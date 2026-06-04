@@ -16,7 +16,9 @@ const track = buildTrack(OVAL);
 track.totalLaps = TOTAL_LAPS;
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 let sceneReady = false;
-scene.load().then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
+// Kept as a promise too so the gallery TestHarness can wait for the GLBs +
+// track before placing its preview cars.
+const scenePromise = scene.load().then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
 
 // ---- race state ----
 let engine = null;
@@ -161,6 +163,22 @@ function returnToLobby() {
   show('lobby');
 }
 
-show('lobby');
-net.start();
+// Gallery / test mode: ?test=1 (or any ?scenario=…) skips the relay and lets
+// the TestHarness drive a single screen from fake data. Normal play connects.
+const _params = new URLSearchParams(location.search);
+const _scenario = _params.get('scenario');
+if (_params.get('test') === '1' || _scenario) {
+  const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
+  import('./TestHarness.js').then(({ runDisplayScenario }) => runDisplayScenario(
+    {
+      scenario: _scenario || 'racing',
+      players: _int(_params.get('players'), 4),
+      host: _params.get('host') === null ? null : _int(_params.get('host'), 0)
+    },
+    { scene, track, scenePromise }
+  ));
+} else {
+  show('lobby');
+  net.start();
+}
 window.__net = net; window.__scene = scene; window.__startRace = startRace;

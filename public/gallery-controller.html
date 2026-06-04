@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Phone Gallery — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+</head>
+<body>
+<header>
+  <h1>TINY TRACK · PHONE</h1>
+
+  <div class="group">
+    <select id="controller-device">
+      <option value="iphone15pm">iPhone 15 Pro Max · 430×932</option>
+      <option value="iphone14" selected>iPhone 14 · 390×844</option>
+      <option value="iphonese">iPhone SE · 375×667</option>
+      <option value="pixel8">Pixel 8 · 412×915</option>
+      <option value="galaxys23">Galaxy S23 · 360×780</option>
+      <option value="zfoldcover">Z Fold cover · 280×653</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <select id="controller-orientation">
+      <option value="portrait" selected>Portrait</option>
+      <option value="landscape">Landscape</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <label class="checkbox-label" for="controller-chrome">
+      <input type="checkbox" id="controller-chrome">
+      Browser chrome
+    </label>
+  </div>
+
+  <div class="group">
+    <select id="player-count">
+      <option value="1">1 Racer</option>
+      <option value="2">2 Racers</option>
+      <option value="3">3 Racers</option>
+      <option value="4">4 Racers</option>
+      <option value="5">5 Racers</option>
+      <option value="6">6 Racers</option>
+      <option value="7">7 Racers</option>
+      <option value="8" selected>8 Racers</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <select id="view-as-player">
+      <option value="0" selected>View as P1</option>
+      <option value="1">View as P2</option>
+      <option value="2">View as P3</option>
+      <option value="3">View as P4</option>
+      <option value="4">View as P5</option>
+      <option value="5">View as P6</option>
+      <option value="6">View as P7</option>
+      <option value="7">View as P8</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <select id="cards-per-row">
+      <option value="1">1 column</option>
+      <option value="2">2 columns</option>
+      <option value="3">3 columns</option>
+      <option value="4">4 columns</option>
+      <option value="5">5 columns</option>
+      <option value="6">6 columns</option>
+      <option value="7" selected>7 columns</option>
+      <option value="8">8 columns</option>
+    </select>
+  </div>
+
+  <button class="ctrl options-toggle" id="options-toggle" aria-expanded="false" aria-label="Options">⚙</button>
+
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html" class="active">Phone</a>
+  </nav>
+</header>
+
+<section class="rail">
+  <div id="controller-rows"></div>
+</section>
+
+<script src="/gallery-common.js"></script>
+<script src="/gallery-controller.js"></script>
+</body>
+</html>

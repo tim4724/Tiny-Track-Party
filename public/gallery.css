@@ -1,0 +1,189 @@
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { background: #06060f; color: #e0e0ff; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; }
+body { padding-bottom: 64px; }
+
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(6, 6, 15, 0.92);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 20px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+}
+header h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.05em; color: #fff; }
+header nav { display: flex; gap: 4px; margin-left: auto; }
+header nav a {
+  color: #aaa; text-decoration: none; font-size: 12px; letter-spacing: 0.05em;
+  padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);
+}
+header nav a:hover { background: #13132a; color: #fff; }
+header nav a.active { background: #2a2a5a; color: #fff; border-color: #5060c0; }
+
+.group { display: flex; align-items: center; gap: 6px; }
+.checkbox-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #e0e0ff; font-size: 12px; cursor: pointer;
+  min-height: 28px;
+}
+.checkbox-label > input[type="checkbox"] { width: 14px; height: 14px; margin: 0; cursor: pointer; }
+
+select, button.ctrl, button.card-btn {
+  background: #13132a;
+  color: #e0e0ff;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font: inherit; font-size: 12px;
+  cursor: pointer;
+  min-height: 28px;
+}
+select:hover, button.ctrl:hover, button.card-btn:hover { background: #1e1e42; border-color: rgba(255,255,255,0.26); }
+
+/* Mobile-only toggle — hidden by default; the media query shows it and
+   collapses option groups behind it below 640px. */
+.options-toggle { display: none; }
+
+section.rail { padding: 20px 20px 8px; }
+
+/* Single flat grid of all gallery cards. --row-cols is set inline from the
+   header's cards-per-row selector. */
+.scenario-strip {
+  display: grid;
+  grid-template-columns: repeat(var(--row-cols, 4), minmax(0, 1fr));
+  gap: 10px;
+  row-gap: 18px;
+  padding-bottom: 6px;
+}
+
+.card {
+  background: #0b0b1a;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  min-width: 0;
+}
+.card-title {
+  font-size: 11px; font-weight: 600; color: #cfcfe8; letter-spacing: 0.03em;
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+}
+.card-title .tag { font-size: 10px; color: #666; font-weight: 400; }
+.card-title .actions { display: flex; gap: 4px; }
+.card-title a.open-link { color: #8899ff; text-decoration: none; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+.card-title a.open-link:hover { text-decoration: underline; }
+button.card-btn { padding: 2px 6px; min-height: 20px; font-size: 11px; line-height: 1; }
+
+.frame-wrap {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+}
+/* Aspect ratio is set inline per-card in makeCard() from logical dims. */
+.frame-wrap.controller { margin: 0 auto; }
+
+.frame-wrap iframe {
+  position: absolute; top: 0; left: 0;
+  border: 0; transform-origin: top left; background: #000;
+  /* Let page scroll gestures pass through instead of being captured by the
+     iframe's own scroll/touch handlers. Previews aren't meant to be
+     interacted with directly; use the "open ↗" link for that. */
+  pointer-events: none;
+}
+/* Simulated browser address-bar. Shown only when the controller chrome toggle
+   is on; height is set inline as a percentage of total device height. */
+.frame-wrap .chrome-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: linear-gradient(#2d2d35, #1f1f27);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  z-index: 2;
+  display: none;
+}
+.frame-wrap.pending::before {
+  content: 'loading…';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #444; font-size: 11px; letter-spacing: 0.1em;
+  /* Above the iframe's own black background (which has no z-index but
+     wins by painting order otherwise). */
+  z-index: 1;
+}
+
+/* Mobile: one card per row + compact, touch-friendly header.
+   - Header becomes a 3-col grid: title spans the top row, and Display /
+     Controller / ⚙ share the row beneath. Option groups hide behind the
+     gear toggle and flow into the grid when opened.
+   - Selects stretch to fill their cell; cards-per-row is hidden since the
+     strip collapses to a single column anyway. */
+@media (max-width: 640px) {
+  header {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px 10px;
+    padding: 10px 12px;
+    align-items: end;
+  }
+  header h1 { grid-column: 1 / -1; font-size: 13px; }
+
+  header .group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    min-width: 0;
+  }
+  header .group > .checkbox-label {
+    display: flex; align-items: center; gap: 6px;
+    min-height: 36px; font-size: 13px;
+  }
+  header .group > .checkbox-label > input[type="checkbox"] {
+    width: 18px; height: 18px; margin: 0;
+  }
+
+  header select,
+  header button.ctrl {
+    width: 100%;
+    min-height: 36px;
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+
+  header .group { display: none; }
+  header.options-open .group:not(:has(> #cards-per-row)) { display: flex; }
+  header button.options-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    grid-column: 3 / 4;
+    grid-row: 2;
+    justify-self: end;
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+  }
+  header nav {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    margin-left: 0;
+    display: flex;
+    gap: 6px;
+  }
+  header nav a {
+    flex: 1;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  section.rail { padding: 12px 12px 8px; }
+
+  .scenario-strip {
+    grid-template-columns: 1fr;
+    row-gap: 14px;
+  }
+}
