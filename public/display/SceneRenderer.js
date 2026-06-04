@@ -25,6 +25,8 @@ const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 const BASE_FOV = 64;          // camera FOV at rest
 const FOV_GAIN = 6;           // extra FOV degrees at top speed (subtle sense of speed)
+// Wheel-kick colour — dark grey (tyre scuff / asphalt grit). One knob to retint.
+const DUST_COLOR = 0x4a4a4a;
 
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
@@ -58,19 +60,27 @@ function makeShadowTexture() {
   return tex;
 }
 
-// Soft white puff for exhaust / curb-dust sprites (tinted per-emit).
-function makePuffTexture() {
+// A few small HARD-edged grains (tinted per-emit) — solid dirt specks, not the
+// soft feathered gradient that read as smoke. Drawn white so the colour tint
+// shows true.
+function makeDustTexture() {
   const s = 48;
   const cv = document.createElement('canvas');
   cv.width = cv.height = s;
   const ctx = cv.getContext('2d');
-  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(255,255,255,0.9)');
-  g.addColorStop(0.5, 'rgba(255,255,255,0.4)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, s, s);
+  for (let i = 0; i < 4; i++) {
+    const cx = s * (0.3 + Math.random() * 0.4);
+    const cy = s * (0.3 + Math.random() * 0.4);
+    const rad = s * (0.1 + Math.random() * 0.1);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.8, 'rgba(255,255,255,1)');   // solid body — hard grain
+    g.addColorStop(1, 'rgba(255,255,255,0)');     // 1px feather only at the rim
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+  }
   const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
@@ -89,15 +99,15 @@ export class SceneRenderer {
     this._initParticles();
   }
 
-  // Pooled puff sprites for exhaust + curb dust. Sprites face whichever camera
-  // renders them, so they look right in every split-screen viewport.
+  // Pooled dust sprites kicked up from the wheels + curb. Sprites face whichever
+  // camera renders them, so they look right in every split-screen viewport.
   _initParticles() {
-    this._puffTex = makePuffTexture();
+    this._dustTex = makeDustTexture();
     this._puffs = [];
     this._puffN = 0;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 200; i++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: this._puffTex, transparent: true, depthWrite: false, opacity: 0
+        map: this._dustTex, transparent: true, depthWrite: false, opacity: 0
       }));
       sp.visible = false;
       sp.userData.life = 0;
@@ -106,17 +116,21 @@ export class SceneRenderer {
     }
   }
 
-  _emitPuff(pos, color, size, life, rise) {
+  // pos = world spawn, vel = world velocity (it then settles under gravity + drag)
+  _emitDust(pos, color, size, life, vel) {
     const sp = this._puffs[this._puffN];
     this._puffN = (this._puffN + 1) % this._puffs.length;
     sp.visible = true;
     sp.position.copy(pos);
-    sp.material.color.set(color);
+    // per-grain brightness jitter so the trail has grit/depth, not one flat tone
+    sp.material.color.set(color).multiplyScalar(0.7 + Math.random() * 0.6);
+    sp.material.rotation = Math.random() * Math.PI * 2; // random start angle per grain
     sp.scale.setScalar(size);
     sp.userData.life = life;
     sp.userData.maxLife = life;
     sp.userData.size = size;
-    sp.userData.rise = rise;
+    sp.userData.spin = (Math.random() - 0.5) * 6; // tumble as it flies
+    sp.userData.vel = vel || new THREE.Vector3();
   }
 
   _stepPuffs(dt) {
@@ -125,9 +139,15 @@ export class SceneRenderer {
       sp.userData.life -= dt;
       if (sp.userData.life <= 0) { sp.visible = false; sp.material.opacity = 0; continue; }
       const f = sp.userData.life / sp.userData.maxLife; // 1 → 0
-      sp.material.opacity = 0.5 * f;
-      sp.scale.setScalar(sp.userData.size * (1.6 - f)); // grow as it fades
-      sp.position.y += sp.userData.rise * dt;
+      const v = sp.userData.vel;
+      if (v) {
+        sp.position.addScaledVector(v, dt);
+        v.y -= 4.5 * dt;                           // strong gravity: grains fall fast, don't billow
+        v.multiplyScalar(1 - Math.min(1, 5 * dt)); // air drag
+      }
+      if (sp.userData.spin) sp.material.rotation += sp.userData.spin * dt; // tumble
+      sp.material.opacity = 0.5 * f;               // light grains, not an opaque cloud
+      sp.scale.setScalar(sp.userData.size);        // fixed size — grains don't expand like smoke
     }
   }
 
@@ -136,7 +156,6 @@ export class SceneRenderer {
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
     r.setSize(window.innerWidth, window.innerHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
-    r.shadowMap.enabled = true;
     r.autoClear = false; // we clear once per frame, then render N viewports
     this.container.appendChild(r.domElement);
     this.renderer = r;
@@ -146,16 +165,10 @@ export class SceneRenderer {
     scene.fog = new THREE.Fog(0x8ecae6, 70, 170);
     this.scene = scene;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x5a7a4a, 1.6));
-    const sun = new THREE.DirectionalLight(0xfff2d8, 2.2);
-    sun.position.set(20, 40, 12);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    const d = 60;
-    sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
-    sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
-    sun.shadow.camera.far = 140;
-    scene.add(sun);
+    // Flat toy lighting: a single soft sky/ground hemisphere — no directional sun
+    // and no shadow map. Every surface is evenly lit with a gentle top-down form
+    // cue, and each car carries its own painted blob shadow instead of a cast one.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 3.0));
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(600, 600),
@@ -163,7 +176,6 @@ export class SceneRenderer {
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -1.0;
-    ground.receiveShadow = true;
     scene.add(ground);
     this.ground = ground;
 
@@ -194,47 +206,16 @@ export class SceneRenderer {
     const need = [...new Set([...TRACK_GLBS, ...CAR_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
-        gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         this.protos.set(name, gltf.scene);
         resolve();
       }, undefined, reject);
     })));
   }
 
-  // Sample the average colour of the track's UP-facing surfaces straight from the
-  // GLB texture atlas, so dust matches the road and auto-updates if the track
-  // model/colour changes. Falls back to tan if anything is unavailable.
-  _sampleTrackColor() {
-    const fallback = new THREE.Color(0xc9b78f);
-    let mesh = null;
-    const proto = this.protos.get('track-wide-straight');
-    if (proto) proto.traverse((o) => {
-      if (!mesh && o.isMesh && o.geometry.attributes.uv && o.material && o.material.map && o.material.map.image) mesh = o;
-    });
-    if (!mesh) return fallback;
-    const map = mesh.material.map, img = map.image, w = img.width, h = img.height;
-    if (!w || !h) return fallback;
-    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    const ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0);
-    const data = ctx.getImageData(0, 0, w, h).data;
-    const pos = mesh.geometry.attributes.position, nrm = mesh.geometry.attributes.normal, uv = mesh.geometry.attributes.uv;
-    let r = 0, g = 0, b = 0, n = 0;
-    for (let i = 0; i < pos.count; i++) {
-      if (nrm && nrm.getY(i) < 0.7) continue; // up-facing only (road + curb tops)
-      let u = uv.getX(i), v = uv.getY(i);
-      if (map.flipY) v = 1 - v;
-      const px = Math.min(w - 1, Math.max(0, Math.round(u * (w - 1))));
-      const py = Math.min(h - 1, Math.max(0, Math.round(v * (h - 1))));
-      const idx = (py * w + px) * 4;
-      r += data[idx]; g += data[idx + 1]; b += data[idx + 2]; n++;
-    }
-    if (!n) return fallback;
-    return new THREE.Color((r / n) / 255, (g / n) / 255, (b / n) / 255);
-  }
 
   setTrack(track, { debug = false } = {}) {
     this.trackGroup.clear();
-    this._dustColor = this._sampleTrackColor();
+    this._dustColor = new THREE.Color(DUST_COLOR); // explicit orange (see DUST_COLOR note)
     if (track.groundY != null) this.ground.position.y = track.groundY;
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
@@ -262,6 +243,87 @@ export class SceneRenderer {
     this._ovTarget = this._trackCenter.clone();
   }
 
+  // Render a car model's TOP-DOWN silhouette once into a soft, car-shaped shadow
+  // texture (cached per model). Returns { tex, size }, where `size` is the square
+  // world footprint the texture spans. The shadow plane is parented to the car
+  // group, so the silhouette inherits the car's heading + road tilt for free.
+  _carShadowTexture(model, proto) {
+    if (!this._carShadowCache) this._carShadowCache = new Map();
+    if (this._carShadowCache.has(model)) return this._carShadowCache.get(model);
+
+    const r = this.renderer;
+    let result;
+    try {
+      proto.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(proto);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const S = Math.max(size.x, size.z) * 1.25; // square footprint + edge padding
+
+      const RES = 128;
+      const rt = new THREE.WebGLRenderTarget(RES, RES, {
+        minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter
+      });
+      // top-down orthographic camera; up = +Z so the model's BACK (+Z) is image-up
+      // and its nose (-Z) is image-down — which becomes the car's forward once the
+      // plane is parented to the group (group +Z = heading).
+      const cam = new THREE.OrthographicCamera(-S / 2, S / 2, S / 2, -S / 2, 0.01, size.y + 2);
+      cam.position.set(center.x, box.max.y + 1, center.z);
+      cam.up.set(0, 0, 1);
+      cam.lookAt(center.x, box.min.y, center.z);
+
+      const sscene = new THREE.Scene();
+      const sil = proto.clone(true);
+      const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      sil.traverse((o) => { if (o.isMesh) o.material = black; });
+      sscene.add(sil);
+
+      const prevRT = r.getRenderTarget();
+      const prevClear = r.getClearColor(new THREE.Color());
+      const prevAlpha = r.getClearAlpha();
+      const prevAuto = r.autoClear;
+      r.autoClear = true;
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(sscene, cam);
+
+      const buf = new Uint8Array(RES * RES * 4);
+      r.readRenderTargetPixels(rt, 0, 0, RES, RES, buf);
+
+      r.setRenderTarget(prevRT);
+      r.setClearColor(prevClear, prevAlpha);
+      r.autoClear = prevAuto;
+      rt.dispose();
+      black.dispose();
+
+      // Coverage (alpha) -> soft black shadow. GL pixels are bottom-up, so flip V.
+      const raw = document.createElement('canvas'); raw.width = raw.height = RES;
+      const img = new ImageData(RES, RES);
+      for (let y = 0; y < RES; y++) {
+        for (let x = 0; x < RES; x++) {
+          const src = ((RES - 1 - y) * RES + x) * 4; // flip vertically
+          img.data[(y * RES + x) * 4 + 3] = buf[src + 3]; // RGB stays 0 (black)
+        }
+      }
+      raw.getContext('2d').putImageData(img, 0, 0);
+      // blur into a second canvas for a soft penumbra edge
+      const cv = document.createElement('canvas'); cv.width = cv.height = RES;
+      const ctx = cv.getContext('2d');
+      ctx.filter = 'blur(3px)';
+      ctx.drawImage(raw, 0, 0);
+
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      result = { tex, size: S };
+    } catch (e) {
+      console.warn('car-shadow silhouette failed; falling back to round blob', e);
+      result = { tex: this._shadowTex, size: 1.5 };
+    }
+    this._carShadowCache.set(model, result);
+    return result;
+  }
+
   addCar(id, colorIndex, name) {
     const model = CAR_MODELS[colorIndex % CAR_MODELS.length];
     const proto = this.protos.get(model) || this.protos.get(CAR_MODELS[0]);
@@ -279,6 +341,7 @@ export class SceneRenderer {
     for (const w of wheels) car.attach(w);
     const bodyBaseQuat = body.quaternion.clone();
     const frontWheels = ['wheel-fl', 'wheel-fr'].map((n) => car.getObjectByName(n)).filter(Boolean);
+    const backWheels = ['wheel-bl', 'wheel-br'].map((n) => car.getObjectByName(n)).filter(Boolean);
 
     const col = new THREE.Color(this.colors[colorIndex % this.colors.length] || '#ffffff');
     const marker = new THREE.Mesh(
@@ -289,14 +352,18 @@ export class SceneRenderer {
     group.add(marker);
     this.scene.add(group);
 
-    // soft contact shadow that grounds the car (separate from the group so it
-    // stays flat on the road and doesn't lean/bob with the body)
+    // car-shaped contact shadow: the model's own top-down silhouette. Parented to
+    // the group so it inherits heading + road tilt (but not the body's lean), and
+    // lies flat just above the road. group +Z = heading, so plane +Y (image-up,
+    // the model's back) maps to the car's rear — the silhouette lines up.
+    const sh = this._carShadowTexture(model, proto);
     const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.1, 1.7),
-      new THREE.MeshBasicMaterial({ map: this._shadowTex, transparent: true, depthWrite: false })
+      new THREE.PlaneGeometry(sh.size, sh.size),
+      new THREE.MeshBasicMaterial({ map: sh.tex, transparent: true, opacity: 0.5, depthWrite: false })
     );
     shadow.rotation.x = -Math.PI / 2;
-    this.scene.add(shadow);
+    shadow.position.y = 0.02; // a hair above the road to avoid z-fighting
+    group.add(shadow);
 
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
@@ -307,10 +374,18 @@ export class SceneRenderer {
     label.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
     this.overlay.appendChild(label);
 
+    // on-screen steer indicator for this player's cell (mirrors the phone bar)
+    const steerBar = document.createElement('div');
+    steerBar.className = 'cell-steer';
+    steerBar.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
+    steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
+    this.overlay.appendChild(steerBar);
+    const steerFill = steerBar.querySelector('.cell-steer__fill');
+
     this.cars.set(id, {
-      group, car, body, bodyBaseQuat, frontWheels, marker, shadow, cam,
+      group, car, body, bodyBaseQuat, frontWheels, backWheels, marker, shadow, cam,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
-      label, pose: null, init: false, lean: 0
+      label, steerBar, steerFill, pose: null, init: false, lean: 0
     });
     if (!this._order.includes(id)) this._order.push(id);
   }
@@ -321,11 +396,12 @@ export class SceneRenderer {
     this.scene.remove(c.group);
     if (c.shadow) this.scene.remove(c.shadow);
     if (c.label.parentNode) c.label.parentNode.removeChild(c.label);
+    if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
   }
 
-  setCarPose(id, pos, forward, up, tangent, lookAhead, steer = 0, spd = 0, scrub = false) {
+  setCarPose(id, pos, forward, up, tangent, lookAhead, steer = 0, spd = 0, scrub = false, steerInput = steer) {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
@@ -349,12 +425,12 @@ export class SceneRenderer {
     c.body.rotateZ(c.lean);
     // turn the front wheels with steering (steer>0 = right)
     for (const w of c.frontWheels) w.rotation.y = steer * WHEEL_TURN_MAX;
+    // on-screen steer indicator: mirror the player's RAW input (same as the phone
+    // bar) so it slides the way they tilt — not the turn-aligned/STEER_SIGN value.
+    if (c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
 
-    // contact shadow: flat on the road, directly under the car (no lean/bob)
-    c.shadow.position.copy(pos).addScaledVector(u, 0.04);
-    const a = Math.atan2(fwd.x, fwd.z); // yaw so the elliptical blob aligns with the car
-    c.shadow.rotation.set(-Math.PI / 2, 0, -a);
-
+    // (the car-shaped shadow is parented to the group, so it follows position,
+    // heading and road tilt automatically — nothing to update here)
     c.marker.rotation.z += 0.05;
   }
 
@@ -393,26 +469,42 @@ export class SceneRenderer {
     this._last = t;
     if (this.onFrame) this.onFrame(dt);
 
-    // kick up ground DUST from behind the wheels (toy car → dust, not smoke)
+    // Kick up small orange dust GRAINS from the ground directly under the wheels
+    // (never the car body). Each grain spawns at the wheel's contact patch
+    // (projected onto the road plane), pops up a touch and falls — a sparse, low
+    // trail that reads as dust, not a plume.
     for (const c of this.cars.values()) {
       if (!c.pose) continue;
       const spd = c.spd || 0;
-      if (spd > 0.15) {
+      const up = c.pose.up, fwd = c.pose.forward;
+      const lat = fwd.clone().cross(up); // car-right
+      const turn = Math.min(1, Math.abs(c.steerAmt || 0)); // how hard we're cornering
+      const driving = spd > 0.2 && c.backWheels && c.backWheels.length;
+      if (driving || c.scrub) {
         c.emitT = (c.emitT || 0) + dt;
-        const interval = 0.10 - spd * 0.05;
+        // emit FASTER the faster we go and the harder we corner (sense of effort);
+        // the curb grind is the densest.
+        const interval = c.scrub ? 0.045 : Math.max(0.04, 0.13 - spd * 0.07 - turn * 0.03);
         if (c.emitT >= interval) {
           c.emitT = 0;
-          const lat = c.pose.forward.clone().cross(c.pose.up); // car-lateral for spread
-          const p = c.pose.pos.clone()
-            .addScaledVector(c.pose.forward, -0.45)        // behind the car
-            .addScaledVector(c.pose.up, 0.02)              // just off the ground
-            .addScaledVector(lat, (Math.random() - 0.5) * 0.4);
-          this._emitPuff(p, this._dustColor || 0xc9b78f, 0.22, 0.5, 0.25); // track-coloured dust
+          c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
+          // curb grind sprays from all four wheels; normal driving just the rears
+          const wheels = c.scrub ? [...c.backWheels, ...c.frontWheels] : c.backWheels;
+          // wider scatter when cornering/grinding so corners visibly kick up more
+          const spread = c.scrub ? 0.9 : 0.3 + turn * 0.6;
+          for (const w of wheels) {
+            // wheel position dropped straight down onto the road plane = contact patch
+            const gp = w.getWorldPosition(new THREE.Vector3());
+            gp.addScaledVector(up, -gp.clone().sub(c.pose.pos).dot(up));
+            const vel = new THREE.Vector3()
+              .addScaledVector(fwd, -(0.2 + spd * 0.8))          // longer trail the faster you go
+              .addScaledVector(up, 0.1 + Math.random() * 0.12)   // small pop, then falls
+              .addScaledVector(lat, (Math.random() - 0.5) * spread);
+            // bigger grains at speed / when grinding; randomised so it's not a stamp
+            const size = (c.scrub ? 0.07 : 0.045 + spd * 0.045) + Math.random() * 0.03;
+            this._emitDust(gp, this._dustColor || DUST_COLOR, size, 0.25 + Math.random() * 0.12, vel);
+          }
         }
-      }
-      if (c.scrub) {
-        const p = c.pose.pos.clone().addScaledVector(c.pose.up, 0.03);
-        this._emitPuff(p, this._dustColor || 0xb8975f, 0.5, 0.5, 0.3);     // heavier dust at the curb
       }
     }
     this._stepPuffs(dt);
@@ -430,7 +522,7 @@ export class SceneRenderer {
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.setViewport(0, 0, W, H); r.setScissor(0, 0, W, H); r.setScissorTest(true);
       r.render(this.scene, this.overview);
-      for (const c of this.cars.values()) c.label.style.display = 'none';
+      for (const c of this.cars.values()) { c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }
       requestAnimationFrame((tt) => this._loop(tt));
       return;
     }
@@ -459,6 +551,13 @@ export class SceneRenderer {
       c.label.style.display = 'block';
       c.label.style.left = x + 'px';
       c.label.style.top = (row * ch) + 'px';
+
+      // steer indicator: centered along the bottom of this player's cell
+      if (c.steerBar) {
+        c.steerBar.style.display = 'block';
+        c.steerBar.style.left = (x + cw / 2) + 'px';
+        c.steerBar.style.top = (row * ch + ch - 34) + 'px';
+      }
     });
 
     requestAnimationFrame((tt) => this._loop(tt));

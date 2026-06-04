@@ -76,9 +76,11 @@ function handleMessage(data) {
       renderLobby(data.players, data.hostPeerIndex);
       break;
     case MSG.COUNTDOWN:
-      show('game'); el('drive-hud').classList.add('hidden');
+      show('game');
+      el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
       el('go').classList.remove('hidden');
       el('go').textContent = data.n > 0 ? data.n : 'GO!';
+      startDriving();                  // stream tilt during the countdown (display reacts)
       buzz(data.n > 0 ? 20 : [0, 90]); // tick on counts, stronger on GO
       break;
     case MSG.GAME_START:
@@ -127,16 +129,13 @@ function renderLobby(players, hostPeerIndex) {
 // --- driving ---
 let steerRaf = null;
 function startDriving() {
+  if (steerRaf) return; // already driving (may have begun during the countdown)
   tilt.start();
   const fill = el('steer-fill');
   const tip = el('motion-tip');
   tip.classList.toggle('hidden', tilt.motionState === 'granted');
-  const brakeEl = el('brake-ind');
   const loop = () => {
-    const st = tilt.state;
-    fill.style.transform = `translateX(${st.steer * 50}%)`;
-    brakeEl.classList.toggle('on', st.brake > 0.05);
-    brakeEl.style.setProperty('--bfill', (st.brake * 100).toFixed(0) + '%');
+    fill.style.transform = `translateX(${tilt.state.steer * 50}%)`;
     steerRaf = requestAnimationFrame(loop);
   };
   loop();
@@ -162,6 +161,14 @@ el('name-form').addEventListener('submit', (e) => {
 
 el('start-btn').addEventListener('click', () => { if (amHost) net.send(MSG.START_GAME); });
 el('recenter-btn').addEventListener('click', () => tilt.recenter());
+
+// BRAKE button — held = brake at the fixed rate, released = release
+const brakeBtn = el('brake-btn');
+const pressBrake = (on) => { tilt.pressBrake(on); brakeBtn.classList.toggle('held', on); };
+brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake(true); });
+brakeBtn.addEventListener('pointerup', () => pressBrake(false));
+brakeBtn.addEventListener('pointercancel', () => pressBrake(false));
+brakeBtn.addEventListener('pointerleave', () => pressBrake(false));
 
 show('name');
 window.__net = net; window.__tilt = tilt;

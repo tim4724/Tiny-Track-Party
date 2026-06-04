@@ -30,7 +30,7 @@
     <div id="wait-host" class="hidden">Waiting for the host to start…</div>
   </section>
 
-  <!-- Game: tilt to steer, swipe down to brake -->
+  <!-- Game: tilt to steer, hold BRAKE to slow -->
   <section id="game" class="hidden">
     <div id="go" class="hidden"></div>
     <div id="drive-hud" class="hidden">
@@ -42,7 +42,7 @@
         <div class="steer__track"><div id="steer-fill"></div></div>
         <div class="steer__label">tilt to steer</div>
       </div>
-      <div id="brake-ind"><span>BRAKE — swipe down</span></div>
+      <button id="brake-btn" class="brake">BRAKE</button>
       <div id="motion-tip" class="hidden">No tilt? Use ◄ ► keys, or tap Re-center.</div>
       <button id="recenter-btn" class="secondary">Re-center steering</button>
     </div>

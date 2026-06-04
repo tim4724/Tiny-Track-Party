@@ -82,6 +82,19 @@ html, body {
 }
 .cell-label__name { font-weight: 800; font-size: 1.15rem; color: var(--c, #fff); }
 .cell-label__stat { display: block; font-size: 0.95rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+
+/* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
+.cell-steer {
+  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 0.7rem;
+  transform: translateX(-50%);
+  background: rgba(11,15,23,0.5); border: 1px solid #2a3850; border-radius: 999px; overflow: hidden;
+  pointer-events: none;
+}
+.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.25); }
+.cell-steer__fill {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%;
+  background: var(--c, #2bb673); border-radius: 999px; transition: transform 0.05s linear;
+}
 /* dim hairline between split-screen cells */
 #scene canvas { display: block; }
 .stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* used in results list */

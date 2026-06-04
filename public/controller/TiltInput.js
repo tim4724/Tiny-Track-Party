@@ -5,16 +5,19 @@
 // [-1,1], low-pass smoothed. iOS 13+ needs requestPermission() from a user
 // gesture (call enableMotion() in a tap handler). HTTPS is required for sensors.
 //
-// Braking: swipe down / hold below the touch-start point on the control surface.
+// Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
+// as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
+// the car all the way down to a standstill.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
-// Space/Down brake, and optional on-screen buttons. Steer = tilt + keys (so the
-// loop is testable headlessly). Emits {s,b} to onControl at ~25 Hz.
+// Space/Down brake. Steer = tilt + keys (so the loop is testable headlessly).
+// Emits {s,b} to onControl at ~25 Hz.
 
 const SEND_HZ = 25;
 const DEFAULT_LOCK = 28;   // degrees of tilt for full lock
 const DEADZONE = 4;        // degrees ignored around neutral
 const SMOOTH = 0.28;       // low-pass factor (higher = snappier)
+const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
 export class TiltInput {
   constructor({ onControl, surface }) {
@@ -29,14 +32,13 @@ export class TiltInput {
     this._rawTilt = 0;
     this._key = 0;         // keyboard steer (-1/0/1)
     this._keyL = false; this._keyR = false;
-    this._brakeTouch = 0;  // 0..1 analog brake from swipe distance
-    this._brakeKey = 0;    // 0..1 keyboard brake
-    this._touchStartY = null;
+    this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
+    this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._timer = null;
 
     this._onOrient = this._onOrient.bind(this);
     this._bindKeys();
-    this._bindTouch();
+    this._initSurface();
   }
 
   // Call from a user gesture (e.g. the Join tap). Returns the permission state.
@@ -75,7 +77,7 @@ export class TiltInput {
   }
   stop() {
     clearInterval(this._timer); this._timer = null;
-    this._brakeTouch = false; this._touchStartY = null;
+    this._brakeBtn = 0;
   }
 
   // Combined steer = smoothed tilt + keyboard, clamped. Brake = touch | key.
@@ -91,12 +93,12 @@ export class TiltInput {
     this._tilt += (target - this._tilt) * SMOOTH;
 
     const s = Math.max(-1, Math.min(1, this._tilt + this._key));
-    const b = Math.max(this._brakeTouch, this._brakeKey);
+    const b = Math.max(this._brakeBtn, this._brakeKey);
     this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3) });
   }
 
   // current state (for UI)
-  get state() { return { steer: Math.max(-1, Math.min(1, this._tilt + this._key)), brake: Math.max(this._brakeTouch, this._brakeKey), tilt: this.haveTilt }; }
+  get state() { return { steer: Math.max(-1, Math.min(1, this._tilt + this._key)), brake: Math.max(this._brakeBtn, this._brakeKey), tilt: this.haveTilt }; }
 
   // --- keyboard fallback / testing ---
   _bindKeys() {
@@ -104,7 +106,7 @@ export class TiltInput {
       const k = e.key.toLowerCase();
       if (k === 'arrowleft' || k === 'a') { this._keyL = down; e.preventDefault(); }
       else if (k === 'arrowright' || k === 'd') { this._keyR = down; e.preventDefault(); }
-      else if (k === 'arrowdown' || k === ' ' || k === 's') { this._brakeKey = down ? 1 : 0; e.preventDefault(); }
+      else if (k === 'arrowdown' || k === ' ' || k === 's') { this._brakeKey = down ? BRAKE_LEVEL : 0; e.preventDefault(); }
       else return;
       this._key = (this._keyR ? 1 : 0) - (this._keyL ? 1 : 0);
     };
@@ -112,30 +114,12 @@ export class TiltInput {
     window.addEventListener('keyup', (e) => set(e, false));
   }
 
-  // --- swipe-down brake on the control surface (analog: distance = amount) ---
-  _bindTouch() {
-    const el = this.surface;
-    el.style.touchAction = 'none';
-    const BRAKE_START = 24;   // px of downward travel before braking begins
-    const BRAKE_FULL = 170;   // px of travel for full brake
-    const start = (y) => { this._touchStartY = y; };
-    const move = (y) => {
-      if (this._touchStartY == null) return;
-      const dy = y - this._touchStartY;
-      this._brakeTouch = Math.max(0, Math.min(1, (dy - BRAKE_START) / (BRAKE_FULL - BRAKE_START)));
-    };
-    const end = () => { this._touchStartY = null; this._brakeTouch = 0; };
-
-    el.addEventListener('touchstart', (e) => { start(e.touches[0].clientY); }, { passive: true });
-    el.addEventListener('touchmove', (e) => { move(e.touches[0].clientY); }, { passive: true });
-    el.addEventListener('touchend', end);
-    el.addEventListener('touchcancel', end);
-    // pointer (desktop / fallback): press-drag-down to brake
-    el.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'touch') start(e.clientY); });
-    el.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch' && e.buttons) move(e.clientY); });
-    el.addEventListener('pointerup', () => { if (this._touchStartY != null) end(); });
+  // Steering is via tilt; the control surface just needs to not scroll/zoom under
+  // the player's thumb while they drive.
+  _initSurface() {
+    if (this.surface) this.surface.style.touchAction = 'none';
   }
 
-  // Hooks for explicit on-screen brake button (fallback when no tilt+no kbd).
-  setBrake(amount) { this._brakeTouch = Math.max(0, Math.min(1, amount)); }
+  // On-screen BRAKE button: held → brake at the fixed BRAKE_LEVEL, released → 0.
+  pressBrake(on) { this._brakeBtn = on ? BRAKE_LEVEL : 0; }
 }

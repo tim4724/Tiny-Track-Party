@@ -47,8 +47,11 @@ button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid 
 #wait-host { color: var(--muted); text-align: center; margin-top: 1rem; }
 
 /* game / driving HUD */
-#game { align-items: stretch; justify-content: flex-start; user-select: none; }
-#go { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 7rem; font-weight: 900; color: var(--accent); }
+#game { align-items: stretch; justify-content: flex-start; user-select: none; position: relative; }
+/* GO countdown overlays the HUD so players can pre-steer while it counts down */
+#go { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  font-size: 7rem; font-weight: 900; color: var(--accent); pointer-events: none;
+  background: rgba(11,15,23,0.35); backdrop-filter: blur(2px); }
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
 .hud-top { display: flex; justify-content: space-between; align-items: center; }
 #lap { font-size: 1.4rem; font-weight: 700; }
@@ -61,9 +64,9 @@ button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid 
 #steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: 999px; transition: transform 0.05s linear; }
 .steer__label { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
 
-/* analog brake: --bfill (0%..100%) paints a red fill across the pill */
-#brake-ind { position: relative; overflow: hidden; text-align: center; font-weight: 800; letter-spacing: 0.05em; padding: 1.2rem; border-radius: 16px; background: var(--bg-2); border: 1px solid #2a3850; color: var(--fg); --bfill: 0%; }
-#brake-ind::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--bfill); background: #e6492d; transition: width 0.05s linear; }
-#brake-ind span { position: relative; } /* text paints above the fill */
-#brake-ind.on { border-color: #e6492d; }
+/* BRAKE button: large hold-to-brake target; lights red while held */
+#brake-btn.brake { margin-top: 0; padding: 1.5rem; border-radius: 16px; font-size: 1.5rem; font-weight: 900;
+  letter-spacing: 0.08em; color: var(--fg); background: var(--bg-2); border: 1px solid #2a3850;
+  touch-action: none; transition: background 0.06s, border-color 0.06s, transform 0.06s; }
+#brake-btn.brake.held { background: #e6492d; border-color: #e6492d; color: #0b0f17; transform: scale(0.98); }
 #motion-tip { color: var(--muted); text-align: center; font-size: 0.95rem; }

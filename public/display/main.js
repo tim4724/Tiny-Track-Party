@@ -24,12 +24,16 @@ let racing = false;
 let lastPlayerState = 0;
 
 scene.onFrame = (dt) => {
-  if (!racing || !engine) return;
-  engine.update(dt * 1000);
+  if (!engine) return;
+  // During the countdown the engine exists but isn't `racing` yet: we still draw
+  // the cars and let them react to steering (wheels/lean/indicator) so players
+  // can get a feel for their tilt — they just don't move until GO.
+  if (racing) engine.update(dt * 1000);
   const snap = engine.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall, c.steerInput);
   }
+  if (!racing) return; // countdown: visible + steerable, but no race progress / HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
   if (now - lastPlayerState > 160) {

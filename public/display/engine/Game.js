@@ -10,7 +10,7 @@
 const ACCEL = 7.0;        // units/s^2 forward
 const VMAX = 9.0;         // top speed units/s — paired with TURN_RATE so the
                           // large corners are followable at full speed (v/R < turn rate)
-const BRAKE_DECEL = 26.0; // units/s^2 when braking toward the brake-target speed
+const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to a full stop
 // Real steering: tilt turns the car's HEADING (radians, relative to the track
 // direction). We subtract the track's own turn each step so NEUTRAL = straight
 // in the world — you must steer through curves (no autosteer). Heading is
@@ -169,7 +169,9 @@ export class Game {
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually
         // turns (= STEER_SIGN * raw input), so the renderer's front wheels + body
         // lean line up with the turn without the renderer needing to know STEER_SIGN.
-        finished: c.finished, steer: STEER_SIGN * c.steer, brake: c.brake, onWall: !!c.onWall
+        // steerInput is the RAW player input (matches the phone's steer bar) and
+        // drives the on-screen steer indicator.
+        finished: c.finished, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall
       });
     }
     return { cars, elapsed: this.elapsed };
