@@ -40,7 +40,7 @@ function stopScrub() {
 let myColorIndex = null;
 let amHost = false;
 
-const NAME_KEY = 'toycar_name';
+const NAME_KEY = 'tinytrack_name';
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
 const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (_) {} };
 

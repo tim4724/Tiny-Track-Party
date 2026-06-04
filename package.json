@@ -1,12 +1,12 @@
 {
-  "name": "toycar-party",
+  "name": "tiny-track-party",
   "version": "0.1.0",
   "description": "Browser-based multiplayer toy-car racing with phone tilt controllers",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
     "test:e2e": "npx playwright test",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\""
   },

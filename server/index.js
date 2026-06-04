@@ -1,6 +1,6 @@
 'use strict';
 
-// ToyCar static host. Like HexStacker, this server runs NO game logic and NO
+// Tiny Track Party static host. Like HexStacker, this server runs NO game logic and NO
 // WebSocket: it serves static files + a few JSON endpoints. Realtime multiplayer
 // runs off-box through the Party-Server relay (wss://ws.couch-games.com) plus the
 // optional WebRTC fastlane. The display browser is authoritative; phones are
@@ -183,7 +183,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   const localIP = getLocalIP();
-  console.log(`ToyCar Party server on http://localhost:${PORT}`);
+  console.log(`Tiny Track Party server on http://localhost:${PORT}`);
   console.log(`Local network:        http://${localIP}:${PORT}`);
   console.log(`Display:              http://localhost:${PORT}/`);
   console.log(`(Phones need HTTPS for tilt sensors — front this with a tunnel/cert.)`);

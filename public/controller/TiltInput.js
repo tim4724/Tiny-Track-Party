@@ -1,4 +1,4 @@
-// TiltInput — phone steering + braking for the ToyCar controller.
+// TiltInput — phone steering + braking for the Tiny Track Party controller.
 //
 // Steering: DeviceOrientation `gamma` (left/right tilt in portrait), calibrated
 // to a neutral capture, dead-zoned, clamped to ±FULL_LOCK°, normalised to

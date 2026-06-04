@@ -1,7 +1,7 @@
 'use strict';
 
 // ============================================================================
-// ToyCar — wire contract shared by display and controllers.
+// Tiny Track Party — wire contract shared by display and controllers.
 // This file is GAME-SIDE config (not part of the partyplug kit): the relay/STUN
 // deployment URLs and this game's message vocabulary live here and are injected
 // into the kit at construction. The kit reads none of these globals.
