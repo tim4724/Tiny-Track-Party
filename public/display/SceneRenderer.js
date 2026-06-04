@@ -13,7 +13,7 @@ const CAR_MODELS = [
   'vehicle-vintage-racer', 'vehicle-suv', 'vehicle-truck', 'vehicle-monster-truck'
 ];
 const TRACK_GLBS = [
-  'track-wide-straight', 'track-wide-corner-small', 'track-wide-corner-large', 'track-wide-curve'
+  'track-road-wide-straight', 'track-road-wide-corner-small', 'track-road-wide-corner-large', 'track-road-wide-curve'
 ];
 
 // Chase camera: sits behind the CAR's heading and looks at it, with the position

@@ -82,10 +82,10 @@ function curvePiece(glb) {
 }
 
 export const PIECES = {
-  straight: () => straightPiece('track-wide-straight'),
-  cornerL: () => cornerLeftPiece('track-wide-corner-small', R_SMALL),
-  cornerLargeL: () => cornerLeftPiece('track-wide-corner-large', R_LARGE),
-  curve: () => curvePiece('track-wide-curve')
+  straight: () => straightPiece('track-road-wide-straight'),
+  cornerL: () => cornerLeftPiece('track-road-wide-corner-small', R_SMALL),
+  cornerLargeL: () => cornerLeftPiece('track-road-wide-corner-large', R_LARGE),
+  curve: () => curvePiece('track-road-wide-curve')
 };
 
 // A drivable centerline: closed polyline of frames (pos, tangent, up, lateral)
