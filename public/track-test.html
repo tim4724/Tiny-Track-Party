@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ToyCar — M1 track test</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #8ecae6; }
+    #scene { position: fixed; inset: 0; }
+    #hud { position: fixed; top: 8px; left: 8px; font: 13px/1.5 monospace; color: #093; background: rgba(255,255,255,0.7); padding: 6px 10px; border-radius: 8px; }
+  </style>
+  <script src="/shared/protocol.js"></script>
+  <script type="importmap" nonce="__CSP_NONCE__">
+  { "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="scene"></div>
+  <div id="hud">loading…</div>
+  <script type="module" src="/track-test.js"></script>
+</body>
+</html>

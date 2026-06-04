@@ -1,0 +1,69 @@
+:root {
+  --bg: #0b0f17;
+  --bg-2: #131a26;
+  --fg: #e7eef7;
+  --muted: #8a9cb0;
+  --accent: #f2b134;
+  --car: #2bb673;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; min-height: 100%;
+  background: radial-gradient(900px 600px at 50% -20%, #1a2434, var(--bg));
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  touch-action: manipulation;
+}
+body { display: flex; min-height: 100vh; }
+.hidden { display: none !important; }
+section { flex: 1; display: flex; flex-direction: column; padding: 7vh 8vw; }
+
+h1 { font-size: 2rem; margin: 0 0 0.2em;
+  background: linear-gradient(120deg, var(--accent), var(--car));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sub { color: var(--muted); margin: 0 0 2rem; }
+
+/* form */
+input[type=text] {
+  width: 100%; font-size: 1.3rem; padding: 1rem 1.1rem;
+  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 14px; color: var(--fg);
+}
+button {
+  font-size: 1.2rem; font-weight: 700; padding: 1rem 1.2rem; margin-top: 1rem;
+  border: none; border-radius: 14px; color: #0b0f17; background: var(--accent);
+  width: 100%; cursor: pointer;
+}
+button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid #2a3850; }
+#name-status { color: var(--muted); margin-top: 1rem; min-height: 1.4em; }
+
+/* lobby */
+.mycar-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.4rem; }
+#mycar { width: 2.4rem; height: 2.4rem; border-radius: 8px; box-shadow: inset 0 0 12px rgba(0,0,0,0.4); }
+#roster { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0 1.6rem; }
+.row { display: flex; align-items: center; gap: 0.6rem; font-size: 1.15rem;
+  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 12px; padding: 0.7rem 1rem; }
+.row--me { border-color: var(--car); }
+.row__dot { width: 1rem; height: 1rem; border-radius: 50%; }
+#wait-host { color: var(--muted); text-align: center; margin-top: 1rem; }
+
+/* game / driving HUD */
+#game { align-items: stretch; justify-content: flex-start; user-select: none; }
+#go { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 7rem; font-weight: 900; color: var(--accent); }
+#drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
+.hud-top { display: flex; justify-content: space-between; align-items: center; }
+#lap { font-size: 1.4rem; font-weight: 700; }
+#pos { font-size: 1.6rem; font-weight: 900; padding: 0.3rem 0.9rem; border-radius: 999px; background: var(--bg-2); border: 1px solid #2a3850; }
+#pos.leader { background: var(--accent); color: #0b0f17; }
+
+.steer { margin-top: auto; }
+.steer__track { position: relative; height: 1.4rem; background: var(--bg-2); border: 1px solid #2a3850; border-radius: 999px; overflow: hidden; }
+.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #2a3850; }
+#steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: 999px; transition: transform 0.05s linear; }
+.steer__label { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
+
+/* analog brake: --bfill (0%..100%) paints a red fill across the pill */
+#brake-ind { position: relative; overflow: hidden; text-align: center; font-weight: 800; letter-spacing: 0.05em; padding: 1.2rem; border-radius: 16px; background: var(--bg-2); border: 1px solid #2a3850; color: var(--fg); --bfill: 0%; }
+#brake-ind::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--bfill); background: #e6492d; transition: width 0.05s linear; }
+#brake-ind span { position: relative; } /* text paints above the fill */
+#brake-ind.on { border-color: #e6492d; }
+#motion-tip { color: var(--muted); text-align: center; font-size: 0.95rem; }

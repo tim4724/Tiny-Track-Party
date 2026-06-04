@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="app-version" content="__APP_VERSION__" />
+  <title>ToyCar Controller</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/controller/controller.css?v=__APP_V__" />
+  <script src="/shared/protocol.js?v=__APP_V__"></script>
+  <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
+</head>
+<body>
+  <!-- Name -->
+  <section id="name">
+    <h1>ToyCar</h1>
+    <p class="sub">Pick a name and jump in.</p>
+    <form id="name-form">
+      <input id="name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off" />
+      <button type="submit">Join race</button>
+    </form>
+    <div id="name-status"></div>
+  </section>
+
+  <!-- Lobby -->
+  <section id="lobby" class="hidden">
+    <div class="mycar-row"><div id="mycar"></div><div>Your car</div></div>
+    <div id="roster"></div>
+    <button id="start-btn" class="hidden">Start race</button>
+    <div id="wait-host" class="hidden">Waiting for the host to start…</div>
+  </section>
+
+  <!-- Game: tilt to steer, swipe down to brake -->
+  <section id="game" class="hidden">
+    <div id="go" class="hidden"></div>
+    <div id="drive-hud" class="hidden">
+      <div class="hud-top">
+        <div id="lap">Lap 1/3</div>
+        <div id="pos">P1</div>
+      </div>
+      <div class="steer">
+        <div class="steer__track"><div id="steer-fill"></div></div>
+        <div class="steer__label">tilt to steer</div>
+      </div>
+      <div id="brake-ind"><span>BRAKE — swipe down</span></div>
+      <div id="motion-tip" class="hidden">No tilt? Use ◄ ► keys, or tap Re-center.</div>
+      <button id="recenter-btn" class="secondary">Re-center steering</button>
+    </div>
+  </section>
+
+  <script type="module" src="/controller/main.js?v=__APP_V__"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="app-version" content="__APP_VERSION__" />
+  <title>ToyCar Party</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
+
+  <!-- Transport + shared contract: classic scripts set window globals BEFORE
+       the deferred module entry runs. -->
+  <script src="/shared/protocol.js?v=__APP_V__"></script>
+  <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script src="/partyplug/RoomFlow.js?v=__APP_V__"></script>
+
+  <!-- Three.js (vendored). The inline importmap is the one script needing a
+       CSP nonce; the module entry is external so it's covered by 'self'. -->
+  <script type="importmap" nonce="__CSP_NONCE__">
+  {
+    "imports": {
+      "three": "/vendor/three/three.module.js",
+      "three/addons/": "/vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Lobby -->
+  <section id="lobby">
+    <div class="lobby__left">
+      <h1>ToyCar Party</h1>
+      <p class="tagline">Phones are your steering wheels. Tilt to steer, swipe down to brake.</p>
+      <div class="join">
+        <div class="join__label">Join at</div>
+        <div class="join__url" id="joinurl">…</div>
+        <div class="join__code" id="code">····</div>
+      </div>
+      <div id="count">Waiting for players…</div>
+      <div id="players"></div>
+      <div id="hint" class="hidden">First to join is <b>host</b> — press <b>Start</b> on your phone.</div>
+    </div>
+    <div class="lobby__right">
+      <div class="qr-card"><canvas id="qr"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Race: Three.js scene + live standings + countdown/results overlays -->
+  <section id="race" class="hidden">
+    <div id="scene"></div>
+    <div id="countdown"></div>
+    <div id="results" class="hidden">
+      <h2>🏁 Results</h2>
+      <ol id="results-list"></ol>
+      <div class="results__hint">Back to lobby…</div>
+    </div>
+  </section>
+
+  <script type="module" src="/display/main.js?v=__APP_V__"></script>
+</body>
+</html>

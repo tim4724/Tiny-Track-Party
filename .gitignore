@@ -1,0 +1,5 @@
+node_modules/
+.playwright-mcp/
+test-results/
+*.log
+.DS_Store

@@ -1,0 +1,101 @@
+:root {
+  --bg: #0b0f17;
+  --bg-2: #131a26;
+  --fg: #e7eef7;
+  --muted: #8a9cb0;
+  --accent: #f2b134;
+  --accent-2: #2bb673;
+  --radius: 18px;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: radial-gradient(1200px 800px at 50% -10%, #1a2434, var(--bg));
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+.hidden { display: none !important; }
+
+/* ---- Lobby ---- */
+#lobby {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  gap: 4vw;
+  padding: 6vh 7vw;
+}
+.lobby__left h1 {
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  margin: 0 0 0.2em;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lobby__left .tagline { color: var(--muted); font-size: clamp(1rem, 1.6vw, 1.4rem); margin: 0 0 2rem; }
+.join {
+  background: var(--bg-2); border: 1px solid #243044; border-radius: var(--radius);
+  padding: 1.4rem 1.6rem; margin-bottom: 1.6rem; display: inline-block;
+}
+.join__label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.12em; }
+.join__url { font-size: clamp(1rem, 1.8vw, 1.5rem); margin-top: 0.3rem; }
+.join__code {
+  font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 800; letter-spacing: 0.18em;
+  color: var(--accent); margin-top: 0.2rem; font-variant-numeric: tabular-nums;
+}
+#count { font-size: 1.2rem; color: var(--muted); margin: 0.4rem 0 1rem; }
+#players { display: flex; flex-wrap: wrap; gap: 0.6rem; max-width: 42rem; }
+.chip {
+  display: flex; align-items: center; gap: 0.55rem;
+  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 999px;
+  padding: 0.5rem 1rem 0.5rem 0.6rem; font-size: 1.15rem;
+}
+.chip--off { opacity: 0.45; }
+.chip__dot { width: 1.1rem; height: 1.1rem; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.4) inset; }
+#hint { color: var(--muted); margin-top: 1.4rem; font-size: 1.05rem; }
+#hint b { color: var(--fg); }
+
+.lobby__right { display: flex; justify-content: center; }
+.qr-card {
+  background: #fff; border-radius: var(--radius); padding: 1.2rem;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+}
+#qr { display: block; width: min(34vw, 46vh); height: auto; image-rendering: pixelated; }
+
+/* ---- Race ---- */
+#race { position: fixed; inset: 0; }
+#scene { position: fixed; inset: 0; }
+#scene canvas { display: block; }
+
+#countdown {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 28vh; font-weight: 900; color: #fff;
+  text-shadow: 0 0 40px rgba(0,0,0,0.5); pointer-events: none;
+}
+
+/* per-viewport (split-screen) label, anchored at each cell's top-left */
+.cell-label {
+  position: absolute; display: none; margin: 0.7rem;
+  background: rgba(11,15,23,0.55); border-left: 4px solid var(--c, #fff);
+  border-radius: 8px; padding: 0.35rem 0.7rem; backdrop-filter: blur(4px);
+}
+.cell-label__name { font-weight: 800; font-size: 1.15rem; color: var(--c, #fff); }
+.cell-label__stat { display: block; font-size: 0.95rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* dim hairline between split-screen cells */
+#scene canvas { display: block; }
+.stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* used in results list */
+
+/* results overlay */
+#results {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(11,15,23,0.78); backdrop-filter: blur(8px);
+}
+#results h2 { font-size: clamp(2.4rem, 6vw, 5rem); margin: 0 0 1rem; color: var(--accent); }
+#results-list { list-style: none; padding: 0; font-size: 1.6rem; display: flex; flex-direction: column; gap: 0.6rem; min-width: 22rem; }
+#results-list li { display: flex; align-items: center; gap: 0.7rem; background: var(--bg-2); border: 1px solid #243044; border-radius: 12px; padding: 0.7rem 1.1rem; }
+#results-list li::before { content: counter(li); }
+#results-list { counter-reset: li; }
+#results-list li { counter-increment: li; }
+.res-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.results__hint { color: var(--muted); margin-top: 1.4rem; }
