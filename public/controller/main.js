@@ -171,4 +171,19 @@ brakeBtn.addEventListener('pointercancel', () => pressBrake(false));
 brakeBtn.addEventListener('pointerleave', () => pressBrake(false));
 
 show('name');
+
+// Gallery / test mode: ?scenario=… lays out a single screen from fake data
+// without connecting to the relay (the controller never auto-connects, so
+// there's nothing to suppress — we just drive the screens directly).
+const _params = new URLSearchParams(location.search);
+const _scenario = _params.get('scenario');
+if (_scenario) {
+  const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
+  import('./TestHarness.js').then(({ runControllerScenario }) => runControllerScenario({
+    scenario: _scenario,
+    color: _int(_params.get('color'), 0),
+    players: _int(_params.get('players'), 4)
+  }));
+}
+
 window.__net = net; window.__tilt = tilt;

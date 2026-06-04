@@ -1,0 +1,211 @@
+// Display Test Harness — drives a single display screen in isolation for the
+// gallery (/gallery.html), with NO relay connection. main.js delegates here
+// when the URL carries ?test=1 / ?scenario=…, handing over the live scene +
+// track so we can stand up the lobby, countdown, a self-driving race preview,
+// or the results overlay from fake data.
+//
+// The race scenarios reuse the real Game engine; cars are steered by a small
+// pure-pursuit autopilot (the engine has no AI of its own) so the split-screen
+// chase cams, HUD, lean, and dust all show real motion in the preview.
+import { Game } from './engine/Game.js';
+import { fetchQR, renderQR } from './Net.js';
+
+const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
+const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
+
+const el = (id) => document.getElementById(id);
+
+// runDisplayScenario(opts, ctx)
+//   opts: { scenario, players, host }
+//   ctx:  { scene, track, scenePromise }  (live instances built by main.js)
+export function runDisplayScenario(opts, ctx) {
+  const COLORS = window.CAR_COLORS || ['#e6492d'];
+  const TOTAL_LAPS = window.TOTAL_LAPS || 3;
+  const scenario = opts.scenario || 'racing';
+  const players = Math.max(1, Math.min(opts.players || 4, COLORS.length));
+  const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
+
+  const screens = { lobby: el('lobby'), race: el('race') };
+  const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
+
+  window.__TEST__ = window.__TEST__ || {};
+
+  // ---- lobby roster ----
+  // Slots usually fill 0..players-1; if the chosen host lives outside that
+  // range, swap in the host slot so the previewed roster actually contains it.
+  function buildSlots(n) {
+    const slots = [];
+    let fill = n;
+    const needHost = host != null && host >= n && host < COLORS.length;
+    if (needHost) fill = n - 1;
+    for (let i = 0; i < fill; i++) slots.push(i);
+    if (needHost) slots.push(host);
+    return slots;
+  }
+
+  function hostSlot(slots) {
+    if (host != null && slots.includes(host)) return host;
+    return slots.length ? slots[0] : null;
+  }
+
+  function renderRoster(slots, hostPeerIndex) {
+    const list = el('players'); list.innerHTML = '';
+    for (const s of slots) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const dot = document.createElement('span');
+      dot.className = 'chip__dot'; dot.style.background = COLORS[s % COLORS.length] || '#888';
+      chip.appendChild(dot);
+      const name = document.createElement('span');
+      name.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
+      chip.appendChild(name);
+      list.appendChild(chip);
+    }
+    el('count').textContent = slots.length
+      ? `${slots.length} racer${slots.length > 1 ? 's' : ''} ready`
+      : 'Waiting for players…';
+    el('hint').classList.toggle('hidden', slots.length === 0);
+  }
+
+  function fakeJoin(code) {
+    el('code').textContent = code;
+    el('joinurl').textContent = (location.host || 'tinytrack.party') + '/' + code;
+    fetchQR((location.origin || 'https://tinytrack.party') + '/' + code)
+      .then((m) => renderQR(el('qr'), m))
+      .catch(() => { /* gallery still works without the QR */ });
+  }
+
+  if (scenario === 'welcome') {
+    show('lobby');
+    renderRoster([], null);
+    el('code').textContent = '····';
+    el('joinurl').textContent = (location.host || 'tinytrack.party');
+    fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
+    return;
+  }
+
+  if (scenario === 'lobby') {
+    const slots = buildSlots(players);
+    show('lobby');
+    renderRoster(slots, hostSlot(slots));
+    fakeJoin('TEST');
+    return;
+  }
+
+  // ---- race scenarios (countdown / racing / results) ----
+  // Build the engine + scene cars once the GLBs are loaded, place them at the
+  // grid, then install our own frame hook. `live` advances the sim each frame.
+  ctx.scenePromise.then(() => setupRace(scenario)).catch((e) => console.warn('[TestHarness] scene load failed', e));
+
+  function setupRace(kind) {
+    const { scene, track } = ctx;
+    show('race');
+    el('results').classList.add('hidden');
+
+    const ids = [];
+    for (let i = 0; i < players; i++) ids.push(i);
+
+    let engine = new Game(ids, track, { onEvent() {} });
+    window.__engine = engine;
+
+    for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+    ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i]));
+
+    const placeGrid = () => {
+      for (const c of engine.getSnapshot().cars) {
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead);
+      }
+    };
+    placeGrid();
+
+    const live = kind === 'racing';
+
+    // Pure-pursuit autopilot: aim each car at a point further along the
+    // centerline. Because the target sits ON the racing line, this term both
+    // recenters lateral drift and anticipates the upcoming curvature, so cars
+    // hold the track instead of scrubbing the curbs.
+    const LOOKAHEAD = 7.5;
+    function autosteer() {
+      for (const c of engine.cars.values()) {
+        if (c.finished || !c.pose) continue;
+        const tgt = track.centerline.sampleAt(c.totalS + LOOKAHEAD).pos;
+        const up = c.pose.up;
+        const fwd = c.pose.forward;
+        const to = tgt.clone().sub(c.pose.pos);
+        to.addScaledVector(up, -to.dot(up)); // flatten onto the road plane
+        if (to.lengthSq() < 1e-6) continue;
+        to.normalize();
+        const cross = fwd.clone().cross(to).dot(up);
+        const dot = Math.max(-1, Math.min(1, fwd.dot(to)));
+        const err = Math.atan2(cross, dot); // + = target is to the car's left
+        // Engine yaws the car by STEER_SIGN(-1)·f(steer), so a NEGATIVE steer
+        // input turns toward a left target — hence the leading minus.
+        const s = Math.max(-1, Math.min(1, -err * 1.8));
+        engine.processInput(c.id, { s, b: 0 });
+      }
+    }
+
+    let lastHud = 0;
+    scene.onFrame = (dt) => {
+      if (live) {
+        autosteer();
+        engine.update(dt * 1000);
+      }
+      const snap = engine.getSnapshot();
+      for (const c of snap.cars) {
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall, c.steerInput);
+      }
+      if (live) {
+        const now = performance.now();
+        if (now - lastHud > 160) {
+          lastHud = now;
+          for (const c of snap.cars) scene.setCarHud(c.id, c);
+        }
+        // Endless preview: once everyone crosses the line, reset and lap again.
+        if (engine.raceOver) {
+          engine = new Game(ids, track, { onEvent() {} });
+          window.__engine = engine;
+          placeGrid();
+        }
+      }
+    };
+
+    if (kind === 'countdown') {
+      // HUD shows lap 1 while the lights count down.
+      for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
+      runCountdown();
+    } else if (kind === 'results') {
+      // Freeze the grid behind the blurred results overlay.
+      const slots = buildSlots(players);
+      const listEl = el('results-list'); listEl.innerHTML = '';
+      slots.forEach((s, i) => {
+        const col = COLORS[s % COLORS.length] || '#888';
+        const li = document.createElement('li');
+        li.innerHTML =
+          `<span class="stand__dot" style="background:${col}"></span> ${FAKE_NAMES[s]}` +
+          `<span class="res-time">${FAKE_TIMES[i].toFixed(1)}s</span>`;
+        listEl.appendChild(li);
+      });
+      el('results').classList.remove('hidden');
+    }
+  }
+
+  function runCountdown() {
+    const cd = el('countdown');
+    let timers = [];
+    const clear = () => { timers.forEach(clearTimeout); timers = []; };
+    const seq = ['3', '2', '1', 'GO!'];
+    function run() {
+      clear();
+      let i = 0;
+      (function tick() {
+        cd.textContent = seq[i];
+        i++;
+        if (i < seq.length) timers.push(setTimeout(tick, 800));
+        else timers.push(setTimeout(() => { cd.textContent = '3'; }, 1200)); // rest at "3"
+      })();
+    }
+    cd.textContent = '3'; // frozen initial frame; ▶ replays the sequence
+    window.__TEST__.replay = run;
+  }
+}
