@@ -285,7 +285,7 @@ var Gallery = (function() {
       iframe.style.transform = 'scale(' + (rect.width / curW) + ')';
     }
     applyDims(opts.logical, opts.chromePx || 0);
-    requestAnimationFrame(rescale);
+    var _raf = requestAnimationFrame(rescale);
     var ro = new ResizeObserver(rescale);
     ro.observe(wrap);
 
@@ -316,8 +316,8 @@ var Gallery = (function() {
     card._initialUrl = opts.url;
     card._applyDims = applyDims;
     // Called by the page's render() before it tears down the strip, so stale
-    // observers don't pile up across re-renders.
-    card._destroy = function() { ro.disconnect(); };
+    // observers / pending callbacks don't pile up across re-renders.
+    card._destroy = function() { ro.disconnect(); cancelAnimationFrame(_raf); };
     card._setLabel = function(newTitle, newTag) {
       titleText.nodeValue = newTitle;
       tagEl.textContent = newTag ? ' ' + newTag : '';
@@ -338,9 +338,9 @@ var Gallery = (function() {
       } else if (card._loaded) {
         wrap.classList.add('pending');
         loadUrl(url);
-      } else {
-        card._pendingUrl = url;
       }
+      // else: not yet lazy-mounted — _initialUrl (set above) is what lazyMount
+      // will load, so there's nothing more to queue.
     };
     return card;
   }

@@ -103,8 +103,7 @@ export function runDisplayScenario(opts, ctx) {
 
   function setupRace(kind) {
     const { scene, track } = ctx;
-    show('race');
-    el('results').classList.add('hidden');
+    // (race screen already shown synchronously above, before the GLB load)
 
     const ids = [];
     for (let i = 0; i < players; i++) ids.push(i);
