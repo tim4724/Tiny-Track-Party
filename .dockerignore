@@ -1,0 +1,9 @@
+node_modules
+.git
+*.md
+.github
+.claude
+.playwright-mcp
+tests
+scripts
+test-results

@@ -1,0 +1,41 @@
+name: Preview Comment
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const safeBranch = branch
+              .toLowerCase()
+              .replace(/[^a-z0-9-]/g, '-')
+              .slice(0, 50)
+              .replace(/-+$/, '');
+            const previewUrl = `https://tinytrack-${safeBranch}.couch-games.com`;
+            const commentBody = `### Preview\n- URL: ${previewUrl}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(previewUrl));
+            if (!existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody,
+              });
+            } else {
+              console.log('Preview comment already exists');
+            }

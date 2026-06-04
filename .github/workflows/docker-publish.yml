@@ -1,0 +1,82 @@
+name: Docker Image
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      platforms:
+        description: "Target platforms for Docker build"
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64"
+    outputs:
+      sha_tag:
+        description: "Image tag for this commit (sha)"
+        value: ${{ jobs.build.outputs.sha_tag }}
+      branch_tag:
+        description: "Image tag for branch (short ref)"
+        value: ${{ jobs.build.outputs.branch_tag }}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      sha_tag: ${{ steps.out.outputs.sha_tag }}
+      branch_tag: ${{ steps.out.outputs.branch_tag }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        if: contains(inputs.platforms || 'linux/amd64,linux/arm64', 'arm64')
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+
+      - name: Capture tags for outputs
+        id: out
+        run: |
+          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | grep ":sha-" | head -n1)
+          BRANCH_TAG=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | grep ":${GITHUB_REF_NAME}$" | head -n1)
+          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=$BRANCH_TAG" >> "$GITHUB_OUTPUT"

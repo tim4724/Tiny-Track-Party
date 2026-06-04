@@ -1,0 +1,80 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Review PR
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: true
+          track_progress: true
+          prompt: |
+            /code-review --comment
+
+      - name: Check for stale bot review threads
+        id: stale-check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(gh api graphql -f query='
+            query($owner:String!,$repo:String!,$pr:Int!) {
+              repository(owner:$owner,name:$repo) {
+                pullRequest(number:$pr) {
+                  reviewThreads(first:100) {
+                    nodes { isResolved comments(first:1) { nodes { author { login } } } }
+                  }
+                }
+              }
+            }' -f owner="${{ github.repository_owner }}" \
+               -f repo="${{ github.event.repository.name }}" \
+               -F pr=${{ github.event.pull_request.number }} \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
+                   | select(.isResolved==false)
+                   | select(.comments.nodes[0].author.login=="claude[bot]")]
+                   | length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Found $count unresolved bot threads"
+
+      - name: Resolve stale bot review threads
+        if: steps.stale-check.outputs.count != '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Resolve stale review comments from previous bot reviews on this PR.
+
+            1. Fetch unresolved review threads:
+               gh api graphql -f query='{ repository(owner:"OWNER",name:"REPO") { pullRequest(number:PR) { reviewThreads(first:100) { nodes { id isResolved comments(first:1) { nodes { body path line author { login } } } } } } } }'
+            2. Filter to threads authored by "claude[bot]" that are unresolved.
+            3. For each, read the current source file at the commented path and line.
+            4. Judge whether the issue described in the comment has been fixed in the current code.
+            5. If fixed, resolve the thread:
+               gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"<id>"}) { thread { isResolved } } }'
+
+            Only resolve threads where you are confident the issue is fixed. Do not resolve threads from human reviewers. If there are no stale bot threads, exit immediately.
+          claude_args: |
+            --model claude-haiku-4-5 --allowedTools "Read,Grep,Bash(gh api:*)"

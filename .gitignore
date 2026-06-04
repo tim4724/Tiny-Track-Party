@@ -3,3 +3,9 @@ node_modules/
 test-results/
 *.log
 .DS_Store
+# Local-only Claude Code state — keeps the .claude/ root committable for shared
+# project settings/hooks while excluding per-user runtime files (worktrees,
+# local settings, scheduler lock).
+.claude/worktrees/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

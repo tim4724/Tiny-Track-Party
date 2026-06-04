@@ -1,0 +1,32 @@
+name: Preview Cleanup
+
+on:
+  delete:
+    branches:
+      - '**'
+
+jobs:
+  cleanup:
+    runs-on: [self-hosted, k8s]
+    if: github.event.ref_type == 'branch' && github.event.ref != 'main' && github.actor != 'dependabot[bot]'
+    environment: preview
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v5
+        with:
+          version: v1.30.0
+
+      - name: Write kubeconfig
+        run: |
+          echo "${KUBECONFIG_B64}" | base64 -d > kubeconfig
+          echo "KUBECONFIG=$PWD/kubeconfig" >> "$GITHUB_ENV"
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+
+      - name: Delete preview namespace
+        run: |
+          set -euo pipefail
+          BRANCH_RAW="${{ github.event.ref }}"
+          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g')
+          NS="tinytrack-${SAFE_BRANCH}"
+          kubectl delete namespace "$NS" --ignore-not-found

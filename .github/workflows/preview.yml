@@ -1,0 +1,231 @@
+name: Preview Deploy
+
+on:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      platforms: ${{ github.ref_name == 'main' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+  deploy:
+    runs-on: [self-hosted, k8s]
+    needs: build
+    if: github.actor != 'dependabot[bot]'
+    environment: preview
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v5
+        with:
+          version: v1.30.0
+
+      - name: Write kubeconfig
+        run: |
+          echo "${KUBECONFIG_B64}" | base64 -d > kubeconfig
+          echo "KUBECONFIG=$PWD/kubeconfig" >> "$GITHUB_ENV"
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+
+      - name: Deploy preview to Kubernetes
+        env:
+          BRANCH_RAW: ${{ github.ref_name }}
+          IMAGE: ${{ needs.build.outputs.sha_tag }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
+          NS="tinytrack-${SAFE_BRANCH}"
+          # All preview hosts sit under *.couch-games.com (covered by the
+          # existing wildcard TLS + DNS). main deploys to tinytrack-main,
+          # branches to tinytrack-<branch>; a bare tinytrack.couch-games.com is
+          # reserved for the eventual production deploy.
+          HOST="tinytrack-${SAFE_BRANCH}.couch-games.com"
+
+          kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
+
+          # Grant deployer SA namespace-scoped permissions via RoleBinding.
+          cat <<RBAC | kubectl apply -n "$NS" -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: tinytrack-deployer
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: tinytrack-preview-resources
+          subjects:
+          - kind: ServiceAccount
+            name: tinytrack-deployer
+            namespace: github-runner
+          RBAC
+
+          # Network policies: default-deny + allow DNS + allow traefik ingress.
+          cat <<NETPOL | kubectl apply -n "$NS" -f -
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: default-deny-all
+          spec:
+            podSelector: {}
+            policyTypes:
+            - Ingress
+            - Egress
+          ---
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-dns
+          spec:
+            podSelector: {}
+            policyTypes:
+            - Egress
+            egress:
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+              ports:
+              - protocol: UDP
+                port: 53
+              - protocol: TCP
+                port: 53
+          ---
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-ingress-from-traefik
+          spec:
+            podSelector: {}
+            policyTypes:
+            - Ingress
+            ingress:
+            - from:
+              - ipBlock:
+                  cidr: 192.168.1.115/32
+              ports:
+              - protocol: TCP
+          NETPOL
+
+          # Copy the *.couch-games.com wildcard TLS into the preview namespace.
+          TLS_CRT=$(kubectl get secret couch-games-wildcard-tls -n default -o jsonpath='{.data.tls\.crt}')
+          TLS_KEY=$(kubectl get secret couch-games-wildcard-tls -n default -o jsonpath='{.data.tls\.key}')
+
+          cat <<EOS | kubectl apply -n "$NS" -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: couch-games-wildcard-tls
+          type: kubernetes.io/tls
+          data:
+            tls.crt: ${TLS_CRT}
+            tls.key: ${TLS_KEY}
+          EOS
+
+          cat <<EOF | kubectl apply -n "$NS" -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: tinytrack
+          spec:
+            revisionHistoryLimit: 3
+            replicas: 1
+            selector:
+              matchLabels:
+                app: tinytrack
+            template:
+              metadata:
+                labels:
+                  app: tinytrack
+              spec:
+                containers:
+                  - name: tinytrack
+                    image: ${IMAGE}
+                    env:
+                      - name: BASE_URL
+                        value: https://${HOST}
+                      - name: APP_ENV
+                        value: preview
+                      - name: GIT_SHA
+                        value: ${GIT_SHA}
+                    ports:
+                      - containerPort: 4000
+                        name: http
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: tinytrack
+          spec:
+            selector:
+              app: tinytrack
+            ports:
+              - port: 4000
+                targetPort: 4000
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: Middleware
+          metadata:
+            name: redirect-to-https
+          spec:
+            redirectScheme:
+              scheme: https
+              permanent: true
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: IngressRoute
+          metadata:
+            name: tinytrack-https
+          spec:
+            entryPoints:
+              - websecure
+            routes:
+              - match: Host(\`${HOST}\`)
+                kind: Rule
+                services:
+                  - name: tinytrack
+                    port: 4000
+            tls:
+              secretName: couch-games-wildcard-tls
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: IngressRoute
+          metadata:
+            name: tinytrack-http
+          spec:
+            entryPoints:
+              - web
+            routes:
+              - match: Host(\`${HOST}\`)
+                kind: Rule
+                services:
+                  - name: tinytrack
+                    port: 4000
+                middlewares:
+                  - name: redirect-to-https
+          EOF
+
+      - name: Publish preview URL
+        env:
+          BRANCH_RAW: ${{ github.ref_name }}
+        run: |
+          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
+          HOST="tinytrack-${SAFE_BRANCH}.couch-games.com"
+          {
+            echo "### Preview"
+            echo "- URL: https://${HOST}"
+          } >> "$GITHUB_STEP_SUMMARY"
