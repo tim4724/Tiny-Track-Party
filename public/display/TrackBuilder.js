@@ -90,6 +90,13 @@ export const PIECES = {
 
 // A drivable centerline: closed polyline of frames (pos, tangent, up, lateral)
 // with cumulative arclength. sampleAt(s) interpolates, wrapping at the lap line.
+//
+// Position is interpolated with a CATMULL-ROM spline (not linearly): the raw
+// polyline is an inscribed polygon, so linear interp makes the car travel in
+// straight chords that kink at every vertex — its heading rotates smoothly but
+// its path direction jumps ~1° at each sample, an ~10 Hz shimmy through curves.
+// The spline gives a C1-smooth path, and we return its OWN derivative as the
+// tangent so the car's facing and its direction of travel agree by construction.
 export class Centerline {
   constructor(samples, length) {
     this.samples = samples;     // [{pos, tangent, up, lateral, s}]
@@ -98,19 +105,42 @@ export class Centerline {
   sampleAt(s) {
     const len = this.length;
     s = ((s % len) + len) % len;
-    const a = this.samples;
+    const a = this.samples, n = a.length;
     // linear scan is fine (a few hundred points); could binary search later.
     let i = 0;
-    while (i < a.length - 1 && a[i + 1].s <= s) i++;
-    const p0 = a[i], p1 = a[(i + 1) % a.length];
-    const segLen = (p1.s > p0.s ? p1.s : len) - p0.s || 1e-6;
-    const f = (s - p0.s) / segLen;
-    return {
-      pos: p0.pos.clone().lerp(p1.pos, f),
-      tangent: p0.tangent.clone().lerp(p1.tangent, f).normalize(),
-      up: p0.up.clone().lerp(p1.up, f).normalize(),
-      lateral: p0.lateral.clone().lerp(p1.lateral, f).normalize()
-    };
+    while (i < n - 1 && a[i + 1].s <= s) i++;
+
+    // Four-point stencil around the segment [i, i+1], wrapping the closed loop.
+    // Arclengths are unwrapped relative to the segment start so they stay
+    // monotonic across the start/finish seam.
+    const idx = (k) => ((k % n) + n) % n;
+    const pA = a[idx(i - 1)], pB = a[i], pC = a[idx(i + 1)], pD = a[idx(i + 2)];
+    const sB = pB.s;
+    let sA = pA.s, sC = pC.s, sD = pD.s;
+    while (sA > sB) sA -= len;
+    while (sC < sB) sC += len;
+    while (sD < sC) sD += len;
+
+    const h = (sC - sB) || 1e-6;
+    const u = (s - sB) / h, u2 = u * u, u3 = u2 * u;
+    // Non-uniform Catmull-Rom = cubic Hermite with finite-difference tangents
+    // (per unit arclength) at the two knots; tangents scaled by the segment span.
+    const mB = pC.pos.clone().sub(pA.pos).multiplyScalar(h / ((sC - sA) || 1e-6));
+    const mC = pD.pos.clone().sub(pB.pos).multiplyScalar(h / ((sD - sB) || 1e-6));
+    const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u;
+    const h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+    const pos = pB.pos.clone().multiplyScalar(h00)
+      .addScaledVector(mB, h10).addScaledVector(pC.pos, h01).addScaledVector(mC, h11);
+    // Derivative of the same curve → tangent (motion direction == facing).
+    const g00 = 6 * u2 - 6 * u, g10 = 3 * u2 - 4 * u + 1;
+    const g01 = -6 * u2 + 6 * u, g11 = 3 * u2 - 2 * u;
+    const tangent = pB.pos.clone().multiplyScalar(g00)
+      .addScaledVector(mB, g10).addScaledVector(pC.pos, g01).addScaledVector(mC, g11).normalize();
+
+    const f = u;
+    const up = pB.up.clone().lerp(pC.up, f).normalize();
+    const lateral = tangent.clone().cross(up).normalize();
+    return { pos, tangent, up, lateral };
   }
 }
 
@@ -169,6 +199,40 @@ export function buildTrack(pieceList) {
     while (worldPts.length > 3 &&
            worldPts[worldPts.length - 1].clone().sub(p0).dot(startTan) > 0) {
       worldPts.pop();
+    }
+  }
+
+  // Weld out degenerate-short segments. The OVERLAP skip and the closure trim
+  // above each leave forward progress intact but can land a vertex a few cm from
+  // its neighbour: a corner's first kept vertex falling just past the joint, or
+  // the loop's final vertex landing almost on top of the first. The car crosses
+  // such a stub in a single frame, snapping its tangent ~6° in one step — that's
+  // the twitch felt entering a curve. Drop any vertex within MIN_SEG of its kept
+  // predecessor (and the last vertex if it collapses onto the start). Every
+  // intended sample spacing scales with SCALE and is far larger (the smallest,
+  // a small-corner arc step, is ~0.43 world), so only joint/seam stubs are cut.
+  const MIN_SEG = 0.125 * SCALE;
+  const welded = [worldPts[0]];
+  for (let i = 1; i < worldPts.length; i++) {
+    if (worldPts[i].distanceTo(welded[welded.length - 1]) >= MIN_SEG) welded.push(worldPts[i]);
+  }
+  if (welded.length > 3 && welded[welded.length - 1].distanceTo(welded[0]) < MIN_SEG) welded.pop();
+  worldPts.splice(0, worldPts.length, ...welded);
+
+  // Round the CURVATURE step at every straight<->curve joint into a short ramp.
+  // Pieces meet with discontinuous curvature (a straight's kappa=0 abuts an arc's
+  // kappa=1/R). The spline that sampleAt fits through that step overshoots and
+  // even briefly reverses curvature right at the joint — the car gets nudged the
+  // wrong way then snaps back, the jitter felt entering a curve. A few light
+  // Laplacian passes (nudge each point toward the midpoint of its neighbours)
+  // spread the step over a short transition. Kept light so steady-corner
+  // curvature is preserved and the racing line shifts only a few tenths of a unit.
+  const SMOOTH_LAMBDA = 0.3, SMOOTH_PASSES = 4, ringN = worldPts.length;
+  for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
+    const ring = worldPts.map((p) => p.clone()); // Jacobi: read the pre-pass ring
+    for (let i = 0; i < ringN; i++) {
+      const a = ring[(i - 1 + ringN) % ringN], b = ring[(i + 1) % ringN];
+      worldPts[i].lerp(a.clone().add(b).multiplyScalar(0.5), SMOOTH_LAMBDA);
     }
   }
 
