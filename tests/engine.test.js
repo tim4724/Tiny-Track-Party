@@ -59,9 +59,11 @@ test('steering moves lateral and clamps at the wall', () => {
   step(game, 2);
   game.processInput('p1', { s: 1 });
   step(game, 3);
-  const lat = game.getSnapshot().cars[0].lat;
-  assert.ok(lat > 0, 'steering right should increase lat');
-  assert.ok(lat <= game.maxLat + 1e-6, 'lat must not exceed the wall');
+  const car = game.getSnapshot().cars[0];
+  assert.ok(car.lat > 0, 'steering right should increase lat');
+  assert.ok(car.lat <= game.maxLat + 1e-6, 'lat must not exceed the wall');
+  // rubbing the curb slows but does NOT trap the car at a standstill
+  assert.ok(car.v > 1, `car should keep moving along the curb (v=${car.v.toFixed(2)})`);
 });
 
 test('a full race finishes and emits events', () => {

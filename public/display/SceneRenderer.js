@@ -20,11 +20,20 @@ const TRACK_GLBS = [
 const CHASE_DIST = 5.0, CHASE_HEIGHT = 2.4, CHASE_LOOK = 5.0;
 const CAM_LERP_POS = 0.16, CAM_LERP_TARGET = 0.22;
 
-// split-screen grid per player count (cols × rows), filled top-to-bottom.
-const LAYOUTS = {
-  1: [1, 1], 2: [1, 2], 3: [2, 2], 4: [2, 2],
-  5: [3, 2], 6: [3, 2], 7: [4, 2], 8: [4, 2]
-};
+// Split-screen grid that makes cells as SQUARE as possible for the current
+// screen aspect: try every column count, score each by how far the resulting
+// cell aspect is from 1:1 (square), with a small penalty for empty cells.
+function bestGrid(n, W, H) {
+  let best = { cols: 1, rows: n, cost: Infinity };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cellAspect = (W / cols) / (H / rows);
+    // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
+    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4;
+    if (cost < best.cost) best = { cols, rows, cost };
+  }
+  return best;
+}
 
 export class SceneRenderer {
   constructor(container, colors) {
@@ -73,6 +82,7 @@ export class SceneRenderer {
     ground.position.y = -1.0;
     ground.receiveShadow = true;
     scene.add(ground);
+    this.ground = ground;
 
     this.trackGroup = new THREE.Group();
     scene.add(this.trackGroup);
@@ -110,6 +120,7 @@ export class SceneRenderer {
 
   setTrack(track, { debug = false } = {}) {
     this.trackGroup.clear();
+    if (track.groundY != null) this.ground.position.y = track.groundY;
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
@@ -235,7 +246,7 @@ export class SceneRenderer {
       return;
     }
 
-    const [cols, rows] = LAYOUTS[Math.min(8, ids.length)] || [Math.ceil(Math.sqrt(ids.length)), Math.ceil(Math.sqrt(ids.length))];
+    const { cols, rows } = bestGrid(ids.length, W, H);
     const cw = Math.floor(W / cols), ch = Math.floor(H / rows);
 
     ids.forEach((id, i) => {

@@ -10,8 +10,11 @@
 const ACCEL = 9.0;        // units/s^2 forward
 const VMAX = 15.0;        // top speed units/s
 const BRAKE_DECEL = 26.0; // units/s^2 when braking toward the brake-target speed
-const STEER_RATE = 4.2;   // lateral units/s at full lock
-const WALL_SCRUB = 0.55;  // speed kept when you hit the wall
+// Ribbon-follow steering: the car always faces the track direction (so it can
+// never u-turn or drive backward); tilt only slides it across the road width.
+const STEER_RATE = 4.2;   // lateral units/s at full tilt
+const WALL_SPEED = VMAX * 0.5; // speed cap while rubbing the curb (slows, never stuck)
+const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 
 export class Game {
@@ -71,8 +74,9 @@ export class Game {
       // lateral: steering authority grows with speed (can't strafe when stopped).
       const authority = 0.25 + 0.75 * Math.min(1, c.v / (VMAX * 0.5));
       c.lat += c.steer * STEER_RATE * authority * dt;
-      if (c.lat > this.maxLat) { c.lat = this.maxLat; c.v *= WALL_SCRUB; }
-      else if (c.lat < -this.maxLat) { c.lat = -this.maxLat; c.v *= WALL_SCRUB; }
+      // Rubbing the curb just slows you toward a cap — never a hard stop.
+      if (c.lat > this.maxLat) { c.lat = this.maxLat; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
+      else if (c.lat < -this.maxLat) { c.lat = -this.maxLat; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
 
       // progress + lap counting (totalS is unwrapped distance from the line).
       const prevTotal = c.totalS;

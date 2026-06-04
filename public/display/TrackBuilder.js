@@ -19,6 +19,7 @@ const Z0 = -0.185;         // entry connector Z
 const R_SMALL = 2.185;     // corner-small turn radius
 const R_LARGE = 4.185;     // corner-large turn radius
 const ROAD_WIDTH = 1.8;    // wide road DRIVABLE width (between curbs); full slab is 2.0
+const SCALE = 2;           // uniform world scale — bigger track, more room for the cars
 
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -117,17 +118,20 @@ export function buildTrack(pieceList) {
   const instances = [];
   const worldPts = [];
 
+  // Uniform scale applied to both GLB placements and the centerline so they
+  // stay consistent. Pieces chain in unscaled space (cursor), then scale out.
+  const scaleM = new THREE.Matrix4().makeScale(SCALE, SCALE, SCALE);
   const tmpInv = new THREE.Matrix4();
   for (const key of pieceList) {
     const spec = PIECES[key]();
     const place = cursor.clone().multiply(tmpInv.copy(spec.entry).invert());
-    instances.push({ glb: spec.glb, matrix: place.clone() });
+    instances.push({ glb: spec.glb, matrix: scaleM.clone().multiply(place) });
 
     // append centerline points (skip first of each piece after the first to
-    // avoid duplicate vertices at joints)
+    // avoid duplicate vertices at joints), scaled to match the placed GLBs
     const start = worldPts.length === 0 ? 0 : 1;
     for (let i = start; i < spec.points.length; i++) {
-      worldPts.push(spec.points[i].clone().applyMatrix4(place));
+      worldPts.push(spec.points[i].clone().applyMatrix4(place).multiplyScalar(SCALE));
     }
     cursor = place.clone().multiply(spec.exit);
   }
@@ -144,7 +148,7 @@ export function buildTrack(pieceList) {
   // lateral = tangent × up, and cumulative arclength.
   const n = worldPts.length;
   const samples = [];
-  let s = 0;
+  let s = 0, minY = Infinity;
   for (let i = 0; i < n; i++) {
     const prev = worldPts[(i - 1 + n) % n];
     const next = worldPts[(i + 1) % n];
@@ -152,11 +156,18 @@ export function buildTrack(pieceList) {
     const up = v(0, 1, 0);
     const lateral = tangent.clone().cross(up).normalize();
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
+    minY = Math.min(minY, worldPts[i].y);
     samples.push({ pos: worldPts[i].clone(), tangent, up, lateral, s });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
 
-  return { instances, centerline: new Centerline(samples, length), length, closed, gap, roadWidth: ROAD_WIDTH };
+  return {
+    instances,
+    centerline: new Centerline(samples, length),
+    length, closed, gap,
+    roadWidth: ROAD_WIDTH * SCALE,
+    groundY: minY - 0.3 // grass plane just under the road slab
+  };
 }
 
 // A simple closed oval: long sides (4 straights) + short sides (2), 4 left
