@@ -13,7 +13,8 @@ export function runControllerScenario(opts) {
   const COLORS = window.CAR_COLORS || ['#2bb673'];
   const scenario = opts.scenario;
   const color = Math.max(0, Math.min(opts.color || 0, COLORS.length - 1));
-  const players = Math.max(1, Math.min(opts.players || 4, COLORS.length));
+  // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
+  const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
 
   const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -86,7 +87,11 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-waiting': {
-      const hostIdx = (color + 1) % players;
+      // Host is any rostered slot that isn't the viewed player (the one
+      // waiting). With a single slot there's no other player, so no ★ — which
+      // matches the "waiting for the host" copy below.
+      const others = buildSlots().filter((s) => s !== color);
+      const hostIdx = others.length ? others[0] : null;
       show('lobby');
       renderRoster(hostIdx);
       el('start-btn').classList.add('hidden');

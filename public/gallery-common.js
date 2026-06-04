@@ -133,38 +133,61 @@ var Gallery = (function() {
       _drain();
     }
   }
+  // Started tasks awaiting load/error/timeout. Tracked so resetQueue() can
+  // abandon them: on re-render the old iframes are torn out of the DOM and
+  // never fire `load`, so their slots would otherwise stay held for 12s.
+  var inflight = [];
   function _drain() {
     while (!paused && active < MAX_CONCURRENT && queue.length) {
       // `let` so each iteration closes over its own task/done/iframe.
       let task = queue.shift();
       let iframe = task.iframe;
-      let url = task.url;
       let done = false;
       let fallback = null;
+      task.started = true;
       active++;
+      let cleanup = function() {
+        clearTimeout(fallback);
+        iframe.removeEventListener('load', finish);
+        iframe.removeEventListener('error', finish);
+        let idx = inflight.indexOf(task); if (idx >= 0) inflight.splice(idx, 1);
+        active--;
+      };
       let finish = function() {
         if (done) return; done = true;
-        clearTimeout(fallback);
-        active--;
+        cleanup();
         task.onDone && task.onDone();
         _drain();
       };
-      iframe.addEventListener('load', finish, { once: true });
-      iframe.addEventListener('error', finish, { once: true });
+      // Abandon a started load without firing onDone — used when the card is
+      // torn down mid-load (resetQueue), so the slot is released immediately.
+      task.cancel = function() { if (done) return; done = true; cleanup(); };
+      inflight.push(task);
+      iframe.addEventListener('load', finish);
+      iframe.addEventListener('error', finish);
       // Fallback: the display page loads a WebGL scene + GLBs, so give it a
       // generous window before assuming the load event was missed. Cleared in
-      // finish() so it doesn't sit pending for 12s after a normal load.
+      // cleanup() so it doesn't sit pending for 12s after a normal load.
       fallback = setTimeout(finish, 12000);
-      iframe.src = url;
+      iframe.src = task.url; // mutable — _setUrl can retarget a not-yet-started task
     }
   }
   function enqueueLoad(iframe, url, onDone) {
-    queue.push({ iframe: iframe, url: url, onDone: onDone });
+    var task = { iframe: iframe, url: url, onDone: onDone, started: false, cancel: null };
+    queue.push(task);
     _drain();
+    return task;
   }
-  // Drop pending work but let in-flight loads finish naturally — zeroing
-  // `active` here would push it negative as their `finish` callbacks fire.
-  function resetQueue() { queue = []; }
+  // Abandon all queued + in-flight loads. Called at the top of render() before
+  // the strip is rebuilt: the old iframes are about to leave the DOM (so their
+  // load events would never fire), and their concurrency slots must be released
+  // immediately or the new cards stall until the 12s fallback.
+  function resetQueue() {
+    queue = [];
+    var pending = inflight.slice();
+    inflight = [];
+    for (var i = 0; i < pending.length; i++) if (pending[i].cancel) pending[i].cancel();
+  }
 
   // Auto-pause loading while a header <select> popup is open. Only selects
   // need this — buttons and number inputs have no popup that an iframe load
@@ -274,17 +297,19 @@ var Gallery = (function() {
     function loadUrl(url) {
       var gen = ++_loadGen;
       link.href = url;
-      enqueueLoad(iframe, url, function() {
+      var task = enqueueLoad(iframe, url, function() {
+        if (card._task === task) card._task = null;
         if (gen !== _loadGen) return;
         wrap.classList.remove('pending');
         card._loaded = true;
         var pending = card._pendingUrl;
         card._pendingUrl = null;
-        if (pending && pending !== url) {
+        if (pending && pending !== task.url) {
           wrap.classList.add('pending');
           loadUrl(pending);
         }
       });
+      card._task = task;
     }
 
     card._loadUrl = loadUrl;
@@ -304,7 +329,13 @@ var Gallery = (function() {
     card._setUrl = function(url) {
       card._initialUrl = url;
       link.href = url;
-      if (card._loaded) {
+      if (card._task) {
+        // A load for this card is queued or in flight. If it hasn't started,
+        // retarget it in place (no stale-URL load, no extra slot consumed);
+        // if it's already loading, chain the new URL after it via _pendingUrl.
+        if (!card._task.started) card._task.url = url;
+        else card._pendingUrl = url;
+      } else if (card._loaded) {
         wrap.classList.add('pending');
         loadUrl(url);
       } else {
@@ -317,10 +348,12 @@ var Gallery = (function() {
   // --- Intersection-based lazy mount ---
   // Observes cards and calls loadUrl only when they approach viewport, so the
   // browser isn't slammed with every WebGL display iframe at once.
+  // Returns the IntersectionObserver so the caller can disconnect it on the
+  // next render() (it holds references to every card it observes).
   function lazyMount(cards) {
     if (!('IntersectionObserver' in window)) {
       for (var i = 0; i < cards.length; i++) cards[i]._loadUrl(cards[i]._initialUrl);
-      return;
+      return null;
     }
     var io = new IntersectionObserver(function(entries) {
       for (var i = 0; i < entries.length; i++) {
@@ -332,6 +365,7 @@ var Gallery = (function() {
       }
     }, { rootMargin: '400px 0px' });
     for (var j = 0; j < cards.length; j++) io.observe(cards[j]);
+    return io;
   }
 
   // --- Mobile options toggle ---

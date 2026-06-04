@@ -22,7 +22,8 @@ export function runDisplayScenario(opts, ctx) {
   const COLORS = window.CAR_COLORS || ['#e6492d'];
   const TOTAL_LAPS = window.TOTAL_LAPS || 3;
   const scenario = opts.scenario || 'racing';
-  const players = Math.max(1, Math.min(opts.players || 4, COLORS.length));
+  // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
+  const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
   const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
 
   const screens = { lobby: el('lobby'), race: el('race') };
@@ -93,8 +94,11 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   // ---- race scenarios (countdown / racing / results) ----
-  // Build the engine + scene cars once the GLBs are loaded, place them at the
-  // grid, then install our own frame hook. `live` advances the sim each frame.
+  // Switch to the race screen synchronously so the lobby (QR/roster/join URL)
+  // doesn't flash while the GLBs load. Build the engine + scene cars once the
+  // GLBs are ready, place them at the grid, then install our own frame hook.
+  show('race');
+  el('results').classList.add('hidden');
   ctx.scenePromise.then(() => setupRace(scenario)).catch((e) => console.warn('[TestHarness] scene load failed', e));
 
   function setupRace(kind) {

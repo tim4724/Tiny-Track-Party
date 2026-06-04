@@ -52,8 +52,10 @@ function cardTag(c) {
   return '';
 }
 
+var lazyIo = null;
 function render() {
   Gallery.resetQueue();
+  if (lazyIo) { lazyIo.disconnect(); lazyIo = null; }
   for (var d0 = 0; d0 < allCards.length; d0++) if (allCards[d0]._destroy) allCards[d0]._destroy();
   var host = document.getElementById('controller-rows');
   host.innerHTML = '';
@@ -81,7 +83,7 @@ function render() {
     if (c.perColor) perColorCards.push({ card: card, scenario: c });
   }
   host.appendChild(strip);
-  Gallery.lazyMount(allCards);
+  lazyIo = Gallery.lazyMount(allCards);
 }
 
 // view-as swaps the `color` param on each per-color card's iframe in place —

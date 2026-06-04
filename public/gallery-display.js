@@ -48,8 +48,10 @@ function cardTag(c) {
   return '';
 }
 
+var lazyIo = null;
 function render() {
   Gallery.resetQueue();
+  if (lazyIo) { lazyIo.disconnect(); lazyIo = null; }
   for (var d0 = 0; d0 < allCards.length; d0++) if (allCards[d0]._destroy) allCards[d0]._destroy();
   var host = document.getElementById('display-rows');
   host.innerHTML = '';
@@ -76,7 +78,7 @@ function render() {
     if (c.hostVariant) hostVariantCards.push({ card: card, scenario: c });
   }
   host.appendChild(strip);
-  Gallery.lazyMount(allCards);
+  lazyIo = Gallery.lazyMount(allCards);
 }
 
 // Host change swaps the `host` param on each host-variant card's iframe in
