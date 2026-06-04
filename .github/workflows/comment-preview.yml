@@ -2,7 +2,9 @@ name: Preview Comment
 
 on:
   pull_request:
-    types: [opened, reopened]
+    # synchronize too, so the comment stays current as the branch evolves —
+    # the marker-adopt logic below keeps it a single, updated-in-place comment.
+    types: [opened, reopened, synchronize]
 
 jobs:
   comment:

@@ -54,6 +54,7 @@ function cardTag(c) {
 
 function render() {
   Gallery.resetQueue();
+  for (var d0 = 0; d0 < allCards.length; d0++) if (allCards[d0]._destroy) allCards[d0]._destroy();
   var host = document.getElementById('controller-rows');
   host.innerHTML = '';
 

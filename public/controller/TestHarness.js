@@ -94,18 +94,20 @@ export function runControllerScenario(opts) {
       break;
     }
 
-    case 'countdown':
+    case 'countdown': {
       showDriveHud();
       el('go').classList.remove('hidden');
       el('go').textContent = '3';
       setSteer(0);
       setHud(1, 3, 1, false);
+      // `timers` lives in the case scope so a re-play cancels the previous
+      // sequence instead of racing it.
+      const go = el('go');
+      const seq = ['3', '2', '1', 'GO!'];
+      let timers = [];
       window.__TEST__.replay = function() {
-        const go = el('go');
-        const seq = ['3', '2', '1', 'GO!'];
+        timers.forEach(clearTimeout); timers = [];
         let i = 0;
-        let timers = [];
-        timers.forEach(clearTimeout);
         (function tick() {
           go.textContent = seq[i]; i++;
           if (i < seq.length) timers.push(setTimeout(tick, 800));
@@ -113,6 +115,7 @@ export function runControllerScenario(opts) {
         })();
       };
       break;
+    }
 
     case 'playing':
       showDriveHud();

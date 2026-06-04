@@ -140,9 +140,11 @@ var Gallery = (function() {
       let iframe = task.iframe;
       let url = task.url;
       let done = false;
+      let fallback = null;
       active++;
       let finish = function() {
         if (done) return; done = true;
+        clearTimeout(fallback);
         active--;
         task.onDone && task.onDone();
         _drain();
@@ -150,8 +152,9 @@ var Gallery = (function() {
       iframe.addEventListener('load', finish, { once: true });
       iframe.addEventListener('error', finish, { once: true });
       // Fallback: the display page loads a WebGL scene + GLBs, so give it a
-      // generous window before assuming the load event was missed.
-      setTimeout(finish, 12000);
+      // generous window before assuming the load event was missed. Cleared in
+      // finish() so it doesn't sit pending for 12s after a normal load.
+      fallback = setTimeout(finish, 12000);
       iframe.src = url;
     }
   }
@@ -260,7 +263,8 @@ var Gallery = (function() {
     }
     applyDims(opts.logical, opts.chromePx || 0);
     requestAnimationFrame(rescale);
-    new ResizeObserver(rescale).observe(wrap);
+    var ro = new ResizeObserver(rescale);
+    ro.observe(wrap);
 
     // Generation counter — each loadUrl bumps it, and onDone early-exits if
     // it no longer matches. Needed because rapid _setUrl calls on an already-
@@ -286,6 +290,9 @@ var Gallery = (function() {
     card._loadUrl = loadUrl;
     card._initialUrl = opts.url;
     card._applyDims = applyDims;
+    // Called by the page's render() before it tears down the strip, so stale
+    // observers don't pile up across re-renders.
+    card._destroy = function() { ro.disconnect(); };
     card._setLabel = function(newTitle, newTag) {
       titleText.nodeValue = newTitle;
       tagEl.textContent = newTag ? ' ' + newTag : '';
