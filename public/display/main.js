@@ -4,6 +4,7 @@ import { DisplayNet, fetchQR, renderQR } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, OVAL } from './TrackBuilder.js';
 import { Game } from './engine/Game.js';
+// Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
@@ -27,7 +28,7 @@ scene.onFrame = (dt) => {
   engine.update(dt * 1000);
   const snap = engine.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.tangent, c.pose.up, -c.steer * 0.25);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall);
   }
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
@@ -37,7 +38,7 @@ scene.onFrame = (dt) => {
       scene.setCarHud(c.id, c);
       net.sendTo(c.id, {
         type: MSG.PLAYER_STATE, lap: c.lap, totalLaps: c.totalLaps,
-        position: c.position, of: c.of, finished: c.finished
+        position: c.position, of: c.of, finished: c.finished, scrub: c.onWall
       });
     }
   }
@@ -99,7 +100,7 @@ function startRace() {
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of players) scene.addCar(p.peerIndex, p.colorIndex, p.name);
   // place cars at their grid poses immediately
-  for (const c of engine.getSnapshot().cars) if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.tangent, c.pose.up);
+  for (const c of engine.getSnapshot().cars) if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead);
 
   let n = COUNTDOWN_SECONDS;
   el('countdown').textContent = n;
@@ -120,7 +121,7 @@ function startRace() {
 }
 
 function onRaceEvent(e) {
-  // hook for SFX / FX later (lap, finish, race_over)
+  // hook for SFX / FX (lap, finish, race_over) — sound disabled for now
 }
 
 let endTimer = null;

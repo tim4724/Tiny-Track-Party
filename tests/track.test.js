@@ -27,6 +27,21 @@ test('centerline is a non-trivial closed ribbon', () => {
   for (let i = 1; i < s.length; i++) assert.ok(s[i] > s[i - 1], 'arclength not monotonic');
 });
 
+test('centerline never steps backward at joints (no hiccup)', () => {
+  const t = buildTrack(OVAL);
+  const pts = t.centerline.samples.map((p) => p.pos);
+  const n = pts.length;
+  let worst = 1;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
+    const d1 = b.clone().sub(a).normalize();
+    const d2 = c.clone().sub(b).normalize();
+    worst = Math.min(worst, d1.dot(d2));
+  }
+  // adjacent segments must point roughly the same way; a back-step would be ~ -1
+  assert.ok(worst > 0.3, `centerline reverses at a joint (worst seg dot=${worst.toFixed(2)})`);
+});
+
 test('sampleAt wraps and returns oriented frames', () => {
   const t = buildTrack(OVAL);
   const a = t.centerline.sampleAt(0);

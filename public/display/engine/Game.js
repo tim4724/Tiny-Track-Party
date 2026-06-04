@@ -7,15 +7,22 @@
 //   new Game(playerIds, { centerline, length, roadWidth, totalLaps }, { onEvent })
 //   update(dtMs) / processInput(id, {s,b}) / getSnapshot() / getResults()
 
-const ACCEL = 9.0;        // units/s^2 forward
-const VMAX = 15.0;        // top speed units/s
+const ACCEL = 7.0;        // units/s^2 forward
+const VMAX = 9.0;         // top speed units/s — paired with TURN_RATE so the
+                          // large corners are followable at full speed (v/R < turn rate)
 const BRAKE_DECEL = 26.0; // units/s^2 when braking toward the brake-target speed
-// Ribbon-follow steering: the car always faces the track direction (so it can
-// never u-turn or drive backward); tilt only slides it across the road width.
-const STEER_RATE = 4.2;   // lateral units/s at full tilt
+// Real steering: tilt turns the car's HEADING (radians, relative to the track
+// direction). We subtract the track's own turn each step so NEUTRAL = straight
+// in the world — you must steer through curves (no autosteer). Heading is
+// clamped so the car can never point backward → u-turn is impossible.
+const TURN_RATE = 1.2;    // rad/s at full tilt — calm
+const STEER_EXPO = 1.8;   // non-linear response: small tilt = gentle, full = full lock
+const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progress)
+const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
 const WALL_SPEED = VMAX * 0.5; // speed cap while rubbing the curb (slows, never stuck)
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
+const LOOKAHEAD = 8.0;    // world units down the centerline the camera aims at
 
 export class Game {
   constructor(playerIds, track, callbacks = {}) {
@@ -31,12 +38,14 @@ export class Game {
     // Stagger the grid so cars don't spawn on top of each other: small negative
     // s and alternating lateral lanes, all behind the start line (s=0).
     playerIds.forEach((id, i) => {
-      const lane = (i % 2 === 0 ? 1 : -1) * Math.min(this.maxLat, 0.22);
+      const row = Math.floor(i / 2);
+      const lane = (i % 2 === 0 ? -1 : 1) * Math.min(this.maxLat * 0.6, 0.5);
       this.cars.set(id, {
         id,
-        totalS: -1.2 - i * 1.1,  // grid positions behind the line
+        totalS: 1.0 + row * 1.6,  // staggered grid on the opening straight (s>0)
         lat: lane,
         v: 0,
+        heading: 0,      // car yaw relative to the track tangent (real steering)
         steer: 0,
         brake: 0,        // 0..1 analog brake (swipe distance)
         lap: 0,
@@ -71,16 +80,36 @@ export class Game {
       if (c.v < targetV) c.v = Math.min(targetV, c.v + ACCEL * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
 
-      // lateral: steering authority grows with speed (can't strafe when stopped).
-      const authority = 0.25 + 0.75 * Math.min(1, c.v / (VMAX * 0.5));
-      c.lat += c.steer * STEER_RATE * authority * dt;
-      // Rubbing the curb just slows you toward a cap — never a hard stop.
-      if (c.lat > this.maxLat) { c.lat = this.maxLat; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
-      else if (c.lat < -this.maxLat) { c.lat = -this.maxLat; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
+      // STEERING (real): tilt turns the car's heading; you must steer through
+      // curves. Move along the heading within the track's surface frame.
+      const authority = 0.4 + 0.6 * Math.min(1, c.v / (VMAX * 0.5));
+      // non-linear response: ease the center so small tilts barely steer
+      const steerIn = Math.sign(c.steer) * Math.pow(Math.abs(c.steer), STEER_EXPO);
+      c.heading += STEER_SIGN * steerIn * TURN_RATE * authority * dt;
 
-      // progress + lap counting (totalS is unwrapped distance from the line).
+      const before = this.centerline.sampleAt(c.totalS);
+      const along = Math.cos(c.heading), across = Math.sin(c.heading);
       const prevTotal = c.totalS;
-      c.totalS += c.v * dt;
+      c.totalS += c.v * Math.max(0.1, along) * dt; // always some forward progress
+      // lateral axis (tangent×up) points opposite the +heading rotation, so the
+      // sideways motion is -sin(heading): the car moves the way it points.
+      c.lat -= c.v * across * dt;
+
+      // Subtract the track's own turn so NEUTRAL holds a world heading (= you
+      // must steer the curves), then clamp so the car can't point backward.
+      const after = this.centerline.sampleAt(c.totalS);
+      const dTheta = Math.atan2(
+        before.tangent.clone().cross(after.tangent).dot(after.up),
+        before.tangent.dot(after.tangent)
+      );
+      c.heading -= dTheta;
+      if (c.heading > MAX_HEADING) c.heading = MAX_HEADING;
+      else if (c.heading < -MAX_HEADING) c.heading = -MAX_HEADING;
+
+      // Rubbing the curb slows you toward a cap — never a hard stop.
+      c.onWall = false;
+      if (c.lat > this.maxLat) { c.lat = this.maxLat; c.onWall = true; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
+      else if (c.lat < -this.maxLat) { c.lat = -this.maxLat; c.onWall = true; if (c.v > WALL_SPEED) c.v = Math.max(WALL_SPEED, c.v - WALL_DECEL * dt); }
       const prevLap = Math.floor(Math.max(0, prevTotal) / this.length);
       const lap = Math.floor(Math.max(0, c.totalS) / this.length);
       if (c.totalS >= 0 && lap > prevLap && prevTotal >= 0) {
@@ -110,8 +139,10 @@ export class Game {
       const f = this.centerline.sampleAt(c.totalS);
       c.pose = {
         pos: f.pos.clone().addScaledVector(f.lateral, c.lat),
-        tangent: f.tangent,
-        up: f.up
+        forward: f.tangent.clone().applyAxisAngle(f.up, c.heading), // car faces its heading
+        tangent: f.tangent,                                          // track direction
+        up: f.up,
+        lookAhead: this.centerline.sampleAt(c.totalS + LOOKAHEAD).pos.clone() // camera aim
       };
     }
   }
@@ -132,10 +163,13 @@ export class Game {
     const cars = [];
     for (const c of this.cars.values()) {
       cars.push({
-        id: c.id, pose: c.pose, lat: c.lat, v: c.v,
+        id: c.id, pose: c.pose, lat: c.lat, v: c.v, spd: c.v / VMAX, // normalized 0..1
         lap: Math.min(this.totalLaps, c.lap + (c.totalS >= 0 ? 1 : 0)), // 1-based display lap
         totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
-        finished: c.finished, steer: c.steer, brake: c.brake
+        // steer is reported TURN-ALIGNED: its sign matches the way the car actually
+        // turns (= STEER_SIGN * raw input), so the renderer's front wheels + body
+        // lean line up with the turn without the renderer needing to know STEER_SIGN.
+        finished: c.finished, steer: STEER_SIGN * c.steer, brake: c.brake, onWall: !!c.onWall
       });
     }
     return { cars, elapsed: this.elapsed };

@@ -20,6 +20,10 @@ const R_SMALL = 2.185;     // corner-small turn radius
 const R_LARGE = 4.185;     // corner-large turn radius
 const ROAD_WIDTH = 1.8;    // wide road DRIVABLE width (between curbs); full slab is 2.0
 const SCALE = 2;           // uniform world scale — bigger track, more room for the cars
+// Each connector nub protrudes ~0.185 past the road surface, so connector-to-
+// connector placement leaves a ~0.37 gap between road tops. Overlap each piece
+// into the previous by that much so the road is seamless (nubs interlock).
+const OVERLAP = 0.37;
 
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -121,19 +125,34 @@ export function buildTrack(pieceList) {
   // Uniform scale applied to both GLB placements and the centerline so they
   // stay consistent. Pieces chain in unscaled space (cursor), then scale out.
   const scaleM = new THREE.Matrix4().makeScale(SCALE, SCALE, SCALE);
+  const overlapBack = new THREE.Matrix4().makeTranslation(0, 0, -OVERLAP);
   const tmpInv = new THREE.Matrix4();
   for (const key of pieceList) {
     const spec = PIECES[key]();
     const place = cursor.clone().multiply(tmpInv.copy(spec.entry).invert());
     instances.push({ glb: spec.glb, matrix: scaleM.clone().multiply(place) });
 
-    // append centerline points (skip first of each piece after the first to
-    // avoid duplicate vertices at joints), scaled to match the placed GLBs
-    const start = worldPts.length === 0 ? 0 : 1;
+    // Append centerline points. Skip the leading points that fall within the
+    // OVERLAP region (where this piece backs into the previous one), so the
+    // centerline never steps backward at a joint. Skipping just one vertex is
+    // not enough where the first segment is shorter than OVERLAP (corners are
+    // sampled in equal angle steps → short first segment) — that back-step is
+    // the "hiccup" felt entering curves.
+    let start = 0;
+    if (worldPts.length > 0) {
+      start = 1;
+      let acc = 0;
+      for (let i = 1; i < spec.points.length; i++) {
+        acc += spec.points[i].distanceTo(spec.points[i - 1]);
+        if (acc >= OVERLAP) { start = i; break; }
+      }
+    }
     for (let i = start; i < spec.points.length; i++) {
       worldPts.push(spec.points[i].clone().applyMatrix4(place).multiplyScalar(SCALE));
     }
-    cursor = place.clone().multiply(spec.exit);
+    // Advance to the exit, then pull back along travel so the NEXT piece overlaps
+    // this one's connector region — closes the road-surface gap at every joint.
+    cursor = place.clone().multiply(spec.exit).multiply(overlapBack);
   }
 
   // Closure check: how far is the final cursor from where we started?
@@ -141,8 +160,17 @@ export function buildTrack(pieceList) {
     .distanceTo(new THREE.Vector3().setFromMatrixPosition(startCursor));
   const closed = gap < 0.5;
 
-  // If closed, drop the last point (coincides with the first) so the loop is seamless.
-  if (closed && worldPts.length > 1) worldPts.pop();
+  // If closed, trim trailing points that overshoot PAST the start point — the
+  // overlap makes the final piece run a little past where the first piece began,
+  // which would back-step when the loop wraps (the hiccup at the start/finish).
+  if (closed && worldPts.length > 3) {
+    const p0 = worldPts[0];
+    const startTan = worldPts[1].clone().sub(p0).normalize();
+    while (worldPts.length > 3 &&
+           worldPts[worldPts.length - 1].clone().sub(p0).dot(startTan) > 0) {
+      worldPts.pop();
+    }
+  }
 
   // Build samples with tangents (central differences around the loop), up=+Y,
   // lateral = tangent × up, and cumulative arclength.
@@ -170,11 +198,12 @@ export function buildTrack(pieceList) {
   };
 }
 
-// A simple closed oval: long sides (4 straights) + short sides (2), 4 left
-// corners → counter-clockwise rectangle that auto-closes.
+// A simple closed oval: long sides (4 straights) + short sides (2), 4 large
+// left corners (gentle radius → followable with a calm steering rate) → a
+// counter-clockwise rectangle that auto-closes.
 export const OVAL = [
-  'straight', 'straight', 'straight', 'straight', 'cornerL',
-  'straight', 'straight', 'cornerL',
-  'straight', 'straight', 'straight', 'straight', 'cornerL',
-  'straight', 'straight', 'cornerL'
+  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'cornerLargeL'
 ];
