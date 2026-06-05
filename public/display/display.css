@@ -48,14 +48,23 @@ html, body {
 }
 
 /* join box — the URL already carries the room code (…/BZK4), so there's no
-   separate code chip. */
+   separate code chip. It's a <button>: click (or Enter/Space) copies the full
+   join link to the clipboard, confirmed by the #toast. */
 .join { margin-bottom: 1.3rem; }
 .join__at {
+  position: relative;
+  display: block; width: 100%; text-align: left;
+  font: inherit; color: inherit;
   border-radius: var(--r-sm);
   padding: 0.75rem 1rem;
   background: var(--surface-2);
   border: 2px solid var(--hairline);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
 }
+.join__at:hover { border-color: var(--brand); background: var(--surface); }
+.join__at:active { transform: translateY(1px); }
+.join__at:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 .join__label {
   font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--ink-3);
@@ -266,3 +275,17 @@ html, body {
   .qr-cap { display: none; }
   #qr { width: min(62vw, 38vh); }
 }
+
+/* ---- Toast ---- transient confirmation (e.g. "Copied"), bottom-centre.
+   Hidden until .is-on is added; fades + slides in, then back out. */
+.toast {
+  position: fixed; left: 50%; bottom: 2.5rem; transform: translate(-50%, 1rem);
+  z-index: 10;
+  font-weight: 800; font-size: 1rem; color: #fff;
+  background: var(--brand);
+  padding: 0.7rem 1.4rem; border-radius: var(--r-pill);
+  box-shadow: var(--shadow-float);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }

@@ -52,10 +52,10 @@
     <div class="lobby__left card">
       <h1>Tiny Track <span>Party</span></h1>
       <div class="join">
-        <div class="join__at">
+        <button type="button" class="join__at" id="joinbox" aria-label="Copy join link">
           <div class="join__label">Join at</div>
           <div class="join__url" id="joinurl">…</div>
-        </div>
+        </button>
       </div>
       <div id="count">Waiting for players…</div>
       <div id="players"></div>
@@ -87,6 +87,9 @@
       <div class="results__hint">Back to lobby…</div>
     </div>
   </section>
+
+  <!-- Transient "Copied" confirmation, shown when the join box is clicked. -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="/display/main.js?v=__APP_V__"></script>
 </body>

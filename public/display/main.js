@@ -64,10 +64,12 @@ scene.onFrame = (dt) => {
 };
 
 // ---- net ----
+let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; we highlight that
     // trailing segment rather than showing the code separately.
+    currentJoinUrl = joinUrl;                   // the full link the join box copies
     try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
     catch (_) { el('joinurl').textContent = joinUrl; }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
@@ -337,6 +339,42 @@ function setPauseOverlay(on) {
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby);
+
+// ---- join link → clipboard ----
+// Brief confirmation toast; auto-hides. Re-trigger restarts the timer.
+let toastTimer = null;
+function showToast(msg) {
+  const t = el('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('is-on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('is-on'), 1600);
+}
+// Copy with a graceful fallback for non-secure contexts where the async
+// Clipboard API isn't available (older setups / plain http).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) { return false; }
+}
+el('joinbox').addEventListener('click', async () => {
+  if (!currentJoinUrl) return;
+  showToast(await copyText(currentJoinUrl) ? 'Copied' : 'Copy failed');
+});
 
 // Gallery / test mode: ?test=1 (or any ?scenario=…) skips the relay and lets
 // the TestHarness drive a single screen from fake data. Normal play connects.
