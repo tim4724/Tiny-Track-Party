@@ -5,11 +5,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, OVAL;
+let buildTrack, OVAL, GRAND_TOUR, TRACKS;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
   OVAL = mod.OVAL;
+  GRAND_TOUR = mod.GRAND_TOUR;
+  TRACKS = mod.TRACKS;
 });
 
 test('oval closes into a loop', () => {
@@ -127,4 +129,71 @@ test('sampleAt wraps and returns oriented frames', () => {
   // tangent and lateral roughly perpendicular, both ~horizontal
   assert.ok(Math.abs(a.tangent.dot(a.lateral)) < 1e-3, 'tangent/lateral not perpendicular');
   assert.ok(Math.abs(a.tangent.y) < 0.2, 'flat track tangent should be ~horizontal');
+});
+
+// ---- Grand Tour: the all-wide-elements circuit with the offset loop-the-loop ----
+
+test('grand tour closes into a loop', () => {
+  const t = buildTrack(GRAND_TOUR);
+  assert.ok(t.closed, `grand tour should close (gap=${t.gap.toFixed(3)})`);
+});
+
+test('grand tour has elevation (hills) but stays upright (no inversion)', () => {
+  const t = buildTrack(GRAND_TOUR);
+  let minUpY = 1, maxY = -Infinity, minY = Infinity;
+  for (const s of t.centerline.samples) {
+    minUpY = Math.min(minUpY, s.up.y);
+    maxY = Math.max(maxY, s.pos.y); minY = Math.min(minY, s.pos.y);
+  }
+  assert.ok(minUpY > 0.5, `track should stay upright (minUpY=${minUpY.toFixed(2)})`);
+  assert.ok(maxY - minY > 1.5, `track should have real elevation change (range=${(maxY - minY).toFixed(1)})`);
+});
+
+test('grand tour frames stay orthonormal (up ⟂ tangent everywhere)', () => {
+  const t = buildTrack(GRAND_TOUR);
+  let worstDot = 0, worstLen = 0;
+  for (const sm of t.centerline.samples) {
+    worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
+    worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+  }
+  assert.ok(worstDot < 1e-3, `up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
+  assert.ok(worstLen < 1e-3, `up not unit length (worst=${worstLen.toFixed(4)})`);
+});
+
+test('grand tour up returns to vertical at the start/finish seam (no twist jump)', () => {
+  const t = buildTrack(GRAND_TOUR);
+  // The lap should resolve the rotation-minimizing frame's holonomy: the up at
+  // the seam (sample 0) and just before it must agree, both ~vertical on the
+  // flat start straight.
+  const s0 = t.centerline.samples[0];
+  const sN = t.centerline.samples[t.centerline.samples.length - 1];
+  assert.ok(s0.up.y > 0.95, `start/finish up should be ~vertical (got ${s0.up.y.toFixed(2)})`);
+  assert.ok(sN.up.dot(s0.up) > 0.9, `up jumps across the seam (dot=${sN.up.dot(s0.up).toFixed(2)})`);
+});
+
+test('grand tour centerline never steps backward (continuous through the loop)', () => {
+  const t = buildTrack(GRAND_TOUR);
+  const pts = t.centerline.samples.map((p) => p.pos);
+  const n = pts.length;
+  let worst = 1, minSeg = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
+    worst = Math.min(worst, b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize()));
+    minSeg = Math.min(minSeg, a.distanceTo(b));
+  }
+  assert.ok(worst > 0, `centerline reverses somewhere (worst seg dot=${worst.toFixed(2)})`);
+  assert.ok(minSeg > 0.2, `degenerate-short segment (min=${minSeg.toFixed(3)})`);
+});
+
+test('every named track closes and includes a start gate', () => {
+  for (const [name, list] of Object.entries(TRACKS)) {
+    const t = buildTrack(list);
+    assert.ok(t.closed, `track "${name}" should close (gap=${t.gap.toFixed(3)})`);
+    assert.ok(t.instances.some((i) => i.glb === 'gate-finish'), `track "${name}" missing start gate`);
+  }
+});
+
+test('startGate:false omits the gate', () => {
+  const t = buildTrack(OVAL, { startGate: false });
+  assert.ok(!t.instances.some((i) => i.glb === 'gate-finish'), 'gate should be omitted');
 });

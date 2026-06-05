@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Asset World — Tiny Track Party</title>
+  <link rel="icon" href="data:," />
+
+  <!-- Three.js (vendored). The inline importmap is the one script needing a
+       CSP nonce; the module entry is external so it's covered by 'self'. -->
+  <script type="importmap" nonce="__CSP_NONCE__">
+  {
+    "imports": {
+      "three": "/vendor/three/three.module.js",
+      "three/addons/": "/vendor/three/addons/"
+    }
+  }
+  </script>
+
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #8ecae6; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #world { position: fixed; inset: 0; }
+    #world canvas { display: block; }
+
+    .panel {
+      position: fixed; z-index: 10; pointer-events: none;
+      color: #1b2a36;
+    }
+    #title {
+      top: 14px; left: 16px;
+      background: rgba(255,255,255,0.82);
+      border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 4px 14px rgba(20,40,60,0.18);
+      max-width: min(46ch, 80vw);
+    }
+    #title h1 { margin: 0 0 2px; font-size: 17px; letter-spacing: 0.2px; }
+    #title p { margin: 0; font-size: 12.5px; line-height: 1.45; color: #38505f; }
+    #title kbd {
+      font: inherit; font-size: 11px; background: #e7eef3; color: #25404f;
+      border-radius: 5px; padding: 1px 5px; border: 1px solid #cfdde6;
+    }
+
+    #legend {
+      bottom: 14px; left: 16px;
+      background: rgba(255,255,255,0.82);
+      border-radius: 14px; padding: 8px 12px;
+      box-shadow: 0 4px 14px rgba(20,40,60,0.18);
+      font-size: 12px; max-width: 80vw;
+    }
+    #legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+    #legend .sw { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+    #legend .muted { color: #5a7282; }
+
+    #loading {
+      position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
+      background: #8ecae6; transition: opacity .4s ease; font-size: 15px; color: #1b2a36;
+    }
+    #loading.done { opacity: 0; pointer-events: none; }
+    .spin {
+      width: 30px; height: 30px; margin: 0 auto 12px;
+      border: 4px solid rgba(27,42,54,0.25); border-top-color: #1b2a36;
+      border-radius: 50%; animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="world"></div>
+
+  <div id="title" class="panel">
+    <h1>🧩 Asset World</h1>
+    <p>
+      Every model in the toy-car kit, at true scale, with its file name floating
+      above.<br>
+      <kbd>WASD</kbd> fly · <kbd>E</kbd>/<kbd>Q</kbd> up/down · <kbd>Shift</kbd> sprint ·
+      <kbd>drag</kbd> look · <kbd>scroll</kbd> zoom.
+    </p>
+  </div>
+
+  <div id="legend" class="panel"></div>
+
+  <div id="loading"><div><div class="spin"></div>Loading the kit…</div></div>
+
+  <script type="module" src="/assets-viewer.js?v=__APP_V__"></script>
+</body>
+</html>

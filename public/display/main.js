@@ -2,7 +2,7 @@
 // engine, the countdown→race→results flow, and per-player PLAYER_STATE.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
-import { buildTrack, OVAL } from './TrackBuilder.js';
+import { buildTrack, OVAL, TRACKS } from './TrackBuilder.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { carThumbNode } from '../shared/carThumbs.js';
@@ -14,13 +14,17 @@ const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
 // ---- scene + track (built once) ----
-const track = buildTrack(OVAL);
+// ?track=<name> selects a named layout (see TrackBuilder.TRACKS); defaults to the
+// oval. The renderer loads exactly the tiles this track uses.
+const _trackName = new URLSearchParams(location.search).get('track');
+const track = buildTrack((_trackName && TRACKS[_trackName]) || OVAL);
 track.totalLaps = TOTAL_LAPS;
+const trackGlbs = [...new Set(track.instances.map((i) => i.glb))];
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 let sceneReady = false;
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
-const scenePromise = scene.load().then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
+const scenePromise = scene.load(trackGlbs).then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
 
 // ---- race state ----
 let session = null;
@@ -252,5 +256,5 @@ if (_params.get('test') === '1' || _scenario) {
   renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
   net.start();
 }
-window.__net = net; window.__scene = scene; window.__startRace = startRace;
+window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;
 window.__session = () => session;

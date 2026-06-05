@@ -8,6 +8,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
+// Debug aid: expose the THREE namespace so test harnesses can raycast against the
+// rendered track to verify the centerline rides the actual GLB road surface.
+if (typeof window !== 'undefined') window.__THREE = THREE;
+
 // Shared with the controller's car picker + protocol (one source of truth).
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
@@ -44,6 +48,14 @@ const DUST_COLOR = 0x4a4a4a;
 const DEF_EXPOSURE = 1.1;    // brightness multiplier (1 = stock)
 const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than stock; <1 = glossier)
 const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
+
+// Ground-stick: each frame we raycast straight down onto the rendered track and
+// drop the car onto that surface, so the wheels ride ON the road over bumps/hills
+// (the centreline only approximates the GLB, so following it directly clips the
+// body in). RIDE_HEIGHT is a hair of clearance so the chassis never digs into a
+// curved bump; the contact shadow is pinned to the road surface, not the lifted car.
+const RIDE_HEIGHT = 0.04;
+const SHADOW_LIFT = 0.02;
 
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
@@ -194,6 +206,26 @@ export class SceneRenderer {
     this._initOverlay();
     this._shadowTex = makeShadowTexture();
     this._initParticles();
+    this._groundRay = new THREE.Raycaster();
+    this._rayFrom = new THREE.Vector3();
+    this._rayDown = new THREE.Vector3(0, -1, 0);
+  }
+
+  // World-Y of the rendered road surface directly under `pos`, or null if no
+  // tile is below. Casts straight down from well above and picks the hit nearest
+  // the car's own height — so the start/finish GATE arch (which sits ABOVE the
+  // road) is ignored and we lock onto the road, not the gate.
+  _roadSurfaceY(pos) {
+    this._groundRay.set(this._rayFrom.copy(pos).setY(pos.y + 6), this._rayDown);
+    this._groundRay.far = 14;
+    const hits = this._groundRay.intersectObject(this.trackGroup, true);
+    if (!hits.length) return null;
+    let best = null, bestErr = Infinity;
+    for (const h of hits) {
+      const err = Math.abs(h.point.y - pos.y);
+      if (err < bestErr) { bestErr = err; best = h.point.y; }
+    }
+    return best;
   }
 
   // Pooled dust sprites kicked up from the wheels + curb. Sprites face whichever
@@ -373,9 +405,12 @@ export class SceneRenderer {
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
-  async load() {
+  // `trackGlbs` lets the caller pass exactly the track tiles the chosen layout
+  // uses (derived from track.instances) so new pieces load without editing the
+  // hard-coded TRACK_GLBS fallback.
+  async load(trackGlbs = TRACK_GLBS) {
     const loader = new GLTFLoader();
-    const need = [...new Set([...TRACK_GLBS, ...CAR_MODELS])];
+    const need = [...new Set([...trackGlbs, ...CAR_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
         if (CAR_MODELS.includes(name)) this._registerCarMats(gltf.scene);
@@ -743,6 +778,15 @@ export class SceneRenderer {
     const x = y.clone().cross(z).normalize();
     const yy = z.clone().cross(x).normalize();
     c.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, yy, z));
+
+    // Drop the car onto the REAL road surface (not the approximate centreline) so
+    // the wheels stay on top of bumps/hills instead of clipping through. The
+    // shadow is then pinned to that surface so it lands on the road, not below it.
+    const roadY = this._roadSurfaceY(pos);
+    if (roadY != null) {
+      c.group.position.y = roadY + RIDE_HEIGHT;
+      c.shadow.position.y = SHADOW_LIFT - RIDE_HEIGHT; // group sits at road+RIDE; this puts the shadow back on the road
+    }
 
     // body lean into the turn — roll ONLY the body (wheels stay flat on the road)
     c.lean += (steer * LEAN_MAX - c.lean) * 0.2;
