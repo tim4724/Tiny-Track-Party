@@ -140,6 +140,17 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
     return;
   }
+  // Manifest of the Kenney kit's GLBs, so the asset-world viewer
+  // (/assets-viewer.html) stays in sync with the directory instead of a
+  // hand-maintained list. Read-only listing of one fixed asset folder.
+  if (urlPath === '/api/assets' && req.method === 'GET') {
+    fs.readdir(path.join(PUBLIC_DIR, 'assets', 'toycar'), (err, files) => {
+      if (err) { sendJson(res, 500, { error: 'asset listing failed' }); return; }
+      const names = files.filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4)).sort();
+      sendJson(res, 200, { assets: names });
+    });
+    return;
+  }
 
   // --- route remaps ---
   if (urlPath === '/') {

@@ -12,9 +12,6 @@ const ASSET = (name) => `/assets/toycar/${name}.glb`;
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
 const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
-const TRACK_GLBS = [
-  'track-road-wide-straight', 'track-road-wide-corner-small', 'track-road-wide-corner-large', 'track-road-wide-curve'
-];
 
 // Chase camera: sits behind the CAR's heading and looks at it, with the position
 // and look-target damped so it lags and swings smoothly behind through turns
@@ -45,6 +42,13 @@ const DEF_EXPOSURE = 1.1;    // brightness multiplier (1 = stock)
 const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than stock; <1 = glossier)
 const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
 
+// Ground-conform: each frame we raycast the rendered track under the front + rear
+// axles and drop the car onto it, so the wheels ride ON the road over bumps/hills
+// (the centreline only approximates the GLB, so following it directly clips the
+// body in). The model's wheel-bottom sits at the group origin, so RIDE_HEIGHT is
+// the gap from wheel to road — keep it tiny so the car looks planted, not hovering.
+const RIDE_HEIGHT = 0.012;
+
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
 // cell aspect is from 1:1 (square), with a small penalty for empty cells.
@@ -58,23 +62,6 @@ function bestGrid(n, W, H) {
     if (cost < best.cost) best = { cols, rows, cost };
   }
   return best;
-}
-
-// Soft radial blob used as a fake contact shadow under each car (grounds it).
-function makeShadowTexture() {
-  const s = 64;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const ctx = cv.getContext('2d');
-  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(0,0,0,0.5)');
-  g.addColorStop(0.55, 'rgba(0,0,0,0.3)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, s, s);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 // A few small HARD-edged grains (tinted per-emit) — solid dirt specks, not the
@@ -192,8 +179,47 @@ export class SceneRenderer {
     this._last = 0;
     this._initThree();
     this._initOverlay();
-    this._shadowTex = makeShadowTexture();
     this._initParticles();
+    this._groundRay = new THREE.Raycaster();
+    this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
+    this._rayFrom = new THREE.Vector3();
+    this._rayDown = new THREE.Vector3(0, -1, 0);
+    this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal
+    this._fwdTilt = new THREE.Vector3();   // heading re-pitched onto the road slope
+    this._worldUp = new THREE.Vector3(0, 1, 0);
+    this._normalMat = new THREE.Matrix3(); // for road-tile world normals
+    this._hitNormal = new THREE.Vector3();
+  }
+
+  // World-Y of the drivable road surface directly under (x, z), or null if no
+  // tile is below. Casts straight down from well above. Two filters pick the road
+  // top out of everything the ray hits:
+  //   1. The road tiles are solid slabs — each returns a TOP face (normal up) and
+  //      a BOTTOM face (normal down) ~0.1–0.2 below it. We keep only up-facing
+  //      faces, so we never lock onto a tile's underside (which would sink the car
+  //      and its wheels through the road).
+  //   2. Among those, pick the hit nearest `refY` (the expected road height, i.e.
+  //      the centreline) — that skips the start/finish GATE arch, whose up-facing
+  //      top sits well ABOVE the road, and resolves overlapping tiles at a seam.
+  _roadHitY(x, z, refY) {
+    this._rayFrom.set(x, refY + 6, z);
+    this._groundRay.set(this._rayFrom, this._rayDown);
+    const hits = this._groundRay.intersectObject(this.trackGroup, true);
+    let best = null, bestErr = Infinity;
+    for (const h of hits) {
+      if (h.face) {
+        this._normalMat.getNormalMatrix(h.object.matrixWorld);
+        // Keep only up-facing surfaces (normal.y > 0.1, i.e. the face leans no more
+        // than ~84° off horizontal); skip vertical walls and tile undersides.
+        // Deliberately loose so sloped road tiles (hills/ramps) still count — the
+        // current tracks have no banking, so nothing near-vertical is drivable.
+        // Tighten this if a banked turn or loop is added, or the car could "land" on a wall.
+        if (this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y <= 0.1) continue;
+      }
+      const err = Math.abs(h.point.y - refY);
+      if (err < bestErr) { bestErr = err; best = h.point.y; }
+    }
+    return best;
   }
 
   // Pooled dust sprites kicked up from the wheels + curb. Sprites face whichever
@@ -254,6 +280,10 @@ export class SceneRenderer {
     r.setSize(window.innerWidth, window.innerHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.autoClear = false; // we clear once per frame, then render N viewports
+    // Real shadow map: cars cast a soft shadow the road RECEIVES, so it wraps over
+    // bumps/hills with no clipping (a flat painted blob can't sit on curved ground).
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFShadowMap; // soft PCF; the Soft variant is deprecated in our three build
     this.container.appendChild(r.domElement);
     this.renderer = r;
 
@@ -267,15 +297,23 @@ export class SceneRenderer {
     scene.fog = new THREE.Fog(0x8ecae6, 70, 170);
     this.scene = scene;
 
-    // Toy lighting: a soft sky/ground hemisphere for even fill, PLUS a warm key
-    // light (NO shadow map — castShadow stays off, so we keep the painted blob
-    // shadows). The key's specular highlight is the "shiny plastic" dot that sells
-    // the injection-moulded-toy read; the hemisphere keeps shadowed sides from
-    // going black. We still avoid a cast-shadow pass to stay cheap and flat.
+    // Toy lighting: a soft sky/ground hemisphere for even fill, PLUS a warm key light
+    // that also casts the "Sunny Circuit" shadow. The key's specular highlight is the
+    // "shiny plastic" dot that sells the injection-moulded-toy read; the hemisphere
+    // keeps shadowed sides from going black.
     scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
     const key = new THREE.DirectionalLight(0xfff1d0, DEF_KEY_LIGHT);
-    key.position.set(6, 12, 4); // high and slightly to one side → raking gloss
+    key.position.set(6, 12, 4); // high and slightly to one side → raking gloss + sun shadow
+    // Shadow camera bounds/placement are set per-track in setTrack (needs the track
+    // extent). autoUpdate off: _loop refreshes the map once per frame, not once per
+    // split-screen cell, so N cameras stay one shadow pass.
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.autoUpdate = false;
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.05; // curved road → bias along the normal kills acne
     scene.add(key);
+    scene.add(key.target);
     this._key = key;
 
     const ground = new THREE.Mesh(
@@ -284,6 +322,7 @@ export class SceneRenderer {
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -1.0;
+    ground.receiveShadow = true;
     scene.add(ground);
     this.ground = ground;
 
@@ -373,9 +412,12 @@ export class SceneRenderer {
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
-  async load() {
+  // Preload the GLBs this scene needs: the car models plus `trackGlbs`, the exact
+  // set of track tiles the chosen layout uses. The caller derives that set from
+  // track.instances (see main.js), so adding a new piece needs no change here.
+  async load(trackGlbs) {
     const loader = new GLTFLoader();
-    const need = [...new Set([...TRACK_GLBS, ...CAR_MODELS])];
+    const need = [...new Set([...trackGlbs, ...CAR_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
         if (CAR_MODELS.includes(name)) this._registerCarMats(gltf.scene);
@@ -423,6 +465,7 @@ export class SceneRenderer {
       const node = proto.clone(true);
       node.matrixAutoUpdate = false;
       node.matrix.copy(inst.matrix);
+      node.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); // catch car shadows
       this.trackGroup.add(node);
     }
     if (debug) {
@@ -441,87 +484,19 @@ export class SceneRenderer {
     const dist = radius / Math.tan((this.overview.fov * Math.PI / 180) / 2) * 0.9;
     this._ovPos = this._trackCenter.clone().add(new THREE.Vector3(0.35, 0.8, 0.9).normalize().multiplyScalar(dist));
     this._ovTarget = this._trackCenter.clone();
-  }
 
-  // Render a car model's TOP-DOWN silhouette once into a soft, car-shaped shadow
-  // texture (cached per model). Returns { tex, size }, where `size` is the square
-  // world footprint the texture spans. The shadow plane is parented to the car
-  // group, so the silhouette inherits the car's heading + road tilt for free.
-  _carShadowTexture(model, proto) {
-    if (!this._carShadowCache) this._carShadowCache = new Map();
-    if (this._carShadowCache.has(model)) return this._carShadowCache.get(model);
-
-    const r = this.renderer;
-    let result;
-    try {
-      proto.updateWorldMatrix(true, true);
-      const box = new THREE.Box3().setFromObject(proto);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      const S = Math.max(size.x, size.z) * 1.25; // square footprint + edge padding
-
-      const RES = 128;
-      const rt = new THREE.WebGLRenderTarget(RES, RES, {
-        minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter
-      });
-      // top-down orthographic camera; up = +Z so the model's BACK (+Z) is image-up
-      // and its nose (-Z) is image-down — which becomes the car's forward once the
-      // plane is parented to the group (group +Z = heading).
-      const cam = new THREE.OrthographicCamera(-S / 2, S / 2, S / 2, -S / 2, 0.01, size.y + 2);
-      cam.position.set(center.x, box.max.y + 1, center.z);
-      cam.up.set(0, 0, 1);
-      cam.lookAt(center.x, box.min.y, center.z);
-
-      const sscene = new THREE.Scene();
-      const sil = proto.clone(true);
-      const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      sil.traverse((o) => { if (o.isMesh) o.material = black; });
-      sscene.add(sil);
-
-      const prevRT = r.getRenderTarget();
-      const prevClear = r.getClearColor(new THREE.Color());
-      const prevAlpha = r.getClearAlpha();
-      const prevAuto = r.autoClear;
-      r.autoClear = true;
-      r.setRenderTarget(rt);
-      r.setClearColor(0x000000, 0);
-      r.clear();
-      r.render(sscene, cam);
-
-      const buf = new Uint8Array(RES * RES * 4);
-      r.readRenderTargetPixels(rt, 0, 0, RES, RES, buf);
-
-      r.setRenderTarget(prevRT);
-      r.setClearColor(prevClear, prevAlpha);
-      r.autoClear = prevAuto;
-      rt.dispose();
-      black.dispose();
-
-      // Coverage (alpha) -> soft black shadow. GL pixels are bottom-up, so flip V.
-      const raw = document.createElement('canvas'); raw.width = raw.height = RES;
-      const img = new ImageData(RES, RES);
-      for (let y = 0; y < RES; y++) {
-        for (let x = 0; x < RES; x++) {
-          const src = ((RES - 1 - y) * RES + x) * 4; // flip vertically
-          img.data[(y * RES + x) * 4 + 3] = buf[src + 3]; // RGB stays 0 (black)
-        }
-      }
-      raw.getContext('2d').putImageData(img, 0, 0);
-      // blur into a second canvas for a soft penumbra edge
-      const cv = document.createElement('canvas'); cv.width = cv.height = RES;
-      const ctx = cv.getContext('2d');
-      ctx.filter = 'blur(3px)';
-      ctx.drawImage(raw, 0, 0);
-
-      const tex = new THREE.CanvasTexture(cv);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      result = { tex, size: S };
-    } catch (e) {
-      console.warn('car-shadow silhouette failed; falling back to round blob', e);
-      result = { tex: this._shadowTex, size: 1.5 };
-    }
-    this._carShadowCache.set(model, result);
-    return result;
+    // Aim + size the sun's shadow camera to cover the whole track. The light keeps its
+    // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we just move it far out
+    // along that direction and frame the track tightly for good shadow-map resolution.
+    const half = Math.max(size.x, size.z) * 0.5 + 4;
+    const k = this._key;
+    k.target.position.copy(this._trackCenter); k.target.updateMatrixWorld();
+    k.position.copy(this._trackCenter).add(new THREE.Vector3(6, 12, 4).normalize().multiplyScalar(half * 2.2));
+    const sc = k.shadow.camera;
+    sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+    sc.near = half * 0.6; sc.far = half * 3.6 + 12;
+    sc.updateProjectionMatrix();
+    k.shadow.needsUpdate = true; // rebuild the map for the new track
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the
@@ -611,6 +586,7 @@ export class SceneRenderer {
     // vintage racer) are modelled facing the other way, so add their per-model
     // yaw fix or they'd drive backwards.
     car.rotation.y = Math.PI + (CAR_MODEL_YAW[carIndex % CAR_MODELS.length] || 0);
+    car.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // sun shadow onto the road
     group.add(car);
 
     // In the GLB the 4 wheels are children of the body node, so rolling the body
@@ -634,18 +610,8 @@ export class SceneRenderer {
     body.add(plate);
     this.scene.add(group);
 
-    // car-shaped contact shadow: the model's own top-down silhouette. Parented to
-    // the group so it inherits heading + road tilt (but not the body's lean), and
-    // lies flat just above the road. group +Z = heading, so plane +Y (image-up,
-    // the model's back) maps to the car's rear — the silhouette lines up.
-    const sh = this._carShadowTexture(model, proto);
-    const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(sh.size, sh.size),
-      new THREE.MeshBasicMaterial({ map: sh.tex, transparent: true, opacity: 0.5, depthWrite: false })
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = 0.02; // a hair above the road to avoid z-fighting
-    group.add(shadow);
+    // (Contact shadow is a real cast shadow now — car.castShadow above + road
+    // receiveShadow in setTrack — so it conforms to bumps/hills with no fake quad.)
 
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
@@ -672,8 +638,20 @@ export class SceneRenderer {
       steerFill = steerBar.querySelector('.cell-steer__fill');
     }
 
+    // Longitudinal wheelbase (front axle → rear axle), measured from the model so
+    // the ground-conform probes sit exactly under the axles. Rotation-invariant
+    // distance, so reading it before the group is posed is fine.
+    group.updateWorldMatrix(true, true);
+    const axleMid = (arr) => {
+      const v = new THREE.Vector3();
+      for (const o of arr) v.add(o.getWorldPosition(new THREE.Vector3()));
+      return arr.length ? v.multiplyScalar(1 / arr.length) : v;
+    };
+    const wheelbase = (frontWheels.length && backWheels.length)
+      ? axleMid(frontWheels).distanceTo(axleMid(backWheels)) : 0.6;
+
     const c = {
-      group, car, body, bodyBaseQuat, frontWheels, backWheels, plate, shadow, cam,
+      group, car, body, bodyBaseQuat, frontWheels, backWheels, wheelbase, plate, cam,
       carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, pose: null, init: false, lean: 0
@@ -714,12 +692,11 @@ export class SceneRenderer {
   removeCar(id) {
     const c = this.cars.get(id);
     if (!c) return;
-    this.scene.remove(c.group); // shadow is a child of group, so it goes too
-    // Dispose only what addCar created fresh per car (name plate + shadow plane).
-    // The car mesh shares its geometry/material with the cached prototype, and
-    // the shadow TEXTURE is cached per model — leave both for the next race.
+    this.scene.remove(c.group);
+    // Dispose only what addCar created fresh per car (the name plate). The car mesh
+    // shares its geometry/material with the cached prototype — leave it for the next
+    // race. (The contact shadow is a real cast shadow now — nothing per-car to free.)
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
-    c.shadow.geometry.dispose(); c.shadow.material.dispose();
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     this.cars.delete(id);
@@ -739,8 +716,38 @@ export class SceneRenderer {
       lookAhead: lookAhead ? lookAhead.clone() : null
     };
     c.group.position.copy(pos);
-    const z = fwd, y = u;
-    const x = y.clone().cross(z).normalize();
+
+    // Ground-conform: probe the rendered road under the FRONT and REAR axles, then
+    // sit the car on the mean of the two and PITCH it along their slope — so the
+    // wheels ride on top of bumps/hills instead of clipping through. A single
+    // centre probe gets height but not slope, so the nose digs in / lifts off on a
+    // crest; two probes give both. Heading (yaw) stays the centreline's; only
+    // pitch + ride height come from the road. Roll is left level (world up) — this
+    // track has no banking, and a flat car reads "wheels on the road" cleanly.
+    let z = fwd; // default: follow the centreline forward (used if a probe misses)
+    const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
+    this._headFlat.copy(fwd).setY(0);
+    if (this._headFlat.lengthSq() > 1e-6) {
+      this._headFlat.normalize();
+      const half = c.wheelbase * 0.5;
+      const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
+      const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
+      if (yF != null && yB != null) {
+        // re-pitch the (horizontal) heading onto the road slope: rise/run = Δy/wheelbase
+        z = this._fwdTilt.set(this._headFlat.x, (yF - yB) / c.wheelbase, this._headFlat.z).normalize();
+        // Rest on the HIGHEST road point under the footprint (front/centre/rear), not
+        // the chord mean: on flat/gentle ground these agree (still planted), but at a
+        // sharp crest it rides the peak so the road never pokes up through the belly —
+        // at worst a wheel floats briefly cresting a bump, which beats clipping.
+        c.group.position.y = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB)) + RIDE_HEIGHT;
+      } else if (yC != null) {
+        // off the edge / over the gate seam: fall back to the centre probe (height only)
+        c.group.position.y = yC + RIDE_HEIGHT;
+      }
+    }
+    // Build the car basis from the pitched forward + a level (world-up) reference,
+    // so x (lateral) stays horizontal and the body owns pitch, nothing else.
+    const x = this._worldUp.clone().cross(z).normalize();
     const yy = z.clone().cross(x).normalize();
     c.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, yy, z));
 
@@ -754,9 +761,8 @@ export class SceneRenderer {
     // bar) so it slides the way they tilt — not the turn-aligned/STEER_SIGN value.
     if (c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
 
-    // (the car-shaped shadow is parented to the group, so it follows position,
-    // heading and road tilt automatically — nothing to update here. The name
-    // tag is a billboard sprite — it orients itself toward each camera.)
+    // (nothing else to update here: the cast shadow follows the car automatically,
+    // and the name plate is parented to the body so it banks with the steering lean.)
   }
 
   setCarHud(id, info) {
@@ -848,6 +854,10 @@ export class SceneRenderer {
     rt.viewport.set(0, 0, DBW, DBH);
     r.setRenderTarget(rt);
     r.clear();
+
+    // Refresh the sun's shadow map ONCE this frame (autoUpdate is off); the first
+    // render() below consumes it and every split-screen cell reuses the same map.
+    if (this._key) this._key.shadow.needsUpdate = true;
 
     const ids = this._order.filter((id) => this.cars.has(id));
     if (ids.length === 0) {
