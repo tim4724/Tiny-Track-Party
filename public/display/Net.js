@@ -7,7 +7,7 @@
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 import { GameNet } from '../shared/GameNet.js';
 
-const { PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS } = window;
+const { PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS, CAR_MODELS } = window;
 
 const enc = encodeURIComponent;
 
@@ -39,7 +39,8 @@ export class DisplayNet extends GameNet {
   // ---- roster helpers ----
   roster() {
     return this.flow.list().map((p) => ({
-      peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, connected: p.connected
+      peerIndex: p.peerIndex, name: p.name,
+      colorIndex: p.colorIndex, carIndex: p.carIndex, connected: p.connected
     }));
   }
   _usedColors() {
@@ -104,6 +105,21 @@ export class DisplayNet extends GameNet {
         this.onRosterChange(this.roster(), this.flow.host);
         break;
       }
+      case MSG.SET_CAR: {
+        // Lobby car-model pick. Car and colour are independent and duplicates
+        // are allowed, so no uniqueness check — just validate and store, then
+        // broadcast so this phone's picker confirms and the display renders the
+        // chosen model at race start. Lobby only.
+        const p = this.flow.get(from);
+        const idx = data.carIndex;
+        if (p && this.roomState === 'lobby'
+          && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
+          p.carIndex = idx;
+          this._broadcastLobby();
+          this.onRosterChange(this.roster(), this.flow.host);
+        }
+        break;
+      }
       case MSG.PING:
         this.party.sendTo(from, { type: MSG.PONG, t: data.t });
         break;
@@ -116,7 +132,9 @@ export class DisplayNet extends GameNet {
   _addPeer(peerIndex) {
     if (this.flow.has(peerIndex) || this.flow.size >= MAX_PLAYERS) return;
     const colorIndex = RoomFlow.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
-    this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex });
+    // Default the car model to the livery slot so everyone starts on a distinct
+    // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
+    this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex });
     // rosterchange fires from addPlayer → announce() handles broadcast + UI.
   }
 
@@ -137,10 +155,12 @@ export class DisplayNet extends GameNet {
 
   // ---- outbound protocol ----
   _welcomeFor(peerIndex) {
+    const p = this.flow.get(peerIndex) || {};
     return {
       type: MSG.WELCOME,
       peerIndex,
-      colorIndex: (this.flow.get(peerIndex) || {}).colorIndex,
+      colorIndex: p.colorIndex,
+      carIndex: p.carIndex,
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       players: this.roster()

@@ -13,42 +13,38 @@ export function runControllerScenario(opts) {
   const COLORS = window.CAR_COLORS || ['#2bb673'];
   const scenario = opts.scenario;
   const color = Math.max(0, Math.min(opts.color || 0, COLORS.length - 1));
-  // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
-  const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
 
   const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
-  // Apply the player's car livery (the --car custom property tints the HUD).
+  // Apply the player's car livery (the --car custom property tints the HUD and
+  // the car-picker tiles).
   const myColor = COLORS[color % COLORS.length];
   document.documentElement.style.setProperty('--car', myColor);
-  if (el('mycar')) el('mycar').style.background = myColor;
 
   window.__TEST__ = window.__TEST__ || {};
 
-  // Roster slots: 0..players-1, but guarantee the viewed color is present
-  // (it's "me") even when color >= players.
-  function buildSlots() {
-    const slots = [];
-    let fill = players;
-    if (color >= players) fill = players - 1;
-    for (let i = 0; i < fill; i++) slots.push(i);
-    if (color >= players) slots.push(color);
-    return slots;
-  }
-
-  function renderRoster(hostIdx) {
-    const list = el('roster'); list.innerHTML = '';
-    for (const s of buildSlots()) {
-      const row = document.createElement('div');
-      row.className = 'row' + (s === color ? ' row--me' : '');
-      const dot = document.createElement('span');
-      dot.className = 'row__dot'; dot.style.background = COLORS[s % COLORS.length] || '#888';
-      row.appendChild(dot);
-      const nm = document.createElement('span');
-      nm.textContent = FAKE_NAMES[s] + (s === hostIdx ? ' ★' : '');
-      row.appendChild(nm);
-      list.appendChild(row);
+  // Car picker (mirrors main.js): every model, tinted to the player's livery,
+  // with `selected` highlighted. Car is independent of colour, so no roster.
+  const MODELS = window.CAR_MODELS || [];
+  const NAMES = window.CAR_NAMES || [];
+  const CAR_SVG =
+    '<svg class="car-opt__svg" viewBox="0 0 64 34" aria-hidden="true">' +
+    '<rect class="bd" x="5" y="14" width="54" height="12" rx="4.5"/>' +
+    '<path class="bd" d="M16 14 L23 6.5 H39 L48 14 Z"/>' +
+    '<rect class="win" x="25" y="8" width="12" height="6" rx="1.5"/>' +
+    '<circle class="wh" cx="20" cy="27" r="5.2"/>' +
+    '<circle class="wh" cx="44" cy="27" r="5.2"/>' +
+    '</svg>';
+  function renderCarPicker(selected) {
+    const pick = el('carpick'); if (!pick) return; pick.innerHTML = '';
+    const count = MODELS.length || 4;
+    for (let i = 0; i < count; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'car-opt' + (i === selected ? ' car-opt--mine' : '');
+      btn.innerHTML = CAR_SVG + `<span class="car-opt__name">${NAMES[i] || ('Car ' + (i + 1))}</span>`;
+      pick.appendChild(btn);
     }
   }
 
@@ -81,23 +77,17 @@ export function runControllerScenario(opts) {
 
     case 'lobby-host':
       show('lobby');
-      renderRoster(color); // I am the host
+      renderCarPicker(color); // default pick mirrors the livery slot
       el('start-btn').classList.remove('hidden');
       el('wait-host').classList.add('hidden');
       break;
 
-    case 'lobby-waiting': {
-      // Host is any rostered slot that isn't the viewed player (the one
-      // waiting). With a single slot there's no other player, so no ★ — which
-      // matches the "waiting for the host" copy below.
-      const others = buildSlots().filter((s) => s !== color);
-      const hostIdx = others.length ? others[0] : null;
+    case 'lobby-waiting':
       show('lobby');
-      renderRoster(hostIdx);
+      renderCarPicker(color);
       el('start-btn').classList.add('hidden');
       el('wait-host').classList.remove('hidden');
       break;
-    }
 
     case 'countdown': {
       showDriveHud();

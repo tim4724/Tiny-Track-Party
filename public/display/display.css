@@ -94,6 +94,9 @@ html, body {
   border-color: #d4deea;
   color: var(--ink-3);
   box-shadow: none;
+  /* wider than a name chip so empty seats read clearly as "room for more" */
+  min-width: 7.5rem;
+  justify-content: center;
 }
 .chip__dot {
   width: 0.85rem; height: 0.85rem; border-radius: 50%;

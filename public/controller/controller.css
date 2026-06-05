@@ -49,20 +49,44 @@ input[type=text]:disabled { opacity: 0.6; }
 .btn { width: 100%; margin-top: 1rem; }           /* phone buttons fill the row */
 #name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
-/* ---- lobby ---- */
-.mycar-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.4rem; font-weight: 800; color: var(--ink-2); }
-#mycar {
-  width: 2.6rem; height: 2.6rem; border-radius: var(--r-sm); background: var(--car);
-  box-shadow: inset 0 -4px 6px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.12);
+/* ---- lobby: pick your car ---- */
+/* sparse like the join screen — center it vertically so it isn't top-heavy.
+   Cap to the viewport so a tall car grid scrolls inside #carpick (below) rather
+   than growing the page and pushing Start off-screen (e.g. landscape). */
+#lobby { justify-content: center; max-height: 100dvh; }
+.lobby-title {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.6rem;
+  margin: 0 0 1.1rem; text-align: center; color: var(--ink);
 }
-#roster { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0 1.6rem; }
-.row {
-  display: flex; align-items: center; gap: 0.6rem; font-size: 1.15rem; font-weight: 800;
-  background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-sm);
-  padding: 0.7rem 1rem; color: var(--ink); box-shadow: var(--shadow-pop);
+/* car grid — every model, tinted to the player's livery. Scrolls if a tall list
+   ever outgrows the screen (e.g. landscape) rather than clipping. */
+.carpick {
+  /* responsive: ~2 cols in portrait, more across a wide (landscape) viewport */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.75rem;
+  width: 100%; margin-bottom: 1.4rem;
+  /* min-height:0 lets the grid shrink below its content in the flex column so it
+     scrolls internally (e.g. landscape) instead of pushing Start off-screen. */
+  min-height: 0; overflow-y: auto;
 }
-.row--me { border-color: var(--car); }
-.row__dot { width: 1rem; height: 1rem; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18); flex: none; }
+.car-opt {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+  padding: 0.8rem 0.5rem 0.65rem; cursor: pointer; color: var(--ink); font-weight: 800;
+  background: var(--surface); border: 3px solid var(--hairline); border-radius: var(--r);
+  box-shadow: var(--shadow-pop);
+  transition: transform 0.08s, box-shadow 0.08s, border-color 0.08s;
+}
+.car-opt:active { transform: translateY(2px); }
+.car-opt__svg { width: 76%; height: auto; display: block; }
+.car-opt__svg .bd { fill: var(--car); }
+.car-opt__svg .win { fill: rgba(255, 255, 255, 0.55); }
+.car-opt__svg .wh { fill: #2a2f3a; }
+.car-opt__name { font-size: 0.95rem; }
+/* selected: ring in the livery colour + a check badge */
+.car-opt--mine { border-color: var(--car); box-shadow: 0 0 0 4px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }
+.car-opt--mine::after {
+  content: '✓'; position: absolute; top: 0.35rem; right: 0.5rem;
+  font-weight: 900; color: var(--car);
+}
 #wait-host { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 
 /* ---- game / driving HUD ---- */
@@ -94,9 +118,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .steer__label { text-align: center; color: var(--ink-2); font-weight: 700; font-size: 0.9rem; margin-top: 0.5rem; }
 
 /* BRAKE — big red hold-to-brake push-button; depresses while held (.held by JS).
-   Tall by design (roughly double a normal button) for an easy thumb target. */
+   Extra-tall by design (~2x the previous height) for an easy thumb target. */
 #brake-btn.brake {
-  margin-top: 0; padding: 3.4rem 1.4rem; font-family: var(--font-display); font-weight: 700;
+  margin-top: 0; padding: 6.8rem 1.4rem; font-family: var(--font-display); font-weight: 700;
   font-size: 1.6rem; letter-spacing: 0.08em; color: #fff; border: none;
   border-radius: var(--r); background: var(--danger);
   box-shadow: 0 6px 0 color-mix(in srgb, var(--danger), #000 26%), var(--inset-hi);
@@ -119,6 +143,6 @@ input[type=text]:disabled { opacity: 0.6; }
   }
   #drive-hud { gap: 0.8rem; }
   #go { font-size: 4.5rem; }
-  #brake-btn.brake { padding: 1.4rem; }   /* drop the double height when vertical room is scarce */
+  #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
   .steer { margin-top: 0.4rem; }
 }

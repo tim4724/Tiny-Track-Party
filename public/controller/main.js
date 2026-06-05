@@ -3,7 +3,7 @@
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 
-const { MSG, CAR_COLORS } = window;
+const { MSG, CAR_COLORS, CAR_MODELS, CAR_NAMES } = window;
 const el = (id) => document.getElementById(id);
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
@@ -38,6 +38,7 @@ function stopScrub() {
 }
 
 let myColorIndex = null;
+let myCarIndex = 0;
 let amHost = false;
 
 const NAME_KEY = 'tinytrack_name';
@@ -78,15 +79,26 @@ function setJoining(on) {
 function handleMessage(data) {
   switch (data.type) {
     case MSG.WELCOME:
-      myColorIndex = data.colorIndex; applyLivery();
+      myColorIndex = data.colorIndex;
+      if (data.carIndex != null) myCarIndex = data.carIndex;
+      applyLivery();
       amHost = net.isHost(data.hostPeerIndex);
-      renderLobby(data.players, data.hostPeerIndex);
+      renderLobby();
       if (data.roomState === 'lobby') show('lobby');
       break;
-    case MSG.LOBBY_UPDATE:
+    case MSG.LOBBY_UPDATE: {
       amHost = net.isHost(data.hostPeerIndex);
-      renderLobby(data.players, data.hostPeerIndex);
+      // The display is authoritative — adopt the colour + car it has on record
+      // for us (colour is auto-assigned; car confirms our pick).
+      const me = (data.players || []).find((p) => p.peerIndex === net.peerIndex);
+      if (me) {
+        myColorIndex = me.colorIndex;
+        if (me.carIndex != null) myCarIndex = me.carIndex;
+        applyLivery();
+      }
+      renderLobby();
       break;
+    }
     case MSG.COUNTDOWN:
       show('game');
       el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
@@ -118,24 +130,44 @@ function handleMessage(data) {
 function applyLivery() {
   const c = CAR_COLORS[myColorIndex] || '#888';
   document.documentElement.style.setProperty('--car', c);
-  el('mycar').style.background = c;
 }
 
-function renderLobby(players, hostPeerIndex) {
-  const list = el('roster'); list.innerHTML = '';
-  for (const p of (players || [])) {
-    const li = document.createElement('div');
-    li.className = 'row' + (p.peerIndex === net.peerIndex ? ' row--me' : '');
-    const dot = document.createElement('span');
-    dot.className = 'row__dot'; dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
-    li.appendChild(dot);
-    const nm = document.createElement('span');
-    nm.textContent = p.name + (p.peerIndex === hostPeerIndex ? ' ★' : '');
-    li.appendChild(nm);
-    list.appendChild(li);
+// Car picker — the controller's lobby is just "pick your car" (the shared
+// display owns the player roster). Every car model is shown, tinted with the
+// player's auto-assigned livery; car and colour are independent and duplicates
+// are fine, so there's no locking. A tap is optimistic — the next LOBBY_UPDATE
+// echoes back the display's record.
+const CAR_COUNT = (CAR_MODELS || []).length;
+// Inline toy-car silhouette; .bd is tinted to the livery via the --car var.
+const CAR_SVG =
+  '<svg class="car-opt__svg" viewBox="0 0 64 34" aria-hidden="true">' +
+  '<rect class="bd" x="5" y="14" width="54" height="12" rx="4.5"/>' +
+  '<path class="bd" d="M16 14 L23 6.5 H39 L48 14 Z"/>' +
+  '<rect class="win" x="25" y="8" width="12" height="6" rx="1.5"/>' +
+  '<circle class="wh" cx="20" cy="27" r="5.2"/>' +
+  '<circle class="wh" cx="44" cy="27" r="5.2"/>' +
+  '</svg>';
+function renderLobby() {
+  const pick = el('carpick'); pick.innerHTML = '';
+  for (let i = 0; i < CAR_COUNT; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'car-opt' + (i === myCarIndex ? ' car-opt--mine' : '');
+    if (i === myCarIndex) btn.setAttribute('aria-current', 'true');
+    btn.innerHTML = CAR_SVG + `<span class="car-opt__name">${(CAR_NAMES && CAR_NAMES[i]) || ('Car ' + (i + 1))}</span>`;
+    btn.addEventListener('click', () => chooseCar(i));
+    pick.appendChild(btn);
   }
   el('start-btn').classList.toggle('hidden', !amHost);
   el('wait-host').classList.toggle('hidden', amHost);
+}
+
+function chooseCar(i) {
+  if (i === myCarIndex) return;
+  myCarIndex = i;       // optimistic; LOBBY_UPDATE is the source of truth
+  renderLobby();        // move the highlight now
+  net.send(MSG.SET_CAR, { carIndex: i });
+  buzz(15);
 }
 
 // --- driving ---
