@@ -14,6 +14,45 @@ const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
+// ---- corner-anticipation braking ----
+// The engine no longer auto-slows for corners (low-handling cars understeer wide
+// instead), so a bot that just steers would plow into the curb. cornerBrake looks
+// down the track, finds the tightest upcoming bend, and brakes so the car arrives
+// no faster than its turn rate can hold (max corner speed ≈ turn/κ). A low-handling
+// car brakes earlier + harder; a grippy one barely lifts.
+const TURN_RATE_FALLBACK = 1.2; // matches Game's base TURN_RATE (cars without a resolved .turn)
+const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
+const BRAKE_LOOK_FAR = 15.0;    // ...to here — far enough to shed speed before the apex
+const BRAKE_LOOK_STEP = 1.0;
+const CORNER_MARGIN = 0.78;     // target well under the max holdable corner speed (pure-pursuit cuts the apex, so leave room)
+const BRAKE_RANGE = 1.6;        // units/s over the safe speed that maps to full brake (firm, early lift)
+
+// Local track curvature (rad per world unit) at arclength s — the turn between two
+// nearby centerline tangents, via the same cross/dot trick the steering uses (so
+// no THREE import; works on the Vector3s sampleAt already returns).
+function curvatureAt(centerline, s, step = 0.6) {
+  const a = centerline.sampleAt(s), b = centerline.sampleAt(s + step);
+  const cross = a.tangent.clone().cross(b.tangent).dot(b.up);
+  const dot = a.tangent.dot(b.tangent);
+  return Math.abs(Math.atan2(cross, dot)) / step;
+}
+
+// Brake (0..1) so the car reaches the tightest bend in the look-ahead window no
+// faster than it can hold. `turn` overrides car.turn (the per-car yaw rate). Used
+// by both the AI bots and a finished car's victory lap (engine), so neither washes
+// wide now that the sim leaves corner speed to the driver.
+export function cornerBrake(car, centerline, { turn } = {}) {
+  if (!car || !centerline) return 0;
+  const yaw = turn || car.turn || TURN_RATE_FALLBACK;
+  let vSafe = Infinity;
+  for (let d = BRAKE_LOOK_NEAR; d <= BRAKE_LOOK_FAR; d += BRAKE_LOOK_STEP) {
+    const k = curvatureAt(centerline, car.totalS + d);
+    if (k > 1e-3) vSafe = Math.min(vSafe, (CORNER_MARGIN * yaw) / k);
+  }
+  if (!isFinite(vSafe) || car.v <= vSafe) return 0;
+  return clamp((car.v - vSafe) / BRAKE_RANGE, 0, 1);
+}
+
 // Steer one engine car toward the centerline lookahead point (optionally offset
 // to a held lane). Returns a steer input in [-1, 1] for engine.processInput {s}.
 export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0 } = {}) {
@@ -34,11 +73,11 @@ export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GA
 }
 
 // A bot personality. `skill` is the fraction of top speed it cruises at: it holds
-// the brake at (1 - skill) on every straight, so a lower-skill bot is catchable.
-// Cornering is always perfect (pure-pursuit never scrubs the curbs), so the
-// cruise-speed handicap is the one balance lever that keeps a sloppy human in the
-// race against a flawless line. `laneBias` holds the bot a fixed offset off the
-// centerline so the field fans across the road instead of running nose-to-tail.
+// the brake at (1 - skill) on the straights, so a lower-skill bot is catchable.
+// On top of that the bot brakes for corners it can't hold (cornerBrake), so a
+// low-handling car (e.g. a Truck bot) visibly slows for bends while a grippy one
+// rails them — the same trade a human feels. `laneBias` holds the bot a fixed
+// offset off the centerline so the field fans across the road, not nose-to-tail.
 export class AiController {
   constructor({ skill = 0.9, lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0 } = {}) {
     this.skill = clamp(skill, 0, 1);
@@ -49,7 +88,7 @@ export class AiController {
   // {s, b} ready to hand straight to engine.processInput(id, ...).
   drive(car, centerline) {
     const s = pursue(car, centerline, { lookahead: this.lookahead, gain: this.gain, laneBias: this.laneBias });
-    return { s, b: 1 - this.skill };
+    return { s, b: Math.max(1 - this.skill, cornerBrake(car, centerline)) };
   }
 }
 

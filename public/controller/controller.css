@@ -58,38 +58,62 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; font-size: 1.6rem;
   margin: 0 0 1.1rem; text-align: center; color: var(--ink);
 }
-/* car grid — every model, tinted to the player's livery. Scrolls if a tall list
-   ever outgrows the screen (e.g. landscape) rather than clipping. */
+/* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
+
+/* Hero — the chosen car shown large with its name + handling stats, like a
+   feature card. Soft surface so it pops; row layout stays short in landscape. */
+.car-hero {
+  display: flex; align-items: center; gap: 0.9rem;
+  background: var(--surface); border: 3px solid var(--hairline); border-radius: var(--r);
+  box-shadow: var(--shadow-pop); padding: 0.8rem 1rem; margin-bottom: 0.9rem;
+}
+/* The square .carthumb (theme.css) sizes to this box; the livery ring lives on
+   the strip tile, not here, so the big render reads clean. */
+.car-hero__view { flex: 0 0 40%; max-width: 9rem; }
+.car-hero__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.car-hero__name {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.35rem;
+  line-height: 1; color: var(--ink);
+}
+
+/* Handling stat bars — one chunky rounded pill per stat, filled in the player's
+   livery so the panel reads as "theirs". Normalised across the roster in JS. */
+.car-opt__stats { display: flex; flex-direction: column; gap: 0.3rem; }
+.car-opt__stats .stat { display: grid; grid-template-columns: 3.9rem 1fr; align-items: center; gap: 0.5rem; }
+.car-opt__stats .stat__lab {
+  font-size: 0.62rem; font-weight: 800; color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: 0.03em; text-align: left;
+}
+.car-opt__stats .stat__bar {
+  height: 0.5rem; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--hairline), #fff 35%);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+.car-opt__stats .stat__bar > i {
+  display: block; height: 100%; border-radius: 999px;
+  background: var(--car); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Strip — every model as a small still tap target. Scrolls if it outgrows the
+   screen (e.g. landscape) rather than clipping. */
 .carpick {
-  /* responsive: ~2 cols in portrait, more across a wide (landscape) viewport */
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.75rem;
-  /* min-height:0 lets the grid shrink below its content in the flex column so it
-     scrolls internally (e.g. landscape) instead of pushing Start off-screen. */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: 0.55rem;
+  /* min-height:0 lets the strip shrink in the flex column and scroll internally
+     instead of pushing Start off-screen. */
   min-height: 0; overflow-y: auto;
-  /* overflow-y:auto makes the box clip overflow-x too, so the selected tile's
-     livery ring (and the soft card shadows) would be sliced off at the grid's
-     edge columns/rows. Pad the scroll box to give them room, then bleed it back
-     out with a matching negative margin so the tiles stay flush with the title
-     and Start button. (No width:100% — the flex column stretches us already.) */
-  padding: 0.6rem; margin: -0.6rem -0.6rem 0.8rem;
+  /* pad so the selected tile's livery ring + soft shadow aren't clipped by the
+     scroll box, then bleed it back out so tiles stay flush with the edges. */
+  padding: 0.5rem; margin: -0.5rem -0.5rem 0.8rem;
 }
 .car-opt {
-  position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
-  padding: 0.8rem 0.5rem 0.65rem; cursor: pointer; color: var(--ink); font-weight: 800;
-  background: var(--surface); border: 3px solid var(--hairline); border-radius: var(--r);
+  position: relative; cursor: pointer; padding: 0.4rem;
+  background: var(--surface); border: 3px solid var(--hairline); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, border-color 0.08s;
 }
 .car-opt:active { transform: translateY(2px); }
-/* The car render itself is the shared .carthumb component (see theme.css) — a
-   square box (still + synchronized spin overlay) that fills the tile width. */
-.car-opt__name { font-size: 0.95rem; }
-/* selected: ring in the livery colour + a check badge */
-.car-opt--mine { border-color: var(--car); box-shadow: 0 0 0 4px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }
-.car-opt--mine::after {
-  content: '✓'; position: absolute; top: 0.35rem; right: 0.5rem;
-  font-weight: 900; color: var(--car);
-}
+/* selected strip tile: ring in the livery colour (the hero shows which it is) */
+.car-opt--mine { border-color: var(--car); box-shadow: 0 0 0 3px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }
 #wait-host { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
    CAR_COLORS), heavier weight so the colour reads as intentional. */

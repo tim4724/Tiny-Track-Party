@@ -4,7 +4,7 @@
 // livery and lay out the requested screen from fake data.
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
-import { carThumbNode } from '../shared/carThumbs.js';
+import { buildCarPicker } from '../shared/carPicker.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const el = (id) => document.getElementById(id);
@@ -25,27 +25,13 @@ export function runControllerScenario(opts) {
 
   window.__TEST__ = window.__TEST__ || {};
 
-  // Car picker (mirrors main.js): every model as a real pre-baked render, with
-  // `selected` highlighted. Car is independent of colour, so no roster; the
-  // livery shows as the selection ring. Spin mode (?carview=spin) rotates the
-  // selected car.
-  const MODELS = window.CAR_MODELS || [];
-  const NAMES = window.CAR_NAMES || [];
+  // Car picker — the real shared layout (hero preview + stats + tap strip). Taps
+  // re-render so the gallery shows the selection updating the big preview live.
   function renderCarPicker(selected) {
-    const pick = el('carpick'); if (!pick) return; pick.innerHTML = '';
-    const count = MODELS.length || 4;
-    for (let i = 0; i < count; i++) {
-      const mine = i === selected;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
-      const name = document.createElement('span');
-      name.className = 'car-opt__name';
-      name.textContent = NAMES[i] || ('Car ' + (i + 1));
-      btn.appendChild(carThumbNode(MODELS[i], { spin: mine }));
-      btn.appendChild(name);
-      pick.appendChild(btn);
-    }
+    buildCarPicker({
+      heroEl: el('car-hero'), stripEl: el('carpick'),
+      selected, onPick: (i) => renderCarPicker(i)
+    });
   }
 
   // Latency chip preview — no relay here, so feed it a static reading. fastlane

@@ -8,7 +8,7 @@ import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { carThumbNode } from '../shared/carThumbs.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
 const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -137,9 +137,13 @@ function renderRoster(roster, hostPeerIndex) {
 // to FIELD_SIZE. AI get string ids ('ai-0'…) that never collide with the integer
 // phone slots, the lowest free liveries, and a personality from AI_PERSONALITIES.
 function buildField(humans) {
-  // carIndex is the player's lobby car pick; AI get a model derived from their
-  // livery slot (carIndex omitted → renderer falls back to colorIndex).
-  const field = humans.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex, ai: false }));
+  // carIndex is the player's lobby car pick; each player carries the handling
+  // stats resolved from it (carStats wraps + defaults), so the engine can give
+  // every car its own accel/top speed/turn/weight + collision footprint.
+  const field = humans.map((p) => ({
+    peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex,
+    carIndex: p.carIndex, stats: carStats(p.carIndex), ai: false
+  }));
   aiBots = new Map();
   const usedColors = new Set(field.map((p) => p.colorIndex));
   const lowestFreeColor = () => { let i = 0; while (usedColors.has(i)) i++; return i; };
@@ -148,7 +152,10 @@ function buildField(humans) {
     const colorIndex = lowestFreeColor();
     usedColors.add(colorIndex);
     const peerIndex = AI_PREFIX + n;
-    field.push({ peerIndex, name: persona.name, colorIndex, ai: true });
+    // AI race the model their livery slot maps to (what the renderer already drew
+    // when carIndex was omitted) — set it explicitly so stats match that model.
+    const carIndex = colorIndex % CAR_MODELS.length;
+    field.push({ peerIndex, name: persona.name, colorIndex, carIndex, stats: carStats(carIndex), ai: true });
     aiBots.set(peerIndex, new AiController(persona));
   }
   return field;

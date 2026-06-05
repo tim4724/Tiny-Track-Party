@@ -7,7 +7,9 @@ const MAX_RACE_MS = 180_000; // hard ceiling; see startRace() note in main.js
 
 export class RaceSession {
   constructor(players, track, opts = {}) {
-    this.engine = new Game(players.map((p) => p.peerIndex), track, {
+    // Each player carries the stats resolved from its car pick (see buildField);
+    // the engine reads {id, stats}. Stats-less entries fall back to the benchmark.
+    this.engine = new Game(players.map((p) => ({ id: p.peerIndex, stats: p.stats })), track, {
       onEvent: opts.onRaceEvent || (() => {}),
     });
     this.racing = false;

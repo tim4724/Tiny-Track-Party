@@ -125,12 +125,16 @@ export function runDisplayScenario(opts, ctx) {
 
     const ids = [];
     for (let i = 0; i < players; i++) ids.push(i);
+    // Give each preview car the model + stats for its slot so the gallery shows
+    // the real spread of handling and the new car-car bumping, not a uniform field.
+    const statsFor = window.carStats || (() => undefined);
+    const field = ids.map((i) => ({ id: i, stats: statsFor(i) }));
 
-    let engine = new Game(ids, track, { onEvent() {} });
+    let engine = new Game(field, track, { onEvent() {} });
     window.__engine = engine;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-    ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i]));
+    ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
 
     const placeGrid = () => {
       for (const c of engine.getSnapshot().cars) {
@@ -170,7 +174,7 @@ export function runDisplayScenario(opts, ctx) {
         }
         // Endless preview: once everyone crosses the line, reset and lap again.
         if (engine.raceOver) {
-          engine = new Game(ids, track, { onEvent() {} });
+          engine = new Game(field, track, { onEvent() {} });
           window.__engine = engine;
           placeGrid();
         }

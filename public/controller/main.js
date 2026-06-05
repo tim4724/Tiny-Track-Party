@@ -2,9 +2,9 @@
 // streamed as CONTROL to the display; live lap/position HUD from PLAYER_STATE.
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
-import { carThumbNode } from '../shared/carThumbs.js';
+import { buildCarPicker } from '../shared/carPicker.js';
 
-const { MSG, CAR_COLORS, CAR_MODELS, CAR_NAMES } = window;
+const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
@@ -171,32 +171,16 @@ function applyLivery() {
   document.documentElement.style.setProperty('--car', c);
 }
 
-// Car picker — the controller's lobby is just "pick your car" (the shared
-// display owns the player roster). Every car model is shown as a real pre-baked
-// render (a plain <img>, so the phone needs no WebGL/Three.js — see carThumbs).
-// Car and colour are independent and duplicates are fine, so there's no
-// locking; the player's livery shows as the selection ring, not a body tint. A
-// tap is optimistic — the next LOBBY_UPDATE echoes back the display's record.
-// In spin mode the current pick rotates (one turntable APNG at a time); the
-// rest stay stills.
-const CAR_COUNT = (CAR_MODELS || []).length;
-const carLabel = (i) => (CAR_NAMES && CAR_NAMES[i]) || ('Car ' + (i + 1));
+// Car picker — the controller's lobby is just "pick your car" (the shared display
+// owns the player roster). A big HERO shows the selected car (spinning pre-baked
+// render — a plain <img>, no WebGL on the phone — its name, and handling stat
+// bars) above a compact strip of every model as a small still. Tapping a strip
+// tile picks it; the hero (preview + stats) updates to match. Car and colour are
+// independent and duplicates are fine, so there's no locking; the livery shows as
+// the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
+// display's record. Layout lives in shared/carPicker.js (shared with the gallery).
 function renderLobby() {
-  const pick = el('carpick'); pick.innerHTML = '';
-  for (let i = 0; i < CAR_COUNT; i++) {
-    const mine = i === myCarIndex;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
-    if (mine) btn.setAttribute('aria-current', 'true');
-    const name = document.createElement('span');
-    name.className = 'car-opt__name';
-    name.textContent = carLabel(i);
-    btn.appendChild(carThumbNode(CAR_MODELS[i], { spin: mine })); // mine spins (others still)
-    btn.appendChild(name);
-    btn.addEventListener('click', () => chooseCar(i));
-    pick.appendChild(btn);
-  }
+  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
   el('start-btn').classList.toggle('hidden', !amHost);
   const waitEl = el('wait-host');
   waitEl.classList.toggle('hidden', amHost);
