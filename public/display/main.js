@@ -197,13 +197,17 @@ function startRace() {
   session = new RaceSession(field, track, {
     onRaceEvent,
     onCountdownTick(n) {
-      el('countdown').textContent = n > 0 ? n : 'GO!';
+      // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
+      // over the next beat via .is-go). n < 0: banner gone.
+      el('countdown').textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
+      el('countdown').classList.toggle('is-go', n === 0);
       net.broadcast({ type: MSG.COUNTDOWN, n });
     },
     onRaceStart() {
-      // Fail-safe note: RaceSession enforces MAX_RACE_MS internally so AFK/DNF
-      // cars can't hang the room forever. A clean 3-lap is ~50-80 s.
-      el('countdown').textContent = '';
+      // Fires on the "GO!" beat — physics are live and the GO! banner is still
+      // up (it clears on the next tick). Fail-safe note: RaceSession enforces
+      // MAX_RACE_MS internally so AFK/DNF cars can't hang the room forever. A
+      // clean 3-lap is ~50-80 s.
       net.flow.transitionTo(ROOM_STATE.PLAYING);
       net.broadcast({ type: MSG.GAME_START });
     },

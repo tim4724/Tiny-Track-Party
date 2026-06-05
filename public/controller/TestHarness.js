@@ -101,9 +101,11 @@ export function runControllerScenario(opts) {
         timers.forEach(clearTimeout); timers = [];
         let i = 0;
         (function tick() {
-          go.textContent = seq[i]; i++;
+          go.textContent = seq[i];
+          go.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
+          i++;
           if (i < seq.length) timers.push(setTimeout(tick, 800));
-          else timers.push(setTimeout(() => { go.textContent = '3'; }, 1200));
+          else timers.push(setTimeout(() => { go.classList.remove('is-go'); go.textContent = '3'; }, 1200));
         })();
       };
       break;

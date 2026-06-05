@@ -27,23 +27,27 @@ export class RaceSession {
     this.paused          = false;
   }
 
-  // Begin the countdown. Fires onCountdownTick(n) for n = seconds..0 at 1 Hz,
-  // then onRaceStart() and begins physics (racing = true). Seconds defaults to
-  // the remembered count so resume() can re-arm the interval where it left off.
+  // Begin the countdown. Fires onCountdownTick(n) for n = seconds..0 at 1 Hz
+  // (n = 0 is the "GO!" beat). The race starts ON "GO!" — racing = true and
+  // onRaceStart() both fire at n = 0, so cars launch the instant the banner
+  // reads GO, not a second later. One more tick at n = -1 clears the lingering
+  // banner. Seconds defaults to the remembered count so resume() can re-arm the
+  // interval where it left off.
   startCountdown(seconds) {
     this._countdownN = seconds;
     this._onCountdownTick(this._countdownN);
     this._countdownTimer = setInterval(() => {
       this._countdownN -= 1;
-      if (this._countdownN >= 0) {
-        this._onCountdownTick(this._countdownN);
-      } else {
-        clearInterval(this._countdownTimer);
-        this._countdownTimer = null;
-        this._countdownN = null;
+      this._onCountdownTick(this._countdownN);   // 2, 1, 0 (GO!), then -1 (clear)
+      if (this._countdownN === 0) {
+        // "GO!" is on screen — drop the flag and start physics this same beat.
         this.racing = true;
         this._onRaceStart();
         this._armRaceTimer(MAX_RACE_MS);
+      } else if (this._countdownN < 0) {
+        clearInterval(this._countdownTimer);
+        this._countdownTimer = null;
+        this._countdownN = null;
       }
     }, 1000);
   }
@@ -78,9 +82,15 @@ export class RaceSession {
     this.paused = false;
     if (!this.racing && this._countdownN != null) {
       this.startCountdown(this._countdownN);     // pick the countdown back up
-    } else if (this.racing && this._raceRemainMs != null) {
-      this._armRaceTimer(this._raceRemainMs);
-      this._raceRemainMs = null;
+    } else if (this.racing) {
+      if (this._countdownN === 0) {              // paused on the GO! beat: clear the lingering banner
+        this._countdownN = null;
+        this._onCountdownTick(-1);
+      }
+      if (this._raceRemainMs != null) {
+        this._armRaceTimer(this._raceRemainMs);
+        this._raceRemainMs = null;
+      }
     }
   }
 

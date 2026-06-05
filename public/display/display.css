@@ -157,6 +157,13 @@ html, body {
   text-shadow: 0 6px 0 rgba(40, 70, 40, 0.28), 0 16px 32px rgba(0, 0, 0, 0.3);
   pointer-events: none;
 }
+/* "GO!" stays up the beat after the start (cars are already moving) and fades
+   out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat. */
+#countdown.is-go { animation: countdown-go 1s ease-out forwards; }
+@keyframes countdown-go {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.35); }
+}
 
 /* per-viewport (split-screen) label, anchored at each cell's top-left */
 .cell-label {

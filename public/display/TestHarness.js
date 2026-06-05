@@ -222,9 +222,10 @@ export function runDisplayScenario(opts, ctx) {
       let i = 0;
       (function tick() {
         cd.textContent = seq[i];
+        cd.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
         i++;
         if (i < seq.length) timers.push(setTimeout(tick, 800));
-        else timers.push(setTimeout(() => { cd.textContent = '3'; }, 1200)); // rest at "3"
+        else timers.push(setTimeout(() => { cd.classList.remove('is-go'); cd.textContent = '3'; }, 1200)); // rest at "3"
       })();
     }
     cd.textContent = '3'; // frozen initial frame; ▶ replays the sequence

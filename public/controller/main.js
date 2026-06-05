@@ -118,16 +118,23 @@ function handleMessage(data) {
       inResults = false;               // a fresh race clears any leftover results overlay
       show('game');
       el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
-      el('go').classList.remove('hidden');
-      el('go').textContent = data.n > 0 ? data.n : 'GO!';
+      if (data.n >= 0) {
+        el('go').classList.remove('hidden');
+        el('go').textContent = data.n > 0 ? data.n : 'GO!';
+        el('go').classList.toggle('is-go', data.n === 0); // fade out on GO!
+        buzz(data.n > 0 ? 20 : [0, 90]); // tick on counts, stronger on GO
+      } else {
+        el('go').classList.add('hidden'); // GO! banner gone the beat after the start
+        el('go').classList.remove('is-go');
+      }
       setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
       el('pause-btn').classList.remove('hidden');
       startDriving();                  // stream tilt during the countdown (display reacts)
-      buzz(data.n > 0 ? 20 : [0, 90]); // tick on counts, stronger on GO
       break;
     case MSG.GAME_START:
+      // Fires on the "GO!" beat; leave the GO! banner up (the n<0 COUNTDOWN
+      // tick hides it) so it doesn't flash away the instant the race starts.
       show('game');
-      el('go').classList.add('hidden');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');
       startDriving();

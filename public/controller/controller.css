@@ -127,6 +127,13 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; font-size: 7rem; color: var(--brand);
   background: rgba(233, 248, 255, 0.5); backdrop-filter: blur(2px); pointer-events: none;
 }
+/* "GO!" fades out over the beat after the start (the race is already live) so
+   the drive HUD is revealed smoothly. Toggled by the COUNTDOWN n=0 beat. */
+#go.is-go { animation: go-fade 1s ease-out forwards; }
+@keyframes go-fade {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.25); }
+}
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
 .hud-top { display: flex; justify-content: space-between; align-items: center; }
 #lap { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--ink); }
