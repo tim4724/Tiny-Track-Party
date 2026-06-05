@@ -130,7 +130,7 @@ html, body {
   background: #fff; border-radius: var(--r-lg); padding: 1.1rem;
   box-shadow: var(--shadow-float);
 }
-#qr { display: block; width: min(30vw, 42vh); height: auto; image-rendering: pixelated; }
+#qr { display: block; width: min(22vw, 32vh); height: auto; image-rendering: pixelated; }
 .qr-cap {
   position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
   margin-top: 0.9rem; white-space: nowrap;
