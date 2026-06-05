@@ -10,6 +10,13 @@ import { GameNet } from '../shared/GameNet.js';
 const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES } = window;
 const enc = encodeURIComponent;
 
+// Relay-liveness ping cadence and the overdue-PONG threshold after which we
+// surface a "no signal" reading (only when the fastlane isn't carrying its own
+// live RTT). 1 Hz is plenty for a latency readout and matches the display's
+// per-controller liveness expectations.
+const PING_INTERVAL_MS = 1000;
+const PONG_TIMEOUT_MS = 3000;
+
 function deriveRoomCode() {
   const seg = (location.pathname || '/').split('/').filter(Boolean)[0];
   return seg || '';
@@ -36,11 +43,14 @@ export class ControllerNet extends GameNet {
     this.onMessage = opts.onMessage || (() => {});
     this.onJoined = opts.onJoined || (() => {});
     this.onStatus = opts.onStatus || (() => {}); // (state, info)
+    this.onRtt = opts.onRtt || (() => {});       // (halfMs, viaFastlane); halfMs < 0 = no signal
     this.roomCode = deriveRoomCode();
     this.instance = deriveInstance();
     this.clientId = loadClientId(this.roomCode);
     this.peerIndex = null;
     this.playerName = '';
+    this._pingTimer = null;
+    this._lastPong = 0;
   }
 
   connect(playerName) {
@@ -56,6 +66,7 @@ export class ControllerNet extends GameNet {
         this.peerIndex = msg.index;
         this._openFastlane();
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName });
+        this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
         this.onStatus('error', msg.message);
@@ -66,9 +77,11 @@ export class ControllerNet extends GameNet {
     this.party.onMessage = (from, data) => {
       if (from !== 0 || !data) return;
       if (this._isSignal(from, data)) return;
+      if (data.type === MSG.PONG) { this._handlePong(data); return; }
       this.onMessage(data);
     };
     this.party.onClose = (attempt, max, meta) => {
+      this._stopPing();
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
       this.onStatus('reconnecting', { attempt, max });
     };
@@ -88,6 +101,10 @@ export class ControllerNet extends GameNet {
   _openFastlane() {
     this._initFastlane(this.peerIndex, {
       emitIdleHeartbeat: true,
+      // Idle heartbeats keep acks flowing even with no inputs, so this fires
+      // ~continuously while the P2P channel is up — smoothed half-RTT (srtt/2),
+      // lower than the WS path. viaFastlane=true so the UI lights the bolt.
+      onRtt: (peerIdx, halfMs) => { if (peerIdx === 0) this.onRtt(Math.round(halfMs), true); },
       onPeerClosed: () => {
         // Display-side fastlane closed (watchdog or display reconnect); retry.
         setTimeout(() => { if (this.fastlane && this.peerIndex != null) this.fastlane.open(0); }, 2000);
@@ -95,6 +112,39 @@ export class ControllerNet extends GameNet {
     });
     this.fastlane.open(0);
   }
+
+  // ---- ping / pong (WS relay-liveness + WS-path latency) ----
+  // The fastlane reports its own (lower) RTT via onRtt; this WS ping is the
+  // fallback latency source and the liveness check. When the fastlane is open
+  // its samples win — we don't let the 1 Hz WS reading clobber the live P2P
+  // chip (the gate in _handlePong / the timeout below).
+  _startPing() {
+    this._stopPing();
+    this._lastPong = Date.now();
+    this._pingTimer = setInterval(() => {
+      if (!this.party) return;
+      this.send(MSG.PING, { t: Date.now() });
+      if (Date.now() - this._lastPong > PONG_TIMEOUT_MS && !this._fastlaneUp()) {
+        this.onRtt(-1, false);
+      }
+    }, PING_INTERVAL_MS);
+  }
+
+  _stopPing() {
+    if (this._pingTimer) { clearInterval(this._pingTimer); this._pingTimer = null; }
+  }
+
+  _handlePong(data) {
+    this._lastPong = Date.now();
+    // Only drive the chip from the WS reading when the fastlane isn't already
+    // feeding higher-fidelity P2P samples — otherwise the 1 Hz relay RTT would
+    // stomp the live bolt reading once a second.
+    if (typeof data.t === 'number' && !this._fastlaneUp()) {
+      this.onRtt(Math.round((Date.now() - data.t) / 2), false);
+    }
+  }
+
+  _fastlaneUp() { return !!(this.fastlane && this.fastlane.isOpen(0)); }
 
   isHost(hostPeerIndex) { return this.peerIndex != null && this.peerIndex === hostPeerIndex; }
 }

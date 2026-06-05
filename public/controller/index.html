@@ -51,6 +51,13 @@
     </div>
   </section>
 
+  <!-- Latency chip — one-way (RTT/2), pinned bottom-right across all screens.
+       Hidden until the first reading lands (post-join). The bolt shows only
+       while the input/ping path is on the P2P fastlane DataChannel. -->
+  <div id="latency" class="latency hidden" role="status" aria-live="off">
+    <span class="latency__bolt" aria-hidden="true"></span><span class="latency__text">-- ms</span>
+  </div>
+
   <script type="module" src="/controller/main.js?v=__APP_V__"></script>
 </body>
 </html>

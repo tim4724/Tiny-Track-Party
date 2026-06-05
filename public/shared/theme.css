@@ -51,6 +51,11 @@
   --danger:  var(--car-red);     /* brake / destructive                       */
   --car:     var(--brand);       /* per-player livery (controller sets this)  */
 
+  /* -- connection quality (controller latency chip) ---------------------- */
+  --ping-good: var(--car-green); /* low latency      */
+  --ping-ok:   var(--car-amber); /* moderate         */
+  --ping-bad:  var(--car-red);   /* high / no signal */
+
   /* -- ink (text) -------------------------------------------------------- */
   --ink:   #26313f;              /* headings / primary text                   */
   --ink-2: #5c6675;              /* body / secondary                          */

@@ -131,6 +131,34 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 #motion-tip { color: var(--ink-2); font-weight: 700; text-align: center; font-size: 0.95rem; }
 
+/* ---- latency chip ---- */
+/* One-way latency (RTT/2), pinned to the bottom-right corner. A dark pill keeps
+   the mint/honey/red ping colours legible over the bright sky background and the
+   red BRAKE button it can overlap (pointer-events:none, so it never eats taps).
+   The colour comes from the .latency--good|ok|bad modifier; the bolt only shows
+   under .latency--fastlane (P2P DataChannel carrying the input/ping path). */
+.latency {
+  position: fixed;
+  right: calc(0.55rem + env(safe-area-inset-right));
+  bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  z-index: 20;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0.26rem 0.55rem;
+  font-family: var(--font-body); font-weight: 800; font-size: 0.72rem; line-height: 1;
+  font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
+  color: #fff;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
+  pointer-events: none; user-select: none;
+}
+.latency__bolt { display: none; font-size: 0.9em; }
+.latency__bolt::before { content: "\26A1\FE0E"; }  /* ⚡ forced to monochrome text presentation */
+.latency--fastlane .latency__bolt { display: inline; }
+.latency--good { color: var(--ping-good); }
+.latency--ok   { color: var(--ping-ok); }
+.latency--bad  { color: var(--ping-bad); }
+
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
 @media (orientation: landscape) {

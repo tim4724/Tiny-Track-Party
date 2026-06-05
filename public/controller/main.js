@@ -60,8 +60,28 @@ const net = new ControllerNet({
     else if (state === 'display_gone') setStatus('Waiting for the big screen…');
     else if (state === 'replaced') setStatus('Opened on another tab.');
   },
-  onMessage: handleMessage
+  onMessage: handleMessage,
+  onRtt: updateLatency
 });
+
+// Latency chip (bottom-right). halfMs is one-way (RTT/2); halfMs < 0 means the
+// PONG is overdue (no signal). viaFastlane lights the bolt when the reading came
+// off the P2P DataChannel rather than the WS relay. Stays hidden until the first
+// reading lands so it never flashes on the pre-join name screen.
+const latencyEl = el('latency');
+function updateLatency(halfMs, viaFastlane) {
+  if (!latencyEl) return;
+  latencyEl.classList.remove('hidden', 'latency--good', 'latency--ok', 'latency--bad');
+  latencyEl.classList.toggle('latency--fastlane', !!viaFastlane);
+  const textEl = latencyEl.querySelector('.latency__text');
+  if (halfMs < 0) {
+    textEl.textContent = 'no signal';
+    latencyEl.classList.add('latency--bad');
+  } else {
+    textEl.textContent = halfMs + ' ms';
+    latencyEl.classList.add(halfMs < 50 ? 'latency--good' : halfMs < 100 ? 'latency--ok' : 'latency--bad');
+  }
+}
 
 const tilt = new TiltInput({
   surface: el('game'),

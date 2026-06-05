@@ -48,6 +48,16 @@ export function runControllerScenario(opts) {
     }
   }
 
+  // Latency chip preview — no relay here, so feed it a static reading. fastlane
+  // shows the bolt; quality colour follows the same thresholds as main.js.
+  function setLatency(halfMs, fastlane) {
+    const chip = el('latency'); if (!chip) return;
+    chip.classList.remove('hidden', 'latency--good', 'latency--ok', 'latency--bad');
+    chip.classList.toggle('latency--fastlane', !!fastlane);
+    chip.querySelector('.latency__text').textContent = halfMs + ' ms';
+    chip.classList.add(halfMs < 50 ? 'latency--good' : halfMs < 100 ? 'latency--ok' : 'latency--bad');
+  }
+
   const setSteer = (v) => { const f = el('steer-fill'); if (f) f.style.transform = `translateX(${v * 50}%)`; };
   function setHud(lap, total, pos, finished) {
     el('lap').textContent = `Lap ${lap}/${total}`;
@@ -95,6 +105,7 @@ export function runControllerScenario(opts) {
       el('go').textContent = '3';
       setSteer(0);
       setHud(1, 3, 1, false);
+      setLatency(24, false);   // pre-fastlane: WS reading, no bolt
       // `timers` lives in the case scope so a re-play cancels the previous
       // sequence instead of racing it.
       const go = el('go');
@@ -117,6 +128,7 @@ export function runControllerScenario(opts) {
       el('go').classList.add('hidden');
       setSteer(0.4); // mid-right tilt, so the steer bar reads off-center
       setHud(2, 3, 2, false);
+      setLatency(16, true);    // fastlane up: low RTT + bolt
       break;
 
     case 'finished':
@@ -124,6 +136,7 @@ export function runControllerScenario(opts) {
       el('go').classList.add('hidden');
       setSteer(0);
       setHud(3, 3, 1, true);
+      setLatency(19, true);
       break;
 
     default:
