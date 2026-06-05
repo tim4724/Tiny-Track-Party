@@ -427,14 +427,18 @@ el('joinbox').addEventListener('click', async () => {
 const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_params.get('test') === '1' || _scenario) {
-  // Gallery/test: render the (default or ?track=) track in 3D — reveal the scene
-  // and drop the diorama since the harness drives the race screens directly.
-  el('scene').classList.remove('hidden');
-  const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
+  // Gallery/test. Lobby previews ('welcome'/'lobby') keep the default diorama
+  // backdrop (no track picked, matching the real lobby); race previews reveal the
+  // 3D scene the harness renders the track + cars into.
+  const _scn = _scenario || 'racing';
+  if (_scn !== 'welcome' && _scn !== 'lobby') {
+    el('scene').classList.remove('hidden');
+    const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
+  }
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
   import('./TestHarness.js').then(({ runDisplayScenario }) => runDisplayScenario(
     {
-      scenario: _scenario || 'racing',
+      scenario: _scn,
       players: _int(_params.get('players'), 4),
       host: _params.get('host') === null ? null : _int(_params.get('host'), 0)
     },

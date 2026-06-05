@@ -67,6 +67,31 @@ export function runControllerScenario(opts) {
     else note.classList.add('hidden');
   }
 
+  // Results board — mirrors main.js renderResults + renderResultFoot. `over=false`
+  // is the "you just finished, others still out" state (some rows "Racing…", a
+  // waiting footer); `over=true` is the final board (host gets "New game").
+  function renderResultsBoard(order, over) {
+    show('results');
+    const list = el('result-list'); list.innerHTML = '';
+    order.forEach((o) => {
+      const li = document.createElement('li');
+      if (o.me) li.classList.add('is-me');
+      if (!o.finished) li.classList.add('is-racing');
+      const dot = document.createElement('span'); dot.className = 'res-dot';
+      dot.style.background = COLORS[o.colorIndex] || '#888';
+      const name = document.createElement('span'); name.className = 'res-name';
+      name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
+      const time = document.createElement('span'); time.className = 'res-time';
+      time.textContent = o.finished ? `${o.time.toFixed(1)}s` : (over ? 'DNF' : 'Racing…');
+      li.append(dot, name, time);
+      list.appendChild(li);
+    });
+    el('newgame-btn').classList.toggle('hidden', !over);   // host gets "New game" once over
+    const wait = el('result-wait');
+    wait.classList.toggle('hidden', !!over);
+    if (!over) wait.textContent = 'Waiting for the other racers to finish…';
+  }
+
   // Latency chip preview — no relay here, so feed it a static reading.
   const setLatency = (halfMs, fastlane) => applyLatencyChip(el('latency'), halfMs, fastlane);
 
@@ -138,10 +163,15 @@ export function runControllerScenario(opts) {
       break;
 
     case 'finished':
-      showDriveHud();
-      setSteer(0);
-      setHud(3, 3, 1, true);
+      // Your car crossed the line — the phone flips to the results board with your
+      // finished row while the rest are still out (not the drive HUD).
       setLatency(19, true);
+      renderResultsBoard([
+        { name: FAKE_NAMES[color], colorIndex: color, time: 31.2, me: true, finished: true },
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, finished: false },
+        { name: 'Bolt', colorIndex: (color + 2) % COLORS.length, ai: true, finished: false },
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, finished: false }
+      ], false);
       break;
 
     case 'paused':
@@ -154,33 +184,16 @@ export function runControllerScenario(opts) {
       el('pause-overlay').classList.remove('hidden');
       break;
 
-    case 'results': {
+    case 'results':
       // Final board (race over), viewed as the host so the "New game" button shows.
-      show('results');
       setLatency(20, true);
-      const order = [
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4 },
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5 }
-      ];
-      const list = el('result-list'); list.innerHTML = '';
-      order.forEach((o) => {
-        const li = document.createElement('li');
-        if (o.me) li.classList.add('is-me');
-        const dot = document.createElement('span'); dot.className = 'res-dot';
-        dot.style.background = COLORS[o.colorIndex] || '#888';
-        const name = document.createElement('span'); name.className = 'res-name';
-        name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
-        const time = document.createElement('span'); time.className = 'res-time';
-        time.textContent = `${o.time.toFixed(1)}s`;
-        li.append(dot, name, time);
-        list.appendChild(li);
-      });
-      el('newgame-btn').classList.remove('hidden'); // host preview
-      el('result-wait').classList.add('hidden');
+      renderResultsBoard([
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4, finished: true },
+        { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true, finished: true },
+        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true, finished: true },
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true }
+      ], true);
       break;
-    }
 
     default:
       console.warn('[ControllerTestHarness] unknown scenario:', scenario);
