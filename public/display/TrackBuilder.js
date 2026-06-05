@@ -189,6 +189,8 @@ function reverseSpec(spec) {
   spec.exit.extractBasis(xx, xy, xz);
   const ePos = new THREE.Vector3().setFromMatrixPosition(spec.entry);
   const xPos = new THREE.Vector3().setFromMatrixPosition(spec.exit);
+  // Use frame(), not conn(): these positions come straight off the already-conn'd
+  // entry/exit matrices, so they sit at the nub already — no DRIVE_LIFT re-applied.
   return {
     glb: spec.glb,
     entry: frame(xPos, xz.clone().negate(), xy), // at old exit, travel reversed, same road normal
@@ -394,8 +396,9 @@ export function buildTrack(pieceList, opts = {}) {
     // Scale the arch so its LEGS straddle the road on the grass — clear of the full
     // slab (2.0), not just the drivable width — and it reads as a grand bridge over
     // the wide track. GATE_WIDTH is the arch's measured outer leg-to-leg span.
-    const SLAB_W = 2.0; // wide piece's full outer width (drivable ROAD_WIDTH is 1.8)
-    const GS = (SLAB_W * SCALE + 1.8) / GATE_WIDTH; // span ~5.8: legs ~0.9 beyond each slab edge, onto the grass
+    const SLAB_W = 2.0;       // wide piece's full outer width (drivable ROAD_WIDTH is 1.8)
+    const LEG_OVERHANG = 0.9; // how far each leg lands beyond the slab edge, onto the grass
+    const GS = (SLAB_W * SCALE + 2 * LEG_OVERHANG) / GATE_WIDTH; // span ~5.8
     const m = new THREE.Matrix4().makeBasis(g.lateral.clone(), g.up.clone(), g.tangent.clone());
     m.scale(new THREE.Vector3(GS, GS, GS));
     // Plant the legs at the ROAD surface (the gate model's origin is at its base), so
@@ -427,31 +430,14 @@ export const OVAL = [
 // =====================================================================
 // Track definitions. A track is just an ordered list of PIECES keys; the
 // builder chains them by connector frames and auto-closes the loop. Compose
-// reusable runs (LOOP, a hill, a chicane) and splice them into a skeleton.
+// reusable runs (a hill, a chicane) and splice them into a skeleton.
 // =====================================================================
 
-// Loop-the-loop. Four vertical quarter-bends make a 360° circle (half a loop =
-// upside-down at the top). A plain circle returns to its entry, so the climb and
-// descent share one plane and meet at the base.
-//
-// OFFSET CORKSCREW: to bring the descent down ONE TRACK WIDTH beside the climb
-// (so the exit clears the entry), the lateral S-bend (`curve`) is spliced in at
-// the TOP — exactly how Kenney's own loop tile offsets its exit. Because the only
-// sideways wide piece also advances a full tile, this makes a TEARDROP, not a
-// perfect circle (unavoidable with wide pieces). The trailing straight + `curveR`
-// merge the lane back so the whole feature nets ONE STRAIGHT forward, a drop-in
-// replacement for a straight that keeps the circuit closed.
-// Use the LARGE bend so the one-track-width sideways drift is small relative to
-// the loop (the small bend's radius ≈ the offset, which tears the two half-loops
-// apart). The lateral S-bend is spliced at the top to carry the descent aside.
-const CORKSCREW = ['bendLarge', 'bendLarge', 'curve', 'bendLarge', 'bendLarge'];
-const OFFSET_LOOP = [...CORKSCREW, 'straight', 'curveR'];
-
 // "Grand Tour": the oval skeleton (4 large corners, auto-closing) with each
-// straight swapped for a wide-road FEATURE. Opposite sides match length so it
-// closes like the oval. The clean LOOP nets zero, so it's dropped into the far
-// straight for free. Every feature returns to ground level, so the lap is
-// net-flat aside from the loop and hills. The start/finish straight (gate) leads.
+// straight swapped for a wide-road FEATURE (speed bumps, half-hill, full hill).
+// Opposite sides match length so it closes like the oval, and every feature
+// returns to ground level, so the lap is net-flat. The start/finish straight
+// (gate) leads.
 export const GRAND_TOUR = [
   // start/finish straight (gate here) → speed bumps   [4 straight-equivalents]
   'straight', 'straight', 'bumpUp', 'bumpDown', 'cornerLargeL',

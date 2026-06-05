@@ -42,13 +42,11 @@
   show('curve (flat)', ['curve']);
   show('straight', ['straight']);
 
-  if (TRACKS) {
-    for (const name of Object.keys(TRACKS)) {
-      const t = buildTrack(TRACKS[name]);
-      let inv = 0;
-      for (const s of t.centerline.samples) inv = Math.min(inv, s.up.y);
-      console.log(`\nTRACK "${name}": pieces=${TRACKS[name].length} closed=${t.closed} gap=${t.gap.toFixed(3)} ` +
-        `len=${t.length.toFixed(1)} minUpY=${inv.toFixed(2)} (${inv < -0.5 ? 'INVERTS ✓' : 'no inversion'})`);
-    }
+  for (const name of Object.keys(TRACKS)) {
+    const t = buildTrack(TRACKS[name]);
+    let inv = 0;
+    for (const s of t.centerline.samples) inv = Math.min(inv, s.up.y);
+    console.log(`\nTRACK "${name}": pieces=${TRACKS[name].length} closed=${t.closed} gap=${t.gap.toFixed(3)} ` +
+      `len=${t.length.toFixed(1)} minUpY=${inv.toFixed(2)} (${inv < -0.5 ? 'INVERTS ✓' : 'no inversion'})`);
   }
 })();

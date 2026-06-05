@@ -8,10 +8,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
-// Debug aid: expose the THREE namespace so test harnesses can raycast against the
-// rendered track to verify the centerline rides the actual GLB road surface.
-if (typeof window !== 'undefined') window.__THREE = THREE;
-
 // Shared with the controller's car picker + protocol (one source of truth).
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
