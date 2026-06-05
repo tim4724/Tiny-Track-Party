@@ -19,8 +19,7 @@ const TRACK_GLBS = [
 // Chase camera: sits behind the CAR's heading and looks at it, with the position
 // and look-target damped so it lags and swings smoothly behind through turns
 // (the standard spring chase-cam every kart racer uses).
-// Close chase that sits LOW and just behind the car with a fairly tight lens —
-// the tilt-shift blur (below) does the heavy lifting for the miniature read, so
+// Close chase that sits LOW and just behind the car with a fairly tight lens, so
 // the camera stays comfortable to drive rather than steeply top-down.
 const CHASE_DIST = 1.8, CHASE_HEIGHT = 0.85, CHASE_LOOK = 2.0; // close, low, slight look-down
 const CHASE_TGT_UP = 0.15;    // look point barely above the road → camera pitches onto the car
@@ -32,24 +31,16 @@ const FOV_GAIN = 5;           // extra FOV degrees at top speed (subtle sense of
 // Wheel-kick colour — dark grey (tyre scuff / asphalt grit). One knob to retint.
 const DUST_COLOR = 0x4a4a4a;
 
-// Tilt-shift (fake depth-of-field) — the core miniature cue. We render the scene
-// to an offscreen target, make a blurred copy, then composite them: a sharp
-// horizontal FOCUS BAND sits on the car, with everything above (far track) and
-// below (near foreground) blurred. Because the chase cam frames the car at a
-// fixed spot in its cell, the band is a fixed position WITHIN each cell — so it
-// lands on every player's car in split-screen. focusV/band/feather are in
-// per-cell UV (0 = cell bottom, 1 = cell top).
-const TS_FOCUS_V = 0.42;    // band centre within a cell (where the car sits)
-const TS_BAND_HALF = 0.13;  // half-height of the fully-sharp band (wider = more in focus)
-const TS_FEATHER = 0.28;    // fade distance from sharp → full blur
-const TS_BLUR_DIV = 4;      // blur-target resolution divisor (4 = quarter-res: 4× fewer blur pixels; invisible since the region is blurred anyway)
-const TS_BLUR_REF = 2;      // blur radius is calibrated to THIS divisor, so changing TS_BLUR_DIV only trades quality↔cost, never the look
-const TS_BLUR_SPREAD = 2.0; // Gaussian spread → screen-space blur radius (clear miniature pop)
+// NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
+// scene still renders to an offscreen LINEAR target and is presented through a
+// single full-screen pass that applies exposure + the linear→sRGB encode (see
+// _present / _matPresent). To bring DOF back later, reinstate the blur render
+// targets + a depth texture on _rtScene and mix sharp↔blur by depth in that pass.
 
-// Look constants. Colour grading is done in the COMPOSITE shader, not via the
+// Look constants. Colour grading is done in the PRESENT shader, not via the
 // renderer's tone mapping: Three disables tone mapping (and sRGB output) when a
-// pass renders into an offscreen target, which ours does for the blur. So the
-// composite applies exposure and the linear→sRGB encode itself.
+// pass renders into an offscreen target, which ours does. So the present pass
+// applies exposure and the linear→sRGB encode itself.
 const DEF_EXPOSURE = 1.1;    // brightness multiplier (1 = stock)
 const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than stock; <1 = glossier)
 const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
@@ -114,8 +105,7 @@ function makeDustTexture() {
 // Rear NAME PLATE — replaces the old rotating cone marker. A small livery-
 // coloured "license plate" fixed to the back of each car with the player's
 // name. The chase cam looks at the back of every car, so you read the plate of
-// whoever you're chasing; it sits in the tilt-shift focus band, so it stays
-// sharp (unlike a tag hovering above the band). The plate is a flat mesh
+// whoever you're chasing. The plate is a flat mesh
 // parented to the car body (so it banks with the steering lean), facing rearward.
 const PLATE_MAX_W = 0.2;     // plate width cap in world units (also clamped to the car's width)
 const PLATE_Y_FRAC = 0.46;   // fallback height up the body's rear face (0 = underside, 1 = roof)
@@ -310,92 +300,49 @@ export class SceneRenderer {
     window.addEventListener('resize', () => this._onResize());
   }
 
-  // Offscreen tilt-shift pipeline. Three passes feed it (see _postProcess):
-  //   scene → _rtScene (sharp)  →  blur H/V → _rtBlur (soft)  →  composite to screen.
-  // The scene RT is full-res and sRGB-encoded (tone-mapping + colour conversion
-  // happen here, exactly as when rendering straight to the canvas); the blur RTs
-  // are half-res for a softer, cheaper blur. Custom ShaderMaterials sample these
-  // texels raw and write the already-encoded result straight to the canvas, so
-  // there's no double colour conversion.
+  // Offscreen present pipeline:  scene → _rtScene (linear, MSAA)  →  present to canvas.
+  // The scene renders to an offscreen target so split-screen viewports compose into
+  // one image; a single full-screen pass then grades it (exposure) and does the
+  // linear→sRGB encode (Three skips both on offscreen targets, so we own them). The
+  // MSAA samples here matter: the renderer's `antialias` flag only covers the default
+  // canvas framebuffer, but the whole scene goes through this target — without it
+  // every geometry edge (notably the plate's thin rim) aliases and crawls as the car
+  // tilts. WebGL2 resolves the multisample buffer for us.
+  // (Depth-of-field blur was removed; see the note near the look constants for how to
+  // reinstate it — add blur targets + a depth texture and mix sharp↔blur here.)
   _initPost() {
     const db = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     const W = Math.max(2, db.x), H = Math.max(2, db.y);
-    const bw = Math.max(1, Math.floor(W / TS_BLUR_DIV)), bh = Math.max(1, Math.floor(H / TS_BLUR_DIV));
     const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
 
-    // The scene pass writes LINEAR colour (Three forces the working space on
-    // offscreen targets), untone-mapped. The composite handles grading + encode.
-    // samples > 0 = MSAA: the renderer's `antialias` flag only covers the default
-    // canvas framebuffer, but the whole scene goes through this offscreen target,
-    // so without this every geometry edge (notably the plate's thin rim) aliases
-    // and crawls as the car tilts. WebGL2 resolves the multisample buffer for us.
     this._rtScene = new THREE.WebGLRenderTarget(W, H, { ...opts, depthBuffer: true, samples: 4 });
     this._rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
-    this._rtBlurA = new THREE.WebGLRenderTarget(bw, bh, { ...opts, depthBuffer: false });
-    this._rtBlurB = new THREE.WebGLRenderTarget(bw, bh, { ...opts, depthBuffer: false });
-    // Blur buffers hold linear colour too (sampled raw by the shaders); label
-    // them so a future Three default-colourspace change can't silently decode.
-    this._rtBlurA.texture.colorSpace = THREE.LinearSRGBColorSpace;
-    this._rtBlurB.texture.colorSpace = THREE.LinearSRGBColorSpace;
 
     const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
-    // Separable Gaussian — LINEAR-SAMPLED: the same 9-tap kernel reconstructed in
-    // 5 fetches by letting hardware bilinear filtering blend each adjacent tap
-    // PAIR in one sample at a weighted offset (the blur RTs use LinearFilter, so
-    // this is exact). The weights/offsets are the standard collapse of the 9-tap
-    // weights {0.2270, 0.1946, 0.1216, 0.0541, 0.0162}. `dir` is the axis + step.
-    this._matBlur = new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } },
-      vertexShader: VERT,
-      fragmentShader: `
-        uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv;
-        void main(){
-          vec2 o1 = dir * 1.3846153846;   // collapsed offset for taps ±1,±2
-          vec2 o2 = dir * 3.2307692308;   // collapsed offset for taps ±3,±4
-          vec3 c = texture2D(tDiffuse, vUv).rgb * 0.2270270270;
-          c += texture2D(tDiffuse, vUv + o1).rgb * 0.3162162162;
-          c += texture2D(tDiffuse, vUv - o1).rgb * 0.3162162162;
-          c += texture2D(tDiffuse, vUv + o2).rgb * 0.0702702703;
-          c += texture2D(tDiffuse, vUv - o2).rgb * 0.0702702703;
-          gl_FragColor = vec4(c, 1.0);
-        }`
-    });
-
-    // Composite: pick sharp↔blur by vertical distance from the per-cell focus
-    // band, then GRADE: exposure (brightness) → linear→sRGB encode. Inputs are
-    // linear (see _rtScene); we own the encode since Three skips it on offscreen
-    // passes. toneMapped=false so Three doesn't try to touch our output.
-    this._matComposite = new THREE.ShaderMaterial({
+    // Present: sample the (linear) scene, GRADE — exposure (brightness) → linear→sRGB
+    // encode — and write straight to the canvas. toneMapped=false so Three doesn't
+    // touch our output.
+    this._matPresent = new THREE.ShaderMaterial({
       toneMapped: false,
-      uniforms: {
-        tSharp: { value: null }, tBlur: { value: null },
-        rows: { value: 1 }, focusV: { value: TS_FOCUS_V },
-        bandHalf: { value: TS_BAND_HALF }, feather: { value: TS_FEATHER },
-        exposure: { value: DEF_EXPOSURE }
-      },
+      uniforms: { tScene: { value: null }, exposure: { value: DEF_EXPOSURE } },
       vertexShader: VERT,
       fragmentShader: `
-        uniform sampler2D tSharp; uniform sampler2D tBlur;
-        uniform float rows, focusV, bandHalf, feather, exposure;
+        uniform sampler2D tScene; uniform float exposure;
         varying vec2 vUv;
         vec3 toSRGB(vec3 c){
           c = max(c, 0.0);
           return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
         }
         void main(){
-          float localV = fract(vUv.y * rows);            // position within this cell
-          float d = abs(localV - focusV);
-          float f = smoothstep(bandHalf, bandHalf + feather, d);
-          vec3 col = mix(texture2D(tSharp, vUv).rgb, texture2D(tBlur, vUv).rgb, f);
-          col = toSRGB(col * exposure);                  // brightness, then gamma-encode
+          vec3 col = toSRGB(texture2D(tScene, vUv).rgb * exposure);
           gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
         }`
     });
 
     this._fsScene = new THREE.Scene();
     this._fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    this._fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this._matComposite);
+    this._fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this._matPresent);
     this._fsScene.add(this._fsQuad);
     this._dbSize = new THREE.Vector2();
   }
@@ -403,45 +350,13 @@ export class SceneRenderer {
   _resizePost() {
     if (!this._rtScene) return;
     const db = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const W = Math.max(2, db.x), H = Math.max(2, db.y);
-    this._rtScene.setSize(W, H);
-    this._rtBlurA.setSize(Math.max(1, Math.floor(W / TS_BLUR_DIV)), Math.max(1, Math.floor(H / TS_BLUR_DIV)));
-    this._rtBlurB.setSize(Math.max(1, Math.floor(W / TS_BLUR_DIV)), Math.max(1, Math.floor(H / TS_BLUR_DIV)));
+    this._rtScene.setSize(Math.max(2, db.x), Math.max(2, db.y));
   }
 
-  // Blur _rtScene into _rtBlurB, then composite (sharp band + blurred surround)
-  // to the canvas. `rows` tells the shader the split-screen row count so the
-  // focus band repeats once per cell. Renders straight to the canvas (target null).
-  _postProcess(rows) {
+  // Grade _rtScene (exposure + linear→sRGB) straight to the canvas (target null).
+  _present() {
     const r = this.renderer;
-    // `dir` is a NORMALIZED UV offset (0..1), so it's independent of each blur
-    // target's pixel resolution. Dividing the desired screen step by the FULL-res
-    // width/height gives the same fraction-of-image for both passes → an equal
-    // blur radius in screen pixels, even though the H pass samples full-res
-    // _rtScene and the V pass samples quarter-res _rtBlurA. So TS_BLUR_DIV only
-    // trades quality↔cost, never the radius.
-    const fw = this._rtScene.width, fh = this._rtScene.height;
-    const step = TS_BLUR_SPREAD * TS_BLUR_REF;
-
-    // horizontal then vertical Gaussian, at blur-target resolution
-    this._fsQuad.material = this._matBlur;
-    this._matBlur.uniforms.tDiffuse.value = this._rtScene.texture;
-    this._matBlur.uniforms.dir.value.set(step / fw, 0);
-    r.setRenderTarget(this._rtBlurA);
-    r.render(this._fsScene, this._fsCam);
-
-    this._matBlur.uniforms.tDiffuse.value = this._rtBlurA.texture;
-    this._matBlur.uniforms.dir.value.set(0, step / fh);
-    r.setRenderTarget(this._rtBlurB);
-    r.render(this._fsScene, this._fsCam);
-
-    this._fsQuad.material = this._matComposite;
-    const u = this._matComposite.uniforms;
-    u.tSharp.value = this._rtScene.texture;
-    u.tBlur.value = this._rtBlurB.texture;
-    u.rows.value = rows;
-    // focusV / bandHalf / feather / exposure are fixed (set once at material
-    // creation from the look constants), so there's nothing to update per frame.
+    this._matPresent.uniforms.tScene.value = this._rtScene.texture;
     r.setRenderTarget(null);
     r.setScissorTest(false);
     r.render(this._fsScene, this._fsCam);
@@ -923,7 +838,7 @@ export class SceneRenderer {
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
     // Everything renders into the offscreen scene target (drawing-buffer pixels);
-    // _postProcess then blurs it and composites the tilt-shift result to the canvas.
+    // _present then grades it (exposure + sRGB) and copies it to the canvas.
     const rt = this._rtScene;
     const db = r.getDrawingBufferSize(this._dbSize);
     const DBW = db.x, DBH = db.y;
@@ -942,7 +857,7 @@ export class SceneRenderer {
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }
-      this._postProcess(1);
+      this._present();
       requestAnimationFrame((tt) => this._loop(tt));
       return;
     }
@@ -984,7 +899,7 @@ export class SceneRenderer {
       }
     });
 
-    this._postProcess(rows);
+    this._present();
     requestAnimationFrame((tt) => this._loop(tt));
   }
 }
