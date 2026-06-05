@@ -195,6 +195,36 @@ html, body {
   position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%;
   background: var(--c, var(--brand)); border-radius: var(--r-pill); transition: transform 0.05s linear;
 }
+/* per-cell FINISHED overlay — a floating frosted card centred in a player's
+   split-screen cell the moment they cross the line, while the rest of the field
+   is still racing. _loop sets left/top to the cell centre; translate centres it.
+   Lives in #scene (z-0) like the other cell overlays, so the full results screen
+   (#results, in #race z-2) covers it once the race ends. */
+.cell-finish {
+  position: absolute; display: none; transform: translate(-50%, -50%);
+  flex-direction: column; align-items: center; gap: 0.25rem; text-align: center;
+  padding: clamp(0.7rem, 1.5vw, 1.3rem) clamp(1.1rem, 2.4vw, 2.2rem);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--r); border-top: 6px solid var(--c, var(--brand));
+  box-shadow: 0 14px 34px rgba(30, 60, 90, 0.3);
+  pointer-events: none;
+}
+.cell-finish__badge {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(0.85rem, 1.4vw, 1.25rem); letter-spacing: 0.16em; text-transform: uppercase;
+  color: #fff; background: var(--c, var(--brand));
+  padding: 0.2rem 0.9rem; border-radius: var(--r-pill);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+.cell-finish__place {
+  font-family: var(--font-display); font-weight: 700; line-height: 1;
+  font-size: clamp(2rem, 4vw, 3.4rem); color: var(--ink);
+}
+.cell-finish__time {
+  font-weight: 800; font-size: clamp(0.95rem, 1.4vw, 1.4rem);
+  color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+
 .stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* results list */
 
 /* results overlay — bright frosted glass + a floating card */

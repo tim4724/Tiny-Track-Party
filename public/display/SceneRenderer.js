@@ -8,6 +8,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
+// English ordinal for a finishing place: 1 → "1st", 2 → "2nd", 3 → "3rd", 4 → "4th".
+function ordinal(n) {
+  const t = n % 100, u = n % 10;
+  const suffix = (t >= 11 && t <= 13) ? 'th' : (u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th');
+  return `${n}${suffix}`;
+}
+
 // Shared with the controller's car picker + protocol (one source of truth).
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
@@ -625,22 +632,36 @@ export class SceneRenderer {
     // solo human then sees one viewport, not their own cell plus three bot cameras.
     // Cell-less cars skip the DOM overlay (label + steer bar) and the cell order.
     const cell = opts.cell !== false;
-    let label = null, steerBar = null, steerFill = null;
+    const colHexUi = this.colors[colorIndex % this.colors.length] || '#fff';
+    let label = null, steerBar = null, steerFill = null, finishEl = null;
     if (cell) {
       label = document.createElement('div');
       label.className = 'cell-label';
       label.innerHTML = `<span class="cell-label__name"></span><span class="cell-label__stat"></span>`;
       label.querySelector('.cell-label__name').textContent = name || ('P' + id);
-      label.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
+      label.style.setProperty('--c', colHexUi);
       this.overlay.appendChild(label);
 
       // on-screen steer indicator for this player's cell (mirrors the phone bar)
       steerBar = document.createElement('div');
       steerBar.className = 'cell-steer';
-      steerBar.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
+      steerBar.style.setProperty('--c', colHexUi);
       steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
       this.overlay.appendChild(steerBar);
       steerFill = steerBar.querySelector('.cell-steer__fill');
+
+      // "FINISHED / place / time" overlay — shown centred in this player's cell
+      // the instant they cross the line while the rest of the field is still
+      // racing. Populated by setCarHud, shown/positioned by _loop. Replaces the
+      // steer bar (they're on a victory lap now, not steering).
+      finishEl = document.createElement('div');
+      finishEl.className = 'cell-finish';
+      finishEl.style.setProperty('--c', colHexUi);
+      finishEl.innerHTML =
+        `<div class="cell-finish__badge">FINISHED</div>` +
+        `<div class="cell-finish__place"></div>` +
+        `<div class="cell-finish__time"></div>`;
+      this.overlay.appendChild(finishEl);
     }
 
     // Longitudinal wheelbase (front axle → rear axle), measured from the model so
@@ -659,7 +680,7 @@ export class SceneRenderer {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, wheelbase, plate, cam,
       carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
-      label, steerBar, steerFill, pose: null, init: false, lean: 0
+      label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0
     };
     this.cars.set(id, c);
     // Place the plate (applies a per-model PLATE_Y override if one is set).
@@ -704,6 +725,7 @@ export class SceneRenderer {
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
+    if (c.finishEl && c.finishEl.parentNode) c.finishEl.parentNode.removeChild(c.finishEl);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
   }
@@ -771,6 +793,15 @@ export class SceneRenderer {
     if (!c || !c.label) return; // cell-less AI cars have no HUD label
     const stat = c.label.querySelector('.cell-label__stat');
     stat.textContent = info.finished ? `Finished P${info.position}` : `P${info.position} · L${info.lap}/${info.totalLaps}`;
+    // Finish overlay: the moment this player crosses the line, fill in their
+    // place + time. _loop shows + positions it (and hides the steer bar) while
+    // c.finished holds; it's covered by the full results screen once the race ends.
+    c.finished = !!info.finished;
+    if (c.finished && c.finishEl) {
+      c.finishEl.querySelector('.cell-finish__place').textContent = ordinal(info.position);
+      c.finishEl.querySelector('.cell-finish__time').textContent =
+        info.finishTime != null ? `${info.finishTime.toFixed(1)}s` : '';
+    }
   }
 
   start() { if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); } }
@@ -879,7 +910,7 @@ export class SceneRenderer {
       }
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
-      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }
+      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; }
       this._present();
       requestAnimationFrame((tt) => this._loop(tt));
       return;
@@ -914,11 +945,22 @@ export class SceneRenderer {
       c.label.style.left = x + 'px';
       c.label.style.top = (row * ch) + 'px';
 
-      // steer indicator: centered along the bottom of this player's cell
+      // steer indicator: centered along the bottom of this player's cell — hidden
+      // once they finish (on a victory lap now, the finish overlay takes its place)
       if (c.steerBar) {
-        c.steerBar.style.display = 'block';
+        c.steerBar.style.display = c.finished ? 'none' : 'block';
         c.steerBar.style.left = (x + cw / 2) + 'px';
         c.steerBar.style.top = (row * ch + ch - 34) + 'px';
+      }
+
+      // FINISHED overlay: centred in the cell while this player is finished and
+      // the race is still on (the results screen covers it once the race ends).
+      if (c.finishEl) {
+        c.finishEl.style.display = c.finished ? 'flex' : 'none';
+        if (c.finished) {
+          c.finishEl.style.left = (x + cw / 2) + 'px';
+          c.finishEl.style.top = (row * ch + ch / 2) + 'px';
+        }
       }
     });
 

@@ -101,6 +101,25 @@ export class RaceSession {
     if (this.engine.raceOver) this._finish();
   }
 
+  // Skip the rest of the race in one synchronous burst: step the deterministic
+  // sim to the chequered flag (no rendering), then end the race. Used when every
+  // human has crossed the line and only CPU cars are still circulating — the
+  // humans shouldn't have to watch them crawl home. Because this runs the REAL
+  // physics, the CPU finish times are their true times, not an estimate.
+  // `stepBots` feeds the AI their input each simulated step, exactly as the
+  // render loop does (a no-op once a car has finished). The guard caps the loop
+  // so a never-finishing car can't hang the burst — _finish then reports
+  // whatever crossed (the rest fall out as DNF, same as the race-timeout path).
+  fastForwardToEnd(stepBots, dtMs = 1000 / 30) {
+    if (!this.racing || this.paused || this._ended) return;
+    let guard = 0;
+    while (!this.engine.raceOver && guard++ < 100000) {
+      if (stepBots) stepBots();
+      this.engine.update(dtMs);
+    }
+    this._finish();
+  }
+
   processInput(id, input) { this.engine.processInput(id, input); }
 
   // Remove a car mid-race (player left). Triggers onRaceEnd if it was the last

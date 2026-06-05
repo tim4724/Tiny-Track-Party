@@ -331,7 +331,7 @@ export class Game {
         // lean line up with the turn without the renderer needing to know STEER_SIGN.
         // steerInput is the RAW player input (matches the phone's steer bar) and
         // drives the on-screen steer indicator.
-        finished: c.finished, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall
+        finished: c.finished, finishTime: c.finishTime, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall
       });
     }
     return { cars, elapsed: this.elapsed };

@@ -7,12 +7,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, OVAL, Game, AiController;
+let buildTrack, OVAL, Game, AiController, RaceSession;
 test.before(async () => {
   const tb = await import('../public/display/TrackBuilder.js');
   buildTrack = tb.buildTrack; OVAL = tb.OVAL;
   Game = (await import('../public/display/engine/Game.js')).Game;
   AiController = (await import('../public/display/AiDriver.js')).AiController;
+  RaceSession = (await import('../public/display/RaceSession.js')).RaceSession;
 });
 
 function mkTrack(laps = 1) { const t = buildTrack(OVAL); t.totalLaps = laps; return t; }
@@ -111,6 +112,31 @@ test('a car whose player leaves mid-race forfeits and unblocks the finish', () =
   const res = game.getResults();
   assert.equal(res.results.length, 1, 'results only include players still present');
   assert.equal(res.results[0].playerId, 'p1');
+});
+
+test('fastForwardToEnd runs the sim to the flag and reports true finish times', () => {
+  // Stand-in for "only CPU cars remain": skip the countdown, then burst the whole
+  // field to the line. Every car must finish with a real (positive, time-ordered)
+  // result — that's the extrapolation the display does when the last human is in.
+  const track = mkTrack(1);
+  let ended = null;
+  const session = new RaceSession(
+    [{ peerIndex: 'p1' }, { peerIndex: 'p2' }], track,
+    { onRaceEnd: (r) => { ended = r; } }
+  );
+  session.racing = true; // the burst doesn't touch the countdown timer
+  const stepBots = () => {
+    for (const id of ['p1', 'p2']) {
+      const car = session.engine.cars.get(id);
+      if (car && !car.finished) session.engine.processInput(id, { s: followSteer(session.engine, track, id) });
+    }
+  };
+  session.fastForwardToEnd(stepBots);
+  assert.ok(session.engine.raceOver, 'every car crossed the line');
+  assert.ok(ended, 'onRaceEnd fired with the final board');
+  assert.equal(ended.results.length, 2);
+  assert.ok(ended.results.every((r) => r.finished && r.time > 0), 'all cars have real finish times');
+  assert.ok(ended.results[0].time <= ended.results[1].time, 'results are ordered by finish time');
 });
 
 test('ranking orders by progress', () => {

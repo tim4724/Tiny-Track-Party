@@ -76,6 +76,7 @@ let lastPlayerState = 0;
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
 let aiBots = new Map();
 let currentField = [];
+let fastForwarding = false; // true only inside the AI-only fast-forward burst
 
 scene.onFrame = (dt) => {
   if (!session || paused) return; // paused: cars hold their last (frozen) pose
@@ -84,6 +85,15 @@ scene.onFrame = (dt) => {
   // they just don't move until GO. session.update() is a no-op until racing.
   driveBots();
   session.update(dt * 1000);
+  // Every human across the line but CPU cars still circulating? Don't make the
+  // humans watch them crawl home — fast-forward the deterministic sim to the
+  // flag and show the final board now (the AI get their true finish times).
+  if (session.racing && humansAllDone()) {
+    fastForwarding = true;
+    session.fastForwardToEnd(driveBots); // runs to raceOver, then fires endRace
+    fastForwarding = false;
+    return;                               // session ended; the results overlay covers the scene
+  }
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
@@ -273,7 +283,29 @@ function onRaceEvent(e) {
   // As each car crosses the line, push the running standings so a finished
   // player's phone flips to the results overlay and it fills in for everyone
   // else as more cars finish. (Other events are SFX/FX hooks — sound disabled.)
-  if (e && e.type === 'finish') broadcastStandings(false);
+  if (!e || e.type !== 'finish') return;
+  if (fastForwarding) return; // endRace sends the final board once; don't spam one per AI car
+  // If that finish was the last human's, we're about to fast-forward to the flag
+  // (only CPU cars remain) and endRace will send the final board — skip this
+  // intermediate push so the last human jumps straight to results, no flash of
+  // the "FINISHED" hero for a race that's effectively already decided.
+  if (humansAllDone()) return;
+  broadcastStandings(false);
+}
+
+// True once every HUMAN car has crossed the line (CPU cars may still be out).
+// Drives the "only CPU left → skip to results" fast-forward. False when there
+// are no humans at all (a fully-AI field has no one to be courteous to, and the
+// natural race_over already covers it).
+function humansAllDone() {
+  if (!session) return false;
+  let humans = 0;
+  for (const [id, c] of session.engine.cars) {
+    if (aiBots.has(id)) continue;  // a CPU racer
+    humans++;
+    if (!c.finished) return false; // a human still on track
+  }
+  return humans > 0;
 }
 
 // Live standings for the controllers' results overlay. Pushed as each car
