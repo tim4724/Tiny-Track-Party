@@ -186,11 +186,67 @@ test('grand tour centerline never steps backward (continuous through the loop)',
 });
 
 test('every named track closes and includes a start gate', () => {
-  for (const [name, list] of Object.entries(TRACKS)) {
-    const t = buildTrack(list);
+  for (const [name, def] of Object.entries(TRACKS)) {
+    const t = buildTrack(def);
     assert.ok(t.closed, `track "${name}" should close (gap=${t.gap.toFixed(3)})`);
     assert.ok(t.instances.some((i) => i.glb === 'gate-finish'), `track "${name}" missing start gate`);
   }
+});
+
+test('every named track has presentation metadata', () => {
+  for (const [name, def] of Object.entries(TRACKS)) {
+    assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
+    assert.ok(typeof def.difficulty === 'string' && def.difficulty.length, `track "${name}" missing difficulty`);
+    assert.ok(Array.isArray(def.pieces) && def.pieces.length, `track "${name}" missing pieces`);
+  }
+});
+
+// The detailed quality suite (above) runs on the oval; re-check the things most
+// likely to break when a NEW track combines pieces in a new way — a centerline
+// that steps backward at a joint, a degenerate-short stub that snaps the car's
+// tangent, or a too-sharp joint — across every named track.
+//
+// NB: the oval-only "curvature never abruptly reverses" check is deliberately NOT
+// generalised here. A chicane (curve→curveR) is an S-bend: its curvature reverses
+// sign by design, so slalom/switchback/riverside legitimately "flip". The bounded
+// per-unit tangent step below is shape-agnostic — it catches a sharp joint without
+// flagging an intentional weave (steady tight corner ≈ 0.023 rad/0.1u, chicane
+// transitions peak ≈ 0.056, all well under the 0.08 bound).
+test('every named track has a clean centerline (no backstep, no stubs, no sharp joints)', () => {
+  for (const [name, def] of Object.entries(TRACKS)) {
+    const cl = buildTrack(def).centerline;
+    const pts = cl.samples.map((p) => p.pos);
+    const n = pts.length;
+    let worst = 1, minSeg = Infinity;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
+      worst = Math.min(worst, b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize()));
+      minSeg = Math.min(minSeg, a.distanceTo(b));
+    }
+    assert.ok(worst > 0, `track "${name}" centerline reverses at a joint (worst seg dot=${worst.toFixed(2)})`);
+    assert.ok(minSeg > 0.2, `track "${name}" has a degenerate-short segment (min=${minSeg.toFixed(3)})`);
+
+    // Bounded per-unit heading change, sampled along the smooth centerline.
+    const STEP = 0.1;
+    let prev = Math.atan2(cl.sampleAt(0).tangent.x, cl.sampleAt(0).tangent.z), worstStep = 0;
+    for (let s = STEP; s <= cl.length; s += STEP) {
+      const f = cl.sampleAt(s);
+      const h = Math.atan2(f.tangent.x, f.tangent.z);
+      let dh = h - prev;
+      while (dh > Math.PI) dh -= 2 * Math.PI;
+      while (dh < -Math.PI) dh += 2 * Math.PI;
+      worstStep = Math.max(worstStep, Math.abs(dh));
+      prev = h;
+    }
+    assert.ok(worstStep < 0.08, `track "${name}" tangent turns too sharply in one step (worst=${worstStep.toFixed(4)} rad)`);
+  }
+});
+
+test('buildTrack accepts a bare piece array and a descriptor alike', () => {
+  const fromArray = buildTrack(OVAL);
+  const fromDef = buildTrack(TRACKS.oval);
+  assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
+  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.pieces array/);
 });
 
 test('startGate:false omits the gate', () => {
@@ -200,4 +256,27 @@ test('startGate:false omits the gate', () => {
 
 test('an unknown piece key throws a clear error', () => {
   assert.throws(() => buildTrack(['straight', 'definitely-not-a-piece']), /Unknown track piece "definitely-not-a-piece"/);
+});
+
+// COLLISION SAFETY. A self-crossing track (Crossover, Tangle) is only valid if the
+// strands that meet in plan are far apart in HEIGHT — a bridge. Any two bits of
+// road that are close in 3D but distant along the lap means cars from two places
+// share the same space: a crash/merge, not a crossing. (This is exactly the bug
+// that sank an early double-bridge "pretzel": two strands grazed at ground level,
+// 0.09 apart.) Bridged crossings sit ~2.0 apart; flat tracks keep strands ≥5 apart.
+test('no track has overlapping strands (every crossing is bridged)', () => {
+  for (const [name, def] of Object.entries(TRACKS)) {
+    const t = buildTrack(def);
+    const Sm = t.centerline.samples, N = Sm.length, L = t.length;
+    let min3d = Infinity, atZ = 0;
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const arc = Math.min(Math.abs(Sm[i].s - Sm[j].s), L - Math.abs(Sm[i].s - Sm[j].s));
+        if (arc < 6) continue; // same local stretch of road — expected to be close
+        const d = Sm[i].pos.distanceTo(Sm[j].pos);
+        if (d < min3d) { min3d = d; atZ = Sm[i].pos.z; }
+      }
+    }
+    assert.ok(min3d >= 1.5, `track "${name}" has strands ${min3d.toFixed(2)} apart in 3D (overlap/unbridged crossing near z=${atZ.toFixed(0)})`);
+  }
 });

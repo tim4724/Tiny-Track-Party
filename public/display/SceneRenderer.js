@@ -73,6 +73,10 @@ const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
 // body in). The model's wheel-bottom sits at the group origin, so RIDE_HEIGHT is
 // the gap from wheel to road — keep it tiny so the car looks planted, not hovering.
 const RIDE_HEIGHT = 0.012;
+// Ride-height smoothing rate (1/s) for the damped offset from the centreline (see
+// setCarPose). Applied as 1 - exp(-RIDE_DAMP·dt) so it's frame-rate-independent;
+// ~18 reproduces the old per-frame 0.25 lerp at 60fps but stays stable at 30fps.
+const RIDE_DAMP = 18;
 
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
@@ -230,8 +234,8 @@ export class SceneRenderer {
     this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
     this._rayFrom = new THREE.Vector3();
     this._rayDown = new THREE.Vector3(0, -1, 0);
-    this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal
-    this._fwdTilt = new THREE.Vector3();   // heading re-pitched onto the road slope
+    this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal (probe placement)
+    this._frameDt = 1 / 60;                 // last frame dt (set in _loop; setCarPose reads it)
     this._worldUp = new THREE.Vector3(0, 1, 0);
     this._normalMat = new THREE.Matrix3(); // for road-tile world normals
     this._hitNormal = new THREE.Vector3();
@@ -255,12 +259,16 @@ export class SceneRenderer {
     for (const h of hits) {
       if (h.face) {
         this._normalMat.getNormalMatrix(h.object.matrixWorld);
-        // Keep only up-facing surfaces (normal.y > 0.1, i.e. the face leans no more
-        // than ~84° off horizontal); skip vertical walls and tile undersides.
-        // Deliberately loose so sloped road tiles (hills/ramps) still count — the
-        // current tracks have no banking, so nothing near-vertical is drivable.
-        // Tighten this if a banked turn or loop is added, or the car could "land" on a wall.
-        if (this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y <= 0.1) continue;
+        // Keep only NEAR-HORIZONTAL surfaces (|normal.y| > 0.1, i.e. the face leans
+        // no more than ~84° off horizontal); skip vertical walls. Using |normal.y|
+        // (not normal.y > 0.1) means MIRRORED tiles — reflected across X, which flips
+        // their winding so the road top face's normal points DOWN — still register;
+        // the nearest-to-refY pick below still selects the true road top (Y is
+        // unaffected by an X-reflection). Deliberately loose so sloped road tiles
+        // (hills/ramps) still count — the tracks have no banking, so nothing
+        // near-vertical is drivable. Tighten if a banked turn or loop is added.
+        const ny = this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y;
+        if (Math.abs(ny) <= 0.1) continue;
       }
       const err = Math.abs(h.point.y - refY);
       if (err < bestErr) { bestErr = err; best = h.point.y; }
@@ -389,7 +397,13 @@ export class SceneRenderer {
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -1.0;
-    ground.receiveShadow = true;
+    // The grass does NOT receive shadows. Cars only ever drive on road tiles (which
+    // do receive), so on-track shadows are unaffected — but an ELEVATED car on an
+    // overpass would otherwise cast a detached blob onto the grass far below the
+    // narrow deck (the light is raked, so the shadow lands off the deck edge). With
+    // the grass opted out, that car's shadow stays on the deck under it; only the
+    // part that would spill past the deck onto grass is clipped (invisible anyway).
+    ground.receiveShadow = false;
     scene.add(ground);
     this.ground = ground;
 
@@ -400,6 +414,10 @@ export class SceneRenderer {
     this.overview.position.set(25, 22, 25);
     this._ovPos = this.overview.position.clone();
     this._ovTarget = new THREE.Vector3();
+    // Overview-orbit framing (radius/height), computed per-track in setTrack and
+    // ridden by the lobby/gallery turntable (see `this.orbit` + the render loop).
+    this._ovRadius = null;
+    this._ovHeight = 0;
 
     this._initPost();
 
@@ -522,7 +540,7 @@ export class SceneRenderer {
     }
   }
 
-  setTrack(track) {
+  setTrack(track, { debug = false } = {}) {
     this.trackGroup.clear();
     if (track.groundY != null) this.ground.position.y = track.groundY;
     for (const inst of track.instances) {
@@ -532,7 +550,31 @@ export class SceneRenderer {
       node.matrixAutoUpdate = false;
       node.matrix.copy(inst.matrix);
       node.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); // catch car shadows
+      // Mirrored tiles are reflected (negative determinant) → their winding flips,
+      // so the road's top face would back-face-cull. Double-side a CLONE of each
+      // material (so we don't make every shared instance double-sided) to keep the
+      // top face drawn + lit from above. Only the few reflected curve tiles pay this.
+      if (inst.mirror) {
+        node.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          const dub = (m) => { const c = m.clone(); c.side = THREE.DoubleSide; return c; };
+          o.material = Array.isArray(o.material) ? o.material.map(dub) : dub(o.material);
+        });
+      }
       this.trackGroup.add(node);
+    }
+    if (debug) {
+      // Magenta centreline overlay (inspection aid). Lift each point a little along
+      // its up vector and disable depth-test so the line is NEVER buried under the
+      // road: on ramps the centreline can sit a few cm BELOW the GLB road surface,
+      // which otherwise hides the line on the bend. renderOrder draws it last.
+      const pts = track.centerline.samples.map((s) => s.pos.clone().addScaledVector(s.up, 0.12));
+      pts.push(pts[0].clone());
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0xff00ff, depthTest: false }));
+      line.renderOrder = 10;
+      this.trackGroup.add(line);
     }
     // overview framing
     const box = new THREE.Box3();
@@ -541,10 +583,11 @@ export class SceneRenderer {
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.5 + 8;
     const dist = radius / Math.tan((this.overview.fov * Math.PI / 180) / 2) * 0.9;
-    this._ovPos = this._trackCenter.clone().add(new THREE.Vector3(0.35, 0.8, 0.9).normalize().multiplyScalar(dist));
+    const ovDir = new THREE.Vector3(0.35, 0.8, 0.9).normalize();
+    this._ovPos = this._trackCenter.clone().add(ovDir.clone().multiplyScalar(dist));
     this._ovTarget = this._trackCenter.clone();
-    // Horizontal radius + height of that iso offset, reused by the lobby orbit so
-    // the moving camera keeps the same framing as the static overview.
+    // Horizontal radius + height of that iso offset, reused by the lobby/gallery
+    // orbit so the moving camera keeps the same framing as the static overview.
     const ovOff = this._ovPos.clone().sub(this._trackCenter);
     this._ovRadius = Math.hypot(ovOff.x, ovOff.z);
     this._ovHeight = ovOff.y;
@@ -561,6 +604,14 @@ export class SceneRenderer {
     sc.near = half * 0.6; sc.far = half * 3.6 + 12;
     sc.updateProjectionMatrix();
     k.shadow.needsUpdate = true; // rebuild the map for the new track
+  }
+
+  // Slowly orbit the overview camera around the whole track — used by the track
+  // gallery to inspect a layout. Drives the same turntable as the lobby preview
+  // (`this.orbit`). Only takes effect while the overview is the active camera (no
+  // split-screen cars on screen); normal play leaves it off.
+  setOverviewOrbit(on) {
+    this.orbit = !!on;
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the
@@ -763,7 +814,8 @@ export class SceneRenderer {
       wheelbase, skidWidth, plate, contact, cam,
       carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
-      label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0
+      label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0,
+      rideOff: null // damped ride-height offset from the centreline (setCarPose)
     };
     this.cars.set(id, c);
     // Place the plate (applies a per-model PLATE_Y override if one is set).
@@ -825,14 +877,14 @@ export class SceneRenderer {
     c.pose = { pos: pos.clone(), forward: fwd, up: u };
     c.group.position.copy(pos);
 
-    // Ground-conform: probe the rendered road under the FRONT and REAR axles, then
-    // sit the car on the mean of the two and PITCH it along their slope — so the
-    // wheels ride on top of bumps/hills instead of clipping through. A single
-    // centre probe gets height but not slope, so the nose digs in / lifts off on a
-    // crest; two probes give both. Heading (yaw) stays the centreline's; only
-    // pitch + ride height come from the road. Roll is left level (world up) — this
-    // track has no banking, and a flat car reads "wheels on the road" cleanly.
-    let z = fwd; // default: follow the centreline forward (used if a probe misses)
+    // Ground-conform. PITCH comes from the centreline forward (`fwd`): the centreline
+    // is built once and filtered, so fwd.y is a SMOOTH road slope (the smootherstep
+    // climb on a ramp). HEIGHT comes from raycasting the rendered road under the axles
+    // so the wheels sit on the actual GLB. We split the two deliberately — re-pitching
+    // from the front/rear probe slope twitched the car at ramp seams (that probe is
+    // noisy: the GLB floor isn't a perfect smootherstep and tiles overlap). Heading
+    // (yaw) is the centreline's; roll stays level (world up) — the tracks have no banking.
+    let z = fwd;
     const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
     this._headFlat.copy(fwd).setY(0);
     if (this._headFlat.lengthSq() > 1e-6) {
@@ -840,21 +892,26 @@ export class SceneRenderer {
       const half = c.wheelbase * 0.5;
       const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
       const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
-      if (yF != null && yB != null) {
-        // re-pitch the (horizontal) heading onto the road slope: rise/run = Δy/wheelbase
-        z = this._fwdTilt.set(this._headFlat.x, (yF - yB) / c.wheelbase, this._headFlat.z).normalize();
-        // Rest on the HIGHEST road point under the footprint (front/centre/rear), not
-        // the chord mean: on flat/gentle ground these agree (still planted), but at a
-        // sharp crest it rides the peak so the road never pokes up through the belly —
-        // at worst a wheel floats briefly cresting a bump, which beats clipping.
-        c.group.position.y = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB)) + RIDE_HEIGHT;
-      } else if (yC != null) {
-        // off the edge / over the gate seam: fall back to the centre probe (height only)
-        c.group.position.y = yC + RIDE_HEIGHT;
+      // Ride on the HIGHEST road point under the footprint (front/centre/rear), not
+      // the chord mean: on flat/gentle ground these agree (still planted), but at a
+      // sharp crest it rides the peak so the road never pokes up through the belly.
+      let roadY = null;
+      if (yF != null && yB != null) roadY = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB));
+      else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
+      if (roadY != null) {
+        // Snap to the road, but DAMP the OFFSET from the (smooth) centreline rather
+        // than the absolute height. The max() above jumps abruptly where ramp tiles
+        // overlap — a ~0.15-unit vertical POP at the ramp seams. Damping the small
+        // offset smooths those pops; the climb itself lives in the centreline height
+        // (pos.y), so it stays lag-free and the wheels keep tracking the road.
+        const offTarget = roadY - pos.y;
+        const a = 1 - Math.exp(-RIDE_DAMP * this._frameDt); // frame-rate-independent smoothing
+        c.rideOff = (c.rideOff == null) ? offTarget : c.rideOff + (offTarget - c.rideOff) * a;
+        c.group.position.y = pos.y + c.rideOff + RIDE_HEIGHT;
       }
     }
-    // Build the car basis from the pitched forward + a level (world-up) reference,
-    // so x (lateral) stays horizontal and the body owns pitch, nothing else.
+    // Build the car basis from the (centreline-pitched) forward + a level (world-up)
+    // reference, so x (lateral) stays horizontal and the body owns pitch, nothing else.
     const x = this._worldUp.clone().cross(z).normalize();
     const yy = z.clone().cross(x).normalize();
     c.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, yy, z));
@@ -916,6 +973,7 @@ export class SceneRenderer {
     if (!this._running) return;
     const dt = Math.min((t - this._last) / 1000, 0.05);
     this._last = t;
+    this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
     if (this.onFrame) this.onFrame(dt);
 
     // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY

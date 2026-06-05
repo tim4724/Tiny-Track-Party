@@ -69,6 +69,12 @@ section.rail { padding: 20px 20px 8px; }
   display: flex; justify-content: space-between; align-items: center; gap: 6px;
 }
 .card-title .tag { font-size: 10px; color: #666; font-weight: 400; }
+/* Track-gallery difficulty chips. */
+.card-title .tag.diff-easy { color: #6ad06a; }
+.card-title .tag.diff-medium { color: #e6b84d; }
+.card-title .tag.diff-hard { color: #e6694d; }
+/* Track-gallery blurb under each preview. */
+.track-blurb { font-size: 11px; line-height: 1.45; color: #9a9ac0; margin: 0; }
 .card-title .actions { display: flex; gap: 4px; }
 .card-title a.open-link { color: #8899ff; text-decoration: none; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
 .card-title a.open-link:hover { text-decoration: underline; }

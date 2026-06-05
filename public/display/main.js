@@ -27,9 +27,12 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 
 // No track is selected at first: the lobby shows the plain diorama and the host's
 // "Start race" stays disabled until they pick one. ?track=<id> preselects (dev /
-// gallery). `track` always holds a valid geometry (the pick, or the first track
-// as a render default) so the scene + gallery always have something to draw.
-const _qTrack = new URLSearchParams(location.search).get('track');
+// gallery), and ?centerline=1 overlays the magenta racing-line ribbon (a track-
+// gallery inspection aid). `track` always holds valid geometry (the pick, or the
+// first track as a render default) so the scene + gallery always have something to draw.
+const _trackParams = new URLSearchParams(location.search);
+const _qTrack = _trackParams.get('track');
+const _showCenterline = _trackParams.get('centerline') === '1';
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
@@ -44,7 +47,7 @@ scene.orbit = true;
 let sceneReady = false;
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
-const scenePromise = scene.load(allGlbs).then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
+const scenePromise = scene.load(allGlbs).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
 // validates host + room state before calling this; `track` is read by startRace.
@@ -54,7 +57,7 @@ function selectTrack(id) {
   track = built.get(id);
   track.totalLaps = TOTAL_LAPS;
   window.__track = track;
-  if (sceneReady && net.roomState === ROOM_STATE.LOBBY) scene.setTrack(track);
+  if (sceneReady && net.roomState === ROOM_STATE.LOBBY) scene.setTrack(track, { debug: _showCenterline });
   updateBackdrop();
 }
 

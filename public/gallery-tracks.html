@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>Display Gallery — Tiny Track Party</title>
+<title>Track Gallery — Tiny Track Party</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/gallery.css?v=__APP_V__">
 </head>
 <body>
 <header>
-  <h1>TINY TRACK · DISPLAY</h1>
+  <h1>TINY TRACK · TRACKS</h1>
 
   <div class="group">
     <select id="display-ar">
@@ -22,48 +22,36 @@
   </div>
 
   <div class="group">
-    <select id="player-count">
-      <option value="1">1 Racer</option>
-      <option value="2">2 Racers</option>
-      <option value="3">3 Racers</option>
-      <option value="4" selected>4 Racers</option>
-    </select>
-  </div>
-
-  <div class="group">
-    <select id="view-as-player">
-      <option value="0" selected>Host P1</option>
-      <option value="1">Host P2</option>
-      <option value="2">Host P3</option>
-      <option value="3">Host P4</option>
-    </select>
+    <label class="checkbox-label" for="show-centerline">
+      <input type="checkbox" id="show-centerline">
+      Centerline
+    </label>
   </div>
 
   <div class="group">
     <select id="cards-per-row">
       <option value="1">1 column</option>
-      <option value="2">2 columns</option>
-      <option value="3" selected>3 columns</option>
+      <option value="2" selected>2 columns</option>
+      <option value="3">3 columns</option>
       <option value="4">4 columns</option>
-      <option value="5">5 columns</option>
     </select>
   </div>
 
   <button class="ctrl options-toggle" id="options-toggle" aria-expanded="false" aria-label="Options">⚙</button>
 
   <nav>
-    <a href="/gallery.html" class="active">Display</a>
+    <a href="/gallery.html">Display</a>
     <a href="/gallery-controller.html">Phone</a>
-    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-tracks.html" class="active">Tracks</a>
     <a href="/assets-viewer.html">Assets</a>
   </nav>
 </header>
 
 <section class="rail">
-  <div id="display-rows"></div>
+  <div id="track-rows"></div>
 </section>
 
 <script src="/gallery-common.js"></script>
-<script src="/gallery-display.js"></script>
+<script type="module" src="/gallery-tracks.js"></script>
 </body>
 </html>

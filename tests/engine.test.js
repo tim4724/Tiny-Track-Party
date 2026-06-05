@@ -7,16 +7,31 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, OVAL, Game, AiController, RaceSession;
+let buildTrack, Game, AiController, RaceSession;
 test.before(async () => {
   const tb = await import('../public/display/TrackBuilder.js');
-  buildTrack = tb.buildTrack; OVAL = tb.OVAL;
+  buildTrack = tb.buildTrack;
   Game = (await import('../public/display/engine/Game.js')).Game;
   AiController = (await import('../public/display/AiDriver.js')).AiController;
   RaceSession = (await import('../public/display/RaceSession.js')).RaceSession;
 });
 
-function mkTrack(laps = 1) { const t = buildTrack(OVAL); t.totalLaps = laps; return t; }
+// A compact closed oval (sides 4/2/4/2, large sweeping corners) used as the
+// fixture for every engine test. Deliberately NOT the catalogue's Sunny Oval:
+// these tests probe PHYSICS (accel, curb wash, corner braking, lap counting) and
+// must stay valid as the catalogue tracks are re-tuned for length/variety — a
+// long front straight there would push the first corner past a test's sim window,
+// or a 2-lap race past its time budget. Catalogue closure is covered separately
+// in tests/track.test.js. Large corners (same R as the catalogue) keep the
+// understeer/corner-brake behaviour identical; only the straights are short.
+const TEST_OVAL = [
+  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'cornerLargeL'
+];
+
+function mkTrack(laps = 1) { const t = buildTrack(TEST_OVAL); t.totalLaps = laps; return t; }
 
 // Pure-pursuit steer: aim at a point a few units ahead on the centerline.
 function followSteer(game, track, id) {
