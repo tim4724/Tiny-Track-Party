@@ -91,6 +91,9 @@ input[type=text]:disabled { opacity: 0.6; }
   font-weight: 900; color: var(--car);
 }
 #wait-host { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
+/* Host name in the wait text — tinted in their livery colour (set inline from
+   CAR_COLORS), heavier weight so the colour reads as intentional. */
+.host-name { font-weight: 800; }
 
 /* ---- game / driving HUD ---- */
 #game { align-items: stretch; justify-content: flex-start; user-select: none; }

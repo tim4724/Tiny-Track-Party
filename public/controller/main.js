@@ -41,6 +41,8 @@ function stopScrub() {
 let myColorIndex = null;
 let myCarIndex = 0;
 let amHost = false;
+let roster = [];           // latest lobby roster (for the host name in the wait text)
+let hostPeerIndex = null;
 
 const NAME_KEY = 'tinytrack_name';
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
@@ -103,11 +105,15 @@ function handleMessage(data) {
       myColorIndex = data.colorIndex;
       if (data.carIndex != null) myCarIndex = data.carIndex;
       applyLivery();
+      roster = data.players || [];
+      hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       renderLobby();
       if (data.roomState === 'lobby') show('lobby');
       break;
     case MSG.LOBBY_UPDATE: {
+      roster = data.players || [];
+      hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       // The display is authoritative — adopt the colour + car it has on record
       // for us (colour is auto-assigned; car confirms our pick).
@@ -180,7 +186,23 @@ function renderLobby() {
     pick.appendChild(btn);
   }
   el('start-btn').classList.toggle('hidden', !amHost);
-  el('wait-host').classList.toggle('hidden', amHost);
+  const waitEl = el('wait-host');
+  waitEl.classList.toggle('hidden', amHost);
+  if (!amHost) renderWaitHost(waitEl);
+}
+
+// "Waiting for NAME to start…" — NAME is the host, tinted in their livery
+// colour (matching the in-race name plate). Built from DOM nodes so a
+// player-supplied name is always inserted as text, never markup. Falls back to
+// "the host" until the roster naming the host has arrived.
+function renderWaitHost(waitEl) {
+  const host = roster.find((p) => p.peerIndex === hostPeerIndex);
+  const nameEl = document.createElement('span');
+  nameEl.className = 'host-name';
+  nameEl.textContent = (host && host.name) || 'the host';
+  if (host) nameEl.style.color = CAR_COLORS[host.colorIndex] || '';
+  waitEl.textContent = 'Waiting for ';
+  waitEl.append(nameEl, ' to start…');
 }
 
 function chooseCar(i) {

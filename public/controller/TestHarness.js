@@ -92,12 +92,23 @@ export function runControllerScenario(opts) {
       el('wait-host').classList.add('hidden');
       break;
 
-    case 'lobby-waiting':
+    case 'lobby-waiting': {
       show('lobby');
       renderCarPicker(color);
       el('start-btn').classList.add('hidden');
-      el('wait-host').classList.remove('hidden');
+      const waitEl = el('wait-host');
+      waitEl.classList.remove('hidden');
+      // Fabricate a host (someone other than this player) so the preview shows
+      // the tinted name treatment, mirroring main.js renderWaitHost.
+      const hostColor = (color + 1) % COLORS.length;
+      const nameEl = document.createElement('span');
+      nameEl.className = 'host-name';
+      nameEl.textContent = FAKE_NAMES[hostColor];
+      nameEl.style.color = COLORS[hostColor];
+      waitEl.textContent = 'Waiting for ';
+      waitEl.append(nameEl, ' to start…');
       break;
+    }
 
     case 'countdown': {
       showDriveHud();
