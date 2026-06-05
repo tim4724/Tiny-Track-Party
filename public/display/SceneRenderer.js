@@ -8,10 +8,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
-const CAR_MODELS = [
-  'vehicle-racer', 'vehicle-speedster', 'vehicle-drag-racer', 'vehicle-racer-low',
-  'vehicle-vintage-racer', 'vehicle-suv', 'vehicle-truck', 'vehicle-monster-truck'
-];
+// Shared with the controller's car picker + protocol (one source of truth).
+// protocol.js (classic script) sets this global before the display modules load.
+const CAR_MODELS = window.CAR_MODELS;
 const TRACK_GLBS = [
   'track-road-wide-straight', 'track-road-wide-corner-small', 'track-road-wide-corner-large', 'track-road-wide-curve'
 ];
@@ -524,8 +523,11 @@ export class SceneRenderer {
     return result;
   }
 
-  addCar(id, colorIndex, name) {
-    const model = CAR_MODELS[colorIndex % CAR_MODELS.length];
+  addCar(id, colorIndex, name, opts = {}) {
+    // Car model is the player's pick (opts.carIndex), independent of the colour
+    // livery; fall back to colorIndex when no pick is supplied (e.g. previews).
+    const carIndex = (opts.carIndex == null ? colorIndex : opts.carIndex);
+    const model = CAR_MODELS[carIndex % CAR_MODELS.length];
     const proto = this.protos.get(model) || this.protos.get(CAR_MODELS[0]);
     const group = new THREE.Group();
     const car = proto.clone(true);
@@ -567,27 +569,35 @@ export class SceneRenderer {
 
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
-    const label = document.createElement('div');
-    label.className = 'cell-label';
-    label.innerHTML = `<span class="cell-label__name"></span><span class="cell-label__stat"></span>`;
-    label.querySelector('.cell-label__name').textContent = name || ('P' + id);
-    label.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
-    this.overlay.appendChild(label);
+    // AI/CPU cars (opts.cell === false) race in the shared world — so they show up
+    // in every human's chase view — but get NO split-screen cell of their own. A
+    // solo human then sees one viewport, not their own cell plus three bot cameras.
+    // Cell-less cars skip the DOM overlay (label + steer bar) and the cell order.
+    const cell = opts.cell !== false;
+    let label = null, steerBar = null, steerFill = null;
+    if (cell) {
+      label = document.createElement('div');
+      label.className = 'cell-label';
+      label.innerHTML = `<span class="cell-label__name"></span><span class="cell-label__stat"></span>`;
+      label.querySelector('.cell-label__name').textContent = name || ('P' + id);
+      label.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
+      this.overlay.appendChild(label);
 
-    // on-screen steer indicator for this player's cell (mirrors the phone bar)
-    const steerBar = document.createElement('div');
-    steerBar.className = 'cell-steer';
-    steerBar.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
-    steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
-    this.overlay.appendChild(steerBar);
-    const steerFill = steerBar.querySelector('.cell-steer__fill');
+      // on-screen steer indicator for this player's cell (mirrors the phone bar)
+      steerBar = document.createElement('div');
+      steerBar.className = 'cell-steer';
+      steerBar.style.setProperty('--c', this.colors[colorIndex % this.colors.length] || '#fff');
+      steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
+      this.overlay.appendChild(steerBar);
+      steerFill = steerBar.querySelector('.cell-steer__fill');
+    }
 
     this.cars.set(id, {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, marker, shadow, cam,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, pose: null, init: false, lean: 0
     });
-    if (!this._order.includes(id)) this._order.push(id);
+    if (cell && !this._order.includes(id)) this._order.push(id);
   }
 
   removeCar(id) {
@@ -599,7 +609,7 @@ export class SceneRenderer {
     // the shadow TEXTURE is cached per model — leave both for the next race.
     c.marker.geometry.dispose(); c.marker.material.dispose();
     c.shadow.geometry.dispose(); c.shadow.material.dispose();
-    if (c.label.parentNode) c.label.parentNode.removeChild(c.label);
+    if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
@@ -640,7 +650,7 @@ export class SceneRenderer {
 
   setCarHud(id, info) {
     const c = this.cars.get(id);
-    if (!c) return;
+    if (!c || !c.label) return; // cell-less AI cars have no HUD label
     const stat = c.label.querySelector('.cell-label__stat');
     stat.textContent = info.finished ? `Finished P${info.position}` : `P${info.position} · L${info.lap}/${info.totalLaps}`;
   }
@@ -735,7 +745,7 @@ export class SceneRenderer {
       this.overview.position.lerp(this._ovPos || this.overview.position, 0.05);
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
-      for (const c of this.cars.values()) { c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }
+      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }
       this._postProcess(1);
       requestAnimationFrame((tt) => this._loop(tt));
       return;

@@ -27,7 +27,7 @@ var MSG = {
   START_GAME: 'start_game',     // host only
   PLAY_AGAIN: 'play_again',     // host only
   RETURN_TO_LOBBY: 'return_to_lobby',
-  SET_COLOR: 'set_color',       // {colorIndex} — car livery in lobby
+  SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_NAME: 'set_name',         // {name}
   SET_DISPLAY_MUTE: 'set_display_mute',
   LEAVE: 'leave',
@@ -65,7 +65,10 @@ var ROOM_STATE = {
 };
 
 // ---- Game constants (shared so display + controller agree) ----
-var MAX_PLAYERS = 8;
+// Human seats per room. A short-handed lobby is topped up to a full grid with AI
+// ("CPU") racers on the display side (see display/main.js FIELD_SIZE), so this is
+// the cap on PHONES, not on cars in a race.
+var MAX_PLAYERS = 4;
 var TOTAL_LAPS = 3;
 var COUNTDOWN_SECONDS = 3;
 
@@ -82,11 +85,25 @@ var CAR_COLORS = [
   '#56ccf2'  // cyan
 ];
 
+// Car models (Kenney Toy Car Kit), indexed by carIndex. The player picks one in
+// the lobby (SET_CAR); the display renders that model and tints it with the
+// player's CAR_COLORS livery. Car choice and colour are independent — two
+// players may drive the same model in different colours. CAR_MODELS / CAR_NAMES
+// are parallel arrays (one source of truth shared by renderer + picker).
+var CAR_MODELS = [
+  'vehicle-racer', 'vehicle-speedster', 'vehicle-drag-racer', 'vehicle-racer-low',
+  'vehicle-vintage-racer', 'vehicle-suv', 'vehicle-truck', 'vehicle-monster-truck'
+];
+var CAR_NAMES = [
+  'Racer', 'Speedster', 'Drag Racer', 'Low Racer',
+  'Vintage', 'SUV', 'Truck', 'Monster'
+];
+
 // Export for both Node.js and browser.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, INPUT, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, CAR_COLORS
+    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, CAR_COLORS, CAR_MODELS, CAR_NAMES
   };
 }

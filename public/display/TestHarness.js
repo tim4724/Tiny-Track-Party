@@ -8,6 +8,7 @@
 // pure-pursuit autopilot (the engine has no AI of its own) so the split-screen
 // chase cams, HUD, lean, and dust all show real motion in the preview.
 import { Game } from './engine/Game.js';
+import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl } from './Net.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
@@ -130,28 +131,14 @@ export function runDisplayScenario(opts, ctx) {
 
     const live = kind === 'racing';
 
-    // Pure-pursuit autopilot: aim each car at a point further along the
-    // centerline. Because the target sits ON the racing line, this term both
-    // recenters lateral drift and anticipates the upcoming curvature, so cars
-    // hold the track instead of scrubbing the curbs.
-    const LOOKAHEAD = 7.5;
+    // Self-driving preview: every car is an AI racer using the SAME pure-pursuit
+    // autopilot as the live CPU fill (AiDriver), so the gallery shows the real bot
+    // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
+    const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
     function autosteer() {
       for (const c of engine.cars.values()) {
         if (c.finished || !c.pose) continue;
-        const tgt = track.centerline.sampleAt(c.totalS + LOOKAHEAD).pos;
-        const up = c.pose.up;
-        const fwd = c.pose.forward;
-        const to = tgt.clone().sub(c.pose.pos);
-        to.addScaledVector(up, -to.dot(up)); // flatten onto the road plane
-        if (to.lengthSq() < 1e-6) continue;
-        to.normalize();
-        const cross = fwd.clone().cross(to).dot(up);
-        const dot = Math.max(-1, Math.min(1, fwd.dot(to)));
-        const err = Math.atan2(cross, dot); // + = target is to the car's left
-        // Engine yaws the car by STEER_SIGN(-1)·f(steer), so a NEGATIVE steer
-        // input turns toward a left target — hence the leading minus.
-        const s = Math.max(-1, Math.min(1, -err * 1.8));
-        engine.processInput(c.id, { s, b: 0 });
+        engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline));
       }
     }
 

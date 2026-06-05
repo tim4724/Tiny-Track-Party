@@ -4,9 +4,10 @@ import { DisplayNet, fetchQR, renderQR, renderJoinUrl } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, OVAL } from './TrackBuilder.js';
 import { RaceSession } from './RaceSession.js';
+import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, MAX_PLAYERS } = window;
 const el = (id) => document.getElementById(id);
 const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -23,12 +24,18 @@ const scenePromise = scene.load().then(() => { scene.setTrack(track); sceneReady
 // ---- race state ----
 let session = null;
 let lastPlayerState = 0;
+// AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
+// Empty when four humans race. `currentField` is the full roster (humans + AI),
+// kept so the results screen can resolve AI names/liveries (they're not in the lobby).
+let aiBots = new Map();
+let currentField = [];
 
 scene.onFrame = (dt) => {
   if (!session) return;
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
+  driveBots();
   session.update(dt * 1000);
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
@@ -41,6 +48,7 @@ scene.onFrame = (dt) => {
     lastPlayerState = now;
     for (const c of snap.cars) {
       scene.setCarHud(c.id, c);
+      if (aiBots.has(c.id)) continue; // no phone behind an AI car
       net.sendTo(c.id, {
         type: MSG.PLAYER_STATE, lap: c.lap, totalLaps: c.totalLaps,
         position: c.position, of: c.of, finished: c.finished, scrub: c.onWall
@@ -75,6 +83,11 @@ net.flow.on('playerleave', ({ peerIndex }) => {
 // Always lay out at least this many seats; empty ones show as placeholders so
 // the lobby card keeps a fixed size as players trickle in.
 const MIN_SEATS = 4;
+
+// Every race runs a full FIELD_SIZE grid: seats no human took are filled by AI
+// ("CPU") racers (see buildField), so a short-handed lobby still gets a real race.
+const FIELD_SIZE = MAX_PLAYERS;
+const AI_PREFIX = 'ai-';
 function renderRoster(roster, hostPeerIndex) {
   const list = el('players'); list.innerHTML = '';
   const seats = Math.max(MIN_SEATS, roster.length);
@@ -99,10 +112,36 @@ function renderRoster(roster, hostPeerIndex) {
   el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Waiting for players…';
 }
 
-function rosterById() {
-  const m = new Map();
-  for (const p of net.flow.list()) m.set(p.peerIndex, p);
-  return m;
+// Build the race field: the connected humans plus AI racers topping the grid up
+// to FIELD_SIZE. AI get string ids ('ai-0'…) that never collide with the integer
+// phone slots, the lowest free liveries, and a personality from AI_PERSONALITIES.
+function buildField(humans) {
+  // carIndex is the player's lobby car pick; AI get a model derived from their
+  // livery slot (carIndex omitted → renderer falls back to colorIndex).
+  const field = humans.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex, ai: false }));
+  aiBots = new Map();
+  const usedColors = new Set(field.map((p) => p.colorIndex));
+  const lowestFreeColor = () => { let i = 0; while (usedColors.has(i)) i++; return i; };
+  for (let n = 0; field.length < FIELD_SIZE; n++) {
+    const persona = AI_PERSONALITIES[n % AI_PERSONALITIES.length];
+    const colorIndex = lowestFreeColor();
+    usedColors.add(colorIndex);
+    const peerIndex = AI_PREFIX + n;
+    field.push({ peerIndex, name: persona.name, colorIndex, ai: true });
+    aiBots.set(peerIndex, new AiController(persona));
+  }
+  return field;
+}
+
+// Feed each AI car its pure-pursuit input for this frame, exactly as a phone's
+// CONTROL would. Runs every frame (a no-op during the countdown, when update() is).
+function driveBots() {
+  if (!aiBots.size) return;
+  for (const [id, bot] of aiBots) {
+    const car = session.engine.cars.get(id);
+    if (!car || car.finished) continue;
+    session.processInput(id, bot.drive(car, track.centerline));
+  }
 }
 
 // ---- race lifecycle ----
@@ -111,15 +150,20 @@ function startRace() {
   const players = net.flow.list();
   if (!players.length) return;
 
+  // Top the grid up to a full field with AI; keep the roster for the results screen.
+  const field = buildField(players);
+  currentField = field;
+
   net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
   show('race');
   el('results').classList.add('hidden');
 
-  // (re)build scene cars
+  // (re)build scene cars. AI cars get no split-screen cell (cell:false) — they're
+  // opponents in the shared world, not players watching the screen.
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
-  for (const p of players) scene.addCar(p.peerIndex, p.colorIndex, p.name);
+  for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
 
-  session = new RaceSession(players, track, {
+  session = new RaceSession(field, track, {
     onRaceEvent,
     onCountdownTick(n) {
       el('countdown').textContent = n > 0 ? n : 'GO!';
@@ -157,12 +201,13 @@ function endRace(results) {
 }
 
 function showResults(results) {
-  const r = rosterById();
+  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
   el('results-list').innerHTML = results.results.map((res) => {
-    const p = r.get(res.playerId) || {};
+    const p = byId.get(res.playerId) || {};
     const col = CAR_COLORS[p.colorIndex] || '#888';
     const time = res.finished ? `${res.time.toFixed(1)}s` : 'DNF';
-    return `<li><span class="stand__dot" style="background:${col}"></span> ${p.name || res.playerId} <span class="res-time">${time}</span></li>`;
+    const label = (p.name || res.playerId) + (p.ai ? ' (CPU)' : '');
+    return `<li><span class="stand__dot" style="background:${col}"></span> ${label} <span class="res-time">${time}</span></li>`;
   }).join('');
   el('results').classList.remove('hidden');
 }
@@ -171,6 +216,7 @@ function returnToLobby() {
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   for (const c of scene.cars.keys()) scene.removeCar(c);
   if (session) { session.dispose(); session = null; }
+  aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
   show('lobby');
 }
@@ -191,6 +237,7 @@ if (_params.get('test') === '1' || _scenario) {
   ));
 } else {
   show('lobby');
+  renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
   net.start();
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace;
