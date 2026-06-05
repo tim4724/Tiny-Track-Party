@@ -83,9 +83,11 @@ function cornerLeftPiece(glb, R) {
   };
 }
 
-// S-bend lane shift: +Z in and out, lateral -2 in X over the span.
-function curvePiece(glb) {
-  const shift = -2, N = 14, pts = [];
+// S-bend lane shift: +Z in and out, `shift` lateral in X over the span,
+// smoothstepped so it eases in and out. shift<0 drifts left, shift>0 right —
+// `curveR` is just the mirror (see PIECES).
+function curvePiece(glb, shift = -2) {
+  const N = 14, pts = [];
   for (let i = 0; i <= N; i++) {
     const t = i / N;
     const sm = t * t * (3 - 2 * t); // smoothstep
@@ -97,17 +99,6 @@ function curvePiece(glb) {
     exit: conn(v(shift, Y, Z0 + L), v(0, 0, 1)),
     points: pts
   };
-}
-
-// Right-hand S-bend (mirror of curvePiece): lateral +2 in X over the span.
-function curveRightPiece(glb) {
-  const shift = 2, N = 14, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    const sm = t * t * (3 - 2 * t);
-    pts.push(v(shift * sm, Y, Z0 + L * t));
-  }
-  return { glb, entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(shift, Y, Z0 + L), v(0, 0, 1)), points: pts };
 }
 
 // ---- 3D / elevation pieces ----
@@ -204,7 +195,7 @@ export const PIECES = {
   cornerL: () => cornerLeftPiece('track-road-wide-corner-small', R_SMALL),
   cornerLargeL: () => cornerLeftPiece('track-road-wide-corner-large', R_LARGE),
   curve: () => curvePiece('track-road-wide-curve'),
-  curveR: () => curveRightPiece('track-road-wide-curve'),
+  curveR: () => curvePiece('track-road-wide-curve', 2), // mirror of curve
   // vertical quarter-arcs (loop-the-loop building blocks)
   bend: () => bendPiece('track-road-wide-straight-bend', R_BEND),
   bendLarge: () => bendPiece('track-road-wide-straight-bend-large', R_BEND_LARGE),

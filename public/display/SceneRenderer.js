@@ -209,10 +209,11 @@ export class SceneRenderer {
     for (const h of hits) {
       if (h.face) {
         this._normalMat.getNormalMatrix(h.object.matrixWorld);
-        // Keep any face tilted less than ~84° from horizontal. Deliberately loose so
-        // sloped road tiles (hills/ramps) still count; the current tracks have no
-        // banking, so nothing near-vertical is drivable. Tighten this if a banked
-        // turn or loop is ever added, or the car could "land" on a wall.
+        // Keep only up-facing surfaces (normal.y > 0.1, i.e. the face leans no more
+        // than ~84° off horizontal); skip vertical walls and tile undersides.
+        // Deliberately loose so sloped road tiles (hills/ramps) still count — the
+        // current tracks have no banking, so nothing near-vertical is drivable.
+        // Tighten this if a banked turn or loop is added, or the car could "land" on a wall.
         if (this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y <= 0.1) continue;
       }
       const err = Math.abs(h.point.y - refY);
