@@ -67,6 +67,7 @@ export function runControllerScenario(opts) {
 
     case 'lobby-host':
       show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color); // default pick mirrors the livery slot
       el('start-btn').classList.remove('hidden');
       el('wait-host').classList.add('hidden');
@@ -74,6 +75,7 @@ export function runControllerScenario(opts) {
 
     case 'lobby-waiting': {
       show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
       el('start-btn').classList.add('hidden');
       const waitEl = el('wait-host');

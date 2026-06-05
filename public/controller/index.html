@@ -26,11 +26,29 @@
     <div id="name-status"></div>
   </section>
 
-  <!-- Lobby — pick your car (the shared display owns the player roster) -->
+  <!-- Lobby — who you are, your car, the track (the shared display owns the
+       player roster). -->
   <section id="lobby" class="hidden">
-    <h2 class="lobby-title">Choose your car</h2>
+    <!-- your identity, up top -->
+    <div class="lobby-me">
+      <span id="me-dot" class="dot"></span>
+      <span id="me-name" class="lobby-me__name"></span>
+    </div>
+
+    <!-- your car -->
+    <div class="lobby-head"><span class="pill">Car</span></div>
     <div id="car-hero" class="car-hero"></div>
     <div id="carpick" class="carpick"></div>
+
+    <!-- the track — schematic maps from the display's catalog. Only the host can
+         change it; everyone else sees it read-only. Hidden until the catalog
+         arrives (WELCOME); see renderTrackPicker. -->
+    <div id="trackpick" class="trackpick hidden">
+      <div class="lobby-head"><span class="pill">Track</span></div>
+      <div id="track-strip" class="trackpick__strip"></div>
+      <div id="track-note" class="trackpick__note hidden">The host picks the track</div>
+    </div>
+
     <button id="start-btn" class="btn btn--brand hidden">Start race</button>
     <div id="wait-host" class="hidden">Waiting for the host to start…</div>
   </section>

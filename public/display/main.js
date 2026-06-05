@@ -2,7 +2,8 @@
 // engine, the countdown→race→results flow, and per-player PLAYER_STATE.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
-import { buildTrack, OVAL, TRACKS } from './TrackBuilder.js';
+import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
+import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { carThumbNode } from '../shared/carThumbs.js';
@@ -13,18 +14,58 @@ const el = (id) => document.getElementById(id);
 const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
-// ---- scene + track (built once) ----
-// ?track=<name> selects a named layout (see TrackBuilder.TRACKS); defaults to the
-// oval. The renderer loads exactly the tiles this track uses.
-const _trackName = new URLSearchParams(location.search).get('track');
-const track = buildTrack((_trackName && TRACKS[_trackName]) || OVAL);
+// ---- tracks ----
+// Build every track once (buildTrack is pure geometry — no GLBs needed), so we
+// can ship a schematic catalog to the phones and switch the lobby preview with
+// no rebuild. The catalog (id + name + top-down SVG path) is what the controllers'
+// track picker renders; `built` keeps the geometry for the race + the 3D preview.
+// Selection is host-driven (SELECT_TRACK) and echoed to all.
+const built = new Map(TRACK_LIST.map((t) => [t.id, buildTrack(t.pieces)]));
+const trackCatalog = TRACK_LIST.map((t) => ({
+  id: t.id, name: t.name, svg: trackSchematic(built.get(t.id))
+}));
+
+// No track is selected at first: the lobby shows the plain diorama and the host's
+// "Start race" stays disabled until they pick one. ?track=<id> preselects (dev /
+// gallery). `track` always holds a valid geometry (the pick, or the first track
+// as a render default) so the scene + gallery always have something to draw.
+const _qTrack = new URLSearchParams(location.search).get('track');
+let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
+let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
-const trackGlbs = [...new Set(track.instances.map((i) => i.glb))];
+
+// ---- scene ----
+// Preload the UNION of every track's tiles up front, so the host can switch
+// tracks in the lobby with no load hitch. The renderer orbits the selected track
+// as a live lobby preview (scene.orbit).
+const allGlbs = [...new Set([...built.values()].flatMap((b) => b.instances.map((i) => i.glb)))];
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
+scene.orbit = true;
 let sceneReady = false;
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
-const scenePromise = scene.load(trackGlbs).then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
+const scenePromise = scene.load(allGlbs).then(() => { scene.setTrack(track); sceneReady = true; scene.start(); });
+
+// Swap the lobby preview + race track to the host's pick. Lobby only — Net
+// validates host + room state before calling this; `track` is read by startRace.
+function selectTrack(id) {
+  if (!built.has(id) || id === selectedTrackId) return;
+  selectedTrackId = id;
+  track = built.get(id);
+  track.totalLaps = TOTAL_LAPS;
+  window.__track = track;
+  if (sceneReady && net.roomState === ROOM_STATE.LOBBY) scene.setTrack(track);
+  updateBackdrop();
+}
+
+// Lobby backdrop: the plain sunny diorama until a track is picked, then the live
+// 3D preview (which covers it). During a race the 3D scene is always the backdrop.
+function updateBackdrop() {
+  const show3D = !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
+  el('scene').classList.toggle('hidden', !show3D);
+  const dio = el('lobby-diorama');
+  if (dio) dio.classList.toggle('hidden', show3D);
+}
 
 // ---- race state ----
 let session = null;
@@ -66,6 +107,9 @@ scene.onFrame = (dt) => {
 // ---- net ----
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
+  trackCatalog,
+  defaultTrackId: selectedTrackId,
+  onTrackChange: selectTrack,
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; we highlight that
     // trailing segment rather than showing the code separately.
@@ -132,7 +176,7 @@ function renderRoster(roster, hostPeerIndex) {
     }
     list.appendChild(seat);
   }
-  el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Waiting for players…';
+  el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Scan the QR code to join';
 }
 
 // Build the race field: the connected humans plus AI racers topping the grid up
@@ -177,6 +221,7 @@ function driveBots() {
 // ---- race lifecycle ----
 function startRace() {
   if (net.roomState !== ROOM_STATE.LOBBY || !sceneReady) return;
+  if (!selectedTrackId) return;              // a track must be chosen first
   const players = net.flow.list();
   if (!players.length) return;
 
@@ -299,6 +344,7 @@ function returnToLobby() {
   aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
   show('lobby');
+  updateBackdrop();              // resume the selected track's 3D preview (or diorama)
 }
 
 // ---- pause ----
@@ -381,6 +427,10 @@ el('joinbox').addEventListener('click', async () => {
 const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_params.get('test') === '1' || _scenario) {
+  // Gallery/test: render the (default or ?track=) track in 3D — reveal the scene
+  // and drop the diorama since the harness drives the race screens directly.
+  el('scene').classList.remove('hidden');
+  const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
   import('./TestHarness.js').then(({ runDisplayScenario }) => runDisplayScenario(
     {
@@ -393,6 +443,7 @@ if (_params.get('test') === '1' || _scenario) {
 } else {
   show('lobby');
   renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
+  updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
   net.start();
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;

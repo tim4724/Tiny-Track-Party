@@ -25,6 +25,9 @@ const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-angle stretch
 const FOV_GAIN = 5;           // extra FOV degrees at top speed (subtle sense of speed)
+// Lobby attract-mode: when no cars are on track (the lobby), slowly orbit the
+// overview camera around the selected track so it reads as a live 3D preview.
+const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzying
 // Wheel-kick colour — dark grey (tyre scuff / asphalt grit). One knob to retint.
 const DUST_COLOR = 0x4a4a4a;
 
@@ -177,6 +180,10 @@ export class SceneRenderer {
     this._order = [];           // stable cell order
     this._running = false;
     this._last = 0;
+    // Lobby orbit (set true by the display in the lobby). Start at the same iso
+    // bearing the static overview used so the first frame matches.
+    this.orbit = false;
+    this._orbitAngle = Math.atan2(0.9, 0.35);
     this._initThree();
     this._initOverlay();
     this._initParticles();
@@ -477,6 +484,11 @@ export class SceneRenderer {
     const dist = radius / Math.tan((this.overview.fov * Math.PI / 180) / 2) * 0.9;
     this._ovPos = this._trackCenter.clone().add(new THREE.Vector3(0.35, 0.8, 0.9).normalize().multiplyScalar(dist));
     this._ovTarget = this._trackCenter.clone();
+    // Horizontal radius + height of that iso offset, reused by the lobby orbit so
+    // the moving camera keeps the same framing as the static overview.
+    const ovOff = this._ovPos.clone().sub(this._trackCenter);
+    this._ovRadius = Math.hypot(ovOff.x, ovOff.z);
+    this._ovHeight = ovOff.y;
 
     // Aim + size the sun's shadow camera to cover the whole track. The light keeps its
     // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we just move it far out
@@ -852,7 +864,19 @@ export class SceneRenderer {
     if (ids.length === 0) {
       // lobby / no cars: single overview camera fills the target
       this.overview.aspect = W / H; this.overview.updateProjectionMatrix();
-      this.overview.position.lerp(this._ovPos || this.overview.position, 0.05);
+      if (this.orbit && this._trackCenter) {
+        // attract-mode turntable: ride a circle around the track at the overview
+        // radius/height, advancing the bearing each frame.
+        this._orbitAngle += LOBBY_ORBIT_SPEED * dt;
+        const ctr = this._trackCenter;
+        this.overview.position.set(
+          ctr.x + Math.cos(this._orbitAngle) * this._ovRadius,
+          ctr.y + this._ovHeight,
+          ctr.z + Math.sin(this._orbitAngle) * this._ovRadius
+        );
+      } else {
+        this.overview.position.lerp(this._ovPos || this.overview.position, 0.05);
+      }
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; }

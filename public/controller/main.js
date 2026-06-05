@@ -3,6 +3,7 @@
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
+import { buildTrackPicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote } from './ui.js';
 
 const { MSG, CAR_COLORS } = window;
@@ -55,9 +56,12 @@ function stopScrub() {
 
 let myColorIndex = null;
 let myCarIndex = 0;
+let myName = '';           // this player's name, shown at the top of the lobby
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
+let trackCatalog = [];     // [{id,name,features,svg}] from the display (WELCOME)
+let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 
 const NAME_KEY = 'tinytrack_name';
@@ -103,26 +107,33 @@ function setJoining(on) {
 
 function handleMessage(data) {
   switch (data.type) {
-    case MSG.WELCOME:
+    case MSG.WELCOME: {
       myColorIndex = data.colorIndex;
       if (data.carIndex != null) myCarIndex = data.carIndex;
       applyLivery();
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
+      if (data.tracks) trackCatalog = data.tracks;       // catalog ships once, on join
+      if (data.trackId != null) selectedTrackId = data.trackId;
+      const me = roster.find((p) => p.peerIndex === net.peerIndex);
+      if (me && me.name) myName = me.name;
       renderLobby();
       if (data.roomState === 'lobby') show('lobby');
       break;
+    }
     case MSG.LOBBY_UPDATE: {
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
+      if (data.trackId != null) selectedTrackId = data.trackId; // host's pick, echoed to all
       // The display is authoritative — adopt the colour + car it has on record
       // for us (colour is auto-assigned; car confirms our pick).
       const me = (data.players || []).find((p) => p.peerIndex === net.peerIndex);
       if (me) {
         myColorIndex = me.colorIndex;
         if (me.carIndex != null) myCarIndex = me.carIndex;
+        if (me.name) myName = me.name;
         applyLivery();
       }
       renderLobby();
@@ -260,11 +271,41 @@ function applyLivery() {
 // the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
 // display's record. Layout lives in shared/carPicker.js (shared with the gallery).
 function renderLobby() {
+  el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
+  renderTrackPicker();
   el('start-btn').classList.toggle('hidden', !amHost);
+  el('start-btn').disabled = !selectedTrackId;   // greyed out until a track is picked
   const waitEl = el('wait-host');
   waitEl.classList.toggle('hidden', amHost);
   if (!amHost) renderWaitHost(waitEl);
+}
+
+// Track picker — schematic maps from the display's catalog. Host taps to change
+// the track (SELECT_TRACK); everyone else sees the strip read-only with the
+// current pick ringed, plus a "host picks" note. Hidden entirely until the
+// catalog arrives (older display / pre-WELCOME). Layout in shared/trackPicker.js.
+function renderTrackPicker() {
+  const wrap = el('trackpick');
+  if (!trackCatalog.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  buildTrackPicker({
+    stripEl: el('track-strip'),
+    catalog: trackCatalog, selected: selectedTrackId, canPick: amHost, onPick: chooseTrack
+  });
+  // Note line: non-host can't pick; host with nothing chosen yet is prompted to.
+  const note = el('track-note');
+  if (!amHost) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
+  else if (!selectedTrackId) { note.textContent = 'Pick a track to start'; note.classList.remove('hidden'); }
+  else note.classList.add('hidden');
+}
+
+function chooseTrack(id) {
+  if (id === selectedTrackId) return;
+  selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
+  renderTrackPicker();    // move the ring + name now
+  net.send(MSG.SELECT_TRACK, { trackId: id });
+  buzz(15);
 }
 
 function renderWaitHost(waitEl) {
@@ -330,6 +371,7 @@ window.addEventListener('popstate', () => {
 el('name-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const n = el('name-input').value.trim().slice(0, 16) || 'Racer';
+  myName = n;
   saveName(n);
   // Request motion permission within this user gesture (iOS requirement).
   tilt.enableMotion();
@@ -338,7 +380,7 @@ el('name-form').addEventListener('submit', (e) => {
   net.connect(n);
 });
 
-el('start-btn').addEventListener('click', () => { if (amHost) net.send(MSG.START_GAME); });
+el('start-btn').addEventListener('click', () => { if (amHost && selectedTrackId) net.send(MSG.START_GAME); });
 
 // --- pause ---
 // The display is authoritative over the paused state; the controller just

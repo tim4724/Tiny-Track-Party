@@ -15,6 +15,7 @@ html, body {
 /* ---- Lobby ---- */
 #lobby {
   position: relative;
+  z-index: 1;                 /* float the lobby over the #scene backdrop */
   height: 100%;
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -22,8 +23,6 @@ html, body {
   gap: 4vw;
   padding: 6vh 7vw;
 }
-/* keep the real content above the diorama backdrop */
-#lobby > *:not(.scene) { position: relative; z-index: 1; }
 
 .lobby__left {
   padding: clamp(1.6rem, 3vw, 2.6rem) clamp(1.8rem, 3vw, 2.8rem);
@@ -130,9 +129,8 @@ html, body {
 .seat--open .seat__name { color: var(--ink-3); }
 .seat--open .seat__dot { display: none; }
 
-/* QR — the card itself is vertically centered to match the welcome card; the
-   "Scan to join" caption is absolutely placed below it so it doesn't shift the
-   QR off-centre (it hangs beneath, outside the centring). */
+/* QR — the join prompt lives in the welcome card's #count ("Scan the QR code to
+   join"), so the QR itself is just the centered card. */
 .lobby__right { position: relative; display: flex; align-items: center; justify-content: center; }
 .qr-card {
   position: relative;
@@ -140,18 +138,16 @@ html, body {
   box-shadow: var(--shadow-float);
 }
 #qr { display: block; width: min(22vw, 32vh); height: auto; image-rendering: pixelated; }
-.qr-cap {
-  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  margin-top: 0.9rem; white-space: nowrap;
-  font-weight: 800; color: var(--ink-2); font-size: 0.95rem;
-  background: #fff; padding: 0.45rem 1.1rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-pop);
-}
 
-/* ---- Race (3D scene is the backdrop; these are overlays) ---- */
-#race { position: fixed; inset: 0; }
-#scene { position: fixed; inset: 0; }
+/* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
+   and the race (split-screen). The lobby/race sections layer on top. ---- */
+/* Diorama backdrop (shown until a track is picked) — pin it to the viewport so it
+   shares the #scene stacking context regardless of body height. */
+#lobby-diorama { position: fixed; }
+#scene { position: fixed; inset: 0; z-index: 0; }
 #scene canvas { display: block; }
+/* Race section is now a transparent overlay container over #scene. */
+#race { position: fixed; inset: 0; z-index: 2; }
 /* Diorama vignette: gently darken the frame edges so the eye locks to the centre,
    reinforcing the miniature/tilt-shift focus. Cosmetic only — never catches clicks. */
 #scene::after {
@@ -260,8 +256,7 @@ html, body {
 
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
    The lobby is designed for a wide screen; on a narrow viewport the two-column
-   card | QR layout cramps. Stack instead: welcome card on top, QR below it.
-   The "Scan to join" caption is dropped here — it's obvious you scan the QR. */
+   card | QR layout cramps. Stack instead: welcome card on top, QR below it. */
 @media (max-width: 860px) {
   html, body { overflow-y: auto; }
   #lobby {
@@ -272,7 +267,6 @@ html, body {
   }
   .lobby__left { width: 100%; max-width: 30rem; }
   .lobby__right { flex-direction: column; }
-  .qr-cap { display: none; }
   #qr { width: min(62vw, 38vh); }
 }
 

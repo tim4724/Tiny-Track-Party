@@ -449,3 +449,10 @@ export const TRACKS = {
   oval: OVAL,
   grand: GRAND_TOUR
 };
+
+// Human-facing catalog for the track selector. `id` keys into TRACKS; `name`
+// labels the tile in the picker. Order here is the order shown to players.
+export const TRACK_LIST = [
+  { id: 'oval', name: 'Sunny Oval', pieces: OVAL },
+  { id: 'grand', name: 'Grand Tour', pieces: GRAND_TOUR }
+];

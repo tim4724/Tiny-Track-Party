@@ -85,7 +85,7 @@ export function runDisplayScenario(opts, ctx) {
     }
     el('count').textContent = slots.length
       ? `${slots.length} racer${slots.length > 1 ? 's' : ''} ready`
-      : 'Waiting for players…';
+      : 'Scan the QR code to join';
   }
 
   function fakeJoin(code) {

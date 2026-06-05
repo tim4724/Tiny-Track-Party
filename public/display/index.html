@@ -39,16 +39,25 @@
   <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
 </head>
 <body>
+  <!-- Default lobby backdrop: the sunny diorama (shown until a track is picked).
+       Once the host picks a track, the 3D #scene below covers it with the live
+       orbiting preview. (Decorative; see .scene in /shared/theme.css.) -->
+  <div class="scene" id="lobby-diorama" aria-hidden="true">
+    <div class="scene__sky"></div>
+    <div class="scene__sun"></div>
+    <div class="scene__cloud scene__cloud--a"></div>
+    <div class="scene__cloud scene__cloud--b"></div>
+    <div class="scene__grass"></div>
+  </div>
+
+  <!-- Persistent 3D backdrop. In the lobby it slowly orbits the SELECTED track
+       (the live preview); in a race it draws the split-screen world. Hidden until
+       a track is picked (then it covers the diorama). The lobby + race sections
+       layer on top of it. -->
+  <div id="scene" class="hidden"></div>
+
   <!-- Lobby -->
   <section id="lobby">
-    <!-- sunny diorama backdrop (decorative; see .scene in /shared/theme.css) -->
-    <div class="scene" aria-hidden="true">
-      <div class="scene__sky"></div>
-      <div class="scene__sun"></div>
-      <div class="scene__cloud scene__cloud--a"></div>
-      <div class="scene__cloud scene__cloud--b"></div>
-      <div class="scene__grass"></div>
-    </div>
     <div class="lobby__left card">
       <h1>Tiny Track <span>Party</span></h1>
       <div class="join">
@@ -57,18 +66,16 @@
           <div class="join__url" id="joinurl">…</div>
         </button>
       </div>
-      <div id="count">Waiting for players…</div>
+      <div id="count">Scan the QR code to join</div>
       <div id="players"></div>
     </div>
     <div class="lobby__right">
       <div class="qr-card"><canvas id="qr"></canvas></div>
-      <div class="qr-cap">Scan to join</div>
     </div>
   </section>
 
-  <!-- Race: Three.js scene + live standings + countdown/results overlays -->
+  <!-- Race: overlays over the persistent #scene backdrop -->
   <section id="race" class="hidden">
-    <div id="scene"></div>
     <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
     <div id="countdown"></div>
     <!-- Pause overlay — frosted glass over the frozen race -->

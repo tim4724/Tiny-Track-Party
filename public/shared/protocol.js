@@ -29,11 +29,12 @@ var MSG = {
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
+  SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
   PING: 'ping',
 
   // Display -> specific controller
-  WELCOME: 'welcome',           // {peerIndex, roomState, ...} on join
-  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot
+  WELCOME: 'welcome',           // {peerIndex, roomState, tracks, trackId, ...} on join
+  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId)
   PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, scrub}
   PONG: 'pong',
 

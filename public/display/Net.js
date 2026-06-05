@@ -17,6 +17,16 @@ export class DisplayNet extends GameNet {
     this.onRoomReady = opts.onRoomReady || (() => {});
     this.onRosterChange = opts.onRosterChange || (() => {});
     this.onControllerMessage = opts.onControllerMessage || (() => {});
+    this.onTrackChange = opts.onTrackChange || (() => {});
+
+    // Track selector state. `tracks` is the catalog the display computed (id +
+    // name + feature chips + schematic SVG), sent to phones in WELCOME so their
+    // picker can render without any game geometry. `trackId` is the current pick;
+    // only the host may change it (in the lobby), via SELECT_TRACK.
+    this.tracks = opts.trackCatalog || [];
+    // null until a track is picked — the lobby shows the plain diorama and the
+    // host's "Start race" button stays disabled until then.
+    this.trackId = opts.defaultTrackId != null ? opts.defaultTrackId : null;
 
     this.flow = new RoomFlow();
     this.roomCode = null;
@@ -120,6 +130,18 @@ export class DisplayNet extends GameNet {
         }
         break;
       }
+      case MSG.SELECT_TRACK: {
+        // Host-only lobby choice of the race track. Validate the id against the
+        // catalog, store it, echo to every phone (LOBBY_UPDATE.trackId), and tell
+        // the display so it can swap the 3D preview.
+        const idOk = this.tracks.some((t) => t.id === data.trackId);
+        if (from === this.flow.host && this.roomState === 'lobby' && idOk && data.trackId !== this.trackId) {
+          this.trackId = data.trackId;
+          this._broadcastLobby();
+          this.onTrackChange(this.trackId);
+        }
+        break;
+      }
       case MSG.PING:
         this.party.sendTo(from, { type: MSG.PONG, t: data.t });
         break;
@@ -163,7 +185,9 @@ export class DisplayNet extends GameNet {
       carIndex: p.carIndex,
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
-      players: this.roster()
+      players: this.roster(),
+      tracks: this.tracks,       // full catalog (static) — sent once, on join
+      trackId: this.trackId      // current selection
     };
   }
   _broadcastLobby() {
@@ -171,7 +195,8 @@ export class DisplayNet extends GameNet {
       type: MSG.LOBBY_UPDATE,
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
-      players: this.roster()
+      players: this.roster(),
+      trackId: this.trackId      // catalog is static (WELCOME) — echo just the pick
     };
     for (const p of this.flow.list()) this.party.sendTo(p.peerIndex, payload);
   }
