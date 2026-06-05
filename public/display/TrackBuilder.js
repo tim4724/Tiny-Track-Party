@@ -391,10 +391,17 @@ export function buildTrack(pieceList, opts = {}) {
   // orient it across the lane (X=lateral, Y=up, Z=travel), base on the surface.
   if (startGate) {
     const g = samples[0];
-    const GS = (ROAD_WIDTH * SCALE * 1.15) / GATE_WIDTH; // span the drivable width + a margin
+    // Scale the arch so its LEGS straddle the road on the grass — clear of the full
+    // slab (2.0), not just the drivable width — and it reads as a grand bridge over
+    // the wide track. GATE_WIDTH is the arch's measured outer leg-to-leg span.
+    const SLAB_W = 2.0; // wide piece's full outer width (drivable ROAD_WIDTH is 1.8)
+    const GS = (SLAB_W * SCALE + 1.8) / GATE_WIDTH; // span ~5.8: legs ~0.9 beyond each slab edge, onto the grass
     const m = new THREE.Matrix4().makeBasis(g.lateral.clone(), g.up.clone(), g.tangent.clone());
     m.scale(new THREE.Vector3(GS, GS, GS));
-    m.setPosition(g.pos.clone().addScaledVector(g.up, -0.15 * SCALE)); // base just under the centreline
+    // Plant the legs at the ROAD surface (the gate model's origin is at its base), so
+    // the arch sits at track level — not sunk to the grass plane, which is a slab-height
+    // (~0.3) BELOW the road and made the gate read as lower than the track.
+    m.setPosition(g.pos.clone().addScaledVector(g.up, -0.02 * SCALE)); // a hair into the road so it looks planted
     instances.push({ glb: 'gate-finish', matrix: m });
   }
 
