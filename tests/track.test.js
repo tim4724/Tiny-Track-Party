@@ -197,3 +197,7 @@ test('startGate:false omits the gate', () => {
   const t = buildTrack(OVAL, { startGate: false });
   assert.ok(!t.instances.some((i) => i.glb === 'gate-finish'), 'gate should be omitted');
 });
+
+test('an unknown piece key throws a clear error', () => {
+  assert.throws(() => buildTrack(['straight', 'definitely-not-a-piece']), /Unknown track piece "definitely-not-a-piece"/);
+});

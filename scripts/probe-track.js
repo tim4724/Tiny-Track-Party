@@ -8,7 +8,9 @@
   const { PIECES, buildTrack, TRACKS } = await import('../public/display/TrackBuilder.js');
 
   // Replicate buildTrack's connector chaining (no scale/overlap) to get the net
-  // entry→exit transform of a sub-sequence.
+  // entry→exit transform of a sub-sequence. NOTE: this mirrors the chaining in
+  // TrackBuilder.buildTrack — if that changes (e.g. overlap handling), update here
+  // too, or the reported net transforms will silently drift from the real track.
   function net(keys) {
     let cursor = new THREE.Matrix4();
     const tmpInv = new THREE.Matrix4();

@@ -12,9 +12,6 @@ const ASSET = (name) => `/assets/toycar/${name}.glb`;
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
 const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
-const TRACK_GLBS = [
-  'track-road-wide-straight', 'track-road-wide-corner-small', 'track-road-wide-corner-large', 'track-road-wide-curve'
-];
 
 // Chase camera: sits behind the CAR's heading and looks at it, with the position
 // and look-target damped so it lags and swings smoothly behind through turns
@@ -184,6 +181,7 @@ export class SceneRenderer {
     this._initOverlay();
     this._initParticles();
     this._groundRay = new THREE.Raycaster();
+    this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
     this._rayFrom = new THREE.Vector3();
     this._rayDown = new THREE.Vector3(0, -1, 0);
     this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal
@@ -206,12 +204,15 @@ export class SceneRenderer {
   _roadHitY(x, z, refY) {
     this._rayFrom.set(x, refY + 6, z);
     this._groundRay.set(this._rayFrom, this._rayDown);
-    this._groundRay.far = 14;
     const hits = this._groundRay.intersectObject(this.trackGroup, true);
     let best = null, bestErr = Infinity;
     for (const h of hits) {
       if (h.face) {
         this._normalMat.getNormalMatrix(h.object.matrixWorld);
+        // Keep any face tilted less than ~84° from horizontal. Deliberately loose so
+        // sloped road tiles (hills/ramps) still count; the current tracks have no
+        // banking, so nothing near-vertical is drivable. Tighten this if a banked
+        // turn or loop is ever added, or the car could "land" on a wall.
         if (this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y <= 0.1) continue;
       }
       const err = Math.abs(h.point.y - refY);
@@ -410,10 +411,10 @@ export class SceneRenderer {
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
-  // `trackGlbs` lets the caller pass exactly the track tiles the chosen layout
-  // uses (derived from track.instances) so new pieces load without editing the
-  // hard-coded TRACK_GLBS fallback.
-  async load(trackGlbs = TRACK_GLBS) {
+  // Preload the GLBs this scene needs: the car models plus `trackGlbs`, the exact
+  // set of track tiles the chosen layout uses. The caller derives that set from
+  // track.instances (see main.js), so adding a new piece needs no change here.
+  async load(trackGlbs) {
     const loader = new GLTFLoader();
     const need = [...new Set([...trackGlbs, ...CAR_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {

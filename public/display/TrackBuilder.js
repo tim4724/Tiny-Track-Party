@@ -243,6 +243,7 @@ export function buildTrack(pieceList, opts = {}) {
   const overlapBack = new THREE.Matrix4().makeTranslation(0, 0, -OVERLAP);
   const tmpInv = new THREE.Matrix4();
   for (const key of pieceList) {
+    if (!PIECES[key]) throw new Error(`Unknown track piece "${key}" (valid: ${Object.keys(PIECES).join(', ')})`);
     const spec = PIECES[key]();
     const place = cursor.clone().multiply(tmpInv.copy(spec.entry).invert());
     instances.push({ glb: spec.glb, matrix: scaleM.clone().multiply(place) });
@@ -374,7 +375,10 @@ export function buildTrack(pieceList, opts = {}) {
   // — rotating each frame about ITS OWN tangent keeps `up` perpendicular for free.
   const t0 = tangents[0];
   const resid = Math.atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
-  for (let i = 0; i < n; i++) up.copy(ups[i]).applyAxisAngle(tangents[i], resid * (i / n)), ups[i].copy(up);
+  for (let i = 0; i < n; i++) {
+    up.copy(ups[i]).applyAxisAngle(tangents[i], resid * (i / n));
+    ups[i].copy(up);
+  }
 
   const samples = [];
   let s = 0, minY = Infinity;

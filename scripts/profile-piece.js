@@ -28,7 +28,9 @@ for(const r of json.scenes[json.scene||0].nodes)visit(r,identity());
 const r3=n=>Math.round(n*1000)/1000;
 // Top-surface height profile: for thin Z-slices near the centreline (|x|<0.3),
 // take the MAX y (road top) in each slice. Gives y(z) for the drivable surface.
-const zmin=Math.min(...verts.map(v=>v[2])), zmax=Math.max(...verts.map(v=>v[2]));
+// reduce(), not Math.min(...big) — a high-poly GLB has enough verts to blow the
+// call stack when spread as arguments.
+const zmin=verts.reduce((a,v)=>Math.min(a,v[2]),Infinity), zmax=verts.reduce((a,v)=>Math.max(a,v[2]),-Infinity);
 const N=22, prof=[];
 for(let i=0;i<=N;i++){
   const z=zmin+(zmax-zmin)*i/N;
@@ -36,7 +38,7 @@ for(let i=0;i<=N;i++){
   // near the centreline). Per z-bin, the max y is the drivable surface.
   const slab=verts.filter(v=>Math.abs(v[2]-z) <= (zmax-zmin)/N*0.6);
   if(!slab.length){prof.push([z,null]);continue;}
-  prof.push([z, Math.max(...slab.map(v=>v[1]))]);
+  prof.push([z, slab.reduce((a,v)=>Math.max(a,v[1]),-Infinity)]);
 }
 console.log('FILE:',file.split('/').pop());
 console.log('z range', r3(zmin), '..', r3(zmax));
