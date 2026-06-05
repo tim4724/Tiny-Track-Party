@@ -209,20 +209,35 @@ export class SceneRenderer {
     this._groundRay = new THREE.Raycaster();
     this._rayFrom = new THREE.Vector3();
     this._rayDown = new THREE.Vector3(0, -1, 0);
+    this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal
+    this._fwdTilt = new THREE.Vector3();   // heading re-pitched onto the road slope
+    this._worldUp = new THREE.Vector3(0, 1, 0);
+    this._normalMat = new THREE.Matrix3(); // for road-tile world normals
+    this._hitNormal = new THREE.Vector3();
   }
 
-  // World-Y of the rendered road surface directly under `pos`, or null if no
-  // tile is below. Casts straight down from well above and picks the hit nearest
-  // the car's own height — so the start/finish GATE arch (which sits ABOVE the
-  // road) is ignored and we lock onto the road, not the gate.
-  _roadSurfaceY(pos) {
-    this._groundRay.set(this._rayFrom.copy(pos).setY(pos.y + 6), this._rayDown);
+  // World-Y of the drivable road surface directly under (x, z), or null if no
+  // tile is below. Casts straight down from well above. Two filters pick the road
+  // top out of everything the ray hits:
+  //   1. The road tiles are solid slabs — each returns a TOP face (normal up) and
+  //      a BOTTOM face (normal down) ~0.1–0.2 below it. We keep only up-facing
+  //      faces, so we never lock onto a tile's underside (which would sink the car
+  //      and its wheels through the road).
+  //   2. Among those, pick the hit nearest `refY` (the expected road height, i.e.
+  //      the centreline) — that skips the start/finish GATE arch, whose up-facing
+  //      top sits well ABOVE the road, and resolves overlapping tiles at a seam.
+  _roadHitY(x, z, refY) {
+    this._rayFrom.set(x, refY + 6, z);
+    this._groundRay.set(this._rayFrom, this._rayDown);
     this._groundRay.far = 14;
     const hits = this._groundRay.intersectObject(this.trackGroup, true);
-    if (!hits.length) return null;
     let best = null, bestErr = Infinity;
     for (const h of hits) {
-      const err = Math.abs(h.point.y - pos.y);
+      if (h.face) {
+        this._normalMat.getNormalMatrix(h.object.matrixWorld);
+        if (this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y <= 0.1) continue;
+      }
+      const err = Math.abs(h.point.y - refY);
       if (err < bestErr) { bestErr = err; best = h.point.y; }
     }
     return best;
@@ -707,8 +722,20 @@ export class SceneRenderer {
       steerFill = steerBar.querySelector('.cell-steer__fill');
     }
 
+    // Longitudinal wheelbase (front axle → rear axle), measured from the model so
+    // the ground-conform probes sit exactly under the axles. Rotation-invariant
+    // distance, so reading it before the group is posed is fine.
+    group.updateWorldMatrix(true, true);
+    const axleMid = (arr) => {
+      const v = new THREE.Vector3();
+      for (const o of arr) v.add(o.getWorldPosition(new THREE.Vector3()));
+      return arr.length ? v.multiplyScalar(1 / arr.length) : v;
+    };
+    const wheelbase = (frontWheels.length && backWheels.length)
+      ? axleMid(frontWheels).distanceTo(axleMid(backWheels)) : 0.6;
+
     const c = {
-      group, car, body, bodyBaseQuat, frontWheels, backWheels, plate, shadow, cam,
+      group, car, body, bodyBaseQuat, frontWheels, backWheels, wheelbase, plate, shadow, cam,
       carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, pose: null, init: false, lean: 0
@@ -774,19 +801,37 @@ export class SceneRenderer {
       lookAhead: lookAhead ? lookAhead.clone() : null
     };
     c.group.position.copy(pos);
-    const z = fwd, y = u;
-    const x = y.clone().cross(z).normalize();
+
+    // Ground-conform: probe the rendered road under the FRONT and REAR axles, then
+    // sit the car on the mean of the two and PITCH it along their slope — so the
+    // wheels ride on top of bumps/hills instead of clipping through. A single
+    // centre probe gets height but not slope, so the nose digs in / lifts off on a
+    // crest; two probes give both. Heading (yaw) stays the centreline's; only
+    // pitch + ride height come from the road. Roll is left level (world up) — this
+    // track has no banking, and a flat car reads "wheels on the road" cleanly.
+    let z = fwd; // default: follow the centreline forward (used if a probe misses)
+    this._headFlat.copy(fwd).setY(0);
+    if (this._headFlat.lengthSq() > 1e-6) {
+      this._headFlat.normalize();
+      const half = c.wheelbase * 0.5;
+      const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
+      const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
+      if (yF != null && yB != null) {
+        // re-pitch the (horizontal) heading onto the road slope: rise/run = Δy/wheelbase
+        z = this._fwdTilt.set(this._headFlat.x, (yF - yB) / c.wheelbase, this._headFlat.z).normalize();
+        c.group.position.y = (yF + yB) * 0.5 + RIDE_HEIGHT;
+        c.shadow.position.y = SHADOW_LIFT - RIDE_HEIGHT; // group lifted by RIDE; pin shadow back onto the road
+      } else {
+        // off the edge / over the gate seam: fall back to a single centre probe (height only)
+        const yC = this._roadHitY(pos.x, pos.z, pos.y);
+        if (yC != null) { c.group.position.y = yC + RIDE_HEIGHT; c.shadow.position.y = SHADOW_LIFT - RIDE_HEIGHT; }
+      }
+    }
+    // Build the car basis from the pitched forward + a level (world-up) reference,
+    // so x (lateral) stays horizontal and the body owns pitch, nothing else.
+    const x = this._worldUp.clone().cross(z).normalize();
     const yy = z.clone().cross(x).normalize();
     c.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, yy, z));
-
-    // Drop the car onto the REAL road surface (not the approximate centreline) so
-    // the wheels stay on top of bumps/hills instead of clipping through. The
-    // shadow is then pinned to that surface so it lands on the road, not below it.
-    const roadY = this._roadSurfaceY(pos);
-    if (roadY != null) {
-      c.group.position.y = roadY + RIDE_HEIGHT;
-      c.shadow.position.y = SHADOW_LIFT - RIDE_HEIGHT; // group sits at road+RIDE; this puts the shadow back on the road
-    }
 
     // body lean into the turn — roll ONLY the body (wheels stay flat on the road)
     c.lean += (steer * LEAN_MAX - c.lean) * 0.2;
