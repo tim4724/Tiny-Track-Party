@@ -7,14 +7,12 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
-    "test:e2e": "npx playwright test",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\""
   },
   "dependencies": {
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
     "three": "^0.184.0"
   }
 }

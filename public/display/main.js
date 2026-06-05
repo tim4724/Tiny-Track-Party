@@ -66,6 +66,14 @@ const net = new DisplayNet({
   }
 });
 
+// A player who leaves during a countdown/race forfeits: drop their car so it
+// doesn't drive on as a ghost and doesn't block the race from ever ending.
+net.flow.on('playerleave', ({ peerIndex }) => {
+  if (!engine || !engine.removeCar(peerIndex)) return;
+  scene.removeCar(peerIndex);
+  if (racing && engine.raceOver) endRace();
+});
+
 function renderRoster(roster, hostPeerIndex) {
   const list = el('players'); list.innerHTML = '';
   for (const p of roster) {
@@ -96,7 +104,6 @@ function startRace() {
   if (!players.length) return;
 
   net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
-  net.setRoomState(ROOM_STATE.COUNTDOWN);
   show('race');
   el('results').classList.add('hidden');
 
@@ -119,9 +126,15 @@ function startRace() {
       clearInterval(tick);
       el('countdown').textContent = '';
       net.flow.transitionTo(ROOM_STATE.PLAYING);
-      net.setRoomState(ROOM_STATE.PLAYING);
       net.broadcast({ type: MSG.GAME_START });
       racing = true;
+      // Fail-safe: a car that can never finish (player AFK, holding full brake,
+      // or gone mid-race) would otherwise hang the room forever, since the race
+      // only ends once every car crosses the line. Cap the race so stragglers
+      // are DNF'd and everyone returns to the lobby. A clean 3-lap is ~50-80s;
+      // this is a generous ceiling, not a target.
+      clearTimeout(raceTimer);
+      raceTimer = setTimeout(() => { if (racing) endRace(); }, MAX_RACE_MS);
     }
   }, 1000);
 }
@@ -130,13 +143,15 @@ function onRaceEvent(e) {
   // hook for SFX / FX (lap, finish, race_over) — sound disabled for now
 }
 
+const MAX_RACE_MS = 180000; // hard race ceiling (see fail-safe note in startRace)
 let endTimer = null;
+let raceTimer = null;
 function endRace() {
   if (!racing) return;
   racing = false;
+  clearTimeout(raceTimer);
   const results = engine.getResults();
   net.flow.transitionTo(ROOM_STATE.RESULTS);
-  net.setRoomState(ROOM_STATE.RESULTS);
   net.broadcast({ type: MSG.GAME_END, results: results.results });
   showResults(results);
   clearTimeout(endTimer);
@@ -156,7 +171,6 @@ function showResults(results) {
 
 function returnToLobby() {
   net.flow.transitionTo(ROOM_STATE.LOBBY);
-  net.setRoomState(ROOM_STATE.LOBBY);
   for (const c of scene.cars.keys()) scene.removeCar(c);
   engine = null;
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby

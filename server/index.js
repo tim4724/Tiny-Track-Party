@@ -81,6 +81,22 @@ function getLocalIP() {
   return 'localhost';
 }
 
+// A bare `/<segment>` (no dot, one segment) is treated as a join code and serves
+// the phone controller. Guard it so it's an intentional code, not a catch-all:
+// real route prefixes, JSON endpoints, and common crawler/legal paths must NOT
+// be mistaken for a room and must 404 instead of spinning up a controller.
+const RESERVED_SEGMENTS = new Set([
+  'display', 'controller', 'shared', 'assets', 'vendor', 'partyplug', 'gallery',
+  'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon'
+]);
+function isRoomCode(urlPath) {
+  const segs = urlPath.split('/').filter(Boolean);
+  if (segs.length !== 1) return false;            // exactly one path segment
+  const seg = segs[0];
+  // Room codes are short and dot-free; reserved words/routes are not codes.
+  return /^[A-Za-z0-9_-]{1,24}$/.test(seg) && !RESERVED_SEGMENTS.has(seg.toLowerCase());
+}
+
 // Content-Security-Policy. Vendoring Three.js keeps script-src/connect-src at
 // 'self'. The ONE relaxation the no-build stack needs: the inline <script
 // type="importmap"> is itself a script, so it must carry a per-response nonce.
@@ -128,10 +144,9 @@ const server = http.createServer((req, res) => {
   // --- route remaps ---
   if (urlPath === '/') {
     urlPath = '/display/index.html';
-  } else if (urlPath === '/privacy') {
-    urlPath = '/privacy.html';
-  } else if (urlPath.length > 1 && !urlPath.includes('.') && urlPath.split('/').filter(Boolean).length === 1) {
-    // Single path segment with no extension -> room code -> phone controller.
+  } else if (isRoomCode(urlPath)) {
+    // Bare join code (e.g. /ABCD) -> phone controller. Reserved/non-code paths
+    // fall through to the static handler (and 404 if there's no such file).
     urlPath = '/controller/index.html';
   }
 

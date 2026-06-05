@@ -24,6 +24,15 @@ const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 const LOOKAHEAD = 8.0;    // world units down the centerline the camera aims at
 
+// Race order: finished cars first (by finish time), then by distance covered.
+// Shared by the live-position ranker and the final results so they can't disagree.
+function byRaceOrder(a, b) {
+  if (a.finished && b.finished) return a.finishTime - b.finishTime;
+  if (a.finished) return -1;
+  if (b.finished) return 1;
+  return b.totalS - a.totalS;
+}
+
 export class Game {
   constructor(playerIds, track, callbacks = {}) {
     this.centerline = track.centerline;
@@ -64,6 +73,18 @@ export class Game {
     if (typeof msg.s === 'number') c.steer = Math.max(-1, Math.min(1, msg.s));
     if (typeof msg.b === 'number') c.brake = Math.max(0, Math.min(1, msg.b));
     else if (typeof msg.b === 'boolean') c.brake = msg.b ? 1 : 0;
+  }
+
+  // Drop a car whose player left mid-race: it forfeits and stops counting toward
+  // `raceOver`, so the remaining cars aren't blocked by a ghost that can never
+  // finish. Returns true if a car was removed. Caller re-checks `raceOver`.
+  removeCar(id) {
+    if (!this.cars.has(id)) return false;
+    this.cars.delete(id);
+    const i = this.finishedOrder.indexOf(id);
+    if (i >= 0) this.finishedOrder.splice(i, 1);
+    this._rank();
+    return true;
   }
 
   update(dtMs) {
@@ -147,15 +168,9 @@ export class Game {
     }
   }
 
-  // Live race position: finished cars first (by finish order), then by progress.
+  // Live race position from the shared race-order comparator.
   _rank() {
-    const arr = [...this.cars.values()];
-    arr.sort((a, b) => {
-      if (a.finished && b.finished) return a.finishTime - b.finishTime;
-      if (a.finished) return -1;
-      if (b.finished) return 1;
-      return b.totalS - a.totalS;
-    });
+    const arr = [...this.cars.values()].sort(byRaceOrder);
     arr.forEach((c, i) => { c.rank = i + 1; });
   }
 
@@ -178,11 +193,7 @@ export class Game {
   }
 
   getResults() {
-    const ranked = [...this.cars.values()].sort((a, b) => {
-      if (a.finished && b.finished) return a.finishTime - b.finishTime;
-      if (a.finished) return -1; if (b.finished) return 1;
-      return b.totalS - a.totalS;
-    });
+    const ranked = [...this.cars.values()].sort(byRaceOrder);
     return {
       elapsed: this.elapsed,
       results: ranked.map((c, i) => ({

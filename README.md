@@ -8,7 +8,7 @@ Tiny Track Party is a couch party game for 1–8 players on a single shared disp
 
 ## Architecture
 
-The display browser is authoritative and broadcasts game state to all controllers through a [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay. Controller input flows to the display over a WebRTC DataChannel (negotiated via the relay), with a WebSocket fallback. Rendering is Three.js.
+The display browser is authoritative and broadcasts game state to all controllers through a [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay. Controller input (tilt/brake) also flows to the display over that relay today. A lower-latency WebRTC DataChannel path (`partyplug/PartyFastlane.js`, relay-signalled, WebSocket fallback) is the next planned step but is not wired in yet. Rendering is Three.js.
 
 ## Quick Start
 
@@ -62,18 +62,17 @@ The relay URL is set in `public/shared/protocol.js`. If you run your own relay, 
 ## Testing
 
 ```bash
-npm test          # Unit tests (node:test)
-npm run test:e2e  # Playwright E2E
+npm test  # Unit tests (node:test)
 ```
 
-Unit tests use Node.js's built-in `node:test` runner — no test framework. They cover the car simulation (`tests/engine.test.js`) and track geometry (`tests/track.test.js`).
+Unit tests use Node.js's built-in `node:test` runner — no test framework. They cover the car simulation (`tests/engine.test.js`), track geometry (`tests/track.test.js`), and the partyplug transport kit (`partyplug/tests/`). There is no end-to-end/browser test suite yet; the `/gallery.html` page is a manual no-relay preview surface for catching UI regressions.
 
 ## Tech Stack
 
 - **Runtime**: Node.js (static host, no build step)
 - **3D**: Three.js (vendored) + Kenney Toy Car Kit assets
-- **Relay**: [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay (signaling + game events)
-- **P2P**: WebRTC DataChannels for low-latency controller input
+- **Relay**: [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay (signaling + game events + controller input)
+- **P2P** (planned): WebRTC DataChannels for low-latency controller input — kit code exists (`PartyFastlane.js`), not yet wired into the game
 - **Frontend**: Vanilla JavaScript + ES modules
 - **Production deps**: 1 npm package (`qrcode`)
 

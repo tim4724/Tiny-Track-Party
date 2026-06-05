@@ -215,7 +215,7 @@ export class SceneRenderer {
 
   setTrack(track, { debug = false } = {}) {
     this.trackGroup.clear();
-    this._dustColor = new THREE.Color(DUST_COLOR); // explicit orange (see DUST_COLOR note)
+    this._dustColor = new THREE.Color(DUST_COLOR); // asphalt grit grey (see DUST_COLOR)
     if (track.groundY != null) this.ground.position.y = track.groundY;
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
@@ -393,8 +393,12 @@ export class SceneRenderer {
   removeCar(id) {
     const c = this.cars.get(id);
     if (!c) return;
-    this.scene.remove(c.group);
-    if (c.shadow) this.scene.remove(c.shadow);
+    this.scene.remove(c.group); // shadow is a child of group, so it goes too
+    // Dispose only what addCar created fresh per car (marker + shadow plane).
+    // The car mesh shares its geometry/material with the cached prototype, and
+    // the shadow TEXTURE is cached per model — leave both for the next race.
+    c.marker.geometry.dispose(); c.marker.material.dispose();
+    c.shadow.geometry.dispose(); c.shadow.material.dispose();
     if (c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     this.cars.delete(id);
@@ -469,7 +473,7 @@ export class SceneRenderer {
     this._last = t;
     if (this.onFrame) this.onFrame(dt);
 
-    // Kick up small orange dust GRAINS from the ground directly under the wheels
+    // Kick up small dust GRAINS from the ground directly under the wheels
     // (never the car body). Each grain spawns at the wheel's contact patch
     // (projected onto the road plane), pops up a touch and falls — a sparse, low
     // trail that reads as dust, not a plume.

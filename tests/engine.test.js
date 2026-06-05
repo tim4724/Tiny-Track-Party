@@ -90,6 +90,28 @@ test('a full race finishes and emits events', () => {
   assert.equal(res.results[0].playerId, 'p1');
 });
 
+test('a car whose player leaves mid-race forfeits and unblocks the finish', () => {
+  const track = mkTrack(1);
+  const game = new Game(['p1', 'p2'], track, {});
+  // p2 holds full brake (stays put) — it would block raceOver forever.
+  for (let i = 0; i < 60; i++) {
+    game.processInput('p1', { s: followSteer(game, track, 'p1') });
+    game.processInput('p2', { s: 0, b: 1 });
+    game.update(16);
+  }
+  assert.equal(game.getSnapshot().cars.length, 2);
+  // p2 leaves the room mid-race.
+  assert.equal(game.removeCar('p2'), true);
+  assert.equal(game.removeCar('p2'), false, 'removing the same car twice is a no-op');
+  assert.equal(game.getSnapshot().cars.length, 1, 'forfeited car is gone from the snapshot');
+  // Drive the lone remaining car home; the race must now be able to end.
+  for (let t = 0; t < 60 && !game.raceOver; t += 0.5) drive(game, track, 'p1', 0.5);
+  assert.ok(game.raceOver, 'race ends once the only remaining car finishes');
+  const res = game.getResults();
+  assert.equal(res.results.length, 1, 'results only include players still present');
+  assert.equal(res.results[0].playerId, 'p1');
+});
+
 test('ranking orders by progress', () => {
   const track = mkTrack(3);
   const game = new Game(['p1', 'p2'], track, {});

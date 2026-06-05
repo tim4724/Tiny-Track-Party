@@ -1,6 +1,7 @@
 // ControllerNet — phone-side relay connection. Derives room/instance/clientId
 // from the URL, joins the room, and exchanges messages with the display (slot 0).
-// M0: WS only (join + lobby). M2 adds the WebRTC fastlane for the CONTROL stream.
+// All traffic (join, lobby, CONTROL) goes over the WebSocket relay today; the
+// WebRTC fastlane for the CONTROL stream is planned but not yet wired in.
 //
 // Reads globals from classic scripts loaded first: PartyConnection, MSG, RELAY_URL.
 
@@ -66,7 +67,8 @@ export class ControllerNet {
     this.party.connect();
   }
 
-  // Reliable WS send to the display. M2 routes CONTROL over the fastlane first.
+  // Reliable WS send to the display. (Once the fastlane lands, CONTROL will try
+  // the DataChannel first and fall back here.)
   send(type, payload) {
     if (!this.party) return;
     const msg = payload || {};

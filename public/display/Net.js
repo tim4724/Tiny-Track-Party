@@ -3,10 +3,10 @@
 // Game logic/rendering live elsewhere; this module is transport + lobby only.
 //
 // Reads partyplug + protocol globals set by the classic <script> tags that load
-// before this module (PartyConnection, RoomFlow, MSG, ROOM_STATE, RELAY_URL,
-// MAX_PLAYERS). Fastlane (WebRTC) is added in M2 for the analog CONTROL stream.
+// before this module (PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS).
+// Room state is owned by the RoomFlow machine (see the `roomState` getter).
 
-const { PartyConnection, RoomFlow, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS } = window;
+const { PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS } = window;
 
 const enc = encodeURIComponent;
 
@@ -21,7 +21,6 @@ export class DisplayNet {
     this.roomCode = null;
     this.instance = null;
     this.baseUrlOverride = null;
-    this.roomState = ROOM_STATE.LOBBY;
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     const announce = () => { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); };
@@ -153,7 +152,9 @@ export class DisplayNet {
 
   broadcast(data) { if (this.party) this.party.broadcast(data); }
   sendTo(id, data) { if (this.party) this.party.sendTo(id, data); }
-  setRoomState(s) { this.roomState = s; }
+  // Room state is owned by RoomFlow — read it straight through so the display
+  // never keeps a second copy that can drift out of sync with the machine.
+  get roomState() { return this.flow.state; }
 
   // ---- join URL / QR base ----
   _joinUrl() {
