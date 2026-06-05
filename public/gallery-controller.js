@@ -20,16 +20,17 @@ var CONTROLLER_CARDS = [
 var state = Gallery.loadState();
 
 // Controller uses its own cards-per-row + players keys so switching pages
-// doesn't clobber the display page's preference. Defaults to 8 players so
-// every car color is available in the view-as selector.
+// doesn't clobber the display page's preference. Defaults to a full room
+// (MAX_PLAYERS) so every assigned car color is available in the view-as selector.
+var MAX_PLAYERS = 4;
 var CTRL_MAX_COLS = 8;
-var CTRL_DEFAULT_PLAYERS = 8;
+var CTRL_DEFAULT_PLAYERS = MAX_PLAYERS;
 var stored = parseInt(state.controllerCardsPerRow, 10);
 state.controllerCardsPerRow = Math.max(1, Math.min(stored || 7, CTRL_MAX_COLS));
-state.controllerPlayers = parseInt(state.controllerPlayers, 10) || CTRL_DEFAULT_PLAYERS;
+state.controllerPlayers = Math.max(1, Math.min(parseInt(state.controllerPlayers, 10) || CTRL_DEFAULT_PLAYERS, MAX_PLAYERS));
 state.players = state.controllerPlayers;
 
-function clampViewAs(v) { return Math.max(0, Math.min(v || 0, 7)); }
+function clampViewAs(v) { return Math.max(0, Math.min(v || 0, MAX_PLAYERS - 1)); }
 state.viewAs = clampViewAs(parseInt(state.viewAs, 10) || 0);
 
 function dims() {
@@ -121,7 +122,7 @@ Gallery.bindCheckbox(state, 'controller-chrome', 'controllerBrowserChrome', upda
 Gallery.bindSelect(state, 'player-count', 'controllerPlayers', function() {
   state.players = state.controllerPlayers;
   render();
-}, function(v) { return Math.max(1, Math.min(parseInt(v, 10) || CTRL_DEFAULT_PLAYERS, 8)); });
+}, function(v) { return Math.max(1, Math.min(parseInt(v, 10) || CTRL_DEFAULT_PLAYERS, MAX_PLAYERS)); });
 Gallery.bindSelect(state, 'view-as-player', 'viewAs', updateViewAs, function(v) {
   return clampViewAs(parseInt(v, 10) || 0);
 });

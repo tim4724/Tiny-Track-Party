@@ -19,15 +19,16 @@ var state = Gallery.loadState();
 
 // Display uses its own cards-per-row + players keys so switching between the
 // display and controller pages doesn't clobber each other's preference.
+var MAX_PLAYERS = 4;
 var DISPLAY_MAX_COLS = 5;
 var DISPLAY_DEFAULT_COLS = 3;
-var DISPLAY_DEFAULT_PLAYERS = 4;
+var DISPLAY_DEFAULT_PLAYERS = MAX_PLAYERS;
 var stored = parseInt(state.displayCardsPerRow, 10);
 state.displayCardsPerRow = Math.max(1, Math.min(stored || DISPLAY_DEFAULT_COLS, DISPLAY_MAX_COLS));
-state.displayPlayers = parseInt(state.displayPlayers, 10) || DISPLAY_DEFAULT_PLAYERS;
+state.displayPlayers = Math.max(1, Math.min(parseInt(state.displayPlayers, 10) || DISPLAY_DEFAULT_PLAYERS, MAX_PLAYERS));
 state.players = state.displayPlayers;
 
-function clampViewAs(v) { return Math.max(0, Math.min(v || 0, 7)); }
+function clampViewAs(v) { return Math.max(0, Math.min(v || 0, MAX_PLAYERS - 1)); }
 state.viewAs = clampViewAs(parseInt(state.viewAs, 10) || 0);
 
 function dims() { return Gallery.DISPLAY_AR_DIMS[state.displayAR] || Gallery.DISPLAY_AR_DIMS['16x9']; }
@@ -113,7 +114,7 @@ Gallery.bindSelect(state, 'display-ar', 'displayAR', updateDims);
 Gallery.bindSelect(state, 'player-count', 'displayPlayers', function() {
   state.players = state.displayPlayers;
   render();
-}, function(v) { return Math.max(1, Math.min(parseInt(v, 10) || DISPLAY_DEFAULT_PLAYERS, 8)); });
+}, function(v) { return Math.max(1, Math.min(parseInt(v, 10) || DISPLAY_DEFAULT_PLAYERS, MAX_PLAYERS)); });
 Gallery.bindSelect(state, 'view-as-player', 'viewAs', updateViewAs, function(v) {
   return clampViewAs(parseInt(v, 10) || 0);
 });
