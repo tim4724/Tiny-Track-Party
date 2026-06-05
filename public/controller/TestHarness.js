@@ -15,7 +15,7 @@ export function runControllerScenario(opts) {
   const scenario = opts.scenario;
   const color = Math.max(0, Math.min(opts.color || 0, COLORS.length - 1));
 
-  const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
+  const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
   // Apply the player's car livery (the --car custom property tints the HUD and
@@ -146,6 +146,34 @@ export function runControllerScenario(opts) {
       el('pause-btn').disabled = true;     // overlay covers it while paused
       el('pause-overlay').classList.remove('hidden');
       break;
+
+    case 'results': {
+      // Final board (race over), viewed as the host so the "New game" button shows.
+      show('results');
+      setLatency(20, true);
+      const order = [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4 },
+        { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true },
+        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true },
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5 }
+      ];
+      const list = el('result-list'); list.innerHTML = '';
+      order.forEach((o) => {
+        const li = document.createElement('li');
+        if (o.me) li.classList.add('is-me');
+        const dot = document.createElement('span'); dot.className = 'res-dot';
+        dot.style.background = COLORS[o.colorIndex] || '#888';
+        const name = document.createElement('span'); name.className = 'res-name';
+        name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
+        const time = document.createElement('span'); time.className = 'res-time';
+        time.textContent = `${o.time.toFixed(1)}s`;
+        li.append(dot, name, time);
+        list.appendChild(li);
+      });
+      el('newgame-btn').classList.remove('hidden'); // host preview
+      el('result-wait').classList.add('hidden');
+      break;
+    }
 
     default:
       console.warn('[ControllerTestHarness] unknown scenario:', scenario);

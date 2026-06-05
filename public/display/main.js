@@ -218,20 +218,55 @@ function startRace() {
   session.startCountdown(COUNTDOWN_SECONDS);
 }
 
-function onRaceEvent(_e) {
-  // hook for SFX / FX (lap, finish, race_over) — sound disabled for now
+function onRaceEvent(e) {
+  // As each car crosses the line, push the running standings so a finished
+  // player's phone flips to the results overlay and it fills in for everyone
+  // else as more cars finish. (Other events are SFX/FX hooks — sound disabled.)
+  if (e && e.type === 'finish') broadcastStandings(false);
 }
 
+// Live standings for the controllers' results overlay. Pushed as each car
+// finishes (over=false) and once more at race end (over=true, so DNF/AFK cars
+// resolve and everyone — not just finishers — sees the final board). Enriched
+// from currentField because the AI racers aren't in the lobby roster the phones
+// know, so the display is the only side that can name/colour them.
+function standingsPayload(results, over) {
+  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  return {
+    type: MSG.STANDINGS,
+    over: !!over,
+    hostPeerIndex: net.flow.host,
+    total: results.results.length,
+    order: results.results.map((res) => {
+      const p = byId.get(res.playerId) || {};
+      return {
+        playerId: res.playerId,
+        name: p.name || String(res.playerId),
+        colorIndex: p.colorIndex == null ? 0 : p.colorIndex,
+        ai: !!p.ai,
+        finished: !!res.finished,
+        time: res.time
+      };
+    })
+  };
+}
+function broadcastStandings(over) {
+  if (session) net.broadcast(standingsPayload(session.getResults(), over));
+}
+
+// The host ends the results screen with "New game" (RETURN_TO_LOBBY); this is
+// only a safety net so a room whose players all left mid-podium still recovers.
+const RESULTS_FAILSAFE_MS = 60000;
 let endTimer = null;
 function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
   paused = false;                              // results aren't pausable
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
-  net.broadcast({ type: MSG.GAME_END, results: results.results });
+  broadcastStandings(true);                    // final board → phones show the full results overlay
   showResults(results);
   clearTimeout(endTimer);
-  endTimer = setTimeout(returnToLobby, 7000);
+  endTimer = setTimeout(returnToLobby, RESULTS_FAILSAFE_MS);
 }
 
 function showResults(results) {

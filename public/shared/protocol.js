@@ -44,7 +44,9 @@ var MSG = {
   // Display -> all controllers (broadcast)
   COUNTDOWN: 'countdown',       // {n} 3..2..1..GO
   GAME_START: 'game_start',
-  GAME_END: 'game_end',         // {results}
+  STANDINGS: 'standings',       // {over, hostPeerIndex, total, order:[{playerId,name,colorIndex,ai,finished,time}]}
+                                // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay
+  GAME_END: 'game_end',         // {results} — sent on return-to-lobby; controllers go back to the lobby
   GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
   GAME_RESUMED: 'game_resumed', // race resumed — controllers hide the pause overlay
   DISPLAY_MUTED: 'display_muted',

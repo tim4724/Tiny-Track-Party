@@ -219,6 +219,41 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 #pause-overlay .btn { width: min(82%, 18rem); margin-top: 0; }
 
+/* ---- results overlay ---- */
+/* Shown on your phone once you finish; the board fills in as the rest of the
+   field crosses the line. Centred in the section column like the other screens. */
+#results { justify-content: center; gap: 1.2rem; }
+.results-title {
+  font-family: var(--font-display); font-weight: 700; font-size: 2rem;
+  text-align: center; margin: 0; color: var(--ink);
+}
+.result-list {
+  list-style: none; counter-reset: li; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  min-height: 0; overflow-y: auto;        /* scroll a tall board rather than push the footer off-screen */
+}
+.result-list li {
+  counter-increment: li;
+  display: flex; align-items: center; gap: 0.6rem;
+  background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-sm);
+  padding: 0.7rem 0.9rem; font-weight: 800; color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+.result-list li::before {
+  content: counter(li); font-family: var(--font-display); font-weight: 700;
+  color: var(--ink-3); min-width: 1.2em; text-align: center;
+}
+.result-list li:first-child::before { color: var(--accent); } /* gold leader number */
+/* your own row, ringed in your livery like the car picker */
+.result-list li.is-me { border-color: var(--car); box-shadow: 0 0 0 3px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }
+.result-list .res-dot { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: none; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18); }
+.result-list .res-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-list .res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
+.result-list li.is-racing .res-time { font-style: italic; } /* still on track — "Racing…" */
+#result-foot { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+#result-foot .btn { width: min(82%, 18rem); margin-top: 0; }
+.result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }
+
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
 @media (orientation: landscape) {

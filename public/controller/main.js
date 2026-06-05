@@ -7,7 +7,7 @@ import { buildCarPicker } from '../shared/carPicker.js';
 const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
 
-const screens = { name: el('name'), lobby: el('lobby'), game: el('game') };
+const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 function show(name) { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); }
 
 // haptics — vibrate the phone (ignored where unsupported)
@@ -43,6 +43,7 @@ let myCarIndex = 0;
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
+let inResults = false;     // showing the results overlay (my car finished / race over)
 
 const NAME_KEY = 'tinytrack_name';
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
@@ -127,6 +128,7 @@ function handleMessage(data) {
       break;
     }
     case MSG.COUNTDOWN:
+      inResults = false;               // a fresh race clears any leftover results overlay
       show('game');
       el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
       el('go').classList.remove('hidden');
@@ -144,25 +146,100 @@ function handleMessage(data) {
       startDriving();
       break;
     case MSG.PLAYER_STATE:
+      if (inResults) break;            // finished → results overlay owns the screen now
       el('lap').textContent = `Lap ${data.lap}/${data.totalLaps}`;
       el('pos').textContent = `P${data.position}`;
       el('pos').classList.toggle('leader', data.position === 1);
       if (data.finished) el('pos').textContent = `Finished P${data.position}`;
       data.scrub ? startScrub() : stopScrub(); // continuous soft curb rumble
       break;
+    case MSG.STANDINGS: {
+      // Live finish board. Refresh who's host (may have shifted if someone left)
+      // and render; flip to the overlay once the race is over (everyone, incl.
+      // DNF) or as soon as MY car crosses the line — I'm on autopilot now.
+      hostPeerIndex = data.hostPeerIndex;
+      amHost = net.isHost(data.hostPeerIndex);
+      renderResults(data);
+      const mine = (data.order || []).find((o) => o.playerId === net.peerIndex);
+      if (data.over || (mine && mine.finished)) showResultsScreen();
+      break;
+    }
     case MSG.GAME_PAUSED:
+      if (inResults) break;            // finished racers watch results, not the pause overlay
       stopScrub();                     // never leave the curb rumble buzzing while frozen
       setPauseOverlay(true);
       break;
     case MSG.GAME_RESUMED:
+      if (inResults) break;
       setPauseOverlay(false);
       break;
     case MSG.GAME_END:
+      inResults = false;
       stopDriving();
       setPauseOverlay(false);
       el('pause-btn').classList.add('hidden');
       show('lobby');
       break;
+  }
+}
+
+// --- results overlay ---
+// Switch the phone to the results board. Stops driving (the car is on autopilot
+// now) and clears the pause UI so a still-racing player's pause can't surface
+// over the board.
+function showResultsScreen() {
+  if (!inResults) { inResults = true; stopDriving(); }
+  setPauseOverlay(false);
+  el('pause-btn').classList.add('hidden');
+  show('results');
+}
+
+// Render the standings rows + the footer (host's "New game" vs a waiting note).
+function renderResults(data) {
+  const list = el('result-list');
+  list.innerHTML = '';
+  (data.order || []).forEach((o) => {
+    const li = document.createElement('li');
+    const isMe = o.playerId === net.peerIndex;
+    if (isMe) li.classList.add('is-me');
+    if (!o.finished) li.classList.add('is-racing');
+    const dot = document.createElement('span');
+    dot.className = 'res-dot';
+    dot.style.background = CAR_COLORS[o.colorIndex] || '#888';
+    const name = document.createElement('span');
+    name.className = 'res-name';
+    name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
+    const time = document.createElement('span');
+    time.className = 'res-time';
+    time.textContent = o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
+    li.append(dot, name, time);
+    list.appendChild(li);
+  });
+  renderResultFoot(data);
+}
+
+// Footer: while cars are still out, a waiting note for everyone. Once the race is
+// over, the host gets the "New game" button; everyone else is told who to wait on.
+function renderResultFoot(data) {
+  const btn = el('newgame-btn');
+  const wait = el('result-wait');
+  if (!data.over) {
+    btn.classList.add('hidden');
+    wait.classList.remove('hidden');
+    wait.textContent = 'Waiting for the other racers to finish…';
+  } else if (amHost) {
+    btn.classList.remove('hidden');
+    wait.classList.add('hidden');
+  } else {
+    btn.classList.add('hidden');
+    wait.classList.remove('hidden');
+    const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'host-name';
+    nameEl.textContent = (host && host.name) || 'the host';
+    if (host) nameEl.style.color = CAR_COLORS[host.colorIndex] || '';
+    wait.textContent = 'Waiting for ';
+    wait.append(nameEl, ' to start a new game…');
   }
 }
 
@@ -256,6 +333,9 @@ function setPauseOverlay(on) {
 el('pause-btn').addEventListener('click', () => { buzz(15); net.send(MSG.PAUSE_GAME); });
 el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RESUME_GAME); });
 el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
+
+// Results overlay: only the host gets the button; it sends everyone to the lobby.
+el('newgame-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
 
 // BRAKE button — held = brake at the fixed rate, released = release
 const brakeBtn = el('brake-btn');

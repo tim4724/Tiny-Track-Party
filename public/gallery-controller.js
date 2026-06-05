@@ -15,7 +15,8 @@ var CONTROLLER_CARDS = [
   { key: 'countdown',       title: 'Countdown',       perColor: true, replayable: true },
   { key: 'playing',         title: 'Driving',         perColor: true },
   { key: 'paused',          title: 'Paused',          perColor: true },
-  { key: 'finished',        title: 'Finished',        perColor: true }
+  { key: 'finished',        title: 'Finished',        perColor: true },
+  { key: 'results',         title: 'Results',         perColor: true }
 ];
 
 var state = Gallery.loadState();

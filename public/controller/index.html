@@ -59,6 +59,17 @@
     </div>
   </section>
 
+  <!-- Results — shown once your car finishes; the board fills in as the rest of
+       the field crosses the line. The host starts the next game from here. -->
+  <section id="results" class="hidden">
+    <h2 class="results-title">🏁 Results</h2>
+    <ol id="result-list" class="result-list"></ol>
+    <div id="result-foot">
+      <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
+      <div id="result-wait" class="result-wait hidden"></div>
+    </div>
+  </section>
+
   <!-- Latency chip — one-way (RTT/2), pinned bottom-right across all screens.
        Hidden until the first reading lands (post-join). The bolt shows only
        while the input/ping path is on the P2P fastlane DataChannel. -->
