@@ -1,24 +1,20 @@
-:root {
-  --bg: #0b0f17;
-  --bg-2: #131a26;
-  --fg: #e7eef7;
-  --muted: #8a9cb0;
-  --accent: #f2b134;
-  --accent-2: #2bb673;
-  --radius: 18px;
-}
-* { box-sizing: border-box; }
+/* Display — big shared screen. "Sunny Circuit" look.
+   Tokens + reusable bits live in /shared/theme.css; this file is layout +
+   display-only composition. Class/ID names are contracted with display/main.js
+   and SceneRenderer.js — don't rename without updating those. */
+
 html, body {
   margin: 0; height: 100%;
-  background: radial-gradient(1200px 800px at 50% -10%, #1a2434, var(--bg));
-  color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background:
+    radial-gradient(900px 520px at 18% -8%, var(--warm-haze), transparent 60%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 55%, #f4fbff 100%);
+  color: var(--ink);
   overflow: hidden;
 }
-.hidden { display: none !important; }
 
 /* ---- Lobby ---- */
 #lobby {
+  position: relative;
   height: 100%;
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -26,89 +22,187 @@ html, body {
   gap: 4vw;
   padding: 6vh 7vw;
 }
+/* keep the real content above the diorama backdrop */
+#lobby > *:not(.scene) { position: relative; z-index: 1; }
+
+.lobby__left {
+  padding: clamp(1.6rem, 3vw, 2.6rem) clamp(1.8rem, 3vw, 2.8rem);
+  /* .card surface comes from the class in the markup */
+}
 .lobby__left h1 {
-  font-size: clamp(2.4rem, 6vw, 5rem);
-  margin: 0 0 0.2em;
-  letter-spacing: -0.02em;
-  background: linear-gradient(120deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 5.4vw, 4.4rem);
+  line-height: 0.98;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.25em;
+  color: var(--ink);
 }
-.lobby__left .tagline { color: var(--muted); font-size: clamp(1rem, 1.6vw, 1.4rem); margin: 0 0 2rem; }
-.join {
-  background: var(--bg-2); border: 1px solid #243044; border-radius: var(--radius);
-  padding: 1.4rem 1.6rem; margin-bottom: 1.6rem; display: inline-block;
+.lobby__left h1 span { color: var(--brand); }
+.lobby__left .tagline {
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  margin: 0 0 1.6rem;
+  max-width: 30rem;
 }
-.join__label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.12em; }
-.join__url { font-size: clamp(1rem, 1.8vw, 1.5rem); margin-top: 0.3rem; }
-.join__code {
-  font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 800; letter-spacing: 0.18em;
-  color: var(--accent); margin-top: 0.2rem; font-variant-numeric: tabular-nums;
-}
-#count { font-size: 1.2rem; color: var(--muted); margin: 0.4rem 0 1rem; }
-#players { display: flex; flex-wrap: wrap; gap: 0.6rem; max-width: 42rem; }
-.chip {
-  display: flex; align-items: center; gap: 0.55rem;
-  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 999px;
-  padding: 0.5rem 1rem 0.5rem 0.6rem; font-size: 1.15rem;
-}
-.chip--off { opacity: 0.45; }
-.chip__dot { width: 1.1rem; height: 1.1rem; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.4) inset; }
-#hint { color: var(--muted); margin-top: 1.4rem; font-size: 1.05rem; }
-#hint b { color: var(--fg); }
 
-.lobby__right { display: flex; justify-content: center; }
+/* join box — the URL already carries the room code (…/BZK4), so there's no
+   separate code chip. */
+.join { margin-bottom: 1.3rem; }
+.join__at {
+  border-radius: var(--r-sm);
+  padding: 0.75rem 1rem;
+  background: var(--surface-2);
+  border: 2px solid var(--hairline);
+}
+.join__label {
+  font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.join__url {
+  font-weight: 800; font-size: clamp(0.95rem, 1.3vw, 1.25rem);
+  color: var(--ink); margin-top: 0.2rem; word-break: break-all;
+}
+/* the room code, highlighted within the URL — swap the colour to taste */
+.join__code { color: var(--car-orange); letter-spacing: 0.03em; }
+
+#count {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-weight: 800; color: var(--brand);
+  font-size: clamp(0.95rem, 1.3vw, 1.15rem);
+  margin: 0.2rem 0 1rem;
+}
+#count::before {
+  content: ''; width: 0.65rem; height: 0.65rem; border-radius: 50%;
+  background: var(--brand); box-shadow: 0 0 0 4px rgba(43, 182, 115, 0.2);
+}
+
+/* Player seats — laid out in a single row, wrapping only when the card runs
+   out of width. Empty seats render as placeholders (see renderRoster), so the
+   card keeps the same footprint from 0 players to full instead of reflowing as
+   people join. */
+#players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.chip { font-size: clamp(0.95rem, 1.2vw, 1.1rem); }
+.chip--placeholder {
+  background: transparent;
+  border-style: dashed;
+  border-color: #d4deea;
+  color: var(--ink-3);
+  box-shadow: none;
+}
+.chip__dot {
+  width: 0.85rem; height: 0.85rem; border-radius: 50%;
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18); flex: none;
+}
+.chip--placeholder .chip__dot {
+  background: transparent; border: 2px dashed #cdd6e0; box-shadow: none;
+}
+
+/* QR — the card itself is vertically centered to match the welcome card; the
+   "Scan to join" caption is absolutely placed below it so it doesn't shift the
+   QR off-centre (it hangs beneath, outside the centring). */
+.lobby__right { position: relative; display: flex; align-items: center; justify-content: center; }
 .qr-card {
-  background: #fff; border-radius: var(--radius); padding: 1.2rem;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  position: relative;
+  background: #fff; border-radius: var(--r-lg); padding: 1.1rem;
+  box-shadow: var(--shadow-float);
 }
-#qr { display: block; width: min(34vw, 46vh); height: auto; image-rendering: pixelated; }
+#qr { display: block; width: min(30vw, 42vh); height: auto; image-rendering: pixelated; }
+.qr-cap {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 0.9rem; white-space: nowrap;
+  font-weight: 800; color: var(--ink-2); font-size: 0.95rem;
+  background: #fff; padding: 0.45rem 1.1rem; border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
+}
 
-/* ---- Race ---- */
+/* ---- Race (3D scene is the backdrop; these are overlays) ---- */
 #race { position: fixed; inset: 0; }
 #scene { position: fixed; inset: 0; }
 #scene canvas { display: block; }
 
 #countdown {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 28vh; font-weight: 900; color: #fff;
-  text-shadow: 0 0 40px rgba(0,0,0,0.5); pointer-events: none;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 26vh; color: #fff;
+  text-shadow: 0 6px 0 rgba(40, 70, 40, 0.28), 0 16px 32px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }
 
 /* per-viewport (split-screen) label, anchored at each cell's top-left */
 .cell-label {
   position: absolute; display: none; margin: 0.7rem;
-  background: rgba(11,15,23,0.55); border-left: 4px solid var(--c, #fff);
-  border-radius: 8px; padding: 0.35rem 0.7rem; backdrop-filter: blur(4px);
+  background: rgba(255, 255, 255, 0.94);
+  border-left: 5px solid var(--c, var(--brand));
+  border-radius: 10px; padding: 0.4rem 0.75rem;
+  box-shadow: 0 8px 18px rgba(30, 60, 90, 0.22);
 }
-.cell-label__name { font-weight: 800; font-size: 1.15rem; color: var(--c, #fff); }
-.cell-label__stat { display: block; font-size: 0.95rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cell-label__name { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--c, var(--ink)); }
+.cell-label__stat { display: block; font-weight: 700; font-size: 0.9rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 /* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
 .cell-steer {
-  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 0.7rem;
+  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 0.8rem;
   transform: translateX(-50%);
-  background: rgba(11,15,23,0.5); border: 1px solid #2a3850; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.9); border: 1px solid var(--hairline);
+  border-radius: var(--r-pill); overflow: hidden;
+  box-shadow: 0 4px 10px rgba(30, 60, 90, 0.18);
   pointer-events: none;
 }
-.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.25); }
+.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(40, 80, 120, 0.18); }
 .cell-steer__fill {
   position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%;
-  background: var(--c, #2bb673); border-radius: 999px; transition: transform 0.05s linear;
+  background: var(--c, var(--brand)); border-radius: var(--r-pill); transition: transform 0.05s linear;
 }
-/* dim hairline between split-screen cells */
-#scene canvas { display: block; }
-.stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* used in results list */
+.stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* results list */
 
-/* results overlay */
+/* results overlay — bright frosted glass + a floating card */
 #results {
-  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: rgba(11,15,23,0.78); backdrop-filter: blur(8px);
+  position: fixed; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(233, 248, 255, 0.72); backdrop-filter: blur(10px);
 }
-#results h2 { font-size: clamp(2.4rem, 6vw, 5rem); margin: 0 0 1rem; color: var(--accent); }
-#results-list { list-style: none; padding: 0; font-size: 1.6rem; display: flex; flex-direction: column; gap: 0.6rem; min-width: 22rem; }
-#results-list li { display: flex; align-items: center; gap: 0.7rem; background: var(--bg-2); border: 1px solid #243044; border-radius: 12px; padding: 0.7rem 1.1rem; }
-#results-list li::before { content: counter(li); }
-#results-list { counter-reset: li; }
-#results-list li { counter-increment: li; }
-.res-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-.results__hint { color: var(--muted); margin-top: 1.4rem; }
+#results h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2.4rem, 6vw, 4.6rem); margin: 0 0 1rem; color: var(--ink);
+}
+#results-list {
+  list-style: none; padding: 0; margin: 0; counter-reset: li;
+  font-size: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; min-width: 24rem;
+}
+#results-list li {
+  counter-increment: li;
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-sm); padding: 0.7rem 1.1rem; font-weight: 800;
+  box-shadow: var(--shadow-pop);
+}
+#results-list li::before {
+  content: counter(li); font-family: var(--font-display); font-weight: 700;
+  color: var(--ink-3); min-width: 1.2em;
+}
+.res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
+.results__hint { color: var(--ink-2); font-weight: 700; margin-top: 1.4rem; }
+
+/* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
+   The lobby is designed for a wide screen; on a narrow viewport the two-column
+   card | QR layout cramps. Stack instead: welcome card on top, QR below it.
+   The "Scan to join" caption is dropped here — it's obvious you scan the QR. */
+@media (max-width: 860px) {
+  html, body { overflow-y: auto; }
+  #lobby {
+    grid-template-columns: 1fr;
+    height: auto; min-height: 100%;
+    align-content: start; justify-items: center;
+    gap: 5vw; padding: 6vh 6vw;
+  }
+  .lobby__left { width: 100%; max-width: 30rem; }
+  .lobby__right { flex-direction: column; }
+  .qr-cap { display: none; }
+  #qr { width: min(62vw, 38vh); }
+}

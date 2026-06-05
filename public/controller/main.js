@@ -48,6 +48,11 @@ const net = new ControllerNet({
   onJoined: () => setStatus(''),
   onStatus: (state, info) => {
     if (state !== 'reconnecting') stopScrub(); // never leave the curb rumble stuck on
+    // Any status callback means the clean join→lobby path didn't carry us all the
+    // way through, so re-enable the join form. It's a no-op once we've moved off
+    // the name screen (the button is hidden), but it prevents a player getting
+    // stuck on a disabled button — display gone, kicked, or reconnect exhausted.
+    setJoining(false);
     if (state === 'reconnecting') setStatus(`Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`);
     else if (state === 'error') setStatus('Error: ' + info);
     else if (state === 'display_gone') setStatus('Waiting for the big screen…');
@@ -62,6 +67,13 @@ const tilt = new TiltInput({
 });
 
 function setStatus(t) { el('name-status').textContent = t; }
+// Lock the join form while a connection is in flight so a double-tap can't fire
+// two joins; unlocked again only if the attempt errors out (success navigates
+// away to the lobby).
+function setJoining(on) {
+  el('join-btn').disabled = on;
+  el('name-input').disabled = on;
+}
 
 function handleMessage(data) {
   switch (data.type) {
@@ -155,7 +167,8 @@ el('name-form').addEventListener('submit', (e) => {
   saveName(n);
   // Request motion permission within this user gesture (iOS requirement).
   tilt.enableMotion();
-  setStatus('Connecting…');
+  setStatus('');           // the disabled button signals the in-flight join
+  setJoining(true);
   net.connect(n);
 });
 

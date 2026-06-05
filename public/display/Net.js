@@ -172,6 +172,23 @@ export class DisplayNet {
   }
 }
 
+// Render a join URL into `el`, wrapping the trailing room code in a
+// <span class="join__code"> so it can be tinted a fun colour. The code is the
+// last path segment (e.g. the BZK4 in tinytrack.party/BZK4). Built with DOM
+// nodes (not innerHTML) so the code is always treated as text.
+export function renderJoinUrl(el, fullText, code) {
+  el.textContent = '';
+  if (code && fullText.endsWith(code)) {
+    el.append(fullText.slice(0, fullText.length - code.length));
+    const span = document.createElement('span');
+    span.className = 'join__code';
+    span.textContent = code;
+    el.appendChild(span);
+  } else {
+    el.textContent = fullText;
+  }
+}
+
 // QR matrix fetch + canvas render (server returns a module bitmap).
 export async function fetchQR(text) {
   const r = await fetch('/api/qr?text=' + enc(text));

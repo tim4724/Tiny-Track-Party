@@ -1,84 +1,113 @@
-:root {
-  --bg: #0b0f17;
-  --bg-2: #131a26;
-  --fg: #e7eef7;
-  --muted: #8a9cb0;
-  --accent: #f2b134;
-  --car: #2bb673;
-}
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* Controller — phone. "Sunny Circuit" look.
+   Tokens + reusable bits live in /shared/theme.css. --car is the player's
+   livery colour, set at runtime by controller/main.js (applyLivery). */
+
 html, body {
   margin: 0; min-height: 100%;
-  background: radial-gradient(900px 600px at 50% -20%, #1a2434, var(--bg));
-  color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 52%, #eef9ee 100%);
+  color: var(--ink);
   touch-action: manipulation;
 }
 /* dvh tracks the *visible* viewport, so bottom content never hides under the
    mobile browser navbar (100vh = the larger toolbar-retracted height). */
-body { display: flex; min-height: 100vh; min-height: 100dvh; }
-.hidden { display: none !important; }
+body { display: flex; min-height: 100vh; min-height: 100dvh; position: relative; }
+/* soft corner sun — the sky/sun warmth, kept clear of the content */
+body::before {
+  content: ''; position: fixed; top: -64px; right: -44px;
+  width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle, #fffbe6, var(--sun));
+  opacity: 0.85; filter: blur(2px); pointer-events: none; z-index: 0;
+}
+* { -webkit-tap-highlight-color: transparent; }
 /* Pad past the notch/home-indicator (viewport-fit=cover lets content reach the
    physical edges) on top of the design breathing room. */
 section {
+  position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column;
   padding:
     calc(7vh + env(safe-area-inset-top)) calc(8vw + env(safe-area-inset-right))
     calc(7vh + env(safe-area-inset-bottom)) calc(8vw + env(safe-area-inset-left));
 }
+/* the join screen is sparse — center it so it isn't top-heavy */
+#name { justify-content: center; padding-bottom: calc(12vh + env(safe-area-inset-bottom)); }
 
-h1 { font-size: 2rem; margin: 0 0 0.2em;
-  background: linear-gradient(120deg, var(--accent), var(--car));
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
-.sub { color: var(--muted); margin: 0 0 2rem; }
+h1 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 2.1rem; line-height: 1.02; margin: 0 0 0.15em; color: var(--ink);
+}
+h1 span { color: var(--brand); }
+.sub { color: var(--ink-2); font-weight: 700; margin: 0 0 2rem; }
 
-/* form */
+/* ---- name form ---- */
 input[type=text] {
-  width: 100%; font-size: 1.3rem; padding: 1rem 1.1rem;
-  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 14px; color: var(--fg);
+  width: 100%; font-family: var(--font-body); font-weight: 700; font-size: 1.3rem;
+  padding: 1rem 1.1rem; color: var(--ink);
+  background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-sm);
 }
-button {
-  font-size: 1.2rem; font-weight: 700; padding: 1rem 1.2rem; margin-top: 1rem;
-  border: none; border-radius: 14px; color: #0b0f17; background: var(--accent);
-  width: 100%; cursor: pointer;
-}
-button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid #2a3850; }
-#name-status { color: var(--muted); margin-top: 1rem; min-height: 1.4em; }
+input[type=text]:focus { outline: none; border-color: var(--brand); }
+input[type=text]:disabled { opacity: 0.6; }
+.btn { width: 100%; margin-top: 1rem; }           /* phone buttons fill the row */
+#name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
-/* lobby */
-.mycar-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.4rem; }
-#mycar { width: 2.4rem; height: 2.4rem; border-radius: 8px; box-shadow: inset 0 0 12px rgba(0,0,0,0.4); }
+/* ---- lobby ---- */
+.mycar-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.4rem; font-weight: 800; color: var(--ink-2); }
+#mycar {
+  width: 2.6rem; height: 2.6rem; border-radius: var(--r-sm); background: var(--car);
+  box-shadow: inset 0 -4px 6px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.12);
+}
 #roster { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0 1.6rem; }
-.row { display: flex; align-items: center; gap: 0.6rem; font-size: 1.15rem;
-  background: var(--bg-2); border: 1px solid #2a3850; border-radius: 12px; padding: 0.7rem 1rem; }
+.row {
+  display: flex; align-items: center; gap: 0.6rem; font-size: 1.15rem; font-weight: 800;
+  background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-sm);
+  padding: 0.7rem 1rem; color: var(--ink); box-shadow: var(--shadow-pop);
+}
 .row--me { border-color: var(--car); }
-.row__dot { width: 1rem; height: 1rem; border-radius: 50%; }
-#wait-host { color: var(--muted); text-align: center; margin-top: 1rem; }
+.row__dot { width: 1rem; height: 1rem; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18); flex: none; }
+#wait-host { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 
-/* game / driving HUD */
-#game { align-items: stretch; justify-content: flex-start; user-select: none; position: relative; }
+/* ---- game / driving HUD ---- */
+#game { align-items: stretch; justify-content: flex-start; user-select: none; }
 /* GO countdown overlays the HUD so players can pre-steer while it counts down */
-#go { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
-  font-size: 7rem; font-weight: 900; color: var(--accent); pointer-events: none;
-  background: rgba(11,15,23,0.35); backdrop-filter: blur(2px); }
+#go {
+  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 7rem; color: var(--brand);
+  background: rgba(233, 248, 255, 0.5); backdrop-filter: blur(2px); pointer-events: none;
+}
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
 .hud-top { display: flex; justify-content: space-between; align-items: center; }
-#lap { font-size: 1.4rem; font-weight: 700; }
-#pos { font-size: 1.6rem; font-weight: 900; padding: 0.3rem 0.9rem; border-radius: 999px; background: var(--bg-2); border: 1px solid #2a3850; }
-#pos.leader { background: var(--accent); color: #0b0f17; }
+#lap { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--ink); }
+#pos {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: #fff;
+  padding: 0.3rem 1rem; border-radius: var(--r-sm); background: var(--car);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+#pos.leader { background: var(--accent); color: var(--ink); }
 
 .steer { margin-top: auto; }
-.steer__track { position: relative; height: 1.4rem; background: var(--bg-2); border: 1px solid #2a3850; border-radius: 999px; overflow: hidden; }
-.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #2a3850; }
-#steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: 999px; transition: transform 0.05s linear; }
-.steer__label { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
+.steer__track {
+  position: relative; height: 1.4rem; overflow: hidden;
+  background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-pill);
+  box-shadow: inset 0 2px 4px rgba(40, 80, 120, 0.1);
+}
+.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--hairline); }
+#steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: var(--r-pill); transition: transform 0.05s linear; }
+.steer__label { text-align: center; color: var(--ink-2); font-weight: 700; font-size: 0.9rem; margin-top: 0.5rem; }
 
-/* BRAKE button: large hold-to-brake target; lights red while held */
-#brake-btn.brake { margin-top: 0; padding: 1.5rem; border-radius: 16px; font-size: 1.5rem; font-weight: 900;
-  letter-spacing: 0.08em; color: var(--fg); background: var(--bg-2); border: 1px solid #2a3850;
-  touch-action: none; transition: background 0.06s, border-color 0.06s, transform 0.06s; }
-#brake-btn.brake.held { background: #e6492d; border-color: #e6492d; color: #0b0f17; transform: scale(0.98); }
-#motion-tip { color: var(--muted); text-align: center; font-size: 0.95rem; }
+/* BRAKE — big red hold-to-brake push-button; depresses while held (.held by JS).
+   Tall by design (roughly double a normal button) for an easy thumb target. */
+#brake-btn.brake {
+  margin-top: 0; padding: 3.4rem 1.4rem; font-family: var(--font-display); font-weight: 700;
+  font-size: 1.6rem; letter-spacing: 0.08em; color: #fff; border: none;
+  border-radius: var(--r); background: var(--danger);
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--danger), #000 26%), var(--inset-hi);
+  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s;
+}
+#brake-btn.brake.held {
+  filter: brightness(1.05);
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--danger), #000 26%), var(--inset-hi);
+}
+#motion-tip { color: var(--ink-2); font-weight: 700; text-align: center; font-size: 0.95rem; }
 
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
@@ -90,6 +119,6 @@ button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid 
   }
   #drive-hud { gap: 0.8rem; }
   #go { font-size: 4.5rem; }
-  #brake-btn.brake { padding: 1rem; font-size: 1.3rem; }
+  #brake-btn.brake { padding: 1.4rem; }   /* drop the double height when vertical room is scarce */
   .steer { margin-top: 0.4rem; }
 }

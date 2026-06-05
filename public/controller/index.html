@@ -6,6 +6,9 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <title>Tiny Track Party Controller</title>
   <link rel="icon" href="data:," />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
+  <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/controller/controller.css?v=__APP_V__" />
   <script src="/shared/protocol.js?v=__APP_V__"></script>
   <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
@@ -13,11 +16,11 @@
 <body>
   <!-- Name -->
   <section id="name">
-    <h1>Tiny Track Party</h1>
+    <h1>Tiny Track <span>Party</span></h1>
     <p class="sub">Pick a name and jump in.</p>
     <form id="name-form">
       <input id="name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off" />
-      <button type="submit">Join race</button>
+      <button id="join-btn" type="submit" class="btn btn--brand">Join race</button>
     </form>
     <div id="name-status"></div>
   </section>
@@ -26,7 +29,7 @@
   <section id="lobby" class="hidden">
     <div class="mycar-row"><div id="mycar"></div><div>Your car</div></div>
     <div id="roster"></div>
-    <button id="start-btn" class="hidden">Start race</button>
+    <button id="start-btn" class="btn btn--brand hidden">Start race</button>
     <div id="wait-host" class="hidden">Waiting for the host to start…</div>
   </section>
 

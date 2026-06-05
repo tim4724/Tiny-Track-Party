@@ -6,6 +6,9 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <title>Tiny Track Party</title>
   <link rel="icon" href="data:," />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
+  <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
 
   <!-- Transport + shared contract: classic scripts set window globals BEFORE
@@ -28,20 +31,29 @@
 <body>
   <!-- Lobby -->
   <section id="lobby">
-    <div class="lobby__left">
-      <h1>Tiny Track Party</h1>
+    <!-- sunny diorama backdrop (decorative; see .scene in /shared/theme.css) -->
+    <div class="scene" aria-hidden="true">
+      <div class="scene__sky"></div>
+      <div class="scene__sun"></div>
+      <div class="scene__cloud scene__cloud--a"></div>
+      <div class="scene__cloud scene__cloud--b"></div>
+      <div class="scene__grass"></div>
+    </div>
+    <div class="lobby__left card">
+      <h1>Tiny Track <span>Party</span></h1>
       <p class="tagline">Phones are your steering wheels. Tilt to steer, hold BRAKE to slow.</p>
       <div class="join">
-        <div class="join__label">Join at</div>
-        <div class="join__url" id="joinurl">…</div>
-        <div class="join__code" id="code">····</div>
+        <div class="join__at">
+          <div class="join__label">Join at</div>
+          <div class="join__url" id="joinurl">…</div>
+        </div>
       </div>
       <div id="count">Waiting for players…</div>
       <div id="players"></div>
-      <div id="hint" class="hidden">First to join is <b>host</b> — press <b>Start</b> on your phone.</div>
     </div>
     <div class="lobby__right">
       <div class="qr-card"><canvas id="qr"></canvas></div>
+      <div class="qr-cap">Scan to join</div>
     </div>
   </section>
 

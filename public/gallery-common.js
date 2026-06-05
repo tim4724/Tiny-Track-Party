@@ -5,9 +5,9 @@
 // state persisted in localStorage so settings survive page nav.
 //
 // The gallery is a no-relay preview surface: each card is an iframe that
-// loads the real display (`/`) or controller (`/GALLERY`) page with
-// ?test=1&scenario=… so the page's TestHarness drives a single screen
-// without ever touching the relay. UI regressions show up here.
+// loads the real display (`/?test=1&scenario=…`) or controller
+// (`/controller/index.html?scenario=…`) page so the page's TestHarness drives a
+// single screen without ever touching the relay. UI regressions show up here.
 // =====================================================================
 
 var Gallery = (function() {
@@ -96,17 +96,19 @@ var Gallery = (function() {
     return '/' + qs(p);
   }
 
-  // Controller page is reached via a room-code path segment — any value works
-  // in test mode, so we use a fixed `GALLERY` segment.
+  // Controller page is served at its canonical path. (It's also reachable in
+  // play via a `/<room-code>` segment, but we don't use that here: the join
+  // code `GALLERY` collides with the reserved `gallery` route, and any other
+  // code is just an indirection — `/controller/index.html` serves the same
+  // page and the TestHarness drives it from `?scenario=…`.)
   function controllerURL(state, scenario, colorIdx, extra) {
     var p = {
-      test: 1,
       scenario: scenario,
       color: colorIdx,
       players: state.players
     };
     if (extra) for (var k in extra) p[k] = extra[k];
-    return '/GALLERY' + qs(p);
+    return '/controller/index.html' + qs(p);
   }
 
   // --- Lazy loading queue ---

@@ -1,0 +1,229 @@
+/* ============================================================================
+   Tiny Track Party — "Sunny Circuit" theme
+   ----------------------------------------------------------------------------
+   ONE source of truth for the look. Shared by the display and the controller
+   (both <link> this before their own page CSS). To add a new UI element in the
+   right style, reach for a TOKEN (a --custom-property) or a KIT class below
+   before writing bespoke CSS — that keeps every screen consistent for free.
+
+   Layout:
+     1. @font-face        — self-hosted Fredoka + Nunito (see /assets/fonts)
+     2. :root tokens      — palette, type, radii, shadows  (the design system)
+     3. base / reset      — box-sizing, default type, .hidden
+     4. component kit     — .card .btn .chip .pill .field .dot  (reusable bits)
+     5. diorama / scene   — .scene__sky/sun/cloud/grass  (the sunny backdrop)
+
+   Pages own their LAYOUT (grid, positioning); the theme owns the LANGUAGE
+   (colour, type, surface, shadow). Keep it that way.
+   ========================================================================= */
+
+/* 1. Fonts — variable woff2, one file per family, weight interpolated. ----- */
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 300 700;            /* variable axis */
+  font-display: swap;
+  src: url('/assets/fonts/fredoka-variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 200 1000;           /* variable axis */
+  font-display: swap;
+  src: url('/assets/fonts/nunito-variable.woff2') format('woff2');
+}
+
+/* 2. Design tokens -------------------------------------------------------- */
+:root {
+  /* -- car palette (mirrors CAR_COLORS in shared/protocol.js) ------------- */
+  --car-red:    #e6492d;
+  --car-amber:  #f2b134;
+  --car-green:  #2bb673;
+  --car-blue:   #2d9cdb;
+  --car-purple: #9b51e0;
+  --car-pink:   #eb5e9c;
+  --car-orange: #f2784b;
+  --car-cyan:   #56ccf2;
+
+  /* -- semantic roles ---------------------------------------------------- */
+  --brand:   var(--car-green);   /* primary action / "Party" accent          */
+  --accent:  var(--car-amber);   /* highlights, room code, leader             */
+  --danger:  var(--car-red);     /* brake / destructive                       */
+  --car:     var(--brand);       /* per-player livery (controller sets this)  */
+
+  /* -- ink (text) -------------------------------------------------------- */
+  --ink:   #26313f;              /* headings / primary text                   */
+  --ink-2: #5c6675;              /* body / secondary                          */
+  --ink-3: #8a93a1;              /* muted / captions                          */
+
+  /* -- surfaces & world -------------------------------------------------- */
+  --surface:     #ffffff;        /* cards                                     */
+  --surface-2:   #f4f8fc;        /* sunken fields                             */
+  --hairline:    #e5edf5;        /* borders between soft surfaces             */
+  --sky-1:       #a8e2ff;        /* sky top                                   */
+  --sky-2:       #e9f8ff;        /* sky bottom                                */
+  --sun:         #fff2bf;
+  --grass-1:     #8ad96e;
+  --grass-2:     #5cbf53;
+  --warm-haze:   #fff8e6;        /* low warm glow behind the sky              */
+
+  /* -- type -------------------------------------------------------------- */
+  --font-display: 'Fredoka', system-ui, sans-serif;   /* headings, numerals  */
+  --font-body:    'Nunito', system-ui, -apple-system, sans-serif;
+
+  /* -- radii ------------------------------------------------------------- */
+  --r-sm:   12px;
+  --r:      18px;
+  --r-lg:   26px;
+  --r-pill: 999px;
+
+  /* -- shadows (soft, ambient — never hard/aggressive) ------------------- */
+  --shadow-pop:   0 3px 6px rgba(40, 60, 90, 0.07);             /* chips      */
+  --shadow-card:  0 18px 40px rgba(40, 80, 120, 0.18),
+                  inset 0 1px 0 #fff;                            /* panels    */
+  --shadow-float: 0 24px 56px rgba(40, 80, 120, 0.26);          /* QR / hero */
+  --inset-hi:     inset 0 2px 0 rgba(255, 255, 255, 0.35);      /* top sheen */
+}
+
+/* 3. Base / reset --------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.hidden { display: none !important; }
+
+/* 4. Component kit -------------------------------------------------------- */
+
+/* Card — the white floating panel everything important sits on. */
+.card {
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+/* Button — chunky toy push-button. Set --btn-bg to recolour; the ledge and
+   pressed state follow automatically. Modifiers below cover the common roles. */
+.btn {
+  --btn-bg: var(--brand);
+  /* ledge derives from --btn-bg HERE (on the button), so a variant that
+     overrides --btn-bg gets a matching darker ledge with zero extra config. */
+  --btn-ledge: color-mix(in srgb, var(--btn-bg), #000 26%);
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  color: #fff;
+  text-align: center;
+  border: none;
+  border-radius: var(--r);
+  padding: 0.85em 1.2em;
+  background: var(--btn-bg);
+  box-shadow: 0 6px 0 var(--btn-ledge), var(--inset-hi);
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+}
+.btn:hover { filter: brightness(1.03); }
+.btn:active, .btn.is-pressed {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 var(--btn-ledge), var(--inset-hi);
+}
+.btn--brand  { --btn-bg: var(--brand); }
+.btn--accent { --btn-bg: var(--accent); color: var(--ink); }
+.btn--danger { --btn-bg: var(--danger); }
+.btn--ghost  {                                   /* quiet, secondary action */
+  --btn-bg: var(--surface);
+  color: var(--ink-2);
+  box-shadow: 0 3px 0 var(--hairline), inset 0 1px 0 #fff;
+  border: 1px solid var(--hairline);
+}
+.btn--ghost:active { box-shadow: 0 1px 0 var(--hairline), inset 0 1px 0 #fff; }
+.btn:disabled, .btn[disabled] {       /* e.g. join button while connecting */
+  opacity: 0.5; cursor: default; filter: none;
+}
+.btn:disabled:active { transform: none; box-shadow: 0 6px 0 var(--btn-ledge), var(--inset-hi); }
+
+/* Chip — a rounded token with a colour dot (player in a roster/lobby). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--surface);
+  border: 2px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 0.45rem 0.95rem 0.45rem 0.6rem;
+  font-weight: 800;
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+.chip--off { opacity: 0.45; }
+
+/* Pill — a tiny uppercase label (kicker / status). */
+.pill {
+  display: inline-block;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Field — a sunken input/value box. */
+.field {
+  background: var(--surface-2);
+  border: 2px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 0.85rem 1rem;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Dot — a livery colour swatch; set its background inline from CAR_COLORS. */
+.dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
+  flex: none;
+}
+
+/* 5. Diorama / scene -----------------------------------------------------
+   Drop a <div class="scene"> with these children behind any screen for the
+   sunny backdrop (sky + sun + clouds + grass). Decorative only — it never
+   eats pointer events and sits at the bottom of the stacking order. */
+.scene { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+
+.scene__sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(900px 520px at 18% -8%, var(--warm-haze), transparent 60%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 60%, #f3fbef 60%, #eaf7e2 100%);
+}
+.scene__sun {
+  position: absolute; top: 8%; left: 9%;
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, #fffce8, var(--sun));
+  box-shadow: 0 0 0 18px rgba(255, 242, 191, 0.4), 0 0 60px rgba(255, 224, 130, 0.6);
+}
+.scene__cloud { position: absolute; background: #fff; border-radius: var(--r-pill);
+  filter: drop-shadow(0 8px 12px rgba(80, 130, 170, 0.12)); }
+.scene__cloud::before, .scene__cloud::after { content: ''; position: absolute; background: #fff; border-radius: 50%; }
+.scene__cloud--a { top: 12%; right: 10%; width: 150px; height: 42px; }
+.scene__cloud--a::before { width: 62px; height: 62px; top: -26px; left: 24px; }
+.scene__cloud--a::after  { width: 46px; height: 46px; top: -16px; left: 82px; }
+.scene__cloud--b { top: 24%; right: 28%; width: 104px; height: 30px; opacity: 0.85; }
+.scene__cloud--b::before { width: 44px; height: 44px; top: -18px; left: 18px; }
+.scene__grass {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 40%;
+  background: radial-gradient(120% 80% at 50% 120%, var(--grass-1), var(--grass-2));
+}
+.scene__grass::after {     /* faint mowed-stripe texture */
+  content: ''; position: absolute; inset: 0; opacity: 0.5;
+  background: repeating-linear-gradient(92deg, rgba(255,255,255,0.05) 0 30px, rgba(0,0,0,0.03) 30px 60px);
+}

@@ -76,7 +76,7 @@ export function runControllerScenario(opts) {
       el('name-input').value = FAKE_NAMES[color];
       el('name-input').disabled = true;
       el('name-form').querySelector('button').disabled = true;
-      el('name-status').textContent = 'Connecting…';
+      el('name-status').textContent = '';
       break;
 
     case 'lobby-host':

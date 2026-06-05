@@ -1,6 +1,6 @@
 // Display entry — lobby + authoritative race. Owns the Three.js scene, the car
 // engine, the countdown→race→results flow, and per-player PLAYER_STATE.
-import { DisplayNet, fetchQR, renderQR } from './Net.js';
+import { DisplayNet, fetchQR, renderQR, renderJoinUrl } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, OVAL } from './TrackBuilder.js';
 import { Game } from './engine/Game.js';
@@ -54,8 +54,9 @@ scene.onFrame = (dt) => {
 // ---- net ----
 const net = new DisplayNet({
   onRoomReady: async ({ roomCode, joinUrl }) => {
-    el('code').textContent = roomCode;
-    try { const u = new URL(joinUrl); el('joinurl').textContent = u.host + u.pathname; }
+    // The room code rides along in the join URL's path; we highlight that
+    // trailing segment rather than showing the code separately.
+    try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
     catch (_) { el('joinurl').textContent = joinUrl; }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
   },
@@ -74,21 +75,31 @@ net.flow.on('playerleave', ({ peerIndex }) => {
   if (racing && engine.raceOver) endRace();
 });
 
+// Always lay out at least this many seats; empty ones show as placeholders so
+// the lobby card keeps a fixed size as players trickle in.
+const MIN_SEATS = 4;
 function renderRoster(roster, hostPeerIndex) {
   const list = el('players'); list.innerHTML = '';
-  for (const p of roster) {
+  const seats = Math.max(MIN_SEATS, roster.length);
+  for (let i = 0; i < seats; i++) {
+    const p = roster[i];
     const chip = document.createElement('div');
-    chip.className = 'chip' + (p.connected ? '' : ' chip--off');
     const dot = document.createElement('span');
-    dot.className = 'chip__dot'; dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
-    chip.appendChild(dot);
+    dot.className = 'chip__dot';
     const name = document.createElement('span');
-    name.textContent = p.name + (p.peerIndex === hostPeerIndex ? '  ★' : '');
+    if (p) {
+      chip.className = 'chip' + (p.connected ? '' : ' chip--off');
+      dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
+      name.textContent = p.name + (p.peerIndex === hostPeerIndex ? '  ★' : '');
+    } else {
+      chip.className = 'chip chip--placeholder';
+      name.textContent = 'Open';   // short, so 4 empty seats still fit one row
+    }
+    chip.appendChild(dot);
     chip.appendChild(name);
     list.appendChild(chip);
   }
   el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Waiting for players…';
-  el('hint').classList.toggle('hidden', roster.length === 0);
 }
 
 function rosterById() {

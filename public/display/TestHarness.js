@@ -8,7 +8,7 @@
 // pure-pursuit autopilot (the engine has no AI of its own) so the split-screen
 // chase cams, HUD, lean, and dust all show real motion in the preview.
 import { Game } from './engine/Game.js';
-import { fetchQR, renderQR } from './Net.js';
+import { fetchQR, renderQR, renderJoinUrl } from './Net.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -49,28 +49,36 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
+  // Mirror display/main.js: always lay out >= 4 seats; empties are placeholders.
+  const MIN_SEATS = 4;
   function renderRoster(slots, hostPeerIndex) {
     const list = el('players'); list.innerHTML = '';
-    for (const s of slots) {
+    const seats = Math.max(MIN_SEATS, slots.length);
+    for (let i = 0; i < seats; i++) {
+      const s = slots[i];
       const chip = document.createElement('div');
-      chip.className = 'chip';
       const dot = document.createElement('span');
-      dot.className = 'chip__dot'; dot.style.background = COLORS[s % COLORS.length] || '#888';
-      chip.appendChild(dot);
+      dot.className = 'chip__dot';
       const name = document.createElement('span');
-      name.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
+      if (s != null) {
+        chip.className = 'chip';
+        dot.style.background = COLORS[s % COLORS.length] || '#888';
+        name.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
+      } else {
+        chip.className = 'chip chip--placeholder';
+        name.textContent = 'Open';
+      }
+      chip.appendChild(dot);
       chip.appendChild(name);
       list.appendChild(chip);
     }
     el('count').textContent = slots.length
       ? `${slots.length} racer${slots.length > 1 ? 's' : ''} ready`
       : 'Waiting for players…';
-    el('hint').classList.toggle('hidden', slots.length === 0);
   }
 
   function fakeJoin(code) {
-    el('code').textContent = code;
-    el('joinurl').textContent = (location.host || 'tinytrack.party') + '/' + code;
+    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code);
     fetchQR((location.origin || 'https://tinytrack.party') + '/' + code)
       .then((m) => renderQR(el('qr'), m))
       .catch(() => { /* gallery still works without the QR */ });
@@ -79,7 +87,6 @@ export function runDisplayScenario(opts, ctx) {
   if (scenario === 'welcome') {
     show('lobby');
     renderRoster([], null);
-    el('code').textContent = '····';
     el('joinurl').textContent = (location.host || 'tinytrack.party');
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     return;
