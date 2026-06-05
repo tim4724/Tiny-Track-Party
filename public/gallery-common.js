@@ -101,11 +101,10 @@ var Gallery = (function() {
   // code `GALLERY` collides with the reserved `gallery` route, and any other
   // code is just an indirection — `/controller/index.html` serves the same
   // page and the TestHarness drives it from `?scenario=…`.)
-  function controllerURL(state, scenario, colorIdx, extra) {
+  function controllerURL(scenario, colorIdx, extra) {
     var p = {
       scenario: scenario,
-      color: colorIdx,
-      players: state.players
+      color: colorIdx
     };
     if (extra) for (var k in extra) p[k] = extra[k];
     return '/controller/index.html' + qs(p);

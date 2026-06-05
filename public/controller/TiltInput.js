@@ -150,13 +150,9 @@ export class TiltInput {
     this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3) });
   }
 
-  // current state (for UI)
+  // current steer (for the on-screen steer indicator)
   get state() {
-    return {
-      steer: clamp1(this._steer + this._key),
-      brake: Math.max(this._brakeBtn, this._brakeKey),
-      tilt: this.haveTilt
-    };
+    return { steer: clamp1(this._steer + this._key) };
   }
 
   // --- keyboard fallback / testing ---

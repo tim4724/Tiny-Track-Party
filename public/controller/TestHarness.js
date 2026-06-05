@@ -5,11 +5,12 @@
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
 import { buildCarPicker } from '../shared/carPicker.js';
+import { applyLatencyChip, renderWaitNote } from './ui.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const el = (id) => document.getElementById(id);
 
-// runControllerScenario({ scenario, color, players })
+// runControllerScenario({ scenario, color })
 export function runControllerScenario(opts) {
   const COLORS = window.CAR_COLORS || ['#2bb673'];
   const scenario = opts.scenario;
@@ -34,15 +35,8 @@ export function runControllerScenario(opts) {
     });
   }
 
-  // Latency chip preview — no relay here, so feed it a static reading. fastlane
-  // shows the bolt; quality colour follows the same thresholds as main.js.
-  function setLatency(halfMs, fastlane) {
-    const chip = el('latency'); if (!chip) return;
-    chip.classList.remove('hidden', 'latency--good', 'latency--ok', 'latency--bad');
-    chip.classList.toggle('latency--fastlane', !!fastlane);
-    chip.querySelector('.latency__text').textContent = halfMs + ' ms';
-    chip.classList.add(halfMs < 50 ? 'latency--good' : halfMs < 100 ? 'latency--ok' : 'latency--bad');
-  }
+  // Latency chip preview — no relay here, so feed it a static reading.
+  const setLatency = (halfMs, fastlane) => applyLatencyChip(el('latency'), halfMs, fastlane);
 
   const setSteer = (v) => { const f = el('steer-fill'); if (f) f.style.transform = `translateX(${v * 50}%)`; };
   function setHud(lap, total, pos, finished) {
@@ -87,12 +81,7 @@ export function runControllerScenario(opts) {
       // Fabricate a host (someone other than this player) so the preview shows
       // the tinted name treatment, mirroring main.js renderWaitHost.
       const hostColor = (color + 1) % COLORS.length;
-      const nameEl = document.createElement('span');
-      nameEl.className = 'host-name';
-      nameEl.textContent = FAKE_NAMES[hostColor];
-      nameEl.style.color = COLORS[hostColor];
-      waitEl.textContent = 'Waiting for ';
-      waitEl.append(nameEl, ' to start…');
+      renderWaitNote(waitEl, { name: FAKE_NAMES[hostColor], color: COLORS[hostColor] }, ' to start…');
       break;
     }
 

@@ -455,7 +455,7 @@ export class SceneRenderer {
     }
   }
 
-  setTrack(track, { debug = false } = {}) {
+  setTrack(track) {
     this.trackGroup.clear();
     this._dustColor = new THREE.Color(DUST_COLOR); // asphalt grit grey (see DUST_COLOR)
     if (track.groundY != null) this.ground.position.y = track.groundY;
@@ -467,13 +467,6 @@ export class SceneRenderer {
       node.matrix.copy(inst.matrix);
       node.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); // catch car shadows
       this.trackGroup.add(node);
-    }
-    if (debug) {
-      const pts = track.centerline.samples.map((s) => s.pos.clone());
-      pts.push(pts[0].clone());
-      this.trackGroup.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(pts),
-        new THREE.LineBasicMaterial({ color: 0xff00ff })));
     }
     // overview framing
     const box = new THREE.Box3();
@@ -703,18 +696,14 @@ export class SceneRenderer {
     this._order = this._order.filter((x) => x !== id);
   }
 
-  setCarPose(id, pos, forward, up, tangent, lookAhead, steer = 0, spd = 0, scrub = false, steerInput = steer) {
+  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer) {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
     const fwd = forward.clone().normalize();
     const u = up.clone().normalize();
-    // mesh faces its heading (forward); camera aims at the look-ahead point
-    c.pose = {
-      pos: pos.clone(), forward: fwd, up: u,
-      tangent: (tangent || forward).clone().normalize(),
-      lookAhead: lookAhead ? lookAhead.clone() : null
-    };
+    // mesh faces its heading (forward)
+    c.pose = { pos: pos.clone(), forward: fwd, up: u };
     c.group.position.copy(pos);
 
     // Ground-conform: probe the rendered road under the FRONT and REAR axles, then
@@ -834,7 +823,7 @@ export class SceneRenderer {
               .addScaledVector(lat, (Math.random() - 0.5) * spread);
             // bigger grains at speed / when grinding; randomised so it's not a stamp
             const size = (c.scrub ? 0.07 : 0.045 + spd * 0.045) + Math.random() * 0.03;
-            this._emitDust(gp, this._dustColor || DUST_COLOR, size, 0.25 + Math.random() * 0.12, vel);
+            this._emitDust(gp, this._dustColor, size, 0.25 + Math.random() * 0.12, vel);
           }
         }
       }

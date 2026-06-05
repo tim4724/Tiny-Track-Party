@@ -45,7 +45,7 @@ scene.onFrame = (dt) => {
   session.update(dt * 1000);
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall, c.steerInput);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
   }
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
@@ -213,7 +213,7 @@ function startRace() {
 
   // Place cars at their grid poses immediately.
   for (const c of session.getSnapshot().cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
   }
   session.startCountdown(COUNTDOWN_SECONDS);
 }
@@ -322,7 +322,7 @@ function resumeRace() {
 function freezeCars() {
   if (!session) return;
   for (const c of session.getSnapshot().cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, 0, 0, false, 0);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, 0, 0, false, 0);
   }
 }
 

@@ -13,12 +13,12 @@
 // (the display shows several cars pointing the same way, not a random jumble).
 const BASE = '/assets/toycar/thumbs/';
 
-export const carStill = (model) => BASE + model + '.png';
-export const carStrip = (model) => BASE + model + '.strip.png';
+const carStill = (model) => BASE + model + '.png';
+const carStrip = (model) => BASE + model + '.strip.png';
 
 // Turntable: keep these in sync with the baked strips and the .carthumb__spin
 // background-size in theme.css (background-size width = SPIN_FRAMES * 100%).
-export const SPIN_FRAMES = 24;
+const SPIN_FRAMES = 24;
 const SPIN_FPS = 8; // 24 frames / 8 fps = 3s per full turn
 
 // Lobby/picker render mode. Defaults to 'spin' (rotates the focused car — the
@@ -27,7 +27,7 @@ const SPIN_FPS = 8; // 24 frames / 8 fps = 3s per full turn
 //   1. explicit ?carview=still|spin  (gallery / testing / opt-out)
 //   2. prefers-reduced-motion: reduce → 'still'  (accessibility wins)
 //   3. default → 'spin'
-export function carView() {
+function carView() {
   let param = null;
   try { param = new URLSearchParams(location.search).get('carview'); } catch (_) { /* no location */ }
   if (param === 'still' || param === 'spin') return param;

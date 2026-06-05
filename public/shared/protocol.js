@@ -23,22 +23,18 @@ var STUN_URL = 'stun:stun.couch-games.com:3478';
 var MSG = {
   // Controller -> Display
   HELLO: 'hello',               // {name?} sent right after join
-  CONTROL: 'control',           // {s: steer[-1,1], b: brake(bool)} — hot path, ~25Hz, fastlane
+  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1]} — hot path, ~25Hz, fastlane
   START_GAME: 'start_game',     // host only
-  PLAY_AGAIN: 'play_again',     // host only
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
-  SET_NAME: 'set_name',         // {name}
-  SET_DISPLAY_MUTE: 'set_display_mute',
-  LEAVE: 'leave',
   PING: 'ping',
 
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, ...} on join
   LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot
-  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, speed, finished}
+  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, scrub}
   PONG: 'pong',
 
   // Display -> all controllers (broadcast)
@@ -48,19 +44,13 @@ var MSG = {
                                 // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay
   GAME_END: 'game_end',         // {results} — sent on return-to-lobby; controllers go back to the lobby
   GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
-  GAME_RESUMED: 'game_resumed', // race resumed — controllers hide the pause overlay
-  DISPLAY_MUTED: 'display_muted',
-  DISPLAY_CLOSED: 'display_closed',
-  ERROR: 'error'
+  GAME_RESUMED: 'game_resumed'  // race resumed — controllers hide the pause overlay
 };
 
 // Message types that ride the low-latency WebRTC fastlane (unreliable, unordered,
 // latest-wins). Only idempotent, latest-state-wins inputs belong here. All other
 // traffic and WS fallback still flow through the relay.
 var FASTLANE_TYPES = { control: true };
-
-// Discrete input actions (reserved; v1 steering/braking is analog via CONTROL).
-var INPUT = {};
 
 // Room states (must match partyplug RoomFlow.STATES; asserted at display boot).
 var ROOM_STATE = {
@@ -146,7 +136,7 @@ function carStats(carIndex) {
 // Export for both Node.js and browser.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    MSG, INPUT, FASTLANE_TYPES, ROOM_STATE,
+    MSG, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL,
     MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
     CAR_STATS, carStats

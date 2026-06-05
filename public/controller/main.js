@@ -3,6 +3,7 @@
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
+import { applyLatencyChip, renderWaitNote } from './ui.js';
 
 const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
@@ -67,24 +68,10 @@ const net = new ControllerNet({
   onRtt: updateLatency
 });
 
-// Latency chip (bottom-right). halfMs is one-way (RTT/2); halfMs < 0 means the
-// PONG is overdue (no signal). viaFastlane lights the bolt when the reading came
-// off the P2P DataChannel rather than the WS relay. Stays hidden until the first
-// reading lands so it never flashes on the pre-join name screen.
+// Latency chip (bottom-right). Stays hidden until the first reading lands so it
+// never flashes on the pre-join name screen. See applyLatencyChip in ui.js.
 const latencyEl = el('latency');
-function updateLatency(halfMs, viaFastlane) {
-  if (!latencyEl) return;
-  latencyEl.classList.remove('hidden', 'latency--good', 'latency--ok', 'latency--bad');
-  latencyEl.classList.toggle('latency--fastlane', !!viaFastlane);
-  const textEl = latencyEl.querySelector('.latency__text');
-  if (halfMs < 0) {
-    textEl.textContent = 'no signal';
-    latencyEl.classList.add('latency--bad');
-  } else {
-    textEl.textContent = halfMs + ' ms';
-    latencyEl.classList.add(halfMs < 50 ? 'latency--good' : halfMs < 100 ? 'latency--ok' : 'latency--bad');
-  }
-}
+function updateLatency(halfMs, viaFastlane) { applyLatencyChip(latencyEl, halfMs, viaFastlane); }
 
 const tilt = new TiltInput({
   surface: el('game'),
@@ -234,12 +221,7 @@ function renderResultFoot(data) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
     const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
-    const nameEl = document.createElement('span');
-    nameEl.className = 'host-name';
-    nameEl.textContent = (host && host.name) || 'the host';
-    if (host) nameEl.style.color = CAR_COLORS[host.colorIndex] || '';
-    wait.textContent = 'Waiting for ';
-    wait.append(nameEl, ' to start a new game…');
+    renderWaitNote(wait, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start a new game…');
   }
 }
 
@@ -264,18 +246,9 @@ function renderLobby() {
   if (!amHost) renderWaitHost(waitEl);
 }
 
-// "Waiting for NAME to start…" — NAME is the host, tinted in their livery
-// colour (matching the in-race name plate). Built from DOM nodes so a
-// player-supplied name is always inserted as text, never markup. Falls back to
-// "the host" until the roster naming the host has arrived.
 function renderWaitHost(waitEl) {
   const host = roster.find((p) => p.peerIndex === hostPeerIndex);
-  const nameEl = document.createElement('span');
-  nameEl.className = 'host-name';
-  nameEl.textContent = (host && host.name) || 'the host';
-  if (host) nameEl.style.color = CAR_COLORS[host.colorIndex] || '';
-  waitEl.textContent = 'Waiting for ';
-  waitEl.append(nameEl, ' to start…');
+  renderWaitNote(waitEl, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start…');
 }
 
 function chooseCar(i) {
@@ -356,9 +329,6 @@ if (_scenario) {
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
   import('./TestHarness.js').then(({ runControllerScenario }) => runControllerScenario({
     scenario: _scenario,
-    color: _int(_params.get('color'), 0),
-    players: _int(_params.get('players'), 4)
+    color: _int(_params.get('color'), 0)
   }));
 }
-
-window.__net = net; window.__tilt = tilt;

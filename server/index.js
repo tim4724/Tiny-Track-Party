@@ -41,14 +41,9 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
-  '.mp3': 'audio/mpeg',
-  '.mp4': 'video/mp4',
-  // 3D assets — glTF binary + companions. Without these, GLBs would fall back to
-  // octet-stream (works) but .gltf/.wasm must be exact for the loader/streaming.
-  '.glb': 'model/gltf-binary',
-  '.gltf': 'model/gltf+json',
-  '.bin': 'application/octet-stream',
-  '.wasm': 'application/wasm'
+  // 3D assets — glTF binary. The Kenney GLBs are self-contained (no .gltf/.bin
+  // companions are served); without this they'd fall back to octet-stream.
+  '.glb': 'model/gltf-binary'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -109,7 +104,6 @@ function cspHeader(nonce, frameAncestors) {
     "font-src 'self'",
     "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com",
     "img-src 'self' data:",
-    "media-src 'self'",
     "object-src 'none'",
     "frame-src 'self'",
     "frame-ancestors " + frameAncestors

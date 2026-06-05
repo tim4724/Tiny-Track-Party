@@ -33,7 +33,6 @@ const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go
 const WALL_SPEED_FRAC = 0.5; // curb speed cap as a fraction of the car's own top speed
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
-const LOOKAHEAD = 8.0;    // world units down the centerline the camera aims at
 
 // ---- Cornering (understeer, not auto-slowdown) ----
 // The "Handling" stat IS the car's turn rate (c.turn). The sim does NOT brake for
@@ -307,9 +306,7 @@ export class Game {
       c.pose = {
         pos: f.pos.clone().addScaledVector(f.lateral, c.lat),
         forward: f.tangent.clone().applyAxisAngle(f.up, c.heading), // car faces its heading
-        tangent: f.tangent,                                          // track direction
-        up: f.up,
-        lookAhead: this.centerline.sampleAt(c.totalS + LOOKAHEAD).pos.clone() // camera aim
+        up: f.up
       };
     }
   }
@@ -324,7 +321,9 @@ export class Game {
     const cars = [];
     for (const c of this.cars.values()) {
       cars.push({
-        id: c.id, pose: c.pose, lat: c.lat, v: c.v, spd: c.v / c.vmax, // normalized 0..1 (per-car top speed)
+        // v (raw speed) + lat (lateral offset) are the engine's physics observables —
+        // the in-game display only needs normalized spd, but the unit tests assert on them.
+        id: c.id, pose: c.pose, lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd normalized 0..1 (per-car top speed)
         lap: Math.min(this.totalLaps, c.lap + (c.totalS >= 0 ? 1 : 0)), // 1-based display lap
         totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually
@@ -344,7 +343,7 @@ export class Game {
       elapsed: this.elapsed,
       results: ranked.map((c, i) => ({
         playerId: c.id, rank: i + 1, finished: c.finished,
-        time: c.finishTime, laps: Math.max(0, c.lap)
+        time: c.finishTime
       }))
     };
   }

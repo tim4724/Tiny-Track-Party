@@ -138,7 +138,7 @@ export function runDisplayScenario(opts, ctx) {
 
     const placeGrid = () => {
       for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
       }
     };
     placeGrid();
@@ -164,7 +164,7 @@ export function runDisplayScenario(opts, ctx) {
       }
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, c.spd, c.onWall, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
       }
       if (live) {
         const now = performance.now();
@@ -190,7 +190,7 @@ export function runDisplayScenario(opts, ctx) {
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.
       for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
       for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, 0, false, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
         scene.setCarHud(c.id, c);
       }
       scene.onFrame = null; // frozen: no per-frame re-pose
