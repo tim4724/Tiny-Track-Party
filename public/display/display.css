@@ -223,7 +223,7 @@ html, body {
   color: var(--ink-3); min-width: 1.2em;
 }
 .res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
-.results__hint { color: var(--ink-2); font-weight: 700; margin-top: 1.4rem; }
+#results-newgame { margin-top: 1.8rem; }
 
 /* ---- Pause ---- */
 /* Pause button — pinned top-right over the scene during the countdown + race.

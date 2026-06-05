@@ -385,6 +385,7 @@ function setPauseOverlay(on) {
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby);
+el('results-newgame').addEventListener('click', returnToLobby);
 
 // ---- join link → clipboard ----
 // Brief confirmation toast; auto-hides. Re-trigger restarts the timer.
