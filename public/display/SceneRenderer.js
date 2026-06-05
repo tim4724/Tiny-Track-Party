@@ -110,12 +110,93 @@ function makeDustTexture() {
   return tex;
 }
 
+// ---------------------------------------------------------------------------
+// Rear NAME PLATE — replaces the old rotating cone marker. A small livery-
+// coloured "license plate" fixed to the back of each car with the player's
+// name. The chase cam looks at the back of every car, so you read the plate of
+// whoever you're chasing; it sits in the tilt-shift focus band, so it stays
+// sharp (unlike a tag hovering above the band). The plate is a flat mesh
+// parented to the car body (so it banks with the steering lean), facing rearward.
+const PLATE_MAX_W = 0.2;     // plate width cap in world units (also clamped to the car's width)
+const PLATE_Y_FRAC = 0.46;   // fallback height up the body's rear face (0 = underside, 1 = roof)
+
+// Per-model plate height (world Y on the rear face), indexed by CAR_MODELS
+// position. null = use the auto-detected flat-panel height; the values below
+// were hand-tuned per model so the plate sits on each car's flat rear surface.
+// Order: racer, speedster, drag-racer, racer-low, vintage-racer, suv, truck, monster-truck.
+const PLATE_Y = [0.157, 0.245, 0.166, 0.156, 0.134, 0.158, 0.247, 0.522];
+
+// Darken a #rrggbb by `amt` (0..1) — used for the plate's inner rim so it reads
+// as a solid plastic chip rather than a flat fill.
+function shade(hex, amt) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.replace(/(.)/g, '$1$1') : h, 16);
+  const r = Math.round(((n >> 16) & 255) * (1 - amt));
+  const g = Math.round(((n >> 8) & 255) * (1 - amt));
+  const b = Math.round((n & 255) * (1 - amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+// Draw the plate to a canvas: a livery-filled rounded rect inside a white rim,
+// with the name in white, auto-shrunk to fit. Returns { tex, aspect }.
+function makePlateTexture(name, colorHex) {
+  const text = (name == null ? '' : String(name)).trim() || '—';
+  const S = 4;                 // supersample → crisp even though the plate is small on screen
+  const W = 232, H = 92;       // logical plate canvas (~2.5 : 1)
+  const cv = document.createElement('canvas');
+  cv.width = W * S; cv.height = H * S;
+  const ctx = cv.getContext('2d');
+  ctx.scale(S, S);
+
+  // white rim, then livery field inset, then a darker inner hairline
+  const pad = 6, r = 16;
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fillStyle = '#ffffff'; ctx.fill();
+  ctx.beginPath(); ctx.roundRect(pad, pad, W - pad * 2, H - pad * 2, r - 4);
+  ctx.fillStyle = colorHex; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = shade(colorHex, 0.28); ctx.stroke();
+
+  // name — white, bold, auto-fit to the field width
+  const maxW = W - pad * 2 - 24;
+  let fontPx = 54;
+  ctx.font = `700 ${fontPx}px Fredoka, Nunito, system-ui, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  if (tw > maxW) {
+    fontPx = Math.max(20, Math.floor(fontPx * maxW / tw));
+    ctx.font = `700 ${fontPx}px Fredoka, Nunito, system-ui, sans-serif`;
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 1;
+  ctx.fillText(text, W / 2, H / 2 + 2);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return { tex, aspect: W / H };
+}
+
+// Build the plate mesh for one car. `anchor` = { z (rear face), y, w (car width) }
+// in the car group's local space, derived from the model's bounding box.
+function makePlate(name, colorHex, anchor) {
+  const pt = makePlateTexture(name, colorHex);
+  const w = Math.min(PLATE_MAX_W, anchor.w * 0.92); // never wider than the car's rear
+  const h = w / pt.aspect;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: pt.tex, transparent: true, depthWrite: false })
+  );
+  // Transform (rear-facing + height) is set by SceneRenderer._positionPlate.
+  return mesh;
+}
+
 export class SceneRenderer {
   constructor(container, colors) {
     this.container = container;
     this.colors = colors || ['#e6492d'];
     this.protos = new Map();
-    this.cars = new Map();      // id -> { group, marker, cam, camPos, camTarget, label, pose }
+    this.cars = new Map();      // id -> { group, plate, cam, camPos, camTarget, label, pose }
+    this._plateAnchors = new Map(); // model name -> { z, y, w } rear-plate placement (per model)
     this._order = [];           // stable cell order
     this._running = false;
     this._last = 0;
@@ -244,7 +325,11 @@ export class SceneRenderer {
 
     // The scene pass writes LINEAR colour (Three forces the working space on
     // offscreen targets), untone-mapped. The composite handles grading + encode.
-    this._rtScene = new THREE.WebGLRenderTarget(W, H, { ...opts, depthBuffer: true });
+    // samples > 0 = MSAA: the renderer's `antialias` flag only covers the default
+    // canvas framebuffer, but the whole scene goes through this offscreen target,
+    // so without this every geometry edge (notably the plate's thin rim) aliases
+    // and crawls as the car tilts. WebGL2 resolves the multisample buffer for us.
+    this._rtScene = new THREE.WebGLRenderTarget(W, H, { ...opts, depthBuffer: true, samples: 4 });
     this._rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
     this._rtBlurA = new THREE.WebGLRenderTarget(bw, bh, { ...opts, depthBuffer: false });
     this._rtBlurB = new THREE.WebGLRenderTarget(bw, bh, { ...opts, depthBuffer: false });
@@ -524,6 +609,81 @@ export class SceneRenderer {
     return result;
   }
 
+  // Rear-plate placement for a model (cached per model): the rear-panel Z, the
+  // height to mount the plate, and the body width — all in the car group's local
+  // space (the group is at identity here, so body world coords = local).
+  //
+  // We auto-find each model's flat rear panel rather than guessing a fixed
+  // height: cast rays forward (+Z) into the BODY at a ladder of heights and read
+  // the rear surface depth at each. The plate wants the REARMOST near-vertical
+  // wall (bumper / tailgate / hatch) — so we take the tallest contiguous run of
+  // heights whose depth sits close to the rearmost hit, and centre the plate on
+  // it. (A plain "flattest run" can latch onto a forward wall like the cabin
+  // back; anchoring to the rearmost depth avoids that.) Wheels are already
+  // reparented off the body, so they can't interfere.
+  _plateAnchor(model, group, body) {
+    if (this._plateAnchors.has(model)) return this._plateAnchors.get(model);
+    group.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(body);
+    const cx = (box.min.x + box.max.x) / 2;
+    const w = box.max.x - box.min.x;
+
+    const N = 48;
+    const dy = (box.max.y - box.min.y) / N;
+    const ray = new THREE.Raycaster();
+    const dir = new THREE.Vector3(0, 0, 1);
+    const startZ = box.min.z - 0.5;
+    const origin = new THREE.Vector3();
+
+    // Some models wind their rear shell so its outward faces would be back-face
+    // culled — the ray would punch through. Force the body double-sided for the
+    // cast so the first hit is always the nearest surface, then restore.
+    const sideSaved = [];
+    body.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        sideSaved.push([m, m.side]); m.side = THREE.DoubleSide;
+      }
+    });
+
+    const hits = [];      // per height: rear-surface z, or null on a miss
+    let zMin = Infinity;
+    for (let i = 0; i < N; i++) {
+      const y = box.min.y + dy * (i + 0.5);
+      ray.set(origin.set(cx, y, startZ), dir);
+      const hit = ray.intersectObject(body, true)[0];
+      const z = hit ? hit.point.z : null;
+      hits.push(z);
+      if (z != null && z < zMin) zMin = z;
+    }
+    for (const [m, side] of sideSaved) m.side = side; // restore
+
+    // Tallest contiguous run of heights sitting within `nearTol` of the rearmost
+    // depth — i.e. the rear wall, tolerating a little rake.
+    const depth = box.max.z - box.min.z;
+    const nearTol = Math.min(0.2, Math.max(0.05, depth * 0.18));
+    let best = null, run = null;
+    for (let i = 0; i < N; i++) {
+      const z = hits[i];
+      const y = box.min.y + dy * (i + 0.5);
+      if (z != null && z <= zMin + nearTol) {
+        if (run) { run.y1 = y; run.zMin = Math.min(run.zMin, z); }
+        else run = { y0: y, y1: y, zMin: z };
+        if (!best || (run.y1 - run.y0) > (best.y1 - best.y0)) best = run;
+      } else { run = null; }
+    }
+
+    // Anchor to the REARMOST depth of the band (not its average): the flat wall
+    // sits at the rearmost depth, while bevels/lips recede — averaging would sink
+    // the plate behind a clean wall (e.g. the box truck) and hide it.
+    const a = best
+      ? { z: best.zMin, y: (best.y0 + best.y1) / 2, w }
+      // fallback if the model resists raycasting: the old fixed-fraction guess
+      : { z: box.min.z, y: box.min.y + (box.max.y - box.min.y) * PLATE_Y_FRAC, w };
+    this._plateAnchors.set(model, a);
+    return a;
+  }
+
   addCar(id, colorIndex, name, opts = {}) {
     // Car model is the player's pick (opts.carIndex), independent of the colour
     // livery; fall back to colorIndex when no pick is supplied (e.g. previews).
@@ -549,13 +709,14 @@ export class SceneRenderer {
     const frontWheels = ['wheel-fl', 'wheel-fr'].map((n) => car.getObjectByName(n)).filter(Boolean);
     const backWheels = ['wheel-bl', 'wheel-br'].map((n) => car.getObjectByName(n)).filter(Boolean);
 
-    const col = new THREE.Color(this.colors[colorIndex % this.colors.length] || '#ffffff');
-    const marker = new THREE.Mesh(
-      new THREE.ConeGeometry(0.22, 0.42, 5),
-      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.4 })
-    );
-    marker.rotation.x = Math.PI; marker.position.y = 1.25;
-    group.add(marker);
+    // livery "license plate" on the car's rear bumper, showing the player name.
+    // Parented to the BODY (not the group) so it banks WITH the steering lean.
+    // _positionPlate (below) sets its body-local transform from the auto-detected
+    // rear panel, applying any per-model height override (PLATE_Y).
+    const colHex = this.colors[colorIndex % this.colors.length] || '#ffffff';
+    const anchor = this._plateAnchor(model, group, body);
+    const plate = makePlate(name, colHex, anchor);
+    body.add(plate);
     this.scene.add(group);
 
     // car-shaped contact shadow: the model's own top-down silhouette. Parented to
@@ -596,22 +757,53 @@ export class SceneRenderer {
       steerFill = steerBar.querySelector('.cell-steer__fill');
     }
 
-    this.cars.set(id, {
-      group, car, body, bodyBaseQuat, frontWheels, backWheels, marker, shadow, cam,
+    const c = {
+      group, car, body, bodyBaseQuat, frontWheels, backWheels, plate, shadow, cam,
+      carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, pose: null, init: false, lean: 0
-    });
+    };
+    this.cars.set(id, c);
+    // Place the plate (applies a per-model PLATE_Y override if one is set).
+    this._positionPlate(c, PLATE_Y[carIndex] != null ? PLATE_Y[carIndex] : anchor.y);
     if (cell && !this._order.includes(id)) this._order.push(id);
+  }
+
+  // Set a car's plate height to `y` (world units on the rear face). The plate is
+  // a child of the BODY, so we convert the desired GROUP-space placement —
+  // (0, y, anchorZ) facing rearward — into the body's local frame using the
+  // body's REST transform (so it's independent of the car's current heading and
+  // lean, and still banks once the body rolls).
+  _positionPlate(c, y) {
+    c.plateY = y;
+    // Desired plate transform in the GROUP's frame: centred, at height y, just
+    // behind the rear face, turned to face rearward.
+    const pg = new THREE.Matrix4().compose(
+      new THREE.Vector3(0, y, c.anchorZ - 0.02),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
+      new THREE.Vector3(1, 1, 1)
+    );
+    // group <- body, at REST. Read it straight off the scene graph (with the
+    // body un-leaned) so it's correct whether `body` is a child node OR the car
+    // itself — the monster truck's wheels aren't named like the others, so its
+    // `body` falls back to the car, and composing car×body would double-apply.
+    const savedQ = c.body.quaternion.clone();
+    c.body.quaternion.copy(c.bodyBaseQuat);
+    c.body.updateWorldMatrix(true, false); // refresh body + ancestors (car, group)
+    const gb = new THREE.Matrix4().copy(c.group.matrixWorld).invert().multiply(c.body.matrixWorld);
+    c.body.quaternion.copy(savedQ);        // restore (the frame loop re-applies lean)
+    // plate local (in the body's frame) = (group<-body)^-1 * desired
+    gb.invert().multiply(pg).decompose(c.plate.position, c.plate.quaternion, c.plate.scale);
   }
 
   removeCar(id) {
     const c = this.cars.get(id);
     if (!c) return;
     this.scene.remove(c.group); // shadow is a child of group, so it goes too
-    // Dispose only what addCar created fresh per car (marker + shadow plane).
+    // Dispose only what addCar created fresh per car (name plate + shadow plane).
     // The car mesh shares its geometry/material with the cached prototype, and
     // the shadow TEXTURE is cached per model — leave both for the next race.
-    c.marker.geometry.dispose(); c.marker.material.dispose();
+    c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     c.shadow.geometry.dispose(); c.shadow.material.dispose();
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
@@ -648,8 +840,8 @@ export class SceneRenderer {
     if (c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
 
     // (the car-shaped shadow is parented to the group, so it follows position,
-    // heading and road tilt automatically — nothing to update here)
-    c.marker.rotation.z += 0.05;
+    // heading and road tilt automatically — nothing to update here. The name
+    // tag is a billboard sprite — it orients itself toward each camera.)
   }
 
   setCarHud(id, info) {
@@ -768,8 +960,8 @@ export class SceneRenderer {
       this._updateChase(c, dt);
       c.cam.aspect = cwDB / chDB; c.cam.updateProjectionMatrix();
 
-      // hide own marker so it doesn't block the chase view
-      c.marker.visible = false;
+      // (the rear plate sits on the bumper, not over the track, so it never
+      // blocks the chase view — no need to hide your own car's plate)
       // render this cell into its sub-rectangle of the target (re-apply via
       // setRenderTarget so the new viewport/scissor take effect)
       rt.viewport.set(xDB, yBottomDB, cwDB, chDB);
@@ -777,7 +969,6 @@ export class SceneRenderer {
       rt.scissorTest = true;
       r.setRenderTarget(rt);
       r.render(this.scene, c.cam);
-      c.marker.visible = true;
 
       // position the DOM label at the cell's top-left (CSS px)
       const x = col * cw;
