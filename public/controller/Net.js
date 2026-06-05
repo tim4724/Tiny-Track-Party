@@ -88,6 +88,16 @@ export class ControllerNet extends GameNet {
     this.party.connect();
   }
 
+  // Tear down the connection for good (no reconnect). The relay tells the
+  // display we've left (peer_left), which drops us from the roster. Used when
+  // the player backs out of the room to the name screen.
+  disconnect() {
+    this._stopPing();
+    if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
+    if (this.party) { this.party.close(); this.party = null; }
+    this.peerIndex = null;
+  }
+
   // Send to the display. FASTLANE_TYPES messages ride the WebRTC DataChannel
   // when it's open; everything else (and fallback) goes over the WS relay.
   send(type, payload) {

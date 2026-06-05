@@ -9,7 +9,21 @@ const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
-function show(name) { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); }
+// Screen "depth": name is the entry point (0); every in-room screen sits one
+// level above it (1). lobby↔game↔results are same-level shuffles. Used to push a
+// browser-history entry only on the forward step into the room, so the back
+// button / phone back gesture pops cleanly back to name entry. See `show`.
+const SCREEN_ORDER = { name: 0, lobby: 1, game: 1, results: 1 };
+let currentScreen = null;
+function show(name) {
+  const prev = currentScreen;
+  currentScreen = name;
+  for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+  // Push history only when stepping UP a level (name → lobby). Same-level and
+  // back transitions don't push, so there's exactly one entry to pop: pressing
+  // back from anywhere in the room returns to the name screen in one step.
+  if ((SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
+}
 
 // haptics — vibrate the phone (ignored where unsupported)
 const buzz = (p) => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (_) {} };
@@ -289,6 +303,30 @@ function stopDriving() {
 
 // --- name screen ---
 el('name-input').value = storedName();
+
+// Back out of the room (back button / phone back gesture) → name entry. Drops
+// the relay connection so the display removes us from the roster, resets the
+// transient in-room UI, and re-fills the name input so the player can edit it
+// and re-join. The history entry pushed by `show` on name → lobby is what the
+// pop lands on; here we just react to it.
+function leaveToName() {
+  net.disconnect();
+  stopDriving();
+  inResults = false;
+  amHost = false;
+  roster = [];
+  setPauseOverlay(false);
+  el('pause-btn').classList.add('hidden');
+  setJoining(false);
+  setStatus('');
+  el('name-input').value = storedName();
+  show('name');
+  el('name-input').focus();
+}
+window.addEventListener('popstate', () => {
+  if (currentScreen && currentScreen !== 'name') leaveToName();
+});
+
 el('name-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const n = el('name-input').value.trim().slice(0, 16) || 'Racer';
