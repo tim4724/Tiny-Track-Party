@@ -5,29 +5,25 @@
 // Reads partyplug + protocol globals set by the classic <script> tags that load
 // before this module (PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS).
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
+import { GameNet } from '../shared/GameNet.js';
 
-const { PartyConnection, RoomFlow, PartyFastlane, MSG, RELAY_URL, STUN_URL, MAX_PLAYERS } = window;
+const { PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS } = window;
 
 const enc = encodeURIComponent;
 
-export class DisplayNet {
+export class DisplayNet extends GameNet {
   constructor(opts = {}) {
+    super();
     this.onRoomReady = opts.onRoomReady || (() => {});
     this.onRosterChange = opts.onRosterChange || (() => {});
     this.onControllerMessage = opts.onControllerMessage || (() => {});
 
     this.flow = new RoomFlow();
-    this.party = null;
     this.roomCode = null;
     this.instance = null;
     this.baseUrlOverride = null;
 
-    this.fastlane = new PartyFastlane({
-      selfIndex: 0,
-      iceServers: [{ urls: STUN_URL }, { urls: 'stun:stun.l.google.com:19302' }],
-      sendSignal: (peerIdx, sig) => { if (this.party) this.party.sendTo(peerIdx, sig); },
-      onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev),
-    });
+    this._initFastlane(0, { onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev) });
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     const announce = () => { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); };
@@ -98,7 +94,7 @@ export class DisplayNet {
 
   _onMessage(from, data) {
     if (!data || from === 0) return;
-    if (this.fastlane.handleSignal(from, data)) return;
+    if (this._isSignal(from, data)) return;
     switch (data.type) {
       case MSG.HELLO: {
         const p = this.flow.get(from);

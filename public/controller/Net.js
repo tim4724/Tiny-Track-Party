@@ -4,9 +4,10 @@
 // is open; all other traffic and fallback go over the WebSocket relay.
 //
 // Reads globals from classic scripts loaded first:
-// PartyConnection, PartyFastlane, MSG, RELAY_URL, STUN_URL, FASTLANE_TYPES.
+// PartyConnection, PartyFastlane, MSG, RELAY_URL, FASTLANE_TYPES.
+import { GameNet } from '../shared/GameNet.js';
 
-const { PartyConnection, PartyFastlane, MSG, RELAY_URL, STUN_URL, FASTLANE_TYPES } = window;
+const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES } = window;
 const enc = encodeURIComponent;
 
 function deriveRoomCode() {
@@ -29,8 +30,9 @@ function loadClientId(roomCode) {
   }
 }
 
-export class ControllerNet {
+export class ControllerNet extends GameNet {
   constructor(opts = {}) {
+    super();
     this.onMessage = opts.onMessage || (() => {});
     this.onJoined = opts.onJoined || (() => {});
     this.onStatus = opts.onStatus || (() => {}); // (state, info)
@@ -38,15 +40,13 @@ export class ControllerNet {
     this.instance = deriveInstance();
     this.clientId = loadClientId(this.roomCode);
     this.peerIndex = null;
-    this.party = null;
     this.playerName = '';
-    this.fastlane = null;
   }
 
   connect(playerName) {
     this.playerName = playerName || this.playerName;
     if (this.party) this.party.close();
-    if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
+    if (this.fastlane) this.fastlane.closeAll();
     const url = RELAY_URL + '/' + enc(this.roomCode) + (this.instance ? '?instance=' + enc(this.instance) : '');
     this.party = new PartyConnection(url, { clientId: this.clientId });
 
@@ -65,7 +65,7 @@ export class ControllerNet {
     };
     this.party.onMessage = (from, data) => {
       if (from !== 0 || !data) return;
-      if (this.fastlane && this.fastlane.handleSignal(from, data)) return;
+      if (this._isSignal(from, data)) return;
       this.onMessage(data);
     };
     this.party.onClose = (attempt, max, meta) => {
@@ -86,11 +86,7 @@ export class ControllerNet {
   }
 
   _openFastlane() {
-    if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
-    this.fastlane = new PartyFastlane({
-      selfIndex: this.peerIndex,
-      iceServers: [{ urls: STUN_URL }, { urls: 'stun:stun.l.google.com:19302' }],
-      sendSignal: (peerIdx, sig) => { if (this.party) this.party.sendTo(peerIdx, sig); },
+    this._initFastlane(this.peerIndex, {
       emitIdleHeartbeat: true,
       onPeerClosed: () => {
         // Display-side fastlane closed (watchdog or display reconnect); retry.
