@@ -63,10 +63,15 @@ input[type=text]:disabled { opacity: 0.6; }
 .carpick {
   /* responsive: ~2 cols in portrait, more across a wide (landscape) viewport */
   display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.75rem;
-  width: 100%; margin-bottom: 1.4rem;
   /* min-height:0 lets the grid shrink below its content in the flex column so it
      scrolls internally (e.g. landscape) instead of pushing Start off-screen. */
   min-height: 0; overflow-y: auto;
+  /* overflow-y:auto makes the box clip overflow-x too, so the selected tile's
+     livery ring (and the soft card shadows) would be sliced off at the grid's
+     edge columns/rows. Pad the scroll box to give them room, then bleed it back
+     out with a matching negative margin so the tiles stay flush with the title
+     and Start button. (No width:100% — the flex column stretches us already.) */
+  padding: 0.6rem; margin: -0.6rem -0.6rem 0.8rem;
 }
 .car-opt {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
