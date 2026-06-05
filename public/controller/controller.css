@@ -14,9 +14,18 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   touch-action: manipulation;
 }
-body { display: flex; min-height: 100vh; }
+/* dvh tracks the *visible* viewport, so bottom content never hides under the
+   mobile browser navbar (100vh = the larger toolbar-retracted height). */
+body { display: flex; min-height: 100vh; min-height: 100dvh; }
 .hidden { display: none !important; }
-section { flex: 1; display: flex; flex-direction: column; padding: 7vh 8vw; }
+/* Pad past the notch/home-indicator (viewport-fit=cover lets content reach the
+   physical edges) on top of the design breathing room. */
+section {
+  flex: 1; display: flex; flex-direction: column;
+  padding:
+    calc(7vh + env(safe-area-inset-top)) calc(8vw + env(safe-area-inset-right))
+    calc(7vh + env(safe-area-inset-bottom)) calc(8vw + env(safe-area-inset-left));
+}
 
 h1 { font-size: 2rem; margin: 0 0 0.2em;
   background: linear-gradient(120deg, var(--accent), var(--car));
@@ -70,3 +79,17 @@ button.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid 
   touch-action: none; transition: background 0.06s, border-color 0.06s, transform 0.06s; }
 #brake-btn.brake.held { background: #e6492d; border-color: #e6492d; color: #0b0f17; transform: scale(0.98); }
 #motion-tip { color: var(--muted); text-align: center; font-size: 0.95rem; }
+
+/* Landscape: less vertical room, so compact the paddings and shrink the big
+   targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
+@media (orientation: landscape) {
+  section {
+    padding:
+      calc(4vh + env(safe-area-inset-top)) calc(6vw + env(safe-area-inset-right))
+      calc(4vh + env(safe-area-inset-bottom)) calc(6vw + env(safe-area-inset-left));
+  }
+  #drive-hud { gap: 0.8rem; }
+  #go { font-size: 4.5rem; }
+  #brake-btn.brake { padding: 1rem; font-size: 1.3rem; }
+  .steer { margin-top: 0.4rem; }
+}

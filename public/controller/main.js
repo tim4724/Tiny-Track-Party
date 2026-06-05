@@ -160,7 +160,6 @@ el('name-form').addEventListener('submit', (e) => {
 });
 
 el('start-btn').addEventListener('click', () => { if (amHost) net.send(MSG.START_GAME); });
-el('recenter-btn').addEventListener('click', () => tilt.recenter());
 
 // BRAKE button — held = brake at the fixed rate, released = release
 const brakeBtn = el('brake-btn');

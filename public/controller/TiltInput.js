@@ -1,35 +1,66 @@
 // TiltInput — phone steering + braking for the Tiny Track Party controller.
 //
-// Steering: DeviceOrientation `gamma` (left/right tilt in portrait), calibrated
-// to a neutral capture, dead-zoned, clamped to ±FULL_LOCK°, normalised to
-// [-1,1], low-pass smoothed. iOS 13+ needs requestPermission() from a user
-// gesture (call enableMotion() in a tap handler). HTTPS is required for sensors.
+// Steering is absolute (no recentering): we read DeviceOrientation, rebuild the
+// gravity vector, and steer by the phone's ROLL — gravity's angle in the x–z
+// plane:  roll = atan2(gx, -gz)  (this equals device `gamma`).
+//
+// Roll is the doodle-jump signal: lean the phone left/right. Critically it's
+// PITCH-INDEPENDENT — the cosβ in gx and gz cancels, so a 25° lean reads 25°
+// whether the phone is flat or tilted back to read it. (asin(gx) does NOT cancel
+// pitch and weakened the lean the more upright you held it — that was a bug.)
+//
+// The steering-wheel twist still works: held upright, a twist swings gravity in
+// the screen plane and the roll runs toward ±90°, so twisting drives the car too
+// (sensitively — it reaches full lock fast, since roll isn't proportional to the
+// twist the way it is to a flat lean). Both gestures, one signal, no mode switch.
+//
+// Roll is screen-orientation corrected, so "left/right from the player's point of
+// view" stays correct in portrait AND landscape.
+//
+// iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
+// tap handler). HTTPS is required for sensors.
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
 // the car all the way down to a standstill.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
-// Space/Down brake. Steer = tilt + keys (so the loop is testable headlessly).
+// Space/Down brake. Steer = roll + keys (so the loop is testable headlessly).
 // Emits {s,b} to onControl at ~25 Hz.
 
 const SEND_HZ = 25;
-const DEFAULT_LOCK = 28;   // degrees of tilt for full lock
-const DEADZONE = 4;        // degrees ignored around neutral
-const SMOOTH = 0.28;       // low-pass factor (higher = snappier)
+const ROLL_LOCK = 30;      // degrees of left/right roll for full lock
+const DEADZONE = 0.06;     // normalized steer ignored around centre
+// Single light low-pass on the steer output: just enough to take the edge off
+// sensor jitter (raw DeviceOrientation twitches ~1-2° even held still) without
+// the lag of a heavier filter. Higher = snappier; set to 1 for fully raw.
+const SMOOTH = 0.5;
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
+
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+
+// Screen rotation the OS has applied (0/90/180/270, or legacy iOS -90..180).
+function screenAngle() {
+  const so = (typeof screen !== 'undefined') && screen.orientation;
+  if (so && typeof so.angle === 'number') return so.angle;
+  if (typeof window !== 'undefined' && typeof window.orientation === 'number') return window.orientation;
+  return 0;
+}
 
 export class TiltInput {
   constructor({ onControl, surface }) {
     this.onControl = onControl || (() => {});
-    this.surface = surface || document.body;
-    this.fullLock = DEFAULT_LOCK;
-    this.neutralGamma = 0;
+    this.surface = surface || (typeof document !== 'undefined' ? document.body : null);
     this.haveTilt = false;
     this.motionState = 'unknown'; // unknown | granted | denied | unsupported
 
-    this._tilt = 0;        // smoothed normalized tilt steer
-    this._rawTilt = 0;
+    // latest gravity unit vector in the device frame (overwritten each event;
+    // the flat seed only stands in until the first reading arrives)
+    this._g = { x: 0, y: 0, z: -1 };
+
+    this._steer = 0;       // smoothed steer output (-1..1)
     this._key = 0;         // keyboard steer (-1/0/1)
     this._keyL = false; this._keyR = false;
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
@@ -60,18 +91,24 @@ export class TiltInput {
   }
 
   _onOrient(e) {
-    if (e.gamma == null) return;
+    if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
-    this._rawTilt = e.gamma;
+
+    // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
+    // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —
+    // which is exactly why steering needs no compass and no recentering.
+    const b = (e.beta || 0) * DEG, g = (e.gamma || 0) * DEG;
+    const cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+    // Store gravity straight from this sample — no smoothing here. The only
+    // low-pass is the one on the steer output (SMOOTH), so there's no startup
+    // ramp and no stacked latency; "level" is wherever gravity actually points.
+    this._g.x = cb * sg;
+    this._g.y = -sb;
+    this._g.z = -cb * cg;
   }
-
-  recenter() { this.neutralGamma = this._rawTilt; }
-
-  setSensitivity(deg) { this.fullLock = Math.max(8, Math.min(60, deg)); }
 
   start() {
     if (this._timer) return;
-    this.recenter();
     const interval = 1000 / SEND_HZ;
     this._timer = setInterval(() => this._tick(), interval);
   }
@@ -80,28 +117,51 @@ export class TiltInput {
     this._brakeBtn = 0;
   }
 
-  // Combined steer = smoothed tilt + keyboard, clamped. Brake = touch | key.
-  _tick() {
-    // tilt → normalized target
-    let target = 0;
-    if (this.haveTilt) {
-      let d = this._rawTilt - this.neutralGamma;
-      if (Math.abs(d) < DEADZONE) d = 0;
-      else d = d - Math.sign(d) * DEADZONE;
-      target = Math.max(-1, Math.min(1, d / (this.fullLock - DEADZONE)));
-    }
-    this._tilt += (target - this._tilt) * SMOOTH;
+  // Rotate the device-frame gravity x/y into the player's frame so "left/right"
+  // is consistent whichever way the phone is held. z is unchanged by a screen
+  // rotation (it spins about the viewing axis).
+  _userGravity() {
+    const a = screenAngle() * DEG;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const { x, y, z } = this._g;
+    return { ux: x * ca + y * sa, uy: -x * sa + y * ca, uz: z };
+  }
 
-    const s = Math.max(-1, Math.min(1, this._tilt + this._key));
+  // Steer = roll = gravity's angle in the x–z plane = atan2(gx, -gz). Equals
+  // device gamma; pitch-independent (cosβ cancels), so the doodle-jump lean is
+  // full-strength at any hold angle. An upright twist runs gz→0, so roll heads
+  // toward ±90° and twisting steers too (just not proportionally).
+  _sensorSteer() {
+    if (!this.haveTilt) return 0;
+    const { ux, uz } = this._userGravity();
+    const rollDeg = Math.atan2(ux, -uz) * RAD;
+    return clamp1(rollDeg / ROLL_LOCK);
+  }
+
+  _tick() {
+    let target = this._sensorSteer();
+    // dead-zone the centre, then re-expand so full lock still reaches ±1
+    if (Math.abs(target) < DEADZONE) target = 0;
+    else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
+    this._steer += (target - this._steer) * SMOOTH;
+
+    const s = clamp1(this._steer + this._key);
     const b = Math.max(this._brakeBtn, this._brakeKey);
     this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3) });
   }
 
   // current state (for UI)
-  get state() { return { steer: Math.max(-1, Math.min(1, this._tilt + this._key)), brake: Math.max(this._brakeBtn, this._brakeKey), tilt: this.haveTilt }; }
+  get state() {
+    return {
+      steer: clamp1(this._steer + this._key),
+      brake: Math.max(this._brakeBtn, this._brakeKey),
+      tilt: this.haveTilt
+    };
+  }
 
   // --- keyboard fallback / testing ---
   _bindKeys() {
+    if (typeof window === 'undefined') return;
     const set = (e, down) => {
       const k = e.key.toLowerCase();
       if (k === 'arrowleft' || k === 'a') { this._keyL = down; e.preventDefault(); }
