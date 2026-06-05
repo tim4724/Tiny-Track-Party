@@ -98,12 +98,18 @@ var CAR_NAMES = [
   'Racer', 'Speedster', 'Drag Racer', 'Low Racer',
   'Vintage', 'SUV', 'Truck', 'Monster'
 ];
+// Extra Y-rotation (radians) per model so they all face travel (+Z) alike. Most
+// Kenney vehicles face -Z (SceneRenderer turns them a half-turn to face +Z); the
+// vintage racer's mesh is modelled facing the opposite way, so it needs an extra
+// half-turn or it drives backwards. Applied in-race (SceneRenderer) and when
+// baking the car thumbnails, so the picker preview matches the racing car.
+var CAR_MODEL_YAW = [0, 0, 0, 0, Math.PI, 0, 0, 0]; // index 4 = vehicle-vintage-racer
 
 // Export for both Node.js and browser.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, INPUT, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, CAR_COLORS, CAR_MODELS, CAR_NAMES
+    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW
   };
 }

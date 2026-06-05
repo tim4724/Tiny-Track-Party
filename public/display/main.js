@@ -5,9 +5,10 @@ import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, OVAL } from './TrackBuilder.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
+import { carThumbNode } from '../shared/carThumbs.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, MAX_PLAYERS } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 const el = (id) => document.getElementById(id);
 const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -93,21 +94,32 @@ function renderRoster(roster, hostPeerIndex) {
   const seats = Math.max(MIN_SEATS, roster.length);
   for (let i = 0; i < seats; i++) {
     const p = roster[i];
-    const chip = document.createElement('div');
-    const dot = document.createElement('span');
-    dot.className = 'chip__dot';
-    const name = document.createElement('span');
+    const seat = document.createElement('div');
     if (p) {
-      chip.className = 'chip' + (p.connected ? '' : ' chip--off');
-      dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
-      name.textContent = p.name + (p.peerIndex === hostPeerIndex ? '  ★' : '');
+      // Show the car this player picked (a real render), ringed + dotted in
+      // their livery. carIndex falls back to colorIndex before they pick.
+      seat.className = 'seat' + (p.connected ? '' : ' seat--off');
+      seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
+      const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
+      const model = CAR_MODELS[carIdx % CAR_MODELS.length];
+      const row = document.createElement('div');
+      row.className = 'seat__name';
+      const dot = document.createElement('span'); dot.className = 'seat__dot';
+      const nm = document.createElement('span'); nm.className = 'seat__label';
+      nm.textContent = p.name + (p.peerIndex === hostPeerIndex ? '  ★' : '');
+      row.appendChild(dot); row.appendChild(nm);
+      // each joined car rotates in spin mode, in lockstep via the shared clock
+      seat.appendChild(carThumbNode(model, { spin: true }));
+      seat.appendChild(row);
     } else {
-      chip.className = 'chip chip--placeholder';
-      name.textContent = 'Open';   // short, so 4 empty seats still fit one row
+      seat.className = 'seat seat--open';
+      const ph = document.createElement('div'); ph.className = 'seat__open';
+      const lab = document.createElement('div'); lab.className = 'seat__name';
+      const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
+      lab.appendChild(nm);
+      seat.appendChild(ph); seat.appendChild(lab);
     }
-    chip.appendChild(dot);
-    chip.appendChild(name);
-    list.appendChild(chip);
+    list.appendChild(seat);
   }
   el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Waiting for players…';
 }

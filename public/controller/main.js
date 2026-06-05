@@ -2,6 +2,7 @@
 // streamed as CONTROL to the display; live lap/position HUD from PLAYER_STATE.
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
+import { carThumbNode } from '../shared/carThumbs.js';
 
 const { MSG, CAR_COLORS, CAR_MODELS, CAR_NAMES } = window;
 const el = (id) => document.getElementById(id);
@@ -133,28 +134,28 @@ function applyLivery() {
 }
 
 // Car picker — the controller's lobby is just "pick your car" (the shared
-// display owns the player roster). Every car model is shown, tinted with the
-// player's auto-assigned livery; car and colour are independent and duplicates
-// are fine, so there's no locking. A tap is optimistic — the next LOBBY_UPDATE
-// echoes back the display's record.
+// display owns the player roster). Every car model is shown as a real pre-baked
+// render (a plain <img>, so the phone needs no WebGL/Three.js — see carThumbs).
+// Car and colour are independent and duplicates are fine, so there's no
+// locking; the player's livery shows as the selection ring, not a body tint. A
+// tap is optimistic — the next LOBBY_UPDATE echoes back the display's record.
+// In spin mode the current pick rotates (one turntable APNG at a time); the
+// rest stay stills.
 const CAR_COUNT = (CAR_MODELS || []).length;
-// Inline toy-car silhouette; .bd is tinted to the livery via the --car var.
-const CAR_SVG =
-  '<svg class="car-opt__svg" viewBox="0 0 64 34" aria-hidden="true">' +
-  '<rect class="bd" x="5" y="14" width="54" height="12" rx="4.5"/>' +
-  '<path class="bd" d="M16 14 L23 6.5 H39 L48 14 Z"/>' +
-  '<rect class="win" x="25" y="8" width="12" height="6" rx="1.5"/>' +
-  '<circle class="wh" cx="20" cy="27" r="5.2"/>' +
-  '<circle class="wh" cx="44" cy="27" r="5.2"/>' +
-  '</svg>';
+const carLabel = (i) => (CAR_NAMES && CAR_NAMES[i]) || ('Car ' + (i + 1));
 function renderLobby() {
   const pick = el('carpick'); pick.innerHTML = '';
   for (let i = 0; i < CAR_COUNT; i++) {
+    const mine = i === myCarIndex;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'car-opt' + (i === myCarIndex ? ' car-opt--mine' : '');
-    if (i === myCarIndex) btn.setAttribute('aria-current', 'true');
-    btn.innerHTML = CAR_SVG + `<span class="car-opt__name">${(CAR_NAMES && CAR_NAMES[i]) || ('Car ' + (i + 1))}</span>`;
+    btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
+    if (mine) btn.setAttribute('aria-current', 'true');
+    const name = document.createElement('span');
+    name.className = 'car-opt__name';
+    name.textContent = carLabel(i);
+    btn.appendChild(carThumbNode(CAR_MODELS[i], { spin: mine })); // mine spins (others still)
+    btn.appendChild(name);
     btn.addEventListener('click', () => chooseCar(i));
     pick.appendChild(btn);
   }

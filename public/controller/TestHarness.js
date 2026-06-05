@@ -4,6 +4,7 @@
 // livery and lay out the requested screen from fake data.
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
+import { carThumbNode } from '../shared/carThumbs.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const el = (id) => document.getElementById(id);
@@ -24,26 +25,25 @@ export function runControllerScenario(opts) {
 
   window.__TEST__ = window.__TEST__ || {};
 
-  // Car picker (mirrors main.js): every model, tinted to the player's livery,
-  // with `selected` highlighted. Car is independent of colour, so no roster.
+  // Car picker (mirrors main.js): every model as a real pre-baked render, with
+  // `selected` highlighted. Car is independent of colour, so no roster; the
+  // livery shows as the selection ring. Spin mode (?carview=spin) rotates the
+  // selected car.
   const MODELS = window.CAR_MODELS || [];
   const NAMES = window.CAR_NAMES || [];
-  const CAR_SVG =
-    '<svg class="car-opt__svg" viewBox="0 0 64 34" aria-hidden="true">' +
-    '<rect class="bd" x="5" y="14" width="54" height="12" rx="4.5"/>' +
-    '<path class="bd" d="M16 14 L23 6.5 H39 L48 14 Z"/>' +
-    '<rect class="win" x="25" y="8" width="12" height="6" rx="1.5"/>' +
-    '<circle class="wh" cx="20" cy="27" r="5.2"/>' +
-    '<circle class="wh" cx="44" cy="27" r="5.2"/>' +
-    '</svg>';
   function renderCarPicker(selected) {
     const pick = el('carpick'); if (!pick) return; pick.innerHTML = '';
     const count = MODELS.length || 4;
     for (let i = 0; i < count; i++) {
+      const mine = i === selected;
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'car-opt' + (i === selected ? ' car-opt--mine' : '');
-      btn.innerHTML = CAR_SVG + `<span class="car-opt__name">${NAMES[i] || ('Car ' + (i + 1))}</span>`;
+      btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
+      const name = document.createElement('span');
+      name.className = 'car-opt__name';
+      name.textContent = NAMES[i] || ('Car ' + (i + 1));
+      btn.appendChild(carThumbNode(MODELS[i], { spin: mine }));
+      btn.appendChild(name);
       pick.appendChild(btn);
     }
   }

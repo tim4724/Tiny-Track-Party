@@ -10,6 +10,7 @@
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl } from './Net.js';
+import { carThumbNode } from '../shared/carThumbs.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -51,27 +52,36 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   // Mirror display/main.js: always lay out >= 4 seats; empties are placeholders.
+  // Each filled seat shows the car that player picked (a real render); for the
+  // preview we vary the car per slot so the lobby shows a mix of models.
   const MIN_SEATS = 4;
+  const MODELS = window.CAR_MODELS || [];
   function renderRoster(slots, hostPeerIndex) {
     const list = el('players'); list.innerHTML = '';
     const seats = Math.max(MIN_SEATS, slots.length);
     for (let i = 0; i < seats; i++) {
       const s = slots[i];
-      const chip = document.createElement('div');
-      const dot = document.createElement('span');
-      dot.className = 'chip__dot';
-      const name = document.createElement('span');
+      const seat = document.createElement('div');
       if (s != null) {
-        chip.className = 'chip';
-        dot.style.background = COLORS[s % COLORS.length] || '#888';
-        name.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
+        seat.className = 'seat';
+        seat.style.setProperty('--c', COLORS[s % COLORS.length] || '#888');
+        const row = document.createElement('div');
+        row.className = 'seat__name';
+        const dot = document.createElement('span'); dot.className = 'seat__dot';
+        const nm = document.createElement('span'); nm.className = 'seat__label';
+        nm.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
+        row.appendChild(dot); row.appendChild(nm);
+        seat.appendChild(carThumbNode(MODELS[s % MODELS.length], { spin: true }));
+        seat.appendChild(row);
       } else {
-        chip.className = 'chip chip--placeholder';
-        name.textContent = 'Open';
+        seat.className = 'seat seat--open';
+        const ph = document.createElement('div'); ph.className = 'seat__open';
+        const lab = document.createElement('div'); lab.className = 'seat__name';
+        const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
+        lab.appendChild(nm);
+        seat.appendChild(ph); seat.appendChild(lab);
       }
-      chip.appendChild(dot);
-      chip.appendChild(name);
-      list.appendChild(chip);
+      list.appendChild(seat);
     }
     el('count').textContent = slots.length
       ? `${slots.length} racer${slots.length > 1 ? 's' : ''} ready`

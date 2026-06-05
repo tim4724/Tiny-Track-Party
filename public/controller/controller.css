@@ -76,10 +76,8 @@ input[type=text]:disabled { opacity: 0.6; }
   transition: transform 0.08s, box-shadow 0.08s, border-color 0.08s;
 }
 .car-opt:active { transform: translateY(2px); }
-.car-opt__svg { width: 76%; height: auto; display: block; }
-.car-opt__svg .bd { fill: var(--car); }
-.car-opt__svg .win { fill: rgba(255, 255, 255, 0.55); }
-.car-opt__svg .wh { fill: #2a2f3a; }
+/* The car render itself is the shared .carthumb component (see theme.css) — a
+   square box (still + synchronized spin overlay) that fills the tile width. */
 .car-opt__name { font-size: 0.95rem; }
 /* selected: ring in the livery colour + a check badge */
 .car-opt--mine { border-color: var(--car); box-shadow: 0 0 0 4px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }

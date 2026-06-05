@@ -11,6 +11,7 @@ const ASSET = (name) => `/assets/toycar/${name}.glb`;
 // Shared with the controller's car picker + protocol (one source of truth).
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
+const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
 const TRACK_GLBS = [
   'track-road-wide-straight', 'track-road-wide-corner-small', 'track-road-wide-corner-large', 'track-road-wide-curve'
 ];
@@ -531,7 +532,10 @@ export class SceneRenderer {
     const proto = this.protos.get(model) || this.protos.get(CAR_MODELS[0]);
     const group = new THREE.Group();
     const car = proto.clone(true);
-    car.rotation.y = Math.PI; // Kenney vehicles face -Z; turn to face travel (+Z)
+    // Kenney vehicles face -Z; turn to face travel (+Z). Some meshes (e.g. the
+    // vintage racer) are modelled facing the other way, so add their per-model
+    // yaw fix or they'd drive backwards.
+    car.rotation.y = Math.PI + (CAR_MODEL_YAW[carIndex % CAR_MODELS.length] || 0);
     group.add(car);
 
     // In the GLB the 4 wheels are children of the body node, so rolling the body

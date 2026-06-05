@@ -82,29 +82,44 @@ html, body {
    out of width. Empty seats render as placeholders (see renderRoster), so the
    card keeps the same footprint from 0 players to full instead of reflowing as
    people join. */
+/* Always FOUR seats in one row (room is capped at 4 players), each an equal
+   fraction of the card, so slots — and the card — scale fluidly with the
+   viewport instead of wrapping. Empty seats stay dashed placeholders so the
+   card keeps its footprint from 0 players to full as people join. */
 #players {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(0.5rem, 0.8vw, 1rem);
 }
-.chip { font-size: clamp(0.95rem, 1.2vw, 1.1rem); }
-.chip--placeholder {
-  background: transparent;
-  border-style: dashed;
-  border-color: #d4deea;
-  color: var(--ink-3);
+.seat {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  min-width: 0; padding: 0.7rem 0.6rem 0.65rem;
+  background: var(--surface);
+  border: 3px solid var(--c, var(--hairline));
+  border-radius: var(--r);
+  box-shadow: var(--shadow-pop);
+}
+/* empty-seat placeholder — a square dashed box matching the .carthumb footprint */
+.seat__open {
+  width: 100%; aspect-ratio: 1 / 1; border-radius: var(--r-sm);
+  background: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.04) 0 7px, transparent 7px 14px);
+}
+.seat__name {
+  display: flex; align-items: center; gap: 0.45rem; max-width: 100%;
+  font-weight: 800; font-size: clamp(0.95rem, 1.15vw, 1.2rem); color: var(--ink);
+}
+.seat__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat__dot {
+  width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none;
+  background: var(--c, #888); box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
+}
+.seat--off { opacity: 0.5; }
+.seat--open {
+  background: transparent; border-style: dashed; border-color: #d4deea;
   box-shadow: none;
-  /* wider than a name chip so empty seats read clearly as "room for more" */
-  min-width: 7.5rem;
-  justify-content: center;
 }
-.chip__dot {
-  width: 0.85rem; height: 0.85rem; border-radius: 50%;
-  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18); flex: none;
-}
-.chip--placeholder .chip__dot {
-  background: transparent; border: 2px dashed #cdd6e0; box-shadow: none;
-}
+.seat--open .seat__name { color: var(--ink-3); }
+.seat--open .seat__dot { display: none; }
 
 /* QR — the card itself is vertically centered to match the welcome card; the
    "Scan to join" caption is absolutely placed below it so it doesn't shift the

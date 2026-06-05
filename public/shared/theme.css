@@ -193,6 +193,22 @@ body {
   flex: none;
 }
 
+/* Car thumbnail (see /shared/carThumbs.js) — a square box showing a pre-baked
+   render. The container sizes it (width:100%); aspect-ratio reserves the box
+   before images load so nothing below jumps. In spin mode an overlay sprites
+   the turntable strip, stepped by a shared clock (so all cars stay in sync). */
+.carthumb { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+.carthumb__still {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block; transition: opacity 0.2s ease;
+}
+.carthumb__spin {
+  position: absolute; inset: 0;
+  background-repeat: no-repeat;
+  background-size: 2400% 100%;   /* SPIN_FRAMES (24) * 100% — keep in sync with carThumbs.js */
+  background-position: 0 0;
+}
+
 /* 5. Diorama / scene -----------------------------------------------------
    Drop a <div class="scene"> with these children behind any screen for the
    sunny backdrop (sky + sun + clouds + grass). Decorative only — it never
