@@ -60,7 +60,7 @@ let myName = '';           // this player's name, shown at the top of the lobby
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
-let trackCatalog = [];     // [{id,name,features,svg}] from the display (WELCOME)
+let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
 let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 
@@ -142,23 +142,15 @@ function handleMessage(data) {
     case MSG.COUNTDOWN:
       inResults = false;               // a fresh race clears any leftover results overlay
       show('game');
-      el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
-      if (data.n >= 0) {
-        el('go').classList.remove('hidden');
-        el('go').textContent = data.n > 0 ? data.n : 'GO!';
-        el('go').classList.toggle('is-go', data.n === 0); // fade out on GO!
-        buzz(data.n > 0 ? 20 : [0, 90]); // tick on counts, stronger on GO
-      } else {
-        el('go').classList.add('hidden'); // GO! banner gone the beat after the start
-        el('go').classList.remove('is-go');
-      }
+      el('drive-hud').classList.remove('hidden'); // full HUD up front — the countdown lives on the display
+      if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]); // haptic tick on counts, stronger on GO
       setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
       el('pause-btn').classList.remove('hidden');
       startDriving();                  // stream tilt during the countdown (display reacts)
       break;
     case MSG.GAME_START:
-      // Fires on the "GO!" beat; leave the GO! banner up (the n<0 COUNTDOWN
-      // tick hides it) so it doesn't flash away the instant the race starts.
+      // Fires on the "GO!" beat. The HUD is already up from COUNTDOWN; this just
+      // covers a player who joined too late to get the countdown messages.
       show('game');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');

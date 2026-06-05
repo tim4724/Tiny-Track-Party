@@ -160,20 +160,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .trackpick__note { color: var(--ink-3); font-weight: 700; font-size: 0.85rem; text-align: center; margin-top: 0.55rem; }
 
 /* ---- game / driving HUD ---- */
+/* No countdown here — the full HUD shows immediately so players can pre-steer
+   while the display counts down 3..2..1..GO. */
 #game { align-items: stretch; justify-content: flex-start; user-select: none; }
-/* GO countdown overlays the HUD so players can pre-steer while it counts down */
-#go {
-  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 7rem; color: var(--brand);
-  background: rgba(233, 248, 255, 0.5); backdrop-filter: blur(2px); pointer-events: none;
-}
-/* "GO!" fades out over the beat after the start (the race is already live) so
-   the drive HUD is revealed smoothly. Toggled by the COUNTDOWN n=0 beat. */
-#go.is-go { animation: go-fade 1s ease-out forwards; }
-@keyframes go-fade {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(1.25); }
-}
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
 .hud-top { display: flex; justify-content: space-between; align-items: center; }
 #lap { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--ink); }
@@ -239,8 +228,8 @@ input[type=text]:disabled { opacity: 0.6; }
 .latency--bad  { color: var(--ping-bad); }
 
 /* ---- pause ---- */
-/* Pause button — top-right of the game screen, above the GO countdown so it's
-   reachable from the lights-out, below the pause overlay + latency chip.
+/* Pause button — top-right of the game screen, reachable from the first beat,
+   below the pause overlay + latency chip.
    .icon-btn (theme.css) supplies the toy-button look. */
 #pause-btn {
   position: fixed; z-index: 8;
@@ -310,7 +299,6 @@ input[type=text]:disabled { opacity: 0.6; }
       calc(4vh + env(safe-area-inset-bottom)) calc(6vw + env(safe-area-inset-left));
   }
   #drive-hud { gap: 0.8rem; }
-  #go { font-size: 4.5rem; }
   #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
   .steer { margin-top: 0.4rem; }
 }

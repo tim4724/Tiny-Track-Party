@@ -5,9 +5,26 @@
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
 import { buildCarPicker } from '../shared/carPicker.js';
+import { buildTrackPicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote } from './ui.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
+
+// Illustrative track catalog for the gallery preview. The real schematics are
+// computed on the display from track geometry (see display/trackSchematic.js) and
+// shipped in WELCOME; the controller has no geometry, so here we hand-author a
+// couple of representative map paths just so the picker renders.
+const FAKE_TRACKS = [
+  { id: 'oval', name: 'Sunny Oval', svg: {
+    viewBox: '0 0 100 100',
+    d: 'M30 20 H70 Q80 20 80 30 V70 Q80 80 70 80 H30 Q20 80 20 70 V30 Q20 20 30 20 Z',
+    start: { x: 50, y: 20 } } },
+  { id: 'grand', name: 'Grand Tour', svg: {
+    viewBox: '0 0 100 100',
+    d: 'M50 18 C72 18 82 33 82 50 C82 67 72 82 50 82 C28 82 18 67 18 50 C18 33 28 18 50 18 Z',
+    start: { x: 50, y: 18 } } }
+];
+
 const el = (id) => document.getElementById(id);
 
 // runControllerScenario({ scenario, color })
@@ -33,6 +50,21 @@ export function runControllerScenario(opts) {
       heroEl: el('car-hero'), stripEl: el('carpick'),
       selected, onPick: (i) => renderCarPicker(i)
     });
+  }
+
+  // Track picker — mirrors main.js renderTrackPicker. Host taps re-render so the
+  // gallery shows the ring + Start gating update live; non-host is read-only.
+  function renderTrackPicker(selected, canPick) {
+    el('trackpick').classList.remove('hidden');
+    buildTrackPicker({
+      stripEl: el('track-strip'), catalog: FAKE_TRACKS, selected, canPick,
+      onPick: canPick ? (id) => renderTrackPicker(id, canPick) : null
+    });
+    if (canPick) el('start-btn').disabled = !selected; // greyed until a track is picked
+    const note = el('track-note');
+    if (!canPick) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
+    else if (!selected) { note.textContent = 'Pick a track to start'; note.classList.remove('hidden'); }
+    else note.classList.add('hidden');
   }
 
   // Latency chip preview — no relay here, so feed it a static reading.
@@ -69,6 +101,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color); // default pick mirrors the livery slot
+      renderTrackPicker(null, true); // host can pick; nothing chosen yet (Start greyed)
       el('start-btn').classList.remove('hidden');
       el('wait-host').classList.add('hidden');
       break;
@@ -77,6 +110,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
+      renderTrackPicker('grand', false); // read-only; reflects the host's pick
       el('start-btn').classList.add('hidden');
       const waitEl = el('wait-host');
       waitEl.classList.remove('hidden');
@@ -87,35 +121,17 @@ export function runControllerScenario(opts) {
       break;
     }
 
-    case 'countdown': {
+    case 'countdown':
+      // No countdown on the controller — the full HUD is up from the first beat
+      // (the 3..2..1..GO lives on the display). Same as 'playing' but pre-fastlane.
       showDriveHud();
-      el('go').classList.remove('hidden');
-      el('go').textContent = '3';
       setSteer(0);
       setHud(1, 3, 1, false);
       setLatency(24, false);   // pre-fastlane: WS reading, no bolt
-      // `timers` lives in the case scope so a re-play cancels the previous
-      // sequence instead of racing it.
-      const go = el('go');
-      const seq = ['3', '2', '1', 'GO!'];
-      let timers = [];
-      window.__TEST__.replay = function() {
-        timers.forEach(clearTimeout); timers = [];
-        let i = 0;
-        (function tick() {
-          go.textContent = seq[i];
-          go.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
-          i++;
-          if (i < seq.length) timers.push(setTimeout(tick, 800));
-          else timers.push(setTimeout(() => { go.classList.remove('is-go'); go.textContent = '3'; }, 1200));
-        })();
-      };
       break;
-    }
 
     case 'playing':
       showDriveHud();
-      el('go').classList.add('hidden');
       setSteer(0.4); // mid-right tilt, so the steer bar reads off-center
       setHud(2, 3, 2, false);
       setLatency(16, true);    // fastlane up: low RTT + bolt
@@ -123,7 +139,6 @@ export function runControllerScenario(opts) {
 
     case 'finished':
       showDriveHud();
-      el('go').classList.add('hidden');
       setSteer(0);
       setHud(3, 3, 1, true);
       setLatency(19, true);
@@ -131,7 +146,6 @@ export function runControllerScenario(opts) {
 
     case 'paused':
       showDriveHud();
-      el('go').classList.add('hidden');
       setSteer(0.2);
       setHud(2, 3, 2, false);
       setLatency(18, true);
