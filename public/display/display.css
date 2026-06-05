@@ -125,6 +125,12 @@ html, body {
 #race { position: fixed; inset: 0; }
 #scene { position: fixed; inset: 0; }
 #scene canvas { display: block; }
+/* Diorama vignette: gently darken the frame edges so the eye locks to the centre,
+   reinforcing the miniature/tilt-shift focus. Cosmetic only — never catches clicks. */
+#scene::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 120% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.28) 100%);
+}
 
 #countdown {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
