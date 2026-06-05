@@ -150,6 +150,17 @@ export function runControllerScenario(opts) {
       setLatency(19, true);
       break;
 
+    case 'paused':
+      showDriveHud();
+      el('go').classList.add('hidden');
+      setSteer(0.2);
+      setHud(2, 3, 2, false);
+      setLatency(18, true);
+      el('pause-btn').classList.remove('hidden');
+      el('pause-btn').disabled = true;     // overlay covers it while paused
+      el('pause-overlay').classList.remove('hidden');
+      break;
+
     default:
       console.warn('[ControllerTestHarness] unknown scenario:', scenario);
   }

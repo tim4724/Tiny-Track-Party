@@ -28,6 +28,7 @@ const scenePromise = scene.load(trackGlbs).then(() => { scene.setTrack(track); s
 
 // ---- race state ----
 let session = null;
+let paused = false;        // race frozen via the pause overlay (display or a controller)
 let lastPlayerState = 0;
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
@@ -36,7 +37,7 @@ let aiBots = new Map();
 let currentField = [];
 
 scene.onFrame = (dt) => {
-  if (!session) return;
+  if (!session || paused) return; // paused: cars hold their last (frozen) pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
@@ -75,6 +76,10 @@ const net = new DisplayNet({
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && net.flow.connectedCount > 0) startRace();
+    // Pause / resume / new game can come from any player's controller.
+    else if (data.type === MSG.PAUSE_GAME) pauseRace();
+    else if (data.type === MSG.RESUME_GAME) resumeRace();
+    else if (data.type === MSG.RETURN_TO_LOBBY) returnToLobby();
   }
 });
 
@@ -173,6 +178,9 @@ function startRace() {
   net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
   show('race');
   el('results').classList.add('hidden');
+  paused = false;
+  setPauseOverlay(false);
+  el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
 
   // (re)build scene cars. AI cars get no split-screen cell (cell:false) — they're
   // opponents in the shared world, not players watching the screen.
@@ -210,6 +218,9 @@ function onRaceEvent(_e) {
 let endTimer = null;
 function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
+  paused = false;                              // results aren't pausable
+  setPauseOverlay(false);
+  el('pause-btn').classList.add('hidden');
   net.broadcast({ type: MSG.GAME_END, results: results.results });
   showResults(results);
   clearTimeout(endTimer);
@@ -229,13 +240,57 @@ function showResults(results) {
 }
 
 function returnToLobby() {
+  if (net.roomState === ROOM_STATE.LOBBY) return;
+  clearTimeout(endTimer);
   net.flow.transitionTo(ROOM_STATE.LOBBY);
+  paused = false;
+  setPauseOverlay(false);
+  el('pause-btn').classList.add('hidden');
   for (const c of scene.cars.keys()) scene.removeCar(c);
   if (session) { session.dispose(); session = null; }
   aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
   show('lobby');
 }
+
+// ---- pause ----
+// Any player's controller (or the on-screen pause button) can freeze the race;
+// the display is authoritative, so it owns `paused` and tells the controllers.
+// "New game" routes through returnToLobby (a full reset), so it isn't handled here.
+function pauseRace() {
+  if (paused || !session) return;
+  if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
+  paused = true;
+  session.pause();
+  freezeCars();                          // zero each car's speed so dust stops kicking up
+  net.broadcast({ type: MSG.GAME_PAUSED });
+  setPauseOverlay(true);
+}
+
+function resumeRace() {
+  if (!paused || !session) return;
+  paused = false;
+  session.resume();
+  net.broadcast({ type: MSG.GAME_RESUMED });
+  setPauseOverlay(false);
+}
+
+// Re-pose every car at rest (spd 0, no scrub) so the renderer stops emitting
+// wheel dust while the field is frozen behind the overlay.
+function freezeCars() {
+  if (!session) return;
+  for (const c of session.getSnapshot().cars) {
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, 0, 0, false, 0);
+  }
+}
+
+function setPauseOverlay(on) {
+  el('pause-overlay').classList.toggle('hidden', !on);
+}
+
+el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
+el('pause-continue').addEventListener('click', resumeRace);
+el('pause-newgame').addEventListener('click', returnToLobby);
 
 // Gallery / test mode: ?test=1 (or any ?scenario=…) skips the relay and lets
 // the TestHarness drive a single screen from fake data. Normal play connects.

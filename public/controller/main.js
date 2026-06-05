@@ -131,6 +131,8 @@ function handleMessage(data) {
       el('drive-hud').classList.remove('hidden'); // show controls so players can pre-steer
       el('go').classList.remove('hidden');
       el('go').textContent = data.n > 0 ? data.n : 'GO!';
+      setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
+      el('pause-btn').classList.remove('hidden');
       startDriving();                  // stream tilt during the countdown (display reacts)
       buzz(data.n > 0 ? 20 : [0, 90]); // tick on counts, stronger on GO
       break;
@@ -138,6 +140,7 @@ function handleMessage(data) {
       show('game');
       el('go').classList.add('hidden');
       el('drive-hud').classList.remove('hidden');
+      el('pause-btn').classList.remove('hidden');
       startDriving();
       break;
     case MSG.PLAYER_STATE:
@@ -147,8 +150,17 @@ function handleMessage(data) {
       if (data.finished) el('pos').textContent = `Finished P${data.position}`;
       data.scrub ? startScrub() : stopScrub(); // continuous soft curb rumble
       break;
+    case MSG.GAME_PAUSED:
+      stopScrub();                     // never leave the curb rumble buzzing while frozen
+      setPauseOverlay(true);
+      break;
+    case MSG.GAME_RESUMED:
+      setPauseOverlay(false);
+      break;
     case MSG.GAME_END:
       stopDriving();
+      setPauseOverlay(false);
+      el('pause-btn').classList.add('hidden');
       show('lobby');
       break;
   }
@@ -248,6 +260,18 @@ el('name-form').addEventListener('submit', (e) => {
 });
 
 el('start-btn').addEventListener('click', () => { if (amHost) net.send(MSG.START_GAME); });
+
+// --- pause ---
+// The display is authoritative over the paused state; the controller just
+// requests a change and reacts to the GAME_PAUSED / GAME_RESUMED broadcast.
+// While paused the overlay covers the screen, so the pause button is disabled.
+function setPauseOverlay(on) {
+  el('pause-overlay').classList.toggle('hidden', !on);
+  el('pause-btn').disabled = on;
+}
+el('pause-btn').addEventListener('click', () => { buzz(15); net.send(MSG.PAUSE_GAME); });
+el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RESUME_GAME); });
+el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
 
 // BRAKE button — held = brake at the fixed rate, released = release
 const brakeBtn = el('brake-btn');

@@ -12,6 +12,7 @@ var DISPLAY_CARDS = [
   { key: 'lobby',     title: 'Lobby',     hostVariant: true },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
+  { key: 'paused',    title: 'Paused' },
   { key: 'results',   title: 'Results' }
 ];
 

@@ -69,7 +69,18 @@
   <!-- Race: Three.js scene + live standings + countdown/results overlays -->
   <section id="race" class="hidden">
     <div id="scene"></div>
+    <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
     <div id="countdown"></div>
+    <!-- Pause overlay — frosted glass over the frozen race -->
+    <div id="pause-overlay" class="hidden">
+      <div class="pause-card card">
+        <h2>Paused</h2>
+        <div class="pause-card__btns">
+          <button id="pause-continue" class="btn btn--brand">Continue</button>
+          <button id="pause-newgame" class="btn btn--ghost">New game</button>
+        </div>
+      </div>
+    </div>
     <div id="results" class="hidden">
       <h2>🏁 Results</h2>
       <ol id="results-list"></ol>

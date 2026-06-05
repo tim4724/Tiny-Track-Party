@@ -17,32 +17,74 @@ export class RaceSession {
     this._onRaceEnd       = opts.onRaceEnd       || (() => {});
 
     this._countdownTimer = null;
+    this._countdownN     = null;   // seconds left on the countdown (for pause/resume)
     this._raceTimer      = null;
+    this._raceDeadline   = 0;      // wall-clock ms when MAX_RACE_MS fires (for pause/resume)
+    this._raceRemainMs   = null;   // remaining MAX_RACE_MS budget while paused
     this._ended          = false;
+    this.paused          = false;
   }
 
   // Begin the countdown. Fires onCountdownTick(n) for n = seconds..0 at 1 Hz,
-  // then onRaceStart() and begins physics (racing = true).
+  // then onRaceStart() and begins physics (racing = true). Seconds defaults to
+  // the remembered count so resume() can re-arm the interval where it left off.
   startCountdown(seconds) {
-    let n = seconds;
-    this._onCountdownTick(n);
+    this._countdownN = seconds;
+    this._onCountdownTick(this._countdownN);
     this._countdownTimer = setInterval(() => {
-      n -= 1;
-      if (n >= 0) {
-        this._onCountdownTick(n);
+      this._countdownN -= 1;
+      if (this._countdownN >= 0) {
+        this._onCountdownTick(this._countdownN);
       } else {
         clearInterval(this._countdownTimer);
         this._countdownTimer = null;
+        this._countdownN = null;
         this.racing = true;
         this._onRaceStart();
-        this._raceTimer = setTimeout(() => { if (this.racing) this._finish(); }, MAX_RACE_MS);
+        this._armRaceTimer(MAX_RACE_MS);
       }
     }, 1000);
   }
 
+  // Arm the race-timeout failsafe, recording the deadline so a pause can bank the
+  // remaining budget and resume() can re-arm it (so a long pause never finishes
+  // the race early).
+  _armRaceTimer(ms) {
+    this._raceDeadline = performance.now() + ms;
+    this._raceTimer = setTimeout(() => {
+      this._raceTimer = null;
+      if (this.racing) this._finish();
+    }, ms);
+  }
+
+  // Freeze the race: stop the countdown / race-timeout timers and bank their
+  // remaining time. Physics simply stop advancing (the caller stops calling
+  // update()), so engine.elapsed — and thus finish times — don't tick while paused.
+  pause() {
+    if (this.paused || this._ended) return;
+    this.paused = true;
+    if (this._countdownTimer) { clearInterval(this._countdownTimer); this._countdownTimer = null; }
+    if (this._raceTimer) {
+      clearTimeout(this._raceTimer); this._raceTimer = null;
+      this._raceRemainMs = Math.max(0, this._raceDeadline - performance.now());
+    }
+  }
+
+  // Unfreeze: re-arm whichever timer was running when we paused.
+  resume() {
+    if (!this.paused || this._ended) return;
+    this.paused = false;
+    if (!this.racing && this._countdownN != null) {
+      this.startCountdown(this._countdownN);     // pick the countdown back up
+    } else if (this.racing && this._raceRemainMs != null) {
+      this._armRaceTimer(this._raceRemainMs);
+      this._raceRemainMs = null;
+    }
+  }
+
   // Call from the render loop. Advances physics and fires onRaceEnd when done.
   update(dtMs) {
-    if (!this.racing) return;
+    if (!this.racing || this.paused) return;
     this.engine.update(dtMs);
     if (this.engine.raceOver) this._finish();
   }
@@ -66,6 +108,7 @@ export class RaceSession {
     if (this._raceTimer)      { clearTimeout(this._raceTimer);       this._raceTimer = null; }
     this._ended = true;
     this.racing = false;
+    this.paused = false;
   }
 
   _finish() {

@@ -37,6 +37,7 @@
   <!-- Game: tilt to steer, hold BRAKE to slow -->
   <section id="game" class="hidden">
     <div id="go" class="hidden"></div>
+    <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
     <div id="drive-hud" class="hidden">
       <div class="hud-top">
         <div id="lap">Lap 1/3</div>
@@ -48,6 +49,12 @@
       </div>
       <button id="brake-btn" class="brake">BRAKE</button>
       <div id="motion-tip" class="hidden">No tilt? Use ◄ ► keys to steer.</div>
+    </div>
+    <!-- Pause overlay — frosted glass with the same choices as the big screen -->
+    <div id="pause-overlay" class="hidden">
+      <h2>Paused</h2>
+      <button id="pause-continue" class="btn btn--brand">Continue</button>
+      <button id="pause-newgame" class="btn btn--ghost">New game</button>
     </div>
   </section>
 

@@ -167,6 +167,34 @@ input[type=text]:disabled { opacity: 0.6; }
 .latency--ok   { color: var(--ping-ok); }
 .latency--bad  { color: var(--ping-bad); }
 
+/* ---- pause ---- */
+/* Pause button — top-right of the game screen, above the GO countdown so it's
+   reachable from the lights-out, below the pause overlay + latency chip.
+   .icon-btn (theme.css) supplies the toy-button look. */
+#pause-btn {
+  position: fixed; z-index: 8;
+  top: calc(0.6rem + env(safe-area-inset-top));
+  right: calc(0.6rem + env(safe-area-inset-right));
+  width: 3.2rem; height: 3.2rem;
+}
+
+/* Pause overlay — frosted glass, the same Continue / New game choices the big
+   screen shows. Buttons fill the column like the rest of the phone UI. */
+#pause-overlay {
+  position: fixed; inset: 0; z-index: 15;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem;
+  padding:
+    calc(7vh + env(safe-area-inset-top)) calc(10vw + env(safe-area-inset-right))
+    calc(7vh + env(safe-area-inset-bottom)) calc(10vw + env(safe-area-inset-left));
+  background: rgba(233, 248, 255, 0.82); backdrop-filter: blur(8px);
+}
+#pause-overlay h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 2.6rem; margin: 0 0 0.6rem; color: var(--ink);
+}
+#pause-overlay .btn { width: min(82%, 18rem); margin-top: 0; }
+
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
 @media (orientation: landscape) {

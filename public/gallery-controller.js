@@ -14,6 +14,7 @@ var CONTROLLER_CARDS = [
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
   { key: 'countdown',       title: 'Countdown',       perColor: true, replayable: true },
   { key: 'playing',         title: 'Driving',         perColor: true },
+  { key: 'paused',          title: 'Paused',          perColor: true },
   { key: 'finished',        title: 'Finished',        perColor: true }
 ];
 

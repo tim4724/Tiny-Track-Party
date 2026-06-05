@@ -213,6 +213,35 @@ html, body {
 .res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
 .results__hint { color: var(--ink-2); font-weight: 700; margin-top: 1.4rem; }
 
+/* ---- Pause ---- */
+/* Pause button — pinned top-right over the scene during the countdown + race.
+   .icon-btn (theme.css) gives it the toy-button look; we only place it here. */
+#pause-btn {
+  position: fixed; z-index: 12;
+  top: calc(1.1rem + env(safe-area-inset-top));
+  right: calc(1.1rem + env(safe-area-inset-right));
+  width: 3.4rem; height: 3.4rem;
+}
+
+/* Pause overlay — same bright frosted glass as the results screen, sits above
+   the (frozen) race with a floating card of choices. */
+#pause-overlay {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(233, 248, 255, 0.72); backdrop-filter: blur(10px);
+}
+.pause-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(1.2rem, 2.5vw, 2rem); text-align: center;
+  padding: clamp(1.8rem, 4vw, 3rem) clamp(2.2rem, 5vw, 4rem);
+}
+.pause-card h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; color: var(--ink);
+}
+.pause-card__btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+.pause-card__btns .btn { min-width: 9rem; }
+
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
    The lobby is designed for a wide screen; on a narrow viewport the two-column
    card | QR layout cramps. Stack instead: welcome card on top, QR below it.

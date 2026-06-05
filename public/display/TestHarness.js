@@ -181,6 +181,17 @@ export function runDisplayScenario(opts, ctx) {
       // HUD shows lap 1 while the lights count down.
       for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
       runCountdown();
+    } else if (kind === 'paused') {
+      // Spin the field forward a few seconds so it reads mid-race, freeze it
+      // (speed 0 → no wheel dust), then show the pause button + overlay over it.
+      for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
+      for (const c of engine.getSnapshot().cars) {
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.pose.tangent, c.pose.lookAhead, c.steer, 0, false, c.steerInput);
+        scene.setCarHud(c.id, c);
+      }
+      scene.onFrame = null; // frozen: no per-frame re-pose
+      el('pause-btn').classList.remove('hidden');
+      el('pause-overlay').classList.remove('hidden');
     } else if (kind === 'results') {
       // Freeze the grid behind the blurred results overlay.
       const slots = buildSlots(players);

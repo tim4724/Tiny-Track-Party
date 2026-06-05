@@ -154,6 +154,30 @@ body {
 }
 .btn:disabled:active { transform: none; box-shadow: 0 6px 0 var(--btn-ledge), var(--inset-hi); }
 
+/* Icon button — a small square toy button for a single glyph (e.g. pause).
+   Quiet by default (ghost-like surface), depresses on press like .btn. Drop a
+   glyph element inside; the glyph inherits `currentColor`. */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 3rem; height: 3rem; padding: 0;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 2px solid var(--hairline);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+}
+.icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
+.icon-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.icon-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Pause glyph — two rounded bars, sized off the button's text colour. */
+.pause-glyph { display: flex; gap: 4px; }
+.pause-glyph::before, .pause-glyph::after {
+  content: ''; width: 4px; height: 16px; border-radius: 2px; background: currentColor;
+}
+
 /* Chip — a rounded token with a colour dot (player in a roster/lobby). */
 .chip {
   display: inline-flex;

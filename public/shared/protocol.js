@@ -26,7 +26,9 @@ var MSG = {
   CONTROL: 'control',           // {s: steer[-1,1], b: brake(bool)} — hot path, ~25Hz, fastlane
   START_GAME: 'start_game',     // host only
   PLAY_AGAIN: 'play_again',     // host only
-  RETURN_TO_LOBBY: 'return_to_lobby',
+  RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
+  PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
+  RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_NAME: 'set_name',         // {name}
   SET_DISPLAY_MUTE: 'set_display_mute',
@@ -43,6 +45,8 @@ var MSG = {
   COUNTDOWN: 'countdown',       // {n} 3..2..1..GO
   GAME_START: 'game_start',
   GAME_END: 'game_end',         // {results}
+  GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
+  GAME_RESUMED: 'game_resumed', // race resumed — controllers hide the pause overlay
   DISPLAY_MUTED: 'display_muted',
   DISPLAY_CLOSED: 'display_closed',
   ERROR: 'error'
