@@ -6,7 +6,7 @@
 // before this module (PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS).
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 
-const { PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS } = window;
+const { PartyConnection, RoomFlow, PartyFastlane, MSG, RELAY_URL, STUN_URL, MAX_PLAYERS } = window;
 
 const enc = encodeURIComponent;
 
@@ -21,6 +21,13 @@ export class DisplayNet {
     this.roomCode = null;
     this.instance = null;
     this.baseUrlOverride = null;
+
+    this.fastlane = new PartyFastlane({
+      selfIndex: 0,
+      iceServers: [{ urls: STUN_URL }, { urls: 'stun:stun.l.google.com:19302' }],
+      sendSignal: (peerIdx, sig) => { if (this.party) this.party.sendTo(peerIdx, sig); },
+      onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev),
+    });
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     const announce = () => { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); };
@@ -47,6 +54,7 @@ export class DisplayNet {
 
   // ---- connection ----
   _connect() {
+    this.fastlane.closeAll();
     const url = (this.roomCode && this.instance)
       ? RELAY_URL + '/' + enc(this.roomCode) + '?instance=' + enc(this.instance)
       : RELAY_URL;
@@ -90,6 +98,7 @@ export class DisplayNet {
 
   _onMessage(from, data) {
     if (!data || from === 0) return;
+    if (this.fastlane.handleSignal(from, data)) return;
     switch (data.type) {
       case MSG.HELLO: {
         const p = this.flow.get(from);
@@ -117,6 +126,7 @@ export class DisplayNet {
 
   _removePeer(peerIndex) {
     if (!this.flow.has(peerIndex)) return;
+    this.fastlane.close(peerIndex);
     this.flow.removePlayer(peerIndex); // emits rosterchange → announce()
   }
 

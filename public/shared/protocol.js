@@ -48,10 +48,9 @@ var MSG = {
   ERROR: 'error'
 };
 
-// Message types that WILL ride the low-latency WebRTC fastlane once it's wired
-// in (unreliable, unordered, latest-wins). Only idempotent, latest-state-wins
-// inputs belong here. RESERVED: today CONTROL goes over the WebSocket relay like
-// every other message; STUN_URL + this table are unused until the fastlane lands.
+// Message types that ride the low-latency WebRTC fastlane (unreliable, unordered,
+// latest-wins). Only idempotent, latest-state-wins inputs belong here. All other
+// traffic and WS fallback still flow through the relay.
 var FASTLANE_TYPES = { control: true };
 
 // Discrete input actions (reserved; v1 steering/braking is analog via CONTROL).

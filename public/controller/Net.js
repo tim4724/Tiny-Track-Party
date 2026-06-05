@@ -1,11 +1,12 @@
 // ControllerNet — phone-side relay connection. Derives room/instance/clientId
 // from the URL, joins the room, and exchanges messages with the display (slot 0).
-// All traffic (join, lobby, CONTROL) goes over the WebSocket relay today; the
-// WebRTC fastlane for the CONTROL stream is planned but not yet wired in.
+// CONTROL messages ride the WebRTC fastlane (PartyFastlane) when the DataChannel
+// is open; all other traffic and fallback go over the WebSocket relay.
 //
-// Reads globals from classic scripts loaded first: PartyConnection, MSG, RELAY_URL.
+// Reads globals from classic scripts loaded first:
+// PartyConnection, PartyFastlane, MSG, RELAY_URL, STUN_URL, FASTLANE_TYPES.
 
-const { PartyConnection, MSG, RELAY_URL } = window;
+const { PartyConnection, PartyFastlane, MSG, RELAY_URL, STUN_URL, FASTLANE_TYPES } = window;
 const enc = encodeURIComponent;
 
 function deriveRoomCode() {
@@ -39,11 +40,13 @@ export class ControllerNet {
     this.peerIndex = null;
     this.party = null;
     this.playerName = '';
+    this.fastlane = null;
   }
 
   connect(playerName) {
     this.playerName = playerName || this.playerName;
     if (this.party) this.party.close();
+    if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
     const url = RELAY_URL + '/' + enc(this.roomCode) + (this.instance ? '?instance=' + enc(this.instance) : '');
     this.party = new PartyConnection(url, { clientId: this.clientId });
 
@@ -51,6 +54,7 @@ export class ControllerNet {
     this.party.onProtocol = (type, msg) => {
       if (type === 'joined') {
         this.peerIndex = msg.index;
+        this._openFastlane();
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName });
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
@@ -59,7 +63,11 @@ export class ControllerNet {
         this.onStatus('display_gone');
       }
     };
-    this.party.onMessage = (from, data) => { if (from === 0 && data) this.onMessage(data); };
+    this.party.onMessage = (from, data) => {
+      if (from !== 0 || !data) return;
+      if (this.fastlane && this.fastlane.handleSignal(from, data)) return;
+      this.onMessage(data);
+    };
     this.party.onClose = (attempt, max, meta) => {
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
       this.onStatus('reconnecting', { attempt, max });
@@ -67,13 +75,29 @@ export class ControllerNet {
     this.party.connect();
   }
 
-  // Reliable WS send to the display. (Once the fastlane lands, CONTROL will try
-  // the DataChannel first and fall back here.)
+  // Send to the display. FASTLANE_TYPES messages ride the WebRTC DataChannel
+  // when it's open; everything else (and fallback) goes over the WS relay.
   send(type, payload) {
     if (!this.party) return;
     const msg = payload || {};
     msg.type = type;
+    if (FASTLANE_TYPES[type] && this.fastlane && this.fastlane.enqueue(0, msg) === 'p2p') return;
     this.party.sendTo(0, msg);
+  }
+
+  _openFastlane() {
+    if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
+    this.fastlane = new PartyFastlane({
+      selfIndex: this.peerIndex,
+      iceServers: [{ urls: STUN_URL }, { urls: 'stun:stun.l.google.com:19302' }],
+      sendSignal: (peerIdx, sig) => { if (this.party) this.party.sendTo(peerIdx, sig); },
+      emitIdleHeartbeat: true,
+      onPeerClosed: () => {
+        // Display-side fastlane closed (watchdog or display reconnect); retry.
+        setTimeout(() => { if (this.fastlane && this.peerIndex != null) this.fastlane.open(0); }, 2000);
+      },
+    });
+    this.fastlane.open(0);
   }
 
   isHost(hostPeerIndex) { return this.peerIndex != null && this.peerIndex === hostPeerIndex; }
