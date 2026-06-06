@@ -33,6 +33,10 @@ const L = 4.0;        // base straight advance (unscaled)
 const W = 2.5;        // default drivable width (unscaled; ×SCALE → 5.0 world)
 const RS = 2.185;     // tight (small) corner radius
 const RL = 4.185;     // sweeping (large) corner radius
+// Some legs below use L ± 0.37: a 90° arc of these radii advances slightly more/less along
+// each plan axis than a plain `L` straight, so the figure-8 (Crossover) and L-shaped
+// (Riverside) loops need a small leg nudge to close (gap ≈ 0). Values found empirically and
+// guarded by the "every named track closes" test — re-tune if a radius or layout changes.
 
 const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
 const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });

@@ -809,12 +809,11 @@ export class SceneRenderer {
     const KERB_RED = c(0xfa6b41);  // kerb red — Kenney's is a warm orange-red, not crimson
     const KERB_WHITE = c(0xf8f8fb);// kerb white
 
-    // Cross-section, left → right, as { l: lateral offset, y: height above the drive
-    // surface }. Asphalt is flat (y=0) from -hw..hw; inside each kerb sits a small
-    // asphalt `gap`, then a thin painted white line, then the main asphalt. A low kerb
-    // rises to `ch` just outside; a skirt drops to -deck so the deck reads as solid
-    // from the side and over crests (a zero-thickness ribbon looks like paper and shows
-    // daylight under hill tops).
+    // Cross-section anatomy, left → right: asphalt is flat (y=0) across the drivable width;
+    // inside each kerb sits a small asphalt `gap`, then a thin painted white line, then the
+    // main asphalt. A low kerb rises to `ch` just outside; a skirt drops to -deck so the deck
+    // reads as solid from the side and over crests (a zero-thickness ribbon looks like paper
+    // and shows daylight under hill tops).
     // Cross-section as { sign: which kerb edge (−1 left, +1 right), off: lateral offset
     // from that edge, y: height above the drive surface }. A point's lateral position on
     // ring i is sign·halfAt(i) + off, so the whole profile flares/pinches with the
@@ -1446,7 +1445,7 @@ export class SceneRenderer {
         const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
         const f = this._centerline.sampleAt(cn.homeS + along);
         const latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
-        const edge = this._roadHalf - CONE_EDGE_MARGIN;
+        const edge = (f.width != null ? f.width / 2 : this._roadHalf) - CONE_EDGE_MARGIN; // per-sample edge: in a flared section the wall sits at the wider visible asphalt, not the scalar default
         if (Math.abs(latOff) > edge) {
           m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
           const vLat = cn.vel.dot(f.lateral);
@@ -1818,7 +1817,9 @@ export class SceneRenderer {
     // so the wheels sit on the actual GLB. We split the two deliberately — re-pitching
     // from the front/rear probe slope twitched the car at ramp seams (that probe is
     // noisy: the GLB floor isn't a perfect smootherstep and tiles overlap). Heading
-    // (yaw) is the centreline's; roll stays level (world up) — the tracks have no banking.
+    // (yaw) is the centreline's; roll stays level (world up) ON PURPOSE — the body stays
+    // level even through a banked corner (Mario-Kart style, reads cleaner than a tilting
+    // cabin). The banked road normal is still carried in c.pose.up for any caller that wants it.
     let z = fwd;
     const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
     this._headFlat.copy(fwd).setY(0);

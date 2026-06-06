@@ -67,8 +67,10 @@ export function buildTrack(track, opts = {}) {
     return Array.isArray(w) ? w[0] + (w[1] - w[0]) * f : w;
   };
   // Per-sample bank roll (radians, eased), signed to lean INTO the turn: a positive
-  // `bank` on a left arc rolls `up` one way, on a right arc the other. Applied to the
-  // frame after parallel-transport (a roll about the tangent), so it can't break closure.
+  // `bank` on a left arc rolls `up` one way, on a right arc the other. A straight has no
+  // turn direction, so by convention it banks toward +lateral (no shipped track banks a
+  // straight). Applied to the frame after parallel-transport (a roll about the tangent),
+  // so it can't break closure.
   const segBank = (seg, f) => {
     if (!seg.bank) return 0;
     const sign = seg.kind === 'arc' ? Math.sign(seg.angle || 1) : 1;
@@ -125,6 +127,10 @@ export function buildTrack(track, opts = {}) {
   // point IS the cursor, so on a closed loop it duplicates the start — drop it so the
   // ring has no zero-length seam segment (the wrap last→first then spans one step).
   const gap = Math.hypot(X, elev, Z);
+  // `closed` tolerates up to 0.5 (unscaled), but the duplicate-point drop below only fires
+  // within DS (0.25). All shipped tracks close to gap≈0 so both agree; a future track left
+  // with gap in (DS, 0.5) would be flagged closed yet keep its last point → one ~(DS+gap)
+  // seam segment. Tune such a track to gap≈0 (the "every named track closes" test guards it).
   const closed = gap < 0.5;
   if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); }
 

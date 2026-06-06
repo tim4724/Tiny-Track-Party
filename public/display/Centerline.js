@@ -15,7 +15,7 @@ import * as THREE from 'three';
 // tangent so the car's facing and its direction of travel agree by construction.
 export class Centerline {
   constructor(samples, length) {
-    this.samples = samples;     // [{pos, tangent, up, lateral, s}]
+    this.samples = samples;     // [{pos, tangent, up, lateral, width, s}]
     this.length = length;
   }
   sampleAt(s) {
