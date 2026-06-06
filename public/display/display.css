@@ -304,13 +304,19 @@ html, body {
 
 /* ---- Pause ---- */
 /* Pause button — pinned top-right over the scene during the countdown + race.
-   .icon-btn (theme.css) gives it the toy-button look; we only place it here. */
+   .icon-btn (theme.css) gives it the toy-button look; we only place it here.
+   It shares the top-right corner with each cell's place/lap readout, so it
+   auto-fades after a few seconds idle (main.js toggles .is-idle); any pointer
+   move / tap / key brings it back. The opacity transition is added to the
+   .icon-btn set so hover/press feedback still animates. */
 #pause-btn {
   position: fixed; z-index: 12;
   top: calc(1.1rem + env(safe-area-inset-top));
   right: calc(1.1rem + env(safe-area-inset-right));
   width: 3.4rem; height: 3.4rem;
+  transition: opacity 0.4s ease, transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
 }
+#pause-btn.is-idle { opacity: 0; pointer-events: none; }
 
 /* Pause overlay — same bright frosted glass as the results screen, sits above
    the (frozen) race with a floating card of choices. */

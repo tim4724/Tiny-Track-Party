@@ -281,6 +281,7 @@ function startRace() {
   raceEnded = false;             // un-freeze the scene for the new race
   setPauseOverlay(false);
   el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
+  revealPauseBtn();                           // show it, then auto-fade until activity
 
   // (re)build scene cars. AI cars get no split-screen cell (cell:false) — they're
   // opponents in the shared world, not players watching the screen.
@@ -389,6 +390,7 @@ function endRace(results) {
   paused = false;                              // results aren't pausable
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
+  stopPauseAutoHide();
   broadcastStandings(true);                    // final board → phones show the full results overlay
   showResults(results);
   clearTimeout(endTimer);
@@ -415,6 +417,7 @@ function returnToLobby() {
   raceEnded = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
+  stopPauseAutoHide();
   for (const c of scene.cars.keys()) scene.removeCar(c);
   if (session) { session.dispose(); session = null; }
   aiBots = new Map(); currentField = [];
@@ -459,6 +462,24 @@ function freezeCars(snap) {
 
 function setPauseOverlay(on) {
   el('pause-overlay').classList.toggle('hidden', !on);
+}
+
+// ---- pause button auto-hide ----
+// The on-screen pause button lives in the top-right corner, sharing it with each
+// cell's place/lap readout. Fade it out after a spell of pointer inactivity so it
+// stops covering that text; any mouse move / tap / key press reveals it again.
+const PAUSE_IDLE_MS = 2500;     // starting value — long enough to aim + click after moving
+let pauseIdleTimer = 0;
+function revealPauseBtn() {
+  const btn = el('pause-btn');
+  if (btn.classList.contains('hidden')) return; // not in a race — nothing to reveal
+  btn.classList.remove('is-idle');
+  clearTimeout(pauseIdleTimer);
+  pauseIdleTimer = setTimeout(() => btn.classList.add('is-idle'), PAUSE_IDLE_MS);
+}
+function stopPauseAutoHide() { clearTimeout(pauseIdleTimer); el('pause-btn').classList.remove('is-idle'); }
+for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
+  window.addEventListener(ev, revealPauseBtn, { passive: true });
 }
 
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
