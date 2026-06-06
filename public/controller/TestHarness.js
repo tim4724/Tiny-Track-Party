@@ -21,6 +21,11 @@ const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const PREVIEW_TRACKS = TRACK_LIST.map((t) => ({ id: t.id, name: t.name, svg: TRACK_SCHEMATICS[t.id] }));
 
 const el = (id) => document.getElementById(id);
+const ordinal = (n) => {
+  const t = n % 100, u = n % 10;
+  const s = (t >= 11 && t <= 13) ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th';
+  return `${n}${s}`;
+};
 
 // runControllerScenario({ scenario, color })
 export function runControllerScenario(opts) {
@@ -91,12 +96,12 @@ export function runControllerScenario(opts) {
 
   const setSteer = (v) => { const f = el('steer-fill'); if (f) f.style.transform = `translateX(${v * 50}%)`; };
   function setHud(lap, total, pos, finished) {
-    el('lap').textContent = `Lap ${lap}/${total}`;
-    el('pos').textContent = finished ? `Finished P${pos}` : `P${pos}`;
-    el('pos').classList.toggle('leader', pos === 1);
+    el('hud-name').textContent = FAKE_NAMES[color];     // who you are, top-left (mirrors the display)
+    el('pos').textContent = ordinal(pos);
+    el('lap').textContent = finished ? 'Finished' : `Lap ${lap}/${total}`;
   }
   // The item identity shows on the DISPLAY, not the phone — the only controller cue
-  // is the USE button lighting up. Preview that by toggling its disabled state.
+  // is the ITEM button lighting up. Preview that by toggling its disabled state.
   function setUse(holding) { const a = el('action-btn'); if (a) a.disabled = !holding; }
   function showDriveHud() {
     show('game');

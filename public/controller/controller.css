@@ -164,18 +164,21 @@ input[type=text]:disabled { opacity: 0.6; }
    while the display counts down 3..2..1..GO. */
 #game { align-items: stretch; justify-content: flex-start; user-select: none; }
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
-.hud-top { display: flex; justify-content: space-between; align-items: center; }
-#lap { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--ink); }
-#pos {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: #fff;
-  padding: 0.3rem 1rem; border-radius: var(--r-sm); background: var(--car);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+/* Mirrors the display's split-cell HUD: player name top-left (tinted with the
+   car livery, like .cell-label__name), big ordinal place + small "Lap n/N"
+   stacked top-right (like .cell-rank). No item UI on the phone. */
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8rem; }
+.hud-name {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: var(--car, var(--ink));
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#pos.leader { background: var(--accent); color: var(--ink); }
+.hud-rank { flex: none; text-align: right; }
+.hud-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: 2.6rem; color: var(--ink); }
+.hud-rank__lap { font-weight: 800; font-size: 1rem; color: var(--ink-2); margin-top: 0.15rem; letter-spacing: 0.02em; }
 
 .steer { margin-top: auto; }
 .steer__track {
-  position: relative; height: 1.4rem; overflow: hidden;
+  position: relative; height: 2.8rem; overflow: hidden;
   background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-pill);
   box-shadow: inset 0 2px 4px rgba(40, 80, 120, 0.1);
 }
@@ -198,11 +201,11 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: 0 2px 0 color-mix(in srgb, var(--danger), #000 26%), var(--inset-hi);
 }
 
-/* BRAKE + USE sit side by side; BRAKE takes the lion's share (held), USE is a tap. */
+/* BRAKE + ITEM sit side by side, equal halves (BRAKE is held, ITEM is a tap). */
 .drive-controls { display: flex; gap: 0.8rem; align-items: stretch; }
 .drive-controls .brake { flex: 1; }
 #action-btn.action {
-  flex: 0 0 40%; padding: 6.8rem 1rem; font-family: var(--font-display); font-weight: 700;
+  flex: 1; padding: 6.8rem 1.4rem; font-family: var(--font-display); font-weight: 700; /* h-pad matches BRAKE so the halves are exactly equal */
   font-size: 1.5rem; letter-spacing: 0.06em; color: var(--ink); border: none;
   border-radius: var(--r); background: var(--accent);
   box-shadow: 0 6px 0 color-mix(in srgb, var(--accent), #000 26%), var(--inset-hi);
@@ -317,6 +320,6 @@ input[type=text]:disabled { opacity: 0.6; }
   }
   #drive-hud { gap: 0.8rem; }
   #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
-  #action-btn.action { padding: 2.8rem 1rem; }   /* match the shorter brake height in landscape */
+  #action-btn.action { padding: 2.8rem 1.4rem; }   /* match BRAKE's height + h-pad in landscape (equal halves) */
   .steer { margin-top: 0.4rem; }
 }

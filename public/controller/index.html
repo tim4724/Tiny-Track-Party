@@ -58,15 +58,18 @@
     <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
     <div id="drive-hud" class="hidden">
       <div class="hud-top">
-        <div id="lap">Lap 1/3</div>
-        <div id="pos">P1</div>
+        <div id="hud-name" class="hud-name"></div>
+        <div class="hud-rank">
+          <div id="pos" class="hud-rank__place">1st</div>
+          <div id="lap" class="hud-rank__lap">Lap 1/3</div>
+        </div>
       </div>
       <div class="steer">
         <div class="steer__track"><div id="steer-fill"></div></div>
         <div class="steer__label">tilt to steer</div>
       </div>
       <div class="drive-controls">
-        <button id="action-btn" class="action" disabled aria-label="Use item">USE</button>
+        <button id="action-btn" class="action" disabled aria-label="Use item">ITEM</button>
         <button id="brake-btn" class="brake">BRAKE</button>
       </div>
       <div id="motion-tip" class="hidden">No tilt? Use ◄ ► keys to steer.</div>

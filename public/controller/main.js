@@ -8,6 +8,12 @@ import { applyLatencyChip, renderWaitNote } from './ui.js';
 
 const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
+// 1 → "1st", 2 → "2nd" … (mirrors the display's place readout).
+const ordinal = (n) => {
+  const t = n % 100, u = n % 10;
+  const s = (t >= 11 && t <= 13) ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th';
+  return `${n}${s}`;
+};
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one
@@ -166,11 +172,9 @@ function handleMessage(data) {
       break;
     case MSG.PLAYER_STATE:
       if (inResults) break;            // finished → results overlay owns the screen now
-      el('lap').textContent = `Lap ${data.lap}/${data.totalLaps}`;
-      el('pos').textContent = `P${data.position}`;
-      el('pos').classList.toggle('leader', data.position === 1);
-      if (data.finished) el('pos').textContent = `Finished P${data.position}`;
-      setHeldItem(data.item);          // lights the USE button (identity shows on the display)
+      el('pos').textContent = ordinal(data.position);
+      el('lap').textContent = data.finished ? 'Finished' : `Lap ${data.lap}/${data.totalLaps}`;
+      setHeldItem(data.item);          // lights the ITEM button (identity shows on the display)
       break;
     case MSG.STANDINGS: {
       // Live finish board. Refresh who's host (may have shifted if someone left)
@@ -353,6 +357,7 @@ function maybeRestoreCar() {
 // --- driving ---
 let steerRaf = null;
 function startDriving() {
+  el('hud-name').textContent = myName || 'Racer'; // who you are, top-left (mirrors the display cell)
   if (steerRaf) return; // already driving (may have begun during the countdown)
   tilt.start();
   const fill = el('steer-fill');

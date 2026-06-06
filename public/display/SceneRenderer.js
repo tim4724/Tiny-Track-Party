@@ -1886,7 +1886,9 @@ export class SceneRenderer {
       if (c.steerBar) {
         c.steerBar.style.display = c.finished ? 'none' : 'block';
         c.steerBar.style.left = (x + cw / 2) + 'px';
-        c.steerBar.style.top = (row * ch + ch - 34) + 'px';
+        // bottom-anchored: bar height is 1.6rem (~26px); the offset keeps its
+        // bottom edge at the same place it sat at the old 0.8rem height.
+        c.steerBar.style.top = (row * ch + ch - 47) + 'px';
       }
 
       // FINISHED overlay: centred in the cell while this player is finished and

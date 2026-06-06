@@ -230,7 +230,7 @@ html, body {
 
 /* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
 .cell-steer {
-  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 0.8rem;
+  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 1.6rem;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.9); border: 1px solid var(--hairline);
   border-radius: var(--r-pill); overflow: hidden;
