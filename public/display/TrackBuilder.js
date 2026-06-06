@@ -53,9 +53,18 @@ export function buildTrack(track, opts = {}) {
   }
   const trackWidth = (track && !Array.isArray(track) && track.width) || ROAD_WIDTH;
 
+  // Per-segment drivable width at local fraction f: a number (constant), an [a,b] taper,
+  // or the track default. Carried per sample so the road can flare/pinch along the lap.
+  const segWidth = (seg, f) => {
+    const w = seg.width;
+    if (w == null) return trackWidth;
+    return Array.isArray(w) ? w[0] + (w[1] - w[0]) * f : w;
+  };
+
   // ---- Forward integrate the centerline (unscaled plan coords) ----
   let X = 0, Z = 0, theta = 0, elev = 0;     // cursor
   const worldPts = [v(0, 0, 0)];             // start at origin; scaled to world after the walk
+  const widths = [trackWidth];               // per-sample drivable width (unscaled), parallel to worldPts
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
@@ -70,6 +79,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
           z0 + dz * len * f + lz * off
         ));
+        widths.push(segWidth(seg, f));
       }
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
@@ -85,6 +95,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f),
           z0 + R * sgn * (latZ(th0) - latZ(th))
         ));
+        widths.push(segWidth(seg, f));
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
@@ -99,10 +110,19 @@ export function buildTrack(track, opts = {}) {
   // ring has no zero-length seam segment (the wrap last→first then spans one step).
   const gap = Math.hypot(X, elev, Z);
   const closed = gap < 0.5;
-  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) worldPts.pop();
+  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); }
 
-  // Scale to world.
+  // Scale positions + widths to world.
   for (const p of worldPts) p.multiplyScalar(SCALE);
+  for (let i = 0; i < widths.length; i++) widths[i] *= SCALE;
+  // Ease width transitions across segment joints so a flare/pinch ramps over a short
+  // span instead of stepping at one sample (a few light wrapping-average passes).
+  for (let pass = 0; pass < 3; pass++) {
+    const w = widths.slice();
+    for (let i = 0; i < widths.length; i++) {
+      widths[i] = 0.5 * w[i] + 0.25 * (w[(i - 1 + widths.length) % widths.length] + w[(i + 1) % widths.length]);
+    }
+  }
 
   // Round the CURVATURE STEP at every straight↔arc joint. A straight (κ=0) abutting an
   // arc (κ=1/R) is a curvature discontinuity; the Catmull-Rom spline sampleAt fits
@@ -170,7 +190,7 @@ export function buildTrack(track, opts = {}) {
     const lateral = tangent.clone().cross(u).normalize();
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
     minY = Math.min(minY, worldPts[i].y);
-    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s });
+    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i] });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
 

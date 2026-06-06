@@ -285,6 +285,17 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
   }
 });
 
+test('variable width: a flared track widens past the default and eases back', () => {
+  const t = buildTrack(TRACKS.crossover); // its spine is flared via flare(6, 3.4)
+  let maxW = 0, minW = Infinity;
+  for (let s = 0; s < t.length; s += 0.5) {
+    const w = t.centerline.widthAt(s);
+    maxW = Math.max(maxW, w); minW = Math.min(minW, w);
+  }
+  assert.ok(maxW > t.roadWidth + 0.5, `flare should exceed the default road width (max=${maxW.toFixed(2)}, default=${t.roadWidth})`);
+  assert.ok(minW > t.roadWidth - 0.2 && minW <= t.roadWidth + 0.01, `non-flared sections stay ~default (min=${minW.toFixed(2)}, default=${t.roadWidth})`);
+});
+
 test('buildTrack accepts a bare segment array and a descriptor alike', () => {
   const fromArray = buildTrack(TRACKS.switchback.segments);
   const fromDef = buildTrack(TRACKS.switchback);

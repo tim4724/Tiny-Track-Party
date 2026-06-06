@@ -775,16 +775,16 @@ export class SceneRenderer {
     const cl = track.centerline;
     if (!cl || !cl.samples.length) return;
 
-    // Drivable width is the track's roadWidth — the same value the physics reads for
-    // the lateral corridor (maxLat in Game.js), so the car always fills the road. The
-    // rest is a fixed toy-kerb cross-section (all world units).
-    const drive = track.roadWidth || 5;
-    const hw = drive / 2;   // half drivable width (asphalt meets kerb here)
+    // Drivable width is per-sample (centerline.width / roadWidth) — the road can flare
+    // and pinch along the lap, and the physics curb corridor follows it (Game.maxLatAt).
+    // `defHalf` is the fallback half-width; the kerb/line cross-section is fixed.
+    const defHalf = (track.roadWidth || 5) / 2;
+    const halfAt = (i) => (frames[i].width != null ? frames[i].width : track.roadWidth || 5) / 2;
     const cw = 0.22;        // kerb lateral width
     const ch = 0.20;        // kerb height — low; a kerb, not a wall
     const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
-    const gap = Math.min(0.07, hw * 0.3);          // asphalt gap between kerb and edge line
-    const lw = Math.min(0.10, hw * 0.5 - gap);     // painted white edge-line width
+    const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
+    const lw = Math.min(0.10, defHalf * 0.5 - gap);// painted white edge-line width
     const stripeLen = 0.32;                        // kerb red/white band length (world units)
 
     // Resample the centreline at a uniform, fine arclength step. The raw samples are
@@ -817,21 +817,25 @@ export class SceneRenderer {
     // rises to `ch` just outside; a skirt drops to -deck so the deck reads as solid
     // from the side and over crests (a zero-thickness ribbon looks like paper and shows
     // daylight under hill tops).
+    // Cross-section as { sign: which kerb edge (−1 left, +1 right), off: lateral offset
+    // from that edge, y: height above the drive surface }. A point's lateral position on
+    // ring i is sign·halfAt(i) + off, so the whole profile flares/pinches with the
+    // per-sample road width while the kerb + line widths stay constant.
     const P = [
-      { l: -(hw + cw),      y: -deck }, // 0  left skirt foot
-      { l: -(hw + cw),      y: 0     }, // 1  left kerb outer base (= top of the deck skirt)
-      { l: -(hw + cw),      y: ch    }, // 2  left kerb outer top
-      { l: -hw,             y: ch    }, // 3  left kerb inner top
-      { l: -hw,             y: 0     }, // 4  left asphalt edge (foot of kerb)
-      { l: -hw + gap,       y: 0     }, // 5  outer edge of left line (after the gap)
-      { l: -hw + gap + lw,  y: 0     }, // 6  inner edge of left line
-      { l:  hw - gap - lw,  y: 0     }, // 7  inner edge of right line
-      { l:  hw - gap,       y: 0     }, // 8  outer edge of right line
-      { l:  hw,             y: 0     }, // 9  right asphalt edge
-      { l:  hw,             y: ch    }, // 10 right kerb inner top
-      { l:  (hw + cw),      y: ch    }, // 11 right kerb outer top
-      { l:  (hw + cw),      y: 0     }, // 12 right kerb outer base (= top of the deck skirt)
-      { l:  (hw + cw),      y: -deck }  // 13 right skirt foot
+      { sign: -1, off: -cw,       y: -deck }, // 0  left skirt foot
+      { sign: -1, off: -cw,       y: 0     }, // 1  left kerb outer base (top of deck skirt)
+      { sign: -1, off: -cw,       y: ch    }, // 2  left kerb outer top
+      { sign: -1, off: 0,         y: ch    }, // 3  left kerb inner top
+      { sign: -1, off: 0,         y: 0     }, // 4  left asphalt edge (foot of kerb)
+      { sign: -1, off: gap,       y: 0     }, // 5  outer edge of left line (after the gap)
+      { sign: -1, off: gap + lw,  y: 0     }, // 6  inner edge of left line
+      { sign:  1, off: -gap - lw, y: 0     }, // 7  inner edge of right line
+      { sign:  1, off: -gap,      y: 0     }, // 8  outer edge of right line
+      { sign:  1, off: 0,         y: 0     }, // 9  right asphalt edge
+      { sign:  1, off: 0,         y: ch    }, // 10 right kerb inner top
+      { sign:  1, off: cw,        y: ch    }, // 11 right kerb outer top
+      { sign:  1, off: cw,        y: 0     }, // 12 right kerb outer base (top of deck skirt)
+      { sign:  1, off: cw,        y: -deck }  // 13 right skirt foot
     ];
     // strip connects profile points (a,b); `kind` picks the colour rule.
     const STRIPS = [
@@ -878,7 +882,8 @@ export class SceneRenderer {
     const tmp = new THREE.Vector3();
     const ring = (i, j) => {
       const s = frames[i];
-      return tmp.copy(s.pos).addScaledVector(s.up, P[j].y).addScaledVector(s.lateral, P[j].l);
+      const l = P[j].sign * halfAt(i) + P[j].off;
+      return tmp.copy(s.pos).addScaledVector(s.up, P[j].y).addScaledVector(s.lateral, l);
     };
     const pos = [], col = [];
     const push3 = (arr, p) => { arr.push(p.x, p.y, p.z); };
@@ -898,10 +903,11 @@ export class SceneRenderer {
     // its kerb mid-line and snap its band length so an EVEN number of bands closes the
     // loop — that keeps every band a uniform physical size and the start/finish seam
     // free of a red-on-red (or white-on-white) join.
-    const kerbDist = (latOff) => {
+    const kerbDist = (side) => {
       const d = new Array(N);
       const at = (k) => new THREE.Vector3().copy(frames[k].pos)
-        .addScaledVector(frames[k].up, ch).addScaledVector(frames[k].lateral, latOff);
+        .addScaledVector(frames[k].up, ch)
+        .addScaledVector(frames[k].lateral, side * (halfAt(k) + cw / 2)); // kerb mid-line (per-sample width)
       let prev = at(0), acc = 0;
       d[0] = 0;
       for (let i = 1; i < N; i++) { const cur = at(i); acc += cur.distanceTo(prev); d[i] = acc; prev = cur; }
@@ -909,7 +915,7 @@ export class SceneRenderer {
       const bands = Math.max(2, 2 * Math.round(total / (2 * stripeLen)));
       return { d, eff: total / bands };
     };
-    const kerbL = kerbDist(-(hw + cw / 2)), kerbR = kerbDist(hw + cw / 2);
+    const kerbL = kerbDist(-1), kerbR = kerbDist(1);
     const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
 
     // Sweep the profile around the closed loop into ONE vertex-coloured buffer.

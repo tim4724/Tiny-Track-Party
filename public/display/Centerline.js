@@ -56,6 +56,11 @@ export class Centerline {
     const f = u;
     const up = pB.up.clone().lerp(pC.up, f).normalize();
     const lateral = tangent.clone().cross(up).normalize();
-    return { pos, tangent, up, lateral };
+    const width = (pB.width != null) ? pB.width + (pC.width - pB.width) * f : undefined;
+    return { pos, tangent, up, lateral, width };
   }
+
+  // Drivable width at arclength s (world units). Convenience over sampleAt for callers
+  // that only need the width (the renderer's per-ring sweep, the physics curb clamp).
+  widthAt(s) { return this.sampleAt(s).width; }
 }

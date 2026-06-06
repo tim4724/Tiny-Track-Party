@@ -392,14 +392,23 @@ export class Game {
   // fraction of the car's own top speed) — slows you, never a hard stop. Shared by
   // the integration step and the post-collision re-clamp (a bump can shove a car
   // into the wall).
+  // Lateral corridor half-width at arclength s. Tracks the per-sample road width so the
+  // car fills a flared section and is pinned tighter through a pinch; falls back to the
+  // scalar maxLat for constant-width tracks. (maxLat itself still seeds the spawn lanes.)
+  maxLatAt(s) {
+    const w = this.centerline.widthAt ? this.centerline.widthAt(s) : null;
+    return (w != null && !Number.isNaN(w)) ? Math.max(0.1, w / 2 - LAT_MARGIN) : this.maxLat;
+  }
+
   _clampCurb(c, dt) {
     // onWall is cleared once per frame at the top of update()'s loop, not here —
     // this runs twice a frame (integration + post-collision re-clamp) and must not
     // wipe a contact the first pass already flagged (a car pinned at the curb sits
-    // exactly AT maxLat, so the second pass wouldn't re-detect it).
+    // exactly AT the limit, so the second pass wouldn't re-detect it).
     const cap = c.vmax * WALL_SPEED_FRAC;
-    if (c.lat > this.maxLat || c.lat < -this.maxLat) {
-      c.lat = c.lat > 0 ? this.maxLat : -this.maxLat;
+    const lim = this.maxLatAt(c.totalS);
+    if (c.lat > lim || c.lat < -lim) {
+      c.lat = c.lat > 0 ? lim : -lim;
       c.onWall = true;
       if (c.v > cap) c.v = Math.max(cap, c.v - WALL_DECEL * dt);
     }
