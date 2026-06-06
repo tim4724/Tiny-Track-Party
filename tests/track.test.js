@@ -5,11 +5,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, TRACKS;
+let buildTrack, TRACKS, TRACK_LIST, trackSchematic, TRACK_SCHEMATICS;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
   TRACKS = mod.TRACKS;
+  TRACK_LIST = mod.TRACK_LIST;
+  trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
+  TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
 });
 
 // Reference fixtures for the detailed geometry suites — kept here, NOT in the
@@ -219,6 +222,19 @@ test('every named track has a display name and pieces', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
     assert.ok(Array.isArray(def.pieces) && def.pieces.length, `track "${name}" missing pieces`);
+  }
+});
+
+// The precomputed schematics (shared/trackSchematics.js — used by the no-relay
+// gallery preview) must match what the live geometry produces, or the preview
+// shows stale maps. trackSchematic is deterministic, so a freshly-built track
+// reproduces the committed SVG exactly; if it doesn't, the generator wasn't re-run.
+test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
+  assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
+    'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
+  for (const t of TRACK_LIST) {
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.pieces)),
+      `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
 });
 
