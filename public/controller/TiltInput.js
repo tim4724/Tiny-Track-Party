@@ -14,8 +14,11 @@
 // (sensitively — it reaches full lock fast, since roll isn't proportional to the
 // twist the way it is to a flat lean). Both gestures, one signal, no mode switch.
 //
-// Roll is screen-orientation corrected, so "left/right from the player's point of
-// view" stays correct in portrait AND landscape.
+// Roll is read in the phone's NATIVE (portrait) frame — we deliberately IGNORE
+// screen.orientation. The controller UI always renders portrait, so the player
+// holds the phone upright; reading the raw sensor means the OS auto-rotating (or
+// being orientation-locked) never shifts the steering reference out from under
+// them mid-race. The steering is a function of physics, not of what the OS does.
 //
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
 // tap handler). HTTPS is required for sensors.
@@ -40,14 +43,6 @@ const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
-
-// Screen rotation the OS has applied (0/90/180/270, or legacy iOS -90..180).
-function screenAngle() {
-  const so = (typeof screen !== 'undefined') && screen.orientation;
-  if (so && typeof so.angle === 'number') return so.angle;
-  if (typeof window !== 'undefined' && typeof window.orientation === 'number') return window.orientation;
-  return 0;
-}
 
 export class TiltInput {
   constructor({ onControl, surface }) {
@@ -117,24 +112,16 @@ export class TiltInput {
     this._brakeBtn = 0;
   }
 
-  // Rotate the device-frame gravity x/y into the player's frame so "left/right"
-  // is consistent whichever way the phone is held. z is unchanged by a screen
-  // rotation (it spins about the viewing axis).
-  _userGravity() {
-    const a = screenAngle() * DEG;
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const { x, y, z } = this._g;
-    return { ux: x * ca + y * sa, uy: -x * sa + y * ca, uz: z };
-  }
-
-  // Steer = roll = gravity's angle in the x–z plane = atan2(gx, -gz). Equals
-  // device gamma; pitch-independent (cosβ cancels), so the doodle-jump lean is
-  // full-strength at any hold angle. An upright twist runs gz→0, so roll heads
-  // toward ±90° and twisting steers too (just not proportionally).
+  // Steer = roll = device-frame gravity's angle in the x–z plane = atan2(gx, -gz).
+  // Equals device gamma; pitch-independent (cosβ cancels), so the doodle-jump lean
+  // is full-strength at any hold angle. An upright twist runs gz→0, so roll heads
+  // toward ±90° and twisting steers too (just not proportionally). Read straight
+  // from the native frame — no screen.orientation correction — so OS rotation
+  // can't flip the steering reference mid-race (see header).
   _sensorSteer() {
     if (!this.haveTilt) return 0;
-    const { ux, uz } = this._userGravity();
-    const rollDeg = Math.atan2(ux, -uz) * RAD;
+    const { x, z } = this._g;
+    const rollDeg = Math.atan2(x, -z) * RAD;
     return clamp1(rollDeg / ROLL_LOCK);
   }
 
