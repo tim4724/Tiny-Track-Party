@@ -51,10 +51,11 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
-  // Mirror display/main.js: always lay out >= 4 seats; empties are placeholders.
-  // Each filled seat shows the car that player picked (a real render); for the
-  // preview we vary the car per slot so the lobby shows a mix of models.
-  const MIN_SEATS = 4;
+  // Mirror display/main.js: lay out at least MAX_PLAYERS seats (locked to the same
+  // protocol constant so the preview grid matches the real lobby); empties are
+  // placeholders. Each filled seat shows the car that player picked (a real render);
+  // for the preview we vary the car per slot so the lobby shows a mix of models.
+  const MIN_SEATS = window.MAX_PLAYERS || 4;
   const MODELS = window.CAR_MODELS || [];
   function renderRoster(slots, hostPeerIndex) {
     const list = el('players'); list.innerHTML = '';

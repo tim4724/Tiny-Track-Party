@@ -352,7 +352,8 @@ export function buildTrack(track, opts = {}) {
     if (worldPts[i].distanceTo(welded[welded.length - 1]) >= MIN_SEG) welded.push(worldPts[i]);
   }
   if (welded.length > 3 && welded[welded.length - 1].distanceTo(welded[0]) < MIN_SEG) welded.pop();
-  worldPts.splice(0, worldPts.length, ...welded);
+  worldPts.length = 0;
+  for (const p of welded) worldPts.push(p); // rebuild in place (no spread → no arg-count limit)
 
   // Round the CURVATURE step at every straight<->curve joint into a short ramp.
   // Pieces meet with discontinuous curvature (a straight's kappa=0 abuts an arc's

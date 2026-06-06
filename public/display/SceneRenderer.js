@@ -429,7 +429,11 @@ export class SceneRenderer {
   }
 
   _initThree() {
-    const r = new THREE.WebGLRenderer({ antialias: true });
+    // antialias:false — the whole scene renders through the offscreen MSAA target
+    // (_rtScene, samples = _msaaSamples); the canvas framebuffer only ever receives
+    // the full-screen present quad, so canvas AA would be a no-op (and an unused
+    // multisample backbuffer).
+    const r = new THREE.WebGLRenderer({ antialias: false });
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
     r.setSize(window.innerWidth, window.innerHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -1306,11 +1310,15 @@ export class SceneRenderer {
       r.setRenderTarget(rt);
       r.render(this.scene, c.cam);
 
-      // position the DOM label at the cell's top-left (CSS px)
+      // position the DOM label at the cell's top-left (CSS px). Guarded like the
+      // steer/finish overlays below: carded cars always have a label, but keep all
+      // three cell overlays consistently null-safe.
       const x = col * cw;
-      c.label.style.display = 'block';
-      c.label.style.left = x + 'px';
-      c.label.style.top = (row * ch) + 'px';
+      if (c.label) {
+        c.label.style.display = 'block';
+        c.label.style.left = x + 'px';
+        c.label.style.top = (row * ch) + 'px';
+      }
 
       // steer indicator: centered along the bottom of this player's cell — hidden
       // once they finish (on a victory lap now, the finish overlay takes its place)
