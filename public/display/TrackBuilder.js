@@ -50,7 +50,8 @@ const DEG = Math.PI / 180;
 // straddles the start/finish line with the gate-finish arch.
 // Returns { instances, centerline, length, closed, gap, roadWidth, groundY }.
 // `instances` carries only non-road scenery GLBs to place (currently the start/finish
-// gate); the road surface itself is generated procedurally from `centerline`.
+// gate); the road surface itself is generated procedurally from `centerline`, as are the
+// support pillars (`pillars`: vertical columns under any `pillars`-flagged bridge/ramp).
 export function buildTrack(track, opts = {}) {
   const { startGate = true } = opts;
   const segments = Array.isArray(track) ? track : (track && track.segments);
@@ -82,6 +83,7 @@ export function buildTrack(track, opts = {}) {
   const worldPts = [v(0, 0, 0)];             // start at origin; scaled to world after the walk
   const widths = [trackWidth];               // per-sample drivable width (unscaled), parallel to worldPts
   const banks = [0];                          // per-sample bank roll (radians), parallel to worldPts
+  const pillarFlags = [false];                // per-sample: emitted by a `pillars` (raised bridge/ramp) segment
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
@@ -101,7 +103,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
           z0 + dz * len * f + lz * off
         ));
-        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f));
+        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f)); pillarFlags.push(!!seg.pillars);
       }
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
@@ -113,7 +115,7 @@ export function buildTrack(track, opts = {}) {
       for (let i = 1; i <= N; i++) {
         const f = i / N, th = th0 + ang * f;
         worldPts.push(v(x0 + R * sgn * (latX(th0) - latX(th)), y0 + rise * smootherstep(f), z0 + R * sgn * (latZ(th0) - latZ(th))));
-        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f));
+        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f)); pillarFlags.push(!!seg.pillars);
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
@@ -132,7 +134,7 @@ export function buildTrack(track, opts = {}) {
   // with gap in (DS, 0.5) would be flagged closed yet keep its last point → one ~(DS+gap)
   // seam segment. Tune such a track to gap≈0 (the "every named track closes" test guards it).
   const closed = gap < 0.5;
-  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); }
+  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); pillarFlags.pop(); }
 
   // Scale positions + widths to world.
   for (const p of worldPts) p.multiplyScalar(SCALE);
@@ -196,9 +198,10 @@ export function buildTrack(track, opts = {}) {
     const lateral = tangent.clone().cross(u).normalize();
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
     minY = Math.min(minY, worldPts[i].y);
-    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i] });
+    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i], pillars: pillarFlags[i] });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
+  const groundY = minY - 0.3; // grass plane sits just under the lowest point of the track
 
   const instances = [];
   // Start/finish gate: the gate-finish arch straddling the line at s=0, oriented across
@@ -213,12 +216,51 @@ export function buildTrack(track, opts = {}) {
     instances.push({ glb: 'gate-finish', matrix: m });
   }
 
+  // ---- Support pillars under raised bridge/ramp segments (opt `pillars: true`) ----
+  // March the flagged samples at a fixed arclength spacing and record a vertical column
+  // running from the grass plane up to just under the deck (SceneRenderer renders each as
+  // a simple cylinder). A station is SKIPPED where the foot would land on a LOWER stretch
+  // of road (the spine a crossover bridge flies over): there the deck must clear the
+  // roadway, so we leave the gap unsupported rather than drop a column onto the track below.
+  const pillars = [];
+  if (samples.some((p) => p.pillars)) {
+    const SPACING = 3.2;     // world units between pillars along the deck
+    const MIN_H = 0.7;       // skip pillars shorter than this — trims the stubby ramp feet
+    const RADIUS = 0.5;      // column radius (world units)
+    const TUCK = 0.3;        // top nestles just under the deck skirt
+    const EMBED = 0.1;       // sink the base below the grass plane so the cap isn't coplanar (z-fighting)
+    const LEVEL_GAP = 1.0;   // a sample this far BELOW a deck counts as "road running underneath"
+    const MARGIN = 0.3;      // keep the foot this far clear of a lower road's edge
+    let acc = SPACING;       // prime so the first flagged sample places a pillar
+    for (let i = 0; i < n; i++) {
+      if (i > 0) acc += worldPts[i].distanceTo(worldPts[i - 1]);
+      const smp = samples[i];
+      if (!smp.pillars || acc < SPACING) continue;
+      acc = 0;
+      const topY = smp.pos.y - TUCK;
+      if (topY - groundY < MIN_H) continue;
+      // Keep the roadway below clear: skip if the round foot would overlap a clearly-lower
+      // road (centre-to-centre < its half-width + our radius + margin). A round column has
+      // no orientation, so a plain radial clearance is exact.
+      let onRoad = false;
+      for (let j = 0; j < n; j++) {
+        if (smp.pos.y - samples[j].pos.y < LEVEL_GAP) continue;
+        const dx = samples[j].pos.x - smp.pos.x, dz = samples[j].pos.z - smp.pos.z;
+        const clear = samples[j].width / 2 + RADIUS + MARGIN;
+        if (dx * dx + dz * dz < clear * clear) { onRoad = true; break; }
+      }
+      if (onRoad) continue;
+      pillars.push({ x: smp.pos.x, z: smp.pos.z, baseY: groundY - EMBED, topY, radius: RADIUS });
+    }
+  }
+
   return {
     instances,
+    pillars,
     centerline: new Centerline(samples, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,
-    groundY: minY - 0.3 // grass plane just under the road
+    groundY // grass plane just under the road
   };
 }
 

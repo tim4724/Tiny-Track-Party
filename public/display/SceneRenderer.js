@@ -973,6 +973,33 @@ export class SceneRenderer {
     flush();
   }
 
+  // Support pillars under raised decks (bridge/ramp). TrackBuilder computes the placements
+  // (the `pillars` opt + the under-bridge skip); each is a simple vertical cylinder from
+  // the grass plane up to just under the deck, merged into ONE matte mesh. They cast a
+  // contact shadow so the column reads as planted on the ground. Off-road, so they're kept
+  // OUT of the collision proxy — purely visual (a car never drives onto a pillar).
+  _buildPillars(track) {
+    const list = track.pillars;
+    if (!list || !list.length) return;
+    const geoms = [];
+    for (const p of list) {
+      const h = Math.max(0.1, p.topY - p.baseY);
+      const g = new THREE.CylinderGeometry(p.radius, p.radius, h, 16);
+      g.translate(p.x, p.baseY + h / 2, p.z); // cylinder is centred on its axis → lift to span base…top
+      geoms.push(g);
+    }
+    const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
+    if (geoms.length > 1) for (const g of geoms) g.dispose(); // copied into `merged`
+    const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.matrixAutoUpdate = false; // geometry is baked in world space (translate above)
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.trackGroup.add(mesh);
+    this._mergedGeoms.push(merged);
+    this._mergedMats.push(mat);
+  }
+
   setTrack(track, { debug = false } = {}) {
     this._disposeTrack();
     this.trackGroup.clear();
@@ -1081,6 +1108,8 @@ export class SceneRenderer {
         for (const g of geoms) addMesh(g);
       }
     }
+
+    this._buildPillars(track);
 
     if (debug) {
       // Magenta centreline overlay (inspection aid). Lift each point a little along

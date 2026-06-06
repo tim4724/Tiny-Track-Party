@@ -13,7 +13,8 @@
 // opts (any segment): rise (Δelevation over the segment, eased), bump (net-flat hump
 //   amplitude), bank (peak roll°, eased — corners only in practice), width (number or
 //   [start,end] taper, overriding the track default), lateral (straight-only net
-//   cross-shift, an S — a chicane is curve+curveR).
+//   cross-shift, an S — a chicane is curve+curveR), pillars (stand support columns from
+//   the grass up to a raised deck — flag the ramp + bridge run of an overpass).
 //
 // ── HOW A TRACK CLOSES ───────────────────────────────────────────────────────
 // The builder walks the segments and auto-closes the loop (gap < 0.5). A straight
@@ -76,7 +77,7 @@ export const CROSSOVER = [
   ...flare(6, 3.4),                                                // spine — flares wide (fast straight)
   arc(RL, -90), straight(L - 0.37), arc(RL, -90),                  // top loop (cw); −0.37 closes the loop
   straight(L - 0.37), ...run(6),                                   // down the far side; −0.37 closes the loop
-  arc(RL, -90), straight(L, { rise: 1.0 }), ...run(4), straight(L, { rise: -1.0 }), // turn west + BRIDGE
+  arc(RL, -90), straight(L, { rise: 1.0, pillars: true }), ...run(4, { pillars: true }), straight(L, { rise: -1.0, pillars: true }), // turn west + BRIDGE (on pillars)
   arc(RL, 90), ...run(3), arc(RL, 90), ...run(3), arc(RL, 90),     // bottom loop (ccw)
   ...run(6)                                                        // back to the spine
 ];
