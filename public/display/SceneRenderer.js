@@ -640,39 +640,28 @@ export class SceneRenderer {
     const need = [...new Set([...trackGlbs, ...CAR_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
-        if (CAR_MODELS.includes(name)) this._registerCarMats(gltf.scene);
+        if (CAR_MODELS.includes(name)) this._glossCarMats(gltf.scene);
         this.protos.set(name, gltf.scene);
         resolve();
       }, undefined, reject);
     })));
-    this._applyCarLook(); // gloss pass on all car materials
   }
 
-  // Collect every unique car material once, stashing its STOCK roughness so the
-  // gloss can be re-derived from the original each time the slider moves (else
-  // repeated multiplies would drift). Materials are shared across the proto's
-  // meshes — and a cloned car shares them — so editing them updates every car live.
-  _registerCarMats(root) {
-    if (!this._carMats) this._carMats = new Set();
+  // Give car materials the toy "shine" once at load: scale stock roughness toward
+  // gloss (DEF_CAR_ROUGH, lower → sharper key-light highlight) and cap metalness.
+  // A per-material guard keeps it idempotent for materials shared across a proto's
+  // meshes (cloned cars share them too, so this updates every car).
+  _glossCarMats(root) {
     root.traverse((o) => {
       if (!o.isMesh || !o.material) return;
       for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
-        if (!m || this._carMats.has(m)) continue;
-        m.userData.baseRough = ('roughness' in m) ? (m.roughness ?? 1) : null;
+        if (!m || m.userData.glossed) continue; // shared material: gloss exactly once
+        m.userData.glossed = true;
+        if ('roughness' in m) m.roughness = Math.max(0.08, (m.roughness ?? 1) * DEF_CAR_ROUGH);
         if ('metalness' in m) m.metalness = Math.min(m.metalness ?? 0, 0.1);
-        this._carMats.add(m);
+        m.needsUpdate = true;
       }
     });
-  }
-
-  // Apply the car gloss from stored stock roughness, scaled by DEF_CAR_ROUGH:
-  // lower roughness → sharper key-light "toy shine".
-  _applyCarLook() {
-    if (!this._carMats) return;
-    const mul = DEF_CAR_ROUGH;
-    for (const m of this._carMats) {
-      if (m.userData.baseRough != null) { m.roughness = Math.max(0.08, m.userData.baseRough * mul); m.needsUpdate = true; }
-    }
   }
 
   // Free the previous track's MERGED geometries/materials (each setTrack makes
@@ -831,14 +820,6 @@ export class SceneRenderer {
     sc.near = half * 0.6; sc.far = half * 3.6 + 12;
     sc.updateProjectionMatrix();
     k.shadow.needsUpdate = true; // rebuild the map for the new track
-  }
-
-  // Slowly orbit the overview camera around the whole track — used by the track
-  // gallery to inspect a layout. Drives the same turntable as the lobby preview
-  // (`this.orbit`). Only takes effect while the overview is the active camera (no
-  // split-screen cars on screen); normal play leaves it off.
-  setOverviewOrbit(on) {
-    this.orbit = !!on;
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the

@@ -123,7 +123,7 @@ export function runDisplayScenario(opts, ctx) {
 
     function setupTrackPreview() {
       const { scene, track } = ctx;
-      scene.setOverviewOrbit(true);
+      scene.orbit = true; // slowly orbit the whole track for the gallery overview
 
       const ids = [];
       for (let i = 0; i < players; i++) ids.push(i);

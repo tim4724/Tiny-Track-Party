@@ -205,9 +205,10 @@ function reverseSpec(spec) {
 // way (entry x=0 → exit x=-2), so the other-way chicane half is this reflection.
 // reverseSpec CANNOT produce it: an S-curve is point-symmetric, so traversing it
 // backwards gives the SAME bend. A reflection has negative determinant → it flips
-// the GLB's triangle winding, so the tile is tagged `mirror:true`; buildTrack
-// reflects its placement matrix and the renderer double-sides its material (else
-// the road's top face back-face-culls). Centerline points are x-negated here so
+// the GLB's triangle winding, so buildTrack reflects its placement matrix and the
+// renderer (detecting that negative determinant) flips the tile's winding back and
+// double-sides the merged material (else the road's top face shades dark). Centerline
+// points are x-negated here so
 // they ride the reflected road; entry/exit are rebuilt as clean frames so the
 // chaining/closure is unchanged (curveR still nets +2, the mirror of curve's -2).
 function mirrorSpec(spec) {
@@ -294,7 +295,7 @@ export function buildTrack(track, opts = {}) {
     // centerline points are already x-negated, so only the tile carries the flip.
     const matrix = scaleM.clone().multiply(place);
     if (spec.mirror) matrix.multiply(flipX);
-    instances.push({ glb: spec.glb, matrix, mirror: !!spec.mirror });
+    instances.push({ glb: spec.glb, matrix });
 
     // Append centerline points. Skip the leading points that fall within the
     // OVERLAP region (where this piece backs into the previous one), so the

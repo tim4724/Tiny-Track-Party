@@ -150,8 +150,9 @@ net.flow.on('playerleave', ({ peerIndex }) => {
 });
 
 // Always lay out at least this many seats; empty ones show as placeholders so
-// the lobby card keeps a fixed size as players trickle in.
-const MIN_SEATS = 4;
+// the lobby card keeps a fixed size as players trickle in. Locked to the race
+// field size so the lobby grid and the grid that actually races never diverge.
+const MIN_SEATS = MAX_PLAYERS;
 
 // Every race runs a full FIELD_SIZE grid: seats no human took are filled by AI
 // ("CPU") racers (see buildField), so a short-handed lobby still gets a real race.
