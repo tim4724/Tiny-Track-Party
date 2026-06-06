@@ -110,21 +110,36 @@ export const RIVERSIDE = [
   'straight', 'straight', 'curve', 'curveR', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'straight', 'straight', 'cornerLargeL'
 ];
 
-// Registry of named, previewable tracks: `name` is the display label and
-// `pieces` is the layout the builder chains. Selected in the display via
-// ?track=<key> (see display/main.js).
+// Oil slicks per track — FIXED hazards (not runtime-random). Each is placed by
+// `u` (fraction of the lap, 0 = start/finish line) and `lat` (lateral offset in
+// world units; the catalogue tracks run ±1.5 between the curbs, 0 = centreline).
+// `radius` and `cones` are optional (engine/renderer defaults: 1.1 units, 4
+// cones). Placed off-centre so a careful line can thread past on the open side;
+// `u` values are starting points to tune by driving (avoid corner apexes).
+const OILS = {
+  switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
+  crossover:  [ { u: 0.22, lat: 0.0 }, { u: 0.52, lat: 0.8 }, { u: 0.84, lat: -0.6 } ],
+  riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ]
+};
+
+// Registry of named, previewable tracks: `name` is the display label, `pieces`
+// is the layout the builder chains, and `oils` are the fixed slick hazards.
+// Selected in the display via ?track=<key> (see display/main.js).
 export const TRACKS = {
   switchback: {
     name: 'Switchback',
-    pieces: SWITCHBACK
+    pieces: SWITCHBACK,
+    oils: OILS.switchback
   },
   crossover: {
     name: 'Crossover',
-    pieces: CROSSOVER
+    pieces: CROSSOVER,
+    oils: OILS.crossover
   },
   riverside: {
     name: 'Riverside',
-    pieces: RIVERSIDE
+    pieces: RIVERSIDE,
+    oils: OILS.riverside
   }
 };
 
@@ -135,4 +150,4 @@ export const TRACK_ORDER = ['switchback', 'crossover', 'riverside'];
 // Flat list of tracks — {id, name, pieces} in display order — used by main.js and
 // the track-picker UI. The display builds each track and computes its schematic SVG
 // from the geometry (see display/trackSchematic.js), so the picker needs no per-track art.
-export const TRACK_LIST = TRACK_ORDER.map((id) => ({ id, name: TRACKS[id].name, pieces: TRACKS[id].pieces }));
+export const TRACK_LIST = TRACK_ORDER.map((id) => ({ id, name: TRACKS[id].name, pieces: TRACKS[id].pieces, oils: TRACKS[id].oils }));

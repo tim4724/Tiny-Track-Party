@@ -53,6 +53,23 @@ const REAR_RESTITUTION = 0.25; // bounciness of a rear-end tap (0 = dead stick, 
 const LAT_KICK = 1.4;          // sideways shove speed (units/s) imparted on a side bump, split by mass
 const KNOCK_DAMP = 6.0;        // how fast a sideways knock bleeds off (per second, exponential)
 
+// ---- Oil slicks (track hazards) ----
+// A puddle is a circle in (s, lat) space — the same locally-flat plane the car-car
+// collisions live in, so detection is cheap and "just works" through loops/hills.
+// Drive a car's CENTRE onto one and it SPINS OUT: steering goes dead and speed
+// bleeds for SPIN_TIME while the body whirls (the spin is cosmetic — the sim
+// heading is untouched; the renderer reads snapshot.spin). Detection is RISING-
+// EDGE per puddle (enter → trigger once), so a car parked on a slick spins a
+// single time, not every frame — it must leave and re-enter to spin again.
+// Numbers are STARTING VALUES (tune in playtest). Hitting oil is NOT an abrupt
+// stop: the car loses grip — throttle cuts and a gentle drag bleeds speed — so it
+// keeps rolling THROUGH the slick and spins out behind it. OIL_RADIUS is only a
+// fallback; the display sizes each puddle to a fraction of the track width.
+const OIL_RADIUS = 0.7;        // default puddle radius (world units) when a hazard omits one
+const SPIN_TIME = 1.0;         // seconds of lost control per spin-out
+const SPIN_DRAG = 2.5;         // gentle deceleration (units/s²) while spinning — coasts through, no hard stop
+const SPIN_TURNS = 2;          // cosmetic whole turns over SPIN_TIME (a multiple of 2π → no snap on reset)
+
 // Default per-car stats = the benchmark: accel/vmax/turn are multipliers on the
 // base constants (1 = unchanged), `mass` is relative (only the ratio matters in a
 // collision), and halfLen/halfWid are the collision footprint half-extents in
@@ -89,6 +106,13 @@ export class Game {
     this.finishedOrder = []; // ids in finish order
     this.cars = new Map();
 
+    // Authored oil slicks for this track: { s (arclength), lat, radius }. The
+    // display resolves them from the track catalogue (fraction-of-lap → arclength);
+    // tests set track.hazards directly. Missing on a hazard-less track → no slicks.
+    this.hazards = (track.hazards || []).map((h) => ({
+      s: h.s, lat: h.lat || 0, radius: h.radius || OIL_RADIUS
+    }));
+
     // Stagger the grid so cars don't spawn on top of each other: small negative
     // s and alternating lateral lanes, all behind the start line (s=0).
     // Each entry is either a primitive id (→ benchmark stats) or {id, stats}.
@@ -106,6 +130,9 @@ export class Game {
         heading: 0,      // car yaw relative to the track tangent (real steering)
         steer: 0,
         brake: 0,        // 0..1 analog brake (swipe distance)
+        spin: 0,         // cosmetic spin-out angle (rad) — renderer whirls the body by this
+        spinT: 0,        // seconds left in the current spin-out (0 = in control)
+        oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
         lap: 0,
         finished: false,
         finishTime: null,
@@ -157,11 +184,27 @@ export class Game {
       // lap counter is frozen (the `c.finished` guard below skips lap detection).
       if (c.finished) { c.steer = pursue(c, this.centerline); c.brake = cornerBrake(c, this.centerline); }
 
-      // LONGITUDINAL: auto-accelerate toward the brake-scaled cruise speed. brake is
-      // analog (0..1): 0 → full speed, 0.5 → half speed, 1 → stop. No automatic
-      // slow-for-the-corner — too hot into a bend and the car washes wide (below).
+      // SPIN-OUT (oil slick): tick down any active spin (whirling the cosmetic
+      // angle, landing back on 0), then test the puddles rising-edge and trigger a
+      // fresh one. While spinning, steering is dead — a clean, recoverable penalty
+      // with no realistic physics. Finished (ghost) cars skip it.
+      let spinning = c.spinT > 0;
+      if (spinning) {
+        c.spinT -= dt;
+        c.spin += (SPIN_TURNS * 2 * Math.PI / SPIN_TIME) * dt;
+        if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
+      }
+      if (!c.finished && this._enterOil(c) && !spinning) {
+        c.spinT = SPIN_TIME; c.spin = 0; spinning = true; // lose grip — no abrupt speed hit
+      }
+
+      // LONGITUDINAL: normally auto-accelerate toward the brake-scaled cruise speed
+      // (brake is analog 0..1: 0 → full speed, 0.5 → half, 1 → stop). On a slick the
+      // car loses grip instead: NO throttle, just a gentle drag, so it coasts through
+      // the oil and spins out behind it rather than braking on the spot.
       const targetV = c.vmax * (1 - c.brake);
-      if (c.v < targetV) c.v = Math.min(targetV, c.v + c.accel * dt);
+      if (spinning) c.v = Math.max(0, c.v - SPIN_DRAG * dt);
+      else if (c.v < targetV) c.v = Math.min(targetV, c.v + c.accel * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
 
       // STEERING (real): tilt turns the car's heading; you must steer through curves.
@@ -170,7 +213,8 @@ export class Game {
       // wide → understeer. authority ramps steering in with speed; non-linear so
       // small tilts barely steer.
       const authority = 0.4 + 0.6 * Math.min(1, c.v / (c.vmax * 0.5));
-      const steerIn = Math.sign(c.steer) * Math.pow(Math.abs(c.steer), STEER_EXPO);
+      const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
+      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), STEER_EXPO);
       c.heading += STEER_SIGN * steerIn * c.turn * authority * dt;
 
       const before = this.centerline.sampleAt(c.totalS);
@@ -244,6 +288,26 @@ export class Game {
       c.onWall = true;
       if (c.v > cap) c.v = Math.max(cap, c.v - WALL_DECEL * dt);
     }
+  }
+
+  // Update which oil slicks `c` overlaps and report whether it ENTERED any this
+  // tick (rising edge). Distance is measured in the same (arclength, lateral)
+  // plane as the car-car collisions, with the arclength gap wrapped to the
+  // shortest way round the closed lap. Membership is kept so a car sitting on a
+  // slick doesn't re-trigger every frame — only a fresh enter spins it out.
+  _enterOil(c) {
+    if (!this.hazards.length) return false;
+    let entered = false;
+    for (let i = 0; i < this.hazards.length; i++) {
+      const h = this.hazards[i];
+      let ds = c.totalS - h.s;
+      ds -= Math.round(ds / this.length) * this.length; // shortest wrap around the lap
+      const dl = c.lat - h.lat;
+      const inside = (ds * ds + dl * dl) < (h.radius * h.radius);
+      if (inside) { if (!c.oilIn.has(i)) { c.oilIn.add(i); entered = true; } }
+      else c.oilIn.delete(i);
+    }
+    return entered;
   }
 
   // Car-car collisions in (totalS, lat) space. Two cars overlap when their
@@ -331,7 +395,8 @@ export class Game {
         // lean line up with the turn without the renderer needing to know STEER_SIGN.
         // steerInput is the RAW player input (matches the phone's steer bar) and
         // drives the on-screen steer indicator.
-        finished: c.finished, finishTime: c.finishTime, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall
+        finished: c.finished, finishTime: c.finishTime, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall,
+        spin: c.spin // cosmetic spin-out angle (rad) for the renderer to whirl the body
       });
     }
     return { cars, elapsed: this.elapsed };

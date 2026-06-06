@@ -20,7 +20,20 @@ const show = (name) => { for (const k of Object.keys(screens)) screens[k].classL
 // no rebuild. The catalog (id + name + top-down SVG path) is what the controllers'
 // track picker renders; `built` keeps the geometry for the race + the 3D preview.
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
-const built = new Map(TRACK_LIST.map((t) => [t.id, buildTrack(t.pieces)]));
+const built = new Map(TRACK_LIST.map((t) => {
+  const b = buildTrack(t.pieces);
+  // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
+  // now that the built geometry knows the lap length. Read by the engine (spin-out
+  // detection) and the renderer (drawing the puddle + cones), both off track.hazards.
+  b.hazards = (t.oils || []).map((o) => ({
+    s: (((o.u % 1) + 1) % 1) * b.length, lat: o.lat || 0,
+    // diameter capped at 40% of the drivable track width (radius = 20%) unless the
+    // slick names its own radius — keeps a puddle dodgeable on any track.
+    radius: o.radius != null ? o.radius : b.roadWidth * 0.2,
+    cones: o.cones
+  }));
+  return [t.id, b];
+}));
 const trackCatalog = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, svg: trackSchematic(built.get(t.id))
 }));
@@ -47,7 +60,9 @@ scene.orbit = true;
 let sceneReady = false;
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
-const scenePromise = scene.load(allGlbs).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
+// item-cone is loaded alongside the track tiles so setTrack can ring each oil
+// slick with cones (it isn't a track instance, so it's added to the set here).
+const scenePromise = scene.load([...allGlbs, 'item-cone']).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
 // validates host + room state before calling this; `track` is read by startRace.
@@ -107,7 +122,7 @@ scene.onFrame = (dt) => {
   }
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin);
   }
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
@@ -263,6 +278,7 @@ function startRace() {
   // opponents in the shared world, not players watching the screen.
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
+  scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
 
   session = new RaceSession(field, track, {
     onRaceEvent,

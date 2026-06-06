@@ -329,6 +329,63 @@ test('finished cars are ghosts — a live car is not shoved by one', () => {
   assert.ok(Math.abs(b.lat - bLat0) < 1e-9, 'live car is not knocked sideways by a finished (ghost) car');
 });
 
+// ---- oil slicks (spin-out hazard) ------------------------------------------
+
+test('an oil slick spins a car out: steering dies + speed scrubs, then control returns', () => {
+  // Slick on the opening straight (small s, before the first corner). A car that
+  // drives onto it should ignore full steer and shed speed, then recover.
+  const track = mkTrack(3);
+  track.hazards = [{ s: 5, lat: 0, radius: 1.1 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 5, lat: 0, v: 8, heading: 0 });
+
+  // one tick lands the car's centre on the slick
+  game.processInput('p1', { s: 1, b: 0 }); game.update(16);
+  assert.ok(car.spinT > 0, 'driving onto oil triggers a spin-out');
+  // speed bleeds GENTLY (loss of grip), not an abrupt scrub
+  assert.ok(car.v < 8 && car.v > 7.5, `gentle deceleration on entry, no hard stop (v=${car.v.toFixed(2)})`);
+  // the cosmetic whirl advances on the following ticks
+  game.processInput('p1', { s: 1, b: 0 }); game.update(16);
+  assert.ok(game.getSnapshot().cars[0].spin > 0, 'snapshot exposes a cosmetic spin angle');
+
+  // hold full steer mid-spin: a controllable car would swing wide on the straight,
+  // but steering is dead so the slick car stays near the centreline — and it keeps
+  // rolling forward (drives THROUGH the slick, spinning out behind it).
+  const lat0 = car.lat, s0 = car.totalS;
+  for (let i = 0; i < 25; i++) { game.processInput('p1', { s: 1, b: 0 }); game.update(16); }
+  assert.ok(car.spinT > 0, 'still spinning ~0.4s in');
+  assert.ok(Math.abs(car.lat - lat0) < 0.3, `steering is dead while spinning (Δlat=${(car.lat - lat0).toFixed(2)})`);
+  assert.ok(car.totalS - s0 > 1.5, `car keeps moving through the slick (Δs=${(car.totalS - s0).toFixed(2)})`);
+
+  // run the spin out; control returns and full steer now moves the car laterally
+  for (let i = 0; i < 60; i++) { game.processInput('p1', { s: 1, b: 0 }); game.update(16); }
+  assert.equal(car.spinT, 0, 'spin-out recovers after ~1s');
+  const lat1 = car.lat;
+  for (let i = 0; i < 25; i++) { game.processInput('p1', { s: 1, b: 0 }); game.update(16); }
+  assert.ok(Math.abs(car.lat - lat1) > 0.3, `steering works again once recovered (Δlat=${(car.lat - lat1).toFixed(2)})`);
+});
+
+test('a car parked on a slick spins out once, not every frame (rising-edge)', () => {
+  const track = mkTrack(3);
+  track.hazards = [{ s: 5, lat: 0, radius: 1.1 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 5, lat: 0, v: 0, heading: 0 });
+
+  // full brake → the car sits on the slick the whole test
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.ok(car.spinT > 0, 'first contact spins it out');
+  for (let i = 0; i < 120; i++) { game.processInput('p1', { b: 1 }); game.update(16); }
+  assert.equal(car.spinT, 0, 'the single spin has ended');
+  assert.ok(car.oilIn.has(0), 'car is still sitting on the slick');
+  // must NOT re-trigger while parked: it has to leave and re-enter to spin again
+  for (let i = 0; i < 30; i++) {
+    game.processInput('p1', { b: 1 }); game.update(16);
+    assert.equal(car.spinT, 0, 'no re-trigger while parked on the slick');
+  }
+});
+
 test('a finished car keeps driving on autopilot instead of stopping', () => {
   const track = mkTrack(1);
   const game = new Game(['p1'], track, {});

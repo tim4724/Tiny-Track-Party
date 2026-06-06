@@ -103,6 +103,23 @@ const RIDE_HEIGHT = 0.012;
 // ~18 reproduces the old per-frame 0.25 lerp at 60fps but stays stable at 30fps.
 const RIDE_DAMP = 18;
 
+// Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
+// a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
+// friction, and settles back upright wherever it lands — pure render-side juice,
+// consistent across every split-screen view (one shared scene). Starting values.
+const OIL_RADIUS_FALLBACK = 0.7; // puddle radius when a hazard omits one (display normally sizes it to track width)
+const CONE_H = 0.3;            // cone height in world units (small toy marker)
+const CONE_KICK_R = 0.7;      // car-centre → cone distance (world units) that punts a cone
+const CONE_KICK_MIN = 2.5;    // launch speed even at a crawl
+const CONE_KICK_GAIN = 6.0;   // extra launch speed at full pace (× the car's normalised speed)
+const CONE_KICK_UP = 2.6;     // upward pop on a kick
+const CONE_GRAVITY = 16.0;    // fall acceleration (units/s²)
+const CONE_RESTITUTION = 0.42;// vertical bounciness on hitting the road
+const CONE_FRICTION = 0.6;    // horizontal speed + tumble retained per ground contact
+const CONE_SETTLE = 0.4;      // residual speed below which a cone comes to rest
+const CONE_EDGE_MARGIN = 0.35;// keep cones this far inside the road edge (off the curb/wall)
+const CONE_WALL_RESTITUTION = 0.5; // bounce energy kept when a kicked cone hits the curb
+
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
 // cell aspect is from 1:1 (square), with a small penalty for empty cells.
@@ -307,6 +324,8 @@ export class SceneRenderer {
     this._sBasis = new THREE.Matrix4();
     this._sWant = new THREE.Vector3();
     this._sTarget = new THREE.Vector3();
+    this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
+    this._coneTmp2 = new THREE.Vector3();
   }
 
   // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
@@ -495,6 +514,11 @@ export class SceneRenderer {
     // instead of one per tile (draw-call count was scaling with track length).
     this.trackGroup = new THREE.Group();
     scene.add(this.trackGroup);
+    // Track hazards (oil slicks + their warning cones), rebuilt per setTrack. Kept
+    // in its own group so it clears with the track without touching the cars/decals.
+    this.hazardGroup = new THREE.Group();
+    scene.add(this.hazardGroup);
+    this._cones = []; // kickable cone state {mesh, home, homeQuat, vel, spinAxis, spinRate, airborne}
     // Collision proxy: the per-tile clones, kept OUT of the scene graph (so they
     // cost nothing to render/cull) but raycast by _roadHitY for ground-conform.
     // Per-tile bounding spheres prune the cast to the 1-2 tiles under the car —
@@ -824,6 +848,151 @@ export class SceneRenderer {
     sc.near = half * 0.6; sc.far = half * 3.6 + 12;
     sc.updateProjectionMatrix();
     k.shadow.needsUpdate = true; // rebuild the map for the new track
+
+    this._buildHazards(track);
+  }
+
+  // Draw the track's oil slicks: a glossy dark disc on the road per hazard, ringed
+  // with item-cone warning markers. Static (placed once from track.hazards +
+  // centreline), so this just rebuilds the hazardGroup when the track changes.
+  // Cone meshes share the cached proto geometry/material, so only the disc (its
+  // own geometry + material) is disposed on rebuild — never the shared proto.
+  _buildHazards(track) {
+    this.hazardGroup.traverse((m) => {
+      if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
+    });
+    this.hazardGroup.clear();
+    this._cones = [];
+    const hz = track.hazards || [];
+    if (!hz.length) return;
+    const cl = track.centerline;
+    this._centerline = cl;                       // _stepCones re-samples it to keep cones on the road
+    this._roadHalf = (track.roadWidth || 3.6) / 2;
+    const coneEdge = this._roadHalf - CONE_EDGE_MARGIN; // max lateral offset that stays off the curb
+    const coneProto = this.protos.get('item-cone');
+    const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+    for (const h of hz) {
+      const radius = h.radius || OIL_RADIUS_FALLBACK;
+      const f = cl.sampleAt(h.s);
+      const up = f.up.clone().normalize();
+      // oil disc — flat on the road, a hair above it, pulled forward in depth so it
+      // never z-fights the road tiles (same polygonOffset trick as the skid decals).
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(radius, 36),
+        // A wet FILM on the road, not a hole: dark slate-blue and semi-transparent
+        // so the road grain reads through it (there's no env map, so gloss/metalness
+        // can't sell "wet" — translucency + tint does). depthWrite off + polygon
+        // offset keep it from z-fighting the road, same as the skid decals.
+        new THREE.MeshStandardMaterial({
+          color: 0x161425, roughness: 0.25, metalness: 0.2,
+          transparent: true, opacity: 0.7, depthWrite: false,
+          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+        })
+      );
+      disc.userData.owned = true; // disc owns its geometry+material (dispose on rebuild)
+      disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat).addScaledVector(up, 0.02);
+      disc.quaternion.setFromUnitVectors(Z, up); // CircleGeometry faces +Z → lay it in the road plane
+      disc.receiveShadow = true;
+      disc.renderOrder = -1; // under the cars' dust/skid decals
+      this.hazardGroup.add(disc);
+      // cones ringing the slick. Phase by half a step so a 4-cone ring lands on the
+      // corners (none dead-centre on the racing line). Non-collidable — a warning.
+      if (!coneProto) continue;
+      const n = h.cones || 4;
+      const ring = radius * 1.05;
+      for (let i = 0; i < n; i++) {
+        const a = (i + 0.5) * (2 * Math.PI / n);
+        const ds = Math.cos(a) * ring, dl = Math.sin(a) * ring;
+        const coneS = h.s + ds;
+        const cf = cl.sampleAt(coneS);                // re-sample so cones follow track curvature
+        const cup = cf.up.clone().normalize();
+        const clat = Math.max(-coneEdge, Math.min(coneEdge, h.lat + dl)); // keep it inside the curb
+        const cone = coneProto.clone(true);
+        const box = new THREE.Box3().setFromObject(cone);
+        cone.scale.setScalar(CONE_H / Math.max(1e-3, box.max.y - box.min.y));
+        cone.position.copy(cf.pos).addScaledVector(cf.lateral, clat);
+        cone.quaternion.setFromUnitVectors(Y, cup); // stand the cone up on the road normal
+        cone.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        this.hazardGroup.add(cone);
+        // register it as a kickable prop (see _stepCones): rest pose + scratch state
+        this._cones.push({
+          mesh: cone, home: cone.position.clone(), homeQuat: cone.quaternion.clone(), homeS: coneS,
+          vel: new THREE.Vector3(), spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0, airborne: false
+        });
+      }
+    }
+  }
+
+  // Advance the kickable warning cones one frame. A resting cone slerps back
+  // upright and watches for a car centre within CONE_KICK_R — contact punts it
+  // away from the car (faster the quicker the car), arcing + tumbling. An airborne
+  // cone falls under gravity, bounces off the road with restitution + friction,
+  // and settles where it lands once its energy drops below CONE_SETTLE. Purely
+  // cosmetic (the sim ignores cones), so it lives entirely here.
+  _stepCones(dt) {
+    if (!this._cones || !this._cones.length) return;
+    for (const cn of this._cones) {
+      const m = cn.mesh;
+      if (!cn.airborne) {
+        if (!m.quaternion.equals(cn.homeQuat)) m.quaternion.slerp(cn.homeQuat, 1 - Math.exp(-8 * dt));
+        for (const c of this.cars.values()) {
+          if (!c.pose) continue;
+          const spd = c.spd || 0;
+          if (spd < 0.05) continue; // a stationary car doesn't kick
+          const dx = m.position.x - c.group.position.x, dz = m.position.z - c.group.position.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 >= CONE_KICK_R * CONE_KICK_R) continue;
+          let dirx, dirz;
+          if (d2 < 1e-4) { const f = c.pose.forward, fl = Math.hypot(f.x, f.z) || 1; dirx = f.x / fl; dirz = f.z / fl; }
+          else { const len = Math.sqrt(d2); dirx = dx / len; dirz = dz / len; }
+          const power = CONE_KICK_MIN + CONE_KICK_GAIN * spd;
+          cn.vel.set(dirx * power, CONE_KICK_UP, dirz * power);
+          cn.spinAxis.set(-dirz, 0, dirx).normalize(); // tumble about a horizontal axis ⟂ to launch
+          cn.spinRate = power * 2.2;
+          cn.airborne = true;
+          break;
+        }
+        continue;
+      }
+      // airborne: integrate, bounce off the road, settle
+      cn.vel.y -= CONE_GRAVITY * dt;
+      m.position.addScaledVector(cn.vel, dt);
+      m.rotateOnWorldAxis(cn.spinAxis, cn.spinRate * dt);
+      if (m.position.y <= cn.home.y) {
+        m.position.y = cn.home.y;
+        if (cn.vel.y < 0) cn.vel.y = -cn.vel.y * CONE_RESTITUTION;
+        cn.vel.x *= CONE_FRICTION; cn.vel.z *= CONE_FRICTION; cn.spinRate *= CONE_FRICTION;
+        if (cn.vel.y < CONE_SETTLE && (cn.vel.x * cn.vel.x + cn.vel.z * cn.vel.z) < CONE_SETTLE * CONE_SETTLE) {
+          cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
+        }
+      }
+      // keep it ON the road: clamp the lateral offset from the centreline (sampled at
+      // the cone's current along-track position) so a kicked cone bounces off the curb
+      // instead of clipping through it / sailing into the grass.
+      if (this._centerline) {
+        const f0 = this._centerline.sampleAt(cn.homeS);
+        const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
+        const f = this._centerline.sampleAt(cn.homeS + along);
+        const latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
+        const edge = this._roadHalf - CONE_EDGE_MARGIN;
+        if (Math.abs(latOff) > edge) {
+          m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
+          const vLat = cn.vel.dot(f.lateral);
+          if (vLat * Math.sign(latOff) > 0) cn.vel.addScaledVector(f.lateral, -vLat * (1 + CONE_WALL_RESTITUTION));
+        }
+      }
+    }
+  }
+
+  // Restore every cone to its home pose — called on a new game so a fresh race
+  // starts with the warning rings intact rather than wherever they were knocked.
+  resetCones() {
+    if (!this._cones) return;
+    for (const cn of this._cones) {
+      cn.mesh.position.copy(cn.home);
+      cn.mesh.quaternion.copy(cn.homeQuat);
+      cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
+    }
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the
@@ -1024,7 +1193,7 @@ export class SceneRenderer {
     const c = {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
       wheelbase, skidWidth, plate, contact, cam,
-      carIndex, anchorZ: anchor.z, plateY: anchor.y,
+      carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0,
       rideOff: null // damped ride-height offset from the centreline (setCarPose)
@@ -1079,10 +1248,13 @@ export class SceneRenderer {
     this._order = this._order.filter((x) => x !== id);
   }
 
-  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer) {
+  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0) {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
+    // spin-out whirl: rotate the whole car model about its up axis on top of its
+    // model-facing fix (the sim heading is untouched — this is purely cosmetic).
+    c.car.rotation.y = c.baseYaw + spin;
     // Persistent pose vectors (created once per car) reused every frame — no GC.
     // Safe because c.pose is only read within the same frame it's written.
     if (!c.pose) c.pose = { pos: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -1242,6 +1414,7 @@ export class SceneRenderer {
       }
     }
     this._stepSkids(dt);
+    this._stepCones(dt);
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
