@@ -88,7 +88,12 @@ export function buildTrack(track, opts = {}) {
       const dx = dirX(theta), dz = dirZ(theta), lx = latX(theta), lz = latZ(theta);
       const x0 = X, z0 = Z, y0 = elev;
       for (let i = 1; i <= N; i++) {
-        const f = i / N, off = lat * smootherstep(f); // C2 ease → the chicane's curvature is continuous (no joint step)
+        // Lateral shift eases with SMOOTHstep, not smootherstep: smootherstep zeroes the
+        // 2nd derivative at both ends, so at a chicane's interior joint the turn-rate dwells
+        // to ~0 (a hitch felt as a left-right "shift" mid-S). smoothstep carries a continuous
+        // non-zero curvature through that joint, and its gentler peak slope (1.5 vs 1.875)
+        // softens the swing. (rise/bump below stay smootherstep — grades want the C2 ends.)
+        const f = i / N, off = lat * smoothstep(f);
         worldPts.push(v(
           x0 + dx * len * f + lx * off,
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,

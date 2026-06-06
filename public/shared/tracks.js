@@ -37,7 +37,12 @@ const RL = 4.185;     // sweeping (large) corner radius
 const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
 const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
 const run = (n, opts) => Array.from({ length: n }, () => straight(L, opts)); // n plain straights
-const chicane = () => [straight(L, { lateral: -1.3 }), straight(L, { lateral: 1.3 })]; // net-0 S (gentle: curves no harder than a corner)
+// Net-0 S. The lateral shift is kept SMALL on purpose: at neutral the understeer model
+// holds a world heading and washes the car sideways by ≈ the shift's full width, so a big
+// shift slides the car curb-to-curb (a left-right lurch you must fight). At ~0.8 the
+// neutral drift stays ~1.7 (well inside the 2.2 curb limit) — a gentle S you flow through
+// with light steering, not a jink that throws you at the kerb.
+const chicane = () => [straight(L, { lateral: -0.8 }), straight(L, { lateral: 0.8 })];
 const halfHill = () => [straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 })];  // net-flat
 const fullHill = () => [straight(L, { rise: 1.0 }), straight(L, { rise: -1.0 })];  // net-flat
 // A run of n straights whose width bulges to `peak` in the middle and eases back to the
