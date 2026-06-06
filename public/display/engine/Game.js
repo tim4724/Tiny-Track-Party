@@ -345,6 +345,7 @@ export class Game {
       // Subtract the track's own turn so NEUTRAL holds a world heading (= you
       // must steer the curves), then clamp so the car can't point backward.
       const after = this.centerline.sampleAt(c.totalS);
+      c.curbLim = this._curbLimit(after.width); // cache from the sampleAt we already did → _clampCurb (both passes, same totalS) reads it instead of re-sampling
       const dTheta = Math.atan2(
         before.tangent.clone().cross(after.tangent).dot(after.up),
         before.tangent.dot(after.tangent)
@@ -388,18 +389,28 @@ export class Game {
     this._rank();
   }
 
-  // Rubbing a curb pins the car just inside it and bleeds speed toward a cap (a
-  // fraction of the car's own top speed) — slows you, never a hard stop. Shared by
-  // the integration step and the post-collision re-clamp (a bump can shove a car
-  // into the wall).
+  // Lateral corridor half-width for a road width (world units): half the drivable width
+  // minus the body margin, so a flared section widens it and a pinch tightens it. Falls
+  // back to the scalar maxLat when width is unknown. (maxLat itself still seeds spawn lanes.)
+  _curbLimit(width) {
+    return (width != null && !Number.isNaN(width)) ? Math.max(0.1, width / 2 - LAT_MARGIN) : this.maxLat;
+  }
+  // Per-arclength version — constructs spline frames via sampleAt, so do NOT call it in hot
+  // paths: update() caches c.curbLim from the sampleAt it already does each tick.
+  maxLatAt(s) {
+    return this._curbLimit(this.centerline.widthAt ? this.centerline.widthAt(s) : null);
+  }
+
+  // Rubbing a curb pins the car just inside it and bleeds speed toward a cap (a fraction of
+  // the car's own top speed) — slows you, never a hard stop. Runs twice a frame (integration
+  // + post-collision re-clamp); both read the cached c.curbLim (same totalS, no re-sample).
   _clampCurb(c, dt) {
-    // onWall is cleared once per frame at the top of update()'s loop, not here —
-    // this runs twice a frame (integration + post-collision re-clamp) and must not
-    // wipe a contact the first pass already flagged (a car pinned at the curb sits
-    // exactly AT maxLat, so the second pass wouldn't re-detect it).
+    // onWall is cleared once per frame at the top of update()'s loop, not here — a car pinned
+    // at the curb sits exactly AT the limit, so the second pass wouldn't re-detect it.
     const cap = c.vmax * WALL_SPEED_FRAC;
-    if (c.lat > this.maxLat || c.lat < -this.maxLat) {
-      c.lat = c.lat > 0 ? this.maxLat : -this.maxLat;
+    const lim = c.curbLim != null ? c.curbLim : this.maxLat;
+    if (c.lat > lim || c.lat < -lim) {
+      c.lat = c.lat > 0 ? lim : -lim;
       c.onWall = true;
       if (c.v > cap) c.v = Math.max(cap, c.v - WALL_DECEL * dt);
     }

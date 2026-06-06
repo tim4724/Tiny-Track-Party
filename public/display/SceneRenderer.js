@@ -413,14 +413,12 @@ export class SceneRenderer {
     for (const h of hits) {
       if (h.face) {
         this._normalMat.getNormalMatrix(h.object.matrixWorld);
-        // Keep only NEAR-HORIZONTAL surfaces (|normal.y| > 0.1, i.e. the face leans
-        // no more than ~84° off horizontal); skip vertical walls. Using |normal.y|
-        // (not normal.y > 0.1) means MIRRORED tiles — reflected across X, which flips
-        // their winding so the road top face's normal points DOWN — still register;
-        // the nearest-to-refY pick below still selects the true road top (Y is
-        // unaffected by an X-reflection). Deliberately loose so sloped road tiles
-        // (hills/ramps) still count — the tracks have no banking, so nothing
-        // near-vertical is drivable. Tighten if a banked turn or loop is added.
+        // Keep only NEAR-HORIZONTAL surfaces (|normal.y| > 0.1, i.e. the face leans no
+        // more than ~84° off horizontal); skip the kerbs' near-vertical inner/outer
+        // faces. |normal.y| (not normal.y) is used so a back-wound road face still
+        // registers; the nearest-to-refY pick below selects the true road top. Loose
+        // enough that sloped hills/ramps AND banked corners (≤ ~25° here) all count —
+        // only a near-vertical wall or a loop-the-loop would need a tighter bound.
         const ny = this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y;
         if (Math.abs(ny) <= 0.1) continue;
       }
@@ -764,6 +762,217 @@ export class SceneRenderer {
     this._mergedMats = [];
   }
 
+  // Build the visible road + kerbs by sweeping a fixed cross-section along the track
+  // centreline, plus a chunked road-surface proxy for the ground-conform raycast. The
+  // road is fully procedural (no GLB tiles): width comes from the track, the kerb is a
+  // low toy profile, so widening the road only pushes the kerb outward — it never grows
+  // into a wall the way scaling the old GLB tiles did. One merged vertex-coloured mesh
+  // (asphalt + white edge lines + red/white kerb + side skirt); adds it to trackGroup
+  // and the collision chunks to `collide`.
+  _buildRibbonRoad(track, collide) {
+    const cl = track.centerline;
+    if (!cl || !cl.samples.length) return;
+
+    // Drivable width is per-sample (centerline.width / roadWidth) — the road can flare
+    // and pinch along the lap, and the physics curb corridor follows it (Game.maxLatAt).
+    // `defHalf` is the fallback half-width; the kerb/line cross-section is fixed.
+    const defHalf = (track.roadWidth || 5) / 2;
+    const halfAt = (i) => (frames[i].width != null ? frames[i].width : track.roadWidth || 5) / 2;
+    const cw = 0.22;        // kerb lateral width
+    const ch = 0.20;        // kerb height — low; a kerb, not a wall
+    const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
+    const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
+    const lw = Math.min(0.10, defHalf * 0.5 - gap);// painted white edge-line width
+    const stripeLen = 0.32;                        // kerb red/white band length (world units)
+
+    // Resample the centreline at a uniform, fine arclength step. The raw samples are
+    // spaced unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a
+    // stripe — so colouring whole between-sample segments aliased the bands into uneven
+    // blobs (a stripe shorter than a segment simply can't be drawn). A uniform step a
+    // few× finer than a stripe renders every band cleanly and also smooths the surface.
+    const ds = Math.min(0.5, Math.max(0.06, stripeLen / 3));
+    const N = Math.min(4000, Math.max(8, Math.round(cl.length / ds)));
+    const frames = [];
+    for (let i = 0; i < N; i++) frames.push(cl.sampleAt((i / N) * cl.length));
+
+    // Colours — sampled directly from the Kenney colormap (colormap.png) at the real
+    // kerb/road face UVs, so the procedural road matches the GLB tiles' plastic look.
+    // Kenney bakes per-face shading into the texture (darker side swatches, brighter
+    // tops); we take the TOP/brightest swatch as the base albedo and let the scene's
+    // real-time lighting do the side shading. Built through THREE.Color so the sRGB
+    // hexes convert to the renderer's linear working space the same way material.color
+    // does (raw vertex-colour floats are NOT auto-converted — doing it here keeps the
+    // albedo identical to what the textured tiles sample).
+    const c = (hex) => { const k = new THREE.Color(hex); return [k.r, k.g, k.b]; };
+    const ASPHALT = c(0x5a6078);   // road surface
+    const LINE = c(0xc4c4d9);      // painted road marking (Kenney's light road-line swatch)
+    const KERB_RED = c(0xfa6b41);  // kerb red — Kenney's is a warm orange-red, not crimson
+    const KERB_WHITE = c(0xf8f8fb);// kerb white
+
+    // Cross-section anatomy, left → right: asphalt is flat (y=0) across the drivable width;
+    // inside each kerb sits a small asphalt `gap`, then a thin painted white line, then the
+    // main asphalt. A low kerb rises to `ch` just outside; a skirt drops to -deck so the deck
+    // reads as solid from the side and over crests (a zero-thickness ribbon looks like paper
+    // and shows daylight under hill tops).
+    // Cross-section as { sign: which kerb edge (−1 left, +1 right), off: lateral offset
+    // from that edge, y: height above the drive surface }. A point's lateral position on
+    // ring i is sign·halfAt(i) + off, so the whole profile flares/pinches with the
+    // per-sample road width while the kerb + line widths stay constant.
+    const P = [
+      { sign: -1, off: -cw,       y: -deck }, // 0  left skirt foot
+      { sign: -1, off: -cw,       y: 0     }, // 1  left kerb outer base (top of deck skirt)
+      { sign: -1, off: -cw,       y: ch    }, // 2  left kerb outer top
+      { sign: -1, off: 0,         y: ch    }, // 3  left kerb inner top
+      { sign: -1, off: 0,         y: 0     }, // 4  left asphalt edge (foot of kerb)
+      { sign: -1, off: gap,       y: 0     }, // 5  outer edge of left line (after the gap)
+      { sign: -1, off: gap + lw,  y: 0     }, // 6  inner edge of left line
+      { sign:  1, off: -gap - lw, y: 0     }, // 7  inner edge of right line
+      { sign:  1, off: -gap,      y: 0     }, // 8  outer edge of right line
+      { sign:  1, off: 0,         y: 0     }, // 9  right asphalt edge
+      { sign:  1, off: 0,         y: ch    }, // 10 right kerb inner top
+      { sign:  1, off: cw,        y: ch    }, // 11 right kerb outer top
+      { sign:  1, off: cw,        y: 0     }, // 12 right kerb outer base (top of deck skirt)
+      { sign:  1, off: cw,        y: -deck }  // 13 right skirt foot
+    ];
+    // strip connects profile points (a,b); `kind` picks the colour rule.
+    const STRIPS = [
+      { a: 0,  b: 1,  kind: 'skirt' },            // left deck side, below road — road-grey
+      { a: 1,  b: 2,  kind: 'kerb', side: 'L' },  // left kerb OUTER face (road level → top) — striped
+      { a: 2,  b: 3,  kind: 'kerb', side: 'L' },  // left kerb top
+      { a: 3,  b: 4,  kind: 'kerb', side: 'L' },  // left kerb inner face
+      { a: 4,  b: 5,  kind: 'road'  },            // gap asphalt between kerb and left line
+      { a: 5,  b: 6,  kind: 'line'  },            // left white edge line
+      { a: 6,  b: 7,  kind: 'road'  },            // main asphalt
+      { a: 7,  b: 8,  kind: 'line'  },            // right white edge line
+      { a: 8,  b: 9,  kind: 'road'  },            // gap asphalt between right line and kerb
+      { a: 9,  b: 10, kind: 'kerb', side: 'R' },  // right kerb inner face
+      { a: 10, b: 11, kind: 'kerb', side: 'R' },  // right kerb top
+      { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
+      { a: 12, b: 13, kind: 'skirt' }             // right deck side, below road — road-grey
+    ];
+    // Baked ambient-occlusion per profile point — a brightness multiplier on the
+    // vertex colour. Kenney paints this contact shading into its texture (dark side
+    // swatches, darkened edges); we approximate it so the flat-albedo ribbon gets the
+    // same plastic-toy form: deep shade at the skirt feet, a contact shadow where the
+    // kerb meets the road, and the asphalt easing darker as it nears the kerb. Road
+    // centre and kerb tops stay full bright. (Multiplies LINEAR colour = physically
+    // how occlusion attenuates reflected light.)
+    const ao = [
+      0.55, // 0  left skirt foot — deep shadow against the grass
+      0.65, // 1  left kerb outer base (deck skirt top, shaded)
+      0.90, // 2  left kerb outer top
+      1.00, // 3  left kerb inner top
+      0.70, // 4  left kerb foot — contact shadow where kerb meets road
+      0.90, // 5  asphalt by the left kerb
+      1.00, // 6  road
+      1.00, // 7  road
+      0.90, // 8  asphalt by the right kerb
+      0.70, // 9  right kerb foot — contact shadow
+      1.00, // 10 right kerb inner top
+      0.90, // 11 right kerb outer top
+      0.65, // 12 right kerb outer base (deck skirt top, shaded)
+      0.55  // 13 right skirt foot
+    ];
+
+    // World position of profile point j on ring i: centreline + height along the road
+    // normal (up) + lateral offset across the road. Returns shared scratch — clone it.
+    const tmp = new THREE.Vector3();
+    const ring = (i, j) => {
+      const s = frames[i];
+      const l = P[j].sign * halfAt(i) + P[j].off;
+      return tmp.copy(s.pos).addScaledVector(s.up, P[j].y).addScaledVector(s.lateral, l);
+    };
+    const pos = [], col = [];
+    const push3 = (arr, p) => { arr.push(p.x, p.y, p.z); };
+    // Per-strip colour push: the two triangles below are wound ia,ib,nb / ia,nb,na, so
+    // the 6 verts map to profile points [a,b,b,a,b,a]. Each gets its base colour times
+    // its own AO, so the darkening varies ACROSS the strip (a gradient) — that's what
+    // gives the kerb face and road edge their baked-in contact shadow.
+    const VSEQ = ['a', 'b', 'b', 'a', 'b', 'a'];
+    const pushStripCol = (base, st) => {
+      for (const v of VSEQ) { const f = ao[st[v]]; col.push(base[0] * f, base[1] * f, base[2] * f); }
+    };
+
+    // Kerb stripes: band by arclength measured ALONG EACH KERB EDGE, not the
+    // centreline. On a bend the outer kerb is longer than the centreline and the inner
+    // is shorter, so banding by centreline arclength stretched the outside bands and
+    // squashed the inside ones (the uneven look). Measure each side independently at
+    // its kerb mid-line and snap its band length so an EVEN number of bands closes the
+    // loop — that keeps every band a uniform physical size and the start/finish seam
+    // free of a red-on-red (or white-on-white) join.
+    const kerbDist = (side) => {
+      const d = new Array(N);
+      const at = (k) => new THREE.Vector3().copy(frames[k].pos)
+        .addScaledVector(frames[k].up, ch)
+        .addScaledVector(frames[k].lateral, side * (halfAt(k) + cw / 2)); // kerb mid-line (per-sample width)
+      let prev = at(0), acc = 0;
+      d[0] = 0;
+      for (let i = 1; i < N; i++) { const cur = at(i); acc += cur.distanceTo(prev); d[i] = acc; prev = cur; }
+      const total = acc + at(0).distanceTo(prev); // close the loop
+      const bands = Math.max(2, 2 * Math.round(total / (2 * stripeLen)));
+      return { d, eff: total / bands };
+    };
+    const kerbL = kerbDist(-1), kerbR = kerbDist(1);
+    const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
+
+    // Sweep the profile around the closed loop into ONE vertex-coloured buffer.
+    for (let i = 0; i < N; i++) {
+      const ni = (i + 1) % N;
+      const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
+      for (const st of STRIPS) {
+        const ia = ring(i, st.a).clone(), ib = ring(i, st.b).clone();
+        const na = ring(ni, st.a).clone(), nb = ring(ni, st.b).clone();
+        push3(pos, ia); push3(pos, ib); push3(pos, nb); // tri 1
+        push3(pos, ia); push3(pos, nb); push3(pos, na); // tri 2
+        const kerbCol = st.side === 'R' ? colR : colL;
+        pushStripCol(st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? LINE : ASPHALT, st);
+      }
+    }
+
+    const mkGeom = (positions, colors) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      if (colors) g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      g.computeVertexNormals();
+      return g;
+    };
+    const geo = mkGeom(pos, col);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte)
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false; // positions are already baked in world space
+    mesh.receiveShadow = true;     // road catches the cars' cast shadows
+    this.trackGroup.add(mesh);
+    this._mergedGeoms.push(geo);
+    this._mergedMats.push(mat);
+
+    // Collision proxy: only the flat asphalt surface (kerbs/skirts aren't drivable),
+    // spanning the full -hw..hw width (profile points 4 and 9), chunked so the existing
+    // (x,z) bucket grid prunes the ground-conform raycast to the few chunks under the
+    // car — the same contract the per-tile clones honour.
+    const CHUNK = 8; // segments per collision mesh
+    const collideMat = new THREE.MeshBasicMaterial({ visible: false });
+    this._mergedMats.push(collideMat);
+    let chunk = [];
+    const flush = () => {
+      if (!chunk.length) return;
+      const cgeo = mkGeom(chunk, null);
+      const m = new THREE.Mesh(cgeo, collideMat);
+      m.matrixAutoUpdate = false;
+      collide.add(m);
+      this._mergedGeoms.push(cgeo);
+      chunk = [];
+    };
+    for (let i = 0; i < N; i++) {
+      const ni = (i + 1) % N;
+      const ia = ring(i, 4).clone(), ib = ring(i, 9).clone();
+      const na = ring(ni, 4).clone(), nb = ring(ni, 9).clone();
+      push3(chunk, ia); push3(chunk, ib); push3(chunk, nb);
+      push3(chunk, ia); push3(chunk, nb); push3(chunk, na);
+      if ((i + 1) % CHUNK === 0) flush();
+    }
+    flush();
+  }
+
   setTrack(track, { debug = false } = {}) {
     this._disposeTrack();
     this.trackGroup.clear();
@@ -780,6 +989,11 @@ export class SceneRenderer {
     const collide = new THREE.Group();
     const buckets = new Map(); // texture.uuid -> { srcMat, geoms: [] }
     const KEEP = ['position', 'normal', 'uv']; // attributes merged tiles must share
+    // The road surface is procedural — swept along the centreline (fills `collide` +
+    // trackGroup itself). The loop below then bakes the remaining GLB scenery (the
+    // start/finish gate); the grid/framing/shadow afterwards run on `collide.children`
+    // + centreline samples regardless.
+    this._buildRibbonRoad(track, collide);
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
@@ -1231,7 +1445,7 @@ export class SceneRenderer {
         const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
         const f = this._centerline.sampleAt(cn.homeS + along);
         const latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
-        const edge = this._roadHalf - CONE_EDGE_MARGIN;
+        const edge = (f.width != null ? f.width / 2 : this._roadHalf) - CONE_EDGE_MARGIN; // per-sample edge: in a flared section the wall sits at the wider visible asphalt, not the scalar default
         if (Math.abs(latOff) > edge) {
           m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
           const vLat = cn.vel.dot(f.lateral);
@@ -1603,7 +1817,9 @@ export class SceneRenderer {
     // so the wheels sit on the actual GLB. We split the two deliberately — re-pitching
     // from the front/rear probe slope twitched the car at ramp seams (that probe is
     // noisy: the GLB floor isn't a perfect smootherstep and tiles overlap). Heading
-    // (yaw) is the centreline's; roll stays level (world up) — the tracks have no banking.
+    // (yaw) is the centreline's; roll stays level (world up) ON PURPOSE — the body stays
+    // level even through a banked corner (Mario-Kart style, reads cleaner than a tilting
+    // cabin). The banked road normal is still carried in c.pose.up for any caller that wants it.
     let z = fwd;
     const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
     this._headFlat.copy(fwd).setY(0);

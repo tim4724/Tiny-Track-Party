@@ -24,11 +24,15 @@ test.before(async () => {
 // or a 2-lap race past its time budget. Catalogue closure is covered separately
 // in tests/track.test.js. Large corners (same R as the catalogue) keep the
 // understeer/corner-brake behaviour identical; only the straights are short.
+// Parametric segment DSL (local, since this CommonJS test can't import the ES-module
+// helpers at module-eval time). angle>0 = LEFT turn.
+const L = 4.0, RL = 4.185;
+const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
+const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
+const run = (n) => Array.from({ length: n }, () => straight(L));
 const TEST_OVAL = [
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'cornerLargeL'
+  ...run(4), arc(RL, 90), ...run(2), arc(RL, 90),
+  ...run(4), arc(RL, 90), ...run(2), arc(RL, 90)
 ];
 
 function mkTrack(laps = 1) { const t = buildTrack(TEST_OVAL); t.totalLaps = laps; return t; }

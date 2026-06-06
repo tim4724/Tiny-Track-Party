@@ -22,21 +22,27 @@ test.before(async () => {
 // chicane, so its curvature never legitimately reverses (the "curvature never
 // abruptly reverses" check); GRAND_TOUR is a flat-closing rectangle that is hills
 // end-to-end (the elevation / orthonormal-frame / seam-holonomy checks).
+// Parametric segment DSL (local, since this CommonJS test can't import the ES-module
+// helpers at module-eval time). angle>0 = LEFT turn.
+const L = 4.0, RL = 4.185;
+const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
+const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
+const run = (n, opts) => Array.from({ length: n }, () => straight(L, opts));
+// OVAL: a 12/5/12/5 rectangle, all-LEFT sweeping corners — the only no-chicane loop, so
+// its curvature never legitimately reverses (the curvature-reversal check below).
 const OVAL = [
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL'
+  ...run(12), arc(RL, 90), ...run(5), arc(RL, 90),
+  ...run(12), arc(RL, 90), ...run(5), arc(RL, 90)
 ];
+// GRAND_TOUR: a flat-closing 9/7/9/7 rectangle that is hills/bumps end-to-end (the
+// elevation / orthonormal-frame / seam-holonomy checks). Net-flat (each rise paired).
 const GRAND_TOUR = [
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'straight', 'cornerLargeL'
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L), arc(RL, 90),
+  straight(L), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), arc(RL, 90),
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L), arc(RL, 90),
+  straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), straight(L), arc(RL, 90)
 ];
 
 test('oval closes into a loop', () => {
@@ -115,9 +121,11 @@ test('curvature never abruptly reverses (no jitter entering curves)', () => {
     const k = dh / ds; // signed curvature (rad / unit)
     // A spline overshooting the curvature step at a joint flips from a clear turn
     // one way to a clear turn the other within a step — the car gets nudged the
-    // wrong way then snaps back. On a smooth path curvature only crosses zero
-    // gradually (through ~0), never between two significant opposite magnitudes.
-    if (Math.sign(k) !== Math.sign(prevK) && Math.abs(k) > 0.01 && Math.abs(prevK) > 0.01) flips++;
+    // wrong way then snaps back (the old jitter spiked to ~0.106). The parametric
+    // arc meets a straight with a curvature STEP (0→1/R); the Catmull-Rom rounds it
+    // with a tiny ≤~0.03 blip — sub-perceptual (the tangent stays C1, so the car's
+    // heading never jolts). Flag only SIGNIFICANT reversals (> 0.04), not that blip.
+    if (Math.sign(k) !== Math.sign(prevK) && Math.abs(k) > 0.04 && Math.abs(prevK) > 0.04) flips++;
     prevK = k;
     prevH = h;
   }
@@ -218,10 +226,10 @@ test('every named track closes and includes a start gate', () => {
   }
 });
 
-test('every named track has a display name and pieces', () => {
+test('every named track has a display name and segments', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
-    assert.ok(Array.isArray(def.pieces) && def.pieces.length, `track "${name}" missing pieces`);
+    assert.ok(Array.isArray(def.segments) && def.segments.length, `track "${name}" missing segments`);
   }
 });
 
@@ -233,7 +241,7 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
   assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
     'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
   for (const t of TRACK_LIST) {
-    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.pieces)),
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.segments)),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
 });
@@ -279,11 +287,49 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
   }
 });
 
-test('buildTrack accepts a bare piece array and a descriptor alike', () => {
-  const fromArray = buildTrack(TRACKS.switchback.pieces);
+test('banking: corners lean INTO the turn and stay upright', () => {
+  // An all-LEFT banked oval: every corner turns the same way, so the road normal should
+  // tilt consistently toward the inside. We test against the FLAT lateral (tangent × world-up)
+  // rather than a per-sample curvature estimate, which is noisy at smoothed joints.
+  const BANKED_OVAL = [
+    ...run(8), arc(RL, 90, { bank: 10 }), ...run(4), arc(RL, 90, { bank: 10 }),
+    ...run(8), arc(RL, 90, { bank: 10 }), ...run(4), arc(RL, 90, { bank: 10 })
+  ];
+  const t = buildTrack(BANKED_OVAL);
+  assert.ok(t.closed, `banked oval should close (gap=${t.gap.toFixed(3)})`);
+  const ss = t.centerline.samples;
+  let minUpY = 1, checked = 0, intoTurn = 0;
+  for (const s of ss) {
+    minUpY = Math.min(minUpY, s.up.y);
+    if (s.up.y > 0.99) continue; // only the well-banked corner samples
+    // flat lateral-LEFT = tangent × world-up; for a left turn the inside is to the left,
+    // so a road banked into the turn tilts `up` toward it (positive dot).
+    const flx = -s.tangent.z, flz = s.tangent.x;       // (tangent × (0,1,0)).xz
+    const lean = s.up.x * flx + s.up.z * flz;
+    checked++;
+    if (lean > 0) intoTurn++;
+  }
+  assert.ok(minUpY > 0.5, `banked corners stay upright (minUpY=${minUpY.toFixed(2)})`);
+  assert.ok(minUpY < 0.99, 'corners should actually be banked (up tilts off vertical)');
+  assert.ok(checked > 0 && intoTurn === checked, `every banked sample leans into the (left) turn (${intoTurn}/${checked})`);
+});
+
+test('variable width: a flared track widens past the default and eases back', () => {
+  const t = buildTrack(TRACKS.crossover); // its spine is flared via flare(6, 3.4)
+  let maxW = 0, minW = Infinity;
+  for (let s = 0; s < t.length; s += 0.5) {
+    const w = t.centerline.widthAt(s);
+    maxW = Math.max(maxW, w); minW = Math.min(minW, w);
+  }
+  assert.ok(maxW > t.roadWidth + 0.5, `flare should exceed the default road width (max=${maxW.toFixed(2)}, default=${t.roadWidth})`);
+  assert.ok(minW > t.roadWidth - 0.2 && minW <= t.roadWidth + 0.01, `non-flared sections stay ~default (min=${minW.toFixed(2)}, default=${t.roadWidth})`);
+});
+
+test('buildTrack accepts a bare segment array and a descriptor alike', () => {
+  const fromArray = buildTrack(TRACKS.switchback.segments);
   const fromDef = buildTrack(TRACKS.switchback);
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
-  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.pieces array/);
+  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.segments array/);
 });
 
 test('startGate:false omits the gate', () => {
@@ -291,8 +337,8 @@ test('startGate:false omits the gate', () => {
   assert.ok(!t.instances.some((i) => i.glb === 'gate-finish'), 'gate should be omitted');
 });
 
-test('an unknown piece key throws a clear error', () => {
-  assert.throws(() => buildTrack(['straight', 'definitely-not-a-piece']), /Unknown track piece "definitely-not-a-piece"/);
+test('an unknown segment kind throws a clear error', () => {
+  assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
 });
 
 // COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the
