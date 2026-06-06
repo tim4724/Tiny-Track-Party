@@ -137,7 +137,11 @@ html, body {
   background: #fff; border-radius: var(--r-lg); padding: 1.1rem;
   box-shadow: var(--shadow-float);
 }
-#qr { display: block; width: min(22vw, 32vh); height: auto; image-rendering: pixelated; }
+/* Reserve a square box up front (aspect-ratio, not the canvas' intrinsic size) so
+   the card holds its final footprint before the async QR fetch resolves. A blank
+   <canvas> is 300×150 (2:1); without this it would render half-height and the
+   card would pop taller the moment renderQR swaps in the square bitmap. */
+#qr { display: block; width: min(22vw, 32vh); aspect-ratio: 1 / 1; image-rendering: pixelated; }
 
 /* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
    and the race (split-screen). The lobby/race sections layer on top. ---- */
