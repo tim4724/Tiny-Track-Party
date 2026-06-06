@@ -101,7 +101,6 @@ const BOX_RADIUS = 0.65;       // fallback item-box radius
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
 const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
-const BANANA_LIFE = 12.0;      // seconds a dropped banana persists before it vanishes
 const BANANA_ARM = 0.4;        // grace before a banana is live (so a shoved dropper can't self-trip)
 const BANANA_BACK = 1.2;       // how far behind the dropper a banana lands (units)
 
@@ -204,7 +203,6 @@ export class Game {
         oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
         padIn: new Set(),// pad indices currently overlapped (rising-edge boost)
         boxIn: new Set(),// box indices currently overlapped (rising-edge pickup)
-        bananaIn: new Set(), // banana ids currently overlapped (rising-edge spin)
         boostT: 0,       // seconds left on an active boost (0 = none)
         boostMul: 1,     // current boost multiplier on the speed ceiling
         item: null,      // held item id (null = empty slot)
@@ -460,19 +458,11 @@ export class Game {
     }
   }
 
-  // Per-frame prop upkeep: respawn item boxes, age dropped bananas, drop dead ones.
+  // Per-frame prop upkeep: respawn item boxes, count down each banana's arm grace.
+  // Bananas don't expire — they sit until a car hits one (consumed in _enterBanana).
   _tickProps(dt) {
     for (const b of this.boxes) if (b.cooldown > 0) b.cooldown = Math.max(0, b.cooldown - dt);
-    if (this.bananas.length) {
-      for (const b of this.bananas) { b.life -= dt; if (b.armT > 0) b.armT -= dt; }
-      const dead = this.bananas.filter((b) => b.life <= 0);
-      if (dead.length) {
-        this.bananas = this.bananas.filter((b) => b.life > 0);
-        // sweep the expired ids out of every car's overlap set (ids never repeat, so
-        // they couldn't false-trigger — this just stops the sets growing unbounded).
-        for (const c of this.cars.values()) for (const b of dead) c.bananaIn.delete(b.id);
-      }
-    }
+    for (const b of this.bananas) if (b.armT > 0) b.armT -= dt;
   }
 
   // Rising-edge overlap of a boost PAD (same (s,lat) test as oil). Returns true on a
@@ -535,25 +525,26 @@ export class Game {
       c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);
     } else if (c.item === 'banana') {
       let s = c.totalS - BANANA_BACK; s = ((s % this.length) + this.length) % this.length;
-      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, life: BANANA_LIFE, armT: BANANA_ARM, owner: c.id });
+      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, armT: BANANA_ARM, owner: c.id });
     }
     c.item = null;
   }
 
-  // Rising-edge overlap of a live dropped banana (skips the owner and un-armed ones).
-  // Returns true on a fresh entry → caller spins the car out (reusing the oil spin).
+  // Overlap of a live dropped banana (skips the owner and un-armed ones). A hit
+  // CONSUMES the banana — Mario-Kart style — so it can't pile up or re-fire: no
+  // rising-edge bookkeeping needed, the banana is simply gone next frame. Returns
+  // true if this car hit one → caller spins the car out (reusing the oil spin).
   _enterBanana(c) {
     if (!this.bananas.length) return false;
-    let entered = false;
+    let hit = false;
     for (const b of this.bananas) {
-      const skip = b.owner === c.id || b.armT > 0;
+      if (b.hit || b.owner === c.id || b.armT > 0) continue; // already consumed this frame, owner, or still arming
       let ds = c.totalS - b.s; ds -= Math.round(ds / this.length) * this.length;
       const dl = c.lat - b.lat;
-      const inside = !skip && (ds * ds + dl * dl) < (BANANA_RADIUS * BANANA_RADIUS);
-      if (inside) { if (!c.bananaIn.has(b.id)) { c.bananaIn.add(b.id); entered = true; } }
-      else c.bananaIn.delete(b.id);
+      if ((ds * ds + dl * dl) < (BANANA_RADIUS * BANANA_RADIUS)) { b.hit = true; hit = true; }
     }
-    return entered;
+    if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
+    return hit;
   }
 
   // Car-car collisions in (totalS, lat) space. Two cars overlap when their

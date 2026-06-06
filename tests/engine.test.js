@@ -621,7 +621,7 @@ test('an AI car uses items instead of hoarding (picks up then fires on a straigh
 
 // ---- banana (dropped hazard) ------------------------------------------------
 
-test('a dropped banana spins a follower but never the dropper, and expires', () => {
+test('a dropped banana spins a follower (consumed on hit) but never the dropper', () => {
   const track = mkTrack(3);
   const game = new Game(['drop', 'follow'], track, {});
   const dropper = game.cars.get('drop'), follow = game.cars.get('follow');
@@ -631,15 +631,29 @@ test('a dropped banana spins a follower but never the dropper, and expires', () 
   game.processInput('drop', { u: 1, b: 1 }); game.update(16);
   assert.equal(game.bananas.length, 1, 'banana dropped');
   const bs = game.bananas[0].s;
-  // dropper sits on its own banana → never trips it (owner-skip)
+  // dropper sits on its own banana → never trips it (owner-skip), and it is NOT consumed
   Object.assign(dropper, { totalS: bs, v: 0 });
   for (let i = 0; i < 40; i++) { game.processInput('drop', { b: 1 }); game.update(16); }
   assert.equal(dropper.spinT, 0, 'the dropper never trips its own banana');
-  // a different car parks on the (now armed) banana → spins out
+  assert.equal(game.bananas.length, 1, 'the owner sitting on it does not consume it');
+  // a different car parks on the (now armed) banana → spins out AND consumes it
   Object.assign(follow, { totalS: bs, lat: 0, v: 0 });
   game.processInput('follow', { b: 1 }); game.update(16);
   assert.ok(follow.spinT > 0, 'a follower spins out on the banana');
-  // it eventually expires off the track
-  for (let i = 0; i < 800; i++) { game.update(16); } // > BANANA_LIFE
-  assert.equal(game.bananas.length, 0, 'banana expires and is removed');
+  assert.equal(game.bananas.length, 0, 'the hit consumes the banana (Mario-Kart style)');
+});
+
+test('a dropped banana never expires — it waits on the track until hit', () => {
+  const track = mkTrack(3);
+  const game = new Game(['drop', 'follow'], track, {});
+  Object.assign(game.cars.get('drop'), { totalS: 12, lat: 0, v: 0, item: 'banana' });
+  Object.assign(game.cars.get('follow'), { totalS: 40, lat: 0, v: 0 }); // far away, never touches it
+  game.elapsed = 2;
+  game.processInput('drop', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.bananas.length, 1, 'banana dropped');
+  // both cars braked + parked clear of the banana; wait well past the old 12s timer
+  for (let i = 0; i < 1500; i++) { // 24s — would have expired under the old life timer
+    game.processInput('drop', { b: 1 }); game.processInput('follow', { b: 1 }); game.update(16);
+  }
+  assert.equal(game.bananas.length, 1, 'the banana is still there: no time-expiry');
 });
