@@ -1,6 +1,6 @@
 // Track catalogue — DATA ONLY, no Three.js. This is the single source of truth
-// for "what tracks exist": each track is an ordered list of TrackBuilder PIECES
-// keys (geometry) plus presentation metadata (name, blurb, difficulty).
+// for "what tracks exist": each track is a display name plus an ordered list of
+// TrackBuilder PIECES keys (the geometry).
 //
 // Kept dependency-free so the SAME module loads everywhere:
 //   • the display engine (TrackBuilder turns `pieces` into drivable geometry),
@@ -110,26 +110,20 @@ export const RIVERSIDE = [
   'straight', 'straight', 'curve', 'curveR', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'cornerLargeL'
 ];
 
-// Registry of named, previewable tracks. `pieces` is the layout the builder
-// chains; the rest is presentation (gallery cards, future track-picker UI).
-// Selected in the display via ?track=<key> (see display/main.js).
+// Registry of named, previewable tracks: `name` is the display label and
+// `pieces` is the layout the builder chains. Selected in the display via
+// ?track=<key> (see display/main.js).
 export const TRACKS = {
   switchback: {
     name: 'Switchback',
-    blurb: 'Compact and vicious: tight corners stacked back-to-back, with rolling half-hills and chicanes between.',
-    difficulty: 'Hard',
     pieces: SWITCHBACK
   },
   crossover: {
     name: 'Crossover',
-    blurb: 'A true figure-eight that flies over itself — climb the bridge, cross above the lower straight, then loop back underneath.',
-    difficulty: 'Hard',
     pieces: CROSSOVER
   },
   riverside: {
     name: 'Riverside',
-    blurb: 'The grand tour: an L-shaped marathon that bends back on itself, packed with chicanes, hills, and bumps. The longest lap in the park.',
-    difficulty: 'Medium',
     pieces: RIVERSIDE
   }
 };

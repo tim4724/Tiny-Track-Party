@@ -215,10 +215,9 @@ test('every named track closes and includes a start gate', () => {
   }
 });
 
-test('every named track has presentation metadata', () => {
+test('every named track has a display name and pieces', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
-    assert.ok(typeof def.difficulty === 'string' && def.difficulty.length, `track "${name}" missing difficulty`);
     assert.ok(Array.isArray(def.pieces) && def.pieces.length, `track "${name}" missing pieces`);
   }
 });

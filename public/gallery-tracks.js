@@ -48,20 +48,10 @@ function render() {
     if (!t) continue;
     const card = Gallery.makeCard({
       title: t.name,
-      tag: t.difficulty || '',
       frameClass: 'display',
       logical: d,
       url: cardURL(id)
     });
-    // colour-code the difficulty chip and drop the blurb under the preview.
-    const tagEl = card.querySelector('.card-title .tag');
-    if (tagEl && t.difficulty) tagEl.classList.add('diff-' + t.difficulty.toLowerCase());
-    if (t.blurb) {
-      const blurb = document.createElement('p');
-      blurb.className = 'track-blurb';
-      blurb.textContent = t.blurb;
-      card.appendChild(blurb);
-    }
     strip.appendChild(card);
     allCards.push(card);
   }
