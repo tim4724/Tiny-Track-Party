@@ -92,7 +92,7 @@ export const CROSSOVER = [
 // ---- Riverside (Medium): the long grand tour. An L-SHAPED circuit (a concave
 // "boot" — five left corners and one right, so the lap bends back on itself
 // instead of tracing a plain rectangle) packed with every flat-and-rolling
-// feature: chicanes, full + half hills, speed bumps. The longest lap in the set.
+// feature: chicanes, full + half hills, and bumps. The longest lap in the set.
 // Sides A9/B3/C3/D4/E4/F9 with turns L,L,R,L,L,L (the single right corner is the
 // re-entrant elbow); side lengths tuned so it auto-closes (probe-track.js). ----
 export const RIVERSIDE = [
@@ -100,14 +100,14 @@ export const RIVERSIDE = [
   'straight', 'curve', 'curveR', 'hillUp', 'hillDown', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
   // short leg: half-hill                                                 [B: 3]
   'straight', 'hillHalfUp', 'hillHalfDown', 'cornerLargeL',
-  // the elbow ledge: speed bumps into the re-entrant RIGHT corner        [C: 3]
-  'straight', 'bumpUp', 'bumpDown', 'cornerLargeR',
+  // the elbow ledge: a bump (hump, no dip) into the re-entrant RIGHT corner [C: 3]
+  'straight', 'bumpUp', 'straight', 'cornerLargeR',
   // inner leg: half-hill → straights                                     [D: 4]
   'hillHalfUp', 'hillHalfDown', 'straight', 'straight', 'cornerLargeL',
   // chicane → full hill                                                  [E: 4]
   'curve', 'curveR', 'hillUp', 'hillDown', 'cornerLargeL',
-  // long home leg: chicane → half-hill → bumps → run to the line         [F: 9]
-  'straight', 'straight', 'curve', 'curveR', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'cornerLargeL'
+  // long home leg: chicane → half-hill → a bump → run to the line        [F: 9]
+  'straight', 'straight', 'curve', 'curveR', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'straight', 'straight', 'cornerLargeL'
 ];
 
 // Registry of named, previewable tracks: `name` is the display label and
