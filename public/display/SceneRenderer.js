@@ -121,11 +121,13 @@ const CONE_EDGE_MARGIN = 0.35;// keep cones this far inside the road edge (off t
 const CONE_WALL_RESTITUTION = 0.5; // bounce energy kept when a kicked cone hits the curb
 
 // Held-item display: a fixed square slot on the cell HUD shows an ICON (not text).
-// Labels are kept for the slot's tooltip/aria; icons are inline SVG (no assets).
+// Labels are kept for the slot's tooltip/aria. Boost is inline SVG; banana is a
+// 2D render of the actual Kenney item-banana GLB, baked offline like the car
+// picker thumbs (scripts/capture-item-icon.js → assets/toycar/thumbs/).
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA' };
 const ITEM_ICONS = {
   boost: '<svg viewBox="0 0 24 24" fill="none" stroke="#12a99a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,13.5 12,7.5 19,13.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>',
-  banana: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 4.5 C 5 12.5, 11 18.8, 19 19" stroke="#ffd23f" stroke-width="5.4" stroke-linecap="round"/><circle cx="5" cy="4.6" r="1.5" fill="#8a6418"/><circle cx="19" cy="19" r="1.5" fill="#8a6418"/></svg>'
+  banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">'
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
 
