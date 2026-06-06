@@ -26,31 +26,31 @@ function show(name) {
   if ((SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
 }
 
-// haptics — vibrate the phone (ignored where unsupported)
+// haptics — vibrate the phone (ignored where unsupported). The player's eyes are
+// on the main display, not the phone, so a buzz is how a tap confirms it landed.
 const buzz = (p) => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (_) {} };
 
-// Curb rumble: a *continuous*-feeling faint buzz while the car scrubs the wall.
-// navigator.vibrate has no intensity control and no native loop, so we fake a
-// steady light rumble with a fine pattern, renewed just before it ends — the
-// motor never falls silent between updates, so it reads as one smooth hum, not
-// taps. Softness has only one lever (duty cycle), so we keep the on-pulse very
-// short (6ms) at a fast cycle (30ms ≈ 33Hz): low average power = faint, high
-// frequency = the pulses blend together instead of feeling like a buzz.
-// Tune: raise the 6 for a stronger rumble; raise the 24 (off-time) for fainter.
-const SCRUB_UNIT = [6, 24];                               // 30ms cycle, ~20% duty: faint hum
-const SCRUB_PATTERN = Array(40).fill(SCRUB_UNIT).flat();  // ~1.2s of soft rumble
-const SCRUB_RENEW_MS = 1000;                              // renew before it ends (1.2s > 1.0s, no gap)
-let _scrubOn = false, _scrubTimer = null;
-function startScrub() {
-  if (_scrubOn) return;
-  _scrubOn = true;
-  buzz(SCRUB_PATTERN);
-  _scrubTimer = setInterval(() => buzz(SCRUB_PATTERN), SCRUB_RENEW_MS);
+// Brake rumble: a *continuous*-feeling LIGHT buzz for as long as BRAKE is held —
+// the player's eyes-free confirmation they're braking (they're watching the car
+// on the main display). navigator.vibrate has no intensity control, so "light" is
+// faked with duty cycle: a short on-pulse at a fast cycle = low average motor
+// power (faint) AND pulses too quick to feel apart (they blend into one smooth
+// hum, not taps). It also has no native loop, so we play a long pattern and renew
+// it just before it ends — the motor never falls silent.
+// Tune: raise the 8 (on-time) for a stronger rumble; raise the 22 (off-time) for
+// fainter. Keep the cycle (8+22=30ms) short or the pulses stop blending.
+const BRAKE_PULSE = [8, 22];                               // 30ms cycle, ~27% duty: a light hum
+const BRAKE_PATTERN = Array(60).fill(BRAKE_PULSE).flat();  // ~1.8s of rumble
+const BRAKE_RENEW_MS = 1500;                               // renew before it ends (1.8s > 1.5s, no gap)
+let _brakeTimer = null;
+function startBrakeRumble() {
+  if (_brakeTimer) return;
+  buzz(BRAKE_PATTERN);
+  _brakeTimer = setInterval(() => buzz(BRAKE_PATTERN), BRAKE_RENEW_MS);
 }
-function stopScrub() {
-  if (!_scrubOn) return;
-  _scrubOn = false;
-  clearInterval(_scrubTimer); _scrubTimer = null;
+function stopBrakeRumble() {
+  if (!_brakeTimer) return;
+  clearInterval(_brakeTimer); _brakeTimer = null;
   buzz(0); // cancel any residual vibration immediately
 }
 
@@ -71,7 +71,6 @@ const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (_) {
 const net = new ControllerNet({
   onJoined: () => setStatus(''),
   onStatus: (state, info) => {
-    if (state !== 'reconnecting') stopScrub(); // never leave the curb rumble stuck on
     // Any status callback means the clean join→lobby path didn't carry us all the
     // way through, so re-enable the join form. It's a no-op once we've moved off
     // the name screen (the button is hidden), but it prevents a player getting
@@ -162,7 +161,6 @@ function handleMessage(data) {
       el('pos').textContent = `P${data.position}`;
       el('pos').classList.toggle('leader', data.position === 1);
       if (data.finished) el('pos').textContent = `Finished P${data.position}`;
-      data.scrub ? startScrub() : stopScrub(); // continuous soft curb rumble
       break;
     case MSG.STANDINGS: {
       // Live finish board. Refresh who's host (may have shifted if someone left)
@@ -177,7 +175,7 @@ function handleMessage(data) {
     }
     case MSG.GAME_PAUSED:
       if (inResults) break;            // finished racers watch results, not the pause overlay
-      stopScrub();                     // never leave the curb rumble buzzing while frozen
+      stopBrakeRumble();               // the overlay covers BRAKE — don't hum through the pause
       setPauseOverlay(true);
       break;
     case MSG.GAME_RESUMED:
@@ -329,7 +327,7 @@ function startDriving() {
 }
 function stopDriving() {
   tilt.stop();
-  stopScrub(); // kill any curb rumble when the race ends / we leave the track
+  stopBrakeRumble(); // never leave the motor humming if BRAKE was held at race end
   if (steerRaf) cancelAnimationFrame(steerRaf);
   steerRaf = null;
 }
@@ -389,9 +387,11 @@ el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RET
 // Results overlay: only the host gets the button; it sends everyone to the lobby.
 el('newgame-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
 
-// BRAKE button — held = brake at the fixed rate, released = release
+// BRAKE button — held = brake at the fixed rate, released = release. A continuous
+// rumble runs while it's held: the player's eyes-free confirmation they're braking
+// (they're watching the car on the main display, not the phone).
 const brakeBtn = el('brake-btn');
-const pressBrake = (on) => { tilt.pressBrake(on); brakeBtn.classList.toggle('held', on); };
+const pressBrake = (on) => { on ? startBrakeRumble() : stopBrakeRumble(); tilt.pressBrake(on); brakeBtn.classList.toggle('held', on); };
 brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake(true); });
 brakeBtn.addEventListener('pointerup', () => pressBrake(false));
 brakeBtn.addEventListener('pointercancel', () => pressBrake(false));

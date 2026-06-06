@@ -35,7 +35,7 @@ var MSG = {
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, tracks, trackId, ...} on join
   LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId)
-  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, scrub}
+  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished}
   PONG: 'pong',
 
   // Display -> all controllers (broadcast)
