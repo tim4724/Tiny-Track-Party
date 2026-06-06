@@ -65,8 +65,14 @@ let selectedTrackId = null; // current track pick (host-controlled, echoed to al
 let inResults = false;     // showing the results overlay (my car finished / race over)
 
 const NAME_KEY = 'tinytrack_name';
+const TRACK_KEY = 'tinytrack_track';   // host's last-picked track id
+const CAR_KEY = 'tinytrack_car';       // last-picked car model index
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
 const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (_) {} };
+const storedTrackId = () => { try { return localStorage.getItem(TRACK_KEY); } catch (_) { return null; } };
+const saveTrackId = (id) => { try { localStorage.setItem(TRACK_KEY, id); } catch (_) {} };
+const storedCarIndex = () => { try { const v = parseInt(localStorage.getItem(CAR_KEY), 10); return Number.isInteger(v) ? v : null; } catch (_) { return null; } };
+const saveCarIndex = (i) => { try { localStorage.setItem(CAR_KEY, String(i)); } catch (_) {} };
 
 const net = new ControllerNet({
   onJoined: () => setStatus(''),
@@ -109,6 +115,7 @@ function handleMessage(data) {
     case MSG.WELCOME: {
       myColorIndex = data.colorIndex;
       if (data.carIndex != null) myCarIndex = data.carIndex;
+      maybeRestoreCar();   // override the slot default with this phone's saved pick
       applyLivery();
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
@@ -261,6 +268,7 @@ function applyLivery() {
 // the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
 // display's record. Layout lives in shared/carPicker.js (shared with the gallery).
 function renderLobby() {
+  maybeAutoSelectTrack();   // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
   renderTrackPicker();
@@ -283,16 +291,31 @@ function renderTrackPicker() {
     stripEl: el('track-strip'),
     catalog: trackCatalog, selected: selectedTrackId, canPick: amHost, onPick: chooseTrack
   });
-  // Note line: non-host can't pick; host with nothing chosen yet is prompted to.
+  // Note line: only the non-host needs telling the host owns the pick. The host
+  // always has a track selected (auto-picked on entry), so no prompt is shown.
   const note = el('track-note');
   if (!amHost) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
-  else if (!selectedTrackId) { note.textContent = 'Pick a track to start'; note.classList.remove('hidden'); }
   else note.classList.add('hidden');
+}
+
+// Host auto-picks a track the moment they reach the lobby, so the display leaves
+// its plain diorama for the live 3D preview without waiting for a tap. The pick
+// is this phone's last-used track (saved on tap), falling back to the first in
+// the catalog. Sent as SELECT_TRACK exactly like a manual choice — the display
+// echoes it back to everyone via LOBBY_UPDATE. No-op for non-hosts, before the
+// catalog arrives, or once a track is already chosen (incl. the display's own).
+function maybeAutoSelectTrack() {
+  if (!amHost || selectedTrackId || !trackCatalog.length) return;
+  const stored = storedTrackId();
+  const id = trackCatalog.some((t) => t.id === stored) ? stored : trackCatalog[0].id;
+  selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
+  net.send(MSG.SELECT_TRACK, { trackId: id });
 }
 
 function chooseTrack(id) {
   if (id === selectedTrackId) return;
   selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
+  saveTrackId(id);        // remember it so the next lobby auto-picks this track
   renderTrackPicker();    // move the ring + name now
   net.send(MSG.SELECT_TRACK, { trackId: id });
   buzz(15);
@@ -306,9 +329,22 @@ function renderWaitHost(waitEl) {
 function chooseCar(i) {
   if (i === myCarIndex) return;
   myCarIndex = i;       // optimistic; LOBBY_UPDATE is the source of truth
+  saveCarIndex(i);      // remember it so the next join restores this car
   renderLobby();        // move the highlight now
   net.send(MSG.SET_CAR, { carIndex: i });
   buzz(15);
+}
+
+// Restore the car model this phone last used, overriding the display's slot-based
+// default assigned on join. Sent as SET_CAR exactly like a tap; the display
+// validates + echoes it back in LOBBY_UPDATE. No-op when nothing's saved, the
+// saved index is out of range, or it already matches what the display gave us.
+function maybeRestoreCar() {
+  const stored = storedCarIndex();
+  const count = (window.CAR_MODELS || []).length;
+  if (stored == null || stored < 0 || stored >= count || stored === myCarIndex) return;
+  myCarIndex = stored;
+  net.send(MSG.SET_CAR, { carIndex: stored });
 }
 
 // --- driving ---

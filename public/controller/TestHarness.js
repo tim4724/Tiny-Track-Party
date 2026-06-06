@@ -58,8 +58,7 @@ export function runControllerScenario(opts) {
     if (canPick) el('start-btn').disabled = !selected; // greyed until a track is picked
     const note = el('track-note');
     if (!canPick) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
-    else if (!selected) { note.textContent = 'Pick a track to start'; note.classList.remove('hidden'); }
-    else note.classList.add('hidden');
+    else note.classList.add('hidden'); // host always has a track auto-picked, so no prompt
   }
 
   // Results board — mirrors main.js renderResults + renderResultFoot. `over=false`
@@ -121,7 +120,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color); // default pick mirrors the livery slot
-      renderTrackPicker(null, true); // host can pick; nothing chosen yet (Start greyed)
+      renderTrackPicker(PREVIEW_TRACKS[0].id, true); // host enters with a track auto-picked (Start enabled)
       el('start-btn').classList.remove('hidden');
       el('wait-host').classList.add('hidden');
       break;
