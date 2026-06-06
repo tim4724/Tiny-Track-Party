@@ -5,6 +5,7 @@
 // lobby (no cars). The game layer calls setCarPose()/setCarHud() each frame.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
@@ -13,6 +14,30 @@ function ordinal(n) {
   const t = n % 100, u = n % 10;
   const suffix = (t >= 11 && t <= 13) ? 'th' : (u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th');
   return `${n}${suffix}`;
+}
+
+// Reverse a BufferGeometry's triangle winding in place. Used when baking MIRRORED
+// track tiles: a mirror placement has a negative-determinant matrix, so applyMatrix4
+// flips the winding while leaving the (correct, +Y) road-top normal alone. Under the
+// merged DoubleSide material that turns the up-facing road top into a BACK face, so
+// the shader flips its normal DOWN and lights it from underneath — the tile renders
+// much darker than its non-mirrored twin. Flipping the winding back makes it a front
+// face again, consistent with the rest of the merged mesh.
+function flipWinding(geo) {
+  const idx = geo.index;
+  if (idx) {
+    const a = idx.array;
+    for (let i = 0; i < a.length; i += 3) { const t = a[i]; a[i] = a[i + 2]; a[i + 2] = t; }
+    idx.needsUpdate = true;
+    return;
+  }
+  for (const attr of Object.values(geo.attributes)) {
+    const arr = attr.array, n = attr.itemSize;
+    for (let i = 0; i + 3 * n <= arr.length; i += 3 * n) {
+      for (let k = 0; k < n; k++) { const t = arr[i + k]; arr[i + k] = arr[i + 2 * n + k]; arr[i + 2 * n + k] = t; }
+    }
+    attr.needsUpdate = true;
+  }
 }
 
 // Shared with the controller's car picker + protocol (one source of truth).
@@ -230,6 +255,7 @@ export class SceneRenderer {
     this._initThree();
     this._initOverlay();
     this._initParticles();
+    this._initFpsMeter();
     this._groundRay = new THREE.Raycaster();
     this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
     this._rayFrom = new THREE.Vector3();
@@ -239,7 +265,25 @@ export class SceneRenderer {
     this._worldUp = new THREE.Vector3(0, 1, 0);
     this._normalMat = new THREE.Matrix3(); // for road-tile world normals
     this._hitNormal = new THREE.Vector3();
+    // Spatial bucket for the ground-conform raycast: a grid (x,z) -> tiles
+    // overlapping that cell, built in setTrack. _roadHitY then casts only against
+    // the 1-few tiles under the car instead of walking every tile in the track —
+    // the per-cast cost was growing with track length (setCarPose's hot path).
+    this._collideGrid = null;
+    this._collideCell = 6; // world units per cell (~tile-sized; tracks use SCALE=2)
+    // Scratch objects reused every frame so the per-car hot paths (setCarPose,
+    // _updateChase) allocate NOTHING — steady-state garbage was forcing GC pauses
+    // that showed up as frame-time spikes (the stutter under load).
+    this._sx = new THREE.Vector3();
+    this._syy = new THREE.Vector3();
+    this._sBasis = new THREE.Matrix4();
+    this._sWant = new THREE.Vector3();
+    this._sTarget = new THREE.Vector3();
   }
+
+  // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
+  // in the raycast hot path). Tracks are tiny, so |g| never approaches 32768.
+  _cellKey(gx, gz) { return (gx + 32768) * 65536 + (gz + 32768); }
 
   // World-Y of the drivable road surface directly under (x, z), or null if no
   // tile is below. Casts straight down from well above. Two filters pick the road
@@ -252,9 +296,16 @@ export class SceneRenderer {
   //      the centreline) — that skips the start/finish GATE arch, whose up-facing
   //      top sits well ABOVE the road, and resolves overlapping tiles at a seam.
   _roadHitY(x, z, refY) {
+    // Only the tiles whose footprint covers (x,z) can be under a straight-down
+    // ray there — look them up in the spatial bucket. A vertical ray at (x,z)
+    // can't hit geometry outside that geometry's x/z AABB, and every tile is
+    // registered in all cells its AABB spans, so this single cell holds the
+    // complete candidate set (both decks where an overpass stacks two strands).
+    const cands = this._collideGrid && this._collideGrid.get(this._cellKey(Math.floor(x / this._collideCell), Math.floor(z / this._collideCell)));
+    if (!cands) return null; // off-track (gap/edge): caller falls back to centreline
     this._rayFrom.set(x, refY + 6, z);
     this._groundRay.set(this._rayFrom, this._rayDown);
-    const hits = this._groundRay.intersectObject(this.trackGroup, true);
+    const hits = this._groundRay.intersectObjects(cands, true);
     let best = null, bestErr = Infinity;
     for (const h of hits) {
       if (h.face) {
@@ -407,8 +458,18 @@ export class SceneRenderer {
     scene.add(ground);
     this.ground = ground;
 
+    // Visible track = a few MERGED meshes (see setTrack): the static tiles are
+    // baked into one geometry per texture so the whole circuit draws in ~1-3 calls
+    // instead of one per tile (draw-call count was scaling with track length).
     this.trackGroup = new THREE.Group();
     scene.add(this.trackGroup);
+    // Collision proxy: the per-tile clones, kept OUT of the scene graph (so they
+    // cost nothing to render/cull) but raycast by _roadHitY for ground-conform.
+    // Per-tile bounding spheres prune the cast to the 1-2 tiles under the car —
+    // pruning the merged mesh can't give (it's one sphere over the whole track).
+    this.trackCollide = new THREE.Group();
+    this._mergedGeoms = []; // merged BufferGeometries to dispose on track change
+    this._mergedMats = [];  // merged materials to dispose on track change
 
     this.overview = new THREE.PerspectiveCamera(50, this._aspect(), 0.1, 600);
     this.overview.position.set(25, 22, 25);
@@ -494,6 +555,48 @@ export class SceneRenderer {
     this.overlay = o;
   }
 
+  // Bottom-right FPS/frame-time readout (debug aid). Shows smoothed FPS, the mean
+  // frame time, and the WORST frame time in each ~250ms window (the worst is what
+  // you feel — vsync bounces a single 17ms frame to 33ms). Reads the REAL rAF
+  // cadence (the loop's raw delta, before the sim's dt clamp). Toggle with the "P"
+  // key; shown by default (it's a debug build aid).
+  _initFpsMeter() {
+    const el = document.createElement('div');
+    el.className = 'fps-meter';
+    el.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;'
+      + 'font:600 12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
+      + 'color:#7CFC8A;background:rgba(0,0,0,0.55);padding:4px 8px;border-radius:7px;'
+      + 'pointer-events:none;white-space:pre;text-align:right;letter-spacing:.3px;';
+    el.textContent = '— fps';
+    (this.container || document.body).appendChild(el);
+    this._fpsEl = el;
+    this._fpsFrames = 0;      // frames since last text update
+    this._fpsAccumMs = 0;     // summed real frame time since last update
+    this._fpsWorstMs = 0;     // worst frame in this window
+    this._fpsLastUpdate = 0;  // timestamp of last text update
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'p' || e.key === 'P') el.style.display = (el.style.display === 'none') ? '' : 'none';
+    });
+  }
+
+  // Fold one real frame (rawMs = unclamped rAF delta) into the meter and refresh
+  // the text every ~250ms. Colour goes amber/red as the worst frame degrades.
+  _tickFpsMeter(t, rawMs) {
+    this._fpsFrames++;
+    this._fpsAccumMs += rawMs;
+    if (rawMs > this._fpsWorstMs) this._fpsWorstMs = rawMs;
+    if (t - this._fpsLastUpdate < 250) return;
+    const mean = this._fpsAccumMs / this._fpsFrames;
+    const fps = 1000 / mean;
+    const worst = this._fpsWorstMs;
+    const el = this._fpsEl;
+    if (el) {
+      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})`;
+      el.style.color = worst > 32 ? '#FF6B6B' : worst > 20 ? '#FFD166' : '#7CFC8A';
+    }
+    this._fpsFrames = 0; this._fpsAccumMs = 0; this._fpsWorstMs = 0; this._fpsLastUpdate = t;
+  }
+
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
@@ -540,29 +643,121 @@ export class SceneRenderer {
     }
   }
 
+  // Free the previous track's MERGED geometries/materials (each setTrack makes
+  // fresh ones). The collision clones share the cached proto geometry, so there's
+  // nothing per-tile to dispose — just drop the group for GC. Merged materials
+  // keep the shared colormap (owned by the proto), so don't dispose textures.
+  _disposeTrack() {
+    for (const g of this._mergedGeoms) g.dispose();
+    for (const m of this._mergedMats) m.dispose();
+    this._mergedGeoms = [];
+    this._mergedMats = [];
+  }
+
   setTrack(track, { debug = false } = {}) {
+    this._disposeTrack();
     this.trackGroup.clear();
     if (track.groundY != null) this.ground.position.y = track.groundY;
+
+    // Build the track in two parallel forms:
+    //   • collision proxy — one clone per tile (geometry shared with the proto,
+    //     matrix baked), kept OUT of the scene so it's free to render but still
+    //     raycast by _roadHitY with per-tile bounding-sphere pruning intact.
+    //   • visible render — every tile's geometry baked into WORLD space and merged
+    //     by source texture, so the whole circuit draws in one call per texture
+    //     (~1-3) instead of one per tile. Draw-call count no longer grows with
+    //     track length (the cause of the slowdown on longer layouts).
+    const collide = new THREE.Group();
+    const buckets = new Map(); // texture.uuid -> { srcMat, geoms: [] }
+    const KEEP = ['position', 'normal', 'uv']; // attributes merged tiles must share
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
-      const node = proto.clone(true);
-      node.matrixAutoUpdate = false;
-      node.matrix.copy(inst.matrix);
-      node.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); // catch car shadows
-      // Mirrored tiles are reflected (negative determinant) → their winding flips,
-      // so the road's top face would back-face-cull. Double-side a CLONE of each
-      // material (so we don't make every shared instance double-sided) to keep the
-      // top face drawn + lit from above. Only the few reflected curve tiles pay this.
-      if (inst.mirror) {
-        node.traverse((o) => {
-          if (!o.isMesh || !o.material) return;
-          const dub = (m) => { const c = m.clone(); c.side = THREE.DoubleSide; return c; };
-          o.material = Array.isArray(o.material) ? o.material.map(dub) : dub(o.material);
-        });
-      }
-      this.trackGroup.add(node);
+
+      // collision clone (shares proto geometry; lives off-scene)
+      const cnode = proto.clone(true);
+      cnode.matrixAutoUpdate = false;
+      cnode.matrix.copy(inst.matrix);
+      collide.add(cnode);
+
+      // render: bake each mesh's geometry to world space and bucket by texture.
+      // Each GLB bundles its own copy of the shared "colormap", so a bucket holds
+      // one tile type — same attributes/indexing, so the merge always succeeds.
+      // Mirrored tiles (negative-determinant matrix) bake in with reversed winding;
+      // flipWinding (below) puts it back so they shade like their non-mirrored twins
+      // instead of dark, and the merged material stays DoubleSide as a safety net.
+      const wnode = proto.clone(true);
+      wnode.matrix.copy(inst.matrix);
+      wnode.matrixAutoUpdate = false;
+      wnode.updateMatrixWorld(true);
+      wnode.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        const srcMat = Array.isArray(o.material) ? o.material[0] : o.material;
+        const key = srcMat && srcMat.map ? srcMat.map.uuid : 'nomap';
+        let b = buckets.get(key);
+        if (!b) { b = { srcMat, geoms: [] }; buckets.set(key, b); }
+        const g = o.geometry.clone();
+        for (const name of Object.keys(g.attributes)) {
+          if (!KEEP.includes(name)) g.deleteAttribute(name);
+        }
+        if (!g.attributes.normal) g.computeVertexNormals();
+        g.applyMatrix4(o.matrixWorld);
+        // Mirrored tile (negative-determinant placement): applyMatrix4 reversed the
+        // winding but kept the road-top normal pointing up, so without this it would
+        // bake in as a back face and shade dark under the DoubleSide merge. Flip it
+        // back so the whole merged mesh winds consistently (see flipWinding).
+        if (o.matrixWorld.determinant() < 0) flipWinding(g);
+        b.geoms.push(g);
+      });
     }
+    collide.updateMatrixWorld(true); // static — compute world matrices once for the raycast
+    this.trackCollide = collide;
+
+    // Index each tile into a coarse (x,z) grid so _roadHitY tests only the tiles
+    // under the car, not all of them. Register a tile in every cell its world
+    // AABB spans, so a single-cell lookup returns every tile a vertical ray there
+    // could hit. Built once per track (cheap); queried 3×/car/frame.
+    const grid = new Map();
+    const tbox = new THREE.Box3();
+    const CELL = this._collideCell;
+    for (const cnode of collide.children) {
+      tbox.setFromObject(cnode);
+      if (tbox.isEmpty()) continue;
+      const gx0 = Math.floor(tbox.min.x / CELL), gx1 = Math.floor(tbox.max.x / CELL);
+      const gz0 = Math.floor(tbox.min.z / CELL), gz1 = Math.floor(tbox.max.z / CELL);
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) {
+          const key = this._cellKey(gx, gz);
+          let list = grid.get(key);
+          if (!list) grid.set(key, list = []);
+          list.push(cnode);
+        }
+      }
+    }
+    this._collideGrid = grid;
+
+    for (const { srcMat, geoms } of buckets.values()) {
+      const mat = srcMat.clone();          // shares the proto's colormap texture
+      mat.side = THREE.DoubleSide;          // keep mirrored-tile faces drawn + lit
+      this._mergedMats.push(mat);
+      const addMesh = (geo) => {
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.matrixAutoUpdate = false;      // geometry is baked in world space
+        mesh.receiveShadow = true;          // road catches the cars' cast shadows
+        this.trackGroup.add(mesh);
+        this._mergedGeoms.push(geo);
+      };
+      const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
+      if (merged) {
+        if (geoms.length > 1) for (const g of geoms) g.dispose(); // copied into `merged`
+        addMesh(merged);
+      } else {
+        // Merge failed (mismatched attributes) — never leave road missing; fall
+        // back to one mesh per tile geometry (still one shared material/texture).
+        for (const g of geoms) addMesh(g);
+      }
+    }
+
     if (debug) {
       // Magenta centreline overlay (inspection aid). Lift each point a little along
       // its up vector and disable depth-test so the line is NEVER buried under the
@@ -871,10 +1066,12 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
-    const fwd = forward.clone().normalize();
-    const u = up.clone().normalize();
-    // mesh faces its heading (forward)
-    c.pose = { pos: pos.clone(), forward: fwd, up: u };
+    // Persistent pose vectors (created once per car) reused every frame — no GC.
+    // Safe because c.pose is only read within the same frame it's written.
+    if (!c.pose) c.pose = { pos: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3() };
+    const fwd = c.pose.forward.copy(forward).normalize();
+    const u = c.pose.up.copy(up).normalize();
+    c.pose.pos.copy(pos);
     c.group.position.copy(pos);
 
     // Ground-conform. PITCH comes from the centreline forward (`fwd`): the centreline
@@ -912,9 +1109,9 @@ export class SceneRenderer {
     }
     // Build the car basis from the (centreline-pitched) forward + a level (world-up)
     // reference, so x (lateral) stays horizontal and the body owns pitch, nothing else.
-    const x = this._worldUp.clone().cross(z).normalize();
-    const yy = z.clone().cross(x).normalize();
-    c.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, yy, z));
+    const x = this._sx.copy(this._worldUp).cross(z).normalize();
+    const yy = this._syy.copy(z).cross(x).normalize();
+    c.group.quaternion.setFromRotationMatrix(this._sBasis.makeBasis(x, yy, z));
 
     // body lean into the turn — roll ONLY the body (wheels stay flat on the road)
     c.lean += (steer * LEAN_MAX - c.lean) * 0.2;
@@ -953,8 +1150,8 @@ export class SceneRenderer {
     const { pos, forward, up } = c.pose;
     const baseFov = BASE_FOV, height = CHASE_HEIGHT;
     // ideal pose: rigidly behind the CAR's heading, looking just ahead of it
-    const want = pos.clone().addScaledVector(forward, -CHASE_DIST).addScaledVector(up, height);
-    const target = pos.clone().addScaledVector(forward, CHASE_LOOK).addScaledVector(up, CHASE_TGT_UP);
+    const want = this._sWant.copy(pos).addScaledVector(forward, -CHASE_DIST).addScaledVector(up, height);
+    const target = this._sTarget.copy(pos).addScaledVector(forward, CHASE_LOOK).addScaledVector(up, CHASE_TGT_UP);
     // frame-rate-independent damping → smooth lag/swing behind the car through turns
     const aPos = 1 - Math.exp(-CAM_POS_RATE * dt);
     const aTgt = 1 - Math.exp(-CAM_TGT_RATE * dt);
@@ -971,9 +1168,11 @@ export class SceneRenderer {
 
   _loop(t) {
     if (!this._running) return;
-    const dt = Math.min((t - this._last) / 1000, 0.05);
+    const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
+    const dt = Math.min(rawMs / 1000, 0.05);
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
+    if (rawMs > 0 && rawMs < 1000) this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);
 
     // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY
