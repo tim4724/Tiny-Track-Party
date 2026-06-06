@@ -2,6 +2,8 @@
 
 Multiplayer toy-car racing where phones become tilt controllers and a shared screen is the track.
 
+![4-player split-screen](artwork/splitscreen-4p.png)
+
 ## Overview
 
 Tiny Track Party is a couch party game for 1–8 players on a single shared display. One browser window is the game screen (TV, monitor, or laptop); each player joins by scanning a QR code with their phone and tilts it to steer. The display runs the authoritative 3D race simulation; the Node.js server only serves static files and a QR code API.
