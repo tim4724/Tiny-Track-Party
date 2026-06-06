@@ -186,19 +186,36 @@ function shade(hex, amt) {
 }
 
 // Draw the plate to a canvas: a livery-filled rounded rect inside a white rim,
-// with the name in white, auto-shrunk to fit. Returns { tex, aspect }.
+// with the name in white, auto-shrunk to fit. Returns { tex, aspect, contentFrac }.
+//
+// The plate sits in a TRANSPARENT MARGIN (M) inside the canvas, so its outer edge
+// is a soft alpha edge (smoothed for free by the texture's mipmaps + anisotropy),
+// NOT the quad's hard polygon silhouette. That silhouette is what aliased and
+// crawled as the car tilted — the reason scene-wide MSAA was needed. With the
+// margin the plate self-antialiases, so it stays crisp regardless of MSAA.
+// contentFrac = the visible plate's fraction of the canvas, so makePlate can size
+// the mesh to keep the plate the same on-screen size despite the added margin.
 function makePlateTexture(name, colorHex) {
   const text = (name == null ? '' : String(name)).trim() || '—';
   const S = 4;                 // supersample → crisp even though the plate is small on screen
-  const W = 232, H = 92;       // logical plate canvas (~2.5 : 1)
+  const W = 232, H = 92;       // logical plate size (~2.5 : 1)
+  const M = 7;                 // transparent margin around the plate (logical px) → soft edge
+  const CW = W + 2 * M, CH = H + 2 * M; // full canvas incl. margin
   const cv = document.createElement('canvas');
-  cv.width = W * S; cv.height = H * S;
+  cv.width = CW * S; cv.height = CH * S;
   const ctx = cv.getContext('2d');
   ctx.scale(S, S);
+  ctx.translate(M, M);         // draw the plate inset, leaving the transparent margin
 
-  // white rim, then livery field inset, then a darker inner hairline
+  // white rim, then livery field inset, then a darker inner hairline.
+  // FEATHER the outer rim: a small blur turns its axis-aligned edges (which canvas
+  // fill leaves as a hard alpha step) into a soft gradient, so the border self-AAs
+  // and never crawls — even with scene MSAA off. The filter is in device pixels
+  // (unaffected by ctx.scale), so scale the radius by S. Interior is drawn crisp.
   const pad = 6, r = 16;
+  ctx.filter = `blur(${(S * 1.1).toFixed(2)}px)`;
   ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fillStyle = '#ffffff'; ctx.fill();
+  ctx.filter = 'none';
   ctx.beginPath(); ctx.roundRect(pad, pad, W - pad * 2, H - pad * 2, r - 4);
   ctx.fillStyle = colorHex; ctx.fill();
   ctx.lineWidth = 2; ctx.strokeStyle = shade(colorHex, 0.28); ctx.stroke();
@@ -221,17 +238,20 @@ function makePlateTexture(name, colorHex) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
-  return { tex, aspect: W / H };
+  return { tex, aspect: CW / CH, contentFrac: W / CW };
 }
 
 // Build the plate mesh for one car. `anchor` = { z (rear face), y, w (car width) }
 // in the car group's local space, derived from the model's bounding box.
 function makePlate(name, colorHex, anchor) {
   const pt = makePlateTexture(name, colorHex);
-  const w = Math.min(PLATE_MAX_W, anchor.w * 0.92); // never wider than the car's rear
-  const h = w / pt.aspect;
+  // Size to the VISIBLE plate (cap to the car's rear), then expand the quad to
+  // include the transparent margin so the plate's on-screen size is unchanged.
+  const visW = Math.min(PLATE_MAX_W, anchor.w * 0.92); // never wider than the car's rear
+  const planeW = visW / pt.contentFrac;
+  const planeH = planeW / pt.aspect;
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(w, h),
+    new THREE.PlaneGeometry(planeW, planeH),
     new THREE.MeshBasicMaterial({ map: pt.tex, transparent: true, depthWrite: false })
   );
   // Transform (rear-facing + height) is set by SceneRenderer._positionPlate.
@@ -252,6 +272,36 @@ export class SceneRenderer {
     // bearing the static overview used so the first frame matches.
     this.orbit = false;
     this._orbitAngle = Math.atan2(0.9, 0.35);
+    // Dynamic resolution must be configured BEFORE _initThree (it sizes the offscreen
+    // target from _renderScale). The scene renders into a target we shrink when frames
+    // can't hold 60; the present pass upscales it to the canvas — trading sharpness for
+    // framerate only on GPUs that need it. The learned scale persists across sessions
+    // (localStorage) so a weak machine starts at the right resolution instead of
+    // re-dipping every race; each fresh load probes one step back UP to reclaim
+    // sharpness if the hardware/window improved. ?renderscale=N pins it; ?noscale off.
+    this._renderScaleFloor = 0.6; // never below 60% linear res (~36% of the pixels)
+    this._dtEma = null;           // smoothed real frame time (ms), drives adaptation
+    this._adaptCooldown = 0;      // frames to wait before the next scale change
+    {
+      const q = new URLSearchParams(location.search);
+      // Offscreen MSAA sample count (?msaa=0|2|4). MSAA was the single biggest GPU
+      // cost (≈5.4ms/frame at 4× on a 12MP buffer, vs 1.1ms with none — measured via
+      // GPU timer query). The plate — the one thin feature that needed it — now self-
+      // antialiases via its soft feathered edge, so we default MSAA OFF; the chunky
+      // toy geometry tolerates it. Override with ?msaa=2 / ?msaa=4 if wanted.
+      const msaa = parseInt(q.get('msaa'), 10);
+      this._msaaSamples = Number.isFinite(msaa) ? Math.max(0, Math.min(4, msaa)) : 0;
+      const fixed = parseFloat(q.get('renderscale'));
+      this._dynRes = !q.has('noscale') && !Number.isFinite(fixed);
+      if (Number.isFinite(fixed)) {
+        this._renderScale = Math.min(1, Math.max(0.4, fixed));
+      } else {
+        const saved = parseFloat(this._loadScale());
+        // probe one step above the saved scale each load; shrink-only adaptation
+        // settles it back down if that's too high (so it converges, never hunts).
+        this._renderScale = Number.isFinite(saved) ? Math.min(1, Math.max(this._renderScaleFloor, saved + 0.1)) : 1;
+      }
+    }
     this._initThree();
     this._initOverlay();
     this._initParticles();
@@ -495,12 +545,23 @@ export class SceneRenderer {
   // tilts. WebGL2 resolves the multisample buffer for us.
   // (Depth-of-field blur was removed; see the note near the look constants for how to
   // reinstate it — add blur targets + a depth texture and mix sharp↔blur here.)
-  _initPost() {
+  // Persist the learned render scale across sessions (best-effort; private mode or a
+  // blocked storage just disables persistence). Keyed so it's per-origin.
+  _loadScale() { try { return localStorage.getItem('tt.renderScale'); } catch (e) { return null; } }
+  _saveScale(s) { try { localStorage.setItem('tt.renderScale', String(s)); } catch (e) { /* ignore */ } }
+
+  // RT pixel dims = canvas drawing buffer × the current render scale (dynamic res).
+  _rtDims() {
     const db = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const W = Math.max(2, db.x), H = Math.max(2, db.y);
+    const s = this._renderScale || 1;
+    return { w: Math.max(2, Math.round(db.x * s)), h: Math.max(2, Math.round(db.y * s)) };
+  }
+
+  _initPost() {
+    const { w: W, h: H } = this._rtDims();
     const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
 
-    this._rtScene = new THREE.WebGLRenderTarget(W, H, { ...opts, depthBuffer: true, samples: 4 });
+    this._rtScene = new THREE.WebGLRenderTarget(W, H, { ...opts, depthBuffer: true, samples: this._msaaSamples });
     this._rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
 
     const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
@@ -534,8 +595,39 @@ export class SceneRenderer {
 
   _resizePost() {
     if (!this._rtScene) return;
-    const db = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    this._rtScene.setSize(Math.max(2, db.x), Math.max(2, db.y));
+    const { w, h } = this._rtDims();
+    this._rtScene.setSize(w, h);
+  }
+
+  // Adapt the render scale from the smoothed REAL frame time (rAF delta) — that's
+  // what reflects GPU fill, which is async and invisible to CPU-submit timing. The
+  // scene's fill (5K × split-screen × MSAA) is the dominant cost on weak GPUs.
+  //
+  // SHRINK-ONLY: when frames slip off 60 (ema climbs past the budget) we shed
+  // resolution to claw the framerate back, and stay there. We deliberately do NOT
+  // auto-grow — reclaiming res risks dropping below 60 again, then shrinking, then
+  // growing… a hunt that shows up as a periodic stutter, which is exactly what a
+  // hard "60fps minimum" goal can't tolerate. The scale resets to full each race
+  // (setTrack), so a new race re-probes from sharp. A SLOW EMA (0.95) means a lone
+  // GC/alt-tab spike won't trigger a shrink — only sustained slowness does. Skipped
+  // while the tab is hidden (rAF throttles there and would misfire). ?renderscale
+  // pins a fixed scale; ?noscale disables this entirely.
+  _adaptScale(dtMs) {
+    if (!this._dynRes) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    this._dtEma = this._dtEma == null ? dtMs : this._dtEma * 0.95 + dtMs * 0.05;
+    // Warmup grace: the first seconds of a race hitch on GLB/texture uploads and JIT
+    // warmup — transient, not the steady-state load. Warm the EMA but don't shrink
+    // yet, or a capable machine gets permanently downscaled by one-time load spikes.
+    this._adaptAge = (this._adaptAge || 0) + dtMs;
+    if (this._adaptAge < 2500) return;
+    if (this._adaptCooldown > 0) { this._adaptCooldown--; return; }
+    if (this._dtEma > 18 && this._renderScale > this._renderScaleFloor) { // sustained < ~55fps
+      this._renderScale = Math.max(this._renderScaleFloor, this._renderScale - 0.1);
+      this._resizePost();
+      this._saveScale(this._renderScale); // remember for next race/session
+      this._adaptCooldown = 90; // ~1.5s for the new scale to settle before reassessing
+    }
   }
 
   // Grade _rtScene (exposure + linear→sRGB) straight to the canvas (target null).
@@ -591,7 +683,9 @@ export class SceneRenderer {
     const worst = this._fpsWorstMs;
     const el = this._fpsEl;
     if (el) {
-      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})`;
+      // Show the render scale only when dynamic-res has pulled it below full.
+      const scaleTag = this._renderScale < 0.999 ? `\n${Math.round(this._renderScale * 100)}% res` : '';
+      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})${scaleTag}`;
       el.style.color = worst > 32 ? '#FF6B6B' : worst > 20 ? '#FFD166' : '#7CFC8A';
     }
     this._fpsFrames = 0; this._fpsAccumMs = 0; this._fpsWorstMs = 0; this._fpsLastUpdate = t;
@@ -1172,7 +1266,10 @@ export class SceneRenderer {
     const dt = Math.min(rawMs / 1000, 0.05);
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
-    if (rawMs > 0 && rawMs < 1000) this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
+    if (rawMs > 0 && rawMs < 1000) {
+      this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
+      this._adaptScale(rawMs);      // dynamic resolution reacts to real frame time
+    }
     if (this.onFrame) this.onFrame(dt);
 
     // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY
@@ -1231,8 +1328,9 @@ export class SceneRenderer {
     // Everything renders into the offscreen scene target (drawing-buffer pixels);
     // _present then grades it (exposure + sRGB) and copies it to the canvas.
     const rt = this._rtScene;
-    const db = r.getDrawingBufferSize(this._dbSize);
-    const DBW = db.x, DBH = db.y;
+    // Viewport math uses the RT's ACTUAL size (= drawing buffer × render scale), so
+    // split-screen cells fill the dynamically-scaled target; the present upscales it.
+    const DBW = rt.width, DBH = rt.height;
     // clear the WHOLE target first (colour + depth) so empty split-screen cells
     // and rounding strips don't keep last frame's pixels
     rt.scissorTest = false;
