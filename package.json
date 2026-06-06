@@ -7,12 +7,14 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
-    "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\""
+    "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
+    "artwork": "node scripts/capture-artwork.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "three": "^0.184.0"
   }
 }
