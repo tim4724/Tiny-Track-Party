@@ -30,6 +30,12 @@ const DS = 0.25;           // centerline sample step (unscaled) — uniform arcl
 // its pitch on/off smoothly (a plain ramp snaps to full pitch the instant it starts).
 const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 const smoothstep = (t) => t * t * (3 - 2 * t); // C1 ends — used for the chicane lateral shift
+// Bank easing across a segment: 0 at both ends, full in the middle (ease in over the
+// first BANK_RAMP, hold, ease out) — so a banked corner leans in/out smoothly and is
+// flat where it meets a straight.
+const BANK_RAMP = 0.35;
+const bankWindow = (f) => f < BANK_RAMP ? smootherstep(f / BANK_RAMP)
+  : f > 1 - BANK_RAMP ? smootherstep((1 - f) / BANK_RAMP) : 1;
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // Plan-frame basis at heading θ: travel direction and lateral-LEFT direction (the
@@ -60,11 +66,20 @@ export function buildTrack(track, opts = {}) {
     if (w == null) return trackWidth;
     return Array.isArray(w) ? w[0] + (w[1] - w[0]) * f : w;
   };
+  // Per-sample bank roll (radians, eased), signed to lean INTO the turn: a positive
+  // `bank` on a left arc rolls `up` one way, on a right arc the other. Applied to the
+  // frame after parallel-transport (a roll about the tangent), so it can't break closure.
+  const segBank = (seg, f) => {
+    if (!seg.bank) return 0;
+    const sign = seg.kind === 'arc' ? Math.sign(seg.angle || 1) : 1;
+    return seg.bank * DEG * bankWindow(f) * sign;
+  };
 
   // ---- Forward integrate the centerline (unscaled plan coords) ----
   let X = 0, Z = 0, theta = 0, elev = 0;     // cursor
   const worldPts = [v(0, 0, 0)];             // start at origin; scaled to world after the walk
   const widths = [trackWidth];               // per-sample drivable width (unscaled), parallel to worldPts
+  const banks = [0];                          // per-sample bank roll (radians), parallel to worldPts
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
@@ -79,7 +94,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
           z0 + dz * len * f + lz * off
         ));
-        widths.push(segWidth(seg, f));
+        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f));
       }
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
@@ -95,7 +110,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f),
           z0 + R * sgn * (latZ(th0) - latZ(th))
         ));
-        widths.push(segWidth(seg, f));
+        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f));
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
@@ -110,7 +125,7 @@ export function buildTrack(track, opts = {}) {
   // ring has no zero-length seam segment (the wrap last→first then spans one step).
   const gap = Math.hypot(X, elev, Z);
   const closed = gap < 0.5;
-  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); }
+  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); }
 
   // Scale positions + widths to world.
   for (const p of worldPts) p.multiplyScalar(SCALE);
@@ -182,6 +197,11 @@ export function buildTrack(track, opts = {}) {
     up.copy(ups[i]).applyAxisAngle(tangents[i], resid * (i / n));
     ups[i].copy(up);
   }
+  // Banking: roll each frame about its tangent by the per-sample bank angle. This is the
+  // last frame step, so `lateral = tangent × up` (computed below) tilts with the road and
+  // the physics/car/ribbon all lean together. Banks ease to 0 at corner ends, so the seam
+  // and straights stay upright (holonomy/upright tests hold for the tasteful ≤~12° used).
+  for (let i = 0; i < n; i++) if (banks[i]) ups[i].applyAxisAngle(tangents[i], banks[i]);
 
   const samples = [];
   let s = 0, minY = Infinity;

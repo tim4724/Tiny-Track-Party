@@ -285,6 +285,33 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
   }
 });
 
+test('banking: corners lean INTO the turn and stay upright', () => {
+  // An all-LEFT banked oval: every corner turns the same way, so the road normal should
+  // tilt consistently toward the inside. We test against the FLAT lateral (tangent × world-up)
+  // rather than a per-sample curvature estimate, which is noisy at smoothed joints.
+  const BANKED_OVAL = [
+    ...run(8), arc(RL, 90, { bank: 10 }), ...run(4), arc(RL, 90, { bank: 10 }),
+    ...run(8), arc(RL, 90, { bank: 10 }), ...run(4), arc(RL, 90, { bank: 10 })
+  ];
+  const t = buildTrack(BANKED_OVAL);
+  assert.ok(t.closed, `banked oval should close (gap=${t.gap.toFixed(3)})`);
+  const ss = t.centerline.samples;
+  let minUpY = 1, checked = 0, intoTurn = 0;
+  for (const s of ss) {
+    minUpY = Math.min(minUpY, s.up.y);
+    if (s.up.y > 0.99) continue; // only the well-banked corner samples
+    // flat lateral-LEFT = tangent × world-up; for a left turn the inside is to the left,
+    // so a road banked into the turn tilts `up` toward it (positive dot).
+    const flx = -s.tangent.z, flz = s.tangent.x;       // (tangent × (0,1,0)).xz
+    const lean = s.up.x * flx + s.up.z * flz;
+    checked++;
+    if (lean > 0) intoTurn++;
+  }
+  assert.ok(minUpY > 0.5, `banked corners stay upright (minUpY=${minUpY.toFixed(2)})`);
+  assert.ok(minUpY < 0.99, 'corners should actually be banked (up tilts off vertical)');
+  assert.ok(checked > 0 && intoTurn === checked, `every banked sample leans into the (left) turn (${intoTurn}/${checked})`);
+});
+
 test('variable width: a flared track widens past the default and eases back', () => {
   const t = buildTrack(TRACKS.crossover); // its spine is flared via flare(6, 3.4)
   let maxW = 0, minW = Infinity;

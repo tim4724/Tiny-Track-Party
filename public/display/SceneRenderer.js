@@ -413,14 +413,12 @@ export class SceneRenderer {
     for (const h of hits) {
       if (h.face) {
         this._normalMat.getNormalMatrix(h.object.matrixWorld);
-        // Keep only NEAR-HORIZONTAL surfaces (|normal.y| > 0.1, i.e. the face leans
-        // no more than ~84° off horizontal); skip vertical walls. Using |normal.y|
-        // (not normal.y > 0.1) means MIRRORED tiles — reflected across X, which flips
-        // their winding so the road top face's normal points DOWN — still register;
-        // the nearest-to-refY pick below still selects the true road top (Y is
-        // unaffected by an X-reflection). Deliberately loose so sloped road tiles
-        // (hills/ramps) still count — the tracks have no banking, so nothing
-        // near-vertical is drivable. Tighten if a banked turn or loop is added.
+        // Keep only NEAR-HORIZONTAL surfaces (|normal.y| > 0.1, i.e. the face leans no
+        // more than ~84° off horizontal); skip the kerbs' near-vertical inner/outer
+        // faces. |normal.y| (not normal.y) is used so a back-wound road face still
+        // registers; the nearest-to-refY pick below selects the true road top. Loose
+        // enough that sloped hills/ramps AND banked corners (≤ ~25° here) all count —
+        // only a near-vertical wall or a loop-the-loop would need a tighter bound.
         const ny = this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).y;
         if (Math.abs(ny) <= 0.1) continue;
       }
