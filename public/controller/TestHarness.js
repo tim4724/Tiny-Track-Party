@@ -15,11 +15,11 @@ const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 // shipped in WELCOME; the controller has no geometry, so here we hand-author a
 // couple of representative map paths just so the picker renders.
 const FAKE_TRACKS = [
-  { id: 'oval', name: 'Sunny Oval', svg: {
+  { id: 'switchback', name: 'Switchback', svg: {
     viewBox: '0 0 100 100',
     d: 'M30 20 H70 Q80 20 80 30 V70 Q80 80 70 80 H30 Q20 80 20 70 V30 Q20 20 30 20 Z',
     start: { x: 50, y: 20 } } },
-  { id: 'grand', name: 'Grand Tour', svg: {
+  { id: 'crossover', name: 'Crossover', svg: {
     viewBox: '0 0 100 100',
     d: 'M50 18 C72 18 82 33 82 50 C82 67 72 82 50 82 C28 82 18 67 18 50 C18 33 28 18 50 18 Z',
     start: { x: 50, y: 18 } } }
@@ -135,7 +135,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
-      renderTrackPicker('grand', false); // read-only; reflects the host's pick
+      renderTrackPicker('crossover', false); // read-only; reflects the host's pick
       el('start-btn').classList.add('hidden');
       const waitEl = el('wait-host');
       waitEl.classList.remove('hidden');

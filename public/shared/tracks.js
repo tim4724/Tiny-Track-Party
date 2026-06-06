@@ -9,8 +9,8 @@
 //     to list tracks — it can't import TrackBuilder, which pulls in Three.js).
 //
 // DESIGN GOAL. Each lap should run ~40-55s for a quick driver (≈2-3 min over the
-// 3-lap race), and the six tracks should feel DISTINCT — varied in outline,
-// corner radius, elevation, and feature density, not the same rectangle dressed
+// 3-lap race), and the tracks should feel DISTINCT — varied in outline, corner
+// radius, elevation, and feature density, not the same rectangle dressed
 // differently. Use scripts/probe-track.js to check a layout closes and
 // scripts/probe-laptime.js to check it runs the right length before shipping it.
 //
@@ -19,12 +19,13 @@
 // (gap < 0.5). Every piece advances ONE span (a straight-length L) along travel;
 // a 90° corner also turns the heading. There are three proven closing recipes:
 //
-//  1. OVAL SKELETON (a simple rectangle). Four identical 90° corners of the SAME
-//     hand (4 × 90° = a full turn) with matched OPPOSITE sides. Because the four
-//     corners are identical, the lap closes as long as opposite sides have equal
-//     length — so any side can be any NET-FLAT, NET-STRAIGHT run of the right
-//     length. Aspect ratio (long-thin vs square) and radius (large=sweeping,
-//     small=tight) are free, which is most of what makes these tracks differ.
+//  1. OVAL SKELETON (a simple rectangle, e.g. Switchback). Four identical 90°
+//     corners of the SAME hand (4 × 90° = a full turn) with matched OPPOSITE
+//     sides. Because the four corners are identical, the lap closes as long as
+//     opposite sides have equal length — so any side can be any NET-FLAT,
+//     NET-STRAIGHT run of the right length. Aspect ratio (long-thin vs square)
+//     and radius (large=sweeping, small=tight) are free, which is most of what
+//     makes these tracks differ.
 //
 //  2. FIGURE-8 (a self-crossing loop, e.g. Crossover). Three right + three left
 //     corners net 0° rotation and cross ONCE; swap two straights of one strand
@@ -42,55 +43,6 @@
 //   • bumpUp + bumpDown                — a hump then a dip; net flat
 //   • hillHalfUp + hillHalfDown        — climb then descend; net flat
 //   • hillUp + hillDown                — a taller climb/descent; net flat
-
-// ---- Sunny Oval (Easy): the flat-out SPEEDWAY. A long, thin rectangle — huge
-// straights and four sweeping large-radius corners, no elevation. The place to
-// pin the throttle and learn the tilt. Sides 12/5/12/5 (opposite sides match). ----
-export const OVAL = [
-  // start/finish straight (gate here) → the long front straight       [side A: 12]
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  // short end                                                        [B: 5]
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  // back straight                                                    [C: 12, = A]
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  // short end                                                        [D: 5, = B]
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL'
-];
-
-// ---- Grand Tour (Medium): the ROLLING-HILLS circuit. A squarer rectangle (vs
-// the oval's long-thin one) where almost every side is hills, crests, and speed
-// bumps — full hills, half-hills, and bumps back to back. Net-flat (each feature
-// returns to ground) so it closes like the oval, but the elevation never lets up.
-// Sides 9/7/9/7. ----
-export const GRAND_TOUR = [
-  // start/finish straight (gate) → full hill → speed bumps → half-hill   [A: 9]
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  // short side: half-hill → bumps                                        [B: 7]
-  'straight', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'cornerLargeL',
-  // back side: full hill → bumps → half-hill                             [C: 9, = A]
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  // short side: half-hill → bumps                                        [D: 7, = B]
-  'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'straight', 'cornerLargeL'
-];
-
-// ---- Slalom Park (Medium): flat but relentless. The oval skeleton (large
-// corners) with chicanes (curve → curveR weaves left then back) stacked down
-// every side, so you're never straight for long — a continuous left-right weave
-// that rewards a smooth line. Sides 6/4/6/4 (opposite sides match). ----
-export const SLALOM = [
-  // start/finish straight → double chicane → straight                   [A: 6]
-  'straight', 'curve', 'curveR', 'curve', 'curveR', 'straight', 'cornerLargeL',
-  // short side: chicane → straights                                     [B: 4]
-  'curve', 'curveR', 'straight', 'straight', 'cornerLargeL',
-  // back side: double chicane                                           [C: 6, = A]
-  'straight', 'curve', 'curveR', 'curve', 'curveR', 'straight', 'cornerLargeL',
-  // short side: chicane → straights                                     [D: 4, = B]
-  'curve', 'curveR', 'straight', 'straight', 'cornerLargeL'
-];
 
 // ---- Switchback (Hard): the tight, technical one. TIGHT (small-radius) corners
 // make a compact circuit, with a chicane + rolling half-hill on the long sides
@@ -158,48 +110,10 @@ export const RIVERSIDE = [
   'straight', 'straight', 'curve', 'curveR', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'cornerLargeL'
 ];
 
-// ---- Tangle (Hard): a second self-crossing circuit, distinct from Crossover. A
-// figure-eight (3 right + 3 left corners → net 0°, crosses once), but with its own
-// shape: a big sweeping top loop feeds a long, high FLYOVER that sails over the
-// start spine, then a tight bottom loop snaps back. The strands meet in plan but
-// ~2 units apart in height (verified collision-free: min strand separation 2.0);
-// the renderer's nearest-centreline ground probe keeps cars on the right deck. ----
-export const TANGLE = [
-  // start/finish spine (gate here) → into the big loop
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeR',
-  // big sweeping top loop
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeR',
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeR',
-  // long high FLYOVER: climb, sail over the spine, descend
-  'hillUp', 'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'hillDown', 'cornerLargeL',
-  // tight bottom loop, the other way, back to the spine
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight'
-];
-
 // Registry of named, previewable tracks. `pieces` is the layout the builder
 // chains; the rest is presentation (gallery cards, future track-picker UI).
 // Selected in the display via ?track=<key> (see display/main.js).
 export const TRACKS = {
-  oval: {
-    name: 'Sunny Oval',
-    blurb: 'A long, flat speedway — sweeping bends and enormous straights. Pin the throttle and learn the tilt.',
-    difficulty: 'Easy',
-    pieces: OVAL
-  },
-  grand: {
-    name: 'Grand Tour',
-    blurb: 'A rolling country circuit — hills, crests, and speed bumps on every side. Net-flat, but your stomach won’t believe it.',
-    difficulty: 'Medium',
-    pieces: GRAND_TOUR
-  },
-  slalom: {
-    name: 'Slalom Park',
-    blurb: 'One chicane after another — a relentless left-right weave that never lets you straighten up.',
-    difficulty: 'Medium',
-    pieces: SLALOM
-  },
   switchback: {
     name: 'Switchback',
     blurb: 'Compact and vicious: tight corners stacked back-to-back, with rolling half-hills and chicanes between.',
@@ -217,20 +131,14 @@ export const TRACKS = {
     blurb: 'The grand tour: an L-shaped marathon that bends back on itself, packed with chicanes, hills, and bumps. The longest lap in the park.',
     difficulty: 'Medium',
     pieces: RIVERSIDE
-  },
-  tangle: {
-    name: 'Tangle',
-    blurb: 'A knotted figure-eight: a big sweeping loop hurls you onto a long high flyover that sails clean over your own start straight, then a tight loop snaps back.',
-    difficulty: 'Hard',
-    pieces: TANGLE
   }
 };
 
 // Stable display order for the gallery / picker (object key order is reliable in
 // practice, but an explicit list keeps presentation independent of TRACKS edits).
-export const TRACK_ORDER = ['oval', 'grand', 'slalom', 'switchback', 'crossover', 'riverside', 'tangle'];
+export const TRACK_ORDER = ['switchback', 'crossover', 'riverside'];
 
-// Flat list for the lobby track picker / selector — {id, name, pieces} in display
-// order. The display builds each track and computes its schematic SVG from the
-// geometry (see display/trackSchematic.js), so the picker needs no per-track art.
+// Flat list of tracks — {id, name, pieces} in display order — used by main.js and
+// the track-picker UI. The display builds each track and computes its schematic SVG
+// from the geometry (see display/trackSchematic.js), so the picker needs no per-track art.
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({ id, name: TRACKS[id].name, pieces: TRACKS[id].pieces }));

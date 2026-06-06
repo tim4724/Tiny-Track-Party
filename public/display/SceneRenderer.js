@@ -272,36 +272,14 @@ export class SceneRenderer {
     // bearing the static overview used so the first frame matches.
     this.orbit = false;
     this._orbitAngle = Math.atan2(0.9, 0.35);
-    // Dynamic resolution must be configured BEFORE _initThree (it sizes the offscreen
-    // target from _renderScale). The scene renders into a target we shrink when frames
-    // can't hold 60; the present pass upscales it to the canvas — trading sharpness for
-    // framerate only on GPUs that need it. The learned scale persists across sessions
-    // (localStorage) so a weak machine starts at the right resolution instead of
-    // re-dipping every race; each fresh load probes one step back UP to reclaim
-    // sharpness if the hardware/window improved. ?renderscale=N pins it; ?noscale off.
-    this._renderScaleFloor = 0.6; // never below 60% linear res (~36% of the pixels)
-    this._dtEma = null;           // smoothed real frame time (ms), drives adaptation
-    this._adaptCooldown = 0;      // frames to wait before the next scale change
-    {
-      const q = new URLSearchParams(location.search);
-      // Offscreen MSAA sample count (?msaa=0|2|4). MSAA was the single biggest GPU
-      // cost (≈5.4ms/frame at 4× on a 12MP buffer, vs 1.1ms with none — measured via
-      // GPU timer query). The plate — the one thin feature that needed it — now self-
-      // antialiases via its soft feathered edge, so we default MSAA OFF; the chunky
-      // toy geometry tolerates it. Override with ?msaa=2 / ?msaa=4 if wanted.
-      const msaa = parseInt(q.get('msaa'), 10);
-      this._msaaSamples = Number.isFinite(msaa) ? Math.max(0, Math.min(4, msaa)) : 0;
-      const fixed = parseFloat(q.get('renderscale'));
-      this._dynRes = !q.has('noscale') && !Number.isFinite(fixed);
-      if (Number.isFinite(fixed)) {
-        this._renderScale = Math.min(1, Math.max(0.4, fixed));
-      } else {
-        const saved = parseFloat(this._loadScale());
-        // probe one step above the saved scale each load; shrink-only adaptation
-        // settles it back down if that's too high (so it converges, never hunts).
-        this._renderScale = Number.isFinite(saved) ? Math.min(1, Math.max(this._renderScaleFloor, saved + 0.1)) : 1;
-      }
-    }
+    // Offscreen MSAA sample count (?msaa=0|2|4), read before _initThree since the
+    // present target is built from it. MSAA was the single biggest GPU cost (≈5.4ms/
+    // frame at 4× on a 12MP buffer, vs 1.1ms with none — measured via GPU timer
+    // query). The plate — the one thin feature that needed it — now self-antialiases
+    // via its soft feathered edge, so we default MSAA OFF; the chunky toy geometry
+    // tolerates it. Override with ?msaa=2 / ?msaa=4 if wanted.
+    const msaa = parseInt(new URLSearchParams(location.search).get('msaa'), 10);
+    this._msaaSamples = Number.isFinite(msaa) ? Math.max(0, Math.min(4, msaa)) : 0;
     this._initThree();
     this._initOverlay();
     this._initParticles();
@@ -545,16 +523,10 @@ export class SceneRenderer {
   // tilts. WebGL2 resolves the multisample buffer for us.
   // (Depth-of-field blur was removed; see the note near the look constants for how to
   // reinstate it — add blur targets + a depth texture and mix sharp↔blur here.)
-  // Persist the learned render scale across sessions (best-effort; private mode or a
-  // blocked storage just disables persistence). Keyed so it's per-origin.
-  _loadScale() { try { return localStorage.getItem('tt.renderScale'); } catch (e) { return null; } }
-  _saveScale(s) { try { localStorage.setItem('tt.renderScale', String(s)); } catch (e) { /* ignore */ } }
-
-  // RT pixel dims = canvas drawing buffer × the current render scale (dynamic res).
+  // RT pixel dims = the full canvas drawing buffer (the present pass is a 1:1 copy).
   _rtDims() {
     const db = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const s = this._renderScale || 1;
-    return { w: Math.max(2, Math.round(db.x * s)), h: Math.max(2, Math.round(db.y * s)) };
+    return { w: Math.max(2, db.x), h: Math.max(2, db.y) };
   }
 
   _initPost() {
@@ -590,44 +562,12 @@ export class SceneRenderer {
     this._fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this._fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this._matPresent);
     this._fsScene.add(this._fsQuad);
-    this._dbSize = new THREE.Vector2();
   }
 
   _resizePost() {
     if (!this._rtScene) return;
     const { w, h } = this._rtDims();
     this._rtScene.setSize(w, h);
-  }
-
-  // Adapt the render scale from the smoothed REAL frame time (rAF delta) — that's
-  // what reflects GPU fill, which is async and invisible to CPU-submit timing. The
-  // scene's fill (5K × split-screen × MSAA) is the dominant cost on weak GPUs.
-  //
-  // SHRINK-ONLY: when frames slip off 60 (ema climbs past the budget) we shed
-  // resolution to claw the framerate back, and stay there. We deliberately do NOT
-  // auto-grow — reclaiming res risks dropping below 60 again, then shrinking, then
-  // growing… a hunt that shows up as a periodic stutter, which is exactly what a
-  // hard "60fps minimum" goal can't tolerate. The scale resets to full each race
-  // (setTrack), so a new race re-probes from sharp. A SLOW EMA (0.95) means a lone
-  // GC/alt-tab spike won't trigger a shrink — only sustained slowness does. Skipped
-  // while the tab is hidden (rAF throttles there and would misfire). ?renderscale
-  // pins a fixed scale; ?noscale disables this entirely.
-  _adaptScale(dtMs) {
-    if (!this._dynRes) return;
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-    this._dtEma = this._dtEma == null ? dtMs : this._dtEma * 0.95 + dtMs * 0.05;
-    // Warmup grace: the first seconds of a race hitch on GLB/texture uploads and JIT
-    // warmup — transient, not the steady-state load. Warm the EMA but don't shrink
-    // yet, or a capable machine gets permanently downscaled by one-time load spikes.
-    this._adaptAge = (this._adaptAge || 0) + dtMs;
-    if (this._adaptAge < 2500) return;
-    if (this._adaptCooldown > 0) { this._adaptCooldown--; return; }
-    if (this._dtEma > 18 && this._renderScale > this._renderScaleFloor) { // sustained < ~55fps
-      this._renderScale = Math.max(this._renderScaleFloor, this._renderScale - 0.1);
-      this._resizePost();
-      this._saveScale(this._renderScale); // remember for next race/session
-      this._adaptCooldown = 90; // ~1.5s for the new scale to settle before reassessing
-    }
   }
 
   // Grade _rtScene (exposure + linear→sRGB) straight to the canvas (target null).
@@ -683,9 +623,7 @@ export class SceneRenderer {
     const worst = this._fpsWorstMs;
     const el = this._fpsEl;
     if (el) {
-      // Show the render scale only when dynamic-res has pulled it below full.
-      const scaleTag = this._renderScale < 0.999 ? `\n${Math.round(this._renderScale * 100)}% res` : '';
-      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})${scaleTag}`;
+      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})`;
       el.style.color = worst > 32 ? '#FF6B6B' : worst > 20 ? '#FFD166' : '#7CFC8A';
     }
     this._fpsFrames = 0; this._fpsAccumMs = 0; this._fpsWorstMs = 0; this._fpsLastUpdate = t;
@@ -1266,10 +1204,7 @@ export class SceneRenderer {
     const dt = Math.min(rawMs / 1000, 0.05);
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
-    if (rawMs > 0 && rawMs < 1000) {
-      this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
-      this._adaptScale(rawMs);      // dynamic resolution reacts to real frame time
-    }
+    if (rawMs > 0 && rawMs < 1000) this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);
 
     // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY
@@ -1328,8 +1263,8 @@ export class SceneRenderer {
     // Everything renders into the offscreen scene target (drawing-buffer pixels);
     // _present then grades it (exposure + sRGB) and copies it to the canvas.
     const rt = this._rtScene;
-    // Viewport math uses the RT's ACTUAL size (= drawing buffer × render scale), so
-    // split-screen cells fill the dynamically-scaled target; the present upscales it.
+    // Viewport math uses the RT's actual size (= the full drawing buffer), so the
+    // split-screen cells fill the target and the present is a 1:1 copy to the canvas.
     const DBW = rt.width, DBH = rt.height;
     // clear the WHOLE target first (colour + depth) so empty split-screen cells
     // and rounding strips don't keep last frame's pixels

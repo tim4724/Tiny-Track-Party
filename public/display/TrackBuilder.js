@@ -15,7 +15,7 @@ import { Centerline } from './Centerline.js';
 // Track DEFINITIONS (the catalogue) live in a dependency-free data module so the
 // gallery + tests can read them without pulling in Three.js. We re-export the few
 // that callers still import via TrackBuilder; everything else imports from tracks.js.
-import { OVAL, GRAND_TOUR, TRACKS, TRACK_LIST } from '../shared/tracks.js';
+import { TRACKS, TRACK_LIST } from '../shared/tracks.js';
 
 const NUB_Y = -0.975;      // CONNECTOR-NUB height: where pieces physically mate.
                            // Frames MUST sit here so GLBs join seamlessly — the
@@ -470,8 +470,8 @@ export function buildTrack(track, opts = {}) {
 }
 
 // Track definitions + the named registry live in the dependency-free catalogue
-// (../shared/tracks.js). Re-export what callers import via TrackBuilder: OVAL/
-// GRAND_TOUR/TRACKS (main.js, tests) and TRACK_LIST — the flat {id,name,pieces}
-// list the lobby track picker renders (the display computes each track's
+// (../shared/tracks.js). Re-export what callers import via TrackBuilder: TRACKS
+// (the tests) and TRACK_LIST (main.js + the lobby track picker) — the flat
+// {id,name,pieces} list the picker renders (the display computes each track's
 // schematic SVG from its built geometry, so the picker needs no per-track art).
-export { OVAL, GRAND_TOUR, TRACKS, TRACK_LIST };
+export { TRACKS, TRACK_LIST };

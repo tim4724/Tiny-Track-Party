@@ -1,18 +1,40 @@
 'use strict';
-// Headless verification of the track geometry: the oval must close into a
+// Headless verification of the track geometry: a reference oval must close into a
 // seamless loop, and the centerline must be a sane, monotonic ribbon.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, OVAL, GRAND_TOUR, TRACKS;
+let buildTrack, TRACKS;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
-  OVAL = mod.OVAL;
-  GRAND_TOUR = mod.GRAND_TOUR;
   TRACKS = mod.TRACKS;
 });
+
+// Reference fixtures for the detailed geometry suites — kept here, NOT in the
+// shipped catalogue, so the game's track list and these invariants evolve
+// independently (cf. engine.test.js's private TEST_OVAL). They exercise properties
+// no current catalogue track does: OVAL is the only all-same-hand loop with NO
+// chicane, so its curvature never legitimately reverses (the "curvature never
+// abruptly reverses" check); GRAND_TOUR is a flat-closing rectangle that is hills
+// end-to-end (the elevation / orthonormal-frame / seam-holonomy checks).
+const OVAL = [
+  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
+  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
+  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL'
+];
+const GRAND_TOUR = [
+  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
+  'straight', 'straight', 'cornerLargeL',
+  'straight', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'cornerLargeL',
+  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
+  'straight', 'straight', 'cornerLargeL',
+  'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'straight', 'cornerLargeL'
+];
 
 test('oval closes into a loop', () => {
   const t = buildTrack(OVAL);
@@ -131,7 +153,7 @@ test('sampleAt wraps and returns oriented frames', () => {
   assert.ok(Math.abs(a.tangent.y) < 0.2, 'flat track tangent should be ~horizontal');
 });
 
-// ---- Grand Tour: the all-wide-elements circuit with the offset loop-the-loop ----
+// ---- Grand Tour fixture: a flat-closing rectangle that is hills end-to-end ----
 
 test('grand tour closes into a loop', () => {
   const t = buildTrack(GRAND_TOUR);
@@ -243,8 +265,8 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
 });
 
 test('buildTrack accepts a bare piece array and a descriptor alike', () => {
-  const fromArray = buildTrack(OVAL);
-  const fromDef = buildTrack(TRACKS.oval);
+  const fromArray = buildTrack(TRACKS.switchback.pieces);
+  const fromDef = buildTrack(TRACKS.switchback);
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
   assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.pieces array/);
 });
@@ -258,7 +280,7 @@ test('an unknown piece key throws a clear error', () => {
   assert.throws(() => buildTrack(['straight', 'definitely-not-a-piece']), /Unknown track piece "definitely-not-a-piece"/);
 });
 
-// COLLISION SAFETY. A self-crossing track (Crossover, Tangle) is only valid if the
+// COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the
 // strands that meet in plan are far apart in HEIGHT — a bridge. Any two bits of
 // road that are close in 3D but distant along the lap means cars from two places
 // share the same space: a crash/merge, not a crossing. (This is exactly the bug
