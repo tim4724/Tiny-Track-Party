@@ -619,6 +619,31 @@ test('an AI car uses items instead of hoarding (picks up then fires on a straigh
   assert.ok(everUsed, 'AI used the item it was holding (did not hoard it forever)');
 });
 
+test('an AI bot steers around a hazard on its line instead of spinning out', () => {
+  // Drive a bot straight at an oil slick parked on the centre line. With the engine
+  // handed to drive() it sees the hazard and dodges; without it (control), it plows
+  // through and spins — proving the evasion is what saves it, not luck.
+  const runBot = (evade) => {
+    const track = mkTrack(3);
+    track.hazards = [{ s: 10, lat: 0, radius: 0.7 }];
+    const game = new Game(['bot'], track, {});
+    const bot = new AiController({ skill: 1, laneBias: 0, seed: 1 });
+    const c = game.cars.get('bot');
+    Object.assign(c, { totalS: 2, lat: 0, v: c.vmax });
+    game._recomputePoses(); // pose at the assigned spot before the first steer
+    game.elapsed = 5;
+    let spun = false;
+    for (let i = 0; i < 80 && c.totalS < 15; i++) { // up to the first corner
+      game.processInput('bot', bot.drive(c, track.centerline, evade ? game : undefined));
+      game.update(16);
+      if (c.spinT > 0) spun = true;
+    }
+    return spun;
+  };
+  assert.equal(runBot(false), true, 'control: a bot with no hazard info plows through and spins');
+  assert.equal(runBot(true), false, 'with evasion the bot steers around the slick and stays in control');
+});
+
 // ---- banana (dropped hazard) ------------------------------------------------
 
 test('a dropped banana spins a follower (consumed on hit) but never the dropper', () => {

@@ -247,7 +247,7 @@ function buildField(humans) {
     // when carIndex was omitted) — set it explicitly so stats match that model.
     const carIndex = colorIndex % CAR_MODELS.length;
     field.push({ peerIndex, name: persona.name, colorIndex, carIndex, stats: carStats(carIndex), ai: true });
-    aiBots.set(peerIndex, new AiController(persona));
+    aiBots.set(peerIndex, new AiController({ ...persona, seed: ((track.seed || 1) + peerIndex) >>> 0 }));
   }
   return field;
 }
@@ -259,7 +259,7 @@ function driveBots() {
   for (const [id, bot] of aiBots) {
     const car = session.engine.cars.get(id);
     if (!car || car.finished) continue;
-    session.processInput(id, bot.drive(car, track.centerline));
+    session.processInput(id, bot.drive(car, track.centerline, session.engine));
   }
 }
 
@@ -269,6 +269,12 @@ function startRace() {
   if (!selectedTrackId) return;              // a track must be chosen first
   const players = net.flow.list();
   if (!players.length) return;
+
+  // Fresh seed per race so item rolls (and AI lane wander) vary game-to-game. The
+  // display is the sole authority, so picking it here (with the page RNG) keeps the
+  // engine deterministic from the seed while the rolls aren't identical every game.
+  // Set BEFORE buildField so the bots seed their wander from the same race seed.
+  track.seed = (Math.random() * 0xffffffff) >>> 0;
 
   // Top the grid up to a full field with AI; keep the roster for the results screen.
   const field = buildField(players);
@@ -288,11 +294,6 @@ function startRace() {
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
-
-  // Fresh seed per race so item rolls vary game-to-game. The display is the sole
-  // authority, so picking it here (with the page RNG) keeps the engine deterministic
-  // from the seed while the rolls aren't identical every game.
-  track.seed = (Math.random() * 0xffffffff) >>> 0;
 
   session = new RaceSession(field, track, {
     onRaceEvent,

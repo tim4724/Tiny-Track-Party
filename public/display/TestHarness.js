@@ -273,11 +273,11 @@ export function runDisplayScenario(opts, ctx) {
     // Self-driving preview: every car is an AI racer using the SAME pure-pursuit
     // autopilot as the live CPU fill (AiDriver), so the gallery shows the real bot
     // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
-    const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
+    const bots = new Map(ids.map((i) => [i, new AiController({ ...AI_PERSONALITIES[i % AI_PERSONALITIES.length], seed: i + 1 })]));
     function autosteer() {
       for (const c of engine.cars.values()) {
         if (c.finished || !c.pose) continue;
-        engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline));
+        engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline, engine));
       }
     }
 
