@@ -23,7 +23,7 @@ var STUN_URL = 'stun:stun.couch-games.com:3478';
 var MSG = {
   // Controller -> Display
   HELLO: 'hello',               // {name?} sent right after join
-  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1]} — hot path, ~25Hz, fastlane
+  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, ~25Hz, fastlane
   START_GAME: 'start_game',     // host only
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
@@ -35,7 +35,7 @@ var MSG = {
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, tracks, trackId, ...} on join
   LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId)
-  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished}
+  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, item, boost} — item lights the controller's USE button
   PONG: 'pong',
 
   // Display -> all controllers (broadcast)

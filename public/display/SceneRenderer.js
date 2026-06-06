@@ -120,6 +120,27 @@ const CONE_SETTLE = 0.4;      // residual speed below which a cone comes to rest
 const CONE_EDGE_MARGIN = 0.35;// keep cones this far inside the road edge (off the curb/wall)
 const CONE_WALL_RESTITUTION = 0.5; // bounce energy kept when a kicked cone hits the curb
 
+// Held-item display: a fixed square slot on the cell HUD shows an ICON (not text).
+// Labels are kept for the slot's tooltip/aria; icons are inline SVG (no assets).
+const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA' };
+const ITEM_ICONS = {
+  boost: '<svg viewBox="0 0 24 24" fill="none" stroke="#12a99a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,13.5 12,7.5 19,13.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>',
+  banana: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 4.5 C 5 12.5, 11 18.8, 19 19" stroke="#ffd23f" stroke-width="5.4" stroke-linecap="round"/><circle cx="5" cy="4.6" r="1.5" fill="#8a6418"/><circle cx="19" cy="19" r="1.5" fill="#8a6418"/></svg>'
+};
+const ITEM_KEYS = Object.keys(ITEM_ICONS);
+
+// Item-box "flashy" idle animation (see _stepBoxes): spin about its up axis, bob on
+// a sine, and pulse a gold emissive sparkle so it reads as a grabbable pickup.
+const BOX_SPIN = 1.6;    // rad/s
+const BOX_BOB_AMP = 0.07; // world units of bob
+const BOX_BOB_W = 3.0;    // bob angular speed (rad/s)
+const BOX_H = 0.3;        // item-box height in world units (0.6× the previous 0.5)
+// Collect burst: when a box is picked up it GROWS while it FADES out, then hides
+// (a clear "poof, grabbed" beat to pair with the HUD roulette). Starting values:
+// tune BOX_COLLECT_TIME up if it's too quick to read, BOX_COLLECT_GROW for punch.
+const BOX_COLLECT_TIME = 0.35; // seconds the grow+fade burst lasts
+const BOX_COLLECT_GROW = 1.1;  // extra scale at burst end (final ≈ 2.1× rest)
+
 // Split-screen grid that makes cells as SQUARE as possible for the current
 // screen aspect: try every column count, score each by how far the resulting
 // cell aspect is from 1:1 (square), with a small penalty for empty cells.
@@ -171,6 +192,33 @@ function makeSoftBlobTexture() {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, s, s);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
+// (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
+// the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
+// +tangent axis (see _buildProps' basis), i.e. the direction of travel.
+function makePadTexture() {
+  const s = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2);
+  g.addColorStop(0, '#7dffe8'); g.addColorStop(0.7, '#22c9b6'); g.addColorStop(1, '#0e8f82');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff4cc'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Three forward chevrons, CENTRED on the disc both ways: apex on the vertical
+  // axis (x = s/2), and the stack — (n-1)·gap plus the chevron's own height — offset
+  // by y0 so it sits centred in the s×s texture instead of low-and-left.
+  const n = 3, gap = 13, chev = 10, y0 = (s - ((n - 1) * gap + chev)) / 2;
+  for (let i = 0; i < n; i++) {
+    const y = y0 + i * gap;
+    ctx.beginPath(); ctx.moveTo(s / 2 - 16, y + chev); ctx.lineTo(s / 2, y); ctx.lineTo(s / 2 + 16, y + chev); ctx.stroke();
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -297,6 +345,10 @@ export class SceneRenderer {
     // tolerates it. Override with ?msaa=2 / ?msaa=4 if wanted.
     const msaa = parseInt(new URLSearchParams(location.search).get('msaa'), 10);
     this._msaaSamples = Number.isFinite(msaa) ? Math.max(0, Math.min(4, msaa)) : 0;
+    // ?bbox=1 → draw collision/trigger outlines for oil, boost pads, item boxes,
+    // bananas, and cars (debug aid; see _drawDebug). Off by default.
+    this._bbox = (() => { try { return new URLSearchParams(location.search).get('bbox') === '1'; } catch (_) { return false; } })();
+    this._dbgStatic = []; // [{kind, s, lat, radius}] for the static props (filled in setTrack)
     this._initThree();
     this._initOverlay();
     this._initParticles();
@@ -326,6 +378,8 @@ export class SceneRenderer {
     this._sTarget = new THREE.Vector3();
     this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
     this._coneTmp2 = new THREE.Vector3();
+    this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector (syncProps)
+    this._liveBananas = new Set();         // reused per-frame live-id set (syncProps); cleared, never reallocated
   }
 
   // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
@@ -379,7 +433,8 @@ export class SceneRenderer {
   // the car), so a ring buffer recycles the oldest when busy.
   _initParticles() {
     this._skidTex = makeSkidTexture();
-    this._softTex = makeSoftBlobTexture(); // round blob for the contact shadow
+    this._softTex = makeSoftBlobTexture(); // round blob for the contact shadow + boost aura
+    this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
     this._skids = [];
     this._skidN = 0;
     // scratch vectors for orientation maths + the per-wheel travel measurement,
@@ -519,6 +574,10 @@ export class SceneRenderer {
     this.hazardGroup = new THREE.Group();
     scene.add(this.hazardGroup);
     this._cones = []; // kickable cone state {mesh, home, homeQuat, vel, spinAxis, spinRate, airborne}
+    this._boxes = [];          // item-box meshes (indexed parallel to track.boxes), toggled by snapshot.boxes
+    this._bananaMeshes = new Map(); // banana id → mesh, reconciled from snapshot.bananas
+    this._dbgGroup = new THREE.Group(); // ?bbox debug outlines (redrawn each frame); persists across tracks
+    scene.add(this._dbgGroup);
     // Collision proxy: the per-tile clones, kept OUT of the scene graph (so they
     // cost nothing to render/cull) but raycast by _roadHitY for ground-conform.
     // Per-tile bounding spheres prune the cast to the 1-2 tiles under the car —
@@ -850,6 +909,197 @@ export class SceneRenderer {
     k.shadow.needsUpdate = true; // rebuild the map for the new track
 
     this._buildHazards(track);
+    this._buildProps(track);
+    this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in syncProps)
+  }
+
+  // Boost pads + item boxes (static, authored). Pads are glowing chevron discs;
+  // boxes float above the road and are shown/hidden per frame from the snapshot
+  // (see syncProps). Added to hazardGroup so they clear with the track; box meshes
+  // share the proto (not `owned`, so the hazard cleanup removes but never disposes
+  // them). Resets the box list + banana-mesh map (their meshes were just cleared).
+  _buildProps(track) {
+    for (const b of (this._boxes || [])) { for (const m of (b.mats || [])) m.dispose(); if (b.geom) b.geom.dispose(); }
+    this._boxes = [];
+    this._bananaMeshes = new Map();
+    const cl = track.centerline;
+    const Y = new THREE.Vector3(0, 1, 0);
+    for (const p of (track.pads || [])) {
+      const radius = p.radius || 0.65;
+      this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
+      const f = cl.sampleAt(p.s);
+      const up = f.up.clone().normalize();
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(radius, 28),
+        new THREE.MeshBasicMaterial({
+          map: this._padTex, transparent: true, opacity: 0.95, depthWrite: false,
+          polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+        })
+      );
+      disc.userData.owned = true; // owns its geometry+material (dispose on rebuild)
+      disc.position.copy(f.pos).addScaledVector(f.lateral, p.lat).addScaledVector(up, 0.025);
+      // basis (lateral=X, tangent=Y, up=Z) lays the disc in the road plane with its
+      // texture +Y (chevrons) pointing along travel.
+      disc.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(f.lateral.clone().normalize(), f.tangent.clone().normalize(), up));
+      disc.renderOrder = -1;
+      this.hazardGroup.add(disc);
+    }
+    const boxProto = this.protos.get('item-box');
+    for (const b of (track.boxes || [])) {
+      this._dbgStatic.push({ kind: 'box', s: b.s, lat: b.lat || 0, radius: b.radius || 0.65 });
+      const f = cl.sampleAt(b.s);
+      const up = f.up.clone().normalize();
+      let mesh;
+      if (boxProto) {
+        mesh = boxProto.clone(true);
+        const bb = new THREE.Box3().setFromObject(mesh);
+        mesh.scale.setScalar(BOX_H / Math.max(1e-3, bb.max.y - bb.min.y));
+        mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      } else {
+        // No GLB: a plain box that OWNS its geometry. Not flagged `owned` — its cloned
+        // material goes in `mats` and its geometry in `geom` (both disposed in the
+        // _buildProps preamble), so the hazard cleanup must not also dispose them.
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4),
+          new THREE.MeshStandardMaterial({ color: 0xffc94d }));
+      }
+      mesh.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.28); // float above the road
+      mesh.quaternion.setFromUnitVectors(Y, up);
+      // Clone this box's materials so it can fade + pulse INDEPENDENTLY of its
+      // siblings (boxProto.clone shares materials by reference). transparent:true lets
+      // the collect burst taper opacity to zero. Disposed at the top of _buildProps on
+      // a track change (the GLB box meshes aren't flagged `owned`, so cleanup skips them).
+      const mats = [];
+      mesh.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        const arr = Array.isArray(o.material) ? o.material : [o.material];
+        const cloned = arr.map((m) => { const cm = m.clone(); cm.transparent = true; return cm; });
+        o.material = Array.isArray(o.material) ? cloned : cloned[0];
+        for (const cm of cloned) mats.push(cm);
+      });
+      this.hazardGroup.add(mesh);
+      // spin/bob/collect state (see _stepBoxes). homeY is the rest height, phase
+      // desyncs the bob, baseS the rest scale to grow from / restore to, collectT
+      // counts down the grow+fade pickup burst, available mirrors the snapshot.
+      this._boxes.push({
+        mesh, mats, geom: boxProto ? null : mesh.geometry, homeY: mesh.position.y, baseS: mesh.scale.x,
+        phase: this._boxes.length * 0.9, collectT: 0, available: true
+      });
+    }
+  }
+
+  // A flat circle outline (LineLoop) of radius r in the plane spanned by axisA/axisB,
+  // for the ?bbox debug overlay. depthTest off so it shows through geometry.
+  _dbgCircle(center, axisA, axisB, r, color) {
+    const seg = 28, pts = [];
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * Math.PI * 2;
+      pts.push(center.clone().addScaledVector(axisA, Math.cos(a) * r).addScaledVector(axisB, Math.sin(a) * r));
+    }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color, depthTest: false }));
+    line.renderOrder = 20;
+    return line;
+  }
+
+  // A rectangle outline for a car's collision footprint (2·hl along × 2·hw across).
+  _dbgRect(center, along, side, hl, hw, color) {
+    const pts = [
+      center.clone().addScaledVector(along, hl).addScaledVector(side, hw),
+      center.clone().addScaledVector(along, hl).addScaledVector(side, -hw),
+      center.clone().addScaledVector(along, -hl).addScaledVector(side, -hw),
+      center.clone().addScaledVector(along, -hl).addScaledVector(side, hw),
+    ];
+    pts.push(pts[0]);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color, depthTest: false }));
+    line.renderOrder = 20;
+    return line;
+  }
+
+  // ?bbox debug: redraw the collision/trigger outlines each frame. Static props
+  // (oil/pad/box) come from _dbgStatic; bananas + cars from the live snapshot.
+  // Cars use the exact (s, lat) collision frame (centreline tangent/lateral), so the
+  // box matches the engine's AABB rather than the heading-rotated render pose.
+  _drawDebug(snap) {
+    if (!this._bbox) return;
+    const g = this._dbgGroup;
+    // each child owns a one-off geometry AND material (made fresh per frame in
+    // _dbgCircle/_dbgRect) — dispose both or the LineBasicMaterials pile up on the GPU.
+    for (const ch of g.children) { ch.geometry.dispose(); if (ch.material) ch.material.dispose(); }
+    g.clear();
+    const cl = this._centerline;
+    if (!cl) return;
+    const COL = { oil: 0xff3b3b, pad: 0x2bd1c4, box: 0xffd23f };
+    const ring = (s, lat, r, color) => {
+      const f = cl.sampleAt(s), up = f.up.clone().normalize();
+      const center = f.pos.clone().addScaledVector(f.lateral, lat).addScaledVector(up, 0.06);
+      g.add(this._dbgCircle(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), r, color));
+    };
+    for (const d of this._dbgStatic) ring(d.s, d.lat, d.radius, COL[d.kind] || 0xffffff);
+    for (const b of (snap.bananas || [])) ring(b.s, b.lat, b.radius || 0.6, 0xff9f1c);
+    for (const c of (snap.cars || [])) {
+      if (c.totalS == null) continue;
+      const f = cl.sampleAt(c.totalS), up = f.up.clone().normalize();
+      const center = f.pos.clone().addScaledVector(f.lateral, c.lat || 0).addScaledVector(up, 0.06);
+      g.add(this._dbgRect(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), c.halfLen || 0.44, c.halfWid || 0.26, 0x39e639));
+    }
+  }
+
+  // Per-frame prop reconcile from the engine snapshot: show only available (off-
+  // cooldown) item boxes, and create/move/remove dropped-banana meshes by id.
+  syncProps(snap) {
+    this._drawDebug(snap); // ?bbox overlay (no-op unless enabled)
+    if (this._boxes && snap.boxes) {
+      for (let i = 0; i < this._boxes.length; i++) {
+        const b = this._boxes[i];
+        const avail = !!snap.boxes[i];
+        if (avail === b.available) continue; // no edge → leave the burst/idle running
+        b.available = avail;
+        if (avail) {                         // respawned: cancel any burst, restore, show
+          b.collectT = 0;
+          b.mesh.scale.setScalar(b.baseS);
+          for (const m of b.mats) m.opacity = 1;
+          b.mesh.visible = true;
+        } else {                             // collected: kick off the grow+fade burst
+          b.collectT = BOX_COLLECT_TIME;
+        }
+      }
+    }
+    if (!this._bananaMeshes) return;
+    const incoming = snap.bananas || [];
+    if (incoming.length === 0 && this._bananaMeshes.size === 0) return; // steady state: no allocations
+    const proto = this.protos.get('item-banana');
+    const live = this._liveBananas; live.clear(); // reused scratch set — no per-frame alloc while bananas are in flight
+    for (const b of incoming) {
+      live.add(b.id);
+      let m = this._bananaMeshes.get(b.id);
+      if (!m && this._centerline) {
+        if (proto) {
+          m = proto.clone(true);
+          const bb = new THREE.Box3().setFromObject(m);
+          m.scale.setScalar(0.35 / Math.max(1e-3, bb.max.y - bb.min.y));
+          m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        } else {
+          m = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffe14d }));
+          m.userData.owned = true;
+        }
+        this.hazardGroup.add(m);
+        this._bananaMeshes.set(b.id, m);
+      }
+      if (m) {
+        const f = this._centerline.sampleAt(b.s);
+        const up = this._sBananaUp.copy(f.up).normalize(); // scratch — no per-frame alloc
+        m.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.05);
+        m.quaternion.setFromUnitVectors(this._worldUp, up);
+      }
+    }
+    for (const [id, m] of this._bananaMeshes) {
+      if (!live.has(id)) {
+        if (m.userData.owned) { m.geometry.dispose(); m.material.dispose(); } // fallback mesh owns its geo/mat
+        this.hazardGroup.remove(m); this._bananaMeshes.delete(id);
+      }
+    }
   }
 
   // Draw the track's oil slicks: a glossy dark disc on the road per hazard, ringed
@@ -863,11 +1113,16 @@ export class SceneRenderer {
     });
     this.hazardGroup.clear();
     this._cones = [];
+    this._dbgStatic = []; // rebuilt here (oil) + in _buildProps (pads, boxes), called right after
+    // Set the centerline + road half-width UNCONDITIONALLY (before the no-oil early
+    // return): _stepCones and syncProps (banana meshes) both need them even on a
+    // track that has boxes/pads but no oil slicks.
+    this._centerline = track.centerline;
+    this._roadHalf = (track.roadWidth || 3.6) / 2;
     const hz = track.hazards || [];
+    for (const h of hz) this._dbgStatic.push({ kind: 'oil', s: h.s, lat: h.lat || 0, radius: h.radius || OIL_RADIUS_FALLBACK });
     if (!hz.length) return;
     const cl = track.centerline;
-    this._centerline = cl;                       // _stepCones re-samples it to keep cones on the road
-    this._roadHalf = (track.roadWidth || 3.6) / 2;
     const coneEdge = this._roadHalf - CONE_EDGE_MARGIN; // max lateral offset that stays off the curb
     const coneProto = this.protos.get('item-cone');
     const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
@@ -979,6 +1234,41 @@ export class SceneRenderer {
           m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
           const vLat = cn.vel.dot(f.lateral);
           if (vLat * Math.sign(latOff) > 0) cn.vel.addScaledVector(f.lateral, -vLat * (1 + CONE_WALL_RESTITUTION));
+        }
+      }
+    }
+  }
+
+  // Idle-animate the item boxes: spin about their up axis, bob, and pulse a gold
+  // emissive sparkle (synchronized across boxes) so they read as flashy pickups.
+  _stepBoxes(dt) {
+    if (!this._boxes || !this._boxes.length) return;
+    this._boxClock = (this._boxClock || 0) + dt;
+    const t = this._boxClock;
+    const pulse = 0.16 + 0.18 * (0.5 + 0.5 * Math.sin(t * 4.5)); // gold emissive throb
+    for (const b of this._boxes) {
+      // Collect burst: a grabbed box GROWS while it FADES out, then hides. Driven by
+      // collectT (set on the available→gone edge in syncProps); k runs 1→0.
+      if (b.collectT > 0) {
+        b.collectT -= dt;
+        const k = Math.max(0, b.collectT / BOX_COLLECT_TIME);
+        b.mesh.rotateY(BOX_SPIN * 2.2 * dt);                      // spin up as it pops
+        b.mesh.scale.setScalar(b.baseS * (1 + (1 - k) * BOX_COLLECT_GROW));
+        for (const m of b.mats) m.opacity = k;                    // fade out
+        if (b.collectT <= 0) {                                    // done: reset + hide
+          b.mesh.visible = false;
+          b.mesh.scale.setScalar(b.baseS);
+          for (const m of b.mats) m.opacity = 1;
+        }
+        continue;
+      }
+      if (!b.mesh.visible) continue;
+      b.mesh.rotateY(BOX_SPIN * dt);                                    // spin about local up
+      b.mesh.position.y = b.homeY + Math.sin(t * BOX_BOB_W + b.phase) * BOX_BOB_AMP;
+      for (const m of b.mats) {
+        if ('emissiveIntensity' in m) {
+          if (m.emissive) m.emissive.setHex(0xffd23f);
+          m.emissiveIntensity = pulse;
         }
       }
     }
@@ -1129,6 +1419,22 @@ export class SceneRenderer {
     contact.renderOrder = -1;                         // under the dust/skid decals
     group.add(contact);
 
+    // BOOST aura: an additive gold glow under the car, shown only while boosting and
+    // sized/brightened by boostMul — so the catch-up scaling (leader vs back-marker)
+    // is visible on the shared screen, not silent rubber-banding. Set in setCarPose.
+    const boostAura = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: this._softTex, color: 0x2bd1c4, transparent: true, opacity: 0, // teal — matches the boost pad/item
+        depthWrite: false, blending: THREE.AdditiveBlending,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+      })
+    );
+    boostAura.rotation.x = -Math.PI / 2;
+    boostAura.position.y = -RIDE_HEIGHT + 0.008;
+    boostAura.visible = false;
+    group.add(boostAura);
+
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
     // AI/CPU cars (opts.cell === false) race in the shared world — so they show up
@@ -1137,14 +1443,21 @@ export class SceneRenderer {
     // Cell-less cars skip the DOM overlay (label + steer bar) and the cell order.
     const cell = opts.cell !== false;
     const colHexUi = this.colors[colorIndex % this.colors.length] || '#fff';
-    let label = null, steerBar = null, steerFill = null, finishEl = null;
+    let label = null, steerBar = null, steerFill = null, finishEl = null, placeEl = null;
     if (cell) {
       label = document.createElement('div');
       label.className = 'cell-label';
-      label.innerHTML = `<span class="cell-label__name"></span><span class="cell-label__stat"></span>`;
+      label.innerHTML = `<div class="cell-label__row"><span class="cell-label__name"></span><div class="cell-label__item is-empty"></div></div>`;
       label.querySelector('.cell-label__name').textContent = name || ('P' + id);
       label.style.setProperty('--c', colHexUi);
       this.overlay.appendChild(label);
+
+      // place + lap readout — pinned to this player's cell top-right, no card, white
+      // text over the scene (positioned by _loop, filled by setCarHud).
+      placeEl = document.createElement('div');
+      placeEl.className = 'cell-rank';
+      placeEl.innerHTML = `<div class="cell-rank__place"></div><div class="cell-rank__lap"></div>`;
+      this.overlay.appendChild(placeEl);
 
       // on-screen steer indicator for this player's cell (mirrors the phone bar)
       steerBar = document.createElement('div');
@@ -1192,10 +1505,10 @@ export class SceneRenderer {
 
     const c = {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, plate, contact, cam,
+      wheelbase, skidWidth, plate, contact, cam, boostAura, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
-      label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0,
+      label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
       rideOff: null // damped ride-height offset from the centreline (setCarPose)
     };
     this.cars.set(id, c);
@@ -1241,20 +1554,39 @@ export class SceneRenderer {
     // so dispose its geometry/material but NOT the map.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     if (c.contact) { c.contact.geometry.dispose(); c.contact.material.dispose(); }
+    // boost aura owns its geometry + material (the map is the shared this._softTex — leave it)
+    if (c.boostAura) { c.boostAura.geometry.dispose(); c.boostAura.material.dispose(); }
+    if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; } // stop any running item roulette
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     if (c.finishEl && c.finishEl.parentNode) c.finishEl.parentNode.removeChild(c.finishEl);
+    if (c.placeEl && c.placeEl.parentNode) c.placeEl.parentNode.removeChild(c.placeEl);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
   }
 
-  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0) {
+  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1) {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
     // spin-out whirl: rotate the whole car model about its up axis on top of its
     // model-facing fix (the sim heading is untouched — this is purely cosmetic).
     c.car.rotation.y = c.baseYaw + spin;
+    // boost aura: a subtle teal glow below the car while boosting, gently PULSATING,
+    // scaled by the boost size (a back-marker's bigger catch-up boost glows a touch
+    // bigger than the leader's floor). Teal matches the boost pad/item colour.
+    if (c.boostAura) {
+      if (boostMul > 1.001) {
+        const k = boostMul - 1;            // 0.25 (leader floor) … 0.60 (last)
+        const pulse = 0.62 + 0.38 * Math.sin(performance.now() * 0.011); // ~1.8 Hz
+        c.boostAura.visible = true;
+        c.boostAura.material.opacity = Math.min(0.42, 0.18 + k * 0.5) * pulse; // subtle
+        const sc = (1.25 + k * 2.0) * (0.96 + 0.06 * pulse);                   // gentle breathing
+        c.boostAura.scale.set(c.footW * sc, c.footL * sc, 1);
+      } else if (c.boostAura.visible) {
+        c.boostAura.visible = false;
+      }
+    }
     // Persistent pose vectors (created once per car) reused every frame — no GC.
     // Safe because c.pose is only read within the same frame it's written.
     if (!c.pose) c.pose = { pos: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -1316,11 +1648,58 @@ export class SceneRenderer {
     // and the name plate is parented to the body so it banks with the steering lean.)
   }
 
+  // Paint the item slot: an item ICON (graphic), or the reserved empty square.
+  _paintSlot(el, item, rolling) {
+    if (item) {
+      el.innerHTML = ITEM_ICONS[item] || '';
+      el.className = 'cell-label__item is-' + item + (rolling ? ' rolling' : '');
+      el.title = ITEM_LABELS[item] || '';
+    } else {
+      el.innerHTML = '';
+      el.className = 'cell-label__item is-empty';
+      el.title = '';
+    }
+  }
+
+  // Slot-machine the cell's item slot: flick through the item ICONS, decelerating,
+  // then land on `item` with a pop. Self-driven (setTimeout chain on c._chipTimer) so
+  // it animates faster than the ~6 Hz setCarHud cadence; cancelled on change/teardown.
+  _rouletteChip(c, item) {
+    const el = c.label && c.label.querySelector('.cell-label__item');
+    if (!el) return;
+    let i = 0, n = 0; const TOTAL = 9;
+    const spin = () => {
+      this._paintSlot(el, ITEM_KEYS[i % ITEM_KEYS.length], true); i++; n++;
+      if (n >= TOTAL) { // land on the real item
+        c._chipTimer = null;
+        this._paintSlot(el, item, false);
+        el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+        return;
+      }
+      c._chipTimer = setTimeout(spin, 35 + n * 16); // decelerate ~35ms → ~165ms
+    };
+    spin();
+  }
+
   setCarHud(id, info) {
     const c = this.cars.get(id);
     if (!c || !c.label) return; // cell-less AI cars have no HUD label
-    const stat = c.label.querySelector('.cell-label__stat');
-    stat.textContent = info.finished ? `Finished P${info.position}` : `P${info.position} · L${info.lap}/${info.totalLaps}`;
+    // place + lap, top-right (no card): a big ordinal over a smaller "Lap n/N". Hidden
+    // while finished — the centred FINISHED overlay shows their place + time instead.
+    if (c.placeEl) {
+      c.placeEl.querySelector('.cell-rank__place').textContent = ordinal(info.position);
+      c.placeEl.querySelector('.cell-rank__lap').textContent = `Lap ${info.lap}/${info.totalLaps}`;
+    }
+    // held-item slot on this player's cell (shared screen) — a fixed reserved square.
+    // On a fresh pickup it SLOT-MACHINES the item icons and lands on what they got;
+    // on use it returns to the empty square (the square is always present, no reflow).
+    const next = (!info.finished && info.item) ? info.item : null;
+    if (next !== c._chipItem) {
+      c._chipItem = next;
+      if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
+      if (next) this._rouletteChip(c, next);
+      else { const e = c.label.querySelector('.cell-label__item'); if (e) this._paintSlot(e, null, false); }
+    }
     // Finish overlay: the moment this player crosses the line, fill in their
     // place + time. _loop shows + positions it (and hides the steer bar) while
     // c.finished holds; it's covered by the full results screen once the race ends.
@@ -1415,6 +1794,7 @@ export class SceneRenderer {
     }
     this._stepSkids(dt);
     this._stepCones(dt);
+    this._stepBoxes(dt);
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
@@ -1454,7 +1834,7 @@ export class SceneRenderer {
       }
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
-      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; }
+      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; }
       this._present();
       requestAnimationFrame((tt) => this._loop(tt));
       return;
@@ -1491,6 +1871,14 @@ export class SceneRenderer {
         c.label.style.display = 'block';
         c.label.style.left = x + 'px';
         c.label.style.top = (row * ch) + 'px';
+      }
+
+      // place + lap: pinned to the cell's top-right (its own transform anchors the
+      // right edge to this left). Hidden once finished — the FINISHED card takes over.
+      if (c.placeEl) {
+        c.placeEl.style.display = c.finished ? 'none' : 'block';
+        c.placeEl.style.left = (x + cw - 12) + 'px';
+        c.placeEl.style.top = (row * ch + 11) + 'px';
       }
 
       // steer indicator: centered along the bottom of this player's cell — hidden

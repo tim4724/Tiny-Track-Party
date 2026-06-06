@@ -95,6 +95,9 @@ export function runControllerScenario(opts) {
     el('pos').textContent = finished ? `Finished P${pos}` : `P${pos}`;
     el('pos').classList.toggle('leader', pos === 1);
   }
+  // The item identity shows on the DISPLAY, not the phone — the only controller cue
+  // is the USE button lighting up. Preview that by toggling its disabled state.
+  function setUse(holding) { const a = el('action-btn'); if (a) a.disabled = !holding; }
   function showDriveHud() {
     show('game');
     el('drive-hud').classList.remove('hidden');
@@ -146,6 +149,7 @@ export function runControllerScenario(opts) {
       showDriveHud();
       setSteer(0);
       setHud(1, 3, 1, false);
+      setUse(false);           // USE off (empty slot)
       setLatency(24, false);   // pre-fastlane: WS reading, no bolt
       break;
 
@@ -153,6 +157,7 @@ export function runControllerScenario(opts) {
       showDriveHud();
       setSteer(0.4); // mid-right tilt, so the steer bar reads off-center
       setHud(2, 3, 2, false);
+      setUse(true);            // USE lit (holding an item; identity is on the display)
       setLatency(16, true);    // fastlane up: low RTT + bolt
       break;
 
@@ -172,6 +177,7 @@ export function runControllerScenario(opts) {
       showDriveHud();
       setSteer(0.2);
       setHud(2, 3, 2, false);
+      setUse(true);            // USE lit
       setLatency(18, true);
       el('pause-btn').classList.remove('hidden');
       el('pause-btn').disabled = true;     // overlay covers it while paused

@@ -197,6 +197,20 @@ input[type=text]:disabled { opacity: 0.6; }
   transform: translateY(4px);
   box-shadow: 0 2px 0 color-mix(in srgb, var(--danger), #000 26%), var(--inset-hi);
 }
+
+/* BRAKE + USE sit side by side; BRAKE takes the lion's share (held), USE is a tap. */
+.drive-controls { display: flex; gap: 0.8rem; align-items: stretch; }
+.drive-controls .brake { flex: 1; }
+#action-btn.action {
+  flex: 0 0 40%; padding: 6.8rem 1rem; font-family: var(--font-display); font-weight: 700;
+  font-size: 1.5rem; letter-spacing: 0.06em; color: var(--ink); border: none;
+  border-radius: var(--r); background: var(--accent);
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--accent), #000 26%), var(--inset-hi);
+  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
+}
+#action-btn.action.held { transform: translateY(4px); box-shadow: 0 2px 0 color-mix(in srgb, var(--accent), #000 26%), var(--inset-hi); }
+#action-btn.action:disabled { opacity: 0.4; filter: grayscale(0.4); }
+
 #motion-tip { color: var(--ink-2); font-weight: 700; text-align: center; font-size: 0.95rem; }
 
 /* ---- latency chip ---- */
@@ -303,5 +317,6 @@ input[type=text]:disabled { opacity: 0.6; }
   }
   #drive-hud { gap: 0.8rem; }
   #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
+  #action-btn.action { padding: 2.8rem 1rem; }   /* match the shorter brake height in landscape */
   .steer { margin-top: 0.4rem; }
 }

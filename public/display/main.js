@@ -32,6 +32,12 @@ const built = new Map(TRACK_LIST.map((t) => {
     radius: o.radius != null ? o.radius : b.roadWidth * 0.2,
     cones: o.cones
   }));
+  // Boost pads + item boxes: same u→s resolve. Radius ~18% of road width (a touch
+  // tighter than oil) — comfortably bigger than one frame of travel so a fast car
+  // can't tunnel through. Read by the engine (detection) + renderer (meshes).
+  const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
+  b.pads = (t.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
+  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
   return [t.id, b];
 }));
 const trackCatalog = TRACK_LIST.map((t) => ({
@@ -60,9 +66,9 @@ scene.orbit = true;
 let sceneReady = false;
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
-// item-cone is loaded alongside the track tiles so setTrack can ring each oil
-// slick with cones (it isn't a track instance, so it's added to the set here).
-const scenePromise = scene.load([...allGlbs, 'item-cone']).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
+// item-cone rings each oil slick; item-box / item-banana are the pickup + dropped
+// hazard meshes — none are track tiles, so they're added to the preload set here.
+const scenePromise = scene.load([...allGlbs, 'item-cone', 'item-box', 'item-banana']).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
 // validates host + room state before calling this; `track` is read by startRace.
@@ -122,8 +128,9 @@ scene.onFrame = (dt) => {
   }
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
   }
+  scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
@@ -134,7 +141,8 @@ scene.onFrame = (dt) => {
       if (aiBots.has(c.id)) continue; // no phone behind an AI car
       net.sendTo(c.id, {
         type: MSG.PLAYER_STATE, lap: c.lap, totalLaps: c.totalLaps,
-        position: c.position, of: c.of, finished: c.finished
+        position: c.position, of: c.of, finished: c.finished,
+        item: c.item, boost: c.boostActive // phone shows the held item + a boost flash
       });
     }
   }
@@ -279,6 +287,11 @@ function startRace() {
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
+
+  // Fresh seed per race so item rolls vary game-to-game. The display is the sole
+  // authority, so picking it here (with the page RNG) keeps the engine deterministic
+  // from the seed while the rolls aren't identical every game.
+  track.seed = (Math.random() * 0xffffffff) >>> 0;
 
   session = new RaceSession(field, track, {
     onRaceEvent,

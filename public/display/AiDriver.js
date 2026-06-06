@@ -11,6 +11,7 @@
 
 const LOOKAHEAD = 7.5;   // world units down the centerline a bot aims at
 const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
+const AI_ITEM_HOLD = 70; // frames a bot holds a fresh item before firing (~1.2s @60fps; lets the pickup roulette finish)
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
@@ -85,10 +86,22 @@ export class AiController {
     this.gain = gain;
     this.laneBias = laneBias;
   }
-  // {s, b} ready to hand straight to engine.processInput(id, ...).
+  // {s, b, u} ready to hand straight to engine.processInput(id, ...). `u` is a
+  // wrapping use-counter (same protocol as the phone's ACTION button): a bot HOLDS a
+  // freshly-collected item for a beat (AI_ITEM_HOLD frames) — so it reads on screen
+  // and the pickup roulette can finish — then fires it on a STRAIGHT (corner
+  // anticipation ≈ 0): boost where it pays off, a banana dropped for chasers. CPU
+  // cars thus contest items instead of hoarding. Deterministic (no RNG): the counter
+  // only advances on the use frame.
   drive(car, centerline) {
     const s = pursue(car, centerline, { lookahead: this.lookahead, gain: this.gain, laneBias: this.laneBias });
-    return { s, b: Math.max(1 - this.skill, cornerBrake(car, centerline)) };
+    const corner = cornerBrake(car, centerline);
+    if (this._useSeq == null) this._useSeq = 0;
+    const item = car && car.item;
+    if (item && item === this._lastItem) this._heldFrames = (this._heldFrames || 0) + 1;
+    else { this._lastItem = item || null; this._heldFrames = 0; } // fresh pickup → restart the hold
+    if (item && this._heldFrames >= AI_ITEM_HOLD && corner < 0.05) this._useSeq = (this._useSeq + 1) & 255;
+    return { s, b: Math.max(1 - this.skill, corner), u: this._useSeq };
   }
 }
 

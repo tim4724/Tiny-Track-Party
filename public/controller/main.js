@@ -152,6 +152,7 @@ function handleMessage(data) {
       if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]); // haptic tick on counts, stronger on GO
       setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
       el('pause-btn').classList.remove('hidden');
+      setHeldItem(null);               // USE off at the line (no PLAYER_STATE yet during countdown)
       startDriving();                  // stream tilt during the countdown (display reacts)
       break;
     case MSG.GAME_START:
@@ -160,6 +161,7 @@ function handleMessage(data) {
       show('game');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');
+      setHeldItem(null);
       startDriving();
       break;
     case MSG.PLAYER_STATE:
@@ -168,6 +170,7 @@ function handleMessage(data) {
       el('pos').textContent = `P${data.position}`;
       el('pos').classList.toggle('leader', data.position === 1);
       if (data.finished) el('pos').textContent = `Finished P${data.position}`;
+      setHeldItem(data.item);          // lights the USE button (identity shows on the display)
       break;
     case MSG.STANDINGS: {
       // Live finish board. Refresh who's host (may have shifted if someone left)
@@ -379,6 +382,7 @@ el('name-input').value = storedName();
 function leaveToName() {
   net.disconnect();
   stopDriving();
+  _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
   amHost = false;
   roster = [];
@@ -432,6 +436,35 @@ brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake
 brakeBtn.addEventListener('pointerup', () => pressBrake(false));
 brakeBtn.addEventListener('pointercancel', () => pressBrake(false));
 brakeBtn.addEventListener('pointerleave', () => pressBrake(false));
+
+// ACTION (use item) — one tap = one use. Bumps the wrapping use-counter the next
+// CONTROL frame carries; disabled (and ignored) while the slot is empty.
+const actionBtn = el('action-btn');
+actionBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (actionBtn.disabled) return;
+  tilt.pressAction(); buzz(20); actionBtn.classList.add('held');
+});
+const releaseAction = () => actionBtn.classList.remove('held');
+actionBtn.addEventListener('pointerup', releaseAction);
+actionBtn.addEventListener('pointercancel', releaseAction);
+actionBtn.addEventListener('pointerleave', releaseAction);
+
+// Held-item badge: dims + disables ACTION when empty, lights up with the item name
+// otherwise. Names map to .is-<id> livery classes in controller.css.
+// The item's IDENTITY is shown on the main display (flashy roulette there); the
+// phone stays a clean driving surface. The only controller-side cue is the USE
+// button lighting up when you're holding something + a light buzz on pickup.
+const ITEM_LABEL = { boost: 'BOOST', banana: 'BANANA' };
+let _heldItem = undefined;
+function setHeldItem(item) {
+  if (item === _heldItem) return;            // only react on a change
+  _heldItem = item;
+  actionBtn.disabled = !item;
+  tilt.setActionEnabled(!!item);             // gate BOTH the button and the keyboard ACTION
+  actionBtn.setAttribute('aria-label', item ? `Use ${ITEM_LABEL[item] || item}` : 'Use item');
+  if (item) buzz(20);                        // eyes-free "you picked something up" (look at the TV for what)
+}
 
 show('name');
 

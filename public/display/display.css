@@ -179,11 +179,54 @@ html, body {
   position: absolute; display: none; margin: 0.7rem;
   background: rgba(255, 255, 255, 0.94);
   border-left: 5px solid var(--c, var(--brand));
-  border-radius: 10px; padding: 0.4rem 0.75rem;
+  border-radius: 12px; padding: 0.85rem;
   box-shadow: 0 8px 18px rgba(30, 60, 90, 0.22);
 }
-.cell-label__name { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--c, var(--ink)); }
-.cell-label__stat { display: block; font-weight: 700; font-size: 0.9rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+/* name on top, the big item indicator stacked + centred below it (place + lap moved
+   out to the top-right .cell-rank readout) */
+.cell-label__row { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.cell-label__name {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--c, var(--ink));
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Place + lap — top-right of the cell, no card, white text legible over the scene.
+   Big ordinal place, a smaller "Lap n/N" beneath. Positioned by _loop; the transform
+   anchors its RIGHT edge to the left coordinate _loop sets (the cell's right edge). */
+.cell-rank {
+  position: absolute; display: none; transform: translateX(-100%);
+  text-align: right; pointer-events: none; color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55), 0 0 2px rgba(0, 0, 0, 0.5);
+}
+.cell-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: clamp(2rem, 3.6vw, 3.2rem); }
+.cell-rank__lap { font-weight: 800; font-size: clamp(0.85rem, 1.3vw, 1.15rem); margin-top: 0.12rem; letter-spacing: 0.02em; }
+
+/* Held-item indicator — a FIXED reserved square (no reflow when empty) showing an
+   item ICON, sized large and centred under the player name so players read what they
+   got at a glance (the controller has no item UI; place/lap live in .cell-rank). */
+.cell-label__item {
+  flex: none; width: 120px; height: 120px; border-radius: 20px; transform-origin: center;
+  align-self: center;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22), inset 0 0 0 3px rgba(0, 0, 0, 0.06);
+}
+.cell-label__item svg { width: 78%; height: 78%; display: block; }
+/* empty: a faint dashed square holding the space */
+.cell-label__item.is-empty { background: transparent; box-shadow: none; border: 3px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
+/* roulette spin: a fast scale/tilt flicker while the slot rolls */
+.cell-label__item.rolling { animation: cellItemRoll 0.1s linear infinite; }
+@keyframes cellItemRoll {
+  0%   { filter: brightness(1.2); transform: scale(1.12) rotate(-4deg); }
+  50%  { filter: brightness(0.9); transform: scale(0.97) rotate(4deg); }
+  100% { filter: brightness(1.2); transform: scale(1.12) rotate(-4deg); }
+}
+/* landing pop: a big springy scale-in */
+.cell-label__item.pop { animation: cellItemPop 0.5s cubic-bezier(0.2, 1.5, 0.35, 1); }
+@keyframes cellItemPop {
+  0%   { transform: scale(1.8); filter: brightness(1.6); }
+  60%  { filter: brightness(1.15); }
+  100% { transform: scale(1); filter: none; }
+}
 
 /* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
 .cell-steer {

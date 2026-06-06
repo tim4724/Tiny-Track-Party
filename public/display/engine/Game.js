@@ -5,7 +5,7 @@
 //
 // Contract (mirrors the HexStacker engine seams):
 //   new Game(playerIds, { centerline, length, roadWidth, totalLaps }, { onEvent })
-//   update(dtMs) / processInput(id, {s,b}) / getSnapshot() / getResults()
+//   update(dtMs) / processInput(id, {s,b,u}) / getSnapshot() / getResults()
 
 // Finished cars take a victory lap on autopilot (see update()). We reuse the same
 // pure-pursuit steer as the AI fill so a finished car drives the racing line
@@ -70,6 +70,64 @@ const SPIN_TIME = 1.0;         // seconds of lost control per spin-out
 const SPIN_DRAG = 2.5;         // gentle deceleration (units/s²) while spinning — coasts through, no hard stop
 const SPIN_TURNS = 2;          // cosmetic whole turns over SPIN_TIME (a multiple of 2π → no snap on reset)
 
+// ---- Catch-up mechanics (boost pads + items) ----
+// The whole "help the cars behind" system rides on ONE per-car factor t∈[0,1]
+// (0 = leader, 1 = last), recomputed each frame from the field's SPREAD along the
+// track. Boost pads scale a boost MAGNITUDE by t; item boxes roll from a t-WEIGHTED
+// table. Same factor, same direction ("further back → better stuff"), one mental
+// model. Two flavours are stored: tRaw (unsmoothed — pads read it at the cross
+// frame so a position swap can't invert the boost) and tCatch (smoothed — item
+// rolls read it so a momentary swap doesn't flip a roll). All STARTING VALUES.
+const SPREAD_REF_FRAC = 0.15;  // spread-denominator floor = 15% of lap length (never divide by a bunched pack)
+const T_TAU = 0.6;             // tCatch smoothing time-constant (s)
+// Boost: a transient multiplier on the speed ceiling that bleeds gently after it
+// expires (so it doesn't fight BRAKE_DECEL's snap-back). Pads scale the peak by t;
+// the boost ITEM is a fixed, position-independent burst.
+const PAD_BOOST_MIN = 1.25;    // pad peak ×vmax for the leader (t=0) — never a dead pad
+const PAD_BOOST_MAX = 1.60;    // pad peak ×vmax for last place (t=1)
+const BOOST_DURATION = 1.4;    // flat-hold boost time (s) from a pad
+const BOOST_ITEM_MUL = 1.5;    // boost-item peak ×vmax (position-independent — it's earned)
+const BOOST_ITEM_DURATION = 1.6; // flat-hold boost time (s) from a used boost item
+// A freshly-ROLLED item can't be fired until this many seconds after pickup, so it
+// can't be used before the player sees what they got — the gate covers the HUD's
+// reveal roulette (~0.86s, see SceneRenderer._rouletteChip). Items set by any other
+// path (tests, direct assignment) start usable. The buffered ACTION press still
+// fires on the first frame past the gate, so a tap during the reveal isn't lost.
+const ITEM_USE_READY = 0.9;    // starting value — bump if the reveal grows
+const BOOST_ACCEL = 22.0;      // ramp toward the boosted ceiling (u/s²) — snappy
+const BOOST_FADE = 0.5;        // after the hold, ease the multiplier back to 1 at this rate (×/s) → a gentle taper, not a snap
+const PAD_RADIUS = 0.65;       // fallback pad radius (the display sizes it per track)
+const BOX_RADIUS = 0.65;       // fallback item-box radius
+const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
+const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
+const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
+const BANANA_LIFE = 12.0;      // seconds a dropped banana persists before it vanishes
+const BANANA_ARM = 0.4;        // grace before a banana is live (so a shoved dropper can't self-trip)
+const BANANA_BACK = 1.2;       // how far behind the dropper a banana lands (units)
+
+// Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
+// roll time (t = 0 leader … 1 last). A clean mirror so the LEADER mostly draws the
+// defensive Banana (a trap to drop behind — doesn't extend the lead) and the back
+// mostly draws the comeback Boost: leader 20% boost / 80% banana, midfield 50/50,
+// last 80% boost / 20% banana.
+const ITEM_TABLE = [
+  { id: 'boost',  base: 1.0, slope:  3.0 },
+  { id: 'banana', base: 4.0, slope: -3.0 }
+];
+
+// Tiny seeded PRNG (mulberry32). Item rolls draw from this so a race is fully
+// reproducible from its seed under a fixed dt (the Node tests) — never the JS
+// global RNG. Live races vary their dt, so they aren't bit-reproducible; that's
+// fine, only the tests need determinism.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // Default per-car stats = the benchmark: accel/vmax/turn are multipliers on the
 // base constants (1 = unchanged), `mass` is relative (only the ratio matters in a
 // collision), and halfLen/halfWid are the collision footprint half-extents in
@@ -113,6 +171,17 @@ export class Game {
       s: h.s, lat: h.lat || 0, radius: h.radius || OIL_RADIUS
     }));
 
+    // Boost pads (drive-over speed strips) and item boxes (drive-over pickups),
+    // resolved by the display from the track catalogue (fraction-of-lap → arclength)
+    // exactly like oil slicks; tests set track.pads/track.boxes directly. Boxes
+    // carry a respawn cooldown; bananas are dropped at runtime (not authored).
+    this.pads = (track.pads || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS }));
+    this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
+    this.bananas = [];      // [{ id, s, lat, life, armT, owner }] — live dropped bananas
+    this._bananaSeq = 0;
+    // Deterministic item rolls from a per-race seed (track.seed; default if unset).
+    this.rng = mulberry32(((track.seed != null ? track.seed : 0x1A2B3C4D) >>> 0) || 1);
+
     // Stagger the grid so cars don't spawn on top of each other: small negative
     // s and alternating lateral lanes, all behind the start line (s=0).
     // Each entry is either a primitive id (→ benchmark stats) or {id, stats}.
@@ -133,6 +202,17 @@ export class Game {
         spin: 0,         // cosmetic spin-out angle (rad) — renderer whirls the body by this
         spinT: 0,        // seconds left in the current spin-out (0 = in control)
         oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
+        padIn: new Set(),// pad indices currently overlapped (rising-edge boost)
+        boxIn: new Set(),// box indices currently overlapped (rising-edge pickup)
+        bananaIn: new Set(), // banana ids currently overlapped (rising-edge spin)
+        boostT: 0,       // seconds left on an active boost (0 = none)
+        boostMul: 1,     // current boost multiplier on the speed ceiling
+        item: null,      // held item id (null = empty slot)
+        pickupAge: 999,  // seconds since the held item was ROLLED from a box (gates use; see ITEM_USE_READY). Large so a directly-set item is usable at once
+        useSeq: 0,       // last seen use-counter from the controller (dedup; matches the controller's reset)
+        wantUse: false,  // a fresh ACTION press is queued for this frame
+        tRaw: 0,         // catch-up factor, unsmoothed (pads read this)
+        tCatch: 0,       // catch-up factor, smoothed (item rolls read this)
         lap: 0,
         finished: false,
         finishTime: null,
@@ -148,6 +228,7 @@ export class Game {
       });
     });
     this._recomputePoses();
+    this._rank(); // race-correct positions from frame 0 (grid order ≠ race order on lap 1)
   }
 
   processInput(id, msg) {
@@ -156,6 +237,9 @@ export class Game {
     if (typeof msg.s === 'number') c.steer = Math.max(-1, Math.min(1, msg.s));
     if (typeof msg.b === 'number') c.brake = Math.max(0, Math.min(1, msg.b));
     else if (typeof msg.b === 'boolean') c.brake = msg.b ? 1 : 0;
+    // ACTION button: a wrapping use-counter (rides the latest-wins fastlane, so a
+    // dropped frame just re-delivers the same value). Fire once per fresh value.
+    if (typeof msg.u === 'number' && msg.u !== c.useSeq) { c.useSeq = msg.u; c.wantUse = true; }
   }
 
   // Drop a car whose player left mid-race: it forfeits and stops counting toward
@@ -174,6 +258,8 @@ export class Game {
     const dt = Math.min(dtMs / 1000, 0.05);
     if (dt <= 0) return;
     this.elapsed += dt;
+    this._computeCatchUp(dt);   // per-car tRaw/tCatch from the field spread
+    this._tickProps(dt);        // box respawn cooldowns + banana life/arm
 
     for (const c of this.cars.values()) {
       c.onWall = false; // cleared once per frame; _clampCurb (main loop + post-collision) only sets it true
@@ -184,27 +270,55 @@ export class Game {
       // lap counter is frozen (the `c.finished` guard below skips lap detection).
       if (c.finished) { c.steer = pursue(c, this.centerline); c.brake = cornerBrake(c, this.centerline); }
 
-      // SPIN-OUT (oil slick): tick down any active spin (whirling the cosmetic
-      // angle, landing back on 0), then test the puddles rising-edge and trigger a
-      // fresh one. While spinning, steering is dead — a clean, recoverable penalty
-      // with no realistic physics. Finished (ghost) cars skip it.
+      // SPIN-OUT (oil slick OR a dropped banana): tick down any active spin (whirling
+      // the cosmetic angle, landing back on 0), then test both hazards rising-edge and
+      // trigger a fresh spin. While spinning, steering is dead — a clean, recoverable
+      // penalty. A spin-out also KILLS an active boost (so oil/banana can't just pause
+      // a boost that then re-bursts on recovery). Finished (ghost) cars skip it.
       let spinning = c.spinT > 0;
       if (spinning) {
         c.spinT -= dt;
         c.spin += (SPIN_TURNS * 2 * Math.PI / SPIN_TIME) * dt;
         if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
       }
-      if (!c.finished && this._enterOil(c) && !spinning) {
-        c.spinT = SPIN_TIME; c.spin = 0; spinning = true; // lose grip — no abrupt speed hit
+      if (!c.finished) {
+        const oil = this._enterOil(c);
+        const ban = this._enterBanana(c);
+        if (oil || ban) {
+          // A fresh hazard (re)arms the spin: entering a SECOND slick/banana mid-spin
+          // extends it rather than being silently swallowed (the rising-edge sets keep
+          // one slick from re-firing every frame). Keep the whirl angle continuous if
+          // already spinning. A spin also kills any active boost — no banked re-burst.
+          if (!spinning) c.spin = 0;
+          c.spinT = SPIN_TIME; spinning = true;
+          c.boostT = 0; c.boostMul = 1;
+        }
       }
 
-      // LONGITUDINAL: normally auto-accelerate toward the brake-scaled cruise speed
-      // (brake is analog 0..1: 0 → full speed, 0.5 → half, 1 → stop). On a slick the
-      // car loses grip instead: NO throttle, just a gentle drag, so it coasts through
-      // the oil and spins out behind it rather than braking on the spot.
-      const targetV = c.vmax * (1 - c.brake);
+      // CATCH-UP FEATURES (live cars): fire a held item, arm a boost pad, grab a box.
+      if (!c.finished) {
+        c.pickupAge += dt; // ages the held item toward ITEM_USE_READY (reset on a fresh roll)
+        // press-to-use: fire the held item, but BUFFER the press across a spin-out OR the
+        // post-pickup reveal gate (fires the first eligible frame) instead of swallowing
+        // it. A press with no item is dropped.
+        if (c.wantUse && c.item && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; this._useItem(c); }
+        else if (c.wantUse && !c.item) c.wantUse = false;
+        if (!spinning && this._enterPad(c)) this._applyPad(c);          // position-scaled boost
+        if (this.elapsed > LAUNCH_GATE) this._enterBox(c);             // roll a held item (gated)
+      }
+
+      // LONGITUDINAL: a boost is a flat HOLD at peak (boostT) followed by a gentle
+      // multiplier FADE back to 1 (BOOST_FADE) — so the ceiling eases down and the car
+      // tapers off rather than snapping at BRAKE_DECEL. Then accelerate toward the
+      // (boosted) brake-scaled cruise ceiling. brake is analog 0..1: 0 → full speed,
+      // 0.5 → half, 1 → stop. On a slick the car loses grip: NO throttle, just a gentle
+      // drag, so it coasts through the hazard.
+      if (c.boostT > 0) { c.boostT -= dt; if (c.boostT < 0) c.boostT = 0; }
+      else if (c.boostMul > 1) c.boostMul = Math.max(1, c.boostMul - BOOST_FADE * dt); // post-hold taper
+      const boosting = c.boostMul > 1;
+      const targetV = c.vmax * c.boostMul * (1 - c.brake);
       if (spinning) c.v = Math.max(0, c.v - SPIN_DRAG * dt);
-      else if (c.v < targetV) c.v = Math.min(targetV, c.v + c.accel * dt);
+      else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
 
       // STEERING (real): tilt turns the car's heading; you must steer through curves.
@@ -253,6 +367,7 @@ export class Game {
         if (lap >= this.totalLaps && !c.finished) {
           c.finished = true;
           c.finishTime = this.elapsed;
+          c.item = null; c.wantUse = false; // drop any held item so the controller's USE button goes dark
           this.finishedOrder.push(c.id);
           this.onEvent({ type: 'finish', id: c.id, rank: this.finishedOrder.length, time: c.finishTime });
           if (this.finishedOrder.length >= this.cars.size) {
@@ -306,6 +421,126 @@ export class Game {
       const inside = (ds * ds + dl * dl) < (h.radius * h.radius);
       if (inside) { if (!c.oilIn.has(i)) { c.oilIn.add(i); entered = true; } }
       else c.oilIn.delete(i);
+    }
+    return entered;
+  }
+
+  // Catch-up factor per LIVE car: t = how far behind the leader, normalised by the
+  // field spread (floored so a bunched pack doesn't blow up). tRaw is read by pads
+  // (at the cross frame — must not lag a position swap); tCatch is the smoothed value
+  // item rolls read. Finished cars are coasting ghosts and excluded from the spread.
+  _computeCatchUp(dt) {
+    let lead = -Infinity, tail = Infinity, n = 0;
+    for (const c of this.cars.values()) {
+      if (c.finished) continue;
+      n++;
+      if (c.totalS > lead) lead = c.totalS;
+      if (c.totalS < tail) tail = c.totalS;
+    }
+    if (!n) return;
+    const denom = Math.max(lead - tail, SPREAD_REF_FRAC * this.length);
+    const k = 1 - Math.exp(-dt / T_TAU);
+    for (const c of this.cars.values()) {
+      if (c.finished) { c.tRaw = 0; c.tCatch = 0; continue; }
+      let raw = (lead - c.totalS) / denom;
+      raw = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+      c.tRaw = raw;
+      c.tCatch += (raw - c.tCatch) * k;
+    }
+  }
+
+  // Per-frame prop upkeep: respawn item boxes, age dropped bananas, drop dead ones.
+  _tickProps(dt) {
+    for (const b of this.boxes) if (b.cooldown > 0) b.cooldown = Math.max(0, b.cooldown - dt);
+    if (this.bananas.length) {
+      for (const b of this.bananas) { b.life -= dt; if (b.armT > 0) b.armT -= dt; }
+      const dead = this.bananas.filter((b) => b.life <= 0);
+      if (dead.length) {
+        this.bananas = this.bananas.filter((b) => b.life > 0);
+        // sweep the expired ids out of every car's overlap set (ids never repeat, so
+        // they couldn't false-trigger — this just stops the sets growing unbounded).
+        for (const c of this.cars.values()) for (const b of dead) c.bananaIn.delete(b.id);
+      }
+    }
+  }
+
+  // Rising-edge overlap of a boost PAD (same (s,lat) test as oil). Returns true on a
+  // fresh entry so the caller arms one boost per cross, not one per frame.
+  _enterPad(c) {
+    if (!this.pads.length) return false;
+    let entered = false;
+    for (let i = 0; i < this.pads.length; i++) {
+      const p = this.pads[i];
+      let ds = c.totalS - p.s; ds -= Math.round(ds / this.length) * this.length;
+      const dl = c.lat - p.lat;
+      if ((ds * ds + dl * dl) < (p.radius * p.radius)) { if (!c.padIn.has(i)) { c.padIn.add(i); entered = true; } }
+      else c.padIn.delete(i);
+    }
+    return entered;
+  }
+
+  // Arm/refresh a position-scaled boost: peak ×vmax interpolates leader→last by tRaw.
+  // Assignment via Math.max (never accumulation) so pads/items can't compound into a
+  // teleport; the timer is re-armed each cross.
+  _applyPad(c) {
+    const mul = PAD_BOOST_MIN + (PAD_BOOST_MAX - PAD_BOOST_MIN) * c.tRaw;
+    c.boostMul = Math.max(c.boostMul, mul);
+    c.boostT = Math.max(c.boostT, BOOST_DURATION);
+  }
+
+  // Rising-edge overlap of an item BOX. A box on cooldown is inert. A car with a
+  // full slot does NOT consume the box (it stays live for the next car) — so holding
+  // an item means forfeiting every box you pass (defuses hoarding). On a fresh pickup
+  // the box goes on cooldown and the car rolls a t-weighted item.
+  _enterBox(c) {
+    if (!this.boxes.length) return;
+    for (let i = 0; i < this.boxes.length; i++) {
+      const b = this.boxes[i];
+      let ds = c.totalS - b.s; ds -= Math.round(ds / this.length) * this.length;
+      const dl = c.lat - b.lat;
+      const inside = b.cooldown <= 0 && (ds * ds + dl * dl) < (b.radius * b.radius);
+      if (inside && !c.boxIn.has(i)) {
+        if (c.item == null) { c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i); }
+        // full slot: leave membership unset so it re-checks next frame (auto-grabs the
+        // instant the slot frees while still on the box).
+      } else if (!inside) { c.boxIn.delete(i); }
+    }
+  }
+
+  // Weighted item roll using the seeded PRNG. weight(t)=max(0, base+slope·t).
+  _roll(t) {
+    let total = 0; const w = [];
+    for (const it of ITEM_TABLE) { const x = Math.max(0, it.base + it.slope * t); w.push(x); total += x; }
+    let r = this.rng() * total;
+    for (let i = 0; i < ITEM_TABLE.length; i++) { r -= w[i]; if (r <= 0) return ITEM_TABLE[i].id; }
+    return ITEM_TABLE[ITEM_TABLE.length - 1].id;
+  }
+
+  // Fire the held item (press-to-use). Boost reuses the pad boost state; Banana drops
+  // a live hazard just behind the dropper (owner-skipped + armed so it can't self-trip).
+  _useItem(c) {
+    if (c.item === 'boost') {
+      c.boostMul = Math.max(c.boostMul, BOOST_ITEM_MUL);
+      c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);
+    } else if (c.item === 'banana') {
+      let s = c.totalS - BANANA_BACK; s = ((s % this.length) + this.length) % this.length;
+      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, life: BANANA_LIFE, armT: BANANA_ARM, owner: c.id });
+    }
+    c.item = null;
+  }
+
+  // Rising-edge overlap of a live dropped banana (skips the owner and un-armed ones).
+  // Returns true on a fresh entry → caller spins the car out (reusing the oil spin).
+  _enterBanana(c) {
+    if (!this.bananas.length) return false;
+    let entered = false;
+    for (const b of this.bananas) {
+      const skip = b.owner === c.id || b.armT > 0;
+      let ds = c.totalS - b.s; ds -= Math.round(ds / this.length) * this.length;
+      const dl = c.lat - b.lat;
+      const inside = !skip && (ds * ds + dl * dl) < (BANANA_RADIUS * BANANA_RADIUS);
+      if (inside) { if (!c.bananaIn.has(b.id)) { c.bananaIn.add(b.id); entered = true; } }
+      else c.bananaIn.delete(b.id);
     }
     return entered;
   }
@@ -396,10 +631,21 @@ export class Game {
         // steerInput is the RAW player input (matches the phone's steer bar) and
         // drives the on-screen steer indicator.
         finished: c.finished, finishTime: c.finishTime, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall,
-        spin: c.spin // cosmetic spin-out angle (rad) for the renderer to whirl the body
+        spin: c.spin, // cosmetic spin-out angle (rad) for the renderer to whirl the body
+        // catch-up + item observables: boostActive/boostMul drive the boost FX (intensity
+        // telegraphs the position-scaled size); item is the held pickup (HUD + controller).
+        item: c.item, boostActive: c.boostMul > 1.001, boostMul: c.boostMul, tCatch: c.tCatch,
+        // collision footprint + arclength — only used by the renderer's debug bbox overlay.
+        totalS: c.totalS, halfLen: c.halfLen, halfWid: c.halfWid
       });
     }
-    return { cars, elapsed: this.elapsed };
+    // Static boxes (available = off cooldown) + live dropped bananas, for the renderer
+    // to show/hide box meshes and reconcile banana meshes by id.
+    return {
+      cars, elapsed: this.elapsed,
+      boxes: this.boxes.map((b) => b.cooldown <= 0),
+      bananas: this.bananas.map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS }))
+    };
   }
 
   getResults() {

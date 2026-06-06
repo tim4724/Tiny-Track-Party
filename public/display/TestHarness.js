@@ -163,6 +163,79 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
+  // ---- mechanics showcase (gallery 'features') ----
+  // A frozen, well-framed shot that reliably shows ALL the catch-up/hazard pieces
+  // at once: a boost PAD, an item BOX, a dropped BANANA, an OIL slick (+cones), and
+  // a car with an ACTIVE BOOST (gold aura). They're clustered down the longest
+  // straight (overriding the track's authored positions just for this preview) so a
+  // single 3/4 camera frames them; the engine is frozen (no update) so nothing drifts.
+  if (scenario === 'features') {
+    show('race');
+    el('results').classList.add('hidden');
+    ctx.scenePromise.then(() => setupFeatures()).catch((e) => console.warn('[TestHarness] scene load failed', e));
+
+    // Start arclength of the longest horizontal straight (curvature ≈ 0).
+    function longestStraight(cl, L) {
+      const head = (s) => { const f = cl.sampleAt(((s % L) + L) % L); return Math.atan2(f.tangent.x, f.tangent.z); };
+      const N = 240, ds = 1.0, TH = 0.045, flat = [];
+      for (let i = 0; i < N; i++) {
+        const s = (i / N) * L; let dh = head(s + ds) - head(s - ds);
+        while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+        flat.push(Math.abs(dh) / (2 * ds) < TH);
+      }
+      let st = 0; while (st < N && flat[st]) st++;             // rotate to a corner so runs don't split at the seam
+      const rot = Array.from({ length: N }, (_, k) => flat[(st + k) % N]);
+      let best = { len: 0, start: 0 }, j = 0;
+      while (j < N) { if (rot[j]) { let e = j; while (e + 1 < N && rot[e + 1]) e++; if (e - j + 1 > best.len) best = { len: e - j + 1, start: (st + j) % N }; j = e + 1; } else j++; }
+      return (best.start / N) * L;
+    }
+
+    function setupFeatures() {
+      const { scene, track } = ctx;
+      scene.orbit = false;
+      const cl = track.centerline, L = track.length;
+      const s0 = longestStraight(cl, L) + 3; // a few units in for runway
+      const at = (d) => ((s0 + d) % L + L) % L;
+
+      // Override the authored layout: cluster one of each down the straight.
+      const featureTrack = Object.assign({}, track, {
+        pads: [{ s: at(3), lat: 0.0, radius: 0.65 }],
+        boxes: [{ s: at(6), lat: 0.7, radius: 0.65 }],
+        hazards: [{ s: at(11), lat: 0.35, radius: 0.7 }], // oil slick (+cones)
+      });
+      scene.setTrack(featureTrack);
+
+      const engine = new Game([0], featureTrack, { onEvent() {} });
+      window.__engine = engine;
+      for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+      scene.addCar(0, 0, 'Boost!', { cell: false }); // cell:false → the overview camera frames the cluster
+
+      const car = engine.cars.get(0);
+      Object.assign(car, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (won't tick — frozen)
+      engine.bananas.push({ id: 1, s: at(8), lat: -0.5, life: 999, armT: 0, owner: 'none' });
+      engine._recomputePoses();
+
+      const snap = engine.getSnapshot();
+      const c0 = snap.cars[0];
+      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul); // boostMul → aura
+      scene.syncProps(snap); // box mesh + dropped-banana mesh
+
+      // Frame it: behind + above the boosting car, looking down the straight at the cluster.
+      const fcar = cl.sampleAt(s0), tan = fcar.tangent.clone().normalize();
+      const pos = fcar.pos.clone().addScaledVector(tan, -4.5).addScaledVector(fcar.lateral, 1.2);
+      pos.y += 3.2;
+      scene.overview.position.copy(pos);
+      scene._ovPos = pos.clone();
+      scene._ovTarget = cl.sampleAt(at(6)).pos.clone();
+      scene.overview.lookAt(scene._ovTarget);
+
+      // Car stays put, but re-pose it each frame so the boost aura keeps pulsating
+      // (boxes/cones idle-animate via the render loop regardless).
+      scene.onFrame = () => scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul);
+    }
+    return;
+  }
+
   // ---- race scenarios (countdown / racing / results) ----
   // Switch to the race screen synchronously so the lobby (QR/roster/join URL)
   // doesn't flash while the GLBs load. Build the engine + scene cars once the
@@ -216,8 +289,9 @@ export function runDisplayScenario(opts, ctx) {
       }
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
       }
+      scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
       if (live) {
         const now = performance.now();
         if (now - lastHud > 160) {

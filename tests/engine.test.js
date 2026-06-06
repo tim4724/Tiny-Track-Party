@@ -386,6 +386,24 @@ test('a car parked on a slick spins out once, not every frame (rising-edge)', ()
   }
 });
 
+test('a second oil slick entered mid-spin re-arms the spin (not silently absorbed)', () => {
+  const track = mkTrack(3);
+  track.hazards = [{ s: 6, lat: 0, radius: 1.0 }, { s: 30, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 6, lat: 0, v: 8, heading: 0 });
+  game.update(16);                                  // enter slick-1 → spin starts
+  assert.ok(car.spinT > 0, 'slick-1 starts the spin');
+  for (let i = 0; i < 20; i++) game.update(16);     // let the spin tick partway down
+  const mid = car.spinT;
+  assert.ok(mid > 0 && mid < 0.9, `still spinning, timer partly elapsed (spinT=${mid.toFixed(2)})`);
+  // drop the still-spinning car onto slick-2: a fresh hazard must RE-ARM the spin
+  // rather than being swallowed (the old `!spinning` guard dropped the second spin).
+  Object.assign(car, { totalS: 30, lat: 0 });
+  game.update(16);
+  assert.ok(car.spinT > mid + 0.2, `second slick re-arms the spin (spinT ${car.spinT.toFixed(2)} > ${mid.toFixed(2)})`);
+});
+
 test('a finished car keeps driving on autopilot instead of stopping', () => {
   const track = mkTrack(1);
   const game = new Game(['p1'], track, {});
@@ -399,4 +417,225 @@ test('a finished car keeps driving on autopilot instead of stopping', () => {
   assert.ok(c.v > 3, `finished car should keep cruising, not stop (v=${c.v.toFixed(2)})`);
   assert.ok(c.totalS > s0 + 5, `finished car should keep covering ground (Δs=${(c.totalS - s0).toFixed(2)})`);
   assert.ok(Math.abs(c.lat) <= game.maxLat + 1e-6, 'autopilot keeps it within the curbs');
+});
+
+// ---- boost pads + catch-up factor -------------------------------------------
+
+test('a boost pad lifts a car above its top speed, then bleeds back down', () => {
+  const track = mkTrack(3);
+  track.pads = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: car.vmax }); // arrive at the pad at cruise
+  let maxV = 0;
+  for (let i = 0; i < 40; i++) { game.processInput('p1', { s: 0, b: 0 }); game.update(16); maxV = Math.max(maxV, car.v); }
+  assert.ok(car.boostT >= 0, 'boost armed on the pad');
+  assert.ok(maxV > car.vmax + 0.5, `boost lifts speed above vmax (peak ${maxV.toFixed(2)} vs vmax ${car.vmax})`);
+  assert.ok(game.getSnapshot().cars[0].boostMul >= 1, 'snapshot exposes boostMul');
+  // run past the boost; speed returns toward cruise with no boost left
+  for (let i = 0; i < 120; i++) { game.processInput('p1', { s: 0, b: 0 }); game.update(16); }
+  assert.equal(car.boostT, 0, 'boost expires');
+  assert.ok(car.v <= car.vmax + 0.2, `speed settles back to cruise (v=${car.v.toFixed(2)})`);
+});
+
+test('catch-up: leader gets t=0, a trailing car gets a bigger pad boost', () => {
+  const track = mkTrack(3);
+  const L = track.length;
+  track.pads = [{ s: L * 0.30, lat: 0, radius: 1.5 }, { s: L * 0.05, lat: 0, radius: 1.5 }];
+  const game = new Game(['lead', 'back'], track, {});
+  const lead = game.cars.get('lead'), back = game.cars.get('back');
+  Object.assign(lead, { totalS: L * 0.30, lat: 0, v: lead.vmax });
+  Object.assign(back, { totalS: L * 0.05, lat: 0, v: back.vmax });
+  game.update(16); // computes t (lead/tail spread) then each car crosses its own pad
+  assert.ok(Math.abs(lead.tRaw - 0) < 1e-9, `leader t = 0 (got ${lead.tRaw})`);
+  assert.ok(back.tRaw > 0.9, `back-marker t near 1 (got ${back.tRaw.toFixed(2)})`);
+  assert.ok(Math.abs(lead.boostMul - 1.25) < 1e-6, `leader gets the floor boost (got ${lead.boostMul})`);
+  assert.ok(back.boostMul > lead.boostMul + 0.2, `trailing car gets a bigger boost (${back.boostMul.toFixed(2)} vs ${lead.boostMul.toFixed(2)})`);
+});
+
+test('catch-up: a lone car is treated as the leader (t=0)', () => {
+  const track = mkTrack(3);
+  const game = new Game(['solo'], track, {});
+  Object.assign(game.cars.get('solo'), { totalS: 20 });
+  game.update(16);
+  assert.equal(game.cars.get('solo').tRaw, 0, 'a single car is never "behind"');
+});
+
+test('a boost pad fires once per cross (rising-edge), not every frame', () => {
+  const track = mkTrack(3);
+  track.pads = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  Object.assign(game.cars.get('p1'), { totalS: 8, lat: 0, v: 0 });
+  const car = game.cars.get('p1');
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.ok(car.boostT > 0, 'first cross arms a boost');
+  for (let i = 0; i < 120; i++) { game.processInput('p1', { b: 1 }); game.update(16); }
+  assert.equal(car.boostT, 0, 'the single boost expired');
+  for (let i = 0; i < 30; i++) { game.processInput('p1', { b: 1 }); game.update(16); assert.equal(car.boostT, 0, 'parked on a pad does not re-arm'); }
+});
+
+test('an oil spin-out cancels an active boost (no banked re-burst)', () => {
+  const track = mkTrack(3);
+  track.hazards = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 8, boostT: 1.0, boostMul: 1.5 });
+  game.update(16);
+  assert.ok(car.spinT > 0, 'hit the slick');
+  assert.equal(car.boostT, 0, 'boost is cancelled by the spin-out');
+  assert.equal(car.boostMul, 1, 'boost multiplier reset');
+});
+
+// ---- item boxes + roll + use ------------------------------------------------
+
+test('an item box fills the slot after the launch gate, then respawns', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  track.seed = 12345;
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  // before the launch gate: no pickup
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.equal(car.item, null, 'no pickups during the launch window');
+  // past the gate: pickup
+  game.elapsed = 2;
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.ok(car.item === 'boost' || car.item === 'banana', `box fills the slot (got ${car.item})`);
+  assert.equal(game.getSnapshot().boxes[0], false, 'box is on cooldown after pickup');
+  // respawn after BOX_RESPAWN
+  for (let i = 0; i < 280; i++) { game.processInput('p1', { b: 1 }); game.update(16); } // ~4.5s
+  assert.equal(game.getSnapshot().boxes[0], true, 'box respawns');
+});
+
+test('a freshly-rolled item is held through the reveal gate, then the buffered press fires', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  track.seed = 12345;
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  game.elapsed = 2; // past the launch gate
+  game.processInput('p1', { b: 1 }); game.update(16); // roll an item from the box
+  assert.ok(car.item, `box filled the slot (got ${car.item})`);
+  // tap USE immediately: during the post-pickup reveal the press must BUFFER, not fire
+  game.processInput('p1', { b: 1, u: 1 }); game.update(16);
+  assert.ok(car.item, 'the item is NOT fired during the reveal gate');
+  assert.ok(car.wantUse, 'the press is queued, waiting out the reveal gate');
+  // hold the press; once the gate opens (~ITEM_USE_READY) the buffered press fires
+  for (let i = 0; i < 70; i++) { game.processInput('p1', { b: 1, u: 1 }); game.update(16); }
+  assert.equal(car.item, null, 'the buffered item fires once the reveal gate opens');
+});
+
+test('a full slot does not consume a box (it stays live for the next car)', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0, item: 'boost' });
+  game.elapsed = 2;
+  game.update(16);
+  assert.equal(game.getSnapshot().boxes[0], true, 'box not consumed while the slot is full');
+});
+
+test('item rolls are deterministic for a seed and position-weighted by t', () => {
+  const track = mkTrack(3); track.seed = 999;
+  const a = new Game(['x'], track, {}), b = new Game(['x'], track, {});
+  const seqA = [], seqB = [];
+  for (let i = 0; i < 20; i++) { seqA.push(a._roll(0.5)); seqB.push(b._roll(0.5)); }
+  assert.deepEqual(seqA, seqB, 'same seed → identical roll sequence');
+  // weighting: banana skews to the leader (t=0), boost to the back (t=1)
+  const g = new Game(['x'], track, {});
+  let bananaLeader = 0, bananaLast = 0;
+  for (let i = 0; i < 4000; i++) if (g._roll(0) === 'banana') bananaLeader++;
+  for (let i = 0; i < 4000; i++) if (g._roll(1) === 'banana') bananaLast++;
+  assert.ok(bananaLeader > bananaLast + 400, `leader rolls more bananas than last (${bananaLeader} vs ${bananaLast})`);
+});
+
+test('the ACTION counter fires a use once per fresh value and dedups repeats', () => {
+  const track = mkTrack(3);
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 5, item: 'boost' });
+  game.processInput('p1', { u: 1 });
+  assert.ok(car.wantUse, 'a fresh counter value queues a use');
+  game.update(16);
+  assert.equal(car.item, null, 'the held item was used');
+  assert.ok(car.boostT > 0, 'boost item armed a boost');
+  assert.equal(car.wantUse, false, 'use consumed');
+  game.processInput('p1', { u: 1 }); // repeat (e.g. fastlane re-delivery)
+  assert.equal(car.wantUse, false, 'same counter value does not re-fire');
+  game.processInput('p1', { u: 2 });
+  assert.ok(car.wantUse, 'a new counter value fires again');
+});
+
+test('the first CONTROL frame (counter 0) does not ghost-fire a use', () => {
+  // The controller resets its counter to 0 on stop(), and cars init useSeq:0, so the
+  // opening frame's u=0 must NOT count as a press (otherwise a held item self-fires).
+  const track = mkTrack(3);
+  const game = new Game(['p1'], track, {});
+  Object.assign(game.cars.get('p1'), { item: 'boost' });
+  game.processInput('p1', { s: 0, b: 0, u: 0 });
+  assert.equal(game.cars.get('p1').wantUse, false, 'u=0 on the first frame is not a fresh press');
+});
+
+test('a queued ACTION press survives a spin-out and fires on recovery', () => {
+  const track = mkTrack(3);
+  track.hazards = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 6, item: 'banana' });
+  // tap USE the same frame we hit the slick: the press must buffer, not vanish
+  game.processInput('p1', { u: 1 }); game.update(16);
+  assert.ok(car.spinT > 0, 'spun out on entry');
+  assert.equal(car.item, 'banana', 'the item was NOT consumed mid-spin');
+  assert.ok(car.wantUse, 'the press is still queued');
+  // run out the spin; the buffered press now fires
+  for (let i = 0; i < 80; i++) { game.update(16); }
+  assert.equal(car.item, null, 'the queued item fires once control returns');
+  assert.equal(game.bananas.length, 1, 'the banana dropped after recovery');
+});
+
+test('an AI car uses items instead of hoarding (picks up then fires on a straight)', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 5, lat: 0, radius: 1.0 }];
+  track.seed = 7;
+  const game = new Game(['x'], track, {});
+  game.elapsed = 2; // past the launch gate
+  const car = game.cars.get('x');
+  const bot = new AiController({ skill: 1 });
+  let everHeld = false, everUsed = false;
+  for (let i = 0; i < 400; i++) {
+    game.processInput('x', bot.drive(car, track.centerline));
+    game.update(16);
+    if (car.item) everHeld = true;
+    else if (everHeld) everUsed = true;
+  }
+  assert.ok(everHeld, 'AI picked up an item from the box');
+  assert.ok(everUsed, 'AI used the item it was holding (did not hoard it forever)');
+});
+
+// ---- banana (dropped hazard) ------------------------------------------------
+
+test('a dropped banana spins a follower but never the dropper, and expires', () => {
+  const track = mkTrack(3);
+  const game = new Game(['drop', 'follow'], track, {});
+  const dropper = game.cars.get('drop'), follow = game.cars.get('follow');
+  Object.assign(dropper, { totalS: 12, lat: 0, v: 0, item: 'banana' });
+  Object.assign(follow, { totalS: 30, lat: 0, v: 0 }); // parked elsewhere, out of the way
+  game.elapsed = 2;
+  game.processInput('drop', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.bananas.length, 1, 'banana dropped');
+  const bs = game.bananas[0].s;
+  // dropper sits on its own banana → never trips it (owner-skip)
+  Object.assign(dropper, { totalS: bs, v: 0 });
+  for (let i = 0; i < 40; i++) { game.processInput('drop', { b: 1 }); game.update(16); }
+  assert.equal(dropper.spinT, 0, 'the dropper never trips its own banana');
+  // a different car parks on the (now armed) banana → spins out
+  Object.assign(follow, { totalS: bs, lat: 0, v: 0 });
+  game.processInput('follow', { b: 1 }); game.update(16);
+  assert.ok(follow.spinT > 0, 'a follower spins out on the banana');
+  // it eventually expires off the track
+  for (let i = 0; i < 800; i++) { game.update(16); } // > BANANA_LIFE
+  assert.equal(game.bananas.length, 0, 'banana expires and is removed');
 });

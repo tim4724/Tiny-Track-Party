@@ -122,6 +122,33 @@ const OILS = {
   riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ]
 };
 
+// Boost pads — drive-over speed strips, position-SCALED for catch-up (the leader
+// gets a floor burst, the back of the pack gets more). Place on STRAIGHTS, centred
+// (lat 0) on the racing line so everyone takes them. `u` = fraction of lap.
+// u values verified to sit where the racing line is HORIZONTALLY straight (XZ
+// curvature ≈ 0), clear of the box rows + oil slicks (see scripts straight-probe).
+// "Straight" here means no left/right turn — a hill piece (pure climb/descent, no
+// XZ turn) qualifies and is fine for a pad. What a pad must avoid is a CORNER, where
+// the car is understeering/braking and the boost is wasted; so each sits near a
+// straight's start for runway. Re-check with the straight probe if pieces change.
+const PADS = {
+  switchback: [ { u: 0.15, lat: 0.0 }, { u: 0.65, lat: 0.0 } ],
+  crossover:  [ { u: 0.08, lat: 0.0 }, { u: 0.40, lat: 0.0 } ],
+  riverside:  [ { u: 0.10, lat: 0.0 }, { u: 0.51, lat: 0.0 } ]
+};
+
+// Item boxes — drive-over pickups, authored in rows ACROSS the lane (a resource to
+// choose, not a gate). Spaced clear of the oils/pads. `u` = fraction of lap, `lat`
+// = lateral offset (±0.7 reaches near the curbs on the ±1.5 catalogue tracks).
+// A row of 4 boxes spread across the lane (±1.05/±0.35 on the ±1.5 catalogue tracks).
+const BOX_LANES = [-1.05, -0.35, 0.35, 1.05];
+const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
+const BOXES = {
+  switchback: boxRow(0.20),
+  crossover:  boxRow(0.66),
+  riverside:  boxRow(0.30)
+};
+
 // Registry of named, previewable tracks: `name` is the display label, `pieces`
 // is the layout the builder chains, and `oils` are the fixed slick hazards.
 // Selected in the display via ?track=<key> (see display/main.js).
@@ -129,17 +156,17 @@ export const TRACKS = {
   switchback: {
     name: 'Switchback',
     pieces: SWITCHBACK,
-    oils: OILS.switchback
+    oils: OILS.switchback, pads: PADS.switchback, boxes: BOXES.switchback
   },
   crossover: {
     name: 'Crossover',
     pieces: CROSSOVER,
-    oils: OILS.crossover
+    oils: OILS.crossover, pads: PADS.crossover, boxes: BOXES.crossover
   },
   riverside: {
     name: 'Riverside',
     pieces: RIVERSIDE,
-    oils: OILS.riverside
+    oils: OILS.riverside, pads: PADS.riverside, boxes: BOXES.riverside
   }
 };
 
@@ -150,4 +177,4 @@ export const TRACK_ORDER = ['switchback', 'crossover', 'riverside'];
 // Flat list of tracks — {id, name, pieces} in display order — used by main.js and
 // the track-picker UI. The display builds each track and computes its schematic SVG
 // from the geometry (see display/trackSchematic.js), so the picker needs no per-track art.
-export const TRACK_LIST = TRACK_ORDER.map((id) => ({ id, name: TRACKS[id].name, pieces: TRACKS[id].pieces, oils: TRACKS[id].oils }));
+export const TRACK_LIST = TRACK_ORDER.map((id) => ({ id, name: TRACKS[id].name, pieces: TRACKS[id].pieces, oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes }));

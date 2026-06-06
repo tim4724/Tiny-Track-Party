@@ -60,6 +60,9 @@ export class TiltInput {
     this._keyL = false; this._keyR = false;
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
+    this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
+    this._actKeyDown = false;
+    this._actionEnabled = false; // gate: ACTION does nothing unless the slot holds an item (set via setActionEnabled)
     this._timer = null;
 
     this._onOrient = this._onOrient.bind(this);
@@ -110,6 +113,8 @@ export class TiltInput {
   stop() {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
+    this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
+    this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }
 
   // Steer = roll = device-frame gravity's angle in the x–z plane = atan2(gx, -gz).
@@ -134,7 +139,10 @@ export class TiltInput {
 
     const s = clamp1(this._steer + this._key);
     const b = Math.max(this._brakeBtn, this._brakeKey);
-    this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3) });
+    // u is a wrapping use-counter: the display fires the held item once each time it
+    // CHANGES, so it survives the fastlane's latest-wins drops (a dropped frame just
+    // re-delivers the same value) without a separate reliable message.
+    this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3), u: this._useCount });
   }
 
   // current steer (for the on-screen steer indicator)
@@ -150,6 +158,11 @@ export class TiltInput {
       if (k === 'arrowleft' || k === 'a') { this._keyL = down; e.preventDefault(); }
       else if (k === 'arrowright' || k === 'd') { this._keyR = down; e.preventDefault(); }
       else if (k === 'arrowdown' || k === ' ' || k === 's') { this._brakeKey = down ? BRAKE_LEVEL : 0; e.preventDefault(); }
+      else if (k === 'enter' || k === 'e' || k === 'arrowup') {
+        // ACTION (use item): bump only on the leading edge so key auto-repeat doesn't spam
+        if (down && !this._actKeyDown) this.pressAction();
+        this._actKeyDown = down; e.preventDefault(); return;
+      }
       else return;
       this._key = (this._keyR ? 1 : 0) - (this._keyL ? 1 : 0);
     };
@@ -165,4 +178,14 @@ export class TiltInput {
 
   // On-screen BRAKE button: held → brake at the fixed BRAKE_LEVEL, released → 0.
   pressBrake(on) { this._brakeBtn = on ? BRAKE_LEVEL : 0; }
+
+  // Enable/disable ACTION — mirrors the held-item slot (main.js drives this from
+  // setHeldItem). Gates BOTH input paths (on-screen button AND keyboard) so a press
+  // with no item can't bump the counter and ghost-fire at the next race's start.
+  setActionEnabled(on) { this._actionEnabled = !!on; }
+
+  // ACTION button: one tap = one item use. Bump the wrapping counter on the press
+  // edge; the next _tick carries it and the display fires the held item once. No-op
+  // when no item is held (see setActionEnabled).
+  pressAction() { if (this._actionEnabled) this._useCount = (this._useCount + 1) & 255; }
 }
