@@ -35,8 +35,23 @@ const FOV_GAIN = 5;           // extra FOV degrees at top speed (subtle sense of
 // Lobby attract-mode: when no cars are on track (the lobby), slowly orbit the
 // overview camera around the selected track so it reads as a live 3D preview.
 const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzying
-// Wheel-kick colour — dark grey (tyre scuff / asphalt grit). One knob to retint.
-const DUST_COLOR = 0x4a4a4a;
+// Tyre-contact cues that ground the car ON the road (vs hovering over it):
+//   • Skidmarks — dark tyre tracks laid under the rear wheels while cornering /
+//     curb-scrubbing, fading out over SKID_LIFE. Each stamp bridges the wheel's
+//     last contact point to its current one (end-to-end, no overlap), so it
+//     forms one continuous ribbon along the exact wheel path at ANY speed (the
+//     engine reports speed normalised, so we measure real travel, not a guess).
+//   • Contact shadow — a soft dark blob that rides flat on the road directly
+//     under each car, filling the gap the (offset) sun shadow leaves so the car
+//     reads planted rather than floating above its own shadow.
+const SKID_COLOR = 0x241f1c;       // near-black warm scuff
+const SKID_MAX_OPACITY = 0.28;     // opacity of a fresh mark at full slip (hard scrub)
+const SKID_THRESH = 0.2;           // |steer| at which tyres start to scuff (below this: no mark)
+const SKID_LIFE = 1.2;             // seconds to fully fade
+const SKID_WIDTH = 0.12;           // fallback tyre-contact width; per-car width is measured in addCar
+const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next stamp
+const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
+const CONTACT_OPACITY = 0.36;      // peak darkness of the under-car contact blob
 
 // NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
 // scene still renders to an offscreen LINEAR target and is presented through a
@@ -74,25 +89,42 @@ function bestGrid(n, W, H) {
   return best;
 }
 
-// A few small HARD-edged grains (tinted per-emit) — solid dirt specks, not the
-// soft feathered gradient that read as smoke. Drawn white so the colour tint
-// shows true.
-function makeDustTexture() {
-  const s = 48;
+// Skid streak alpha: SOFT across its width, SOLID along its length. Each stamp
+// bridges the wheel's last contact to its current one and they're laid end-to-
+// end (abutting, no overlap), so a solid length tiles into one continuous tyre
+// track with no scalloping — a round blob or feathered ends would dip to zero at
+// every join and read as a dotted line; overlap would stack alpha into dark bands.
+function makeSkidTexture() {
+  const w = 16, h = 8;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  // width profile only: feather the left/right edges so the track has soft sides
+  const gx = ctx.createLinearGradient(0, 0, w, 0);
+  gx.addColorStop(0, 'rgba(255,255,255,0)');
+  gx.addColorStop(0.5, 'rgba(255,255,255,1)');
+  gx.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gx;
+  ctx.fillRect(0, 0, w, h);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// A single soft round alpha blob (white core feathering to transparent). Drawn
+// white so the material colour tint shows true; used for the under-car contact
+// shadow (scaled to the footprint).
+function makeSoftBlobTexture() {
+  const s = 64;
   const cv = document.createElement('canvas');
   cv.width = cv.height = s;
   const ctx = cv.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const cx = s * (0.3 + Math.random() * 0.4);
-    const cy = s * (0.3 + Math.random() * 0.4);
-    const rad = s * (0.1 + Math.random() * 0.1);
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.8, 'rgba(255,255,255,1)');   // solid body — hard grain
-    g.addColorStop(1, 'rgba(255,255,255,0)');     // 1px feather only at the rim
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
-  }
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.75)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -236,55 +268,76 @@ export class SceneRenderer {
     return best;
   }
 
-  // Pooled dust sprites kicked up from the wheels + curb. Sprites face whichever
-  // camera renders them, so they look right in every split-screen viewport.
+  // Pooled skidmark decals — flat quads laid on the road that fade out. Shared
+  // across all cars (the marks stay where they were laid; they don't move with
+  // the car), so a ring buffer recycles the oldest when busy.
   _initParticles() {
-    this._dustTex = makeDustTexture();
-    this._puffs = [];
-    this._puffN = 0;
-    for (let i = 0; i < 200; i++) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: this._dustTex, transparent: true, depthWrite: false, opacity: 0
-      }));
-      sp.visible = false;
-      sp.userData.life = 0;
-      this.scene.add(sp);
-      this._puffs.push(sp);
+    this._skidTex = makeSkidTexture();
+    this._softTex = makeSoftBlobTexture(); // round blob for the contact shadow
+    this._skids = [];
+    this._skidN = 0;
+    // scratch vectors for orientation maths + the per-wheel travel measurement,
+    // so the hot path allocates nothing per frame.
+    this._skU = new THREE.Vector3();
+    this._skF = new THREE.Vector3();
+    this._skL = new THREE.Vector3();
+    this._skMat = new THREE.Matrix4();
+    this._gpA = new THREE.Vector3();
+    this._projV = new THREE.Vector3(); // scratch for the contact-patch projection
+    this._segV = new THREE.Vector3();
+    this._dirV = new THREE.Vector3();
+    this._midV = new THREE.Vector3();
+    // Pool sized for the worst case — all 4 cars cornering at 60 fps, one stamp per
+    // rear wheel per frame held for SKID_LIFE: 60 × 1.2 × 2 × 4 ≈ 580. 640 gives a
+    // little headroom; curb scrub (4 wheels) can still exceed it, and the ring
+    // buffer then recycles the oldest (most-faded) marks, which is invisible.
+    for (let i = 0; i < 640; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: this._skidTex, color: SKID_COLOR, transparent: true,
+          depthWrite: false, opacity: 0,
+          // pull the decal toward the camera in depth so it never z-fights the road
+          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+        })
+      );
+      m.visible = false;
+      m.userData.life = 0;
+      this.scene.add(m);
+      this._skids.push(m);
     }
   }
 
-  // pos = world spawn, vel = world velocity (it then settles under gravity + drag)
-  _emitDust(pos, color, size, life, vel) {
-    const sp = this._puffs[this._puffN];
-    this._puffN = (this._puffN + 1) % this._puffs.length;
-    sp.visible = true;
-    sp.position.copy(pos);
-    // per-grain brightness jitter so the trail has grit/depth, not one flat tone
-    sp.material.color.set(color).multiplyScalar(0.7 + Math.random() * 0.6);
-    sp.material.rotation = Math.random() * Math.PI * 2; // random start angle per grain
-    sp.scale.setScalar(size);
-    sp.userData.life = life;
-    sp.userData.maxLife = life;
-    sp.userData.size = size;
-    sp.userData.spin = (Math.random() - 0.5) * 6; // tumble as it flies
-    sp.userData.vel = vel || new THREE.Vector3();
+  // Lay one skid stamp centred at world `mid`, lying in the road plane
+  // (normal = up) with its length along `dir` (a unit travel direction).
+  // `width` is the car's tyre-contact width; `strength` (0..1) scales peak
+  // opacity; `length` spans the wheel's last→now travel so consecutive stamps
+  // butt together into one seamless ribbon.
+  _emitSkidSeg(mid, up, dir, length, width, strength) {
+    const m = this._skids[this._skidN];
+    this._skidN = (this._skidN + 1) % this._skids.length;
+    // basis: geometry X → lateral, Y → travel-in-plane, Z(normal) → road up
+    this._skU.copy(up).normalize();
+    this._skF.copy(dir).addScaledVector(this._skU, -dir.dot(this._skU));
+    if (this._skF.lengthSq() < 1e-9) return;             // travel parallel to up (shouldn't happen)
+    this._skF.normalize();
+    this._skL.copy(this._skF).cross(this._skU);          // L = F × U  (right-handed)
+    this._skMat.makeBasis(this._skL, this._skF, this._skU);
+    m.quaternion.setFromRotationMatrix(this._skMat);
+    m.position.copy(mid).addScaledVector(this._skU, 0.006); // a hair above the road
+    m.scale.set(width, length, 1);
+    m.visible = true;
+    m.userData.life = SKID_LIFE;
+    m.userData.peak = SKID_MAX_OPACITY * strength;
+    m.material.opacity = m.userData.peak;
   }
 
-  _stepPuffs(dt) {
-    for (const sp of this._puffs) {
-      if (!sp.visible) continue;
-      sp.userData.life -= dt;
-      if (sp.userData.life <= 0) { sp.visible = false; sp.material.opacity = 0; continue; }
-      const f = sp.userData.life / sp.userData.maxLife; // 1 → 0
-      const v = sp.userData.vel;
-      if (v) {
-        sp.position.addScaledVector(v, dt);
-        v.y -= 4.5 * dt;                           // strong gravity: grains fall fast, don't billow
-        v.multiplyScalar(1 - Math.min(1, 5 * dt)); // air drag
-      }
-      if (sp.userData.spin) sp.material.rotation += sp.userData.spin * dt; // tumble
-      sp.material.opacity = 0.5 * f;               // light grains, not an opaque cloud
-      sp.scale.setScalar(sp.userData.size);        // fixed size — grains don't expand like smoke
+  _stepSkids(dt) {
+    for (const m of this._skids) {
+      if (!m.visible) continue;
+      m.userData.life -= dt;
+      if (m.userData.life <= 0) { m.visible = false; m.material.opacity = 0; continue; }
+      m.material.opacity = m.userData.peak * (m.userData.life / SKID_LIFE); // linear autofade
     }
   }
 
@@ -471,7 +524,6 @@ export class SceneRenderer {
 
   setTrack(track) {
     this.trackGroup.clear();
-    this._dustColor = new THREE.Color(DUST_COLOR); // asphalt grit grey (see DUST_COLOR)
     if (track.groundY != null) this.ground.position.y = track.groundY;
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
@@ -622,8 +674,28 @@ export class SceneRenderer {
     body.add(plate);
     this.scene.add(group);
 
-    // (Contact shadow is a real cast shadow now — car.castShadow above + road
-    // receiveShadow in setTrack — so it conforms to bumps/hills with no fake quad.)
+    // Soft CONTACT SHADOW: a dark blob that rides flat on the road directly under
+    // the car. The sun also casts a real shadow, but a single directional light
+    // throws it off to one side — leaving a bright gap under the chassis that
+    // reads as "hovering". This blob fills that gap so the car looks planted.
+    // Parented to the GROUP (not the leaning body) so it stays flush with the
+    // road — it inherits the road pitch/heading but never the steering lean.
+    group.updateWorldMatrix(true, true);
+    const fb = new THREE.Box3().setFromObject(car);
+    const footW = fb.max.x - fb.min.x, footL = fb.max.z - fb.min.z;
+    const contact = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: this._softTex, color: 0x000000, transparent: true, depthWrite: false,
+        opacity: CONTACT_OPACITY,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+      })
+    );
+    contact.rotation.x = -Math.PI / 2;               // lie in the group's road plane
+    contact.scale.set(footW * 1.55, footL * 1.3, 1); // a touch larger than the footprint
+    contact.position.y = -RIDE_HEIGHT + 0.006;       // hug the road just under the wheels
+    contact.renderOrder = -1;                         // under the dust/skid decals
+    group.add(contact);
 
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
@@ -676,8 +748,19 @@ export class SceneRenderer {
     const wheelbase = (frontWheels.length && backWheels.length)
       ? axleMid(frontWheels).distanceTo(axleMid(backWheels)) : 0.6;
 
+    // Tyre-contact width for the skidmarks — measured from a rear wheel so the
+    // track matches the model's tyre (the monster truck's fat tyres mark wider
+    // than the racer's). The wheel is a thin disc: its smallest horizontal extent
+    // is the tread width (the larger horizontal + the vertical are the diameter).
+    let skidWidth = SKID_WIDTH;
+    if (backWheels.length) {
+      const wb = new THREE.Box3().setFromObject(backWheels[0]).getSize(new THREE.Vector3());
+      skidWidth = Math.min(0.24, Math.max(0.06, Math.min(wb.x, wb.z)));
+    }
+
     const c = {
-      group, car, body, bodyBaseQuat, frontWheels, backWheels, wheelbase, plate, cam,
+      group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
+      wheelbase, skidWidth, plate, contact, cam,
       carIndex, anchorZ: anchor.z, plateY: anchor.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, finished: false, pose: null, init: false, lean: 0
@@ -719,10 +802,12 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     this.scene.remove(c.group);
-    // Dispose only what addCar created fresh per car (the name plate). The car mesh
-    // shares its geometry/material with the cached prototype — leave it for the next
-    // race. (The contact shadow is a real cast shadow now — nothing per-car to free.)
+    // Dispose what addCar created fresh per car (the name plate + contact-shadow
+    // blob). The car mesh shares its geometry/material with the cached prototype —
+    // leave it for the next race. The contact blob shares the pooled soft texture,
+    // so dispose its geometry/material but NOT the map.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
+    if (c.contact) { c.contact.geometry.dispose(); c.contact.material.dispose(); }
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     if (c.finishEl && c.finishEl.parentNode) c.finishEl.parentNode.removeChild(c.finishEl);
@@ -833,45 +918,56 @@ export class SceneRenderer {
     this._last = t;
     if (this.onFrame) this.onFrame(dt);
 
-    // Kick up small dust GRAINS from the ground directly under the wheels
-    // (never the car body). Each grain spawns at the wheel's contact patch
-    // (projected onto the road plane), pops up a touch and falls — a sparse, low
-    // trail that reads as dust, not a plume.
+    // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY
+    // while moving (so a new mark only ever bridges one short segment — no gaps),
+    // but a mark's opacity ramps smoothly from ZERO at the scuff threshold: a dead-
+    // straight cruise leaves nothing (the contact shadow grounds it there), gentle
+    // bends fade in faintly, and hard cornering / curb grinding marks clearly.
+    // Stamps are laid end-to-end (no overlap, so faint quads don't stack into
+    // darker blobs) at the car's tyre width → one even ribbon along the exact
+    // wheel path at any speed.
     for (const c of this.cars.values()) {
       if (!c.pose) continue;
-      const spd = c.spd || 0;
-      const up = c.pose.up, fwd = c.pose.forward;
-      const lat = fwd.clone().cross(up); // car-right
-      const turn = Math.min(1, Math.abs(c.steerAmt || 0)); // how hard we're cornering
-      const driving = spd > 0.2 && c.backWheels && c.backWheels.length;
-      if (driving || c.scrub) {
-        c.emitT = (c.emitT || 0) + dt;
-        // emit FASTER the faster we go and the harder we corner (sense of effort);
-        // the curb grind is the densest.
-        const interval = c.scrub ? 0.045 : Math.max(0.04, 0.13 - spd * 0.07 - turn * 0.03);
-        if (c.emitT >= interval) {
-          c.emitT = 0;
-          c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
-          // curb grind sprays from all four wheels; normal driving just the rears
-          const wheels = c.scrub ? [...c.backWheels, ...c.frontWheels] : c.backWheels;
-          // wider scatter when cornering/grinding so corners visibly kick up more
-          const spread = c.scrub ? 0.9 : 0.3 + turn * 0.6;
-          for (const w of wheels) {
-            // wheel position dropped straight down onto the road plane = contact patch
-            const gp = w.getWorldPosition(new THREE.Vector3());
-            gp.addScaledVector(up, -gp.clone().sub(c.pose.pos).dot(up));
-            const vel = new THREE.Vector3()
-              .addScaledVector(fwd, -(0.2 + spd * 0.8))          // longer trail the faster you go
-              .addScaledVector(up, 0.1 + Math.random() * 0.12)   // small pop, then falls
-              .addScaledVector(lat, (Math.random() - 0.5) * spread);
-            // bigger grains at speed / when grinding; randomised so it's not a stamp
-            const size = (c.scrub ? 0.07 : 0.045 + spd * 0.045) + Math.random() * 0.03;
-            this._emitDust(gp, this._dustColor, size, 0.25 + Math.random() * 0.12, vel);
-          }
+      const spd = c.spd || 0;                                // normalised 0..1 (per-car top speed)
+      if (spd <= 0.05 && !c.scrub) {
+        // stopped: forget every wheel's last contact so we never bridge across a stop
+        if (c.backWheels) for (const w of c.backWheels) w.userData.skidLast = null;
+        if (c.frontWheels) for (const w of c.frontWheels) w.userData.skidLast = null;
+        continue;
+      }
+      const up = c.pose.up;
+      const turn = Math.min(1, Math.abs(c.steerAmt || 0));   // how hard we're cornering
+      // slip 0..1: 1 grinding the curb, else how far past the scuff threshold the corner is
+      const slip = c.scrub ? 1 : Math.max(0, (turn - SKID_THRESH) / (1 - SKID_THRESH));
+      const strength = c.scrub ? 1 : Math.min(1, slip * 1.3); // 0 at threshold → smooth fade-in
+      c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
+      // curb grind marks all four wheels; otherwise just the loaded rears (clear
+      // the fronts so a later scrub doesn't bridge from a stale spot)
+      const wheels = c.scrub ? c.allWheels : c.backWheels;
+      if (!c.scrub && c.frontWheels) for (const w of c.frontWheels) w.userData.skidLast = null;
+      for (const w of wheels) {
+        // wheel position dropped onto the road plane under the car = contact patch
+        const gp = w.getWorldPosition(this._gpA);
+        gp.addScaledVector(up, -this._projV.copy(gp).sub(c.pose.pos).dot(up));
+        // `last` is a live reference to w.userData.skidLast, so last.copy(...) below
+        // advances the stored point in place.
+        let last = w.userData.skidLast;
+        if (!last) { w.userData.skidLast = gp.clone(); continue; } // first contact: seed it
+        const seg = this._segV.copy(gp).sub(last);
+        const dist = seg.length();
+        if (dist < SKID_SEG_MIN) continue;                  // not moved enough yet — accumulate
+        if (dist > SKID_SEG_MAX) { last.copy(gp); continue; } // respawn/teleport — don't streak across it
+        // only draw if the corner is hard enough to scuff; otherwise just keep the
+        // contact point marching forward so the next real mark bridges one segment
+        if (strength > 0.02) {
+          const dir = this._dirV.copy(seg).multiplyScalar(1 / dist);
+          const mid = this._midV.copy(last).addScaledVector(seg, 0.5);
+          this._emitSkidSeg(mid, up, dir, dist, c.skidWidth, strength); // end-to-end, no overlap
         }
+        last.copy(gp); // always advance (even on a straight) → next mark starts adjacent
       }
     }
-    this._stepPuffs(dt);
+    this._stepSkids(dt);
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
