@@ -351,27 +351,6 @@ export class SceneRenderer {
     // bananas, and cars (debug aid; see _drawDebug). Off by default.
     this._bbox = (() => { try { return new URLSearchParams(location.search).get('bbox') === '1'; } catch (_) { return false; } })();
     this._dbgStatic = []; // [{kind, s, lat, radius}] for the static props (filled in setTrack)
-    // PROTOTYPE — procedural road ribbon (?road=ribbon). Instead of baking Kenney
-    // GLB tiles, sweep a road cross-section along the centreline so road WIDTH and
-    // curb HEIGHT are independent knobs (the GLB tiles bake them together, and the
-    // uniform-scale tiling can't widen one without growing the other). Knobs:
-    //   ?roadw=<world units>  drivable width (default: the track's own; also widens
-    //                         the physics corridor so the car actually uses it)
-    //   ?curbh=<world units>  curb height — the "realistic kerb" lever (default 0.12,
-    //                         vs the GLB tiles' ~0.4 wall)
-    //   ?curbw / ?deck        curb lateral width / deck thickness (skirt drop)
-    const _p = new URLSearchParams(location.search);
-    const _num = (k, d) => { const v = parseFloat(_p.get(k)); return Number.isFinite(v) ? v : d; };
-    this._roadMode = _p.get('road') === 'ribbon' ? 'ribbon' : 'tiles';
-    this._ribbon = {
-      roadW: _p.has('roadw') ? _num('roadw', null) : null,
-      curbH: _num('curbh', 0.2),
-      curbW: _num('curbw', 0.22),
-      deck: _num('deck', 0.34),
-      stripe: _num('stripe', 0.32), // kerb red/white band length (world units) — smaller = higher freq
-      line: _num('line', 0.1),      // painted white edge-line width on the asphalt (world units)
-      gap: _num('gap', 0.07)        // asphalt gap between the kerb and the white edge line
-    };
     this._initThree();
     this._initOverlay();
     this._initParticles();
@@ -785,29 +764,28 @@ export class SceneRenderer {
     this._mergedMats = [];
   }
 
-  // PROTOTYPE — build the visible road + kerbs by sweeping a fixed cross-section
-  // along the centreline, plus a chunked road-surface proxy for the ground-conform
-  // raycast. Road WIDTH and kerb HEIGHT are independent constants here (the whole
-  // point): widening the road only pushes the kerb profile outward — the kerb height
-  // never grows into a wall the way uniformly scaling the GLB tiles does. One merged
-  // vertex-coloured mesh (asphalt + white edge lines + red/white kerb + side skirt);
-  // adds it to trackGroup and the collision chunks to `collide`.
+  // Build the visible road + kerbs by sweeping a fixed cross-section along the track
+  // centreline, plus a chunked road-surface proxy for the ground-conform raycast. The
+  // road is fully procedural (no GLB tiles): width comes from the track, the kerb is a
+  // low toy profile, so widening the road only pushes the kerb outward — it never grows
+  // into a wall the way scaling the old GLB tiles did. One merged vertex-coloured mesh
+  // (asphalt + white edge lines + red/white kerb + side skirt); adds it to trackGroup
+  // and the collision chunks to `collide`.
   _buildRibbonRoad(track, collide) {
     const cl = track.centerline;
     if (!cl || !cl.samples.length) return;
 
-    // Drivable width: the track's own by default; ?roadw widens it AND the physics
-    // corridor (maxLat is derived from track.roadWidth in Game.js) so the car
-    // actually uses the extra room instead of staying pinned to the old centre lane.
-    const drive = this._ribbon.roadW != null ? this._ribbon.roadW : (track.roadWidth || 3.6);
-    if (this._ribbon.roadW != null) track.roadWidth = drive;
-    const hw = drive / 2;                          // half drivable width (asphalt meets kerb here)
-    const cw = Math.max(0.02, this._ribbon.curbW); // kerb lateral width
-    const ch = Math.max(0, this._ribbon.curbH);    // kerb height (the "realistic kerb" lever)
-    const deck = Math.max(0, this._ribbon.deck);   // side-skirt drop (visual deck thickness)
-    const gap = Math.min(Math.max(0, this._ribbon.gap), hw * 0.3);       // asphalt gap kerb→line
-    const lw = Math.min(Math.max(0, this._ribbon.line), hw * 0.5 - gap); // painted edge-line width
-    const stripeLen = Math.max(0.05, this._ribbon.stripe);               // kerb band length (world units)
+    // Drivable width is the track's roadWidth — the same value the physics reads for
+    // the lateral corridor (maxLat in Game.js), so the car always fills the road. The
+    // rest is a fixed toy-kerb cross-section (all world units).
+    const drive = track.roadWidth || 5;
+    const hw = drive / 2;   // half drivable width (asphalt meets kerb here)
+    const cw = 0.22;        // kerb lateral width
+    const ch = 0.20;        // kerb height — low; a kerb, not a wall
+    const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
+    const gap = Math.min(0.07, hw * 0.3);          // asphalt gap between kerb and edge line
+    const lw = Math.min(0.10, hw * 0.5 - gap);     // painted white edge-line width
+    const stripeLen = 0.32;                        // kerb red/white band length (world units)
 
     // Resample the centreline at a uniform, fine arclength step. The raw samples are
     // spaced unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a
@@ -1008,14 +986,12 @@ export class SceneRenderer {
     const collide = new THREE.Group();
     const buckets = new Map(); // texture.uuid -> { srcMat, geoms: [] }
     const KEEP = ['position', 'normal', 'uv']; // attributes merged tiles must share
-    // PROTOTYPE: ribbon mode swaps the GLB ROAD tiles for a procedural road swept
-    // along the centreline (fills `collide` + trackGroup itself), then the loop
-    // below still bakes the non-road scenery (the start/finish gate) so the A/B
-    // differs only in the road. Everything after (grid, framing, shadow) runs on
-    // `collide.children` + centreline samples, so it's mode-agnostic.
-    if (this._roadMode === 'ribbon') this._buildRibbonRoad(track, collide);
+    // The road surface is procedural — swept along the centreline (fills `collide` +
+    // trackGroup itself). The loop below then bakes the remaining GLB scenery (the
+    // start/finish gate); the grid/framing/shadow afterwards run on `collide.children`
+    // + centreline samples regardless.
+    this._buildRibbonRoad(track, collide);
     for (const inst of track.instances) {
-      if (this._roadMode === 'ribbon' && inst.glb.startsWith('track')) continue;
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
 
