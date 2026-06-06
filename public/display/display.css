@@ -143,6 +143,22 @@ html, body {
    card would pop taller the moment renderQR swaps in the square bitmap. */
 #qr { display: block; width: min(22vw, 32vh); aspect-ratio: 1 / 1; image-rendering: pixelated; }
 
+/* Build/version badge — preview builds only (the server leaves it empty in
+   production, and :empty hides it). Pinned to the lobby's bottom-right corner,
+   deliberately quiet. Not uppercased so the commit hash stays lowercase hex. */
+.version-badge {
+  position: absolute; right: clamp(0.7rem, 1.4vw, 1.4rem); bottom: clamp(0.7rem, 1.4vh, 1.3rem);
+  z-index: 2;
+  font-weight: 700; font-size: clamp(0.7rem, 0.95vw, 0.88rem);
+  letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 2px solid var(--hairline); border-radius: var(--r-pill);
+  padding: 0.25rem 0.7rem;
+  pointer-events: none; user-select: none;
+}
+.version-badge:empty { display: none; }
+
 /* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
    and the race (split-screen). The lobby/race sections layer on top. ---- */
 /* Diorama backdrop (shown until a track is picked) — pin it to the viewport so it

@@ -22,11 +22,27 @@ const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
 const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
 const APP_VERSION = require('../package.json').version;
 const APP_ENV = String(process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development')).toLowerCase();
-const GIT_SHA = String(process.env.GIT_SHA || '').trim();
 const IS_PROD = APP_ENV === 'production';
+
+// CI injects GIT_SHA for preview/prod images (see .github/workflows/preview.yml).
+// Locally there's none, so fall back to the working tree's HEAD — guarded, so a
+// container without git/.git just yields '' and the badge stays hidden.
+function detectLocalSha() {
+  if (IS_PROD) return '';
+  try {
+    return require('child_process')
+      .execSync('git rev-parse HEAD', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'], timeout: 1000 })
+      .toString().trim();
+  } catch (_) { return ''; }
+}
+const GIT_SHA = String(process.env.GIT_SHA || '').trim() || detectLocalSha();
 
 function getShortSha(sha) { return sha ? sha.slice(0, 7) : null; }
 const VERSION_LABEL = APP_VERSION + (!IS_PROD && getShortSha(GIT_SHA) ? ' (#' + getShortSha(GIT_SHA) + ')' : '');
+// Visible build badge — only on preview (non-production) builds. Empty in prod so
+// the lobby's `.version-badge:empty` rule hides it entirely. (There is no prod
+// deploy yet; this keeps the badge off the day there is one.)
+const VERSION_BADGE = IS_PROD ? '' : VERSION_LABEL;
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -183,6 +199,7 @@ const server = http.createServer((req, res) => {
       const nonce = crypto.randomBytes(16).toString('base64');
       let text = data.toString('utf8');
       text = text.replace(/__APP_VERSION__/g, VERSION_LABEL)
+                 .replace(/__VERSION_BADGE__/g, VERSION_BADGE)
                  .replace(/__APP_V__/g, APP_VERSION)
                  .replace(/__CSP_NONCE__/g, nonce);
       data = Buffer.from(text);

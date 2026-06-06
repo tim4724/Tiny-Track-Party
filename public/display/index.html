@@ -81,6 +81,12 @@
     <div class="lobby__right">
       <div class="qr-card"><canvas id="qr"></canvas></div>
     </div>
+
+    <!-- Build badge: version + short commit, shown on preview (non-production)
+         builds only. The server fills __VERSION_BADGE__ with "x.y.z (#sha)" off
+         production and leaves it empty in prod; .version-badge:empty hides it.
+         Lives inside #lobby so it's gone once the race starts. -->
+    <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
   </section>
 
   <!-- Race: overlays over the persistent #scene backdrop -->
