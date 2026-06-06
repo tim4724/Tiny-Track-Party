@@ -51,10 +51,11 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
-  // Mirror display/main.js: always lay out >= 4 seats; empties are placeholders.
-  // Each filled seat shows the car that player picked (a real render); for the
-  // preview we vary the car per slot so the lobby shows a mix of models.
-  const MIN_SEATS = 4;
+  // Mirror display/main.js: lay out at least MAX_PLAYERS seats (locked to the same
+  // protocol constant so the preview grid matches the real lobby); empties are
+  // placeholders. Each filled seat shows the car that player picked (a real render);
+  // for the preview we vary the car per slot so the lobby shows a mix of models.
+  const MIN_SEATS = window.MAX_PLAYERS || 4;
   const MODELS = window.CAR_MODELS || [];
   function renderRoster(slots, hostPeerIndex) {
     const list = el('players'); list.innerHTML = '';
@@ -108,6 +109,57 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster(slots, hostSlot(slots));
     fakeJoin('TEST');
+    return;
+  }
+
+  // ---- track preview (used by the track gallery, /gallery-tracks.html) ----
+  // Shows the WHOLE layout under a slowly orbiting overview camera, with a small
+  // AI field driving it so you can read the line + scale. The cars are added
+  // cell:false so the renderer keeps its single overview camera (no split-screen),
+  // which is what makes the orbiting whole-track shot possible.
+  if (scenario === 'track') {
+    show('race');
+    el('results').classList.add('hidden');
+    ctx.scenePromise.then(() => setupTrackPreview()).catch((e) => console.warn('[TestHarness] scene load failed', e));
+
+    function setupTrackPreview() {
+      const { scene, track } = ctx;
+      scene.orbit = true; // slowly orbit the whole track for the gallery overview
+
+      const ids = [];
+      for (let i = 0; i < players; i++) ids.push(i);
+      let engine = new Game(ids, track, { onEvent() {} });
+      window.__engine = engine;
+
+      for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+      // cell:false → opponents in the shared world with no split-screen viewport,
+      // so _order stays empty and the overview camera frames the whole track.
+      ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { cell: false }));
+
+      const placeGrid = () => {
+        for (const c of engine.getSnapshot().cars) {
+          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
+        }
+      };
+      placeGrid();
+
+      const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
+      scene.onFrame = (dt) => {
+        for (const c of engine.cars.values()) {
+          if (!c.finished && c.pose) engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline));
+        }
+        engine.update(dt * 1000);
+        for (const c of engine.getSnapshot().cars) {
+          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
+        }
+        // Endless preview: once everyone finishes, reset and lap again.
+        if (engine.raceOver) {
+          engine = new Game(ids, track, { onEvent() {} });
+          window.__engine = engine;
+          placeGrid();
+        }
+      };
+    }
     return;
   }
 

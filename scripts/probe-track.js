@@ -45,10 +45,11 @@
   show('straight', ['straight']);
 
   for (const name of Object.keys(TRACKS)) {
-    const t = buildTrack(TRACKS[name]);
+    const def = TRACKS[name];
+    const t = buildTrack(def);
     let inv = 0;
     for (const s of t.centerline.samples) inv = Math.min(inv, s.up.y);
-    console.log(`\nTRACK "${name}": pieces=${TRACKS[name].length} closed=${t.closed} gap=${t.gap.toFixed(3)} ` +
+    console.log(`\nTRACK "${name}" (${def.name}): pieces=${def.pieces.length} closed=${t.closed} gap=${t.gap.toFixed(3)} ` +
       `len=${t.length.toFixed(1)} minUpY=${inv.toFixed(2)} (${inv < -0.5 ? 'INVERTS ✓' : 'no inversion'})`);
   }
 })();

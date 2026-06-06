@@ -12,6 +12,10 @@
 // the pieces identically.
 import * as THREE from 'three';
 import { Centerline } from './Centerline.js';
+// Track DEFINITIONS (the catalogue) live in a dependency-free data module so the
+// gallery + tests can read them without pulling in Three.js. We re-export the few
+// that callers still import via TrackBuilder; everything else imports from tracks.js.
+import { TRACKS, TRACK_LIST } from '../shared/tracks.js';
 
 const NUB_Y = -0.975;      // CONNECTOR-NUB height: where pieces physically mate.
                            // Frames MUST sit here so GLBs join seamlessly — the
@@ -111,7 +115,13 @@ const HILL_FULL = 1.0;       // hill-complete / corner-ramp climb
 const HILL_HALF = 0.5;       // hill-complete-half climb
 const BUMP_AMP = 0.5;        // bump hump / dip amplitude
 
-const smoothstep = (t) => t * t * (3 - 2 * t);
+// SMOOTHERSTEP (Perlin): zero FIRST and SECOND derivative at t=0 and t=1. Plain
+// smoothstep only zeroes the slope at the ends — its CURVATURE is maximal there,
+// so a hill's pitch snaps to its fastest rate the instant the ramp meets the flat
+// (the "weird rotation at the two ramp edges"). Smootherstep eases the curvature in
+// and out too, so the car pitches on/off a ramp smoothly. Same endpoints (0→1), so
+// climb totals + closure are unchanged. (The chicane curve keeps plain smoothstep.)
+const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 // Vertical quarter-loop: flat entry (+Z), exit pointing straight UP (+Y) with the
 // road facing back (-Z). Four of these + a lateral curve make a loop-the-loop
@@ -150,12 +160,12 @@ function bumpPiece(glb, amp) {
 }
 
 // Straight ramp with FLAT ends at different heights (hill-complete / -half): the
-// road eases up by `climb` over the span via a smoothstep, level at both ends.
+// road eases up by `climb` over the span via smootherstep, level at both ends.
 function hillPiece(glb, climb) {
   const N = 12, pts = [];
   for (let i = 0; i <= N; i++) {
     const t = i / N;
-    pts.push(v(0, Y + climb * smoothstep(t), Z0 + L * t));
+    pts.push(v(0, Y + climb * smootherstep(t), Z0 + L * t));
   }
   return { glb, entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(0, Y + climb, Z0 + L), v(0, 0, 1)), points: pts };
 }
@@ -165,7 +175,7 @@ function cornerRampPiece(glb, R, climb) {
   const cx = -R, cz = Z0, N = 16, pts = [];
   for (let i = 0; i <= N; i++) {
     const t = i / N, a = (Math.PI / 2) * t;
-    pts.push(v(cx + R * Math.cos(a), Y + climb * smoothstep(t), cz + R * Math.sin(a)));
+    pts.push(v(cx + R * Math.cos(a), Y + climb * smootherstep(t), cz + R * Math.sin(a)));
   }
   return { glb, entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(cx, Y + climb, cz + R), v(-1, 0, 0)), points: pts };
 }
@@ -190,12 +200,49 @@ function reverseSpec(spec) {
   };
 }
 
+// MIRROR a piece across its local X=0 plane (the plane through entry forward+up):
+// the OPPOSITE-hand version of a one-sided GLB. The Kenney curve only bends one
+// way (entry x=0 → exit x=-2), so the other-way chicane half is this reflection.
+// reverseSpec CANNOT produce it: an S-curve is point-symmetric, so traversing it
+// backwards gives the SAME bend. A reflection has negative determinant → it flips
+// the GLB's triangle winding, so buildTrack reflects its placement matrix and the
+// renderer (detecting that negative determinant) flips the tile's winding back and
+// double-sides the merged material (else the road's top face shades dark). Centerline
+// points are x-negated here so
+// they ride the reflected road; entry/exit are rebuilt as clean frames so the
+// chaining/closure is unchanged (curveR still nets +2, the mirror of curve's -2).
+function mirrorSpec(spec) {
+  // NOTE: valid only for tiles whose road surface is HORIZONTAL (up has no X
+  // component, fy.x == 0 — true for all current chicane uses). On a laterally
+  // BANKED piece fy.x != 0 and reflecting the reconstructed up would flip the bank
+  // the wrong way; handle banking explicitly before reusing this there.
+  const reflect = (m) => {
+    const p = new THREE.Vector3().setFromMatrixPosition(m);
+    const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3();
+    m.extractBasis(fx, fy, fz); // columns: x(lateral), y(up), z(forward)
+    // Guard the horizontal-surface assumption above: on a banked piece up tilts
+    // sideways (fy.x != 0) and this reflection would mirror the bank the wrong way.
+    // Fail loudly so a future banked tile is caught here, not as "weird geometry".
+    if (Math.abs(fy.x) > 1e-6) throw new Error('mirrorSpec: only horizontal road surfaces supported (banked piece needs explicit handling)');
+    // negate the X-component of position, forward, and up; frame() rebuilds a
+    // valid right-handed basis (same as reverseSpec — positions are nub-level).
+    return frame(v(-p.x, p.y, p.z), v(-fz.x, fz.y, fz.z), v(-fy.x, fy.y, fy.z));
+  };
+  return {
+    glb: spec.glb,
+    mirror: true,
+    entry: reflect(spec.entry),
+    exit: reflect(spec.exit),
+    points: spec.points.map((p) => v(-p.x, p.y, p.z))
+  };
+}
+
 export const PIECES = {
   straight: () => straightPiece('track-road-wide-straight'),
   cornerL: () => cornerLeftPiece('track-road-wide-corner-small', R_SMALL),
   cornerLargeL: () => cornerLeftPiece('track-road-wide-corner-large', R_LARGE),
   curve: () => curvePiece('track-road-wide-curve'),
-  curveR: () => curvePiece('track-road-wide-curve', 2), // mirror of curve
+  curveR: () => mirrorSpec(curvePiece('track-road-wide-curve')), // TRUE mirror (reflected GLB)
   // vertical quarter-arcs (loop-the-loop building blocks)
   bend: () => bendPiece('track-road-wide-straight-bend', R_BEND),
   bendLarge: () => bendPiece('track-road-wide-straight-bend-large', R_BEND_LARGE),
@@ -217,12 +264,18 @@ export const PIECES = {
   cornerLargeR: () => reverseSpec(cornerLeftPiece('track-road-wide-corner-large', R_LARGE))
 };
 
-// Build the track. `pieceList` is an array of PIECES keys. `opts.startGate`
-// (default true) straddles the start/finish line with the gate-finish arch.
+// Build the track. `track` is either a bare array of PIECES keys or a catalogue
+// descriptor ({ pieces, ... }) from shared/tracks.js. `opts.startGate` (default
+// true) straddles the start/finish line with the gate-finish arch.
 // Returns { instances:[{glb, matrix}], centerline, length, closed, gap }.
 // (The Centerline class lives in Centerline.js, imported above.)
-export function buildTrack(pieceList, opts = {}) {
+export function buildTrack(track, opts = {}) {
   const { startGate = true } = opts;
+  // Accept either the raw piece list or a descriptor that carries it.
+  const pieceList = Array.isArray(track) ? track : (track && track.pieces);
+  if (!Array.isArray(pieceList)) {
+    throw new Error('buildTrack: expected a PIECES-key array or a track descriptor with a .pieces array');
+  }
   let cursor = new THREE.Matrix4(); // start at world origin, +Z travel
   const startCursor = cursor.clone();
   const instances = [];
@@ -232,12 +285,17 @@ export function buildTrack(pieceList, opts = {}) {
   // stay consistent. Pieces chain in unscaled space (cursor), then scale out.
   const scaleM = new THREE.Matrix4().makeScale(SCALE, SCALE, SCALE);
   const overlapBack = new THREE.Matrix4().makeTranslation(0, 0, -OVERLAP);
+  const flipX = new THREE.Matrix4().makeScale(-1, 1, 1); // local X-reflection for mirrored tiles
   const tmpInv = new THREE.Matrix4();
   for (const key of pieceList) {
     if (!PIECES[key]) throw new Error(`Unknown track piece "${key}" (valid: ${Object.keys(PIECES).join(', ')})`);
     const spec = PIECES[key]();
     const place = cursor.clone().multiply(tmpInv.copy(spec.entry).invert());
-    instances.push({ glb: spec.glb, matrix: scaleM.clone().multiply(place) });
+    // Mirrored pieces (see mirrorSpec) reflect the GLB across its local X; their
+    // centerline points are already x-negated, so only the tile carries the flip.
+    const matrix = scaleM.clone().multiply(place);
+    if (spec.mirror) matrix.multiply(flipX);
+    instances.push({ glb: spec.glb, matrix });
 
     // Append centerline points. Skip the leading points that fall within the
     // OVERLAP region (where this piece backs into the previous one), so the
@@ -294,7 +352,8 @@ export function buildTrack(pieceList, opts = {}) {
     if (worldPts[i].distanceTo(welded[welded.length - 1]) >= MIN_SEG) welded.push(worldPts[i]);
   }
   if (welded.length > 3 && welded[welded.length - 1].distanceTo(welded[0]) < MIN_SEG) welded.pop();
-  worldPts.splice(0, worldPts.length, ...welded);
+  worldPts.length = 0;
+  for (const p of welded) worldPts.push(p); // rebuild in place (no spread → no arg-count limit)
 
   // Round the CURVATURE step at every straight<->curve joint into a short ramp.
   // Pieces meet with discontinuous curvature (a straight's kappa=0 abuts an arc's
@@ -308,7 +367,7 @@ export function buildTrack(pieceList, opts = {}) {
   // Smooth ONLY the horizontal plane (X, Z), and only on near-flat points. This
   // rounds the curvature step at flat straight↔corner joints (the original jitter
   // fix) WITHOUT touching the vertical profile. The elevation pieces author their
-  // own C1-smooth height (raised-cosine bumps, smoothstep hills — all flat-ended),
+  // own C1-smooth height (raised-cosine bumps, smootherstep hills — all flat-ended),
   // so the centreline already rides the GLB road exactly; smoothing Y would only
   // pull it OFF the road at the bump/hill transitions (float then clip). Steep /
   // looping points are skipped so the vertical loop keeps its true radius.
@@ -412,47 +471,9 @@ export function buildTrack(pieceList, opts = {}) {
   };
 }
 
-// A simple closed oval: long sides (4 straights) + short sides (2), 4 large
-// left corners (gentle radius → followable with a calm steering rate) → a
-// counter-clockwise rectangle that auto-closes.
-export const OVAL = [
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'cornerLargeL'
-];
-
-// =====================================================================
-// Track definitions. A track is just an ordered list of PIECES keys; the
-// builder chains them by connector frames and auto-closes the loop. Compose
-// reusable runs (a hill, a chicane) and splice them into a skeleton.
-// =====================================================================
-
-// "Grand Tour": the oval skeleton (4 large corners, auto-closing) with each
-// straight swapped for a wide-road FEATURE (speed bumps, half-hill, full hill).
-// Opposite sides match length so it closes like the oval, and every feature
-// returns to ground level, so the lap is net-flat. The start/finish straight
-// (gate) leads.
-export const GRAND_TOUR = [
-  // start/finish straight (gate here) → speed bumps   [4 straight-equivalents]
-  'straight', 'straight', 'bumpUp', 'bumpDown', 'cornerLargeL',
-  // short side: a half-height hill (up then down)     [2]
-  'hillHalfUp', 'hillHalfDown', 'cornerLargeL',
-  // far side: straights + a full hill                 [4]
-  'straight', 'straight', 'hillUp', 'hillDown', 'cornerLargeL',
-  // short side: more bumps                             [2]
-  'bumpUp', 'bumpDown', 'cornerLargeL'
-];
-
-// Registry of named, previewable tracks (display: ?track=<name>).
-export const TRACKS = {
-  oval: OVAL,
-  grand: GRAND_TOUR
-};
-
-// Human-facing catalog for the track selector. `id` keys into TRACKS; `name`
-// labels the tile in the picker. Order here is the order shown to players.
-export const TRACK_LIST = [
-  { id: 'oval', name: 'Sunny Oval', pieces: OVAL },
-  { id: 'grand', name: 'Grand Tour', pieces: GRAND_TOUR }
-];
+// Track definitions + the named registry live in the dependency-free catalogue
+// (../shared/tracks.js). Re-export what callers import via TrackBuilder: TRACKS
+// (the tests) and TRACK_LIST (main.js + the lobby track picker) — the flat
+// {id,name,pieces} list the picker renders (the display computes each track's
+// schematic SVG from its built geometry, so the picker needs no per-track art).
+export { TRACKS, TRACK_LIST };
