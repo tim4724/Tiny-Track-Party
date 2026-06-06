@@ -1,18 +1,16 @@
-// TrackBuilder — turns a list of track pieces into a drivable centerline ribbon
-// the car physics follows AND the renderer sweeps the procedural road over (see
-// SceneRenderer._buildRibbonRoad). There are no road meshes here — only geometry.
+// TrackBuilder — integrates a list of parametric SEGMENTS into a drivable centerline
+// ribbon the car physics follows AND the renderer sweeps the procedural road over
+// (see SceneRenderer._buildRibbonRoad). There are no road meshes here — only geometry.
 //
-// Pieces chain by connector frames: each piece has an ENTRY and EXIT frame in
-// its own local space (+Z = travel direction, +Y = up). We keep a world "cursor"
-// frame; for each piece we place it so its entry frame lands on the cursor, then
-// advance the cursor to the piece's exit frame.
-//
-// NOTE: the piece radii/grades and the connector-nub offsets below were originally
-// measured from the Kenney GLB track tiles so the centreline rode their surface.
-// The GLB road is gone, but we keep these values verbatim — they define the current
-// track shapes, and changing them would reshape every track. A future pass could
-// author the centreline directly (parametric segments / clothoids) and drop the
-// nub-mating machinery; for now it's retained purely to preserve the geometry.
+// A track is authored as a sequence of segments (see ../shared/tracks.js):
+//   straight(length, opts)         — a run, optionally with a lateral S-shift (chicane),
+//                                    an elevation `rise`, or a net-flat `bump`.
+//   arc(radius, angleDeg, opts)    — a turn; angle>0 = LEFT, <0 = RIGHT; optional `rise`.
+// We walk a scalar cursor (plan position, heading, elevation) forward, emitting samples
+// at a uniform arclength step. Heading 0 = +Z travel; +heading turns toward -X (left).
+// The frame's `up` is parallel-transported (rotation-minimizing) so it stays perpendicular
+// through hills, and the start/finish twist (holonomy) is unwound so `up` doesn't jump
+// at the seam. (Banking + variable width layer onto this in later passes.)
 import * as THREE from 'three';
 import { Centerline } from './Centerline.js';
 // Track DEFINITIONS (the catalogue) live in a dependency-free data module so the
@@ -20,356 +18,106 @@ import { Centerline } from './Centerline.js';
 // that callers still import via TrackBuilder; everything else imports from tracks.js.
 import { TRACKS, TRACK_LIST } from '../shared/tracks.js';
 
-const NUB_Y = -0.975;      // CONNECTOR-NUB height: where pieces physically mate.
-                           // Frames MUST sit here so GLBs join seamlessly — the
-                           // offset to the driving surface rotates into a GAP on
-                           // pitched/looping pieces if the frame is placed higher.
-const DRIVE_LIFT = 0.075;  // lift from the nub up to the driving surface
-const Y = NUB_Y + DRIVE_LIFT; // = -0.9 DRIVING-SURFACE height (road floor between
-                           // curbs). NB: -0.7 is the curb top; cars sit on -0.9.
-const L = 4.37;            // straight connector span (Z: -0.185 .. 4.185)
-const Z0 = -0.185;         // entry connector Z
-const R_SMALL = 2.185;     // corner-small turn radius
-const R_LARGE = 4.185;     // corner-large turn radius
-const ROAD_WIDTH = 2.5;    // drivable width (between kerbs), unscaled; ×SCALE = 5.0 world.
-                           // Single source of truth: read by the physics (maxLat in
-                           // Game.js) AND the procedural road ribbon in SceneRenderer.
-const GATE_WIDTH = 1.55;   // gate-finish arch span (measured) — scaled up to span the wide road
-const SCALE = 2;           // uniform world scale — bigger track, more room for the cars
-// Each connector nub protrudes ~0.185 past the road surface, so connector-to-
-// connector placement leaves a ~0.37 gap between road tops. Overlap each piece
-// into the previous by that much so the road is seamless (nubs interlock).
-const OVERLAP = 0.37;
+const SCALE = 2;           // unscaled track units → world (bigger track, more room for cars)
+const ROAD_WIDTH = 2.5;    // default drivable width (unscaled); ×SCALE = 5.0 world. The
+                           // single source of truth, read by the physics (maxLat in Game.js)
+                           // AND the procedural road ribbon in SceneRenderer.
+const GATE_WIDTH = 1.55;   // gate-finish arch span (measured) — scaled up to span the road
+const DS = 0.25;           // centerline sample step (unscaled) — uniform arclength spacing,
+                           // a few× finer than a kerb stripe and well above the min-seg floor.
 
+// SMOOTHERSTEP (Perlin): zero FIRST and SECOND derivative at the ends, so a grade eases
+// its pitch on/off smoothly (a plain ramp snaps to full pitch the instant it starts).
+const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+const smoothstep = (t) => t * t * (3 - 2 * t); // C1 ends — used for the chicane lateral shift
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
-// Build a frame matrix from position + forward (+Z) + up (+Y).
-function frame(pos, fwd, up = v(0, 1, 0)) {
-  const z = fwd.clone().normalize();
-  const x = up.clone().cross(z).normalize();
-  const y = z.clone().cross(x).normalize();
-  return new THREE.Matrix4().makeBasis(x, y, z).setPosition(pos);
-}
+// Plan-frame basis at heading θ: travel direction and lateral-LEFT direction (the
+// inward normal of a left turn). d = dL/dθ, so rotating L by φ gives L(θ+φ) — which is
+// what makes the closed-form arc below exact.
+const dirX = (th) => -Math.sin(th), dirZ = (th) => Math.cos(th);
+const latX = (th) => -Math.cos(th), latZ = (th) => -Math.sin(th);
+const DEG = Math.PI / 180;
 
-// Connector frame at the NUB. Pieces are authored along the DRIVING surface, but
-// they physically mate at the connector nub, which sits DRIVE_LIFT below the road
-// along the road normal (-up). Anchoring the frame there — not at the driving
-// height — is what makes GLBs join seamlessly on pitched/looping pieces: a frame
-// placed at driving height carries an offset that rotates into a GAP once the
-// connector tilts out of horizontal (the cause of the broken loop).
-function conn(driveAnchor, fwd, up = v(0, 1, 0)) {
-  const u = up.clone().normalize();
-  return frame(driveAnchor.clone().addScaledVector(u, -DRIVE_LIFT), fwd, u);
-}
-
-// ---- Piece registry. Each piece returns local entry/exit frames + a polyline
-// of local centerline points (entry → exit inclusive). ----
-function straightPiece(len = L) {
-  const pts = [];
-  const N = 6;
-  for (let i = 0; i <= N; i++) pts.push(v(0, Y, Z0 + (len) * (i / N)));
-  return {
-    entry: conn(v(0, Y, Z0), v(0, 0, 1)),
-    exit: conn(v(0, Y, Z0 + len), v(0, 0, 1)),
-    points: pts
-  };
-}
-
-// 90° left turn (+Z in, -X out). Arc center at (-R, _, Z0); sweep +X→+Z.
-function cornerLeftPiece(R) {
-  const cx = -R, cz = Z0;
-  const N = 16, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const a = (Math.PI / 2) * (i / N);
-    pts.push(v(cx + R * Math.cos(a), Y, cz + R * Math.sin(a)));
-  }
-  return {
-    entry: conn(v(0, Y, Z0), v(0, 0, 1)),
-    exit: conn(v(cx, Y, cz + R), v(-1, 0, 0)),
-    points: pts
-  };
-}
-
-// S-bend lane shift: +Z in and out, `shift` lateral in X over the span,
-// smoothstepped so it eases in and out. shift<0 drifts left, shift>0 right —
-// `curveR` is just the mirror (see PIECES).
-function curvePiece(shift = -2) {
-  const N = 14, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    const sm = t * t * (3 - 2 * t); // smoothstep
-    pts.push(v(shift * sm, Y, Z0 + L * t));
-  }
-  return {
-    entry: conn(v(0, Y, Z0), v(0, 0, 1)),
-    exit: conn(v(shift, Y, Z0 + L), v(0, 0, 1)),
-    points: pts
-  };
-}
-
-// ---- 3D / elevation pieces ----
-// Connector heights/radii are MEASURED from the GLB vertices (see
-// scripts/inspect-piece.js + profile-piece.js). All are expressed at the Y=-0.9
-// driving height so they chain against the flat pieces above.
-const R_BEND = 2.16;         // straight-bend vertical-arc radius
-const R_BEND_LARGE = 4.16;   // straight-bend-large vertical-arc radius
-const HILL_FULL = 1.0;       // hill-complete / corner-ramp climb
-const HILL_HALF = 0.5;       // hill-complete-half climb
-const BUMP_AMP = 0.5;        // bump hump / dip amplitude
-
-// SMOOTHERSTEP (Perlin): zero FIRST and SECOND derivative at t=0 and t=1. Plain
-// smoothstep only zeroes the slope at the ends — its CURVATURE is maximal there,
-// so a hill's pitch snaps to its fastest rate the instant the ramp meets the flat
-// (the "weird rotation at the two ramp edges"). Smootherstep eases the curvature in
-// and out too, so the car pitches on/off a ramp smoothly. Same endpoints (0→1), so
-// climb totals + closure are unchanged. (The chicane curve keeps plain smoothstep.)
-const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
-
-// Vertical quarter-loop: flat entry (+Z), exit pointing straight UP (+Y) with the
-// road facing back (-Z). Four of these + a lateral curve make a loop-the-loop
-// whose exit clears its entry. The arc lies in the local Y–Z plane about a centre
-// on the NUB datum; the centreline rides the DRIVING arc (radius R - DRIVE_LIFT,
-// the nub arc lifted toward centre), and conn() drops the connector frames back
-// to the nub so the bend tiles mate exactly (the original frame-at-driving-height
-// version left a gap that grew through the loop — the disconnected pieces).
-function bendPiece(R) {
-  const cy = NUB_Y + R, cz = Z0;          // arc centre, on the nub datum
-  const r = R - DRIVE_LIFT;               // driving-surface radius (lifted toward centre)
-  const N = 12, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const a = (Math.PI / 2) * (i / N);
-    pts.push(v(0, cy - r * Math.cos(a), cz + r * Math.sin(a)));
-  }
-  return {
-    entry: conn(pts[0].clone(), v(0, 0, 1), v(0, 1, 0)),
-    exit: conn(pts[N].clone(), v(0, 1, 0), v(0, 0, -1)), // heading +Y, road normal -Z
-    points: pts
-  };
-}
-
-// Gentle hump (net-flat ends): the road rises (bump-up) or dips (bump-down) by
-// BUMP_AMP at the middle and returns to the entry height. A RAISED COSINE (not a
-// plain sine) so the slope is ZERO at both connectors — a sine starts with a
-// non-zero slope, kinking the road at every flat→bump joint (the bumpy ride).
-function bumpPiece(amp) {
-  const N = 10, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    pts.push(v(0, Y + amp * (1 - Math.cos(2 * Math.PI * t)) / 2, Z0 + L * t));
-  }
-  return { entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(0, Y, Z0 + L), v(0, 0, 1)), points: pts };
-}
-
-// Straight ramp with FLAT ends at different heights (hill-complete / -half): the
-// road eases up by `climb` over the span via smootherstep, level at both ends.
-function hillPiece(climb) {
-  const N = 12, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    pts.push(v(0, Y + climb * smootherstep(t), Z0 + L * t));
-  }
-  return { entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(0, Y + climb, Z0 + L), v(0, 0, 1)), points: pts };
-}
-
-// 90° left turn that also climbs by `climb`, level at both ends (corner-*-ramp).
-function cornerRampPiece(R, climb) {
-  const cx = -R, cz = Z0, N = 16, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, a = (Math.PI / 2) * t;
-    pts.push(v(cx + R * Math.cos(a), Y + climb * smootherstep(t), cz + R * Math.sin(a)));
-  }
-  return { entry: conn(v(0, Y, Z0), v(0, 0, 1)), exit: conn(v(cx, Y + climb, cz + R), v(-1, 0, 0)), points: pts };
-}
-
-// Traverse a piece BACKWARD: its exit connector becomes the entry. A climbing
-// piece thus becomes a descending one (same GLB, driven the other way), which is
-// how the loop returns to ground level — the kit ships no dedicated "down" tiles.
-function reverseSpec(spec) {
-  const ex = new THREE.Vector3(), ey = new THREE.Vector3(), ez = new THREE.Vector3();
-  const xx = new THREE.Vector3(), xy = new THREE.Vector3(), xz = new THREE.Vector3();
-  spec.entry.extractBasis(ex, ey, ez);
-  spec.exit.extractBasis(xx, xy, xz);
-  const ePos = new THREE.Vector3().setFromMatrixPosition(spec.entry);
-  const xPos = new THREE.Vector3().setFromMatrixPosition(spec.exit);
-  // Use frame(), not conn(): these positions come straight off the already-conn'd
-  // entry/exit matrices, so they sit at the nub already — no DRIVE_LIFT re-applied.
-  return {
-    entry: frame(xPos, xz.clone().negate(), xy), // at old exit, travel reversed, same road normal
-    exit: frame(ePos, ez.clone().negate(), ey),
-    points: spec.points.slice().reverse()
-  };
-}
-
-// MIRROR a piece across its local X=0 plane (the plane through entry forward+up):
-// the OPPOSITE-hand version of a one-sided GLB. The Kenney curve only bends one
-// way (entry x=0 → exit x=-2), so the other-way chicane half is this reflection.
-// reverseSpec CANNOT produce it: an S-curve is point-symmetric, so traversing it
-// backwards gives the SAME bend. A reflection has negative determinant → it flips
-// the GLB's triangle winding, so buildTrack reflects its placement matrix and the
-// renderer (detecting that negative determinant) flips the tile's winding back and
-// double-sides the merged material (else the road's top face shades dark). Centerline
-// points are x-negated here so
-// they ride the reflected road; entry/exit are rebuilt as clean frames so the
-// chaining/closure is unchanged (curveR still nets +2, the mirror of curve's -2).
-function mirrorSpec(spec) {
-  // NOTE: valid only for tiles whose road surface is HORIZONTAL (up has no X
-  // component, fy.x == 0 — true for all current chicane uses). On a laterally
-  // BANKED piece fy.x != 0 and reflecting the reconstructed up would flip the bank
-  // the wrong way; handle banking explicitly before reusing this there.
-  const reflect = (m) => {
-    const p = new THREE.Vector3().setFromMatrixPosition(m);
-    const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3();
-    m.extractBasis(fx, fy, fz); // columns: x(lateral), y(up), z(forward)
-    // Guard the horizontal-surface assumption above: on a banked piece up tilts
-    // sideways (fy.x != 0) and this reflection would mirror the bank the wrong way.
-    // Fail loudly so a future banked tile is caught here, not as "weird geometry".
-    if (Math.abs(fy.x) > 1e-6) throw new Error('mirrorSpec: only horizontal road surfaces supported (banked piece needs explicit handling)');
-    // negate the X-component of position, forward, and up; frame() rebuilds a
-    // valid right-handed basis (same as reverseSpec — positions are nub-level).
-    return frame(v(-p.x, p.y, p.z), v(-fz.x, fz.y, fz.z), v(-fy.x, fy.y, fy.z));
-  };
-  return {
-    entry: reflect(spec.entry),
-    exit: reflect(spec.exit),
-    points: spec.points.map((p) => v(-p.x, p.y, p.z))
-  };
-}
-
-export const PIECES = {
-  straight: () => straightPiece(),
-  cornerL: () => cornerLeftPiece(R_SMALL),
-  cornerLargeL: () => cornerLeftPiece(R_LARGE),
-  curve: () => curvePiece(),
-  curveR: () => mirrorSpec(curvePiece()), // TRUE mirror (reflected across the centreline)
-  // vertical quarter-arcs (loop-the-loop building blocks)
-  bend: () => bendPiece(R_BEND),
-  bendLarge: () => bendPiece(R_BEND_LARGE),
-  // gentle humps (net-flat)
-  bumpUp: () => bumpPiece(BUMP_AMP),
-  bumpDown: () => bumpPiece(-BUMP_AMP),
-  // straight ramps (flat ends, different heights) + their descents
-  hillUp: () => hillPiece(HILL_FULL),
-  hillDown: () => reverseSpec(hillPiece(HILL_FULL)),
-  hillHalfUp: () => hillPiece(HILL_HALF),
-  hillHalfDown: () => reverseSpec(hillPiece(HILL_HALF)),
-  // ramped corners (turn + climb) + their descents
-  rampCornerUp: () => cornerRampPiece(R_SMALL, HILL_FULL),
-  rampCornerDown: () => reverseSpec(cornerRampPiece(R_SMALL, HILL_FULL)),
-  rampCornerLargeUp: () => cornerRampPiece(R_LARGE, HILL_FULL),
-  rampCornerLargeDown: () => reverseSpec(cornerRampPiece(R_LARGE, HILL_FULL)),
-  // right turns (same arcs driven backward) — for chicanes / closing the circuit
-  cornerR: () => reverseSpec(cornerLeftPiece(R_SMALL)),
-  cornerLargeR: () => reverseSpec(cornerLeftPiece(R_LARGE))
-};
-
-// Build the track. `track` is either a bare array of PIECES keys or a catalogue
-// descriptor ({ pieces, ... }) from shared/tracks.js. `opts.startGate` (default
-// true) straddles the start/finish line with the gate-finish arch.
+// Build the track. `track` is a bare segment array OR a catalogue descriptor
+// ({ segments, width, ... }) from shared/tracks.js. `opts.startGate` (default true)
+// straddles the start/finish line with the gate-finish arch.
 // Returns { instances, centerline, length, closed, gap, roadWidth, groundY }.
 // `instances` carries only non-road scenery GLBs to place (currently the start/finish
 // gate); the road surface itself is generated procedurally from `centerline`.
-// (The Centerline class lives in Centerline.js, imported above.)
 export function buildTrack(track, opts = {}) {
   const { startGate = true } = opts;
-  // Accept either the raw piece list or a descriptor that carries it.
-  const pieceList = Array.isArray(track) ? track : (track && track.pieces);
-  if (!Array.isArray(pieceList)) {
-    throw new Error('buildTrack: expected a PIECES-key array or a track descriptor with a .pieces array');
+  const segments = Array.isArray(track) ? track : (track && track.segments);
+  if (!Array.isArray(segments)) {
+    throw new Error('buildTrack: expected a segment array or a track descriptor with a .segments array');
   }
-  let cursor = new THREE.Matrix4(); // start at world origin, +Z travel
-  const startCursor = cursor.clone();
-  const instances = [];
-  const worldPts = [];
+  const trackWidth = (track && !Array.isArray(track) && track.width) || ROAD_WIDTH;
 
-  // Pieces chain in unscaled space (the cursor frame); centreline points scale out to
-  // world by SCALE below. There are no per-piece meshes to place — the visible road is
-  // generated procedurally from this centreline by the renderer (see _buildRibbonRoad).
-  const overlapBack = new THREE.Matrix4().makeTranslation(0, 0, -OVERLAP);
-  const tmpInv = new THREE.Matrix4();
-  for (const key of pieceList) {
-    if (!PIECES[key]) throw new Error(`Unknown track piece "${key}" (valid: ${Object.keys(PIECES).join(', ')})`);
-    const spec = PIECES[key]();
-    const place = cursor.clone().multiply(tmpInv.copy(spec.entry).invert());
+  // ---- Forward integrate the centerline (unscaled plan coords) ----
+  let X = 0, Z = 0, theta = 0, elev = 0;     // cursor
+  const worldPts = [v(0, 0, 0)];             // start at origin; scaled to world after the walk
 
-    // Append centerline points. Skip the leading points that fall within the
-    // OVERLAP region (where this piece backs into the previous one), so the
-    // centerline never steps backward at a joint. Skipping just one vertex is
-    // not enough where the first segment is shorter than OVERLAP (corners are
-    // sampled in equal angle steps → short first segment) — that back-step is
-    // the "hiccup" felt entering curves.
-    let start = 0;
-    if (worldPts.length > 0) {
-      start = 1;
-      let acc = 0;
-      for (let i = 1; i < spec.points.length; i++) {
-        acc += spec.points[i].distanceTo(spec.points[i - 1]);
-        if (acc >= OVERLAP) { start = i; break; }
+  for (const seg of segments) {
+    if (seg.kind === 'straight') {
+      const len = seg.length, lat = seg.lateral || 0, rise = seg.rise || 0, bump = seg.bump || 0;
+      const N = Math.max(1, Math.round(len / DS));
+      const dx = dirX(theta), dz = dirZ(theta), lx = latX(theta), lz = latZ(theta);
+      const x0 = X, z0 = Z, y0 = elev;
+      for (let i = 1; i <= N; i++) {
+        const f = i / N, off = lat * smoothstep(f);
+        worldPts.push(v(
+          x0 + dx * len * f + lx * off,
+          y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
+          z0 + dz * len * f + lz * off
+        ));
       }
+      X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
+    } else if (seg.kind === 'arc') {
+      const R = seg.radius, ang = (seg.angle || 0) * DEG, rise = seg.rise || 0;
+      const sgn = Math.sign(ang) || 1, arcLen = R * Math.abs(ang);
+      const N = Math.max(1, Math.round(arcLen / DS));
+      const th0 = theta, x0 = X, z0 = Z, y0 = elev;
+      // point(φ) = P0 + R·sgn·(L(θ0) − L(θ0+φ)) — exact arc, left/right via sgn.
+      for (let i = 1; i <= N; i++) {
+        const f = i / N, th = th0 + ang * f;
+        worldPts.push(v(
+          x0 + R * sgn * (latX(th0) - latX(th)),
+          y0 + rise * smootherstep(f),
+          z0 + R * sgn * (latZ(th0) - latZ(th))
+        ));
+      }
+      X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
+      Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
+      elev = y0 + rise; theta = th0 + ang;
+    } else {
+      throw new Error(`Unknown segment kind "${seg && seg.kind}" (expected "straight" or "arc")`);
     }
-    for (let i = start; i < spec.points.length; i++) {
-      worldPts.push(spec.points[i].clone().applyMatrix4(place).multiplyScalar(SCALE));
-    }
-    // Advance to the exit, then pull back along travel so the NEXT piece overlaps
-    // this one's connector region — closes the road-surface gap at every joint.
-    cursor = place.clone().multiply(spec.exit).multiply(overlapBack);
   }
 
-  // Closure check: how far is the final cursor from where we started?
-  const gap = new THREE.Vector3().setFromMatrixPosition(cursor)
-    .distanceTo(new THREE.Vector3().setFromMatrixPosition(startCursor));
+  // Closure: distance from the cursor back to the origin (unscaled). The last emitted
+  // point IS the cursor, so on a closed loop it duplicates the start — drop it so the
+  // ring has no zero-length seam segment (the wrap last→first then spans one step).
+  const gap = Math.hypot(X, elev, Z);
   const closed = gap < 0.5;
+  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) worldPts.pop();
 
-  // If closed, trim trailing points that overshoot PAST the start point — the
-  // overlap makes the final piece run a little past where the first piece began,
-  // which would back-step when the loop wraps (the hiccup at the start/finish).
-  if (closed && worldPts.length > 3) {
-    const p0 = worldPts[0];
-    const startTan = worldPts[1].clone().sub(p0).normalize();
-    while (worldPts.length > 3 &&
-           worldPts[worldPts.length - 1].clone().sub(p0).dot(startTan) > 0) {
-      worldPts.pop();
-    }
-  }
+  // Scale to world.
+  for (const p of worldPts) p.multiplyScalar(SCALE);
 
-  // Weld out degenerate-short segments. The OVERLAP skip and the closure trim
-  // above each leave forward progress intact but can land a vertex a few cm from
-  // its neighbour: a corner's first kept vertex falling just past the joint, or
-  // the loop's final vertex landing almost on top of the first. The car crosses
-  // such a stub in a single frame, snapping its tangent ~6° in one step — that's
-  // the twitch felt entering a curve. Drop any vertex within MIN_SEG of its kept
-  // predecessor (and the last vertex if it collapses onto the start). Every
-  // intended sample spacing scales with SCALE and is far larger (the smallest,
-  // a small-corner arc step, is ~0.43 world), so only joint/seam stubs are cut.
-  const MIN_SEG = 0.125 * SCALE;
-  const welded = [worldPts[0]];
-  for (let i = 1; i < worldPts.length; i++) {
-    if (worldPts[i].distanceTo(welded[welded.length - 1]) >= MIN_SEG) welded.push(worldPts[i]);
-  }
-  if (welded.length > 3 && welded[welded.length - 1].distanceTo(welded[0]) < MIN_SEG) welded.pop();
-  worldPts.length = 0;
-  for (const p of welded) worldPts.push(p); // rebuild in place (no spread → no arg-count limit)
-
-  // Round the CURVATURE step at every straight<->curve joint into a short ramp.
-  // Pieces meet with discontinuous curvature (a straight's kappa=0 abuts an arc's
-  // kappa=1/R). The spline that sampleAt fits through that step overshoots and
-  // even briefly reverses curvature right at the joint — the car gets nudged the
-  // wrong way then snaps back, the jitter felt entering a curve. A few light
-  // Laplacian passes (nudge each point toward the midpoint of its neighbours)
-  // spread the step over a short transition. Kept light so steady-corner
-  // curvature is preserved and the racing line shifts only a few tenths of a unit.
-  //
-  // Smooth ONLY the horizontal plane (X, Z), and only on near-flat points. This
-  // rounds the curvature step at flat straight↔corner joints (the original jitter
-  // fix) WITHOUT touching the vertical profile. The elevation pieces author their
-  // own C1-smooth height (raised-cosine bumps, smootherstep hills — all flat-ended),
-  // so the centreline already rides the GLB road exactly; smoothing Y would only
-  // pull it OFF the road at the bump/hill transitions (float then clip). Steep /
-  // looping points are skipped so the vertical loop keeps its true radius.
+  // Round the CURVATURE STEP at every straight↔arc joint. A straight (κ=0) abutting an
+  // arc (κ=1/R) is a curvature discontinuity; the Catmull-Rom spline sampleAt fits
+  // through it overshoots and briefly reverses curvature right at the joint (the car
+  // gets nudged the wrong way then snaps back). A few light Laplacian passes (nudge each
+  // point toward the midpoint of its neighbours) spread the step over a short transition.
+  // Smooth ONLY the horizontal plane (X,Z) and only on near-flat points, so the vertical
+  // profile (hills/bumps — already C1 via smootherstep) is untouched. Closure is computed
+  // from the cursor above, so this never affects it. (Clothoid transitions will replace
+  // this with a true spiral in a later pass.)
   const SMOOTH_LAMBDA = 0.3, SMOOTH_PASSES = 4, ringN = worldPts.length;
   const at = (i) => worldPts[(i % ringN + ringN) % ringN];
   const steep = worldPts.map((_, i) => {
     const t = at(i + 1).clone().sub(at(i - 1));
-    return Math.abs(t.y) > 0.3 * (t.length() || 1); // climbing/looping → leave the geometry alone
+    return Math.abs(t.y) > 0.3 * (t.length() || 1); // climbing → leave the geometry alone
   });
   for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
     const ring = worldPts.map((p) => p.clone()); // Jacobi: read the pre-pass ring
@@ -380,23 +128,17 @@ export function buildTrack(track, opts = {}) {
       worldPts[i].z += ((a.z + b.z) * 0.5 - worldPts[i].z) * SMOOTH_LAMBDA;
     }
   }
-
-  // Build samples with tangents (central differences around the loop), up=+Y,
-  // lateral = tangent × up, and cumulative arclength.
   const n = worldPts.length;
+
   // Tangents via central differences around the closed ring.
   const tangents = [];
   for (let i = 0; i < n; i++) {
-    const prev = worldPts[(i - 1 + n) % n];
-    const next = worldPts[(i + 1) % n];
-    tangents.push(next.clone().sub(prev).normalize());
+    tangents.push(worldPts[(i + 1) % n].clone().sub(worldPts[(i - 1 + n) % n]).normalize());
   }
-  // Parallel-transport (rotation-minimizing frame) an `up` vector around the ring
-  // so the ribbon carries REAL 3D orientation: it stays ~+Y on flat track, and
-  // rotates with the road through a vertical loop (fully inverted at the top).
-  // The old code hardcoded up=+Y — a flat-only assumption that can't represent a
-  // loop-the-loop. Each step rotates `up` by the same rotation that turns the
-  // previous tangent into the current one, then re-orthogonalizes against drift.
+  // Parallel-transport (rotation-minimizing frame) an `up` vector around the ring so the
+  // ribbon carries REAL 3D orientation: ~+Y on flat track, tilting to stay perpendicular
+  // through hills. Each step rotates `up` by the rotation that turns the previous tangent
+  // into the current one, then re-orthogonalizes against drift.
   let up = v(0, 1, 0);
   up.addScaledVector(tangents[0], -up.dot(tangents[0]));
   if (up.lengthSq() < 1e-6) up = v(0, 0, 1).addScaledVector(tangents[0], -tangents[0].z);
@@ -413,10 +155,7 @@ export function buildTrack(track, opts = {}) {
     up.addScaledVector(t1, -up.dot(t1)).normalize();
     ups.push(up.clone());
   }
-  // Any residual twist after a full lap (frame holonomy) would jump `up` at the
-  // start/finish seam. Measure it (the signed angle, about the start tangent,
-  // from the transported-back-to-start up to the initial up) and unwind it evenly
-  // — rotating each frame about ITS OWN tangent keeps `up` perpendicular for free.
+  // Unwind the residual twist (frame holonomy) evenly so `up` doesn't jump at the seam.
   const t0 = tangents[0];
   const resid = Math.atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
   for (let i = 0; i < n; i++) {
@@ -427,8 +166,7 @@ export function buildTrack(track, opts = {}) {
   const samples = [];
   let s = 0, minY = Infinity;
   for (let i = 0; i < n; i++) {
-    const tangent = tangents[i];
-    const u = ups[i];
+    const tangent = tangents[i], u = ups[i];
     const lateral = tangent.clone().cross(u).normalize();
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
     minY = Math.min(minY, worldPts[i].y);
@@ -436,23 +174,16 @@ export function buildTrack(track, opts = {}) {
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
 
-  // Start/finish gate: the gate-finish arch straddling the line at s=0. The kit's
-  // gate is sized for the narrow track, so scale it to span the wide road and
-  // orient it across the lane (X=lateral, Y=up, Z=travel), base on the surface.
+  const instances = [];
+  // Start/finish gate: the gate-finish arch straddling the line at s=0, oriented across
+  // the lane (X=lateral, Y=up, Z=travel), legs straddling the road onto the grass.
   if (startGate) {
     const g = samples[0];
-    // Scale the arch so its LEGS straddle the road on the grass and it reads as a grand
-    // bridge over the track. Span = the full drivable road plus an overhang each side
-    // so the legs land on grass clear of the kerbs. GATE_WIDTH is the arch's measured
-    // outer leg-to-leg span.
     const LEG_OVERHANG = 0.9; // how far each leg lands beyond the road edge, onto the grass
-    const GS = (ROAD_WIDTH * SCALE + 2 * LEG_OVERHANG) / GATE_WIDTH; // straddle the full road
+    const GS = (trackWidth * SCALE + 2 * LEG_OVERHANG) / GATE_WIDTH; // straddle the full road
     const m = new THREE.Matrix4().makeBasis(g.lateral.clone(), g.up.clone(), g.tangent.clone());
     m.scale(new THREE.Vector3(GS, GS, GS));
-    // Plant the legs at the ROAD surface (the gate model's origin is at its base), so
-    // the arch sits at track level — not sunk to the grass plane, which is a slab-height
-    // (~0.3) BELOW the road and made the gate read as lower than the track.
-    m.setPosition(g.pos.clone().addScaledVector(g.up, -0.02 * SCALE)); // a hair into the road so it looks planted
+    m.setPosition(g.pos.clone().addScaledVector(g.up, -0.02 * SCALE)); // a hair into the road
     instances.push({ glb: 'gate-finish', matrix: m });
   }
 
@@ -460,14 +191,12 @@ export function buildTrack(track, opts = {}) {
     instances,
     centerline: new Centerline(samples, length),
     length, closed, gap,
-    roadWidth: ROAD_WIDTH * SCALE,
-    groundY: minY - 0.3 // grass plane just under the road slab
+    roadWidth: trackWidth * SCALE,
+    groundY: minY - 0.3 // grass plane just under the road
   };
 }
 
 // Track definitions + the named registry live in the dependency-free catalogue
 // (../shared/tracks.js). Re-export what callers import via TrackBuilder: TRACKS
-// (the tests) and TRACK_LIST (main.js + the lobby track picker) — the flat
-// {id,name,pieces} list the picker renders (the display computes each track's
-// schematic SVG from its built geometry, so the picker needs no per-track art).
+// (the tests) and TRACK_LIST (main.js + the lobby track picker).
 export { TRACKS, TRACK_LIST };

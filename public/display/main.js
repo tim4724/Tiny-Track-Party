@@ -21,7 +21,7 @@ const show = (name) => { for (const k of Object.keys(screens)) screens[k].classL
 // track picker renders; `built` keeps the geometry for the race + the 3D preview.
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
 const built = new Map(TRACK_LIST.map((t) => {
-  const b = buildTrack(t.pieces);
+  const b = buildTrack(t.segments);
   // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
   // now that the built geometry knows the lap length. Read by the engine (spin-out
   // detection) and the renderer (drawing the puddle + cones), both off track.hazards.

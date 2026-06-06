@@ -22,21 +22,27 @@ test.before(async () => {
 // chicane, so its curvature never legitimately reverses (the "curvature never
 // abruptly reverses" check); GRAND_TOUR is a flat-closing rectangle that is hills
 // end-to-end (the elevation / orthonormal-frame / seam-holonomy checks).
+// Parametric segment DSL (local, since this CommonJS test can't import the ES-module
+// helpers at module-eval time). angle>0 = LEFT turn.
+const L = 4.0, RL = 4.185;
+const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
+const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
+const run = (n, opts) => Array.from({ length: n }, () => straight(L, opts));
+// OVAL: a 12/5/12/5 rectangle, all-LEFT sweeping corners — the only no-chicane loop, so
+// its curvature never legitimately reverses (the curvature-reversal check below).
 const OVAL = [
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'straight', 'straight', 'straight', 'straight', 'cornerLargeL'
+  ...run(12), arc(RL, 90), ...run(5), arc(RL, 90),
+  ...run(12), arc(RL, 90), ...run(5), arc(RL, 90)
 ];
+// GRAND_TOUR: a flat-closing 9/7/9/7 rectangle that is hills/bumps end-to-end (the
+// elevation / orthonormal-frame / seam-holonomy checks). Net-flat (each rise paired).
 const GRAND_TOUR = [
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  'straight', 'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'cornerLargeL',
-  'straight', 'hillUp', 'hillDown', 'bumpUp', 'bumpDown', 'hillHalfUp', 'hillHalfDown',
-  'straight', 'straight', 'cornerLargeL',
-  'hillHalfUp', 'hillHalfDown', 'bumpUp', 'bumpDown', 'straight', 'straight', 'straight', 'cornerLargeL'
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L), arc(RL, 90),
+  straight(L), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), arc(RL, 90),
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L), arc(RL, 90),
+  straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), straight(L), arc(RL, 90)
 ];
 
 test('oval closes into a loop', () => {
@@ -218,10 +224,10 @@ test('every named track closes and includes a start gate', () => {
   }
 });
 
-test('every named track has a display name and pieces', () => {
+test('every named track has a display name and segments', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
-    assert.ok(Array.isArray(def.pieces) && def.pieces.length, `track "${name}" missing pieces`);
+    assert.ok(Array.isArray(def.segments) && def.segments.length, `track "${name}" missing segments`);
   }
 });
 
@@ -233,7 +239,7 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
   assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
     'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
   for (const t of TRACK_LIST) {
-    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.pieces)),
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.segments)),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
 });
@@ -279,11 +285,11 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
   }
 });
 
-test('buildTrack accepts a bare piece array and a descriptor alike', () => {
-  const fromArray = buildTrack(TRACKS.switchback.pieces);
+test('buildTrack accepts a bare segment array and a descriptor alike', () => {
+  const fromArray = buildTrack(TRACKS.switchback.segments);
   const fromDef = buildTrack(TRACKS.switchback);
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
-  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.pieces array/);
+  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.segments array/);
 });
 
 test('startGate:false omits the gate', () => {
@@ -291,8 +297,8 @@ test('startGate:false omits the gate', () => {
   assert.ok(!t.instances.some((i) => i.glb === 'gate-finish'), 'gate should be omitted');
 });
 
-test('an unknown piece key throws a clear error', () => {
-  assert.throws(() => buildTrack(['straight', 'definitely-not-a-piece']), /Unknown track piece "definitely-not-a-piece"/);
+test('an unknown segment kind throws a clear error', () => {
+  assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
 });
 
 // COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the
