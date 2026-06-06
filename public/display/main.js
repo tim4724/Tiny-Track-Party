@@ -80,9 +80,10 @@ let lastPlayerState = 0;
 let aiBots = new Map();
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
+let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
 
 scene.onFrame = (dt) => {
-  if (!session || paused) return; // paused: cars hold their last (frozen) pose
+  if (!session || paused || raceEnded) return; // paused/ended: cars hold their last (frozen) pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
@@ -92,8 +93,15 @@ scene.onFrame = (dt) => {
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
   if (session.racing && humansAllDone()) {
+    // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
+    // advances the deterministic sim with NO rendering, and the just-finished
+    // human keeps driving a victory lap — so without this the chase camera is
+    // seen whipping across the track to that far-away pose through the
+    // translucent results glass. raceEnded then holds this frame until the next
+    // race (see the onFrame guard above).
+    freezeCars(session.getSnapshot());
     fastForwarding = true;
-    session.fastForwardToEnd(driveBots); // runs to raceOver, then fires endRace
+    session.fastForwardToEnd(driveBots); // runs to raceOver, then fires endRace (sets raceEnded)
     fastForwarding = false;
     return;                               // session ended; the results overlay covers the scene
   }
@@ -111,7 +119,7 @@ scene.onFrame = (dt) => {
       if (aiBots.has(c.id)) continue; // no phone behind an AI car
       net.sendTo(c.id, {
         type: MSG.PLAYER_STATE, lap: c.lap, totalLaps: c.totalLaps,
-        position: c.position, of: c.of, finished: c.finished, scrub: c.onWall
+        position: c.position, of: c.of, finished: c.finished
       });
     }
   }
@@ -247,6 +255,7 @@ function startRace() {
   show('race');
   el('results').classList.add('hidden');
   paused = false;
+  raceEnded = false;             // un-freeze the scene for the new race
   setPauseOverlay(false);
   el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
 
@@ -347,6 +356,7 @@ const RESULTS_FAILSAFE_MS = 60000;
 let endTimer = null;
 function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
+  raceEnded = true;                            // hold the finish frame behind the translucent results overlay
   paused = false;                              // results aren't pausable
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
@@ -373,6 +383,7 @@ function returnToLobby() {
   clearTimeout(endTimer);
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   paused = false;
+  raceEnded = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   for (const c of scene.cars.keys()) scene.removeCar(c);
@@ -406,10 +417,13 @@ function resumeRace() {
 }
 
 // Re-pose every car at rest (spd 0, no scrub) so the renderer stops emitting
-// wheel dust while the field is frozen behind the overlay.
-function freezeCars() {
+// wheel dust while the field is frozen behind the overlay. Takes an optional
+// snapshot so the caller can freeze on a SPECIFIC frame (e.g. the finish moment
+// captured before the AI-only fast-forward burst teleports the cars); defaults
+// to the live snapshot for the pause path.
+function freezeCars(snap) {
   if (!session) return;
-  for (const c of session.getSnapshot().cars) {
+  for (const c of (snap || session.getSnapshot()).cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, 0, 0, false, 0);
   }
 }
