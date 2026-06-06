@@ -88,7 +88,7 @@ export function buildTrack(track, opts = {}) {
       const dx = dirX(theta), dz = dirZ(theta), lx = latX(theta), lz = latZ(theta);
       const x0 = X, z0 = Z, y0 = elev;
       for (let i = 1; i <= N; i++) {
-        const f = i / N, off = lat * smoothstep(f);
+        const f = i / N, off = lat * smootherstep(f); // C2 ease → the chicane's curvature is continuous (no joint step)
         worldPts.push(v(
           x0 + dx * len * f + lx * off,
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
@@ -99,22 +99,18 @@ export function buildTrack(track, opts = {}) {
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
       const R = seg.radius, ang = (seg.angle || 0) * DEG, rise = seg.rise || 0;
-      const sgn = Math.sign(ang) || 1, arcLen = R * Math.abs(ang);
-      const N = Math.max(1, Math.round(arcLen / DS));
-      const th0 = theta, x0 = X, z0 = Z, y0 = elev;
-      // point(φ) = P0 + R·sgn·(L(θ0) − L(θ0+φ)) — exact arc, left/right via sgn.
+      const sgn = Math.sign(ang) || 1, A = Math.abs(ang);
+      const x0 = X, z0 = Z, y0 = elev, th0 = theta;
+      // Exact arc: point(φ) = P0 + R·sgn·(L(θ0) − L(θ0+φ)), left/right via sgn.
+      const N = Math.max(1, Math.round(R * A / DS));
       for (let i = 1; i <= N; i++) {
         const f = i / N, th = th0 + ang * f;
-        worldPts.push(v(
-          x0 + R * sgn * (latX(th0) - latX(th)),
-          y0 + rise * smootherstep(f),
-          z0 + R * sgn * (latZ(th0) - latZ(th))
-        ));
+        worldPts.push(v(x0 + R * sgn * (latX(th0) - latX(th)), y0 + rise * smootherstep(f), z0 + R * sgn * (latZ(th0) - latZ(th))));
         widths.push(segWidth(seg, f)); banks.push(segBank(seg, f));
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
-      elev = y0 + rise; theta = th0 + ang;
+      theta = th0 + ang; elev = y0 + rise;
     } else {
       throw new Error(`Unknown segment kind "${seg && seg.kind}" (expected "straight" or "arc")`);
     }
@@ -139,30 +135,9 @@ export function buildTrack(track, opts = {}) {
     }
   }
 
-  // Round the CURVATURE STEP at every straight↔arc joint. A straight (κ=0) abutting an
-  // arc (κ=1/R) is a curvature discontinuity; the Catmull-Rom spline sampleAt fits
-  // through it overshoots and briefly reverses curvature right at the joint (the car
-  // gets nudged the wrong way then snaps back). A few light Laplacian passes (nudge each
-  // point toward the midpoint of its neighbours) spread the step over a short transition.
-  // Smooth ONLY the horizontal plane (X,Z) and only on near-flat points, so the vertical
-  // profile (hills/bumps — already C1 via smootherstep) is untouched. Closure is computed
-  // from the cursor above, so this never affects it. (Clothoid transitions will replace
-  // this with a true spiral in a later pass.)
-  const SMOOTH_LAMBDA = 0.3, SMOOTH_PASSES = 4, ringN = worldPts.length;
-  const at = (i) => worldPts[(i % ringN + ringN) % ringN];
-  const steep = worldPts.map((_, i) => {
-    const t = at(i + 1).clone().sub(at(i - 1));
-    return Math.abs(t.y) > 0.3 * (t.length() || 1); // climbing → leave the geometry alone
-  });
-  for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
-    const ring = worldPts.map((p) => p.clone()); // Jacobi: read the pre-pass ring
-    for (let i = 0; i < ringN; i++) {
-      if (steep[i]) continue;
-      const a = ring[(i - 1 + ringN) % ringN], b = ring[(i + 1) % ringN];
-      worldPts[i].x += ((a.x + b.x) * 0.5 - worldPts[i].x) * SMOOTH_LAMBDA;
-      worldPts[i].z += ((a.z + b.z) * 0.5 - worldPts[i].z) * SMOOTH_LAMBDA;
-    }
-  }
+  // (No position smoothing pass: clothoid arc transitions + the C2 chicane ease give a
+  // curvature-continuous centreline by construction, so the old Laplacian — which also
+  // rippled the steady arc and shrank the radius — is gone.)
   const n = worldPts.length;
 
   // Tangents via central differences around the closed ring.

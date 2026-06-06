@@ -12,8 +12,8 @@
 //                                −angle = RIGHT.
 // opts (any segment): rise (Δelevation over the segment, eased), bump (net-flat hump
 //   amplitude), bank (peak roll°, eased — corners only in practice), width (number or
-//   [start,end] taper, overriding the track default), clothoid (spiral length at each
-//   arc end), lateral (straight-only net cross-shift, an S — a chicane is curve+curveR).
+//   [start,end] taper, overriding the track default), lateral (straight-only net
+//   cross-shift, an S — a chicane is curve+curveR).
 //
 // ── HOW A TRACK CLOSES ───────────────────────────────────────────────────────
 // The builder walks the segments and auto-closes the loop (gap < 0.5). A straight
@@ -53,10 +53,10 @@ const flare = (n, peak) => {
 // chicane + rolling half-hill on the long sides, a quick chicane on the short sides.
 // Sides 7/3/7/3 with four small LEFT corners → closes. ----
 export const SWITCHBACK = [
-  straight(L), ...chicane(), ...halfHill(), ...flare(2, 3.1), arc(RS, 90, { bank: 11 }),  // A: 7 (flared corner approach)
-  ...chicane(), straight(L), arc(RS, 90, { bank: 11 }),                                   // B: 3
-  straight(L), ...chicane(), ...halfHill(), ...flare(2, 3.1), arc(RS, 90, { bank: 11 }),  // C: 7 (=A)
-  ...chicane(), straight(L), arc(RS, 90, { bank: 11 })                                    // D: 3 (=B)
+  straight(L), ...chicane(), ...halfHill(), ...flare(2, 3.1), arc(RS, 90),  // A: 7 (flared corner approach)
+  ...chicane(), straight(L), arc(RS, 90),                                   // B: 3
+  straight(L), ...chicane(), ...halfHill(), ...flare(2, 3.1), arc(RS, 90),  // C: 7 (=A)
+  ...chicane(), straight(L), arc(RS, 90)                                    // D: 3 (=B)
 ];
 
 // ---- Crossover (Hard): a figure-8 that passes OVER itself. Up a long spine, loop the
@@ -65,10 +65,10 @@ export const SWITCHBACK = [
 // start. 3 right + 3 left corners → net 0°; the rise…fall lifts the bridge strand. ----
 export const CROSSOVER = [
   ...flare(6, 3.4),                                                // spine — flares wide (fast straight)
-  arc(RL, -90, { bank: 9 }), straight(L - 0.37), arc(RL, -90, { bank: 9 }),                  // top loop (cw); −0.37 closes the loop
+  arc(RL, -90), straight(L - 0.37), arc(RL, -90),                  // top loop (cw); −0.37 closes the loop
   straight(L - 0.37), ...run(6),                                   // down the far side; −0.37 closes the loop
-  arc(RL, -90, { bank: 9 }), straight(L, { rise: 1.0 }), ...run(4), straight(L, { rise: -1.0 }), // turn west + BRIDGE
-  arc(RL, 90, { bank: 9 }), ...run(3), arc(RL, 90, { bank: 9 }), ...run(3), arc(RL, 90, { bank: 9 }),      // bottom loop (ccw)
+  arc(RL, -90), straight(L, { rise: 1.0 }), ...run(4), straight(L, { rise: -1.0 }), // turn west + BRIDGE
+  arc(RL, 90), ...run(3), arc(RL, 90), ...run(3), arc(RL, 90),     // bottom loop (ccw)
   ...run(6)                                                        // back to the spine
 ];
 
@@ -76,12 +76,12 @@ export const CROSSOVER = [
 // one right re-entrant elbow) packed with chicanes, full + half hills, and bumps. The
 // longest lap in the set. Turns L,L,R,L,L,L; side lengths tuned to auto-close. ----
 export const RIVERSIDE = [
-  straight(L + 0.37), ...chicane(), ...fullHill(), ...flare(4, 3.3), arc(RL, 90, { bank: 9 }),  // A: 9 (+0.37 closes; flared run)
-  straight(L - 0.37), ...halfHill(), arc(RL, 90, { bank: 9 }),                                  // B: 3 (−0.37 closes the loop)
-  straight(L), straight(L, { bump: 0.5 }), straight(L), arc(RL, -90, { bank: 9 }),              // C: 3 (elbow, RIGHT)
-  ...halfHill(), straight(L), straight(L), arc(RL, 90, { bank: 9 }),                            // D: 4
-  ...chicane(), ...fullHill(), arc(RL, 90, { bank: 9 }),                                        // E: 4
-  straight(L), straight(L), ...chicane(), ...halfHill(), straight(L, { bump: 0.5 }), straight(L), straight(L), arc(RL, 90, { bank: 9 }) // F: 9
+  straight(L + 0.37), ...chicane(), ...fullHill(), ...flare(4, 3.3), arc(RL, 90),  // A: 9 (+0.37 closes; flared run)
+  straight(L - 0.37), ...halfHill(), arc(RL, 90),                                  // B: 3 (−0.37 closes)
+  straight(L), straight(L, { bump: 0.5 }), straight(L), arc(RL, -90),              // C: 3 (elbow, RIGHT)
+  ...halfHill(), straight(L), straight(L), arc(RL, 90),                            // D: 4
+  ...chicane(), ...fullHill(), arc(RL, 90),                                        // E: 4
+  straight(L), straight(L), ...chicane(), ...halfHill(), straight(L, { bump: 0.5 }), straight(L), straight(L), arc(RL, 90) // F: 9
 ];
 
 // Oil slicks per track — FIXED hazards. Placed by `u` (fraction of the lap, 0 =
