@@ -327,28 +327,46 @@ export class Game {
       const authority = 0.4 + 0.6 * Math.min(1, c.v / (c.vmax * 0.5));
       const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
       const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), STEER_EXPO);
-      c.heading += STEER_SIGN * steerIn * c.turn * authority * dt;
+      // Steered heading (relative to the road) for THIS step. It feeds the world facing
+      // vector below and is then re-derived from the projection, so c.heading isn't
+      // mutated until the end — the final c.heading is `fwd` re-expressed vs the new tangent.
+      const steerHeading = c.heading + STEER_SIGN * steerIn * c.turn * authority * dt;
 
-      const before = this.centerline.sampleAt(c.totalS);
-      const along = Math.cos(c.heading), across = Math.sin(c.heading);
+      // MOTION — step in WORLD space, then re-project onto the ribbon to recover (s, lat).
+      // We drive the car along its WORLD facing direction and read its road coordinates
+      // back, rather than advancing `s` and sliding `lat` directly. Integrating in
+      // curvilinear (s, lat) can't trace a straight world line through a CURVATURE REVERSAL
+      // (a chicane) while the car carries a lateral offset — it bows by a hair, the small
+      // sideways "wobble". A world step + projection is straight by construction. This is
+      // still grip-free: NEUTRAL holds a fixed WORLD heading (you must steer the curves);
+      // there is no auto-follow. The ribbon still owns elevation/up/bank — `world` is built
+      // from the frame, so hills, banking and the figure-8 bridge are unchanged.
       const prevTotal = c.totalS;
-      c.totalS += c.v * Math.max(0.1, along) * dt; // always some forward progress
-      // lateral axis (tangent×up) points opposite the +heading rotation, so the
-      // sideways motion is -sin(heading): the car moves the way it points. A bump
-      // adds a transient sideways velocity (vlat) on top, which decays away.
-      c.lat -= c.v * across * dt;
-      c.lat += c.vlat * dt;
+      const f0 = this.centerline.sampleAt(c.totalS);
+      const fwd = f0.tangent.clone().applyAxisAngle(f0.up, steerHeading); // car's world forward
+      const world = f0.pos.clone()
+        .addScaledVector(f0.lateral, c.lat)        // where the car is now
+        .addScaledVector(fwd, c.v * dt)            // drive forward in the world
+        .addScaledVector(f0.lateral, c.vlat * dt); // + a decaying sideways knock (bumps)
       c.vlat *= Math.exp(-KNOCK_DAMP * dt);
-
-      // Subtract the track's own turn so NEUTRAL holds a world heading (= you
-      // must steer the curves), then clamp so the car can't point backward.
-      const after = this.centerline.sampleAt(c.totalS);
-      c.curbLim = this._curbLimit(after.width); // cache from the sampleAt we already did → _clampCurb (both passes, same totalS) reads it instead of re-sampling
-      const dTheta = Math.atan2(
-        before.tangent.clone().cross(after.tangent).dot(after.up),
-        before.tangent.dot(after.tangent)
+      // maxStep = the physical per-frame reach: v·dt is the centreline advance; the +0.5
+      // covers the extra arclength a laterally-offset car traces on the OUTSIDE of a corner
+      // (outer factor peaks ~1.3 at full width; measured worst-case reach ≈0.94 ≪ the ≈1.4
+      // window at max boost). The car can't have moved further along the road than this, so
+      // the projection is pinned to the LOCAL strand even at the 50ms dt cap or max boost.
+      const hit = this.centerline.projectNear(world, c.totalS, c.v * dt + 0.5); // nearest arclength + offset
+      // Intra-frame guard: at MAX_HEADING the foot can sit a hair behind sHint — don't let
+      // the motion step reverse s. (_resolveCollisions may still push totalS back — that's real.)
+      c.totalS = Math.max(prevTotal, hit.s);
+      c.lat = hit.lat;
+      c.curbLim = this._curbLimit(hit.frame.width); // cache from the projection's frame → _clampCurb reads it
+      // Re-express the (translation-invariant) world heading relative to the NEW tangent,
+      // so NEUTRAL keeps a fixed world heading exactly — this replaces the old per-step
+      // "subtract the road's turn". Then clamp so the car can never point backward.
+      c.heading = Math.atan2(
+        hit.frame.tangent.clone().cross(fwd).dot(hit.frame.up),
+        hit.frame.tangent.dot(fwd)
       );
-      c.heading -= dTheta;
       if (c.heading > MAX_HEADING) c.heading = MAX_HEADING;
       else if (c.heading < -MAX_HEADING) c.heading = -MAX_HEADING;
 

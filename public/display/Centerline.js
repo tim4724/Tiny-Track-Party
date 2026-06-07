@@ -60,6 +60,36 @@ export class Centerline {
     return { pos, tangent, up, lateral, width };
   }
 
+  // Project a world POINT onto the centreline near a known arclength `sHint`, returning
+  // the foot's arclength `s`, the signed lateral offset, and the frame there. Used by the
+  // physics to integrate a car in WORLD space and read its road coordinates back (so a
+  // neutral car traces a dead-straight world line — integrating in curvilinear (s,lat)
+  // instead bows it through a curvature reversal). A car moves little per frame, so Newton
+  // from sHint converges in a couple of steps: minimise |P−C(s)|², i.e. drive the along-
+  // tangent error g(s)=(P−C(s))·T(s) to 0. The step uses the fixed approximation g'=−1;
+  // the true g'=−1+curvature·lat, so it converges when curvature < 1/|lat| — easily met by
+  // the shipped tracks (R_min≈5.9, lat_max≈1.8 → g'≈−0.7, ~0.45×/step). A future track with
+  // R<2 at full width would converge slowly; raise the loop cap if you add one. `s` stays
+  // near sHint (accumulated, NOT wrapped) so lap counters keep growing across the seam.
+  //
+  // `maxStep` HARD-bounds |s − sHint| so the search can only ever land on the LOCAL strand.
+  // Where two strands cross in world space (a figure-8 bridge) they are ~half a lap apart
+  // in arclength, so a window of a couple of units makes a wrong-strand snap impossible by
+  // construction — not merely unlikely. Pass the physical per-frame reach (≈ v·dt + margin).
+  projectNear(point, sHint, maxStep = Infinity) {
+    const lo = sHint - maxStep, hi = sHint + maxStep;
+    let s = sHint;
+    for (let i = 0; i < 8; i++) { // 8 gives headroom over the ~0.45×/step convergence; most calls early-break
+      const f = this.sampleAt(s);
+      const along = point.clone().sub(f.pos).dot(f.tangent);
+      s += along;
+      if (s < lo) s = lo; else if (s > hi) s = hi; // clamp every step: never leave the local strand
+      if (Math.abs(along) < 1e-6) break;
+    }
+    const frame = this.sampleAt(s);
+    return { s, lat: point.clone().sub(frame.pos).dot(frame.lateral), frame };
+  }
+
   // Drivable width at arclength s (world units). Convenience over sampleAt for callers
   // that only need the width (the renderer's per-ring sweep, the physics curb clamp).
   widthAt(s) { return this.sampleAt(s).width; }
