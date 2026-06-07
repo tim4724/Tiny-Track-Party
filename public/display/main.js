@@ -6,6 +6,7 @@ import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
+import { LobbyDemo } from './LobbyDemo.js';
 import { carThumbNode } from '../shared/carThumbs.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
@@ -52,6 +53,9 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 const _trackParams = new URLSearchParams(location.search);
 const _qTrack = _trackParams.get('track');
 const _showCenterline = _trackParams.get('centerline') === '1';
+// Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
+// the live lobby attract demo must stay out of their way — guard every demo entry on it.
+const _isTestMode = _trackParams.get('test') === '1' || !!_trackParams.get('scenario');
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
@@ -64,11 +68,19 @@ const allGlbs = [...new Set([...built.values()].flatMap((b) => b.instances.map((
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 scene.orbit = true;
 let sceneReady = false;
+// Lobby attract demo: AI driving the players' picked cars around the selected track,
+// rendered under the orbiting overview camera. Runs only in the lobby (no session).
+const lobbyDemo = new LobbyDemo(scene);
 // Kept as a promise too so the gallery TestHarness can wait for the GLBs +
 // track before placing its preview cars.
 // item-cone rings each oil slick; item-box / item-banana are the pickup + dropped
 // hazard meshes — none are track tiles, so they're added to the preload set here.
-const scenePromise = scene.load([...allGlbs, 'item-cone', 'item-box', 'item-banana']).then(() => { scene.setTrack(track, { debug: _showCenterline }); sceneReady = true; scene.start(); });
+const scenePromise = scene.load([...allGlbs, 'item-cone', 'item-box', 'item-banana']).then(() => {
+  scene.setTrack(track, { debug: _showCenterline });
+  sceneReady = true;
+  scene.start();
+  refreshLobbyDemo(); // start the attract demo if a track is already picked (?track= / picked during load)
+});
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
 // validates host + room state before calling this; `track` is read by startRace.
@@ -78,8 +90,18 @@ function selectTrack(id) {
   track = built.get(id);
   track.totalLaps = TOTAL_LAPS;
   window.__track = track;
-  if (sceneReady && net.roomState === ROOM_STATE.LOBBY) scene.setTrack(track, { debug: _showCenterline });
-  updateBackdrop();
+  if (sceneReady && net.roomState === ROOM_STATE.LOBBY) {
+    // Crossfade the backdrop: the track swap (and demo rebuild) happens under a
+    // sky-coloured veil so it reads as a smooth transition, not a hard cut — and
+    // the same dip reveals the very first preview over the diorama.
+    fadeBackdrop(() => {
+      updateBackdrop();
+      scene.setTrack(track, { debug: _showCenterline });
+      refreshLobbyDemo();
+    });
+  } else {
+    updateBackdrop();
+  }
 }
 
 // Lobby backdrop: the plain sunny diorama until a track is picked, then the live
@@ -89,6 +111,107 @@ function updateBackdrop() {
   el('scene').classList.toggle('hidden', !show3D);
   const dio = el('lobby-diorama');
   if (dio) dio.classList.toggle('hidden', show3D);
+}
+
+// ---- lobby backdrop crossfade ----
+// Dip a sky-coloured veil to opaque, run `mid` under the cover (swap track, rebuild
+// the demo cars, drop the frozen race field…), then fade back. The veil sits below
+// the lobby UI + race overlay, so only the 3D preview dips, not the cards. FADE_MS
+// mirrors the CSS transition on #scene-fade.
+const FADE_MS = 380;
+let fadeTimer = null;
+function fadeBackdrop(mid) {
+  const fade = el('scene-fade');
+  if (!fade) { mid(); return; }            // veil missing (older markup) → instant
+  fade.classList.add('is-on');
+  clearTimeout(fadeTimer);
+  fadeTimer = setTimeout(() => {
+    // try/finally so a throw in mid() can never leave the veil stuck opaque.
+    try { mid(); }
+    finally { fadeTimer = setTimeout(() => fade.classList.remove('is-on'), 60); } // fade back in
+  }, FADE_MS);
+}
+
+// ---- lobby attract demo ----
+// (Re)build the demo to match the current track + roster, or tear it down when it
+// shouldn't be running (no track yet, mid-race, or a test surface owns the scene).
+// Cheap to call repeatedly: it skips a rebuild when nothing relevant changed, so
+// re-picking the same car doesn't re-grid the field.
+function refreshLobbyDemo() {
+  if (_isTestMode || !sceneReady || session || !selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY)) {
+    lobbyDemo.stop();
+    return;
+  }
+  const field = buildDemoField(net.flow.list());
+  const sig = demoSig(field, selectedTrackId);
+  if (lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
+
+  // Same track + same set of cars, only the picks changed (a player switched their
+  // car) → swap those models in place so the demo race keeps running, no re-grid.
+  // Anything else (join/leave, track switch, first start) is a full rebuild.
+  if (lobbyDemo.active && lobbyDemo.track === track && sameCarSet(field, lobbyDemo.field)) {
+    const prevById = new Map(lobbyDemo.field.map((p) => [p.id, p]));
+    for (const p of field) {
+      const prev = prevById.get(p.id);
+      if (prev && (prev.carIndex !== p.carIndex || prev.colorIndex !== p.colorIndex || prev.name !== p.name)) {
+        lobbyDemo.swapCar(p.id, p);
+      }
+    }
+    lobbyDemo.sig = sig; // record the new signature so the next diff is accurate
+    return;
+  }
+  lobbyDemo.start(track, field, sig);
+}
+
+// True when two demo fields cover the exact same set of car ids (so only liveries/
+// models could have changed) — the cue to swap in place rather than rebuild.
+function sameCarSet(a, b) {
+  if (a.length !== b.length) return false;
+  const ids = new Set(b.map((p) => p.id));
+  return a.every((p) => ids.has(p.id));
+}
+
+// Roster changes (join/leave/car-pick) arrive in bursts as players fiddle; debounce
+// the rebuild so rapid car-cycling coalesces into one re-grid instead of many.
+let demoRefreshTimer = null;
+function scheduleLobbyDemo() {
+  clearTimeout(demoRefreshTimer);
+  demoRefreshTimer = setTimeout(refreshLobbyDemo, 500);
+}
+
+// Build the attract field: each connected human's PICKED car (livery + model), plus
+// CPU racers topping the grid up to a full field — every car driven by the AI. The
+// ids are namespaced so they never collide with the integer phone slots a later real
+// race uses (the race rebuilds its own field on "GO").
+function buildDemoField(humans) {
+  const field = [];
+  const usedColors = new Set();
+  for (const p of humans) {
+    const carIndex = (p.carIndex == null ? p.colorIndex : p.carIndex);
+    field.push({ id: 'demo-' + p.peerIndex, name: p.name, colorIndex: p.colorIndex, carIndex, stats: carStats(carIndex) });
+    usedColors.add(p.colorIndex);
+  }
+  const humanCount = field.length;
+  const lowestFreeColor = () => { let i = 0; while (usedColors.has(i)) i++; return i; };
+  while (field.length < FIELD_SIZE) {
+    const colorIndex = lowestFreeColor(); usedColors.add(colorIndex);
+    const carIndex = colorIndex % CAR_MODELS.length;
+    field.push({ id: 'demo-cpu-' + (field.length - humanCount), colorIndex, carIndex, stats: carStats(carIndex) });
+  }
+  // Persona (skill + lane) by final grid index so they spread across the WHOLE field;
+  // each CPU also takes THAT persona's name, so its plate matches how it drives.
+  // Humans keep their own name but still drive on a persona — no phones steer here.
+  field.forEach((p, i) => {
+    p.persona = AI_PERSONALITIES[i % AI_PERSONALITIES.length];
+    if (i >= humanCount) p.name = p.persona.name;
+  });
+  return field;
+}
+
+// Cheap signature of what the demo renders, so refreshLobbyDemo can skip a no-op
+// rebuild. Track + each car's id/livery/model; a rename alone won't re-grid.
+function demoSig(field, trackId) {
+  return trackId + '|' + field.map((p) => p.id + ':' + p.colorIndex + ':' + p.carIndex).join(',');
 }
 
 // ---- race state ----
@@ -104,7 +227,8 @@ let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
 
 scene.onFrame = (dt) => {
-  if (!session || paused || raceEnded) return; // paused/ended: cars hold their last (frozen) pose
+  if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
+  if (paused || raceEnded) return; // paused/ended: cars hold their last (frozen) pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
@@ -222,6 +346,7 @@ function renderRoster(roster, hostPeerIndex) {
     list.appendChild(seat);
   }
   el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Scan the QR code to join';
+  scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
 
 // Build the race field: the connected humans plus AI racers topping the grid up
@@ -275,6 +400,8 @@ function startRace() {
   // engine deterministic from the seed while the rolls aren't identical every game.
   // Set BEFORE buildField so the bots seed their wander from the same race seed.
   track.seed = (Math.random() * 0xffffffff) >>> 0;
+
+  lobbyDemo.stop(); // the race owns the scene now — drop the attract cars
 
   // Top the grid up to a full field with AI; keep the roster for the results screen.
   const field = buildField(players);
@@ -419,12 +546,17 @@ function returnToLobby() {
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   stopPauseAutoHide();
-  for (const c of scene.cars.keys()) scene.removeCar(c);
   if (session) { session.dispose(); session = null; }
   aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
   show('lobby');
-  updateBackdrop();              // resume the selected track's 3D preview (or diorama)
+  // Crossfade from the frozen finish frame back to the attract demo: drop the race
+  // cars + restart the demo under the veil so the reset doesn't pop on screen.
+  fadeBackdrop(() => {
+    for (const c of scene.cars.keys()) scene.removeCar(c);
+    updateBackdrop();             // resume the selected track's 3D preview (or diorama)
+    refreshLobbyDemo();           // AI back to driving the picked cars
+  });
 }
 
 // ---- pause ----
@@ -553,4 +685,4 @@ if (_params.get('test') === '1' || _scenario) {
   net.start();
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;
-window.__session = () => session;
+window.__session = () => session; window.__lobbyDemo = lobbyDemo;

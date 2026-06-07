@@ -56,6 +56,12 @@
        layer on top of it. -->
   <div id="scene" class="hidden"></div>
 
+  <!-- Crossfade veil for the lobby track preview: a sky-coloured layer (matching the
+       3D scene's clear colour) that dips opaque to hide a track swap / demo rebuild,
+       then fades back. Sits above #scene but below the lobby UI + race overlay, so
+       only the backdrop fades. Toggled (.is-on) by main.js's fadeBackdrop(). -->
+  <div id="scene-fade" aria-hidden="true"></div>
+
   <!-- Lobby -->
   <section id="lobby">
     <div class="lobby__left card">

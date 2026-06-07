@@ -252,6 +252,23 @@ export class Game {
     return true;
   }
 
+  // Re-resolve a car's per-model handling + footprint IN PLACE, keeping its
+  // position/velocity/race state. Used when a player changes their car pick in the
+  // lobby attract demo so the swap doesn't restart the race. Returns true if the
+  // car exists.
+  setCarStats(id, stats) {
+    const c = this.cars.get(id);
+    if (!c) return false;
+    const st = normStats(stats);
+    c.accel = ACCEL * st.accel;
+    c.vmax = VMAX * st.vmax;
+    c.turn = TURN_RATE * st.turn;
+    c.mass = st.mass;
+    c.halfLen = st.halfLen;
+    c.halfWid = st.halfWid;
+    return true;
+  }
+
   update(dtMs) {
     const dt = Math.min(dtMs / 1000, 0.05);
     if (dt <= 0) return;
