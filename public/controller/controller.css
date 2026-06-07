@@ -58,13 +58,12 @@ input[type=text]:disabled { opacity: 0.6; }
   padding-top: calc(0.9rem + env(safe-area-inset-top));
 }
 
-/* Player identity, up top — livery dot + name. */
-.lobby-me { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.2rem; }
+/* Player identity, up top — name in your livery colour (mirrors the display). */
+.lobby-me { display: flex; align-items: center; margin: 0 0 1.2rem; }
 .lobby-me__name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; line-height: 1;
-  color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; line-height: 1;
+  color: var(--car, var(--ink)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#me-dot { width: 1rem; height: 1rem; flex: none; background: var(--car); }
 
 /* Section heading row ("Car", "Track") — a small pill kicker. */
 .lobby-head { display: flex; align-items: baseline; gap: 0.55rem; margin: 0 0 0.55rem; }
@@ -169,12 +168,12 @@ input[type=text]:disabled { opacity: 0.6; }
    stacked top-right (like .cell-rank). No item UI on the phone. */
 .hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8rem; }
 .hud-name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: var(--car, var(--ink));
+  font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; color: var(--car, var(--ink));
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .hud-rank { flex: none; text-align: right; }
 .hud-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: 2.6rem; color: var(--ink); }
-.hud-rank__lap { font-weight: 800; font-size: 1rem; color: var(--ink-2); margin-top: 0.15rem; letter-spacing: 0.02em; }
+.hud-rank__lap { font-weight: 800; font-size: 1rem; color: var(--ink); margin-top: 0.12rem; letter-spacing: 0.02em; white-space: nowrap; }
 
 .steer { margin-top: auto; }
 .steer__track {

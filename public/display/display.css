@@ -190,47 +190,42 @@ html, body {
   to   { opacity: 0; transform: scale(1.35); }
 }
 
-/* per-viewport (split-screen) label, anchored at each cell's top-left */
+/* per-viewport (split-screen) label, anchored at each cell's top-left. No card:
+   just the name + item indicator floating over the scene (cf. .cell-rank). */
 .cell-label {
-  position: absolute; display: none; margin: 0.7rem;
-  background: rgba(255, 255, 255, 0.94);
-  border-left: 5px solid var(--c, var(--brand));
-  border-radius: 12px; padding: 0.85rem;
-  box-shadow: 0 8px 18px rgba(30, 60, 90, 0.22);
+  position: absolute; display: none; margin: 0.7rem; pointer-events: none;
 }
-/* name on top, the big item indicator stacked + centred below it (place + lap moved
-   out to the top-right .cell-rank readout) */
-.cell-label__row { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+/* name on top, the big item indicator stacked + left-aligned below it (place + lap
+   moved out to the top-right .cell-rank readout) */
+.cell-label__row { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 .cell-label__name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--c, var(--ink));
-  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 2vw, 2.2rem);
+  color: var(--c, var(--ink));
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Place + lap — top-right of the cell, no card, white text legible over the scene.
-   Big ordinal place, a smaller "Lap n/N" beneath. Positioned by _loop; the transform
-   anchors its RIGHT edge to the left coordinate _loop sets (the cell's right edge). */
+/* Place + lap — top-right of the cell, no card. Dark ink (legible on the constant
+   blue sky, no shadow). Big ordinal place, a smaller "Lap n/N" beneath. Positioned by
+   _loop; the transform anchors its RIGHT edge to the left coord _loop sets (cell right). */
 .cell-rank {
   position: absolute; display: none; transform: translateX(-100%);
-  text-align: right; pointer-events: none; color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55), 0 0 2px rgba(0, 0, 0, 0.5);
+  text-align: right; pointer-events: none; color: var(--ink);
 }
 .cell-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: clamp(2rem, 3.6vw, 3.2rem); }
-.cell-rank__lap { font-weight: 800; font-size: clamp(0.85rem, 1.3vw, 1.15rem); margin-top: 0.12rem; letter-spacing: 0.02em; }
+.cell-rank__lap { font-weight: 800; font-size: clamp(0.85rem, 1.3vw, 1.15rem); margin-top: 0.12rem; letter-spacing: 0.02em; white-space: nowrap; }
 
-/* Held-item indicator — a FIXED reserved square (no reflow when empty) showing an
-   item ICON, sized large and centred under the player name so players read what they
-   got at a glance (the controller has no item UI; place/lap live in .cell-rank). */
+/* Held-item indicator — a FIXED reserved box (no reflow when empty) under the player
+   name so players read what they got at a glance (the controller has no item UI;
+   place/lap live in .cell-rank). The dashed outline box is ALWAYS shown; the item
+   ICON sits inside it. No backing fill or shadow — the sky behind is a constant blue. */
 .cell-label__item {
-  flex: none; width: 120px; height: 120px; border-radius: 20px; transform-origin: center;
-  align-self: center;
+  flex: none; width: 120px; height: 120px; transform-origin: center;
   display: flex; align-items: center; justify-content: center;
-  background: #fff; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22), inset 0 0 0 3px rgba(0, 0, 0, 0.06);
+  border-radius: 20px; border: 3px dashed color-mix(in srgb, var(--ink) 30%, transparent);
 }
-.cell-label__item svg { width: 78%; height: 78%; display: block; }
+.cell-label__item svg { width: 70%; height: 70%; display: block; }
 /* baked asset icons (e.g. the banana GLB render) — already square + padded */
-.cell-label__item img { width: 88%; height: 88%; object-fit: contain; display: block; }
-/* empty: a faint dashed square holding the space */
-.cell-label__item.is-empty { background: transparent; box-shadow: none; border: 3px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
+.cell-label__item img { width: 78%; height: 78%; object-fit: contain; display: block; }
 /* roulette spin: a fast scale/tilt flicker while the slot rolls */
 .cell-label__item.rolling { animation: cellItemRoll 0.1s linear infinite; }
 @keyframes cellItemRoll {
