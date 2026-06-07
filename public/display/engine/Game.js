@@ -269,6 +269,25 @@ export class Game {
     return true;
   }
 
+  // Re-key a live car from one id to another (a dropped player reconnects on a
+  // DIFFERENT device → new peerIndex, but their car keeps racing). Preserves all
+  // car state; updates the map key, the car's own id, its place in the finish
+  // order, and any banana it owns so nothing dangles on the old id. No-op (false)
+  // if the source car is gone or the target id is taken.
+  rekeyCar(oldId, newId) {
+    if (oldId === newId) return false;
+    const car = this.cars.get(oldId);
+    if (!car || this.cars.has(newId)) return false;
+    this.cars.delete(oldId);
+    car.id = newId;
+    this.cars.set(newId, car);
+    for (let i = 0; i < this.finishedOrder.length; i++) {
+      if (this.finishedOrder[i] === oldId) this.finishedOrder[i] = newId;
+    }
+    for (const b of this.bananas) { if (b.owner === oldId) b.owner = newId; }
+    return true;
+  }
+
   update(dtMs) {
     const dt = Math.min(dtMs / 1000, 0.05);
     if (dt <= 0) return;

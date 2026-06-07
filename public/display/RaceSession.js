@@ -130,6 +130,10 @@ export class RaceSession {
     return removed;
   }
 
+  // Re-key a live car (dropped player reconnects on another device). See
+  // Game.rekeyCar. Returns truthy if the car existed and was moved.
+  rekeyCar(oldId, newId) { return this.engine.rekeyCar(oldId, newId); }
+
   getSnapshot() { return this.engine.getSnapshot(); }
   getResults()  { return this.engine.getResults(); }
 

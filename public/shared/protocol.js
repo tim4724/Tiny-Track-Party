@@ -22,7 +22,7 @@ var STUN_URL = 'stun:stun.couch-games.com:3478';
 // a plain object with a `.type` drawn from here.
 var MSG = {
   // Controller -> Display
-  HELLO: 'hello',               // {name?} sent right after join
+  HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
   CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, ~25Hz, fastlane
   START_GAME: 'start_game',     // host only
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
@@ -30,6 +30,7 @@ var MSG = {
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
+  LEAVE: 'leave',               // intentional exit (back-out) — display frees the seat at once (no reconnect QR)
   PING: 'ping',
 
   // Display -> specific controller

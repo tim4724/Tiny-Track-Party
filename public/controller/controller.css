@@ -271,6 +271,23 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 #pause-overlay .btn { width: min(82%, 18rem); margin-top: 0; }
 
+/* Connection overlay — screen-agnostic, sits above everything (incl. pause) so a
+   dropped relay link always wins the screen. Same frosted glass as the pause UI. */
+#conn {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  padding:
+    calc(7vh + env(safe-area-inset-top)) calc(10vw + env(safe-area-inset-right))
+    calc(7vh + env(safe-area-inset-bottom)) calc(10vw + env(safe-area-inset-left));
+  background: rgba(233, 248, 255, 0.92); backdrop-filter: blur(8px);
+  text-align: center;
+}
+#conn.hidden { display: none; }
+.conn__card { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; max-width: 22rem; }
+.conn__title { font-family: var(--font-display); font-weight: 700; font-size: 2rem; color: var(--ink); }
+.conn__msg { color: var(--ink-2); font-weight: 700; min-height: 1.2em; }
+.conn__card .btn { width: min(82%, 18rem); margin-top: 0.2rem; }
+
 /* ---- results overlay ---- */
 /* Shown on your phone once you finish; the board fills in as the rest of the
    field crosses the line. Centred in the section column like the other screens. */

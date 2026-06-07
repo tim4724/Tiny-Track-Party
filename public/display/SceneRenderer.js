@@ -1769,6 +1769,7 @@ export class SceneRenderer {
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
+      reconnecting: false, reconnectEl: null, // dropped-player reconnect card (centred in this cell, like finishEl)
       rideOff: null // damped ride-height offset from the centreline (setCarPose)
     };
     this.cars.set(id, c);
@@ -1819,8 +1820,43 @@ export class SceneRenderer {
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
     if (c.finishEl && c.finishEl.parentNode) c.finishEl.parentNode.removeChild(c.finishEl);
     if (c.placeEl && c.placeEl.parentNode) c.placeEl.parentNode.removeChild(c.placeEl);
+    if (c.reconnectEl && c.reconnectEl.parentNode) c.reconnectEl.parentNode.removeChild(c.reconnectEl);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
+  }
+
+  // Re-key a car's render entry from one id to another (a dropped player
+  // reconnects on a different device). Keeps the same mesh, plate and split-screen
+  // cell — only the id it's filed under changes, so the camera keeps following it.
+  // The reconnect card is dropped: a re-key means the seat is back.
+  rekeyCar(oldId, newId) {
+    if (oldId === newId) return false;
+    const c = this.cars.get(oldId);
+    if (!c || this.cars.has(newId)) return false;
+    this.setCarReconnect(oldId, null);
+    this.cars.delete(oldId);
+    this.cars.set(newId, c);
+    for (let i = 0; i < this._order.length; i++) {
+      if (this._order[i] === oldId) this._order[i] = newId;
+    }
+    return true;
+  }
+
+  // Show (el) or clear (null) a dropped player's reconnect card, centred in their
+  // split-screen cell by _loop — same placement as the FINISHED card. `el` is the
+  // card DOM built by the display layer (carries the rejoin QR). No-op if the car
+  // has no cell (e.g. nobody's racing), so reconnect cards only show in-race.
+  setCarReconnect(id, el) {
+    const c = this.cars.get(id);
+    if (!c || !c.label) return false; // cell-less / unknown car → nowhere to centre it
+    if (c.reconnectEl && c.reconnectEl !== el && c.reconnectEl.parentNode) {
+      c.reconnectEl.parentNode.removeChild(c.reconnectEl);
+    }
+    if (!el) { c.reconnectEl = null; c.reconnecting = false; return true; }
+    c.reconnectEl = el;
+    c.reconnecting = true;
+    if (el.parentNode !== this.overlay) this.overlay.appendChild(el);
+    return true;
   }
 
   setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1) {
@@ -2095,7 +2131,7 @@ export class SceneRenderer {
       }
       this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       r.render(this.scene, this.overview);
-      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; }
+      for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; if (c.reconnectEl) c.reconnectEl.style.display = 'none'; }
       this._present();
       requestAnimationFrame((tt) => this._loop(tt));
       return;
@@ -2126,26 +2162,32 @@ export class SceneRenderer {
 
       // position the DOM label at the cell's top-left (CSS px). Guarded like the
       // steer/finish overlays below: carded cars always have a label, but keep all
-      // three cell overlays consistently null-safe.
+      // three cell overlays consistently null-safe. Hidden while the reconnect card
+      // owns the cell — that card already shows the name, so the corner label would
+      // just duplicate it (the FINISHED card has no name, so it keeps the label).
       const x = col * cw;
       if (c.label) {
-        c.label.style.display = 'block';
+        c.label.style.display = c.reconnecting ? 'none' : 'block';
         c.label.style.left = x + 'px';
         c.label.style.top = (row * ch) + 'px';
       }
 
+      // place/lap + steer are hidden while a centred card owns the cell — when the
+      // player has FINISHED or has dropped and is shown the reconnect QR.
+      const cardInCell = c.finished || c.reconnecting;
+
       // place + lap: pinned to the cell's top-right (its own transform anchors the
-      // right edge to this left). Hidden once finished — the FINISHED card takes over.
+      // right edge to this left). Hidden once a centred card takes the cell.
       if (c.placeEl) {
-        c.placeEl.style.display = c.finished ? 'none' : 'block';
+        c.placeEl.style.display = cardInCell ? 'none' : 'block';
         c.placeEl.style.left = (x + cw - 12) + 'px';
         c.placeEl.style.top = (row * ch + 11) + 'px';
       }
 
       // steer indicator: centered along the bottom of this player's cell — hidden
-      // once they finish (on a victory lap now, the finish overlay takes its place)
+      // once a centred card takes the cell (finished, or dropped/reconnecting).
       if (c.steerBar) {
-        c.steerBar.style.display = c.finished ? 'none' : 'block';
+        c.steerBar.style.display = cardInCell ? 'none' : 'block';
         c.steerBar.style.left = (x + cw / 2) + 'px';
         // bottom-anchored: bar height is 1.6rem (~26px); the offset keeps its
         // bottom edge at the same place it sat at the old 0.8rem height.
@@ -2159,6 +2201,17 @@ export class SceneRenderer {
         if (c.finished) {
           c.finishEl.style.left = (x + cw / 2) + 'px';
           c.finishEl.style.top = (row * ch + ch / 2) + 'px';
+        }
+      }
+
+      // Reconnect QR: centred in the dropped player's cell exactly like FINISHED,
+      // while their car keeps its place on track. Finished wins the cell if both.
+      if (c.reconnectEl) {
+        const showRc = c.reconnecting && !c.finished;
+        c.reconnectEl.style.display = showRc ? 'flex' : 'none';
+        if (showRc) {
+          c.reconnectEl.style.left = (x + cw / 2) + 'px';
+          c.reconnectEl.style.top = (row * ch + ch / 2) + 'px';
         }
       }
     });

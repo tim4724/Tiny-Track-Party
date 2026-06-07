@@ -1,6 +1,6 @@
 // Display entry — lobby + authoritative race. Owns the Three.js scene, the car
 // engine, the countdown→race→results flow, and per-player PLAYER_STATE.
-import { DisplayNet, fetchQR, renderQR, renderJoinUrl } from './Net.js';
+import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { trackSchematic } from './trackSchematic.js';
@@ -238,6 +238,13 @@ scene.onFrame = (dt) => {
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
   if (session.racing && humansAllDone()) {
+    // A dropped racer's ghost can never cross the line — forfeit any such car now
+    // that every connected human is home, so the burst (and the race) ends
+    // promptly instead of running to the guard cap on a car that can't finish.
+    for (const id of [...session.engine.cars.keys()]) {
+      if (!aiBots.has(id) && net.flow.isDisconnected(id)) forfeitCar(id);
+    }
+    if (!session.racing) return; // forfeiting the last unfinished car already ended the race
     // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
     // advances the deterministic sim with NO rendering, and the just-finished
     // human keeps driving a victory lap — so without this the chase camera is
@@ -287,6 +294,8 @@ const net = new DisplayNet({
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
   },
   onRosterChange: renderRoster,
+  onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
+  onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && net.flow.connectedCount > 0) startRace();
@@ -297,12 +306,24 @@ const net = new DisplayNet({
   }
 });
 
-// A player who leaves during a countdown/race forfeits: drop their car so it
-// doesn't drive on as a ghost and doesn't block the race from ever ending.
-net.flow.on('playerleave', ({ peerIndex }) => {
+// Pull a player's car out of the live race. Fires on playerleave — a clean
+// back-out (LEAVE) or a dropped seat whose reconnect grace window elapsed. A
+// brief mid-race disconnect does NOT come through here: the car is kept running
+// (camera stays on it) so a quick reconnect resumes driving.
+function forfeitCar(peerIndex) {
   if (!session || !session.forceRemoveCar(peerIndex)) return;
   scene.removeCar(peerIndex);
-});
+}
+net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
+
+// A dropped player reconnected on a different device (new peerIndex): move their
+// still-racing car — engine, render entry and results identity — onto the new
+// slot so that phone drives it and the camera keeps following the same car.
+function rekeyCarPlayer(oldId, newId) {
+  if (!session || !session.rekeyCar(oldId, newId)) return;
+  scene.rekeyCar(oldId, newId);
+  for (const p of currentField) { if (p.peerIndex === oldId) p.peerIndex = newId; }
+}
 
 // Always lay out at least this many seats; empty ones show as placeholders so
 // the lobby card keeps a fixed size as players trickle in. Locked to the race
@@ -349,6 +370,24 @@ function renderRoster(roster, hostPeerIndex) {
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
 
+// Dropped-seat reconnect cards: a QR centred in each disconnected player's
+// split-screen cell (same placement as the FINISHED card) so they can scan — their
+// own phone OR a new one — and drop back into their exact seat. The card rides on
+// their still-racing car via the renderer; SceneRenderer._loop keeps it centred.
+// Driven by DisplayNet.onReconnectChange; we diff against what's shown so a roster
+// reshuffle only adds/removes the cards that changed.
+const _rcShown = new Set(); // car ids currently showing a reconnect card
+function renderReconnect(seats) {
+  const want = new Set(seats.map((s) => s.peerIndex));
+  for (const id of [..._rcShown]) {
+    if (!want.has(id)) { scene.setCarReconnect(id, null); _rcShown.delete(id); }
+  }
+  for (const s of seats) {
+    if (_rcShown.has(s.peerIndex)) continue;             // already showing this seat's card
+    if (scene.setCarReconnect(s.peerIndex, buildReconnectCard(s))) _rcShown.add(s.peerIndex);
+  }
+}
+
 // Build the race field: the connected humans plus AI racers topping the grid up
 // to FIELD_SIZE. AI get string ids ('ai-0'…) that never collide with the integer
 // phone slots, the lowest free liveries, and a personality from AI_PERSONALITIES.
@@ -392,7 +431,9 @@ function driveBots() {
 function startRace() {
   if (net.roomState !== ROOM_STATE.LOBBY || !sceneReady) return;
   if (!selectedTrackId) return;              // a track must be chosen first
-  const players = net.flow.list();
+  // Only seat connected players — a dropped racer's seat lingers (dimmed, with a
+  // reconnect QR) but doesn't get a car until they're back.
+  const players = net.flow.list().filter((p) => p.connected);
   if (!players.length) return;
 
   // Fresh seed per race so item rolls (and AI lane wander) vary game-to-game. The
@@ -464,17 +505,20 @@ function onRaceEvent(e) {
   broadcastStandings(false);
 }
 
-// True once every HUMAN car has crossed the line (CPU cars may still be out).
-// Drives the "only CPU left → skip to results" fast-forward. False when there
-// are no humans at all (a fully-AI field has no one to be courteous to, and the
-// natural race_over already covers it).
+// True once every CONNECTED human car has crossed the line (CPU cars may still be
+// out). Drives the "only CPU left → skip to results" fast-forward. A dropped
+// racer's ghost is skipped: it can never finish (no input), so it must not hold
+// the flag down and make everyone else wait out the reconnect grace window —
+// the courtesy path forfeits it. False when no connected humans are left (a
+// fully-AI / fully-dropped field; the race-timeout failsafe covers that).
 function humansAllDone() {
   if (!session) return false;
   let humans = 0;
   for (const [id, c] of session.engine.cars) {
-    if (aiBots.has(id)) continue;  // a CPU racer
+    if (aiBots.has(id)) continue;               // a CPU racer
+    if (net.flow.isDisconnected(id)) continue;  // a dropped racer's ghost — doesn't hold up the flag
     humans++;
-    if (!c.finished) return false; // a human still on track
+    if (!c.finished) return false;              // a connected human still on track
   }
   return humans > 0;
 }

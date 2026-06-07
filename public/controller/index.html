@@ -92,6 +92,18 @@
     </div>
   </section>
 
+  <!-- Connection overlay — screen-agnostic. Covers the phone whenever the relay
+       link drops so the player isn't tapping a dead surface: "Reconnecting…" while
+       PartyConnection retries, then "Connection lost" with a retry (and a nudge to
+       the big screen's reconnect QR) once it gives up. Hidden on a clean (re)join. -->
+  <div id="conn" class="conn hidden" role="alertdialog" aria-live="assertive">
+    <div class="conn__card">
+      <div id="conn-title" class="conn__title">Reconnecting…</div>
+      <div id="conn-msg" class="conn__msg"></div>
+      <button id="conn-retry" type="button" class="btn btn--brand hidden">Try again</button>
+    </div>
+  </div>
+
   <!-- Latency chip — one-way (RTT/2), pinned bottom-right across all screens.
        Hidden until the first reading lands (post-join). The bolt shows only
        while the input/ping path is on the P2P fastlane DataChannel. -->

@@ -81,20 +81,50 @@ const storedCarIndex = () => { try { const v = parseInt(localStorage.getItem(CAR
 const saveCarIndex = (i) => { try { localStorage.setItem(CAR_KEY, String(i)); } catch (_) {} };
 
 const net = new ControllerNet({
-  onJoined: () => setStatus(''),
+  onJoined: () => { setStatus(''); hideConn(); },
   onStatus: (state, info) => {
     // Any status callback means the clean join→lobby path didn't carry us all the
     // way through, so re-enable the join form. It's a no-op once we've moved off
     // the name screen (the button is hidden), but it prevents a player getting
     // stuck on a disabled button — display gone, kicked, or reconnect exhausted.
     setJoining(false);
-    if (state === 'reconnecting') setStatus(`Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`);
-    else if (state === 'error') setStatus('Error: ' + info);
-    else if (state === 'display_gone') setStatus('Waiting for the big screen…');
-    else if (state === 'replaced') setStatus('Opened on another tab.');
+    // In-room (lobby/game/results) the name-screen status line is off-screen, so a
+    // dropped link needs the full-screen #conn overlay; on the name screen the
+    // status text under the form is enough.
+    const inRoom = currentScreen && currentScreen !== 'name';
+    if (state === 'reconnecting') {
+      const txt = `Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`;
+      setStatus(txt);
+      if (inRoom) showConn('Reconnecting…', txt, false);
+    } else if (state === 'lost') {
+      setStatus('Connection lost.');
+      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true);
+    } else if (state === 'error') {
+      setStatus('Error: ' + info);
+    } else if (state === 'display_gone') {
+      setStatus('Waiting for the big screen…');
+      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false);
+    } else if (state === 'replaced') {
+      setStatus('Opened on another tab.');
+      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false);
+    }
   },
   onMessage: handleMessage,
   onRtt: updateLatency
+});
+
+// ---- connection overlay (screen-agnostic relay-link feedback) ----
+function showConn(title, msg, retry) {
+  el('conn-title').textContent = title;
+  el('conn-msg').textContent = msg || '';
+  el('conn-retry').classList.toggle('hidden', !retry);
+  el('conn').classList.remove('hidden');
+}
+function hideConn() { el('conn').classList.add('hidden'); }
+el('conn-retry').addEventListener('click', () => {
+  buzz(15);
+  showConn('Reconnecting…', '', false);
+  net.connect(myName);
 });
 
 // Latency chip (bottom-right). Stays hidden until the first reading lands so it
@@ -119,6 +149,7 @@ function setJoining(on) {
 function handleMessage(data) {
   switch (data.type) {
     case MSG.WELCOME: {
+      hideConn();   // a WELCOME means we're back in (covers the display returning after display_gone)
       myColorIndex = data.colorIndex;
       if (data.carIndex != null) myCarIndex = data.carIndex;
       maybeRestoreCar();   // override the slot default with this phone's saved pick
@@ -131,7 +162,20 @@ function handleMessage(data) {
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
       renderLobby();
-      if (data.roomState === 'lobby') show('lobby');
+      // Land on the screen matching the live room state. Normally that's the
+      // lobby, but a player who rejoins mid-race (reconnected, or scanned the
+      // reconnect QR) must drop straight back into the race instead of stalling
+      // on the name screen — their car is still on track waiting for input.
+      if (data.roomState === 'countdown' || data.roomState === 'playing') {
+        inResults = false;
+        show('game');
+        el('drive-hud').classList.remove('hidden');
+        el('pause-btn').classList.remove('hidden');
+        setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
+        startDriving();      // resume streaming tilt to our still-racing car
+      } else {
+        show('lobby');       // lobby or results — the next countdown/board routes us onward
+      }
       break;
     }
     case MSG.LOBBY_UPDATE: {
@@ -395,6 +439,7 @@ function leaveToName() {
   el('pause-btn').classList.add('hidden');
   setJoining(false);
   setStatus('');
+  hideConn();
   el('name-input').value = storedName();
   show('name');
   el('name-input').focus();
@@ -472,6 +517,7 @@ function setHeldItem(item) {
 }
 
 show('name');
+window.__net = net; // debug/test handle (parity with the display)
 
 // Gallery / test mode: ?scenario=… lays out a single screen from fake data
 // without connecting to the relay (the controller never auto-connects, so

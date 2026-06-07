@@ -14,6 +14,8 @@ var DISPLAY_CARDS = [
   { key: 'racing',    title: 'Race',      animated: true },
   { key: 'features',  title: 'Mechanics' },
   { key: 'paused',    title: 'Paused' },
+  { key: 'reconnect', title: 'Reconnect' },
+  { key: 'finished',  title: 'Player finished' },
   { key: 'results',   title: 'Results' }
 ];
 

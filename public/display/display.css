@@ -390,3 +390,23 @@ html, body {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- Reconnect card ---- a QR for a dropped player, centred in their own
+   split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for
+   placement + chrome (absolute, translate(-50%,-50%), frosted card, livery
+   top-border); _loop sets left/top and toggles display. .cell-reconnect only adds
+   the spacing the QR content wants. */
+.cell-reconnect { gap: 0.5rem; }
+.rc-card__head {
+  display: flex; align-items: center; max-width: 11rem;
+  font-weight: 800; font-size: clamp(0.9rem, 1.1vw, 1.1rem); color: var(--ink);
+}
+.rc-card__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-card__sub {
+  font-weight: 700; font-size: 0.72rem; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.rc-card__qr {
+  display: block; width: clamp(96px, 9vw, 132px); aspect-ratio: 1 / 1;
+  border-radius: var(--r-sm); image-rendering: pixelated;
+}

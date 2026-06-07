@@ -26,6 +26,17 @@ function deriveInstance() {
   if (!raw) return null;
   try { return decodeURIComponent(raw); } catch (_) { return raw; }
 }
+// Reconnect claim from the display's per-seat QR (…/ROOM?claim=<peerIndex>). When
+// a player rejoins on a DIFFERENT device (the original phone's clientId is gone),
+// this token tells the display which dropped seat to hand this fresh connection —
+// see DisplayNet._claimReconnect. A same-device reconnect keeps its relay slot by
+// clientId and never needs it. Null on a normal first-time join.
+function deriveClaim() {
+  const raw = new URLSearchParams(location.search).get('claim');
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
 function loadClientId(roomCode) {
   const key = 'clientId_' + roomCode;
   try {
@@ -47,6 +58,7 @@ export class ControllerNet extends GameNet {
     this.roomCode = deriveRoomCode();
     this.instance = deriveInstance();
     this.clientId = loadClientId(this.roomCode);
+    this.rejoinToken = deriveClaim();
     this.peerIndex = null;
     this.playerName = '';
     this._pingTimer = null;
@@ -64,8 +76,12 @@ export class ControllerNet extends GameNet {
     this.party.onProtocol = (type, msg) => {
       if (type === 'joined') {
         this.peerIndex = msg.index;
+        this.party.resetReconnectCount(); // fresh retry budget — each clean (re)join starts over
         this._openFastlane();
-        this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName });
+        // rejoinToken claims a dropped seat when this is a cross-device rejoin
+        // (harmless otherwise — the display ignores a token that matches our own
+        // fresh slot or names a seat that's no longer waiting).
+        this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
         this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
@@ -83,16 +99,23 @@ export class ControllerNet extends GameNet {
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
+      // attempt > max: PartyConnection has stopped retrying — the link is down for
+      // good until the player acts. Surface a distinct 'lost' so the UI can offer a
+      // retry (and point at the big screen's reconnect QR).
+      if (attempt > max) { this.onStatus('lost'); return; }
       this.onStatus('reconnecting', { attempt, max });
     };
     this.party.connect();
   }
 
-  // Tear down the connection for good (no reconnect). The relay tells the
-  // display we've left (peer_left), which drops us from the roster. Used when
+  // Tear down the connection for good (no reconnect). Sends LEAVE first so the
+  // display frees our seat outright instead of holding it open with a reconnect
+  // QR — a back-out is intentional, not a drop. (peer_left follows when the
+  // socket closes; the display no-ops it once the seat's already gone.) Used when
   // the player backs out of the room to the name screen.
   disconnect() {
     this._stopPing();
+    try { if (this.party) this.party.sendTo(0, { type: MSG.LEAVE }); } catch (_) {}
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
     if (this.party) { this.party.close(); this.party = null; }
     this.peerIndex = null;

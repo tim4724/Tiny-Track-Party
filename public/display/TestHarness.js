@@ -9,7 +9,7 @@
 // chase cams, HUD, lean, and dust all show real motion in the preview.
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
-import { fetchQR, renderQR, renderJoinUrl } from './Net.js';
+import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { carThumbNode } from '../shared/carThumbs.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
@@ -322,6 +322,45 @@ export function runDisplayScenario(opts, ctx) {
       scene.onFrame = null; // frozen: no per-frame re-pose
       el('pause-btn').classList.remove('hidden');
       el('pause-overlay').classList.remove('hidden');
+    } else if (kind === 'reconnect') {
+      // Spin the field forward so it reads mid-race, then freeze it and float a
+      // reconnect QR over it for a "dropped" player. The dropped racer's car keeps
+      // its split-screen cell — exactly as it does live while someone reconnects
+      // (the car isn't forfeited until the grace window elapses).
+      for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
+      for (const c of engine.getSnapshot().cars) {
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
+        scene.setCarHud(c.id, c);
+      }
+      scene.onFrame = null; // frozen: no per-frame re-pose
+      // Fake a dropped racer: the last filled slot is reconnecting. Its car keeps
+      // its cell; the reconnect QR is centred in that cell (the renderer positions
+      // it). The QR encodes the join URL with the seat's ?claim= token (no relay
+      // needed — /api/qr serves it).
+      const dropped = buildSlots(players).slice(-1)[0];
+      scene.setCarReconnect(dropped, buildReconnectCard({
+        name: FAKE_NAMES[dropped], colorIndex: dropped,
+        url: (location.origin || 'https://tinytrack.party') + '/TEST?claim=' + dropped
+      }));
+    } else if (kind === 'finished') {
+      // One racer has crossed the line while the rest of the field races on: spin
+      // the field forward so it's spread out, mark the current leader FINISHED,
+      // then freeze. Their split-screen cell shows the centred FINISHED card
+      // (place + time); every other cell keeps its live lap/place HUD.
+      for (let t = 0; t < 160; t++) { autosteer(); engine.update(33); }
+      const leadId = engine.getSnapshot().cars.reduce((a, b) => (a.position <= b.position ? a : b)).id;
+      const lead = engine.cars.get(leadId);
+      if (lead) {
+        lead.finished = true;
+        lead.finishTime = FAKE_TIMES[0];
+        if (!engine.finishedOrder.includes(leadId)) engine.finishedOrder.push(leadId);
+        engine._rank(); // promote the finisher to P1; the rest keep racing for position
+      }
+      for (const c of engine.getSnapshot().cars) {
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
+        scene.setCarHud(c.id, c);
+      }
+      scene.onFrame = null; // frozen
     } else if (kind === 'results') {
       // Freeze the grid behind the blurred results overlay.
       const slots = buildSlots(players);
