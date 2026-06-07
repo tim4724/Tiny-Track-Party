@@ -76,7 +76,6 @@ const SKID_LIFE = 1.2;             // seconds to fully fade
 const SKID_WIDTH = 0.12;           // fallback tyre-contact width; per-car width is measured in addCar
 const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next stamp
 const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
-const CONTACT_OPACITY = 0.36;      // peak darkness of the under-car contact blob
 
 // NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
 // scene still renders to an offscreen LINEAR target and is presented through a
@@ -433,7 +432,7 @@ export class SceneRenderer {
   // the car), so a ring buffer recycles the oldest when busy.
   _initParticles() {
     this._skidTex = makeSkidTexture();
-    this._softTex = makeSoftBlobTexture(); // round blob for the contact shadow + boost aura
+    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
     this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
     this._skids = [];
     this._skidN = 0;
@@ -516,6 +515,12 @@ export class SceneRenderer {
     // bumps/hills with no clipping (a flat painted blob can't sit on curved ground).
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap; // soft PCF; the Soft variant is deprecated in our three build
+    // Rebuild the shadow map at most ONCE per frame, not once per split-screen cell:
+    // _loop raises renderer.shadowMap.needsUpdate before the first cell renders and that
+    // render consumes it. The gate (WebGLShadowMap) reads renderer.shadowMap — NOT
+    // light.shadow — so the flag has to live here, else autoUpdate stays on and every
+    // one of the N cameras re-rasterises the whole map (4× the shadow cost at 4 players).
+    r.shadowMap.autoUpdate = false;
     this.container.appendChild(r.domElement);
     this.renderer = r;
 
@@ -537,11 +542,12 @@ export class SceneRenderer {
     const key = new THREE.DirectionalLight(0xfff1d0, DEF_KEY_LIGHT);
     key.position.set(6, 12, 4); // high and slightly to one side → raking gloss + sun shadow
     // Shadow camera bounds/placement are set per-track in setTrack (needs the track
-    // extent). autoUpdate off: _loop refreshes the map once per frame, not once per
-    // split-screen cell, so N cameras stay one shadow pass.
+    // extent); _loop refreshes the map once per frame (see renderer.shadowMap.autoUpdate
+    // above). 4096² keeps the per-texel size small even on the biggest track's fitted
+    // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead
+    // of shimmering as the car moves — coarse texels were the source of the flicker.
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.autoUpdate = false;
+    key.shadow.mapSize.set(4096, 4096);
     key.shadow.bias = -0.0004;
     key.shadow.normalBias = 0.05; // curved road → bias along the normal kills acne
     scene.add(key);
@@ -1141,15 +1147,38 @@ export class SceneRenderer {
     this._ovHeight = ovOff.y;
 
     // Aim + size the sun's shadow camera to cover the whole track. The light keeps its
-    // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we just move it far out
-    // along that direction and frame the track tightly for good shadow-map resolution.
-    const half = Math.max(size.x, size.z) * 0.5 + 4;
+    // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we move it far out along
+    // that direction and FIT the orthographic frustum to the track's bounding box as
+    // projected into the light's view. A symmetric ±max(size)/2 box (the old approach)
+    // under-covers a large or L-shaped track seen from the raked angle: its diagonal
+    // corners fall OUTSIDE the frustum, so cars there cast no shadow. On Riverside that
+    // dropped the shadow near the start/finish and on a couple of the L's arms — the
+    // shadow "blinked" as you drove. Fitting the projected AABB guarantees full coverage.
     const k = this._key;
+    const dir = new THREE.Vector3(6, 12, 4).normalize();
+    const diag = Math.hypot(size.x, size.y, size.z);
+    k.position.copy(this._trackCenter).addScaledVector(dir, diag + 20); // far enough that near > 0
     k.target.position.copy(this._trackCenter); k.target.updateMatrixWorld();
-    k.position.copy(this._trackCenter).add(new THREE.Vector3(6, 12, 4).normalize().multiplyScalar(half * 2.2));
+    // Build the exact view matrix the shadow camera will use at render time (it re-derives
+    // this each frame from light.position/target with up +Y), so our fit matches what gets
+    // rasterised into the shadow map.
     const sc = k.shadow.camera;
-    sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
-    sc.near = half * 0.6; sc.far = half * 3.6 + 12;
+    sc.position.copy(k.position); sc.up.set(0, 1, 0); sc.lookAt(this._trackCenter);
+    sc.updateMatrixWorld(true);
+    const view = sc.matrixWorld.clone().invert();
+    // Project the 8 AABB corners (top corners lifted by the car body height so a tall
+    // caster at the track edge still fits) and fit left/right/top/bottom + near/far to them.
+    const CAR_H = 1.2, M = 4; // M: world-unit slack absorbing road width + caster overhang
+    const corner = new THREE.Vector3();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) for (let zi = 0; zi < 2; zi++) {
+      corner.set(xi ? box.max.x : box.min.x, (yi ? box.max.y : box.min.y) + (yi ? CAR_H : 0), zi ? box.max.z : box.min.z).applyMatrix4(view);
+      minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
+      minY = Math.min(minY, corner.y); maxY = Math.max(maxY, corner.y);
+      minZ = Math.min(minZ, corner.z); maxZ = Math.max(maxZ, corner.z); // view looks down -z
+    }
+    sc.left = minX - M; sc.right = maxX + M; sc.bottom = minY - M; sc.top = maxY + M;
+    sc.near = Math.max(0.5, -maxZ - M); sc.far = -minZ + M;
     sc.updateProjectionMatrix();
     k.shadow.needsUpdate = true; // rebuild the map for the new track
 
@@ -1641,28 +1670,14 @@ export class SceneRenderer {
     body.add(plate);
     this.scene.add(group);
 
-    // Soft CONTACT SHADOW: a dark blob that rides flat on the road directly under
-    // the car. The sun also casts a real shadow, but a single directional light
-    // throws it off to one side — leaving a bright gap under the chassis that
-    // reads as "hovering". This blob fills that gap so the car looks planted.
-    // Parented to the GROUP (not the leaning body) so it stays flush with the
-    // road — it inherits the road pitch/heading but never the steering lean.
+    // Car footprint (width × length), used to size the boost aura below. The sun's
+    // directional light is the only car shadow now — a single raked light leaves a
+    // faint gap under the chassis, but a generic oval blob there read as a separate
+    // "second shadow", so it's gone; the cast silhouette alone keeps the car planted.
+    // updateWorldMatrix first so the bounding box reflects the posed car transform.
     group.updateWorldMatrix(true, true);
     const fb = new THREE.Box3().setFromObject(car);
     const footW = fb.max.x - fb.min.x, footL = fb.max.z - fb.min.z;
-    const contact = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        map: this._softTex, color: 0x000000, transparent: true, depthWrite: false,
-        opacity: CONTACT_OPACITY,
-        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
-      })
-    );
-    contact.rotation.x = -Math.PI / 2;               // lie in the group's road plane
-    contact.scale.set(footW * 1.55, footL * 1.3, 1); // a touch larger than the footprint
-    contact.position.y = -RIDE_HEIGHT + 0.006;       // hug the road just under the wheels
-    contact.renderOrder = -1;                         // under the dust/skid decals
-    group.add(contact);
 
     // BOOST aura: an additive gold glow under the car, shown only while boosting and
     // sized/brightened by boostMul — so the catch-up scaling (leader vs back-marker)
@@ -1750,7 +1765,7 @@ export class SceneRenderer {
 
     const c = {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, plate, contact, cam, boostAura, footW, footL,
+      wheelbase, skidWidth, plate, cam, boostAura, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
@@ -1793,12 +1808,10 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     this.scene.remove(c.group);
-    // Dispose what addCar created fresh per car (the name plate + contact-shadow
-    // blob). The car mesh shares its geometry/material with the cached prototype —
-    // leave it for the next race. The contact blob shares the pooled soft texture,
-    // so dispose its geometry/material but NOT the map.
+    // Dispose what addCar created fresh per car (the name plate + boost aura). The car
+    // mesh shares its geometry/material with the cached prototype — leave it for the
+    // next race.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
-    if (c.contact) { c.contact.geometry.dispose(); c.contact.material.dispose(); }
     // boost aura owns its geometry + material (the map is the shared this._softTex — leave it)
     if (c.boostAura) { c.boostAura.geometry.dispose(); c.boostAura.material.dispose(); }
     if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; } // stop any running item roulette
@@ -2058,9 +2071,10 @@ export class SceneRenderer {
     r.setRenderTarget(rt);
     r.clear();
 
-    // Refresh the sun's shadow map ONCE this frame (autoUpdate is off); the first
-    // render() below consumes it and every split-screen cell reuses the same map.
-    if (this._key) this._key.shadow.needsUpdate = true;
+    // Refresh the sun's shadow map ONCE this frame (renderer.shadowMap.autoUpdate is
+    // off); the first render() below consumes it and every split-screen cell reuses the
+    // same map. The flag lives on renderer.shadowMap — the gate ignores light.shadow.
+    if (this._key) r.shadowMap.needsUpdate = true;
 
     const ids = this._order.filter((id) => this.cars.has(id));
     if (ids.length === 0) {
