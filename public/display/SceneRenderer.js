@@ -1933,6 +1933,12 @@ export class SceneRenderer {
     // body lean into the turn — roll ONLY the body (wheels stay flat on the road)
     c.lean += (steer * LEAN_MAX - c.lean) * 0.2;
     c.body.quaternion.copy(c.bodyBaseQuat);
+    // Models with no separate body node (body === car — e.g. the monster truck, whose
+    // wheels aren't named like the others) carry the spin-out whirl on this SAME node,
+    // so the copy above just wiped the whirl set near the top of setCarPose. Fold it
+    // back in here (only while spinning out) or the car spins out in the sim but never
+    // visibly whirls on screen.
+    if (spin && c.body === c.car) c.body.rotateY(spin);
     c.body.rotateZ(c.lean);
     // turn the front wheels with steering (steer>0 = right)
     for (const w of c.frontWheels) w.rotation.y = steer * WHEEL_TURN_MAX;
