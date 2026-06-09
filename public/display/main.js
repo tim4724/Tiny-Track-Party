@@ -8,6 +8,7 @@ import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
+import { createWakeLock } from '../shared/wakeLock.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
@@ -691,6 +692,13 @@ el('joinbox').addEventListener('click', async () => {
   showToast(await copyText(currentJoinUrl) ? 'Copied' : 'Copy failed');
 });
 
+// Keep the display awake for the whole session — the lobby IS the join screen
+// (QR + attract demo), so the screen sleeping there is as bad as mid-race.
+// Re-acquired on tab return; no-op where unsupported. Gallery/test surfaces are
+// dev previews and skip it.
+const wakeLock = createWakeLock();
+if (!_isTestMode) wakeLock.enable();
+
 // Gallery / test mode: ?test=1 (or any ?scenario=…) skips the relay and lets
 // the TestHarness drive a single screen from fake data. Normal play connects.
 const _params = new URLSearchParams(location.search);
@@ -738,4 +746,4 @@ if (_params.get('test') === '1' || _scenario) {
   net.start();
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;
-window.__session = () => session; window.__lobbyDemo = lobbyDemo;
+window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;

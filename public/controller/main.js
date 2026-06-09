@@ -6,6 +6,7 @@ import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote } from './ui.js';
 import { ordinal } from '../shared/format.js';
+import { createWakeLock } from '../shared/wakeLock.js';
 
 const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
@@ -75,8 +76,15 @@ const saveTrackId = (id) => { try { localStorage.setItem(TRACK_KEY, id); } catch
 const storedCarIndex = () => { try { const v = parseInt(localStorage.getItem(CAR_KEY), 10); return Number.isInteger(v) ? v : null; } catch (_) { return null; } };
 const saveCarIndex = (i) => { try { localStorage.setItem(CAR_KEY, String(i)); } catch (_) {} };
 
+// Keep the phone's screen on while seated in a room: tilt steering means whole
+// races go by without a touch, so the screen would otherwise dim and lock
+// mid-race. Held from join (lobby included — waiting on the host shouldn't dim
+// either) until the player backs out; re-acquired on tab return (the browser
+// drops the lock whenever the phone is pocketed / the tab hidden).
+const wakeLock = createWakeLock();
+
 const net = new ControllerNet({
-  onJoined: () => { setStatus(''); hideConn(); },
+  onJoined: () => { setStatus(''); hideConn(); wakeLock.enable(); },
   onStatus: (state, info) => {
     // Any status callback means the clean join→lobby path didn't carry us all the
     // way through, so re-enable the join form. It's a no-op once we've moved off
@@ -426,6 +434,7 @@ el('name-input').value = storedName();
 function leaveToName() {
   net.disconnect();
   stopDriving();
+  wakeLock.disable();  // off the room — let the phone sleep normally again
   _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
   amHost = false;
@@ -512,7 +521,7 @@ function setHeldItem(item) {
 }
 
 show('name');
-window.__net = net; // debug/test handle (parity with the display)
+window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
 
 // Gallery / test mode: ?scenario=… lays out a single screen from fake data
 // without connecting to the relay (the controller never auto-connects, so
