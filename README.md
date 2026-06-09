@@ -4,15 +4,15 @@ Multiplayer toy-car racing where phones become tilt controllers and a shared scr
 
 ![4-player split-screen](artwork/splitscreen-4p.png)
 
-**▶ [Play it live](https://tinytrack-main.couch-games.com/)** · **[UI gallery](https://tinytrack-main.couch-games.com/gallery.html)**
+**▶ [Play it live](https://tinytrack.couch-games.com/)** · **[UI gallery](https://tinytrack.couch-games.com/gallery.html)**
 
 ## Overview
 
-Tiny Track Party is a couch party game for 1–8 players on a single shared display. One browser window is the game screen (TV, monitor, or laptop); each player joins by scanning a QR code with their phone and tilts it to steer. The display runs the authoritative 3D race simulation; the Node.js server only serves static files and a QR code API.
+Tiny Track Party is a couch party game for 1–4 players on a single shared display. One browser window is the game screen (TV, monitor, or laptop); each player joins by scanning a QR code with their phone and tilts it to steer. Empty seats are topped up with AI ("CPU") racers, so every race runs a full grid. The display runs the authoritative 3D race simulation; the Node.js server only serves static files and a QR code API.
 
 ## Architecture
 
-The display browser is authoritative and broadcasts game state to all controllers through a [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay. Controller input (tilt/brake) also flows to the display over that relay today. A lower-latency WebRTC DataChannel path (`partyplug/PartyFastlane.js`, relay-signalled, WebSocket fallback) is the next planned step but is not wired in yet. Rendering is Three.js.
+The display browser is authoritative and broadcasts game state to all controllers through a [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay. Controller input (`CONTROL` — steer/brake/use, ~25 Hz) rides a lower-latency WebRTC DataChannel fastlane (`partyplug/PartyFastlane.js`, relay-signalled) whenever its channel is open, and falls back to the relay otherwise; all other traffic flows over the relay. Rendering is Three.js.
 
 ## Quick Start
 
@@ -34,8 +34,9 @@ node server/index.js
 |---|---|
 | Tilt phone left/right | Steer |
 | Hold BRAKE | Slow down |
+| Tap USE (when lit) | Fire your power-up |
 
-Cars auto-accelerate; steering and braking are the only inputs.
+Cars auto-accelerate; tilt, brake, and the item button are the only inputs. Drive over an item box to roll a power-up — a **boost** (a short speed burst) or a **banana** to drop behind you — which arms the USE button. Boost pads on the track and the rubber-banded item odds give trailing cars a catch-up edge.
 
 ## Project Structure
 
@@ -75,8 +76,8 @@ Unit tests use Node.js's built-in `node:test` runner — no test framework. They
 
 - **Runtime**: Node.js (static host, no build step)
 - **3D**: Three.js (vendored) + Kenney Toy Car Kit assets
-- **Relay**: [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay (signaling + game events + controller input)
-- **P2P** (planned): WebRTC DataChannels for low-latency controller input — kit code exists (`PartyFastlane.js`), not yet wired into the game
+- **Relay**: [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay (signaling + game events + controller-input fallback)
+- **P2P**: WebRTC DataChannels (`partyplug/PartyFastlane.js`) carry low-latency controller input, with automatic WebSocket-relay fallback
 - **Frontend**: Vanilla JavaScript + ES modules
 - **Production deps**: 1 npm package (`qrcode`)
 

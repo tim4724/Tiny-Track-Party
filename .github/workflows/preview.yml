@@ -52,8 +52,7 @@ jobs:
           NS="tinytrack-${SAFE_BRANCH}"
           # All preview hosts sit under *.couch-games.com (covered by the
           # existing wildcard TLS + DNS). main deploys to tinytrack-main,
-          # branches to tinytrack-<branch>; a bare tinytrack.couch-games.com is
-          # reserved for the eventual production deploy.
+          # branches to tinytrack-<branch>.
           HOST="tinytrack-${SAFE_BRANCH}.couch-games.com"
 
           kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
