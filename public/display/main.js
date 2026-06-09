@@ -56,6 +56,10 @@ const _showCenterline = _trackParams.get('centerline') === '1';
 // Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
 // the live lobby attract demo must stay out of their way — guard every demo entry on it.
 const _isTestMode = _trackParams.get('test') === '1' || !!_trackParams.get('scenario');
+// ?solo=1 — DEBUG single-player keyboard mode (no relay, no phones). ?car=<n>
+// picks the model. See DebugSolo.js; wired at the bootstrap tail below.
+const _isDebugSolo = _trackParams.get('solo') === '1';
+const _soloCar = (((parseInt(_trackParams.get('car'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
@@ -225,6 +229,7 @@ let aiBots = new Map();
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
+let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
 
 scene.onFrame = (dt) => {
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
@@ -233,6 +238,7 @@ scene.onFrame = (dt) => {
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
   driveBots();
+  if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
   // Every human across the line but CPU cars still circulating? Don't make the
   // humans watch them crawl home — fast-forward the deterministic sim to the
@@ -722,6 +728,24 @@ if (_params.get('test') === '1' || _scenario) {
     },
     { scene, track, scenePromise }
   ));
+} else if (_isDebugSolo) {
+  // DEBUG ?solo=1: one local keyboard player on the main display, no relay. The
+  // module seats a synthetic human in net.flow and feeds the keyboard through the
+  // normal engine input path, so the whole race lifecycle runs unchanged. Booting
+  // through the lobby (not the test harness) keeps that path identical to live play.
+  show('lobby');
+  renderRoster([], null);
+  updateBackdrop();
+  import('./DebugSolo.js').then(({ DebugSolo }) => {
+    debugSolo = new DebugSolo({
+      net, scenePromise,
+      startRace, returnToLobby, selectTrack,
+      defaultTrackId: selectedTrackId || TRACK_LIST[0].id,
+      carIndex: _soloCar,
+    });
+    window.__debugSolo = debugSolo;
+    debugSolo.start();
+  });
 } else {
   show('lobby');
   renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
