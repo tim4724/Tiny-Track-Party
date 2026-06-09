@@ -333,6 +333,52 @@ test('finished cars are ghosts — a live car is not shoved by one', () => {
   assert.ok(Math.abs(b.lat - bLat0) < 1e-9, 'live car is not knocked sideways by a finished (ghost) car');
 });
 
+// Resolve a single collision pair in isolation (no motion step), so an assertion
+// sees PURE collision output from hand-set car states. Mirrors the engine call.
+function collide(carA, carB, statsA, statsB) {
+  const track = mkTrack(3);
+  const game = new Game([{ id: 'a', stats: statsA }, { id: 'b', stats: statsB }], track, {});
+  const a = game.cars.get('a'), b = game.cars.get('b');
+  Object.assign(a, carA); Object.assign(b, carB);
+  game._collidePair(a, b);
+  return { a, b };
+}
+
+test('a side bump never scrubs forward speed (door-to-door racing keeps pace)', () => {
+  // Two cars dead level (same s), overlapping laterally, both cruising at 6 u/s
+  // straight ahead. The contact normal is sideways, so the impulse must leave each
+  // car's forward speed exactly untouched — no bouncy pace-scrubbing.
+  const { a, b } = collide({ totalS: 5, lat: 0, v: 6, heading: 0 }, { totalS: 5, lat: 0.25, v: 6, heading: 0 });
+  assert.equal(a.v, 6, `left car keeps its forward speed (v=${a.v})`);
+  assert.equal(b.v, 6, `right car keeps its forward speed (v=${b.v})`);
+  assert.ok(Math.abs(b.lat - a.lat) > 0.25, 'cars still separated sideways');
+});
+
+test('a gentle side lean imparts no knock — only a hard converge does (not bouncy)', () => {
+  // Both stationary-lateral (heading 0, no prior knock): they overlap but are NOT
+  // converging, so NO sideways impulse — the old fixed kick pinged them apart at
+  // any brush; this one is proportional to the actual closing speed.
+  const idle = collide({ totalS: 5, lat: 0, v: 6, heading: 0 }, { totalS: 5, lat: 0.25, v: 6, heading: 0 });
+  assert.equal(idle.a.vlat, 0, 'no knock when not converging (left)');
+  assert.equal(idle.b.vlat, 0, 'no knock when not converging (right)');
+  // Now the left car actively swerves into the right one (heading<0 drifts +lat):
+  // a real converging contact, so a knock IS imparted, shoving them apart.
+  const ram = collide({ totalS: 5, lat: 0, v: 6, heading: -0.3 }, { totalS: 5, lat: 0.25, v: 6, heading: 0 });
+  assert.ok(ram.a.vlat < 0, `swerver is knocked back off its line (vlat=${ram.a.vlat.toFixed(2)})`);
+  assert.ok(ram.b.vlat > 0, `rammed car is shoved aside (vlat=${ram.b.vlat.toFixed(2)})`);
+});
+
+test('the stronger car dominates a rear-end: it keeps its pace, the light one is launched', () => {
+  // Same closing impact (chaser at 8, leader at 2), once between equal cars and
+  // once with a 2× heavier chaser. The heavy chaser must shed LESS speed and fling
+  // the light leader forward HARDER — momentum favours the heavier car.
+  const even = collide({ totalS: 5, lat: 0, v: 8, heading: 0 }, { totalS: 5.6, lat: 0, v: 2, heading: 0 }, { mass: 1 }, { mass: 1 });
+  const heavy = collide({ totalS: 5, lat: 0, v: 8, heading: 0 }, { totalS: 5.6, lat: 0, v: 2, heading: 0 }, { mass: 2 }, { mass: 1 });
+  assert.ok(heavy.a.v > even.a.v, `heavy chaser keeps more pace (${heavy.a.v.toFixed(2)} vs even ${even.a.v.toFixed(2)})`);
+  assert.ok(heavy.b.v > even.b.v, `heavy chaser launches the light leader harder (${heavy.b.v.toFixed(2)} vs even ${even.b.v.toFixed(2)})`);
+  assert.ok(heavy.a.v < 8, 'the chaser still sheds some speed (no interpenetration)');
+});
+
 // ---- oil slicks (spin-out hazard) ------------------------------------------
 
 test('an oil slick spins a car out: steering dies + speed scrubs, then control returns', () => {

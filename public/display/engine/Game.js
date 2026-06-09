@@ -49,8 +49,13 @@ const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 // units). Collision is therefore a 2D box overlap in (s, lat): cheap, robust, and
 // it "just works" through loops/hills because it never touches world XYZ.
 const COLLIDE_SHRINK = 0.9;    // footprints a touch tighter than the mesh so a bump reads as contact, not a gap
-const REAR_RESTITUTION = 0.25; // bounciness of a rear-end tap (0 = dead stick, 1 = elastic)
-const LAT_KICK = 1.4;          // sideways shove speed (units/s) imparted on a side bump, split by mass
+// One impulse model for both contact axes (see _collidePair). RESTITUTION is the
+// bounciness of the impact along the contact normal: ~0 = a solid inelastic thunk
+// (the cars match speed and part, no rebound), 1 = a perfectly elastic ping. Kept
+// LOW on purpose — the old fixed "kick" pinged cars off each other at every brush;
+// a velocity-proportional impulse instead means a gentle lean barely registers and
+// only a real ram lands a blow, with no rebound to scrub speed.
+const RESTITUTION = 0.12;      // impact bounciness along the contact normal (0 = dead stick, 1 = elastic)
 const KNOCK_DAMP = 6.0;        // how fast a sideways knock bleeds off (per second, exponential)
 
 // ---- Oil slicks (track hazards) ----
@@ -604,20 +609,20 @@ export class Game {
   // Car-car collisions in (totalS, lat) space. Two cars overlap when their
   // arclength gap AND lateral gap are both inside the summed footprints; we push
   // them apart along the axis of least penetration (classic AABB MTV), split by
-  // mass so the heavier car barely moves. A rear-end overlap also trades speed
-  // (the chaser slows, the car ahead gets nudged); a side overlap imparts a
-  // sideways knock. Finished cars are ghosts so a coasting winner can't block the
-  // pack at the line.
+  // mass so the heavier car barely moves, then resolve the impact as ONE
+  // mass-weighted impulse along that normal (the heavier/faster car keeps its line,
+  // the lighter one absorbs the blow). Finished cars are ghosts so a coasting
+  // winner can't block the pack at the line.
   _resolveCollisions(dt) {
     const list = [...this.cars.values()].filter((c) => !c.finished);
     for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) this._collidePair(list[i], list[j], dt);
+      for (let j = i + 1; j < list.length; j++) this._collidePair(list[i], list[j]);
     }
     // A push may have driven a car past a curb — pin it back inside.
     for (const c of list) this._clampCurb(c, dt);
   }
 
-  _collidePair(a, b, dt) {
+  _collidePair(a, b) {
     const ds = b.totalS - a.totalS;          // +: b is ahead of a along the track
     const dl = b.lat - a.lat;                // +: b sits to a's +lateral side
     const sumLen = (a.halfLen + b.halfLen) * COLLIDE_SHRINK;
@@ -626,32 +631,48 @@ export class Game {
     const penL = sumWid - Math.abs(dl);
     if (penS <= 0 || penL <= 0) return;      // no overlap on one axis → no contact
 
-    const mSum = a.mass + b.mass;
-    const aShare = b.mass / mSum;            // lighter car takes the larger push
-    const bShare = a.mass / mSum;
+    // Inverse-mass shares: the lighter car takes the larger push and the larger
+    // velocity change (invA/invSum == b.mass/mSum), so a heavy car barely budges
+    // and keeps its momentum — the "stronger car dominates" feel.
+    const invA = 1 / a.mass, invB = 1 / b.mass, invSum = invA + invB;
+    const aShare = invA / invSum;
+    const bShare = invB / invSum;
 
     if (penS <= penL) {
-      // Longitudinal overlap → separate along the track and trade speed.
-      const dir = ds >= 0 ? 1 : -1;          // push b forward, a backward (or vice-versa)
-      a.totalS -= dir * penS * aShare;
-      b.totalS += dir * penS * bShare;
-      const rear = dir > 0 ? a : b;          // the car behind (catching up)
-      const front = dir > 0 ? b : a;
-      const rel = rear.v - front.v;
-      if (rel > 0) {                         // only when actually closing in
-        // 1D collision with restitution along the track: conserves momentum,
-        // `rel` is the closing speed. Rear slows, front gets nudged forward.
-        const p = rear.mass * rear.v + front.mass * front.v;
-        rear.v = (p - front.mass * REAR_RESTITUTION * rel) / mSum;
-        front.v = (p + rear.mass * REAR_RESTITUTION * rel) / mSum;
+      // ── REAR-END: contact normal lies along the track ──────────────────────
+      // Separate along s, then resolve the 1D impact as a mass-weighted impulse.
+      // With RESTITUTION≈0 it equalises the closing speed (a solid thunk, no
+      // rebound) — the heavy car keeps its pace and launches the light one forward,
+      // rather than both bouncing apart. This is the minimum speed change that
+      // still keeps the cars from interpenetrating, so the chaser sheds no more
+      // pace than physics demands.
+      const n = ds >= 0 ? 1 : -1;            // contact normal: a → b along the track
+      a.totalS -= n * penS * aShare;
+      b.totalS += n * penS * bShare;
+      const vrel = (b.v - a.v) * n;          // <0 ⇒ closing (the rear car is gaining)
+      if (vrel < 0) {
+        const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
+        a.v = Math.max(0, a.v - j * invA * n); // rear slows / front gets nudged on
+        b.v = Math.max(0, b.v + j * invB * n);
       }
     } else {
-      // Lateral overlap → separate sideways and impart a decaying knock.
-      const dir = dl >= 0 ? 1 : -1;          // push b to +lat, a to -lat (stacked → deterministic)
-      a.lat -= dir * penL * aShare;
-      b.lat += dir * penL * bShare;
-      a.vlat -= dir * LAT_KICK * aShare;
-      b.vlat += dir * LAT_KICK * bShare;
+      // ── SIDE BUMP: contact normal points sideways ──────────────────────────
+      // Separate sideways, then trade a mass-weighted impulse from the actual
+      // lateral closing speed — steering drift (−v·sin(heading)) plus any live
+      // knock. Forward speed is never touched, so racing door-to-door scrubs NO
+      // pace, and the knock scales with how hard the cars converge: a gentle lean
+      // barely registers, a committed swerve shoves the lighter car off its line.
+      const n = dl >= 0 ? 1 : -1;            // contact normal: a → b sideways (+lat)
+      a.lat -= n * penL * aShare;
+      b.lat += n * penL * bShare;
+      const vLatA = -a.v * Math.sin(a.heading) + a.vlat; // lateral velocity, +lat dir
+      const vLatB = -b.v * Math.sin(b.heading) + b.vlat;
+      const vrel = (vLatB - vLatA) * n;      // <0 ⇒ converging sideways
+      if (vrel < 0) {
+        const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
+        a.vlat -= j * invA * n;              // lighter car takes the bigger knock
+        b.vlat += j * invB * n;
+      }
     }
   }
 
