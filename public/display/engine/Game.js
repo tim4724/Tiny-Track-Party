@@ -13,6 +13,7 @@
 // AiDriver is dependency-free (no THREE), so this keeps Game loadable in both the
 // browser and the Node tests.
 import { pursue, cornerBrake } from '../AiDriver.js';
+import { mulberry32, wrapDelta } from './util.js';
 
 // Base handling numbers — the "Racer" benchmark. Per-car stats (see DEFAULT_STATS
 // and the `stats` constructor arg) scale these so each model feels distinct while
@@ -119,18 +120,10 @@ const ITEM_TABLE = [
   { id: 'banana', base: 4.0, slope: -3.0 }
 ];
 
-// Tiny seeded PRNG (mulberry32). Item rolls draw from this so a race is fully
-// reproducible from its seed under a fixed dt (the Node tests) — never the JS
-// global RNG. Live races vary their dt, so they aren't bit-reproducible; that's
-// fine, only the tests need determinism.
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Item rolls draw from a seeded PRNG (mulberry32, engine/util.js) so a race is
+// fully reproducible from its seed under a fixed dt (the Node tests) — never
+// the JS global RNG. Live races vary their dt, so they aren't bit-reproducible;
+// that's fine, only the tests need determinism.
 
 // Default per-car stats = the benchmark: accel/vmax/turn are multipliers on the
 // base constants (1 = unchanged), `mass` is relative (only the ratio matters in a
@@ -321,7 +314,7 @@ export class Game {
         if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
       }
       if (!c.finished) {
-        const oil = this._enterOil(c);
+        const oil = this._enterZones(c, this.hazards, c.oilIn);
         const ban = this._enterBanana(c);
         if (oil || ban) {
           // A fresh hazard (re)arms the spin: entering a SECOND slick/banana mid-spin
@@ -342,7 +335,7 @@ export class Game {
         // it. A press with no item is dropped.
         if (c.wantUse && c.item && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; this._useItem(c); }
         else if (c.wantUse && !c.item) c.wantUse = false;
-        if (!spinning && this._enterPad(c)) this._applyPad(c);          // position-scaled boost
+        if (!spinning && this._enterZones(c, this.pads, c.padIn)) this._applyPad(c); // position-scaled boost
         if (this.elapsed > LAUNCH_GATE) this._enterBox(c);             // roll a held item (gated)
       }
 
@@ -473,22 +466,21 @@ export class Game {
     }
   }
 
-  // Update which oil slicks `c` overlaps and report whether it ENTERED any this
-  // tick (rising edge). Distance is measured in the same (arclength, lateral)
+  // Rising-edge overlap for circular (s, lat) trigger zones — oil slicks and
+  // boost pads share this. Distance is measured in the same (arclength, lateral)
   // plane as the car-car collisions, with the arclength gap wrapped to the
-  // shortest way round the closed lap. Membership is kept so a car sitting on a
-  // slick doesn't re-trigger every frame — only a fresh enter spins it out.
-  _enterOil(c) {
-    if (!this.hazards.length) return false;
+  // shortest way round the closed lap. Membership (`inSet`, per car) is kept so
+  // a car sitting in a zone doesn't re-trigger every frame — only a fresh enter
+  // fires. (Item boxes keep their own loop: cooldown + full-slot rules differ.)
+  _enterZones(c, zones, inSet) {
     let entered = false;
-    for (let i = 0; i < this.hazards.length; i++) {
-      const h = this.hazards[i];
-      let ds = c.totalS - h.s;
-      ds -= Math.round(ds / this.length) * this.length; // shortest wrap around the lap
-      const dl = c.lat - h.lat;
-      const inside = (ds * ds + dl * dl) < (h.radius * h.radius);
-      if (inside) { if (!c.oilIn.has(i)) { c.oilIn.add(i); entered = true; } }
-      else c.oilIn.delete(i);
+    for (let i = 0; i < zones.length; i++) {
+      const z = zones[i];
+      const ds = wrapDelta(c.totalS - z.s, this.length);
+      const dl = c.lat - z.lat;
+      const inside = (ds * ds + dl * dl) < (z.radius * z.radius);
+      if (inside) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
+      else inSet.delete(i);
     }
     return entered;
   }
@@ -524,21 +516,6 @@ export class Game {
     for (const b of this.bananas) if (b.armT > 0) b.armT -= dt;
   }
 
-  // Rising-edge overlap of a boost PAD (same (s,lat) test as oil). Returns true on a
-  // fresh entry so the caller arms one boost per cross, not one per frame.
-  _enterPad(c) {
-    if (!this.pads.length) return false;
-    let entered = false;
-    for (let i = 0; i < this.pads.length; i++) {
-      const p = this.pads[i];
-      let ds = c.totalS - p.s; ds -= Math.round(ds / this.length) * this.length;
-      const dl = c.lat - p.lat;
-      if ((ds * ds + dl * dl) < (p.radius * p.radius)) { if (!c.padIn.has(i)) { c.padIn.add(i); entered = true; } }
-      else c.padIn.delete(i);
-    }
-    return entered;
-  }
-
   // Arm/refresh a position-scaled boost: peak ×vmax interpolates leader→last by tRaw.
   // Assignment via Math.max (never accumulation) so pads/items can't compound into a
   // teleport; the timer is re-armed each cross.
@@ -556,7 +533,7 @@ export class Game {
     if (!this.boxes.length) return;
     for (let i = 0; i < this.boxes.length; i++) {
       const b = this.boxes[i];
-      let ds = c.totalS - b.s; ds -= Math.round(ds / this.length) * this.length;
+      const ds = wrapDelta(c.totalS - b.s, this.length);
       const dl = c.lat - b.lat;
       const inside = b.cooldown <= 0 && (ds * ds + dl * dl) < (b.radius * b.radius);
       if (inside && !c.boxIn.has(i)) {
@@ -598,7 +575,7 @@ export class Game {
     let hit = false;
     for (const b of this.bananas) {
       if (b.hit || b.owner === c.id || b.armT > 0) continue; // already consumed this frame, owner, or still arming
-      let ds = c.totalS - b.s; ds -= Math.round(ds / this.length) * this.length;
+      const ds = wrapDelta(c.totalS - b.s, this.length);
       const dl = c.lat - b.lat;
       if ((ds * ds + dl * dl) < (BANANA_RADIUS * BANANA_RADIUS)) { b.hit = true; hit = true; }
     }

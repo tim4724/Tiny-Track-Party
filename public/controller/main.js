@@ -5,15 +5,10 @@ import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote } from './ui.js';
+import { ordinal } from '../shared/format.js';
 
 const { MSG, CAR_COLORS } = window;
 const el = (id) => document.getElementById(id);
-// 1 → "1st", 2 → "2nd" … (mirrors the display's place readout).
-const ordinal = (n) => {
-  const t = n % 100, u = n % 10;
-  const s = (t >= 11 && t <= 13) ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th';
-  return `${n}${s}`;
-};
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one

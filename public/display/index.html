@@ -74,9 +74,9 @@
       </div>
       <div id="count">Scan the QR code to join</div>
       <!-- Seeded with four open-seat placeholders so the welcome card paints at its
-           full height on the first frame, before main.js runs. renderRoster() then
-           replaces these (always keeping >=4 seats) as players join — keep this
-           markup in sync with its `seat--open` branch. -->
+           full height on the first frame, before main.js runs. lobbySeats.js's
+           renderSeats() then replaces these (always keeping >=4 seats) as players
+           join — keep this markup in sync with its `seat--open` branch. -->
       <div id="players">
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>

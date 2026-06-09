@@ -6,15 +6,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { ordinal } from '../shared/format.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
-
-// English ordinal for a finishing place: 1 → "1st", 2 → "2nd", 3 → "3rd", 4 → "4th".
-function ordinal(n) {
-  const t = n % 100, u = n % 10;
-  const suffix = (t >= 11 && t <= 13) ? 'th' : (u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th');
-  return `${n}${suffix}`;
-}
 
 // Reverse a BufferGeometry's triangle winding in place. Used when baking MIRRORED
 // track tiles: a mirror placement has a negative-determinant matrix, so applyMatrix4

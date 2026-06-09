@@ -7,10 +7,10 @@ import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { carThumbNode } from '../shared/carThumbs.js';
+import { renderSeats, seatCountText } from './lobbySeats.js';
 // Sound is intentionally disabled for now (Audio.js kept for a later pass).
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
 const screens = { lobby: el('lobby'), race: el('race') };
 const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -183,24 +183,35 @@ function scheduleLobbyDemo() {
   demoRefreshTimer = setTimeout(refreshLobbyDemo, 500);
 }
 
+// CPU seats that top a human roster up to FIELD_SIZE — shared by the race grid
+// (buildField) and the lobby attract demo (buildDemoField). Each gets the lowest
+// free livery, the model that livery slot maps to (what the renderer already
+// drew when carIndex was omitted) + its stats, and a persona cycled by CPU
+// index. Callers shape the entry (id key, ai flag) and wire any controller.
+function cpuSeats(humans) {
+  const used = new Set(humans.map((p) => p.colorIndex));
+  const seats = [];
+  for (let n = 0; humans.length + seats.length < FIELD_SIZE; n++) {
+    const colorIndex = RoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
+    used.add(colorIndex);
+    const carIndex = colorIndex % CAR_MODELS.length;
+    seats.push({ n, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length], colorIndex, carIndex, stats: carStats(carIndex) });
+  }
+  return seats;
+}
+
 // Build the attract field: each connected human's PICKED car (livery + model), plus
 // CPU racers topping the grid up to a full field — every car driven by the AI. The
 // ids are namespaced so they never collide with the integer phone slots a later real
 // race uses (the race rebuilds its own field on "GO").
 function buildDemoField(humans) {
-  const field = [];
-  const usedColors = new Set();
-  for (const p of humans) {
+  const field = humans.map((p) => {
     const carIndex = (p.carIndex == null ? p.colorIndex : p.carIndex);
-    field.push({ id: 'demo-' + p.peerIndex, name: p.name, colorIndex: p.colorIndex, carIndex, stats: carStats(carIndex) });
-    usedColors.add(p.colorIndex);
-  }
+    return { id: 'demo-' + p.peerIndex, name: p.name, colorIndex: p.colorIndex, carIndex, stats: carStats(carIndex) };
+  });
   const humanCount = field.length;
-  const lowestFreeColor = () => { let i = 0; while (usedColors.has(i)) i++; return i; };
-  while (field.length < FIELD_SIZE) {
-    const colorIndex = lowestFreeColor(); usedColors.add(colorIndex);
-    const carIndex = colorIndex % CAR_MODELS.length;
-    field.push({ id: 'demo-cpu-' + (field.length - humanCount), colorIndex, carIndex, stats: carStats(carIndex) });
+  for (const s of cpuSeats(field)) {
+    field.push({ id: 'demo-cpu-' + s.n, colorIndex: s.colorIndex, carIndex: s.carIndex, stats: s.stats });
   }
   // Persona (skill + lane) by final grid index so they spread across the WHOLE field;
   // each CPU also takes THAT persona's name, so its plate matches how it drives.
@@ -331,48 +342,18 @@ function rekeyCarPlayer(oldId, newId) {
   for (const p of currentField) { if (p.peerIndex === oldId) p.peerIndex = newId; }
 }
 
-// Always lay out at least this many seats; empty ones show as placeholders so
-// the lobby card keeps a fixed size as players trickle in. Locked to the race
-// field size so the lobby grid and the grid that actually races never diverge.
-const MIN_SEATS = MAX_PLAYERS;
-
 // Every race runs a full FIELD_SIZE grid: seats no human took are filled by AI
 // ("CPU") racers (see buildField), so a short-handed lobby still gets a real race.
 const FIELD_SIZE = MAX_PLAYERS;
 const AI_PREFIX = 'ai-';
+
+// Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
 function renderRoster(roster, hostPeerIndex) {
-  const list = el('players'); list.innerHTML = '';
-  const seats = Math.max(MIN_SEATS, roster.length);
-  for (let i = 0; i < seats; i++) {
-    const p = roster[i];
-    const seat = document.createElement('div');
-    if (p) {
-      // Show the car this player picked (a real render), ringed + dotted in
-      // their livery. carIndex falls back to colorIndex before they pick.
-      seat.className = 'seat' + (p.connected ? '' : ' seat--off');
-      seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
-      const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
-      const model = CAR_MODELS[carIdx % CAR_MODELS.length];
-      const row = document.createElement('div');
-      row.className = 'seat__name';
-      const dot = document.createElement('span'); dot.className = 'seat__dot';
-      const nm = document.createElement('span'); nm.className = 'seat__label';
-      nm.textContent = p.name + (p.peerIndex === hostPeerIndex ? '  ★' : '');
-      row.appendChild(dot); row.appendChild(nm);
-      // each joined car rotates in spin mode, in lockstep via the shared clock
-      seat.appendChild(carThumbNode(model, { spin: true }));
-      seat.appendChild(row);
-    } else {
-      seat.className = 'seat seat--open';
-      const ph = document.createElement('div'); ph.className = 'seat__open';
-      const lab = document.createElement('div'); lab.className = 'seat__name';
-      const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
-      lab.appendChild(nm);
-      seat.appendChild(ph); seat.appendChild(lab);
-    }
-    list.appendChild(seat);
-  }
-  el('count').textContent = roster.length ? `${roster.length} racer${roster.length > 1 ? 's' : ''} ready` : 'Scan the QR code to join';
+  renderSeats(el('players'), roster.map((p) => ({
+    name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
+    connected: p.connected, host: p.peerIndex === hostPeerIndex
+  })));
+  el('count').textContent = seatCountText(roster.length);
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
 
@@ -395,8 +376,8 @@ function renderReconnect(seats) {
 }
 
 // Build the race field: the connected humans plus AI racers topping the grid up
-// to FIELD_SIZE. AI get string ids ('ai-0'…) that never collide with the integer
-// phone slots, the lowest free liveries, and a personality from AI_PERSONALITIES.
+// to FIELD_SIZE (cpuSeats). AI get string ids ('ai-0'…) that never collide with
+// the integer phone slots.
 function buildField(humans) {
   // carIndex is the player's lobby car pick; each player carries the handling
   // stats resolved from it (carStats wraps + defaults), so the engine can give
@@ -406,18 +387,13 @@ function buildField(humans) {
     carIndex: p.carIndex, stats: carStats(p.carIndex), ai: false
   }));
   aiBots = new Map();
-  const usedColors = new Set(field.map((p) => p.colorIndex));
-  const lowestFreeColor = () => { let i = 0; while (usedColors.has(i)) i++; return i; };
-  for (let n = 0; field.length < FIELD_SIZE; n++) {
-    const persona = AI_PERSONALITIES[n % AI_PERSONALITIES.length];
-    const colorIndex = lowestFreeColor();
-    usedColors.add(colorIndex);
-    const peerIndex = AI_PREFIX + n;
-    // AI race the model their livery slot maps to (what the renderer already drew
-    // when carIndex was omitted) — set it explicitly so stats match that model.
-    const carIndex = colorIndex % CAR_MODELS.length;
-    field.push({ peerIndex, name: persona.name, colorIndex, carIndex, stats: carStats(carIndex), ai: true });
-    aiBots.set(peerIndex, new AiController({ ...persona, seed: ((track.seed || 1) + peerIndex) >>> 0 }));
+  for (const s of cpuSeats(field)) {
+    const peerIndex = AI_PREFIX + s.n;
+    field.push({ peerIndex, name: s.persona.name, colorIndex: s.colorIndex, carIndex: s.carIndex, stats: s.stats, ai: true });
+    // Seed each bot's wander from the race seed + its NUMERIC index (s.n, not the
+    // 'ai-N' id string — number+string coerces to NaN>>>0 = 0, which had been
+    // handing every bot the same stream): distinct per bot, fresh per race.
+    aiBots.set(peerIndex, new AiController({ ...s.persona, seed: ((track.seed || 1) + s.n) >>> 0 }));
   }
   return field;
 }
@@ -577,13 +553,22 @@ function endRace(results) {
 
 function showResults(results) {
   const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
-  el('results-list').innerHTML = results.results.map((res) => {
+  const list = el('results-list');
+  list.innerHTML = '';
+  for (const res of results.results) {
     const p = byId.get(res.playerId) || {};
-    const col = CAR_COLORS[p.colorIndex] || '#888';
-    const time = res.finished ? `${res.time.toFixed(1)}s` : 'DNF';
-    const label = (p.name || res.playerId) + (p.ai ? ' (CPU)' : '');
-    return `<li><span class="stand__dot" style="background:${col}"></span> ${label} <span class="res-time">${time}</span></li>`;
-  }).join('');
+    const li = document.createElement('li');
+    const dot = document.createElement('span');
+    dot.className = 'stand__dot';
+    dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
+    const time = document.createElement('span');
+    time.className = 'res-time';
+    time.textContent = res.finished ? `${res.time.toFixed(1)}s` : 'DNF';
+    // The name is player-supplied — appended as TEXT, never markup (same rule as
+    // the controller's results list and renderJoinUrl).
+    li.append(dot, ` ${(p.name || res.playerId)}${p.ai ? ' (CPU)' : ''} `, time);
+    list.appendChild(li);
+  }
   el('results').classList.remove('hidden');
 }
 

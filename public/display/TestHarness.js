@@ -10,7 +10,7 @@
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { carThumbNode } from '../shared/carThumbs.js';
+import { renderSeats, seatCountText } from './lobbySeats.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -51,42 +51,14 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
-  // Mirror display/main.js: lay out at least MAX_PLAYERS seats (locked to the same
-  // protocol constant so the preview grid matches the real lobby); empties are
-  // placeholders. Each filled seat shows the car that player picked (a real render);
-  // for the preview we vary the car per slot so the lobby shows a mix of models.
-  const MIN_SEATS = window.MAX_PLAYERS || 4;
-  const MODELS = window.CAR_MODELS || [];
+  // Seat grid via the SAME renderer as the live lobby (lobbySeats.js), so the
+  // preview can't drift from the real markup. The preview varies the car per
+  // slot (carIndex = slot) so the lobby shows a mix of models.
   function renderRoster(slots, hostPeerIndex) {
-    const list = el('players'); list.innerHTML = '';
-    const seats = Math.max(MIN_SEATS, slots.length);
-    for (let i = 0; i < seats; i++) {
-      const s = slots[i];
-      const seat = document.createElement('div');
-      if (s != null) {
-        seat.className = 'seat';
-        seat.style.setProperty('--c', COLORS[s % COLORS.length] || '#888');
-        const row = document.createElement('div');
-        row.className = 'seat__name';
-        const dot = document.createElement('span'); dot.className = 'seat__dot';
-        const nm = document.createElement('span'); nm.className = 'seat__label';
-        nm.textContent = FAKE_NAMES[s] + (s === hostPeerIndex ? '  ★' : '');
-        row.appendChild(dot); row.appendChild(nm);
-        seat.appendChild(carThumbNode(MODELS[s % MODELS.length], { spin: true }));
-        seat.appendChild(row);
-      } else {
-        seat.className = 'seat seat--open';
-        const ph = document.createElement('div'); ph.className = 'seat__open';
-        const lab = document.createElement('div'); lab.className = 'seat__name';
-        const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
-        lab.appendChild(nm);
-        seat.appendChild(ph); seat.appendChild(lab);
-      }
-      list.appendChild(seat);
-    }
-    el('count').textContent = slots.length
-      ? `${slots.length} racer${slots.length > 1 ? 's' : ''} ready`
-      : 'Scan the QR code to join';
+    renderSeats(el('players'), slots.map((s) => ({
+      name: FAKE_NAMES[s], colorIndex: s, carIndex: s, host: s === hostPeerIndex
+    })));
+    el('count').textContent = seatCountText(slots.length);
   }
 
   function fakeJoin(code) {

@@ -8,6 +8,7 @@
 // (display/main.js) and the gallery preview (TestHarness). It operates on engine
 // car POSES — the THREE.Vector3s the engine already placed on car.pose — so it
 // imports no THREE and always reads the same frame the engine produced.
+import { mulberry32, wrapDelta } from './engine/util.js';
 
 const LOOKAHEAD = 7.5;   // world units down the centerline a bot aims at
 const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
@@ -19,7 +20,7 @@ const AI_ITEM_HOLD = 70; // frames a bot holds a fresh item before firing (~1.2s
 // a smooth, organic weave. (We perturb the steer, not the lane: the engine's expo
 // steering swallows small lane offsets, but a steer nudge integrates into visible
 // drift that pursue gently corrects, so it stays bounded.) The randomness is a PER-BOT
-// seeded stream (mulberry32, below) — never Math.random — so a seeded race replays
+// seeded stream (mulberry32, engine/util.js) — never Math.random — so a seeded race replays
 // identically. It's the deliberate "a few real mistakes" cost of looking alive.
 const STEER_WANDER = 0.12; // amplitude of the steer weave added to a bot's input (0..1) — small: enough to look alive, not enough to cost real time
 const WEAVE_EASE = 0.045;  // per-frame lerp toward the current target — smooth drift, not twitch
@@ -41,17 +42,6 @@ const BANANA_AVOID_R = 0.6; // mirrors the engine's BANANA_RADIUS (bananas carry
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
-// Tiny seeded PRNG (mulberry32) — each bot owns one so its wander is reproducible
-// from the race seed WITHOUT touching the engine's item-roll RNG (a separate stream).
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // Find the nearest hazard sitting on the bot's intended line and pick a lane past it.
 // `game` exposes hazards (oil: {s,lat,radius}) + bananas ({s,lat,owner}) in centerline
 // space; we aim for the side with the most corridor room. Returns the dodge lane (world
@@ -61,7 +51,7 @@ function avoidThreat(car, lane, game, maxLat) {
   const L = game.length;
   let best = null, bestDs = Infinity;
   const consider = (h, radius) => {
-    let ds = h.s - car.totalS; ds -= Math.round(ds / L) * L; // wrap to the nearest copy
+    const ds = wrapDelta(h.s - car.totalS, L);               // wrap to the nearest copy
     if (ds < EVADE_NEAR || ds > EVADE_FAR) return;           // behind/abreast, or too far to matter yet
     if (Math.abs(lane - h.lat) > radius + EVADE_CLEAR) return; // off to the side — not on our line
     if (ds < bestDs) { bestDs = ds; best = { lat: h.lat, r: radius }; }
