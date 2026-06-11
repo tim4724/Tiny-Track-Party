@@ -5,7 +5,7 @@
 // state persisted in localStorage so settings survive page nav.
 //
 // The gallery is a no-relay preview surface: each card is an iframe that
-// loads the real display (`/?test=1&scenario=…`) or controller
+// loads the real display (`/?scenario=…`) or controller
 // (`/controller/index.html?scenario=…`) page so the page's TestHarness drives a
 // single screen without ever touching the relay. UI regressions show up here.
 // =====================================================================
@@ -85,10 +85,9 @@ var Gallery = (function() {
     return parts.length ? '?' + parts.join('&') : '';
   }
 
-  // Display page is served at `/`. test=1 keeps the page off the relay.
+  // Display page is served at `/`. Any scenario keeps the page off the relay.
   function displayURL(state, scenario, extra) {
     var p = {
-      test: 1,
       scenario: scenario,
       players: state.players
     };

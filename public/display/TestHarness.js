@@ -1,6 +1,6 @@
 // Display Test Harness — drives a single display screen in isolation for the
 // gallery (/gallery.html), with NO relay connection. main.js delegates here
-// when the URL carries ?test=1 / ?scenario=…, handing over the live scene +
+// when the URL carries ?scenario=…, handing over the live scene +
 // track so we can stand up the lobby, countdown, a self-driving race preview,
 // or the results overlay from fake data.
 //

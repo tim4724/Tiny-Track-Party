@@ -1,4 +1,4 @@
-// DEBUG-ONLY single-player keyboard mode (?solo=1).
+// DEBUG-ONLY single-player keyboard mode (?solo, ?solo=<carIndex>).
 //
 // Lets you drive one car on the main display with the keyboard, no phones and no
 // relay. It deliberately reuses the *entire* real race path: a synthetic local
@@ -9,7 +9,7 @@
 // The only trick is the transport: there are no phones to talk to, so net.party
 // is swapped for a no-op stub. Every existing net call (_broadcastLobby /
 // broadcast / sendTo) then runs unchanged against a null wire — no special-casing
-// leaks into DisplayNet or the race lifecycle. Nothing here loads unless ?solo=1.
+// leaks into DisplayNet or the race lifecycle. Nothing here loads unless ?solo.
 //
 // Controls: WASD / arrow keys steer + brake (S / ↓), Q or Space use item,
 // Enter start / next race, R abort back to the lobby. The car auto-accelerates

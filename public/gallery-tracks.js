@@ -1,5 +1,5 @@
 // Track gallery — one card per named track, each an iframe loading the real
-// display in track-preview mode (/?test=1&scenario=track&track=<id>): the whole
+// display in track-preview mode (/?scenario=track&track=<id>): the whole
 // layout under a slowly orbiting overview camera with a small AI field driving
 // it. Reuses the shared Gallery helpers (card factory, lazy mount, AR scaling).
 //

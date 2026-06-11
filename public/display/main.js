@@ -56,11 +56,12 @@ const _qTrack = _trackParams.get('track');
 const _showCenterline = _trackParams.get('centerline') === '1';
 // Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
 // the live lobby attract demo must stay out of their way — guard every demo entry on it.
-const _isTestMode = _trackParams.get('test') === '1' || !!_trackParams.get('scenario');
-// ?solo=1 — DEBUG single-player keyboard mode (no relay, no phones). ?car=<n>
-// picks the model. See DebugSolo.js; wired at the bootstrap tail below.
-const _isDebugSolo = _trackParams.get('solo') === '1';
-const _soloCar = (((parseInt(_trackParams.get('car'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
+const _isTestMode = !!_trackParams.get('scenario');
+// ?solo[=<n>] — DEBUG single-player keyboard mode (no relay, no phones); the
+// value picks the car model (bare ?solo = car 0). See DebugSolo.js; wired at
+// the bootstrap tail below.
+const _isDebugSolo = _trackParams.has('solo');
+const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
@@ -700,15 +701,15 @@ el('joinbox').addEventListener('click', async () => {
 const wakeLock = createWakeLock();
 if (!_isTestMode) wakeLock.enable();
 
-// Gallery / test mode: ?test=1 (or any ?scenario=…) skips the relay and lets
-// the TestHarness drive a single screen from fake data. Normal play connects.
+// Gallery / test mode: any ?scenario=… skips the relay and lets the
+// TestHarness drive a single screen from fake data. Normal play connects.
 const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
-if (_params.get('test') === '1' || _scenario) {
+if (_scenario) {
   // Gallery/test. Lobby previews ('welcome'/'lobby') keep the default diorama
   // backdrop (no track picked, matching the real lobby); race previews reveal the
   // 3D scene the harness renders the track + cars into.
-  const _scn = _scenario || 'racing';
+  const _scn = _scenario;
   if (_scn !== 'welcome' && _scn !== 'lobby') {
     el('scene').classList.remove('hidden');
     const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');

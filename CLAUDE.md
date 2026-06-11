@@ -12,7 +12,7 @@ npm run dev                       # Run with --watch (auto-restart)
 ```
 
 There is no browser/E2E suite yet. `/gallery.html` is a manual no-relay preview
-surface (driven by the per-page TestHarness via `?test=1&scenario=…`).
+surface (driven by the per-page TestHarness via `?scenario=…`).
 
 ## Key Rules
 
