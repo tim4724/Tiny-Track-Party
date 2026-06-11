@@ -324,6 +324,7 @@ export class Game {
           if (!spinning) c.spin = 0;
           c.spinT = SPIN_TIME; spinning = true;
           c.boostT = 0; c.boostMul = 1;
+          this.onEvent({ type: 'spin', id: c.id, cause: ban ? 'banana' : 'oil' });
         }
       }
 
@@ -523,6 +524,7 @@ export class Game {
     const mul = PAD_BOOST_MIN + (PAD_BOOST_MAX - PAD_BOOST_MIN) * c.tRaw;
     c.boostMul = Math.max(c.boostMul, mul);
     c.boostT = Math.max(c.boostT, BOOST_DURATION);
+    this.onEvent({ type: 'pad', id: c.id });
   }
 
   // Rising-edge overlap of an item BOX. A box on cooldown is inert. A car with a
@@ -537,7 +539,10 @@ export class Game {
       const dl = c.lat - b.lat;
       const inside = b.cooldown <= 0 && (ds * ds + dl * dl) < (b.radius * b.radius);
       if (inside && !c.boxIn.has(i)) {
-        if (c.item == null) { c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i); }
+        if (c.item == null) {
+          c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
+          this.onEvent({ type: 'pickup', id: c.id, item: c.item });
+        }
         // full slot: leave membership unset so it re-checks next frame (auto-grabs the
         // instant the slot frees while still on the box).
       } else if (!inside) { c.boxIn.delete(i); }
@@ -556,6 +561,7 @@ export class Game {
   // Fire the held item (press-to-use). Boost reuses the pad boost state; Banana drops
   // a live hazard just behind the dropper (owner-skipped + armed so it can't self-trip).
   _useItem(c) {
+    this.onEvent({ type: 'item_use', id: c.id, item: c.item });
     if (c.item === 'boost') {
       c.boostMul = Math.max(c.boostMul, BOOST_ITEM_MUL);
       c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);

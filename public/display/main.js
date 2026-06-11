@@ -9,7 +9,8 @@ import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
-// Sound is intentionally disabled for now (Audio.js kept for a later pass).
+import { RaceAudio } from './Audio.js';
+import { wrapDelta } from './engine/util.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
@@ -231,6 +232,13 @@ function demoSig(field, trackId) {
   return trackId + '|' + field.map((p) => p.id + ':' + p.colorIndex + ':' + p.carIndex).join(',');
 }
 
+// ---- audio ----
+// All race/lobby sound — the "toy foley" cue palette (see Audio.js for how the
+// sound gallery's picks resolve). Browsers gate audio behind a user gesture, so
+// resume() rides the window gesture listeners below; until someone touches the
+// display every cue no-ops silently.
+const audio = new RaceAudio();
+
 // ---- race state ----
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
@@ -279,6 +287,22 @@ scene.onFrame = (dt) => {
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
+    // Curb scrub — humans always (their cell shows it), CPU cars only while on
+    // some human's camera; RaceAudio spaces the bursts.
+    if (c.onWall && c.spd > 0.35 && (!aiBots.has(c.id) || cpuCarOnScreen(c.id))) audio.screech(c.spd);
+    // State-driven voices per HUMAN car — each level follows the physics this
+    // frame: boost wind from the boost multiplier, tire squeal from hard
+    // steering at speed (squared so gentle corrections stay silent; a spinning
+    // car's wheels aren't gripping, so no squeal), brake skid from brake
+    // pressure while the car still moves. CPU cars stay silent here — they
+    // corner and brake constantly, and a 7-car chorus would be noise.
+    // Gate thresholds are starting values — tune by ear in ?solo=1.
+    if (!aiBots.has(c.id)) {
+      audio.boostWind(c.id, c.boostMul);
+      const fastGate = Math.max(0, Math.min(1, (c.spd - 0.45) / 0.3));
+      audio.cornerSqueal(c.id, c.spin ? 0 : c.steer * c.steer * fastGate);
+      audio.brakeSkid(c.id, c.brake * Math.max(0, Math.min(1, (c.spd - 0.2) / 0.4)));
+    }
   }
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
@@ -332,6 +356,7 @@ const net = new DisplayNet({
 function forfeitCar(peerIndex) {
   if (!session || !session.forceRemoveCar(peerIndex)) return;
   scene.removeCar(peerIndex);
+  audio.stopCarVoices(peerIndex); // its id leaves the loop — no zero-level update will come
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 
@@ -341,6 +366,7 @@ net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 function rekeyCarPlayer(oldId, newId) {
   if (!session || !session.rekeyCar(oldId, newId)) return;
   scene.rekeyCar(oldId, newId);
+  audio.stopCarVoices(oldId); // the loop re-creates voices under newId next frame
   for (const p of currentField) { if (p.peerIndex === oldId) p.peerIndex = newId; }
 }
 
@@ -350,7 +376,12 @@ const FIELD_SIZE = MAX_PLAYERS;
 const AI_PREFIX = 'ai-';
 
 // Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
+let lastRosterCount = 0;
 function renderRoster(roster, hostPeerIndex) {
+  // A bigger roster means someone joined (renames/car picks keep the count) —
+  // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
+  if (roster.length > lastRosterCount && net.roomState === ROOM_STATE.LOBBY) audio.join();
+  lastRosterCount = roster.length;
   renderSeats(el('players'), roster.map((p) => ({
     name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
     connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
@@ -464,6 +495,7 @@ function startRace() {
       // over the next beat via .is-go). n < 0: banner gone.
       el('countdown').textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
       el('countdown').classList.toggle('is-go', n === 0);
+      audio.countdown(n);
       net.broadcast({ type: MSG.COUNTDOWN, n });
     },
     onRaceStart() {
@@ -485,11 +517,54 @@ function startRace() {
   session.startCountdown(COUNTDOWN_SECONDS);
 }
 
+// A CPU car is "on screen" when it sits in some human's chase view: the camera
+// hangs ~2 units behind its car looking ahead, so the visible stretch is from
+// just behind a human to a run of track in front. Starting values (tune by ear
+// in ?solo=1): beyond ~20 units a car is a speck, behind the camera it's gone.
+const VIS_BEHIND = 2, VIS_AHEAD = 20;
+function cpuCarOnScreen(id) {
+  if (!session) return false;
+  const cpu = session.engine.cars.get(id);
+  if (!cpu) return false;
+  for (const [hid, h] of session.engine.cars) {
+    if (aiBots.has(hid)) continue;
+    const ds = wrapDelta(cpu.totalS - h.totalS, session.engine.length);
+    if (ds >= -VIS_BEHIND && ds <= VIS_AHEAD) return true;
+  }
+  return false;
+}
+
+// Map engine events onto cues — sound only for what's VISIBLE (same principle
+// as the controller haptics: feedback must map to something the player can
+// see). A human's moments are always on screen (their split-screen cell); a
+// CPU car's world moments (boost, banana, spin) sound only while it's in a
+// human's view. HUD-narration cues stay human-only regardless: the roulette
+// describes the player's item slot, and lap / finish narrate their cell's HUD.
+function audioForRaceEvent(e) {
+  const isHuman = e.id == null || !aiBots.has(e.id);
+  const visible = isHuman || cpuCarOnScreen(e.id);
+  switch (e.type) {
+    case 'pickup':
+      if (isHuman) audio.pickup();          // pop + roulette tick-down
+      else if (visible) audio.pickupPop();  // a CPU grab on camera: just the world pop
+      break;
+    // (boost item-use and pad crossings make no one-shot sound — the boost
+    // WIND in onFrame tracks the resulting speed state instead.)
+    case 'item_use': if (visible && e.item === 'banana') audio.bananaDrop(); break;
+    case 'spin': if (visible) audio.spin(); break;
+    // The chequered-flag crossing chimes like any other lap (a 'finish' fanfare
+    // was auditioned and cut) — the results overlay carries the celebration.
+    case 'lap': case 'finish': if (isHuman) audio.lap(); break;
+  }
+}
+
 function onRaceEvent(e) {
   // As each car crosses the line, push the running standings so a finished
   // player's phone flips to the results overlay and it fills in for everyone
-  // else as more cars finish. (Other events are SFX/FX hooks — sound disabled.)
-  if (!e || e.type !== 'finish') return;
+  // else as more cars finish.
+  if (!e) return;
+  if (!fastForwarding) audioForRaceEvent(e); // the fast-forward burst is silent — it's skipping, not racing
+  if (e.type !== 'finish') return;
   if (fastForwarding) return; // endRace sends the final board once; don't spam one per AI car
   // If that finish was the last human's, we're about to fast-forward to the flag
   // (only CPU cars remain) and endRace will send the final board — skip this
@@ -553,6 +628,7 @@ let endTimer = null;
 function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
+  audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
   paused = false;                              // results aren't pausable
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
@@ -588,6 +664,9 @@ function returnToLobby() {
   if (net.roomState === ROOM_STATE.LOBBY) return;
   clearTimeout(endTimer);
   net.flow.transitionTo(ROOM_STATE.LOBBY);
+  // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
+  // key) — kill any state voices or a boost wind would drone on in the lobby.
+  audio.stopVoices();
   paused = false;
   raceEnded = false;
   setPauseOverlay(false);
@@ -615,6 +694,7 @@ function pauseRace() {
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   paused = true;
   session.pause();
+  audio.stopVoices();                    // frozen cars must not keep their wind/squeal going
   freezeCars();                          // zero each car's speed so dust stops kicking up
   net.broadcast({ type: MSG.GAME_PAUSED });
   setPauseOverlay(true);
@@ -660,6 +740,21 @@ function revealPauseBtn() {
 function stopPauseAutoHide() { clearTimeout(pauseIdleTimer); el('pause-btn').classList.remove('is-idle'); }
 for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
   window.addEventListener(ev, revealPauseBtn, { passive: true });
+}
+// Unlock audio on the first real gesture (pointermove is not a user activation,
+// so it can't resume a suspended AudioContext — only clicks/keys count).
+for (const ev of ['pointerdown', 'keydown']) {
+  window.addEventListener(ev, () => audio.resume(), { passive: true });
+}
+// Until that gesture happens the page is silently muted — surface it, or a solo
+// auto-race / an untouched TV reads as "the game has no sound". The pill shows
+// while audio is locked and disappears the moment it unlocks; clicking it is a
+// gesture, so the window pointerdown listener above does the actual resume.
+// Hidden on gallery/test surfaces (their iframes never get gestures) and where
+// Web Audio doesn't exist (nothing to unlock).
+const _audioSupported = !!(window.AudioContext || window.webkitAudioContext);
+if (!_isTestMode && _audioSupported) {
+  setInterval(() => el('sound-hint').classList.toggle('hidden', audio.ready), 500);
 }
 
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
@@ -756,7 +851,7 @@ if (_scenario) {
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
   net.start();
 }
-window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;
+window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this

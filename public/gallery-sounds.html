@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Sound Gallery — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+</head>
+<body>
+<header>
+  <h1>TINY TRACK · SOUNDS</h1>
+
+  <div class="group">
+    <label class="checkbox-label" for="master-volume">Volume</label>
+    <input type="range" id="master-volume" min="0" max="100" value="60">
+  </div>
+
+  <button class="ctrl" id="copy-picks" title="Copy your starred picks as JSON (paste it to whoever bakes in the defaults)">Copy picks</button>
+  <button class="ctrl" id="clear-picks" title="Clear all starred picks">Clear picks</button>
+
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-sounds.html" class="active">Sounds</a>
+    <a href="/assets-viewer.html">Assets</a>
+  </nav>
+</header>
+
+<section class="rail">
+  <p class="sound-hint">Candidate “toy foley” palette, all Web Audio synthesis (no asset files).
+  Click ▶ to audition; spam the frequent ones to fatigue-test (each play self-jitters ±1 semitone).
+  Star ☆ the variant you want per cue — picks persist in this browser and are what gets wired into the race.</p>
+  <div id="sound-grid" class="sound-grid"></div>
+</section>
+
+<script type="module" src="/gallery-sounds.js"></script>
+</body>
+</html>

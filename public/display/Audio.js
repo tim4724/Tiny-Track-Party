@@ -1,14 +1,30 @@
-// RaceAudio — all sound for the big screen, synthesized with Web Audio (no asset
-// files). A single engine drone whose pitch/volume track the pack's speed, plus
-// discrete SFX (countdown, lap, finish, curb screech). Browsers require a user
-// gesture to start audio, so call resume() from a click/key on the display.
+// RaceAudio — all sound for the big screen, built on the "toy foley" cue
+// palette in audio/cues.js (Web Audio synthesis, no asset files, no engine
+// drone — see the rejected v1 for why).
+//
+// Which variant plays per cue: the sound gallery's starred picks (localStorage,
+// same browser + origin as /gallery-sounds.html) override the committed
+// DEFAULT_PICKS — so an audition round applies to local races immediately, and
+// every other machine (the TV, preview deploys) gets the defaults. The gallery
+// volume slider shares the same key and acts as the race's master volume.
+//
+// Browsers require a user gesture before audio runs; call resume() from
+// pointerdown/keydown. Every play method no-ops safely while locked.
+import { resolveVariant } from './audio/cues.js';
+
+const PICKS_KEY = 'tinytrack_sound_picks_v1';
+const VOLUME_KEY = 'tinytrack_sound_volume_v1';
+const SCREECH_GAP_MS = 140; // min spacing so curb contact can't machine-gun
+const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
+
 export class RaceAudio {
   constructor() {
     this.ctx = null;
     this.master = null;
-    this.engine = null;
-    this.noiseBuf = null;
-    this._lastScreech = 0;
+    this._picks = null;
+    this._lastScreech = -Infinity;
+    this._lastLap = -Infinity;
+    this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
   }
 
   _ensure() {
@@ -17,82 +33,127 @@ export class RaceAudio {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.5;
-    this.master.connect(this.ctx.destination);
-    // one second of white noise for screech
-    const n = this.ctx.sampleRate;
-    const buf = this.ctx.createBuffer(1, n, n);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    this.noiseBuf = buf;
+    this.master.gain.value = this._volume();
+    // Soft limiter: overlapping cues (8 cars' worth) must not clip TV speakers.
+    const comp = this.ctx.createDynamicsCompressor();
+    comp.threshold.value = -12;
+    comp.knee.value = 24;
+    comp.ratio.value = 6;
+    this.master.connect(comp);
+    comp.connect(this.ctx.destination);
   }
 
-  resume() { this._ensure(); if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
-  get ready() { return this.ctx && this.ctx.state === 'running'; }
-
-  // ---- engine drone (level 0..1) ----
-  startEngine() {
+  resume() {
     this._ensure();
-    if (!this.ctx || this.engine) return;
-    const ctx = this.ctx;
-    const osc1 = ctx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 60;
-    const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = 90;
-    const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 600;
-    const gain = ctx.createGain(); gain.gain.value = 0;
-    osc1.connect(filt); osc2.connect(filt); filt.connect(gain); gain.connect(this.master);
-    osc1.start(); osc2.start();
-    this.engine = { osc1, osc2, filt, gain };
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   }
-  setEngine(level) {
-    if (!this.engine || !this.ctx) return;
-    const t = this.ctx.currentTime, l = Math.max(0, Math.min(1, level));
-    const f = 55 + l * 150;
-    this.engine.osc1.frequency.setTargetAtTime(f, t, 0.06);
-    this.engine.osc2.frequency.setTargetAtTime(f * 1.5, t, 0.06);
-    this.engine.filt.frequency.setTargetAtTime(450 + l * 1600, t, 0.06);
-    this.engine.gain.gain.setTargetAtTime(0.05 + l * 0.11, t, 0.06);
-  }
-  stopEngine() {
-    if (!this.engine || !this.ctx) return;
-    const e = this.engine, t = this.ctx.currentTime;
-    try { e.gain.gain.setTargetAtTime(0, t, 0.1); e.osc1.stop(t + 0.4); e.osc2.stop(t + 0.4); } catch (_) {}
-    this.engine = null;
+  get ready() { return !!this.ctx && this.ctx.state === 'running'; }
+
+  _volume() {
+    try {
+      const raw = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+      return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) / 100 : 0.6;
+    } catch (_) { return 0.6; }
   }
 
-  // ---- one-shot SFX ----
-  _tone(freq, dur, vol, type = 'square', delay = 0) {
-    this._ensure();
-    if (!this.ctx) return;
-    const ctx = this.ctx, t = ctx.currentTime + delay;
-    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
-    const g = ctx.createGain();
-    o.connect(g); g.connect(this.master);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.start(t); o.stop(t + dur + 0.03);
+  // Gallery picks, read once per session (re-read after resume() if you ever
+  // need live re-picking; a race doesn't).
+  _variant(cueId) {
+    if (!this._picks) {
+      try { this._picks = JSON.parse(localStorage.getItem(PICKS_KEY)) || {}; }
+      catch (_) { this._picks = {}; }
+    }
+    return resolveVariant(cueId, this._picks);
   }
 
-  countdown(n) { if (n > 0) this._tone(440, 0.18, 0.3, 'square'); else this._tone(880, 0.5, 0.4, 'sawtooth'); }
-  lap() { this._tone(660, 0.12, 0.3); this._tone(990, 0.2, 0.3, 'square', 0.1); }
-  finish() { [523, 659, 784, 1047].forEach((f, i) => this._tone(f, 0.3, 0.35, 'triangle', i * 0.12)); }
+  // Play a cue, optionally attenuated (vol < 1 routes through a trim gain so
+  // cue code stays volume-agnostic). Returns silently while audio is locked.
+  _play(cueId, vol = 1) {
+    if (!this.ready) return;
+    const v = this._variant(cueId);
+    if (!v) return;
+    let dest = this.master;
+    if (vol < 1) {
+      dest = this.ctx.createGain();
+      dest.gain.value = vol;
+      dest.connect(this.master);
+    }
+    v.play(this.ctx, dest);
+  }
 
-  // tyre screech: short band-passed noise burst, throttled so it doesn't machine-gun
-  screech(intensity = 1) {
-    this._ensure();
-    if (!this.ctx || !this.noiseBuf) return;
+  // ---- race moments ----
+
+  // RaceSession's 1 Hz countdown: n > 0 ticks, n === 0 is the GO beat.
+  countdown(n) {
+    if (!this.ready || n < 0) return;
+    const v = this._variant('countdown');
+    if (!v) return;
+    if (n > 0) v.tick(this.ctx, this.master);
+    else v.go(this.ctx, this.master);
+  }
+
+  // Box grab: pickup pop + the roulette tick-down (the renderer's chip spin is
+  // ~0.86s). The roulette's reveal pop lands the "item ready" beat — a separate
+  // ding was auditioned and cut as redundant.
+  pickup() {
+    this._play('pickup');
+    this._play('roulette');
+  }
+
+  // Just the world pop — no roulette/ready chain. For CPU pickups that happen
+  // on camera: the box bounce is visible but there's no HUD slot to narrate.
+  pickupPop() { this._play('pickup'); }
+
+  // STATE-DRIVEN voices: a continuous sound per (cue, car) whose level follows
+  // live physics every frame (boost wind, cornering squeal, brake skid). A
+  // voice starts when its level rises above the floor and dies when it falls
+  // back — call these from the render loop with the snapshot values.
+  _stateVoice(cueId, id, level) {
+    if (!this.ready) return;
+    const key = cueId + ':' + id;
+    let voice = this._voices.get(key);
+    if (level <= 0.02) {
+      if (voice) { voice.stop(); this._voices.delete(key); }
+      return;
+    }
+    if (!voice) {
+      const v = this._variant(cueId);
+      if (!v || !v.start) return;
+      voice = v.start(this.ctx, this.master);
+      this._voices.set(key, voice);
+    }
+    voice.set(level);
+  }
+  // boostMul 1.0 → silent; the pad/item peak (~1.6) → full level.
+  boostWind(id, boostMul) { this._stateVoice('boost', id, Math.max(0, Math.min(1, (boostMul - 1) / 0.6))); }
+  cornerSqueal(id, level) { this._stateVoice('corner', id, level); }
+  brakeSkid(id, level) { this._stateVoice('brake', id, level); }
+  // Kill all live voices — pause, race end, return to lobby. Without this a
+  // frozen frame would hold its sounds forever (the loop stops updating levels).
+  stopVoices() {
+    for (const voice of this._voices.values()) voice.stop();
+    this._voices.clear();
+  }
+  // One car left the race (forfeit) or changed id (cross-device rejoin) — the
+  // render loop will never feed that id a zero level, so kill its voices here.
+  stopCarVoices(id) {
+    for (const [key, voice] of this._voices) {
+      if (key.endsWith(':' + id)) { voice.stop(); this._voices.delete(key); }
+    }
+  }
+  bananaDrop() { this._play('banana_drop'); }
+  spin() { this._play('banana_slip'); } // oil shares the comedy cue
+  lap() {
     const now = performance.now();
-    if (now - this._lastScreech < 140) return;
-    this._lastScreech = now;
-    const ctx = this.ctx, t = ctx.currentTime;
-    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
-    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 1.2;
-    const g = ctx.createGain();
-    src.connect(bp); bp.connect(g); g.connect(this.master);
-    const v = 0.12 * Math.max(0.3, Math.min(1, intensity));
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(v, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    src.start(t); src.stop(t + 0.25);
+    if (now - this._lastLap < LAP_GAP_MS) return;
+    this._lastLap = now;
+    this._play('lap');
   }
+  screech(intensity = 1) {
+    const now = performance.now();
+    if (now - this._lastScreech < SCREECH_GAP_MS) return;
+    this._lastScreech = now;
+    this._play('screech', Math.max(0.3, Math.min(1, intensity)));
+  }
+  join() { this._play('join'); }
 }

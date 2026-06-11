@@ -119,6 +119,11 @@
   <!-- Transient "Copied" confirmation, shown when the join box is clicked. -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!-- Audio-unlock hint: browsers keep a page muted until a real click/key on
+       it, so this pill shows while sound is still locked (lobby and race
+       alike). Any gesture unlocks; clicking the pill is the obvious one. -->
+  <button id="sound-hint" class="sound-hint hidden">🔇 tap for sound</button>
+
   <script type="module" src="/display/main.js?v=__APP_V__"></script>
 </body>
 </html>

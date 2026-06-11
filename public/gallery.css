@@ -112,6 +112,30 @@ button.card-btn { padding: 2px 6px; min-height: 20px; font-size: 11px; line-heig
   z-index: 1;
 }
 
+/* --- Sound gallery (/gallery-sounds.html) — soundboard cards, no iframes. --- */
+.sound-hint { font-size: 12px; color: #888; max-width: 760px; line-height: 1.5; margin-bottom: 14px; }
+.sound-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  row-gap: 14px;
+}
+.sound-card { gap: 6px; }
+.sound-desc { font-size: 11px; color: #777; line-height: 1.4; margin-bottom: 2px; }
+.sound-variant { display: flex; align-items: center; gap: 6px; }
+.sound-variant.picked .sound-play { border-color: #c8a030; }
+.sound-play {
+  flex: 1;
+  text-align: left;
+  min-height: 30px;
+  font-size: 12px;
+}
+.sound-play.playing { background: #2a2a5a; border-color: #5060c0; }
+.sound-star { min-height: 30px; width: 34px; font-size: 14px; color: #666; }
+.sound-star.picked { color: #ffcf40; border-color: #c8a030; }
+.sound-speed { width: 90px; }
+input[type="range"] { accent-color: #5060c0; }
+
 /* Mobile: one card per row + compact, touch-friendly header.
    - Header becomes a 3-col grid: title spans the top row, and Display /
      Controller / ⚙ share the row beneath. Option groups hide behind the

@@ -621,6 +621,40 @@ test('item rolls are deterministic for a seed and position-weighted by t', () =>
   assert.ok(bananaLeader > bananaLast + 400, `leader rolls more bananas than last (${bananaLeader} vs ${bananaLast})`);
 });
 
+test('item moments emit events: pickup, item_use, pad, spin', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  track.pads = [{ s: 20, lat: 0, radius: 1.0 }];
+  track.seed = 12345;
+  const events = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => events.push(e) });
+  const car = game.cars.get('p1');
+
+  // pickup from the box
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  game.elapsed = 2;
+  game.processInput('p1', { b: 1 }); game.update(16);
+  const pickup = events.find((e) => e.type === 'pickup');
+  assert.ok(pickup && pickup.id === 'p1' && pickup.item === car.item, 'box grab emits pickup with the rolled item');
+
+  // use the held item (force a known one so the assert is stable)
+  car.item = 'boost'; car.pickupAge = 99;
+  game.processInput('p1', { b: 1, u: 1 }); game.update(16);
+  const use = events.find((e) => e.type === 'item_use');
+  assert.ok(use && use.id === 'p1' && use.item === 'boost', 'firing the item emits item_use');
+
+  // boost pad (rising edge)
+  Object.assign(car, { totalS: 20, lat: 0, v: 0, boostT: 0, boostMul: 1 });
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.ok(events.some((e) => e.type === 'pad' && e.id === 'p1'), 'crossing a pad emits pad');
+
+  // banana hit → spin (a live banana owned by someone else)
+  game.bananas.push({ id: 99, s: car.totalS % game.length, lat: car.lat, armT: 0, owner: 'someone-else' });
+  game.processInput('p1', { b: 1 }); game.update(16);
+  const spin = events.find((e) => e.type === 'spin');
+  assert.ok(spin && spin.id === 'p1' && spin.cause === 'banana', 'a banana hit emits spin with its cause');
+});
+
 test('the ACTION counter fires a use once per fresh value and dedups repeats', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
