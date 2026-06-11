@@ -121,14 +121,15 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-opt:active { transform: translateY(2px); }
 /* selected strip tile: ring in the livery colour (the hero shows which it is) */
 .car-opt--mine { border-color: var(--car); box-shadow: 0 0 0 3px color-mix(in srgb, var(--car), #fff 62%), var(--shadow-pop); }
-#wait-host { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
+/* under the footer button: why it's gated / who we're waiting on */
+#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }
 
 /* ---- track picker ----
-   Schematic "map" tiles of each track (paths shipped by the display). Host taps
-   to choose; non-host tiles are disabled (read-only). Mirrors the car strip. */
+   Schematic "map" tiles of each track (paths shipped by the display). Host only
+   (everyone else sees the pick on the big screen). Mirrors the car strip. */
 .trackpick { margin-top: 1.2rem; }
 .trackpick__strip {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
@@ -155,8 +156,6 @@ input[type=text]:disabled { opacity: 0.6; }
 .track-map__casing { fill: none; stroke: #fff; stroke-width: 9; stroke-linejoin: round; stroke-linecap: round; }
 .track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 5.5; stroke-linejoin: round; stroke-linecap: round; }
 .track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 1.5; }
-
-.trackpick__note { color: var(--ink-3); font-weight: 700; font-size: 0.85rem; text-align: center; margin-top: 0.55rem; }
 
 /* ---- game / driving HUD ---- */
 /* No countdown here — the full HUD shows immediately so players can pre-steer

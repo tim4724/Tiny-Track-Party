@@ -4,7 +4,7 @@ import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
-import { applyLatencyChip, renderWaitNote } from './ui.js';
+import { applyLatencyChip, renderWaitNote, renderReadyFoot } from './ui.js';
 import { ordinal } from '../shared/format.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
@@ -64,6 +64,7 @@ let roster = [];           // latest lobby roster (for the host name in the wait
 let hostPeerIndex = null;
 let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
 let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
+let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 
 const NAME_KEY = 'tinytrack_name';
@@ -164,6 +165,7 @@ function handleMessage(data) {
       if (data.trackId != null) selectedTrackId = data.trackId;
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
+      amReady = !!(me && me.ready);
       renderLobby();
       // Land on the screen matching the live room state. Normally that's the
       // lobby, but a player who rejoins mid-race (reconnected, or scanned the
@@ -193,6 +195,7 @@ function handleMessage(data) {
         myColorIndex = me.colorIndex;
         if (me.carIndex != null) myCarIndex = me.carIndex;
         if (me.name) myName = me.name;
+        amReady = !!me.ready;
         applyLivery();
       }
       renderLobby();
@@ -326,30 +329,29 @@ function renderLobby() {
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
   renderTrackPicker();
-  el('start-btn').classList.toggle('hidden', !amHost);
-  el('start-btn').disabled = !selectedTrackId;   // greyed out until a track is picked
-  const waitEl = el('wait-host');
-  waitEl.classList.toggle('hidden', amHost);
-  if (!amHost) renderWaitHost(waitEl);
+  const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
+  renderReadyFoot(el('ready-btn'), el('ready-note'), {
+    amHost, amReady,
+    canStart: !!selectedTrackId,  // host can't start without a track (auto-picked, so ~always true)
+    host: hostP && { name: hostP.name, color: CAR_COLORS[hostP.colorIndex] },
+    others: roster   // every non-host racer but me (for the host that's everyone else)
+      .filter((p) => p.peerIndex !== net.peerIndex && p.peerIndex !== hostPeerIndex && p.connected !== false)
+      .map((p) => ({ name: p.name, color: CAR_COLORS[p.colorIndex], ready: !!p.ready }))
+  });
 }
 
-// Track picker — schematic maps from the display's catalog. Host taps to change
-// the track (SELECT_TRACK); everyone else sees the strip read-only with the
-// current pick ringed, plus a "host picks" note. Hidden entirely until the
-// catalog arrives (older display / pre-WELCOME). Layout in shared/trackPicker.js.
+// Track picker — host only: schematic maps from the display's catalog, tap to
+// change the track (SELECT_TRACK). Everyone else gets no picker at all — the
+// big screen shows the host's pick. Also hidden until the catalog arrives
+// (older display / pre-WELCOME). Layout in shared/trackPicker.js.
 function renderTrackPicker() {
   const wrap = el('trackpick');
-  if (!trackCatalog.length) { wrap.classList.add('hidden'); return; }
+  if (!amHost || !trackCatalog.length) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
   buildTrackPicker({
     stripEl: el('track-strip'),
-    catalog: trackCatalog, selected: selectedTrackId, canPick: amHost, onPick: chooseTrack
+    catalog: trackCatalog, selected: selectedTrackId, canPick: true, onPick: chooseTrack
   });
-  // Note line: only the non-host needs telling the host owns the pick. The host
-  // always has a track selected (auto-picked on entry), so no prompt is shown.
-  const note = el('track-note');
-  if (!amHost) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
-  else note.classList.add('hidden');
 }
 
 // Host auto-picks a track the moment they reach the lobby, so the display leaves
@@ -373,11 +375,6 @@ function chooseTrack(id) {
   renderTrackPicker();    // move the ring + name now
   net.send(MSG.SELECT_TRACK, { trackId: id });
   buzz(15);
-}
-
-function renderWaitHost(waitEl) {
-  const host = roster.find((p) => p.peerIndex === hostPeerIndex);
-  renderWaitNote(waitEl, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start…');
 }
 
 function chooseCar(i) {
@@ -438,6 +435,7 @@ function leaveToName() {
   _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
   amHost = false;
+  amReady = false;
   roster = [];
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
@@ -464,7 +462,19 @@ el('name-form').addEventListener('submit', (e) => {
   net.connect(n);
 });
 
-el('start-btn').addEventListener('click', () => { if (amHost && selectedTrackId) net.send(MSG.START_GAME); });
+// Lobby footer button — for the host it's "Start race" (enabled only once
+// everyone else is ready — see renderReadyFoot); for everyone else it's the
+// ready toggle. The display validates both messages.
+el('ready-btn').addEventListener('click', () => {
+  if (amHost) {
+    net.send(MSG.START_GAME);
+  } else {
+    amReady = !amReady;   // optimistic; LOBBY_UPDATE is the source of truth
+    renderLobby();        // flip the button (and note) now
+    net.send(MSG.SET_READY, { ready: amReady });
+  }
+  buzz(15);
+});
 
 // --- pause ---
 // The display is authoritative over the paused state; the controller just

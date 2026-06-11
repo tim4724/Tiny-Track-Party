@@ -24,18 +24,19 @@ var MSG = {
   // Controller -> Display
   HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
   CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, ~25Hz, fastlane
-  START_GAME: 'start_game',     // host only
+  START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
+  SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
   SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
   LEAVE: 'leave',               // intentional exit (back-out) — display frees the seat at once (no reconnect QR)
   PING: 'ping',
 
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, tracks, trackId, ...} on join
-  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId)
+  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag)
   PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, item, boost} — item lights the controller's USE button
   PONG: 'pong',
 

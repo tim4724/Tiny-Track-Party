@@ -57,6 +57,10 @@ export class DisplayNet extends GameNet {
     const announce = () => { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); };
     this.flow.on('rosterchange', announce);
     this.flow.on('hostchange', announce);
+    // Ready flags are lobby-only: wipe them whenever the room lands back in the
+    // lobby, so the next race needs a fresh round of "I'm ready" taps (stale
+    // flags would leave the host's "Start race" pre-armed for the new race).
+    this.flow.on('statechange', ({ to }) => { if (to === ROOM_STATE.LOBBY) this._clearReady(); });
   }
 
   async start() {
@@ -68,8 +72,16 @@ export class DisplayNet extends GameNet {
   roster() {
     return this.flow.list().map((p) => ({
       peerIndex: p.peerIndex, name: p.name,
-      colorIndex: p.colorIndex, carIndex: p.carIndex, connected: p.connected
+      colorIndex: p.colorIndex, carIndex: p.carIndex, connected: p.connected,
+      ready: !!p.ready
     }));
+  }
+  // Drop every player's ready flag (entering the lobby). Announce only if
+  // something actually changed, so the first lobby entry stays quiet.
+  _clearReady() {
+    let changed = false;
+    for (const p of this.flow.list()) { if (p.ready) { p.ready = false; changed = true; } }
+    if (changed) { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); }
   }
   _usedColors() {
     const s = new Set();
@@ -156,6 +168,20 @@ export class DisplayNet extends GameNet {
         }
         break;
       }
+      case MSG.SET_READY: {
+        // Lobby readiness toggle (non-hosts — the host starts the race instead
+        // of readying up). Stored on the player record and echoed to every
+        // phone via LOBBY_UPDATE; the game layer requires every non-host
+        // player ready before honouring the host's START_GAME.
+        const p = this.flow.get(from);
+        const ready = !!data.ready;
+        if (p && from !== this.flow.host && this.roomState === 'lobby' && ready !== !!p.ready) {
+          p.ready = ready;
+          this._broadcastLobby();
+          this.onRosterChange(this.roster(), this.flow.host);
+        }
+        break;
+      }
       case MSG.SELECT_TRACK: {
         // Host-only lobby choice of the race track. Validate the id against the
         // catalog, store it, echo to every phone (LOBBY_UPDATE.trackId), and tell
@@ -194,7 +220,7 @@ export class DisplayNet extends GameNet {
     const colorIndex = RoomFlow.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
     // Default the car model to the livery slot so everyone starts on a distinct
     // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
-    this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex });
+    this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex, ready: false });
     // rosterchange fires from addPlayer → announce() handles broadcast + UI.
   }
 

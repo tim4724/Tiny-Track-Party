@@ -122,6 +122,16 @@ html, body {
   background: var(--c, #888); box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
 }
 .seat--off { opacity: 0.5; }
+/* readiness pill — present (invisible) on every taken seat so the card keeps
+   its height; lit in the brand green once the player's "I'm ready" lands. */
+.seat__ready {
+  visibility: hidden;
+  font-weight: 900; font-size: clamp(0.6rem, 0.8vw, 0.8rem); letter-spacing: 0.07em;
+  color: #fff; background: var(--brand);
+  padding: 0.18rem 0.6rem; border-radius: 999px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+}
+.seat--ready .seat__ready { visibility: visible; }
 .seat--open {
   background: transparent; border-style: dashed; border-color: #d4deea;
   box-shadow: none;

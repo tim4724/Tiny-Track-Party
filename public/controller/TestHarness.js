@@ -8,7 +8,7 @@ import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-import { applyLatencyChip, renderWaitNote } from './ui.js';
+import { applyLatencyChip, renderReadyFoot } from './ui.js';
 import { ordinal } from '../shared/format.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
@@ -48,18 +48,24 @@ export function runControllerScenario(opts) {
     });
   }
 
-  // Track picker — mirrors main.js renderTrackPicker. Host taps re-render so the
-  // gallery shows the ring + Start gating update live; non-host is read-only.
+  // Track picker — mirrors main.js renderTrackPicker: host only (non-host lobby
+  // has no picker at all). Host taps re-render so the gallery shows the ring move.
   function renderTrackPicker(selected, canPick) {
+    if (!canPick) { el('trackpick').classList.add('hidden'); return; }
     el('trackpick').classList.remove('hidden');
     buildTrackPicker({
-      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, selected, canPick,
-      onPick: canPick ? (id) => renderTrackPicker(id, canPick) : null
+      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, selected, canPick: true,
+      onPick: (id) => renderTrackPicker(id, true)
     });
-    if (canPick) el('start-btn').disabled = !selected; // greyed until a track is picked
-    const note = el('track-note');
-    if (!canPick) { note.textContent = 'The host picks the track'; note.classList.remove('hidden'); }
-    else note.classList.add('hidden'); // host always has a track auto-picked, so no prompt
+  }
+
+  // Lobby footer — the SAME renderer as main.js (renderReadyFoot), fed fake
+  // roster data. For a non-host, tapping toggles the ready state so the gallery
+  // shows the held-down "Ready ✓" + waiting note live; the host's "Start race"
+  // button just renders (no race to start here).
+  function renderReadyPreview(amHost, amReady, host, others) {
+    renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, canStart: true, host, others });
+    if (!amHost) el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others);
   }
 
   // Results board — mirrors main.js renderResults + renderResultFoot. `over=false`
@@ -124,25 +130,25 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color); // default pick mirrors the livery slot
-      renderTrackPicker(PREVIEW_TRACKS[0].id, true); // host enters with a track auto-picked (Start enabled)
-      el('start-btn').classList.remove('hidden');
-      el('wait-host').classList.add('hidden');
+      renderTrackPicker(PREVIEW_TRACKS[0].id, true); // host enters with a track auto-picked
+      // Everyone else is already ready, so the host's "Start race" is enabled.
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
+        { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }
+      ]);
       break;
 
-    case 'lobby-waiting': {
+    case 'lobby-waiting':
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
-      renderTrackPicker('crossover', false); // read-only; reflects the host's pick
-      el('start-btn').classList.add('hidden');
-      const waitEl = el('wait-host');
-      waitEl.classList.remove('hidden');
-      // Fabricate a host (someone other than this player) so the preview shows
-      // the tinted name treatment, mirroring main.js renderWaitHost.
-      const hostColor = (color + 1) % COLORS.length;
-      renderWaitNote(waitEl, { name: FAKE_NAMES[hostColor], color: COLORS[hostColor] }, ' to start…');
+      renderTrackPicker(null, false); // non-host: no track picker (the big screen shows the pick)
+      // Already readied up and so is everyone else, so the note shows the
+      // tinted-name "Waiting for <HOST> to start…" treatment.
+      renderReadyPreview(false, true,
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length] },
+        [{ name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }]);
       break;
-    }
 
     case 'countdown':
       // No countdown on the controller — the full HUD is up from the first beat

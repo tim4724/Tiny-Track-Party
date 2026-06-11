@@ -12,9 +12,9 @@ const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 // players trickle in (locked to the race field size so the lobby grid and the
 // grid that actually races never diverge). Each seat shows the car that player
 // picked (a real render), ringed + dotted in their livery. `seats` entries:
-//   { name, colorIndex, carIndex?, connected?, host? }
+//   { name, colorIndex, carIndex?, connected?, host?, ready? }
 // carIndex falls back to colorIndex (the slot default before they pick);
-// connected === false dims the seat; host appends the ★.
+// connected === false dims the seat; host appends the ★; ready lights the pill.
 export function renderSeats(listEl, seats) {
   listEl.innerHTML = '';
   const total = Math.max(MAX_PLAYERS, seats.length);
@@ -22,7 +22,7 @@ export function renderSeats(listEl, seats) {
     const p = seats[i];
     const seat = document.createElement('div');
     if (p) {
-      seat.className = 'seat' + (p.connected === false ? ' seat--off' : '');
+      seat.className = 'seat' + (p.connected === false ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
       seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
       const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
       const row = document.createElement('div');
@@ -34,6 +34,12 @@ export function renderSeats(listEl, seats) {
       // each joined car rotates in spin mode, in lockstep via the shared clock
       seat.appendChild(carThumbNode(CAR_MODELS[carIdx % CAR_MODELS.length], { spin: true }));
       seat.appendChild(row);
+      // readiness pill — appended on every taken seat (visibility-toggled in
+      // CSS) so a seat doesn't change height the moment its player readies up.
+      const rd = document.createElement('span');
+      rd.className = 'seat__ready';
+      rd.textContent = 'READY';
+      seat.appendChild(rd);
     } else {
       seat.className = 'seat seat--open';
       const ph = document.createElement('div'); ph.className = 'seat__open';
@@ -47,6 +53,7 @@ export function renderSeats(listEl, seats) {
 }
 
 // Headline under the seat grid (shared for the same no-drift reason).
+// "joined", not "ready" — readiness is its own per-seat pill now.
 export function seatCountText(n) {
-  return n ? `${n} racer${n > 1 ? 's' : ''} ready` : 'Scan the QR code to join';
+  return n ? `${n} racer${n > 1 ? 's' : ''} joined` : 'Scan the QR code to join';
 }

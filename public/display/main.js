@@ -317,7 +317,7 @@ const net = new DisplayNet({
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
-    else if (data.type === MSG.START_GAME && from === net.flow.host && net.flow.connectedCount > 0) startRace();
+    else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
     // Pause / resume / new game can come from any player's controller.
     else if (data.type === MSG.PAUSE_GAME) pauseRace();
     else if (data.type === MSG.RESUME_GAME) resumeRace();
@@ -353,7 +353,7 @@ const AI_PREFIX = 'ai-';
 function renderRoster(roster, hostPeerIndex) {
   renderSeats(el('players'), roster.map((p) => ({
     name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
-    connected: p.connected, host: p.peerIndex === hostPeerIndex
+    connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
   })));
   el('count').textContent = seatCountText(roster.length);
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
@@ -412,6 +412,15 @@ function driveBots() {
 }
 
 // ---- race lifecycle ----
+// START_GAME gate: the host's "Start race" button is only enabled once every
+// other player is ready (controller-side renderReadyFoot); re-checked here so
+// a stale or forged START_GAME can't jump the lobby. The host themselves never
+// readies — their start IS the commitment.
+function allRacersReady() {
+  const players = net.flow.list().filter((p) => p.connected);
+  return players.length > 0 && players.every((p) => p.ready || p.peerIndex === net.flow.host);
+}
+
 function startRace() {
   if (net.roomState !== ROOM_STATE.LOBBY || !sceneReady) return;
   if (!selectedTrackId) return;              // a track must be chosen first

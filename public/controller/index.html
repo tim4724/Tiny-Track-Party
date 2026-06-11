@@ -39,17 +39,18 @@
     <div id="car-hero" class="car-hero"></div>
     <div id="carpick" class="carpick"></div>
 
-    <!-- the track — schematic maps from the display's catalog. Only the host can
-         change it; everyone else sees it read-only. Hidden until the catalog
-         arrives (WELCOME); see renderTrackPicker. -->
+    <!-- the track — host only: schematic maps from the display's catalog.
+         Everyone else sees the pick on the big screen instead. Hidden until the
+         catalog arrives (WELCOME); see renderTrackPicker. -->
     <div id="trackpick" class="trackpick hidden">
       <div class="lobby-head"><span class="pill">Track</span></div>
       <div id="track-strip" class="trackpick__strip"></div>
-      <div id="track-note" class="trackpick__note hidden">The host picks the track</div>
     </div>
 
-    <button id="start-btn" class="btn btn--brand hidden">Start race</button>
-    <div id="wait-host" class="hidden">Waiting for the host to start…</div>
+    <!-- lobby footer — non-hosts ready up; the host's button is "Start race",
+         disabled until everyone else is ready. See renderReadyFoot (ui.js). -->
+    <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
+    <div id="ready-note" class="hidden"></div>
   </section>
 
   <!-- Game: tilt to steer, hold BRAKE to slow -->

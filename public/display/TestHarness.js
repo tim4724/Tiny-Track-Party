@@ -56,7 +56,9 @@ export function runDisplayScenario(opts, ctx) {
   // slot (carIndex = slot) so the lobby shows a mix of models.
   function renderRoster(slots, hostPeerIndex) {
     renderSeats(el('players'), slots.map((s) => ({
-      name: FAKE_NAMES[s], colorIndex: s, carIndex: s, host: s === hostPeerIndex
+      name: FAKE_NAMES[s], colorIndex: s, carIndex: s, host: s === hostPeerIndex,
+      // preview the readiness pill: everyone but the host has readied up
+      ready: hostPeerIndex != null && s !== hostPeerIndex
     })));
     el('count').textContent = seatCountText(slots.length);
   }
