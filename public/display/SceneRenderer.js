@@ -107,9 +107,9 @@ const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next st
 const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
 const UNDER_AO_OPACITY = 0.35;     // underbody shading strength — starting value
 const UNDER_AO_COLOR = 0x1c1a18;   // near-black warm, same family as the skid scuffs
-const DUST_LIFE = 0.5;             // seconds a curb-scrub dust puff lives
-const DUST_OPACITY = 0.15;         // peak puff opacity — subtle, it's texture not an effect
-const DUST_SIZE = 0.18;            // world size of a fresh puff (swells while fading)
+// NOTE: curb-scrub dust puffs were tried and removed — the per-frame emission
+// saturated into impact smoke on wall hits (reads as damage, which the game
+// doesn't have), and the skid marks already carry the scrub cue.
 
 // NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
 // scene still renders to an offscreen LINEAR target and is presented through a
@@ -536,7 +536,7 @@ export class SceneRenderer {
   // the car), so a ring buffer recycles the oldest when busy.
   _initParticles() {
     this._skidTex = makeSkidTexture();
-    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura + dust puffs
+    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
     this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
     // Underbody shading (see the cue notes up top) never animates, so every car
     // shares this one geometry + material — addCar only makes a mesh.
@@ -578,50 +578,6 @@ export class SceneRenderer {
       m.userData.life = 0;
       this.scene.add(m);
       this._skids.push(m);
-    }
-
-    // Curb-scrub DUST — a small pool of soft warm-grey puffs kicked up at the
-    // wheels while a car grinds the curb. Sprites billboard per camera (right
-    // in every split-screen cell); each rises, swells and fades over DUST_LIFE.
-    // Deliberately subtle: it should register as texture, not as an effect.
-    this._dust = [];
-    this._dustN = 0;
-    for (let i = 0; i < 32; i++) {
-      const m = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: this._softTex, color: 0xcabd9f, transparent: true, opacity: 0,
-        depthWrite: false
-      }));
-      m.visible = false;
-      m.userData = { life: 0, vel: new THREE.Vector3() };
-      this.scene.add(m);
-      this._dust.push(m);
-    }
-  }
-
-  // Spawn one dust puff at a wheel's contact midpoint (ring buffer, like skids).
-  _emitDust(p) {
-    const m = this._dust[this._dustN];
-    this._dustN = (this._dustN + 1) % this._dust.length;
-    m.position.copy(p);
-    m.position.y += 0.06;
-    m.scale.set(DUST_SIZE, DUST_SIZE, 1);
-    m.material.opacity = DUST_OPACITY;
-    m.userData.life = DUST_LIFE;
-    m.userData.vel.set((Math.random() - 0.5) * 0.8, 0.8 + Math.random() * 0.5, (Math.random() - 0.5) * 0.8);
-    m.visible = true;
-  }
-
-  _stepDust(dt) {
-    for (const m of this._dust) {
-      if (!m.visible) continue;
-      m.userData.life -= dt;
-      if (m.userData.life <= 0) { m.visible = false; m.material.opacity = 0; continue; }
-      const k = m.userData.life / DUST_LIFE;       // 1 → 0
-      m.position.addScaledVector(m.userData.vel, dt);
-      m.userData.vel.y *= Math.exp(-2.5 * dt);     // the upward kick decays
-      const s = DUST_SIZE + (1 - k) * 0.3;          // swell while fading
-      m.scale.set(s, s, 1);
-      m.material.opacity = DUST_OPACITY * k;
     }
   }
 
@@ -1826,7 +1782,7 @@ export class SceneRenderer {
       disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat).addScaledVector(up, 0.02);
       disc.quaternion.setFromUnitVectors(Z, up); // CircleGeometry faces +Z → lay it in the road plane
       disc.receiveShadow = true;
-      disc.renderOrder = -1; // under the cars' dust/skid decals
+      disc.renderOrder = -1; // under the cars' skid decals
       this.hazardGroup.add(disc);
       // cones ringing the slick. Phase by half a step so a 4-cone ring lands on the
       // corners (none dead-centre on the racing line). Non-collidable — a warning.
@@ -2561,14 +2517,11 @@ export class SceneRenderer {
           const dir = this._dirV.copy(seg).multiplyScalar(1 / dist);
           const mid = this._midV.copy(last).addScaledVector(seg, 0.5);
           this._emitSkidSeg(mid, up, dir, dist, c.skidWidth, strength); // end-to-end, no overlap
-          // curb grind also kicks up dust (throttled — not every stamp)
-          if (c.scrub && Math.random() < 0.25) this._emitDust(mid);
         }
         last.copy(gp); // always advance (even on a straight) → next mark starts adjacent
       }
     }
     this._stepSkids(dt);
-    this._stepDust(dt);
     this._stepCones(dt);
     this._stepBoxes(dt);
     // clouds drift slowly east, wrapping well outside the playfield
