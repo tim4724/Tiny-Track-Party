@@ -600,7 +600,13 @@ export class Game {
   }
 
   _collidePair(a, b) {
-    const ds = b.totalS - a.totalS;          // +: b is ahead of a along the track
+    // Wrapped along-track gap, like every other (s, lat) proximity test: totalS is
+    // CUMULATIVE across laps, so a raw difference between a lapping leader and a
+    // backmarker is ≈ a whole lap — they'd occupy the same WORLD spot yet never
+    // register contact, and the leader would ghost straight through. Wrapping
+    // measures the real world gap; the pushes below are small local deltas, so
+    // applying them to the cumulative totalS stays correct across the lap seam.
+    const ds = wrapDelta(b.totalS - a.totalS, this.length); // +: b is ahead of a along the track
     const dl = b.lat - a.lat;                // +: b sits to a's +lateral side
     const sumLen = (a.halfLen + b.halfLen) * COLLIDE_SHRINK;
     const sumWid = (a.halfWid + b.halfWid) * COLLIDE_SHRINK;

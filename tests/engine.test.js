@@ -37,6 +37,10 @@ const TEST_OVAL = [
 
 function mkTrack(laps = 1) { const t = buildTrack(TEST_OVAL); t.totalLaps = laps; return t; }
 
+// Shortest signed arclength gap round the closed lap (mirrors engine/util.wrapDelta,
+// which this CommonJS file can't import at module-eval time).
+const wrap = (ds, len) => ds - Math.round(ds / len) * len;
+
 // Pure-pursuit steer: aim at a point a few units ahead on the centerline.
 function followSteer(game, track, id) {
   const c = game.cars.get(id);
@@ -317,6 +321,21 @@ test('weight decides a side bump: the heavy car barely budges, the light one is 
   const dH = Math.abs(game.cars.get('a').lat - hLat0);
   const dL = Math.abs(game.cars.get('b').lat - lLat0);
   assert.ok(dL > dH * 1.8, `light car moves much more than heavy (heavy ${dH.toFixed(3)} vs light ${dL.toFixed(3)})`);
+});
+
+test('lapped traffic is solid — a leader one lap up still collides at the same world spot', () => {
+  // totalS is cumulative across laps, so the leader's raw arclength gap to a
+  // backmarker at the same WORLD spot is ≈ a whole lap. The collision pair must
+  // measure the wrapped gap (like every other proximity test) or the leader
+  // ghosts straight through lapped traffic.
+  const { game, track } = parkPair({ totalS: 5.0, lat: 0, v: 1 }, { totalS: 5.0, lat: 0, v: 8 });
+  const a = game.cars.get('a'), b = game.cars.get('b');
+  b.totalS = 5.0 + track.length - 0.6; // one lap ahead, 0.6 behind `a` in the world, closing fast
+  game.processInput('a', { b: 1 });    // backmarker parked
+  for (let i = 0; i < 20; i++) game.update(16);
+  assert.ok(a.v > 0 || a.totalS > 5.0, 'the lapped car is hit (punted/pushed), not ghosted through');
+  const worldGap = Math.abs(wrap(b.totalS - a.totalS, track.length));
+  assert.ok(worldGap > 0.7, `cars are separated in world space after contact (gap=${worldGap.toFixed(2)})`);
 });
 
 test('finished cars are ghosts — a live car is not shoved by one', () => {
