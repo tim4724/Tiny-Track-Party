@@ -39,6 +39,10 @@ function flipWinding(geo) {
 const CAR_MODELS = window.CAR_MODELS;
 const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
 
+// Trackside scenery GLBs (always preloaded — every track scatters them, see
+// _buildScenery). Order matters: [0] is the round tree, [1] the pine.
+const SCENERY_MODELS = ['tree', 'tree-pine'];
+
 // Chase camera: sits behind the CAR's heading and looks at it, with the position
 // and look-target damped so it lags and swings smoothly behind through turns
 // (the standard spring chase-cam every kart racer uses).
@@ -49,6 +53,31 @@ const CHASE_TGT_UP = 0.15;    // look point barely above the road → camera pit
 const CAM_POS_RATE = 7.0, CAM_TGT_RATE = 13.0; // damping speed per second (higher = snappier)
 const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
+// Weight transfer: smoothed d(spd)/dt pitches the body — nose-down dive under
+// braking, squat under throttle. Suspension responding to the road is contact
+// evidence; a body rigid against the world reads as suspended above it. The
+// dive is deliberately stronger than the squat (real suspension is too, and the
+// brake dip is the beat the player should FEEL on a tap).
+const PITCH_DIVE_MAX = 0.08;  // nose-down (rad) at full braking — starting value
+const PITCH_SQUAT_MAX = 0.03; // nose-up (rad) at full throttle — subtle
+const PITCH_ACCEL_NORM = 0.8; // |d(spd)/dt| mapping to full pitch ≈ engine full throttle (ACCEL/VMAX)
+const PITCH_RATE = 6;         // pitch damping (1/s) — a soft suspension settle, not a snap
+// Wheel roll: wheels spin to match the car's REAL travel (arclength/radius,
+// measured from the pose delta — `spd` is normalised, so it can't drive this),
+// CAPPED at the readable ceiling of a 60Hz DISPLAY (the TV — a 120Hz dev
+// browser hides strobing that the TV shows, so calibrate for 60): the wheels
+// turn 1:1 up to the cap and pin there above it, so they are ALWAYS visibly
+// turning while the car moves. Above ~1 u/s the rate is no longer literal —
+// true rolling is 30–70 rad/s, which no 60Hz display can show as anything but
+// wagon-wheel strobe — but a coherent fast-looking spin beats both aliasing
+// flicker and a parked-looking wheel (both shipped, both rejected, along with
+// generated blur impostors of three increasing sophistications: every attempt
+// to render the true rate produced its own artefact). The early "capped looks
+// like slipping" verdict predates the full-travel roll fix: back then drift
+// and wall-scrub under-rolled to a THIRD of the right rate on top of the cap,
+// which is what made the slip readable.
+const ROLL_SEG_MAX = 1.5;     // per-frame travel beyond this = respawn/teleport → don't spin across it
+const ROLL_RATE_CAP = 9;      // visual spin ceiling (rad/s ≈ 8.6°/frame at 60Hz, ~1.4 rev/s)
 const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-angle stretch
 const FOV_GAIN = 5;           // extra FOV degrees at top speed (subtle sense of speed)
 // Lobby attract-mode: when no cars are on track (the lobby), slowly orbit the
@@ -60,9 +89,15 @@ const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzyin
 //     last contact point to its current one (end-to-end, no overlap), so it
 //     forms one continuous ribbon along the exact wheel path at ANY speed (the
 //     engine reports speed normalised, so we measure real travel, not a guess).
-//   • Contact shadow — a soft dark blob that rides flat on the road directly
-//     under each car, filling the gap the (offset) sun shadow leaves so the car
-//     reads planted rather than floating above its own shadow.
+//   • Underbody shading — ONE soft dark rounded-rect under the chassis, inset
+//     to stay INSIDE the car's silhouette. The raked sun shadow lands offset
+//     (toward the camera), so without it the underside and the tyre→road
+//     junctions are fully lit and the eye reads the gap as hover height. The
+//     inset is the load-bearing detail: a full-car OVAL whose edge was visible
+//     on open road read as a detached "second shadow", and per-wheel CIRCLES
+//     read as polka-dot feet around each tyre (both tried, both rejected) —
+//     keep the edge hidden under the body and it reads as occlusion instead
+//     (the same trick as the kerb-foot AO baked into the road ribbon).
 const SKID_COLOR = 0x241f1c;       // near-black warm scuff
 const SKID_MAX_OPACITY = 0.28;     // opacity of a fresh mark at full slip (hard scrub)
 const SKID_THRESH = 0.2;           // |steer| at which tyres start to scuff (below this: no mark)
@@ -70,6 +105,11 @@ const SKID_LIFE = 1.2;             // seconds to fully fade
 const SKID_WIDTH = 0.12;           // fallback tyre-contact width; per-car width is measured in addCar
 const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next stamp
 const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
+const UNDER_AO_OPACITY = 0.35;     // underbody shading strength — starting value
+const UNDER_AO_COLOR = 0x1c1a18;   // near-black warm, same family as the skid scuffs
+const DUST_LIFE = 0.5;             // seconds a curb-scrub dust puff lives
+const DUST_OPACITY = 0.15;         // peak puff opacity — subtle, it's texture not an effect
+const DUST_SIZE = 0.18;            // world size of a fresh puff (swells while fading)
 
 // NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
 // scene still renders to an offscreen LINEAR target and is presented through a
@@ -189,6 +229,75 @@ function makeSoftBlobTexture() {
   ctx.fillRect(0, 0, s, s);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Underbody-shading alpha: a feathered rounded rect (white core, soft edges),
+// drawn portrait (texture v = car length) and stretched to each car's footprint.
+// The feather lives INSIDE the quad, so the dark core sits ~inset under the
+// chassis and fades out before the quad edge — the silhouette rule above.
+function makeUnderShadowTexture() {
+  const w = 64, h = 128;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const inset = 12; // blur tail stays clear of the canvas edge (no clipped feather)
+  ctx.filter = 'blur(7px)';
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  ctx.beginPath();
+  ctx.roundRect(inset, inset, w - inset * 2, h - inset * 2, 18);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Cloud sprite: a few overlapping blurred white blobs — a soft toy cumulus.
+// Every blob keeps blur-tail clearance (~2× the blur radius) from the canvas
+// edges: a tail that crosses the edge gets sliced into a hard flat line — the
+// "clipped cloud" artefact.
+function makeCloudTexture() {
+  const w = 128, h = 64;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.filter = 'blur(5px)';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  for (const [x, y, r] of [[36, 36, 14], [58, 30, 17], [84, 36, 14], [68, 42, 11], [46, 42, 10]]) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Lawn: mowing stripes (alternating ±4% luminance bands) plus a few soft
+// blotches, tiled across the ground plane. Subtle — it should read as "lawn"
+// only when you look, never as a pattern.
+function makeLawnTexture() {
+  const s = 256, stripes = 8;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const base = [106, 168, 79]; // the old flat ground colour, #6aa84f
+  for (let i = 0; i < stripes; i++) {
+    const f = i % 2 ? 1.04 : 0.965;
+    ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
+    ctx.fillRect(Math.floor(i * s / stripes), 0, Math.ceil(s / stripes), s);
+  }
+  // faint organic blotches so the stripes don't read as a perfect print
+  ctx.filter = 'blur(7px)';
+  for (let i = 0; i < 26; i++) {
+    const f = (i % 2 ? 1.05 : 0.95);
+    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.35)`;
+    const x = (i * 73) % s, y = (i * 131) % s, r = 10 + (i * 37) % 22;
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.6, i, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(18, 18); // ~33u per tile on the 600u plane → stripes ≈ 4u wide
+  tex.anisotropy = 4;
   return tex;
 }
 
@@ -371,6 +480,7 @@ export class SceneRenderer {
     this._sBasis = new THREE.Matrix4();
     this._sWant = new THREE.Vector3();
     this._sTarget = new THREE.Vector3();
+    this._dsV = new THREE.Vector3();       // scratch for the per-frame travel delta (wheel roll)
     this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
     this._coneTmp2 = new THREE.Vector3();
     this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector (syncProps)
@@ -426,8 +536,17 @@ export class SceneRenderer {
   // the car), so a ring buffer recycles the oldest when busy.
   _initParticles() {
     this._skidTex = makeSkidTexture();
-    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
+    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura + dust puffs
     this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
+    // Underbody shading (see the cue notes up top) never animates, so every car
+    // shares this one geometry + material — addCar only makes a mesh.
+    this._aoTex = makeUnderShadowTexture();
+    this._aoGeo = new THREE.PlaneGeometry(1, 1);
+    this._aoMat = new THREE.MeshBasicMaterial({
+      map: this._aoTex, color: UNDER_AO_COLOR, transparent: true, opacity: UNDER_AO_OPACITY,
+      depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    });
     this._skids = [];
     this._skidN = 0;
     // scratch vectors for orientation maths + the per-wheel travel measurement,
@@ -459,6 +578,50 @@ export class SceneRenderer {
       m.userData.life = 0;
       this.scene.add(m);
       this._skids.push(m);
+    }
+
+    // Curb-scrub DUST — a small pool of soft warm-grey puffs kicked up at the
+    // wheels while a car grinds the curb. Sprites billboard per camera (right
+    // in every split-screen cell); each rises, swells and fades over DUST_LIFE.
+    // Deliberately subtle: it should register as texture, not as an effect.
+    this._dust = [];
+    this._dustN = 0;
+    for (let i = 0; i < 32; i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this._softTex, color: 0xcabd9f, transparent: true, opacity: 0,
+        depthWrite: false
+      }));
+      m.visible = false;
+      m.userData = { life: 0, vel: new THREE.Vector3() };
+      this.scene.add(m);
+      this._dust.push(m);
+    }
+  }
+
+  // Spawn one dust puff at a wheel's contact midpoint (ring buffer, like skids).
+  _emitDust(p) {
+    const m = this._dust[this._dustN];
+    this._dustN = (this._dustN + 1) % this._dust.length;
+    m.position.copy(p);
+    m.position.y += 0.06;
+    m.scale.set(DUST_SIZE, DUST_SIZE, 1);
+    m.material.opacity = DUST_OPACITY;
+    m.userData.life = DUST_LIFE;
+    m.userData.vel.set((Math.random() - 0.5) * 0.8, 0.8 + Math.random() * 0.5, (Math.random() - 0.5) * 0.8);
+    m.visible = true;
+  }
+
+  _stepDust(dt) {
+    for (const m of this._dust) {
+      if (!m.visible) continue;
+      m.userData.life -= dt;
+      if (m.userData.life <= 0) { m.visible = false; m.material.opacity = 0; continue; }
+      const k = m.userData.life / DUST_LIFE;       // 1 → 0
+      m.position.addScaledVector(m.userData.vel, dt);
+      m.userData.vel.y *= Math.exp(-2.5 * dt);     // the upward kick decays
+      const s = DUST_SIZE + (1 - k) * 0.3;          // swell while fading
+      m.scale.set(s, s, 1);
+      m.material.opacity = DUST_OPACITY * k;
     }
   }
 
@@ -528,6 +691,86 @@ export class SceneRenderer {
     scene.fog = new THREE.Fog(0x8ecae6, 70, 170);
     this.scene = scene;
 
+    // Sky dome: a vertex-coloured backdrop — deeper blue overhead easing to a
+    // pale warm band at the horizon (the same hue the fog uses, so distant
+    // geometry dissolves into the sky instead of hitting a flat backdrop).
+    // fog:false (the dome IS the backdrop) and depthWrite:false + renderOrder
+    // -1 so it always paints first and everything draws over it.
+    {
+      const R = 420;
+      const skyGeo = new THREE.SphereGeometry(R, 24, 12);
+      const sp = skyGeo.attributes.position;
+      const skyCol = new Float32Array(sp.count * 3);
+      const top = new THREE.Color(0x59a7e8).convertSRGBToLinear(); // zenith
+      const hor = new THREE.Color(0x8ecae6).convertSRGBToLinear(); // horizon = fog colour
+      const low = new THREE.Color(0xc8e9f2).convertSRGBToLinear(); // below-horizon haze
+      const c = new THREE.Color();
+      for (let i = 0; i < sp.count; i++) {
+        const t = sp.getY(i) / R; // -1 (nadir) .. 1 (zenith)
+        if (t >= 0) c.copy(hor).lerp(top, Math.pow(t, 0.65));
+        else c.copy(hor).lerp(low, Math.min(1, -t * 3));
+        skyCol[i * 3] = c.r; skyCol[i * 3 + 1] = c.g; skyCol[i * 3 + 2] = c.b;
+      }
+      skyGeo.setAttribute('color', new THREE.BufferAttribute(skyCol, 3));
+      const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({
+        vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false
+      }));
+      sky.renderOrder = -1;
+      scene.add(sky);
+    }
+
+    // Clouds: a handful of soft sprite puffs drifting slowly. Sprites billboard
+    // per camera, so they read correctly in every split-screen cell; fog:false
+    // because they live past the fog's far end. Drift is stepped in _loop.
+    this._clouds = [];
+    {
+      const cloudTex = makeCloudTexture();
+      for (let i = 0; i < 8; i++) {
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: cloudTex, transparent: true, opacity: 0.8, fog: false, depthWrite: false
+        }));
+        const a = (i / 8) * Math.PI * 2 + (i % 3) * 0.45;
+        const r = 180 + (i % 4) * 38;
+        sprite.position.set(Math.cos(a) * r, 42 + (i % 3) * 16, Math.sin(a) * r);
+        const w = 50 + (i % 3) * 20;
+        sprite.scale.set(w, w * 0.42, 1);
+        this._clouds.push(sprite);
+        scene.add(sprite);
+      }
+    }
+
+    // Horizon hills: one merged ring of squashed toy domes, far outside any
+    // track and deep in the fog tail, so they render as soft pale silhouettes —
+    // depth for the diorama without competing with it. Built once; never
+    // disposed (they're track-independent, like the ground plane).
+    {
+      const hillProto = new THREE.SphereGeometry(1, 10, 6);
+      hillProto.deleteAttribute('uv');
+      const geoms = [];
+      const hc = new THREE.Color();
+      for (let i = 0; i < 18; i++) {
+        const g = hillProto.clone();
+        g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
+        const a = (i / 18) * Math.PI * 2 + (i % 5) * 0.13;
+        const r = 150 + (i % 3) * 18;
+        g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the grass plane
+        // pastel greens — distance haze should make them recede, not loom
+        hc.set([0x8cc578, 0x7cb86a, 0x9bce86][i % 3]).convertSRGBToLinear();
+        const n = g.attributes.position.count;
+        const colA = new Float32Array(n * 3);
+        for (let k = 0; k < n; k++) { colA[k * 3] = hc.r; colA[k * 3 + 1] = hc.g; colA[k * 3 + 2] = hc.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(colA, 3));
+        geoms.push(g);
+      }
+      hillProto.dispose();
+      const hills = new THREE.Mesh(
+        mergeGeometries(geoms, false),
+        new THREE.MeshStandardMaterial({ vertexColors: true })
+      );
+      for (const g of geoms) g.dispose(); // copied into the merge
+      scene.add(hills);
+    }
+
     // Toy lighting: a soft sky/ground hemisphere for even fill, PLUS a warm key light
     // that also casts the "Sunny Circuit" shadow. The key's specular highlight is the
     // "shiny plastic" dot that sells the injection-moulded-toy read; the hemisphere
@@ -550,7 +793,9 @@ export class SceneRenderer {
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(600, 600),
-      new THREE.MeshStandardMaterial({ color: 0x6aa84f })
+      // Lawn texture (mowing stripes) instead of a flat colour — the colour
+      // lives in the texture, so the material tint stays white.
+      new THREE.MeshStandardMaterial({ map: makeLawnTexture() })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -1.0;
@@ -724,7 +969,7 @@ export class SceneRenderer {
   // track.instances (see main.js), so adding a new piece needs no change here.
   async load(trackGlbs) {
     const loader = new GLTFLoader();
-    const need = [...new Set([...trackGlbs, ...CAR_MODELS])];
+    const need = [...new Set([...trackGlbs, ...CAR_MODELS, ...SCENERY_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
         if (CAR_MODELS.includes(name)) this._glossCarMats(gltf.scene);
@@ -1000,6 +1245,170 @@ export class SceneRenderer {
     this._mergedMats.push(mat);
   }
 
+  // Trackside scenery — the kit's own GLB trees (round + pine, with small
+  // sunken trees standing in for bushes) plus faceted boulders, scattered on
+  // the grass outside the racing corridor. The parallax of things streaming
+  // past is the strongest speed cue there is (trackside, not on the car — see
+  // the wheel-roll notes above). Trees + bushes bake into ONE textured mesh
+  // (they all share the kit colormap) and the boulders into ONE vertex-
+  // coloured mesh — two draw calls total, like the road; castShadow stays
+  // off because the grass doesn't receive shadows anyway.
+  _buildScenery(track) {
+    const cl = track.centerline;
+    if (!cl || !cl.samples.length) return;
+
+    // Deterministic placement: a seeded LCG keyed on the track's identity, so a
+    // layout's scenery is identical on every load and every display.
+    let seed = 2166136261;
+    const idStr = String(track.id || track.name || '') + Math.round(cl.length * 100);
+    for (let i = 0; i < idStr.length; i++) seed = ((seed ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+    const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+    // A candidate is clear only if it's outside EVERY centreline sample's
+    // corridor — the local sample being far away isn't enough on a figure-8,
+    // where the other strand can pass right through the band (2D check on
+    // purpose: under a bridge the lower strand still owns the ground).
+    const samples = cl.samples;
+    const defHalf = (track.roadWidth || 5) / 2;
+    const MARGIN = 2.2; // kerb + canopy radius + breathing room
+    const isClear = (x, z) => {
+      for (const s of samples) {
+        const half = (s.width != null ? s.width / 2 : defHalf) + MARGIN;
+        const dx = x - s.pos.x, dz = z - s.pos.z;
+        if (dx * dx + dz * dz < half * half) return false;
+      }
+      return true;
+    };
+
+    // Tree sources: each SCENERY_MODELS proto reduced to bake-ready
+    // {geometry, matrixWorld} parts plus the shared colormap material. The kit
+    // models are toy-tiny (0.83 tall — shorter than two cars), so placements
+    // scale them up to diorama size below.
+    const treeSrc = [];
+    let colorMat = null;
+    for (const name of SCENERY_MODELS) {
+      const root = this.protos.get(name);
+      if (!root) continue;
+      root.updateMatrixWorld(true);
+      const parts = [];
+      root.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        parts.push({ geo: o.geometry, mw: o.matrixWorld.clone() });
+        const m = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (!colorMat && m && m.map) colorMat = m;
+      });
+      if (parts.length) treeSrc.push(parts);
+    }
+
+    const KEEP = ['position', 'normal', 'uv']; // merged attribute sets must match
+    const groundY = this.ground.position.y;
+    const treeGeoms = [];
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
+    const P = new THREE.Vector3(), S = new THREE.Vector3();
+    const UP = new THREE.Vector3(0, 1, 0);
+    const placeTree = (x, z, opts = {}) => {
+      if (!treeSrc.length) return;
+      // 65% round / 35% pine — pines as the accent, not an evergreen forest
+      const parts = opts.parts || treeSrc[rand() < 0.65 ? 0 : treeSrc.length - 1];
+      const s = opts.s != null ? opts.s : 2.3 + rand() * 1.1; // ≈1.9–2.8 world tall (≈3–5 car heights)
+      Q.setFromAxisAngle(UP, rand() * Math.PI * 2);
+      S.set(s, s * (0.92 + rand() * 0.16), s); // slight height jitter
+      P.set(x, groundY - (opts.sink || 0) * s, z); // sink: bury the trunk (bushes, below)
+      M.compose(P, Q, S);
+      // Per-vertex shade multiplier over the colormap (1 = as-authored): a touch
+      // of brightness variation keeps a copse from reading as stamped clones.
+      const shade = 0.88 + rand() * 0.2;
+      for (const part of parts) {
+        const g = part.geo.clone();
+        for (const nm of Object.keys(g.attributes)) {
+          if (!KEEP.includes(nm)) g.deleteAttribute(nm);
+        }
+        if (!g.attributes.normal) g.computeVertexNormals();
+        g.applyMatrix4(part.mw).applyMatrix4(M);
+        const n = g.attributes.position.count;
+        g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(shade), 3));
+        treeGeoms.push(g);
+      }
+    };
+
+    // Boulders: faceted icosahedra (flat-shaded) — the low-poly read of the
+    // kit, not smooth blobs. UVs dropped; colour comes from per-vertex tints
+    // in the pillars' toy-concrete family so they sit in the same palette.
+    const rockProto = new THREE.IcosahedronGeometry(1, 0);
+    rockProto.deleteAttribute('uv');
+    const tint = (g, hex, shade) => {
+      const c = new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(shade);
+      const n = g.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      return g;
+    };
+    const ROCK_GREYS = [0xc6cbd6, 0xb4bac8, 0x9aa1b4]; // pillar-concrete family
+
+    const plainGeoms = [];
+    const step = 7; // candidate spacing along the lap (world units)
+    for (let d = 0; d < cl.length && treeGeoms.length + plainGeoms.length < 500; d += step) {
+      const f = cl.sampleAt(d);
+      const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
+      for (const side of [-1, 1]) {
+        if (rand() > 0.62) continue; // leave gaps — a hedge-wall reads fake
+        const lat = side * (half + 2.5 + rand() * 9);
+        const x = f.pos.x + f.lateral.x * lat + (rand() - 0.5) * 3;
+        const z = f.pos.z + f.lateral.z * lat + (rand() - 0.5) * 3;
+        if (!isClear(x, z)) continue;
+        const roll = rand();
+        if (roll < 0.62) {
+          placeTree(x, z);
+          // copse: sometimes 1–2 companions huddle by the first trunk —
+          // clusters read as parkland, an even sprinkle reads as noise
+          if (rand() < 0.45) {
+            const extra = 1 + Math.floor(rand() * 2);
+            for (let e = 0; e < extra; e++) {
+              const a = rand() * Math.PI * 2, r = 1.6 + rand() * 1.6;
+              const ex = x + Math.cos(a) * r, ez = z + Math.sin(a) * r;
+              if (isClear(ex, ez)) placeTree(ex, ez);
+            }
+          }
+        } else if (roll < 0.9) {
+          // "bush" = a small round tree sunk to its canopy. The kit has no bush
+          // model, and procedural domes never matched (flat side facets render
+          // as dark holes against the sunlit lawn) — a buried trunk reuses the
+          // canopy's authored colours/facets for an exact style match, free.
+          placeTree(x, z, { parts: treeSrc[0], s: 1.1 + rand() * 0.7, sink: 0.3 });
+        } else {
+          // half-sunk boulder
+          const rr = 0.3 + rand() * 0.45;
+          const grey = ROCK_GREYS[Math.floor(rand() * ROCK_GREYS.length)];
+          const rock = tint(rockProto.clone(), grey, 0.92 + rand() * 0.16);
+          rock.scale(rr, rr * (0.55 + rand() * 0.3), rr);
+          rock.rotateY(rand() * Math.PI * 2);
+          rock.translate(x, groundY + rr * 0.25, z);
+          plainGeoms.push(rock);
+        }
+      }
+    }
+    rockProto.dispose();
+
+    const addMerged = (geoms, mat) => {
+      if (!geoms.length) { mat.dispose(); return; }
+      const merged = mergeGeometries(geoms, false);
+      for (const g of geoms) g.dispose(); // copied into the merge
+      if (!merged) { mat.dispose(); return; }
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.matrixAutoUpdate = false;
+      this.trackGroup.add(mesh); // cleared with the track; dispose via the merged-pools
+      this._mergedGeoms.push(merged);
+      this._mergedMats.push(mat);
+    };
+    if (colorMat) {
+      const treeMat = colorMat.clone(); // shares the proto's colormap texture
+      treeMat.vertexColors = true;      // the per-tree shade multiplier above
+      addMerged(treeGeoms, treeMat);
+    }
+    addMerged(plainGeoms, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true }));
+  }
+
   setTrack(track, { debug = false } = {}) {
     this._disposeTrack();
     this.trackGroup.clear();
@@ -1110,6 +1519,7 @@ export class SceneRenderer {
     }
 
     this._buildPillars(track);
+    this._buildScenery(track);
 
     if (debug) {
       // Magenta centreline overlay (inspection aid). Lift each point a little along
@@ -1653,6 +2063,10 @@ export class SceneRenderer {
     const bodyBaseQuat = body.quaternion.clone();
     const frontWheels = ['wheel-fl', 'wheel-fr'].map((n) => car.getObjectByName(n)).filter(Boolean);
     const backWheels = ['wheel-bl', 'wheel-br'].map((n) => car.getObjectByName(n)).filter(Boolean);
+    // Front wheels both STEER (yaw, setCarPose) and ROLL (about the axle). YXZ
+    // applies the steer yaw first, then the roll about the already-yawed axle —
+    // the composition a real steered wheel has. Rears roll on default-order X alone.
+    for (const w of frontWheels) w.rotation.order = 'YXZ';
 
     // livery "license plate" on the car's rear bumper, showing the player name.
     // Parented to the BODY (not the group) so it banks WITH the steering lean.
@@ -1664,10 +2078,9 @@ export class SceneRenderer {
     body.add(plate);
     this.scene.add(group);
 
-    // Car footprint (width × length), used to size the boost aura below. The sun's
-    // directional light is the only car shadow now — a single raked light leaves a
-    // faint gap under the chassis, but a generic oval blob there read as a separate
-    // "second shadow", so it's gone; the cast silhouette alone keeps the car planted.
+    // Car footprint (width × length), used to size the boost aura and the underbody
+    // shading quad below (see the tyre-contact cue notes up top for the silhouette
+    // rule that shape obeys).
     // updateWorldMatrix first so the bounding box reflects the posed car transform.
     group.updateWorldMatrix(true, true);
     const fb = new THREE.Box3().setFromObject(car);
@@ -1751,18 +2164,46 @@ export class SceneRenderer {
     // track matches the model's tyre (the monster truck's fat tyres mark wider
     // than the racer's). The wheel is a thin disc: its smallest horizontal extent
     // is the tread width (the larger horizontal + the vertical are the diameter).
-    let skidWidth = SKID_WIDTH;
+    let skidWidth = SKID_WIDTH, wheelRadius = 0.09;
     if (backWheels.length) {
       const wb = new THREE.Box3().setFromObject(backWheels[0]).getSize(new THREE.Vector3());
       skidWidth = Math.min(0.24, Math.max(0.06, Math.min(wb.x, wb.z)));
+      wheelRadius = Math.max(0.04, wb.y / 2); // the disc's vertical extent IS the tyre diameter
     }
+
+    // Axis signs for the roll/pitch animations, MEASURED from the rest transform
+    // (the group was just added at the origin with identity rotation, so world
+    // space = group space here). The model-facing yaw fix flips local axes
+    // relative to the group — the stock PI flip maps local +X onto group −X — so
+    // a hard-coded sign would spin the wheels backwards (and pitch the body the
+    // wrong way) on a differently-authored model or a future CAR_MODEL_YAW entry.
+    // Convention: positive rotation about GROUP +X = rolling forward / nose-down.
+    const axisV = new THREE.Vector3();
+    for (const w of [...frontWheels, ...backWheels]) {
+      axisV.setFromMatrixColumn(w.matrixWorld, 0); // wheel local X (the axle) in group space
+      w.userData.rollSign = axisV.x >= 0 ? 1 : -1;
+    }
+    const pitchSign = (axisV.setFromMatrixColumn(body.matrixWorld, 0).x >= 0) ? 1 : -1;
+
+    // UNDERBODY SHADING — one soft dark rounded-rect under the chassis (see the
+    // cue notes up top). A child of the GROUP, which rides the road plane, so it
+    // lies flat on the asphalt beneath the (leaning/pitching) body. Stretched to
+    // the model's footprint: the texture's feather lives INSIDE the quad, so the
+    // dark core stays within the silhouette and the edge is never visible as a
+    // shape on open road — the rule that keeps it reading as occlusion.
+    const ao = new THREE.Mesh(this._aoGeo, this._aoMat);
+    ao.rotation.x = -Math.PI / 2;
+    ao.position.set((fb.min.x + fb.max.x) / 2, -RIDE_HEIGHT + 0.004, (fb.min.z + fb.max.z) / 2);
+    ao.scale.set(footW, footL, 1);
+    group.add(ao);
 
     const c = {
       group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, plate, cam, boostAura, footW, footL,
+      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostAura, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
+      wheelRoll: 0, pitch: 0, prevSpd: 0, lastPos: null, // wheel-roll + weight-transfer state (setCarPose)
       reconnecting: false, reconnectEl: null, // dropped-player reconnect card (centred in this cell, like finishEl)
       rideOff: null // damped ride-height offset from the centreline (setCarPose)
     };
@@ -1804,8 +2245,8 @@ export class SceneRenderer {
     if (!c) return;
     this.scene.remove(c.group);
     // Dispose what addCar created fresh per car (the name plate + boost aura). The car
-    // mesh shares its geometry/material with the cached prototype — leave it for the
-    // next race.
+    // mesh shares its geometry/material with the cached prototype, and the underbody
+    // shading quad shares _aoGeo/_aoMat — leave those for the next race.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     // boost aura owns its geometry + material (the map is the shared this._softTex — leave it)
     if (c.boostAura) { c.boostAura.geometry.dispose(); c.boostAura.material.dispose(); }
@@ -1880,6 +2321,18 @@ export class SceneRenderer {
     if (!c.pose) c.pose = { pos: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3() };
     const fwd = c.pose.forward.copy(forward).normalize();
     const u = c.pose.up.copy(up).normalize();
+    // Travel since last frame — drives the wheel roll. FULL ground travel,
+    // signed by the heading component: the physically-strict roll would be the
+    // heading projection (a drifting tyre rolls slower than the car moves), but
+    // this game's handling is all drift — the projection left the wheels
+    // visibly under-rolling through every corner and wall scrub, which read as
+    // slip (readability > physics; same call as the brake dive).
+    let ds = 0;
+    if (c.lastPos) {
+      this._dsV.copy(pos).sub(c.lastPos);
+      ds = this._dsV.length() * (Math.sign(this._dsV.dot(fwd)) || 1);
+    }
+    (c.lastPos || (c.lastPos = new THREE.Vector3())).copy(pos);
     c.pose.pos.copy(pos);
     c.group.position.copy(pos);
 
@@ -1934,8 +2387,32 @@ export class SceneRenderer {
     // visibly whirls on screen.
     if (spin && c.body === c.car) c.body.rotateY(spin);
     c.body.rotateZ(c.lean);
-    // turn the front wheels with steering (steer>0 = right)
-    for (const w of c.frontWheels) w.rotation.y = steer * WHEEL_TURN_MAX;
+    // Weight transfer: smoothed d(spd)/dt → body pitch — dive under braking,
+    // squat under throttle. c.pitch is the NOSE-DOWN angle; pitchSign maps it
+    // onto the body's local X (which the model-facing yaw fix may have flipped).
+    const dspd = (spd - c.prevSpd) / Math.max(this._frameDt, 1e-3);
+    c.prevSpd = spd;
+    const pitchAmt = Math.max(-1, Math.min(1, dspd / PITCH_ACCEL_NORM)); // <0 braking, >0 throttle
+    const pitchTarget = -pitchAmt * (pitchAmt < 0 ? PITCH_DIVE_MAX : PITCH_SQUAT_MAX);
+    c.pitch += (pitchTarget - c.pitch) * (1 - Math.exp(-PITCH_RATE * this._frameDt));
+    c.body.rotateX(c.pitch * c.pitchSign);
+    // Roll every wheel to match the car's real travel (ds / tyre radius),
+    // capped at ROLL_RATE_CAP so the spin stays coherent on a 60Hz display
+    // (see the constants up top) — turning whenever the car moves. Teleport-
+    // sized jumps (respawn) don't spin the wheels; the accumulator wraps at
+    // ±π (same orientation) so it never loses precision.
+    if (Math.abs(ds) < ROLL_SEG_MAX) {
+      const lim = ROLL_RATE_CAP * Math.max(this._frameDt, 1e-3);
+      c.wheelRoll += Math.max(-lim, Math.min(lim, ds / c.wheelRadius));
+      if (c.wheelRoll > Math.PI) c.wheelRoll -= Math.PI * 2;
+      else if (c.wheelRoll < -Math.PI) c.wheelRoll += Math.PI * 2;
+    }
+    for (const w of c.backWheels) w.rotation.x = c.wheelRoll * w.userData.rollSign;
+    // front wheels: steer yaw + roll (YXZ order set in addCar; steer>0 = right)
+    for (const w of c.frontWheels) {
+      w.rotation.y = steer * WHEEL_TURN_MAX;
+      w.rotation.x = c.wheelRoll * w.userData.rollSign;
+    }
     // on-screen steer indicator: mirror the player's RAW input (same as the phone
     // bar) so it slides the way they tilt — not the turn-aligned/STEER_SIGN value.
     if (c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
@@ -2084,13 +2561,21 @@ export class SceneRenderer {
           const dir = this._dirV.copy(seg).multiplyScalar(1 / dist);
           const mid = this._midV.copy(last).addScaledVector(seg, 0.5);
           this._emitSkidSeg(mid, up, dir, dist, c.skidWidth, strength); // end-to-end, no overlap
+          // curb grind also kicks up dust (throttled — not every stamp)
+          if (c.scrub && Math.random() < 0.25) this._emitDust(mid);
         }
         last.copy(gp); // always advance (even on a straight) → next mark starts adjacent
       }
     }
     this._stepSkids(dt);
+    this._stepDust(dt);
     this._stepCones(dt);
     this._stepBoxes(dt);
+    // clouds drift slowly east, wrapping well outside the playfield
+    for (const cl of this._clouds) {
+      cl.position.x += 0.7 * dt;
+      if (cl.position.x > 300) cl.position.x = -300;
+    }
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
