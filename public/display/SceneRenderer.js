@@ -79,13 +79,34 @@ const PITCH_RATE = 6;         // pitch damping (1/s) — a soft suspension settl
 const ROLL_SEG_MAX = 1.5;     // per-frame travel beyond this = respawn/teleport → don't spin across it
 const ROLL_RATE_CAP = 9;      // visual spin ceiling (rad/s ≈ 8.6°/frame at 60Hz, ~1.4 rev/s)
 const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-angle stretch
-const FOV_GAIN = 5;           // extra FOV degrees at top speed (subtle sense of speed)
+// Sense of speed (no shake): FOV widens and the chase camera stretches back with
+// speed. `spd` is normalised to the car's own vmax but a BOOST raises v above it
+// (spd reaches ~1.6), so both cues automatically over-extend during a boost — the
+// kick is proportional to how fast you ACTUALLY go. The FOV response is
+// asymmetric: it kicks wide fast (a boost lands as a hit) and eases back slow
+// (running out of boost is a taper, not a snap). Starting values.
+const FOV_GAIN = 7;           // extra FOV degrees at top speed (~+11° at full boost)
+const FOV_RISE = 9, FOV_FALL = 3; // FOV damping rates (1/s): fast in, slow out
+const CHASE_DIST_GAIN = 0.3;  // extra chase distance at full speed — the car pulls away
+// BOOST wind streaks: a few additive white-teal streaks slicing past the car while
+// boostMul > 1 — the Mario-Kart "cutting through air" idiom. World-space (not a
+// screen overlay) so every split-screen cell sees a rival's boost too, same as the
+// aura. Each streak is an AXIAL BILLBOARD (see streakBillboard): it spins about
+// its travel axis per render pass to face that cell's camera — a fixed quad is
+// near edge-on from dead astern, where every chase cam sits. Gated to boost on
+// purpose: the baseline stays clean (cap what strobes, exaggerate what
+// communicates). Starting values.
+const STREAK_N = 4;           // streaks per car
+const STREAK_COLOR = 0xdffcf8;// near-white with a teal cast (ties to the boost identity)
+const STREAK_FRONT = 0.7, STREAK_BACK = -2.4; // travel span in car-local Z (world units)
+const STREAK_OPACITY = 0.15;  // peak opacity at max boost — a whisper of airflow, not lasers
 // Lobby attract-mode: when no cars are on track (the lobby), slowly orbit the
 // overview camera around the selected track so it reads as a live 3D preview.
 const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzying
 // Tyre-contact cues that ground the car ON the road (vs hovering over it):
 //   • Skidmarks — dark tyre tracks laid under the rear wheels while cornering /
-//     curb-scrubbing, fading out over SKID_LIFE. Each stamp bridges the wheel's
+//     curb-scrubbing / hard-braking / launching, fading over SKID_LIFE down to
+//     a lingering patina floor (see SKID_PATINA). Each stamp bridges the wheel's
 //     last contact point to its current one (end-to-end, no overlap), so it
 //     forms one continuous ribbon along the exact wheel path at ANY speed (the
 //     engine reports speed normalised, so we measure real travel, not a guess).
@@ -101,15 +122,48 @@ const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzyin
 const SKID_COLOR = 0x241f1c;       // near-black warm scuff
 const SKID_MAX_OPACITY = 0.28;     // opacity of a fresh mark at full slip (hard scrub)
 const SKID_THRESH = 0.2;           // |steer| at which tyres start to scuff (below this: no mark)
-const SKID_LIFE = 1.2;             // seconds to fully fade
+const SKID_LIFE = 1.2;             // seconds to fade down to the patina floor
 const SKID_WIDTH = 0.12;           // fallback tyre-contact width; per-car width is measured in addCar
 const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next stamp
 const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
+// Rubber patina: a faded mark doesn't vanish — it settles at this fraction of its
+// peak opacity and STAYS until its pool slot is recycled. Corners on the racing
+// line get re-stamped every lap, so they accumulate visible rubber over a race
+// (the track looks raced-on) while one-off marks eventually rotate out. All
+// stamps live in ONE merged mesh with per-vertex alpha (single draw call —
+// the old mesh-per-stamp pool put ~580 visible draw calls up during hard
+// cornering), so lingering marks cost nothing extra. Starting value.
+const SKID_PATINA = 0.22;          // lingering fraction of a mark's peak (~0.06 max alpha)
+const SKID_POOL = 2048;            // stamp slots (ring buffer) — bounds the patina's memory
+// Brake marks: slamming the brake at speed lays straight streaks under the rears
+// (firing in sync with the nose dive — two contact channels on the same beat).
+const SKID_BRAKE_MIN = 0.6;        // analog brake input where marks start; full brake = full mark
+// Launch scratch: hard forward acceleration from near-standstill (race start,
+// boost from slow) scratches faint marks — torque biting into the asphalt.
+const SKID_LAUNCH_MIN = 0.5;       // accelNorm (smoothed d(spd)/dt vs full throttle) where it starts
 const UNDER_AO_OPACITY = 0.35;     // underbody shading strength — starting value
 const UNDER_AO_COLOR = 0x1c1a18;   // near-black warm, same family as the skid scuffs
-// NOTE: curb-scrub dust puffs were tried and removed — the per-frame emission
-// saturated into impact smoke on wall hits (reads as damage, which the game
-// doesn't have), and the skid marks already carry the scrub cue.
+// Load shift: the harder the body pitches (brake dive / throttle squat), the closer
+// the chassis presses to the road — darken the underbody shading with |pitch| so
+// braking visibly plants the car. Added on top of UNDER_AO_OPACITY. Starting value.
+const AO_LOAD_GAIN = 0.10;
+// NOTE: body "road feel" vibration was tried and removed — a speed-scaled
+// suspension murmur (twin sines, ±0.005 then ±0.0017) plus a kerb-scrub shudder.
+// Even at 1/3 amplitude it read as a rendering bug/jitter from the chase cam,
+// not as suspension responding to the road. Contact evidence stays with the
+// event-driven cues instead: brake dive/squat, the AO load shift, and the skids.
+// NOTE: under-wheel dust was attempted FOUR ways and removed for good — the
+// concept doesn't fit this game, don't re-propose it:
+//   1. curb-scrub puffs, per-frame emission — saturated into impact smoke on
+//      wall hits (read as damage, which the game doesn't have);
+//   2. soft sprite blobs on clean driving — read as miniature CLOUDS (the
+//      clouds' exact visual language);
+//   3. faceted low-poly chips — read as kicked-up STONES;
+//   4. fine multi-speck particle spray (one Points buffer, gravity arcs) —
+//      correct "dust" idiom, still rejected: not wanted on an asphalt toy road.
+// Grounding on straights is carried by the contact cues that DID land: the
+// underbody shading + load shift, brake dive/squat, skid marks + patina, and
+// the centre dash line streaming past.
 
 // NOTE: tilt-shift depth-of-field was removed — it didn't read well in motion. The
 // scene still renders to an offscreen LINEAR target and is presented through a
@@ -211,6 +265,55 @@ function makeSkidTexture() {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// Wind-streak alpha: a blurred ellipse — soft at both ends AND across its width
+// (unlike the skid texture, streaks never tile end-to-end, so soft ends are
+// wanted here). Drawn white; the material colour tints it.
+function makeStreakTexture() {
+  const w = 64, h = 16;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.filter = 'blur(3px)';
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h / 2, w / 2 - 8, h / 2 - 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Streak geometry: ONE unit quad, length along Z (travel), width along X,
+// facing +Y. Orientation comes from axial billboarding (below) — a fixed quad
+// (or crossed pair) along the travel axis is near edge-on from DEAD ASTERN,
+// which is exactly where every chase camera sits. Texture u runs along the
+// length, v across the width. Scaled per streak via mesh.scale.
+function makeStreakGeometry() {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(
+    [-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5], 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 1, 1, 1, 1, 0], 2));
+  g.setIndex([0, 1, 2, 0, 2, 3]);
+  return g;
+}
+
+// Axial billboard for a streak mesh: spin it about its long (local Z) axis so
+// its face follows the camera. Installed as onBeforeRender, which the renderer
+// calls once per render pass — BEFORE it derives the modelViewMatrix from
+// matrixWorld — so every split-screen cell sees the streak turned toward its
+// OWN camera, even though all cells share the one scene.
+const _sbV = new THREE.Vector3();
+const _sbM = new THREE.Matrix4();
+function streakBillboard(renderer, scn, camera) {
+  _sbV.setFromMatrixPosition(camera.matrixWorld);
+  _sbM.copy(this.parent.matrixWorld).invert();
+  _sbV.applyMatrix4(_sbM).sub(this.position); // camera dir in the parent's frame
+  // rotate +Y (the face normal) about Z onto the camera's bearing in the XY plane
+  this.rotation.z = Math.atan2(-_sbV.x, _sbV.y);
+  this.updateMatrix();
+  this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
 }
 
 // A single soft round alpha blob (white core feathering to transparent). Drawn
@@ -531,15 +634,27 @@ export class SceneRenderer {
     return best;
   }
 
-  // Pooled skidmark decals — flat quads laid on the road that fade out. Shared
-  // across all cars (the marks stay where they were laid; they don't move with
-  // the car), so a ring buffer recycles the oldest when busy.
+  // Skidmark decals — flat quads laid on the road. ONE merged mesh with
+  // per-vertex RGBA (alpha animates the fade), so the whole rubber layer — live
+  // marks AND lingering patina — is a single draw call. The old mesh-per-stamp
+  // pool cost one draw call per visible mark (~580 during hard 4-car cornering)
+  // and forced marks to vanish to keep that count down; the merge removes both
+  // limits. A ring buffer recycles the oldest stamp when full.
   _initParticles() {
     this._skidTex = makeSkidTexture();
     this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
     this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
-    // Underbody shading (see the cue notes up top) never animates, so every car
-    // shares this one geometry + material — addCar only makes a mesh.
+    this._streakTex = makeStreakTexture(); // boost wind streak
+    this._streakGeo = makeStreakGeometry();
+    // Template material for the boost wind streaks (cloned per streak so each can
+    // fade independently). fog off — a streak is a near-camera effect.
+    this._streakMat = new THREE.MeshBasicMaterial({
+      map: this._streakTex, color: STREAK_COLOR, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false
+    });
+    // Underbody shading (see the cue notes up top): shared geometry/texture, but
+    // the MATERIAL is cloned per car in addCar — its opacity animates with body
+    // pitch (the load-shift cue), so cars can't share one. This one is the template.
     this._aoTex = makeUnderShadowTexture();
     this._aoGeo = new THREE.PlaneGeometry(1, 1);
     this._aoMat = new THREE.MeshBasicMaterial({
@@ -547,71 +662,114 @@ export class SceneRenderer {
       depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
     });
-    this._skids = [];
     this._skidN = 0;
     // scratch vectors for orientation maths + the per-wheel travel measurement,
     // so the hot path allocates nothing per frame.
     this._skU = new THREE.Vector3();
     this._skF = new THREE.Vector3();
     this._skL = new THREE.Vector3();
-    this._skMat = new THREE.Matrix4();
     this._gpA = new THREE.Vector3();
     this._projV = new THREE.Vector3(); // scratch for the contact-patch projection
     this._segV = new THREE.Vector3();
     this._dirV = new THREE.Vector3();
     this._midV = new THREE.Vector3();
-    // Pool sized for the worst case — all 4 cars cornering at 60 fps, one stamp per
-    // rear wheel per frame held for SKID_LIFE: 60 × 1.2 × 2 × 4 ≈ 580. 640 gives a
-    // little headroom; curb scrub (4 wheels) can still exceed it, and the ring
-    // buffer then recycles the oldest (most-faded) marks, which is invisible.
-    for (let i = 0; i < 640; i++) {
-      const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({
-          map: this._skidTex, color: SKID_COLOR, transparent: true,
-          depthWrite: false, opacity: 0,
-          // pull the decal toward the camera in depth so it never z-fights the road
-          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
-        })
-      );
-      m.visible = false;
-      m.userData.life = 0;
-      this.scene.add(m);
-      this._skids.push(m);
+    // One BufferGeometry holding every stamp: 4 verts (12 floats pos / 16 floats
+    // RGBA) + 6 indices per slot. RGB is SKID_COLOR baked per vertex (built via
+    // THREE.Color so the sRGB hex lands in linear space exactly like the old
+    // material.color did); alpha starts 0 (slot empty/invisible).
+    const pos = new Float32Array(SKID_POOL * 4 * 3);
+    const col = new Float32Array(SKID_POOL * 4 * 4);
+    const uvA = new Float32Array(SKID_POOL * 4 * 2);
+    const idx = new Uint32Array(SKID_POOL * 6);
+    const rub = new THREE.Color(SKID_COLOR);
+    for (let i = 0; i < SKID_POOL; i++) {
+      for (let v = 0; v < 4; v++) {
+        const ci = (i * 4 + v) * 4;
+        col[ci] = rub.r; col[ci + 1] = rub.g; col[ci + 2] = rub.b; // alpha stays 0
+      }
+      // texture u runs ACROSS the width (the feathered axis), v along the length
+      uvA.set([0, 0, 1, 0, 1, 1, 0, 1], i * 4 * 2);
+      idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
     }
+    const geo = new THREE.BufferGeometry();
+    this._skidPos = new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
+    this._skidCol = new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', this._skidPos);
+    geo.setAttribute('color', this._skidCol);
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvA, 2));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this._skidLife = new Float32Array(SKID_POOL); // >0: fading toward the patina floor
+    this._skidPeak = new Float32Array(SKID_POOL); // 0: slot empty (alpha already 0)
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      map: this._skidTex, vertexColors: true, transparent: true, depthWrite: false,
+      // pull the decals toward the camera in depth so they never z-fight the road
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    }));
+    mesh.frustumCulled = false; // stamps span the whole track — always in view anyway
+    this.scene.add(mesh);
+    this._skidMesh = mesh;
+  }
+
+  // Wipe every skid mark + the accumulated patina (track change / fresh race).
+  clearSkids() {
+    const col = this._skidCol.array;
+    for (let i = 0; i < SKID_POOL; i++) {
+      this._skidLife[i] = 0; this._skidPeak[i] = 0;
+      for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = 0;
+    }
+    this._skidCol.needsUpdate = true;
+    this._skidN = 0;
   }
 
   // Lay one skid stamp centred at world `mid`, lying in the road plane
   // (normal = up) with its length along `dir` (a unit travel direction).
   // `width` is the car's tyre-contact width; `strength` (0..1) scales peak
   // opacity; `length` spans the wheel's last→now travel so consecutive stamps
-  // butt together into one seamless ribbon.
+  // butt together into one seamless ribbon. Writes the next ring-buffer slot's
+  // 4 vertices in place (recycling the oldest mark/patina when the pool wraps).
   _emitSkidSeg(mid, up, dir, length, width, strength) {
-    const m = this._skids[this._skidN];
-    this._skidN = (this._skidN + 1) % this._skids.length;
-    // basis: geometry X → lateral, Y → travel-in-plane, Z(normal) → road up
+    // basis: L → lateral (texture u, feathered), F → travel-in-plane, U → road up
     this._skU.copy(up).normalize();
     this._skF.copy(dir).addScaledVector(this._skU, -dir.dot(this._skU));
     if (this._skF.lengthSq() < 1e-9) return;             // travel parallel to up (shouldn't happen)
     this._skF.normalize();
     this._skL.copy(this._skF).cross(this._skU);          // L = F × U  (right-handed)
-    this._skMat.makeBasis(this._skL, this._skF, this._skU);
-    m.quaternion.setFromRotationMatrix(this._skMat);
-    m.position.copy(mid).addScaledVector(this._skU, 0.006); // a hair above the road
-    m.scale.set(width, length, 1);
-    m.visible = true;
-    m.userData.life = SKID_LIFE;
-    m.userData.peak = SKID_MAX_OPACITY * strength;
-    m.material.opacity = m.userData.peak;
+    const i = this._skidN;
+    this._skidN = (this._skidN + 1) % SKID_POOL;
+    const pos = this._skidPos.array, col = this._skidCol.array;
+    const cx = mid.x + this._skU.x * 0.006,              // a hair above the road
+          cy = mid.y + this._skU.y * 0.006,
+          cz = mid.z + this._skU.z * 0.006;
+    const lx = this._skL.x * width / 2, ly = this._skL.y * width / 2, lz = this._skL.z * width / 2;
+    const fx = this._skF.x * length / 2, fy = this._skF.y * length / 2, fz = this._skF.z * length / 2;
+    // 4 corners matching the (0,0)(1,0)(1,1)(0,1) UVs: −L−F, +L−F, +L+F, −L+F
+    let p = i * 4 * 3;
+    pos[p++] = cx - lx - fx; pos[p++] = cy - ly - fy; pos[p++] = cz - lz - fz;
+    pos[p++] = cx + lx - fx; pos[p++] = cy + ly - fy; pos[p++] = cz + lz - fz;
+    pos[p++] = cx + lx + fx; pos[p++] = cy + ly + fy; pos[p++] = cz + lz + fz;
+    pos[p++] = cx - lx + fx; pos[p++] = cy - ly + fy; pos[p]   = cz - lz + fz;
+    const peak = SKID_MAX_OPACITY * strength;
+    for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = peak;
+    this._skidLife[i] = SKID_LIFE;
+    this._skidPeak[i] = peak;
+    this._skidPos.needsUpdate = true;
+    this._skidCol.needsUpdate = true;
   }
 
   _stepSkids(dt) {
-    for (const m of this._skids) {
-      if (!m.visible) continue;
-      m.userData.life -= dt;
-      if (m.userData.life <= 0) { m.visible = false; m.material.opacity = 0; continue; }
-      m.material.opacity = m.userData.peak * (m.userData.life / SKID_LIFE); // linear autofade
+    const col = this._skidCol.array;
+    let dirty = false;
+    for (let i = 0; i < SKID_POOL; i++) {
+      if (this._skidLife[i] <= 0) continue;            // empty, or already settled patina
+      this._skidLife[i] -= dt;
+      // linear fade from peak down to the patina floor, where the mark settles
+      // (it stays until the ring buffer recycles the slot — see SKID_PATINA)
+      const k = Math.max(this._skidLife[i] / SKID_LIFE, 0);
+      const a = this._skidPeak[i] * (SKID_PATINA + (1 - SKID_PATINA) * k);
+      for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = a;
+      dirty = true;
     }
+    if (dirty) this._skidCol.needsUpdate = true;
   }
 
   _initThree() {
@@ -985,6 +1143,13 @@ export class SceneRenderer {
     const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
     const lw = Math.min(0.10, defHalf * 0.5 - gap);// painted white edge-line width
     const stripeLen = 0.32;                        // kerb red/white band length (world units)
+    const dashW = 0.09;                            // painted centre-dash width
+    // Centre dash cadence: at top speed (~9 u/s) a 1.8u period streams past at
+    // ~5 cycles/s — a readable flow, not a strobe. The dash is the near-field
+    // speedometer: right at the chase cam's focus, its flow rate IS the car's
+    // actual speed (the asphalt itself is flat colour, so without it nothing
+    // close to the car streams past). Starting values.
+    const DASH_PERIOD = 1.8, DASH_FRAC = 0.4;      // ~0.72u dash / ~1.08u gap
 
     // Resample the centreline at a uniform, fine arclength step. The raw samples are
     // spaced unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a
@@ -1027,13 +1192,15 @@ export class SceneRenderer {
       { sign: -1, off: 0,         y: 0     }, // 4  left asphalt edge (foot of kerb)
       { sign: -1, off: gap,       y: 0     }, // 5  outer edge of left line (after the gap)
       { sign: -1, off: gap + lw,  y: 0     }, // 6  inner edge of left line
-      { sign:  1, off: -gap - lw, y: 0     }, // 7  inner edge of right line
-      { sign:  1, off: -gap,      y: 0     }, // 8  outer edge of right line
-      { sign:  1, off: 0,         y: 0     }, // 9  right asphalt edge
-      { sign:  1, off: 0,         y: ch    }, // 10 right kerb inner top
-      { sign:  1, off: cw,        y: ch    }, // 11 right kerb outer top
-      { sign:  1, off: cw,        y: 0     }, // 12 right kerb outer base (top of deck skirt)
-      { sign:  1, off: cw,        y: -deck }  // 13 right skirt foot
+      { sign:  0, off: -dashW / 2, y: 0    }, // 7  centre dash, left edge (sign 0 = road centre)
+      { sign:  0, off: dashW / 2, y: 0     }, // 8  centre dash, right edge
+      { sign:  1, off: -gap - lw, y: 0     }, // 9  inner edge of right line
+      { sign:  1, off: -gap,      y: 0     }, // 10 outer edge of right line
+      { sign:  1, off: 0,         y: 0     }, // 11 right asphalt edge
+      { sign:  1, off: 0,         y: ch    }, // 12 right kerb inner top
+      { sign:  1, off: cw,        y: ch    }, // 13 right kerb outer top
+      { sign:  1, off: cw,        y: 0     }, // 14 right kerb outer base (top of deck skirt)
+      { sign:  1, off: cw,        y: -deck }  // 15 right skirt foot
     ];
     // strip connects profile points (a,b); `kind` picks the colour rule.
     const STRIPS = [
@@ -1043,13 +1210,15 @@ export class SceneRenderer {
       { a: 3,  b: 4,  kind: 'kerb', side: 'L' },  // left kerb inner face
       { a: 4,  b: 5,  kind: 'road'  },            // gap asphalt between kerb and left line
       { a: 5,  b: 6,  kind: 'line'  },            // left white edge line
-      { a: 6,  b: 7,  kind: 'road'  },            // main asphalt
-      { a: 7,  b: 8,  kind: 'line'  },            // right white edge line
-      { a: 8,  b: 9,  kind: 'road'  },            // gap asphalt between right line and kerb
-      { a: 9,  b: 10, kind: 'kerb', side: 'R' },  // right kerb inner face
-      { a: 10, b: 11, kind: 'kerb', side: 'R' },  // right kerb top
-      { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
-      { a: 12, b: 13, kind: 'skirt' }             // right deck side, below road — road-grey
+      { a: 6,  b: 7,  kind: 'road'  },            // asphalt, left half
+      { a: 7,  b: 8,  kind: 'dash'  },            // centre dash (LINE/ASPHALT bands along the lap)
+      { a: 8,  b: 9,  kind: 'road'  },            // asphalt, right half
+      { a: 9,  b: 10, kind: 'line'  },            // right white edge line
+      { a: 10, b: 11, kind: 'road'  },            // gap asphalt between right line and kerb
+      { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb inner face
+      { a: 12, b: 13, kind: 'kerb', side: 'R' },  // right kerb top
+      { a: 13, b: 14, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
+      { a: 14, b: 15, kind: 'skirt' }             // right deck side, below road — road-grey
     ];
     // Baked ambient-occlusion per profile point — a brightness multiplier on the
     // vertex colour. Kenney paints this contact shading into its texture (dark side
@@ -1066,13 +1235,15 @@ export class SceneRenderer {
       0.70, // 4  left kerb foot — contact shadow where kerb meets road
       0.90, // 5  asphalt by the left kerb
       1.00, // 6  road
-      1.00, // 7  road
-      0.90, // 8  asphalt by the right kerb
-      0.70, // 9  right kerb foot — contact shadow
-      1.00, // 10 right kerb inner top
-      0.90, // 11 right kerb outer top
-      0.65, // 12 right kerb outer base (deck skirt top, shaded)
-      0.55  // 13 right skirt foot
+      1.00, // 7  centre dash left edge
+      1.00, // 8  centre dash right edge
+      1.00, // 9  road
+      0.90, // 10 asphalt by the right kerb
+      0.70, // 11 right kerb foot — contact shadow
+      1.00, // 12 right kerb inner top
+      0.90, // 13 right kerb outer top
+      0.65, // 14 right kerb outer base (deck skirt top, shaded)
+      0.55  // 15 right skirt foot
     ];
 
     // World position of profile point j on ring i: centreline + height along the road
@@ -1116,17 +1287,26 @@ export class SceneRenderer {
     const kerbL = kerbDist(-1), kerbR = kerbDist(1);
     const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
 
+    // Centre-dash banding by centreline arclength (the resample is uniform, so
+    // ring i sits at i/N of the lap). Snap the period so a WHOLE number of
+    // dash+gap cycles closes the loop — no half-dash at the start/finish seam.
+    const dashPeriod = cl.length / Math.max(2, Math.round(cl.length / DASH_PERIOD));
+    const dashOn = (i) => ((i / N) * cl.length) % dashPeriod < dashPeriod * DASH_FRAC;
+
     // Sweep the profile around the closed loop into ONE vertex-coloured buffer.
     for (let i = 0; i < N; i++) {
       const ni = (i + 1) % N;
       const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
+      const colD = dashOn(i) ? LINE : ASPHALT;
       for (const st of STRIPS) {
         const ia = ring(i, st.a).clone(), ib = ring(i, st.b).clone();
         const na = ring(ni, st.a).clone(), nb = ring(ni, st.b).clone();
         push3(pos, ia); push3(pos, ib); push3(pos, nb); // tri 1
         push3(pos, ia); push3(pos, nb); push3(pos, na); // tri 2
         const kerbCol = st.side === 'R' ? colR : colL;
-        pushStripCol(st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? LINE : ASPHALT, st);
+        pushStripCol(
+          st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? LINE : st.kind === 'dash' ? colD : ASPHALT,
+          st);
       }
     }
 
@@ -1147,7 +1327,7 @@ export class SceneRenderer {
     this._mergedMats.push(mat);
 
     // Collision proxy: only the flat asphalt surface (kerbs/skirts aren't drivable),
-    // spanning the full -hw..hw width (profile points 4 and 9), chunked so the existing
+    // spanning the full -hw..hw width (profile points 4 and 11), chunked so the existing
     // (x,z) bucket grid prunes the ground-conform raycast to the few chunks under the
     // car — the same contract the per-tile clones honour.
     const CHUNK = 8; // segments per collision mesh
@@ -1165,8 +1345,8 @@ export class SceneRenderer {
     };
     for (let i = 0; i < N; i++) {
       const ni = (i + 1) % N;
-      const ia = ring(i, 4).clone(), ib = ring(i, 9).clone();
-      const na = ring(ni, 4).clone(), nb = ring(ni, 9).clone();
+      const ia = ring(i, 4).clone(), ib = ring(i, 11).clone();
+      const na = ring(ni, 4).clone(), nb = ring(ni, 11).clone();
       push3(chunk, ia); push3(chunk, ib); push3(chunk, nb);
       push3(chunk, ia); push3(chunk, nb); push3(chunk, na);
       if ((i + 1) % CHUNK === 0) flush();
@@ -1368,6 +1548,7 @@ export class SceneRenderer {
   setTrack(track, { debug = false } = {}) {
     this._disposeTrack();
     this.trackGroup.clear();
+    this.clearSkids(); // marks/patina are world-space — they belong to the old track
     if (track.groundY != null) this.ground.position.y = track.groundY;
 
     // Build the track in two parallel forms:
@@ -2147,15 +2328,35 @@ export class SceneRenderer {
     // the model's footprint: the texture's feather lives INSIDE the quad, so the
     // dark core stays within the silhouette and the edge is never visible as a
     // shape on open road — the rule that keeps it reading as occlusion.
-    const ao = new THREE.Mesh(this._aoGeo, this._aoMat);
+    // Material is a per-car clone: its opacity tracks body pitch (the load-shift
+    // cue in setCarPose), so cars can't share the template.
+    const aoMat = this._aoMat.clone();
+    const ao = new THREE.Mesh(this._aoGeo, aoMat);
     ao.rotation.x = -Math.PI / 2;
     ao.position.set((fb.min.x + fb.max.x) / 2, -RIDE_HEIGHT + 0.004, (fb.min.z + fb.max.z) / 2);
     ao.scale.set(footW, footL, 1);
     group.add(ao);
 
+    // BOOST wind streaks (see the constants up top): a small rig of axial-
+    // billboard quads parented to the GROUP (so they align with the heading),
+    // cycling front→back past the body while boosting. Hidden otherwise; stepped
+    // in setCarPose, which knows boostMul and the frame's real travel.
+    const streakGroup = new THREE.Group();
+    streakGroup.visible = false;
+    const streaks = [];
+    for (let i = 0; i < STREAK_N; i++) {
+      const m = new THREE.Mesh(this._streakGeo, this._streakMat.clone()); // per-streak opacity
+      m.onBeforeRender = streakBillboard; // face each cell's camera (axial billboard)
+      streakGroup.add(m);
+      streaks.push({ mesh: m, z: 0, dead: true });
+    }
+    group.add(streakGroup);
+
     const c = {
-      group, car, body, bodyBaseQuat, frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostAura, footW, footL,
+      group, car, body, bodyBaseQuat,
+      frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
+      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostAura, aoMat,
+      streakGroup, streaks, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
       label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
@@ -2206,6 +2407,10 @@ export class SceneRenderer {
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     // boost aura owns its geometry + material (the map is the shared this._softTex — leave it)
     if (c.boostAura) { c.boostAura.geometry.dispose(); c.boostAura.material.dispose(); }
+    // per-car clones: the underbody-shading material (opacity animates with load)
+    // and each wind streak's material — their maps/geometry are shared templates.
+    if (c.aoMat) c.aoMat.dispose();
+    if (c.streaks) for (const st of c.streaks) st.mesh.material.dispose();
     if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; } // stop any running item roulette
     if (c.label && c.label.parentNode) c.label.parentNode.removeChild(c.label);
     if (c.steerBar && c.steerBar.parentNode) c.steerBar.parentNode.removeChild(c.steerBar);
@@ -2250,10 +2455,10 @@ export class SceneRenderer {
     return true;
   }
 
-  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1) {
+  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1, brake = 0) {
     const c = this.cars.get(id);
     if (!c) return;
-    c.spd = spd; c.scrub = scrub; c.steerAmt = steer;
+    c.spd = spd; c.scrub = scrub; c.steerAmt = steer; c.brakeAmt = brake;
     // spin-out whirl: rotate the whole car model about its up axis on top of its
     // model-facing fix (the sim heading is untouched — this is purely cosmetic).
     c.car.rotation.y = c.baseYaw + spin;
@@ -2291,6 +2496,38 @@ export class SceneRenderer {
     (c.lastPos || (c.lastPos = new THREE.Vector3())).copy(pos);
     c.pose.pos.copy(pos);
     c.group.position.copy(pos);
+
+    // BOOST wind streaks: while boosting, cycle each streak front→back past the
+    // body at the car's REAL speed through the air (this frame's travel), so the
+    // rush rate IS how fast the car actually moves. Each pass respawns at a fresh
+    // offset around the body; the sin() envelope fades a streak in and out over
+    // its pass so neither end pops. (Math.random is fine here: the streaks live
+    // in the one shared scene, so every split-screen cell sees the same ones.)
+    if (boostMul > 1.001) {
+      const dtf = Math.max(this._frameDt, 1e-3);
+      const wspd = Math.min(Math.abs(ds), ROLL_SEG_MAX) / dtf + 3; // +floor: visible even from a standstill
+      const span = STREAK_FRONT - STREAK_BACK;
+      const k = Math.min(1, (boostMul - 1) / 0.6); // boost size (leader floor → last place) scales brightness
+      c.streakGroup.visible = true;
+      for (const st of c.streaks) {
+        if (st.dead) {
+          // respawn ahead of the nose at a fresh offset; staggered entry via the random z
+          st.z = STREAK_FRONT + Math.random() * span * 0.8;
+          st.mesh.position.x = (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4) * c.footW;
+          st.mesh.position.y = 0.1 + Math.random() * 0.3;
+          st.mesh.scale.set(0.07, 1, 0.6 + Math.random() * 0.5); // width × (face) × length
+          st.dead = false;
+        }
+        st.z -= wspd * dtf;
+        if (st.z < STREAK_BACK) { st.dead = true; st.mesh.material.opacity = 0; continue; }
+        st.mesh.position.z = st.z;
+        const p = Math.min(1, Math.max(0, (STREAK_FRONT - st.z) / span)); // 0 entering → 1 leaving
+        st.mesh.material.opacity = Math.sin(Math.PI * p) * STREAK_OPACITY * (0.5 + 0.5 * k);
+      }
+    } else if (c.streakGroup.visible) {
+      c.streakGroup.visible = false;
+      for (const st of c.streaks) { st.dead = true; st.mesh.material.opacity = 0; }
+    }
 
     // Ground-conform. PITCH comes from the centreline forward (`fwd`): the centreline
     // is built once and filtered, so fwd.y is a SMOOTH road slope (the smootherstep
@@ -2349,9 +2586,13 @@ export class SceneRenderer {
     const dspd = (spd - c.prevSpd) / Math.max(this._frameDt, 1e-3);
     c.prevSpd = spd;
     const pitchAmt = Math.max(-1, Math.min(1, dspd / PITCH_ACCEL_NORM)); // <0 braking, >0 throttle
+    c.accelNorm = pitchAmt > 0 ? pitchAmt : 0; // forward bite — the launch-scratch skids read this
     const pitchTarget = -pitchAmt * (pitchAmt < 0 ? PITCH_DIVE_MAX : PITCH_SQUAT_MAX);
     c.pitch += (pitchTarget - c.pitch) * (1 - Math.exp(-PITCH_RATE * this._frameDt));
     c.body.rotateX(c.pitch * c.pitchSign);
+    // Load shift: the harder the body pitches (dive/squat), the closer the chassis
+    // presses to the road — darken the underbody shading in step with it.
+    c.aoMat.opacity = UNDER_AO_OPACITY + AO_LOAD_GAIN * Math.min(1, Math.abs(c.pitch) / PITCH_DIVE_MAX);
     // Roll every wheel to match the car's real travel (ds / tyre radius),
     // capped at ROLL_RATE_CAP so the spin stays coherent on a 60Hz display
     // (see the constants up top) — turning whenever the car moves. Teleport-
@@ -2446,8 +2687,12 @@ export class SceneRenderer {
   _updateChase(c, dt) {
     const { pos, forward, up } = c.pose;
     const baseFov = BASE_FOV, height = CHASE_HEIGHT;
-    // ideal pose: rigidly behind the CAR's heading, looking just ahead of it
-    const want = this._sWant.copy(pos).addScaledVector(forward, -CHASE_DIST).addScaledVector(up, height);
+    const spd = c.spd || 0; // normalised to vmax; exceeds 1 under boost (see FOV_GAIN notes)
+    // ideal pose: behind the CAR's heading, stretching further back with speed
+    // (the car visibly pulls away from the camera as it accelerates), looking
+    // just ahead of it.
+    const dist = CHASE_DIST + CHASE_DIST_GAIN * spd;
+    const want = this._sWant.copy(pos).addScaledVector(forward, -dist).addScaledVector(up, height);
     const target = this._sTarget.copy(pos).addScaledVector(forward, CHASE_LOOK).addScaledVector(up, CHASE_TGT_UP);
     // frame-rate-independent damping → smooth lag/swing behind the car through turns
     const aPos = 1 - Math.exp(-CAM_POS_RATE * dt);
@@ -2455,9 +2700,11 @@ export class SceneRenderer {
     if (!c.init) { c.camPos.copy(want); c.camTarget.copy(target); c.init = true; }
     else { c.camPos.lerp(want, aPos); c.camTarget.lerp(target, aTgt); }
     c.cam.position.copy(c.camPos);
-    // sense of speed: gently widen FOV with speed (no shake)
-    const spd = c.spd || 0;
-    c.fov = (c.fov || baseFov) + (baseFov + spd * FOV_GAIN - (c.fov || baseFov)) * (1 - Math.exp(-6 * dt));
+    // sense of speed: widen FOV with speed (no shake) — fast attack so a boost
+    // lands as a kick, slow release so it tapers off rather than snapping back
+    const fovTarget = baseFov + spd * FOV_GAIN;
+    const fovRate = fovTarget > (c.fov || baseFov) ? FOV_RISE : FOV_FALL;
+    c.fov = (c.fov || baseFov) + (fovTarget - (c.fov || baseFov)) * (1 - Math.exp(-fovRate * dt));
     c.cam.fov = c.fov;
     c.cam.up.copy(up);
     c.cam.lookAt(c.camTarget);
@@ -2493,7 +2740,16 @@ export class SceneRenderer {
       const turn = Math.min(1, Math.abs(c.steerAmt || 0));   // how hard we're cornering
       // slip 0..1: 1 grinding the curb, else how far past the scuff threshold the corner is
       const slip = c.scrub ? 1 : Math.max(0, (turn - SKID_THRESH) / (1 - SKID_THRESH));
-      const strength = c.scrub ? 1 : Math.min(1, slip * 1.3); // 0 at threshold → smooth fade-in
+      // brake bite: slamming the analog brake at speed lays straight streaks, in
+      // sync with the nose dive — the tyres visibly gripping the road to shed pace
+      const brakeBite = ((c.brakeAmt || 0) > SKID_BRAKE_MIN && spd > 0.25)
+        ? (c.brakeAmt - SKID_BRAKE_MIN) / (1 - SKID_BRAKE_MIN) : 0;
+      // launch scratch: hard forward acceleration from near-standstill (race
+      // start, boost from slow) — faint marks of torque biting in, fading out as
+      // the car gets rolling
+      const launch = ((c.accelNorm || 0) > SKID_LAUNCH_MIN && spd < 0.5)
+        ? Math.min(1, (c.accelNorm - SKID_LAUNCH_MIN) / (1 - SKID_LAUNCH_MIN)) * (1 - spd / 0.5) * 0.6 : 0;
+      const strength = c.scrub ? 1 : Math.min(1, Math.max(slip * 1.3, brakeBite, launch)); // 0 at threshold → smooth fade-in
       c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
       // curb grind marks all four wheels; otherwise just the loaded rears (clear
       // the fronts so a later scrub doesn't bridge from a stale spot)

@@ -83,7 +83,7 @@ export class LobbyDemo {
     this.engine.update(dt * 1000);
     const snap = this.engine.getSnapshot();
     for (const c of snap.cars) {
-      if (c.pose) this.scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
+      if (c.pose) this.scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
     }
     this.scene.syncProps(snap); // item boxes pop + dropped bananas, same as a live race
     if (this.engine.raceOver) { this._buildEngine(); this._placeGrid(); } // endless: re-grid + lap again

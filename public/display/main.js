@@ -277,7 +277,7 @@ scene.onFrame = (dt) => {
   }
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
   }
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
@@ -445,6 +445,7 @@ function startRace() {
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
+  scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
 
   session = new RaceSession(field, track, {
     onRaceEvent,
