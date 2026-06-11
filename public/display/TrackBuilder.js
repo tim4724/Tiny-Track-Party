@@ -4,8 +4,14 @@
 //
 // A track is authored as a sequence of segments (see ../shared/tracks.js):
 //   straight(length, opts)         — a run, optionally with a lateral S-shift (chicane),
-//                                    an elevation `rise`, or a net-flat `bump`.
+//                                    an elevation `rise`, a net-flat `bump`, or a `roll`
+//                                    (heartline corkscrew: the frame twists about the
+//                                    straight centerline, ±360° = one full barrel roll).
 //   arc(radius, angleDeg, opts)    — a turn; angle>0 = LEFT, <0 = RIGHT; optional `rise`.
+//   loop(radius, opts)             — a vertical loop: a 180° HALF-loop by default (exits at
+//                                    ±2·radius heading the opposite way, frame flipped), or
+//                                    with `drift` the FULL 360° TILTED toy loop (exit lands
+//                                    `drift` beside the entry, parallel, same elevation).
 // We walk a scalar cursor (plan position, heading, elevation) forward, emitting samples
 // at a uniform arclength step. Heading 0 = +Z travel; +heading turns toward -X (left).
 // The frame's `up` is parallel-transported (rotation-minimizing) so it stays perpendicular
@@ -77,6 +83,22 @@ export function buildTrack(track, opts = {}) {
     const sign = seg.kind === 'arc' ? Math.sign(seg.angle || 1) : 1;
     return seg.bank * DEG * bankWindow(f) * sign;
   };
+  // Heartline ROLL (corkscrew): `roll: ±360` twists the frame fully about the tangent
+  // across the segment, eased (smootherstep) so the twist RATE is zero at both ends.
+  // The centerline itself doesn't move (it's the road that corkscrews around it), so
+  // put a rolled straight on a RAISED run: at 90° the road edge hangs a half-width
+  // below the centerline and must still clear the grass. Stacks with `bank`.
+  //
+  // Roll is CUMULATIVE (`rollAcc`): unlike bank (a local lean that returns to 0), a
+  // roll permanently re-clocks the frame, so every later sample carries the running
+  // total. That's what lets `roll: 180` right a frame that a half-loop left INVERTED
+  // — parallel transport says the rest of the lap is upside down, and the held +180°
+  // counter-roll corrects every sample downstream. A lap must net to 0 (mod 360°):
+  // each half-loop contributes 180° of transported flip, each roll its angle — e.g.
+  // loop + roll:180 + roll:360 + roll:-360 ≡ 0. (Get it wrong and the seam unwind
+  // smears the residual twist around the whole lap — the upright-seam test catches it.)
+  let rollAcc = 0;
+  const segTwist = (seg, f) => segBank(seg, f) + rollAcc + (seg.roll ? seg.roll * DEG * smootherstep(f) : 0);
 
   // ---- Forward integrate the centerline (unscaled plan coords) ----
   let X = 0, Z = 0, theta = 0, elev = 0;     // cursor
@@ -103,7 +125,7 @@ export function buildTrack(track, opts = {}) {
           y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
           z0 + dz * len * f + lz * off
         ));
-        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f)); pillarFlags.push(!!seg.pillars);
+        widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
       }
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
@@ -115,14 +137,57 @@ export function buildTrack(track, opts = {}) {
       for (let i = 1; i <= N; i++) {
         const f = i / N, th = th0 + ang * f;
         worldPts.push(v(x0 + R * sgn * (latX(th0) - latX(th)), y0 + rise * smootherstep(f), z0 + R * sgn * (latZ(th0) - latZ(th))));
-        widths.push(segWidth(seg, f)); banks.push(segBank(seg, f)); pillarFlags.push(!!seg.pillars);
+        widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
       theta = th0 + ang; elev = y0 + rise;
-    } else {
-      throw new Error(`Unknown segment kind "${seg && seg.kind}" (expected "straight" or "arc")`);
+    } else if (seg.kind === 'loop') {
+      // Vertical LOOP. Default: a HALF-loop — 180° of a circle in the (travel, up)
+      // plane, exiting directly above (or below, `over: false`) the entry, heading
+      // the OPPOSITE way; planar, so transport adds no twist and the curvature is
+      // pure in-frame pitch (cars auto-follow, no steering, no wash) — the frame
+      // simply exits flipped. With `drift`: the full tilted loop below — the one
+      // 360° shape whose exit corridor CAN'T collide with its own entry climb,
+      // because the sideways lean lands it a road width over.
+      const r = seg.radius;
+      const vert = seg.over === false ? -1 : 1;
+      const drift = seg.drift || 0;
+      const dx = dirX(theta), dz = dirZ(theta), lx = latX(theta), lz = latZ(theta);
+      const x0 = X, z0 = Z, y0 = elev;
+      if (drift) {
+        // FULL 360° TILTED LOOP (the toy-track loop): one complete circle whose
+        // plane leans sideways — a single helix turn about the LATERAL axis — so
+        // going around lands the exit `drift` beside the entry, parallel, at the
+        // same elevation, heading unchanged. No crown, no roll-out: the only
+        // upside-down moment is the instant over the top. The drift eases with
+        // smoothstep so both feet leave/land dead straight (zero side-rate at the
+        // joints); mid-loop the gentle steady heading lean is what the cars steer
+        // (and what reads as the ring's tilt). Plan-wise the whole element is a
+        // pure lateral jog of `drift`.
+        const N = Math.max(16, Math.round(2 * Math.PI * r / DS));
+        for (let i = 1; i <= N; i++) {
+          const f = i / N, phi = 2 * Math.PI * f, off = drift * smoothstep(f);
+          const fwd = r * Math.sin(phi);
+          worldPts.push(v(x0 + dx * fwd + lx * off, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd + lz * off));
+          widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+        }
+        X = x0 + lx * drift; Z = z0 + lz * drift; // beside the entry; heading + elev unchanged
+      } else {
+        const N = Math.max(8, Math.round(Math.PI * r / DS));
+        for (let i = 1; i <= N; i++) {
+          const f = i / N, phi = Math.PI * f;
+          const fwd = r * Math.sin(phi); // along-travel excursion; back to 0 at the apex
+          worldPts.push(v(x0 + dx * fwd, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd));
+          widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+        }
+        theta += Math.PI;           // heading reversed
+        elev = y0 + vert * 2 * r;   // apex directly above/below the entry; X/Z unchanged
+      }
+        } else {
+      throw new Error(`Unknown segment kind "${seg && seg.kind}" (expected "straight", "arc" or "loop")`);
     }
+    if (seg.roll) rollAcc = (rollAcc + seg.roll * DEG) % (2 * Math.PI); // re-clock the frame for everything downstream
   }
 
   // Closure: distance from the cursor back to the origin (unscaled). The last emitted
@@ -178,6 +243,13 @@ export function buildTrack(track, opts = {}) {
     up.addScaledVector(t1, -up.dot(t1)).normalize();
     ups.push(up.clone());
   }
+  // Banking + roll: roll each frame about its tangent by the per-sample twist angle, so
+  // `lateral = tangent × up` (computed below) tilts with the road and the physics/car/
+  // ribbon all lean together. Applied BEFORE the holonomy unwind: a half-loop leaves the
+  // transported frame inverted and the cumulative roll is what rights it — the unwind
+  // must measure the CORRECTED frames, or it would read that inversion as a fake π
+  // residual and smear a full twist around the lap.
+  for (let i = 0; i < n; i++) if (banks[i]) ups[i].applyAxisAngle(tangents[i], banks[i]);
   // Unwind the residual twist (frame holonomy) evenly so `up` doesn't jump at the seam.
   const t0 = tangents[0];
   const resid = Math.atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
@@ -185,23 +257,22 @@ export function buildTrack(track, opts = {}) {
     up.copy(ups[i]).applyAxisAngle(tangents[i], resid * (i / n));
     ups[i].copy(up);
   }
-  // Banking: roll each frame about its tangent by the per-sample bank angle. This is the
-  // last frame step, so `lateral = tangent × up` (computed below) tilts with the road and
-  // the physics/car/ribbon all lean together. Banks ease to 0 at corner ends, so the seam
-  // and straights stay upright (holonomy/upright tests hold for the tasteful ≤~12° used).
-  for (let i = 0; i < n; i++) if (banks[i]) ups[i].applyAxisAngle(tangents[i], banks[i]);
 
   const samples = [];
-  let s = 0, minY = Infinity;
+  let s = 0, minY = Infinity, minEdgeY = Infinity;
   for (let i = 0; i < n; i++) {
     const tangent = tangents[i], u = ups[i];
     const lateral = tangent.clone().cross(u).normalize();
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
     minY = Math.min(minY, worldPts[i].y);
+    minEdgeY = Math.min(minEdgeY, worldPts[i].y - Math.abs(lateral.y) * widths[i] / 2);
     samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i], pillars: pillarFlags[i] });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
-  const groundY = minY - 0.3; // grass plane sits just under the lowest point of the track
+  // Grass plane: just under the lowest point of the track — measured at the road
+  // EDGE, not the centreline, so a banked corner's leaned-in kerb can't clip through
+  // the lawn (on a flat track edge == centreline and this is the classic minY − 0.3).
+  const groundY = Math.min(minY - 0.3, minEdgeY - 0.12);
 
   const instances = [];
   // Start/finish gate: the gate-finish arch straddling the line at s=0, oriented across
@@ -236,6 +307,10 @@ export function buildTrack(track, opts = {}) {
       if (i > 0) acc += worldPts[i].distanceTo(worldPts[i - 1]);
       const smp = samples[i];
       if (!smp.pillars || acc < SPACING) continue;
+      // Only prop up a deck that's roughly RIGHT-SIDE-UP: under a rolled (corkscrew)
+      // or looping stretch, "just below the centerline" is inside or above the road
+      // surface, so a column there would stab through the ribbon.
+      if (smp.up.y < 0.7) continue;
       acc = 0;
       const topY = smp.pos.y - TUCK;
       if (topY - groundY < MIN_H) continue;

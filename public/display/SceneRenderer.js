@@ -1218,7 +1218,12 @@ export class SceneRenderer {
       { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb inner face
       { a: 12, b: 13, kind: 'kerb', side: 'R' },  // right kerb top
       { a: 13, b: 14, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
-      { a: 14, b: 15, kind: 'skirt' }             // right deck side, below road — road-grey
+      { a: 14, b: 15, kind: 'skirt' },            // right deck side, below road — road-grey
+      // Deck BELLY: a plain face closing the underside between the two skirt feet.
+      // Seen from below (under a loop, the roll bridge, the spiral) it occludes the
+      // painted top surface entirely, so the track's bottom reads as solid plastic —
+      // pure road-grey, no lines or kerb stripes shining through the DoubleSide mesh.
+      { a: 15, b: 0,  kind: 'skirt' }
     ];
     // Baked ambient-occlusion per profile point — a brightness multiplier on the
     // vertex colour. Kenney paints this contact shading into its texture (dark side
@@ -2235,7 +2240,11 @@ export class SceneRenderer {
       })
     );
     boostAura.rotation.x = -Math.PI / 2;
-    boostAura.position.y = -RIDE_HEIGHT + 0.008;
+    // Floats a hand above the deck: the quad is FLAT in the car's frame, so where the
+    // road curves away under it (bends, crests, bank ramps) a deck-hugging quad gets
+    // sliced by the rising surface — the clipped-glow artifact. The soft additive
+    // halo doesn't read as airborne at this height, and it clears the road's curl.
+    boostAura.position.y = -RIDE_HEIGHT + 0.12;
     boostAura.visible = false;
     group.add(boostAura);
 
@@ -2535,38 +2544,51 @@ export class SceneRenderer {
     // so the wheels sit on the actual GLB. We split the two deliberately — re-pitching
     // from the front/rear probe slope twitched the car at ramp seams (that probe is
     // noisy: the GLB floor isn't a perfect smootherstep and tiles overlap). Heading
-    // (yaw) is the centreline's; roll stays level (world up) ON PURPOSE — the body stays
-    // level even through a banked corner (Mario-Kart style, reads cleaner than a tilting
-    // cabin). The banked road normal is still carried in c.pose.up for any caller that wants it.
+    // (yaw) is the centreline's; ROLL follows the road surface (`pose.up` — the local
+    // swept-surface normal under the car): level on flat road, leaned with a banked
+    // corner's cross slope, riding the wall through a corkscrew. (An earlier world-up
+    // reference kept the body level "Mario-Kart style" — that predates banked corners,
+    // read as the car counter-rotating once real cross slope shipped, and snapped past
+    // 90° of roll where worldUp×forward flips sign.) `stunt` below only fades out the
+    // straight-down road probe, which is meaningless on a steep or inverted deck.
     let z = fwd;
-    const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
-    this._headFlat.copy(fwd).setY(0);
-    if (this._headFlat.lengthSq() > 1e-6) {
-      this._headFlat.normalize();
-      const half = c.wheelbase * 0.5;
-      const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
-      const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
-      // Ride on the HIGHEST road point under the footprint (front/centre/rear), not
-      // the chord mean: on flat/gentle ground these agree (still planted), but at a
-      // sharp crest it rides the peak so the road never pokes up through the belly.
-      let roadY = null;
-      if (yF != null && yB != null) roadY = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB));
-      else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
-      if (roadY != null) {
-        // Snap to the road, but DAMP the OFFSET from the (smooth) centreline rather
-        // than the absolute height. The max() above jumps abruptly where ramp tiles
-        // overlap — a ~0.15-unit vertical POP at the ramp seams. Damping the small
-        // offset smooths those pops; the climb itself lives in the centreline height
-        // (pos.y), so it stays lag-free and the wheels keep tracking the road.
-        const offTarget = roadY - pos.y;
-        const a = 1 - Math.exp(-RIDE_DAMP * this._frameDt); // frame-rate-independent smoothing
-        c.rideOff = (c.rideOff == null) ? offTarget : c.rideOff + (offTarget - c.rideOff) * a;
-        c.group.position.y = pos.y + c.rideOff + RIDE_HEIGHT;
+    const stunt = Math.min(1, Math.max(0, (0.97 - u.y) / 0.10)); // 0 ≤ ~14° of roll, 1 past ~29°
+    if (stunt < 1) {
+      const yC = this._roadHitY(pos.x, pos.z, pos.y); // road directly under the car centre
+      this._headFlat.copy(fwd).setY(0);
+      if (this._headFlat.lengthSq() > 1e-6) {
+        this._headFlat.normalize();
+        const half = c.wheelbase * 0.5;
+        const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
+        const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
+        // Ride on the HIGHEST road point under the footprint (front/centre/rear), not
+        // the chord mean: on flat/gentle ground these agree (still planted), but at a
+        // sharp crest it rides the peak so the road never pokes up through the belly.
+        let roadY = null;
+        if (yF != null && yB != null) roadY = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB));
+        else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
+        if (roadY != null) {
+          // Snap to the road, but DAMP the OFFSET from the (smooth) centreline rather
+          // than the absolute height. The max() above jumps abruptly where ramp tiles
+          // overlap — a ~0.15-unit vertical POP at the ramp seams. Damping the small
+          // offset smooths those pops; the climb itself lives in the centreline height
+          // (pos.y), so it stays lag-free and the wheels keep tracking the road.
+          const offTarget = roadY - pos.y;
+          const a = 1 - Math.exp(-RIDE_DAMP * this._frameDt); // frame-rate-independent smoothing
+          c.rideOff = (c.rideOff == null) ? offTarget : c.rideOff + (offTarget - c.rideOff) * a;
+          // A straight-down probe is meaningless on a rolled/steep surface — fade its
+          // contribution out with `stunt` and lift along the FRAME's up instead below.
+          c.group.position.y = pos.y + (c.rideOff + RIDE_HEIGHT) * (1 - stunt);
+        }
       }
+    } else {
+      c.rideOff = null; // re-seed the damped offset when the car comes back off a stunt
     }
-    // Build the car basis from the (centreline-pitched) forward + a level (world-up)
-    // reference, so x (lateral) stays horizontal and the body owns pitch, nothing else.
-    const x = this._sx.copy(this._worldUp).cross(z).normalize();
+    if (stunt > 0) c.group.position.addScaledVector(u, RIDE_HEIGHT * stunt);
+    // Build the car basis from the (centreline-pitched) forward + the road-surface up.
+    // Never degenerates: u is perpendicular to the frame tangent by construction, and
+    // stays well clear of z (the car's pitched forward) everywhere a track can go.
+    const x = this._sx.copy(u).cross(z).normalize();
     const yy = this._syy.copy(z).cross(x).normalize();
     c.group.quaternion.setFromRotationMatrix(this._sBasis.makeBasis(x, yy, z));
 

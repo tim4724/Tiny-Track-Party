@@ -10,11 +10,26 @@
 //   straight(length, opts?)      a run of `length` (unscaled units; ×SCALE→world).
 //   arc(radius, angleDeg, opts?) a turn of `angleDeg` about `radius`; +angle = LEFT,
 //                                −angle = RIGHT.
+//   loop(radius, opts?)          a vertical loop. Default: a HALF-loop — 180° of a
+//                                planar circle, exiting at ±2·radius (over: false
+//                                dives) heading the OPPOSITE way, frame flipped.
+//                                With `drift`: the FULL 360° TILTED toy loop — one
+//                                circle whose plane leans sideways, landing the
+//                                exit `drift` beside the entry at ground level,
+//                                parallel, heading unchanged; upside down only at
+//                                the top instant. The tilt couples ~75° of frame
+//                                holonomy per loop — cancel it with a matching
+//                                `roll` (probe it; see Twister) or the stretch
+//                                after the loop rides visibly rolled.
 // opts (any segment): rise (Δelevation over the segment, eased), bump (net-flat hump
-//   amplitude), bank (peak roll°, eased — corners only in practice), width (number or
-//   [start,end] taper, overriding the track default), lateral (straight-only net
-//   cross-shift, an S — a chicane is curve+curveR), pillars (stand support columns from
-//   the grass up to a raised deck — flag the ramp + bridge run of an overpass).
+//   amplitude), bank (peak roll°, eased — corners only in practice), roll (heartline
+//   twist about the centerline, eased over the segment and CUMULATIVE downstream —
+//   the barrel-roll bridge is roll: 360, and small rolls trim the geometric
+//   holonomy of climbing/tilted elements like the spiral and the drift loops),
+//   width (number or [start,end] taper, overriding the track default), lateral
+//   (straight-only net cross-shift, an S — a chicane is curve+curveR), pillars (stand
+//   support columns from the grass up to a raised deck — flag the ramp + bridge run
+//   of an overpass).
 //
 // ── HOW A TRACK CLOSES ───────────────────────────────────────────────────────
 // The builder walks the segments and auto-closes the loop (gap < 0.5). A straight
@@ -41,6 +56,7 @@ const RL = 4.185;     // sweeping (large) corner radius
 
 const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
 const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
+const loop = (radius, opts = {}) => ({ kind: 'loop', radius, ...opts });
 const run = (n, opts) => Array.from({ length: n }, () => straight(L, opts)); // n plain straights
 // Net-0 S. The lateral shift is kept SMALL on purpose: at neutral the understeer model
 // holds a world heading and washes the car sideways by ≈ the shift's full width, so a big
@@ -94,13 +110,62 @@ export const RIVERSIDE = [
   straight(L), straight(L), ...chicane(), ...halfHill(), straight(L, { bump: 0.5 }), straight(L), straight(L), arc(RL, 90) // F: 9
 ];
 
+// ---- Twister (Expert): the stunt showpiece — a BARREL-ROLL bridge, a flat SPIRAL,
+// and two small TILTED TOY LOOPS, every stunt entered and exited dead straight on
+// an otherwise flat banked circuit.
+//
+// THE ROLL: a 360° heartline barrel roll on a low pillared bridge — the road
+// corkscrews around the driving line while the line itself stays dead straight.
+// Rate ≈ 0.18 rad/world: the engine's local-surface pose keeps cars flush (the
+// old 0.31-rate corkscrew predated that pose and visibly floated).
+//
+// THE SPIRAL (NW corner): a looping in YAW — 450° clockwise, climbing to bridge
+// over its own entrance, then diving out as the downhill launch. -450° ≡ -90°, so
+// it drops in as a plain corner; the climb-while-turning couples ~35° of frame
+// holonomy, cancelled by the small roll spread invisibly over the arc.
+//
+// THE LOOPS: each is ONE segment — a full 360° circle whose plane tilts sideways
+// (loop(2.2, { drift: ±3 })), so the car drives straight in, around, and out one
+// road width beside the entry, parallel, at ground level. No crown, no roll-out;
+// upside down only for the instant over the top. The tilt's ~75.5° of transported
+// holonomy is cancelled inside each ring by its `roll` (opposite signs for the
+// opposite leans), measured by probe — without it the stretch BETWEEN the loops
+// rides on its side even though the lap seam closes upright.
+//
+// Closure: headings sum to -720° (the spiral adds a full extra turn); each loop is
+// plan-wise a pure lateral jog of `drift`. The east/south leg lengths are solved
+// so the plan closes exactly (gap ≈ 0); every stunt is net-flat, so elevation
+// closes by construction. ----
+export const TWISTER = [
+  ...run(3),                                          // the grid straight
+  straight(4, { rise: 1.5, pillars: true }),          // ramp onto the roll bridge
+  straight(32, { roll: 360, pillars: true }),         // THE ROLL — full barrel roll, line dead straight
+  straight(4, { rise: -1.5, pillars: true }),         // ramp off
+  straight(4),                                        // breather up to the spiral
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 34.9 }), // THE SPIRAL
+  straight(9, { rise: -2.6, pillars: true }),         // dive out — the downhill launch
+  straight(6),                                        // flat beat — boost — straight into
+  loop(2.2, { drift: 3, roll: 75.5 }),                            // LOOP 1: one small tilted circle — straight in,
+                                                      // around, and out one road width beside the entry
+  straight(4),                                        // beat
+  arc(RL, -90, { bank: 10 }),                         // NE corner, banked
+  straight(52),                                       // east leg south — boost — straight into
+  loop(2.2, { drift: -3, roll: -75.5 }),                           // LOOP 2: the same tilted circle, leaning the other way
+  straight(7),                                        // beat
+  arc(RL, -90, { bank: 10 }),                         // SE corner, banked
+  straight(16),                                       // south leg home
+  arc(RL, -90, { bank: 10 })                          // SW corner, into the grid
+];
+
 // Oil slicks per track — FIXED hazards. Placed by `u` (fraction of the lap, 0 =
 // start/finish) and `lat` (lateral offset in world units; 0 = centreline). `radius`
 // and `cones` optional. Off-centre so a careful line can thread past; tune by driving.
 const OILS = {
   switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
   crossover:  [ { u: 0.22, lat: 0.0 }, { u: 0.52, lat: 0.8 }, { u: 0.84, lat: -0.6 } ],
-  riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ]
+  riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ],
+  // Flats only — never on a loop, the spiral, or the roll bridge, where a forced spin would be cruel.
+  twister:    [ { u: 0.232, lat: 0.7 }, { u: 0.732, lat: -0.7 } ]
 };
 
 // Boost pads — drive-over speed strips, position-scaled for catch-up. Place on STRAIGHTS
@@ -109,7 +174,10 @@ const OILS = {
 const PADS = {
   switchback: [ { u: 0.15, lat: 0.0 }, { u: 0.65, lat: 0.0 } ],
   crossover:  [ { u: 0.08, lat: 0.0 }, { u: 0.40, lat: 0.0 } ],
-  riverside:  [ { u: 0.10, lat: 0.0 }, { u: 0.51, lat: 0.0 } ]
+  riverside:  [ { u: 0.10, lat: 0.0 }, { u: 0.51, lat: 0.0 } ],
+  // One pad on the flat beat before loop 1 — it fires the pack INTO the ring,
+  // Hot Wheels style — and one on the long east leg toward loop 2.
+  twister:    [ { u: 0.434, lat: 0.0 }, { u: 0.65, lat: 0.0 } ]
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
@@ -119,7 +187,8 @@ const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
 const BOXES = {
   switchback: boxRow(0.20),
   crossover:  boxRow(0.66),
-  riverside:  boxRow(0.30)
+  riverside:  boxRow(0.30),
+  twister:    boxRow(0.039) // early on the launch straight — grab an item, then fly
 };
 
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
@@ -135,11 +204,15 @@ export const TRACKS = {
   riverside: {
     name: 'Riverside', segments: RIVERSIDE,
     oils: OILS.riverside, pads: PADS.riverside, boxes: BOXES.riverside
+  },
+  twister: {
+    name: 'Twister', segments: TWISTER,
+    oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister
   }
 };
 
 // Stable display order for the gallery / picker.
-export const TRACK_ORDER = ['switchback', 'crossover', 'riverside'];
+export const TRACK_ORDER = ['switchback', 'crossover', 'riverside', 'twister'];
 
 // Flat list — {id, name, segments, oils, pads, boxes} in display order — used by main.js
 // and the track picker. The display builds each track and computes its schematic SVG

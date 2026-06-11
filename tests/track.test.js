@@ -271,16 +271,28 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
     assert.ok(worst > 0, `track "${name}" centerline reverses at a joint (worst seg dot=${worst.toFixed(2)})`);
     assert.ok(minSeg > 0.2, `track "${name}" has a degenerate-short segment (min=${minSeg.toFixed(3)})`);
 
-    // Bounded per-unit heading change, sampled along the smooth centerline.
+    // Bounded per-unit heading change, sampled along the smooth centerline. PLAN
+    // heading is meaningless through the 3D stunts: near-vertical tangents (a loop
+    // flips heading 180° at the apex), banked decks, high-altitude skyways, and the
+    // corkscrew's flared deck — the helix legitimately swings plan heading fast even
+    // where it is level (its eased entry/exit transitions). Skip near-vertical,
+    // well-banked, high-altitude and flared-stunt samples and re-seed — every
+    // ground-level near-flat default-width stretch (including hills/bridges, which
+    // top out at 2.0) is still covered. (Flares on plain straights — Crossover,
+    // Switchback — are also skipped; their heading is trivially constant anyway.)
     const STEP = 0.1;
-    let prev = Math.atan2(cl.sampleAt(0).tangent.x, cl.sampleAt(0).tangent.z), worstStep = 0;
-    for (let s = STEP; s <= cl.length; s += STEP) {
+    let prev = null, worstStep = 0;
+    for (let s = 0; s <= cl.length; s += STEP) {
       const f = cl.sampleAt(s);
+      if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05
+        || (cl.widthAt && cl.widthAt(s) > 5.4)) { prev = null; continue; }
       const h = Math.atan2(f.tangent.x, f.tangent.z);
-      let dh = h - prev;
-      while (dh > Math.PI) dh -= 2 * Math.PI;
-      while (dh < -Math.PI) dh += 2 * Math.PI;
-      worstStep = Math.max(worstStep, Math.abs(dh));
+      if (prev != null) {
+        let dh = h - prev;
+        while (dh > Math.PI) dh -= 2 * Math.PI;
+        while (dh < -Math.PI) dh += 2 * Math.PI;
+        worstStep = Math.max(worstStep, Math.abs(dh));
+      }
       prev = h;
     }
     assert.ok(worstStep < 0.08, `track "${name}" tangent turns too sharply in one step (worst=${worstStep.toFixed(4)} rad)`);
@@ -339,6 +351,144 @@ test('startGate:false omits the gate', () => {
 
 test('an unknown segment kind throws a clear error', () => {
   assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
+});
+
+// ---- Twister: the stunt track (the segments that go 3D) — the barrel-roll bridge,
+// the 450° climbing spiral, and two tilted toy loops. The loops/spiral roll the car
+// via the centerline curving through space; only the roll bridge twists the ribbon,
+// at a rate the engine's local-surface pose keeps flush. Each geometric element
+// carries a probe-measured `roll` trim cancelling its transported holonomy. ----
+
+test('twister closes and the loops genuinely invert the frame', () => {
+  const t = buildTrack(TRACKS.twister);
+  assert.ok(t.closed, `twister should close (gap=${t.gap.toFixed(3)})`);
+  let maxY = -Infinity, inverted = 0;
+  for (const sm of t.centerline.samples) {
+    maxY = Math.max(maxY, sm.pos.y);
+    if (sm.up.y < -0.9) inverted++; // loop tops + roll-bridge middle: road faces the ground
+  }
+  assert.ok(maxY > 8, `loop apex should tower over the hills (maxY=${maxY.toFixed(1)} world)`);
+  assert.ok(inverted > 0, 'no inverted frames found — the loop is not looping');
+});
+
+test('twister stunts carry the road sideways and over the top, edges clear of the grass', () => {
+  const t = buildTrack(TRACKS.twister);
+  const ss = t.centerline.samples;
+  // The loops/spiral/roll all put the deck sideways somewhere; assert sideways
+  // decks exist at all, and separately that the tilted loops crest at 2·radius
+  // and are INVERTED over the top (a full circle, not a hop).
+  let sideways = 0, top = ss[0];
+  for (const sm of ss) {
+    if (Math.abs(sm.up.y) < 0.2) sideways++;
+    if (sm.pos.y > top.pos.y) top = sm;
+  }
+  assert.ok(sideways > 8, `stunts should carry the road through sideways (found ${sideways} samples)`);
+  assert.ok(top.pos.y > 8, `the loop apex should crest ~8.8 world (got ${top.pos.y.toFixed(1)})`);
+  assert.ok(top.up.y < -0.9, `the crest is passed inverted (up.y=${top.up.y.toFixed(2)})`);
+  // Wherever the deck banks, the low road edge (pos ± lateral·half-width) must stay
+  // out of the lawn. A banked ground corner's inside kerb may EMBED a few cm into
+  // the grass plane (real kerbs sit in turf; groundY is 0.3 under the lowest
+  // centreline point) — what this catches is a tilted deck whose edge stabs
+  // genuinely UNDER the lawn, like an unraised heartline roll would (−2.5).
+  for (const sm of ss) {
+    const dip = Math.abs(sm.lateral.y) * sm.width / 2;
+    assert.ok(sm.pos.y - dip > t.groundY - 0.15,
+      `road edge dips to ${(sm.pos.y - dip).toFixed(2)} at s=${sm.s.toFixed(1)} — buried under the grass (${t.groundY.toFixed(2)})`);
+  }
+});
+
+test('twister deck twist rate stays shallow everywhere (no helicoid corkscrews)', () => {
+  // The signature regression test: the original heartline corkscrew twisted the
+  // ribbon at ~0.31 rad/world — a rigid car could only chord it (≈36° of misfit
+  // across a wheelbase, the "flat car floats on the screwed road" bug), and that
+  // predated the engine's local-surface pose (cars now tilt to the helicoid under
+  // them). The shipped barrel-roll bridge twists at an intentional ~0.18 peak —
+  // flush within ~10° across a wheelbase with the pose conforming. The bound
+  // guards the bad old territory, not the designed roll.
+  const t = buildTrack(TRACKS.twister);
+  const ss = t.centerline.samples;
+  let worst = 0, at = 0;
+  for (let i = 1; i < ss.length; i++) {
+    const a = ss[i - 1], b = ss[i], ds = b.s - a.s;
+    if (ds <= 1e-6) continue;
+    const tg = a.tangent;
+    const ua = a.up.clone().addScaledVector(tg, -a.up.dot(tg)).normalize();
+    const ub = b.up.clone().addScaledVector(tg, -b.up.dot(tg)).normalize();
+    const ang = Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub)));
+    if (ang / ds > worst) { worst = ang / ds; at = a.s; }
+  }
+  assert.ok(worst < 0.21, `deck twists at ${worst.toFixed(3)} rad/world near s=${at.toFixed(1)} — helicoid territory (bound 0.21)`);
+});
+
+test('twister frames stay orthonormal and resolve upright at the seam', () => {
+  const t = buildTrack(TRACKS.twister);
+  let worstDot = 0, worstLen = 0;
+  for (const sm of t.centerline.samples) {
+    worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
+    worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+  }
+  assert.ok(worstDot < 1e-3, `up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
+  assert.ok(worstLen < 1e-3, `up not unit length (worst=${worstLen.toFixed(4)})`);
+  // Every element's transported holonomy (tilted loops ±75.5°, the climbing spiral
+  // ~35°) must be cancelled by its own roll trim, and the barrel roll nets 360 ≡ 0:
+  // if the lap's twist didn't net out, the seam unwind would smear the residual
+  // around the whole track and tilt the grid straight.
+  const ss = t.centerline.samples;
+  assert.ok(ss[0].up.y > 0.95, `seam up should be ~vertical (got ${ss[0].up.y.toFixed(2)})`);
+  assert.ok(ss[ss.length - 1].up.dot(ss[0].up) > 0.9, 'up twists across the seam');
+});
+
+test('twister spiral bridges over its own entrance with real clearance', () => {
+  const t = buildTrack(TRACKS.twister);
+  // The spiral's elevated final quarter crosses directly over its own entrance.
+  // Find sample pairs sharing a plan footprint but far apart along the lap — there
+  // must be a genuinely stacked stretch, and it must clear like a (tall) bridge.
+  const ss = t.centerline.samples, L = t.length;
+  let stacked = 0, minGap = Infinity;
+  for (const a of ss) {
+    if (a.pos.y > 0.01) continue; // ground strand only
+    for (const b of ss) {
+      const arc = Math.min(Math.abs(a.s - b.s), L - Math.abs(a.s - b.s));
+      if (arc < 6) continue;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
+      if (dx * dx + dz * dz > 1.0) continue; // same plan footprint
+      stacked++;
+      minGap = Math.min(minGap, b.pos.y - a.pos.y);
+    }
+  }
+  assert.ok(stacked > 10, `expected a stacked crossing stretch (found ${stacked} stacked pairs)`);
+  assert.ok(minGap > 3.0, `the crossing should clear the road below like a bridge (min gap=${minGap.toFixed(2)})`);
+});
+
+test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface', async () => {
+  // A twisted road is a helicoid: away from the centreline the surface normal
+  // pitches by atan(lat·twistRate) off the frame up. The engine's pose.up must be
+  // that LOCAL normal, or a curb-running car visibly floats off / digs into the
+  // twisting road (oriented to the centre frame alone it was ~50° off). No shipped
+  // track sustains a heartline roll any more (Twister's stunts are geometric), so
+  // exercise the engine against a private rolled fixture.
+  const { Game } = await import('../public/display/engine/Game.js');
+  const ROLLED = [
+    ...run(4), arc(RL, 90), ...run(2), arc(RL, 90),
+    straight(2), straight(12, { roll: 360 }), straight(2), arc(RL, 90), ...run(2), arc(RL, 90)
+  ];
+  const t = buildTrack(ROLLED, { startGate: false });
+  const cl = t.centerline;
+  // find a mid-roll sample: road sideways (|up.y| small) on a near-level path
+  const mid = cl.samples.find((sm) => Math.abs(sm.up.y) < 0.1 && Math.abs(sm.tangent.y) < 0.35);
+  assert.ok(mid, 'no mid-corkscrew sample found');
+  const game = new Game(['p1'], { centerline: cl, length: t.length, roadWidth: t.roadWidth });
+  const car = game.cars.get('p1');
+  car.totalS = mid.s; car.lat = 1.5;
+  game._recomputePoses();
+  // numeric local surface normal at (s, lat): finite-difference the swept surface
+  // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction
+  const d = 0.4, l = 1.5;
+  const at = (s) => { const f = cl.sampleAt(s); return f.pos.clone().addScaledVector(f.lateral, l); };
+  const alongS = at(mid.s + d).sub(at(mid.s - d));
+  const normal = cl.sampleAt(mid.s).lateral.clone().cross(alongS).normalize();
+  const dot = Math.abs(normal.dot(car.pose.up));
+  assert.ok(dot > 0.98, `pose.up should match the local surface normal (|dot|=${dot.toFixed(3)} ≈ ${(Math.acos(Math.min(1, dot)) * 180 / Math.PI).toFixed(1)}° off)`);
 });
 
 // COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the

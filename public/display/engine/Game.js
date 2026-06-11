@@ -659,13 +659,28 @@ export class Game {
     }
   }
 
+  // Per-car world pose for the renderer/camera. `up` is the LOCAL SURFACE normal at
+  // the car's (s, lat), not the centreline frame's up: where the road twists about
+  // its tangent (a corkscrew), the swept surface is a helicoid, whose normal pitches
+  // by atan(lat·twistRate) away from the frame up as you move off-centre — a curb-
+  // hugging car oriented to the frame up alone visibly floats off / digs into the
+  // twisting road. Measured by sampling the frame a short step ahead; on untwisted
+  // road (everything but a roll segment) the rate is ~0 and `up` is the frame up.
   _recomputePoses() {
+    const TWIST_PROBE = 0.6; // arclength step for the twist-rate estimate (world units)
     for (const c of this.cars.values()) {
       const f = this.centerline.sampleAt(c.totalS);
+      let up = f.up;
+      if (c.lat > 0.05 || c.lat < -0.05) {
+        const f2 = this.centerline.sampleAt(c.totalS + TWIST_PROBE);
+        // twist of `up` about the tangent across the probe step (rad/world-unit)
+        const tau = Math.atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / TWIST_PROBE;
+        if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, c.lat * tau).normalize();
+      }
       c.pose = {
         pos: f.pos.clone().addScaledVector(f.lateral, c.lat),
-        forward: f.tangent.clone().applyAxisAngle(f.up, c.heading), // car faces its heading
-        up: f.up
+        forward: f.tangent.clone().applyAxisAngle(f.up, c.heading), // car faces its heading (yaw about the FRAME up)
+        up
       };
     }
   }
