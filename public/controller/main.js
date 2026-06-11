@@ -535,3 +535,19 @@ if (_scenario) {
     color: _int(_params.get('color'), 0)
   }));
 }
+
+// Debug settings (faint wrench, bottom-left): interactive editor for this
+// page's query params — edits reload the page so each param takes effect
+// through its normal boot path above. Lazy import: dev aid, not boot-critical.
+const _COLOR_NAMES = ['Red', 'Amber', 'Green', 'Blue', 'Purple', 'Pink', 'Orange', 'Cyan'];
+import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
+  { section: 'Test harness' },
+  { key: 'scenario', label: 'Scenario', hint: 'no relay; lays out one screen', type: 'select',
+    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'countdown',
+      'playing', 'finished', 'paused', 'results'].map((s) => ({ value: s, label: s })) },
+  { key: 'color', label: 'Livery', hint: 'scenario only', type: 'select',
+    options: CAR_COLORS.map((c, i) => ({ value: String(i), label: _COLOR_NAMES[i] || c })) },
+  { section: 'Rendering' },
+  { key: 'carview', label: 'Car thumbs', type: 'select',
+    options: [{ value: 'spin', label: 'spin' }, { value: 'still', label: 'still' }] },
+], { title: 'Controller' }));

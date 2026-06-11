@@ -1,0 +1,84 @@
+/* Debug settings panel (shared/debugPanel.js) — layout only; colour/type/surface
+   come from the theme kit (.card .btn .pill .field). Loaded lazily by the module,
+   so production pages that never open it pay nothing. */
+
+/* Faint wrench in the corner: discoverable when you look for it, invisible when
+   you don't. Opposite corner from the version badge (display) and latency chip
+   (controller), both bottom-right. */
+.dbg-fab {
+  position: fixed;
+  left: calc(0.6rem + env(safe-area-inset-left));
+  bottom: calc(0.55rem + env(safe-area-inset-bottom));
+  z-index: 60;
+  width: 2.1rem; height: 2.1rem;
+  border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--ink-3);
+  font-size: 1.15rem; line-height: 1;
+  opacity: 0.22;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.dbg-fab:hover, .dbg-fab:focus-visible, .dbg-fab.is-open { opacity: 1; }
+
+/* Our display:flex would otherwise beat the [hidden] UA default of display:none,
+   leaving the panel permanently visible — restate it at higher specificity. */
+.dbg[hidden] { display: none; }
+
+.dbg {
+  position: fixed;
+  left: calc(0.6rem + env(safe-area-inset-left));
+  bottom: calc(3.1rem + env(safe-area-inset-bottom));
+  z-index: 61;
+  width: min(21rem, calc(100vw - 1.5rem));
+  max-height: min(34rem, calc(100vh - 4.5rem));
+  display: flex; flex-direction: column;
+  padding: 0.8rem 0.95rem;
+  font-size: 0.85rem;
+}
+
+.dbg__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+.dbg__close {
+  border: 0; background: none; cursor: pointer;
+  color: var(--ink-3); font-size: 1.3rem; line-height: 1; padding: 0 0.2rem;
+}
+
+.dbg__body { overflow-y: auto; min-height: 0; }
+
+.dbg__section { display: block; margin: 0.7rem 0 0.15rem; }
+.dbg__section:first-child { margin-top: 0; }
+
+.dbg__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+.dbg__label { color: var(--ink-2); font-weight: 700; }
+.dbg__hint { display: block; color: var(--ink-3); font-weight: 600; font-size: 0.72rem; }
+
+/* Compact overrides of the kit's roomy .field padding — this is a dense dev
+   panel, not a lobby form. */
+.dbg__input.field {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  width: 7.5rem;
+  font-family: inherit;
+}
+.dbg__check { width: 1.15rem; height: 1.15rem; accent-color: var(--brand); }
+
+.dbg__url {
+  display: block;
+  margin-top: 0.45rem; padding: 0.35rem 0.5rem;
+  background: var(--surface-2); border-radius: var(--r-sm);
+  color: var(--ink-3); font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.dbg__foot {
+  display: flex; justify-content: flex-end; gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+.dbg__btn.btn { font-size: 0.9rem; padding: 0.45rem 1.1rem; }

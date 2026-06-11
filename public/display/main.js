@@ -749,3 +749,28 @@ if (_scenario) {
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track;
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
+
+// Debug settings (faint wrench, bottom-left): interactive editor for this
+// page's query params — edits reload the page so each param takes effect
+// through its normal boot path above. Lazy import: dev aid, not boot-critical.
+import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
+  { section: 'Test harness' },
+  { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
+    options: ['welcome', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
+      .map((s) => ({ value: s, label: s })) },
+  { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
+  { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
+  { section: 'Solo drive' },
+  { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
+    options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },
+  { section: 'Track' },
+  { key: 'track', label: 'Preselect', type: 'select',
+    options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
+  { key: 'centerline', label: 'Racing line', hint: 'magenta ribbon overlay', type: 'flag' },
+  { section: 'Rendering' },
+  { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
+    options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
+  { key: 'bbox', label: 'Collision boxes', type: 'flag' },
+  { key: 'carview', label: 'Car thumbs', type: 'select',
+    options: [{ value: 'spin', label: 'spin' }, { value: 'still', label: 'still' }] },
+], { title: 'Display' }));
