@@ -359,8 +359,11 @@ export class DisplayNet extends GameNet {
 
   // ---- liveness (1 Hz) ----
   _startLiveness() {
-    if (this._livenessTimer) return;
+    // Reset BEFORE the timer guard: a heartbeat left in-flight by a dropped
+    // socket must not survive into the fresh connection, or the first tick
+    // would read it as overdue and force-reconnect the link that just recovered.
     this._hbPending = false;
+    if (this._livenessTimer) return;
     this._livenessTimer = setInterval(() => this._livenessTick(), LIVENESS_TICK_MS);
   }
 

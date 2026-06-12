@@ -39,7 +39,7 @@ function newCode() {
   }
 }
 
-const wss = new WebSocketServer({ port: PORT }, () => {
+const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT }, () => {
   console.log(`[relay-stub] listening on ws://127.0.0.1:${PORT}`);
 });
 
