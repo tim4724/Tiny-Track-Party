@@ -8,7 +8,7 @@ import { applyLatencyChip, renderWaitNote, renderReadyFoot } from './ui.js';
 import { ordinal } from '../shared/format.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
-const { MSG, CAR_COLORS } = window;
+const { MSG, CAR_COLORS, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
@@ -188,7 +188,7 @@ function handleMessage(data) {
       // Mid-race WELCOME: inRace says whether a car of ours is on track. false
       // = brand-new late joiner → wait in the lobby for the next race. An older
       // display omits the flag — treat that as in-race (the old rejoin path).
-      const midRace = data.roomState === 'countdown' || data.roomState === 'playing';
+      const midRace = data.roomState === ROOM_STATE.COUNTDOWN || data.roomState === ROOM_STATE.PLAYING;
       waitingForNextRace = midRace && data.inRace === false;
       renderLobby();
       // Land on the screen matching the live room state. Normally that's the

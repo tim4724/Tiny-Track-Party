@@ -89,7 +89,7 @@ export function runControllerScenario(opts) {
       li.append(dot, name, time);
       list.appendChild(li);
     });
-    el('newgame-btn').classList.toggle('hidden', !over);   // host gets "New game" once over
+    el('newgame-btn').classList.toggle('hidden', !over);   // gallery: shown to all when over (real game gates on host)
     const wait = el('result-wait');
     wait.classList.toggle('hidden', !!over);
     if (!over) wait.textContent = 'Waiting for the other racers to finish…';

@@ -8,9 +8,8 @@
 // hostVariant cards swap their `host` URL param when the host selector changes
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
 var DISPLAY_CARDS = [
-  { key: 'welcome',       title: 'Welcome (waiting)' },
-  { key: 'device-choice', title: 'Device chooser' },
-  { key: 'lobby',         title: 'Lobby',     hostVariant: true },
+  { key: 'welcome',   title: 'Welcome (waiting)' },
+  { key: 'lobby',     title: 'Lobby',     hostVariant: true },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
   { key: 'features',  title: 'Mechanics' },
