@@ -11,6 +11,7 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   const bob = await joinController(browser, roomCode, 'Bob');
   await startRace(alice, [bob]);
   await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  const carsBefore = await page.evaluate(() => window.__session().engine.cars.size);
 
   // Carol joins mid-race: the waiting lobby, not the drive screen.
   const carol = await joinController(browser, roomCode, 'Carol');
@@ -18,10 +19,8 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   await expect(carol.locator('#ready-note')).toContainText('in the next race');
   await expect(carol.locator('#ready-btn')).toBeHidden();
   await expect(carol.locator('#game')).toBeHidden();
-  // No car was spawned for her on the display.
-  expect(await page.evaluate(() => window.__session().engine.cars.size)).toBe(
-    await page.evaluate(() => window.MAX_PLAYERS)
-  );
+  // No car was spawned for her on the display — the field is what it was.
+  expect(await page.evaluate(() => window.__session().engine.cars.size)).toBe(carsBefore);
 
   // Host aborts to the lobby — Carol's waiting note gives way to the ready button.
   await alice.click('#pause-btn');

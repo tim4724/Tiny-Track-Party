@@ -10,11 +10,11 @@ test('phone-sized visit gets the chooser and defers the room', async ({ browser 
   await page.goto(`/?${relayQuery}`);
 
   await page.waitForSelector('#device-choice', { state: 'visible' });
-  // No ghost room while the chooser is up. Asserting a NON-event is inherently
-  // time-based (a poll-until-pass would succeed on the first null and prove
-  // nothing), so give a wrongly-started boot a grace window, then check that
-  // net.start() never even opened a connection — not just that no room exists.
-  await page.waitForTimeout(400);
+  // The boot must take the DEFERRED path: __deviceChoicePending flips true the
+  // moment startWhenDeviceChosen defers (deterministic — the chooser itself is
+  // visible from first paint, before the module runs), and net.start() must not
+  // have opened a connection or created a room.
+  await page.waitForFunction(() => window.__deviceChoicePending === true);
   expect(await page.evaluate(() => ({ connected: !!window.__net.party, room: window.__net.roomCode })))
     .toEqual({ connected: false, room: null });
 

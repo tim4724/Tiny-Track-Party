@@ -910,24 +910,24 @@ function startWhenDeviceChosen() {
     net.start();
     return;
   }
+  window.__deviceChoicePending = true; // E2E hook: the boot took the deferred path
   let chosen = false;
-  const mq = window.matchMedia('(max-width: 700px), (max-height: 500px)');
   const proceed = () => {
     if (chosen) return;
     chosen = true;
-    if (mq.removeEventListener) mq.removeEventListener('change', onChange);
-    else if (mq.removeListener) mq.removeListener(onChange); // older Safari
+    window.__deviceChoicePending = false;
+    window.removeEventListener('resize', onResize);
     dismissDeviceChoice();
     net.start();
   };
+  // The chooser's visibility is pure CSS (the display.css media query): if the
+  // window grows past the trigger — a small desktop window getting maximised —
+  // the overlay vanishes on its own, so treat that as choosing the big screen
+  // or the room would never open. Reading the computed style on resize keeps
+  // the breakpoint defined in exactly one place (the CSS).
+  const onResize = () => { if (getComputedStyle(choice).display === 'none') proceed(); };
   el('device-continue').addEventListener('click', proceed);
-  // The chooser is media-query driven (keep this query in sync with
-  // display.css): if the window grows past the trigger — a small desktop
-  // window getting maximised — the overlay vanishes on its own, so treat
-  // that as choosing the big screen or the room would never open.
-  const onChange = () => { if (!mq.matches) proceed(); };
-  if (mq.addEventListener) mq.addEventListener('change', onChange);
-  else mq.addListener(onChange); // older Safari
+  window.addEventListener('resize', onResize);
 }
 
 // Gallery / test mode: any ?scenario=… skips the relay and lets the

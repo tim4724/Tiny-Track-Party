@@ -103,5 +103,9 @@ wss.on('connection', (ws) => {
     if (room.sockets.get(index) !== ws) return; // already replaced by a newer socket
     room.sockets.delete(index);
     for (const [, s] of room.sockets) send(s, { type: 'peer_left', index });
+    // Reap fully-empty rooms so a long test run doesn't accumulate them. (The
+    // real relay holds rooms a while for reconnects; tests that reload a page
+    // always keep at least one other socket in the room, so this stays safe.)
+    if (room.sockets.size === 0) rooms.delete(room.code);
   });
 });
