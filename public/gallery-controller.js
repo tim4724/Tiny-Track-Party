@@ -6,17 +6,25 @@
 // so the player's own car livery can be previewed across all 8 colors.
 //
 // Card shape:
-//   { key, title, perColor? }
+//   { key, title, perColor?, url? }
+// `url` points the iframe somewhere other than the controller page — the
+// device chooser lives on the DISPLAY page but only ever renders phone-sized
+// (it's the wrong-link fork), so it previews here among the phone screens.
 var CONTROLLER_CARDS = [
+  { key: 'device-choice',   title: 'Device chooser', url: '/display/index.html?scenario=device-choice' },
   { key: 'name',            title: 'Name input' },
   { key: 'name-connecting', title: 'Connecting…' },
   { key: 'lobby-host',      title: 'Lobby (host)',    perColor: true },
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
+  { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
   { key: 'countdown',       title: 'Countdown',       perColor: true, replayable: true },
   { key: 'playing',         title: 'Driving',         perColor: true },
   { key: 'paused',          title: 'Paused',          perColor: true },
   { key: 'finished',        title: 'Finished',        perColor: true },
-  { key: 'results',         title: 'Results',         perColor: true }
+  { key: 'results',         title: 'Results',         perColor: true },
+  { key: 'conn-lost',        title: 'Connection lost' },
+  { key: 'conn-screen-gone', title: 'Big screen gone' },
+  { key: 'conn-replaced',    title: 'Seat replaced' }
 ];
 
 var state = Gallery.loadState();
@@ -42,6 +50,7 @@ var allCards = [];
 var perColorCards = [];
 
 function cardURL(c) {
+  if (c.url) return c.url;
   var colorIdx = c.perColor ? state.viewAs : 0;
   return Gallery.controllerURL(c.key, colorIdx);
 }

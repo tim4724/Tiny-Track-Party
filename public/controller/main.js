@@ -8,7 +8,7 @@ import { applyLatencyChip, renderWaitNote, renderReadyFoot } from './ui.js';
 import { ordinal } from '../shared/format.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
-const { MSG, CAR_COLORS } = window;
+const { MSG, CAR_COLORS, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
@@ -66,6 +66,13 @@ let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
 let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
+// Joined while a race was already running (WELCOME said inRace:false): we have
+// no car out there, so we wait on the lobby screen — car picker live, no ready
+// button — and ignore the current race's broadcasts. The display seats us
+// automatically when the next race builds its field; GAME_END (back to the
+// lobby) clears the flag.
+let waitingForNextRace = false;
+let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
 
 const NAME_KEY = 'tinytrack_name';
 const TRACK_KEY = 'tinytrack_track';   // host's last-picked track id
@@ -99,18 +106,18 @@ const net = new ControllerNet({
     if (state === 'reconnecting') {
       const txt = `Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`;
       setStatus(txt);
-      if (inRoom) showConn('Reconnecting…', txt, false);
+      if (inRoom) showConn('Reconnecting…', txt, false, false);
     } else if (state === 'lost') {
       setStatus('Connection lost.');
-      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true);
+      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true, true);
     } else if (state === 'error') {
-      setStatus('Error: ' + info);
+      setStatus(friendlyRelayError(info));
     } else if (state === 'display_gone') {
       setStatus('Waiting for the big screen…');
-      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false);
+      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false, true);
     } else if (state === 'replaced') {
       setStatus('Opened on another tab.');
-      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false);
+      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false, true);
     }
   },
   onMessage: handleMessage,
@@ -118,18 +125,24 @@ const net = new ControllerNet({
 });
 
 // ---- connection overlay (screen-agnostic relay-link feedback) ----
-function showConn(title, msg, retry) {
+// `leave` shows the "Exit to start" escape hatch — on for every terminal state
+// (lost / display_gone / replaced), off while a reconnect is still in flight.
+function showConn(title, msg, retry, leave) {
   el('conn-title').textContent = title;
   el('conn-msg').textContent = msg || '';
   el('conn-retry').classList.toggle('hidden', !retry);
+  el('conn-leave').classList.toggle('hidden', !leave);
   el('conn').classList.remove('hidden');
 }
 function hideConn() { el('conn').classList.add('hidden'); }
 el('conn-retry').addEventListener('click', () => {
   buzz(15);
-  showConn('Reconnecting…', '', false);
+  showConn('Reconnecting…', '', false, false);
   net.connect(myName);
 });
+// Pop the room's history entry — the popstate handler runs the real leave
+// (leaveToName), exactly as the back gesture would, keeping the stack clean.
+el('conn-leave').addEventListener('click', () => { buzz(15); history.back(); });
 
 // Latency chip (bottom-right). Stays hidden until the first reading lands so it
 // never flashes on the pre-join name screen. See applyLatencyChip in ui.js.
@@ -142,6 +155,12 @@ const tilt = new TiltInput({
 });
 
 function setStatus(t) { el('name-status').textContent = t; }
+// Relay error strings (Party-Server) → copy a party guest can act on.
+function friendlyRelayError(msg) {
+  if (msg === 'Room not found') return 'That race has ended — scan a fresh QR code on the big screen.';
+  if (msg === 'Room is full') return 'This race is full — wait for a free seat, then try again.';
+  return 'Error: ' + msg;
+}
 // Lock the join form while a connection is in flight so a double-tap can't fire
 // two joins; unlocked again only if the attempt errors out (success navigates
 // away to the lobby).
@@ -166,20 +185,32 @@ function handleMessage(data) {
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
       amReady = !!(me && me.ready);
+      // Mid-race WELCOME: inRace says whether a car of ours is on track. false
+      // = brand-new late joiner → wait in the lobby for the next race. An older
+      // display omits the flag — treat that as in-race (the old rejoin path).
+      const midRace = data.roomState === ROOM_STATE.COUNTDOWN || data.roomState === ROOM_STATE.PLAYING;
+      waitingForNextRace = midRace && data.inRace === false;
       renderLobby();
       // Land on the screen matching the live room state. Normally that's the
       // lobby, but a player who rejoins mid-race (reconnected, or scanned the
       // reconnect QR) must drop straight back into the race instead of stalling
       // on the name screen — their car is still on track waiting for input.
-      if (data.roomState === 'countdown' || data.roomState === 'playing') {
+      if (midRace && !waitingForNextRace) {
         inResults = false;
         show('game');
         el('drive-hud').classList.remove('hidden');
         el('pause-btn').classList.remove('hidden');
+        setPauseOverlay(!!data.paused); // re-raise a pause we missed while away
         setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
         startDriving();      // resume streaming tilt to our still-racing car
       } else {
-        show('lobby');       // lobby or results — the next countdown/board routes us onward
+        // Lobby, results, or waiting on the next race. May be reached FROM the
+        // game screen (the display reloaded into a fresh lobby mid-race), so
+        // shut the drive surface down like GAME_END does.
+        stopDriving();
+        setPauseOverlay(false);
+        el('pause-btn').classList.add('hidden');
+        show('lobby');
       }
       break;
     }
@@ -199,9 +230,14 @@ function handleMessage(data) {
         applyLivery();
       }
       renderLobby();
+      // Host duty can move while the results board is up (the host left) — the
+      // footer's "New game" button must follow it or nobody can start the next
+      // game from a phone until the display's failsafe kicks in.
+      if (inResults && lastStandings) renderResultFoot(lastStandings);
       break;
     }
     case MSG.COUNTDOWN:
+      if (waitingForNextRace) break;   // the running race isn't ours — keep the waiting lobby
       inResults = false;               // a fresh race clears any leftover results overlay
       show('game');
       el('drive-hud').classList.remove('hidden'); // full HUD up front — the countdown lives on the display
@@ -214,6 +250,7 @@ function handleMessage(data) {
     case MSG.GAME_START:
       // Fires on the "GO!" beat. The HUD is already up from COUNTDOWN; this just
       // covers a player who joined too late to get the countdown messages.
+      if (waitingForNextRace) break;   // no car of ours in this race
       show('game');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');
@@ -230,6 +267,10 @@ function handleMessage(data) {
       // Live finish board. Refresh who's host (may have shifted if someone left)
       // and render; flip to the overlay once the race is over (everyone, incl.
       // DNF) or as soon as MY car crosses the line — I'm on autopilot now.
+      // Waiting on the next race: mid-race boards aren't ours, but the FINAL
+      // board is — it lists us as "Next race", so join everyone on the results.
+      if (waitingForNextRace && !data.over) break;
+      lastStandings = data;
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       renderResults(data);
@@ -238,19 +279,22 @@ function handleMessage(data) {
       break;
     }
     case MSG.GAME_PAUSED:
-      if (inResults) break;            // finished racers watch results, not the pause overlay
+      if (inResults || waitingForNextRace) break; // not in this race — no pause overlay
       stopBrakeRumble();               // the overlay covers BRAKE — don't hum through the pause
       setPauseOverlay(true);
       break;
     case MSG.GAME_RESUMED:
-      if (inResults) break;
+      if (inResults || waitingForNextRace) break;
       setPauseOverlay(false);
       break;
     case MSG.GAME_END:
       inResults = false;
+      waitingForNextRace = false;      // back in the lobby — we're in the next race for real
+      lastStandings = null;
       stopDriving();
       setPauseOverlay(false);
       el('pause-btn').classList.add('hidden');
+      renderLobby();                   // restore the ready footer the waiting note replaced
       show('lobby');
       break;
   }
@@ -275,7 +319,8 @@ function renderResults(data) {
     const li = document.createElement('li');
     const isMe = o.playerId === net.peerIndex;
     if (isMe) li.classList.add('is-me');
-    if (!o.finished) li.classList.add('is-racing');
+    if (o.joining) li.classList.add('is-joining');      // late joiner — no car this race
+    else if (!o.finished) li.classList.add('is-racing');
     const dot = document.createElement('span');
     dot.className = 'res-dot';
     dot.style.background = CAR_COLORS[o.colorIndex] || '#888';
@@ -284,7 +329,8 @@ function renderResults(data) {
     name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
     const time = document.createElement('span');
     time.className = 'res-time';
-    time.textContent = o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
+    time.textContent = o.joining ? 'Next race'
+      : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
     li.append(dot, name, time);
     list.appendChild(li);
   });
@@ -330,6 +376,18 @@ function renderLobby() {
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
   renderTrackPicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
+  if (waitingForNextRace) {
+    // Late joiner: a race is running without us. No ready button (readiness
+    // gates a lobby we're not in) — pick a car and hold for the next race.
+    // If host promotion lands on us mid-race (original host gone), this branch
+    // still hides the start controls — acceptable: the abandoned-race timer on
+    // the display returns everyone to the lobby, where we get them normally.
+    el('ready-btn').classList.add('hidden');
+    const note = el('ready-note');
+    note.classList.remove('hidden');
+    note.textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
+    return;
+  }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
     canStart: !!selectedTrackId,  // host can't start without a track (auto-picked, so ~always true)
@@ -434,6 +492,8 @@ function leaveToName() {
   wakeLock.disable();  // off the room — let the phone sleep normally again
   _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
+  waitingForNextRace = false;
+  lastStandings = null;
   amHost = false;
   amReady = false;
   roster = [];
@@ -553,8 +613,9 @@ const _COLOR_NAMES = ['Red', 'Amber', 'Green', 'Blue', 'Purple', 'Pink', 'Orange
 import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay; lays out one screen', type: 'select',
-    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'countdown',
-      'playing', 'finished', 'paused', 'results'].map((s) => ({ value: s, label: s })) },
+    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'lobby-joining',
+      'countdown', 'playing', 'finished', 'paused', 'results',
+      'conn-lost', 'conn-screen-gone', 'conn-replaced'].map((s) => ({ value: s, label: s })) },
   { key: 'color', label: 'Livery', hint: 'scenario only', type: 'select',
     options: CAR_COLORS.map((c, i) => ({ value: String(i), label: _COLOR_NAMES[i] || c })) },
   { section: 'Rendering' },

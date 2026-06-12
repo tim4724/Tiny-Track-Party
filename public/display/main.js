@@ -242,6 +242,7 @@ const audio = new RaceAudio();
 // ---- race state ----
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
+let autoPaused = false;    // race frozen because no connected human holds a car (silent; see refreshAutoPause)
 let lastPlayerState = 0;
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
@@ -254,7 +255,7 @@ let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal pla
 
 scene.onFrame = (dt) => {
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
-  if (paused || raceEnded) return; // paused/ended: cars hold their last (frozen) pose
+  if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
@@ -339,6 +340,22 @@ const net = new DisplayNet({
   onRosterChange: renderRoster,
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
+  // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
+  // phone drops back into the race); one without is a late joiner (the phone
+  // waits in its lobby — they get a car when the next race builds its field).
+  inRace: (peerIndex) => !!(session && session.engine.cars.has(peerIndex)),
+  // Manual pause only: the silent auto-pause lifts on the reconnect itself
+  // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
+  isPaused: () => paused,
+  // Standings are broadcast-only, so a (re)joiner missed every board pushed
+  // while they were away. Catch them up: mid-race the live order (a rejoiner
+  // whose car already finished flips straight to the results overlay), during
+  // results the final board (instead of stranding them on the lobby screen).
+  onPlayerWelcomed: (peerIndex) => {
+    if (!session) return;
+    if (net.roomState === ROOM_STATE.PLAYING) net.sendTo(peerIndex, standingsPayload(session.getResults(), false));
+    else if (net.roomState === ROOM_STATE.RESULTS) net.sendTo(peerIndex, standingsPayload(session.getResults(), true));
+  },
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
@@ -359,6 +376,54 @@ function forfeitCar(peerIndex) {
   audio.stopCarVoices(peerIndex); // its id leaves the loop — no zero-level update will come
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
+
+// ---- auto-pause ----
+// A race with no connected human driving is a race nobody is playing: freeze it
+// instead of letting the bots run it to the flag. SILENT on purpose — no pause
+// overlay, no GAME_PAUSED broadcast — because the frosted overlay would cover
+// the per-seat reconnect QR cards frozen on screen, and those are exactly what
+// a dropped party needs to scan back in. The freeze lifts the moment a racer
+// reconnects (same device or via their QR). When no human seat is left at all
+// (everyone backed out / every grace window expired) there is nothing to wait
+// for, so the room returns to the lobby — any late joiners waiting there get
+// seated in the next race immediately. Re-checked on every roster change
+// (disconnect, reconnect, rekey, leave, seat expiry).
+function refreshAutoPause() {
+  if (!session || raceEnded) return;
+  if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
+  let connected = 0, inGrace = 0;
+  for (const id of session.engine.cars.keys()) {
+    if (aiBots.has(id)) continue;                 // CPU racer
+    if (net.flow.isDisconnected(id)) inGrace++;   // seat held, QR showing
+    else if (net.flow.has(id)) connected++;       // human at the wheel
+  }
+  if (!connected && !inGrace) { returnToLobby(); return; } // no human cars left at all
+  autoPaused = connected === 0;
+  syncSessionFrozen();
+  refreshAbandonTimer();
+}
+net.flow.on('rosterchange', refreshAutoPause);
+
+// Escape hatch on top of the auto-pause: every racer is gone (only QR seats
+// left) while late joiners sit waiting in their lobby. Don't hold the newcomers
+// hostage for the full RECONNECT_GRACE_MS — give the dropped party a short
+// window to scan back in, then return to the lobby so the next race seats the
+// people who are actually here. The timer is disarmed the moment any racer
+// reconnects or the last waiting late joiner leaves (both fire rosterchange).
+const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000; // __abandonGraceMs: E2E hook to shorten the wait
+let abandonTimer = null;
+function refreshAbandonTimer() {
+  const abandoned = autoPaused && lateJoiners().length > 0;
+  if (!abandoned) {
+    clearTimeout(abandonTimer);
+    abandonTimer = null;
+  } else if (!abandonTimer) {
+    abandonTimer = setTimeout(() => {
+      abandonTimer = null;
+      if (autoPaused) returnToLobby(); // re-check: state may have shifted since arming
+    }, ABANDONED_RACE_GRACE_MS);
+  }
+}
 
 // A dropped player reconnected on a different device (new peerIndex): move their
 // still-racing car — engine, render entry and results identity — onto the new
@@ -476,6 +541,7 @@ function startRace() {
   show('race');
   el('results').classList.add('hidden');
   paused = false;
+  autoPaused = false;
   raceEnded = false;             // un-freeze the scene for the new race
   setPauseOverlay(false);
   el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
@@ -599,23 +665,39 @@ function humansAllDone() {
 // know, so the display is the only side that can name/colour them.
 function standingsPayload(results, over) {
   const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  const order = results.results.map((res) => {
+    const p = byId.get(res.playerId) || {};
+    return {
+      playerId: res.playerId,
+      name: p.name || String(res.playerId),
+      colorIndex: p.colorIndex == null ? 0 : p.colorIndex,
+      ai: !!p.ai,
+      finished: !!res.finished,
+      time: res.time
+    };
+  });
+  // Anyone who joined mid-race has no car this round (the field is locked at
+  // the start) — list them under the racers, flagged `joining`, so every board
+  // shows who's waiting on the next race instead of silently omitting them.
+  for (const p of lateJoiners()) {
+    order.push({ playerId: p.peerIndex, name: p.name, colorIndex: p.colorIndex, joining: true });
+  }
   return {
     type: MSG.STANDINGS,
     over: !!over,
     hostPeerIndex: net.flow.host,
-    total: results.results.length,
-    order: results.results.map((res) => {
-      const p = byId.get(res.playerId) || {};
-      return {
-        playerId: res.playerId,
-        name: p.name || String(res.playerId),
-        colorIndex: p.colorIndex == null ? 0 : p.colorIndex,
-        ai: !!p.ai,
-        finished: !!res.finished,
-        time: res.time
-      };
-    })
+    total: order.length,   // racers + joining rows — always matches order
+    order
   };
+}
+
+// Connected players without a car in the current race — they joined after the
+// field was locked and ride the next one (see the `joining` rows above).
+// Both callers (standingsPayload + showResults) run synchronously inside the
+// same endRace flow, so the two boards always agree on who's joining.
+function lateJoiners() {
+  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  return net.flow.list().filter((p) => !!p.connected && !byId.has(p.peerIndex));
 }
 function broadcastStandings(over) {
   if (session) net.broadcast(standingsPayload(session.getResults(), over));
@@ -630,6 +712,7 @@ function endRace(results) {
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
   audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
   paused = false;                              // results aren't pausable
+  autoPaused = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   stopPauseAutoHide();
@@ -657,17 +740,32 @@ function showResults(results) {
     li.append(dot, ` ${(p.name || res.playerId)}${p.ai ? ' (CPU)' : ''} `, time);
     list.appendChild(li);
   }
+  // Late joiners under the field: no rank or time — they're in the next race.
+  for (const p of lateJoiners()) {
+    const li = document.createElement('li');
+    li.className = 'is-joining';
+    const dot = document.createElement('span');
+    dot.className = 'stand__dot';
+    dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
+    const time = document.createElement('span');
+    time.className = 'res-time';
+    time.textContent = 'Next race';
+    li.append(dot, ` ${p.name} `, time);
+    list.appendChild(li);
+  }
   el('results').classList.remove('hidden');
 }
 
 function returnToLobby() {
   if (net.roomState === ROOM_STATE.LOBBY) return;
   clearTimeout(endTimer);
+  clearTimeout(abandonTimer); abandonTimer = null;
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
   audio.stopVoices();
   paused = false;
+  autoPaused = false;
   raceEnded = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
@@ -693,9 +791,7 @@ function pauseRace() {
   if (paused || !session) return;
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   paused = true;
-  session.pause();
-  audio.stopVoices();                    // frozen cars must not keep their wind/squeal going
-  freezeCars();                          // zero each car's speed so dust stops kicking up
+  syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_PAUSED });
   setPauseOverlay(true);
 }
@@ -703,9 +799,26 @@ function pauseRace() {
 function resumeRace() {
   if (!paused || !session) return;
   paused = false;
-  session.resume();
+  syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_RESUMED });
   setPauseOverlay(false);
+}
+
+// The sim is frozen while EITHER pause is set (manual overlay pause OR the
+// silent auto-pause), so the two compose: a manual resume while every racer is
+// still disconnected keeps the field frozen, and a reconnect during a manual
+// pause keeps the overlay's authority. Sync the session's timers to the
+// combined state instead of letting each path drive pause()/resume() directly.
+function syncSessionFrozen() {
+  if (!session) return;
+  const frozen = paused || autoPaused;
+  if (frozen && !session.paused) {
+    session.pause();
+    audio.stopVoices();                  // frozen cars must not keep their wind/squeal going
+    freezeCars();                        // zero each car's speed so dust stops kicking up
+  } else if (!frozen && session.paused) {
+    session.resume();
+  }
 }
 
 // Re-pose every car at rest (spd 0, no scrub) so the renderer stops emitting
@@ -805,16 +918,52 @@ el('joinbox').addEventListener('click', async () => {
 const wakeLock = createWakeLock();
 if (!_isTestMode) wakeLock.enable();
 
+// ---- device chooser ----
+// The display URL opened on a phone-sized screen (see #device-choice in
+// index.html + display.css): most likely someone followed the wrong link while
+// trying to JOIN a game, so don't open a room until they commit to running the
+// big screen here. On big screens (and test/solo surfaces, which dismiss
+// up front) we mark it dismissed immediately, so resizing the window
+// mid-session can never surface the chooser over a live lobby or race.
+function dismissDeviceChoice() { document.documentElement.classList.add('device-choice-dismissed'); }
+function startWhenDeviceChosen() {
+  const choice = el('device-choice');
+  if (!choice || getComputedStyle(choice).display === 'none') {
+    dismissDeviceChoice();
+    net.start();
+    return;
+  }
+  window.__deviceChoicePending = true; // E2E hook: the boot took the deferred path
+  let chosen = false;
+  const proceed = () => {
+    if (chosen) return;
+    chosen = true;
+    window.__deviceChoicePending = false;
+    window.removeEventListener('resize', onResize);
+    dismissDeviceChoice();
+    net.start();
+  };
+  // The chooser's visibility is pure CSS (the display.css media query): if the
+  // window grows past the trigger — a small desktop window getting maximised —
+  // the overlay vanishes on its own, so treat that as choosing the big screen
+  // or the room would never open. Reading the computed style on resize keeps
+  // the breakpoint defined in exactly one place (the CSS).
+  const onResize = () => { if (getComputedStyle(choice).display === 'none') proceed(); };
+  el('device-continue').addEventListener('click', proceed);
+  window.addEventListener('resize', onResize);
+}
+
 // Gallery / test mode: any ?scenario=… skips the relay and lets the
 // TestHarness drive a single screen from fake data. Normal play connects.
 const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_scenario) {
+  dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
   // Gallery/test. Lobby previews ('welcome'/'lobby') keep the default diorama
   // backdrop (no track picked, matching the real lobby); race previews reveal the
   // 3D scene the harness renders the track + cars into.
   const _scn = _scenario;
-  if (_scn !== 'welcome' && _scn !== 'lobby') {
+  if (_scn !== 'welcome' && _scn !== 'lobby' && _scn !== 'device-choice') {
     el('scene').classList.remove('hidden');
     const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
   }
@@ -832,6 +981,7 @@ if (_scenario) {
   // module seats a synthetic human in net.flow and feeds the keyboard through the
   // normal engine input path, so the whole race lifecycle runs unchanged. Booting
   // through the lobby (not the test harness) keeps that path identical to live play.
+  dismissDeviceChoice(); // dev surface — never block it on the chooser
   show('lobby');
   renderRoster([], null);
   updateBackdrop();
@@ -849,10 +999,11 @@ if (_scenario) {
   show('lobby');
   renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  net.start();
+  startWhenDeviceChosen(); // net.start(), gated on the device chooser where it shows
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
+window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
@@ -860,7 +1011,7 @@ window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeL
 import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
+    options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

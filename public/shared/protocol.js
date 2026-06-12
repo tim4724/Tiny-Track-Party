@@ -9,6 +9,15 @@
 
 // Party-Server relay URL (signaling + game-event fallback).
 var RELAY_URL = 'wss://ws.couch-games.com';
+// Dev/test override: the server injects its RELAY_URL env into each page's
+// <meta name="relay-url"> (see server/index.js), which also widens the CSP to
+// exactly that origin — the E2E suite points pages at its hermetic stub
+// (tests/e2e/relay-server.js) this way. Operator-set env only, no client-side
+// override. Browser-only; Node imports keep the default.
+if (typeof document !== 'undefined') {
+  var _relayMeta = document.querySelector('meta[name="relay-url"]');
+  if (_relayMeta && _relayMeta.content) RELAY_URL = _relayMeta.content;
+}
 
 // STUN server for the WebRTC fastlane to gather server-reflexive candidates so
 // cross-network peers connect when host candidates aren't reachable. STUN is
@@ -31,11 +40,11 @@ var MSG = {
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
   SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
-  LEAVE: 'leave',               // intentional exit (back-out) — display frees the seat at once (no reconnect QR)
+  LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
   // Display -> specific controller
-  WELCOME: 'welcome',           // {peerIndex, roomState, tracks, trackId, ...} on join
+  WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
   LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag)
   PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, item, boost} — item lights the controller's USE button
   PONG: 'pong',

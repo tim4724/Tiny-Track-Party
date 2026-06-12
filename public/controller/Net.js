@@ -88,6 +88,14 @@ export class ControllerNet extends GameNet {
         this.onStatus('error', msg.message);
       } else if (type === 'peer_left' && msg.index === 0) {
         this.onStatus('display_gone');
+      } else if (type === 'peer_joined' && msg.index === 0) {
+        // The display came back (reconnect — or a RELOAD that wiped its
+        // roster): re-introduce ourselves so a fresh display restores this
+        // seat's name, and re-open the fastlane right away instead of waiting
+        // for the retry tick. The WELCOME it answers with clears any
+        // "waiting for the big screen" overlay.
+        this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+        if (this.fastlane) this.fastlane.open(0);
       }
     };
     this.party.onMessage = (from, data) => {
