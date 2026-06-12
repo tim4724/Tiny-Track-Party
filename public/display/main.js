@@ -242,6 +242,7 @@ const audio = new RaceAudio();
 // ---- race state ----
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
+let autoPaused = false;    // race frozen because no connected human holds a car (silent; see refreshAutoPause)
 let lastPlayerState = 0;
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
@@ -254,7 +255,7 @@ let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal pla
 
 scene.onFrame = (dt) => {
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
-  if (paused || raceEnded) return; // paused/ended: cars hold their last (frozen) pose
+  if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() is a no-op until racing.
@@ -363,6 +364,32 @@ function forfeitCar(peerIndex) {
   audio.stopCarVoices(peerIndex); // its id leaves the loop — no zero-level update will come
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
+
+// ---- auto-pause ----
+// A race with no connected human driving is a race nobody is playing: freeze it
+// instead of letting the bots run it to the flag. SILENT on purpose — no pause
+// overlay, no GAME_PAUSED broadcast — because the frosted overlay would cover
+// the per-seat reconnect QR cards frozen on screen, and those are exactly what
+// a dropped party needs to scan back in. The freeze lifts the moment a racer
+// reconnects (same device or via their QR). When no human seat is left at all
+// (everyone backed out / every grace window expired) there is nothing to wait
+// for, so the room returns to the lobby — any late joiners waiting there get
+// seated in the next race immediately. Re-checked on every roster change
+// (disconnect, reconnect, rekey, leave, seat expiry).
+function refreshAutoPause() {
+  if (!session || raceEnded) return;
+  if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
+  let connected = 0, inGrace = 0;
+  for (const id of session.engine.cars.keys()) {
+    if (aiBots.has(id)) continue;                 // CPU racer
+    if (net.flow.isDisconnected(id)) inGrace++;   // seat held, QR showing
+    else if (net.flow.has(id)) connected++;       // human at the wheel
+  }
+  if (!connected && !inGrace) { returnToLobby(); return; } // no human cars left at all
+  autoPaused = connected === 0;
+  syncSessionFrozen();
+}
+net.flow.on('rosterchange', refreshAutoPause);
 
 // A dropped player reconnected on a different device (new peerIndex): move their
 // still-racing car — engine, render entry and results identity — onto the new
@@ -480,6 +507,7 @@ function startRace() {
   show('race');
   el('results').classList.add('hidden');
   paused = false;
+  autoPaused = false;
   raceEnded = false;             // un-freeze the scene for the new race
   setPauseOverlay(false);
   el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
@@ -648,6 +676,7 @@ function endRace(results) {
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
   audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
   paused = false;                              // results aren't pausable
+  autoPaused = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   stopPauseAutoHide();
@@ -699,6 +728,7 @@ function returnToLobby() {
   // key) — kill any state voices or a boost wind would drone on in the lobby.
   audio.stopVoices();
   paused = false;
+  autoPaused = false;
   raceEnded = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
@@ -724,9 +754,7 @@ function pauseRace() {
   if (paused || !session) return;
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   paused = true;
-  session.pause();
-  audio.stopVoices();                    // frozen cars must not keep their wind/squeal going
-  freezeCars();                          // zero each car's speed so dust stops kicking up
+  syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_PAUSED });
   setPauseOverlay(true);
 }
@@ -734,9 +762,26 @@ function pauseRace() {
 function resumeRace() {
   if (!paused || !session) return;
   paused = false;
-  session.resume();
+  syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_RESUMED });
   setPauseOverlay(false);
+}
+
+// The sim is frozen while EITHER pause is set (manual overlay pause OR the
+// silent auto-pause), so the two compose: a manual resume while every racer is
+// still disconnected keeps the field frozen, and a reconnect during a manual
+// pause keeps the overlay's authority. Sync the session's timers to the
+// combined state instead of letting each path drive pause()/resume() directly.
+function syncSessionFrozen() {
+  if (!session) return;
+  const frozen = paused || autoPaused;
+  if (frozen && !session.paused) {
+    session.pause();
+    audio.stopVoices();                  // frozen cars must not keep their wind/squeal going
+    freezeCars();                        // zero each car's speed so dust stops kicking up
+  } else if (!frozen && session.paused) {
+    session.resume();
+  }
 }
 
 // Re-pose every car at rest (spd 0, no scrub) so the renderer stops emitting
