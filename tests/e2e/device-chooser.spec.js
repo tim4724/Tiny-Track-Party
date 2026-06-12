@@ -2,12 +2,12 @@
 // Device chooser: the display URL on a phone-sized viewport offers the
 // big-screen/join fork and defers room creation until a choice is made;
 // big screens never see it.
-const { test, expect, relayQuery, openDisplay } = require('./helpers');
+const { test, expect, openDisplay } = require('./helpers');
 
 test('phone-sized visit gets the chooser and defers the room', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
-  await page.goto(`/?${relayQuery}`);
+  await page.goto('/');
 
   await page.waitForSelector('#device-choice', { state: 'visible' });
   // The boot must take the DEFERRED path: __deviceChoicePending flips true the

@@ -25,7 +25,9 @@ module.exports = defineConfig({
   webServer: [
     {
       command: 'node server/index.js',
-      env: { ...process.env, PORT: String(PORT) },
+      // RELAY_URL points every served page at the local stub (injected via the
+      // relay-url <meta>; see shared/protocol.js) and scopes the CSP to it.
+      env: { ...process.env, PORT: String(PORT), RELAY_URL: `ws://127.0.0.1:${RELAY_PORT}` },
       port: PORT,
       reuseExistingServer: false,
     },

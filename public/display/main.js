@@ -940,7 +940,7 @@ if (_scenario) {
   // backdrop (no track picked, matching the real lobby); race previews reveal the
   // 3D scene the harness renders the track + cars into.
   const _scn = _scenario;
-  if (_scn !== 'welcome' && _scn !== 'lobby') {
+  if (_scn !== 'welcome' && _scn !== 'lobby' && _scn !== 'device-choice') {
     el('scene').classList.remove('hidden');
     const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
   }
@@ -988,7 +988,7 @@ window.__sceneReady = scenePromise; // awaited by E2E before starting a race (st
 import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
+    options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

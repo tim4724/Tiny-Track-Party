@@ -4,7 +4,8 @@
 // protocol subset partyplug/PartyConnection.js documents, so the display +
 // controller pages run their REAL transport against localhost instead of the
 // production relay (wss://ws.couch-games.com). Pages are pointed here via the
-// ?relay= override in shared/protocol.js; playwright.config.js boots it.
+// app server's RELAY_URL env (injected as the relay-url <meta>; see
+// shared/protocol.js); playwright.config.js boots both servers.
 //
 //   Client → relay:  create { clientId, maxClients }
 //   Client → relay:  join   { clientId, room }

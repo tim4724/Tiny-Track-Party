@@ -14,8 +14,9 @@ npm run dev                       # Run with --watch (auto-restart)
 ```
 
 E2E (`tests/e2e/`) drives real display + controller pages against a local
-Party-Server stub (`tests/e2e/relay-server.js`) via the `?relay=` override in
-`shared/protocol.js` — no dependency on the production relay. Import `test`/
+Party-Server stub (`tests/e2e/relay-server.js`) via the server's `RELAY_URL`
+env, injected into each page as the `relay-url` `<meta>` (read by
+`shared/protocol.js`) — no dependency on the production relay. Import `test`/
 `expect` from `tests/e2e/helpers.js` (it reaps leaked phone contexts). The
 suite needs `npx playwright install chromium` once. `/gallery.html` is a manual
 no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`).

@@ -78,6 +78,19 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
+  if (scenario === 'device-choice') {
+    // The wrong-device fork (display URL opened on a phone). Live it's
+    // media-query driven and main.js pre-dismisses it for every gallery iframe,
+    // so force it on with an inline display — viewport-independent here.
+    // Behind it: the welcome lobby, exactly what boot shows while room
+    // creation is deferred on the chooser (no room yet, so no QR).
+    show('lobby');
+    renderRoster([], null);
+    el('joinurl').textContent = (location.host || 'tinytrack.party');
+    el('device-choice').style.display = 'flex';
+    return;
+  }
+
   if (scenario === 'lobby') {
     const slots = buildSlots(players);
     show('lobby');
@@ -347,6 +360,15 @@ export function runDisplayScenario(opts, ctx) {
           `<span class="res-time">${FAKE_TIMES[i].toFixed(1)}s</span>`;
         listEl.appendChild(li);
       });
+      // Late joiner riding along under the field — mirrors showResults'
+      // "Next race" row (no rank, no time; they race the next one).
+      const j = slots.length % FAKE_NAMES.length;
+      const joinLi = document.createElement('li');
+      joinLi.className = 'is-joining';
+      joinLi.innerHTML =
+        `<span class="stand__dot" style="background:${COLORS[j % COLORS.length] || '#888'}"></span> ${FAKE_NAMES[j]}` +
+        `<span class="res-time">Next race</span>`;
+      listEl.appendChild(joinLi);
       el('results').classList.remove('hidden');
     }
   }

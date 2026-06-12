@@ -44,6 +44,12 @@ const VERSION_LABEL = APP_VERSION + (!IS_PROD && getShortSha(GIT_SHA) ? ' (#' + 
 // deploy yet; this keeps the badge off the day there is one.)
 const VERSION_BADGE = IS_PROD ? '' : VERSION_LABEL;
 
+// Relay override (dev/E2E): RELAY_URL=ws://… points every served page at a
+// local relay — injected into each HTML's <meta name="relay-url"> (read by
+// shared/protocol.js) and added verbatim to connect-src. Operator-set env
+// only; there is no client-side override.
+const RELAY_URL_OVERRIDE = String(process.env.RELAY_URL || '').trim();
+
 const MIME_TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -118,9 +124,9 @@ function cspHeader(nonce, frameAncestors) {
     "script-src 'self' 'nonce-" + nonce + "'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    // Off production, also allow arbitrary ws:/wss: so the E2E suite (and dev)
-    // can point pages at a local relay via the ?relay= override in protocol.js.
-    "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com" + (IS_PROD ? '' : ' ws: wss:'),
+    // RELAY_URL (env) widens connect-src to exactly the configured relay —
+    // the E2E suite points pages at its local stub this way.
+    "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
     "img-src 'self' data:",
     "object-src 'none'",
     "frame-src 'self'",
@@ -203,7 +209,8 @@ const server = http.createServer((req, res) => {
       text = text.replace(/__APP_VERSION__/g, VERSION_LABEL)
                  .replace(/__VERSION_BADGE__/g, VERSION_BADGE)
                  .replace(/__APP_V__/g, APP_VERSION)
-                 .replace(/__CSP_NONCE__/g, nonce);
+                 .replace(/__CSP_NONCE__/g, nonce)
+                 .replace(/__RELAY_URL__/g, RELAY_URL_OVERRIDE);
       data = Buffer.from(text);
       const iframeable = urlPath === '/display/index.html' || urlPath === '/controller/index.html';
       headers['Content-Security-Policy'] = cspHeader(nonce, iframeable ? "'self'" : "'none'");

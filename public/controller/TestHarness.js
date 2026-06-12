@@ -219,6 +219,29 @@ export function runControllerScenario(opts) {
       ], true);
       break;
 
+    case 'conn-lost':
+    case 'conn-screen-gone':
+    case 'conn-replaced': {
+      // Connection overlay terminal states (copy mirrors main.js's onStatus
+      // handlers), previewed over the drive HUD — the mid-race drop is the
+      // case the overlay exists for. All three show the "Exit to start"
+      // escape hatch; only 'lost' also offers a manual retry.
+      showDriveHud();
+      setSteer(0);
+      setHud(2, 3, 2, false);
+      const [title, msg, retry] = {
+        'conn-lost': ['Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true],
+        'conn-screen-gone': ['Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false],
+        'conn-replaced': ['Opened on another tab', 'This seat is now controlled from another tab or device.', false]
+      }[scenario];
+      el('conn-title').textContent = title;
+      el('conn-msg').textContent = msg;
+      el('conn-retry').classList.toggle('hidden', !retry);
+      el('conn-leave').classList.remove('hidden');
+      el('conn').classList.remove('hidden');
+      break;
+    }
+
     default:
       console.warn('[ControllerTestHarness] unknown scenario:', scenario);
   }

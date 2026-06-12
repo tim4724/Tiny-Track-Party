@@ -1,6 +1,7 @@
 // @ts-check
-// Shared helpers for the E2E suite. Every page is pointed at the local relay
-// stub via the ?relay= override (shared/protocol.js); each controller gets its
+// Shared helpers for the E2E suite. The app server is started with RELAY_URL
+// pointing at the local stub (playwright.config.js), so every served page is
+// already wired to it — no per-URL plumbing here. Each controller gets its
 // OWN browser context so per-room clientIds (localStorage) don't collide —
 // two pages in one context would evict each other's relay slot.
 //
@@ -9,9 +10,6 @@
 // CONTROL streams) can't starve the single worker across tests.
 
 const base = require('@playwright/test');
-
-const RELAY = `ws://127.0.0.1:${process.env.PW_RELAY_PORT || 4201}`;
-const relayQuery = `relay=${encodeURIComponent(RELAY)}`;
 
 const test = base.test.extend({
   // Auto fixture: after each test, reap every context the spec opened
@@ -25,7 +23,7 @@ const test = base.test.extend({
 // Open the display, wait for its room + the 3D scene (startRace gates on
 // sceneReady, so tests must not press Start before the GLBs are in).
 async function openDisplay(page) {
-  await page.goto(`/?${relayQuery}`);
+  await page.goto('/');
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
   await page.evaluate(() => window.__sceneReady);
   return page.evaluate(() => window.__net.roomCode);
@@ -37,7 +35,7 @@ async function openDisplay(page) {
 async function joinController(browser, roomCode, name) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
-  await page.goto(`/${roomCode}?${relayQuery}`);
+  await page.goto(`/${roomCode}`);
   await page.fill('#name-input', name);
   await page.click('#join-btn');
   await page.waitForSelector('#name.hidden', { state: 'attached', timeout: 15000 });
@@ -54,4 +52,4 @@ async function startRace(host, others) {
 
 const visible = (sel) => `${sel}:not(.hidden)`;
 
-module.exports = { test, expect: base.expect, RELAY, relayQuery, openDisplay, joinController, startRace, visible };
+module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, visible };

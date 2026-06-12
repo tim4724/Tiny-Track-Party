@@ -17,7 +17,10 @@ var CONTROLLER_CARDS = [
   { key: 'playing',         title: 'Driving',         perColor: true },
   { key: 'paused',          title: 'Paused',          perColor: true },
   { key: 'finished',        title: 'Finished',        perColor: true },
-  { key: 'results',         title: 'Results',         perColor: true }
+  { key: 'results',         title: 'Results',         perColor: true },
+  { key: 'conn-lost',        title: 'Connection lost' },
+  { key: 'conn-screen-gone', title: 'Big screen gone' },
+  { key: 'conn-replaced',    title: 'Seat replaced' }
 ];
 
 var state = Gallery.loadState();
