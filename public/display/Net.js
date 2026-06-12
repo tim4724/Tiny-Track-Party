@@ -234,7 +234,7 @@ export class DisplayNet extends GameNet {
         // locked to their car until the room is back in the lobby.
         const p = this.flow.get(from);
         const idx = data.carIndex;
-        if (p && (this.roomState === 'lobby' || !this.inRace(from))
+        if (p && (this.roomState === ROOM_STATE.LOBBY || !this.inRace(from))
           && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
           p.carIndex = idx;
           this._announce();
@@ -248,7 +248,7 @@ export class DisplayNet extends GameNet {
         // player ready before honouring the host's START_GAME.
         const p = this.flow.get(from);
         const ready = !!data.ready;
-        if (p && from !== this.flow.host && this.roomState === 'lobby' && ready !== !!p.ready) {
+        if (p && from !== this.flow.host && this.roomState === ROOM_STATE.LOBBY && ready !== !!p.ready) {
           p.ready = ready;
           this._announce();
         }
@@ -259,7 +259,7 @@ export class DisplayNet extends GameNet {
         // catalog, store it, echo to every phone (LOBBY_UPDATE.trackId), and tell
         // the display so it can swap the 3D preview.
         const idOk = this.tracks.some((t) => t.id === data.trackId);
-        if (from === this.flow.host && this.roomState === 'lobby' && idOk && data.trackId !== this.trackId) {
+        if (from === this.flow.host && this.roomState === ROOM_STATE.LOBBY && idOk && data.trackId !== this.trackId) {
           this.trackId = data.trackId;
           this._broadcastLobby();
           this.onTrackChange(this.trackId);

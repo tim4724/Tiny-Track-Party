@@ -68,7 +68,10 @@
        the fork instead of booting a TV layout they can't use. Hidden on big
        screens and once dismissed (display.css media query + the
        html.device-choice-dismissed class); main.js defers opening a room until
-       a choice is made, so a stray phone visit never spawns a ghost room. -->
+       a choice is made, so a stray phone visit never spawns a ghost room.
+       role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
+       containment we don't implement (no focus trap) — tabbing out lands on
+       the benign lobby behind, which the screen reader can then read honestly. -->
   <div id="device-choice" role="dialog" aria-labelledby="device-choice-title">
     <div class="device-card card">
       <h1 id="device-choice-title">Tiny Track <span>Party</span></h1>

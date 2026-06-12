@@ -909,9 +909,11 @@ function startWhenDeviceChosen() {
     return;
   }
   let chosen = false;
+  const mq = window.matchMedia('(max-width: 700px), (max-height: 500px)');
   const proceed = () => {
     if (chosen) return;
     chosen = true;
+    if (mq.removeEventListener) mq.removeEventListener('change', onChange);
     dismissDeviceChoice();
     net.start();
   };
@@ -920,7 +922,6 @@ function startWhenDeviceChosen() {
   // display.css): if the window grows past the trigger — a small desktop
   // window getting maximised — the overlay vanishes on its own, so treat
   // that as choosing the big screen or the room would never open.
-  const mq = window.matchMedia('(max-width: 700px), (max-height: 500px)');
   const onChange = () => { if (!mq.matches) proceed(); };
   if (mq.addEventListener) mq.addEventListener('change', onChange);
   else mq.addListener(onChange); // older Safari
