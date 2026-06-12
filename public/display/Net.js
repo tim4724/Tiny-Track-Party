@@ -31,6 +31,11 @@ export class DisplayNet extends GameNet {
     // (oldId, newId) so the game layer can re-key their still-racing car onto the
     // new slot. A same-device reconnect keeps its id and never needs this.
     this.onPlayerRekey = opts.onPlayerRekey || (() => {});
+    // Asked per WELCOME: does this seat have a car in the live race? Lets a
+    // mid-race WELCOME distinguish a rejoin (drop back into the race) from a
+    // brand-new late joiner (wait in the lobby for the next race). The game
+    // layer answers from its session; default "yes" preserves the rejoin path.
+    this.inRace = opts.inRace || (() => true);
 
     // Dropped seats currently offering a reconnect QR, plus their grace timers.
     // peerIndex -> {peerIndex, name, colorIndex, url}; peerIndex -> timeout id.
@@ -325,6 +330,7 @@ export class DisplayNet extends GameNet {
       carIndex: p.carIndex,
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
+      inRace: !!this.inRace(peerIndex), // mid-race: rejoin (true) vs late joiner (false)
       players: this.roster(),
       tracks: this.tracks,       // full catalog (static) — sent once, on join
       trackId: this.trackId      // current selection

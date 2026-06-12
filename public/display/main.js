@@ -339,6 +339,10 @@ const net = new DisplayNet({
   onRosterChange: renderRoster,
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
+  // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
+  // phone drops back into the race); one without is a late joiner (the phone
+  // waits in its lobby — they get a car when the next race builds its field).
+  inRace: (peerIndex) => !!(session && session.engine.cars.has(peerIndex)),
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
@@ -599,23 +603,37 @@ function humansAllDone() {
 // know, so the display is the only side that can name/colour them.
 function standingsPayload(results, over) {
   const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  const order = results.results.map((res) => {
+    const p = byId.get(res.playerId) || {};
+    return {
+      playerId: res.playerId,
+      name: p.name || String(res.playerId),
+      colorIndex: p.colorIndex == null ? 0 : p.colorIndex,
+      ai: !!p.ai,
+      finished: !!res.finished,
+      time: res.time
+    };
+  });
+  // Anyone who joined mid-race has no car this round (the field is locked at
+  // the start) — list them under the racers, flagged `joining`, so every board
+  // shows who's waiting on the next race instead of silently omitting them.
+  for (const p of lateJoiners()) {
+    order.push({ playerId: p.peerIndex, name: p.name, colorIndex: p.colorIndex, joining: true });
+  }
   return {
     type: MSG.STANDINGS,
     over: !!over,
     hostPeerIndex: net.flow.host,
     total: results.results.length,
-    order: results.results.map((res) => {
-      const p = byId.get(res.playerId) || {};
-      return {
-        playerId: res.playerId,
-        name: p.name || String(res.playerId),
-        colorIndex: p.colorIndex == null ? 0 : p.colorIndex,
-        ai: !!p.ai,
-        finished: !!res.finished,
-        time: res.time
-      };
-    })
+    order
   };
+}
+
+// Connected players without a car in the current race — they joined after the
+// field was locked and ride the next one (see the `joining` rows above).
+function lateJoiners() {
+  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  return net.flow.list().filter((p) => p.connected !== false && !byId.has(p.peerIndex));
 }
 function broadcastStandings(over) {
   if (session) net.broadcast(standingsPayload(session.getResults(), over));
@@ -655,6 +673,19 @@ function showResults(results) {
     // The name is player-supplied — appended as TEXT, never markup (same rule as
     // the controller's results list and renderJoinUrl).
     li.append(dot, ` ${(p.name || res.playerId)}${p.ai ? ' (CPU)' : ''} `, time);
+    list.appendChild(li);
+  }
+  // Late joiners under the field: no rank or time — they're in the next race.
+  for (const p of lateJoiners()) {
+    const li = document.createElement('li');
+    li.className = 'is-joining';
+    const dot = document.createElement('span');
+    dot.className = 'stand__dot';
+    dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
+    const time = document.createElement('span');
+    time.className = 'res-time';
+    time.textContent = 'Next race';
+    li.append(dot, ` ${p.name} `, time);
     list.appendChild(li);
   }
   el('results').classList.remove('hidden');
@@ -805,11 +836,33 @@ el('joinbox').addEventListener('click', async () => {
 const wakeLock = createWakeLock();
 if (!_isTestMode) wakeLock.enable();
 
+// ---- device chooser ----
+// The display URL opened on a phone-sized screen (see #device-choice in
+// index.html + display.css): most likely someone followed the wrong link while
+// trying to JOIN a game, so don't open a room until they commit to running the
+// big screen here. On big screens (and test/solo surfaces, which dismiss
+// up front) we mark it dismissed immediately, so resizing the window
+// mid-session can never surface the chooser over a live lobby or race.
+function dismissDeviceChoice() { document.documentElement.classList.add('device-choice-dismissed'); }
+function startWhenDeviceChosen() {
+  const choice = el('device-choice');
+  if (!choice || getComputedStyle(choice).display === 'none') {
+    dismissDeviceChoice();
+    net.start();
+    return;
+  }
+  el('device-continue').addEventListener('click', () => {
+    dismissDeviceChoice();
+    net.start();
+  }, { once: true });
+}
+
 // Gallery / test mode: any ?scenario=… skips the relay and lets the
 // TestHarness drive a single screen from fake data. Normal play connects.
 const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_scenario) {
+  dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
   // Gallery/test. Lobby previews ('welcome'/'lobby') keep the default diorama
   // backdrop (no track picked, matching the real lobby); race previews reveal the
   // 3D scene the harness renders the track + cars into.
@@ -832,6 +885,7 @@ if (_scenario) {
   // module seats a synthetic human in net.flow and feeds the keyboard through the
   // normal engine input path, so the whole race lifecycle runs unchanged. Booting
   // through the lobby (not the test harness) keeps that path identical to live play.
+  dismissDeviceChoice(); // dev surface — never block it on the chooser
   show('lobby');
   renderRoster([], null);
   updateBackdrop();
@@ -849,7 +903,7 @@ if (_scenario) {
   show('lobby');
   renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  net.start();
+  startWhenDeviceChosen(); // net.start(), gated on the device chooser where it shows
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;

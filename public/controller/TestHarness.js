@@ -77,13 +77,15 @@ export function runControllerScenario(opts) {
     order.forEach((o) => {
       const li = document.createElement('li');
       if (o.me) li.classList.add('is-me');
-      if (!o.finished) li.classList.add('is-racing');
+      if (o.joining) li.classList.add('is-joining');     // late joiner — no car this race
+      else if (!o.finished) li.classList.add('is-racing');
       const dot = document.createElement('span'); dot.className = 'res-dot';
       dot.style.background = COLORS[o.colorIndex] || '#888';
       const name = document.createElement('span'); name.className = 'res-name';
       name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
       const time = document.createElement('span'); time.className = 'res-time';
-      time.textContent = o.finished ? `${o.time.toFixed(1)}s` : (over ? 'DNF' : 'Racing…');
+      time.textContent = o.joining ? 'Next race'
+        : o.finished ? `${o.time.toFixed(1)}s` : (over ? 'DNF' : 'Racing…');
       li.append(dot, name, time);
       list.appendChild(li);
     });
@@ -150,6 +152,19 @@ export function runControllerScenario(opts) {
         [{ name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }]);
       break;
 
+    case 'lobby-joining':
+      // Late joiner: scanned the QR while a race was running. The lobby with the
+      // car picker live but no ready button — just the "race in progress" note
+      // (mirrors main.js renderLobby's waitingForNextRace branch).
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      renderCarPicker(color);
+      renderTrackPicker(null, false);
+      el('ready-btn').classList.add('hidden');
+      el('ready-note').classList.remove('hidden');
+      el('ready-note').textContent = 'Race in progress — you’re in the next one!';
+      break;
+
     case 'countdown':
       // No countdown on the controller — the full HUD is up from the first beat
       // (the 3..2..1..GO lives on the display). Same as 'playing' but pre-fastlane.
@@ -192,13 +207,15 @@ export function runControllerScenario(opts) {
       break;
 
     case 'results':
-      // Final board (race over), viewed as the host so the "New game" button shows.
+      // Final board (race over), viewed as the host so the "New game" button
+      // shows. The last row is a late joiner waiting on the next race.
       setLatency(20, true);
       renderResultsBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4, finished: true },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true, finished: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true, finished: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true }
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true },
+        { name: FAKE_NAMES[(color + 4) % FAKE_NAMES.length], colorIndex: (color + 4) % COLORS.length, joining: true }
       ], true);
       break;
 

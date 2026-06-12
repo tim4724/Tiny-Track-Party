@@ -321,6 +321,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .result-list .res-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result-list .res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
 .result-list li.is-racing .res-time { font-style: italic; } /* still on track — "Racing…" */
+/* late joiner riding along under the field — no rank number, "Next race" status */
+.result-list li.is-joining::before { content: '–'; }
+.result-list li.is-joining .res-time { font-style: italic; }
 #result-foot { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
 #result-foot .btn { width: min(82%, 18rem); margin-top: 0; }
 .result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }

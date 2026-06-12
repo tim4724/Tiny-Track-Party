@@ -62,6 +62,22 @@
        only the backdrop fades. Toggled (.is-on) by main.js's fadeBackdrop(). -->
   <div id="scene-fade" aria-hidden="true"></div>
 
+  <!-- Device chooser — the display URL opened on a phone-sized screen. The race
+       runs on a big screen while phones steer, so a cramped viewport most likely
+       means someone followed the wrong link while trying to JOIN a game. Offer
+       the fork instead of booting a TV layout they can't use. Hidden on big
+       screens and once dismissed (display.css media query + the
+       html.device-choice-dismissed class); main.js defers opening a room until
+       a choice is made, so a stray phone visit never spawns a ghost room. -->
+  <div id="device-choice" role="dialog" aria-labelledby="device-choice-title">
+    <div class="device-card card">
+      <h1 id="device-choice-title">Tiny Track <span>Party</span></h1>
+      <p>This page is the <strong>big screen</strong> — it runs the race while everyone steers with their phone.</p>
+      <p>Joining a party? Scan the QR code on your group’s big screen instead.</p>
+      <button id="device-continue" class="btn btn--brand">Use this device as the big screen</button>
+    </div>
+  </div>
+
   <!-- Lobby -->
   <section id="lobby">
     <div class="lobby__left card">

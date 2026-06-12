@@ -66,6 +66,12 @@ let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
 let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
+// Joined while a race was already running (WELCOME said inRace:false): we have
+// no car out there, so we wait on the lobby screen — car picker live, no ready
+// button — and ignore the current race's broadcasts. The display seats us
+// automatically when the next race builds its field; GAME_END (back to the
+// lobby) clears the flag.
+let waitingForNextRace = false;
 
 const NAME_KEY = 'tinytrack_name';
 const TRACK_KEY = 'tinytrack_track';   // host's last-picked track id
@@ -166,12 +172,17 @@ function handleMessage(data) {
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
       amReady = !!(me && me.ready);
+      // Mid-race WELCOME: inRace says whether a car of ours is on track. false
+      // = brand-new late joiner → wait in the lobby for the next race. An older
+      // display omits the flag — treat that as in-race (the old rejoin path).
+      const midRace = data.roomState === 'countdown' || data.roomState === 'playing';
+      waitingForNextRace = midRace && data.inRace === false;
       renderLobby();
       // Land on the screen matching the live room state. Normally that's the
       // lobby, but a player who rejoins mid-race (reconnected, or scanned the
       // reconnect QR) must drop straight back into the race instead of stalling
       // on the name screen — their car is still on track waiting for input.
-      if (data.roomState === 'countdown' || data.roomState === 'playing') {
+      if (midRace && !waitingForNextRace) {
         inResults = false;
         show('game');
         el('drive-hud').classList.remove('hidden');
@@ -179,7 +190,7 @@ function handleMessage(data) {
         setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
         startDriving();      // resume streaming tilt to our still-racing car
       } else {
-        show('lobby');       // lobby or results — the next countdown/board routes us onward
+        show('lobby');       // lobby, results, or waiting on the next race
       }
       break;
     }
@@ -202,6 +213,7 @@ function handleMessage(data) {
       break;
     }
     case MSG.COUNTDOWN:
+      if (waitingForNextRace) break;   // the running race isn't ours — keep the waiting lobby
       inResults = false;               // a fresh race clears any leftover results overlay
       show('game');
       el('drive-hud').classList.remove('hidden'); // full HUD up front — the countdown lives on the display
@@ -214,6 +226,7 @@ function handleMessage(data) {
     case MSG.GAME_START:
       // Fires on the "GO!" beat. The HUD is already up from COUNTDOWN; this just
       // covers a player who joined too late to get the countdown messages.
+      if (waitingForNextRace) break;   // no car of ours in this race
       show('game');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');
@@ -230,6 +243,9 @@ function handleMessage(data) {
       // Live finish board. Refresh who's host (may have shifted if someone left)
       // and render; flip to the overlay once the race is over (everyone, incl.
       // DNF) or as soon as MY car crosses the line — I'm on autopilot now.
+      // Waiting on the next race: mid-race boards aren't ours, but the FINAL
+      // board is — it lists us as "Next race", so join everyone on the results.
+      if (waitingForNextRace && !data.over) break;
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       renderResults(data);
@@ -238,19 +254,21 @@ function handleMessage(data) {
       break;
     }
     case MSG.GAME_PAUSED:
-      if (inResults) break;            // finished racers watch results, not the pause overlay
+      if (inResults || waitingForNextRace) break; // not in this race — no pause overlay
       stopBrakeRumble();               // the overlay covers BRAKE — don't hum through the pause
       setPauseOverlay(true);
       break;
     case MSG.GAME_RESUMED:
-      if (inResults) break;
+      if (inResults || waitingForNextRace) break;
       setPauseOverlay(false);
       break;
     case MSG.GAME_END:
       inResults = false;
+      waitingForNextRace = false;      // back in the lobby — we're in the next race for real
       stopDriving();
       setPauseOverlay(false);
       el('pause-btn').classList.add('hidden');
+      renderLobby();                   // restore the ready footer the waiting note replaced
       show('lobby');
       break;
   }
@@ -275,7 +293,8 @@ function renderResults(data) {
     const li = document.createElement('li');
     const isMe = o.playerId === net.peerIndex;
     if (isMe) li.classList.add('is-me');
-    if (!o.finished) li.classList.add('is-racing');
+    if (o.joining) li.classList.add('is-joining');      // late joiner — no car this race
+    else if (!o.finished) li.classList.add('is-racing');
     const dot = document.createElement('span');
     dot.className = 'res-dot';
     dot.style.background = CAR_COLORS[o.colorIndex] || '#888';
@@ -284,7 +303,8 @@ function renderResults(data) {
     name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
     const time = document.createElement('span');
     time.className = 'res-time';
-    time.textContent = o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
+    time.textContent = o.joining ? 'Next race'
+      : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
     li.append(dot, name, time);
     list.appendChild(li);
   });
@@ -330,6 +350,15 @@ function renderLobby() {
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
   renderTrackPicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
+  if (waitingForNextRace) {
+    // Late joiner: a race is running without us. No ready button (readiness
+    // gates a lobby we're not in) — pick a car and hold for the next race.
+    el('ready-btn').classList.add('hidden');
+    const note = el('ready-note');
+    note.classList.remove('hidden');
+    note.textContent = 'Race in progress — you’re in the next one!';
+    return;
+  }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
     canStart: !!selectedTrackId,  // host can't start without a track (auto-picked, so ~always true)
@@ -434,6 +463,7 @@ function leaveToName() {
   wakeLock.disable();  // off the room — let the phone sleep normally again
   _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
+  waitingForNextRace = false;
   amHost = false;
   amReady = false;
   roster = [];
@@ -553,8 +583,8 @@ const _COLOR_NAMES = ['Red', 'Amber', 'Green', 'Blue', 'Purple', 'Pink', 'Orange
 import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay; lays out one screen', type: 'select',
-    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'countdown',
-      'playing', 'finished', 'paused', 'results'].map((s) => ({ value: s, label: s })) },
+    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'lobby-joining',
+      'countdown', 'playing', 'finished', 'paused', 'results'].map((s) => ({ value: s, label: s })) },
   { key: 'color', label: 'Livery', hint: 'scenario only', type: 'select',
     options: CAR_COLORS.map((c, i) => ({ value: String(i), label: _COLOR_NAMES[i] || c })) },
   { section: 'Rendering' },

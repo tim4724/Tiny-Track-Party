@@ -334,6 +334,9 @@ html, body {
   color: var(--ink-3); min-width: 1.2em;
 }
 .res-time { margin-left: auto; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Late joiners ride along under the field: no rank number, "Next race" status. */
+#results-list li.is-joining::before { content: '–'; }
+#results-list li.is-joining .res-time { font-style: italic; }
 #results-newgame { margin-top: 1.8rem; }
 
 /* ---- Pause ---- */
@@ -370,6 +373,34 @@ html, body {
 }
 .pause-card__btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
 .pause-card__btns .btn { min-width: 9rem; }
+
+/* ---- Device chooser ---- the display URL opened on a phone-sized screen
+   (see #device-choice in index.html). Hidden by default; the media query below
+   surfaces it on cramped viewports until a choice is made. Size-only triggers
+   (no pointer/hover filters): the "run the big screen here OR join on your
+   phone" fork applies to any small window, and continuing is one tap away.
+   main.js adds html.device-choice-dismissed on "continue" AND at boot on big
+   screens / dev surfaces, so a mid-session window resize can never resurface
+   the chooser over a live lobby or race. */
+#device-choice {
+  display: none; position: fixed; inset: 0; z-index: 30;
+  align-items: center; justify-content: center;
+  padding: 1.2rem;
+  background: rgba(233, 248, 255, 0.85); backdrop-filter: blur(10px);
+}
+.device-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 1rem; padding: 2rem 1.6rem; max-width: 26rem;
+}
+.device-card h1 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 2.2rem; line-height: 0.98; margin: 0; color: var(--ink);
+}
+.device-card h1 span { color: var(--brand); }
+.device-card p { margin: 0; color: var(--ink-2); font-weight: 700; }
+@media (max-width: 700px), (max-height: 500px) {
+  html:not(.device-choice-dismissed) #device-choice { display: flex; }
+}
 
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
    The lobby is designed for a wide screen; on a narrow viewport the two-column

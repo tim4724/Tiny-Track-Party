@@ -12,6 +12,7 @@ var CONTROLLER_CARDS = [
   { key: 'name-connecting', title: 'Connecting…' },
   { key: 'lobby-host',      title: 'Lobby (host)',    perColor: true },
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
+  { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
   { key: 'countdown',       title: 'Countdown',       perColor: true, replayable: true },
   { key: 'playing',         title: 'Driving',         perColor: true },
   { key: 'paused',          title: 'Paused',          perColor: true },
