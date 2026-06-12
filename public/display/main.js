@@ -671,6 +671,8 @@ function standingsPayload(results, over) {
 
 // Connected players without a car in the current race — they joined after the
 // field was locked and ride the next one (see the `joining` rows above).
+// Both callers (standingsPayload + showResults) run synchronously inside the
+// same endRace flow, so the two boards always agree on who's joining.
 function lateJoiners() {
   const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
   return net.flow.list().filter((p) => p.connected !== false && !byId.has(p.peerIndex));
@@ -914,6 +916,7 @@ function startWhenDeviceChosen() {
     if (chosen) return;
     chosen = true;
     if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+    else if (mq.removeListener) mq.removeListener(onChange); // older Safari
     dismissDeviceChoice();
     net.start();
   };

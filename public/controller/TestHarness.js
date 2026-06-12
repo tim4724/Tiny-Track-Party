@@ -162,7 +162,7 @@ export function runControllerScenario(opts) {
       renderTrackPicker(null, false);
       el('ready-btn').classList.add('hidden');
       el('ready-note').classList.remove('hidden');
-      el('ready-note').textContent = 'Race in progress — you’re in the next one!';
+      el('ready-note').textContent = 'You’re in the next race!';
       break;
 
     case 'countdown':

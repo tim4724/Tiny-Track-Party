@@ -382,7 +382,7 @@ function renderLobby() {
     el('ready-btn').classList.add('hidden');
     const note = el('ready-note');
     note.classList.remove('hidden');
-    note.textContent = 'Race in progress — you’re in the next one!';
+    note.textContent = 'You’re in the next race!';
     return;
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {

@@ -10,9 +10,13 @@ test('phone-sized visit gets the chooser and defers the room', async ({ browser 
   await page.goto(`/?${relayQuery}`);
 
   await page.waitForSelector('#device-choice', { state: 'visible' });
-  // No ghost room while the chooser is up.
+  // No ghost room while the chooser is up. Asserting a NON-event is inherently
+  // time-based (a poll-until-pass would succeed on the first null and prove
+  // nothing), so give a wrongly-started boot a grace window, then check that
+  // net.start() never even opened a connection — not just that no room exists.
   await page.waitForTimeout(400);
-  expect(await page.evaluate(() => window.__net.roomCode)).toBeNull();
+  expect(await page.evaluate(() => ({ connected: !!window.__net.party, room: window.__net.roomCode })))
+    .toEqual({ connected: false, room: null });
 
   // Committing to the big screen creates the room and dismisses the chooser.
   await page.click('#device-continue');

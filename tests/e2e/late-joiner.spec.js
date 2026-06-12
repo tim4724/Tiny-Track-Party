@@ -15,7 +15,7 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   // Carol joins mid-race: the waiting lobby, not the drive screen.
   const carol = await joinController(browser, roomCode, 'Carol');
   await carol.waitForSelector(visible('#lobby'));
-  await expect(carol.locator('#ready-note')).toContainText('Race in progress');
+  await expect(carol.locator('#ready-note')).toContainText('in the next race');
   await expect(carol.locator('#ready-btn')).toBeHidden();
   await expect(carol.locator('#game')).toBeHidden();
   // No car was spawned for her on the display.
