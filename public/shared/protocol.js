@@ -9,6 +9,16 @@
 
 // Party-Server relay URL (signaling + game-event fallback).
 var RELAY_URL = 'wss://ws.couch-games.com';
+// Dev/test override: ?relay=ws://… points the page at a local relay (the E2E
+// suite runs the hermetic stub in tests/e2e/relay-server.js). Browser-only —
+// Node imports keep the default — and the production CSP's connect-src blocks
+// non-couch-games sockets anyway, so this is inert in prod.
+if (typeof location !== 'undefined') {
+  try {
+    var _relayOverride = new URLSearchParams(location.search).get('relay');
+    if (_relayOverride) RELAY_URL = _relayOverride;
+  } catch (_) { /* keep the default */ }
+}
 
 // STUN server for the WebRTC fastlane to gather server-reflexive candidates so
 // cross-network peers connect when host candidates aren't reachable. STUN is

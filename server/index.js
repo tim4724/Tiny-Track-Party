@@ -118,7 +118,9 @@ function cspHeader(nonce, frameAncestors) {
     "script-src 'self' 'nonce-" + nonce + "'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com",
+    // Off production, also allow arbitrary ws:/wss: so the E2E suite (and dev)
+    // can point pages at a local relay via the ?relay= override in protocol.js.
+    "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com" + (IS_PROD ? '' : ' ws: wss:'),
     "img-src 'self' data:",
     "object-src 'none'",
     "frame-src 'self'",

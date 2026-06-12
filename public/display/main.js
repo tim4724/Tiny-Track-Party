@@ -976,6 +976,7 @@ if (_scenario) {
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
+window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect

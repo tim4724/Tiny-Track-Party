@@ -10,13 +10,15 @@
     "gen:schematics": "node scripts/gen-track-schematics.js",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
     "artwork": "node scripts/capture-artwork.js",
-    "icon:item": "node scripts/capture-item-icon.js"
+    "icon:item": "node scripts/capture-item-icon.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "three": "^0.184.0"
+    "@playwright/test": "^1.60.0",
+    "three": "^0.184.0",
+    "ws": "^8.21.0"
   }
 }
