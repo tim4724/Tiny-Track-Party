@@ -7,41 +7,22 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ordinal } from '../shared/format.js';
+import {
+  flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
+  makeSoftBlobTexture, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
+} from './render/textures.js';
+import { buildEnvironment } from './render/environment.js';
+import { buildRibbonRoad, buildPillars, buildScenery, SCENERY_MODELS } from './render/track.js';
+import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
+import { TrackProps } from './render/TrackProps.js';
+import { FpsMeter } from './render/FpsMeter.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
-
-// Reverse a BufferGeometry's triangle winding in place. Used when baking MIRRORED
-// track tiles: a mirror placement has a negative-determinant matrix, so applyMatrix4
-// flips the winding while leaving the (correct, +Y) road-top normal alone. Under the
-// merged DoubleSide material that turns the up-facing road top into a BACK face, so
-// the shader flips its normal DOWN and lights it from underneath — the tile renders
-// much darker than its non-mirrored twin. Flipping the winding back makes it a front
-// face again, consistent with the rest of the merged mesh.
-function flipWinding(geo) {
-  const idx = geo.index;
-  if (idx) {
-    const a = idx.array;
-    for (let i = 0; i < a.length; i += 3) { const t = a[i]; a[i] = a[i + 2]; a[i + 2] = t; }
-    idx.needsUpdate = true;
-    return;
-  }
-  for (const attr of Object.values(geo.attributes)) {
-    const arr = attr.array, n = attr.itemSize;
-    for (let i = 0; i + 3 * n <= arr.length; i += 3 * n) {
-      for (let k = 0; k < n; k++) { const t = arr[i + k]; arr[i + k] = arr[i + 2 * n + k]; arr[i + 2 * n + k] = t; }
-    }
-    attr.needsUpdate = true;
-  }
-}
 
 // Shared with the controller's car picker + protocol (one source of truth).
 // protocol.js (classic script) sets this global before the display modules load.
 const CAR_MODELS = window.CAR_MODELS;
 const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
-
-// Trackside scenery GLBs (always preloaded — every track scatters them, see
-// _buildScenery). Order matters: [0] is the round tree, [1] the pine.
-const SCENERY_MODELS = ['tree', 'tree-pine'];
 
 // Chase camera: sits behind the CAR's heading and looks at it, with the position
 // and look-target damped so it lags and swings smoothly behind through turns
@@ -119,28 +100,6 @@ const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzyin
 //     read as polka-dot feet around each tyre (both tried, both rejected) —
 //     keep the edge hidden under the body and it reads as occlusion instead
 //     (the same trick as the kerb-foot AO baked into the road ribbon).
-const SKID_COLOR = 0x241f1c;       // near-black warm scuff
-const SKID_MAX_OPACITY = 0.28;     // opacity of a fresh mark at full slip (hard scrub)
-const SKID_THRESH = 0.2;           // |steer| at which tyres start to scuff (below this: no mark)
-const SKID_LIFE = 1.2;             // seconds to fade down to the patina floor
-const SKID_WIDTH = 0.12;           // fallback tyre-contact width; per-car width is measured in addCar
-const SKID_SEG_MIN = 0.04;         // min wheel travel before laying the next stamp
-const SKID_SEG_MAX = 1.5;          // gap bigger than this = a respawn/teleport → don't bridge it
-// Rubber patina: a faded mark doesn't vanish — it settles at this fraction of its
-// peak opacity and STAYS until its pool slot is recycled. Corners on the racing
-// line get re-stamped every lap, so they accumulate visible rubber over a race
-// (the track looks raced-on) while one-off marks eventually rotate out. All
-// stamps live in ONE merged mesh with per-vertex alpha (single draw call —
-// the old mesh-per-stamp pool put ~580 visible draw calls up during hard
-// cornering), so lingering marks cost nothing extra. Starting value.
-const SKID_PATINA = 0.22;          // lingering fraction of a mark's peak (~0.06 max alpha)
-const SKID_POOL = 2048;            // stamp slots (ring buffer) — bounds the patina's memory
-// Brake marks: slamming the brake at speed lays straight streaks under the rears
-// (firing in sync with the nose dive — two contact channels on the same beat).
-const SKID_BRAKE_MIN = 0.6;        // analog brake input where marks start; full brake = full mark
-// Launch scratch: hard forward acceleration from near-standstill (race start,
-// boost from slow) scratches faint marks — torque biting into the asphalt.
-const SKID_LAUNCH_MIN = 0.5;       // accelNorm (smoothed d(spd)/dt vs full throttle) where it starts
 const UNDER_AO_OPACITY = 0.35;     // underbody shading strength — starting value
 const UNDER_AO_COLOR = 0x1c1a18;   // near-black warm, same family as the skid scuffs
 // Load shift: the harder the body pitches (brake dive / throttle squat), the closer
@@ -177,7 +136,6 @@ const AO_LOAD_GAIN = 0.10;
 // applies exposure and the linear→sRGB encode itself.
 const DEF_EXPOSURE = 1.1;    // brightness multiplier (1 = stock)
 const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than stock; <1 = glossier)
-const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
 
 // Ground-conform: each frame we raycast the rendered track under the front + rear
 // axles and drop the car onto it, so the wheels ride ON the road over bumps/hills
@@ -190,23 +148,6 @@ const RIDE_HEIGHT = 0.012;
 // ~18 reproduces the old per-frame 0.25 lerp at 60fps but stays stable at 30fps.
 const RIDE_DAMP = 18;
 
-// Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
-// a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
-// friction, and settles back upright wherever it lands — pure render-side juice,
-// consistent across every split-screen view (one shared scene). Starting values.
-const OIL_RADIUS_FALLBACK = 0.7; // puddle radius when a hazard omits one (display normally sizes it to track width)
-const CONE_H = 0.3;            // cone height in world units (small toy marker)
-const CONE_KICK_R = 0.7;      // car-centre → cone distance (world units) that punts a cone
-const CONE_KICK_MIN = 2.5;    // launch speed even at a crawl
-const CONE_KICK_GAIN = 6.0;   // extra launch speed at full pace (× the car's normalised speed)
-const CONE_KICK_UP = 2.6;     // upward pop on a kick
-const CONE_GRAVITY = 16.0;    // fall acceleration (units/s²)
-const CONE_RESTITUTION = 0.42;// vertical bounciness on hitting the road
-const CONE_FRICTION = 0.6;    // horizontal speed + tumble retained per ground contact
-const CONE_SETTLE = 0.4;      // residual speed below which a cone comes to rest
-const CONE_EDGE_MARGIN = 0.35;// keep cones this far inside the road edge (off the curb/wall)
-const CONE_WALL_RESTITUTION = 0.5; // bounce energy kept when a kicked cone hits the curb
-
 // Held-item display: a fixed square slot on the cell HUD shows an ICON (not text).
 // Labels are kept for the slot's tooltip/aria. Boost is inline SVG; banana is a
 // 2D render of the actual Kenney item-banana GLB, baked offline like the car
@@ -217,318 +158,6 @@ const ITEM_ICONS = {
   banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">'
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
-
-// Item-box "flashy" idle animation (see _stepBoxes): spin about its up axis, bob on
-// a sine, and pulse a gold emissive sparkle so it reads as a grabbable pickup.
-const BOX_SPIN = 1.6;    // rad/s
-const BOX_BOB_AMP = 0.07; // world units of bob
-const BOX_BOB_W = 3.0;    // bob angular speed (rad/s)
-const BOX_H = 0.3;        // item-box height in world units (0.6× the previous 0.5)
-// Collect burst: when a box is picked up it GROWS while it FADES out, then hides
-// (a clear "poof, grabbed" beat to pair with the HUD roulette). Starting values:
-// tune BOX_COLLECT_TIME up if it's too quick to read, BOX_COLLECT_GROW for punch.
-const BOX_COLLECT_TIME = 0.35; // seconds the grow+fade burst lasts
-const BOX_COLLECT_GROW = 1.1;  // extra scale at burst end (final ≈ 2.1× rest)
-
-// Split-screen grid that makes cells as SQUARE as possible for the current
-// screen aspect: try every column count, score each by how far the resulting
-// cell aspect is from 1:1 (square), with a small penalty for empty cells.
-function bestGrid(n, W, H) {
-  let best = { cols: 1, rows: n, cost: Infinity };
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols);
-    const cellAspect = (W / cols) / (H / rows);
-    // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
-    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4;
-    if (cost < best.cost) best = { cols, rows, cost };
-  }
-  return best;
-}
-
-// Skid streak alpha: SOFT across its width, SOLID along its length. Each stamp
-// bridges the wheel's last contact to its current one and they're laid end-to-
-// end (abutting, no overlap), so a solid length tiles into one continuous tyre
-// track with no scalloping — a round blob or feathered ends would dip to zero at
-// every join and read as a dotted line; overlap would stack alpha into dark bands.
-function makeSkidTexture() {
-  const w = 16, h = 8;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  // width profile only: feather the left/right edges so the track has soft sides
-  const gx = ctx.createLinearGradient(0, 0, w, 0);
-  gx.addColorStop(0, 'rgba(255,255,255,0)');
-  gx.addColorStop(0.5, 'rgba(255,255,255,1)');
-  gx.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gx;
-  ctx.fillRect(0, 0, w, h);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Wind-streak alpha: a blurred ellipse — soft at both ends AND across its width
-// (unlike the skid texture, streaks never tile end-to-end, so soft ends are
-// wanted here). Drawn white; the material colour tints it.
-function makeStreakTexture() {
-  const w = 64, h = 16;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  ctx.filter = 'blur(3px)';
-  ctx.fillStyle = 'rgba(255,255,255,1)';
-  ctx.beginPath();
-  ctx.ellipse(w / 2, h / 2, w / 2 - 8, h / 2 - 5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Streak geometry: ONE unit quad, length along Z (travel), width along X,
-// facing +Y. Orientation comes from axial billboarding (below) — a fixed quad
-// (or crossed pair) along the travel axis is near edge-on from DEAD ASTERN,
-// which is exactly where every chase camera sits. Texture u runs along the
-// length, v across the width. Scaled per streak via mesh.scale.
-function makeStreakGeometry() {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(
-    [-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5], 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 1, 1, 1, 1, 0], 2));
-  g.setIndex([0, 1, 2, 0, 2, 3]);
-  return g;
-}
-
-// Axial billboard for a streak mesh: spin it about its long (local Z) axis so
-// its face follows the camera. Installed as onBeforeRender, which the renderer
-// calls once per render pass — BEFORE it derives the modelViewMatrix from
-// matrixWorld — so every split-screen cell sees the streak turned toward its
-// OWN camera, even though all cells share the one scene.
-const _sbV = new THREE.Vector3();
-const _sbM = new THREE.Matrix4();
-function streakBillboard(renderer, scn, camera) {
-  _sbV.setFromMatrixPosition(camera.matrixWorld);
-  _sbM.copy(this.parent.matrixWorld).invert();
-  _sbV.applyMatrix4(_sbM).sub(this.position); // camera dir in the parent's frame
-  // rotate +Y (the face normal) about Z onto the camera's bearing in the XY plane
-  this.rotation.z = Math.atan2(-_sbV.x, _sbV.y);
-  this.updateMatrix();
-  this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
-}
-
-// A single soft round alpha blob (white core feathering to transparent). Drawn
-// white so the material colour tint shows true; used for the under-car contact
-// shadow (scaled to the footprint).
-function makeSoftBlobTexture() {
-  const s = 64;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const ctx = cv.getContext('2d');
-  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.55, 'rgba(255,255,255,0.75)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, s, s);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Underbody-shading alpha: a feathered rounded rect (white core, soft edges),
-// drawn portrait (texture v = car length) and stretched to each car's footprint.
-// The feather lives INSIDE the quad, so the dark core sits ~inset under the
-// chassis and fades out before the quad edge — the silhouette rule above.
-function makeUnderShadowTexture() {
-  const w = 64, h = 128;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  const inset = 12; // blur tail stays clear of the canvas edge (no clipped feather)
-  ctx.filter = 'blur(7px)';
-  ctx.fillStyle = 'rgba(255,255,255,1)';
-  ctx.beginPath();
-  ctx.roundRect(inset, inset, w - inset * 2, h - inset * 2, 18);
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Cloud sprite: a few overlapping blurred white blobs — a soft toy cumulus.
-// Every blob keeps blur-tail clearance (~2× the blur radius) from the canvas
-// edges: a tail that crosses the edge gets sliced into a hard flat line — the
-// "clipped cloud" artefact.
-function makeCloudTexture() {
-  const w = 128, h = 64;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  ctx.filter = 'blur(5px)';
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  for (const [x, y, r] of [[36, 36, 14], [58, 30, 17], [84, 36, 14], [68, 42, 11], [46, 42, 10]]) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Lawn: mowing stripes (alternating ±4% luminance bands) plus a few soft
-// blotches, tiled across the ground plane. Subtle — it should read as "lawn"
-// only when you look, never as a pattern.
-function makeLawnTexture() {
-  const s = 256, stripes = 8;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const ctx = cv.getContext('2d');
-  const base = [106, 168, 79]; // the old flat ground colour, #6aa84f
-  for (let i = 0; i < stripes; i++) {
-    const f = i % 2 ? 1.04 : 0.965;
-    ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
-    ctx.fillRect(Math.floor(i * s / stripes), 0, Math.ceil(s / stripes), s);
-  }
-  // faint organic blotches so the stripes don't read as a perfect print
-  ctx.filter = 'blur(7px)';
-  for (let i = 0; i < 26; i++) {
-    const f = (i % 2 ? 1.05 : 0.95);
-    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.35)`;
-    const x = (i * 73) % s, y = (i * 131) % s, r = 10 + (i * 37) % 22;
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.6, i, 0, Math.PI * 2); ctx.fill();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(18, 18); // ~33u per tile on the 600u plane → stripes ≈ 4u wide
-  tex.anisotropy = 4;
-  return tex;
-}
-
-// Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
-// (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
-// the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
-// +tangent axis (see _buildProps' basis), i.e. the direction of travel.
-function makePadTexture() {
-  const s = 64;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const ctx = cv.getContext('2d');
-  const g = ctx.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2);
-  g.addColorStop(0, '#7dffe8'); g.addColorStop(0.7, '#22c9b6'); g.addColorStop(1, '#0e8f82');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fff4cc'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  // Three forward chevrons, CENTRED on the disc both ways: apex on the vertical
-  // axis (x = s/2), and the stack — (n-1)·gap plus the chevron's own height — offset
-  // by y0 so it sits centred in the s×s texture instead of low-and-left.
-  const n = 3, gap = 13, chev = 10, y0 = (s - ((n - 1) * gap + chev)) / 2;
-  for (let i = 0; i < n; i++) {
-    const y = y0 + i * gap;
-    ctx.beginPath(); ctx.moveTo(s / 2 - 16, y + chev); ctx.lineTo(s / 2, y); ctx.lineTo(s / 2 + 16, y + chev); ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// ---------------------------------------------------------------------------
-// Rear NAME PLATE — replaces the old rotating cone marker. A small livery-
-// coloured "license plate" fixed to the back of each car with the player's
-// name. The chase cam looks at the back of every car, so you read the plate of
-// whoever you're chasing. The plate is a flat mesh
-// parented to the car body (so it banks with the steering lean), facing rearward.
-const PLATE_MAX_W = 0.2;     // plate width cap in world units (also clamped to the car's width)
-const PLATE_Y_FRAC = 0.46;   // fallback height up the body's rear face (0 = underside, 1 = roof)
-
-// Per-model plate height (world Y on the rear face), indexed by CAR_MODELS
-// position. null = use the auto-detected flat-panel height; the values below
-// were hand-tuned per model so the plate sits on each car's flat rear surface.
-// Order: racer, speedster, drag-racer, racer-low, vintage-racer, suv, truck, monster-truck.
-const PLATE_Y = [0.157, 0.245, 0.166, 0.156, 0.134, 0.158, 0.247, 0.522];
-
-// Darken a #rrggbb by `amt` (0..1) — used for the plate's inner rim so it reads
-// as a solid plastic chip rather than a flat fill.
-function shade(hex, amt) {
-  const h = hex.replace('#', '');
-  const n = parseInt(h.length === 3 ? h.replace(/(.)/g, '$1$1') : h, 16);
-  const r = Math.round(((n >> 16) & 255) * (1 - amt));
-  const g = Math.round(((n >> 8) & 255) * (1 - amt));
-  const b = Math.round((n & 255) * (1 - amt));
-  return `rgb(${r},${g},${b})`;
-}
-
-// Draw the plate to a canvas: a livery-filled rounded rect inside a white rim,
-// with the name in white, auto-shrunk to fit. Returns { tex, aspect, contentFrac }.
-//
-// The plate sits in a TRANSPARENT MARGIN (M) inside the canvas, so its outer edge
-// is a soft alpha edge (smoothed for free by the texture's mipmaps + anisotropy),
-// NOT the quad's hard polygon silhouette. That silhouette is what aliased and
-// crawled as the car tilted — the reason scene-wide MSAA was needed. With the
-// margin the plate self-antialiases, so it stays crisp regardless of MSAA.
-// contentFrac = the visible plate's fraction of the canvas, so makePlate can size
-// the mesh to keep the plate the same on-screen size despite the added margin.
-function makePlateTexture(name, colorHex) {
-  const text = (name == null ? '' : String(name)).trim() || '—';
-  const S = 4;                 // supersample → crisp even though the plate is small on screen
-  const W = 232, H = 92;       // logical plate size (~2.5 : 1)
-  const M = 7;                 // transparent margin around the plate (logical px) → soft edge
-  const CW = W + 2 * M, CH = H + 2 * M; // full canvas incl. margin
-  const cv = document.createElement('canvas');
-  cv.width = CW * S; cv.height = CH * S;
-  const ctx = cv.getContext('2d');
-  ctx.scale(S, S);
-  ctx.translate(M, M);         // draw the plate inset, leaving the transparent margin
-
-  // white rim, then livery field inset, then a darker inner hairline.
-  // FEATHER the outer rim: a small blur turns its axis-aligned edges (which canvas
-  // fill leaves as a hard alpha step) into a soft gradient, so the border self-AAs
-  // and never crawls — even with scene MSAA off. The filter is in device pixels
-  // (unaffected by ctx.scale), so scale the radius by S. Interior is drawn crisp.
-  const pad = 6, r = 16;
-  ctx.filter = `blur(${(S * 1.1).toFixed(2)}px)`;
-  ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fillStyle = '#ffffff'; ctx.fill();
-  ctx.filter = 'none';
-  ctx.beginPath(); ctx.roundRect(pad, pad, W - pad * 2, H - pad * 2, r - 4);
-  ctx.fillStyle = colorHex; ctx.fill();
-  ctx.lineWidth = 2; ctx.strokeStyle = shade(colorHex, 0.28); ctx.stroke();
-
-  // name — white, bold, auto-fit to the field width
-  const maxW = W - pad * 2 - 24;
-  let fontPx = 54;
-  ctx.font = `700 ${fontPx}px Fredoka, Nunito, system-ui, sans-serif`;
-  const tw = ctx.measureText(text).width;
-  if (tw > maxW) {
-    fontPx = Math.max(20, Math.floor(fontPx * maxW / tw));
-    ctx.font = `700 ${fontPx}px Fredoka, Nunito, system-ui, sans-serif`;
-  }
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 1;
-  ctx.fillText(text, W / 2, H / 2 + 2);
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return { tex, aspect: CW / CH, contentFrac: W / CW };
-}
-
-// Build the plate mesh for one car. `anchor` = { z (rear face), y, w (car width) }
-// in the car group's local space, derived from the model's bounding box.
-function makePlate(name, colorHex, anchor) {
-  const pt = makePlateTexture(name, colorHex);
-  // Size to the VISIBLE plate (cap to the car's rear), then expand the quad to
-  // include the transparent margin so the plate's on-screen size is unchanged.
-  const visW = Math.min(PLATE_MAX_W, anchor.w * 0.92); // never wider than the car's rear
-  const planeW = visW / pt.contentFrac;
-  const planeH = planeW / pt.aspect;
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(planeW, planeH),
-    new THREE.MeshBasicMaterial({ map: pt.tex, transparent: true, depthWrite: false })
-  );
-  // Transform (rear-facing + height) is set by SceneRenderer._positionPlate.
-  return mesh;
-}
 
 export class SceneRenderer {
   constructor(container, colors) {
@@ -553,20 +182,20 @@ export class SceneRenderer {
     const msaa = parseInt(new URLSearchParams(location.search).get('msaa'), 10);
     this._msaaSamples = Number.isFinite(msaa) ? Math.max(0, Math.min(4, msaa)) : 0;
     // ?bbox=1 → draw collision/trigger outlines for oil, boost pads, item boxes,
-    // bananas, and cars (debug aid; see _drawDebug). Off by default.
+    // bananas, and cars (debug aid; see render/TrackProps.js). Off by default.
     this._bbox = (() => { try { return new URLSearchParams(location.search).get('bbox') === '1'; } catch (_) { return false; } })();
-    this._dbgStatic = []; // [{kind, s, lat, radius}] for the static props (filled in setTrack)
     this._initThree();
     this._initOverlay();
-    this._initParticles();
-    this._initFpsMeter();
+    this._initCarFx();
+    this.skids = new SkidMarks(this.scene);
+    this.props = new TrackProps(this.scene, this.protos, this._bbox);
+    this._fps = new FpsMeter(this.container);
     this._groundRay = new THREE.Raycaster();
     this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
     this._rayFrom = new THREE.Vector3();
     this._rayDown = new THREE.Vector3(0, -1, 0);
     this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal (probe placement)
     this._frameDt = 1 / 60;                 // last frame dt (set in _loop; setCarPose reads it)
-    this._worldUp = new THREE.Vector3(0, 1, 0);
     this._normalMat = new THREE.Matrix3(); // for road-tile world normals
     this._hitNormal = new THREE.Vector3();
     // Spatial bucket for the ground-conform raycast: a grid (x,z) -> tiles
@@ -584,10 +213,6 @@ export class SceneRenderer {
     this._sWant = new THREE.Vector3();
     this._sTarget = new THREE.Vector3();
     this._dsV = new THREE.Vector3();       // scratch for the per-frame travel delta (wheel roll)
-    this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
-    this._coneTmp2 = new THREE.Vector3();
-    this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector (syncProps)
-    this._liveBananas = new Set();         // reused per-frame live-id set (syncProps); cleared, never reallocated
   }
 
   // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
@@ -634,16 +259,11 @@ export class SceneRenderer {
     return best;
   }
 
-  // Skidmark decals — flat quads laid on the road. ONE merged mesh with
-  // per-vertex RGBA (alpha animates the fade), so the whole rubber layer — live
-  // marks AND lingering patina — is a single draw call. The old mesh-per-stamp
-  // pool cost one draw call per visible mark (~580 during hard 4-car cornering)
-  // and forced marks to vanish to keep that count down; the merge removes both
-  // limits. A ring buffer recycles the oldest stamp when full.
-  _initParticles() {
-    this._skidTex = makeSkidTexture();
+  // Shared textures/materials for the per-car visual effects (boost aura, wind
+  // streaks, underbody shading). These are the templates; addCar clones the ones
+  // that must animate per instance.
+  _initCarFx() {
     this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
-    this._padTex = makePadTexture();       // boost-pad face (teal disc + gold chevrons)
     this._streakTex = makeStreakTexture(); // boost wind streak
     this._streakGeo = makeStreakGeometry();
     // Template material for the boost wind streaks (cloned per streak so each can
@@ -662,115 +282,16 @@ export class SceneRenderer {
       depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
     });
-    this._skidN = 0;
-    // scratch vectors for orientation maths + the per-wheel travel measurement,
-    // so the hot path allocates nothing per frame.
-    this._skU = new THREE.Vector3();
-    this._skF = new THREE.Vector3();
-    this._skL = new THREE.Vector3();
-    this._gpA = new THREE.Vector3();
-    this._projV = new THREE.Vector3(); // scratch for the contact-patch projection
-    this._segV = new THREE.Vector3();
-    this._dirV = new THREE.Vector3();
-    this._midV = new THREE.Vector3();
-    // One BufferGeometry holding every stamp: 4 verts (12 floats pos / 16 floats
-    // RGBA) + 6 indices per slot. RGB is SKID_COLOR baked per vertex (built via
-    // THREE.Color so the sRGB hex lands in linear space exactly like the old
-    // material.color did); alpha starts 0 (slot empty/invisible).
-    const pos = new Float32Array(SKID_POOL * 4 * 3);
-    const col = new Float32Array(SKID_POOL * 4 * 4);
-    const uvA = new Float32Array(SKID_POOL * 4 * 2);
-    const idx = new Uint32Array(SKID_POOL * 6);
-    const rub = new THREE.Color(SKID_COLOR);
-    for (let i = 0; i < SKID_POOL; i++) {
-      for (let v = 0; v < 4; v++) {
-        const ci = (i * 4 + v) * 4;
-        col[ci] = rub.r; col[ci + 1] = rub.g; col[ci + 2] = rub.b; // alpha stays 0
-      }
-      // texture u runs ACROSS the width (the feathered axis), v along the length
-      uvA.set([0, 0, 1, 0, 1, 1, 0, 1], i * 4 * 2);
-      idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
-    }
-    const geo = new THREE.BufferGeometry();
-    this._skidPos = new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this._skidCol = new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('position', this._skidPos);
-    geo.setAttribute('color', this._skidCol);
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvA, 2));
-    geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    this._skidLife = new Float32Array(SKID_POOL); // >0: fading toward the patina floor
-    this._skidPeak = new Float32Array(SKID_POOL); // 0: slot empty (alpha already 0)
-    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      map: this._skidTex, vertexColors: true, transparent: true, depthWrite: false,
-      // pull the decals toward the camera in depth so they never z-fight the road
-      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
-    }));
-    mesh.frustumCulled = false; // stamps span the whole track — always in view anyway
-    this.scene.add(mesh);
-    this._skidMesh = mesh;
   }
 
   // Wipe every skid mark + the accumulated patina (track change / fresh race).
-  clearSkids() {
-    const col = this._skidCol.array;
-    for (let i = 0; i < SKID_POOL; i++) {
-      this._skidLife[i] = 0; this._skidPeak[i] = 0;
-      for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = 0;
-    }
-    this._skidCol.needsUpdate = true;
-    this._skidN = 0;
-  }
+  clearSkids() { this.skids.clear(); }
 
-  // Lay one skid stamp centred at world `mid`, lying in the road plane
-  // (normal = up) with its length along `dir` (a unit travel direction).
-  // `width` is the car's tyre-contact width; `strength` (0..1) scales peak
-  // opacity; `length` spans the wheel's last→now travel so consecutive stamps
-  // butt together into one seamless ribbon. Writes the next ring-buffer slot's
-  // 4 vertices in place (recycling the oldest mark/patina when the pool wraps).
-  _emitSkidSeg(mid, up, dir, length, width, strength) {
-    // basis: L → lateral (texture u, feathered), F → travel-in-plane, U → road up
-    this._skU.copy(up).normalize();
-    this._skF.copy(dir).addScaledVector(this._skU, -dir.dot(this._skU));
-    if (this._skF.lengthSq() < 1e-9) return;             // travel parallel to up (shouldn't happen)
-    this._skF.normalize();
-    this._skL.copy(this._skF).cross(this._skU);          // L = F × U  (right-handed)
-    const i = this._skidN;
-    this._skidN = (this._skidN + 1) % SKID_POOL;
-    const pos = this._skidPos.array, col = this._skidCol.array;
-    const cx = mid.x + this._skU.x * 0.006,              // a hair above the road
-          cy = mid.y + this._skU.y * 0.006,
-          cz = mid.z + this._skU.z * 0.006;
-    const lx = this._skL.x * width / 2, ly = this._skL.y * width / 2, lz = this._skL.z * width / 2;
-    const fx = this._skF.x * length / 2, fy = this._skF.y * length / 2, fz = this._skF.z * length / 2;
-    // 4 corners matching the (0,0)(1,0)(1,1)(0,1) UVs: −L−F, +L−F, +L+F, −L+F
-    let p = i * 4 * 3;
-    pos[p++] = cx - lx - fx; pos[p++] = cy - ly - fy; pos[p++] = cz - lz - fz;
-    pos[p++] = cx + lx - fx; pos[p++] = cy + ly - fy; pos[p++] = cz + lz - fz;
-    pos[p++] = cx + lx + fx; pos[p++] = cy + ly + fy; pos[p++] = cz + lz + fz;
-    pos[p++] = cx - lx + fx; pos[p++] = cy - ly + fy; pos[p]   = cz - lz + fz;
-    const peak = SKID_MAX_OPACITY * strength;
-    for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = peak;
-    this._skidLife[i] = SKID_LIFE;
-    this._skidPeak[i] = peak;
-    this._skidPos.needsUpdate = true;
-    this._skidCol.needsUpdate = true;
-  }
+  // Per-frame prop reconcile from the engine snapshot (item boxes, bananas, ?bbox).
+  syncProps(snap) { this.props.sync(snap); }
 
-  _stepSkids(dt) {
-    const col = this._skidCol.array;
-    let dirty = false;
-    for (let i = 0; i < SKID_POOL; i++) {
-      if (this._skidLife[i] <= 0) continue;            // empty, or already settled patina
-      this._skidLife[i] -= dt;
-      // linear fade from peak down to the patina floor, where the mark settles
-      // (it stays until the ring buffer recycles the slot — see SKID_PATINA)
-      const k = Math.max(this._skidLife[i] / SKID_LIFE, 0);
-      const a = this._skidPeak[i] * (SKID_PATINA + (1 - SKID_PATINA) * k);
-      for (let v = 0; v < 4; v++) col[(i * 4 + v) * 4 + 3] = a;
-      dirty = true;
-    }
-    if (dirty) this._skidCol.needsUpdate = true;
-  }
+  // Restore every warning cone to its home pose (new game / fresh race).
+  resetCones() { this.props.resetCones(); }
 
   _initThree() {
     // antialias:false — the whole scene renders through the offscreen MSAA target
@@ -805,138 +326,18 @@ export class SceneRenderer {
     scene.fog = new THREE.Fog(0x8ecae6, 70, 170);
     this.scene = scene;
 
-    // Sky dome: a vertex-coloured backdrop — deeper blue overhead easing to a
-    // pale warm band at the horizon (the same hue the fog uses, so distant
-    // geometry dissolves into the sky instead of hitting a flat backdrop).
-    // fog:false (the dome IS the backdrop) and depthWrite:false + renderOrder
-    // -1 so it always paints first and everything draws over it.
-    {
-      const R = 420;
-      const skyGeo = new THREE.SphereGeometry(R, 24, 12);
-      const sp = skyGeo.attributes.position;
-      const skyCol = new Float32Array(sp.count * 3);
-      const top = new THREE.Color(0x59a7e8).convertSRGBToLinear(); // zenith
-      const hor = new THREE.Color(0x8ecae6).convertSRGBToLinear(); // horizon = fog colour
-      const low = new THREE.Color(0xc8e9f2).convertSRGBToLinear(); // below-horizon haze
-      const c = new THREE.Color();
-      for (let i = 0; i < sp.count; i++) {
-        const t = sp.getY(i) / R; // -1 (nadir) .. 1 (zenith)
-        if (t >= 0) c.copy(hor).lerp(top, Math.pow(t, 0.65));
-        else c.copy(hor).lerp(low, Math.min(1, -t * 3));
-        skyCol[i * 3] = c.r; skyCol[i * 3 + 1] = c.g; skyCol[i * 3 + 2] = c.b;
-      }
-      skyGeo.setAttribute('color', new THREE.BufferAttribute(skyCol, 3));
-      const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({
-        vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false
-      }));
-      sky.renderOrder = -1;
-      scene.add(sky);
-    }
-
-    // Clouds: a handful of soft sprite puffs drifting slowly. Sprites billboard
-    // per camera, so they read correctly in every split-screen cell; fog:false
-    // because they live past the fog's far end. Drift is stepped in _loop.
-    this._clouds = [];
-    {
-      const cloudTex = makeCloudTexture();
-      for (let i = 0; i < 8; i++) {
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: cloudTex, transparent: true, opacity: 0.8, fog: false, depthWrite: false
-        }));
-        const a = (i / 8) * Math.PI * 2 + (i % 3) * 0.45;
-        const r = 180 + (i % 4) * 38;
-        sprite.position.set(Math.cos(a) * r, 42 + (i % 3) * 16, Math.sin(a) * r);
-        const w = 50 + (i % 3) * 20;
-        sprite.scale.set(w, w * 0.42, 1);
-        this._clouds.push(sprite);
-        scene.add(sprite);
-      }
-    }
-
-    // Horizon hills: one merged ring of squashed toy domes, far outside any
-    // track and deep in the fog tail, so they render as soft pale silhouettes —
-    // depth for the diorama without competing with it. Built once; never
-    // disposed (they're track-independent, like the ground plane).
-    {
-      const hillProto = new THREE.SphereGeometry(1, 10, 6);
-      hillProto.deleteAttribute('uv');
-      const geoms = [];
-      const hc = new THREE.Color();
-      for (let i = 0; i < 18; i++) {
-        const g = hillProto.clone();
-        g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
-        const a = (i / 18) * Math.PI * 2 + (i % 5) * 0.13;
-        const r = 150 + (i % 3) * 18;
-        g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the grass plane
-        // pastel greens — distance haze should make them recede, not loom
-        hc.set([0x8cc578, 0x7cb86a, 0x9bce86][i % 3]).convertSRGBToLinear();
-        const n = g.attributes.position.count;
-        const colA = new Float32Array(n * 3);
-        for (let k = 0; k < n; k++) { colA[k * 3] = hc.r; colA[k * 3 + 1] = hc.g; colA[k * 3 + 2] = hc.b; }
-        g.setAttribute('color', new THREE.BufferAttribute(colA, 3));
-        geoms.push(g);
-      }
-      hillProto.dispose();
-      const hills = new THREE.Mesh(
-        mergeGeometries(geoms, false),
-        new THREE.MeshStandardMaterial({ vertexColors: true })
-      );
-      for (const g of geoms) g.dispose(); // copied into the merge
-      scene.add(hills);
-    }
-
-    // Toy lighting: a soft sky/ground hemisphere for even fill, PLUS a warm key light
-    // that also casts the "Sunny Circuit" shadow. The key's specular highlight is the
-    // "shiny plastic" dot that sells the injection-moulded-toy read; the hemisphere
-    // keeps shadowed sides from going black.
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
-    const key = new THREE.DirectionalLight(0xfff1d0, DEF_KEY_LIGHT);
-    key.position.set(6, 12, 4); // high and slightly to one side → raking gloss + sun shadow
-    // Shadow camera bounds/placement are set per-track in setTrack (needs the track
-    // extent); _loop refreshes the map once per frame (see renderer.shadowMap.autoUpdate
-    // above). 4096² keeps the per-texel size small even on the biggest track's fitted
-    // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead
-    // of shimmering as the car moves — coarse texels were the source of the flicker.
-    key.castShadow = true;
-    key.shadow.mapSize.set(4096, 4096);
-    key.shadow.bias = -0.0004;
-    key.shadow.normalBias = 0.05; // curved road → bias along the normal kills acne
-    scene.add(key);
-    scene.add(key.target);
-    this._key = key;
-
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(600, 600),
-      // Lawn texture (mowing stripes) instead of a flat colour — the colour
-      // lives in the texture, so the material tint stays white.
-      new THREE.MeshStandardMaterial({ map: makeLawnTexture() })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -1.0;
-    // The grass does NOT receive shadows. Cars only ever drive on road tiles (which
-    // do receive), so on-track shadows are unaffected — but an ELEVATED car on an
-    // overpass would otherwise cast a detached blob onto the grass far below the
-    // narrow deck (the light is raked, so the shadow lands off the deck edge). With
-    // the grass opted out, that car's shadow stays on the deck under it; only the
-    // part that would spill past the deck onto grass is clipped (invisible anyway).
-    ground.receiveShadow = false;
-    scene.add(ground);
-    this.ground = ground;
+    // Sky dome, drifting clouds, horizon hills, toy lighting and the lawn
+    // ground plane — track-independent, built once (render/environment.js).
+    const env = buildEnvironment(scene);
+    this._clouds = env.clouds; // drifted in _loop
+    this._key = env.key;       // shadow camera fitted per-track in setTrack
+    this.ground = env.ground;
 
     // Visible track = a few MERGED meshes (see setTrack): the static tiles are
     // baked into one geometry per texture so the whole circuit draws in ~1-3 calls
     // instead of one per tile (draw-call count was scaling with track length).
     this.trackGroup = new THREE.Group();
     scene.add(this.trackGroup);
-    // Track hazards (oil slicks + their warning cones), rebuilt per setTrack. Kept
-    // in its own group so it clears with the track without touching the cars/decals.
-    this.hazardGroup = new THREE.Group();
-    scene.add(this.hazardGroup);
-    this._cones = []; // kickable cone state {mesh, home, homeQuat, vel, spinAxis, spinRate, airborne}
-    this._boxes = [];          // item-box meshes (indexed parallel to track.boxes), toggled by snapshot.boxes
-    this._bananaMeshes = new Map(); // banana id → mesh, reconciled from snapshot.bananas
-    this._dbgGroup = new THREE.Group(); // ?bbox debug outlines (redrawn each frame); persists across tracks
-    scene.add(this._dbgGroup);
     // Collision proxy: the per-tile clones, kept OUT of the scene graph (so they
     // cost nothing to render/cull) but raycast by _roadHitY for ground-conform.
     // Per-tile bounding spheres prune the cast to the 1-2 tiles under the car —
@@ -1033,48 +434,6 @@ export class SceneRenderer {
     this.overlay = o;
   }
 
-  // Bottom-right FPS/frame-time readout (debug aid). Shows smoothed FPS, the mean
-  // frame time, and the WORST frame time in each ~250ms window (the worst is what
-  // you feel — vsync bounces a single 17ms frame to 33ms). Reads the REAL rAF
-  // cadence (the loop's raw delta, before the sim's dt clamp). Toggle with the "P"
-  // key; shown by default (it's a debug build aid).
-  _initFpsMeter() {
-    const el = document.createElement('div');
-    el.className = 'fps-meter';
-    el.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;'
-      + 'font:600 12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
-      + 'color:#7CFC8A;background:rgba(0,0,0,0.55);padding:4px 8px;border-radius:7px;'
-      + 'pointer-events:none;white-space:pre;text-align:right;letter-spacing:.3px;';
-    el.textContent = '— fps';
-    (this.container || document.body).appendChild(el);
-    this._fpsEl = el;
-    this._fpsFrames = 0;      // frames since last text update
-    this._fpsAccumMs = 0;     // summed real frame time since last update
-    this._fpsWorstMs = 0;     // worst frame in this window
-    this._fpsLastUpdate = 0;  // timestamp of last text update
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'p' || e.key === 'P') el.style.display = (el.style.display === 'none') ? '' : 'none';
-    });
-  }
-
-  // Fold one real frame (rawMs = unclamped rAF delta) into the meter and refresh
-  // the text every ~250ms. Colour goes amber/red as the worst frame degrades.
-  _tickFpsMeter(t, rawMs) {
-    this._fpsFrames++;
-    this._fpsAccumMs += rawMs;
-    if (rawMs > this._fpsWorstMs) this._fpsWorstMs = rawMs;
-    if (t - this._fpsLastUpdate < 250) return;
-    const mean = this._fpsAccumMs / this._fpsFrames;
-    const fps = 1000 / mean;
-    const worst = this._fpsWorstMs;
-    const el = this._fpsEl;
-    if (el) {
-      el.textContent = `${fps.toFixed(0)} fps\n${mean.toFixed(1)} ms (⤒${worst.toFixed(0)})`;
-      el.style.color = worst > 32 ? '#FF6B6B' : worst > 20 ? '#FFD166' : '#7CFC8A';
-    }
-    this._fpsFrames = 0; this._fpsAccumMs = 0; this._fpsWorstMs = 0; this._fpsLastUpdate = t;
-  }
-
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
@@ -1121,435 +480,6 @@ export class SceneRenderer {
     this._mergedMats = [];
   }
 
-  // Build the visible road + kerbs by sweeping a fixed cross-section along the track
-  // centreline, plus a chunked road-surface proxy for the ground-conform raycast. The
-  // road is fully procedural (no GLB tiles): width comes from the track, the kerb is a
-  // low toy profile, so widening the road only pushes the kerb outward — it never grows
-  // into a wall the way scaling the old GLB tiles did. One merged vertex-coloured mesh
-  // (asphalt + white edge lines + red/white kerb + side skirt); adds it to trackGroup
-  // and the collision chunks to `collide`.
-  _buildRibbonRoad(track, collide) {
-    const cl = track.centerline;
-    if (!cl || !cl.samples.length) return;
-
-    // Drivable width is per-sample (centerline.width / roadWidth) — the road can flare
-    // and pinch along the lap, and the physics curb corridor follows it (Game.maxLatAt).
-    // `defHalf` is the fallback half-width; the kerb/line cross-section is fixed.
-    const defHalf = (track.roadWidth || 5) / 2;
-    const halfAt = (i) => (frames[i].width != null ? frames[i].width : track.roadWidth || 5) / 2;
-    const cw = 0.22;        // kerb lateral width
-    const ch = 0.20;        // kerb height — low; a kerb, not a wall
-    const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
-    const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
-    const lw = Math.min(0.10, defHalf * 0.5 - gap);// painted white edge-line width
-    const stripeLen = 0.32;                        // kerb red/white band length (world units)
-    const dashW = 0.09;                            // painted centre-dash width
-    // Centre dash cadence: at top speed (~9 u/s) a 1.8u period streams past at
-    // ~5 cycles/s — a readable flow, not a strobe. The dash is the near-field
-    // speedometer: right at the chase cam's focus, its flow rate IS the car's
-    // actual speed (the asphalt itself is flat colour, so without it nothing
-    // close to the car streams past). Starting values.
-    const DASH_PERIOD = 1.8, DASH_FRAC = 0.4;      // ~0.72u dash / ~1.08u gap
-
-    // Resample the centreline at a uniform, fine arclength step. The raw samples are
-    // spaced unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a
-    // stripe — so colouring whole between-sample segments aliased the bands into uneven
-    // blobs (a stripe shorter than a segment simply can't be drawn). A uniform step a
-    // few× finer than a stripe renders every band cleanly and also smooths the surface.
-    const ds = Math.min(0.5, Math.max(0.06, stripeLen / 3));
-    const N = Math.min(4000, Math.max(8, Math.round(cl.length / ds)));
-    const frames = [];
-    for (let i = 0; i < N; i++) frames.push(cl.sampleAt((i / N) * cl.length));
-
-    // Colours — sampled directly from the Kenney colormap (colormap.png) at the real
-    // kerb/road face UVs, so the procedural road matches the GLB tiles' plastic look.
-    // Kenney bakes per-face shading into the texture (darker side swatches, brighter
-    // tops); we take the TOP/brightest swatch as the base albedo and let the scene's
-    // real-time lighting do the side shading. Built through THREE.Color so the sRGB
-    // hexes convert to the renderer's linear working space the same way material.color
-    // does (raw vertex-colour floats are NOT auto-converted — doing it here keeps the
-    // albedo identical to what the textured tiles sample).
-    const c = (hex) => { const k = new THREE.Color(hex); return [k.r, k.g, k.b]; };
-    const ASPHALT = c(0x5a6078);   // road surface
-    const LINE = c(0xc4c4d9);      // painted road marking (Kenney's light road-line swatch)
-    const KERB_RED = c(0xfa6b41);  // kerb red — Kenney's is a warm orange-red, not crimson
-    const KERB_WHITE = c(0xf8f8fb);// kerb white
-
-    // Cross-section anatomy, left → right: asphalt is flat (y=0) across the drivable width;
-    // inside each kerb sits a small asphalt `gap`, then a thin painted white line, then the
-    // main asphalt. A low kerb rises to `ch` just outside; a skirt drops to -deck so the deck
-    // reads as solid from the side and over crests (a zero-thickness ribbon looks like paper
-    // and shows daylight under hill tops).
-    // Cross-section as { sign: which kerb edge (−1 left, +1 right), off: lateral offset
-    // from that edge, y: height above the drive surface }. A point's lateral position on
-    // ring i is sign·halfAt(i) + off, so the whole profile flares/pinches with the
-    // per-sample road width while the kerb + line widths stay constant.
-    const P = [
-      { sign: -1, off: -cw,       y: -deck }, // 0  left skirt foot
-      { sign: -1, off: -cw,       y: 0     }, // 1  left kerb outer base (top of deck skirt)
-      { sign: -1, off: -cw,       y: ch    }, // 2  left kerb outer top
-      { sign: -1, off: 0,         y: ch    }, // 3  left kerb inner top
-      { sign: -1, off: 0,         y: 0     }, // 4  left asphalt edge (foot of kerb)
-      { sign: -1, off: gap,       y: 0     }, // 5  outer edge of left line (after the gap)
-      { sign: -1, off: gap + lw,  y: 0     }, // 6  inner edge of left line
-      { sign:  0, off: -dashW / 2, y: 0    }, // 7  centre dash, left edge (sign 0 = road centre)
-      { sign:  0, off: dashW / 2, y: 0     }, // 8  centre dash, right edge
-      { sign:  1, off: -gap - lw, y: 0     }, // 9  inner edge of right line
-      { sign:  1, off: -gap,      y: 0     }, // 10 outer edge of right line
-      { sign:  1, off: 0,         y: 0     }, // 11 right asphalt edge
-      { sign:  1, off: 0,         y: ch    }, // 12 right kerb inner top
-      { sign:  1, off: cw,        y: ch    }, // 13 right kerb outer top
-      { sign:  1, off: cw,        y: 0     }, // 14 right kerb outer base (top of deck skirt)
-      { sign:  1, off: cw,        y: -deck }  // 15 right skirt foot
-    ];
-    // strip connects profile points (a,b); `kind` picks the colour rule.
-    const STRIPS = [
-      { a: 0,  b: 1,  kind: 'skirt' },            // left deck side, below road — road-grey
-      { a: 1,  b: 2,  kind: 'kerb', side: 'L' },  // left kerb OUTER face (road level → top) — striped
-      { a: 2,  b: 3,  kind: 'kerb', side: 'L' },  // left kerb top
-      { a: 3,  b: 4,  kind: 'kerb', side: 'L' },  // left kerb inner face
-      { a: 4,  b: 5,  kind: 'road'  },            // gap asphalt between kerb and left line
-      { a: 5,  b: 6,  kind: 'line'  },            // left white edge line
-      { a: 6,  b: 7,  kind: 'road'  },            // asphalt, left half
-      { a: 7,  b: 8,  kind: 'dash'  },            // centre dash (LINE/ASPHALT bands along the lap)
-      { a: 8,  b: 9,  kind: 'road'  },            // asphalt, right half
-      { a: 9,  b: 10, kind: 'line'  },            // right white edge line
-      { a: 10, b: 11, kind: 'road'  },            // gap asphalt between right line and kerb
-      { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb inner face
-      { a: 12, b: 13, kind: 'kerb', side: 'R' },  // right kerb top
-      { a: 13, b: 14, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
-      { a: 14, b: 15, kind: 'skirt' },            // right deck side, below road — road-grey
-      // Deck BELLY: a plain face closing the underside between the two skirt feet.
-      // Seen from below (under a loop, the roll bridge, the spiral) it occludes the
-      // painted top surface entirely, so the track's bottom reads as solid plastic —
-      // pure road-grey, no lines or kerb stripes shining through the DoubleSide mesh.
-      { a: 15, b: 0,  kind: 'skirt' }
-    ];
-    // Baked ambient-occlusion per profile point — a brightness multiplier on the
-    // vertex colour. Kenney paints this contact shading into its texture (dark side
-    // swatches, darkened edges); we approximate it so the flat-albedo ribbon gets the
-    // same plastic-toy form: deep shade at the skirt feet, a contact shadow where the
-    // kerb meets the road, and the asphalt easing darker as it nears the kerb. Road
-    // centre and kerb tops stay full bright. (Multiplies LINEAR colour = physically
-    // how occlusion attenuates reflected light.)
-    const ao = [
-      0.55, // 0  left skirt foot — deep shadow against the grass
-      0.65, // 1  left kerb outer base (deck skirt top, shaded)
-      0.90, // 2  left kerb outer top
-      1.00, // 3  left kerb inner top
-      0.70, // 4  left kerb foot — contact shadow where kerb meets road
-      0.90, // 5  asphalt by the left kerb
-      1.00, // 6  road
-      1.00, // 7  centre dash left edge
-      1.00, // 8  centre dash right edge
-      1.00, // 9  road
-      0.90, // 10 asphalt by the right kerb
-      0.70, // 11 right kerb foot — contact shadow
-      1.00, // 12 right kerb inner top
-      0.90, // 13 right kerb outer top
-      0.65, // 14 right kerb outer base (deck skirt top, shaded)
-      0.55  // 15 right skirt foot
-    ];
-
-    // World position of profile point j on ring i: centreline + height along the road
-    // normal (up) + lateral offset across the road. Returns shared scratch — clone it.
-    const tmp = new THREE.Vector3();
-    const ring = (i, j) => {
-      const s = frames[i];
-      const l = P[j].sign * halfAt(i) + P[j].off;
-      return tmp.copy(s.pos).addScaledVector(s.up, P[j].y).addScaledVector(s.lateral, l);
-    };
-    const pos = [], col = [];
-    const push3 = (arr, p) => { arr.push(p.x, p.y, p.z); };
-    // Per-strip colour push: the two triangles below are wound ia,ib,nb / ia,nb,na, so
-    // the 6 verts map to profile points [a,b,b,a,b,a]. Each gets its base colour times
-    // its own AO, so the darkening varies ACROSS the strip (a gradient) — that's what
-    // gives the kerb face and road edge their baked-in contact shadow.
-    const VSEQ = ['a', 'b', 'b', 'a', 'b', 'a'];
-    const pushStripCol = (base, st) => {
-      for (const v of VSEQ) { const f = ao[st[v]]; col.push(base[0] * f, base[1] * f, base[2] * f); }
-    };
-
-    // Kerb stripes: band by arclength measured ALONG EACH KERB EDGE, not the
-    // centreline. On a bend the outer kerb is longer than the centreline and the inner
-    // is shorter, so banding by centreline arclength stretched the outside bands and
-    // squashed the inside ones (the uneven look). Measure each side independently at
-    // its kerb mid-line and snap its band length so an EVEN number of bands closes the
-    // loop — that keeps every band a uniform physical size and the start/finish seam
-    // free of a red-on-red (or white-on-white) join.
-    const kerbDist = (side) => {
-      const d = new Array(N);
-      const at = (k) => new THREE.Vector3().copy(frames[k].pos)
-        .addScaledVector(frames[k].up, ch)
-        .addScaledVector(frames[k].lateral, side * (halfAt(k) + cw / 2)); // kerb mid-line (per-sample width)
-      let prev = at(0), acc = 0;
-      d[0] = 0;
-      for (let i = 1; i < N; i++) { const cur = at(i); acc += cur.distanceTo(prev); d[i] = acc; prev = cur; }
-      const total = acc + at(0).distanceTo(prev); // close the loop
-      const bands = Math.max(2, 2 * Math.round(total / (2 * stripeLen)));
-      return { d, eff: total / bands };
-    };
-    const kerbL = kerbDist(-1), kerbR = kerbDist(1);
-    const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
-
-    // Centre-dash banding by centreline arclength (the resample is uniform, so
-    // ring i sits at i/N of the lap). Snap the period so a WHOLE number of
-    // dash+gap cycles closes the loop — no half-dash at the start/finish seam.
-    const dashPeriod = cl.length / Math.max(2, Math.round(cl.length / DASH_PERIOD));
-    const dashOn = (i) => ((i / N) * cl.length) % dashPeriod < dashPeriod * DASH_FRAC;
-
-    // Sweep the profile around the closed loop into ONE vertex-coloured buffer.
-    for (let i = 0; i < N; i++) {
-      const ni = (i + 1) % N;
-      const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
-      const colD = dashOn(i) ? LINE : ASPHALT;
-      for (const st of STRIPS) {
-        const ia = ring(i, st.a).clone(), ib = ring(i, st.b).clone();
-        const na = ring(ni, st.a).clone(), nb = ring(ni, st.b).clone();
-        push3(pos, ia); push3(pos, ib); push3(pos, nb); // tri 1
-        push3(pos, ia); push3(pos, nb); push3(pos, na); // tri 2
-        const kerbCol = st.side === 'R' ? colR : colL;
-        pushStripCol(
-          st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? LINE : st.kind === 'dash' ? colD : ASPHALT,
-          st);
-      }
-    }
-
-    const mkGeom = (positions, colors) => {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      if (colors) g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      g.computeVertexNormals();
-      return g;
-    };
-    const geo = mkGeom(pos, col);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte)
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.matrixAutoUpdate = false; // positions are already baked in world space
-    mesh.receiveShadow = true;     // road catches the cars' cast shadows
-    this.trackGroup.add(mesh);
-    this._mergedGeoms.push(geo);
-    this._mergedMats.push(mat);
-
-    // Collision proxy: only the flat asphalt surface (kerbs/skirts aren't drivable),
-    // spanning the full -hw..hw width (profile points 4 and 11), chunked so the existing
-    // (x,z) bucket grid prunes the ground-conform raycast to the few chunks under the
-    // car — the same contract the per-tile clones honour.
-    const CHUNK = 8; // segments per collision mesh
-    const collideMat = new THREE.MeshBasicMaterial({ visible: false });
-    this._mergedMats.push(collideMat);
-    let chunk = [];
-    const flush = () => {
-      if (!chunk.length) return;
-      const cgeo = mkGeom(chunk, null);
-      const m = new THREE.Mesh(cgeo, collideMat);
-      m.matrixAutoUpdate = false;
-      collide.add(m);
-      this._mergedGeoms.push(cgeo);
-      chunk = [];
-    };
-    for (let i = 0; i < N; i++) {
-      const ni = (i + 1) % N;
-      const ia = ring(i, 4).clone(), ib = ring(i, 11).clone();
-      const na = ring(ni, 4).clone(), nb = ring(ni, 11).clone();
-      push3(chunk, ia); push3(chunk, ib); push3(chunk, nb);
-      push3(chunk, ia); push3(chunk, nb); push3(chunk, na);
-      if ((i + 1) % CHUNK === 0) flush();
-    }
-    flush();
-  }
-
-  // Support pillars under raised decks (bridge/ramp). TrackBuilder computes the placements
-  // (the `pillars` opt + the under-bridge skip); each is a simple vertical cylinder from
-  // the grass plane up to just under the deck, merged into ONE matte mesh. They cast a
-  // contact shadow so the column reads as planted on the ground. Off-road, so they're kept
-  // OUT of the collision proxy — purely visual (a car never drives onto a pillar).
-  _buildPillars(track) {
-    const list = track.pillars;
-    if (!list || !list.length) return;
-    const geoms = [];
-    for (const p of list) {
-      const h = Math.max(0.1, p.topY - p.baseY);
-      const g = new THREE.CylinderGeometry(p.radius, p.radius, h, 16);
-      g.translate(p.x, p.baseY + h / 2, p.z); // cylinder is centred on its axis → lift to span base…top
-      geoms.push(g);
-    }
-    const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
-    if (geoms.length > 1) for (const g of geoms) g.dispose(); // copied into `merged`
-    const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete
-    const mesh = new THREE.Mesh(merged, mat);
-    mesh.matrixAutoUpdate = false; // geometry is baked in world space (translate above)
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    this.trackGroup.add(mesh);
-    this._mergedGeoms.push(merged);
-    this._mergedMats.push(mat);
-  }
-
-  // Trackside scenery — the kit's own GLB trees (round + pine, with small
-  // sunken trees standing in for bushes) plus faceted boulders, scattered on
-  // the grass outside the racing corridor. The parallax of things streaming
-  // past is the strongest speed cue there is (trackside, not on the car — see
-  // the wheel-roll notes above). Trees + bushes bake into ONE textured mesh
-  // (they all share the kit colormap) and the boulders into ONE vertex-
-  // coloured mesh — two draw calls total, like the road; castShadow stays
-  // off because the grass doesn't receive shadows anyway.
-  _buildScenery(track) {
-    const cl = track.centerline;
-    if (!cl || !cl.samples.length) return;
-
-    // Deterministic placement: a seeded LCG keyed on the track's identity, so a
-    // layout's scenery is identical on every load and every display.
-    let seed = 2166136261;
-    const idStr = String(track.id || track.name || '') + Math.round(cl.length * 100);
-    for (let i = 0; i < idStr.length; i++) seed = ((seed ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
-    const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-
-    // A candidate is clear only if it's outside EVERY centreline sample's
-    // corridor — the local sample being far away isn't enough on a figure-8,
-    // where the other strand can pass right through the band (2D check on
-    // purpose: under a bridge the lower strand still owns the ground).
-    const samples = cl.samples;
-    const defHalf = (track.roadWidth || 5) / 2;
-    const MARGIN = 2.2; // kerb + canopy radius + breathing room
-    const isClear = (x, z) => {
-      for (const s of samples) {
-        const half = (s.width != null ? s.width / 2 : defHalf) + MARGIN;
-        const dx = x - s.pos.x, dz = z - s.pos.z;
-        if (dx * dx + dz * dz < half * half) return false;
-      }
-      return true;
-    };
-
-    // Tree sources: each SCENERY_MODELS proto reduced to bake-ready
-    // {geometry, matrixWorld} parts plus the shared colormap material. The kit
-    // models are toy-tiny (0.83 tall — shorter than two cars), so placements
-    // scale them up to diorama size below.
-    const treeSrc = [];
-    let colorMat = null;
-    for (const name of SCENERY_MODELS) {
-      const root = this.protos.get(name);
-      if (!root) continue;
-      root.updateMatrixWorld(true);
-      const parts = [];
-      root.traverse((o) => {
-        if (!o.isMesh || !o.geometry) return;
-        parts.push({ geo: o.geometry, mw: o.matrixWorld.clone() });
-        const m = Array.isArray(o.material) ? o.material[0] : o.material;
-        if (!colorMat && m && m.map) colorMat = m;
-      });
-      if (parts.length) treeSrc.push(parts);
-    }
-
-    const KEEP = ['position', 'normal', 'uv']; // merged attribute sets must match
-    const groundY = this.ground.position.y;
-    const treeGeoms = [];
-    const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
-    const P = new THREE.Vector3(), S = new THREE.Vector3();
-    const UP = new THREE.Vector3(0, 1, 0);
-    const placeTree = (x, z, opts = {}) => {
-      if (!treeSrc.length) return;
-      // 65% round / 35% pine — pines as the accent, not an evergreen forest
-      const parts = opts.parts || treeSrc[rand() < 0.65 ? 0 : treeSrc.length - 1];
-      const s = opts.s != null ? opts.s : 2.3 + rand() * 1.1; // ≈1.9–2.8 world tall (≈3–5 car heights)
-      Q.setFromAxisAngle(UP, rand() * Math.PI * 2);
-      S.set(s, s * (0.92 + rand() * 0.16), s); // slight height jitter
-      P.set(x, groundY - (opts.sink || 0) * s, z); // sink: bury the trunk (bushes, below)
-      M.compose(P, Q, S);
-      // Per-vertex shade multiplier over the colormap (1 = as-authored): a touch
-      // of brightness variation keeps a copse from reading as stamped clones.
-      const shade = 0.88 + rand() * 0.2;
-      for (const part of parts) {
-        const g = part.geo.clone();
-        for (const nm of Object.keys(g.attributes)) {
-          if (!KEEP.includes(nm)) g.deleteAttribute(nm);
-        }
-        if (!g.attributes.normal) g.computeVertexNormals();
-        g.applyMatrix4(part.mw).applyMatrix4(M);
-        const n = g.attributes.position.count;
-        g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(shade), 3));
-        treeGeoms.push(g);
-      }
-    };
-
-    // Boulders: faceted icosahedra (flat-shaded) — the low-poly read of the
-    // kit, not smooth blobs. UVs dropped; colour comes from per-vertex tints
-    // in the pillars' toy-concrete family so they sit in the same palette.
-    const rockProto = new THREE.IcosahedronGeometry(1, 0);
-    rockProto.deleteAttribute('uv');
-    const tint = (g, hex, shade) => {
-      const c = new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(shade);
-      const n = g.attributes.position.count;
-      const arr = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
-      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-      return g;
-    };
-    const ROCK_GREYS = [0xc6cbd6, 0xb4bac8, 0x9aa1b4]; // pillar-concrete family
-
-    const plainGeoms = [];
-    const step = 7; // candidate spacing along the lap (world units)
-    for (let d = 0; d < cl.length && treeGeoms.length + plainGeoms.length < 500; d += step) {
-      const f = cl.sampleAt(d);
-      const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
-      for (const side of [-1, 1]) {
-        if (rand() > 0.62) continue; // leave gaps — a hedge-wall reads fake
-        const lat = side * (half + 2.5 + rand() * 9);
-        const x = f.pos.x + f.lateral.x * lat + (rand() - 0.5) * 3;
-        const z = f.pos.z + f.lateral.z * lat + (rand() - 0.5) * 3;
-        if (!isClear(x, z)) continue;
-        const roll = rand();
-        if (roll < 0.62) {
-          placeTree(x, z);
-          // copse: sometimes 1–2 companions huddle by the first trunk —
-          // clusters read as parkland, an even sprinkle reads as noise
-          if (rand() < 0.45) {
-            const extra = 1 + Math.floor(rand() * 2);
-            for (let e = 0; e < extra; e++) {
-              const a = rand() * Math.PI * 2, r = 1.6 + rand() * 1.6;
-              const ex = x + Math.cos(a) * r, ez = z + Math.sin(a) * r;
-              if (isClear(ex, ez)) placeTree(ex, ez);
-            }
-          }
-        } else if (roll < 0.9) {
-          // "bush" = a small round tree sunk to its canopy. The kit has no bush
-          // model, and procedural domes never matched (flat side facets render
-          // as dark holes against the sunlit lawn) — a buried trunk reuses the
-          // canopy's authored colours/facets for an exact style match, free.
-          placeTree(x, z, { parts: treeSrc[0], s: 1.1 + rand() * 0.7, sink: 0.3 });
-        } else {
-          // half-sunk boulder
-          const rr = 0.3 + rand() * 0.45;
-          const grey = ROCK_GREYS[Math.floor(rand() * ROCK_GREYS.length)];
-          const rock = tint(rockProto.clone(), grey, 0.92 + rand() * 0.16);
-          rock.scale(rr, rr * (0.55 + rand() * 0.3), rr);
-          rock.rotateY(rand() * Math.PI * 2);
-          rock.translate(x, groundY + rr * 0.25, z);
-          plainGeoms.push(rock);
-        }
-      }
-    }
-    rockProto.dispose();
-
-    const addMerged = (geoms, mat) => {
-      if (!geoms.length) { mat.dispose(); return; }
-      const merged = mergeGeometries(geoms, false);
-      for (const g of geoms) g.dispose(); // copied into the merge
-      if (!merged) { mat.dispose(); return; }
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.matrixAutoUpdate = false;
-      this.trackGroup.add(mesh); // cleared with the track; dispose via the merged-pools
-      this._mergedGeoms.push(merged);
-      this._mergedMats.push(mat);
-    };
-    if (colorMat) {
-      const treeMat = colorMat.clone(); // shares the proto's colormap texture
-      treeMat.vertexColors = true;      // the per-tree shade multiplier above
-      addMerged(treeGeoms, treeMat);
-    }
-    addMerged(plainGeoms, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true }));
-  }
-
   setTrack(track, { debug = false } = {}) {
     this._disposeTrack();
     this.trackGroup.clear();
@@ -1571,7 +501,7 @@ export class SceneRenderer {
     // trackGroup itself). The loop below then bakes the remaining GLB scenery (the
     // start/finish gate); the grid/framing/shadow afterwards run on `collide.children`
     // + centreline samples regardless.
-    this._buildRibbonRoad(track, collide);
+    buildRibbonRoad(this, track, collide);
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
@@ -1660,8 +590,8 @@ export class SceneRenderer {
       }
     }
 
-    this._buildPillars(track);
-    this._buildScenery(track);
+    buildPillars(this, track);
+    buildScenery(this, track);
 
     if (debug) {
       // Magenta centreline overlay (inspection aid). Lift each point a little along
@@ -1728,381 +658,7 @@ export class SceneRenderer {
     sc.updateProjectionMatrix();
     k.shadow.needsUpdate = true; // rebuild the map for the new track
 
-    this._buildHazards(track);
-    this._buildProps(track);
-    this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in syncProps)
-  }
-
-  // Boost pads + item boxes (static, authored). Pads are glowing chevron discs;
-  // boxes float above the road and are shown/hidden per frame from the snapshot
-  // (see syncProps). Added to hazardGroup so they clear with the track; box meshes
-  // share the proto (not `owned`, so the hazard cleanup removes but never disposes
-  // them). Resets the box list + banana-mesh map (their meshes were just cleared).
-  _buildProps(track) {
-    for (const b of (this._boxes || [])) { for (const m of (b.mats || [])) m.dispose(); if (b.geom) b.geom.dispose(); }
-    this._boxes = [];
-    this._bananaMeshes = new Map();
-    const cl = track.centerline;
-    const Y = new THREE.Vector3(0, 1, 0);
-    for (const p of (track.pads || [])) {
-      const radius = p.radius || 0.65;
-      this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
-      const f = cl.sampleAt(p.s);
-      const up = f.up.clone().normalize();
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(radius, 28),
-        new THREE.MeshBasicMaterial({
-          map: this._padTex, transparent: true, opacity: 0.95, depthWrite: false,
-          polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
-        })
-      );
-      disc.userData.owned = true; // owns its geometry+material (dispose on rebuild)
-      disc.position.copy(f.pos).addScaledVector(f.lateral, p.lat).addScaledVector(up, 0.025);
-      // basis (lateral=X, tangent=Y, up=Z) lays the disc in the road plane with its
-      // texture +Y (chevrons) pointing along travel.
-      disc.quaternion.setFromRotationMatrix(
-        new THREE.Matrix4().makeBasis(f.lateral.clone().normalize(), f.tangent.clone().normalize(), up));
-      disc.renderOrder = -1;
-      this.hazardGroup.add(disc);
-    }
-    const boxProto = this.protos.get('item-box');
-    for (const b of (track.boxes || [])) {
-      this._dbgStatic.push({ kind: 'box', s: b.s, lat: b.lat || 0, radius: b.radius || 0.65 });
-      const f = cl.sampleAt(b.s);
-      const up = f.up.clone().normalize();
-      let mesh;
-      if (boxProto) {
-        mesh = boxProto.clone(true);
-        const bb = new THREE.Box3().setFromObject(mesh);
-        mesh.scale.setScalar(BOX_H / Math.max(1e-3, bb.max.y - bb.min.y));
-        mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      } else {
-        // No GLB: a plain box that OWNS its geometry. Not flagged `owned` — its cloned
-        // material goes in `mats` and its geometry in `geom` (both disposed in the
-        // _buildProps preamble), so the hazard cleanup must not also dispose them.
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4),
-          new THREE.MeshStandardMaterial({ color: 0xffc94d }));
-      }
-      mesh.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.28); // float above the road
-      mesh.quaternion.setFromUnitVectors(Y, up);
-      // Clone this box's materials so it can fade + pulse INDEPENDENTLY of its
-      // siblings (boxProto.clone shares materials by reference). transparent:true lets
-      // the collect burst taper opacity to zero. Disposed at the top of _buildProps on
-      // a track change (the GLB box meshes aren't flagged `owned`, so cleanup skips them).
-      const mats = [];
-      mesh.traverse((o) => {
-        if (!o.isMesh || !o.material) return;
-        const arr = Array.isArray(o.material) ? o.material : [o.material];
-        const cloned = arr.map((m) => { const cm = m.clone(); cm.transparent = true; return cm; });
-        o.material = Array.isArray(o.material) ? cloned : cloned[0];
-        for (const cm of cloned) mats.push(cm);
-      });
-      this.hazardGroup.add(mesh);
-      // spin/bob/collect state (see _stepBoxes). homeY is the rest height, phase
-      // desyncs the bob, baseS the rest scale to grow from / restore to, collectT
-      // counts down the grow+fade pickup burst, available mirrors the snapshot.
-      this._boxes.push({
-        mesh, mats, geom: boxProto ? null : mesh.geometry, homeY: mesh.position.y, baseS: mesh.scale.x,
-        phase: this._boxes.length * 0.9, collectT: 0, available: true
-      });
-    }
-  }
-
-  // A flat circle outline (LineLoop) of radius r in the plane spanned by axisA/axisB,
-  // for the ?bbox debug overlay. depthTest off so it shows through geometry.
-  _dbgCircle(center, axisA, axisB, r, color) {
-    const seg = 28, pts = [];
-    for (let i = 0; i <= seg; i++) {
-      const a = (i / seg) * Math.PI * 2;
-      pts.push(center.clone().addScaledVector(axisA, Math.cos(a) * r).addScaledVector(axisB, Math.sin(a) * r));
-    }
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color, depthTest: false }));
-    line.renderOrder = 20;
-    return line;
-  }
-
-  // A rectangle outline for a car's collision footprint (2·hl along × 2·hw across).
-  _dbgRect(center, along, side, hl, hw, color) {
-    const pts = [
-      center.clone().addScaledVector(along, hl).addScaledVector(side, hw),
-      center.clone().addScaledVector(along, hl).addScaledVector(side, -hw),
-      center.clone().addScaledVector(along, -hl).addScaledVector(side, -hw),
-      center.clone().addScaledVector(along, -hl).addScaledVector(side, hw),
-    ];
-    pts.push(pts[0]);
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color, depthTest: false }));
-    line.renderOrder = 20;
-    return line;
-  }
-
-  // ?bbox debug: redraw the collision/trigger outlines each frame. Static props
-  // (oil/pad/box) come from _dbgStatic; bananas + cars from the live snapshot.
-  // Cars use the exact (s, lat) collision frame (centreline tangent/lateral), so the
-  // box matches the engine's AABB rather than the heading-rotated render pose.
-  _drawDebug(snap) {
-    if (!this._bbox) return;
-    const g = this._dbgGroup;
-    // each child owns a one-off geometry AND material (made fresh per frame in
-    // _dbgCircle/_dbgRect) — dispose both or the LineBasicMaterials pile up on the GPU.
-    for (const ch of g.children) { ch.geometry.dispose(); if (ch.material) ch.material.dispose(); }
-    g.clear();
-    const cl = this._centerline;
-    if (!cl) return;
-    const COL = { oil: 0xff3b3b, pad: 0x2bd1c4, box: 0xffd23f };
-    const ring = (s, lat, r, color) => {
-      const f = cl.sampleAt(s), up = f.up.clone().normalize();
-      const center = f.pos.clone().addScaledVector(f.lateral, lat).addScaledVector(up, 0.06);
-      g.add(this._dbgCircle(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), r, color));
-    };
-    for (const d of this._dbgStatic) ring(d.s, d.lat, d.radius, COL[d.kind] || 0xffffff);
-    for (const b of (snap.bananas || [])) ring(b.s, b.lat, b.radius || 0.6, 0xff9f1c);
-    for (const c of (snap.cars || [])) {
-      if (c.totalS == null) continue;
-      const f = cl.sampleAt(c.totalS), up = f.up.clone().normalize();
-      const center = f.pos.clone().addScaledVector(f.lateral, c.lat || 0).addScaledVector(up, 0.06);
-      g.add(this._dbgRect(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), c.halfLen || 0.44, c.halfWid || 0.26, 0x39e639));
-    }
-  }
-
-  // Per-frame prop reconcile from the engine snapshot: show only available (off-
-  // cooldown) item boxes, and create/move/remove dropped-banana meshes by id.
-  syncProps(snap) {
-    this._drawDebug(snap); // ?bbox overlay (no-op unless enabled)
-    if (this._boxes && snap.boxes) {
-      for (let i = 0; i < this._boxes.length; i++) {
-        const b = this._boxes[i];
-        const avail = !!snap.boxes[i];
-        if (avail === b.available) continue; // no edge → leave the burst/idle running
-        b.available = avail;
-        if (avail) {                         // respawned: cancel any burst, restore, show
-          b.collectT = 0;
-          b.mesh.scale.setScalar(b.baseS);
-          for (const m of b.mats) m.opacity = 1;
-          b.mesh.visible = true;
-        } else {                             // collected: kick off the grow+fade burst
-          b.collectT = BOX_COLLECT_TIME;
-        }
-      }
-    }
-    if (!this._bananaMeshes) return;
-    const incoming = snap.bananas || [];
-    if (incoming.length === 0 && this._bananaMeshes.size === 0) return; // steady state: no allocations
-    const proto = this.protos.get('item-banana');
-    const live = this._liveBananas; live.clear(); // reused scratch set — no per-frame alloc while bananas are in flight
-    for (const b of incoming) {
-      live.add(b.id);
-      let m = this._bananaMeshes.get(b.id);
-      if (!m && this._centerline) {
-        if (proto) {
-          m = proto.clone(true);
-          const bb = new THREE.Box3().setFromObject(m);
-          m.scale.setScalar(0.35 / Math.max(1e-3, bb.max.y - bb.min.y));
-          m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-        } else {
-          m = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffe14d }));
-          m.userData.owned = true;
-        }
-        this.hazardGroup.add(m);
-        this._bananaMeshes.set(b.id, m);
-      }
-      if (m) {
-        const f = this._centerline.sampleAt(b.s);
-        const up = this._sBananaUp.copy(f.up).normalize(); // scratch — no per-frame alloc
-        m.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.05);
-        m.quaternion.setFromUnitVectors(this._worldUp, up);
-      }
-    }
-    for (const [id, m] of this._bananaMeshes) {
-      if (!live.has(id)) {
-        if (m.userData.owned) { m.geometry.dispose(); m.material.dispose(); } // fallback mesh owns its geo/mat
-        this.hazardGroup.remove(m); this._bananaMeshes.delete(id);
-      }
-    }
-  }
-
-  // Draw the track's oil slicks: a glossy dark disc on the road per hazard, ringed
-  // with item-cone warning markers. Static (placed once from track.hazards +
-  // centreline), so this just rebuilds the hazardGroup when the track changes.
-  // Cone meshes share the cached proto geometry/material, so only the disc (its
-  // own geometry + material) is disposed on rebuild — never the shared proto.
-  _buildHazards(track) {
-    this.hazardGroup.traverse((m) => {
-      if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
-    });
-    this.hazardGroup.clear();
-    this._cones = [];
-    this._dbgStatic = []; // rebuilt here (oil) + in _buildProps (pads, boxes), called right after
-    // Set the centerline + road half-width UNCONDITIONALLY (before the no-oil early
-    // return): _stepCones and syncProps (banana meshes) both need them even on a
-    // track that has boxes/pads but no oil slicks.
-    this._centerline = track.centerline;
-    this._roadHalf = (track.roadWidth || 3.6) / 2;
-    const hz = track.hazards || [];
-    for (const h of hz) this._dbgStatic.push({ kind: 'oil', s: h.s, lat: h.lat || 0, radius: h.radius || OIL_RADIUS_FALLBACK });
-    if (!hz.length) return;
-    const cl = track.centerline;
-    const coneEdge = this._roadHalf - CONE_EDGE_MARGIN; // max lateral offset that stays off the curb
-    const coneProto = this.protos.get('item-cone');
-    const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
-    for (const h of hz) {
-      const radius = h.radius || OIL_RADIUS_FALLBACK;
-      const f = cl.sampleAt(h.s);
-      const up = f.up.clone().normalize();
-      // oil disc — flat on the road, a hair above it, pulled forward in depth so it
-      // never z-fights the road tiles (same polygonOffset trick as the skid decals).
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(radius, 36),
-        // A wet FILM on the road, not a hole: dark slate-blue and semi-transparent
-        // so the road grain reads through it (there's no env map, so gloss/metalness
-        // can't sell "wet" — translucency + tint does). depthWrite off + polygon
-        // offset keep it from z-fighting the road, same as the skid decals.
-        new THREE.MeshStandardMaterial({
-          color: 0x161425, roughness: 0.25, metalness: 0.2,
-          transparent: true, opacity: 0.7, depthWrite: false,
-          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
-        })
-      );
-      disc.userData.owned = true; // disc owns its geometry+material (dispose on rebuild)
-      disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat).addScaledVector(up, 0.02);
-      disc.quaternion.setFromUnitVectors(Z, up); // CircleGeometry faces +Z → lay it in the road plane
-      disc.receiveShadow = true;
-      disc.renderOrder = -1; // under the cars' skid decals
-      this.hazardGroup.add(disc);
-      // cones ringing the slick. Phase by half a step so a 4-cone ring lands on the
-      // corners (none dead-centre on the racing line). Non-collidable — a warning.
-      if (!coneProto) continue;
-      const n = h.cones || 4;
-      const ring = radius * 1.05;
-      for (let i = 0; i < n; i++) {
-        const a = (i + 0.5) * (2 * Math.PI / n);
-        const ds = Math.cos(a) * ring, dl = Math.sin(a) * ring;
-        const coneS = h.s + ds;
-        const cf = cl.sampleAt(coneS);                // re-sample so cones follow track curvature
-        const cup = cf.up.clone().normalize();
-        const clat = Math.max(-coneEdge, Math.min(coneEdge, h.lat + dl)); // keep it inside the curb
-        const cone = coneProto.clone(true);
-        const box = new THREE.Box3().setFromObject(cone);
-        cone.scale.setScalar(CONE_H / Math.max(1e-3, box.max.y - box.min.y));
-        cone.position.copy(cf.pos).addScaledVector(cf.lateral, clat);
-        cone.quaternion.setFromUnitVectors(Y, cup); // stand the cone up on the road normal
-        cone.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-        this.hazardGroup.add(cone);
-        // register it as a kickable prop (see _stepCones): rest pose + scratch state
-        this._cones.push({
-          mesh: cone, home: cone.position.clone(), homeQuat: cone.quaternion.clone(), homeS: coneS,
-          vel: new THREE.Vector3(), spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0, airborne: false
-        });
-      }
-    }
-  }
-
-  // Advance the kickable warning cones one frame. A resting cone slerps back
-  // upright and watches for a car centre within CONE_KICK_R — contact punts it
-  // away from the car (faster the quicker the car), arcing + tumbling. An airborne
-  // cone falls under gravity, bounces off the road with restitution + friction,
-  // and settles where it lands once its energy drops below CONE_SETTLE. Purely
-  // cosmetic (the sim ignores cones), so it lives entirely here.
-  _stepCones(dt) {
-    if (!this._cones || !this._cones.length) return;
-    for (const cn of this._cones) {
-      const m = cn.mesh;
-      if (!cn.airborne) {
-        if (!m.quaternion.equals(cn.homeQuat)) m.quaternion.slerp(cn.homeQuat, 1 - Math.exp(-8 * dt));
-        for (const c of this.cars.values()) {
-          if (!c.pose) continue;
-          const spd = c.spd || 0;
-          if (spd < 0.05) continue; // a stationary car doesn't kick
-          const dx = m.position.x - c.group.position.x, dz = m.position.z - c.group.position.z;
-          const d2 = dx * dx + dz * dz;
-          if (d2 >= CONE_KICK_R * CONE_KICK_R) continue;
-          let dirx, dirz;
-          if (d2 < 1e-4) { const f = c.pose.forward, fl = Math.hypot(f.x, f.z) || 1; dirx = f.x / fl; dirz = f.z / fl; }
-          else { const len = Math.sqrt(d2); dirx = dx / len; dirz = dz / len; }
-          const power = CONE_KICK_MIN + CONE_KICK_GAIN * spd;
-          cn.vel.set(dirx * power, CONE_KICK_UP, dirz * power);
-          cn.spinAxis.set(-dirz, 0, dirx).normalize(); // tumble about a horizontal axis ⟂ to launch
-          cn.spinRate = power * 2.2;
-          cn.airborne = true;
-          break;
-        }
-        continue;
-      }
-      // airborne: integrate, bounce off the road, settle
-      cn.vel.y -= CONE_GRAVITY * dt;
-      m.position.addScaledVector(cn.vel, dt);
-      m.rotateOnWorldAxis(cn.spinAxis, cn.spinRate * dt);
-      if (m.position.y <= cn.home.y) {
-        m.position.y = cn.home.y;
-        if (cn.vel.y < 0) cn.vel.y = -cn.vel.y * CONE_RESTITUTION;
-        cn.vel.x *= CONE_FRICTION; cn.vel.z *= CONE_FRICTION; cn.spinRate *= CONE_FRICTION;
-        if (cn.vel.y < CONE_SETTLE && (cn.vel.x * cn.vel.x + cn.vel.z * cn.vel.z) < CONE_SETTLE * CONE_SETTLE) {
-          cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
-        }
-      }
-      // keep it ON the road: clamp the lateral offset from the centreline (sampled at
-      // the cone's current along-track position) so a kicked cone bounces off the curb
-      // instead of clipping through it / sailing into the grass.
-      if (this._centerline) {
-        const f0 = this._centerline.sampleAt(cn.homeS);
-        const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
-        const f = this._centerline.sampleAt(cn.homeS + along);
-        const latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
-        const edge = (f.width != null ? f.width / 2 : this._roadHalf) - CONE_EDGE_MARGIN; // per-sample edge: in a flared section the wall sits at the wider visible asphalt, not the scalar default
-        if (Math.abs(latOff) > edge) {
-          m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
-          const vLat = cn.vel.dot(f.lateral);
-          if (vLat * Math.sign(latOff) > 0) cn.vel.addScaledVector(f.lateral, -vLat * (1 + CONE_WALL_RESTITUTION));
-        }
-      }
-    }
-  }
-
-  // Idle-animate the item boxes: spin about their up axis, bob, and pulse a gold
-  // emissive sparkle (synchronized across boxes) so they read as flashy pickups.
-  _stepBoxes(dt) {
-    if (!this._boxes || !this._boxes.length) return;
-    this._boxClock = (this._boxClock || 0) + dt;
-    const t = this._boxClock;
-    const pulse = 0.16 + 0.18 * (0.5 + 0.5 * Math.sin(t * 4.5)); // gold emissive throb
-    for (const b of this._boxes) {
-      // Collect burst: a grabbed box GROWS while it FADES out, then hides. Driven by
-      // collectT (set on the available→gone edge in syncProps); k runs 1→0.
-      if (b.collectT > 0) {
-        b.collectT -= dt;
-        const k = Math.max(0, b.collectT / BOX_COLLECT_TIME);
-        b.mesh.rotateY(BOX_SPIN * 2.2 * dt);                      // spin up as it pops
-        b.mesh.scale.setScalar(b.baseS * (1 + (1 - k) * BOX_COLLECT_GROW));
-        for (const m of b.mats) m.opacity = k;                    // fade out
-        if (b.collectT <= 0) {                                    // done: reset + hide
-          b.mesh.visible = false;
-          b.mesh.scale.setScalar(b.baseS);
-          for (const m of b.mats) m.opacity = 1;
-        }
-        continue;
-      }
-      if (!b.mesh.visible) continue;
-      b.mesh.rotateY(BOX_SPIN * dt);                                    // spin about local up
-      b.mesh.position.y = b.homeY + Math.sin(t * BOX_BOB_W + b.phase) * BOX_BOB_AMP;
-      for (const m of b.mats) {
-        if ('emissiveIntensity' in m) {
-          if (m.emissive) m.emissive.setHex(0xffd23f);
-          m.emissiveIntensity = pulse;
-        }
-      }
-    }
-  }
-
-  // Restore every cone to its home pose — called on a new game so a fresh race
-  // starts with the warning rings intact rather than wherever they were knocked.
-  resetCones() {
-    if (!this._cones) return;
-    for (const cn of this._cones) {
-      cn.mesh.position.copy(cn.home);
-      cn.mesh.quaternion.copy(cn.homeQuat);
-      cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
-    }
+    this.props.setTrack(track);
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the
@@ -2477,7 +1033,7 @@ export class SceneRenderer {
     if (c.boostAura) {
       if (boostMul > 1.001) {
         const k = boostMul - 1;            // 0.25 (leader floor) … 0.60 (last)
-        const pulse = 0.62 + 0.38 * Math.sin(performance.now() * 0.011); // ~1.8 Hz
+        const pulse = 0.62 + 0.38 * Math.sin(this._last * 0.011); // ~1.8 Hz (rAF clock — no per-car performance.now())
         c.boostAura.visible = true;
         c.boostAura.material.opacity = Math.min(0.42, 0.18 + k * 0.5) * pulse; // subtle
         const sc = (1.25 + k * 2.0) * (0.96 + 0.06 * pulse);                   // gentle breathing
@@ -2738,70 +1294,14 @@ export class SceneRenderer {
     const dt = Math.min(rawMs / 1000, 0.05);
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
-    if (rawMs > 0 && rawMs < 1000) this._tickFpsMeter(t, rawMs); // skip absurd post-stall deltas
+    if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);
 
-    // SKIDMARK ribbon. Each rear wheel's contact point is tracked CONTINUOUSLY
-    // while moving (so a new mark only ever bridges one short segment — no gaps),
-    // but a mark's opacity ramps smoothly from ZERO at the scuff threshold: a dead-
-    // straight cruise leaves nothing (the contact shadow grounds it there), gentle
-    // bends fade in faintly, and hard cornering / curb grinding marks clearly.
-    // Stamps are laid end-to-end (no overlap, so faint quads don't stack into
-    // darker blobs) at the car's tyre width → one even ribbon along the exact
-    // wheel path at any speed.
-    for (const c of this.cars.values()) {
-      if (!c.pose) continue;
-      const spd = c.spd || 0;                                // normalised 0..1 (per-car top speed)
-      if (spd <= 0.05 && !c.scrub) {
-        // stopped: forget every wheel's last contact so we never bridge across a stop
-        if (c.backWheels) for (const w of c.backWheels) w.userData.skidLast = null;
-        if (c.frontWheels) for (const w of c.frontWheels) w.userData.skidLast = null;
-        continue;
-      }
-      const up = c.pose.up;
-      const turn = Math.min(1, Math.abs(c.steerAmt || 0));   // how hard we're cornering
-      // slip 0..1: 1 grinding the curb, else how far past the scuff threshold the corner is
-      const slip = c.scrub ? 1 : Math.max(0, (turn - SKID_THRESH) / (1 - SKID_THRESH));
-      // brake bite: slamming the analog brake at speed lays straight streaks, in
-      // sync with the nose dive — the tyres visibly gripping the road to shed pace
-      const brakeBite = ((c.brakeAmt || 0) > SKID_BRAKE_MIN && spd > 0.25)
-        ? (c.brakeAmt - SKID_BRAKE_MIN) / (1 - SKID_BRAKE_MIN) : 0;
-      // launch scratch: hard forward acceleration from near-standstill (race
-      // start, boost from slow) — faint marks of torque biting in, fading out as
-      // the car gets rolling
-      const launch = ((c.accelNorm || 0) > SKID_LAUNCH_MIN && spd < 0.5)
-        ? Math.min(1, (c.accelNorm - SKID_LAUNCH_MIN) / (1 - SKID_LAUNCH_MIN)) * (1 - spd / 0.5) * 0.6 : 0;
-      const strength = c.scrub ? 1 : Math.min(1, Math.max(slip * 1.3, brakeBite, launch)); // 0 at threshold → smooth fade-in
-      c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
-      // curb grind marks all four wheels; otherwise just the loaded rears (clear
-      // the fronts so a later scrub doesn't bridge from a stale spot)
-      const wheels = c.scrub ? c.allWheels : c.backWheels;
-      if (!c.scrub && c.frontWheels) for (const w of c.frontWheels) w.userData.skidLast = null;
-      for (const w of wheels) {
-        // wheel position dropped onto the road plane under the car = contact patch
-        const gp = w.getWorldPosition(this._gpA);
-        gp.addScaledVector(up, -this._projV.copy(gp).sub(c.pose.pos).dot(up));
-        // `last` is a live reference to w.userData.skidLast, so last.copy(...) below
-        // advances the stored point in place.
-        let last = w.userData.skidLast;
-        if (!last) { w.userData.skidLast = gp.clone(); continue; } // first contact: seed it
-        const seg = this._segV.copy(gp).sub(last);
-        const dist = seg.length();
-        if (dist < SKID_SEG_MIN) continue;                  // not moved enough yet — accumulate
-        if (dist > SKID_SEG_MAX) { last.copy(gp); continue; } // respawn/teleport — don't streak across it
-        // only draw if the corner is hard enough to scuff; otherwise just keep the
-        // contact point marching forward so the next real mark bridges one segment
-        if (strength > 0.02) {
-          const dir = this._dirV.copy(seg).multiplyScalar(1 / dist);
-          const mid = this._midV.copy(last).addScaledVector(seg, 0.5);
-          this._emitSkidSeg(mid, up, dir, dist, c.skidWidth, strength); // end-to-end, no overlap
-        }
-        last.copy(gp); // always advance (even on a straight) → next mark starts adjacent
-      }
-    }
-    this._stepSkids(dt);
-    this._stepCones(dt);
-    this._stepBoxes(dt);
+    // Skidmark trails: bridge each wheel's contact path into the merged decal
+    // pool (cornering scuffs, curb grinds, brake streaks, launch scratches).
+    this.skids.layTrails(this.cars);
+    this.skids.step(dt);
+    this.props.step(dt, this.cars); // kickable cones + item-box idle/collect anims
     // clouds drift slowly east, wrapping well outside the playfield
     for (const cl of this._clouds) {
       cl.position.x += 0.7 * dt;

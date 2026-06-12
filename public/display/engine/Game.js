@@ -279,9 +279,8 @@ export class Game {
     this.cars.delete(oldId);
     car.id = newId;
     this.cars.set(newId, car);
-    for (let i = 0; i < this.finishedOrder.length; i++) {
-      if (this.finishedOrder[i] === oldId) this.finishedOrder[i] = newId;
-    }
+    const fi = this.finishedOrder.indexOf(oldId);
+    if (fi !== -1) this.finishedOrder[fi] = newId;
     for (const b of this.bananas) { if (b.owner === oldId) b.owner = newId; }
     return true;
   }
@@ -477,13 +476,19 @@ export class Game {
     let entered = false;
     for (let i = 0; i < zones.length; i++) {
       const z = zones[i];
-      const ds = wrapDelta(c.totalS - z.s, this.length);
-      const dl = c.lat - z.lat;
-      const inside = (ds * ds + dl * dl) < (z.radius * z.radius);
-      if (inside) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
+      if (this._inZone(c, z, z.radius)) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
       else inSet.delete(i);
     }
     return entered;
+  }
+
+  // Circle overlap in the shared (arclength, lateral) trigger plane — the one
+  // geometry test behind oil/pad zones, item boxes, and bananas. The arclength
+  // gap wraps to the shortest way round the closed lap.
+  _inZone(c, z, radius) {
+    const ds = wrapDelta(c.totalS - z.s, this.length);
+    const dl = c.lat - z.lat;
+    return (ds * ds + dl * dl) < radius * radius;
   }
 
   // Catch-up factor per LIVE car: t = how far behind the leader, normalised by the
@@ -535,9 +540,7 @@ export class Game {
     if (!this.boxes.length) return;
     for (let i = 0; i < this.boxes.length; i++) {
       const b = this.boxes[i];
-      const ds = wrapDelta(c.totalS - b.s, this.length);
-      const dl = c.lat - b.lat;
-      const inside = b.cooldown <= 0 && (ds * ds + dl * dl) < (b.radius * b.radius);
+      const inside = b.cooldown <= 0 && this._inZone(c, b, b.radius);
       if (inside && !c.boxIn.has(i)) {
         if (c.item == null) {
           c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
@@ -581,9 +584,7 @@ export class Game {
     let hit = false;
     for (const b of this.bananas) {
       if (b.hit || b.owner === c.id || b.armT > 0) continue; // already consumed this frame, owner, or still arming
-      const ds = wrapDelta(c.totalS - b.s, this.length);
-      const dl = c.lat - b.lat;
-      if ((ds * ds + dl * dl) < (BANANA_RADIUS * BANANA_RADIUS)) { b.hit = true; hit = true; }
+      if (this._inZone(c, b, BANANA_RADIUS)) { b.hit = true; hit = true; }
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
     return hit;

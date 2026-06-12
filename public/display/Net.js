@@ -54,9 +54,8 @@ export class DisplayNet extends GameNet {
     this._initFastlane(0, { onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev) });
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
-    const announce = () => { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); };
-    this.flow.on('rosterchange', announce);
-    this.flow.on('hostchange', announce);
+    this.flow.on('rosterchange', () => this._announce());
+    this.flow.on('hostchange', () => this._announce());
     // Ready flags are lobby-only: wipe them whenever the room lands back in the
     // lobby, so the next race needs a fresh round of "I'm ready" taps (stale
     // flags would leave the host's "Start race" pre-armed for the new race).
@@ -69,6 +68,12 @@ export class DisplayNet extends GameNet {
   }
 
   // ---- roster helpers ----
+  // Echo roster state everywhere it's consumed: every phone (LOBBY_UPDATE) and
+  // the display's own UI. Called on any roster/host/ready/car change.
+  _announce() {
+    this._broadcastLobby();
+    this.onRosterChange(this.roster(), this.flow.host);
+  }
   roster() {
     return this.flow.list().map((p) => ({
       peerIndex: p.peerIndex, name: p.name,
@@ -81,7 +86,7 @@ export class DisplayNet extends GameNet {
   _clearReady() {
     let changed = false;
     for (const p of this.flow.list()) { if (p.ready) { p.ready = false; changed = true; } }
-    if (changed) { this._broadcastLobby(); this.onRosterChange(this.roster(), this.flow.host); }
+    if (changed) this._announce();
   }
   _usedColors() {
     const s = new Set();
@@ -145,8 +150,7 @@ export class DisplayNet extends GameNet {
         const p = this.flow.get(from);
         if (p && data.name) p.name = String(data.name).slice(0, 16);
         this.party.sendTo(from, this._welcomeFor(from));
-        this._broadcastLobby();
-        this.onRosterChange(this.roster(), this.flow.host);
+        this._announce();
         break;
       }
       case MSG.LEAVE:
@@ -163,8 +167,7 @@ export class DisplayNet extends GameNet {
         if (p && this.roomState === 'lobby'
           && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
           p.carIndex = idx;
-          this._broadcastLobby();
-          this.onRosterChange(this.roster(), this.flow.host);
+          this._announce();
         }
         break;
       }
@@ -177,8 +180,7 @@ export class DisplayNet extends GameNet {
         const ready = !!data.ready;
         if (p && from !== this.flow.host && this.roomState === 'lobby' && ready !== !!p.ready) {
           p.ready = ready;
-          this._broadcastLobby();
-          this.onRosterChange(this.roster(), this.flow.host);
+          this._announce();
         }
         break;
       }
