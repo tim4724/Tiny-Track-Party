@@ -22,8 +22,8 @@ intentionally resolves nothing.
 
 - **Slot 0 is the display; slots 1..N are controllers.**
 - **Transport is pluggable.** Talk to the Party Sockets relay
-  (`PartyConnection`) or run on AirConsole (`AirConsoleAdapter`) behind one
-  interface, with an optional P2P low-latency input path (`PartyFastlane`).
+  (`PartyConnection`) — or any adapter that speaks the same interface — with an
+  optional P2P low-latency input path (`PartyFastlane`).
 - **`RoomFlow` is the brain** — who is in the room, who is host, what state we
   are in. It is headless: it emits events, your view renders.
 - **The kit knows nothing about your game.** No DOM, no rendering, no colors,
@@ -34,8 +34,6 @@ intentionally resolves nothing.
 | Module | Role |
 | --- | --- |
 | `PartyConnection.js` | WebSocket client for the Party Sockets relay. Stable `clientId` bearer token for reconnect. |
-| `AirConsoleAdapter.js` | Drop-in `PartyConnection` replacement that speaks the AirConsole SDK. |
-| `AirConsoleStorage.js` | AirConsole persistent-data backed `localStorage` shim. |
 | `PartyFastlane.js` | Optional P2P WebRTC DataChannel layer (low-latency input). Piggybacks on the connection for signaling, falls back to it. |
 | `RoomFlow.js` | Headless room/lobby/host state machine: room state, roster, sticky-host election, presence. |
 
@@ -79,8 +77,8 @@ relay config is deployment-level, not framework-level.
 ## API reference
 
 Conceptual model: slot 0 is always the display, slots 1..N are controllers. The
-transport classes are interchangeable (`PartyConnection` and `AirConsoleAdapter`
-share one interface).
+transport interface is adapter-friendly: anything exposing `PartyConnection`'s
+methods and callbacks can stand in for it (a platform-SDK adapter once did).
 
 ### `PartyConnection` — relay WebSocket client
 
@@ -113,45 +111,6 @@ The relay requires a `clientId`; if you omit it, one is auto-generated. An
 auto-generated id is stable for this instance (in-session reconnects keep the
 same slot) but not across page reloads — to reconnect across a reload, persist a
 `clientId` (e.g. `localStorage`) and pass it in.
-
-### `AirConsoleAdapter` — drop-in `PartyConnection` over the AirConsole SDK
-
-```js
-new AirConsoleAdapter(airconsole, {
-  role: 'display' | 'controller',
-  onReady?: (code, ac) => void,   // runs before 'created'/'joined' is synthesized
-})
-```
-
-Same interface and callbacks as `PartyConnection` (`onError` is a no-op, the SDK
-has no error event; `create` / `join` / `reconnectNow` are no-ops). Synthesizes
-the relay protocol events from SDK device events.
-
-The `onReady` hook is the kit's seam for anything a game must do before first
-paint (e.g. applying the AirConsole-profile locale). The kit carries no i18n
-knowledge itself.
-
-`broadcast(data)` maps directly to AirConsole's broadcast primitive. Displays
-use it to fan out game messages; controller code should generally use
-`sendTo(0, data)` to talk only to the display.
-
-AirConsole-only extras:
-- `getMasterPeerIndex()` — the master-controller rule; feed it to `RoomFlow.masterProvider`.
-- `captureEarlyReady(airconsole)` — replay an SDK `onReady` that fired before
-  the adapter was constructed.
-
-### `AirConsoleStorage` — AC persistent-data storage shim
-
-```js
-const storage = AirConsoleStorage.install(airconsole, {
-  allowlist: ['volume', 'difficulty']
-});
-```
-
-Installs a `localStorage`-compatible shim backed by AirConsole persistent data.
-Only allowlisted keys round-trip; keys not listed silently no-op. Use
-`storage.requestLoad()` after AirConsole `onReady`, and `storage.onLoad(fn)` to
-react once persisted values hydrate.
 
 ### `PartyFastlane` — optional P2P DataChannel (low-latency input)
 
@@ -203,8 +162,8 @@ Reads: `state`, `host` (effective), `hostPeerIndex` (sticky), `isHost(peerIndex)
 
 Static: `RoomFlow.lowestFreeSlot(used, max)` returns the lowest free dense slot
 in `[0, max)` given the slot values in use. Pure and **sparse-safe** — pass slot
-values, never `peerIndex`es, so a non-contiguous transport id (an AirConsole
-`device_id`) is never mistaken for a dense seat/color index. Use it for any
+values, never `peerIndex`es, so a non-contiguous transport id (e.g. a platform
+SDK's device id) is never mistaken for a dense seat/color index. Use it for any
 per-player dense allocation (seat, color slot) instead of indexing by peerIndex.
 
 Events (`flow.on(type, fn)` returns an unsubscribe function; `'*'` receives all):
