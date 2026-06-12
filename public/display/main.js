@@ -400,8 +400,30 @@ function refreshAutoPause() {
   if (!connected && !inGrace) { returnToLobby(); return; } // no human cars left at all
   autoPaused = connected === 0;
   syncSessionFrozen();
+  refreshAbandonTimer();
 }
 net.flow.on('rosterchange', refreshAutoPause);
+
+// Escape hatch on top of the auto-pause: every racer is gone (only QR seats
+// left) while late joiners sit waiting in their lobby. Don't hold the newcomers
+// hostage for the full RECONNECT_GRACE_MS — give the dropped party a short
+// window to scan back in, then return to the lobby so the next race seats the
+// people who are actually here. The timer is disarmed the moment any racer
+// reconnects or the last waiting late joiner leaves (both fire rosterchange).
+const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000; // __abandonGraceMs: E2E hook to shorten the wait
+let abandonTimer = null;
+function refreshAbandonTimer() {
+  const abandoned = autoPaused && lateJoiners().length > 0;
+  if (!abandoned) {
+    clearTimeout(abandonTimer);
+    abandonTimer = null;
+  } else if (!abandonTimer) {
+    abandonTimer = setTimeout(() => {
+      abandonTimer = null;
+      if (autoPaused) returnToLobby(); // re-check: state may have shifted since arming
+    }, ABANDONED_RACE_GRACE_MS);
+  }
+}
 
 // A dropped player reconnected on a different device (new peerIndex): move their
 // still-racing car — engine, render entry and results identity — onto the new
@@ -737,6 +759,7 @@ function showResults(results) {
 function returnToLobby() {
   if (net.roomState === ROOM_STATE.LOBBY) return;
   clearTimeout(endTimer);
+  clearTimeout(abandonTimer); abandonTimer = null;
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.

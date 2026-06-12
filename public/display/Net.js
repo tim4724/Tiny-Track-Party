@@ -17,6 +17,20 @@ const enc = encodeURIComponent;
 // player who's truly gone stops blocking the 4-seat room.
 const RECONNECT_GRACE_MS = 90000;
 
+// Controller liveness. The relay only reports a drop when a socket actually
+// CLOSES — a locked phone or dead Wi-Fi leaves it dangling for minutes. Phones
+// ping at 1 Hz (controller/Net.js), so a seat silent past this window is treated
+// as dropped through the same path as a real peer_left. Lobby seats are exempt:
+// peer_left stays the authority there, so a brief blip can't kick a lobby seat.
+const LIVENESS_TIMEOUT_MS = 3000;
+// Display self-heartbeat: each liveness tick relays a message to our own slot.
+// An echo overdue past this window means OUR socket is half-dead (the relay
+// can't reach us), so force a reconnect instead of waiting for TCP to notice.
+// Wider than the controller window: with the fastlane carrying inputs the WS
+// sees only ~1 Hz traffic, so this lone canary needs more margin.
+const HEARTBEAT_DEAD_MS = 6000;
+const LIVENESS_TICK_MS = 1000;
+
 // sessionStorage key for the live room, so a display RELOAD rejoins its own
 // room (the phones just see a short "waiting for the big screen" blip) instead
 // of creating a fresh one and orphaning every controller in the dead room.
@@ -55,6 +69,13 @@ export class DisplayNet extends GameNet {
     this._reconnectSeats = new Map();
     this._reconnectTimers = new Map();
 
+    // Liveness bookkeeping: peerIndex -> last proof-of-life timestamp, plus the
+    // self-heartbeat in-flight state (see _livenessTick).
+    this._lastSeen = new Map();
+    this._livenessTimer = null;
+    this._hbPending = false;
+    this._hbSentAt = 0;
+
     // Track selector state. `tracks` is the catalog the display computed (id +
     // name + feature chips + schematic SVG), sent to phones in WELCOME so their
     // picker can render without any game geometry. `trackId` is the current pick;
@@ -70,7 +91,10 @@ export class DisplayNet extends GameNet {
     this.baseUrlOverride = null;
     this._inRoom = false; // true between a created/joined ack and the socket dropping
 
-    this._initFastlane(0, { onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev) });
+    // Fastlane input counts as proof of life: a phone whose relay socket died
+    // can still be driving over the open P2P channel — its car must not grow a
+    // reconnect QR mid-corner.
+    this._initFastlane(0, { onInput: (peerIdx, ev) => { this._seen(peerIdx); this.onControllerMessage(peerIdx, ev); } });
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     this.flow.on('rosterchange', () => this._announce());
@@ -159,6 +183,7 @@ export class DisplayNet extends GameNet {
         if (this.instance) this.party.pinInstance(RELAY_URL, this.roomCode, this.instance);
         this._inRoom = true;
         this._saveRoom();
+        this._startLiveness();
         this.onRoomReady({ roomCode: this.roomCode, joinUrl: this._joinUrl() });
         break;
       case 'joined': // display reconnected to an existing room (in-session or after a reload)
@@ -167,6 +192,7 @@ export class DisplayNet extends GameNet {
         this.party.resetReconnectCount();
         this._inRoom = true;
         this._saveRoom();
+        this._startLiveness();
         this.onRoomReady({ roomCode: this.roomCode, joinUrl: this._joinUrl() });
         break;
       case 'peer_joined':
@@ -191,7 +217,13 @@ export class DisplayNet extends GameNet {
   }
 
   _onMessage(from, data) {
-    if (!data || from === 0) return;
+    if (!data) return;
+    if (from === 0) { // our own relay echo coming back (see _livenessTick)
+      if (data.type === '_heartbeat') this._hbPending = false;
+      return;
+    }
+    // ANY traffic from a peer — app message or RTC signal — is proof of life.
+    this._seen(from);
     if (this._isSignal(from, data)) return;
     switch (data.type) {
       case MSG.HELLO: {
@@ -217,9 +249,7 @@ export class DisplayNet extends GameNet {
         // the usual grace window (re-joining lands straight back in the seat)
         // and expires like any other drop if the player is truly gone.
         if (this.roomState === ROOM_STATE.COUNTDOWN || this.roomState === ROOM_STATE.PLAYING) {
-          this.fastlane.close(from);
-          this.flow.markDisconnected(from);
-          this._showReconnect(from);
+          this._dropSeat(from);
         } else {
           this._expireSeat(from);
         }
@@ -276,24 +306,20 @@ export class DisplayNet extends GameNet {
   }
 
   _addPeer(peerIndex) {
-    const existing = this.flow.get(peerIndex);
-    if (existing) {
-      // Same-device reconnect: the relay keys slots by clientId, so a returning
-      // phone lands back on its old index. Flip presence back on and drop its
-      // reconnect QR. (A cross-device rejoin gets a NEW index instead and is
-      // re-keyed onto the dropped seat in _claimReconnect via HELLO.)
-      if (this.flow.isDisconnected(peerIndex)) {
-        this.flow.markReconnected(peerIndex);
-        this._clearReconnect(peerIndex);
-      }
-      return;
+    if (!this.flow.has(peerIndex)) {
+      if (this.flow.size >= MAX_PLAYERS) return;
+      const colorIndex = RoomFlow.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
+      // Default the car model to the livery slot so everyone starts on a distinct
+      // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
+      this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex, ready: false });
+      // rosterchange fires from addPlayer → announce() handles broadcast + UI.
     }
-    if (this.flow.size >= MAX_PLAYERS) return;
-    const colorIndex = RoomFlow.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
-    // Default the car model to the livery slot so everyone starts on a distinct
-    // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
-    this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex, ready: false });
-    // rosterchange fires from addPlayer → announce() handles broadcast + UI.
+    // Existing seat = same-device reconnect: the relay keys slots by clientId,
+    // so a returning phone lands back on its old index — _seen flips presence
+    // back on and drops its reconnect QR. (A cross-device rejoin gets a NEW
+    // index instead and is re-keyed onto the dropped seat in _claimReconnect
+    // via HELLO.) New seats just get their liveness clock started.
+    this._seen(peerIndex);
   }
 
   _removePeer(peerIndex) {
@@ -305,20 +331,76 @@ export class DisplayNet extends GameNet {
     // resumes driving — and offer a reconnect QR for that exact seat. The car is
     // only forfeited if the seat's grace window elapses (playerleave → forfeitCar).
     if (this.roomState === ROOM_STATE.LOBBY) {
+      this._lastSeen.delete(peerIndex);
       this.flow.removePlayer(peerIndex); // emits rosterchange → announce()
     } else {
-      this.flow.markDisconnected(peerIndex);
-      this._showReconnect(peerIndex);
+      this._dropSeat(peerIndex);
     }
+  }
+
+  // Mid-game drop (socket gone, liveness silence, or a mid-race LEAVE): keep the
+  // seat AND the car — the camera stays on it and a quick reconnect resumes
+  // driving — and offer the per-seat reconnect QR with its grace clock running.
+  _dropSeat(peerIndex) {
+    this.fastlane.close(peerIndex);
+    this.flow.markDisconnected(peerIndex);
+    this._showReconnect(peerIndex);
   }
 
   // Free a seat for good: clear its reconnect QR/timer and drop the player. Used
   // for an intentional LEAVE and when the reconnect grace window elapses.
   _expireSeat(peerIndex) {
     this._clearReconnect(peerIndex);
+    this._lastSeen.delete(peerIndex);
     if (!this.flow.has(peerIndex)) return;
     this.fastlane.close(peerIndex);
     this.flow.removePlayer(peerIndex);
+  }
+
+  // ---- liveness (1 Hz) ----
+  _startLiveness() {
+    if (this._livenessTimer) return;
+    this._hbPending = false;
+    this._livenessTimer = setInterval(() => this._livenessTick(), LIVENESS_TICK_MS);
+  }
+
+  // Record proof of life for a peer — relay message, RTC signal, fastlane input,
+  // or a relay (re)join. Also lifts a dropped seat back to connected: a phone can
+  // go silent and resume WITHOUT its socket ever closing (locked screen, network
+  // blip), so presence must flip back here, not only on peer_joined.
+  _seen(peerIndex) {
+    this._lastSeen.set(peerIndex, Date.now());
+    if (this.flow.isDisconnected(peerIndex)) {
+      this.flow.markReconnected(peerIndex); // emits rosterchange → announce + auto-pause refresh
+      this._clearReconnect(peerIndex);
+    }
+  }
+
+  _livenessTick() {
+    if (!this._inRoom || !this.party) return;
+    const now = Date.now();
+    // Self-heartbeat: relay a message to our own slot and expect it echoed back.
+    // Tracked as an in-flight flag rather than an echo-age so a throttled
+    // background tab — whose ticks may run minutes apart — can't misread its own
+    // starvation as a dead link. No echo inside the window = the socket is
+    // half-dead; reconnect now instead of waiting for TCP to notice.
+    if (this._hbPending && now - this._hbSentAt > HEARTBEAT_DEAD_MS) {
+      this._hbPending = false;
+      this.party.reconnectNow();
+      return;
+    }
+    if (!this._hbPending) {
+      this._hbPending = true;
+      this._hbSentAt = now;
+      this.party.sendTo(0, { type: '_heartbeat' });
+    }
+    // Per-controller silence check — mid-game only (see LIVENESS_TIMEOUT_MS).
+    if (this.roomState === ROOM_STATE.LOBBY) return;
+    for (const p of this.flow.list()) {
+      if (!p.connected) continue;
+      const seen = this._lastSeen.get(p.peerIndex);
+      if (seen != null && now - seen > LIVENESS_TIMEOUT_MS) this._dropSeat(p.peerIndex);
+    }
   }
 
   _resyncPeers(peers) {
@@ -348,6 +430,7 @@ export class DisplayNet extends GameNet {
     if (!this.flow.has(oldId) || !this.flow.isDisconnected(oldId)) return false;
     this.fastlane.close(oldId);
     this.fastlane.close(fromId);
+    this._lastSeen.delete(oldId);
     this.flow.rekey(oldId, fromId); // moves the seat record, marks it reconnected
     this.onPlayerRekey(oldId, fromId); // move their still-racing car onto the new slot
     this._clearReconnect(oldId);

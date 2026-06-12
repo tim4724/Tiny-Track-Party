@@ -31,3 +31,25 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   await startRace(alice, [bob, carol]);
   await carol.waitForSelector(visible('#game'));
 });
+
+test('an abandoned race returns to the lobby for waiting late joiners', async ({ page, browser }) => {
+  // Shorten the abandoned-race grace so the test doesn't sit out the real 15 s.
+  await page.addInitScript(() => { window.__abandonGraceMs = 1500; });
+  const roomCode = await openDisplay(page);
+
+  const alice = await joinController(browser, roomCode, 'Alice'); // host
+  await startRace(alice, []);
+  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+
+  // Bob scans in mid-race and waits in his lobby for the next one.
+  const bob = await joinController(browser, roomCode, 'Bob');
+  await bob.waitForSelector(visible('#lobby'));
+
+  // The only racer vanishes. Normally her seat (and the frozen race) would hold
+  // its reconnect QR for the full 90 s grace — but with Bob waiting, the
+  // abandoned-race timer returns the room to the lobby after a short window.
+  await alice.context().close();
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
+  // Bob's waiting note gives way to the ready button — he's in the next race.
+  await bob.waitForSelector(visible('#ready-btn'));
+});

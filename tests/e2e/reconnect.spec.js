@@ -21,6 +21,37 @@ test('a reloaded phone rejoins straight into its still-running race', async ({ p
   await bob.waitForSelector(visible('#game'), { timeout: 15000 });
 });
 
+test('a silent phone is dropped by liveness and restored when its pings resume', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
+  await startRace(alice, []);
+  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+
+  // Lock-screen simulation: every outbound path goes quiet — pings, the CONTROL
+  // stream (which falls back to the relay without a fastlane), RTC signalling —
+  // but the relay socket stays OPEN, so peer_left never fires and only the
+  // display's 1 Hz liveness check can notice.
+  await alice.evaluate(() => {
+    const net = window.__net;
+    net._stopPing();
+    if (net.fastlane) { net.fastlane.closeAll(); net.fastlane = null; }
+    net.party._send = () => {}; // shadow the prototype method; deleted on "wake"
+  });
+
+  // ~3 s of relay silence → seat dropped, its reconnect QR card up on the cell.
+  await page.waitForFunction(() => window.__net.flow.isDisconnected(1), null, { timeout: 10000 });
+  await expect(page.locator('.cell-reconnect')).toBeVisible();
+
+  // The phone wakes: traffic resumes on the SAME socket (no rejoin handshake) —
+  // the seat flips back to connected and the QR card comes down.
+  await alice.evaluate(() => {
+    delete window.__net.party._send; // un-shadow → prototype send works again
+    window.__net._startPing();
+  });
+  await page.waitForFunction(() => !window.__net.flow.isDisconnected(1), null, { timeout: 10000 });
+  await expect(page.locator('.cell-reconnect')).toHaveCount(0);
+});
+
 test('a display reload rejoins its own room and regathers the party', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
