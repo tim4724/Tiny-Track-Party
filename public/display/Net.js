@@ -166,10 +166,13 @@ export class DisplayNet extends GameNet {
         // Lobby car-model pick. Car and colour are independent and duplicates
         // are allowed, so no uniqueness check — just validate and store, then
         // broadcast so this phone's picker confirms and the display renders the
-        // chosen model at race start. Lobby only.
+        // chosen model at race start. Allowed in the lobby, and mid-race for
+        // players with no car on track (late joiners wait in THEIR lobby while
+        // a race runs — their pick must stick for the next race). Racers stay
+        // locked to their car until the room is back in the lobby.
         const p = this.flow.get(from);
         const idx = data.carIndex;
-        if (p && this.roomState === 'lobby'
+        if (p && (this.roomState === 'lobby' || !this.inRace(from))
           && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
           p.carIndex = idx;
           this._announce();
