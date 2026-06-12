@@ -102,6 +102,10 @@
       <div id="conn-title" class="conn__title">Reconnecting…</div>
       <div id="conn-msg" class="conn__msg"></div>
       <button id="conn-retry" type="button" class="btn btn--brand hidden">Try again</button>
+      <!-- Escape hatch for terminal states (display gone for good, seat taken
+           over, retries exhausted) — without it the overlay is a dead end and
+           only the back gesture gets you out. -->
+      <button id="conn-leave" type="button" class="btn btn--ghost hidden">Exit to start</button>
     </div>
   </div>
 

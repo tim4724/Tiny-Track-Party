@@ -17,6 +17,12 @@ const enc = encodeURIComponent;
 // player who's truly gone stops blocking the 4-seat room.
 const RECONNECT_GRACE_MS = 90000;
 
+// sessionStorage key for the live room, so a display RELOAD rejoins its own
+// room (the phones just see a short "waiting for the big screen" blip) instead
+// of creating a fresh one and orphaning every controller in the dead room.
+// sessionStorage is per-tab on purpose: a second display tab gets its own room.
+const ROOM_KEY = 'tinytrack_display_room';
+
 export class DisplayNet extends GameNet {
   constructor(opts = {}) {
     super();
@@ -36,6 +42,13 @@ export class DisplayNet extends GameNet {
     // brand-new late joiner (wait in the lobby for the next race). The game
     // layer answers from its session; default "yes" preserves the rejoin path.
     this.inRace = opts.inRace || (() => true);
+    // Asked per WELCOME: is the race manually paused? A rejoiner must re-raise
+    // the pause overlay it missed while away, or its wheel just feels dead.
+    this.isPaused = opts.isPaused || (() => false);
+    // Fired after a WELCOME is sent, so the game layer can follow up with any
+    // catch-up state that normally only flows as broadcasts (e.g. the live
+    // standings board for a rejoiner whose car already finished).
+    this.onPlayerWelcomed = opts.onPlayerWelcomed || (() => {});
 
     // Dropped seats currently offering a reconnect QR, plus their grace timers.
     // peerIndex -> {peerIndex, name, colorIndex, url}; peerIndex -> timeout id.
@@ -55,6 +68,7 @@ export class DisplayNet extends GameNet {
     this.roomCode = null;
     this.instance = null;
     this.baseUrlOverride = null;
+    this._inRoom = false; // true between a created/joined ack and the socket dropping
 
     this._initFastlane(0, { onInput: (peerIdx, ev) => this.onControllerMessage(peerIdx, ev) });
 
@@ -69,7 +83,25 @@ export class DisplayNet extends GameNet {
 
   async start() {
     await this._fetchBaseUrl();
+    this._restoreRoom();
     this._connect();
+  }
+
+  // ---- room persistence (reload survival) ----
+  _restoreRoom() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(ROOM_KEY) || 'null');
+      if (saved && saved.room) {
+        this.roomCode = saved.room;
+        this.instance = saved.instance || null;
+      }
+    } catch (_) { /* no restore — create a fresh room */ }
+  }
+  _saveRoom() {
+    try { sessionStorage.setItem(ROOM_KEY, JSON.stringify({ room: this.roomCode, instance: this.instance })); } catch (_) {}
+  }
+  _forgetRoom() {
+    try { sessionStorage.removeItem(ROOM_KEY); } catch (_) {}
   }
 
   // ---- roster helpers ----
@@ -101,6 +133,7 @@ export class DisplayNet extends GameNet {
 
   // ---- connection ----
   _connect() {
+    if (this.party) this.party.close(); // fresh-room fallback replaces the connection
     this.fastlane.closeAll();
     const url = (this.roomCode && this.instance)
       ? RELAY_URL + '/' + enc(this.roomCode) + '?instance=' + enc(this.instance)
@@ -112,6 +145,7 @@ export class DisplayNet extends GameNet {
       if (this.roomCode) this.party.join(this.roomCode);
       else this.party.create(MAX_PLAYERS + 1); // +1 for the display itself
     };
+    this.party.onClose = () => { this._inRoom = false; };
     this.party.onProtocol = (type, msg) => this._onProtocol(type, msg);
     this.party.onMessage = (from, data) => this._onMessage(from, data);
     this.party.connect();
@@ -123,12 +157,16 @@ export class DisplayNet extends GameNet {
         this.roomCode = msg.room;
         this.instance = msg.instance || null;
         if (this.instance) this.party.pinInstance(RELAY_URL, this.roomCode, this.instance);
+        this._inRoom = true;
+        this._saveRoom();
         this.onRoomReady({ roomCode: this.roomCode, joinUrl: this._joinUrl() });
         break;
-      case 'joined': // display reconnected to an existing room
+      case 'joined': // display reconnected to an existing room (in-session or after a reload)
         this.roomCode = msg.room;
         this._resyncPeers(msg.peers || []);
         this.party.resetReconnectCount();
+        this._inRoom = true;
+        this._saveRoom();
         this.onRoomReady({ roomCode: this.roomCode, joinUrl: this._joinUrl() });
         break;
       case 'peer_joined':
@@ -139,6 +177,15 @@ export class DisplayNet extends GameNet {
         break;
       case 'error':
         console.warn('[relay]', msg.message);
+        // A join refused while we hold a room code means the room is gone (the
+        // relay expired it while this tab was closed/asleep). Fall back to a
+        // fresh room instead of erroring forever on a dead one.
+        if (this.roomCode && !this._inRoom) {
+          this._forgetRoom();
+          this.roomCode = null;
+          this.instance = null;
+          this._connect();
+        }
         break;
     }
   }
@@ -152,15 +199,30 @@ export class DisplayNet extends GameNet {
         // build below reflects the restored identity (livery/car/host) — not the
         // throwaway placeholder slot the relay just handed this fresh connection.
         this._claimReconnect(from, data);
+        // A HELLO from a peer we never seated (the relay knows them, we don't —
+        // e.g. this tab reloaded and missed their peer_joined): seat them now.
+        if (!this.flow.has(from)) this._addPeer(from);
         const p = this.flow.get(from);
         if (p && data.name) p.name = String(data.name).slice(0, 16);
         this.party.sendTo(from, this._welcomeFor(from));
+        this.onPlayerWelcomed(from);
         this._announce();
         break;
       }
       case MSG.LEAVE:
-        // Intentional back-out: free the seat outright (no reconnect QR).
-        this._expireSeat(from);
+        // Intentional back-out. In the lobby (and on the results board) the
+        // seat is freed outright — the join QR covers coming back. Mid-race
+        // it's treated as a DROP instead: one accidental back-swipe must not
+        // forfeit a car for good, so the seat holds its reconnect QR through
+        // the usual grace window (re-joining lands straight back in the seat)
+        // and expires like any other drop if the player is truly gone.
+        if (this.roomState === ROOM_STATE.COUNTDOWN || this.roomState === ROOM_STATE.PLAYING) {
+          this.fastlane.close(from);
+          this.flow.markDisconnected(from);
+          this._showReconnect(from);
+        } else {
+          this._expireSeat(from);
+        }
         break;
       case MSG.SET_CAR: {
         // Lobby car-model pick. Car and colour are independent and duplicates
@@ -264,6 +326,12 @@ export class DisplayNet extends GameNet {
     for (const p of this.flow.list()) {
       if (!present.has(p.peerIndex)) this._expireSeat(p.peerIndex);
     }
+    // Peers the relay knows that we don't — this tab RELOADED mid-session and
+    // lost the roster. Seat them with placeholder identities now; each phone
+    // also re-HELLOs when it sees the display return, restoring its name.
+    for (const idx of peers) {
+      if (idx !== 0 && !this.flow.has(idx)) this._addPeer(idx);
+    }
     // Re-welcome everyone so their controllers clear any reconnect overlay.
     for (const p of this.flow.list()) this.party.sendTo(p.peerIndex, this._welcomeFor(p.peerIndex));
   }
@@ -334,6 +402,7 @@ export class DisplayNet extends GameNet {
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       inRace: !!this.inRace(peerIndex), // mid-race: rejoin (true) vs late joiner (false)
+      paused: !!this.isPaused(),        // mid-race: re-sync the pause overlay a rejoiner missed
       players: this.roster(),
       tracks: this.tracks,       // full catalog (static) — sent once, on join
       trackId: this.trackId      // current selection

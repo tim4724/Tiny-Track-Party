@@ -344,6 +344,18 @@ const net = new DisplayNet({
   // phone drops back into the race); one without is a late joiner (the phone
   // waits in its lobby — they get a car when the next race builds its field).
   inRace: (peerIndex) => !!(session && session.engine.cars.has(peerIndex)),
+  // Manual pause only: the silent auto-pause lifts on the reconnect itself
+  // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
+  isPaused: () => paused,
+  // Standings are broadcast-only, so a (re)joiner missed every board pushed
+  // while they were away. Catch them up: mid-race the live order (a rejoiner
+  // whose car already finished flips straight to the results overlay), during
+  // results the final board (instead of stranding them on the lobby screen).
+  onPlayerWelcomed: (peerIndex) => {
+    if (!session) return;
+    if (net.roomState === ROOM_STATE.PLAYING) net.sendTo(peerIndex, standingsPayload(session.getResults(), false));
+    else if (net.roomState === ROOM_STATE.RESULTS) net.sendTo(peerIndex, standingsPayload(session.getResults(), true));
+  },
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();

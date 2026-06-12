@@ -31,7 +31,7 @@ var MSG = {
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
   SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
-  LEAVE: 'leave',               // intentional exit (back-out) — display frees the seat at once (no reconnect QR)
+  LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
   // Display -> specific controller

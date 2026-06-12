@@ -72,6 +72,7 @@ let inResults = false;     // showing the results overlay (my car finished / rac
 // automatically when the next race builds its field; GAME_END (back to the
 // lobby) clears the flag.
 let waitingForNextRace = false;
+let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
 
 const NAME_KEY = 'tinytrack_name';
 const TRACK_KEY = 'tinytrack_track';   // host's last-picked track id
@@ -105,18 +106,18 @@ const net = new ControllerNet({
     if (state === 'reconnecting') {
       const txt = `Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`;
       setStatus(txt);
-      if (inRoom) showConn('Reconnecting…', txt, false);
+      if (inRoom) showConn('Reconnecting…', txt, false, false);
     } else if (state === 'lost') {
       setStatus('Connection lost.');
-      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true);
+      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true, true);
     } else if (state === 'error') {
-      setStatus('Error: ' + info);
+      setStatus(friendlyRelayError(info));
     } else if (state === 'display_gone') {
       setStatus('Waiting for the big screen…');
-      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false);
+      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false, true);
     } else if (state === 'replaced') {
       setStatus('Opened on another tab.');
-      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false);
+      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false, true);
     }
   },
   onMessage: handleMessage,
@@ -124,18 +125,24 @@ const net = new ControllerNet({
 });
 
 // ---- connection overlay (screen-agnostic relay-link feedback) ----
-function showConn(title, msg, retry) {
+// `leave` shows the "Exit to start" escape hatch — on for every terminal state
+// (lost / display_gone / replaced), off while a reconnect is still in flight.
+function showConn(title, msg, retry, leave) {
   el('conn-title').textContent = title;
   el('conn-msg').textContent = msg || '';
   el('conn-retry').classList.toggle('hidden', !retry);
+  el('conn-leave').classList.toggle('hidden', !leave);
   el('conn').classList.remove('hidden');
 }
 function hideConn() { el('conn').classList.add('hidden'); }
 el('conn-retry').addEventListener('click', () => {
   buzz(15);
-  showConn('Reconnecting…', '', false);
+  showConn('Reconnecting…', '', false, false);
   net.connect(myName);
 });
+// Pop the room's history entry — the popstate handler runs the real leave
+// (leaveToName), exactly as the back gesture would, keeping the stack clean.
+el('conn-leave').addEventListener('click', () => { buzz(15); history.back(); });
 
 // Latency chip (bottom-right). Stays hidden until the first reading lands so it
 // never flashes on the pre-join name screen. See applyLatencyChip in ui.js.
@@ -148,6 +155,12 @@ const tilt = new TiltInput({
 });
 
 function setStatus(t) { el('name-status').textContent = t; }
+// Relay error strings (Party-Server) → copy a party guest can act on.
+function friendlyRelayError(msg) {
+  if (msg === 'Room not found') return 'That race has ended — scan a fresh QR code on the big screen.';
+  if (msg === 'Room is full') return 'This race is full — wait for a free seat, then try again.';
+  return 'Error: ' + msg;
+}
 // Lock the join form while a connection is in flight so a double-tap can't fire
 // two joins; unlocked again only if the attempt errors out (success navigates
 // away to the lobby).
@@ -187,10 +200,17 @@ function handleMessage(data) {
         show('game');
         el('drive-hud').classList.remove('hidden');
         el('pause-btn').classList.remove('hidden');
+        setPauseOverlay(!!data.paused); // re-raise a pause we missed while away
         setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
         startDriving();      // resume streaming tilt to our still-racing car
       } else {
-        show('lobby');       // lobby, results, or waiting on the next race
+        // Lobby, results, or waiting on the next race. May be reached FROM the
+        // game screen (the display reloaded into a fresh lobby mid-race), so
+        // shut the drive surface down like GAME_END does.
+        stopDriving();
+        setPauseOverlay(false);
+        el('pause-btn').classList.add('hidden');
+        show('lobby');
       }
       break;
     }
@@ -210,6 +230,10 @@ function handleMessage(data) {
         applyLivery();
       }
       renderLobby();
+      // Host duty can move while the results board is up (the host left) — the
+      // footer's "New game" button must follow it or nobody can start the next
+      // game from a phone until the display's failsafe kicks in.
+      if (inResults && lastStandings) renderResultFoot(lastStandings);
       break;
     }
     case MSG.COUNTDOWN:
@@ -246,6 +270,7 @@ function handleMessage(data) {
       // Waiting on the next race: mid-race boards aren't ours, but the FINAL
       // board is — it lists us as "Next race", so join everyone on the results.
       if (waitingForNextRace && !data.over) break;
+      lastStandings = data;
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       renderResults(data);
@@ -265,6 +290,7 @@ function handleMessage(data) {
     case MSG.GAME_END:
       inResults = false;
       waitingForNextRace = false;      // back in the lobby — we're in the next race for real
+      lastStandings = null;
       stopDriving();
       setPauseOverlay(false);
       el('pause-btn').classList.add('hidden');
@@ -464,6 +490,7 @@ function leaveToName() {
   _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
   inResults = false;
   waitingForNextRace = false;
+  lastStandings = null;
   amHost = false;
   amReady = false;
   roster = [];
