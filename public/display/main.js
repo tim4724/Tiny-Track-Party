@@ -686,7 +686,7 @@ function standingsPayload(results, over) {
     type: MSG.STANDINGS,
     over: !!over,
     hostPeerIndex: net.flow.host,
-    total: results.results.length,
+    total: order.length,   // racers + joining rows — always matches order
     order
   };
 }
@@ -697,7 +697,7 @@ function standingsPayload(results, over) {
 // same endRace flow, so the two boards always agree on who's joining.
 function lateJoiners() {
   const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
-  return net.flow.list().filter((p) => p.connected !== false && !byId.has(p.peerIndex));
+  return net.flow.list().filter((p) => !!p.connected && !byId.has(p.peerIndex));
 }
 function broadcastStandings(over) {
   if (session) net.broadcast(standingsPayload(session.getResults(), over));

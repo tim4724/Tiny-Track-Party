@@ -25,7 +25,7 @@ const test = base.test.extend({
 async function openDisplay(page) {
   await page.goto('/');
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
-  await page.evaluate(() => window.__sceneReady);
+  await page.evaluate(() => window.__sceneReady); // evaluate awaits the returned Promise (GLB load)
   return page.evaluate(() => window.__net.roomCode);
 }
 

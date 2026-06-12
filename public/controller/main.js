@@ -379,10 +379,13 @@ function renderLobby() {
   if (waitingForNextRace) {
     // Late joiner: a race is running without us. No ready button (readiness
     // gates a lobby we're not in) — pick a car and hold for the next race.
+    // If host promotion lands on us mid-race (original host gone), this branch
+    // still hides the start controls — acceptable: the abandoned-race timer on
+    // the display returns everyone to the lobby, where we get them normally.
     el('ready-btn').classList.add('hidden');
     const note = el('ready-note');
     note.classList.remove('hidden');
-    note.textContent = 'You’re in the next race!';
+    note.textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
     return;
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
