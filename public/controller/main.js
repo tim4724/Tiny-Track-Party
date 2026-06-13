@@ -1,11 +1,11 @@
-// Controller entry — name → lobby → drive. M2: tilt steering + swipe brake,
-// streamed as CONTROL to the display; live lap/position HUD from PLAYER_STATE.
+// Controller entry — name → lobby → drive. Tilt steering + brake streamed as
+// CONTROL to the display; PLAYER_STATE just lights the ITEM button (place/lap and
+// the rest of the race HUD live on the big screen).
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
-import { applyLatencyChip, renderWaitNote, renderReadyFoot } from './ui.js';
-import { ordinal } from '../shared/format.js';
+import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
 const { MSG, CAR_COLORS, ROOM_STATE } = window;
@@ -200,6 +200,7 @@ function handleMessage(data) {
         show('game');
         el('drive-hud').classList.remove('hidden');
         el('pause-btn').classList.remove('hidden');
+        el('help-btn-game').classList.remove('hidden'); // re-check controls mid-race
         setPauseOverlay(!!data.paused); // re-raise a pause we missed while away
         setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
         startDriving();      // resume streaming tilt to our still-racing car
@@ -210,7 +211,9 @@ function handleMessage(data) {
         stopDriving();
         setPauseOverlay(false);
         el('pause-btn').classList.add('hidden');
+        el('help-btn-game').classList.add('hidden');
         show('lobby');
+        onEnterLobby();  // first lobby entry → teach controls (or surface blocked motion)
       }
       break;
     }
@@ -244,6 +247,7 @@ function handleMessage(data) {
       if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]); // haptic tick on counts, stronger on GO
       setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
       el('pause-btn').classList.remove('hidden');
+      el('help-btn-game').classList.remove('hidden');
       setHeldItem(null);               // USE off at the line (no PLAYER_STATE yet during countdown)
       startDriving();                  // stream tilt during the countdown (display reacts)
       break;
@@ -254,13 +258,12 @@ function handleMessage(data) {
       show('game');
       el('drive-hud').classList.remove('hidden');
       el('pause-btn').classList.remove('hidden');
+      el('help-btn-game').classList.remove('hidden');
       setHeldItem(null);
       startDriving();
       break;
     case MSG.PLAYER_STATE:
       if (inResults) break;            // finished → results overlay owns the screen now
-      el('pos').textContent = ordinal(data.position);
-      el('lap').textContent = data.finished ? 'Finished' : `Lap ${data.lap}/${data.totalLaps}`;
       setHeldItem(data.item);          // lights the ITEM button (identity shows on the display)
       break;
     case MSG.STANDINGS: {
@@ -294,6 +297,7 @@ function handleMessage(data) {
       stopDriving();
       setPauseOverlay(false);
       el('pause-btn').classList.add('hidden');
+      el('help-btn-game').classList.add('hidden');
       renderLobby();                   // restore the ready footer the waiting note replaced
       show('lobby');
       break;
@@ -308,6 +312,7 @@ function showResultsScreen() {
   if (!inResults) { inResults = true; stopDriving(); }
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
+  el('help-btn-game').classList.add('hidden');
   show('results');
 }
 
@@ -499,6 +504,9 @@ function leaveToName() {
   roster = [];
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
+  el('help-btn-game').classList.add('hidden');
+  if (helpOpen()) closeHelp();         // don't strand either popup over the name screen
+  if (motionOpen()) closeMotionPopup();
   setJoining(false);
   setStatus('');
   hideConn();
@@ -510,15 +518,20 @@ window.addEventListener('popstate', () => {
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
 
-el('name-form').addEventListener('submit', (e) => {
+el('name-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const n = el('name-input').value.trim().slice(0, 16) || 'Racer';
   myName = n;
   saveName(n);
-  // Request motion permission within this user gesture (iOS requirement).
-  tilt.enableMotion();
   setStatus('');           // the disabled button signals the in-flight join
   setJoining(true);
+  // Request motion permission within this user gesture (iOS requirement). AWAIT it
+  // so motionState is resolved before the lobby's auto-shown help reads it — the
+  // request itself is fired synchronously inside this gesture (enableMotion calls
+  // requestPermission before its first await), so awaiting the result is safe and
+  // doesn't break the gesture rule. On iOS this waits out the system prompt; on
+  // Android/desktop it resolves on the next microtask (no prompt, negligible delay).
+  await tilt.enableMotion();
   net.connect(n);
 });
 
@@ -541,6 +554,9 @@ el('ready-btn').addEventListener('click', () => {
 // requests a change and reacts to the GAME_PAUSED / GAME_RESUMED broadcast.
 // While paused the overlay covers the screen, so the pause button is disabled.
 function setPauseOverlay(on) {
+  // Pause is authoritative and must win the screen: if a popup is open when a pause
+  // lands (both sit above the pause overlay), close it so the pause shows.
+  if (on) { if (helpOpen()) closeHelp(); if (motionOpen()) closeMotionPopup(); }
   el('pause-overlay').classList.toggle('hidden', !on);
   el('pause-btn').disabled = on;
 }
@@ -550,6 +566,159 @@ el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RET
 
 // Results overlay: only the host gets the button; it sends everyone to the lobby.
 el('newgame-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
+
+// --- How-to-Drive popup ---
+// Purely INSTRUCTIONAL: teaches the controls (tilt/brake/item) + the keep-upright
+// note. Auto-shows ONCE per device on first lobby entry; the "?" buttons (lobby +
+// game) reopen it. The motion-permission recovery is a SEPARATE popup (below).
+const HELP_SEEN_KEY = 'tinytrack_seen_help';
+const helpSeen = () => { try { return localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (_) { return false; } };
+const markHelpSeen = () => { try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (_) {} };
+
+// True in gallery/scenario mode — auto-popups stay shut there (the harness opens the
+// one it's previewing; a real WELCOME never fires anyway).
+const inScenario = () => !!new URLSearchParams(location.search).get('scenario');
+
+// Auto-show the help popup once per device on the first lobby entry, then never
+// again (the flag is sticky). See onEnterLobby for how it yields to the motion popup.
+function maybeAutoShowHelp() {
+  if (inScenario() || helpSeen() || helpOpen()) return;
+  openHelp();        // show first, THEN stamp — a throw before it shows can't burn the once
+  markHelpSeen();
+}
+
+// On reaching the lobby: if tilt is blocked, the actionable motion popup wins the
+// beat (so the two never stack); otherwise teach the controls once. A blocked player
+// still gets the controls intro later — once motion is sorted, this runs again with
+// the help flag still unseen.
+function onEnterLobby() {
+  if (inScenario()) return;
+  if (motionBlocked()) maybeShowMotionAlert();
+  else maybeAutoShowHelp();
+}
+
+// --- shared modal plumbing (help + motion popups) ---
+// While a modal is up, mark the screens behind it inert so a screen reader's virtual
+// cursor (and any stray Tab) can't reach the lobby/HUD underneath — aria-modal + the
+// keyboard trap only cover sighted keyboard users. inert is ignored where unsupported,
+// so this degrades to the trap alone.
+function setBackgroundInert(on) {
+  for (const k of Object.keys(screens)) screens[k].toggleAttribute('inert', on);
+}
+// Minimal focus trap: keep Tab/Shift+Tab cycling within the open card's VISIBLE
+// focusables (a hidden button is in the DOM but offsetParent null — exclude it, or
+// Tab lands on something invisible).
+function trapTab(overlay, e) {
+  if (e.key !== 'Tab') return;
+  const f = [...overlay.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+const restoreFocus = (node) => { if (node && node.focus) node.focus(); };
+
+// How-to-Drive popup open/close. _helpReturnFocus is the element focused before
+// opening, so closing returns focus to it (the "?" that opened it).
+let _helpReturnFocus = null;
+function openHelp() {
+  _helpReturnFocus = document.activeElement;
+  el('phone-name').textContent = myName || 'Racer';   // demo phone reads as "your phone" (livery via --car)
+  el('help-overlay').classList.remove('hidden');
+  setBackgroundInert(true);
+  el('help-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
+}
+function closeHelp() {
+  el('help-overlay').classList.add('hidden');
+  if (!motionOpen()) setBackgroundInert(false);   // un-inert BEFORE restoring focus
+  restoreFocus(_helpReturnFocus); _helpReturnFocus = null;
+}
+const helpOpen = () => !el('help-overlay').classList.contains('hidden');
+
+el('help-btn').addEventListener('click', () => { buzz(15); openHelp(); });
+el('help-btn-game').addEventListener('click', () => { buzz(15); openHelp(); });
+el('help-done').addEventListener('click', () => { buzz(15); closeHelp(); });
+el('help-overlay').addEventListener('keydown', (e) => trapTab(el('help-overlay'), e));
+
+// --- Motion-blocked popup ---
+// A SEPARATE alert from the instructions: surfaces when the tilt sensor is blocked
+// (iOS denied) or absent (unsupported), with the live recovery path. Auto-shows once
+// per page load on lobby entry while blocked (no nagging on every lobby return). The
+// recovery action depends on the state: iOS won't re-prompt once denied, so the button
+// RELOADS (the next Join re-raises the prompt) rather than uselessly re-requesting.
+// Copy + action live in ui.js (motionHelpCopy) so they can't drift from the gallery.
+const motionBlocked = () => { const s = tilt.motionState; return s === 'denied' || s === 'unsupported'; };
+let _motionAlertShown = false;
+let _motionReturnFocus = null;
+
+function maybeShowMotionAlert() {
+  if (inScenario() || _motionAlertShown || motionOpen() || !motionBlocked()) return;
+  _motionAlertShown = true;
+  openMotionPopup();
+}
+
+// Populate the popup's title/status/Allow/fix from the resolved state.
+function refreshMotionPopup() {
+  const copy = motionHelpCopy(tilt.motionState);
+  if (!copy.show) return;          // granted — popup shouldn't be up; guard anyway
+  el('motion-title').textContent = copy.title;
+  el('motion-status').textContent = copy.status;
+  const allow = el('motion-allow');
+  allow.classList.toggle('hidden', !copy.allow);
+  allow.disabled = false; allow.textContent = copy.allowText;
+  const fix = el('motion-fix');
+  if (copy.fix) { fix.classList.remove('hidden'); fix.innerHTML = copy.fix; }
+  else fix.classList.add('hidden');
+}
+
+function openMotionPopup() {
+  _motionReturnFocus = document.activeElement;
+  refreshMotionPopup();
+  el('motion-overlay').classList.remove('hidden');
+  setBackgroundInert(true);
+  el('motion-done').focus();
+}
+function closeMotionPopup() {
+  el('motion-overlay').classList.add('hidden');
+  if (!helpOpen()) setBackgroundInert(false);
+  restoreFocus(_motionReturnFocus); _motionReturnFocus = null;
+}
+const motionOpen = () => !el('motion-overlay').classList.contains('hidden');
+
+el('motion-done').addEventListener('click', () => { buzz(15); closeMotionPopup(); });
+el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
+// The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
+// since players have no keyboard fallback).
+el('motion-tip').addEventListener('click', () => { buzz(15); openMotionPopup(); });
+
+// Primary recovery button — what it DOES depends on the resolved state (see
+// motionHelpCopy's `action`). Once iOS has denied, re-calling requestPermission()
+// resolves 'denied' silently (no prompt), so 'denied' RELOADS instead: the next Join
+// re-raises the prompt (name is restored from localStorage). 'unknown' (gallery /
+// pre-prompt) is the only state where a fresh request can still prompt — there we
+// (re-)call enableMotion() within this gesture and confirm a grant in place.
+el('motion-allow').addEventListener('click', async () => {
+  buzz(15);
+  if (motionHelpCopy(tilt.motionState).action === 'reload') { location.reload(); return; }
+  const btn = el('motion-allow');
+  btn.disabled = true; btn.textContent = 'Asking…';
+  await tilt.enableMotion();
+  if (tilt.motionState === 'granted') {
+    el('motion-title').textContent = 'Motion access on';
+    el('motion-status').textContent = 'Tilt to steer is ready.';
+    btn.classList.add('hidden');
+    el('motion-fix').classList.add('hidden');
+  } else {
+    refreshMotionPopup();   // now 'denied' → button flips to "Reload & ask again"
+  }
+});
+
+// Escape closes whichever modal is up (motion sits above help — close it first).
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (motionOpen()) { e.preventDefault(); e.stopPropagation(); closeMotionPopup(); }
+  else if (helpOpen()) { e.preventDefault(); e.stopPropagation(); closeHelp(); }
+});
 
 // BRAKE button — held = brake at the fixed rate, released = release. A continuous
 // rumble runs while it's held: the player's eyes-free confirmation they're braking
@@ -606,19 +775,6 @@ if (_scenario) {
   }));
 }
 
-// Debug settings (faint wrench, bottom-left): interactive editor for this
-// page's query params — edits reload the page so each param takes effect
-// through its normal boot path above. Lazy import: dev aid, not boot-critical.
-const _COLOR_NAMES = ['Red', 'Amber', 'Green', 'Blue', 'Purple', 'Pink', 'Orange', 'Cyan'];
-import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
-  { section: 'Test harness' },
-  { key: 'scenario', label: 'Scenario', hint: 'no relay; lays out one screen', type: 'select',
-    options: ['name', 'name-connecting', 'lobby-host', 'lobby-waiting', 'lobby-joining',
-      'countdown', 'playing', 'finished', 'paused', 'results',
-      'conn-lost', 'conn-screen-gone', 'conn-replaced'].map((s) => ({ value: s, label: s })) },
-  { key: 'color', label: 'Livery', hint: 'scenario only', type: 'select',
-    options: CAR_COLORS.map((c, i) => ({ value: String(i), label: _COLOR_NAMES[i] || c })) },
-  { section: 'Rendering' },
-  { key: 'carview', label: 'Car thumbs', type: 'select',
-    options: [{ value: 'spin', label: 'spin' }, { value: 'still', label: 'still' }] },
-], { title: 'Controller' }));
+// No debug-settings wrench on the controller — it's the player-facing phone, so the
+// query-param editor would ship to real players. Scenarios are still reachable
+// directly via ?scenario=…&color=… (handled above); the gallery drives them that way.

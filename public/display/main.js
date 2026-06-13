@@ -312,13 +312,12 @@ scene.onFrame = (dt) => {
   if (now - lastPlayerState > 160) {
     lastPlayerState = now;
     for (const c of snap.cars) {
-      scene.setCarHud(c.id, c);
+      scene.setCarHud(c.id, c); // the TV's own HUD still shows place/lap from the car directly
       if (aiBots.has(c.id)) continue; // no phone behind an AI car
-      net.sendTo(c.id, {
-        type: MSG.PLAYER_STATE, lap: c.lap, totalLaps: c.totalLaps,
-        position: c.position, of: c.of, finished: c.finished,
-        item: c.item, boost: c.boostActive // phone shows the held item + a boost flash
-      });
+      // The phone HUD shows no place/lap (standings live on the TV) and reads only the
+      // held item — so PLAYER_STATE now carries just that. Still sent periodically (not
+      // only on change) so a (re)joiner mid-race gets their ITEM button relit.
+      net.sendTo(c.id, { type: MSG.PLAYER_STATE, item: c.item });
     }
   }
 };

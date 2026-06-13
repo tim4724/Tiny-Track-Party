@@ -40,6 +40,51 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // this gate is purely UX). `others` is every other NON-host connected player
 // as {name, color, ready}; `host` is {name, color} for the non-host waiting
 // note; `canStart` additionally gates the host until a track is picked.
+// "Motion sensor is blocked" popup copy — one source of truth for the live phone
+// (main.js refreshMotionPopup) and the gallery preview (TestHarness's
+// 'motion-blocked' case), keyed off tilt.motionState so the two can't drift. Returns
+// what to render: { show, title, status, allow, action, allowText, fix } (fix is an
+// HTML string or null — set via innerHTML for the <em> emphasis; the only markup is
+// our own literal). `action` says what the primary button DOES:
+//   'request' — (re-)call requestPermission(); only useful before a choice was made.
+//   'reload'  — reload the page (the only way to re-raise the iOS prompt once denied).
+// The distinction matters because iOS already prompts on the Join tap, then caches the
+// answer for the life of the page load: a second requestPermission() after a deny
+// resolves 'denied' SILENTLY (no prompt). So 'denied' offers RELOAD, not re-request —
+// reloading lets the next Join prompt again (name is restored from localStorage, so
+// it's a one-tap rejoin). If the global Safari toggle is off, even reload won't
+// prompt, hence the Settings fix line. 'granted' (incl. Android/desktop, which resolve
+// granted on the Join tap) needs no recovery, so the popup stays shut. 'unsupported'
+// drops the button entirely (no prompt to raise on that platform). 'unknown' (the
+// gallery / pre-prompt edge) is the one state where a fresh request CAN still prompt.
+export function motionHelpCopy(state) {
+  switch (state) {
+    case 'granted':
+      return { show: false };
+    case 'denied':
+      return {
+        show: true, allow: true, action: 'reload', allowText: 'Reload & ask again',
+        title: 'Motion sensor is blocked',
+        status: 'Steering uses your phone’s tilt, which is switched off.',
+        fix: 'Still off after reloading? Turn on <em>Settings → Apps → Safari → Motion &amp; Orientation Access</em>, then rejoin.'
+      };
+    case 'unsupported':
+      return {
+        show: true, allow: false, action: null, allowText: 'Allow motion',
+        title: 'Tilt steering isn’t available',
+        status: 'This device doesn’t report motion, so tilt steering won’t work here. Try joining from a phone.',
+        fix: null
+      };
+    default: // 'unknown' — before the Join tap resolved permission (e.g. the gallery)
+      return {
+        show: true, allow: true, action: 'request', allowText: 'Allow motion',
+        title: 'Turn on motion access',
+        status: 'Steering uses your phone’s tilt, so the game needs motion access. Tap below to turn it on.',
+        fix: null
+      };
+  }
+}
+
 export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, canStart, host, others }) {
   btnEl.classList.remove('hidden');
   const allReady = others.every((p) => p.ready);

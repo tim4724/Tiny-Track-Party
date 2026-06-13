@@ -17,6 +17,8 @@ var CONTROLLER_CARDS = [
   { key: 'lobby-host',      title: 'Lobby (host)',    perColor: true },
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
   { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
+  { key: 'help',            title: 'How to drive',    perColor: true },
+  { key: 'motion-blocked',  title: 'Motion blocked',  perColor: true },
   { key: 'countdown',       title: 'Countdown',       perColor: true, replayable: true },
   { key: 'playing',         title: 'Driving',         perColor: true },
   { key: 'paused',          title: 'Paused',          perColor: true },

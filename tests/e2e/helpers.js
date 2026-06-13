@@ -34,6 +34,13 @@ async function openDisplay(page) {
 // a mid-race joiner lands on the waiting lobby, others on the normal lobby.
 async function joinController(browser, roomCode, name) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  // Pre-seed the "How to drive" popup's seen-flag so its first-run auto-show
+  // doesn't cover the lobby and block ready/start clicks. These specs drive the
+  // game flow (a returning player who's already dismissed it); the popup's own
+  // coverage is the gallery 'help' scenario. Key mirrors HELP_SEEN_KEY in main.js.
+  await context.addInitScript(() => {
+    try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
+  });
   const page = await context.newPage();
   await page.goto(`/${roomCode}`);
   await page.fill('#name-input', name);

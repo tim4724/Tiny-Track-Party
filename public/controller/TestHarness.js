@@ -8,8 +8,7 @@ import { buildCarPicker } from '../shared/carPicker.js';
 import { buildTrackPicker } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-import { applyLatencyChip, renderReadyFoot } from './ui.js';
-import { ordinal } from '../shared/format.js';
+import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -99,10 +98,8 @@ export function runControllerScenario(opts) {
   const setLatency = (halfMs, fastlane) => applyLatencyChip(el('latency'), halfMs, fastlane);
 
   const setSteer = (v) => { const f = el('steer-fill'); if (f) f.style.transform = `translateX(${v * 50}%)`; };
-  function setHud(lap, total, pos, finished) {
+  function setHudName() {
     el('hud-name').textContent = FAKE_NAMES[color];     // who you are, top-left (mirrors the display)
-    el('pos').textContent = ordinal(pos);
-    el('lap').textContent = finished ? 'Finished' : `Lap ${lap}/${total}`;
   }
   // The item identity shows on the DISPLAY, not the phone — the only controller cue
   // is the ITEM button lighting up. Preview that by toggling its disabled state.
@@ -111,6 +108,11 @@ export function runControllerScenario(opts) {
     show('game');
     el('drive-hud').classList.remove('hidden');
     el('motion-tip').classList.add('hidden');
+    // The pause + "?" buttons ride with the HUD live (see startDriving in main.js),
+    // so the gallery shows them too. Both are z-8 fixed, so the paused/conn overlays
+    // (z-15/z-30) still cover them where those scenarios layer one on top.
+    el('pause-btn').classList.remove('hidden');
+    el('help-btn-game').classList.remove('hidden');
   }
 
   switch (scenario) {
@@ -152,6 +154,49 @@ export function runControllerScenario(opts) {
         [{ name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }]);
       break;
 
+    case 'help': {
+      // How-to-Drive popup over the lobby, for the gallery. main.js owns the live
+      // open/close (and its auto-show is suppressed in scenario mode), so here we
+      // just lay out the host lobby and pop the overlay open — the instructional
+      // popup (animated steer demo, brake/item swatches, upright note) is
+      // screenshottable without a relay. Motion recovery is its own scenario below.
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openHelp)
+      renderCarPicker(color);
+      renderTrackPicker(PREVIEW_TRACKS[0].id, true);
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
+      ]);
+      el('help-overlay').classList.remove('hidden');
+      el('help-done').focus();   // seed focus inside the dialog (mirrors openHelp)
+      break;
+    }
+
+    case 'motion-blocked': {
+      // The separate motion-blocked alert over the lobby. Preview the richest
+      // 'denied' branch (title + status + Allow button + Settings fix), pulling the
+      // SAME copy main.js renders (motionHelpCopy in ui.js) so the gallery can't
+      // drift from the live text.
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      renderCarPicker(color);
+      renderTrackPicker(PREVIEW_TRACKS[0].id, true);
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
+      ]);
+      const copy = motionHelpCopy('denied');
+      el('motion-title').textContent = copy.title;
+      el('motion-status').textContent = copy.status;
+      el('motion-allow').classList.toggle('hidden', !copy.allow);
+      const fix = el('motion-fix');
+      fix.classList.toggle('hidden', !copy.fix);
+      if (copy.fix) fix.innerHTML = copy.fix;
+      el('motion-overlay').classList.remove('hidden');
+      el('motion-done').focus();
+      break;
+    }
+
     case 'lobby-joining':
       // Late joiner: scanned the QR while a race was running. The lobby with the
       // car picker live but no ready button — just the "race in progress" note
@@ -170,7 +215,7 @@ export function runControllerScenario(opts) {
       // (the 3..2..1..GO lives on the display). Same as 'playing' but pre-fastlane.
       showDriveHud();
       setSteer(0);
-      setHud(1, 3, 1, false);
+      setHudName();
       setUse(false);           // USE off (empty slot)
       setLatency(24, false);   // pre-fastlane: WS reading, no bolt
       break;
@@ -178,7 +223,7 @@ export function runControllerScenario(opts) {
     case 'playing':
       showDriveHud();
       setSteer(0.4); // mid-right tilt, so the steer bar reads off-center
-      setHud(2, 3, 2, false);
+      setHudName();
       setUse(true);            // USE lit (holding an item; identity is on the display)
       setLatency(16, true);    // fastlane up: low RTT + bolt
       break;
@@ -198,11 +243,10 @@ export function runControllerScenario(opts) {
     case 'paused':
       showDriveHud();
       setSteer(0.2);
-      setHud(2, 3, 2, false);
+      setHudName();
       setUse(true);            // USE lit
       setLatency(18, true);
-      el('pause-btn').classList.remove('hidden');
-      el('pause-btn').disabled = true;     // overlay covers it while paused
+      el('pause-btn').disabled = true;     // shown by showDriveHud; overlay covers it while paused
       el('pause-overlay').classList.remove('hidden');
       break;
 
@@ -228,7 +272,7 @@ export function runControllerScenario(opts) {
       // escape hatch; only 'lost' also offers a manual retry.
       showDriveHud();
       setSteer(0);
-      setHud(2, 3, 2, false);
+      setHudName();
       const [title, msg, retry] = {
         'conn-lost': ['Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true],
         'conn-screen-gone': ['Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false],

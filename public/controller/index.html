@@ -30,9 +30,12 @@
   <!-- Lobby — who you are, your car, the track (the shared display owns the
        player roster). -->
   <section id="lobby" class="hidden">
-    <!-- your identity, up top — name in your livery colour (no dot needed) -->
+    <!-- your identity, up top — name in your livery colour (no dot needed). The
+         "?" reopens the How-to-Drive popup (always available in the lobby; it
+         also auto-shows once on the first visit — see openHelp in main.js). -->
     <div class="lobby-me">
       <span id="me-name" class="lobby-me__name"></span>
+      <button id="help-btn" class="help-btn icon-btn" type="button" aria-label="How to drive" aria-haspopup="dialog">?</button>
     </div>
 
     <!-- your car -->
@@ -57,23 +60,28 @@
   <!-- Game: tilt to steer, hold BRAKE to slow -->
   <section id="game" class="hidden">
     <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
+    <!-- Mid-race re-check: reopens the same How-to-Drive popup as the lobby "?".
+         Sits just left of the pause button (fixed; shown with the HUD). -->
+    <button id="help-btn-game" class="help-btn-game icon-btn hidden" type="button" aria-label="How to drive" aria-haspopup="dialog">?</button>
     <div id="drive-hud" class="hidden">
+      <!-- Player name only — top-left, sharing the top row with the fixed pause/?
+           buttons (lined up in CSS). No place/lap on the phone; the live standings
+           live on the big screen. -->
       <div class="hud-top">
         <div id="hud-name" class="hud-name"></div>
-        <div class="hud-rank">
-          <div id="pos" class="hud-rank__place">1st</div>
-          <div id="lap" class="hud-rank__lap">Lap 1/3</div>
-        </div>
       </div>
       <div class="steer">
         <div class="steer__track"><div id="steer-fill"></div></div>
-        <div class="steer__label">tilt to steer</div>
+        <div class="steer__label">Tilt to steer</div>
       </div>
       <div class="drive-controls">
         <button id="action-btn" class="action" disabled aria-label="Use item">ITEM</button>
         <button id="brake-btn" class="brake">BRAKE</button>
       </div>
-      <div id="motion-tip" class="hidden">No tilt? Use ◄ ► keys to steer.</div>
+      <!-- Shown mid-race only while tilt is blocked (see startDriving). A tap
+           reopens the motion-blocked popup to fix it on the spot — there's no
+           keyboard fallback for players (that's a dev/desktop aid only). -->
+      <button id="motion-tip" class="motion-tip hidden" type="button">Tilt steering is off — tap to fix.</button>
     </div>
     <!-- Pause overlay — frosted glass with the same choices as the big screen -->
     <div id="pause-overlay" class="hidden">
@@ -107,6 +115,83 @@
            over, retries exhausted) — without it the overlay is a dead end and
            only the back gesture gets you out. -->
       <button id="conn-leave" type="button" class="btn btn--ghost hidden">Exit to start</button>
+    </div>
+  </div>
+
+  <!-- How-to-Drive popup — frosted glass like #pause-overlay/#conn, sits ABOVE the
+       lobby and BELOW #conn (z 17) so a dropped link always wins. Purely
+       INSTRUCTIONAL: tilt-to-steer (animated demo), hold-BRAKE, tap-ITEM, and the
+       keep-upright note. Auto-shows ONCE per device on first lobby entry
+       (localStorage 'tinytrack_seen_help'); the "?" buttons reopen it. The motion-
+       permission recovery is a SEPARATE popup (#motion-overlay). Wiring in main.js. -->
+  <div id="help-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <h2 id="help-title">How to drive</h2>
+
+      <!-- STEER — the hero, and the most important control, so it gets the space.
+           A phone LEANS side to side (doodle-jump: rolled around its long axis — a
+           3D rotateY, NOT a flat in-plane twist) with the steer bar sliding in
+           lockstep, so the gesture reads at a glance. The live #steer-fill in the
+           HUD looks the same, reinforcing the mapping. -->
+      <div class="help-steer">
+        <!-- The demo phone previews the REAL driving screen in miniature: the
+             player's own name top-left (tinted with their livery, like the live HUD),
+             a steer strip that fills with the lean, over the two buttons in their live
+             positions (ITEM amber LEFT, BRAKE red RIGHT). The phone leans side to side
+             (doodle-jump rotateY) and the strip slides in step. #phone-name is
+             filled on open (openHelp / the gallery harness). -->
+        <div class="steer-demo" aria-hidden="true">
+          <div class="phone-lean">
+            <div class="phone-frame">
+              <div class="phone-inner">
+                <span id="phone-name" class="phone-name"></span>
+                <div class="mini-steer"><div class="mini-steer__fill"></div></div>
+                <div class="mini-controls">
+                  <span class="mini-btn mini-btn--item"></span>
+                  <span class="mini-btn mini-btn--brake"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="help-steer__lead">Tilt your phone side to side</p>
+      </div>
+
+      <!-- BRAKE + ITEM — SAME order as the live screen + the demo phone above: ITEM
+           (amber) on the LEFT, BRAKE (red) on the RIGHT. One short caption each. -->
+      <div class="help-controls">
+        <div class="help-ctrl">
+          <span class="help-chip help-chip--item" aria-hidden="true">ITEM</span>
+          <span class="help-ctrl__cap">Tap to use a pickup</span>
+        </div>
+        <div class="help-ctrl">
+          <span class="help-chip help-chip--brake" aria-hidden="true">BRAKE</span>
+          <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
+        </div>
+      </div>
+
+      <!-- Auto-rotate warning — a soft amber callout (a gentle heads-up, not
+           alarming). Framed accurately: steering is orientation-independent (see
+           TiltInput.js), so this is only about keeping the portrait UI from flipping. -->
+      <p class="help-warn"><span class="help-warn__icon" aria-hidden="true"></span>Turn off auto-rotate so the screen stays put.</p>
+
+      <button id="help-done" class="btn btn--brand help-done" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
+       when the tilt sensor is blocked (iOS denied) or absent (unsupported), with the
+       live recovery path. Sits above #help-overlay (z 18) but below #conn. Title,
+       copy + the primary button's action come from tilt.motionState (see
+       refreshMotionPopup / motionHelpCopy). Once iOS has denied, that button RELOADS
+       (the only way to re-raise the prompt) rather than uselessly re-requesting. -->
+  <div id="motion-overlay" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="motion-title" aria-describedby="motion-status">
+    <div class="help-card motion-card">
+      <h2 id="motion-title">Motion sensor is blocked</h2>
+      <p id="motion-status" class="help-copy"></p>
+      <button id="motion-allow" class="btn btn--brand" type="button">Reload &amp; ask again</button>
+      <p id="motion-fix" class="help-copy help-motion-fix hidden"></p>
+      <button id="motion-done" class="btn btn--ghost" type="button">Got it</button>
     </div>
   </div>
 

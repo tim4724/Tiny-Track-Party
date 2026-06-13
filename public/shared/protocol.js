@@ -46,7 +46,7 @@ var MSG = {
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
   LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag)
-  PLAYER_STATE: 'player_state', // {lap, totalLaps, position, of, finished, item, boost} — item lights the controller's USE button
+  PLAYER_STATE: 'player_state', // {item} — lights the controller's ITEM button (the phone shows no place/lap; standings live on the display)
   PONG: 'pong',
 
   // Display -> all controllers (broadcast)
