@@ -231,7 +231,7 @@ export function runDisplayScenario(opts, ctx) {
 
       const car = engine.cars.get(0);
       Object.assign(car, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (won't tick — frozen)
-      engine.bananas.push({ id: 1, s: at(8), lat: -0.5, armT: 0, owner: 'none' });
+      engine.bananas.push({ id: 1, s: at(8), lat: -0.5, owner: 'none' });
       engine._recomputePoses();
 
       const snap = engine.getSnapshot();

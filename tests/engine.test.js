@@ -728,7 +728,7 @@ test('item moments emit events: pickup, item_use, pad, spin', () => {
   assert.ok(events.some((e) => e.type === 'pad' && e.id === 'p1'), 'crossing a pad emits pad');
 
   // banana hit → spin (a live banana owned by someone else)
-  game.bananas.push({ id: 99, s: car.totalS % game.length, lat: car.lat, armT: 0, owner: 'someone-else' });
+  game.bananas.push({ id: 99, s: car.totalS % game.length, lat: car.lat, owner: 'someone-else' });
   game.processInput('p1', { b: 1 }); game.update(16);
   const spin = events.find((e) => e.type === 'spin');
   assert.ok(spin && spin.id === 'p1' && spin.cause === 'banana', 'a banana hit emits spin with its cause');
@@ -839,11 +839,27 @@ test('a dropped banana spins a follower (consumed on hit) but never the dropper'
   for (let i = 0; i < 40; i++) { game.processInput('drop', { b: 1 }); game.update(16); }
   assert.equal(dropper.spinT, 0, 'the dropper never trips its own banana');
   assert.equal(game.bananas.length, 1, 'the owner sitting on it does not consume it');
-  // a different car parks on the (now armed) banana → spins out AND consumes it
+  // a different car parks on the live banana → spins out AND consumes it
   Object.assign(follow, { totalS: bs, lat: 0, v: 0 });
   game.processInput('follow', { b: 1 }); game.update(16);
   assert.ok(follow.spinT > 0, 'a follower spins out on the banana');
   assert.equal(game.bananas.length, 0, 'the hit consumes the banana (Mario-Kart style)');
+});
+
+test('a dropped banana is live immediately — a tailgater is hit the same frame', () => {
+  const track = mkTrack(3);
+  const game = new Game(['drop', 'tail'], track, {});
+  const dropper = game.cars.get('drop'), tail = game.cars.get('tail');
+  Object.assign(dropper, { totalS: 12, lat: 0, v: 0, item: 'banana' });
+  // tailgater sits right where the banana will land (BANANA_BACK behind the dropper)
+  Object.assign(tail, { totalS: 12 - 1.2, lat: 0, v: 0 });
+  game.elapsed = 2;
+  // single tick: the drop (action button) happens, then the tailgater — iterated
+  // after the dropper — is already sitting on the live banana and trips it
+  game.processInput('drop', { u: 1, b: 1 }); game.processInput('tail', { b: 1 }); game.update(16);
+  assert.ok(tail.spinT > 0, 'the tailgater spins out on the freshly dropped banana');
+  assert.equal(dropper.spinT, 0, 'the dropper itself never trips it');
+  assert.equal(game.bananas.length, 0, 'the hit consumed the banana');
 });
 
 test('a dropped banana never expires — it waits on the track until hit', () => {

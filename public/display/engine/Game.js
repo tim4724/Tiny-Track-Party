@@ -115,7 +115,6 @@ const BOX_RADIUS = 0.65;       // fallback item-box radius
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
 const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
-const BANANA_ARM = 0.4;        // grace before a banana is live (so a shoved dropper can't self-trip)
 const BANANA_BACK = 1.2;       // how far behind the dropper a banana lands (units)
 
 // Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
@@ -188,7 +187,7 @@ export class Game {
       : { s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS });
     this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
-    this.bananas = [];      // [{ id, s, lat, life, armT, owner }] — live dropped bananas
+    this.bananas = [];      // [{ id, s, lat, owner }] — live dropped bananas (live on drop; owner-skipped)
     this._bananaSeq = 0;
     // Deterministic item rolls from a per-race seed (track.seed; default if unset).
     this.rng = mulberry32(((track.seed != null ? track.seed : 0x1A2B3C4D) >>> 0) || 1);
@@ -540,11 +539,10 @@ export class Game {
     }
   }
 
-  // Per-frame prop upkeep: respawn item boxes, count down each banana's arm grace.
-  // Bananas don't expire — they sit until a car hits one (consumed in _enterBanana).
+  // Per-frame prop upkeep: respawn item boxes. Bananas need no upkeep — they go live
+  // the instant they're dropped and sit until a car hits one (consumed in _enterBanana).
   _tickProps(dt) {
     for (const b of this.boxes) if (b.cooldown > 0) b.cooldown = Math.max(0, b.cooldown - dt);
-    for (const b of this.bananas) if (b.armT > 0) b.armT -= dt;
   }
 
   // Arm/refresh a position-scaled boost: peak ×vmax interpolates leader→last by tRaw.
@@ -587,7 +585,8 @@ export class Game {
   }
 
   // Fire the held item (press-to-use). Boost reuses the pad boost state; Banana drops
-  // a live hazard just behind the dropper (owner-skipped + armed so it can't self-trip).
+  // a hazard just behind the dropper — live immediately (so a tailgater is hit at once)
+  // and owner-skipped forever, so the dropper can never trip it.
   _useItem(c) {
     this.onEvent({ type: 'item_use', id: c.id, item: c.item });
     if (c.item === 'boost') {
@@ -595,7 +594,7 @@ export class Game {
       c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);
     } else if (c.item === 'banana') {
       let s = c.totalS - BANANA_BACK; s = ((s % this.length) + this.length) % this.length;
-      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, armT: BANANA_ARM, owner: c.id });
+      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, owner: c.id });
     }
     c.item = null;
   }
@@ -608,7 +607,7 @@ export class Game {
     if (!this.bananas.length) return false;
     let hit = false;
     for (const b of this.bananas) {
-      if (b.hit || b.owner === c.id || b.armT > 0) continue; // already consumed this frame, owner, or still arming
+      if (b.hit || b.owner === c.id) continue; // already consumed this frame, or the dropper itself
       if (this._inZone(c, b, BANANA_RADIUS)) { b.hit = true; hit = true; }
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
