@@ -106,6 +106,7 @@ export function buildTrack(track, opts = {}) {
   const widths = [trackWidth];               // per-sample drivable width (unscaled), parallel to worldPts
   const banks = [0];                          // per-sample bank roll (radians), parallel to worldPts
   const pillarFlags = [false];                // per-sample: emitted by a `pillars` (raised bridge/ramp) segment
+  const hillFlags = [false];                  // per-sample: a non-pillared straight rise/bump → can carry a grass hill
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
@@ -126,6 +127,7 @@ export function buildTrack(track, opts = {}) {
           z0 + dz * len * f + lz * off
         ));
         widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+        hillFlags.push(!seg.pillars && (!!seg.rise || !!seg.bump)); // open-ground grade → a grass hill
       }
       X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
@@ -138,6 +140,7 @@ export function buildTrack(track, opts = {}) {
         const f = i / N, th = th0 + ang * f;
         worldPts.push(v(x0 + R * sgn * (latX(th0) - latX(th)), y0 + rise * smootherstep(f), z0 + R * sgn * (latZ(th0) - latZ(th))));
         widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+        hillFlags.push(false); // arcs (corners, the spiral) never carry a hill
       }
       X = x0 + R * sgn * (latX(th0) - latX(th0 + ang));
       Z = z0 + R * sgn * (latZ(th0) - latZ(th0 + ang));
@@ -171,6 +174,7 @@ export function buildTrack(track, opts = {}) {
           const fwd = r * Math.sin(phi);
           worldPts.push(v(x0 + dx * fwd + lx * off, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd + lz * off));
           widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+          hillFlags.push(false); // a loop is a stunt, never a hill
         }
         X = x0 + lx * drift; Z = z0 + lz * drift; // beside the entry; heading + elev unchanged
       } else {
@@ -180,6 +184,7 @@ export function buildTrack(track, opts = {}) {
           const fwd = r * Math.sin(phi); // along-travel excursion; back to 0 at the apex
           worldPts.push(v(x0 + dx * fwd, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd));
           widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
+          hillFlags.push(false); // a loop is a stunt, never a hill
         }
         theta += Math.PI;           // heading reversed
         elev = y0 + vert * 2 * r;   // apex directly above/below the entry; X/Z unchanged
@@ -199,7 +204,7 @@ export function buildTrack(track, opts = {}) {
   // with gap in (DS, 0.5) would be flagged closed yet keep its last point → one ~(DS+gap)
   // seam segment. Tune such a track to gap≈0 (the "every named track closes" test guards it).
   const closed = gap < 0.5;
-  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); pillarFlags.pop(); }
+  if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); pillarFlags.pop(); hillFlags.pop(); }
 
   // Scale positions + widths to world.
   for (const p of worldPts) p.multiplyScalar(SCALE);
@@ -266,7 +271,7 @@ export function buildTrack(track, opts = {}) {
     if (i > 0) s += worldPts[i].distanceTo(worldPts[i - 1]);
     minY = Math.min(minY, worldPts[i].y);
     minEdgeY = Math.min(minEdgeY, worldPts[i].y - Math.abs(lateral.y) * widths[i] / 2);
-    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i], pillars: pillarFlags[i] });
+    samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i], pillars: pillarFlags[i], hillable: hillFlags[i] });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
   // Grass plane: just under the lowest point of the track — measured at the road
@@ -329,9 +334,66 @@ export function buildTrack(track, opts = {}) {
     }
   }
 
+  // ---- Grass hills (berms) under raised, NON-pillared road — the organic counterpart
+  // to pillars. A raised deck needs something beneath it or it floats over the flat lawn:
+  // a bridge gets pillars (above), a hill gets terrain — a grass berm lofted up to meet
+  // the road underside, flaring back down to the lawn (hiding the deck's grey skirt). A
+  // sample berms when it's `hillable` (its segment is an open-ground straight rise/bump —
+  // loops, arcs/the spiral and bridges are NOT, so a berm can never mound up a stunt),
+  // it rises above the lawn (HILL_MIN skips the dead-flat ends), and NO road runs beneath
+  // it (else the berm would bury the lower road — that span stays open air). Contiguous
+  // hill samples form a run; runs shorter than MIN_RUN are dropped as noise. Each run is
+  // emitted as lofted cross-section rings (left foot → left top → right top → right foot),
+  // feathered to lawn level one sample past each end so the berm rises smoothly out of
+  // flat ground. SceneRenderer.buildHills stitches the rings into a grass surface.
+  const hills = [];
+  {
+    const HILL_MIN = 0.15;  // a hillable sample this close to the lawn is essentially flat — skip it
+    const MIN_RUN = 1.0;    // world units; drop any stray sub-threshold run as noise
+    const TUCK = 0.15;      // berm top sits this far under the road surface — grass hugs the road edge, hiding the skirt
+    const EDGE = 0.25;      // berm top reaches this far past the drivable edge, hiding the skirt
+    const LEVEL_GAP = 1.0;  // a sample this far BELOW counts as road running underneath
+    const REACH = 3.2;      // berm footprint half-extent for the under-road clearance test
+    const ARC_GUARD = 12;   // ignore road within this arclength — it's the hill's OWN flanks, not a crossing
+    const isHill = (i) => {
+      const s = samples[i];
+      if (!s.hillable || s.pos.y - groundY < HILL_MIN) return false;
+      for (let j = 0; j < n; j++) {
+        if (s.pos.y - samples[j].pos.y < LEVEL_GAP) continue; // not clearly below us
+        const ds = Math.abs(s.s - samples[j].s);
+        if (Math.min(ds, length - ds) < ARC_GUARD) continue;  // the hill's own descending flank, not a road it flies over
+        const dx = samples[j].pos.x - s.pos.x, dz = samples[j].pos.z - s.pos.z;
+        const clear = samples[j].width / 2 + REACH;
+        if (dx * dx + dz * dz < clear * clear) return false;  // a genuinely lower, separate road below — keep open air
+      }
+      return true;
+    };
+    let i = 0;
+    while (i < n) {
+      if (!isHill(i)) { i++; continue; }
+      const a = i; while (i < n && isHill(i)) i++;
+      const b = i - 1;
+      if (samples[b].s - samples[a].s < MIN_RUN) continue; // drop noise
+      const lo = Math.max(0, a - 1), hi = Math.min(n - 1, b + 1); // feather one sample past each end
+      const rings = [];
+      for (let k = lo; k <= hi; k++) {
+        const s = samples[k];
+        let lx = s.lateral.x, lz = s.lateral.z;
+        const ll = Math.hypot(lx, lz);
+        if (ll < 1e-6) { lx = 1; lz = 0; } else { lx /= ll; lz /= ll; }
+        const feather = (k < a || k > b);
+        // topY = road − TUCK, but never below the lawn: where the road is within TUCK of
+        // the ground (the hill's foot) the berm just meets the lawn flush rather than dipping under.
+        rings.push({ cx: s.pos.x, cz: s.pos.z, lx, lz, halfW: s.width / 2 + EDGE, topY: feather ? groundY : Math.max(groundY, s.pos.y - TUCK) });
+      }
+      hills.push(rings);
+    }
+  }
+
   return {
     instances,
     pillars,
+    hills,
     centerline: new Centerline(samples, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,

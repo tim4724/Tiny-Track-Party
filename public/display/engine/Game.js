@@ -58,6 +58,14 @@ const COLLIDE_SHRINK = 0.9;    // footprints a touch tighter than the mesh so a 
 // only a real ram lands a blow, with no rebound to scrub speed.
 const RESTITUTION = 0.12;      // impact bounciness along the contact normal (0 = dead stick, 1 = elastic)
 const KNOCK_DAMP = 6.0;        // how fast a sideways knock bleeds off (per second, exponential)
+// Solid support posts (immovable, see _collidePole). Realistic, UNDERSTANDABLE behaviour: the
+// car is pushed straight OUT of the post along the (s, lat) contact line (always AWAY from the
+// post), and the speed driven INTO the post is shed (inelastic). So a head-on — you drove into
+// it — costs the most pace; clipping the edge glances you off keeping most of it. But a post
+// BUMPS you, it doesn't FREEZE you: speed is floored at POLE_MIN_KEEP of top speed, so even a
+// square hit leaves you crawling around it rather than dead-stopped. Direction is purely
+// POSITIONAL (which side you hit), never the car's velocity, so a curve's yaw can't flip it.
+const POLE_MIN_KEEP = 0.3;     // a hit never drops you below this fraction of top speed — you crawl past, never freeze
 
 // ---- Oil slicks (track hazards) ----
 // A puddle is a circle in (s, lat) space — the same locally-flat plane the car-car
@@ -174,6 +182,7 @@ export class Game {
     // carry a respawn cooldown; bananas are dropped at runtime (not authored).
     this.pads = (track.pads || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS }));
     this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
+    this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
     this.bananas = [];      // [{ id, s, lat, life, armT, owner }] — live dropped bananas
     this._bananaSeq = 0;
     // Deterministic item rolls from a per-race seed (track.seed; default if unset).
@@ -602,8 +611,44 @@ export class Game {
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) this._collidePair(list[i], list[j]);
     }
+    // Solid poles: immovable, so each car is resolved against each pole on its own.
+    if (this.poles.length) for (const c of list) for (const p of this.poles) this._collidePole(c, p);
     // A push may have driven a car past a curb — pin it back inside.
     for (const c of list) this._clampCurb(c, dt);
+  }
+
+  // A car vs an immovable support post. Treat the car as a disc and push it straight out of
+  // the post along the (s, lat) contact normal (post → car), always AWAY from the post — so a
+  // head-on pushes you back and a side-clip pushes you aside. Then shed the velocity driven
+  // INTO the post (inelastic): drive straight in and you lose most of your pace; pass cleanly
+  // alongside and you keep it. Speed is floored at POLE_MIN_KEEP of top speed, so a hit bumps
+  // you to a crawl but never freezes you — you nudge around it. Direction is positional, never
+  // velocity-based, so a curve's yaw can't flip it. The post's `s` is on ONE pass, so a car on
+  // the deck crossing overhead (far-away totalS) never matches.
+  _collidePole(c, p) {
+    const ds = wrapDelta(c.totalS - p.s, this.length);
+    const dl = c.lat - p.lat;
+    const R = (c.halfLen + c.halfWid) / 2 + p.radius;   // car-disc + post radius
+    let dist = Math.hypot(ds, dl);
+    if (dist >= R) return;                              // discs clear → no contact
+    let nS, nL;                                          // outward contact normal, post → car
+    if (dist > 1e-3) { nS = ds / dist; nL = dl / dist; }
+    else { nS = -1; nL = 0; dist = 1e-3; }              // dead-on → treat as a pure head-on (push straight back)
+    const pen = R - dist;
+    c.totalS += nS * pen;                               // de-penetrate straight out of the post (away from it)
+    c.lat += nL * pen;
+    // Scrub the speed going INTO the post. Car velocity in (s, lat): forward speed along the
+    // tangent (≈+s) plus lateral drift. Remove the inward normal component → head-on kills pace.
+    const vS = c.v * Math.cos(c.heading);
+    const vL = -c.v * Math.sin(c.heading) + (c.vlat || 0);
+    const vn = vS * nS + vL * nL;                       // <0 ⇒ driving into the post
+    // Only when you're driving INTO it: shed the into-post speed (head-on → near zero), but floor
+    // it so the post bumps you to a crawl rather than freezing you. A glancing touch that isn't
+    // driving in keeps its pace untouched (the floor must never hand a slow car free speed).
+    if (vn < 0) c.v = Math.max(POLE_MIN_KEEP * c.vmax, vS - vn * nS);
+    c.vlat = 0;
+    if (Math.abs(nS) > 0.6) { c.boostT = 0; c.boostMul = 1; } // a head-on also kills an active boost
+    c.onWall = true;                                    // contact flag → brake light + controller buzz
   }
 
   _collidePair(a, b) {

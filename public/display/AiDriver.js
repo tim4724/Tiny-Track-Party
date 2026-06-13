@@ -57,6 +57,7 @@ function avoidThreat(car, lane, game, maxLat) {
     if (ds < bestDs) { bestDs = ds; best = { lat: h.lat, r: radius }; }
   };
   for (const h of (game.hazards || [])) consider(h, h.radius);
+  for (const p of (game.poles || [])) consider(p, p.radius);  // solid poles: dodge like an oil, but they STOP you, not spin you
   for (const b of (game.bananas || [])) if (b.owner !== car.id && b.armT <= 0) consider(b, BANANA_AVOID_R); // skip our own + still-arming bananas — neither can spin us (matches the engine's _enterBanana)
   if (!best) return null;
   const m = Math.max(0.1, maxLat - 0.1);                     // keep the dodge inside the curb

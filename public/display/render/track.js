@@ -108,7 +108,7 @@ export function buildRibbonRoad(R, track, collide) {
     { a: 13, b: 14, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
     { a: 14, b: 15, kind: 'skirt' },            // right deck side, below road — road-grey
     // Deck BELLY: a plain face closing the underside between the two skirt feet.
-    // Seen from below (under a loop, the roll bridge, the spiral) it occludes the
+    // Seen from below (under a loop, the bridge, the spiral) it occludes the
     // painted top surface entirely, so the track's bottom reads as solid plastic —
     // pure road-grey, no lines or kerb stripes shining through the DoubleSide mesh.
     { a: 15, b: 0,  kind: 'skirt' }
@@ -274,6 +274,164 @@ export function buildPillars(R, track) {
   const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false; // geometry is baked in world space (translate above)
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  R.trackGroup.add(mesh);
+  R._mergedGeoms.push(merged);
+  R._mergedMats.push(mat);
+}
+
+// Grass hills (berms) under raised, NON-pillared road — the organic counterpart to
+// pillars. TrackBuilder marks each hill and lofts it into cross-section rings (left
+// foot → left top → right top → right foot, feathered to lawn level at both ends);
+// here we stitch consecutive rings into a grass surface that meets the road underside
+// and flares down to the lawn, burying the deck's floating grey skirt. One merged mesh
+// re-using the lawn texture so it reads as the same ground; DoubleSide so the slopes
+// can't show a dark backface. Purely terrain — off the racing line and the collision
+// proxy. The per-ring flare grows with height for a roughly constant slope angle.
+export function buildHills(R, track) {
+  const runs = track.hills;
+  if (!runs || !runs.length) return;
+  const gy = R.ground.position.y; // the lawn the berm feet rest on (set per-track in setTrack)
+  // Four world-space corners of a ring's cross-section: outer feet at lawn level, the
+  // two tops at the berm height under the road. Flare = horizontal run of each slope.
+  const corners = (r) => {
+    const flare = 0.6 + 0.8 * Math.max(0, r.topY - gy);
+    const hw = r.halfW, ox = r.lx, oz = r.lz;
+    return [
+      [r.cx - ox * (hw + flare), gy,     r.cz - oz * (hw + flare)], // 0 left foot
+      [r.cx - ox * hw,           r.topY, r.cz - oz * hw],           // 1 left top
+      [r.cx + ox * hw,           r.topY, r.cz + oz * hw],           // 2 right top
+      [r.cx + ox * (hw + flare), gy,     r.cz + oz * (hw + flare)]  // 3 right foot
+    ];
+  };
+  const pos = [];
+  const quad = (p, q, s, t) => pos.push(p[0],p[1],p[2], q[0],q[1],q[2], s[0],s[1],s[2],  p[0],p[1],p[2], s[0],s[1],s[2], t[0],t[1],t[2]);
+  for (const rings of runs) {
+    let A = corners(rings[0]);
+    for (let i = 1; i < rings.length; i++) {
+      const B = corners(rings[i]);
+      quad(A[0], A[1], B[1], B[0]); // left slope
+      quad(A[1], A[2], B[2], B[1]); // top (under the road)
+      quad(A[2], A[3], B[3], B[2]); // right slope
+      A = B;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  // Tile the lawn texture across the berm in world XZ, matching the ground plane's scale
+  // (its UVs run 0..1 over the 600u plane, so x/600 keeps the same texels-per-metre).
+  const uv = [];
+  for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / 600, pos[i + 2] / 600);
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map: R.ground.material.map, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.matrixAutoUpdate = false; // geometry baked in world space
+  mesh.castShadow = false;
+  mesh.receiveShadow = false; // like the lawn, the berm doesn't receive shadows
+  R.trackGroup.add(mesh);
+  R._mergedGeoms.push(geo);
+  R._mergedMats.push(mat); // the shared lawn .map is NOT disposed here (see _disposeTrack)
+}
+
+// Solid poles (track.poles) — a concrete post. Where a deck crosses OVERHEAD it rises from
+// the road up to just under that deck (a support column); where nothing is overhead (e.g. at
+// the spiral's summit) it stands up from the road as a post you crest into. The engine owns
+// the collision (cars hit its (s, lat) footprint); here we just draw it — matte toy concrete
+// like the pillars.
+export function buildPoles(R, track) {
+  const list = track.poles;
+  if (!list || !list.length || !track.centerline) return;
+  const cl = track.centerline, samples = cl.samples;
+  const TUCK = 0.34, EMBED = 0.06, POST_UP = 2.0; // POST_UP = how far a no-deck-overhead post stands above the road
+  const geoms = [];
+  for (const p of list) {
+    const f = cl.sampleAt(p.s);
+    const base = f.pos.clone().addScaledVector(f.lateral, p.lat); // road surface at (s, lat)
+    let topY = base.y + POST_UP, bestD = Infinity;                // no deck overhead → a post standing up from the road
+    for (const s of samples) {
+      if (s.pos.y - base.y < 1.5) continue;                       // must be a deck clearly ABOVE us
+      const dx = s.pos.x - base.x, dz = s.pos.z - base.z, d = dx * dx + dz * dz;
+      if (d < 4 && d < bestD) { bestD = d; topY = s.pos.y - TUCK; } // nearest overhead (within 2 world) → rise to tuck under it
+    }
+    const r = p.radius || 0.45;
+    const h = Math.max(0.3, topY - (base.y - EMBED));
+    const g = new THREE.CylinderGeometry(r, r, h, 16);
+    g.translate(base.x, base.y - EMBED + h / 2, base.z);          // span road surface → just under the deck above
+    geoms.push(g);
+  }
+  const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
+  if (geoms.length > 1) for (const g of geoms) g.dispose();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete (like pillars)
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.matrixAutoUpdate = false;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  R.trackGroup.add(mesh);
+  R._mergedGeoms.push(merged);
+  R._mergedMats.push(mat);
+}
+
+// Loop support poles — a VERTICAL post under each 360° loop, one on each side, holding it up
+// from below. The post stands beneath the loop's lower-OUTER flank (where the road is angled
+// ~60° and its underside faces down-and-out, and the road has curved away below — so a vertical
+// shaft there has clear air all the way to the ground). Its TOP is cut to the road's underside
+// plane (a diagonal, not a flat top) so it meets the angled road flush instead of poking through
+// it. We auto-detect loops and brace each at one lower-flank point per side. Purely visual.
+export function buildLoopPoles(R, track) {
+  const cl = track.centerline;
+  if (!cl || !cl.samples.length) return;
+  const ss = cl.samples, n = ss.length, gy = R.ground.position.y;
+  const loops = [];
+  let cur = null;
+  for (let i = 0; i < n; i++) {
+    if (ss[i].up.y < 0.3) { if (!cur) { cur = [i, i]; loops.push(cur); } else cur[1] = i; }
+    else cur = null;
+  }
+  const RAD = 0.36, EMBED = 0.1, DECK = 0.34, OFFSET = 0.45; // OFFSET nudges the shaft out past the road's outer face; slim RAD keeps margin
+  const geoms = [];
+  for (const [a0, b0] of loops) {
+    if (b0 - a0 < 4) continue;
+    let a = a0, b = b0;
+    while (a > 0 && ss[a].pos.y > 0.6) a--;
+    while (b < n - 1 && ss[b].pos.y > 0.6) b++;
+    let cx = 0, cz = 0, cnt = 0;
+    for (let i = a; i <= b; i++) { cx += ss[i].pos.x; cz += ss[i].pos.z; cnt++; }
+    cx /= cnt; cz /= cnt;
+    let apex = a;
+    for (let i = a; i <= b; i++) if (ss[i].pos.y > ss[apex].pos.y) apex = i; // top of the loop splits its two sides
+    for (const [lo, hi] of [[a, apex], [apex, b]]) {
+      // one contact per side: a lower-flank sample where the road is angled ~60° (up.y ≈ 0.5)
+      let best = null;
+      for (let i = lo; i <= hi; i++) { const s = ss[i]; if (s.pos.y < 1.5 || s.pos.y > 3.2 || s.up.y < 0.3) continue; const sc = Math.abs(s.up.y - 0.5); if (!best || sc < best.sc) best = { s, sc }; }
+      if (!best) continue;
+      const c = best.s;
+      let ox = c.pos.x - cx, oz = c.pos.z - cz; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol; // outward (away from loop centre)
+      const sx = c.pos.x + ox * OFFSET, sz = c.pos.z + oz * OFFSET; // shaft, nudged out to clear the road's outer face
+      // road UNDERSIDE plane at the contact: a point a deck-thickness behind the surface, normal = up.
+      const ux = c.up.x, uy = c.up.y, uz = c.up.z;
+      const Ux = c.pos.x - ux * DECK, Uy = c.pos.y - uy * DECK, Uz = c.pos.z - uz * DECK;
+      const H = (c.pos.y + 1.0) - (gy - EMBED); // build tall, then clip the top to the plane below
+      const g = new THREE.CylinderGeometry(RAD, RAD, H, 16);
+      g.translate(sx, gy - EMBED + H / 2, sz);
+      const p = g.attributes.position;
+      for (let v = 0; v < p.count; v++) {
+        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+        const planeY = Uy - (ux * (vx - Ux) + uz * (vz - Uz)) / uy; // y of the underside plane at (vx, vz)
+        if (vy > planeY) p.setY(v, planeY);                          // diagonal cut → flush with the angled underside
+      }
+      p.needsUpdate = true;
+      g.computeVertexNormals();
+      geoms.push(g);
+    }
+  }
+  if (!geoms.length) return;
+  const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
+  if (geoms.length > 1) for (const g of geoms) g.dispose();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete (like pillars)
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.matrixAutoUpdate = false;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   R.trackGroup.add(mesh);

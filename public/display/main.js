@@ -41,6 +41,9 @@ const built = new Map(TRACK_LIST.map((t) => {
   const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
   b.pads = (t.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
   b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
+  // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
+  // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).
+  b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }));
   return [t.id, b];
 }));
 const trackCatalog = TRACK_LIST.map((t) => ({

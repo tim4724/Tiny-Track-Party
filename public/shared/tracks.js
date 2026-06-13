@@ -24,8 +24,9 @@
 // opts (any segment): rise (Δelevation over the segment, eased), bump (net-flat hump
 //   amplitude), bank (peak roll°, eased — corners only in practice), roll (heartline
 //   twist about the centerline, eased over the segment and CUMULATIVE downstream —
-//   the barrel-roll bridge is roll: 360, and small rolls trim the geometric
-//   holonomy of climbing/tilted elements like the spiral and the drift loops),
+//   small rolls trim the geometric holonomy of climbing/tilted elements like the
+//   spiral and the drift loops; a full roll: 360 corkscrews the road around a
+//   straight line and self-cancels, e.g. a barrel roll),
 //   width (number or [start,end] taper, overriding the track default), lateral
 //   (straight-only net cross-shift, an S — a chicane is curve+curveR), pillars (stand
 //   support columns from the grass up to a raised deck — flag the ramp + bridge run
@@ -110,14 +111,15 @@ export const RIVERSIDE = [
   straight(L), straight(L), ...chicane(), ...halfHill(), straight(L, { bump: 0.5 }), straight(L), straight(L), arc(RL, 90) // F: 9
 ];
 
-// ---- Twister (Expert): the stunt showpiece — a BARREL-ROLL bridge, a flat SPIRAL,
-// and two small TILTED TOY LOOPS, every stunt entered and exited dead straight on
-// an otherwise flat banked circuit.
+// ---- Twister (Expert): the stunt showpiece — a flat SPIRAL and two small TILTED
+// TOY LOOPS, every stunt entered and exited dead straight on an otherwise flat
+// banked circuit. A low pillared bridge opens the lap.
 //
-// THE ROLL: a 360° heartline barrel roll on a low pillared bridge — the road
-// corkscrews around the driving line while the line itself stays dead straight.
-// Rate ≈ 0.18 rad/world: the engine's local-surface pose keeps cars flush (the
-// old 0.31-rate corkscrew predated that pose and visibly floated).
+// THE BRIDGE: it once carried a 360° heartline barrel roll (the road corkscrewed
+// around a dead-straight driving line). Removed — the corkscrew made players
+// dizzy. The engine handles it fine, so to bring it back, restore `roll: 360` on
+// the bridge straight below (360° ≡ 0, so it self-cancels and needs no other
+// change). The raised bridge is kept as scenery.
 //
 // THE SPIRAL (NW corner): a looping in YAW — 450° clockwise, climbing to bridge
 // over its own entrance, then diving out as the downhill launch. -450° ≡ -90°, so
@@ -138,8 +140,8 @@ export const RIVERSIDE = [
 // closes by construction. ----
 export const TWISTER = [
   ...run(3),                                          // the grid straight
-  straight(4, { rise: 1.5, pillars: true }),          // ramp onto the roll bridge
-  straight(32, { roll: 360, pillars: true }),         // THE ROLL — full barrel roll, line dead straight
+  straight(4, { rise: 1.5, pillars: true }),          // ramp onto the bridge
+  straight(32, { pillars: true }),                    // THE BRIDGE — was a 360° barrel roll (see header)
   straight(4, { rise: -1.5, pillars: true }),         // ramp off
   straight(4),                                        // breather up to the spiral
   arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 34.9 }), // THE SPIRAL
@@ -164,7 +166,7 @@ const OILS = {
   switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
   crossover:  [ { u: 0.22, lat: 0.0 }, { u: 0.52, lat: 0.8 }, { u: 0.84, lat: -0.6 } ],
   riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ],
-  // Flats only — never on a loop, the spiral, or the roll bridge, where a forced spin would be cruel.
+  // Flats only — never on a loop or the spiral, where a forced spin would be cruel.
   twister:    [ { u: 0.232, lat: 0.7 }, { u: 0.732, lat: -0.7 } ]
 };
 
@@ -191,6 +193,17 @@ const BOXES = {
   twister:    boxRow(0.039) // early on the launch straight — grab an item, then fly
 };
 
+// Support poles — SOLID obstacles cars collide with (unlike oils, which only spin you).
+// A pole stands ON a lower stretch of road and rises to brace a deck crossing overhead,
+// so the flown-over span reads as supported, not floating — and clipping it costs you.
+// Placed by `u`/`lat` like the others; collision lives in (s, lat), so a pole on the
+// LOWER pass only bites that pass — a car on the deck above (a far-away `s`) sails over
+// it. Off-centre so a clean line threads past. Only the Twister spiral needs one.
+const POLES = {
+  twister: [ { u: 0.272, lat: 0 } ] // dead-centre on the lower pass DIRECTLY under the summit — the column
+                                     // rises bottom→top to hold the spiral's highest point; you clip it climbing in
+};
+
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
 export const TRACKS = {
   switchback: {
@@ -207,17 +220,17 @@ export const TRACKS = {
   },
   twister: {
     name: 'Twister', segments: TWISTER,
-    oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister
+    oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister, poles: POLES.twister
   }
 };
 
 // Stable display order for the gallery / picker.
 export const TRACK_ORDER = ['switchback', 'crossover', 'riverside', 'twister'];
 
-// Flat list — {id, name, segments, oils, pads, boxes} in display order — used by main.js
-// and the track picker. The display builds each track and computes its schematic SVG
-// from the geometry, so the picker needs no per-track art.
+// Flat list — {id, name, segments, oils, pads, boxes, poles} in display order — used by
+// main.js and the track picker. The display builds each track and computes its schematic
+// SVG from the geometry, so the picker needs no per-track art.
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name, segments: TRACKS[id].segments,
-  oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes
+  oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));

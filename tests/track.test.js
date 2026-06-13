@@ -353,11 +353,12 @@ test('an unknown segment kind throws a clear error', () => {
   assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
 });
 
-// ---- Twister: the stunt track (the segments that go 3D) — the barrel-roll bridge,
-// the 450° climbing spiral, and two tilted toy loops. The loops/spiral roll the car
-// via the centerline curving through space; only the roll bridge twists the ribbon,
-// at a rate the engine's local-surface pose keeps flush. Each geometric element
-// carries a probe-measured `roll` trim cancelling its transported holonomy. ----
+// ---- Twister: the stunt track (the segments that go 3D) — a raised bridge, the
+// 450° climbing spiral, and two tilted toy loops. The loops/spiral roll the car via
+// the centerline curving through space. (The bridge once corkscrewed the ribbon — a
+// `roll: 360` barrel roll — removed for motion sickness; the engine handled it fine.)
+// Each geometric element carries a probe-measured `roll` trim cancelling its
+// transported holonomy. ----
 
 test('twister closes and the loops genuinely invert the frame', () => {
   const t = buildTrack(TRACKS.twister);
@@ -365,7 +366,7 @@ test('twister closes and the loops genuinely invert the frame', () => {
   let maxY = -Infinity, inverted = 0;
   for (const sm of t.centerline.samples) {
     maxY = Math.max(maxY, sm.pos.y);
-    if (sm.up.y < -0.9) inverted++; // loop tops + roll-bridge middle: road faces the ground
+    if (sm.up.y < -0.9) inverted++; // loop tops: road faces the ground over the crest
   }
   assert.ok(maxY > 8, `loop apex should tower over the hills (maxY=${maxY.toFixed(1)} world)`);
   assert.ok(inverted > 0, 'no inverted frames found — the loop is not looping');
@@ -402,9 +403,10 @@ test('twister deck twist rate stays shallow everywhere (no helicoid corkscrews)'
   // ribbon at ~0.31 rad/world — a rigid car could only chord it (≈36° of misfit
   // across a wheelbase, the "flat car floats on the screwed road" bug), and that
   // predated the engine's local-surface pose (cars now tilt to the helicoid under
-  // them). The shipped barrel-roll bridge twists at an intentional ~0.18 peak —
-  // flush within ~10° across a wheelbase with the pose conforming. The bound
-  // guards the bad old territory, not the designed roll.
+  // them). The shipped track now peaks at ~0.085 (the loop/spiral roll trims) since
+  // the barrel-roll bridge was removed; the 0.21 bound still guards the bad-old
+  // corkscrew while leaving room to restore the barrel roll (~0.18 peak, flush
+  // within ~10° across a wheelbase with the pose conforming).
   const t = buildTrack(TRACKS.twister);
   const ss = t.centerline.samples;
   let worst = 0, at = 0;
@@ -430,9 +432,9 @@ test('twister frames stay orthonormal and resolve upright at the seam', () => {
   assert.ok(worstDot < 1e-3, `up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
   assert.ok(worstLen < 1e-3, `up not unit length (worst=${worstLen.toFixed(4)})`);
   // Every element's transported holonomy (tilted loops ±75.5°, the climbing spiral
-  // ~35°) must be cancelled by its own roll trim, and the barrel roll nets 360 ≡ 0:
-  // if the lap's twist didn't net out, the seam unwind would smear the residual
-  // around the whole track and tilt the grid straight.
+  // ~35°) must be cancelled by its own roll trim: if the lap's twist didn't net out,
+  // the seam unwind would smear the residual around the whole track and tilt the
+  // grid straight.
   const ss = t.centerline.samples;
   assert.ok(ss[0].up.y > 0.95, `seam up should be ~vertical (got ${ss[0].up.y.toFixed(2)})`);
   assert.ok(ss[ss.length - 1].up.dot(ss[0].up) > 0.9, 'up twists across the seam');
@@ -511,5 +513,37 @@ test('no track has overlapping strands (every crossing is bridged)', () => {
       }
     }
     assert.ok(min3d >= 1.5, `track "${name}" has strands ${min3d.toFixed(2)} apart in 3D (overlap/unbridged crossing near z=${atZ.toFixed(0)})`);
+  }
+});
+
+// ---- Grass hills (berms): raised, non-pillared road floats over the flat lawn unless
+// terrain rises to meet it. buildTrack marks hill runs and lofts cross-section rings;
+// bridges (pillars) and loops/banked stunts must NOT be mistaken for hills (a berm there
+// would put a grass mound under a stunt or bury the road a bridge flies over). ----
+test('grass hills berm raised non-pillared road, never bridges or loops', () => {
+  const hillsOf = (name) => buildTrack(TRACKS[name]).hills;
+  assert.ok(hillsOf('switchback').length > 0, 'switchback hills should berm');
+  assert.ok(hillsOf('riverside').length > 0, 'riverside hills should berm');
+  assert.equal(hillsOf('twister').length, 0, 'twister: all raised road is bridge/loop/spiral — no berms');
+  assert.equal(hillsOf('crossover').length, 0, 'crossover: its only rise is a pillared bridge — no berms');
+});
+
+test('hill berms feather to the lawn at both ends and rise under the road between', () => {
+  const t = buildTrack(TRACKS.riverside);
+  const gy = t.groundY;
+  assert.ok(t.hills.length > 0);
+  for (const rings of t.hills) {
+    assert.ok(rings.length >= 4, 'a hill run lofts several rings');
+    // The end rings sit at lawn level so the berm emerges smoothly from flat ground.
+    assert.ok(Math.abs(rings[0].topY - gy) < 1e-9, 'first ring feathers to the lawn');
+    assert.ok(Math.abs(rings[rings.length - 1].topY - gy) < 1e-9, 'last ring feathers to the lawn');
+    // No ring ever dips below the lawn (topY = road − TUCK is clamped at groundY), and
+    // the run reaches real height somewhere between its feathered ends.
+    let peak = 0;
+    for (const r of rings) {
+      assert.ok(r.topY >= gy - 1e-9, 'berm never dips below the lawn');
+      peak = Math.max(peak, r.topY - gy);
+    }
+    assert.ok(peak > 0.5, `berm carries real height (peak ${peak.toFixed(2)} above lawn)`);
   }
 });

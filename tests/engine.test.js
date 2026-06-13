@@ -91,6 +91,62 @@ test('analog brake settles at a proportional cruise speed', () => {
   assert.ok(game.getSnapshot().cars[0].v < 0.5, 'full brake should stop the car');
 });
 
+// ---- solid support poles (spiral) ----
+// A pole is an immovable (s, lat) obstacle. Drive head-on into it and you stop against it,
+// losing most of your speed (realistic); clip its edge and you glance off to that side; pass
+// on a clear line and it's untouched. Deflection is AWAY from the post (positional), never
+// the car's velocity — so a curve's yaw can't throw it the wrong way.
+test('driving head-on into a pole bleeds most speed but never freezes you', () => {
+  const track = mkTrack(3);
+  track.poles = [{ s: 14, lat: 0, radius: 0.6 }];
+  const game = new Game(['p1'], track, {});
+  let cruise = 0, dipAtPole = Infinity;
+  for (let i = 0; i < 400; i++) {
+    game.processInput('p1', { s: followSteer(game, track, 'p1'), b: 0 }); // tracks the centre line → head-on
+    game.update(16);
+    const c = game.getSnapshot().cars[0];
+    if (c.totalS > 6 && c.totalS < 11) cruise = Math.max(cruise, c.v);          // speed before the pole
+    if (Math.abs(wrap(c.totalS - 14, track.length)) < 1.5) dipAtPole = Math.min(dipAtPole, c.v);
+  }
+  assert.ok(dipAtPole < cruise * 0.6, `a head-on should scrub most speed (cruise ${cruise.toFixed(1)} -> ${dipAtPole.toFixed(1)})`);
+  assert.ok(dipAtPole > cruise * 0.2, `but a post bumps, not freezes — you keep crawling (kept ${(100 * dipAtPole / cruise).toFixed(0)}%)`);
+});
+
+test('a pole off the racing line lets a centred car pass', () => {
+  const track = mkTrack(3);
+  track.poles = [{ s: 14, lat: 1.6, radius: 0.6 }]; // off to the side — car disc (0.35) + post (0.6) = 0.95 < 1.6
+  const game = new Game(['p1'], track, {});
+  drive(game, track, 'p1', 4);
+  const c = game.getSnapshot().cars[0];
+  assert.ok(c.totalS > 16, `a centred car should sail past an off-line pole (totalS=${c.totalS.toFixed(1)})`);
+});
+
+// Deflection is AWAY from the post, on the side you hit it — predictable, never thrown the
+// wrong way by which direction the car happened to be drifting on a curve.
+test('a pole pushes a car off to the side it hit, away from the post', () => {
+  const clipOnSide = (startLat) => {
+    const track = mkTrack(3); track.poles = [{ s: 18, lat: 0, radius: 0.6 }];
+    const game = new Game(['p1'], track, {});
+    drive(game, track, 'p1', 2.5);                 // up to speed
+    const c = game.cars.get('p1');
+    c.totalS = 18; c.lat = startLat; c.heading = 0; c.vlat = 0; // overlapping the post, offset to one side
+    game.processInput('p1', { s: 0, b: 0 }); game.update(16);
+    return c.lat;
+  };
+  assert.ok(clipOnSide(+0.3) > 0.3, 'clipped on the +side → pushed further +side (away from the post)');
+  assert.ok(clipOnSide(-0.3) < -0.3, 'clipped on the -side → pushed further -side');
+});
+
+test('grazing a pole without driving into it does not boost a slow car (speed floor scoped to the scrub)', () => {
+  const track = mkTrack(3); track.poles = [{ s: 18, lat: 0, radius: 0.6 }];
+  const game = new Game(['p1'], track, {});
+  drive(game, track, 'p1', 2.5);
+  const c = game.cars.get('p1');
+  c.totalS = 18; c.lat = 0.3; c.heading = 0; c.vlat = 0; c.v = 1.0; // crawling, just touching the post off-centre (not driving in)
+  game.processInput('p1', { s: 0, b: 0 }); game.update(16);
+  assert.ok(c.v < 2.0, `the post floor must not hand a slow grazer free speed (v=${c.v.toFixed(2)})`);
+});
+
 test('hard steering reaches the curb but never gets stuck and cannot u-turn', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});

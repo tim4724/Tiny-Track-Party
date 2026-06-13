@@ -153,7 +153,7 @@ export function runDisplayScenario(opts, ctx) {
       const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
       scene.onFrame = (dt) => {
         for (const c of engine.cars.values()) {
-          if (!c.finished && c.pose) engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline));
+          if (!c.finished && c.pose) engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline, engine)); // pass the game so preview bots dodge hazards/poles too
         }
         engine.update(dt * 1000);
         for (const c of engine.getSnapshot().cars) {

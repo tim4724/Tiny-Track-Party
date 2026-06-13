@@ -12,7 +12,7 @@ import {
   makeSoftBlobTexture, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
 import { buildEnvironment } from './render/environment.js';
-import { buildRibbonRoad, buildPillars, buildScenery, SCENERY_MODELS } from './render/track.js';
+import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, SCENERY_MODELS } from './render/track.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
@@ -676,6 +676,9 @@ export class SceneRenderer {
     }
 
     buildPillars(this, track);
+    buildHills(this, track);
+    buildPoles(this, track);
+    buildLoopPoles(this, track);
     buildScenery(this, track);
 
     if (debug) {
