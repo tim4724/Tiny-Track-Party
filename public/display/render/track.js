@@ -186,11 +186,33 @@ export function buildRibbonRoad(R, track, collide) {
   const dashPeriod = cl.length / Math.max(2, Math.round(cl.length / DASH_PERIOD));
   const dashOn = (i) => ((i / N) * cl.length) % dashPeriod < dashPeriod * DASH_FRAC;
 
+  // Bare-asphalt zone under each full-width launch strip (boost pad at a loop mouth):
+  // blank the centre dash AND the white edge lines there so the teal pad reads as paint
+  // on clean asphalt instead of a layer hovering OVER the road markings — otherwise the
+  // dash/lines peek out at the strip's leading/trailing edge and give away the seam. The
+  // margin clears a hair beyond the strip footprint so nothing emerges right at the edge.
+  const STRIP_MARGIN = 0.12;
+  const stripZones = (track.pads || [])
+    .filter((p) => p.shape === 'strip')
+    .map((p) => ({ s: p.s, half: (p.halfLen || 0) + STRIP_MARGIN }));
+  const bareAsphalt = (i) => {
+    if (!stripZones.length) return false;
+    const sArc = (i / N) * cl.length;
+    for (const z of stripZones) {
+      let d = Math.abs(sArc - z.s);
+      if (d > cl.length / 2) d = cl.length - d; // shortest way round the closed lap
+      if (d < z.half) return true;
+    }
+    return false;
+  };
+
   // Sweep the profile around the closed loop into ONE vertex-coloured buffer.
   for (let i = 0; i < N; i++) {
     const ni = (i + 1) % N;
     const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
-    const colD = dashOn(i) ? LINE : ASPHALT;
+    const bare = bareAsphalt(i);
+    const colD = (dashOn(i) && !bare) ? LINE : ASPHALT;
+    const colLine = bare ? ASPHALT : LINE;
     for (const st of STRIPS) {
       const ia = ring(i, st.a).clone(), ib = ring(i, st.b).clone();
       const na = ring(ni, st.a).clone(), nb = ring(ni, st.b).clone();
@@ -198,7 +220,7 @@ export function buildRibbonRoad(R, track, collide) {
       push3(pos, ia); push3(pos, nb); push3(pos, na); // tri 2
       const kerbCol = st.side === 'R' ? colR : colL;
       pushStripCol(
-        st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? LINE : st.kind === 'dash' ? colD : ASPHALT,
+        st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine : st.kind === 'dash' ? colD : ASPHALT,
         st);
     }
   }

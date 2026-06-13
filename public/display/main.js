@@ -40,6 +40,17 @@ const built = new Map(TRACK_LIST.map((t) => {
   // can't tunnel through. Read by the engine (detection) + renderer (meshes).
   const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
   b.pads = (t.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
+  // Every looping gets a full-width RECTANGULAR launch strip at its mouth, so a loop is
+  // always entered on boost. The strip sits flat on the approach with its leading edge at
+  // the loop entry (centre = entry − halfLen). Position-scaled like any pad (the engine
+  // reads `shape: 'strip'` → a longitudinal band across the lane).
+  const LOOP_PAD_LEN = 2.2; // world units along travel
+  for (const ls of (b.loopStarts || [])) {
+    b.pads.push({
+      s: (((ls.s - LOOP_PAD_LEN / 2) % b.length) + b.length) % b.length,
+      lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
+    });
+  }
   b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
   // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
   // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).

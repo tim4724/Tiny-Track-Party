@@ -180,7 +180,12 @@ export class Game {
     // resolved by the display from the track catalogue (fraction-of-lap → arclength)
     // exactly like oil slicks; tests set track.pads/track.boxes directly. Boxes
     // carry a respawn cooldown; bananas are dropped at runtime (not authored).
-    this.pads = (track.pads || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS }));
+    // A pad is a circular disc by default, or a full-width RECTANGULAR launch strip
+    // (`shape: 'strip'`, auto-placed at every loop mouth — see main.js): a longitudinal
+    // band `halfLen` along travel × `halfWidth` across the lane. Both arm the same boost.
+    this.pads = (track.pads || []).map((p) => p.shape === 'strip'
+      ? { s: p.s, lat: p.lat || 0, shape: 'strip', halfLen: p.halfLen, halfWidth: p.halfWidth }
+      : { s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS });
     this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
     this.bananas = [];      // [{ id, s, lat, life, armT, owner }] — live dropped bananas
@@ -485,10 +490,21 @@ export class Game {
     let entered = false;
     for (let i = 0; i < zones.length; i++) {
       const z = zones[i];
-      if (this._inZone(c, z, z.radius)) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
+      const hit = z.shape === 'strip' ? this._inStrip(c, z) : this._inZone(c, z, z.radius);
+      if (hit) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
       else inSet.delete(i);
     }
     return entered;
+  }
+
+  // Rectangular overlap in the same (arclength, lateral) plane — a full-width launch
+  // STRIP at a loop mouth: a longitudinal band `|ds| < halfLen` across the lane
+  // `|dl| < halfWidth` (the road half-width, so any car on the road crosses it). The
+  // arclength gap wraps to the shortest way round the closed lap, like _inZone.
+  _inStrip(c, z) {
+    const ds = wrapDelta(c.totalS - z.s, this.length);
+    const dl = c.lat - z.lat;
+    return Math.abs(ds) < z.halfLen && Math.abs(dl) < z.halfWidth;
   }
 
   // Circle overlap in the shared (arclength, lateral) trigger plane — the one

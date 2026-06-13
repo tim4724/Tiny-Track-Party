@@ -107,6 +107,7 @@ export function buildTrack(track, opts = {}) {
   const banks = [0];                          // per-sample bank roll (radians), parallel to worldPts
   const pillarFlags = [false];                // per-sample: emitted by a `pillars` (raised bridge/ramp) segment
   const hillFlags = [false];                  // per-sample: a non-pillared straight rise/bump → can carry a grass hill
+  const loopEntryIdx = [];                    // worldPts index of each loop's MOUTH (the flat sample just before it climbs)
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
@@ -153,6 +154,7 @@ export function buildTrack(track, opts = {}) {
       // simply exits flipped. With `drift`: the full tilted loop below — the one
       // 360° shape whose exit corridor CAN'T collide with its own entry climb,
       // because the sideways lean lands it a road width over.
+      loopEntryIdx.push(worldPts.length - 1); // the last point IS the cursor = the loop's flat mouth
       const r = seg.radius;
       const vert = seg.over === false ? -1 : 1;
       const drift = seg.drift || 0;
@@ -274,6 +276,10 @@ export function buildTrack(track, opts = {}) {
     samples.push({ pos: worldPts[i].clone(), tangent, up: u, lateral, s, width: widths[i], pillars: pillarFlags[i], hillable: hillFlags[i] });
   }
   const length = s + worldPts[n - 1].distanceTo(worldPts[0]); // close the loop
+  // Loop mouths in arclength (+ the local road width there): the display auto-places a
+  // full-width launch pad at each, so a looping is always entered on boost. Interior
+  // indices, so the seam duplicate-point drop (last point only) never invalidates them.
+  const loopStarts = loopEntryIdx.map((idx) => ({ s: samples[idx].s, width: samples[idx].width }));
   // Grass plane: just under the lowest point of the track — measured at the road
   // EDGE, not the centreline, so a banked corner's leaned-in kerb can't clip through
   // the lawn (on a flat track edge == centreline and this is the classic minY − 0.3).
@@ -394,6 +400,7 @@ export function buildTrack(track, opts = {}) {
     instances,
     pillars,
     hills,
+    loopStarts,
     centerline: new Centerline(samples, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,

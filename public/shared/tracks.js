@@ -177,9 +177,11 @@ const PADS = {
   switchback: [ { u: 0.15, lat: 0.0 }, { u: 0.65, lat: 0.0 } ],
   crossover:  [ { u: 0.08, lat: 0.0 }, { u: 0.40, lat: 0.0 } ],
   riverside:  [ { u: 0.10, lat: 0.0 }, { u: 0.51, lat: 0.0 } ],
-  // One pad on the flat beat before loop 1 — it fires the pack INTO the ring,
-  // Hot Wheels style — and one on the long east leg toward loop 2.
-  twister:    [ { u: 0.434, lat: 0.0 }, { u: 0.65, lat: 0.0 } ]
+  // No authored pads: every looping auto-places a full-width rectangular launch
+  // strip at its mouth (see main.js / TrackBuilder.loopStarts), so the pack is
+  // always fired INTO each ring on boost — the two manual circular loop-feeders
+  // that used to sit before loop 1 and loop 2 are now redundant.
+  twister:    []
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`

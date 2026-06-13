@@ -599,6 +599,29 @@ test('a boost pad fires once per cross (rising-edge), not every frame', () => {
   for (let i = 0; i < 30; i++) { game.processInput('p1', { b: 1 }); game.update(16); assert.equal(car.boostT, 0, 'parked on a pad does not re-arm'); }
 });
 
+test('a full-width strip pad (loop launch) boosts a car at the lane EDGE, not just centre', () => {
+  const track = mkTrack(3);
+  // A rectangular launch strip: a longitudinal band (2·1.1 long) spanning the full road
+  // half-width. A centred circular pad of any sane radius would miss a car at the edge.
+  track.pads = [{ s: 8, lat: 0, shape: 'strip', halfLen: 1.1, halfWidth: 2.5 }];
+  const game = new Game(['edge'], track, {});
+  const car = game.cars.get('edge');
+  Object.assign(car, { totalS: 8, lat: 2.0, v: car.vmax }); // hard against a curb, off-centre
+  assert.ok(Math.abs(car.lat) > game.maxLat - 0.3, 'sanity: the car is parked near the lane edge');
+  game.processInput('edge', { s: 0, b: 0 }); game.update(16);
+  assert.ok(car.boostT > 0, 'crossing the full-width strip at the lane edge arms a boost');
+});
+
+test('a strip pad does not fire outside its longitudinal band', () => {
+  const track = mkTrack(3);
+  track.pads = [{ s: 8, lat: 0, shape: 'strip', halfLen: 1.1, halfWidth: 2.5 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8 + 1.6, lat: 0, v: car.vmax }); // 1.6 ahead of centre, past halfLen=1.1
+  game.processInput('p1', { s: 0, b: 0 }); game.update(16);
+  assert.equal(car.boostT, 0, 'a car beyond the strip length is not boosted');
+});
+
 test('an oil spin-out cancels an active boost (no banked re-burst)', () => {
   const track = mkTrack(3);
   track.hazards = [{ s: 8, lat: 0, radius: 1.0 }];

@@ -228,6 +228,35 @@ function makePadTexture() {
   return tex;
 }
 
+// Boost-pad face for the FULL-WIDTH LAUNCH STRIP at a loop mouth (the rectangular
+// sibling of makePadTexture). FLAT matte teal — deliberately NO gradient/glow: a
+// centre-bright gradient fakes a 3D sheen so the wide strip reads as a slab of light
+// hovering over the asphalt rather than paint ON it. A grid of flat cream forward
+// chevrons tiles the width so it reads as a launch arrow, not one stretched disc.
+// Mapped onto a PlaneGeometry whose local +Y (texture v=1, canvas-top) is the pad's
+// +tangent → the chevron apexes point along travel, same convention as the disc.
+function makePadStripTexture() {
+  const w = 320, h = 128;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#1fb6a6'; ctx.fillRect(0, 0, w, h);  // flat body — reads as paint
+  ctx.strokeStyle = '#fdf3cf'; ctx.lineWidth = 9; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Chevrons in a cols×rows grid across the WIDTH (apex toward canvas-top = travel).
+  const cols = 5, rows = 2, cw = w / cols, gap = 26, chev = 22, half = cw * 0.32;
+  const y0 = (h - ((rows - 1) * gap + chev)) / 2;
+  for (let c = 0; c < cols; c++) {
+    const cx = (c + 0.5) * cw;
+    for (let r = 0; r < rows; r++) {
+      const y = y0 + r * gap;
+      ctx.beginPath(); ctx.moveTo(cx - half, y + chev); ctx.lineTo(cx, y); ctx.lineTo(cx + half, y + chev); ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // ---------------------------------------------------------------------------
 // Rear NAME PLATE — replaces the old rotating cone marker. A small livery-
 // coloured "license plate" fixed to the back of each car with the player's
@@ -331,5 +360,5 @@ export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
   makeSoftBlobTexture, makeUnderShadowTexture, makeCloudTexture, makeLawnTexture,
-  makePadTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
+  makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

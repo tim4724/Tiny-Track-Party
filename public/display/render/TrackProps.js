@@ -3,7 +3,7 @@
 // the ?bbox collision-outline debug overlay. Owns the hazard scene group; the
 // engine stays authoritative — everything here is render-side juice.
 import * as THREE from 'three';
-import { makePadTexture } from './textures.js';
+import { makePadTexture, makePadStripTexture } from './textures.js';
 
 // Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
 // a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
@@ -39,6 +39,7 @@ export class TrackProps {
     this.protos = protos;     // shared GLB prototype cache (filled by SceneRenderer.load)
     this._bbox = bbox;        // ?bbox=1 debug-outline flag
     this._padTex = makePadTexture();
+    this._padStripTex = makePadStripTexture(); // full-width rectangular launch strip (loop mouths)
     // Hazards/props live in their own group so they clear with the track without
     // touching the cars/decals; the debug group persists across tracks.
     this.hazardGroup = new THREE.Group();
@@ -83,25 +84,33 @@ export class TrackProps {
     const cl = track.centerline;
     const Y = new THREE.Vector3(0, 1, 0);
     for (const p of (track.pads || [])) {
-      const radius = p.radius || 0.65;
-      this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
+      // A pad is a glowing chevron DISC by default, or a full-width rectangular launch
+      // STRIP (`shape: 'strip'`, auto-placed at a loop mouth) — a plane spanning the lane.
+      let geom, tex;
+      if (p.shape === 'strip') {
+        geom = new THREE.PlaneGeometry(p.halfWidth * 2, p.halfLen * 2); // X=width, Y=along travel
+        tex = this._padStripTex;
+        this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, shape: 'strip', halfLen: p.halfLen, halfWidth: p.halfWidth });
+      } else {
+        const radius = p.radius || 0.65;
+        geom = new THREE.CircleGeometry(radius, 28);
+        tex = this._padTex;
+        this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
+      }
       const f = cl.sampleAt(p.s);
       const up = f.up.clone().normalize();
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(radius, 28),
-        new THREE.MeshBasicMaterial({
-          map: this._padTex, transparent: true, opacity: 0.95, depthWrite: false,
-          polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
-        })
-      );
-      disc.userData.owned = true; // owns its geometry+material (dispose on rebuild)
-      disc.position.copy(f.pos).addScaledVector(f.lateral, p.lat).addScaledVector(up, 0.025);
-      // basis (lateral=X, tangent=Y, up=Z) lays the disc in the road plane with its
+      const face = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.95, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+      }));
+      face.userData.owned = true; // owns its geometry+material (dispose on rebuild)
+      face.position.copy(f.pos).addScaledVector(f.lateral, p.lat).addScaledVector(up, 0.025);
+      // basis (lateral=X, tangent=Y, up=Z) lays the face in the road plane with its
       // texture +Y (chevrons) pointing along travel.
-      disc.quaternion.setFromRotationMatrix(
+      face.quaternion.setFromRotationMatrix(
         new THREE.Matrix4().makeBasis(f.lateral.clone().normalize(), f.tangent.clone().normalize(), up));
-      disc.renderOrder = -1;
-      this.hazardGroup.add(disc);
+      face.renderOrder = -1;
+      this.hazardGroup.add(face);
     }
     const boxProto = this.protos.get('item-box');
     for (const b of (track.boxes || [])) {
@@ -194,7 +203,13 @@ export class TrackProps {
       const center = f.pos.clone().addScaledVector(f.lateral, lat).addScaledVector(up, 0.06);
       g.add(this._dbgCircle(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), r, color));
     };
-    for (const d of this._dbgStatic) ring(d.s, d.lat, d.radius, COL[d.kind] || 0xffffff);
+    for (const d of this._dbgStatic) {
+      if (d.shape === 'strip') {
+        const f = cl.sampleAt(d.s), up = f.up.clone().normalize();
+        const center = f.pos.clone().addScaledVector(f.lateral, d.lat).addScaledVector(up, 0.06);
+        g.add(this._dbgRect(center, f.tangent.clone().normalize(), f.lateral.clone().normalize(), d.halfLen, d.halfWidth, COL.pad));
+      } else ring(d.s, d.lat, d.radius, COL[d.kind] || 0xffffff);
+    }
     for (const b of (snap.bananas || [])) ring(b.s, b.lat, b.radius || 0.6, 0xff9f1c);
     for (const c of (snap.cars || [])) {
       if (c.totalS == null) continue;

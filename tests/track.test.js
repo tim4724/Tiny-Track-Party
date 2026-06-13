@@ -226,6 +226,25 @@ test('every named track closes and includes a start gate', () => {
   }
 });
 
+test('buildTrack reports a loop mouth (arclength + width) for every loop segment', () => {
+  // The display auto-places a full-width launch strip at each loop mouth (main.js reads
+  // these), so every `loop` segment must surface exactly one entry, in-range and sized.
+  for (const [name, def] of Object.entries(TRACKS)) {
+    const t = buildTrack(def);
+    const nLoops = def.segments.filter((s) => s.kind === 'loop').length;
+    assert.ok(Array.isArray(t.loopStarts), `track "${name}" should report loopStarts`);
+    assert.equal(t.loopStarts.length, nLoops, `track "${name}": one loop mouth per loop segment`);
+    for (const ls of t.loopStarts) {
+      assert.ok(ls.s >= 0 && ls.s < t.length, `track "${name}" loop mouth s in [0,length) (got ${ls.s})`);
+      assert.ok(ls.width > 0, `track "${name}" loop mouth carries a positive road width (got ${ls.width})`);
+    }
+  }
+});
+
+test('a loop-free track reports no loop mouths', () => {
+  assert.deepEqual(buildTrack(OVAL).loopStarts, []);
+});
+
 test('every named track has a display name and segments', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
