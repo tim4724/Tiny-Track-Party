@@ -29,16 +29,27 @@ export function renderSeats(listEl, seats) {
       row.className = 'seat__name';
       const dot = document.createElement('span'); dot.className = 'seat__dot';
       const nm = document.createElement('span'); nm.className = 'seat__label';
-      nm.textContent = p.name + (p.host ? '  ★' : '');
+      nm.textContent = p.name;
       row.appendChild(dot); row.appendChild(nm);
+      // host marker — a black star pinned to the seat's top-right corner (the
+      // same slot as the ready check; the host never readies, so they can't
+      // collide). Out of the name so a long name can't push it off-screen.
+      if (p.host) {
+        const hs = document.createElement('span');
+        hs.className = 'seat__host';
+        hs.setAttribute('aria-label', 'Host');
+        hs.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></svg>';
+        seat.appendChild(hs);
+      }
       // each joined car rotates in spin mode, in lockstep via the shared clock
       seat.appendChild(carThumbNode(CAR_MODELS[carIdx % CAR_MODELS.length], { spin: true }));
       seat.appendChild(row);
-      // readiness pill — appended on every taken seat (visibility-toggled in
-      // CSS) so a seat doesn't change height the moment its player readies up.
+      // readiness check — a circle checkmark pinned to the seat's top-right
+      // corner (visibility-toggled in CSS, so it never shifts the seat layout).
       const rd = document.createElement('span');
       rd.className = 'seat__ready';
-      rd.textContent = 'READY';
+      rd.setAttribute('aria-label', 'Ready');
+      rd.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       seat.appendChild(rd);
     } else {
       seat.className = 'seat seat--open';

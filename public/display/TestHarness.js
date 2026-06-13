@@ -14,6 +14,11 @@ import { renderSeats, seatCountText } from './lobbySeats.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
+// Held items per slot for the frozen previews (reconnect / finished) so the cell
+// item indicator shows populated — a mix of boost/banana with some empty slots,
+// rather than a field of empty squares. null = that slot is carrying nothing.
+const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost', null];
+const giveItems = (engine) => { for (const c of engine.cars.values()) c.item = PREVIEW_ITEMS[c.id] || null; };
 
 const el = (id) => document.getElementById(id);
 
@@ -315,6 +320,7 @@ export function runDisplayScenario(opts, ctx) {
       // its split-screen cell — exactly as it does live while someone reconnects
       // (the car isn't forfeited until the grace window elapses).
       for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
+      giveItems(engine); // populate the cell item slots so the preview isn't all empty
       for (const c of engine.getSnapshot().cars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
         scene.setCarHud(c.id, c);
@@ -343,6 +349,7 @@ export function runDisplayScenario(opts, ctx) {
         if (!engine.finishedOrder.includes(leadId)) engine.finishedOrder.push(leadId);
         engine._rank(); // promote the finisher to P1; the rest keep racing for position
       }
+      giveItems(engine); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
       for (const c of engine.getSnapshot().cars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
         scene.setCarHud(c.id, c);

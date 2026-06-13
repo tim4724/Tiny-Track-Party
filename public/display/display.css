@@ -100,6 +100,7 @@ html, body {
   gap: clamp(0.5rem, 0.8vw, 1rem);
 }
 .seat {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
   min-width: 0; padding: 0.7rem 0.6rem 0.65rem;
   background: var(--surface);
@@ -122,16 +123,30 @@ html, body {
   background: var(--c, #888); box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
 }
 .seat--off { opacity: 0.5; }
-/* readiness pill — present (invisible) on every taken seat so the card keeps
-   its height; lit in the brand green once the player's "I'm ready" lands. */
+/* readiness check — a brand-green circle checkmark pinned to the seat's
+   top-right corner; present (invisible) on every taken seat and revealed once
+   the player's "I'm ready" lands, so the seat layout never shifts. */
 .seat__ready {
   visibility: hidden;
-  font-weight: 900; font-size: clamp(0.6rem, 0.8vw, 0.8rem); letter-spacing: 0.07em;
+  position: absolute; top: 0.45rem; right: 0.45rem;
+  width: clamp(1.3rem, 1.9vw, 1.7rem); aspect-ratio: 1;
+  display: grid; place-items: center;
   color: #fff; background: var(--brand);
-  padding: 0.18rem 0.6rem; border-radius: 999px;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+  border: 2px solid #fff; border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 -2px 0 rgba(0, 0, 0, 0.14);
 }
+.seat__ready svg { width: 70%; height: 70%; }
 .seat--ready .seat__ready { visibility: visible; }
+/* host marker — a black star in the same top-right corner as the ready check
+   (mutually exclusive: the host never readies). A white drop-shadow keeps it
+   legible over any car livery behind it. */
+.seat__host {
+  position: absolute; top: 0.4rem; right: 0.5rem;
+  width: clamp(1.4rem, 2vw, 1.8rem); aspect-ratio: 1;
+  display: grid; place-items: center;
+  filter: drop-shadow(0 0 2px #fff) drop-shadow(0 1px 2px rgba(255, 255, 255, 0.9));
+}
+.seat__host svg { width: 100%; height: 100%; fill: var(--ink); }
 .seat--open {
   background: transparent; border-style: dashed; border-color: #d4deea;
   box-shadow: none;
@@ -233,7 +248,7 @@ html, body {
   text-align: right; pointer-events: none; color: var(--ink);
 }
 .cell-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: clamp(2rem, 3.6vw, 3.2rem); }
-.cell-rank__lap { font-weight: 800; font-size: clamp(0.85rem, 1.3vw, 1.15rem); margin-top: 0.12rem; letter-spacing: 0.02em; white-space: nowrap; }
+.cell-rank__lap { font-weight: 800; font-size: clamp(1.1rem, 1.75vw, 1.55rem); margin-top: 0.12rem; letter-spacing: 0.02em; white-space: nowrap; }
 
 /* Held-item indicator — a FIXED reserved box (no reflow when empty) under the player
    name so players read what they got at a glance (the controller has no item UI;
