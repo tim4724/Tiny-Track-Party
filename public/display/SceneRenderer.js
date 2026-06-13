@@ -441,13 +441,15 @@ export class SceneRenderer {
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
-  // Hand the overview camera to the viewer: drag to orbit, scroll to dolly,
-  // right-drag to pan. Used by the standalone track preview (the track gallery's
-  // "open ↗" — i.e. NOT the grid iframe) so a track can be inspected up close.
-  // It replaces the auto-orbit turntable: once `this.controls` exists the render
-  // loop only ticks it (for damping) and stops posing the camera itself.
-  // OrbitControls is lazy-imported so the live race + gallery-grid path never
-  // downloads it. Call AFTER setTrack so the framing fields are populated.
+  // Hand the overview camera to the viewer: drag to LOOK AROUND in place, scroll
+  // to fly forward, WASD to glide and Q/E to drop/rise. Used by the standalone
+  // track preview (the track gallery's "open ↗" — i.e. NOT the grid iframe) so a
+  // track can be inspected up close. It replaces the auto-orbit turntable: once
+  // `this.controls` exists the render loop ticks the inspector instead of posing
+  // the camera. OrbitControls supplies the rotate-drag + damping (we re-aim it so
+  // it spins around the camera, not the track — see _tickInspectorControls); it's
+  // lazy-imported so the live race + gallery-grid path never downloads it. Call
+  // AFTER setTrack so the framing fields are populated.
   async enableUserCamera() {
     if (this.controls) return this.controls;
     this.orbit = false; // the viewer drives the camera now — no turntable
@@ -458,22 +460,25 @@ export class SceneRenderer {
     c.enableDamping = true;
     c.dampingFactor = 0.08;
     c.rotateSpeed = 0.6;
-    c.zoomSpeed = 0.9;
-    c.panSpeed = 0.6;
-    c.maxPolarAngle = Math.PI * 0.49; // keep the camera above the ground plane
-    // Start from the same iso framing the static overview uses, then size the
-    // dolly limits to the track so you can't fly off or clip into the road.
+    // Look-around inspector, not an orbit rig: the wheel flies forward (custom
+    // handler below), A/D strafe and Q/E rise/dip, so OrbitControls' own zoom &
+    // pan are off. Free the pitch so you can look right down at the track or up
+    // to the sky (a small epsilon avoids the straight-up/down azimuth flip).
+    c.enableZoom = false;
+    c.enablePan = false;
+    c.minPolarAngle = 0.02;
+    c.maxPolarAngle = Math.PI - 0.02;
+    // Start from the same iso framing the static overview uses; remember that
+    // distance so the fly speed feels the same as the turntable's framing.
     if (this._ovPos) this.overview.position.copy(this._ovPos);
     if (this._trackCenter) c.target.copy(this._trackCenter);
-    const dist = this.overview.position.distanceTo(c.target);
-    c.minDistance = Math.max(5, dist * 0.2);
-    c.maxDistance = dist * 3;
+    this._flyDist = this.overview.position.distanceTo(c.target);
     c.update();
     // Cursor affordance: grab while idle, grabbing mid-drag.
     dom.style.cursor = 'grab';
     c.addEventListener('start', () => { dom.style.cursor = 'grabbing'; });
     c.addEventListener('end', () => { dom.style.cursor = 'grab'; });
-    // Keyboard fly: WASD glides the rig across the ground, Q/E raise & lower it.
+    // Keyboard fly: WASD glides the rig across the ground, Q drops & E rises.
     // Held keys are collected here and applied each frame in _moveCameraKeys (the
     // render loop), so diagonals and held presses move smoothly + framerate-free.
     const keys = this._camKeys = new Set();
@@ -489,37 +494,69 @@ export class SceneRenderer {
     window.addEventListener('keyup', (e) => keys.delete(e.code));
     // Stop drifting if focus leaves the tab mid-press (no keyup arrives).
     window.addEventListener('blur', () => keys.clear());
+    // Wheel flies the rig forward/back along the look direction (OrbitControls'
+    // own zoom is off). Scaled by the framing distance so a notch feels the same
+    // near or far; passive:false so we can swallow the page scroll.
+    dom.addEventListener('wheel', (e) => {
+      if (editable(e.target)) return;
+      e.preventDefault();
+      const step = Math.max(8, this._flyDist || 30) * 0.0009 * -e.deltaY;
+      const fwd = this.overview.getWorldDirection(new THREE.Vector3());
+      this.overview.position.addScaledVector(fwd, step);
+    }, { passive: false });
     this.controls = c;
     return c;
   }
 
-  // Apply the WASD / QE fly keys for the inspector camera. Moves BOTH the camera
-  // and the orbit pivot by the same vector so it's a fly-through, not a pan-around
-  // (drag still orbits about wherever you've flown to). WASD ride the camera's
-  // GROUND-plane forward/right so you skim level over the track; Q/E are world up.
-  // Step scales with the dolly distance so it feels the same zoomed in or out.
+  // Apply the WASD / QE fly keys for the inspector camera. WASD ride the camera's
+  // GROUND-plane forward/right so you skim level over the track; Q drops and E
+  // rises (world up). Both are fractions of a framing-anchored reference speed
+  // (this._flyDist, so it feels the same everywhere): WASD at 50%, rise/dip at a
+  // gentler 25% for fine height tweaks. Rotation is handled separately
+  // (_tickInspectorControls), so this only ever translates the camera.
   _moveCameraKeys(dt) {
     const keys = this._camKeys;
     if (!keys || !keys.size) return;
-    const cam = this.overview, tgt = this.controls.target;
-    const fwd = new THREE.Vector3().subVectors(tgt, cam.position);
-    const dist = fwd.length() || 1;
+    const cam = this.overview;
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
     // Forward/right flattened onto the ground; right = fwdFlat × worldUp.
     const fwdFlat = new THREE.Vector3(fwd.x, 0, fwd.z);
     if (fwdFlat.lengthSq() < 1e-6) fwdFlat.set(0, 0, -1); // looking straight down
     fwdFlat.normalize();
     const right = new THREE.Vector3(-fwdFlat.z, 0, fwdFlat.x);
-    const move = new THREE.Vector3();
-    if (keys.has('KeyW')) move.add(fwdFlat);
-    if (keys.has('KeyS')) move.sub(fwdFlat);
-    if (keys.has('KeyD')) move.add(right);
-    if (keys.has('KeyA')) move.sub(right);
-    if (keys.has('KeyQ')) move.y += 1;
-    if (keys.has('KeyE')) move.y -= 1;
-    if (move.lengthSq() === 0) return;
-    move.normalize().multiplyScalar(Math.max(8, dist) * 0.9 * dt);
-    cam.position.add(move);
-    tgt.add(move);
+    const horiz = new THREE.Vector3();
+    if (keys.has('KeyW')) horiz.add(fwdFlat);
+    if (keys.has('KeyS')) horiz.sub(fwdFlat);
+    if (keys.has('KeyD')) horiz.add(right);
+    if (keys.has('KeyA')) horiz.sub(right);
+    let vy = 0;
+    if (keys.has('KeyE')) vy += 1; // E rises
+    if (keys.has('KeyQ')) vy -= 1; // Q drops
+    if (horiz.lengthSq() === 0 && vy === 0) return;
+    const ref = Math.max(8, this._flyDist || 8) * 0.9 * dt; // framing-anchored reference
+    if (horiz.lengthSq() > 0) cam.position.addScaledVector(horiz.normalize(), ref * 0.5); // WASD at 50%
+    cam.position.y += vy * ref * 0.25; // rise/dip at 25%
+  }
+
+  // Tick the inspector OrbitControls so a rotate-drag spins the view IN PLACE
+  // (around the camera's own position) rather than orbiting the track centre.
+  // OrbitControls only ever orbits its `target`, so: pin the target a unit ahead
+  // of the camera, let update() apply the drag (+ damping), then snap the camera
+  // back to where it was — keeping only the freshly-aimed look direction. Zoom &
+  // pan are off and WASD/QE/wheel do all translation, so rotation is the only
+  // thing update() moves, which makes that restore exact (no orbital drift).
+  _tickInspectorControls() {
+    const c = this.controls;
+    if (!c) return;
+    const cam = this.overview, tgt = c.target;
+    const D = 1; // pivot offset; cancelled by the restore, so its size is moot
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
+    tgt.copy(cam.position).addScaledVector(fwd, D);
+    const px = cam.position.x, py = cam.position.y, pz = cam.position.z;
+    c.update(); // applies the rotate drag + damping; orbits the camera around tgt
+    const dir = new THREE.Vector3().subVectors(tgt, cam.position).normalize();
+    cam.position.set(px, py, pz);
+    tgt.copy(cam.position).addScaledVector(dir, D);
   }
 
   // Preload the GLBs this scene needs: the car models plus `trackGlbs`, the exact
@@ -1423,9 +1460,9 @@ export class SceneRenderer {
       if (this.controls) {
         // Viewer-driven inspector camera (standalone track preview) owns the
         // overview's position + aim: apply the WASD/QE fly keys, then tick the
-        // controls (damping + any in-progress drag/zoom need the update).
+        // inspector (which turns a rotate-drag into an in-place look, plus damping).
         this._moveCameraKeys(dt);
-        this.controls.update();
+        this._tickInspectorControls();
       } else {
         if (this.orbit && this._trackCenter) {
           // attract-mode turntable: ride a circle around the track at the overview

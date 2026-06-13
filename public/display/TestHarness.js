@@ -119,7 +119,7 @@ export function runDisplayScenario(opts, ctx) {
       // In the gallery grid each card is an iframe → keep the calm auto-orbit
       // turntable (you can't comfortably drag a thumbnail). Opened standalone
       // ("open ↗" / its own tab) there is no iframe, so hand the camera to the
-      // viewer (drag to orbit, scroll to zoom, right-drag to pan) for a closer
+      // viewer (drag to look around, scroll to fly, WASD/QE to move) for a closer
       // look. A cross-origin frame throws on window.top — treat that as framed.
       let inIframe = true;
       try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
@@ -175,7 +175,7 @@ export function runDisplayScenario(opts, ctx) {
       if (document.querySelector('.cam-hint')) return;
       const hint = document.createElement('div');
       hint.className = 'cam-hint';
-      hint.textContent = 'Drag to look · scroll to zoom · WASD to move · Q/E to rise & dip';
+      hint.textContent = 'Drag to look · scroll to zoom · WASD to move · Q/E to drop & rise';
       document.body.appendChild(hint);
       setTimeout(() => hint.classList.add('is-faded'), 6000);
     }
