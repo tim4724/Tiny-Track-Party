@@ -215,6 +215,13 @@ export function buildRibbonRoad(R, track, collide) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.matrixAutoUpdate = false; // positions are already baked in world space
   mesh.receiveShadow = true;     // road catches the cars' cast shadows
+  // …and casts too, so where the ribbon stacks over itself (loops, the climbing
+  // spiral, the roll bridge) the upper deck shades the lower one. Without this the
+  // deck is opaque to incoming shadows but transparent to the sun, so an elevated
+  // car drops a lone, parentless silhouette onto the road below instead of the deck
+  // overhead simply putting that road in shade. (Flat road casts onto grass, which
+  // opts out of receiving — env.js — so ordinary track is unchanged.)
+  mesh.castShadow = true;
   R.trackGroup.add(mesh);
   R._mergedGeoms.push(geo);
   R._mergedMats.push(mat);
