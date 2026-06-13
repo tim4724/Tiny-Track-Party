@@ -113,23 +113,57 @@ function streakBillboard(renderer, scn, camera) {
   this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
 }
 
-// A single soft round alpha blob (white core feathering to transparent). Drawn
-// white so the material colour tint shows true; used for the under-car contact
-// shadow (scaled to the footprint).
-function makeSoftBlobTexture() {
-  const s = 64;
+// Radial falloff for the filled boost circle: a bright core fading to transparent
+// at the rim, so the additive disk has no hard edge. Sampled by the disk's UV.x =
+// normalised radius (0 at the centre, 1 at the rim); v is unused.
+function makeBoostDiskTexture() {
+  const w = 64, h = 4;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
+  cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
-  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.55, 'rgba(255,255,255,0.75)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
+  const g = ctx.createLinearGradient(0, 0, w, 0); // u: 0 = centre, 1 = rim
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.6)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, s, s);
+  ctx.fillRect(0, 0, w, h);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;
+}
+
+// A filled disk: a centre vertex + `rings` concentric loops of `seg` angular
+// vertices, fanned/quadded into a solid circle. Positions start at zero and are
+// REWRITTEN every frame by SceneRenderer, which conforms each vertex onto the road
+// surface — the intermediate ring(s) let the disk BEND over loops/crests/banks
+// instead of tenting flat from the centre. UV.x = normalised radius (0 centre → 1
+// rim) drives the falloff texture. Each car gets its own instance (verts are per-car).
+function makeBoostDiskGeometry(seg = 16, rings = 2) {
+  const g = new THREE.BufferGeometry();
+  const n = 1 + seg * rings; // centre + concentric rings
+  const pos = new THREE.BufferAttribute(new Float32Array(n * 3), 3);
+  pos.setUsage(THREE.DynamicDrawUsage);
+  const uv = new Float32Array(n * 2);
+  uv[0] = 0; uv[1] = 0; // centre → texture u = 0 (bright core)
+  for (let r = 1; r <= rings; r++) {
+    const u = r / rings; // 0..1 across the radius
+    for (let i = 0; i < seg; i++) { const vi = 1 + (r - 1) * seg + i; uv[vi * 2] = u; }
+  }
+  const idx = [];
+  for (let i = 0; i < seg; i++) idx.push(0, 1 + i, 1 + (i + 1) % seg); // centre fan → ring 1
+  for (let r = 1; r < rings; r++) {                                    // band between successive rings
+    const b0 = 1 + (r - 1) * seg, b1 = 1 + r * seg;
+    for (let i = 0; i < seg; i++) {
+      const j = (i + 1) % seg;
+      idx.push(b0 + i, b1 + i, b1 + j, b0 + i, b1 + j, b0 + j);
+    }
+  }
+  g.setAttribute('position', pos);
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.userData.seg = seg; g.userData.rings = rings;
+  return g;
 }
 
 // Underbody-shading alpha: a feathered rounded rect (white core, soft edges),
@@ -359,6 +393,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeSoftBlobTexture, makeUnderShadowTexture, makeCloudTexture, makeLawnTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeCloudTexture, makeLawnTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

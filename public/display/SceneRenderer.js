@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ordinal } from '../shared/format.js';
 import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
-  makeSoftBlobTexture, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
 import { buildEnvironment } from './render/environment.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, SCENERY_MODELS } from './render/track.js';
@@ -143,6 +143,16 @@ const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than s
 // body in). The model's wheel-bottom sits at the group origin, so RIDE_HEIGHT is
 // the gap from wheel to road — keep it tiny so the car looks planted, not hovering.
 const RIDE_HEIGHT = 0.012;
+// Boost circle: a filled teal disk CONFORMED to the road under a boosting car (see
+// setCarPose). `SEG` angular × `RINGS` radial samples — each raycast onto the deck
+// per frame, so keep them modest. The intermediate ring lets the disk bend with the
+// road. LIFT sits it a hair above the asphalt (with polygonOffset) to kill z-fighting;
+// RAY_UP is how far out along the surface normal the conform ray starts before casting
+// back down toward the road.
+const BOOST_DISK_SEG = 16;
+const BOOST_DISK_RINGS = 2;
+const BOOST_DISK_LIFT = 0.02;
+const BOOST_RAY_UP = 1.6;
 // Ride-height smoothing rate (1/s) for the damped offset from the centreline (see
 // setCarPose). Applied as 1 - exp(-RIDE_DAMP·dt) so it's frame-rate-independent;
 // ~18 reproduces the old per-frame 0.25 lerp at 60fps but stays stable at 30fps.
@@ -217,6 +227,19 @@ export class SceneRenderer {
     this._sWant = new THREE.Vector3();
     this._sTarget = new THREE.Vector3();
     this._dsV = new THREE.Vector3();       // scratch for the per-frame travel delta (wheel roll)
+    // Boost-disk conform: a dedicated raycaster (cast along the surface normal, not
+    // straight down — so it works on a loop's wall/ceiling) plus the scratch vectors
+    // that rewrite the disk's verts onto the road each frame. All reused → no GC.
+    this._conformRay = new THREE.Raycaster();
+    this._conformRay.far = BOOST_RAY_UP + 4;
+    this._conformDir = new THREE.Vector3();
+    this._diskHit = new THREE.Vector3();
+    this._diskRight = new THREE.Vector3();
+    this._diskFwd = new THREE.Vector3();
+    this._diskRadial = new THREE.Vector3();
+    this._diskMid = new THREE.Vector3();
+    this._diskOrigin = new THREE.Vector3();
+    this._diskBase = new THREE.Vector3();
   }
 
   // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
@@ -263,11 +286,50 @@ export class SceneRenderer {
     return best;
   }
 
-  // Shared textures/materials for the per-car visual effects (boost aura, wind
+  // Like _roadHitY but casts along an arbitrary `axis` (the car's surface normal)
+  // instead of straight down, keeping only the road DECK — faces roughly square to
+  // the cast axis — so a loop wall, kerb or bank doesn't fool it. Used to conform
+  // the boost disk onto the road wherever the track points, including the inside
+  // of a loop where a straight-down probe is meaningless. `origin` starts out along
+  // +axis above the surface; the ray runs back down −axis. Picks the hit nearest
+  // `near` (the tangent-plane sample) to resolve stacked decks. Returns a shared
+  // scratch point (copy it before the next call) or null when off-track.
+  _roadHitAlong(origin, axis, near) {
+    const cands = this._collideGrid && this._collideGrid.get(this._cellKey(Math.floor(near.x / this._collideCell), Math.floor(near.z / this._collideCell)));
+    if (!cands) return null;
+    this._conformDir.copy(axis).multiplyScalar(-1);
+    this._conformRay.set(origin, this._conformDir);
+    const hits = this._conformRay.intersectObjects(cands, true);
+    let best = null, bestErr = Infinity;
+    for (const h of hits) {
+      if (h.face) {
+        this._normalMat.getNormalMatrix(h.object.matrixWorld);
+        const d = this._hitNormal.copy(h.face.normal).applyNormalMatrix(this._normalMat).normalize().dot(axis);
+        if (Math.abs(d) < 0.35) continue; // skip near-vertical faces (kerbs/walls)
+      }
+      const err = h.point.distanceTo(near);
+      if (err < bestErr) { bestErr = err; best = this._diskHit.copy(h.point); }
+    }
+    return best;
+  }
+
+  // Snap one boost-disk vertex onto the road and write it into `arr` at `vi`. The
+  // tangent-plane sample is in this._diskMid (set by the caller); cast from a touch
+  // out along `axis` (the surface normal), drop onto the deck, and lift a hair so it
+  // sits flush without z-fighting. Falls back to the tangent point when off-track. A
+  // method (not a per-frame closure) so the hot path allocates nothing.
+  _conformDiskVert(arr, vi, axis) {
+    this._diskOrigin.copy(this._diskMid).addScaledVector(axis, BOOST_RAY_UP);
+    const hit = this._roadHitAlong(this._diskOrigin, axis, this._diskMid); // road point, or null off-track
+    this._diskBase.copy(hit || this._diskMid).addScaledVector(axis, BOOST_DISK_LIFT);
+    arr[vi] = this._diskBase.x; arr[vi + 1] = this._diskBase.y; arr[vi + 2] = this._diskBase.z;
+  }
+
+  // Shared textures/materials for the per-car visual effects (boost disk, wind
   // streaks, underbody shading). These are the templates; addCar clones the ones
   // that must animate per instance.
   _initCarFx() {
-    this._softTex = makeSoftBlobTexture(); // round blob for the boost aura
+    this._diskTex = makeBoostDiskTexture(); // radial falloff for the filled boost circle
     this._streakTex = makeStreakTexture(); // boost wind streak
     this._streakGeo = makeStreakGeometry();
     // Template material for the boost wind streaks (cloned per streak so each can
@@ -901,7 +963,7 @@ export class SceneRenderer {
     body.add(plate);
     this.scene.add(group);
 
-    // Car footprint (width × length), used to size the boost aura and the underbody
+    // Car footprint (width × length), used to size the boost disk and the underbody
     // shading quad below (see the tyre-contact cue notes up top for the silhouette
     // rule that shape obeys).
     // updateWorldMatrix first so the bounding box reflects the posed car transform.
@@ -909,25 +971,24 @@ export class SceneRenderer {
     const fb = new THREE.Box3().setFromObject(car);
     const footW = fb.max.x - fb.min.x, footL = fb.max.z - fb.min.z;
 
-    // BOOST aura: an additive gold glow under the car, shown only while boosting and
-    // sized/brightened by boostMul — so the catch-up scaling (leader vs back-marker)
-    // is visible on the shared screen, not silent rubber-banding. Set in setCarPose.
-    const boostAura = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
+    // BOOST circle: an additive teal disk painted on the road under the car, shown
+    // only while boosting and sized/brightened by boostMul — so the catch-up scaling
+    // (leader vs back-marker) is visible on the shared screen, not silent rubber-
+    // banding. Unlike a flat quad (which slices through the deck where the road curls
+    // up — loops, crests, bank ramps), its verts are CONFORMED to the road surface
+    // every frame in setCarPose, so the circle bends with the track. A child of the
+    // SCENE, not the car group: the conform writes world-space positions directly.
+    const boostDisk = new THREE.Mesh(
+      makeBoostDiskGeometry(BOOST_DISK_SEG, BOOST_DISK_RINGS),
       new THREE.MeshBasicMaterial({
-        map: this._softTex, color: 0x2bd1c4, transparent: true, opacity: 0, // teal — matches the boost pad/item
-        depthWrite: false, blending: THREE.AdditiveBlending,
+        map: this._diskTex, color: 0x2bd1c4, transparent: true, opacity: 0, // teal — matches the boost pad/item
+        depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
       })
     );
-    boostAura.rotation.x = -Math.PI / 2;
-    // Floats a hand above the deck: the quad is FLAT in the car's frame, so where the
-    // road curves away under it (bends, crests, bank ramps) a deck-hugging quad gets
-    // sliced by the rising surface — the clipped-glow artifact. The soft additive
-    // halo doesn't read as airborne at this height, and it clears the road's curl.
-    boostAura.position.y = -RIDE_HEIGHT + 0.12;
-    boostAura.visible = false;
-    group.add(boostAura);
+    boostDisk.frustumCulled = false; // identity transform at the origin; the verts roam the whole track
+    boostDisk.visible = false;
+    this.scene.add(boostDisk);
 
     const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
 
@@ -1045,7 +1106,7 @@ export class SceneRenderer {
     const c = {
       group, car, body, bodyBaseQuat,
       frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostAura, aoMat,
+      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostDisk, aoMat,
       streakGroup, streaks, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
@@ -1091,12 +1152,13 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     this.scene.remove(c.group);
-    // Dispose what addCar created fresh per car (the name plate + boost aura). The car
+    // Dispose what addCar created fresh per car (the name plate + boost disk). The car
     // mesh shares its geometry/material with the cached prototype, and the underbody
     // shading quad shares _aoGeo/_aoMat — leave those for the next race.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
-    // boost aura owns its geometry + material (the map is the shared this._softTex — leave it)
-    if (c.boostAura) { c.boostAura.geometry.dispose(); c.boostAura.material.dispose(); }
+    // boost disk owns its geometry + material (the falloff map is the shared this._diskTex — leave it).
+    // It's a child of the SCENE (not the group removed above), so pull it out too.
+    if (c.boostDisk) { this.scene.remove(c.boostDisk); c.boostDisk.geometry.dispose(); c.boostDisk.material.dispose(); }
     // per-car clones: the underbody-shading material (opacity animates with load)
     // and each wind streak's material — their maps/geometry are shared templates.
     if (c.aoMat) c.aoMat.dispose();
@@ -1152,21 +1214,8 @@ export class SceneRenderer {
     // spin-out whirl: rotate the whole car model about its up axis on top of its
     // model-facing fix (the sim heading is untouched — this is purely cosmetic).
     c.car.rotation.y = c.baseYaw + spin;
-    // boost aura: a subtle teal glow below the car while boosting, gently PULSATING,
-    // scaled by the boost size (a back-marker's bigger catch-up boost glows a touch
-    // bigger than the leader's floor). Teal matches the boost pad/item colour.
-    if (c.boostAura) {
-      if (boostMul > 1.001) {
-        const k = boostMul - 1;            // 0.25 (leader floor) … 0.60 (last)
-        const pulse = 0.62 + 0.38 * Math.sin(this._last * 0.011); // ~1.8 Hz (rAF clock — no per-car performance.now())
-        c.boostAura.visible = true;
-        c.boostAura.material.opacity = Math.min(0.42, 0.18 + k * 0.5) * pulse; // subtle
-        const sc = (1.25 + k * 2.0) * (0.96 + 0.06 * pulse);                   // gentle breathing
-        c.boostAura.scale.set(c.footW * sc, c.footL * sc, 1);
-      } else if (c.boostAura.visible) {
-        c.boostAura.visible = false;
-      }
-    }
+    // (The boost disk is updated at the END of setCarPose — it needs the surface
+    // basis computed below to conform its circle onto the road.)
     // Persistent pose vectors (created once per car) reused every frame — no GC.
     // Safe because c.pose is only read within the same frame it's written.
     if (!c.pose) c.pose = { pos: new THREE.Vector3(), forward: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -1316,6 +1365,52 @@ export class SceneRenderer {
     // on-screen steer indicator: mirror the player's RAW input (same as the phone
     // bar) so it slides the way they tilt — not the turn-aligned/STEER_SIGN value.
     if (c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
+
+    // BOOST circle: a filled teal disk painted on the road under the car while
+    // boosting, gently pulsating and scaled by the boost size (a back-marker's bigger
+    // catch-up boost glows a touch bigger than the leader's floor). Every vertex —
+    // the centre and each concentric-ring sample — is CONFORMED to the actual road
+    // surface (raycast back down the surface normal `u`) so the disk follows the track
+    // through loops, crests and banks instead of clipping through a curling deck. Done
+    // here — after the surface basis (this._sx = right, u = up, fwd) and the car's
+    // road-snapped position are final this frame.
+    const disk = c.boostDisk;
+    if (disk) {
+      if (boostMul > 1.001) {
+        const k = boostMul - 1;            // ~0.25 (leader floor) … 0.60 (last)
+        const pulse = 0.62 + 0.38 * Math.sin(this._last * 0.011); // ~1.8 Hz (rAF clock)
+        disk.visible = true;
+        disk.material.opacity = Math.min(0.42, 0.18 + k * 0.5) * pulse;
+        const sc = (1.25 + k * 2.0) * (0.96 + 0.06 * pulse);       // size breathes with the pulse
+        const outerR = (c.footW + c.footL) * 0.5 * sc * 0.5;       // disk radius from the footprint
+        // Two in-surface axes (both ⟂ the surface normal u): right from the car basis,
+        // and the car forward projected back into the surface plane.
+        this._diskRight.copy(this._sx);
+        this._diskFwd.copy(fwd).addScaledVector(u, -fwd.dot(u));
+        if (this._diskFwd.lengthSq() > 1e-6) this._diskFwd.normalize(); else this._diskFwd.copy(fwd);
+        const center = c.group.position;
+        const geo = disk.geometry;
+        const arr = geo.getAttribute('position').array;
+        const seg = geo.userData.seg, rings = geo.userData.rings;
+        // centre vertex (index 0): the road directly under the car
+        this._diskMid.copy(center);
+        this._conformDiskVert(arr, 0, u);
+        // each concentric ring outward to the rim
+        for (let r = 1; r <= rings; r++) {
+          const rad = outerR * (r / rings);
+          for (let i = 0; i < seg; i++) {
+            const a = (i / seg) * Math.PI * 2;
+            const ct = Math.cos(a), st = Math.sin(a);
+            this._diskRadial.copy(this._diskRight).multiplyScalar(ct).addScaledVector(this._diskFwd, st);
+            this._diskMid.copy(center).addScaledVector(this._diskRadial, rad);
+            this._conformDiskVert(arr, (1 + (r - 1) * seg + i) * 3, u);
+          }
+        }
+        geo.getAttribute('position').needsUpdate = true;
+      } else if (disk.visible) {
+        disk.visible = false;
+      }
+    }
 
     // (nothing else to update here: the cast shadow follows the car automatically,
     // and the name plate is parented to the body so it banks with the steering lean.)
