@@ -123,6 +123,7 @@ export function runDisplayScenario(opts, ctx) {
       // look. A cross-origin frame throws on window.top — treat that as framed.
       let inIframe = true;
       try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+      scene.setFog(false);   // track preview (grid thumbnail OR free-cam inspector): show the WHOLE circuit, no haze
       if (inIframe) {
         scene.orbit = true; // slowly orbit the whole track for the gallery overview
       } else {

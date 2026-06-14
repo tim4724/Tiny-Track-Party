@@ -1,3 +1,7 @@
+// Resolved waypoints for the seeded multi-crossing tracks (generated offline by
+// scripts/gen-tracks.mjs — solver-placed elevation baked in; pure data, no Three.js).
+import { GEN_TRACKS } from './genTracks.js';
+
 // Track catalogue — DATA ONLY, no Three.js. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
 // list of parametric SEGMENTS (the geometry). TrackBuilder integrates the segments
@@ -159,10 +163,36 @@ export const TWISTER = [
   arc(RL, -90, { bank: 10 })                          // SW corner, into the grid
 ];
 
+// ---- Meadow Mile (Easy): the gentle teaching circuit. A roomy rounded rectangle on big
+// sweeping (RL) corners — the easiest line to hold — with one soft chicane and a rolling
+// half-hill per long side, and open sweeper short sides. No stunts, no banking, nothing
+// tight. Four small LEFT corners of the SAME hand with matched OPPOSITE sides (long 7 /
+// short 3) close it exactly like Switchback, just on the larger radius. ----
+export const MEADOW = [
+  straight(L), ...chicane(), straight(L), ...halfHill(), straight(L), arc(RL, 90),  // A: 7 (soft S, then a rolling hill)
+  ...run(3), arc(RL, 90),                                                           // B: 3 (open sweeper)
+  straight(L), ...chicane(), straight(L), ...halfHill(), straight(L), arc(RL, 90),  // C: 7 (= A)
+  ...run(3), arc(RL, 90)                                                            // D: 3 (= B)
+];
+
+// ---- BACKYARD CUP — four SEEDED multi-crossing tracks. Each is a procedurally-generated
+// closed plan whose self-crossings are lifted into overpasses by a solved elevation profile
+// (scripts/gen-tracks.mjs); the resolved waypoints are baked into GEN_TRACKS and used directly
+// in the registry below. To reroll or change the seed picks, edit + run that script. ----
+
 // Oil slicks per track — FIXED hazards. Placed by `u` (fraction of the lap, 0 =
 // start/finish) and `lat` (lateral offset in world units; 0 = centreline). `radius`
 // and `cones` optional. Off-centre so a careful line can thread past; tune by driving.
 const OILS = {
+  // Backyard Cup — off-line slicks on gentle GROUND stretches that are also in the OPEN: no
+  // overpass deck overhead (else the warning cones tangle with the deck/pillars and read as
+  // misplaced) and never on a high bridge (a forced spin mustn't throw you off a deck).
+  bowtie:     [ { u: 0.04, lat: 0.7 }, { u: 0.89, lat: -0.7 } ],
+  pretzel:    [ { u: 0.46, lat: 0.7 }, { u: 0.71, lat: -0.7 } ],
+  lasso:      [ { u: 0.71, lat: 0.7 }, { u: 0.83, lat: -0.7 } ],
+  cloverleaf: [ { u: 0.04, lat: 0.7 }, { u: 0.78, lat: -0.7 } ],
+  // Easiest track → a single, clearly off-line slick a careful line threads past.
+  meadow:     [ { u: 0.74, lat: 0.8 } ],
   switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
   crossover:  [ { u: 0.22, lat: 0.0 }, { u: 0.52, lat: 0.8 }, { u: 0.84, lat: -0.6 } ],
   riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ],
@@ -174,6 +204,14 @@ const OILS = {
 // (XZ curvature ≈ 0, where the boost isn't wasted mid-corner), centred (lat 0) on the
 // racing line. `u` = fraction of lap. A pure climb/descent counts as straight.
 const PADS = {
+  // Backyard Cup — two pads each on the gentlest stretches, ~half a lap apart. A pure
+  // climb/descent counts as straight, so these may sit on a ramp, just not mid-corner.
+  bowtie:      [ { u: 0.26, lat: 0.0 }, { u: 0.72, lat: 0.0 } ],
+  pretzel:    [ { u: 0.11, lat: 0.0 }, { u: 0.56, lat: 0.0 } ],
+  lasso:      [ { u: 0.13, lat: 0.0 }, { u: 0.61, lat: 0.0 } ],
+  cloverleaf: [ { u: 0.26, lat: 0.0 }, { u: 0.68, lat: 0.0 } ],
+  // Centred on the two long open sweepers (the short sides) — the cleanest straights.
+  meadow:     [ { u: 0.38, lat: 0.0 }, { u: 0.88, lat: 0.0 } ],
   switchback: [ { u: 0.15, lat: 0.0 }, { u: 0.65, lat: 0.0 } ],
   crossover:  [ { u: 0.08, lat: 0.0 }, { u: 0.40, lat: 0.0 } ],
   riverside:  [ { u: 0.10, lat: 0.0 }, { u: 0.51, lat: 0.0 } ],
@@ -189,6 +227,12 @@ const PADS = {
 const BOX_LANES = [-1.05, -0.35, 0.35, 1.05];
 const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
 const BOXES = {
+  // Backyard Cup — a row of 4 across a gentle stretch (pickups are safe, so a low deck is fine).
+  bowtie:      boxRow(0.53),
+  pretzel:    boxRow(0.05),
+  lasso:      boxRow(0.39),
+  cloverleaf: boxRow(0.41),
+  meadow:     boxRow(0.13),   // on the straight between the first chicane and the hill
   switchback: boxRow(0.20),
   crossover:  boxRow(0.66),
   riverside:  boxRow(0.30),
@@ -207,32 +251,89 @@ const POLES = {
 };
 
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
+// `difficulty` is a display label only (the picker badges it; cups order easy→hard).
 export const TRACKS = {
-  switchback: {
-    name: 'Switchback', segments: SWITCHBACK,
-    oils: OILS.switchback, pads: PADS.switchback, boxes: BOXES.switchback
+  // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation)
+  bowtie: {
+    name: 'Bowtie', difficulty: 'Medium', waypoints: GEN_TRACKS.bowtie,
+    oils: OILS.bowtie, pads: PADS.bowtie, boxes: BOXES.bowtie
   },
+  pretzel: {
+    name: 'Pretzel', difficulty: 'Hard', waypoints: GEN_TRACKS.pretzel,
+    oils: OILS.pretzel, pads: PADS.pretzel, boxes: BOXES.pretzel
+  },
+  lasso: {
+    name: 'Lasso', difficulty: 'Hard', waypoints: GEN_TRACKS.lasso,
+    oils: OILS.lasso, pads: PADS.lasso, boxes: BOXES.lasso
+  },
+  cloverleaf: {
+    name: 'Cloverleaf', difficulty: 'Expert', waypoints: GEN_TRACKS.cloverleaf,
+    oils: OILS.cloverleaf, pads: PADS.cloverleaf, boxes: BOXES.cloverleaf
+  },
+  // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
   crossover: {
-    name: 'Crossover', segments: CROSSOVER,
+    name: 'Crossover', difficulty: 'Hard', segments: CROSSOVER,
     oils: OILS.crossover, pads: PADS.crossover, boxes: BOXES.crossover
   },
-  riverside: {
-    name: 'Riverside', segments: RIVERSIDE,
-    oils: OILS.riverside, pads: PADS.riverside, boxes: BOXES.riverside
-  },
   twister: {
-    name: 'Twister', segments: TWISTER,
+    name: 'Twister', difficulty: 'Expert', segments: TWISTER,
     oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister, poles: POLES.twister
+  },
+  // Retired — in no cup, so they don't appear in the picker; kept defined only so the
+  // geometry regression tests keep exercising the segment-DSL builders they use.
+  meadow: {
+    name: 'Meadow Mile', difficulty: 'Easy', segments: MEADOW,
+    oils: OILS.meadow, pads: PADS.meadow, boxes: BOXES.meadow
+  },
+  switchback: {
+    name: 'Switchback', difficulty: 'Hard', segments: SWITCHBACK,
+    oils: OILS.switchback, pads: PADS.switchback, boxes: BOXES.switchback
+  },
+  riverside: {
+    name: 'Riverside', difficulty: 'Medium', segments: RIVERSIDE,
+    oils: OILS.riverside, pads: PADS.riverside, boxes: BOXES.riverside
   }
 };
 
-// Stable display order for the gallery / picker.
-export const TRACK_ORDER = ['switchback', 'crossover', 'riverside', 'twister'];
+// Cups — curated, ordered sets of tracks (a "grand prix" grouping). Each cup lists its
+// track ids easiest→hardest; the controller picker renders one labelled section per cup.
+// CUPS is the SOURCE OF TRUTH for track ordering — TRACK_ORDER / TRACK_LIST below are
+// derived by flattening it, so a track appears in the picker iff it's listed in a cup.
+// New track: add the descriptor to TRACKS above, then drop its id into a cup here.
+// Place-based names that double as each cup's future biome (themed environments,
+// later phase): Backyard = grass/grounded; Rooftop = ramps/overpass/stunts.
+export const CUPS = [
+  { id: 'backyard', name: 'Backyard Cup', tracks: ['bowtie', 'pretzel', 'lasso', 'cloverleaf'] }, // seeded multi-crossing circuits
+  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['crossover', 'twister'] }      // overpass + stunts (rooftop biome)
+];
 
-// Flat list — {id, name, segments, oils, pads, boxes, poles} in display order — used by
-// main.js and the track picker. The display builds each track and computes its schematic
-// SVG from the geometry, so the picker needs no per-track art.
+// Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —
+// the rounded mean of its tracks' levels (Easy=1 … Expert=4), or an explicit `difficulty`
+// on the cup to pin it. The picker shows this as a 4-pip meter on the cup header; tracks
+// are NOT badged individually. Recomputes as tracks join a cup.
+const DIFF_LEVEL = { Easy: 1, Medium: 2, Hard: 3, Expert: 4 };
+const cupTendency = (c) => c.difficulty != null ? c.difficulty
+  : Math.round(c.tracks.reduce((sum, id) => sum + (DIFF_LEVEL[TRACKS[id].difficulty] || 2), 0) / c.tracks.length);
+
+// id → { cup, cupName, cupDifficulty } so each track knows its cup for the picker. Validate
+// ids first (a cup naming a track absent from TRACKS would otherwise vanish silently).
+const CUP_OF = {};
+for (const c of CUPS) {
+  for (const id of c.tracks) if (!TRACKS[id]) throw new Error(`CUPS references unknown track "${id}"`);
+  const cupDifficulty = cupTendency(c);
+  for (const id of c.tracks) CUP_OF[id] = { cup: c.id, cupName: c.name, cupDifficulty };
+}
+
+// Stable display order for the gallery / picker — every cup's tracks, in cup order.
+export const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
+
+// Flat list — {id, name, difficulty, cup, cupName, cupDifficulty, segments, oils, pads,
+// boxes, poles} in cup order — used by main.js, the track picker, and the gallery. `difficulty`
+// is per-track data (orders the cup + feeds the tendency); the picker renders only the cup
+// tendency. The display builds each track + computes its schematic SVG, so no per-track art.
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({
-  id, name: TRACKS[id].name, segments: TRACKS[id].segments,
+  id, name: TRACKS[id].name, difficulty: TRACKS[id].difficulty,
+  cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,
+  segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints,
   oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));

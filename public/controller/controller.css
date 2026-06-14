@@ -131,9 +131,33 @@ input[type=text]:disabled { opacity: 0.6; }
    Schematic "map" tiles of each track (paths shipped by the display). Host only
    (everyone else sees the pick on the big screen). Mirrors the car strip. */
 .trackpick { margin-top: 1.2rem; }
+/* the strip stacks one cup per row; each cup is a label over a grid of map tiles.
+   padding + matching negative margin so tile shadow-pop isn't clipped at the edges. */
 .trackpick__strip {
+  display: flex; flex-direction: column; gap: 0.9rem;
+  padding: 0.5rem; margin: -0.5rem -0.5rem 0;
+}
+.trackpick__cup { display: flex; flex-direction: column; gap: 0.5rem; }
+.trackpick__cup-head { display: flex; align-items: center; gap: 0.45rem; }
+.trackpick__cup-name {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.84rem;
+  letter-spacing: 0.01em; color: var(--ink);
+}
+/* difficulty TENDENCY meter — 4 pips, the first `data-level` filled and colour-ramped
+   (green→amber→orange→red); a lean for the whole cup, not a per-track badge. */
+.trackpick__cup-meter { display: inline-flex; align-items: center; gap: 3px; }
+.trackpick__cup-meter > i {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-3), transparent 60%);
+}
+.trackpick__cup-meter[data-level="1"] { --pip: var(--car-green); }
+.trackpick__cup-meter[data-level="2"] { --pip: var(--car-amber); }
+.trackpick__cup-meter[data-level="3"] { --pip: color-mix(in srgb, var(--car-amber), var(--car-red) 55%); }
+.trackpick__cup-meter[data-level="4"] { --pip: var(--car-red); }
+.trackpick__cup-meter > i.is-on { background: var(--pip); }
+.trackpick__grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-  gap: 0.55rem; padding: 0.5rem; margin: -0.5rem -0.5rem 0;
+  gap: 0.55rem;
 }
 .track-opt {
   display: flex; flex-direction: column; align-items: center; gap: 0.3rem;

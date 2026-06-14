@@ -18,7 +18,7 @@ const path = require('path');
   const { trackSchematic } = await import('../public/display/trackSchematic.js');
 
   const body = TRACK_LIST
-    .map((t) => `  ${t.id}: ${JSON.stringify(trackSchematic(buildTrack(t.segments)))}`)
+    .map((t) => `  ${t.id}: ${JSON.stringify(trackSchematic(buildTrack(t)))}`)
     .join(',\n');
 
   const out =

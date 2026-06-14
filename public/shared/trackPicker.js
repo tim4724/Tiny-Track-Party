@@ -34,33 +34,81 @@ function schematicSvg(svg) {
   return el;
 }
 
-// Render the picker.
-//   stripEl : container for the tap tiles
-//   catalog : [{ id, name, svg }] (from the display)
+// One map tile: schematic + name, ringed when it's the pick. Difficulty is shown
+// per-cup as a tendency meter (see cupMeter), not badged on each track.
+function trackTile(t, mine, canPick, onPick) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
+  if (mine) btn.setAttribute('aria-current', 'true');
+  btn.setAttribute('aria-label', t.name);
+  btn.disabled = !canPick;
+  btn.appendChild(schematicSvg(t.svg || {}));
+  const lab = document.createElement('span');
+  lab.className = 'track-opt__name';
+  lab.textContent = t.name;
+  btn.appendChild(lab);
+  if (canPick && onPick) btn.addEventListener('click', () => onPick(t.id));
+  return btn;
+}
+
+// A cup's difficulty TENDENCY as a 4-pip meter (the first `level` pips filled, 1–4). A
+// lean for the whole cup, not a per-track rating; CSS colour-ramps the filled pips.
+function cupMeter(level) {
+  const lv = Math.max(1, Math.min(4, level | 0));
+  const meter = document.createElement('span');
+  meter.className = 'trackpick__cup-meter';
+  meter.dataset.level = String(lv);
+  meter.setAttribute('aria-label', `difficulty ${lv} of 4`);
+  for (let i = 0; i < 4; i++) {
+    const pip = document.createElement('i');
+    if (i < lv) pip.className = 'is-on';
+    meter.appendChild(pip);
+  }
+  return meter;
+}
+
+// Render the picker, one labelled section per cup.
+//   stripEl : container for the cup sections
+//   catalog : [{ id, name, svg, cup?, cupName?, cupDifficulty? }] (from the display)
 //   selected: current track id (null = nothing ringed)
 //   canPick : whether taps are live (host only)
 //   onPick  : (id) => void
+// Entries with no `cup` collapse into a single unlabelled group (older display / gallery),
+// so the picker still renders if the catalog predates cups.
 export function buildTrackPicker({ stripEl, catalog, selected, canPick, onPick }) {
   const list = catalog || [];
   const selId = list.some((t) => t.id === selected) ? selected : null; // null = nothing ringed
+  if (!stripEl) return;
+  stripEl.innerHTML = '';
 
-  if (stripEl) {
-    stripEl.innerHTML = '';
-    list.forEach((t) => {
-      const mine = t.id === selId;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
-      if (mine) btn.setAttribute('aria-current', 'true');
-      btn.setAttribute('aria-label', t.name);
-      btn.disabled = !canPick;
-      btn.appendChild(schematicSvg(t.svg || {}));
-      const lab = document.createElement('span');
-      lab.className = 'track-opt__name';
-      lab.textContent = t.name;
-      btn.appendChild(lab);
-      if (canPick && onPick) btn.addEventListener('click', () => onPick(t.id));
-      stripEl.appendChild(btn);
-    });
+  // Group by cup, preserving the catalog's (cup-ordered) sequence.
+  const groups = [];
+  const byCup = new Map();
+  for (const t of list) {
+    const key = t.cup || '';
+    let g = byCup.get(key);
+    if (!g) { g = { name: t.cupName || '', diff: t.cupDifficulty, items: [] }; byCup.set(key, g); groups.push(g); }
+    g.items.push(t);
+  }
+
+  for (const g of groups) {
+    const cup = document.createElement('div');
+    cup.className = 'trackpick__cup';
+    if (g.name) {
+      const head = document.createElement('div');
+      head.className = 'trackpick__cup-head';
+      const name = document.createElement('span');
+      name.className = 'trackpick__cup-name';
+      name.textContent = g.name;
+      head.appendChild(name);
+      if (g.diff != null) head.appendChild(cupMeter(g.diff));
+      cup.appendChild(head);
+    }
+    const grid = document.createElement('div');
+    grid.className = 'trackpick__grid';
+    g.items.forEach((t) => grid.appendChild(trackTile(t, t.id === selId, canPick, onPick)));
+    cup.appendChild(grid);
+    stripEl.appendChild(cup);
   }
 }

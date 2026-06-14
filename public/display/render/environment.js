@@ -8,6 +8,7 @@ import { makeCloudTexture, makeLawnTexture } from './textures.js';
 const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
 
 export function buildEnvironment(scene) {
+  let horizonHills = null; // returned so setTrack can push the ring out past a large track
   // Sky dome: a vertex-coloured backdrop — deeper blue overhead easing to a
   // pale warm band at the horizon (the same hue the fog uses, so distant
   // geometry dissolves into the sky instead of hitting a flat backdrop).
@@ -86,6 +87,7 @@ export function buildEnvironment(scene) {
     );
     for (const g of geoms) g.dispose(); // copied into the merge
     scene.add(hills);
+    horizonHills = hills;
   }
 
   // Toy lighting: a soft sky/ground hemisphere for even fill, PLUS a warm key light
@@ -124,5 +126,5 @@ export function buildEnvironment(scene) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, key, ground };
+  return { clouds, key, ground, hills: horizonHills };
 }

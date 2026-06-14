@@ -231,7 +231,7 @@ test('buildTrack reports a loop mouth (arclength + width) for every loop segment
   // these), so every `loop` segment must surface exactly one entry, in-range and sized.
   for (const [name, def] of Object.entries(TRACKS)) {
     const t = buildTrack(def);
-    const nLoops = def.segments.filter((s) => s.kind === 'loop').length;
+    const nLoops = (def.segments || []).filter((s) => s.kind === 'loop').length;
     assert.ok(Array.isArray(t.loopStarts), `track "${name}" should report loopStarts`);
     assert.equal(t.loopStarts.length, nLoops, `track "${name}": one loop mouth per loop segment`);
     for (const ls of t.loopStarts) {
@@ -245,10 +245,12 @@ test('a loop-free track reports no loop mouths', () => {
   assert.deepEqual(buildTrack(OVAL).loopStarts, []);
 });
 
-test('every named track has a display name and segments', () => {
+test('every named track has a display name and a geometry source', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
-    assert.ok(Array.isArray(def.segments) && def.segments.length, `track "${name}" missing segments`);
+    const seg = Array.isArray(def.segments) && def.segments.length;
+    const wp = Array.isArray(def.waypoints) && def.waypoints.length;
+    assert.ok(seg || wp, `track "${name}" needs either .segments or .waypoints`);
   }
 });
 
@@ -260,7 +262,7 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
   assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
     'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
   for (const t of TRACK_LIST) {
-    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t.segments)),
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t)),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
 });
@@ -547,21 +549,34 @@ test('grass hills berm raised non-pillared road, never bridges or loops', () => 
   assert.equal(hillsOf('crossover').length, 0, 'crossover: its only rise is a pillared bridge — no berms');
 });
 
+// The seeded Backyard tracks are waypoint/spline tracks: every one mixes flown-over
+// crossings (bridge -> pillars) with raised non-bridge ramps (-> grass berms). Guards
+// against buildSplineTrack silently dropping the pillar or berm pass on a geometry change.
+test('seeded Backyard tracks produce both bridge pillars and grass berms', () => {
+  for (const id of ['bowtie', 'pretzel', 'lasso', 'cloverleaf']) {
+    const t = buildTrack(TRACKS[id]);
+    assert.ok(t.pillars.length > 0, `${id}: bridged crossings should stand pillars`);
+    assert.ok(t.hills.length > 0, `${id}: raised non-bridge ramps should grow berms`);
+  }
+});
+
 test('hill berms feather to the lawn at both ends and rise under the road between', () => {
   const t = buildTrack(TRACKS.riverside);
   const gy = t.groundY;
   assert.ok(t.hills.length > 0);
   for (const rings of t.hills) {
     assert.ok(rings.length >= 4, 'a hill run lofts several rings');
-    // The end rings sit at lawn level so the berm emerges smoothly from flat ground.
-    assert.ok(Math.abs(rings[0].topY - gy) < 1e-9, 'first ring feathers to the lawn');
-    assert.ok(Math.abs(rings[rings.length - 1].topY - gy) < 1e-9, 'last ring feathers to the lawn');
-    // No ring ever dips below the lawn (topY = road − TUCK is clamped at groundY), and
-    // the run reaches real height somewhere between its feathered ends.
+    // The end rings sit at lawn level so the berm emerges smoothly from flat ground. Each
+    // ring carries two top corners (topL/topR) that follow the road's bank.
+    const top = (r) => Math.max(r.topL, r.topR);
+    assert.ok(Math.abs(rings[0].topL - gy) < 1e-9 && Math.abs(rings[0].topR - gy) < 1e-9, 'first ring feathers to the lawn');
+    assert.ok(Math.abs(rings[rings.length - 1].topL - gy) < 1e-9 && Math.abs(rings[rings.length - 1].topR - gy) < 1e-9, 'last ring feathers to the lawn');
+    // No corner ever dips below the lawn (clamped at groundY), and the run reaches real
+    // height somewhere between its feathered ends.
     let peak = 0;
     for (const r of rings) {
-      assert.ok(r.topY >= gy - 1e-9, 'berm never dips below the lawn');
-      peak = Math.max(peak, r.topY - gy);
+      assert.ok(r.topL >= gy - 1e-9 && r.topR >= gy - 1e-9, 'berm never dips below the lawn');
+      peak = Math.max(peak, top(r) - gy);
     }
     assert.ok(peak > 0.5, `berm carries real height (peak ${peak.toFixed(2)} above lawn)`);
   }
