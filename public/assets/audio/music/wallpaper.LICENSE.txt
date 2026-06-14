@@ -1,0 +1,18 @@
+wallpaper.mp3 — the in-race background music track.
+
+Source : "Wallpaper"
+Author : Kevin MacLeod
+From   : https://incompetech.com/music/royalty-free/music.html
+License: CC-BY 4.0 (Attribution) — https://creativecommons.org/licenses/by/4.0/
+
+ATTRIBUTION IS REQUIRED. Unlike the CC0 engine clip, shipping this track
+obliges us to credit the author. The required credit line (put it on an
+in-game credits screen / about page before public release):
+
+  "Wallpaper" by Kevin MacLeod (incompetech.com)
+  Licensed under Creative Commons: By Attribution 4.0
+  https://creativecommons.org/licenses/by/4.0/
+
+No changes were made to the track (looped only). This is a placeholder for the
+whole soundtrack — track-specific songs come later; when the final pool is
+chosen, gather every CC-BY credit here and surface them in-game.

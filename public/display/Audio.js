@@ -10,12 +10,30 @@
 //
 // Browsers require a user gesture before audio runs; call resume() from
 // pointerdown/keydown. Every play method no-ops safely while locked.
-import { resolveVariant } from './audio/cues.js';
+import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
 
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
 const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 const SCREECH_GAP_MS = 140; // min spacing so curb contact can't machine-gun
 const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
+
+// Background music: one shipped track for now (track-specific songs come later —
+// this will grow into a per-track map). Exported so the display can show an
+// on-screen credit chip (title + artist, linking to `source`) — which is also
+// how we satisfy the CC-BY attribution for Kevin MacLeod's "Wallpaper" (see
+// music/wallpaper.LICENSE.txt).
+export const RACE_MUSIC = {
+  file: '/assets/audio/music/wallpaper.mp3',
+  title: 'Wallpaper',
+  artist: 'Kevin MacLeod',
+  license: 'CC-BY 4.0',
+  source: 'https://incompetech.com/music/royalty-free/music.html',
+};
+// MUSIC_LEVEL is a STARTING VALUE — a bed under the SFX, not a wall of sound.
+// Tune by ear in ?solo=1: if it buries the cues, drop by 0.05; if it vanishes,
+// raise it. It rides the master gain, so the volume slider scales it too.
+// Settled at 0.28 by ear — a touch forward of the SFX bed (Tim, 2026-06-14).
+const MUSIC_LEVEL = 0.28;
 
 export class RaceAudio {
   constructor() {
@@ -25,6 +43,8 @@ export class RaceAudio {
     this._lastScreech = -Infinity;
     this._lastLap = -Infinity;
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
+    this._music = null;       // streamed background track (HTMLAudioElement)
+    this._musicUrl = null;    // its current src, so we only reload on a track change
   }
 
   _ensure() {
@@ -41,6 +61,11 @@ export class RaceAudio {
     comp.ratio.value = 6;
     this.master.connect(comp);
     comp.connect(this.ctx.destination);
+    // Decode the one recorded cue (the engine loop) up front, on the same
+    // user-gesture that creates the context — so the buffer is ready by the
+    // time the first race frame asks for an engine. Fire-and-forget: the voice
+    // stays silent until it resolves and never throws if the fetch fails.
+    loadSampleBuffers(this.ctx);
   }
 
   resume() {
@@ -58,12 +83,15 @@ export class RaceAudio {
 
   // Gallery picks, read once per session (re-read after resume() if you ever
   // need live re-picking; a race doesn't).
-  _variant(cueId) {
+  _loadPicks() {
     if (!this._picks) {
       try { this._picks = JSON.parse(localStorage.getItem(PICKS_KEY)) || {}; }
       catch (_) { this._picks = {}; }
     }
-    return resolveVariant(cueId, this._picks);
+    return this._picks;
+  }
+  _variant(cueId) {
+    return resolveVariant(cueId, this._loadPicks());
   }
 
   // Play a cue, optionally attenuated (vol < 1 routes through a trim gain so
@@ -128,6 +156,13 @@ export class RaceAudio {
   boostWind(id, boostMul) { this._stateVoice('boost', id, Math.max(0, Math.min(1, (boostMul - 1) / 0.6))); }
   cornerSqueal(id, level) { this._stateVoice('corner', id, level); }
   brakeSkid(id, level) { this._stateVoice('brake', id, level); }
+  // Driving sound — a STATE-DRIVEN voice like the others: the recorded engine
+  // loop, pitch + level following the car's speed every frame (silent at rest).
+  // Called per HUMAN car from the render loop; CPU cars stay silent (an 8-car
+  // engine chorus would be mud, same reasoning as corner/brake).
+  engineDrive(id, level) {
+    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)));
+  }
   // Kill all live voices — pause, race end, return to lobby. Without this a
   // frozen frame would hold its sounds forever (the loop stops updating levels).
   stopVoices() {
@@ -156,4 +191,45 @@ export class RaceAudio {
     this._play('screech', Math.max(0.3, Math.min(1, intensity)));
   }
   join() { this._play('join'); }
+
+  // ---- background music ----
+  // Ambient, not a cue: the race song plays globally for the whole race (it does
+  // NOT follow the visible-events rule the SFX do). Unlike the synth cues and the
+  // tiny engine loop (Web Audio buffers), the song is a multi-MB full track, so
+  // it STREAMS through an <audio> element rather than decoding ~40 MB of PCM into
+  // memory. It's routed into the master gain so the limiter and volume slider
+  // apply; if MediaElementSource isn't available it falls back to the element's
+  // own volume scaled by the master level.
+  startMusic(url = RACE_MUSIC.file) {
+    if (!this.ready) return;
+    if (!this._music) {
+      const el = new Audio();
+      el.loop = true;
+      el.preload = 'auto';
+      this._music = el;
+      try {
+        const node = this.ctx.createMediaElementSource(el);
+        const g = this.ctx.createGain();
+        g.gain.value = MUSIC_LEVEL;
+        node.connect(g);
+        g.connect(this.master);
+        this._musicGain = g; // kept for inspection / live level tuning
+      } catch (_) {
+        el.volume = MUSIC_LEVEL * this._volume(); // routed straight to the device
+      }
+    }
+    // Swap src only on a real track change (per-track songs later); re-racing the
+    // same track keeps it buffered. createMediaElementSource follows the element,
+    // so the routing survives a src change.
+    if (this._musicUrl !== url) { this._music.src = url; this._musicUrl = url; }
+    try { this._music.currentTime = 0; } catch (_) { /* not seekable yet */ }
+    this._music.play().catch(() => { /* gesture/decoding race — stays silent */ });
+  }
+  pauseMusic() { if (this._music) this._music.pause(); }
+  resumeMusic() { if (this._music && this.ready) this._music.play().catch(() => {}); }
+  stopMusic() {
+    if (!this._music) return;
+    this._music.pause();
+    try { this._music.currentTime = 0; } catch (_) { /* ignore */ }
+  }
 }

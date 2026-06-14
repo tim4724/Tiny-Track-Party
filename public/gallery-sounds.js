@@ -3,7 +3,7 @@
 // variant the way the race would fire it, plus a star per variant to record
 // which candidate wins. Picks live in localStorage; the race wiring reads the
 // approved palette from cues.js once the audition round settles it.
-import { CUES } from '/display/audio/cues.js';
+import { CUES, loadSampleBuffers } from '/display/audio/cues.js';
 
 const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
@@ -26,6 +26,7 @@ function audio() {
   comp.ratio.value = 6;
   master.connect(comp);
   comp.connect(ctx.destination);
+  loadSampleBuffers(ctx); // decode the recorded engine loop so its cue auditions here too
   return { ctx, master };
 }
 

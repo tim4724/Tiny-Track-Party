@@ -65,7 +65,13 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
   // 3D assets — glTF binary. The Kenney GLBs are self-contained (no .gltf/.bin
   // companions are served); without this they'd fall back to octet-stream.
-  '.glb': 'model/gltf-binary'
+  '.glb': 'model/gltf-binary',
+  // Audio. The race itself is asset-free Web Audio synthesis, but the sound
+  // gallery / SFX-audition surfaces load clips for comparison.
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.mp3': 'audio/mpeg'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -222,6 +228,32 @@ const server = http.createServer((req, res) => {
     const noCache = !IS_PROD || ext === '.html' || ext === '.js';
     headers['Cache-Control'] = noCache ? 'no-store' : 'public, max-age=86400';
 
+    // Byte-range support — media elements need 206 responses to compute a
+    // track's duration and to scrub (a streamed Ogg over a plain 200 reports
+    // duration = Infinity and can't seek). data is already fully buffered, so
+    // a range is just a slice. HTML is templated per-request, so never ranged.
+    const total = data.length;
+    headers['Accept-Ranges'] = 'bytes';
+    const rangeHeader = ext !== '.html' && req.headers.range;
+    const m = rangeHeader && /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+    if (m && (m[1] || m[2])) {
+      let start = m[1] ? parseInt(m[1], 10) : total - parseInt(m[2], 10);
+      let end = m[1] && m[2] ? parseInt(m[2], 10) : total - 1;
+      start = Math.max(0, start);
+      end = Math.min(end, total - 1);
+      if (start > end) { // unsatisfiable
+        res.writeHead(416, { ...headers, 'Content-Range': `bytes */${total}` });
+        res.end();
+        return;
+      }
+      headers['Content-Range'] = `bytes ${start}-${end}/${total}`;
+      headers['Content-Length'] = end - start + 1;
+      res.writeHead(206, headers);
+      res.end(data.subarray(start, end + 1));
+      return;
+    }
+
+    headers['Content-Length'] = total;
     res.writeHead(200, headers);
     res.end(data);
   });

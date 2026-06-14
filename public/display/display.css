@@ -475,6 +475,25 @@ html.cam-free #race { pointer-events: none; }
   cursor: pointer;
 }
 
+/* ---- Now-playing music credit ---- bottom-left link: the current track +
+   artist, linking to its source (also the on-screen CC-BY attribution). A dark
+   translucent pill so it reads over the bright 3D scene without grabbing focus.
+   Shares the sound-hint's corner, but they never show together (the hint is up
+   only while audio is locked; this only during a race). */
+.music-credit {
+  position: fixed; left: 1rem; bottom: 1rem; z-index: 9;
+  max-width: min(46vw, 24rem);
+  display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: inherit; font-weight: 700; font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.92); text-decoration: none;
+  background: rgba(25, 35, 45, 0.55);
+  padding: 0.4rem 0.9rem; border-radius: var(--r-pill);
+  box-shadow: var(--shadow-float);
+  opacity: 0.78; transition: opacity 0.2s ease, background 0.2s ease;
+}
+.music-credit::before { content: "\266A\00a0\00a0"; opacity: 0.9; } /* ♪ */
+.music-credit:hover { opacity: 1; background: rgba(25, 35, 45, 0.72); }
+
 /* ---- Reconnect card ---- a QR for a dropped player, centred in their own
    split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for
    placement + chrome (absolute, translate(-50%,-50%), frosted card, livery

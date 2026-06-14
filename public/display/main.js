@@ -9,7 +9,7 @@ import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
-import { RaceAudio } from './Audio.js';
+import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { wrapDelta } from './engine/util.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
@@ -252,6 +252,22 @@ function demoSig(field, trackId) {
 // resume() rides the window gesture listeners below; until someone touches the
 // display every cue no-ops silently.
 const audio = new RaceAudio();
+window.__audio = audio; // debug hook (alongside __engine/__track) — tune music/SFX by ear in ?solo
+
+// Now-playing credit chip (bottom-left): the current track + artist, linking to
+// its source — and the on-screen CC-BY attribution. Filled from the track
+// descriptor; toggled with the music lifecycle (shown on GO, hidden at results /
+// lobby). Values are static config, so textContent/href are safe to set raw.
+function showMusicCredit(on) {
+  const mc = el('music-credit');
+  if (!mc) return;
+  if (on) {
+    mc.textContent = `${RACE_MUSIC.title} · ${RACE_MUSIC.artist}`;
+    mc.href = RACE_MUSIC.source;
+    mc.title = `${RACE_MUSIC.title} by ${RACE_MUSIC.artist} — ${RACE_MUSIC.license} (source ↗)`;
+  }
+  mc.classList.toggle('hidden', !on);
+}
 
 // ---- race state ----
 let session = null;
@@ -317,6 +333,10 @@ scene.onFrame = (dt) => {
       const fastGate = Math.max(0, Math.min(1, (c.spd - 0.45) / 0.3));
       audio.cornerSqueal(c.id, c.spin ? 0 : c.steer * c.steer * fastGate);
       audio.brakeSkid(c.id, c.brake * Math.max(0, Math.min(1, (c.spd - 0.2) / 0.4)));
+      // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
+      // Divisor maps normal top speed (~1.0) to near-full and lets boost (~1.6)
+      // peg the top of the range; starting value, tune by ear in ?solo=1.
+      audio.engineDrive(c.id, c.spd / 1.2);
     }
   }
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
@@ -584,6 +604,8 @@ function startRace() {
       // clean 3-lap is ~50-80 s.
       net.flow.transitionTo(ROOM_STATE.PLAYING);
       net.broadcast({ type: MSG.GAME_START });
+      audio.startMusic();                      // background track for the whole race
+      showMusicCredit(true);                   // now-playing credit chip (bottom-left)
     },
     onRaceEnd: endRace,
   });
@@ -724,6 +746,8 @@ function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
   audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
+  audio.stopMusic();                           // race over → results screen is quiet
+  showMusicCredit(false);
   paused = false;                              // results aren't pausable
   autoPaused = false;
   setPauseOverlay(false);
@@ -777,6 +801,8 @@ function returnToLobby() {
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
   audio.stopVoices();
+  audio.stopMusic();
+  showMusicCredit(false);
   paused = false;
   autoPaused = false;
   raceEnded = false;
@@ -828,9 +854,11 @@ function syncSessionFrozen() {
   if (frozen && !session.paused) {
     session.pause();
     audio.stopVoices();                  // frozen cars must not keep their wind/squeal going
+    audio.pauseMusic();                  // ... and the music holds where it was
     freezeCars();                        // zero each car's speed so dust stops kicking up
   } else if (!frozen && session.paused) {
     session.resume();
+    audio.resumeMusic();
   }
 }
 

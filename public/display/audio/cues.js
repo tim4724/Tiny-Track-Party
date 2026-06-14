@@ -39,6 +39,67 @@ function noiseBuf(ctx) {
   return buf;
 }
 
+// The one asset-backed cue. Everything else in this module is synthesized, but
+// the driving engine is a REAL recorded loop (CC0, ggbotnet —
+// public/assets/audio/engine_loop.ogg, see its .LICENSE.txt), played the way
+// shipping racers do: loop it and pitch-shift playbackRate with speed.
+//
+// Web Audio can't decode synchronously and this module stays fetch-free at
+// import time (so Node can import the cue table), so the host (RaceAudio / the
+// gallery) calls loadSampleBuffers(ctx) once after it creates the context. The
+// decoded buffer is cached per-context; until it resolves the engine voice is
+// simply silent — in practice the decode finishes during the lobby, long before
+// the first race frame asks for an engine.
+const SAMPLE_URLS = { engine: '/assets/audio/engine_loop.ogg' };
+const sampleBufs = new WeakMap(); // ctx -> { engine: AudioBuffer, ... }
+
+export async function loadSampleBuffers(ctx) {
+  let cache = sampleBufs.get(ctx);
+  if (!cache) { cache = {}; sampleBufs.set(ctx, cache); }
+  await Promise.all(Object.entries(SAMPLE_URLS).map(async ([name, url]) => {
+    if (cache[name]) return;                          // already decoded for this ctx
+    try {
+      const data = await fetch(url).then((r) => r.arrayBuffer());
+      cache[name] = await ctx.decodeAudioData(data);
+    } catch (_) { /* leave unset — the voice stays silent rather than throwing */ }
+  }));
+  return cache;
+}
+function sampleBuf(ctx, name) {
+  const cache = sampleBufs.get(ctx);
+  return (cache && cache[name]) || null;
+}
+
+// Loop a recorded buffer and pitch-shift it by speed (playbackRate = RPM),
+// opening a lowpass for air as it revs. bufFn(ctx) returns the decoded buffer
+// (or null if the async decode hasn't landed yet — then the voice is silently
+// inert). opts give the per-variant rate / filter / gain ranges.
+function bakedLoopVoice(ctx, dest, bufFn, opts = {}) {
+  const { rate0 = 0.55, rateSpan = 1.25, lp0 = 500, lpSpan = 2200, gain0 = 0.05, gainSpan = 0.06, Q = 0.7 } = opts;
+  const src = ctx.createBufferSource();
+  const buf = bufFn(ctx);
+  if (buf) src.buffer = buf;        // null until the decode lands → plays silence
+  src.loop = true;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = lp0; lp.Q.value = Q;
+  const out = ctx.createGain(); out.gain.value = 0.0001;
+  src.connect(lp); lp.connect(out); out.connect(dest);
+  src.start(ctx.currentTime);
+  return {
+    set(level) {
+      const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+      src.playbackRate.setTargetAtTime(rate0 + l * rateSpan, at, 0.12); // RPM
+      lp.frequency.setTargetAtTime(lp0 + l * lpSpan, at, 0.1);
+      out.gain.setTargetAtTime(gain0 + l * gainSpan, at, 0.08);
+    },
+    stop() {
+      const at = ctx.currentTime;
+      out.gain.setTargetAtTime(0.0001, at, 0.1);
+      try { src.stop(at + 0.5); } catch (_) { /* already stopped */ }
+    }
+  };
+}
+
 // ---- building blocks ----
 
 // Percussive gain envelope: fast attack → (optional hold) → exponential decay.
@@ -139,8 +200,8 @@ export const DEFAULT_PICKS = {
   banana_slip: 'dizzy',
   lap: 'plink2',
   screech: 'rumble',
-  join: 'risingtwo'
-  // engine_putt: deliberately absent — no engine drone in v1.
+  join: 'risingtwo',
+  engine_putt: 'realloop' // the recorded engine loop, pitch-shifted by speed (Tim, 2026-06-13)
   // Cut after auditioning: 'ready' (the roulette's reveal pop already lands
   // that beat), 'final_lap' (redundant with the lap chime) and 'finish' (the
   // chequered-flag crossing plays the ordinary lap chime — the results screen
@@ -432,49 +493,21 @@ export const CUES = [
   },
   {
     id: 'engine_putt',
-    label: 'Engine putt-putt (optional)',
-    desc: 'Wind-up-toy idle, NOT planned for v1 — here so the “do we even want an engine?” question gets answered by ear. Speed slider = pack speed.',
+    label: 'Driving sound (engine)',
+    desc: 'The shipping driving voice: a real recorded engine loop (CC0) looped and pitch-shifted by speed — higher and louder the faster you go, fading to silence at rest (the RPM=playbackRate trick every racer uses). Slider = speed. The synth experiments that lost this audition are gone; the recording is decoded by the host via loadSampleBuffers().',
     continuous: true,
     variants: [
       {
-        id: 'windup', label: 'wind-up toy',
+        id: 'realloop', label: 'recorded engine loop',
         start(ctx, dest) {
-          const t = ctx.currentTime;
-          const o = ctx.createOscillator();
-          o.type = 'triangle';
-          o.frequency.value = 85;
-          // square LFO gates the tone 0..1 → the "putt putt putt" pulse train
-          const gate = ctx.createGain();
-          gate.gain.value = 0.5;
-          const lfo = ctx.createOscillator();
-          lfo.type = 'square';
-          lfo.frequency.value = 8;
-          const depth = ctx.createGain();
-          depth.gain.value = 0.5;
-          lfo.connect(depth);
-          depth.connect(gate.gain);
-          const filt = ctx.createBiquadFilter();
-          filt.type = 'lowpass';
-          filt.frequency.value = 420;
-          const out = ctx.createGain();
-          out.gain.setValueAtTime(0.0001, t);
-          out.gain.exponentialRampToValueAtTime(0.07, t + 0.15);
-          o.connect(gate); gate.connect(filt); filt.connect(out); out.connect(dest);
-          o.start(t); lfo.start(t);
-          return {
-            set(level) {
-              const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
-              o.frequency.setTargetAtTime(78 + l * 70, at, 0.08);
-              lfo.frequency.setTargetAtTime(7 + l * 10, at, 0.08);
-              filt.frequency.setTargetAtTime(380 + l * 450, at, 0.08);
-              out.gain.setTargetAtTime(0.05 + l * 0.05, at, 0.08);
-            },
-            stop() {
-              const at = ctx.currentTime;
-              out.gain.setTargetAtTime(0.0001, at, 0.08);
-              try { o.stop(at + 0.5); lfo.stop(at + 0.5); } catch (_) { /* already stopped */ }
-            }
-          };
+          // rate0/rateSpan: idle just under the recording's native pitch, climbing
+          // to ~1.65× flat-out; the lowpass opens for "air" under load; gain swells
+          // up from near-silent off the line. STARTING VALUES — tune by ear in
+          // ?solo=1 (the clip is full-scale stereo, so the gains sit well below the
+          // synth cues' levels). Gain halved (0.015/0.12 → 0.007/0.06) once the
+          // background music joined the mix — the engine was burying it (Tim, 2026-06-14).
+          return bakedLoopVoice(ctx, dest, (c) => sampleBuf(c, 'engine'),
+            { rate0: 0.9, rateSpan: 0.75, lp0: 900, lpSpan: 5200, gain0: 0.007, gainSpan: 0.06, Q: 0.6 });
         }
       }
     ]
