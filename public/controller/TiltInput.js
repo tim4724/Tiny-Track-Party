@@ -14,11 +14,14 @@
 // (sensitively — it reaches full lock fast, since roll isn't proportional to the
 // twist the way it is to a flat lean). Both gestures, one signal, no mode switch.
 //
-// Roll is read in the phone's NATIVE (portrait) frame — we deliberately IGNORE
-// screen.orientation. The controller UI always renders portrait, so the player
-// holds the phone upright; reading the raw sensor means the OS auto-rotating (or
-// being orientation-locked) never shifts the steering reference out from under
-// them mid-race. The steering is a function of physics, not of what the OS does.
+// Roll is read in the SCREEN's current frame, not the phone's native one: we take
+// the device-frame gravity vector and rotate its x/y by screen.orientation.angle,
+// so "lean toward the right of whatever you're looking at" steers right whether the
+// UI is portrait or landscape. Hold the phone any way up and the steering tracks
+// the visible up-direction — the OS auto-rotating the UI rotates the steering
+// reference WITH it (so they stay consistent), and orientation-locking just pins
+// both. In portrait (angle 0) this collapses to the raw native roll, so nothing
+// changes for the common case.
 //
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
 // tap handler). HTTPS is required for sensors.
@@ -43,6 +46,18 @@ const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+
+// The screen's "right" axis expressed in the device's native x/y, keyed by the OS
+// rotation angle. Projecting gravity onto this axis (instead of always onto native
+// +x) is what makes a left/right lean read the same in portrait and landscape:
+// rotate the steering reference with the UI. Equivalent to rotating (x,y) by the
+// screen angle — { rx: cosθ, ry: -sinθ } — snapped to the four right angles.
+const SCREEN_RIGHT = {
+  0:   { rx: 1,  ry: 0 },   // portrait — native frame, unchanged
+  90:  { rx: 0,  ry: -1 },  // landscape-primary
+  180: { rx: -1, ry: 0 },   // upside-down portrait
+  270: { rx: 0,  ry: 1 },   // landscape-secondary
+};
 
 export class TiltInput {
   constructor({ onControl, surface }) {
@@ -117,17 +132,33 @@ export class TiltInput {
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }
 
-  // Steer = roll = device-frame gravity's angle in the x–z plane = atan2(gx, -gz).
-  // Equals device gamma; pitch-independent (cosβ cancels), so the doodle-jump lean
-  // is full-strength at any hold angle. An upright twist runs gz→0, so roll heads
-  // toward ±90° and twisting steers too (just not proportionally). Read straight
-  // from the native frame — no screen.orientation correction — so OS rotation
-  // can't flip the steering reference mid-race (see header).
+  // Steer = roll = gravity's angle in the screen's x–z plane = atan2(gRight, -gz),
+  // where gRight is gravity's component along the screen's current "right" axis (the
+  // device x/y rotated by the screen orientation; see SCREEN_RIGHT / _screenAngle).
+  // In portrait this is the native roll (= device gamma): pitch-independent (cosβ
+  // cancels) so the doodle-jump lean is full-strength at any hold angle, and an
+  // upright twist runs gz→0 so roll heads toward ±90° and twisting steers too. In
+  // landscape the same screen-relative lean is read off the device's pitch axis
+  // instead — one signal, any orientation.
   _sensorSteer() {
     if (!this.haveTilt) return 0;
-    const { x, z } = this._g;
-    const rollDeg = Math.atan2(x, -z) * RAD;
+    const { x, y, z } = this._g;
+    const { rx, ry } = SCREEN_RIGHT[this._screenAngle()] || SCREEN_RIGHT[0];
+    const gRight = x * rx + y * ry;
+    const rollDeg = Math.atan2(gRight, -z) * RAD;
     return clamp1(rollDeg / ROLL_LOCK);
+  }
+
+  // Degrees the OS has rotated the UI from its natural (portrait) orientation,
+  // snapped to {0,90,180,270}. Prefer the modern Screen Orientation API; fall back
+  // to the legacy window.orientation (which reports -90, hence the wrap). Absent
+  // both (desktop / Node test), assume portrait.
+  _screenAngle() {
+    const so = (typeof screen !== 'undefined' && screen.orientation
+        && typeof screen.orientation.angle === 'number') ? screen.orientation.angle
+      : (typeof window !== 'undefined' && typeof window.orientation === 'number'
+        ? window.orientation : 0);
+    return (((Math.round(so / 90) * 90) % 360) + 360) % 360;
   }
 
   _tick() {

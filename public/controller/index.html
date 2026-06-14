@@ -170,10 +170,11 @@
         </div>
       </div>
 
-      <!-- Auto-rotate warning — a soft amber callout (a gentle heads-up, not
-           alarming). Framed accurately: steering is orientation-independent (see
-           TiltInput.js), so this is only about keeping the portrait UI from flipping. -->
-      <p class="help-warn"><span class="help-warn__icon" aria-hidden="true"></span>Turn off auto-rotate so the screen stays put.</p>
+      <!-- Orientation note — a soft amber callout (a gentle heads-up, not alarming).
+           Steering is orientation-aware now (see TiltInput.js): it follows whichever
+           way the UI is facing, so landscape works too and auto-rotate is harmless —
+           we just nudge toward portrait as the comfiest hold. -->
+      <p class="help-warn"><span class="help-warn__icon" aria-hidden="true"></span>Portrait's comfiest, but steering works sideways too.</p>
 
       <button id="help-done" class="btn btn--brand help-done" type="button">Got it</button>
     </div>
