@@ -21,14 +21,14 @@
     const bot = new AiController(AI_PERSONALITIES[0]);
     let t = 0, last = 0; const laps = [];
     while (!engine.raceOver && t < MAX_S) {
-      const car = engine.cars.get(0);
+      const car = engine.cars.get(0);            // Map.get → same object each tick (update mutates in place)
       if (car && !car.finished && car.pose) engine.processInput(0, bot.drive(car, track.centerline));
       engine.update(DT); t += DT / 1000;
-      const c = engine.cars.get(0);
-      if (c && c.lap > last) { laps.push(t - laps.reduce((a, b) => a + b, 0)); last = c.lap; }
+      if (car && car.lap > last) { laps.push(t - laps.reduce((a, b) => a + b, 0)); last = car.lap; }
     }
     const steady = laps.slice(1);
-    return steady.length ? steady.reduce((a, b) => a + b, 0) / steady.length : (laps[0] || 0);
+    // never finished a lap → MAX_S sentinel; a 0 here would read as "fastest" and poison the table.
+    return steady.length ? steady.reduce((a, b) => a + b, 0) / steady.length : (laps[0] ?? MAX_S);
   }
 
   const N = CAR_STATS.length;
