@@ -19,8 +19,8 @@ const carName = (i) => NAMES[i] || ('Car ' + (i + 1));
 // is "more = more" (a full Weight bar = heaviest) so they read consistently. The
 // domain comes from CAR_STATS, not hardcoded, so retuning the table reshapes the
 // bars automatically. The floor sits at 50% (not 0) on purpose: every car should
-// look capable at everything, with differences as the top half of the bar — no
-// stat ever reads as empty/"broken", which fits the moderate (all-viable) spread.
+// look capable at everything, with differences shown as the top half of the bar —
+// no stat ever reads as empty/"broken", however wide or narrow the real spread is.
 const STAT_BAR_FLOOR = 0.50;
 const STAT_ROWS = [
   { lab: 'Speed', key: 'vmax' },

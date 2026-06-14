@@ -44,7 +44,7 @@
     const wi = times.indexOf(fast), li = times.indexOf(slow);
     wins[wi]++; worst[li]++; nTracks++;
     times.map((t, i) => ({ t, i })).sort((a, b) => a.t - b.t).forEach((o, r) => { rankSum[o.i] += r + 1; });
-    const cells = times.map((t, i) => (i === wi ? '*' : ' ') + t.toFixed(1).padStart(7)).join('');
+    const cells = times.map((t, i) => t.toFixed(1).padStart(7) + (i === wi ? '*' : ' ')).join('');
     console.log(name.padEnd(11) + pad(track.length.toFixed(0), 3) + '  ' + cells +
       '  ' + pad(((slow - fast) / fast * 100).toFixed(1), 5) + '% ' + CAR_NAMES[wi]);
   }
