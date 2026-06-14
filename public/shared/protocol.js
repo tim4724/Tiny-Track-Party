@@ -127,9 +127,9 @@ var CAR_MODEL_YAW = [0, 0, 0, 0];
 var CAR_STATS = [
   // accel, vmax, turn(=handling), mass — max holdable corner speed ≈ turn·9 u/s on the oval's tightest bend.
   { accel: 1.00, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Racer) — balanced benchmark, no weakness (~7.0 u/s in the tightest corner)
-  { accel: 1.12, vmax: 0.98, turn: 1.06, mass: 0.90, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — nimble lightweight: best launch + agile, lightest (shoved easily), modest top end
-  { accel: 1.00, vmax: 0.97, turn: 1.13, mass: 0.92, halfLen: 0.44, halfWid: 0.26 }, // Carve (Low Racer) — corner carver, rails the tightest bend, light, low top speed
-  { accel: 0.88, vmax: 1.06, turn: 0.95, mass: 1.16, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy freight train: sluggish launch + ponderous in corners, fast once rolling (top speed), wins every shove
+  { accel: 1.20, vmax: 0.96, turn: 1.10, mass: 0.82, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — nimble lightweight: best launch + agile, lightest (shoved easily), modest top end
+  { accel: 1.00, vmax: 0.96, turn: 1.24, mass: 0.85, halfLen: 0.44, halfWid: 0.26 }, // Carve (Low Racer) — corner carver, rails the tightest bend, light, low top speed
+  { accel: 0.80, vmax: 1.13, turn: 0.88, mass: 1.30, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy freight train: sluggish launch + ponderous in corners, fast once rolling (top speed), wins every shove
 ];
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Racer
