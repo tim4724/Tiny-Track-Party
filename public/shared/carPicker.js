@@ -15,10 +15,13 @@ const carName = (i) => NAMES[i] || ('Car ' + (i + 1));
 
 // Stat bars read in the player's livery. Each bar is normalised across the WHOLE
 // roster — the engine stats are multipliers/weights with awkward absolute ranges,
-// so the lowest car shows a sliver and the highest a full bar. Every row is
-// "more = more" (a full Weight bar = heaviest) so they read consistently. The
+// so the roster-lowest car shows a HALF bar and the highest a full bar. Every row
+// is "more = more" (a full Weight bar = heaviest) so they read consistently. The
 // domain comes from CAR_STATS, not hardcoded, so retuning the table reshapes the
-// bars automatically.
+// bars automatically. The floor sits at 50% (not 0) on purpose: every car should
+// look capable at everything, with differences as the top half of the bar — no
+// stat ever reads as empty/"broken", which fits the moderate (all-viable) spread.
+const STAT_BAR_FLOOR = 0.50;
 const STAT_ROWS = [
   { lab: 'Speed', key: 'vmax' },
   { lab: 'Accel', key: 'accel' },
@@ -43,8 +46,8 @@ function statBarsNode(carIndex) {
   const dom = statDomain();
   STAT_ROWS.forEach((row, k) => {
     const d = dom[k];
-    // 14%..100%: even the weakest stat shows a readable sliver.
-    const pct = Math.round((0.14 + 0.86 * ((st[row.key] - d.lo) / d.span)) * 100);
+    // STAT_BAR_FLOOR..100%: the weakest stat still reads as half-full, not empty.
+    const pct = Math.round((STAT_BAR_FLOOR + (1 - STAT_BAR_FLOOR) * ((st[row.key] - d.lo) / d.span)) * 100);
     const r = document.createElement('div'); r.className = 'stat';
     const lab = document.createElement('span'); lab.className = 'stat__lab'; lab.textContent = row.lab;
     const bar = document.createElement('span'); bar.className = 'stat__bar';
