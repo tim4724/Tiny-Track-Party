@@ -99,46 +99,41 @@ var CAR_COLORS = [
 // players may drive the same model in different colours. CAR_MODELS / CAR_NAMES
 // are parallel arrays (one source of truth shared by renderer + picker).
 var CAR_MODELS = [
-  'vehicle-racer', 'vehicle-speedster', 'vehicle-drag-racer', 'vehicle-racer-low',
-  'vehicle-vintage-racer', 'vehicle-suv', 'vehicle-truck', 'vehicle-monster-truck'
+  'vehicle-racer', 'vehicle-speedster', 'vehicle-racer-low', 'vehicle-vintage-racer'
 ];
 var CAR_NAMES = [
-  'Racer', 'Speedster', 'Drag Racer', 'Low Racer',
-  'Vintage', 'SUV', 'Truck', 'Monster'
+  'Dash', 'Bolt', 'Carve', 'Rumble'
 ];
 // Extra Y-rotation (radians) per model, for any model whose mesh faces the wrong
 // way after SceneRenderer's base half-turn (most Kenney vehicles face -Z, so the
 // renderer turns them to +Z). Every model currently faces correctly, so this is
 // all zeros — kept as a per-model hook. Applied in-race (SceneRenderer) and when
 // baking the car thumbnails, so the picker preview matches the racing car.
-var CAR_MODEL_YAW = [0, 0, 0, 0, 0, 0, 0, 0];
+var CAR_MODEL_YAW = [0, 0, 0, 0];
 
 // Per-model handling stats, parallel to CAR_MODELS. The engine (Game.js) reads a
 // resolved stats object per car; these are the source of truth the display feeds
-// in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark (1 = the "Racer"
+// in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark (1 = the Dash
 // baseline); `mass` is relative (only the ratio matters when two cars collide);
 // halfLen/halfWid are the collision footprint half-extents in WORLD units,
-// measured from the Kenney meshes (length×width: racer 0.88×0.53, drag 1.34×0.59,
-// monster 0.88×0.63). `turn` is the "Handling" stat shown in the picker — the car's
+// measured from the Kenney meshes (length×width: racer 0.88×0.53, speedster
+// 0.88×0.56). `turn` is the "Handling" stat shown in the picker — the car's
 // turn rate, which sets its max corner speed: the engine does NOT auto-slow, so a
 // low-handling car that carries too much speed simply can't yaw fast enough and
 // washes WIDE (understeer) into the curb — you must brake yourself. A grippy car
 // rails the same bend much faster. So the spread here is deliberately wide. Heavy
 // cars win every bump but pay for it in accel + cornering — weight is a real trade.
-// Tuned for the gentle OVAL; revisit when tighter tracks land.
+// Spread tuned against the cup tracks with scripts/probe-car-matrix.js (a bold,
+// all-viable mix: each car owns a niche, none dominant); re-run it after edits.
 var CAR_STATS = [
-  // accel, vmax, turn(=handling), mass — max holdable corner speed ≈ turn·9 u/s on the oval's tightest bend.
-  { accel: 1.00, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Racer — the benchmark (~7.0 u/s in the tightest corner)
-  { accel: 0.92, vmax: 1.12, turn: 1.10, mass: 0.85, halfLen: 0.44, halfWid: 0.28 }, // Speedster — fastest top end, nimble, light (shoved easily)
-  { accel: 1.30, vmax: 1.10, turn: 0.74, mass: 1.05, halfLen: 0.67, halfWid: 0.29 }, // Drag Racer — rocket launch + top end, must brake hard for corners, long
-  { accel: 1.06, vmax: 0.97, turn: 1.32, mass: 0.80, halfLen: 0.44, halfWid: 0.26 }, // Low Racer — corner carver, takes the tightest bend nearly flat-out
-  { accel: 0.85, vmax: 0.90, turn: 1.00, mass: 0.90, halfLen: 0.44, halfWid: 0.28 }, // Vintage — gentle all-rounder, forgiving
-  { accel: 0.95, vmax: 1.00, turn: 0.84, mass: 1.30, halfLen: 0.44, halfWid: 0.26 }, // SUV — heavy, average pace, must ease off in corners
-  { accel: 0.88, vmax: 0.96, turn: 0.76, mass: 1.50, halfLen: 0.44, halfWid: 0.26 }, // Truck — heavy hauler, shoves hard, ponderous in corners
-  { accel: 1.00, vmax: 0.95, turn: 0.70, mass: 1.75, halfLen: 0.44, halfWid: 0.32 }  // Monster — heaviest bully, widest, has to crawl through corners
+  // accel, vmax, turn(=handling), mass — max holdable corner speed ≈ turn·9 u/s in the tightest corners.
+  { accel: 1.00, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Racer) — balanced benchmark, no weakness (~7.0 u/s in the tightest corner)
+  { accel: 1.20, vmax: 0.96, turn: 1.10, mass: 0.82, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — nimble lightweight: best launch + agile, lightest (shoved easily), low top end (tied with Carve)
+  { accel: 1.00, vmax: 0.96, turn: 1.24, mass: 0.85, halfLen: 0.44, halfWid: 0.26 }, // Carve (Low Racer) — corner carver, rails the tightest bend, light, low top speed
+  { accel: 0.80, vmax: 1.13, turn: 0.88, mass: 1.30, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy freight train: sluggish launch + ponderous in corners, fast once rolling (top speed), wins every shove
 ];
 
-// Resolve a carIndex to its stats (wraps the array; null/garbage → the Racer
+// Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash
 // benchmark). Both the display engine wiring and the controller picker call this.
 function carStats(carIndex) {
   var i = (carIndex == null || isNaN(carIndex)) ? 0 : ((carIndex % CAR_STATS.length) + CAR_STATS.length) % CAR_STATS.length;

@@ -303,8 +303,8 @@ const PLATE_Y_FRAC = 0.46;   // fallback height up the body's rear face (0 = und
 // Per-model plate height (world Y on the rear face), indexed by CAR_MODELS
 // position. null = use the auto-detected flat-panel height; the values below
 // were hand-tuned per model so the plate sits on each car's flat rear surface.
-// Order: racer, speedster, drag-racer, racer-low, vintage-racer, suv, truck, monster-truck.
-const PLATE_Y = [0.157, 0.245, 0.166, 0.156, 0.134, 0.158, 0.247, 0.522];
+// Order: racer, speedster, racer-low, vintage-racer.
+const PLATE_Y = [0.157, 0.245, 0.156, 0.134];
 
 // Darken a #rrggbb by `amt` (0..1) — used for the plate's inner rim so it reads
 // as a solid plastic chip rather than a flat fill.
