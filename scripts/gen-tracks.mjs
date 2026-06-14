@@ -1,4 +1,3 @@
-'use strict';
 // Bake the CHOSEN seeds into public/shared/genTracks.js — the resolved waypoints that the
 // dependency-free catalogue (public/shared/tracks.js) imports. The generation pipeline lives
 // in ./track-gen.mjs; this file just names which seed becomes which track id and writes them.

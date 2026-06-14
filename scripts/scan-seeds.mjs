@@ -1,4 +1,3 @@
-'use strict';
 // Audition a RANGE of seeds for new Backyard tracks. Each seed is run through the full
 // generate→solve pipeline (scripts/track-gen.mjs) and graded against the same gates the unit
 // tests enforce on shipped tracks (closed, smooth, ≥1 bridged self-crossing, lap ~40-60s,

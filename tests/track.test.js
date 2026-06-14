@@ -549,6 +549,17 @@ test('grass hills berm raised non-pillared road, never bridges or loops', () => 
   assert.equal(hillsOf('crossover').length, 0, 'crossover: its only rise is a pillared bridge — no berms');
 });
 
+// The seeded Backyard tracks are waypoint/spline tracks: every one mixes flown-over
+// crossings (bridge -> pillars) with raised non-bridge ramps (-> grass berms). Guards
+// against buildSplineTrack silently dropping the pillar or berm pass on a geometry change.
+test('seeded Backyard tracks produce both bridge pillars and grass berms', () => {
+  for (const id of ['bowtie', 'pretzel', 'lasso', 'cloverleaf']) {
+    const t = buildTrack(TRACKS[id]);
+    assert.ok(t.pillars.length > 0, `${id}: bridged crossings should stand pillars`);
+    assert.ok(t.hills.length > 0, `${id}: raised non-bridge ramps should grow berms`);
+  }
+});
+
 test('hill berms feather to the lawn at both ends and rise under the road between', () => {
   const t = buildTrack(TRACKS.riverside);
   const gy = t.groundY;
