@@ -189,19 +189,14 @@ html, body {
 /* Diorama backdrop (shown until a track is picked) — pin it to the viewport so it
    shares the #scene stacking context regardless of body height. */
 #lobby-diorama { position: fixed; }
-#scene { position: fixed; inset: 0; z-index: 0; }
+/* The 3D backdrop sits OVER the diorama (same z-0, later in the DOM). Visibility is by
+   opacity, not display, so we can crossfade the track straight in over the diorama (the
+   default background) — no intermediate veil. .hidden is a hard off for non-lobby paths;
+   .is-dim drops it to transparent so the diorama beneath shows through (the fade base).
+   FADE_MS in main.js mirrors this transition. */
+#scene { position: fixed; inset: 0; z-index: 0; opacity: 1; transition: opacity 0.45s ease; }
+#scene.is-dim { opacity: 0; }
 #scene canvas { display: block; }
-/* Lobby track-preview crossfade veil — see #scene-fade in index.html. Sky colour
-   matches SceneRenderer's scene.background (0x8ecae6) so the dip is seamless. z-index 0
-   (after #scene in the DOM) paints it above the preview but below #lobby (z-1) + #race
-   (z-2), so only the 3D backdrop fades. FADE_MS in main.js mirrors this duration. */
-#scene-fade {
-  position: fixed; inset: 0; z-index: 0;
-  background: #8ecae6;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.38s ease;
-}
-#scene-fade.is-on { opacity: 1; }
 /* Race section is now a transparent overlay container over #scene. */
 #race { position: fixed; inset: 0; z-index: 2; }
 /* Standalone track preview (track gallery "open ↗", not the grid iframe): the

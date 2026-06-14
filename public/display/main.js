@@ -89,6 +89,7 @@ track.totalLaps = TOTAL_LAPS;
 const allGlbs = [...new Set([...built.values()].flatMap((b) => b.instances.map((i) => i.glb)))];
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 scene.orbit = true;
+scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;
 // Lobby attract demo: AI driving the players' picked cars around the selected track,
 // rendered under the orbiting overview camera. Runs only in the lobby (no session).
@@ -113,11 +114,10 @@ function selectTrack(id) {
   track.totalLaps = TOTAL_LAPS;
   window.__track = track;
   if (sceneReady && net.roomState === ROOM_STATE.LOBBY) {
-    // Crossfade the backdrop: the track swap (and demo rebuild) happens under a
-    // sky-coloured veil so it reads as a smooth transition, not a hard cut — and
-    // the same dip reveals the very first preview over the diorama.
+    // Build the picked track and crossfade the 3D preview in over the diorama (the
+    // default background) — see fadeBackdrop. The diorama IS the transition base, so the
+    // reveal/swap reads as "default background → track", with no blue veil between.
     fadeBackdrop(() => {
-      updateBackdrop();
       scene.setTrack(track, { debug: _showCenterline });
       refreshLobbyDemo();
     });
@@ -126,32 +126,48 @@ function selectTrack(id) {
   }
 }
 
-// Lobby backdrop: the plain sunny diorama until a track is picked, then the live
-// 3D preview (which covers it). During a race the 3D scene is always the backdrop.
+// Lobby backdrop: the sunny diorama is the persistent base layer; the 3D #scene sits over
+// it and is shown/hidden by OPACITY (.is-dim), not display, so it can crossfade straight in
+// over the diorama. No track picked (and not racing) → dim, so the diorama shows through.
 function updateBackdrop() {
   const show3D = !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
-  el('scene').classList.toggle('hidden', !show3D);
-  const dio = el('lobby-diorama');
-  if (dio) dio.classList.toggle('hidden', show3D);
+  const sc = el('scene');
+  sc.classList.remove('hidden');           // visibility is by opacity now, not display
+  sc.classList.toggle('is-dim', !show3D);
 }
 
 // ---- lobby backdrop crossfade ----
-// Dip a sky-coloured veil to opaque, run `mid` under the cover (swap track, rebuild
-// the demo cars, drop the frozen race field…), then fade back. The veil sits below
-// the lobby UI + race overlay, so only the 3D preview dips, not the cards. FADE_MS
-// mirrors the CSS transition on #scene-fade.
-const FADE_MS = 380;
+// Crossfade the 3D preview THROUGH the diorama: fade #scene out (revealing the diorama
+// beneath), run `mid` under cover (swap track, rebuild demo cars, drop the frozen race
+// field…), then fade the rebuilt scene back in. If #scene is already hidden (the very first
+// reveal), there's nothing to fade out — just build and fade in over the diorama already on
+// screen. FADE_MS mirrors the #scene opacity transition in display.css.
+const FADE_MS = 450;
 let fadeTimer = null;
 function fadeBackdrop(mid) {
-  const fade = el('scene-fade');
-  if (!fade) { mid(); return; }            // veil missing (older markup) → instant
-  fade.classList.add('is-on');
-  clearTimeout(fadeTimer);
-  fadeTimer = setTimeout(() => {
-    // try/finally so a throw in mid() can never leave the veil stuck opaque.
+  const sc = el('scene');
+  if (!sc) { mid(); return; }
+  const dio = el('lobby-diorama'); if (dio) dio.classList.remove('hidden'); // the crossfade base
+  const buildThenFadeIn = () => {
+    // try/finally so a throw in mid() can never leave the backdrop stuck transparent.
     try { mid(); }
-    finally { fadeTimer = setTimeout(() => fade.classList.remove('is-on'), 60); } // fade back in
-  }, FADE_MS);
+    finally {
+      sc.classList.remove('hidden');
+      sc.classList.add('is-dim');           // hold the just-built track transparent for one frame…
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const show3D = !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
+        sc.classList.toggle('is-dim', !show3D); // …then fade it in over the diorama
+      }));
+    }
+  };
+  clearTimeout(fadeTimer);
+  const visible = !sc.classList.contains('hidden') && !sc.classList.contains('is-dim');
+  if (visible) {
+    sc.classList.add('is-dim');             // fade the current 3D out → diorama shows through
+    fadeTimer = setTimeout(buildThenFadeIn, FADE_MS);
+  } else {
+    buildThenFadeIn();                       // already on the diorama → build + fade in
+  }
 }
 
 // ---- lobby attract demo ----
@@ -818,11 +834,10 @@ function returnToLobby() {
   aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
   show('lobby');
-  // Crossfade from the frozen finish frame back to the attract demo: drop the race
-  // cars + restart the demo under the veil so the reset doesn't pop on screen.
+  // Crossfade from the frozen finish frame back to the attract demo (through the diorama):
+  // drop the race cars + restart the demo under cover so the reset doesn't pop on screen.
   fadeBackdrop(() => {
     for (const c of scene.cars.keys()) scene.removeCar(c);
-    updateBackdrop();             // resume the selected track's 3D preview (or diorama)
     refreshLobbyDemo();           // AI back to driving the picked cars
   });
 }

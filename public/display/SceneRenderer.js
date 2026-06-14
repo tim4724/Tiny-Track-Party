@@ -91,6 +91,17 @@ const STREAK_OPACITY = 0.15;  // peak opacity at max boost — a whisper of airf
 // Lobby attract-mode: when no cars are on track (the lobby), slowly orbit the
 // overview camera around the selected track so it reads as a live 3D preview.
 const LOBBY_ORBIT_SPEED = 0.1; // rad/s (~63 s per turn) — calm, never dizzying
+// Lobby perimeter orbit: sweep an ELLIPSE fitted to the track's XZ bounding box (elongated
+// like the track), hugging just outside its outer edge and looking at the centre — so the
+// camera circles the track's overall SHAPE up close, without weaving along every curve. The
+// open field hazes out for depth. Gated to the lobby (scene.bboxOrbit); the gallery grid keeps
+// its whole-track turntable. See _loop's overview branch + setTrack.
+const BBOX_ORBIT_SPEED = 0.16;   // rad/s (~39 s per loop) — calm, never dizzying
+const BBOX_CLEARANCE = 8;        // world units the orbit sits OUTSIDE the track bbox edge — tight, so the
+                                 // foreground field is minimal and the track fills the frame
+const BBOX_HEIGHT_K = 0.7;       // camera height = this × the AVERAGE bbox half-extent …
+const BBOX_HEIGHT_BASE = 24;     // … + this base — high enough to look DOWN onto the track so the frame
+                                 // fills with ground + hazed field, not the empty sky/horizon
 // Tyre-contact cues that ground the car ON the road (vs hovering over it):
 //   • Skidmarks — dark tyre tracks laid under the rear wheels while cornering /
 //     curb-scrubbing / hard-braking / launching, fading over SKID_LIFE down to
@@ -396,7 +407,17 @@ export class SceneRenderer {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x8ecae6);
-    scene.fog = new THREE.Fog(0x8ecae6, 70, 170);
+    // Two fog profiles, chosen per-frame by camera mode (see _loop). The RACE fog is a
+    // tight atmospheric tail for the close chase cam; the OVERVIEW fog (built per track in
+    // setTrack) is pushed out so the lobby/gallery turntable can frame the WHOLE circuit
+    // crisply while still dissolving the finite ground plane's edge + horizon into the sky
+    // (fog colour == sky colour). Both are THREE.Fog of the same type, so swapping between
+    // them only changes near/far uniforms — it never recompiles materials (no hitch on
+    // weak GPUs). setFog(false) forces fog off entirely (gallery grid / inspector).
+    this._raceFog = new THREE.Fog(0x8ecae6, 70, 170);
+    this._overviewFog = null;
+    this._fogEnabled = true;
+    scene.fog = this._raceFog;
     this.scene = scene;
 
     // Sky dome, drifting clouds, horizon hills, toy lighting and the lawn
@@ -420,14 +441,27 @@ export class SceneRenderer {
     this._mergedGeoms = []; // merged BufferGeometries to dispose on track change
     this._mergedMats = [];  // merged materials to dispose on track change
 
-    this.overview = new THREE.PerspectiveCamera(50, this._aspect(), 0.1, 600);
+    // near 4 (not 0.1) so the depth buffer keeps real precision out at the horizon: the
+    // overview orbits ~80-190u from everything, and the far hill domes sit ON the lawn
+    // (their bases sunk into it), so a 0.1/600 frustum (ratio 6000) left their waterline
+    // z-fighting the ground and shimmering as the camera moved. far 1500 also clears the
+    // sky dome (radius 420, up to ~600u from an offset camera) which 600 was clipping. The
+    // free-cam inspector drops near back to 0.1 in enableUserCamera so it can fly in close.
+    this.overview = new THREE.PerspectiveCamera(50, this._aspect(), 4, 1500);
     this.overview.position.set(25, 22, 25);
     this._ovPos = this.overview.position.clone();
     this._ovTarget = new THREE.Vector3();
-    // Overview-orbit framing (radius/height), computed per-track in setTrack and
-    // ridden by the lobby/gallery turntable (see `this.orbit` + the render loop).
+    // Overview-orbit framing (radius/height), computed per-track in setTrack and ridden by
+    // the gallery turntable (`this.orbit`) — also the lobby's fallback before the bbox path.
     this._ovRadius = null;
     this._ovHeight = 0;
+    // Lobby perimeter orbit (the lobby sets bboxOrbit=true): sweep an ellipse around the
+    // track's bounding box instead of the gallery's whole-track circle.
+    this.bboxOrbit = false;
+    this._bbAx = null;     // ellipse semi-axes (X/Z), fitted to the bbox in setTrack
+    this._bbAz = null;
+    this._bbHeight = 0;
+    this._bbFog = null;
 
     this._initPost();
 
@@ -511,12 +545,12 @@ export class SceneRenderer {
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
 
-  // Toggle the distance fog. The standalone track inspector turns it OFF so the whole
-  // circuit reads clearly with the free camera, no haze; the race + gallery grid keep the
-  // atmospheric tail. Restores the original Fog on re-enable (captured on first call).
+  // Force the distance fog fully OFF (the gallery grid + free-cam inspector want the whole
+  // circuit with zero haze). When left enabled (the default), the render loop picks the
+  // right profile by camera mode each frame — tight race fog for the chase cams, pushed-out
+  // overview fog for the lobby/orbit turntable (see _loop). Takes effect next frame.
   setFog(enabled) {
-    if (this._fogDefault === undefined) this._fogDefault = this.scene.fog;
-    this.scene.fog = enabled ? this._fogDefault : null;
+    this._fogEnabled = enabled;
   }
 
   // Hand the overview camera to the viewer: drag to LOOK AROUND in place, scroll
@@ -531,6 +565,8 @@ export class SceneRenderer {
   async enableUserCamera() {
     if (this.controls) return this.controls;
     this.orbit = false; // the viewer drives the camera now — no turntable
+    this.overview.near = 0.1; // free-cam can fly right up to geometry; restore the close near plane
+    this.overview.updateProjectionMatrix();
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
     if (this.controls) return this.controls; // a second call raced us during the import
     const dom = this.renderer.domElement;
@@ -822,6 +858,8 @@ export class SceneRenderer {
     this._trackCenter = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.5 + 8;
+    // Whole-track fit distance for the gallery turntable (and the lobby's bbox-orbit
+    // fallback). The overview fog below derives from the resulting _ovRadius.
     const dist = radius / Math.tan((this.overview.fov * Math.PI / 180) / 2) * 0.9;
     const ovDir = new THREE.Vector3(0.35, 0.8, 0.9).normalize();
     this._ovPos = this._trackCenter.clone().add(ovDir.clone().multiplyScalar(dist));
@@ -831,6 +869,40 @@ export class SceneRenderer {
     const ovOff = this._ovPos.clone().sub(this._trackCenter);
     this._ovRadius = Math.hypot(ovOff.x, ovOff.z);
     this._ovHeight = ovOff.y;
+
+    // Overview fog profile — the gallery whole-track turntable (and the lobby's bbox-orbit
+    // fallback). Reusing the race fog here would veil the far half of a track framed from
+    // ~100-190u out, so instead: start the fog just PAST the farthest the track can sit from
+    // the orbiting camera — so the whole circuit stays crisp — then dissolve over a WIDE band so the (huge) lawn
+    // fades gently into the sky. A narrow band gets compressed into a hard line at the
+    // grazing horizon angle; a wide one reads as natural haze. The lawn extends far beyond
+    // fogFar (see environment GROUND_SIZE), so there's no plane edge to clamp against.
+    // Built once per track (samples are walked here already); the loop just swaps it in
+    // (no recompile — same Fog type).
+    let maxCamDist = 0;                                   // worst-case camera→track-point distance over a full orbit
+    const ringY = this._trackCenter.y + this._ovHeight;   // height of the orbit ring
+    for (const s of track.centerline.samples) {
+      const horiz = Math.hypot(s.pos.x - this._trackCenter.x, s.pos.z - this._trackCenter.z) + this._ovRadius;
+      const d = Math.hypot(horiz, s.pos.y - ringY);       // a sample sitting diametrically opposite the camera
+      if (d > maxCamDist) maxCamDist = d;
+    }
+    const fogNear = maxCamDist + 12;                       // entire track inside near → zero fog on it
+    const fogFar = fogNear + Math.max(220, radius * 2);    // wide, gentle dissolve into the sky
+    this._overviewFog = new THREE.Fog(0x8ecae6, fogNear, fogFar);
+
+    // Lobby perimeter-orbit ellipse (see _loop): hug just outside the track's XZ bbox, so the
+    // camera traces the track's overall shape up close (elongated tracks → elongated path).
+    const halfX = size.x / 2, halfZ = size.z / 2;
+    this._bbAx = halfX + BBOX_CLEARANCE;
+    this._bbAz = halfZ + BBOX_CLEARANCE;
+    // Height off the AVERAGE half-extent (not the max) so a very elongated track isn't
+    // over-elevated into a top-down view on its narrow sides — keeps the tilt low + the
+    // open field below the horizon (hazed) rather than a flat empty plane.
+    this._bbHeight = BBOX_HEIGHT_K * (halfX + halfZ) * 0.5 + BBOX_HEIGHT_BASE;
+    // Perimeter-orbit fog: with the camera hugging the track, keep the near road crisp but
+    // haze the open field SOON so the empty grass outside the circuit dissolves into the sky
+    // instead of reading as a flat plane (tighter than the whole-track overview fog above).
+    this._bbFog = new THREE.Fog(0x8ecae6, 55, 55 + Math.max(110, Math.max(halfX, halfZ) * 1.2));
 
     // Aim + size the sun's shadow camera to cover the whole track. The light keeps its
     // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we move it far out along
@@ -1577,6 +1649,15 @@ export class SceneRenderer {
     if (this._key) r.shadowMap.needsUpdate = true;
 
     const ids = this._order.filter((id) => this.cars.has(id));
+    // Pick the fog profile for this frame by camera mode: the overview turntable (no cells)
+    // frames the whole track and wants the pushed-out overview fog; the race chase cams
+    // want the tight race fog. Reassign only on an actual change so the material program
+    // cache never thrashes (both are THREE.Fog, so even a swap is a uniform-only change).
+    const wantFog = !this._fogEnabled ? null
+      : (ids.length !== 0) ? this._raceFog                                   // race: cars in cells → tight chase fog
+      : (this.bboxOrbit && this._bbFog) ? this._bbFog                        // lobby perimeter orbit → track-hugging fog
+      : (this._overviewFog || this._raceFog);                                // gallery turntable → wide overview fog
+    if (this.scene.fog !== wantFog) this.scene.fog = wantFog;
     if (ids.length === 0) {
       // lobby / no cars: single overview camera fills the target
       this.overview.aspect = W / H; this.overview.updateProjectionMatrix();
@@ -1586,6 +1667,18 @@ export class SceneRenderer {
         // inspector (which turns a rotate-drag into an in-place look, plus damping).
         this._moveCameraKeys(dt);
         this._tickInspectorControls();
+      } else if (this.bboxOrbit && this._bbAx != null && this._trackCenter) {
+        // Lobby perimeter orbit: sweep an ellipse around the track's bounding box (elongated
+        // like the track), hugging just outside it and looking at the centre — circles the
+        // track's overall SHAPE up close without weaving along every curve.
+        this._orbitAngle += BBOX_ORBIT_SPEED * dt;
+        const ctr = this._trackCenter;
+        this.overview.position.set(
+          ctr.x + Math.cos(this._orbitAngle) * this._bbAx,
+          ctr.y + this._bbHeight,
+          ctr.z + Math.sin(this._orbitAngle) * this._bbAz
+        );
+        this.overview.lookAt(ctr);
       } else {
         if (this.orbit && this._trackCenter) {
           // attract-mode turntable: ride a circle around the track at the overview

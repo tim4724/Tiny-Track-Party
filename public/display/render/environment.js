@@ -6,6 +6,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeCloudTexture, makeLawnTexture } from './textures.js';
 
 const DEF_KEY_LIGHT = 1.4;   // warm key-light intensity (the plastic "shine")
+// Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
+// plane's rectangular edge always sits thousands of units out — beyond the fog far plane
+// AND past the visible horizon — so the grass dissolves into the sky with no straight
+// "ground plate" seam from any camera. Exported so the grass-berm UVs (render/track.js)
+// stay locked to the same texel scale. It's still ONE quad: a bigger plane just covers the
+// same on-screen pixels up to the horizon, so there's no extra vertex/fill cost.
+export const GROUND_SIZE = 6000;
+const STRIPE_TILE = 600 / 18;  // ~33.3 world-u per mowing-stripe tile (unchanged from the old 600u/18-repeat lawn)
 
 export function buildEnvironment(scene) {
   let horizonHills = null; // returned so setTrack can push the ring out past a large track
@@ -109,11 +117,16 @@ export function buildEnvironment(scene) {
   scene.add(key);
   scene.add(key.target);
 
+  const lawn = makeLawnTexture();
+  // Tile the stripes across the big plane at the same world scale as the old 600u lawn
+  // (UVs run 0..1 over the plane, so repeat == tiles across it). Berm UVs in track.js use
+  // worldXZ / GROUND_SIZE to match this exactly.
+  lawn.repeat.set(GROUND_SIZE / STRIPE_TILE, GROUND_SIZE / STRIPE_TILE);
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 600),
+    new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
     // Lawn texture (mowing stripes) instead of a flat colour — the colour
     // lives in the texture, so the material tint stays white.
-    new THREE.MeshStandardMaterial({ map: makeLawnTexture() })
+    new THREE.MeshStandardMaterial({ map: lawn })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1.0;

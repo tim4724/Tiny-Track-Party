@@ -4,6 +4,7 @@
 // disposables in R._mergedGeoms/R._mergedMats (freed on the next setTrack).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GROUND_SIZE } from './environment.js';
 
 // Trackside scenery GLBs (always preloaded — every track scatters them, see
 // _buildScenery). Order matters: [0] is the round tree, [1] the pine.
@@ -343,9 +344,9 @@ export function buildHills(R, track) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   // Tile the lawn texture across the berm in world XZ, matching the ground plane's scale
-  // (its UVs run 0..1 over the 600u plane, so x/600 keeps the same texels-per-metre).
+  // (its UVs run 0..1 over the GROUND_SIZE plane, so xz/GROUND_SIZE keeps the same texels-per-metre).
   const uv = [];
-  for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / 600, pos[i + 2] / 600);
+  for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / GROUND_SIZE, pos[i + 2] / GROUND_SIZE);
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ map: R.ground.material.map, roughness: 1, metalness: 0, side: THREE.DoubleSide });
