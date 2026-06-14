@@ -29,9 +29,16 @@ const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see p
 // (the standard spring chase-cam every kart racer uses).
 // Close chase that sits LOW and just behind the car with a fairly tight lens, so
 // the camera stays comfortable to drive rather than steeply top-down.
-const CHASE_DIST = 1.8, CHASE_HEIGHT = 0.85, CHASE_LOOK = 2.0; // close, low, slight look-down
-const CHASE_TGT_UP = 0.15;    // look point barely above the road → camera pitches onto the car
+const CHASE_DIST = 1.35, CHASE_HEIGHT = 0.64, CHASE_LOOK = 1.5; // close, low, slight look-down (dolly'd ~33% nearer so the car reads bigger)
+const CHASE_TGT_UP = 0.11;    // look point barely above the road → camera pitches onto the car
 const CAM_POS_RATE = 7.0, CAM_TGT_RATE = 13.0; // damping speed per second (higher = snappier)
+// The position spring lags the car by ~velocity/rate, so the faster you go the
+// further back the camera sits — at full boost that lag alone shrinks the car
+// more than the FOV/dist cues do. So the follow rate climbs with spd² (applied
+// in _updateChase): fast straights/boosts tighten and stay glued (car stays
+// big), while slow corners keep the low base rate and its loose swing-behind.
+const CAM_POS_RATE_SPD = 13.0; // extra follow rate per spd² (see above)
+const CAM_RATE_SPD_MAX = 1.6;  // cap the spd feeding that term so a future >1.6 boost can't drive the cam toward rigid
 const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 // Weight transfer: smoothed d(spd)/dt pitches the body — nose-down dive under
@@ -66,9 +73,9 @@ const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-
 // kick is proportional to how fast you ACTUALLY go. The FOV response is
 // asymmetric: it kicks wide fast (a boost lands as a hit) and eases back slow
 // (running out of boost is a taper, not a snap). Starting values.
-const FOV_GAIN = 7;           // extra FOV degrees at top speed (~+11° at full boost)
+const FOV_GAIN = 4;           // extra FOV degrees at top speed (~+6° at full boost) — trimmed so the car doesn't shrink at speed
 const FOV_RISE = 9, FOV_FALL = 3; // FOV damping rates (1/s): fast in, slow out
-const CHASE_DIST_GAIN = 0.3;  // extra chase distance at full speed — the car pulls away
+const CHASE_DIST_GAIN = 0.06; // extra chase distance at full speed — a hint of pull-away (kept tiny: distance shrink is pure car-shrink, no speed-feel upside)
 // BOOST wind streaks: a few additive white-teal streaks slicing past the car while
 // boostMul > 1 — the Mario-Kart "cutting through air" idiom. World-space (not a
 // screen overlay) so every split-screen cell sees a rival's boost too, same as the
@@ -1492,8 +1499,13 @@ export class SceneRenderer {
     const dist = CHASE_DIST + CHASE_DIST_GAIN * spd;
     const want = this._sWant.copy(pos).addScaledVector(forward, -dist).addScaledVector(up, height);
     const target = this._sTarget.copy(pos).addScaledVector(forward, CHASE_LOOK).addScaledVector(up, CHASE_TGT_UP);
-    // frame-rate-independent damping → smooth lag/swing behind the car through turns
-    const aPos = 1 - Math.exp(-CAM_POS_RATE * dt);
+    // frame-rate-independent damping → smooth lag/swing behind the car through turns.
+    // Follow rate climbs with speed² so the spring lag (≈v/rate) doesn't pull the
+    // car small at max speed; the quadratic keeps the rate near base through slow
+    // corners (loose swing preserved) and only tightens on fast straights/boosts.
+    // spd is capped here so an over-1.6 boost can't ramp the rate toward rigid.
+    const rateSpd = Math.min(spd, CAM_RATE_SPD_MAX);
+    const aPos = 1 - Math.exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);
     const aTgt = 1 - Math.exp(-CAM_TGT_RATE * dt);
     if (!c.init) { c.camPos.copy(want); c.camTarget.copy(target); c.init = true; }
     else { c.camPos.lerp(want, aPos); c.camTarget.lerp(target, aTgt); }
