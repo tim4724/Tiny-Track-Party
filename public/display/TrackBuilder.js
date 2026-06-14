@@ -24,7 +24,7 @@ import { Centerline } from './Centerline.js';
 // that callers still import via TrackBuilder; everything else imports from tracks.js.
 import { TRACKS, TRACK_LIST } from '../shared/tracks.js';
 
-const SCALE = 2;           // unscaled track units → world (bigger track, more room for cars)
+export const SCALE = 2;    // unscaled track units → world (bigger track, more room for cars). Exported so the offline generator (scripts/track-gen.mjs) shares the exact value rather than duplicating it.
 const ROAD_WIDTH = 2.5;    // default drivable width (unscaled); ×SCALE = 5.0 world. The
                            // single source of truth, read by the physics (maxLat in Game.js)
                            // AND the procedural road ribbon in SceneRenderer.

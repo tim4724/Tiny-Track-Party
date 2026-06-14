@@ -15,8 +15,10 @@
 // Used by BOTH scripts/gen-tracks.mjs (bake the chosen seeds) and scripts/scan-seeds.mjs
 // (audition a whole range). Needs Three.js (via buildTrack to sample + cross-detect), so it
 // runs OFFLINE in Node — the browser only ever sees the baked DATA.
-const { buildTrack } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
-const DEG = Math.PI / 180, SCALE = 2; // SCALE MUST match TrackBuilder.js (plan units → world); findCrossings uses it to compare plan coords against world samples
+// Import SCALE from TrackBuilder so the plan→world factor can never drift out of sync
+// (findCrossings compares plan coords against world samples and must use the same value).
+const { buildTrack, SCALE } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
+const DEG = Math.PI / 180;
 
 export const mulberry32 = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
@@ -35,7 +37,11 @@ export function drive(build) {
 
 // Append a smooth Hermite connector from the course's END pose back to its START → a loop.
 export function closeCourse(r) {
-  const p0 = { x: r.x, z: r.z }, d0 = { x: Math.cos(r.th), z: Math.sin(r.th) }, p1 = r.pts[0], sd = { x: 1, z: 0 };
+  const p0 = { x: r.x, z: r.z }, d0 = { x: Math.cos(r.th), z: Math.sin(r.th) }, p1 = r.pts[0];
+  // arrival tangent = the course's ACTUAL start heading (pts[0]→pts[1]), so the Hermite tail
+  // joins smoothly whatever direction genPlan opens with — not hardcoded to the turtle's +X.
+  const p2 = r.pts[1] || { x: p1.x + 1, z: p1.z }, sl = Math.hypot(p2.x - p1.x, p2.z - p1.z) || 1;
+  const sd = { x: (p2.x - p1.x) / sl, z: (p2.z - p1.z) / sl };
   const dist = Math.hypot(p1.x - p0.x, p1.z - p0.z), m = Math.max(8, dist), n = Math.max(4, Math.round(dist / 8));
   const tail = [];
   for (let i = 1; i < n; i++) { const t = i / n, t2 = t * t, t3 = t2 * t; const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2; tail.push({ x: h00 * p0.x + h10 * m * d0.x + h01 * p1.x + h11 * m * sd.x, z: h00 * p0.z + h10 * m * d0.z + h01 * p1.z + h11 * m * sd.z }); }
@@ -96,6 +102,8 @@ export function bakeSeed(seed) {
   const plan = genPlan(seed);
   const flat = buildTrack({ waypoints: plan });
   const h = solveElevation(findCrossings(flat, plan), plan.length);
+  // y>0.05 → carry an elevation; y>0.6 → bridge (pillars, not a berm). 0.6 = half the solver's
+  // crossing clearance D=1.2: above the midpoint a waypoint is the OVER strand of a crossing.
   return plan.map((p, i) => { const o = { x: +p.x.toFixed(2), z: +p.z.toFixed(2) }; if (h[i] > 0.05) o.y = +h[i].toFixed(2); if (h[i] > 0.6) o.bridge = true; return o; });
 }
 
@@ -117,11 +125,13 @@ export function evaluateSeed(seed) {
     if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worstStep = Math.max(worstStep, Math.abs(d)); }
     prev = hd;
   }
-  // DISTINCT self-crossings (deduped to waypoint-index pairs — independent of height)
-  const crossings = findCrossings(flat, plan).length;
+  // DISTINCT self-crossings (deduped to waypoint-index pairs — independent of height).
+  // Detect once and reuse for both the count and the solve (it's deterministic in the plan).
+  const wpPairs = findCrossings(flat, plan);
+  const crossings = wpPairs.length;
   // bridge clearance + peak height after the solve
   let elev, threw = false;
-  try { const h = solveElevation(findCrossings(flat, plan), plan.length); const baked = plan.map((p, i) => ({ ...p, y: h[i] })); elev = buildTrack({ waypoints: baked }); }
+  try { const h = solveElevation(wpPairs, plan.length); const baked = plan.map((p, i) => ({ ...p, y: h[i] })); elev = buildTrack({ waypoints: baked }); }
   catch (e) { threw = true; }
   let minBridge = Infinity, maxY = 0;
   if (elev) {
@@ -133,7 +143,7 @@ export function evaluateSeed(seed) {
       minBridge = Math.min(minBridge, Math.abs(E[i].pos.y - E[j].pos.y));
     }
   }
-  const lapSec = L * 0.124;
+  const lapSec = L * 0.124; // s/world-unit, measured from a headless full-speed AI lap (≈40-60s over 350-480u)
   const pass = !threw && elev != null && flat.gap < 0.5 && worstStep < 0.08
     && crossings >= 1 && minBridge >= 1.5 && L >= 350 && L <= 480 && maxY <= 8;
   return { seed, pass, gap: +flat.gap.toFixed(2), len: Math.round(L), lapSec: Math.round(lapSec),
