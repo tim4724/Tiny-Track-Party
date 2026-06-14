@@ -459,7 +459,7 @@ function buildSplineTrack(track, opts = {}) {
       widths.push(wA + (wB - wA) * frac);
       banks.push(bA + (bB - bA) * frac);
       pillarFlags.push(bridge);
-      hillFlags.push(!bridge && c.y > 0.1); // a raised, non-bridge stretch grows a grass berm
+      hillFlags.push(!bridge && c.y > 0.075); // a raised, non-bridge stretch grows a grass berm; 0.075 = finalize's HILL_MIN(0.15)/SCALE(2), so the unscaled gate here matches the world-space one there
     }
   }
   return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, [], trackWidth, { startGate });

@@ -16,7 +16,7 @@
 // (audition a whole range). Needs Three.js (via buildTrack to sample + cross-detect), so it
 // runs OFFLINE in Node — the browser only ever sees the baked DATA.
 const { buildTrack } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
-const DEG = Math.PI / 180, SCALE = 2;
+const DEG = Math.PI / 180, SCALE = 2; // SCALE MUST match TrackBuilder.js (plan units → world); findCrossings uses it to compare plan coords against world samples
 
 export const mulberry32 = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 

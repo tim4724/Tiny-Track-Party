@@ -184,12 +184,13 @@ export const MEADOW = [
 // start/finish) and `lat` (lateral offset in world units; 0 = centreline). `radius`
 // and `cones` optional. Off-centre so a careful line can thread past; tune by driving.
 const OILS = {
-  // Backyard Cup — off-line slicks on the gentler GROUND stretches (never on a high bridge),
-  // so a forced spin can't throw you off a deck. u-values from the gen-track hazard probe.
-  bowtie:      [ { u: 0.04, lat: 0.7 }, { u: 0.86, lat: -0.7 } ],
-  pretzel:    [ { u: 0.46, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
+  // Backyard Cup — off-line slicks on gentle GROUND stretches that are also in the OPEN: no
+  // overpass deck overhead (else the warning cones tangle with the deck/pillars and read as
+  // misplaced) and never on a high bridge (a forced spin mustn't throw you off a deck).
+  bowtie:     [ { u: 0.04, lat: 0.7 }, { u: 0.89, lat: -0.7 } ],
+  pretzel:    [ { u: 0.46, lat: 0.7 }, { u: 0.71, lat: -0.7 } ],
   lasso:      [ { u: 0.71, lat: 0.7 }, { u: 0.83, lat: -0.7 } ],
-  cloverleaf: [ { u: 0.04, lat: 0.7 }, { u: 0.85, lat: -0.7 } ],
+  cloverleaf: [ { u: 0.04, lat: 0.7 }, { u: 0.78, lat: -0.7 } ],
   // Easiest track → a single, clearly off-line slick a careful line threads past.
   meadow:     [ { u: 0.74, lat: 0.8 } ],
   switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
