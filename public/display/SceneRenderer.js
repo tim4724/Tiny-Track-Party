@@ -405,6 +405,7 @@ export class SceneRenderer {
     this._clouds = env.clouds; // drifted in _loop
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
+    this._hills = env.hills;   // horizon-hill ring; pushed out past the track in setTrack
 
     // Visible track = a few MERGED meshes (see setTrack): the static tiles are
     // baked into one geometry per texture so the whole circuit draws in ~1-3 calls
@@ -509,6 +510,14 @@ export class SceneRenderer {
 
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
+
+  // Toggle the distance fog. The standalone track inspector turns it OFF so the whole
+  // circuit reads clearly with the free camera, no haze; the race + gallery grid keep the
+  // atmospheric tail. Restores the original Fog on re-enable (captured on first call).
+  setFog(enabled) {
+    if (this._fogDefault === undefined) this._fogDefault = this.scene.fog;
+    this.scene.fog = enabled ? this._fogDefault : null;
+  }
 
   // Hand the overview camera to the viewer: drag to LOOK AROUND in place, scroll
   // to fly forward, WASD to glide and Q/E to drop/rise. Used by the standalone
@@ -802,7 +811,12 @@ export class SceneRenderer {
     }
     // overview framing
     const box = new THREE.Box3();
-    for (const s of track.centerline.samples) box.expandByPoint(s.pos);
+    let maxR = 0;
+    for (const s of track.centerline.samples) { box.expandByPoint(s.pos); maxR = Math.max(maxR, Math.hypot(s.pos.x, s.pos.z)); }
+    // Push the horizon-hill ring (built at radius ~150 about the world origin) out past the
+    // track's farthest reach so a large circuit can't drive into the scenery. XZ only (keep
+    // the squashed height + base sink); never below 1× (small tracks keep the authored ring).
+    if (this._hills) { const sf = Math.max(1, (maxR + 60) / 150); this._hills.scale.set(sf, 1, sf); }
     this._trackCenter = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.5 + 8;

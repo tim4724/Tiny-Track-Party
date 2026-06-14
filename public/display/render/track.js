@@ -318,13 +318,14 @@ export function buildHills(R, track) {
   // Four world-space corners of a ring's cross-section: outer feet at lawn level, the
   // two tops at the berm height under the road. Flare = horizontal run of each slope.
   const corners = (r) => {
-    const flare = 0.6 + 0.8 * Math.max(0, r.topY - gy);
+    // tops follow the road's bank (topL ≠ topR on a tilted deck); flare off the taller side.
+    const flare = 0.6 + 0.8 * Math.max(0, Math.max(r.topL, r.topR) - gy);
     const hw = r.halfW, ox = r.lx, oz = r.lz;
     return [
-      [r.cx - ox * (hw + flare), gy,     r.cz - oz * (hw + flare)], // 0 left foot
-      [r.cx - ox * hw,           r.topY, r.cz - oz * hw],           // 1 left top
-      [r.cx + ox * hw,           r.topY, r.cz + oz * hw],           // 2 right top
-      [r.cx + ox * (hw + flare), gy,     r.cz + oz * (hw + flare)]  // 3 right foot
+      [r.cx - ox * (hw + flare), gy,      r.cz - oz * (hw + flare)], // 0 left foot
+      [r.cx - ox * hw,           r.topL,  r.cz - oz * hw],           // 1 left top
+      [r.cx + ox * hw,           r.topR,  r.cz + oz * hw],           // 2 right top
+      [r.cx + ox * (hw + flare), gy,      r.cz + oz * (hw + flare)]  // 3 right foot
     ];
   };
   const pos = [];

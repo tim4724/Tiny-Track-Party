@@ -382,27 +382,35 @@ export class TrackProps {
         }
         continue;
       }
-      // airborne: integrate, bounce off the road, settle
+      // airborne: integrate under gravity, then bounce off / settle onto the LOCAL road
+      // surface — NOT the spawn height. A kicked cone travels along the track to where the
+      // deck sits at a different elevation (and bank), so settling at its old home.y would
+      // leave it floating over a descent or sunk into a rise. Sample the road at the cone's
+      // current (s, lat) once and use it for BOTH the floor height and the curb clamp.
       cn.vel.y -= CONE_GRAVITY * dt;
       m.position.addScaledVector(cn.vel, dt);
       m.rotateOnWorldAxis(cn.spinAxis, cn.spinRate * dt);
-      if (m.position.y <= cn.home.y) {
-        m.position.y = cn.home.y;
+      let roadY = cn.home.y, f = null, latOff = 0;
+      if (this._centerline) {
+        const f0 = this._centerline.sampleAt(cn.homeS);
+        const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
+        f = this._centerline.sampleAt(cn.homeS + along);
+        latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
+        roadY = f.pos.y + f.lateral.y * latOff; // road surface at this lateral offset (follows the bank)
+      }
+      if (m.position.y <= roadY) {
+        m.position.y = roadY;
         if (cn.vel.y < 0) cn.vel.y = -cn.vel.y * CONE_RESTITUTION;
         cn.vel.x *= CONE_FRICTION; cn.vel.z *= CONE_FRICTION; cn.spinRate *= CONE_FRICTION;
         if (cn.vel.y < CONE_SETTLE && (cn.vel.x * cn.vel.x + cn.vel.z * cn.vel.z) < CONE_SETTLE * CONE_SETTLE) {
           cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
         }
       }
-      // keep it ON the road: clamp the lateral offset from the centreline (sampled at
-      // the cone's current along-track position) so a kicked cone bounces off the curb
+      // keep it ON the road: clamp the lateral offset (per-sample edge: in a flared section
+      // the wall sits at the wider visible asphalt) so a kicked cone bounces off the curb
       // instead of clipping through it / sailing into the grass.
-      if (this._centerline) {
-        const f0 = this._centerline.sampleAt(cn.homeS);
-        const along = this._coneTmp.copy(m.position).sub(cn.home).dot(f0.tangent);
-        const f = this._centerline.sampleAt(cn.homeS + along);
-        const latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
-        const edge = (f.width != null ? f.width / 2 : this._roadHalf) - CONE_EDGE_MARGIN; // per-sample edge: in a flared section the wall sits at the wider visible asphalt, not the scalar default
+      if (f) {
+        const edge = (f.width != null ? f.width / 2 : this._roadHalf) - CONE_EDGE_MARGIN;
         if (Math.abs(latOff) > edge) {
           m.position.addScaledVector(f.lateral, Math.sign(latOff) * edge - latOff); // shove back inside
           const vLat = cn.vel.dot(f.lateral);

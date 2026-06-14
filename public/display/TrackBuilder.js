@@ -59,6 +59,9 @@ const DEG = Math.PI / 180;
 // gate); the road surface itself is generated procedurally from `centerline`, as are the
 // support pillars (`pillars`: vertical columns under any `pillars`-flagged bridge/ramp).
 export function buildTrack(track, opts = {}) {
+  // Two authoring models: a closed loop of WAYPOINTS (organic, flowing — buildSplineTrack)
+  // or a sequence of parametric SEGMENTS (the turtle walk below; required for loops/spirals).
+  if (track && !Array.isArray(track) && Array.isArray(track.waypoints)) return buildSplineTrack(track, opts);
   const { startGate = true } = opts;
   const segments = Array.isArray(track) ? track : (track && track.segments);
   if (!Array.isArray(segments)) {
@@ -197,14 +200,19 @@ export function buildTrack(track, opts = {}) {
     if (seg.roll) rollAcc = (rollAcc + seg.roll * DEG) % (2 * Math.PI); // re-clock the frame for everything downstream
   }
 
-  // Closure: distance from the cursor back to the origin (unscaled). The last emitted
-  // point IS the cursor, so on a closed loop it duplicates the start — drop it so the
+  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate });
+}
+
+// Shared finalize — frames (parallel transport + banking + holonomy unwind), support pillars,
+// grass-hill berms, the start gate, and the Centerline. Fed by BOTH the segment walk
+// (buildTrack) and the waypoint sampler (buildSplineTrack): the integrated centreline points
+// (UNSCALED) plus per-sample width / bank(radians) / pillar / hill flags, and loop mouths.
+function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate = true } = {}) {
+  // Closure: the last emitted point duplicates the start on a closed loop — drop it so the
   // ring has no zero-length seam segment (the wrap last→first then spans one step).
-  const gap = Math.hypot(X, elev, Z);
-  // `closed` tolerates up to 0.5 (unscaled), but the duplicate-point drop below only fires
-  // within DS (0.25). All shipped tracks close to gap≈0 so both agree; a future track left
-  // with gap in (DS, 0.5) would be flagged closed yet keep its last point → one ~(DS+gap)
-  // seam segment. Tune such a track to gap≈0 (the "every named track closes" test guards it).
+  const gap = worldPts[worldPts.length - 1].distanceTo(worldPts[0]);
+  // `closed` tolerates up to 0.5 (unscaled); the duplicate-point drop below only fires within
+  // DS. Tracks close to gap≈0 in practice (the "every named track closes" test guards it).
   const closed = gap < 0.5;
   if (worldPts.length > 3 && worldPts[worldPts.length - 1].distanceTo(worldPts[0]) < DS) { worldPts.pop(); widths.pop(); banks.pop(); pillarFlags.pop(); hillFlags.pop(); }
 
@@ -388,9 +396,16 @@ export function buildTrack(track, opts = {}) {
         const ll = Math.hypot(lx, lz);
         if (ll < 1e-6) { lx = 1; lz = 0; } else { lx /= ll; lz /= ll; }
         const feather = (k < a || k > b);
+        const halfW = s.width / 2 + EDGE;
         // topY = road − TUCK, but never below the lawn: where the road is within TUCK of
-        // the ground (the hill's foot) the berm just meets the lawn flush rather than dipping under.
-        rings.push({ cx: s.pos.x, cz: s.pos.z, lx, lz, halfW: s.width / 2 + EDGE, topY: feather ? groundY : Math.max(groundY, s.pos.y - TUCK) });
+        // the ground (the hill's foot) the berm just meets the lawn flush rather than dipping
+        // under. The two top corners FOLLOW THE ROAD'S BANK: a tilted deck (authored bank, or
+        // the transport frame rolling on a curving descent) has one edge lower than the other,
+        // so a flat berm top would poke up through the low edge. slope = Δy per unit horizontal
+        // along the lateral; the corners ride ±slope·halfW off the centre, TUCK under the deck.
+        const slope = ll < 1e-6 ? 0 : s.lateral.y / ll;
+        const top = (sign) => feather ? groundY : Math.max(groundY, s.pos.y + sign * slope * halfW - TUCK);
+        rings.push({ cx: s.pos.x, cz: s.pos.z, lx, lz, halfW, topL: top(-1), topR: top(1) });
       }
       hills.push(rings);
     }
@@ -406,6 +421,48 @@ export function buildTrack(track, opts = {}) {
     roadWidth: trackWidth * SCALE,
     groundY // grass plane just under the road
   };
+}
+
+// Build a track from a CLOSED loop of WAYPOINTS — the organic, flowing counterpart to the
+// segment walk. Each waypoint: { x, z, y?, w?, bank?, bridge? } (unscaled plan coords; `y`
+// elevation; `w` drivable-width override; `bank` degrees; `bridge: true` → a pillared deck
+// that flies over a lower strand). A CENTRIPETAL Catmull-Rom (alpha=0.5 — no overshoot or
+// cusps, unlike the uniform kind) threads the points; we sample it at ~DS spacing and hand
+// the result to the SAME finalize the segment tracks use. Closes by construction (it's a
+// loop), so there is no closure algebra — draw the shape you want.
+function buildSplineTrack(track, opts = {}) {
+  const { startGate = true } = opts;
+  const pts = track.waypoints, m = pts.length;
+  const trackWidth = track.width || ROAD_WIDTH;
+  const at = (i) => pts[((i % m) + m) % m];
+  const P = (i) => { const p = at(i); return v(p.x, p.y || 0, p.z); };
+  const knot = (ti, a, b) => ti + Math.sqrt(Math.max(1e-6, a.distanceTo(b))); // centripetal (alpha=0.5)
+  const worldPts = [], widths = [], banks = [], pillarFlags = [], hillFlags = [];
+  for (let i = 0; i < m; i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    const t0 = 0, t1 = knot(t0, p0, p1), t2 = knot(t1, p1, p2), t3 = knot(t2, p2, p3);
+    const SUB = Math.max(8, Math.ceil(p1.distanceTo(p2) / DS)); // ~DS spacing along this span
+    const wA = at(i).w || trackWidth, wB = at(i + 1).w || trackWidth;
+    const bA = (at(i).bank || 0) * DEG, bB = (at(i + 1).bank || 0) * DEG;
+    const bridge = !!(at(i).bridge || at(i + 1).bridge); // ramp segments (one end flagged) bridge too
+    for (let k = 0; k < SUB; k++) {
+      const frac = k / SUB, t = t1 + (t2 - t1) * frac;
+      // Barry-Goldman pyramid (works in 3D, x/y/z together). Mind the aliasing: a2 feeds
+      // both b1 (by reference, unmutated) and b2 (cloned), so neither corrupts the other.
+      const a1 = p0.clone().multiplyScalar((t1 - t) / (t1 - t0)).addScaledVector(p1, (t - t0) / (t1 - t0));
+      const a2 = p1.clone().multiplyScalar((t2 - t) / (t2 - t1)).addScaledVector(p2, (t - t1) / (t2 - t1));
+      const a3 = p2.clone().multiplyScalar((t3 - t) / (t3 - t2)).addScaledVector(p3, (t - t2) / (t3 - t2));
+      const b1 = a1.multiplyScalar((t2 - t) / (t2 - t0)).addScaledVector(a2, (t - t0) / (t2 - t0));
+      const b2 = a2.clone().multiplyScalar((t3 - t) / (t3 - t1)).addScaledVector(a3, (t - t1) / (t3 - t1));
+      const c = b1.multiplyScalar((t2 - t) / (t2 - t1)).addScaledVector(b2, (t - t1) / (t2 - t1));
+      worldPts.push(c);
+      widths.push(wA + (wB - wA) * frac);
+      banks.push(bA + (bB - bA) * frac);
+      pillarFlags.push(bridge);
+      hillFlags.push(!bridge && c.y > 0.1); // a raised, non-bridge stretch grows a grass berm
+    }
+  }
+  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, [], trackWidth, { startGate });
 }
 
 // Track definitions + the named registry live in the dependency-free catalogue

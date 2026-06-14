@@ -24,7 +24,7 @@ const show = (name) => { for (const k of Object.keys(screens)) screens[k].classL
 // track picker renders; `built` keeps the geometry for the race + the 3D preview.
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
 const built = new Map(TRACK_LIST.map((t) => {
-  const b = buildTrack(t.segments);
+  const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
   // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
   // now that the built geometry knows the lap length. Read by the engine (spin-out
   // detection) and the renderer (drawing the puddle + cones), both off track.hazards.
@@ -58,7 +58,8 @@ const built = new Map(TRACK_LIST.map((t) => {
   return [t.id, b];
 }));
 const trackCatalog = TRACK_LIST.map((t) => ({
-  id: t.id, name: t.name, svg: trackSchematic(built.get(t.id))
+  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+  svg: trackSchematic(built.get(t.id))
 }));
 
 // No track is selected at first: the lobby shows the plain diorama and the host's
