@@ -351,8 +351,10 @@ scene.onFrame = (dt) => {
       if (aiBots.has(c.id)) continue; // no phone behind an AI car
       // The phone HUD shows no place/lap (standings live on the TV) and reads only the
       // held item — so PLAYER_STATE now carries just that. Still sent periodically (not
-      // only on change) so a (re)joiner mid-race gets their ITEM button relit.
-      net.sendTo(c.id, { type: MSG.PLAYER_STATE, item: c.item });
+      // only on change) so a (re)joiner mid-race gets their ITEM button relit. A finished
+      // car keeps an item internally (victory-lap box pops, see Game._enterBox) but can't
+      // use it, so report an empty slot — the USE button stays dark on the results overlay.
+      net.sendTo(c.id, { type: MSG.PLAYER_STATE, item: c.finished ? null : c.item });
     }
   }
 };
@@ -647,8 +649,10 @@ function audioForRaceEvent(e) {
   const visible = isHuman || cpuCarOnScreen(e.id);
   switch (e.type) {
     case 'pickup':
-      if (isHuman) audio.pickup();          // pop + roulette tick-down
-      else if (visible) audio.pickupPop();  // a CPU grab on camera: just the world pop
+      // A finished car has no HUD item slot to narrate, so its victory-lap grabs play
+      // just the world pop (like a CPU grab on camera) — never the player roulette chain.
+      if (isHuman && !e.finished) audio.pickup(); // pop + roulette tick-down
+      else if (visible) audio.pickupPop();        // CPU / finished grab on camera: world pop
       break;
     // (boost item-use and pad crossings make no one-shot sound — the boost
     // WIND in onFrame tracks the resulting speed state instead.)

@@ -318,14 +318,16 @@ export class Game {
       // the cosmetic angle, landing back on 0), then test both hazards rising-edge and
       // trigger a fresh spin. While spinning, steering is dead — a clean, recoverable
       // penalty. A spin-out also KILLS an active boost (so oil/banana can't just pause
-      // a boost that then re-bursts on recovery). Finished (ghost) cars skip it.
+      // a boost that then re-bursts on recovery). A finished car on its victory lap is
+      // NOT exempt: it still spins out on hazards — its autopilot steer dies mid-spin
+      // (steerEff = 0) like a player's would, then recovers and resumes the racing line.
       let spinning = c.spinT > 0;
       if (spinning) {
         c.spinT -= dt;
         c.spin += (SPIN_TURNS * 2 * Math.PI / SPIN_TIME) * dt;
         if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
       }
-      if (!c.finished) {
+      {
         const oil = this._enterZones(c, this.hazards, c.oilIn);
         const ban = this._enterBanana(c);
         if (oil || ban) {
@@ -340,7 +342,9 @@ export class Game {
         }
       }
 
-      // CATCH-UP FEATURES (live cars): fire a held item, arm a boost pad, grab a box.
+      // CATCH-UP FEATURES (live cars only): fire a held item, arm a boost pad. A finished
+      // car has no controller and keeps whatever item it grabs (see _enterBox), so it
+      // never fires an item and isn't lifted by pads — its victory lap stays at cruise.
       if (!c.finished) {
         c.pickupAge += dt; // ages the held item toward ITEM_USE_READY (reset on a fresh roll)
         // press-to-use: fire the held item, but BUFFER the press across a spin-out OR the
@@ -349,8 +353,12 @@ export class Game {
         if (c.wantUse && c.item && !spinning && c.pickupAge >= ITEM_USE_READY) { c.wantUse = false; this._useItem(c); }
         else if (c.wantUse && !c.item) c.wantUse = false;
         if (!spinning && this._enterZones(c, this.pads, c.padIn)) this._applyPad(c); // position-scaled boost
-        if (this.elapsed > LAUNCH_GATE) this._enterBox(c);             // roll a held item (gated)
       }
+      // Item boxes: live cars roll a held item; a finished car on its victory lap also
+      // grabs boxes so they keep popping (cooldown + pickup pop) beneath it — but it KEEPS
+      // whatever it holds rather than rerolling (it can't use items). The launch gate only
+      // blocks the opening seconds, which a finished car is long past, so it's exempt.
+      if (c.finished || this.elapsed > LAUNCH_GATE) this._enterBox(c);
 
       // LONGITUDINAL: a boost is a flat HOLD at peak (boostT) followed by a gentle
       // multiplier FADE back to 1 (BOOST_FADE) — so the ceiling eases down and the car
@@ -555,10 +563,12 @@ export class Game {
     this.onEvent({ type: 'pad', id: c.id });
   }
 
-  // Rising-edge overlap of an item BOX. A box on cooldown is inert. A car with a
+  // Rising-edge overlap of an item BOX. A box on cooldown is inert. A LIVE car with a
   // full slot does NOT consume the box (it stays live for the next car) — so holding
   // an item means forfeiting every box you pass (defuses hoarding). On a fresh pickup
-  // the box goes on cooldown and the car rolls a t-weighted item.
+  // the box goes on cooldown and the car rolls a t-weighted item. A FINISHED car always
+  // pops the box: empty → rolls (collects) one, full → keeps it (it can't use items, so
+  // hoarding is moot — the box still cools down + pops so the victory lap stays lively).
   _enterBox(c) {
     if (!this.boxes.length) return;
     for (let i = 0; i < this.boxes.length; i++) {
@@ -567,10 +577,15 @@ export class Game {
       if (inside && !c.boxIn.has(i)) {
         if (c.item == null) {
           c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
-          this.onEvent({ type: 'pickup', id: c.id, item: c.item });
+          this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: c.finished });
+        } else if (c.finished) {
+          // Finished + full slot: pop the box (cooldown + pickup pop) but HOLD the current
+          // item — no reroll. Latch membership so the box fires once, not every frame.
+          b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
+          this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: true });
         }
-        // full slot: leave membership unset so it re-checks next frame (auto-grabs the
-        // instant the slot frees while still on the box).
+        // live car, full slot: leave membership unset so it re-checks next frame (auto-grabs
+        // the instant the slot frees while still on the box).
       } else if (!inside) { c.boxIn.delete(i); }
     }
   }

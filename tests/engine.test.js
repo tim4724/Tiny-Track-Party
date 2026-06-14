@@ -544,6 +544,70 @@ test('a finished car keeps driving on autopilot instead of stopping', () => {
   assert.ok(Math.abs(c.lat) <= game.maxLat + 1e-6, 'autopilot keeps it within the curbs');
 });
 
+test('a finished car still spins out on hazards (oil + banana) during its victory lap', () => {
+  const track = mkTrack(3);
+  track.hazards = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  car.finished = true; car.finishTime = 1; // on its victory lap (not added to finishedOrder → race stays live)
+  Object.assign(car, { totalS: 8, lat: 0, v: 6 });
+  game.update(16);
+  assert.ok(car.spinT > 0, 'a finished car spins out when it drives onto oil');
+  // and a dropped banana (someone else's) spins it out too, and is consumed
+  Object.assign(car, { spinT: 0, spin: 0, totalS: 30, lat: 0, v: 6 });
+  car.oilIn.clear();
+  game.bananas.push({ id: 1, s: 30, lat: 0, owner: 'someone-else' });
+  game.update(16);
+  assert.ok(car.spinT > 0, 'a finished car spins out on a banana');
+  assert.equal(game.bananas.length, 0, 'the banana is consumed by the finished car');
+});
+
+test('a finished car collects an item on its victory lap (box pops + cooldown, world-pop pickup)', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  track.seed = 12345;
+  const events = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => events.push(e) });
+  const car = game.cars.get('p1');
+  car.finished = true; car.finishTime = 1; car.item = null; // finishing nulls the slot
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  game.update(16); // finished cars are exempt from the launch gate, so this collects at once
+  assert.ok(car.item === 'boost' || car.item === 'banana', `finished car collects an item (got ${car.item})`);
+  assert.equal(game.getSnapshot().boxes[0], false, 'the box goes on cooldown under the finished car');
+  const pickup = events.find((e) => e.type === 'pickup' && e.id === 'p1');
+  assert.ok(pickup && pickup.finished === true, 'pickup is flagged finished (drives a world pop, not the player roulette)');
+});
+
+test('a finished car with a full slot keeps its item but still pops the box (cooldown + sound)', () => {
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  const events = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => events.push(e) });
+  const car = game.cars.get('p1');
+  car.finished = true; car.finishTime = 1; car.item = 'boost'; // already holding one
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  game.update(16);
+  assert.equal(car.item, 'boost', 'a finished car keeps its held item — no reroll');
+  assert.equal(game.getSnapshot().boxes[0], false, 'the box still goes on cooldown');
+  assert.ok(events.some((e) => e.type === 'pickup' && e.id === 'p1' && e.finished === true),
+    'a full-slot finished car still emits a (finished) pickup so the box pops + sounds');
+});
+
+test('a LIVE car with a full slot still forfeits the box (finished-car rule does not leak)', () => {
+  // Guards the deliberate anti-hoarding rule for live cars: only FINISHED cars pop a box
+  // they can't take. (The reverse of the test above.)
+  const track = mkTrack(3);
+  track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
+  const events = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => events.push(e) });
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0, item: 'boost' });
+  game.elapsed = 2; // past the launch gate
+  game.update(16);
+  assert.equal(game.getSnapshot().boxes[0], true, 'a live full-slot car leaves the box live');
+  assert.ok(!events.some((e) => e.type === 'pickup'), 'no pickup fires for a live full-slot car');
+});
+
 // ---- boost pads + catch-up factor -------------------------------------------
 
 test('a boost pad lifts a car above its top speed, then bleeds back down', () => {
