@@ -34,10 +34,11 @@ const CHASE_TGT_UP = 0.11;    // look point barely above the road → camera pit
 const CAM_POS_RATE = 7.0, CAM_TGT_RATE = 13.0; // damping speed per second (higher = snappier)
 // The position spring lags the car by ~velocity/rate, so the faster you go the
 // further back the camera sits — at full boost that lag alone shrinks the car
-// more than the FOV/dist cues do. Scale the follow rate UP with speed so fast
-// straights/boosts stay glued (car stays big), while corners (taken slow) keep
-// the low rate and its smooth swing-behind feel.
-const CAM_POS_RATE_SPD = 13.0; // extra follow rate, scaled by spd² (see _updateChase) — kills most of the at-speed lag so the car stays big. Quadratic so slow corners keep the loose swing and only fast straights/boosts tighten.
+// more than the FOV/dist cues do. So the follow rate climbs with spd² (applied
+// in _updateChase): fast straights/boosts tighten and stay glued (car stays
+// big), while slow corners keep the low base rate and its loose swing-behind.
+const CAM_POS_RATE_SPD = 13.0; // extra follow rate per spd² (see above)
+const CAM_RATE_SPD_MAX = 1.6;  // cap the spd feeding that term so a future >1.6 boost can't drive the cam toward rigid
 const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 // Weight transfer: smoothed d(spd)/dt pitches the body — nose-down dive under
@@ -1502,7 +1503,9 @@ export class SceneRenderer {
     // Follow rate climbs with speed² so the spring lag (≈v/rate) doesn't pull the
     // car small at max speed; the quadratic keeps the rate near base through slow
     // corners (loose swing preserved) and only tightens on fast straights/boosts.
-    const aPos = 1 - Math.exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * spd * spd) * dt);
+    // spd is capped here so an over-1.6 boost can't ramp the rate toward rigid.
+    const rateSpd = Math.min(spd, CAM_RATE_SPD_MAX);
+    const aPos = 1 - Math.exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);
     const aTgt = 1 - Math.exp(-CAM_TGT_RATE * dt);
     if (!c.init) { c.camPos.copy(want); c.camTarget.copy(target); c.init = true; }
     else { c.camPos.lerp(want, aPos); c.camTarget.lerp(target, aTgt); }
