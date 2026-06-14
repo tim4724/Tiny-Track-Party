@@ -593,8 +593,22 @@ export class Game {
       c.boostMul = Math.max(c.boostMul, BOOST_ITEM_MUL);
       c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);
     } else if (c.item === 'banana') {
-      let s = c.totalS - BANANA_BACK; s = ((s % this.length) + this.length) % this.length;
-      this.bananas.push({ id: ++this._bananaSeq, s, lat: c.lat, owner: c.id });
+      // Drop straight out the back along the car's HEADING, not down the centreline.
+      // A centreline drop (same lat, s-BANANA_BACK) lands beside the tail — with no
+      // autosteer the car is yawed through every corner (offset ~BANANA_BACK·sin θ).
+      // Rebuild the world pose from the car's live (totalS, lat, heading) — same frame
+      // math as _recomputePoses, but local so it's not coupled to pose freshness — step
+      // BANANA_BACK back, then re-project to (s, lat) the way the motion step does.
+      const f = this.centerline.sampleAt(c.totalS);
+      const fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading); // unit forward (tangent is normalised)
+      const world = f.pos.clone()
+        .addScaledVector(f.lateral, c.lat)    // car's reference point
+        .addScaledVector(fwd, -BANANA_BACK);  // straight out the back, along the heading
+      const hit = this.centerline.projectNear(world, c.totalS, BANANA_BACK + 0.5);
+      const lim = this._curbLimit(hit.frame.width); // keep it on the road if the tail swung wide near a curb
+      const lat = Math.max(-lim, Math.min(lim, hit.lat));
+      const s = ((hit.s % this.length) + this.length) % this.length;
+      this.bananas.push({ id: ++this._bananaSeq, s, lat, owner: c.id });
     }
     c.item = null;
   }

@@ -862,6 +862,31 @@ test('a dropped banana is live immediately — a tailgater is hit the same frame
   assert.equal(game.bananas.length, 0, 'the hit consumed the banana');
 });
 
+test('a dropped banana trails the car along its HEADING, not down the centreline', () => {
+  // Regression: with no autosteer the car is yawed through every corner. The drop used
+  // to land at the car's own lat, BANANA_BACK back down the CENTRELINE — beside the
+  // tail, not behind it. It now steps back along the car's world heading.
+  const track = mkTrack(3);
+  const game = new Game(['drop'], track, {});
+  const c = game.cars.get('drop');
+  Object.assign(c, { totalS: 12, lat: 0, v: 0, item: 'banana', heading: 0.6 }); // ~34° yaw on the front straight
+  game.elapsed = 2;
+  game.processInput('drop', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.bananas.length, 1, 'banana dropped');
+  const b = game.bananas[0];
+  // Reconstruct world positions from (s, lat) the way the renderer / _inZone do.
+  const f = game.centerline.sampleAt(12);
+  const carPos = f.pos.clone();                              // car is at lat 0
+  const fwd = f.tangent.clone().applyAxisAngle(f.up, 0.6);   // car's world forward at drop time
+  const fb = game.centerline.sampleAt(b.s);
+  const toBanana = fb.pos.clone().addScaledVector(fb.lateral, b.lat).sub(carPos); // car → banana
+  // Sits ~BANANA_BACK behind, directly opposite the nose. A centreline drop at this yaw
+  // could only reach back·fwd ≈ -1.2·cos(0.6) ≈ -0.99; behind-the-heading gives ≈ -1.2.
+  assert.ok(Math.abs(toBanana.length() - 1.2) < 0.15, `~BANANA_BACK behind (got ${toBanana.length().toFixed(2)})`);
+  assert.ok(toBanana.dot(fwd) < -1.1, 'behind the nose along the heading, not down the centreline');
+  assert.ok(Math.abs(b.lat) > 0.3, `gained the yaw's lateral component (lat ${b.lat.toFixed(2)})`); // not a same-lat drop
+});
+
 test('a dropped banana never expires — it waits on the track until hit', () => {
   const track = mkTrack(3);
   const game = new Game(['drop', 'follow'], track, {});
