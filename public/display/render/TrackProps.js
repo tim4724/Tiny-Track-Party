@@ -28,6 +28,7 @@ const BOX_SPIN = 1.6;    // rad/s
 const BOX_BOB_AMP = 0.07; // world units of bob
 const BOX_BOB_W = 3.0;    // bob angular speed (rad/s)
 const BOX_H = 0.3;        // item-box height in world units (0.6× the previous 0.5)
+const BOX_FLOAT = 0.18;  // clearance of the box's base above the road (it hovers); bobs ±BOX_BOB_AMP around this
 // Collect burst: when a box is picked up it GROWS while it FADES out, then hides
 // (a clear "poof, grabbed" beat to pair with the HUD roulette). Starting values:
 // tune BOX_COLLECT_TIME up if it's too quick to read, BOX_COLLECT_GROW for punch.
@@ -130,7 +131,7 @@ export class TrackProps {
         mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4),
           new THREE.MeshStandardMaterial({ color: 0xffc94d }));
       }
-      mesh.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.28); // float above the road
+      mesh.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, BOX_FLOAT); // hover above the road
       mesh.quaternion.setFromUnitVectors(Y, up);
       // Clone this box's materials so it can fade + pulse INDEPENDENTLY of its
       // siblings (boxProto.clone shares materials by reference). transparent:true lets
@@ -253,9 +254,13 @@ export class TrackProps {
           const bb = new THREE.Box3().setFromObject(m);
           m.scale.setScalar(0.35 / Math.max(1e-3, bb.max.y - bb.min.y));
           m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+          // Anchor to the measured base, wherever the GLB pivot sits: re-measure
+          // post-scale and remember the bottom offset so the model rests flush.
+          m.userData.bottom = new THREE.Box3().setFromObject(m).min.y;
         } else {
           m = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffe14d }));
           m.userData.owned = true;
+          m.userData.bottom = -0.18; // sphere origin is its centre
         }
         this.hazardGroup.add(m);
         this._bananaMeshes.set(b.id, m);
@@ -263,7 +268,9 @@ export class TrackProps {
       if (m) {
         const f = this._centerline.sampleAt(b.s);
         const up = this._sBananaUp.copy(f.up).normalize(); // scratch — no per-frame alloc
-        m.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.05);
+        // Sit the model's base on the road (+1mm to avoid z-fighting), not its pivot.
+        const lift = 0.001 - (m.userData.bottom || 0);
+        m.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, lift);
         m.quaternion.setFromUnitVectors(this._worldUp, up);
       }
     }
