@@ -21,20 +21,15 @@ const carStrip = (model) => BASE + model + '.strip.png';
 const SPIN_FRAMES = 24;
 const SPIN_FPS = 8; // 24 frames / 8 fps = 3s per full turn
 
-// Lobby/picker render mode. Defaults to 'spin' (rotates the focused car — the
-// player's current pick on the controller, each joined car on the display);
-// 'still' shows the calm hero everywhere. Order of precedence:
-//   1. explicit ?carview=still|spin  (gallery / testing / opt-out)
-//   2. prefers-reduced-motion: reduce → 'still'  (accessibility wins)
-//   3. default → 'spin'
-function carView() {
-  let param = null;
-  try { param = new URLSearchParams(location.search).get('carview'); } catch (_) { /* no location */ }
-  if (param === 'still' || param === 'spin') return param;
+// Lobby/picker render mode. Spinning cars (the focused car — the player's
+// current pick on the controller, each joined car on the display) turn on a
+// turntable; everything else shows the calm hero still. Accessibility opt-out:
+// prefers-reduced-motion: reduce → hold the still everywhere.
+function spinAllowed() {
   try {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 'still';
-  } catch (_) { /* no matchMedia (very old browser) → fall through to default */ }
-  return 'spin';
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  } catch (_) { /* no matchMedia (very old browser) → allow spin */ }
+  return true;
 }
 
 // ---- shared spin clock ----------------------------------------------------
@@ -75,7 +70,7 @@ export function carThumbNode(model, { spin = false } = {}) {
   still.src = carStill(model);
   box.appendChild(still);
 
-  if (spin && carView() === 'spin') {
+  if (spin && spinAllowed()) {
     const overlay = document.createElement('div');
     overlay.className = 'carthumb__spin';
     box.appendChild(overlay);

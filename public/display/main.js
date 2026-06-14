@@ -1072,6 +1072,4 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
     options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
   { key: 'bbox', label: 'Collision boxes', type: 'flag' },
-  { key: 'carview', label: 'Car thumbs', type: 'select',
-    options: [{ value: 'spin', label: 'spin' }, { value: 'still', label: 'still' }] },
 ], { title: 'Display' }));
