@@ -549,7 +549,9 @@ export class SceneRenderer {
     // Start from the same iso framing the static overview uses; remember that
     // distance so the fly speed feels the same as the turntable's framing.
     if (this._ovPos) this.overview.position.copy(this._ovPos);
-    if (this._trackCenter) c.target.copy(this._trackCenter);
+    // Aim at whatever the scenario framed: the track centre for the whole-circuit
+    // preview, a feature cluster for the mechanics showcase. Both set _ovTarget.
+    c.target.copy(this._ovTarget);
     this._flyDist = this.overview.position.distanceTo(c.target);
     c.update();
     // Cursor affordance: grab while idle, grabbing mid-drag.

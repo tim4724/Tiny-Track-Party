@@ -22,6 +22,38 @@ const giveItems = (engine) => { for (const c of engine.cars.values()) c.item = P
 
 const el = (id) => document.getElementById(id);
 
+// Standalone inspector camera. When a preview page is opened on its OWN (not in a
+// gallery iframe), hand the overview camera to the viewer — drag to look, scroll to
+// fly, WASD to glide, Q/E to drop/rise — so the scene can be inspected up close. In
+// the gallery grid each card is an iframe → leave the scenario's own framing alone
+// (you can't comfortably drag a thumbnail). A cross-origin frame throws on
+// window.top, so treat that as framed. Call AFTER the scenario frames its shot (it
+// reads scene._ovPos/_ovTarget). Returns true when it took over the camera.
+function enableFreeCamIfStandalone(scene) {
+  let inIframe = true;
+  try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+  if (inIframe) return false;
+  scene.setFog(false); // flying around the scene: no haze clipping the far track
+  // #race is a transparent z-2 overlay over the canvas; let pointer events fall
+  // through to it so OrbitControls can listen (see .cam-free in display.css).
+  document.documentElement.classList.add('cam-free');
+  scene.enableUserCamera();
+  showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
+  return true;
+}
+
+// One-time control legend for the free camera — the drag/WASD controls are
+// otherwise invisible. Fades out on its own after a few seconds (the controls keep
+// working regardless); styled by .cam-hint in display.css.
+function showCamHint() {
+  if (document.querySelector('.cam-hint')) return;
+  const hint = document.createElement('div');
+  hint.className = 'cam-hint';
+  hint.textContent = 'Drag to look · scroll to zoom · WASD to move · Q/E to drop & rise';
+  document.body.appendChild(hint);
+  setTimeout(() => hint.classList.add('is-faded'), 6000);
+}
+
 // runDisplayScenario(opts, ctx)
 //   opts: { scenario, players, host }
 //   ctx:  { scene, track, scenePromise }  (live instances built by main.js)
@@ -116,23 +148,10 @@ export function runDisplayScenario(opts, ctx) {
 
     function setupTrackPreview() {
       const { scene, track } = ctx;
-      // In the gallery grid each card is an iframe → keep the calm auto-orbit
-      // turntable (you can't comfortably drag a thumbnail). Opened standalone
-      // ("open ↗" / its own tab) there is no iframe, so hand the camera to the
-      // viewer (drag to look around, scroll to fly, WASD/QE to move) for a closer
-      // look. A cross-origin frame throws on window.top — treat that as framed.
-      let inIframe = true;
-      try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
       scene.setFog(false);   // track preview (grid thumbnail OR free-cam inspector): show the WHOLE circuit, no haze
-      if (inIframe) {
-        scene.orbit = true; // slowly orbit the whole track for the gallery overview
-      } else {
-        // #race is a transparent z-2 overlay over the canvas; let pointer events
-        // fall through to it so OrbitControls can listen (see display.css).
-        document.documentElement.classList.add('cam-free');
-        scene.enableUserCamera();
-        showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
-      }
+      // Standalone ("open ↗" / own tab) → free-cam inspector; gallery iframe →
+      // keep the calm auto-orbit turntable (you can't comfortably drag a thumbnail).
+      if (!enableFreeCamIfStandalone(scene)) scene.orbit = true;
 
       const ids = [];
       for (let i = 0; i < players; i++) ids.push(i);
@@ -167,18 +186,6 @@ export function runDisplayScenario(opts, ctx) {
           placeGrid();
         }
       };
-    }
-
-    // One-time control legend for the free camera — the drag/WASD controls are
-    // otherwise invisible. Fades out on its own after a few seconds (the controls
-    // keep working regardless); styled by .cam-hint in display.css.
-    function showCamHint() {
-      if (document.querySelector('.cam-hint')) return;
-      const hint = document.createElement('div');
-      hint.className = 'cam-hint';
-      hint.textContent = 'Drag to look · scroll to zoom · WASD to move · Q/E to drop & rise';
-      document.body.appendChild(hint);
-      setTimeout(() => hint.classList.add('is-faded'), 6000);
     }
     return;
   }
@@ -252,6 +259,10 @@ export function runDisplayScenario(opts, ctx) {
       // Car stays put, but re-pose it each frame so the boost aura keeps pulsating
       // (boxes/cones idle-animate via the render loop regardless).
       scene.onFrame = () => scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul);
+
+      // Standalone (own tab): let the viewer fly around the feature cluster. In the
+      // gallery iframe this is a no-op, so the frozen 3/4 framing above is kept.
+      enableFreeCamIfStandalone(scene);
     }
     return;
   }
