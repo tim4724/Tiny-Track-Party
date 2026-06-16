@@ -3,6 +3,7 @@
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
+import { themeByName, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
@@ -26,6 +27,7 @@ const show = (name) => { for (const k of Object.keys(screens)) screens[k].classL
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
 const built = new Map(TRACK_LIST.map((t) => {
   const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
+  b.cup = t.cup;             // carry the cup id onto the geometry → SceneRenderer picks the biome theme
   // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
   // now that the built geometry knows the lap length. Read by the engine (spin-out
   // detection) and the renderer (drawing the puddle + cones), both off track.hazards.
@@ -89,6 +91,10 @@ track.totalLaps = TOTAL_LAPS;
 // as a live lobby preview (scene.orbit).
 const allGlbs = [...new Set([...built.values()].flatMap((b) => b.instances.map((i) => i.glb)))];
 const scene = new SceneRenderer(el('scene'), CAR_COLORS);
+// ?biome=<name> — inspector override: force a biome on every track regardless of its cup
+// (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
+const _qBiome = _trackParams.get('biome');
+if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;
@@ -1142,6 +1148,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
   { key: 'centerline', label: 'Racing line', hint: 'magenta ribbon overlay', type: 'flag' },
   { section: 'Rendering' },
+  { key: 'biome', label: 'Biome', hint: 'override the cup look (blank = cup decides)', type: 'select',
+    options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
   { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
     options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
   { key: 'bbox', label: 'Collision boxes', type: 'flag' },

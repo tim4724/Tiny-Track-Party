@@ -258,6 +258,45 @@ function makeLawnTexture() {
   return tex;
 }
 
+// Sand: warm pale beach grit — the same tiled-canvas idiom as the lawn (so berm UVs
+// line up), but mowing stripes become gentle wind ripples (subtler ± luminance) over
+// a tan base, with soft blotches and a fine darker speckle so it reads as "sand" up
+// close without becoming a pattern at a distance. The caller (environment.js) overrides
+// .repeat for the big ground plane, exactly as it does for the lawn.
+function makeSandTexture() {
+  const s = 256, ripples = 10;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const base = [222, 200, 150]; // warm pale sand (#dec896)
+  for (let i = 0; i < ripples; i++) {
+    const f = i % 2 ? 1.03 : 0.975; // gentle ripple banding — half the contrast of mowing stripes
+    ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
+    ctx.fillRect(Math.floor(i * s / ripples), 0, Math.ceil(s / ripples), s);
+  }
+  // soft drift blotches so the ripples don't read as a print
+  ctx.filter = 'blur(6px)';
+  for (let i = 0; i < 30; i++) {
+    const f = (i % 2 ? 1.04 : 0.94);
+    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.3)`;
+    const x = (i * 73) % s, y = (i * 131) % s, r = 8 + (i * 37) % 20;
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.7, i, 0, Math.PI * 2); ctx.fill();
+  }
+  // fine darker grains — only legible up close, gives the "grit" read
+  ctx.filter = 'none';
+  for (let i = 0; i < 140; i++) {
+    const x = (i * 53) % s, y = (i * 97) % s;
+    ctx.fillStyle = `rgba(150,120,80,${(0.05 + (i % 3) * 0.03).toFixed(2)})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(18, 18);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
 // (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
 // the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
@@ -416,6 +455,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture, makeSandTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

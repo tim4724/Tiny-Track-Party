@@ -11,7 +11,8 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme } from './render/environment.js';
+import { THEMES, themeForCup } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, SCENERY_MODELS } from './render/track.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
@@ -515,8 +516,20 @@ export class SceneRenderer {
     // shader does exposure + linear→sRGB explicitly instead.
     r.toneMapping = THREE.NoToneMapping;
 
+    // Per-cup BIOME: the renderer boots on the canonical grass theme (so the lobby
+    // diorama, before any track is picked, looks exactly as it always did). setTrack
+    // re-skins to the picked track's cup biome via _applyTheme (guarded: a grass-cup
+    // track is a no-op, so existing cups stay byte-identical). `_themeFog` is the colour
+    // the three fog profiles + the background share; it tracks the active biome.
+    const baseTheme = THEMES.grass;
+    this._theme = baseTheme;
+    this._themeFog = baseTheme.fog;
+    // Inspector override (set by main.js from ?biome=<name>): when non-null, every track
+    // renders in this biome regardless of its cup. Null in normal play → cup decides.
+    this.biomeOverride = null;
+
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8ecae6);
+    scene.background = new THREE.Color(baseTheme.fog);
     // Two fog profiles, chosen per-frame by camera mode (see _loop). The RACE fog is a
     // tight atmospheric tail for the close chase cam; the OVERVIEW fog (built per track in
     // setTrack) is pushed out so the lobby/gallery turntable can frame the WHOLE circuit
@@ -524,15 +537,17 @@ export class SceneRenderer {
     // (fog colour == sky colour). Both are THREE.Fog of the same type, so swapping between
     // them only changes near/far uniforms — it never recompiles materials (no hitch on
     // weak GPUs). setFog(false) forces fog off entirely (gallery grid / inspector).
-    this._raceFog = new THREE.Fog(0x8ecae6, 70, 170);
+    this._raceFog = new THREE.Fog(this._themeFog, 70, 170);
     this._overviewFog = null;
     this._fogEnabled = true;
     scene.fog = this._raceFog;
     this.scene = scene;
 
-    // Sky dome, drifting clouds, horizon hills, toy lighting and the lawn
-    // ground plane — track-independent, built once (render/environment.js).
-    const env = buildEnvironment(scene);
+    // Sky dome, drifting clouds, horizon hills, toy lighting and the ground plane —
+    // track-independent, built once (render/environment.js) for the base biome. `_env`
+    // keeps the recolourable handles (sky/hemi/hills/ground) for _applyTheme.
+    const env = buildEnvironment(scene, baseTheme);
+    this._env = env;
     this._clouds = env.clouds; // drifted in _loop
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
@@ -878,6 +893,20 @@ export class SceneRenderer {
     });
   }
 
+  // Re-skin the world to a biome: world dressing (sky/hills/ground/lights) via the
+  // environment, then the fog + background colour the renderer owns. Cheap (in-place
+  // recolours + cached textures), so switching cups in the lobby has no hitch. Called
+  // from setTrack only when the biome actually changes (object-identity guard).
+  _applyTheme(theme) {
+    applyEnvTheme(this._env, theme);
+    this._themeFog = theme.fog;
+    this.scene.background.set(theme.fog);
+    this._raceFog.color.set(theme.fog);
+    if (this._overviewFog) this._overviewFog.color.set(theme.fog);
+    if (this._bbFog) this._bbFog.color.set(theme.fog);
+    this._theme = theme;
+  }
+
   // Free the previous track's MERGED geometries/materials (each setTrack makes
   // fresh ones). The collision clones share the cached proto geometry, so there's
   // nothing per-tile to dispose — just drop the group for GC. Merged materials
@@ -893,6 +922,12 @@ export class SceneRenderer {
     this._disposeTrack();
     this.trackGroup.clear();
     this.clearSkids(); // marks/patina are world-space — they belong to the old track
+    // Re-skin to this track's cup biome BEFORE building any track geometry: the grass
+    // skirt/berms (render/track.js) copy ground.material.map at build time, so the
+    // ground texture must already be the biome's. Guarded so a same-biome switch (and
+    // every grass-cup track) costs nothing and stays byte-identical.
+    const theme = this.biomeOverride || themeForCup(track.cup);
+    if (theme !== this._theme) this._applyTheme(theme);
     if (track.groundY != null) this.ground.position.y = track.groundY;
 
     // Build the track in two parallel forms:
@@ -1059,7 +1094,7 @@ export class SceneRenderer {
     }
     const fogNear = maxCamDist + 12;                       // entire track inside near → zero fog on it
     const fogFar = fogNear + Math.max(220, radius * 2);    // wide, gentle dissolve into the sky
-    this._overviewFog = new THREE.Fog(0x8ecae6, fogNear, fogFar);
+    this._overviewFog = new THREE.Fog(this._themeFog, fogNear, fogFar);
 
     // Lobby perimeter-orbit ellipse (see _loop): hug just outside the track's XZ bbox, so the
     // camera traces the track's overall shape up close (elongated tracks → elongated path).
@@ -1073,7 +1108,7 @@ export class SceneRenderer {
     // Perimeter-orbit fog: with the camera hugging the track, keep the near road crisp but
     // haze the open field SOON so the empty grass outside the circuit dissolves into the sky
     // instead of reading as a flat plane (tighter than the whole-track overview fog above).
-    this._bbFog = new THREE.Fog(0x8ecae6, 55, 55 + Math.max(110, Math.max(halfX, halfZ) * 1.2));
+    this._bbFog = new THREE.Fog(this._themeFog, 55, 55 + Math.max(110, Math.max(halfX, halfZ) * 1.2));
 
     // Aim + size the sun's shadow camera to cover the whole track. The light direction
     // is near-VERTICAL (2,12,1.5) — only slightly raked: cars/props no longer cast the
