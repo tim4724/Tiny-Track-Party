@@ -50,22 +50,23 @@ const PITCH_DIVE_MAX = 0.08;  // nose-down (rad) at full braking — starting va
 const PITCH_SQUAT_MAX = 0.03; // nose-up (rad) at full throttle — subtle
 const PITCH_ACCEL_NORM = 0.8; // |d(spd)/dt| mapping to full pitch ≈ engine full throttle (ACCEL/VMAX)
 const PITCH_RATE = 6;         // pitch damping (1/s) — a soft suspension settle, not a snap
-// Wheel roll: wheels spin to match the car's REAL travel (arclength/radius,
-// measured from the pose delta — `spd` is normalised, so it can't drive this),
-// CAPPED at the readable ceiling of a 60Hz DISPLAY (the TV — a 120Hz dev
-// browser hides strobing that the TV shows, so calibrate for 60): the wheels
-// turn 1:1 up to the cap and pin there above it, so they are ALWAYS visibly
-// turning while the car moves. Above ~1 u/s the rate is no longer literal —
-// true rolling is 30–70 rad/s, which no 60Hz display can show as anything but
-// wagon-wheel strobe — but a coherent fast-looking spin beats both aliasing
-// flicker and a parked-looking wheel (both shipped, both rejected, along with
-// generated blur impostors of three increasing sophistications: every attempt
-// to render the true rate produced its own artefact). The early "capped looks
-// like slipping" verdict predates the full-travel roll fix: back then drift
-// and wall-scrub under-rolled to a THIRD of the right rate on top of the cap,
-// which is what made the slip readable.
-const ROLL_SEG_MAX = 1.5;     // per-frame travel beyond this = respawn/teleport → don't spin across it
-const ROLL_RATE_CAP = 9;      // visual spin ceiling (rad/s ≈ 8.6°/frame at 60Hz, ~1.4 rev/s)
+// Wheel roll: rate comes from the car's REAL travel (arclength / tyre radius,
+// ω = v/r, measured from the pose delta — `spd` is normalised, so it can't drive
+// this), then scaled by WHEEL_SPIN_SCALE for READABILITY (NOT a cap — a smooth
+// proportional factor, so the spin still tracks speed and radius).
+// WHY scale (2026-06-16): the literal rate is geometrically correct — even
+// conservative (1.3 wheel-revs per car-length vs ~2.2 for a real car) — but at
+// racing speed the car covers ~9 car-lengths/s, so ω hits ~70 rad/s ≈ 11 rev/s.
+// Two perceptual problems with shipping that literally: (1) the chase cam
+// compresses apparent translation, so honest wheels visibly outrun how fast the
+// car LOOKS like it's going ("too fast by a huge margin"); (2) past ~10 rad/s it
+// wagon-wheel strobes on a 60Hz TV. Every racing game cheats wheels slower than
+// physical for exactly this reason (1). This factor is the one dial: 1.0 = literal,
+// lower = calmer / reads-right. Dialed to 0.40 by eye via a temp on-screen slider
+// (≈28 rad/s ≈ 4.5 rev/s at racing speed). (A hard cap was tried, 9 then 14 rad/s,
+// and rejected for clipping the speed feel — a proportional scale keeps it.)
+const ROLL_SEG_MAX = 1.5;      // per-frame travel beyond this = respawn/teleport → don't spin across it
+const WHEEL_SPIN_SCALE = 0.4;  // visual roll as a fraction of literal ω=v/r (1.0 = physically literal)
 const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-angle stretch
 // Sense of speed (no shake): FOV widens and the chase camera stretches back with
 // speed. `spd` is normalised to the car's own vmax but a BOOST raises v above it
@@ -159,8 +160,12 @@ const DEF_CAR_ROUGH = 1.2;   // car roughness multiplier (>1 = more matte than s
 // axles and drop the car onto it, so the wheels ride ON the road over bumps/hills
 // (the centreline only approximates the GLB, so following it directly clips the
 // body in). The model's wheel-bottom sits at the group origin, so RIDE_HEIGHT is
-// the gap from wheel to road — keep it tiny so the car looks planted, not hovering.
-const RIDE_HEIGHT = 0.012;
+// the SIGNED gap from wheel to road — keep it tiny. A slightly NEGATIVE value
+// sinks the contact patch a hair into the deck, killing the last of the
+// "floating" look. The underbody AO disk tracks the road regardless: it offsets
+// by −RIDE_HEIGHT (see addCar), so the shadow stays planted on the asphalt
+// whether the wheel hovers above the road or is pushed a touch into it.
+const RIDE_HEIGHT = -0.004;
 // Boost circle: a filled teal disk CONFORMED to the road under a boosting car (see
 // setCarPose). `SEG` angular × `RINGS` radial samples — each raycast onto the deck
 // per frame, so keep them modest. The intermediate ring lets the disk bend with the
@@ -1458,16 +1463,14 @@ export class SceneRenderer {
     // Load shift: the harder the body pitches (dive/squat), the closer the chassis
     // presses to the road — darken the underbody shading in step with it.
     c.aoMat.opacity = UNDER_AO_OPACITY + AO_LOAD_GAIN * Math.min(1, Math.abs(c.pitch) / PITCH_DIVE_MAX);
-    // Roll every wheel to match the car's real travel (ds / tyre radius),
-    // capped at ROLL_RATE_CAP so the spin stays coherent on a 60Hz display
-    // (see the constants up top) — turning whenever the car moves. Teleport-
-    // sized jumps (respawn) don't spin the wheels; the accumulator wraps at
-    // ±π (same orientation) so it never loses precision.
+    // Roll every wheel from the car's real travel (ds / tyre radius), scaled by
+    // WHEEL_SPIN_SCALE for readability — see the constants up top (the literal
+    // rate is correct but reads "too fast" under the chase cam, and strobes).
+    // Teleport-sized jumps (respawn) don't spin the wheels; the accumulator is
+    // wrapped into (−π, π] each frame so it never loses precision.
     if (Math.abs(ds) < ROLL_SEG_MAX) {
-      const lim = ROLL_RATE_CAP * Math.max(this._frameDt, 1e-3);
-      c.wheelRoll += Math.max(-lim, Math.min(lim, ds / c.wheelRadius));
-      if (c.wheelRoll > Math.PI) c.wheelRoll -= Math.PI * 2;
-      else if (c.wheelRoll < -Math.PI) c.wheelRoll += Math.PI * 2;
+      c.wheelRoll += (ds / c.wheelRadius) * WHEEL_SPIN_SCALE;
+      c.wheelRoll = ((c.wheelRoll + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
     }
     for (const w of c.backWheels) w.rotation.x = c.wheelRoll * w.userData.rollSign;
     // front wheels: steer yaw + roll (YXZ order set in addCar; steer>0 = right)
