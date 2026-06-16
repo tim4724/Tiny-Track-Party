@@ -11,6 +11,7 @@
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
     "artwork": "node scripts/capture-artwork.js",
     "icon:item": "node scripts/capture-item-icon.js",
+    "thumbs:car": "node scripts/capture-car-thumbs.js",
     "test:e2e": "playwright test"
   },
   "dependencies": {

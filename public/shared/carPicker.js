@@ -15,13 +15,13 @@ const carName = (i) => NAMES[i] || ('Car ' + (i + 1));
 
 // Stat bars read in the player's livery. Each bar is normalised across the WHOLE
 // roster — the engine stats are multipliers/weights with awkward absolute ranges,
-// so the roster-lowest car shows a HALF bar and the highest a full bar. Every row
+// so the roster-lowest car shows a 2/3 bar and the highest a full bar. Every row
 // is "more = more" (a full Weight bar = heaviest) so they read consistently. The
 // domain comes from CAR_STATS, not hardcoded, so retuning the table reshapes the
-// bars automatically. The floor sits at 50% (not 0) on purpose: every car should
-// look capable at everything, with differences shown as the top half of the bar —
-// no stat ever reads as empty/"broken", however wide or narrow the real spread is.
-const STAT_BAR_FLOOR = 0.50;
+// bars automatically. The floor sits high (66%, not 0) on purpose: these are all
+// hero cars — every one should read as genuinely capable at everything, with the
+// real spread shown as the top third of the bar, never as an empty/"broken" stat.
+const STAT_BAR_FLOOR = 0.66;
 const STAT_ROWS = [
   { lab: 'Speed', key: 'vmax' },
   { lab: 'Accel', key: 'accel' },
