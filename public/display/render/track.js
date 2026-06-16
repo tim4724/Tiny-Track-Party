@@ -140,23 +140,45 @@ export function buildRibbonRoad(R, track, collide) {
     0.55  // 15 right skirt foot
   ];
 
-  // World position of profile point j on ring i: centreline + height along the road
-  // normal (up) + lateral offset across the road. Returns shared scratch — clone it.
-  const tmp = new THREE.Vector3();
-  const ring = (i, j) => {
+  // World position of every profile point on every ring, precomputed ONCE into a flat
+  // Float32Array (x,y,z per point): centreline + height along the road normal (up) +
+  // lateral offset across the road. The sweep below references each point up to ~4× (two
+  // adjacent strips × current/next ring), so computing it per-reference (the old per-strip
+  // ring() helper) recomputed the same trig ~4× AND allocated a Vector3 per reference —
+  // ~256k throwaway vectors on a long track. One precompute kills both: the dominant cost
+  // of setTrack (see the profile). Point p on ring i lives at rings[(i*NP + p)*3 ..].
+  const NP = P.length, RP = NP * 3;
+  const rings = new Float32Array(N * RP);
+  for (let i = 0; i < N; i++) {
     const s = frames[i];
-    const l = P[j].sign * halfAt(i) + P[j].off;
-    return tmp.copy(s.pos).addScaledVector(s.up, P[j].y).addScaledVector(s.lateral, l);
-  };
-  const pos = [], col = [];
-  const push3 = (arr, p) => { arr.push(p.x, p.y, p.z); };
+    const px = s.pos.x, py = s.pos.y, pz = s.pos.z;
+    const ux = s.up.x, uy = s.up.y, uz = s.up.z;
+    const ax = s.lateral.x, ay = s.lateral.y, az = s.lateral.z;
+    const half = halfAt(i);
+    const base = i * RP;
+    for (let j = 0; j < NP; j++) {
+      const pj = P[j], yj = pj.y, l = pj.sign * half + pj.off, o = base + j * 3;
+      rings[o]     = px + ux * yj + ax * l;
+      rings[o + 1] = py + uy * yj + ay * l;
+      rings[o + 2] = pz + uz * yj + az * l;
+    }
+  }
+
+  // Visible-mesh attributes, sized exactly (16 strips × 2 tris × 3 verts × 3 floats per
+  // ring) and filled by cursor — no per-vertex array growth. Float32BufferAttribute takes
+  // the typed array directly (no copy).
+  const STRIDE = STRIPS.length * 6 * 3;
+  const pos = new Float32Array(N * STRIDE);
+  const col = new Float32Array(N * STRIDE);
+  let pc = 0, cc = 0;
+  const emitPt = (i, j) => { const o = i * RP + j * 3; pos[pc++] = rings[o]; pos[pc++] = rings[o + 1]; pos[pc++] = rings[o + 2]; };
   // Per-strip colour push: the two triangles below are wound ia,ib,nb / ia,nb,na, so
   // the 6 verts map to profile points [a,b,b,a,b,a]. Each gets its base colour times
   // its own AO, so the darkening varies ACROSS the strip (a gradient) — that's what
   // gives the kerb face and road edge their baked-in contact shadow.
   const VSEQ = ['a', 'b', 'b', 'a', 'b', 'a'];
-  const pushStripCol = (base, st) => {
-    for (const v of VSEQ) { const f = ao[st[v]]; col.push(base[0] * f, base[1] * f, base[2] * f); }
+  const pushStripCol = (cbase, st) => {
+    for (let v = 0; v < 6; v++) { const f = ao[st[VSEQ[v]]]; col[cc++] = cbase[0] * f; col[cc++] = cbase[1] * f; col[cc++] = cbase[2] * f; }
   };
 
   // Kerb stripes: band by arclength measured ALONG EACH KERB EDGE, not the
@@ -215,10 +237,8 @@ export function buildRibbonRoad(R, track, collide) {
     const colD = (dashOn(i) && !bare) ? LINE : ASPHALT;
     const colLine = bare ? ASPHALT : LINE;
     for (const st of STRIPS) {
-      const ia = ring(i, st.a).clone(), ib = ring(i, st.b).clone();
-      const na = ring(ni, st.a).clone(), nb = ring(ni, st.b).clone();
-      push3(pos, ia); push3(pos, ib); push3(pos, nb); // tri 1
-      push3(pos, ia); push3(pos, nb); push3(pos, na); // tri 2
+      emitPt(i, st.a); emitPt(i, st.b); emitPt(ni, st.b);  // tri 1: ia, ib, nb
+      emitPt(i, st.a); emitPt(ni, st.b); emitPt(ni, st.a); // tri 2: ia, nb, na
       const kerbCol = st.side === 'R' ? colR : colL;
       pushStripCol(
         st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine : st.kind === 'dash' ? colD : ASPHALT,
@@ -229,8 +249,11 @@ export function buildRibbonRoad(R, track, collide) {
   const mkGeom = (positions, colors) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    if (colors) g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    g.computeVertexNormals();
+    // Normals only matter for the lit, visible road (colors set). The collision proxy is an
+    // invisible MeshBasicMaterial raycast for ground-conform Y — it never shades, and the
+    // raycaster derives any face normal it needs from positions, so computing a normal
+    // attribute for it is pure waste (~one computeVertexNormals per 8-segment chunk).
+    if (colors) { g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.computeVertexNormals(); }
     return g;
   };
   const geo = mkGeom(pos, col);
@@ -266,12 +289,11 @@ export function buildRibbonRoad(R, track, collide) {
     R._mergedGeoms.push(cgeo);
     chunk = [];
   };
+  const chunkPt = (i, j) => { const o = i * RP + j * 3; chunk.push(rings[o], rings[o + 1], rings[o + 2]); };
   for (let i = 0; i < N; i++) {
     const ni = (i + 1) % N;
-    const ia = ring(i, 4).clone(), ib = ring(i, 11).clone();
-    const na = ring(ni, 4).clone(), nb = ring(ni, 11).clone();
-    push3(chunk, ia); push3(chunk, ib); push3(chunk, nb);
-    push3(chunk, ia); push3(chunk, nb); push3(chunk, na);
+    chunkPt(i, 4); chunkPt(i, 11); chunkPt(ni, 11);  // tri 1: ia, ib, nb
+    chunkPt(i, 4); chunkPt(ni, 11); chunkPt(ni, 4);  // tri 2: ia, nb, na
     if ((i + 1) % CHUNK === 0) flush();
   }
   flush();
