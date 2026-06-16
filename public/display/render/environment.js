@@ -110,7 +110,15 @@ export function buildEnvironment(scene) {
   // above). 4096² keeps the per-texel size small even on the biggest track's fitted
   // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead
   // of shimmering as the car moves — coarse texels were the source of the flicker.
-  key.castShadow = true;
+  // Under headless automation (E2E) the scene renders through SwiftShader (software
+  // GL). The sun's shadow pass re-rasterises the WHOLE track's geometry every frame
+  // (it can't frustum-cull like the chase cam does) — the single biggest per-frame
+  // cost there — which on a busy CI box stalls frames for seconds and starves the
+  // wall-clock race countdown so `racing` flips long after the test's budget. No test
+  // inspects shadows, so skip the pass entirely under automation; real users (and the
+  // manual gallery preview) keep the tuned 4096² map. See CLAUDE.md / display-perf memory.
+  const automation = (typeof navigator !== 'undefined' && navigator.webdriver);
+  key.castShadow = !automation;
   key.shadow.mapSize.set(4096, 4096);
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.05; // curved road → bias along the normal kills acne

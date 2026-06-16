@@ -2,7 +2,7 @@
 // Late joiner flow: a phone that scans the QR mid-race waits in the lobby
 // (car picker live, no ready button, "race in progress" note) instead of
 // landing on a dead steering wheel — and is seated in the next race.
-const { test, expect, openDisplay, joinController, startRace, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('mid-race joiner waits in the lobby, then races the next one', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -10,7 +10,7 @@ test('mid-race joiner waits in the lobby, then races the next one', async ({ pag
   const alice = await joinController(browser, roomCode, 'Alice'); // host
   const bob = await joinController(browser, roomCode, 'Bob');
   await startRace(alice, [bob]);
-  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  await waitForRacing(page);
   const carsBefore = await page.evaluate(() => window.__session().engine.cars.size);
 
   // Carol joins mid-race: the waiting lobby, not the drive screen.
@@ -39,7 +39,7 @@ test('an abandoned race returns to the lobby for waiting late joiners', async ({
 
   const alice = await joinController(browser, roomCode, 'Alice'); // host
   await startRace(alice, []);
-  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  await waitForRacing(page);
 
   // Bob scans in mid-race and waits in his lobby for the next one.
   const bob = await joinController(browser, roomCode, 'Bob');

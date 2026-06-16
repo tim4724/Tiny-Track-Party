@@ -2,7 +2,7 @@
 // Reconnect flows: a reloaded phone reclaims its seat mid-race (same clientId
 // → same relay slot → WELCOME with inRace), and a reloaded display rejoins its
 // OWN room (sessionStorage) and regathers the party instead of orphaning it.
-const { test, expect, openDisplay, joinController, startRace, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('a reloaded phone rejoins straight into its still-running race', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -10,7 +10,7 @@ test('a reloaded phone rejoins straight into its still-running race', async ({ p
   const alice = await joinController(browser, roomCode, 'Alice'); // host
   const bob = await joinController(browser, roomCode, 'Bob');
   await startRace(alice, [bob]);
-  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  await waitForRacing(page);
 
   // Bob's phone dies mid-corner. His car keeps running on the display.
   await bob.reload();
@@ -25,7 +25,7 @@ test('a silent phone is dropped by liveness and restored when its pings resume',
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
   await startRace(alice, []);
-  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  await waitForRacing(page);
 
   // Lock-screen simulation: every outbound path goes quiet — pings, the CONTROL
   // stream (which falls back to the relay without a fastlane), RTC signalling —

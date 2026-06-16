@@ -1,7 +1,7 @@
 // @ts-check
 // Core session flow: lobby → ready/start → countdown → racing → pause →
 // "New game" → back to the lobby, asserted across the display and both phones.
-const { test, expect, openDisplay, joinController, startRace, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('lobby → race → pause → new game returns everyone to the lobby', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -17,7 +17,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await page.waitForSelector(visible('#race'));
   await alice.waitForSelector(visible('#game'));
   await bob.waitForSelector(visible('#game'));
-  await page.waitForFunction(() => window.__session() && window.__session().racing, null, { timeout: 20000 });
+  await waitForRacing(page);
 
   // Any phone can pause; the overlay raises on every screen.
   await bob.click('#pause-btn');

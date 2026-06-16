@@ -59,4 +59,19 @@ async function startRace(host, others) {
 
 const visible = (sel) => `${sel}:not(.hidden)`;
 
-module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, visible };
+// Wait for the display to flip into the live race (session.racing). The race
+// starts on the "GO!" beat of a wall-clock countdown — but that countdown runs
+// on the display's main thread, which in headless CI renders the full Three.js
+// scene through SwiftShader (software GL). The first race frame there can stall
+// for several seconds (lazy shader compile / first split-screen setup), and on a
+// busy box the steady frames are slow too, blocking the 1 Hz countdown setInterval
+// so the race starts many seconds late. The countdown is ~3 s on real hardware;
+// this generous budget absorbs the software-render stall without masking a
+// genuinely stuck start. (Disabling the per-frame shadow pass under automation —
+// see environment.js — is what keeps that stall to seconds rather than tens.)
+async function waitForRacing(displayPage, timeout = 45000) {
+  await displayPage.waitForFunction(
+    () => window.__session() && window.__session().racing, null, { timeout });
+}
+
+module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible };
