@@ -1066,7 +1066,10 @@ if (_scenario) {
   // 3D scene the harness renders the track + cars into.
   const _scn = _scenario;
   if (_scn !== 'welcome' && _scn !== 'lobby' && _scn !== 'device-choice') {
-    el('scene').classList.remove('hidden');
+    // Reveal the 3D scene: #scene ships .is-dim (opacity 0) so the lobby starts on the
+    // diorama, but a track/race preview owns the screen — drop BOTH .hidden and .is-dim,
+    // else the canvas renders into a fully transparent container (looks like a blank page).
+    el('scene').classList.remove('hidden', 'is-dim');
     const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
   }
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
