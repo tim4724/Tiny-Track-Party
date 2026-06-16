@@ -229,7 +229,38 @@ export function buildRibbonRoad(R, track, collide) {
     return false;
   };
 
-  // Sweep the profile around the closed loop into ONE vertex-coloured buffer.
+  const mkGeom = (positions, colors) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    // Normals only matter for the lit, visible road (colors set). The collision proxy is an
+    // invisible MeshBasicMaterial raycast for ground-conform Y — it never shades, so a normal
+    // attribute is pure waste there (one computeVertexNormals per 8-segment chunk).
+    if (colors) { g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.computeVertexNormals(); }
+    return g;
+  };
+
+  // One matte vertex-coloured asphalt material, shared by every road chunk.
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte)
+  R._mergedMats.push(mat);
+
+  // Sweep the profile into CHUNKED vertex-coloured buffers (not one giant mesh). A single
+  // merged ribbon can't be frustum-culled — its bounding sphere spans the whole circuit, so
+  // it's always "in view" and the close chase cam paid to draw the ENTIRE lap in every
+  // split-screen cell, and again in the shadow pass. Splitting the sweep into contiguous
+  // arclength chunks lets three cull the ~90% of the lap behind the camera / past the race
+  // fog: identical pixels, a fraction of the triangles submitted. Chunk K spans rings
+  // [lo, hi]; its last quad shares ring `hi` with chunk K+1 (and the final chunk closes back
+  // to ring 0), so the surface stays seamless. ~160 rings/chunk keeps the chunk count (hence
+  // the drawn-when-visible draw calls) low while still culling most of a long track.
+  // receiveShadow so the cars' shadows land on the road; castShadow is set per chunk below.
+  //
+  // Build the FULL ribbon once and solve its vertex normals across the whole surface, THEN
+  // slice it into fixed-ring chunks. Solving normals per-chunk would split them at every
+  // seam (each boundary vertex seeing only one chunk's triangles), leaving a faint lighting
+  // facet on banked/graded seams; slicing ONE normal-solved buffer keeps the shading
+  // pixel-identical to the old single mesh. Each ring contributes a fixed run of vertices
+  // (STRIPS × 2 tris × 3), so a chunk is just a contiguous slice of the buffers. The sweep
+  // fills the preallocated pos/col typed arrays via emitPt/pushStripCol (cursor-advanced).
   for (let i = 0; i < N; i++) {
     const ni = (i + 1) % N;
     const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
@@ -240,37 +271,32 @@ export function buildRibbonRoad(R, track, collide) {
       emitPt(i, st.a); emitPt(i, st.b); emitPt(ni, st.b);  // tri 1: ia, ib, nb
       emitPt(i, st.a); emitPt(ni, st.b); emitPt(ni, st.a); // tri 2: ia, nb, na
       const kerbCol = st.side === 'R' ? colR : colL;
-      pushStripCol(
-        st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine : st.kind === 'dash' ? colD : ASPHALT,
-        st);
+      pushStripCol(st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine : st.kind === 'dash' ? colD : ASPHALT, st);
     }
   }
-
-  const mkGeom = (positions, colors) => {
+  const full = mkGeom(pos, col); // solves vertex normals over the whole ribbon
+  const fp = full.attributes.position.array, fc = full.attributes.color.array, fn = full.attributes.normal.array;
+  const CHUNK_RINGS = 160; // keep chunk count (hence drawn-when-visible draw calls) low; STRIDE = floats/ring
+  for (let lo = 0; lo < N; lo += CHUNK_RINGS) {
+    const a = lo * STRIDE, z = Math.min(lo + CHUNK_RINGS, N) * STRIDE;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    // Normals only matter for the lit, visible road (colors set). The collision proxy is an
-    // invisible MeshBasicMaterial raycast for ground-conform Y — it never shades, and the
-    // raycaster derives any face normal it needs from positions, so computing a normal
-    // attribute for it is pure waste (~one computeVertexNormals per 8-segment chunk).
-    if (colors) { g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.computeVertexNormals(); }
-    return g;
-  };
-  const geo = mkGeom(pos, col);
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte)
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.matrixAutoUpdate = false; // positions are already baked in world space
-  mesh.receiveShadow = true;     // road catches the cars' cast shadows
-  // …and casts too, so where the ribbon stacks over itself (loops, the climbing
-  // spiral, the roll bridge) the upper deck shades the lower one. Without this the
-  // deck is opaque to incoming shadows but transparent to the sun, so an elevated
-  // car drops a lone, parentless silhouette onto the road below instead of the deck
-  // overhead simply putting that road in shade. (Flat road casts onto grass, which
-  // opts out of receiving — env.js — so ordinary track is unchanged.)
-  mesh.castShadow = true;
-  R.trackGroup.add(mesh);
-  R._mergedGeoms.push(geo);
-  R._mergedMats.push(mat);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(fp.slice(a, z), 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(fc.slice(a, z), 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(fn.slice(a, z), 3));
+    g.computeBoundingSphere(); // per-chunk sphere → three frustum-culls off-screen chunks
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.matrixAutoUpdate = false; // positions are already baked in world space
+    mesh.receiveShadow = true;
+    // Cast shadow ONLY from elevated chunks (bridge/ramp/loop decks). The shadow camera
+    // frames the whole track, so it can't cull the road; a ground-level chunk only casts
+    // onto grass, which opts out of receiving (env.js), so its shadow is invisible — skip
+    // it for free. An elevated deck genuinely shades the road below, so it keeps casting.
+    let maxY = -Infinity;
+    for (let k = a + 1; k < z; k += 3) if (fp[k] > maxY) maxY = fp[k];
+    mesh.castShadow = maxY > 0.8; // > flat road's kerb-top (~0.2), with margin
+    R.trackGroup.add(mesh);
+    R._mergedGeoms.push(g);
+  }
 
   // Collision proxy: only the flat asphalt surface (kerbs/skirts aren't drivable),
   // spanning the full -hw..hw width (profile points 4 and 11), chunked so the existing
