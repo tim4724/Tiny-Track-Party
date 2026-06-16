@@ -5,7 +5,6 @@
 // same model. No relay, no game logic — just the kit on display.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
@@ -64,10 +63,59 @@ ground.position.y = -0.02; // a hair below 0 so models resting on 0 don't z-figh
 scene.add(ground);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2000);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI * 0.495; // can't dive under the ground
+
+// ---- first-person look ----
+// Drag rotates the camera IN PLACE — around its own position, like an FPS — not
+// an orbit around a distant pivot. Orientation is held as yaw (about world up) +
+// pitch (about the local right axis) and the quaternion is rebuilt from a YXZ
+// euler each move, so there's never any roll. WASD (below) then flies along
+// wherever you're looking.
+const look = { yaw: 0, pitch: 0 };
+const PITCH_LIMIT = Math.PI / 2 - 0.02; // a hair shy of straight up/down (no flip)
+const LOOK_SENS = 0.0026;               // radians per pixel dragged
+function applyLook() {
+  look.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, look.pitch));
+  camera.quaternion.setFromEuler(new THREE.Euler(look.pitch, look.yaw, 0, 'YXZ'));
+}
+// Aim at a world point, then adopt that heading as the yaw/pitch state.
+function lookAtPoint(target) {
+  camera.lookAt(target);
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+  look.yaw = e.y; look.pitch = e.x;
+  applyLook();
+}
+
+const canvas = renderer.domElement;
+canvas.style.touchAction = 'none';
+canvas.style.cursor = 'grab';
+let dragging = false, dragPtr = null, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', (e) => {
+  dragging = true; dragPtr = e.pointerId; lastX = e.clientX; lastY = e.clientY;
+  canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; e.preventDefault();
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging || e.pointerId !== dragPtr) return;
+  look.yaw   -= (e.clientX - lastX) * LOOK_SENS;
+  look.pitch -= (e.clientY - lastY) * LOOK_SENS;
+  lastX = e.clientX; lastY = e.clientY;
+  applyLook();
+});
+function endDrag(e) {
+  if (e.pointerId !== dragPtr) return;
+  dragging = false; dragPtr = null; canvas.style.cursor = 'grab';
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+// Scroll dollies along the view direction (toward whatever you're looking at).
+// Normalise deltaMode so line/page-mode wheels (Firefox) move like pixel ones.
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const unit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? innerHeight : 1);
+  const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
+  camera.position.addScaledVector(fwd, -e.deltaY * unit * 0.05); // wheel up = forward
+}, { passive: false });
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -76,9 +124,9 @@ addEventListener('resize', () => {
 });
 
 // ---- WASD fly movement ----
-// Mouse still orbits/zooms (OrbitControls); the keyboard TRANSLATES the whole
-// rig — move camera and orbit target by the same delta so orientation is kept
-// and you fly across the spread-out layout. W/S forward/back (horizontal),
+// The mouse aims (first-person look, above); the keyboard TRANSLATES the camera
+// so you fly across the spread-out layout. Forward follows the look heading
+// flattened to horizontal, so W/S stay level even while looking up or down.
 // A/D strafe, E/Q (or Space/Shift-Space) up/down, Shift = sprint.
 const keys = new Set();
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space']);
@@ -114,8 +162,7 @@ function flyStep() {
   if (keys.has('KeyQ')) move.y -= 1;
   if (move.lengthSq() === 0) return;
   move.normalize().multiplyScalar(speed);
-  camera.position.add(move);
-  controls.target.add(move); // move the orbit pivot too → translate, don't orbit
+  camera.position.add(move); // pure translation — orientation is owned by the look state
 }
 
 // ---- floating text labels (camera-facing sprites) ----
@@ -242,16 +289,13 @@ async function main() {
   // Open framed on the wide-road family (the focus of the project); the rest of
   // the kit recedes behind it for context. Fall back to the whole layout.
   frameOn(focusBox || worldBox);
-  // Let a zoom-out reach the far end of the whole layout.
-  controls.maxDistance = worldBox.getSize(new THREE.Vector3()).length() * 1.2;
-  controls.update();
 
   buildLegend();
   // One frame, then reveal — avoids a flash of an empty scene.
   renderer.render(scene, camera);
   document.getElementById('loading').classList.add('done');
   // Expose internals for debugging / scripted framing.
-  window.__viewer = { scene, camera, controls, worldBox, focusBox, frameOn };
+  window.__viewer = { scene, camera, look, worldBox, focusBox, frameOn };
 }
 
 // Aim the camera at a box from a 3/4 overhead angle, pulled back so the box
@@ -263,8 +307,8 @@ function frameOn(box) {
   const fitH = radius / Math.tan((camera.fov * Math.PI / 180) / 2);
   const dist = fitH * 1.35;
   const dir = new THREE.Vector3(0.05, 0.5, -1).normalize(); // mostly forward, tilted down
-  controls.target.copy(center);
   camera.position.copy(center).addScaledVector(dir, dist);
+  lookAtPoint(center);
 }
 
 function buildLegend() {
@@ -277,7 +321,6 @@ function buildLegend() {
 
 renderer.setAnimationLoop(() => {
   flyStep();
-  controls.update();
   renderer.render(scene, camera);
 });
 
