@@ -197,6 +197,17 @@ html, body {
 #scene { position: fixed; inset: 0; z-index: 0; opacity: 1; transition: opacity 0.45s ease; }
 #scene.is-dim { opacity: 0; }
 #scene canvas { display: block; }
+/* Track→track crossfade still: a frozen frame of the OUTGOING track, laid over the live
+   canvas while the new track rebuilds underneath. Fading it out dissolves one circuit
+   straight into the next — never dipping through the diorama. Inside #scene's z-0 stacking
+   context (so it stays behind the lobby/race UI); FADE_MS in main.js mirrors this. */
+#scene-snap { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1;
+  opacity: 1; transition: opacity 0.45s ease; pointer-events: none;
+  /* Promote to its own compositor layer so the fade keeps animating off the main thread —
+     it has to glide THROUGH setTrack's tens-of-ms rebuild block (which freezes the orbit),
+     masking that hitch. main.js commits the fade a frame BEFORE the rebuild for this reason. */
+  will-change: opacity; }
+#scene-snap.is-fading { opacity: 0; }
 /* Race section is now a transparent overlay container over #scene. */
 #race { position: fixed; inset: 0; z-index: 2; }
 /* Standalone track preview (track gallery "open ↗", not the grid iframe): the

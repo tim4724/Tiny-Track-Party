@@ -114,9 +114,9 @@ function selectTrack(id) {
   track.totalLaps = TOTAL_LAPS;
   window.__track = track;
   if (sceneReady && net.roomState === ROOM_STATE.LOBBY) {
-    // Build the picked track and crossfade the 3D preview in over the diorama (the
-    // default background) — see fadeBackdrop. The diorama IS the transition base, so the
-    // reveal/swap reads as "default background → track", with no blue veil between.
+    // Swap the picked track with a crossfade — see fadeBackdrop. Track→track dissolves one
+    // circuit straight into the next; the very first pick reveals the track over the diorama
+    // (the default background). The build (geometry + demo cars) runs under cover either way.
     fadeBackdrop(() => {
       scene.setTrack(track, { debug: _showCenterline });
       refreshLobbyDemo();
@@ -137,17 +137,30 @@ function updateBackdrop() {
 }
 
 // ---- lobby backdrop crossfade ----
-// Crossfade the 3D preview THROUGH the diorama: fade #scene out (revealing the diorama
-// beneath), run `mid` under cover (swap track, rebuild demo cars, drop the frozen race
-// field…), then fade the rebuilt scene back in. If #scene is already hidden (the very first
-// reveal), there's nothing to fade out — just build and fade in over the diorama already on
-// screen. FADE_MS mirrors the #scene opacity transition in display.css.
+// Two transitions share this helper, picked by whether a track is already on screen:
+//
+//  • track → track (a track is showing): a TRUE crossfade between circuits. Freeze the
+//    current track as a still over #scene (scene.snapshot), run `mid` to rebuild the live
+//    canvas to the new track UNDERNEATH the still, then fade the still out so the new track
+//    emerges through the old. It never dips through the diorama background.
+//  • diorama → track (the very first pick — #scene still transparent): there's no outgoing
+//    track to dissolve from, so reveal the just-built track over the diorama by fading
+//    #scene's own opacity in.
+//
+// `mid` (swap track, rebuild demo cars, drop the frozen race field…) always runs under cover.
+// FADE_MS mirrors the opacity transitions on #scene / #scene-snap in display.css.
 const FADE_MS = 450;
-let fadeTimer = null;
+let fadeTimer = null, snapTimer = null, fadeGen = 0;
 function fadeBackdrop(mid) {
   const sc = el('scene');
   if (!sc) { mid(); return; }
-  const dio = el('lobby-diorama'); if (dio) dio.classList.remove('hidden'); // the crossfade base
+  const dio = el('lobby-diorama'); if (dio) dio.classList.remove('hidden'); // base for the first reveal
+  // Clear any in-flight crossfade so rapid track-cycling can't stack stills / fade timers.
+  // fadeGen invalidates any deferred build still queued from a superseded pick (see below).
+  clearTimeout(fadeTimer); clearTimeout(snapTimer);
+  const gen = ++fadeGen;
+  const oldSnap = el('scene-snap'); if (oldSnap) oldSnap.remove();
+
   const buildThenFadeIn = () => {
     // try/finally so a throw in mid() can never leave the backdrop stuck transparent.
     try { mid(); }
@@ -160,14 +173,42 @@ function fadeBackdrop(mid) {
       }));
     }
   };
-  clearTimeout(fadeTimer);
+
   const visible = !sc.classList.contains('hidden') && !sc.classList.contains('is-dim');
-  if (visible) {
-    sc.classList.add('is-dim');             // fade the current 3D out → diorama shows through
+  if (!visible) { buildThenFadeIn(); return; }   // first reveal → diorama → track
+
+  // A track is on screen: dissolve it straight into the next one. The still is a frozen frame
+  // of the OUTGOING track; the live #scene rebuilds to the new track behind it.
+  const still = scene.snapshot();
+  if (!still) {                                  // capture unavailable → fall back to the dip
+    sc.classList.add('is-dim');
     fadeTimer = setTimeout(buildThenFadeIn, FADE_MS);
-  } else {
-    buildThenFadeIn();                       // already on the diorama → build + fade in
+    return;
   }
+  still.id = 'scene-snap';
+  sc.appendChild(still);                         // sits over the live canvas, inside #scene's z-0 layer
+  sc.classList.remove('is-dim');                 // the live track stays fully opaque beneath the still
+  // Order matters: start the fade FIRST, rebuild the track a frame LATER. An opacity
+  // transition runs on the compositor, so it keeps animating even while the main thread is
+  // busy — whereas setTrack blocks the thread for tens of ms (and the orbit with it). By the
+  // time the rebuild runs the compositor already owns the fade, so the hitch happens UNDER a
+  // still that's visibly dissolving and the preview never appears to stop. (The very first
+  // reveal masks the same block with the compositor-animated diorama; see buildThenFadeIn.)
+  // Until the rebuild swaps it, the live layer is still the OUTGOING track — same as the
+  // still on top, so the early fade shows no change. mid() reads the latest pick, and a fast
+  // re-pick supersedes this whole chain via fadeGen.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (gen !== fadeGen) return;                 // superseded by a newer pick
+    still.classList.add('is-fading');            // hand the dissolve to the compositor…
+    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
+    requestAnimationFrame(() => {                // …then rebuild a frame later, hidden behind it
+      if (gen !== fadeGen) return;               // a newer pick (or leaving the lobby) cancelled us
+      if (!(sceneReady && net.roomState === ROOM_STATE.LOBBY)) { // race started under us → drop the still
+        clearTimeout(snapTimer); still.remove(); return;
+      }
+      mid();
+    });
+  }));
 }
 
 // ---- lobby attract demo ----

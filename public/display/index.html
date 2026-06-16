@@ -52,9 +52,9 @@
   </div>
 
   <!-- Persistent 3D backdrop. In the lobby it orbits the SELECTED track's shape (the live
-       preview); in a race it draws the split-screen world. Starts transparent (.is-dim)
-       over the diorama and crossfades straight in once a track is picked. The lobby + race
-       sections layer on top of it. -->
+       preview); in a race it draws the split-screen world. Starts transparent (.is-dim) and
+       reveals over the diorama on the first pick; later picks crossfade one track straight
+       into the next (see #scene-snap). The lobby + race sections layer on top of it. -->
   <div id="scene" class="is-dim"></div>
 
   <!-- Device chooser — the display URL opened on a phone-sized screen. The race

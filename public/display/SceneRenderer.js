@@ -553,6 +553,24 @@ export class SceneRenderer {
     this._fogEnabled = enabled;
   }
 
+  // Grab the CURRENT frame as a frozen still (a detached 2D canvas). The lobby uses this to
+  // crossfade one track STRAIGHT into the next: snapshot track A, rebuild the live scene to
+  // track B underneath, then fade the still out so B emerges through A — no dip through the
+  // diorama. We re-grade the last rendered frame straight to the canvas (_present reads the
+  // still-intact _rtScene) and copy it back SYNCHRONOUSLY, in this same task, before the
+  // browser presents+clears the drawing buffer — so no preserveDrawingBuffer is needed.
+  // Returns null if there's nothing to capture yet (caller falls back to the diorama reveal).
+  snapshot() {
+    if (!this.renderer || !this._rtScene) return null;
+    this._present();
+    const src = this.renderer.domElement;
+    if (!src.width || !src.height) return null;
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    c.getContext('2d').drawImage(src, 0, 0);
+    return c;
+  }
+
   // Hand the overview camera to the viewer: drag to LOOK AROUND in place, scroll
   // to fly forward, WASD to glide and Q/E to drop/rise. Used by the standalone
   // track preview (the track gallery's "open ↗" — i.e. NOT the grid iframe) so a
