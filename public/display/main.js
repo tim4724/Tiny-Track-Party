@@ -675,7 +675,7 @@ function startRace() {
   for (const c of session.getSnapshot().cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
   }
-  session.startCountdown(COUNTDOWN_SECONDS);
+  session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
 
 // A CPU car is "on screen" when it sits in some human's chase view: the camera

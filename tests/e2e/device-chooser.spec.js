@@ -27,4 +27,7 @@ test('phone-sized visit gets the chooser and defers the room', async ({ browser 
 test('big screens never see the chooser', async ({ page }) => {
   await openDisplay(page); // room created straight away at 1280x720
   await expect(page.locator('#device-choice')).toBeHidden();
+  // Behavioural signal, not just CSS: a big-screen boot takes the immediate path,
+  // it never defers behind the chooser (the inverse of the deferred-path test above).
+  expect(await page.evaluate(() => window.__deviceChoicePending)).toBeFalsy();
 });

@@ -73,6 +73,7 @@ test('upside-down portrait (180°): roll steers the opposite way to 0°', () => 
 
 test('legacy window.orientation (-90) is honoured when screen.orientation is absent', () => {
   const hadS = Object.prototype.hasOwnProperty.call(globalThis, 'screen');
+  const prevS = globalThis.screen;
   const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
   const prevW = globalThis.window;
   delete globalThis.screen; // force the fallback path
@@ -85,11 +86,78 @@ test('legacy window.orientation (-90) is honoured when screen.orientation is abs
     assert.ok(Math.abs(t._sensorSteer() + HALF) < EPS);
   } finally {
     if (hadW) globalThis.window = prevW; else delete globalThis.window;
-    if (hadS) {/* screen restored by withScreenAngle elsewhere */}
+    if (hadS) globalThis.screen = prevS; else delete globalThis.screen;
   }
 });
 
 test('a full twist past the lock still clamps to ±1', () => {
   assert.equal(steerFor({ angle: 0, beta: 0, gamma: 75 }), 1);
   assert.equal(steerFor({ angle: 0, beta: 0, gamma: -75 }), -1);
+});
+
+// ---- the _tick output loop: deadzone, brake, the gated ACTION counter, stop() ----
+// _tick is the per-frame producer of the {s,b,u} CONTROL frame. We call it directly
+// (no real 25 Hz timer) and read the emitted control off an onControl capture.
+
+test('_tick dead-zones a centred lean to zero, but full lock still re-expands to ±1', () => {
+  withScreenAngle(0, () => {
+    const out = [];
+    const t = new TiltInput({ onControl: (c) => out.push(c) });
+    t._onOrient({ beta: 0, gamma: 1 }); // ~0.03 normalized, inside the 0.06 dead-zone
+    t._tick();
+    assert.equal(out.at(-1).s, 0, 'a lean inside the dead-zone steers nothing');
+    t._onOrient({ beta: 0, gamma: 75 }); // hard lock
+    for (let i = 0; i < 12; i++) t._tick(); // SMOOTH=0.5 converges in a few ticks
+    assert.ok(out.at(-1).s > 0.99, `full lock re-expands to +1 (got ${out.at(-1).s})`);
+  });
+});
+
+test('_tick re-expands a mid lean past the dead-zone (lock maps linearly, no lost travel)', () => {
+  withScreenAngle(0, () => {
+    const out = [];
+    const t = new TiltInput({ onControl: (c) => out.push(c) });
+    t._onOrient({ beta: 0, gamma: 15 }); // raw sensor steer 0.5 (15°/30°)
+    for (let i = 0; i < 20; i++) t._tick();
+    const expected = (0.5 - 0.06) / (1 - 0.06); // 0.5, dead-zone removed and re-expanded
+    assert.ok(Math.abs(out.at(-1).s - expected) < 0.01, `re-expanded steer ~${expected.toFixed(3)} (got ${out.at(-1).s})`);
+  });
+});
+
+test('the on-screen BRAKE button feeds b through _tick and clears on release', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.pressBrake(true); t._tick();
+  assert.equal(out.at(-1).b, 1, 'a held brake reports full BRAKE_LEVEL');
+  t.pressBrake(false); t._tick();
+  assert.equal(out.at(-1).b, 0, 'releasing the brake reports zero');
+});
+
+test('ACTION is gated by the held-item slot and bumps the use-counter once per press', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.pressAction(); t._tick();
+  assert.equal(out.at(-1).u, 0, 'with no item, a press does not bump the counter (no ghost-fire)');
+  t.setActionEnabled(true);
+  t.pressAction(); t._tick();
+  assert.equal(out.at(-1).u, 1, 'with an item, a press bumps the counter');
+  t.pressAction(); t._tick();
+  assert.equal(out.at(-1).u, 2, 'each press bumps exactly once');
+});
+
+test('the ACTION use-counter wraps at 256 (matches the display fire-on-change protocol)', () => {
+  const t = new TiltInput({});
+  t.setActionEnabled(true);
+  for (let i = 0; i < 256; i++) t.pressAction();
+  assert.equal(t._useCount, 0, 'the wrapping counter returns to 0 after 256 presses');
+});
+
+test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
+  const t = new TiltInput({});
+  t.setActionEnabled(true);
+  t.pressAction(); t.pressBrake(true);
+  assert.ok(t._useCount > 0 && t._brakeBtn > 0, 'state is set mid-race');
+  t.stop();
+  assert.equal(t._useCount, 0, 'use-counter reset on stop');
+  assert.equal(t._brakeBtn, 0, 'brake reset on stop');
+  assert.equal(t._actKeyDown, false, 'held-key flag cleared on stop');
 });

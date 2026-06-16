@@ -69,7 +69,9 @@ describe('PartyFastlane / netcode', () => {
 
     test('enqueues into ring with monotonic event seq', () => {
       const { fastlane, peer, peerIdx } = makeFastlane();
-      fastlane.enqueue(peerIdx, { type: 'input', action: 'left' });
+      // the happy path returns 'p2p' (the documented success contract, mirroring
+      // the 'dropped' return the failure-path tests above assert)
+      assert.strictEqual(fastlane.enqueue(peerIdx, { type: 'input', action: 'left' }), 'p2p');
       fastlane.enqueue(peerIdx, { type: 'input', action: 'right' });
       assert.strictEqual(peer.eventSeq, 2);
       // Newest first

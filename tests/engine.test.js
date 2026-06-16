@@ -193,6 +193,26 @@ test('a car whose player leaves mid-race forfeits and unblocks the finish', () =
   assert.equal(res.results[0].playerId, 'p1');
 });
 
+test('rekeyCar moves a live car to a new id, preserving state and re-owning its banana', () => {
+  // A dropped player reconnects on a DIFFERENT device (new peerIndex); their car
+  // keeps racing under the new id. The subtle invariant: a banana they dropped must
+  // follow the new id, or the rejoined dropper would trip their own banana.
+  const track = mkTrack(3);
+  const game = new Game(['p1', 'p2'], track, {});
+  Object.assign(game.cars.get('p1'), { totalS: 12, lat: 0.4, v: 6 });
+  game.bananas.push({ id: 1, s: 30, lat: 0, owner: 'p1' });
+  assert.equal(game.rekeyCar('p1', 'p1b'), true);
+  assert.equal(game.cars.has('p1'), false, 'the old id is gone');
+  assert.ok(game.cars.has('p1b'), 'the new id holds the car');
+  assert.equal(game.cars.get('p1b').id, 'p1b', "the car's own id moved");
+  assert.equal(game.cars.get('p1b').totalS, 12, 'race position is preserved across the rekey');
+  assert.equal(game.bananas[0].owner, 'p1b', 'the owned banana follows the new id');
+  // no-op guards: a missing source, a taken target, and a same-id rekey all return false
+  assert.equal(game.rekeyCar('ghost', 'x'), false, 'rekeying a missing car is a no-op');
+  assert.equal(game.rekeyCar('p2', 'p1b'), false, 'rekeying onto a taken id is a no-op');
+  assert.equal(game.rekeyCar('p2', 'p2'), false, 'rekeying to the same id is a no-op');
+});
+
 test('fastForwardToEnd runs the sim to the flag and reports true finish times', () => {
   // Stand-in for "only CPU cars remain": skip the countdown, then burst the whole
   // field to the line. Every car must finish with a real (positive, time-ordered)
@@ -218,6 +238,94 @@ test('fastForwardToEnd runs the sim to the flag and reports true finish times', 
   assert.ok(ended.results[0].time <= ended.results[1].time, 'results are ordered by finish time');
 });
 
+test('forceRemoveCar ends the race when the last unfinished car leaves (fires onRaceEnd once)', () => {
+  // The RaceSession wrapper around Game.removeCar: if removing a car leaves only
+  // finished cars, the race must end (onRaceEnd) — the path main.js's forfeit relies on.
+  const track = mkTrack(1);
+  let ended = null, calls = 0;
+  const session = new RaceSession(
+    [{ peerIndex: 'p1' }, { peerIndex: 'p2' }], track,
+    { onRaceEnd: (r) => { ended = r; calls++; } }
+  );
+  session.racing = true; // skip the countdown (mirrors the fastForwardToEnd test above)
+  // p1 drives home; p2 sits on full brake and never finishes, so the race stays open.
+  for (let i = 0; i < 60000 / 16 && !session.engine.cars.get('p1').finished; i++) {
+    session.processInput('p1', { s: followSteer(session.engine, track, 'p1') });
+    session.processInput('p2', { s: 0, b: 1 });
+    session.update(16);
+  }
+  assert.ok(session.engine.cars.get('p1').finished, 'p1 reached the flag');
+  assert.equal(session.engine.raceOver, false, 'p2 still circulating keeps the race open');
+  assert.equal(session.forceRemoveCar('p2'), true, 'the leaving car is removed');
+  assert.equal(calls, 1, 'removing the last unfinished car fires onRaceEnd exactly once');
+  assert.ok(ended && ended.results[0].playerId === 'p1', 'the final board carries the finished winner');
+});
+
+// ---- RaceSession countdown timer (the 1 Hz beat that gates the live race) ------
+// Pure timer logic (setInterval / setTimeout / performance.now, no DOM or net), so
+// node:test's mock timers drive it deterministically — no real wall-clock waiting.
+// This is the contract the E2E __countdownSeconds hook leans on (floor is 1, not 0).
+
+test('startCountdown counts down to GO and flips racing exactly on the 0 beat', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const ticks = []; let starts = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onCountdownTick: (n) => ticks.push(n),
+    onRaceStart: () => { starts++; },
+  });
+  session.startCountdown(3);
+  assert.deepEqual(ticks, [3], 'the opening beat shows the full count');
+  assert.equal(session.racing, false, 'not racing during the count');
+  t.mock.timers.tick(1000); // 2
+  t.mock.timers.tick(1000); // 1
+  assert.equal(session.racing, false, 'still counting at 1');
+  assert.equal(starts, 0, 'onRaceStart has not fired before GO');
+  t.mock.timers.tick(1000); // 0 (GO!)
+  assert.deepEqual(ticks, [3, 2, 1, 0], 'counts 3, 2, 1, then GO');
+  assert.equal(session.racing, true, 'racing flips on the GO beat');
+  assert.equal(starts, 1, 'onRaceStart fires once, on GO');
+  t.mock.timers.tick(1000); // -1 (clear the banner, stop the interval)
+  assert.equal(ticks[ticks.length - 1], -1, 'a final -1 beat clears the banner');
+  assert.equal(session._countdownTimer, null, 'the interval is cleared after GO');
+});
+
+test('startCountdown(1) reaches GO in one beat; startCountdown(0) never starts the race', (t) => {
+  // Floor check for the E2E __countdownSeconds hook: 1 is the shortest count that
+  // still flips racing. 0 fires only the opening tick (no racing) then a -1 clear,
+  // so it would deadlock the race — the hook must never use it.
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const one = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {});
+  one.startCountdown(1);
+  assert.equal(one.racing, false, 'not racing on the opening 1 beat');
+  t.mock.timers.tick(1000);
+  assert.equal(one.racing, true, 'one beat later it is GO');
+
+  const zero = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {});
+  zero.startCountdown(0);
+  t.mock.timers.tick(1000);
+  t.mock.timers.tick(1000);
+  assert.equal(zero.racing, false, 'startCountdown(0) never flips racing — the deadlock the hook avoids');
+});
+
+test('pausing the countdown freezes the beats; resume picks up where it left off', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const ticks = [];
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onCountdownTick: (n) => ticks.push(n),
+  });
+  session.startCountdown(3); // [3]
+  t.mock.timers.tick(1000);  // [3, 2]
+  session.pause();
+  assert.equal(session._countdownTimer, null, 'the beat timer stops while paused');
+  t.mock.timers.tick(5000);  // time passes, but no beats while paused
+  assert.deepEqual(ticks, [3, 2], 'no beats land during a pause');
+  session.resume();          // re-arms from the banked count (2)
+  assert.equal(ticks[ticks.length - 1], 2, 'resume re-shows the banked count');
+  t.mock.timers.tick(1000);  // 1
+  t.mock.timers.tick(1000);  // 0 (GO!)
+  assert.equal(session.racing, true, 'the resumed countdown still reaches GO');
+});
+
 test('ranking orders by progress', () => {
   const track = mkTrack(3);
   const game = new Game(['p1', 'p2'], track, {});
@@ -229,6 +337,20 @@ test('ranking orders by progress', () => {
   }
   const p1 = game.getSnapshot().cars.find((c) => c.id === 'p1');
   assert.equal(p1.position, 1, 'moving car should be in the lead');
+});
+
+test('a finished car outranks a still-racing car further along; lap display is 1-based', () => {
+  // byRaceOrder puts finished cars first (by finish time), so a car that crossed the
+  // line leads one that has covered more raw distance but is still racing.
+  const { game } = parkPair({ totalS: 5.0, lat: 0, v: 0 }, { totalS: 50.0, lat: 0, v: 8 });
+  Object.assign(game.cars.get('a'), { finished: true, finishTime: 12 });
+  game._rank(); // ranks are computed during update(); this test sets state directly
+  const snap = game.getSnapshot();
+  const a = snap.cars.find((c) => c.id === 'a'), b = snap.cars.find((c) => c.id === 'b');
+  assert.equal(a.position, 1, 'the finished car leads despite covering less distance');
+  assert.equal(b.position, 2, 'the still-racing car ranks behind it');
+  assert.equal(game.getResults().results[0].playerId, 'a', 'getResults agrees with the live ranker');
+  assert.equal(b.lap, 1, 'a grid car on lap 0 (totalS>=0) shows lap 1 — the HUD lap is 1-based');
 });
 
 // ---- per-car stats ----------------------------------------------------------
@@ -336,6 +458,26 @@ test('a stats-less (plain id) car keeps the benchmark feel', () => {
   assert.ok(Math.abs(v1 - v2) < 1e-6, `default == explicit-1.0 (${v1} vs ${v2})`);
 });
 
+test('setCarStats re-stats a live car in place, keeping its position and speed', () => {
+  // The lobby attract demo swaps a player's car pick mid-demo without rebuilding the
+  // race: stats re-resolve in place, race state is untouched. The constructor path is
+  // tested via topSpeed/accel above; this is the distinct mutate-in-place path.
+  const track = mkTrack(3);
+  const game = new Game([{ id: 'x', stats: {} }], track, {});
+  const c = game.cars.get('x');
+  const baseAccel = c.accel, baseVmax = c.vmax, baseTurn = c.turn; // all from the 1.0 benchmark
+  drive(game, track, 'x', 0.5); // build up non-trivial position/velocity state
+  const sBefore = c.totalS, vBefore = c.v;
+  assert.equal(game.setCarStats('x', { vmax: 1.3, turn: 0.7, mass: 2, accel: 1.5 }), true);
+  assert.ok(Math.abs(c.vmax / baseVmax - 1.3) < 1e-9, 'vmax rescaled in place');
+  assert.ok(Math.abs(c.turn / baseTurn - 0.7) < 1e-9, 'turn rescaled in place');
+  assert.ok(Math.abs(c.accel / baseAccel - 1.5) < 1e-9, 'accel rescaled in place');
+  assert.equal(c.mass, 2, 'mass re-resolved');
+  assert.equal(c.totalS, sBefore, 'position untouched by a re-stat');
+  assert.equal(c.v, vBefore, 'speed untouched by a re-stat');
+  assert.equal(game.setCarStats('missing', {}), false, 're-statting a missing car is a no-op');
+});
+
 // ---- car-car collisions -----------------------------------------------------
 
 // Park two cars at fixed (s, lat) and step once with both braked so the
@@ -387,9 +529,13 @@ test('lapped traffic is solid — a leader one lap up still collides at the same
   const { game, track } = parkPair({ totalS: 5.0, lat: 0, v: 1 }, { totalS: 5.0, lat: 0, v: 8 });
   const a = game.cars.get('a'), b = game.cars.get('b');
   b.totalS = 5.0 + track.length - 0.6; // one lap ahead, 0.6 behind `a` in the world, closing fast
-  game.processInput('a', { b: 1 });    // backmarker parked
+  game.processInput('a', { b: 1 });    // backmarker parked, full brake
   for (let i = 0; i < 20; i++) game.update(16);
-  assert.ok(a.v > 0 || a.totalS > 5.0, 'the lapped car is hit (punted/pushed), not ghosted through');
+  // `a` is on the brakes from a standing-still v=1: with no contact it only decays
+  // toward 0, so a clear forward speed can ONLY come from the lapping car punting it.
+  // (The old `a.v > 0 || a.totalS > 5.0` was satisfied by a's own coast — it passed
+  // even when the leader ghosted straight through, the exact bug this guards.)
+  assert.ok(a.v > 1.0, `the lapped car is punted forward, not ghosted through (v=${a.v.toFixed(2)})`);
   const worldGap = Math.abs(wrap(b.totalS - a.totalS, track.length));
   assert.ok(worldGap > 0.7, `cars are separated in world space after contact (gap=${worldGap.toFixed(2)})`);
 });

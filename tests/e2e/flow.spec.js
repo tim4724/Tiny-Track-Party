@@ -30,4 +30,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await page.waitForSelector(visible('#lobby'));
   await alice.waitForSelector(visible('#lobby'));
   await bob.waitForSelector(visible('#lobby'));
+  // The race was actually torn down, not just visually hidden: the display disposed
+  // its session (timers + scene cars), so __session() is null back in the lobby.
+  await page.waitForFunction(() => window.__session() === null);
 });
