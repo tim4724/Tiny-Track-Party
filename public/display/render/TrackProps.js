@@ -94,7 +94,7 @@ export class TrackProps {
         this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, shape: 'strip', halfLen: p.halfLen, halfWidth: p.halfWidth });
       } else {
         const radius = p.radius || 0.65;
-        geom = new THREE.CircleGeometry(radius, 28);
+        geom = new THREE.CircleGeometry(radius, 18);
         tex = this._padTex;
         this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
       }

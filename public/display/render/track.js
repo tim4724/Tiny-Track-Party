@@ -240,7 +240,7 @@ export function buildRibbonRoad(R, track, collide) {
   };
 
   // One matte vertex-coloured asphalt material, shared by every road chunk.
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte)
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }); // matches Kenney track tiles (fully matte) — Lambert, no PBR specular; the road is the dominant near-camera fill so this cuts real per-fragment cost ×N cells
   R._mergedMats.push(mat);
 
   // Sweep the profile into CHUNKED vertex-coloured buffers (not one giant mesh). A single
@@ -336,13 +336,13 @@ export function buildPillars(R, track) {
   const geoms = [];
   for (const p of list) {
     const h = Math.max(0.1, p.topY - p.baseY);
-    const g = new THREE.CylinderGeometry(p.radius, p.radius, h, 16);
+    const g = new THREE.CylinderGeometry(p.radius, p.radius, h, 12);
     g.translate(p.x, p.baseY + h / 2, p.z); // cylinder is centred on its axis → lift to span base…top
     geoms.push(g);
   }
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose(); // copied into `merged`
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete
+  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false; // geometry is baked in world space (translate above)
   mesh.castShadow = true;
@@ -397,7 +397,7 @@ export function buildHills(R, track) {
   for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / GROUND_SIZE, pos[i + 2] / GROUND_SIZE);
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ map: R.ground.material.map, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+  const mat = new THREE.MeshLambertMaterial({ map: R.ground.material.map, side: THREE.DoubleSide }); // matte grass berm — Lambert (matches the lawn material class)
   const mesh = new THREE.Mesh(geo, mat);
   mesh.matrixAutoUpdate = false; // geometry baked in world space
   mesh.castShadow = false;
@@ -429,13 +429,13 @@ export function buildPoles(R, track) {
     }
     const r = p.radius || 0.45;
     const h = Math.max(0.3, topY - (base.y - EMBED));
-    const g = new THREE.CylinderGeometry(r, r, h, 16);
+    const g = new THREE.CylinderGeometry(r, r, h, 12);
     g.translate(base.x, base.y - EMBED + h / 2, base.z);          // span road surface → just under the deck above
     geoms.push(g);
   }
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete (like pillars)
+  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete (like pillars)
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false;
   mesh.castShadow = true;
@@ -485,7 +485,7 @@ export function buildLoopPoles(R, track) {
       const ux = c.up.x, uy = c.up.y, uz = c.up.z;
       const Ux = c.pos.x - ux * DECK, Uy = c.pos.y - uy * DECK, Uz = c.pos.z - uz * DECK;
       const H = (c.pos.y + 1.0) - (gy - EMBED); // build tall, then clip the top to the plane below
-      const g = new THREE.CylinderGeometry(RAD, RAD, H, 16);
+      const g = new THREE.CylinderGeometry(RAD, RAD, H, 12);
       g.translate(sx, gy - EMBED + H / 2, sz);
       const p = g.attributes.position;
       for (let v = 0; v < p.count; v++) {
@@ -501,7 +501,7 @@ export function buildLoopPoles(R, track) {
   if (!geoms.length) return;
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9aa1b4, roughness: 1, metalness: 0 }); // matte toy concrete (like pillars)
+  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete (like pillars)
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false;
   mesh.castShadow = true;

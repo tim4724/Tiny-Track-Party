@@ -24,7 +24,7 @@ export function buildEnvironment(scene) {
   // -1 so it always paints first and everything draws over it.
   {
     const R = 420;
-    const skyGeo = new THREE.SphereGeometry(R, 24, 12);
+    const skyGeo = new THREE.SphereGeometry(R, 16, 10); // backdrop sphere: fewer segments, no visible faceting on the smooth gradient
     const sp = skyGeo.attributes.position;
     const skyCol = new Float32Array(sp.count * 3);
     const top = new THREE.Color(0x59a7e8).convertSRGBToLinear(); // zenith
@@ -42,6 +42,7 @@ export function buildEnvironment(scene) {
       vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false
     }));
     sky.renderOrder = -1;
+    sky.frustumCulled = false; // radius-420 BackSide dome centred on origin: every camera sits inside it, so the cull always passes — skip the per-cell test
     scene.add(sky);
   }
 
@@ -70,7 +71,7 @@ export function buildEnvironment(scene) {
   // depth for the diorama without competing with it. Built once; never
   // disposed (they're track-independent, like the ground plane).
   {
-    const hillProto = new THREE.SphereGeometry(1, 10, 6);
+    const hillProto = new THREE.SphereGeometry(1, 8, 5); // far, fog-soft, non-uniformly squashed — faceting invisible at this resolution
     hillProto.deleteAttribute('uv');
     const geoms = [];
     const hc = new THREE.Color();
@@ -91,7 +92,7 @@ export function buildEnvironment(scene) {
     hillProto.dispose();
     const hills = new THREE.Mesh(
       mergeGeometries(geoms, false),
-      new THREE.MeshStandardMaterial({ vertexColors: true })
+      new THREE.MeshLambertMaterial({ vertexColors: true }) // matte fog-soft domes — Lambert skips the unused PBR specular/GGX path
     );
     for (const g of geoms) g.dispose(); // copied into the merge
     scene.add(hills);
@@ -108,8 +109,11 @@ export function buildEnvironment(scene) {
   // Shadow camera bounds/placement are set per-track in setTrack (needs the track
   // extent); _loop refreshes the map once per frame (see renderer.shadowMap.autoUpdate
   // above). 4096² keeps the per-texel size small even on the biggest track's fitted
-  // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead
-  // of shimmering as the car moves — coarse texels were the source of the flicker.
+  // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead of
+  // shimmering as the car moves — coarse texels are the source of the flicker. (2048² was
+  // tried for weak hardware, 2026-06-17 — 4× less shadow-map fill + VRAM — but it brought
+  // back exactly that edge shimmer on moving cars, so it's reverted. The weak-HW render
+  // win lives in the matte→MeshLambert material swaps instead; do NOT re-lower this map.)
   // Under headless automation (E2E) the scene renders through SwiftShader (software
   // GL). The sun's shadow pass re-rasterises the WHOLE track's geometry every frame
   // (it can't frustum-cull like the chase cam does) — the single biggest per-frame
@@ -134,7 +138,7 @@ export function buildEnvironment(scene) {
     new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
     // Lawn texture (mowing stripes) instead of a flat colour — the colour
     // lives in the texture, so the material tint stays white.
-    new THREE.MeshStandardMaterial({ map: lawn })
+    new THREE.MeshLambertMaterial({ map: lawn }) // huge full-screen matte fill, never receives shadows → Lambert drops the PBR per-fragment cost over the biggest surface
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1.0;
