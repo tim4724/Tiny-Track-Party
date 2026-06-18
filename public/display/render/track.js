@@ -30,9 +30,9 @@ export function buildRibbonRoad(R, track, collide) {
   const ch = 0.20;        // kerb height — low; a kerb, not a wall
   const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
   const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
-  const lw = Math.min(0.10, defHalf * 0.5 - gap);// painted white edge-line width
-  const stripeLen = 0.32;                        // kerb red/white band length (world units)
-  const dashW = 0.09;                            // painted centre-dash width
+  const lw = Math.min(0.20, defHalf * 0.5 - gap);// painted white edge-line width
+  const stripeLen = 2.0;                         // kerb red/white band length (world units)
+  const dashW = 0.18;                            // painted centre-dash width
   // Centre dash cadence: at top speed (~9 u/s) a 1.8u period streams past at
   // ~5 cycles/s — a readable flow, not a strobe. The dash is the near-field
   // speedometer: right at the chase cam's focus, its flow rate IS the car's
@@ -40,13 +40,23 @@ export function buildRibbonRoad(R, track, collide) {
   // close to the car streams past). Starting values.
   const DASH_PERIOD = 1.8, DASH_FRAC = 0.4;      // ~0.72u dash / ~1.08u gap
 
-  // Resample the centreline at a uniform, fine arclength step. The raw samples are
-  // spaced unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a
-  // stripe — so colouring whole between-sample segments aliased the bands into uneven
-  // blobs (a stripe shorter than a segment simply can't be drawn). A uniform step a
-  // few× finer than a stripe renders every band cleanly and also smooths the surface.
-  const ds = Math.min(0.5, Math.max(0.06, stripeLen / 3));
-  const N = Math.min(4000, Math.max(8, Math.round(cl.length / ds)));
+  // Resample the centreline at a uniform, fine arclength step. Raw samples are spaced
+  // unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a painted
+  // band — so colouring whole between-sample segments aliases the bands into uneven
+  // blobs. Step a few× finer than the SMALLEST band so every band renders cleanly. The
+  // kerb stripe is now long (stripeLen), so the centre dash's on-length is the finest
+  // feature; driving ds off it keeps the dash from quantising to ragged ring counts.
+  const minBand = Math.min(stripeLen, DASH_PERIOD * DASH_FRAC);
+  let N = Math.min(4000, Math.max(8, Math.round(cl.length / Math.max(0.06, minBand / 3))));
+  // The centre dash needs every segment the SAME length, so snap N to a whole number of
+  // dash cycles: each cycle is then an exact integer ring run (dashOn below) and the
+  // start/finish seam lands on a cycle boundary. (The kerb bands snap themselves — see
+  // kerbDist.) ringsPerCycle/dashRingsOn are reused by dashOn further down.
+  const dashCycles = Math.max(2, Math.round(cl.length / DASH_PERIOD));
+  let ringsPerCycle = Math.max(4, Math.round(N / dashCycles));
+  if (ringsPerCycle * dashCycles > 4000) ringsPerCycle = Math.max(4, Math.floor(4000 / dashCycles));
+  N = ringsPerCycle * dashCycles;
+  const dashRingsOn = Math.min(ringsPerCycle - 1, Math.max(1, Math.round(ringsPerCycle * DASH_FRAC)));
   const frames = [];
   for (let i = 0; i < N; i++) frames.push(cl.sampleAt((i / N) * cl.length));
 
@@ -203,11 +213,11 @@ export function buildRibbonRoad(R, track, collide) {
   const kerbL = kerbDist(-1), kerbR = kerbDist(1);
   const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
 
-  // Centre-dash banding by centreline arclength (the resample is uniform, so
-  // ring i sits at i/N of the lap). Snap the period so a WHOLE number of
-  // dash+gap cycles closes the loop — no half-dash at the start/finish seam.
-  const dashPeriod = cl.length / Math.max(2, Math.round(cl.length / DASH_PERIOD));
-  const dashOn = (i) => ((i / N) * cl.length) % dashPeriod < dashPeriod * DASH_FRAC;
+  // Centre dash: ring i is dash-on for the first dashRingsOn rings of each cycle. N is
+  // an exact multiple of the cycle count (see resample above), so every dash spans the
+  // same ring run — uniform dashes, clean seam — instead of quantising to ragged
+  // lengths against a coarse resample.
+  const dashOn = (i) => (i % ringsPerCycle) < dashRingsOn;
 
   // Bare-asphalt zone under each full-width launch strip (boost pad at a loop mouth):
   // blank the centre dash AND the white edge lines there so the teal pad reads as paint
