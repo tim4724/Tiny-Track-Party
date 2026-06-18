@@ -11,6 +11,7 @@ import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { wrapDelta } from './engine/util.js';
+import { setSteerExpo, getSteerExpo } from './engine/Game.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
@@ -1123,6 +1124,13 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { section: 'Solo drive' },
   { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
     options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },
+  { section: 'Driving feel' },
+  // Live: re-shapes the tilt→steer curve mid-race (no reload). 1 = linear scaling;
+  // higher = gentler near centre, sharper toward full lock. The engine reads it
+  // fresh each step, so it affects every car in the running race instantly.
+  { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
+    min: 0.6, max: 3, step: 0.05, value: getSteerExpo(), live: setSteerExpo,
+    format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - 1.8) < 1e-9 ? ' · default' : '') },
   { section: 'Track' },
   { key: 'track', label: 'Preselect', type: 'select',
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },

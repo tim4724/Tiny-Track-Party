@@ -28,7 +28,19 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
 const TURN_RATE = 1.2;    // rad/s at full tilt — calm
-const STEER_EXPO = 1.8;   // non-linear response: small tilt = gentle, full = full lock
+const STEER_EXPO = 1.8;   // default non-linear response: small tilt = gentle, full = full lock (1 = linear)
+// Live-tunable steering response exponent. Shared by every engine (so a value set
+// in the display debug panel survives race/lobby re-creation) and read fresh each
+// physics step, so dragging the slider re-shapes the curve mid-race. Defaults to
+// STEER_EXPO; setSteerExpo clamps to a sane band. Kept module-local + Node-pure
+// (no window) so the engine still imports cleanly under node:test.
+let _steerExpo = STEER_EXPO;
+export function setSteerExpo(v) {
+  const n = Number(v);
+  if (Number.isFinite(n)) _steerExpo = Math.max(0.5, Math.min(3, n));
+  return _steerExpo;
+}
+export function getSteerExpo() { return _steerExpo; }
 const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progress)
 const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
 const WALL_SPEED_FRAC = 0.5; // curb speed cap as a fraction of the car's own top speed
@@ -381,7 +393,7 @@ export class Game {
       // small tilts barely steer.
       const authority = 0.4 + 0.6 * Math.min(1, c.v / (c.vmax * 0.5));
       const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
-      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), STEER_EXPO);
+      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
       // Steered heading (relative to the road) for THIS step. It feeds the world facing
       // vector below and is then re-derived from the projection, so c.heading isn't
       // mutated until the end — the final c.heading is `fwd` re-expressed vs the new tangent.

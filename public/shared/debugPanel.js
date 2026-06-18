@@ -11,13 +11,19 @@
 //     type 'flag'   → checkbox, serialized as key=1 / absent
 //     type 'int'    → number input, absent when blank, clamped to min/max
 //     type 'select' → dropdown with a "default" blank choice, absent when blank
+//     type 'range'  → slider with a numeric readout; value: default, min/max/step,
+//           optional format(n)→label, optional live(n) called on every drag (and
+//           once at init with the prefilled value) so the control can tune a live
+//           value with NO reload. Serialized only when it differs from `value`, so
+//           the URL stays clean at the default and a reload still restores any set value.
 //     options: [{ value, label }] for selects
 //     bare: a select value to show when the param is present with NO value
 //           (e.g. ?solo ≡ ?solo=0) — without it a bare param would prefill as
 //           the blank "default" choice and Apply would silently drop it
 //
-// Dev aid only: no game state is read or written — the page's own param
-// parsing stays the single source of truth.
+// Mostly a dev aid over URL params (Apply reloads). The one exception is a
+// 'range' field's live(n) callback, which pushes its value straight into the page
+// at drag time — used for feel-tuning (e.g. the steering curve) without a reload.
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -88,6 +94,36 @@ export function initDebugPanel(schema, { title = 'Debug' } = {}) {
       select.addEventListener('input', refreshPreview);
       row.appendChild(select);
       read = () => select.value || null;
+    } else if (def.type === 'range') {
+      const step = def.step || 1;
+      const dec = (String(step).split('.')[1] || '').length; // decimals to match the step
+      const fmt = (n) => n.toFixed(dec);
+      const def0 = def.value != null ? def.value : (def.min || 0);
+      const label = (n) => (def.format ? def.format(n) : fmt(n));
+      const clamp = (n) => Math.max(def.min, Math.min(def.max, n));
+
+      const raw = current.get(def.key);
+      const val = clamp(raw != null && raw !== '' && Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : def0);
+
+      const wrap = el('div', 'dbg__range');
+      const input = el('input', 'dbg__slider');
+      input.type = 'range';
+      input.min = def.min; input.max = def.max; input.step = step;
+      input.value = String(val);
+      const out = el('output', 'dbg__readout', label(val));
+      input.addEventListener('input', () => {
+        const n = parseFloat(input.value);
+        out.textContent = label(n);
+        if (def.live) def.live(n);
+        refreshPreview();
+      });
+      wrap.appendChild(input);
+      wrap.appendChild(out);
+      row.appendChild(wrap);
+      // Push the prefilled value into the page once, so a value carried in by the
+      // URL takes effect at boot without the user having to touch the slider.
+      if (def.live) def.live(val);
+      read = () => (fmt(parseFloat(input.value)) === fmt(def0) ? null : fmt(parseFloat(input.value)));
     } else { // 'int'
       const input = el('input', 'field dbg__input');
       input.type = 'number';

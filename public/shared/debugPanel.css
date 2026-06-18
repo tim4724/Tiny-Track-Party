@@ -69,6 +69,16 @@
 }
 .dbg__check { width: 1.15rem; height: 1.15rem; accent-color: var(--brand); }
 
+/* Range row: slider fills the space, a fixed-width readout keeps the number from
+   shifting the layout as it changes. */
+.dbg__range { display: flex; align-items: center; gap: 0.55rem; flex: 1; min-width: 0; }
+.dbg__slider { flex: 1; min-width: 0; accent-color: var(--brand); cursor: pointer; }
+.dbg__readout {
+  flex: none; min-width: 5.5rem; text-align: right;
+  color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
 .dbg__url {
   display: block;
   margin-top: 0.45rem; padding: 0.35rem 0.5rem;
