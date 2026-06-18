@@ -383,10 +383,11 @@ export class SceneRenderer {
   resetCones() { this.props.resetCones(); }
 
   _initThree() {
-    // antialias:false — the whole scene renders through the offscreen MSAA target
-    // (_rtScene, samples = _msaaSamples); the canvas framebuffer only ever receives
-    // the full-screen present quad, so canvas AA would be a no-op (and an unused
-    // multisample backbuffer).
+    // antialias:false — the whole scene renders through the offscreen target (_rtScene,
+    // optional MSAA via samples = _msaaSamples, off by default); edge AA comes from the
+    // FXAA pass folded into _present. The canvas framebuffer only ever receives the
+    // full-screen present quad, so canvas AA would be a no-op (and an unused multisample
+    // backbuffer).
     const r = new THREE.WebGLRenderer({ antialias: false });
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
     r.setSize(window.innerWidth, window.innerHeight);
@@ -499,22 +500,64 @@ export class SceneRenderer {
     const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
     // Present: sample the (linear) scene, GRADE — exposure (brightness) → linear→sRGB
-    // encode — and write straight to the canvas. toneMapped=false so Three doesn't
-    // touch our output.
+    // encode — then run FXAA on the graded image and write straight to the canvas.
+    // toneMapped=false so Three doesn't touch our output.
+    //
+    // FXAA (in lieu of MSAA): the scene is flat-shaded toy geometry painted with
+    // VERTEX COLOURS (the swept road ribbon's white edge lines + red/white kerb), so the
+    // white↔asphalt boundary is a hard geometric edge that crawls and jags when seen
+    // near edge-on — and MSAA is off by default (it was the single biggest GPU cost,
+    // ~5.4ms/frame at 4×). We already pay for this full-screen present pass, so we fold a
+    // single-pass FXAA into it: ~9 extra taps (~0.4ms) vs MSAA's ~5.4ms, ~10× cheaper.
+    // FXAA is a perceptual (gamma-space) edge filter, so it runs on `graded()` — the
+    // exposed, sRGB-encoded colour that actually reaches the panel — not the linear
+    // buffer. HUD labels are DOM overlays (not in the canvas), so text stays crisp.
     this._matPresent = new THREE.ShaderMaterial({
       toneMapped: false,
-      uniforms: { tScene: { value: null }, exposure: { value: DEF_EXPOSURE } },
+      uniforms: {
+        tScene: { value: null },
+        exposure: { value: DEF_EXPOSURE },
+        texel: { value: new THREE.Vector2(1 / W, 1 / H) }, // 1/drawing-buffer px, kept in sync by _resizePost
+      },
       vertexShader: VERT,
       fragmentShader: `
-        uniform sampler2D tScene; uniform float exposure;
+        uniform sampler2D tScene; uniform float exposure; uniform vec2 texel;
         varying vec2 vUv;
         vec3 toSRGB(vec3 c){
           c = max(c, 0.0);
           return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
         }
+        // The displayed colour at a uv: exposure + linear→sRGB, clamped. FXAA blends
+        // these, so every tap is the real on-panel colour (correct sRGB, not an approx).
+        vec3 graded(vec2 uv){ return clamp(toSRGB(texture2D(tScene, uv).rgb * exposure), 0.0, 1.0); }
+
+        // Compact FXAA (Timothy Lottes' console variant). Detects the local edge from a
+        // 5-tap luma cross, then blends along it; falls back to the unfiltered centre on
+        // flat areas, so interiors stay sharp and only contrast edges soften.
+        const float SPAN_MAX = 8.0, REDUCE_MUL = 1.0 / 8.0, REDUCE_MIN = 1.0 / 128.0;
+        const vec3 LUMA = vec3(0.299, 0.587, 0.114);
         void main(){
-          vec3 col = toSRGB(texture2D(tScene, vUv).rgb * exposure);
-          gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+          vec3 mC = graded(vUv);
+          vec3 nw = graded(vUv + vec2(-1.0, -1.0) * texel);
+          vec3 ne = graded(vUv + vec2( 1.0, -1.0) * texel);
+          vec3 sw = graded(vUv + vec2(-1.0,  1.0) * texel);
+          vec3 se = graded(vUv + vec2( 1.0,  1.0) * texel);
+          float lM = dot(mC, LUMA);
+          float lNW = dot(nw, LUMA), lNE = dot(ne, LUMA), lSW = dot(sw, LUMA), lSE = dot(se, LUMA);
+          float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+          float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+
+          vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+          float reduce = max((lNW + lNE + lSW + lSE) * 0.25 * REDUCE_MUL, REDUCE_MIN);
+          float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+          dir = clamp(dir * rcp, -SPAN_MAX, SPAN_MAX) * texel;
+
+          vec3 rgbA = 0.5 * (graded(vUv + dir * (1.0 / 3.0 - 0.5)) + graded(vUv + dir * (2.0 / 3.0 - 0.5)));
+          vec3 rgbB = rgbA * 0.5 + 0.25 * (graded(vUv + dir * -0.5) + graded(vUv + dir * 0.5));
+          float lB = dot(rgbB, LUMA);
+          // rgbB samples the wider span; if it overshoots the local luma range it has
+          // strayed off the edge, so use the safer narrow blend rgbA.
+          gl_FragColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);
         }`
     });
 
@@ -528,6 +571,7 @@ export class SceneRenderer {
     if (!this._rtScene) return;
     const { w, h } = this._rtDims();
     this._rtScene.setSize(w, h);
+    this._matPresent.uniforms.texel.value.set(1 / w, 1 / h); // FXAA samples in drawing-buffer texels
   }
 
   // Grade _rtScene (exposure + linear→sRGB) straight to the canvas (target null).
