@@ -1063,6 +1063,13 @@ export class SceneRenderer {
       .map((n) => car.getObjectByName(n)).filter(Boolean);
     const body = wheels.length ? wheels[0].parent : car;
     for (const w of wheels) car.attach(w);
+    // Some models (Bolt, Rumble) expose a cross-axle — the rod between the wheels.
+    // In the source GLB it was welded into the body mesh, so it tilted with the
+    // leaning/diving body (wrong: an axle is unsprung, it rides with the wheels).
+    // scripts/extract-rod.js split it into its own `axle` node; reparent it off
+    // the body too so it stays flat with the wheels. Models without one no-op.
+    const axle = car.getObjectByName('axle');
+    if (axle) car.attach(axle);
     const bodyBaseQuat = body.quaternion.clone();
     const frontWheels = ['wheel-fl', 'wheel-fr'].map((n) => car.getObjectByName(n)).filter(Boolean);
     const backWheels = ['wheel-bl', 'wheel-br'].map((n) => car.getObjectByName(n)).filter(Boolean);
