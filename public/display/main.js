@@ -1114,7 +1114,13 @@ window.__sceneReady = scenePromise; // awaited by E2E before starting a race (st
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
 // through its normal boot path above. Lazy import: dev aid, not boot-critical.
-import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
+import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
+  // Capture the engine default ONCE, before any URL ?steerExpo= value is applied
+  // (the panel's range field calls live() at init). Used for both the slider's
+  // default and the "· default" readout marker — reading it live inside format()
+  // would wrongly equal the dragged value.
+  const steerDefault = getSteerExpo();
+  return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
     options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
@@ -1129,8 +1135,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   // higher = gentler near centre, sharper toward full lock. The engine reads it
   // fresh each step, so it affects every car in the running race instantly.
   { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
-    min: 0.6, max: 3, step: 0.05, value: getSteerExpo(), live: setSteerExpo,
-    format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - 1.8) < 1e-9 ? ' · default' : '') },
+    min: 0.6, max: 3, step: 0.05, value: steerDefault, live: setSteerExpo,
+    format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
   { section: 'Track' },
   { key: 'track', label: 'Preselect', type: 'select',
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
@@ -1139,4 +1145,5 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => initDebugPanel([
   { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
     options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
   { key: 'bbox', label: 'Collision boxes', type: 'flag' },
-], { title: 'Display' }));
+  ], { title: 'Display' });
+});

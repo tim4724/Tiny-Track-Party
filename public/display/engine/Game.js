@@ -28,7 +28,7 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
 const TURN_RATE = 1.2;    // rad/s at full tilt — calm
-const STEER_EXPO = 1.8;   // default non-linear response: small tilt = gentle, full = full lock (1 = linear)
+const STEER_EXPO = 1.25;  // default response: near-linear with a slightly softened centre (1 = linear); tuned on hardware
 // Live-tunable steering response exponent. Shared by every engine (so a value set
 // in the display debug panel survives race/lobby re-creation) and read fresh each
 // physics step, so dragging the slider re-shapes the curve mid-race. Defaults to
