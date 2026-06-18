@@ -10,13 +10,20 @@
 // that page in headless Chromium at a 16:9 viewport, lets the race develop for a
 // beat so the cars spread along the track, and screenshots the canvas to a PNG.
 //
-//   node scripts/capture-artwork.js                 # → artwork/splitscreen-4p.png (1920x1080)
+//   node scripts/capture-artwork.js                 # → artwork/splitscreen-4p.png (1920x1080, 2x SSAA)
 //   node scripts/capture-artwork.js --track grand   # use the Grand Tour layout
 //   node scripts/capture-artwork.js --width 2560 --height 1440 --wait 4000
+//   node scripts/capture-artwork.js --ss 1          # no supersampling (1:1 native render)
 //   node scripts/capture-artwork.js --out artwork/hero.png
 //
+// Edges are antialiased by supersampling: the page renders at SS× the target
+// (deviceScaleFactor=SS, so the WebGL buffer AND the HUD draw at SS× — the CSS
+// layout viewport stays WIDTHxHEIGHT, so composition is unchanged), then the shot
+// is downscaled back to WIDTHxHEIGHT in-browser. SS=2 means a 4K render → 1080p.
+// (The renderer caps its pixel ratio at 2, so SS>2 won't sharpen the 3D further.)
+//
 // Flags (all optional): --out, --width, --height, --players, --track, --scenario,
-// --wait (ms to let the race run before the shot), --port, --headed.
+// --ss (supersample factor, default 2), --wait (ms before the shot), --port, --headed.
 
 const http = require('http');
 const path = require('path');
@@ -46,6 +53,7 @@ const PLAYERS = parseInt(args.players, 10) || 4;       // 4 → 2x2 grid
 const TRACK = args.track || 'oval';
 const SCENARIO = args.scenario || 'racing';
 const WAIT_MS = parseInt(args.wait, 10) || 4000;       // let cars spread off the grid
+const SS = Math.max(1, parseInt(args.ss, 10) || 2);    // supersample factor (2 → 4K render → 1080p)
 const PORT = parseInt(args.port, 10) || 4319;          // off the default 4000 dev port
 const OUT = path.resolve(ROOT, args.out || 'artwork/splitscreen-4p.png');
 
@@ -84,8 +92,8 @@ async function main() {
 
     browser = await chromium.launch({ headless: !args.headed });
     const page = await browser.newPage({
-      viewport: { width: WIDTH, height: HEIGHT },
-      deviceScaleFactor: 1, // canvas drawing buffer == WIDTHxHEIGHT (exact 16:9 PNG)
+      viewport: { width: WIDTH, height: HEIGHT }, // CSS layout px — fixes composition
+      deviceScaleFactor: SS, // render (WebGL + HUD) at SS× for supersampling; shot is SS·WIDTH × SS·HEIGHT
     });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
@@ -110,8 +118,32 @@ async function main() {
     // than sitting stacked on the start grid.
     await page.waitForTimeout(WAIT_MS);
 
-    await page.screenshot({ path: OUT });
-    console.log(`Captured ${PLAYERS}-player ${WIDTH}x${HEIGHT} split-screen → ${path.relative(ROOT, OUT)}`);
+    if (SS === 1) {
+      await page.screenshot({ path: OUT }); // native render, no downscale
+    } else {
+      // Shot is SS·WIDTH × SS·HEIGHT; downscale to WIDTHxHEIGHT in-browser with a
+      // high-quality filter (createImageBitmap resizeQuality) for clean edges.
+      const bigPng = await page.screenshot();
+      const downscaled = await page.evaluate(async ({ b64, w, h }) => {
+        // Decode base64 → bytes by hand (a fetch of a data: URL is blocked by the
+        // page's connect-src CSP), then build the source bitmap from a Blob.
+        const raw = atob(b64);
+        const src = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) src[i] = raw.charCodeAt(i);
+        const blob = new Blob([src], { type: 'image/png' });
+        const bmp = await createImageBitmap(blob, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+        const canvas = new OffscreenCanvas(w, h);
+        canvas.getContext('2d').drawImage(bmp, 0, 0);
+        const outBlob = await canvas.convertToBlob({ type: 'image/png' });
+        const bytes = new Uint8Array(await outBlob.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin);
+      }, { b64: bigPng.toString('base64'), w: WIDTH, h: HEIGHT });
+      fs.writeFileSync(OUT, Buffer.from(downscaled, 'base64'));
+    }
+    const note = SS === 1 ? '' : ` (${SS}x SSAA from ${WIDTH * SS}x${HEIGHT * SS})`;
+    console.log(`Captured ${PLAYERS}-player ${WIDTH}x${HEIGHT} split-screen${note} → ${path.relative(ROOT, OUT)}`);
   } finally {
     if (browser) await browser.close();
     killServer();
