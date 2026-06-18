@@ -123,7 +123,8 @@ export function initDebugPanel(schema, { title = 'Debug' } = {}) {
       // Push the prefilled value into the page once, so a value carried in by the
       // URL takes effect at boot without the user having to touch the slider.
       if (def.live) def.live(val);
-      read = () => (fmt(parseFloat(input.value)) === fmt(def0) ? null : fmt(parseFloat(input.value)));
+      // Serialize only when off the default, so the URL stays clean at `value`.
+      read = () => { const s = fmt(parseFloat(input.value)); return s === fmt(def0) ? null : s; };
     } else { // 'int'
       const input = el('input', 'field dbg__input');
       input.type = 'number';
