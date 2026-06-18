@@ -186,6 +186,29 @@ function makeUnderShadowTexture() {
   return tex;
 }
 
+// Soft round contact-shadow blob for FLOATING props (item boxes). A radial white
+// falloff on transparent, tinted dark by the material `color`. The real sun shadow
+// of a hovering box lands raked off to one side (the key light is high+angled), so
+// it reads as a detached smudge that hides where the box actually sits on the track.
+// This fake blob is laid flat on the road DIRECTLY beneath the box instead — a
+// dead-centre position cue — and the box stops casting the raked sun shadow. Static
+// (placed once per track), so it also drops a caster from the per-frame shadow pass.
+function makeBlobShadowTexture() {
+  const s = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.82)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Cloud sprite: a few overlapping blurred white blobs — a soft toy cumulus.
 // Every blob keeps blur-tail clearance (~2× the blur radius) from the canvas
 // edges: a tail that crosses the edge gets sliced into a hard flat line — the
@@ -393,6 +416,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeCloudTexture, makeLawnTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

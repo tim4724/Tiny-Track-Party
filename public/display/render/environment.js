@@ -105,27 +105,21 @@ export function buildEnvironment(scene) {
   // keeps shadowed sides from going black.
   scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
   const key = new THREE.DirectionalLight(0xfff1d0, DEF_KEY_LIGHT);
-  key.position.set(6, 12, 4); // high and slightly to one side → raking gloss + sun shadow
-  // Shadow camera bounds/placement are set per-track in setTrack (needs the track
-  // extent); _loop refreshes the map once per frame (see renderer.shadowMap.autoUpdate
-  // above). 4096² keeps the per-texel size small even on the biggest track's fitted
-  // frustum (~0.03 world units/texel), so the cast shadow's edge stays crisp instead of
-  // shimmering as the car moves — coarse texels are the source of the flicker. (2048² was
-  // tried for weak hardware, 2026-06-17 — 4× less shadow-map fill + VRAM — but it brought
-  // back exactly that edge shimmer on moving cars, so it's reverted. The weak-HW render
-  // win lives in the matte→MeshLambert material swaps instead; do NOT re-lower this map.)
-  // Under headless automation (E2E) the scene renders through SwiftShader (software
-  // GL). The sun's shadow pass re-rasterises the WHOLE track's geometry every frame
-  // (it can't frustum-cull like the chase cam does) — the single biggest per-frame
-  // cost there — which on a busy CI box stalls frames for seconds and starves the
-  // wall-clock race countdown so `racing` flips long after the test's budget. No test
-  // inspects shadows, so skip the pass entirely under automation; real users (and the
-  // manual gallery preview) keep the tuned 4096² map. See CLAUDE.md / display-perf memory.
+  key.position.set(2, 12, 1.5); // near-overhead, slightly raked → gloss highlight + a near-straight-down track shadow (MUST match `dir` in SceneRenderer.setTrack)
+  // The shadow map is BAKED ONCE per track and frozen (see SceneRenderer.setTrack/_loop):
+  // cars/props no longer cast it (they carry centred ground blobs), so the ONLY caster is
+  // the fixed track geometry. 2048² is plenty now — the old 4096² existed only to keep
+  // MOVING car-shadow edges from shimmering on coarse texels, and with nothing dynamic in
+  // the map there's nothing left to shimmer. Halving the side is a 4× VRAM + per-fragment
+  // PCF-sampling win on weak hardware (the per-frame whole-track re-raster is already gone).
+  // Under headless automation (E2E, SwiftShader software GL) skip the caster entirely: the
+  // one-time bake of the whole track is still a heavy frame at load that can stall the
+  // wall-clock race countdown, and no test inspects shadows. See CLAUDE.md / display-perf.
   const automation = (typeof navigator !== 'undefined' && navigator.webdriver);
   key.castShadow = !automation;
-  key.shadow.mapSize.set(4096, 4096);
+  key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
-  key.shadow.normalBias = 0.05; // curved road → bias along the normal kills acne
+  key.shadow.normalBias = 0.06; // curved road → bias along the normal kills acne (a hair more for the coarser 2048² texel)
   scene.add(key);
   scene.add(key.target);
 

@@ -110,20 +110,23 @@ const BBOX_HEIGHT_BASE = 24;     // … + this base — high enough to look DOWN
 //     last contact point to its current one (end-to-end, no overlap), so it
 //     forms one continuous ribbon along the exact wheel path at ANY speed (the
 //     engine reports speed normalised, so we measure real travel, not a guess).
-//   • Underbody shading — ONE soft dark rounded-rect under the chassis, inset
-//     to stay INSIDE the car's silhouette. The raked sun shadow lands offset
-//     (toward the camera), so without it the underside and the tyre→road
-//     junctions are fully lit and the eye reads the gap as hover height. The
-//     inset is the load-bearing detail: a full-car OVAL whose edge was visible
-//     on open road read as a detached "second shadow", and per-wheel CIRCLES
-//     read as polka-dot feet around each tyre (both tried, both rejected) —
-//     keep the edge hidden under the body and it reads as occlusion instead
-//     (the same trick as the kerb-foot AO baked into the road ribbon).
-const UNDER_AO_OPACITY = 0.35;     // underbody shading strength — starting value
-const UNDER_AO_COLOR = 0x1c1a18;   // near-black warm, same family as the skid scuffs
+//   • Ground shadow — ONE soft dark rounded-rect under the chassis. This is the
+//     car's WHOLE shadow now: cars don't cast the real sun shadow (the directional
+//     map is baked once per track and frozen — a moving car can't be in it), so this
+//     blob stands in for it. It's a child of the road-aligned GROUP (not the leaning
+//     body), so it lies flat on whatever surface the car drives — flat road, bank,
+//     hill, even an inverted loop deck — and tracks the car for free. Scaled a bit
+//     PAST the footprint (SHADOW_OVERSCAN) so a soft penumbra reads beyond the wheels
+//     like a real drop shadow; the texture's feather still lives inside the quad so
+//     the edge stays soft, never a hard shape. The blob is centred under the car; the
+//     sun was steepened toward vertical (see setTrack `dir`) so the baked TRACK shadows
+//     also drop nearly straight down, keeping the two consistent.
+const UNDER_AO_OPACITY = 0.8;      // car ground-shadow strength (it's the car's whole shadow now — must read on bright asphalt)
+const UNDER_AO_COLOR = 0x171513;   // near-black warm, a touch deeper than the skid scuffs so the blob carries as a shadow
+const SHADOW_OVERSCAN = 1.45;      // blob scale past the car footprint → soft penumbra beyond the wheels
 // Load shift: the harder the body pitches (brake dive / throttle squat), the closer
-// the chassis presses to the road — darken the underbody shading with |pitch| so
-// braking visibly plants the car. Added on top of UNDER_AO_OPACITY. Starting value.
+// the chassis presses to the road — darken the shadow with |pitch| so braking visibly
+// plants the car. Added on top of UNDER_AO_OPACITY. Starting value.
 const AO_LOAD_GAIN = 0.10;
 // NOTE: body "road feel" vibration was tried and removed — a speed-scaled
 // suspension murmur (twin sines, ±0.005 then ±0.0017) plus a kerb-scrub shudder.
@@ -393,15 +396,17 @@ export class SceneRenderer {
     r.setSize(window.innerWidth, window.innerHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.autoClear = false; // we clear once per frame, then render N viewports
-    // Real shadow map: cars cast a soft shadow the road RECEIVES, so it wraps over
-    // bumps/hills with no clipping (a flat painted blob can't sit on curved ground).
+    // Real shadow map for the STATIC TRACK only: the fixed track geometry casts a soft
+    // shadow the road RECEIVES, so it wraps over bumps/hills/overpasses with no clipping.
+    // It's baked ONCE per track (setTrack) and frozen — moving cars/props don't cast (they
+    // carry ground blobs), so nothing needs a per-frame rebuild.
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap; // soft PCF; the Soft variant is deprecated in our three build
-    // Rebuild the shadow map at most ONCE per frame, not once per split-screen cell:
-    // _loop raises renderer.shadowMap.needsUpdate before the first cell renders and that
-    // render consumes it. The gate (WebGLShadowMap) reads renderer.shadowMap — NOT
-    // light.shadow — so the flag has to live here, else autoUpdate stays on and every
-    // one of the N cameras re-rasterises the whole map (4× the shadow cost at 4 players).
+    // autoUpdate OFF + needsUpdate raised exactly once (in setTrack): the gate
+    // (WebGLShadowMap) reads renderer.shadowMap — NOT light.shadow — so with autoUpdate
+    // off and needsUpdate cleared after the bake, the whole-track shadow pass never runs
+    // again. (Previously _loop raised needsUpdate every frame to capture moving cars; now
+    // that cars don't cast, that per-frame whole-track re-raster is gone entirely.)
     r.shadowMap.autoUpdate = false;
     this.container.appendChild(r.domElement);
     this.renderer = r;
@@ -971,16 +976,19 @@ export class SceneRenderer {
     // instead of reading as a flat plane (tighter than the whole-track overview fog above).
     this._bbFog = new THREE.Fog(0x8ecae6, 55, 55 + Math.max(110, Math.max(halfX, halfZ) * 1.2));
 
-    // Aim + size the sun's shadow camera to cover the whole track. The light keeps its
-    // (6,12,4) DIRECTION (so gloss/highlights are unchanged); we move it far out along
-    // that direction and FIT the orthographic frustum to the track's bounding box as
-    // projected into the light's view. A symmetric ±max(size)/2 box (the old approach)
-    // under-covers a large or L-shaped track seen from the raked angle: its diagonal
-    // corners fall OUTSIDE the frustum, so cars there cast no shadow. On Riverside that
-    // dropped the shadow near the start/finish and on a couple of the L's arms — the
-    // shadow "blinked" as you drove. Fitting the projected AABB guarantees full coverage.
+    // Aim + size the sun's shadow camera to cover the whole track. The light direction
+    // is near-VERTICAL (2,12,1.5) — only slightly raked: cars/props no longer cast the
+    // sun shadow (they carry centred ground blobs), so the only thing this direction
+    // shadows is the static track geometry, and a near-overhead sun drops those track
+    // shadows nearly straight DOWN — consistent with the centred blobs — while the small
+    // residual rake keeps a little gloss directionality on the plastic. We move the light
+    // far out along this direction and FIT the orthographic frustum to the track's
+    // bounding box as projected into the light's view (a symmetric box under-covers a
+    // large/L-shaped track from an angle — diagonal corners fall outside and the shadow
+    // "blinks"; fitting the projected AABB guarantees full coverage). MUST stay in sync
+    // with the light's authored position in environment.js (buildEnvironment).
     const k = this._key;
-    const dir = new THREE.Vector3(6, 12, 4).normalize();
+    const dir = new THREE.Vector3(2, 12, 1.5).normalize();
     const diag = Math.hypot(size.x, size.y, size.z);
     k.position.copy(this._trackCenter).addScaledVector(dir, diag + 20); // far enough that near > 0
     k.target.position.copy(this._trackCenter); k.target.updateMatrixWorld();
@@ -1005,9 +1013,15 @@ export class SceneRenderer {
     sc.left = minX - M; sc.right = maxX + M; sc.bottom = minY - M; sc.top = maxY + M;
     sc.near = Math.max(0.5, -maxZ - M); sc.far = -minZ + M;
     sc.updateProjectionMatrix();
-    k.shadow.needsUpdate = true; // rebuild the map for the new track
 
     this.props.setTrack(track);
+    // Bake the sun shadow ONCE for this static track. The track geometry above is the
+    // only shadow caster (cars/boxes/bananas/cones cast no real shadow — they carry
+    // ground blobs instead), and both it and the light are fixed, so one render here is
+    // enough; _loop never refreshes it again (see the note there). Raising the renderer-
+    // level flag (the gate ignores light.shadow) makes the NEXT frame render the map and
+    // then auto-clear it back to frozen. A track change re-runs setTrack → re-bakes.
+    this.renderer.shadowMap.needsUpdate = true;
   }
 
   // Rear-plate placement for a model (cached per model): the rear-panel Z, the
@@ -1097,7 +1111,12 @@ export class SceneRenderer {
     // vintage racer) are modelled facing the other way, so add their per-model
     // yaw fix or they'd drive backwards.
     car.rotation.y = Math.PI + (CAR_MODEL_YAW[carIndex % CAR_MODELS.length] || 0);
-    car.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // sun shadow onto the road
+    // Cars do NOT cast the real sun shadow: the directional map is baked once per track
+    // (frozen — see setTrack/_loop) and a moving car can't be in it. Each car instead
+    // carries a soft ground blob (the `ao` plane below) that follows it and sits flat on
+    // whatever surface it drives — flat road, bank, hill, even a loop deck — because the
+    // blob is parented to the road-aligned group, not the leaning body.
+    car.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     group.add(car);
 
     // In the GLB the 4 wheels are children of the body node, so rolling the body
@@ -1242,19 +1261,19 @@ export class SceneRenderer {
     }
     const pitchSign = (axisV.setFromMatrixColumn(body.matrixWorld, 0).x >= 0) ? 1 : -1;
 
-    // UNDERBODY SHADING — one soft dark rounded-rect under the chassis (see the
-    // cue notes up top). A child of the GROUP, which rides the road plane, so it
-    // lies flat on the asphalt beneath the (leaning/pitching) body. Stretched to
-    // the model's footprint: the texture's feather lives INSIDE the quad, so the
-    // dark core stays within the silhouette and the edge is never visible as a
-    // shape on open road — the rule that keeps it reading as occlusion.
-    // Material is a per-car clone: its opacity tracks body pitch (the load-shift
+    // GROUND SHADOW — one soft dark rounded-rect under the chassis (see the cue notes
+    // up top). This is the car's entire shadow: cars no longer cast the real sun shadow
+    // (the directional map is baked once per track and frozen), so this blob replaces it.
+    // A child of the road-aligned GROUP (not the leaning/pitching body), so it lies flat
+    // on the surface the car drives — road, bank, hill, even a loop deck. Scaled PAST the
+    // footprint by SHADOW_OVERSCAN so a soft penumbra reads beyond the wheels like a drop
+    // shadow. Material is a per-car clone: its opacity tracks body pitch (the load-shift
     // cue in setCarPose), so cars can't share the template.
     const aoMat = this._aoMat.clone();
     const ao = new THREE.Mesh(this._aoGeo, aoMat);
     ao.rotation.x = -Math.PI / 2;
     ao.position.set((fb.min.x + fb.max.x) / 2, -RIDE_HEIGHT + 0.004, (fb.min.z + fb.max.z) / 2);
-    ao.scale.set(footW, footL, 1);
+    ao.scale.set(footW * SHADOW_OVERSCAN, footL * SHADOW_OVERSCAN, 1);
     group.add(ao);
 
     // BOOST wind streaks (see the constants up top): a small rig of axial-
@@ -1715,10 +1734,12 @@ export class SceneRenderer {
     r.setRenderTarget(rt);
     r.clear();
 
-    // Refresh the sun's shadow map ONCE this frame (renderer.shadowMap.autoUpdate is
-    // off); the first render() below consumes it and every split-screen cell reuses the
-    // same map. The flag lives on renderer.shadowMap — the gate ignores light.shadow.
-    if (this._key) r.shadowMap.needsUpdate = true;
+    // The sun's shadow map is NOT refreshed per frame: it's BAKED ONCE per track in
+    // setTrack (the only casters are the fixed track geometry — cars/props carry their
+    // own ground-blob shadows and no longer cast), then frozen and reused every frame
+    // and every split-screen cell. The light + track are both static, so re-rasterising
+    // them each frame was pure waste; this drops the whole-track shadow pass — the
+    // biggest per-frame GPU cost on weak hardware — to a single render at track load.
 
     const ids = this._order.filter((id) => this.cars.has(id));
     // Pick the fog profile for this frame by camera mode: the overview turntable (no cells)

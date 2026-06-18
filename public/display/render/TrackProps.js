@@ -3,7 +3,7 @@
 // the ?bbox collision-outline debug overlay. Owns the hazard scene group; the
 // engine stays authoritative — everything here is render-side juice.
 import * as THREE from 'three';
-import { makePadTexture, makePadStripTexture } from './textures.js';
+import { makePadTexture, makePadStripTexture, makeBlobShadowTexture } from './textures.js';
 
 // Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
 // a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
@@ -34,6 +34,13 @@ const BOX_FLOAT = 0.18;  // clearance of the box's base above the road (it hover
 // tune BOX_COLLECT_TIME up if it's too quick to read, BOX_COLLECT_GROW for punch.
 const BOX_COLLECT_TIME = 0.35; // seconds the grow+fade burst lasts
 const BOX_COLLECT_GROW = 1.1;  // extra scale at burst end (final ≈ 2.1× rest)
+// Static contact shadow painted on the road directly under each (floating) box —
+// the box's real sun shadow lands raked off to one side, so it can't be read as a
+// position cue (see makeBlobShadowTexture). Slightly wider than the box footprint
+// so it reads as a soft halo; tint/strength match the car underbody AO family.
+const BOX_SHADOW_R = 0.3;       // blob radius in world units (box footprint ≈ ±0.15)
+const BOX_SHADOW_COLOR = 0x1c1a18; // near-black warm, same as the car under-AO + skid scuffs
+const BOX_SHADOW_OPACITY = 0.4;
 
 export class TrackProps {
   constructor(scene, protos, bbox) {
@@ -41,6 +48,16 @@ export class TrackProps {
     this._bbox = bbox;        // ?bbox=1 debug-outline flag
     this._padTex = makePadTexture();
     this._padStripTex = makePadStripTexture(); // full-width rectangular launch strip (loop mouths)
+    // Shared (renderer-lifetime) bits for the item-box contact shadows: one circle
+    // geometry + one tinted soft-blob material reused by every box on every track.
+    // Boxes only toggle their shadow mesh's `.visible`, so the material never needs
+    // per-box cloning — nothing here is disposed on a track change.
+    this._boxShadowGeo = new THREE.CircleGeometry(BOX_SHADOW_R, 24);
+    this._boxShadowMat = new THREE.MeshBasicMaterial({
+      map: makeBlobShadowTexture(), color: BOX_SHADOW_COLOR,
+      transparent: true, opacity: BOX_SHADOW_OPACITY, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 // sit on the road, no z-fight (same as oil/pads)
+    });
     // Hazards/props live in their own group so they clear with the track without
     // touching the cars/decals; the debug group persists across tracks.
     this.hazardGroup = new THREE.Group();
@@ -54,6 +71,7 @@ export class TrackProps {
     this._centerline = null;
     this._roadHalf = 1.8;
     this._worldUp = new THREE.Vector3(0, 1, 0);
+    this._zAxis = new THREE.Vector3(0, 0, 1); // CircleGeometry faces +Z → reused to lay blobs in the road plane
     this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
     this._coneTmp2 = new THREE.Vector3();
     this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector
@@ -123,7 +141,9 @@ export class TrackProps {
         mesh = boxProto.clone(true);
         const bb = new THREE.Box3().setFromObject(mesh);
         mesh.scale.setScalar(BOX_H / Math.max(1e-3, bb.max.y - bb.min.y));
-        mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        // The box deliberately does NOT cast the sun shadow: it hovers, and the key
+        // light is raked, so that shadow lands off to one side and reads as a detached
+        // smudge. A static blob directly beneath it (below) is the position cue instead.
       } else {
         // No GLB: a plain box that OWNS its geometry. Not flagged `owned` — its cloned
         // material goes in `mats` and its geometry in `geom` (both disposed in the
@@ -146,11 +166,20 @@ export class TrackProps {
         for (const cm of cloned) mats.push(cm);
       });
       this.hazardGroup.add(mesh);
+      // Static contact shadow: a soft blob laid flat on the road DIRECTLY under the
+      // box's hover point (f.pos + lat, before BOX_FLOAT lifts the box). Shares the
+      // renderer-lifetime geo+material; only its `.visible` toggles (see sync), so
+      // it's free per frame. CircleGeometry faces +Z → rotate Z to the road normal.
+      const shadow = new THREE.Mesh(this._boxShadowGeo, this._boxShadowMat);
+      shadow.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.02);
+      shadow.quaternion.setFromUnitVectors(this._zAxis, up);
+      shadow.renderOrder = -1; // paint with the road decals, beneath the box
+      this.hazardGroup.add(shadow);
       // spin/bob/collect state (see _stepBoxes). homeY is the rest height, phase
       // desyncs the bob, baseS the rest scale to grow from / restore to, collectT
       // counts down the grow+fade pickup burst, available mirrors the snapshot.
       this._boxes.push({
-        mesh, mats, geom: boxProto ? null : mesh.geometry, homeY: mesh.position.y, baseS: mesh.scale.x,
+        mesh, mats, shadow, geom: boxProto ? null : mesh.geometry, homeY: mesh.position.y, baseS: mesh.scale.x,
         phase: this._boxes.length * 0.9, collectT: 0, available: true
       });
     }
@@ -235,8 +264,10 @@ export class TrackProps {
           b.mesh.scale.setScalar(b.baseS);
           for (const m of b.mats) m.opacity = 1;
           b.mesh.visible = true;
+          if (b.shadow) b.shadow.visible = true;
         } else {                             // collected: kick off the grow+fade burst
           b.collectT = BOX_COLLECT_TIME;
+          if (b.shadow) b.shadow.visible = false; // box is grabbed → drop its ground cue too
         }
       }
     }
@@ -253,7 +284,9 @@ export class TrackProps {
           m = proto.clone(true);
           const bb = new THREE.Box3().setFromObject(m);
           m.scale.setScalar(0.35 / Math.max(1e-3, bb.max.y - bb.min.y));
-          m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+          // Bananas cast no real sun shadow (the directional map is baked once per track
+          // and frozen — a banana dropped mid-race can't be in it); the ground blob below
+          // grounds it instead.
           // Anchor to the measured base, wherever the GLB pivot sits: re-measure
           // post-scale and remember the bottom offset so the model rests flush.
           m.userData.bottom = new THREE.Box3().setFromObject(m).min.y;
@@ -262,6 +295,14 @@ export class TrackProps {
           m.userData.owned = true;
           m.userData.bottom = -0.18; // sphere origin is its centre
         }
+        // Soft contact shadow on the road under the banana — shares the renderer-lifetime
+        // item-box blob geo+material (scaled down to the banana). Tracked on the mesh so
+        // it's detached when the banana is removed; never disposed (shared resources).
+        const sh = new THREE.Mesh(this._boxShadowGeo, this._boxShadowMat);
+        sh.scale.setScalar(0.7);
+        sh.renderOrder = -1;
+        m.userData.shadow = sh;
+        this.hazardGroup.add(sh);
         this.hazardGroup.add(m);
         this._bananaMeshes.set(b.id, m);
       }
@@ -272,10 +313,16 @@ export class TrackProps {
         const lift = 0.001 - (m.userData.bottom || 0);
         m.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, lift);
         m.quaternion.setFromUnitVectors(this._worldUp, up);
+        const sh = m.userData.shadow; // ground blob: flat on the road directly under the banana
+        if (sh) {
+          sh.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.02);
+          sh.quaternion.setFromUnitVectors(this._zAxis, up);
+        }
       }
     }
     for (const [id, m] of this._bananaMeshes) {
       if (!live.has(id)) {
+        if (m.userData.shadow) this.hazardGroup.remove(m.userData.shadow); // blob shares the shared geo/mat → just detach, never dispose
         if (m.userData.owned) { m.geometry.dispose(); m.material.dispose(); } // fallback mesh owns its geo/mat
         this.hazardGroup.remove(m); this._bananaMeshes.delete(id);
       }
@@ -347,7 +394,10 @@ export class TrackProps {
         cone.scale.setScalar(CONE_H / Math.max(1e-3, box.max.y - box.min.y));
         cone.position.copy(cf.pos).addScaledVector(cf.lateral, clat);
         cone.quaternion.setFromUnitVectors(Y, cup); // stand the cone up on the road normal
-        cone.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        // Cones cast no real sun shadow: the directional map is baked once per track and
+        // frozen, but cones MOVE when a passing car kicks them (see _stepCones) — a baked
+        // shadow would stick at the cone's home spot. They sit on the oil disc that already
+        // grounds them, so no blob is needed.
         this.hazardGroup.add(cone);
         // register it as a kickable prop (see _stepCones): rest pose + scratch state
         this._cones.push({
