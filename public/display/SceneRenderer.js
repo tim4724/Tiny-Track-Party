@@ -110,17 +110,18 @@ const BBOX_HEIGHT_BASE = 24;     // … + this base — high enough to look DOWN
 //     last contact point to its current one (end-to-end, no overlap), so it
 //     forms one continuous ribbon along the exact wheel path at ANY speed (the
 //     engine reports speed normalised, so we measure real travel, not a guess).
-//   • Ground shadow — ONE soft dark rounded-rect under the chassis. This is the
-//     car's WHOLE shadow now: cars don't cast the real sun shadow (the directional
-//     map is baked once per track and frozen — a moving car can't be in it), so this
-//     blob stands in for it. It's a child of the road-aligned GROUP (not the leaning
-//     body), so it lies flat on whatever surface the car drives — flat road, bank,
-//     hill, even an inverted loop deck — and tracks the car for free. Scaled a bit
-//     PAST the footprint (SHADOW_OVERSCAN) so a soft penumbra reads beyond the wheels
-//     like a real drop shadow; the texture's feather still lives inside the quad so
-//     the edge stays soft, never a hard shape. The blob is centred under the car; the
-//     sun was steepened toward vertical (see setTrack `dir`) so the baked TRACK shadows
-//     also drop nearly straight down, keeping the two consistent.
+//   • Ground shadow — a soft dark plane under the chassis carrying the car's real
+//     top-down SILHOUETTE (cabin + wheels), baked once per model (_bakeCarShadow);
+//     a soft oval is the fallback. This is the car's WHOLE shadow now: cars don't
+//     cast the real sun shadow (the directional map is baked once per track and
+//     frozen — a moving car can't be in it), so this stands in for it. It's a child
+//     of the road-aligned GROUP (not the leaning body), so it lies flat on whatever
+//     surface the car drives — flat road, bank, hill, even an inverted loop deck —
+//     and tracks the car for free. Scaled a bit PAST the footprint (SHADOW_OVERSCAN)
+//     so the silhouette's penumbra reads beyond the wheels like a real drop shadow.
+//     The shadow is centred under the car; the sun was steepened toward vertical (see
+//     setTrack `dir`) so the baked TRACK shadows also drop nearly straight down,
+//     keeping the two consistent.
 const UNDER_AO_OPACITY = 0.8;      // car ground-shadow strength (it's the car's whole shadow now — must read on bright asphalt)
 const UNDER_AO_COLOR = 0x171513;   // near-black warm, a touch deeper than the skid scuffs so the blob carries as a shadow
 const SHADOW_OVERSCAN = 1.45;      // blob scale past the car footprint → soft penumbra beyond the wheels
@@ -364,16 +365,89 @@ export class SceneRenderer {
       map: this._streakTex, color: STREAK_COLOR, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false
     });
-    // Underbody shading (see the cue notes up top): shared geometry/texture, but
-    // the MATERIAL is cloned per car in addCar — its opacity animates with body
-    // pitch (the load-shift cue), so cars can't share one. This one is the template.
+    // Car ground shadow (see the cue notes up top): shared geometry, but the MATERIAL is
+    // cloned per car in addCar — its opacity animates with body pitch (the load-shift cue),
+    // so cars can't share one. Its MAP is a per-MODEL baked top-down silhouette of the car
+    // (see _bakeCarShadow), cached in _carShadowTex; _aoTex is the soft-oval fallback if a
+    // bake fails. This template carries the tint/opacity/offset.
     this._aoTex = makeUnderShadowTexture();
     this._aoGeo = new THREE.PlaneGeometry(1, 1);
+    this._carShadowTex = new Map(); // model name → baked silhouette CanvasTexture (or null on failure)
     this._aoMat = new THREE.MeshBasicMaterial({
       map: this._aoTex, color: UNDER_AO_COLOR, transparent: true, opacity: UNDER_AO_OPACITY,
       depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
     });
+  }
+
+  // Bake a soft top-down SILHOUETTE of a car model into a texture, so its ground shadow
+  // has the car's real outline (cabin + wheels poking out) instead of a generic oval —
+  // the "more realistic" shadow. Rendered ONCE per model (cached): an orthographic camera
+  // straight above the model paints a flat-white mask on transparent, framed to the same
+  // footprint×SHADOW_OVERSCAN the shadow quad uses (so the silhouette lands at footprint
+  // size with room for the penumbra), then read back and blurred on a 2D canvas for the
+  // soft edge. The car's length runs up the texture (+Z → vertical) and width across
+  // (+X → horizontal), matching the quad's UVs. `rotationY` is the car's posed yaw so the
+  // silhouette aligns with the footW/footL the quad is scaled to.
+  _bakeCarShadow(model, proto, rotationY) {
+    if (this._carShadowTex.has(model)) return this._carShadowTex.get(model);
+    let tex = null;
+    try {
+      const r = this.renderer;
+      const tmp = new THREE.Scene();
+      const c = proto.clone(true);
+      c.rotation.y = rotationY;
+      tmp.add(c);
+      tmp.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(c);
+      const w = (bb.max.x - bb.min.x) || 0.1, l = (bb.max.z - bb.min.z) || 0.1;
+      const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
+      const hw = (w / 2) * SHADOW_OVERSCAN, hl = (l / 2) * SHADOW_OVERSCAN;
+      const cam = new THREE.OrthographicCamera(-hw, hw, hl, -hl, 0.01, (bb.max.y - bb.min.y) + 2);
+      cam.position.set(cx, bb.max.y + 1, cz);
+      cam.up.set(0, 0, 1);            // world +Z (car length) → texture vertical
+      cam.lookAt(cx, bb.min.y, cz);
+      const TW = 128, TH = Math.max(16, Math.round(TW * (hl / hw)));
+      const rt = new THREE.WebGLRenderTarget(TW, TH);
+      const override = new THREE.MeshBasicMaterial({ color: 0xffffff }); // flat unlit → pure silhouette
+      tmp.overrideMaterial = override;
+      const prevRT = r.getRenderTarget();
+      const prevC = r.getClearColor(new THREE.Color()), prevA = r.getClearAlpha();
+      const prevShadow = r.shadowMap.enabled;
+      r.shadowMap.enabled = false; // don't let this render consume setTrack's pending track-shadow bake
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(tmp, cam);
+      const px = new Uint8Array(TW * TH * 4);
+      r.readRenderTargetPixels(rt, 0, 0, TW, TH, px);
+      r.setRenderTarget(prevRT);
+      r.setClearColor(prevC, prevA);
+      r.shadowMap.enabled = prevShadow;
+      tmp.overrideMaterial = null;
+      override.dispose(); rt.dispose();
+      // White-on-transparent mask (force rgb white so blurring the edge fades ALPHA only,
+      // no dark fringe), then blur on a 2D canvas for the soft penumbra. The footprint sits
+      // inside the SHADOW_OVERSCAN border, so the blur tail has room and never clips.
+      const mask = document.createElement('canvas'); mask.width = TW; mask.height = TH;
+      const img = mask.getContext('2d').createImageData(TW, TH);
+      for (let i = 0; i < TW * TH; i++) {
+        img.data[i * 4] = 255; img.data[i * 4 + 1] = 255; img.data[i * 4 + 2] = 255;
+        img.data[i * 4 + 3] = px[i * 4 + 3];
+      }
+      mask.getContext('2d').putImageData(img, 0, 0);
+      const out = document.createElement('canvas'); out.width = TW; out.height = TH;
+      const octx = out.getContext('2d');
+      octx.filter = `blur(${Math.max(2, Math.round(TW * 0.04))}px)`;
+      octx.drawImage(mask, 0, 0);
+      tex = new THREE.CanvasTexture(out);
+      tex.colorSpace = THREE.SRGBColorSpace;
+    } catch (e) {
+      console.warn('[shadow] car silhouette bake failed for', model, e);
+      tex = null;
+    }
+    this._carShadowTex.set(model, tex);
+    return tex;
   }
 
   // Wipe every skid mark + the accumulated patina (track change / fresh race).
@@ -1261,15 +1335,18 @@ export class SceneRenderer {
     }
     const pitchSign = (axisV.setFromMatrixColumn(body.matrixWorld, 0).x >= 0) ? 1 : -1;
 
-    // GROUND SHADOW — one soft dark rounded-rect under the chassis (see the cue notes
-    // up top). This is the car's entire shadow: cars no longer cast the real sun shadow
-    // (the directional map is baked once per track and frozen), so this blob replaces it.
-    // A child of the road-aligned GROUP (not the leaning/pitching body), so it lies flat
+    // GROUND SHADOW — a soft dark plane under the chassis carrying the car's real top-down
+    // SILHOUETTE (cabin + wheels), baked once per model (see _bakeCarShadow); _aoTex's soft
+    // oval is the fallback. This is the car's entire shadow: cars no longer cast the real
+    // sun shadow (the directional map is baked once per track and frozen), so this replaces
+    // it. A child of the road-aligned GROUP (not the leaning/pitching body), so it lies flat
     // on the surface the car drives — road, bank, hill, even a loop deck. Scaled PAST the
-    // footprint by SHADOW_OVERSCAN so a soft penumbra reads beyond the wheels like a drop
-    // shadow. Material is a per-car clone: its opacity tracks body pitch (the load-shift
-    // cue in setCarPose), so cars can't share the template.
+    // footprint by SHADOW_OVERSCAN so the silhouette's penumbra reads beyond the wheels like
+    // a drop shadow. Material is a per-car clone: its opacity tracks body pitch (the load-
+    // shift cue in setCarPose), so cars can't share the template.
     const aoMat = this._aoMat.clone();
+    const sil = this._bakeCarShadow(model, proto, car.rotation.y); // car.rotation.y = posed yaw the footprint was measured at
+    if (sil) aoMat.map = sil;
     const ao = new THREE.Mesh(this._aoGeo, aoMat);
     ao.rotation.x = -Math.PI / 2;
     ao.position.set((fb.min.x + fb.max.x) / 2, -RIDE_HEIGHT + 0.004, (fb.min.z + fb.max.z) / 2);
@@ -1294,7 +1371,7 @@ export class SceneRenderer {
     const c = {
       group, car, body, bodyBaseQuat,
       frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostDisk, aoMat,
+      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostDisk, aoMat, ao,
       streakGroup, streaks, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
@@ -1402,6 +1479,14 @@ export class SceneRenderer {
     // spin-out whirl: rotate the whole car model about its up axis on top of its
     // model-facing fix (the sim heading is untouched — this is purely cosmetic).
     c.car.rotation.y = c.baseYaw + spin;
+    // The ground shadow now carries the car's SILHOUETTE, so it must whirl WITH the car
+    // (a static car-shaped shadow under a spinning car reads as a bug). The shadow plane
+    // is laid flat by rotation.x=-π/2; with Euler 'XYZ' its rotation.z spins it in its own
+    // (ground) plane about the road normal. The +spin sign (the flat-lay flips the handed-
+    // ness, so it matches the car's Ry whirl — verified: shadow length-axis tracks the car
+    // heading at 0/45/90°). Cheap: spin is 0 except during a spin-out, a no-op every normal
+    // frame.
+    if (c.ao) c.ao.rotation.z = spin;
     // (The boost disk is updated at the END of setCarPose — it needs the surface
     // basis computed below to conform its circle onto the road.)
     // Persistent pose vectors (created once per car) reused every frame — no GC.
