@@ -114,21 +114,27 @@ const BBOX_HEIGHT_BASE = 24;     // … + this base — high enough to look DOWN
 //     top-down SILHOUETTE (cabin + wheels), baked once per model (_bakeCarShadow);
 //     a soft oval is the fallback. This is the car's WHOLE shadow now: cars don't
 //     cast the real sun shadow (the directional map is baked once per track and
-//     frozen — a moving car can't be in it), so this stands in for it. It's a child
-//     of the road-aligned GROUP (not the leaning body), so it lies flat on whatever
-//     surface the car drives — flat road, bank, hill, even an inverted loop deck —
-//     and tracks the car for free. Scaled a bit PAST the footprint (SHADOW_OVERSCAN)
-//     so the silhouette's penumbra reads beyond the wheels like a real drop shadow.
+//     frozen — a moving car can't be in it), so this stands in for it. Like the boost
+//     disk it's a SCENE child whose grid verts are CONFORMED to the road each frame
+//     (setCarPose), so it bends with whatever the car drives — flat road, bank, hill,
+//     even an inverted loop deck — instead of clipping as a flat quad. Scaled a bit
+//     PAST the footprint (SHADOW_OVERSCAN) so the silhouette's penumbra reads beyond
+//     the wheels like a real drop shadow.
 //     The shadow is centred under the car; the sun was steepened toward vertical (see
 //     setTrack `dir`) so the baked TRACK shadows also drop nearly straight down,
 //     keeping the two consistent.
-const UNDER_AO_OPACITY = 0.8;      // car ground-shadow strength (it's the car's whole shadow now — must read on bright asphalt)
+// The car shadow's silhouette is SOFT (a blurred, penumbra-heavy bake), so although its
+// opaque core already matches a real cast shadow's darkening (~0.85× the lit road, measured
+// against the loop's cast shadow), the parts that read around the car are faded penumbra and
+// looked lighter than the loop's harder-edged shadow. Raise the opacity so that VISIBLE
+// penumbra reads as dark as the loop shadow; the over-dark core is hidden under the car.
+const UNDER_AO_OPACITY = 0.55;
 const UNDER_AO_COLOR = 0x171513;   // near-black warm, a touch deeper than the skid scuffs so the blob carries as a shadow
 const SHADOW_OVERSCAN = 1.45;      // blob scale past the car footprint → soft penumbra beyond the wheels
-// Load shift: the harder the body pitches (brake dive / throttle squat), the closer
-// the chassis presses to the road — darken the shadow with |pitch| so braking visibly
-// plants the car. Added on top of UNDER_AO_OPACITY. Starting value.
-const AO_LOAD_GAIN = 0.10;
+// Load shift: the harder the body pitches (brake dive / throttle squat), the closer the
+// chassis presses to the road — darken the shadow a little with |pitch| so braking visibly
+// plants the car. A small cue ON TOP of the track-matched base. Starting value.
+const AO_LOAD_GAIN = 0.08;
 // NOTE: body "road feel" vibration was tried and removed — a speed-scaled
 // suspension murmur (twin sines, ±0.005 then ±0.0017) plus a kerb-scrub shudder.
 // Even at 1/3 amplitude it read as a rendering bug/jitter from the chase cam,
@@ -180,6 +186,13 @@ const BOOST_DISK_SEG = 16;
 const BOOST_DISK_RINGS = 2;
 const BOOST_DISK_LIFT = 0.02;
 const BOOST_RAY_UP = 1.6;
+// Car ground shadow: a SILHOUETTE-textured grid CONFORMED to the road like the boost disk
+// (see setCarPose), so it bends through loops / crests / ramps instead of clipping as a
+// flat quad. SEG_W×SEG_L cells → (SEG_W+1)(SEG_L+1) verts raycast onto the deck per car per
+// frame; the footprint is small so a coarse grid bends smoothly. Reuses BOOST_DISK_LIFT/
+// BOOST_RAY_UP and the _conformDiskVert raycast.
+const SHADOW_SEG_W = 2;
+const SHADOW_SEG_L = 3;
 // Ride-height smoothing rate (1/s) for the damped offset from the centreline (see
 // setCarPose). Applied as 1 - exp(-RIDE_DAMP·dt) so it's frame-rate-independent;
 // ~18 reproduces the old per-frame 0.25 lerp at 60fps but stays stable at 30fps.
@@ -267,6 +280,8 @@ export class SceneRenderer {
     this._diskMid = new THREE.Vector3();
     this._diskOrigin = new THREE.Vector3();
     this._diskBase = new THREE.Vector3();
+    this._shR = new THREE.Vector3(); // car-shadow conform: in-surface right axis, spun by the whirl
+    this._shF = new THREE.Vector3(); // car-shadow conform: in-surface forward axis, spun by the whirl
   }
 
   // Pack a signed cell coord into one integer key (avoids per-lookup string alloc
@@ -371,11 +386,20 @@ export class SceneRenderer {
     // (see _bakeCarShadow), cached in _carShadowTex; _aoTex is the soft-oval fallback if a
     // bake fails. This template carries the tint/opacity/offset.
     this._aoTex = makeUnderShadowTexture();
-    this._aoGeo = new THREE.PlaneGeometry(1, 1);
+    // A tessellated grid (not a flat quad) so it can be CONFORMED to the road per frame
+    // (see setCarPose) and never clips on a curving deck. Cloned per car (each conforms its
+    // own verts). _aoBaseXY holds the rest local (x,y) ∈ [-0.5,0.5] of every grid vertex,
+    // shared by all cars to recompute world positions each frame.
+    this._aoGeo = new THREE.PlaneGeometry(1, 1, SHADOW_SEG_W, SHADOW_SEG_L);
+    {
+      const p = this._aoGeo.getAttribute('position');
+      this._aoBaseXY = new Float32Array(p.count * 2);
+      for (let i = 0; i < p.count; i++) { this._aoBaseXY[i * 2] = p.getX(i); this._aoBaseXY[i * 2 + 1] = p.getY(i); }
+    }
     this._carShadowTex = new Map(); // model name → baked silhouette CanvasTexture (or null on failure)
     this._aoMat = new THREE.MeshBasicMaterial({
       map: this._aoTex, color: UNDER_AO_COLOR, transparent: true, opacity: UNDER_AO_OPACITY,
-      depthWrite: false,
+      depthWrite: false, side: THREE.DoubleSide, // conform writes world verts wound front-DOWN (right×fwd = −u); DoubleSide so it isn't backface-culled from above (same as the boost disk)
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
     });
   }
@@ -430,15 +454,16 @@ export class SceneRenderer {
       // no dark fringe), then blur on a 2D canvas for the soft penumbra. The footprint sits
       // inside the SHADOW_OVERSCAN border, so the blur tail has room and never clips.
       const mask = document.createElement('canvas'); mask.width = TW; mask.height = TH;
-      const img = mask.getContext('2d').createImageData(TW, TH);
+      const mctx = mask.getContext('2d');
+      const img = mctx.createImageData(TW, TH);
       for (let i = 0; i < TW * TH; i++) {
         img.data[i * 4] = 255; img.data[i * 4 + 1] = 255; img.data[i * 4 + 2] = 255;
         img.data[i * 4 + 3] = px[i * 4 + 3];
       }
-      mask.getContext('2d').putImageData(img, 0, 0);
+      mctx.putImageData(img, 0, 0);
       const out = document.createElement('canvas'); out.width = TW; out.height = TH;
       const octx = out.getContext('2d');
-      octx.filter = `blur(${Math.max(2, Math.round(TW * 0.04))}px)`;
+      octx.filter = `blur(${Math.max(2, Math.round(TW * 0.022))}px)`; // tight penumbra: a crisp shadow edge near the loop's hard cast shadow, not a wide soft ring
       octx.drawImage(mask, 0, 0);
       tex = new THREE.CanvasTexture(out);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -1335,23 +1360,21 @@ export class SceneRenderer {
     }
     const pitchSign = (axisV.setFromMatrixColumn(body.matrixWorld, 0).x >= 0) ? 1 : -1;
 
-    // GROUND SHADOW — a soft dark plane under the chassis carrying the car's real top-down
+    // GROUND SHADOW — a dark plane under the chassis carrying the car's real top-down
     // SILHOUETTE (cabin + wheels), baked once per model (see _bakeCarShadow); _aoTex's soft
     // oval is the fallback. This is the car's entire shadow: cars no longer cast the real
     // sun shadow (the directional map is baked once per track and frozen), so this replaces
-    // it. A child of the road-aligned GROUP (not the leaning/pitching body), so it lies flat
-    // on the surface the car drives — road, bank, hill, even a loop deck. Scaled PAST the
-    // footprint by SHADOW_OVERSCAN so the silhouette's penumbra reads beyond the wheels like
-    // a drop shadow. Material is a per-car clone: its opacity tracks body pitch (the load-
-    // shift cue in setCarPose), so cars can't share the template.
+    // it. Like the boost disk, it's a SCENE child whose grid verts are CONFORMED to the road
+    // each frame (setCarPose) — so it bends through loops / crests / ramps instead of clipping
+    // as a flat quad, and tracks the car's spin-out whirl. Own geometry (per-car conform);
+    // material is a per-car clone (its opacity tracks body pitch — the load-shift cue).
     const aoMat = this._aoMat.clone();
     const sil = this._bakeCarShadow(model, proto, car.rotation.y); // car.rotation.y = posed yaw the footprint was measured at
     if (sil) aoMat.map = sil;
-    const ao = new THREE.Mesh(this._aoGeo, aoMat);
-    ao.rotation.x = -Math.PI / 2;
-    ao.position.set((fb.min.x + fb.max.x) / 2, -RIDE_HEIGHT + 0.004, (fb.min.z + fb.max.z) / 2);
-    ao.scale.set(footW * SHADOW_OVERSCAN, footL * SHADOW_OVERSCAN, 1);
-    group.add(ao);
+    const ao = new THREE.Mesh(this._aoGeo.clone(), aoMat); // own grid: verts conformed per frame
+    ao.frustumCulled = false; // conformed verts roam the whole track (like the boost disk)
+    ao.visible = false;       // shown once the first setCarPose conforms it (no flash at the origin)
+    this.scene.add(ao);       // a SCENE child (world-space conform), not a group child
 
     // BOOST wind streaks (see the constants up top): a small rig of axial-
     // billboard quads parented to the GROUP (so they align with the heading),
@@ -1417,15 +1440,17 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     this.scene.remove(c.group);
-    // Dispose what addCar created fresh per car (the name plate + boost disk). The car
-    // mesh shares its geometry/material with the cached prototype, and the underbody
-    // shading quad shares _aoGeo/_aoMat — leave those for the next race.
+    // Dispose what addCar created fresh per car (name plate, boost disk, ground shadow). The
+    // car mesh shares its geometry/material with the cached prototype; the shadow's silhouette
+    // map (_carShadowTex) and the _aoGeo template are shared — leave those for the next race.
     c.plate.geometry.dispose(); c.plate.material.map.dispose(); c.plate.material.dispose();
     // boost disk owns its geometry + material (the falloff map is the shared this._diskTex — leave it).
     // It's a child of the SCENE (not the group removed above), so pull it out too.
     if (c.boostDisk) { this.scene.remove(c.boostDisk); c.boostDisk.geometry.dispose(); c.boostDisk.material.dispose(); }
-    // per-car clones: the underbody-shading material (opacity animates with load)
-    // and each wind streak's material — their maps/geometry are shared templates.
+    // ground shadow: now a SCENE child (conformed) with its OWN cloned grid geometry +
+    // per-car material (opacity animates with load). The silhouette map is the cached
+    // per-model texture — shared, leave it. Pull the mesh from the scene and dispose its geo.
+    if (c.ao) { this.scene.remove(c.ao); c.ao.geometry.dispose(); }
     if (c.aoMat) c.aoMat.dispose();
     if (c.streaks) for (const st of c.streaks) st.mesh.material.dispose();
     if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; } // stop any running item roulette
@@ -1477,16 +1502,10 @@ export class SceneRenderer {
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer; c.brakeAmt = brake;
     // spin-out whirl: rotate the whole car model about its up axis on top of its
-    // model-facing fix (the sim heading is untouched — this is purely cosmetic).
+    // model-facing fix (the sim heading is untouched — this is purely cosmetic). The car
+    // shadow's silhouette whirls with it too, folded into the conform basis at the END of
+    // setCarPose (it spins the in-surface forward/right by `spin`).
     c.car.rotation.y = c.baseYaw + spin;
-    // The ground shadow now carries the car's SILHOUETTE, so it must whirl WITH the car
-    // (a static car-shaped shadow under a spinning car reads as a bug). The shadow plane
-    // is laid flat by rotation.x=-π/2; with Euler 'XYZ' its rotation.z spins it in its own
-    // (ground) plane about the road normal. The +spin sign (the flat-lay flips the handed-
-    // ness, so it matches the car's Ry whirl — verified: shadow length-axis tracks the car
-    // heading at 0/45/90°). Cheap: spin is 0 except during a spin-out, a no-op every normal
-    // frame.
-    if (c.ao) c.ao.rotation.z = spin;
     // (The boost disk is updated at the END of setCarPose — it needs the surface
     // basis computed below to conform its circle onto the road.)
     // Persistent pose vectors (created once per car) reused every frame — no GC.
@@ -1683,8 +1702,34 @@ export class SceneRenderer {
       }
     }
 
-    // (nothing else to update here: the cast shadow follows the car automatically,
-    // and the name plate is parented to the body so it banks with the steering lean.)
+    // CAR SHADOW conform: bend the silhouette grid onto the deck (same raycast as the boost
+    // disk) so it never clips on a loop / crest / ramp. The in-surface basis — right (this._sx)
+    // and forward (fwd projected into the surface) — is spun by the spin-out whirl so the
+    // silhouette tracks the car; each grid vertex's rest (lx,ly) ∈ [-0.5,0.5] places it across
+    // the footprint×overscan, then _conformDiskVert drops it on the road. Done after the basis
+    // and road-snapped position are final.
+    const shdw = c.ao;
+    if (shdw) {
+      const right = this._diskRight.copy(this._sx);
+      const sfwd = this._diskFwd.copy(fwd).addScaledVector(u, -fwd.dot(u));
+      if (sfwd.lengthSq() > 1e-6) sfwd.normalize(); else sfwd.copy(fwd);
+      const cs = Math.cos(spin), sn = Math.sin(spin);
+      this._shR.copy(right).multiplyScalar(cs).addScaledVector(sfwd, -sn); // right rotated by +spin about u
+      this._shF.copy(sfwd).multiplyScalar(cs).addScaledVector(right, sn);  // forward rotated by +spin about u
+      const hw = c.footW * SHADOW_OVERSCAN, hl = c.footL * SHADOW_OVERSCAN;
+      const center = c.group.position;
+      const base = this._aoBaseXY, arr = shdw.geometry.getAttribute('position').array;
+      const n = base.length >> 1;
+      for (let vi = 0; vi < n; vi++) {
+        this._diskMid.copy(center).addScaledVector(this._shR, base[vi * 2] * hw).addScaledVector(this._shF, base[vi * 2 + 1] * hl);
+        this._conformDiskVert(arr, vi * 3, u);
+      }
+      shdw.geometry.getAttribute('position').needsUpdate = true;
+      shdw.visible = true;
+    }
+
+    // (nothing else to update here: the name plate is parented to the body so it banks
+    // with the steering lean.)
   }
 
   // Paint the item slot: an item ICON (graphic), or the reserved empty square.
