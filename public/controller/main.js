@@ -64,6 +64,7 @@ let roster = [];           // latest lobby roster (for the host name in the wait
 let hostPeerIndex = null;
 let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
 let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
+let displayTrackId = null;  // track the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 // Joined while a race was already running (WELCOME said inRace:false): we have
@@ -181,6 +182,7 @@ function handleMessage(data) {
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       if (data.tracks) trackCatalog = data.tracks;       // catalog ships once, on join
+      displayTrackId = data.trackId != null ? data.trackId : null; // what the display has on record
       if (data.trackId != null) selectedTrackId = data.trackId;
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
@@ -221,6 +223,7 @@ function handleMessage(data) {
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
+      displayTrackId = data.trackId != null ? data.trackId : null; // what the display has on record
       if (data.trackId != null) selectedTrackId = data.trackId; // host's pick, echoed to all
       // The display is authoritative — adopt the colour + car it has on record
       // for us (colour is auto-assigned; car confirms our pick).
@@ -421,14 +424,25 @@ function renderTrackPicker() {
 // its plain diorama for the live 3D preview without waiting for a tap. The pick
 // is this phone's last-used track (saved on tap), falling back to the first in
 // the catalog. Sent as SELECT_TRACK exactly like a manual choice — the display
-// echoes it back to everyone via LOBBY_UPDATE. No-op for non-hosts, before the
-// catalog arrives, or once a track is already chosen (incl. the display's own).
+// echoes it back to everyone via LOBBY_UPDATE. No-op for non-hosts or before the
+// catalog arrives.
 function maybeAutoSelectTrack() {
-  if (!amHost || selectedTrackId || !trackCatalog.length) return;
-  const stored = storedTrackId();
-  const id = trackCatalog.some((t) => t.id === stored) ? stored : trackCatalog[0].id;
-  selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
-  net.send(MSG.SELECT_TRACK, { trackId: id });
+  if (!amHost || !trackCatalog.length) return;
+  if (!selectedTrackId) {
+    // First lobby entry: seed the pick from this phone's last-used track.
+    const stored = storedTrackId();
+    const id = trackCatalog.some((t) => t.id === stored) ? stored : trackCatalog[0].id;
+    selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
+    net.send(MSG.SELECT_TRACK, { trackId: id });
+    return;
+  }
+  // Repair a desync: we hold a pick but the display reports none (it reloaded /
+  // reconnected and lost its track state while our phone kept ours). Without this
+  // the "Start race" button is enabled here (canStart = !!selectedTrackId) yet the
+  // display's startRace() bails on its own null track, so the tap silently no-ops —
+  // and re-picking only helps if you choose a DIFFERENT track. Re-asserting our pick
+  // restores both the display's 3D preview and the start gate.
+  if (displayTrackId == null) net.send(MSG.SELECT_TRACK, { trackId: selectedTrackId });
 }
 
 function chooseTrack(id) {
