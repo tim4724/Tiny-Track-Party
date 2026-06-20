@@ -129,14 +129,31 @@ const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills lau
 const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
 const BANANA_BACK = 1.2;       // how far behind the dropper a banana lands (units)
 
+// ---- Homing rocket (offensive item) ----
+// A fired rocket locks the car directly AHEAD in the standings and runs it down
+// through the SAME (totalS, lat) plane as everything else: it advances along the
+// ribbon faster than any car and eases its lateral offset onto the target's lane,
+// then spins the target out on contact (reusing the oil/banana spin). The owner is
+// always behind it, so it can never hit its own firer. A target-less rocket (the
+// leader fired) or one that outlives its flight simply expires — a whiff. Numbers
+// are STARTING VALUES (tune in playtest).
+const ROCKET_SPEED = 22.0;     // u/s along the ribbon — well above any boosted car so it always closes
+const ROCKET_HOME = 8.0;       // lateral homing rate toward the target's lane (per second; exp-approach)
+const ROCKET_HIT = 0.6;        // arclength lead (units) at which the rocket detonates on its target
+const ROCKET_LIFE = 10.0;      // seconds a rocket flies before it expires (a whiff) — generous so it reliably
+                               // runs its target down; a target-less rocket just flies straight until this cap
+
 // Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
-// roll time (t = 0 leader … 1 last). A clean mirror so the LEADER mostly draws the
-// defensive Banana (a trap to drop behind — doesn't extend the lead) and the back
-// mostly draws the comeback Boost: leader 20% boost / 80% banana, midfield 50/50,
-// last 80% boost / 20% banana.
+// roll time (t = 0 leader … 1 last). The LEADER draws only Boost/Banana — NEVER a
+// rocket: it has no car ahead to hit, so a rocket would just whiff (the rocket's
+// negative base zeroes its weight across the front of the field). The back draws the
+// comeback Boost + the offensive Rocket (catch up AND attack ahead). Rough mix →
+// leader: 20% boost / 80% banana / 0% rocket; midfield: 34 / 43 / 23; last: 43% boost
+// / 14% banana / 43% rocket.
 const ITEM_TABLE = [
-  { id: 'boost',  base: 1.0, slope:  3.0 },
-  { id: 'banana', base: 4.0, slope: -3.0 }
+  { id: 'boost',  base: 1.0, slope:  2.0 },
+  { id: 'banana', base: 4.0, slope: -3.0 },
+  { id: 'rocket', base: -0.3, slope: 3.3 } // base<0 → weight is 0 for the leader (and the very front), ramps to 3.0 at last
 ];
 
 // Item rolls draw from a seeded PRNG (mulberry32, engine/util.js) so a race is
@@ -201,6 +218,8 @@ export class Game {
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
     this.bananas = [];      // [{ id, s, lat, owner }] — live dropped bananas (live on drop; owner-skipped)
     this._bananaSeq = 0;
+    this.rockets = [];      // [{ id, s (cumulative arclength), lat, owner, targetId, life }] — live homing rockets
+    this._rocketSeq = 0;
     // Deterministic item rolls from a per-race seed (track.seed; default if unset).
     this.rng = mulberry32(((track.seed != null ? track.seed : 0x1A2B3C4D) >>> 0) || 1);
 
@@ -307,6 +326,10 @@ export class Game {
     const fi = this.finishedOrder.indexOf(oldId);
     if (fi !== -1) this.finishedOrder[fi] = newId;
     for (const b of this.bananas) { if (b.owner === oldId) b.owner = newId; }
+    // In-flight rockets must follow the rekey too: a rocket LOCKED on this car keeps its
+    // lock (else _stepRockets can't find the old id → drops it → whiffs), and one OWNED by
+    // it keeps its owner so it still can't self-hit.
+    for (const r of this.rockets) { if (r.owner === oldId) r.owner = newId; if (r.targetId === oldId) r.targetId = newId; }
     return true;
   }
 
@@ -316,6 +339,7 @@ export class Game {
     this.elapsed += dt;
     this._computeCatchUp(dt);   // per-car tRaw/tCatch from the field spread
     this._tickProps(dt);        // box respawn cooldowns + banana life/arm
+    this._stepRockets(dt);      // advance live homing rockets BEFORE the car loop, so a hit lands on the target's own frame
 
     for (const c of this.cars.values()) {
       c.onWall = false; // cleared once per frame; _clampCurb (main loop + post-collision) only sets it true
@@ -636,6 +660,15 @@ export class Game {
       const lat = Math.max(-lim, Math.min(lim, hit.lat));
       const s = ((hit.s % this.length) + this.length) % this.length;
       this.bananas.push({ id: ++this._bananaSeq, s, lat, owner: c.id });
+    } else if (c.item === 'rocket') {
+      // Lock the car directly AHEAD in the standings (smallest cumulative totalS gap
+      // ahead; finished cars excluded). The leader may fire with no car ahead — the
+      // rocket still launches and simply expires (a whiff). The owner is always behind
+      // its own rocket, so it can never be the target — no self-hit. The rocket starts
+      // at the firer's CUMULATIVE totalS (this runs before the motion step, so the
+      // value is the frame's start) and is stepped from the next frame on.
+      const target = this._nextCarAhead(c);
+      this.rockets.push({ id: ++this._rocketSeq, s: c.totalS, lat: c.lat, owner: c.id, targetId: target ? target.id : null, life: 0 });
     }
     c.item = null;
   }
@@ -653,6 +686,57 @@ export class Game {
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
     return hit;
+  }
+
+  // The car directly AHEAD of `c` in the standings: the smallest POSITIVE cumulative
+  // totalS gap among live cars (finished cars are coasting ghosts, excluded). Uses raw
+  // cumulative totalS (no lap wrap) so it tracks true race position — a back-marker
+  // locks the racer one place up, not whoever is physically nearest a lap apart.
+  // Returns null when `c` is the leader (nothing ahead → the rocket whiffs).
+  _nextCarAhead(c) {
+    let best = null, bestGap = Infinity;
+    for (const o of this.cars.values()) {
+      if (o === c || o.finished) continue;
+      const gap = o.totalS - c.totalS;
+      if (gap > 0 && gap < bestGap) { bestGap = gap; best = o; }
+    }
+    return best;
+  }
+
+  // Advance every live homing rocket. Each flies forward along the ribbon faster than
+  // any car and eases its lateral offset onto its locked target's lane; once it catches
+  // the target (arclength lead ≤ ROCKET_HIT) it spins them out and is consumed. A rocket
+  // whose target has finished or left the race drops its lock and flies straight; any
+  // rocket that outlives ROCKET_LIFE expires (a whiff). Runs BEFORE the car loop so a
+  // hit lands on the target's own frame this tick. Deterministic (no RNG).
+  _stepRockets(dt) {
+    if (!this.rockets.length) return;
+    for (const r of this.rockets) {
+      r.life += dt;
+      r.s += ROCKET_SPEED * dt;
+      const t = r.targetId != null ? this.cars.get(r.targetId) : null;
+      if (t && !t.finished) {
+        r.lat += (t.lat - r.lat) * Math.min(1, ROCKET_HOME * dt); // home onto the target's lane
+        if (t.totalS - r.s <= ROCKET_HIT) { this._spinOut(t, 'rocket'); r.hit = true; } // caught up → detonate
+      } else {
+        r.targetId = null; // target gone (finished/left) → fly straight, then expire at ROCKET_LIFE
+      }
+      if (r.life > ROCKET_LIFE) r.hit = true;
+    }
+    if (this.rockets.some((r) => r.hit)) this.rockets = this.rockets.filter((r) => !r.hit);
+  }
+
+  // Spin a car out from an EXTERNAL strike (a homing rocket). A rocket CANCELS any crash
+  // already in progress and starts a fresh one: reset the cosmetic whirl to 0 and re-arm
+  // the FULL spin timer (so a car mid-spin from a banana is overwritten — the banana crash
+  // ends, a new explosion + spin-out begins). Also kills any active boost and emits the
+  // event for sound/FX. The target's own update() picks the spin up at the top of its next
+  // frame (steering dies, speed bleeds), exactly as if it had driven onto a slick.
+  _spinOut(c, cause) {
+    c.spin = 0;            // restart the whirl — a new crash, not a continuation
+    c.spinT = SPIN_TIME;   // full fresh stun (overwrites any remaining banana/oil spin)
+    c.boostT = 0; c.boostMul = 1;
+    this.onEvent({ type: 'spin', id: c.id, cause });
   }
 
   // Car-car collisions in (totalS, lat) space. Two cars overlap when their
@@ -827,7 +911,13 @@ export class Game {
     return {
       cars, elapsed: this.elapsed,
       boxes: this.boxes.map((b) => b.cooldown <= 0),
-      bananas: this.bananas.map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS }))
+      bananas: this.bananas.map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS })),
+      // Live homing rockets: cumulative arclength wrapped to [0, length) so the renderer
+      // can place them by (s, lat) like every other prop (it derives the facing/bank from
+      // the centreline tangent at s). owner is exposed for any per-cell FX gating.
+      rockets: this.rockets.map((r) => ({
+        id: r.id, s: ((r.s % this.length) + this.length) % this.length, lat: r.lat, owner: r.owner
+      }))
     };
   }
 

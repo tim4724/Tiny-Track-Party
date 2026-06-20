@@ -405,6 +405,7 @@ scene.onFrame = (dt) => {
     }
   }
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
+  driveRocketAudio(snap); // sustained jet per in-flight rocket, level by distance to the nearest player
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
@@ -702,6 +703,43 @@ function cpuCarOnScreen(id) {
   return false;
 }
 
+// Rocket flight audio: a sustained jet per in-flight rocket, held the whole air time, its
+// level scaled by ARCLENGTH DISTANCE to the nearest human (closer = louder, silent past
+// ROCKET_AUDIBLE). This is the one place the game scales a voice by emitter distance — the
+// rest of the audio just gates on/off by camera visibility. Voices stop when a rocket leaves
+// the snapshot (hit/expired). `rs` is the rocket's wrapped arclength; humans carry cumulative
+// totalS, so wrapDelta gives the real on-track gap.
+const ROCKET_AUDIBLE = 26; // arclength units: full at 0, fades to silent here
+let _rocketVoiceIds = new Set();
+function rocketAudibility(rs) {
+  if (!session) return 0;
+  const len = session.engine.length; let best = Infinity;
+  for (const [hid, h] of session.engine.cars) {
+    if (aiBots.has(hid)) continue;
+    const gap = Math.abs(wrapDelta(rs - h.totalS, len));
+    if (gap < best) best = gap;
+  }
+  return best < ROCKET_AUDIBLE ? Math.max(0.2, 1 - best / ROCKET_AUDIBLE) : 0;
+}
+function driveRocketAudio(snap) {
+  const seen = new Set();
+  for (const r of (snap.rockets || [])) { seen.add(r.id); audio.rocketFlight(r.id, rocketAudibility(r.s)); }
+  for (const id of _rocketVoiceIds) if (!seen.has(id)) audio.rocketFlight(id, 0); // stop the ones that just landed/expired
+  _rocketVoiceIds = seen;
+}
+// Loudness of a rocket IMPACT, kept CONSISTENT with the flight so you never get a jet that
+// fades in with no boom: the detonation is at the target car, so reuse the flight's distance
+// metric on the target's position (a human hit → always full). The old cpuCarOnScreen gate
+// was a narrower, asymmetric window than the flight's range → "zisch but no explosion" at
+// certain distances (the bug). Returns 0 when no player is in earshot of the impact.
+function rocketImpactLevel(targetId) {
+  const t = session && session.engine.cars.get(targetId);
+  if (!t) return 1;                    // target already gone (rare) — just play it
+  if (!aiBots.has(targetId)) return 1; // a human got hit → full
+  const a = rocketAudibility(t.totalS);
+  return a > 0 ? Math.max(0.45, a) : 0; // audible whenever the flight was, with a clear payoff floor
+}
+
 // Map engine events onto cues — sound only for what's VISIBLE (same principle
 // as the controller haptics: feedback must map to something the player can
 // see). A human's moments are always on screen (their split-screen cell); a
@@ -720,8 +758,17 @@ function audioForRaceEvent(e) {
       break;
     // (boost item-use and pad crossings make no one-shot sound — the boost
     // WIND in onFrame tracks the resulting speed state instead.)
-    case 'item_use': if (visible && e.item === 'banana') audio.bananaDrop(); break;
-    case 'spin': if (visible) audio.spin(); break;
+    case 'item_use':
+      if (visible && e.item === 'banana') audio.bananaDrop();
+      // the rocket's launch+flight is a SUSTAINED voice driven per-frame in onFrame
+      // (driveRocketAudio), not a one-shot here; boost item-use stays silent.
+      break;
+    case 'spin':
+      // rocket → boom, gated/scaled by distance to a player (same metric as the flight, so the
+      // jet and its explosion are always heard together); oil/banana → comedy slip, camera-gated.
+      if (e.cause === 'rocket') { const lvl = rocketImpactLevel(e.id); if (lvl > 0) audio.rocketHit(lvl); }
+      else if (visible) audio.spin();
+      break;
     // The chequered-flag crossing chimes like any other lap (a 'finish' fanfare
     // was auditioned and cut) — the results overlay carries the celebration.
     case 'lap': case 'finish': if (isHuman) audio.lap(); break;
@@ -734,6 +781,9 @@ function onRaceEvent(e) {
   // else as more cars finish.
   if (!e) return;
   if (!fastForwarding) audioForRaceEvent(e); // the fast-forward burst is silent — it's skipping, not racing
+  // Rocket strike: pop a one-shot impact burst on the target (frustum culling drops it
+  // off-screen). Skipped during the silent fast-forward, like the audio above.
+  if (!fastForwarding && e.type === 'spin' && e.cause === 'rocket') scene.rocketImpact(e.id);
   if (e.type !== 'finish') return;
   if (fastForwarding) return; // endRace sends the final board once; don't spam one per AI car
   // If that finish was the last human's, we're about to fast-forward to the flag

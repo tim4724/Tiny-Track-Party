@@ -201,12 +201,17 @@ test('rekeyCar moves a live car to a new id, preserving state and re-owning its 
   const game = new Game(['p1', 'p2'], track, {});
   Object.assign(game.cars.get('p1'), { totalS: 12, lat: 0.4, v: 6 });
   game.bananas.push({ id: 1, s: 30, lat: 0, owner: 'p1' });
+  // in-flight rockets: one TARGETING p1 (must keep its lock) and one OWNED by p1 (no self-hit)
+  game.rockets.push({ id: 1, s: 8, lat: 0, owner: 'p2', targetId: 'p1', life: 0 });
+  game.rockets.push({ id: 2, s: 5, lat: 0, owner: 'p1', targetId: 'p2', life: 0 });
   assert.equal(game.rekeyCar('p1', 'p1b'), true);
   assert.equal(game.cars.has('p1'), false, 'the old id is gone');
   assert.ok(game.cars.has('p1b'), 'the new id holds the car');
   assert.equal(game.cars.get('p1b').id, 'p1b', "the car's own id moved");
   assert.equal(game.cars.get('p1b').totalS, 12, 'race position is preserved across the rekey');
   assert.equal(game.bananas[0].owner, 'p1b', 'the owned banana follows the new id');
+  assert.equal(game.rockets[0].targetId, 'p1b', 'a rocket locked on the car keeps its lock across the rekey (no whiff)');
+  assert.equal(game.rockets[1].owner, 'p1b', 'a rocket owned by the car keeps its owner (still no self-hit)');
   // no-op guards: a missing source, a taken target, and a same-id rekey all return false
   assert.equal(game.rekeyCar('ghost', 'x'), false, 'rekeying a missing car is a no-op');
   assert.equal(game.rekeyCar('p2', 'p1b'), false, 'rekeying onto a taken id is a no-op');
@@ -718,7 +723,7 @@ test('a finished car collects an item on its victory lap (box pops + cooldown, w
   car.finished = true; car.finishTime = 1; car.item = null; // finishing nulls the slot
   Object.assign(car, { totalS: 8, lat: 0, v: 0 });
   game.update(16); // finished cars are exempt from the launch gate, so this collects at once
-  assert.ok(car.item === 'boost' || car.item === 'banana', `finished car collects an item (got ${car.item})`);
+  assert.ok(['boost', 'banana', 'rocket'].includes(car.item), `finished car collects an item (got ${car.item})`);
   assert.equal(game.getSnapshot().boxes[0], false, 'the box goes on cooldown under the finished car');
   const pickup = events.find((e) => e.type === 'pickup' && e.id === 'p1');
   assert.ok(pickup && pickup.finished === true, 'pickup is flagged finished (drives a world pop, not the player roulette)');
@@ -859,7 +864,7 @@ test('an item box fills the slot after the launch gate, then respawns', () => {
   // past the gate: pickup
   game.elapsed = 2;
   game.processInput('p1', { b: 1 }); game.update(16);
-  assert.ok(car.item === 'boost' || car.item === 'banana', `box fills the slot (got ${car.item})`);
+  assert.ok(['boost', 'banana', 'rocket'].includes(car.item), `box fills the slot (got ${car.item})`);
   assert.equal(game.getSnapshot().boxes[0], false, 'box is on cooldown after pickup');
   // respawn after BOX_RESPAWN
   for (let i = 0; i < 280; i++) { game.processInput('p1', { b: 1 }); game.update(16); } // ~4.5s
@@ -1110,4 +1115,70 @@ test('a dropped banana never expires — it waits on the track until hit', () =>
     game.processInput('drop', { b: 1 }); game.processInput('follow', { b: 1 }); game.update(16);
   }
   assert.equal(game.bananas.length, 1, 'the banana is still there: no time-expiry');
+});
+
+// ---- homing rocket (offensive item) ----------------------------------------
+
+test('a fired rocket homes the car ahead and spins it out, never the firer', () => {
+  const track = mkTrack(3);
+  const events = [];
+  const game = new Game(['fire', 'tgt'], track, { onEvent: (e) => events.push(e) });
+  const fire = game.cars.get('fire'), tgt = game.cars.get('tgt');
+  Object.assign(fire, { totalS: 8, lat: 0, v: 2, item: 'rocket', pickupAge: 99 });
+  Object.assign(tgt, { totalS: 20, lat: 0.4, v: 2 }); // ahead + off-centre, so homing has lane to close
+  // single tick fires the held rocket (press-to-use); _useItem runs before the motion step,
+  // so it spawns at the firer's frame-start totalS and locks the car directly ahead.
+  game.processInput('fire', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.rockets.length, 1, 'the rocket launches');
+  assert.equal(game.rockets[0].targetId, 'tgt', 'it locks the car directly ahead');
+  assert.ok(events.some((e) => e.type === 'item_use' && e.id === 'fire' && e.item === 'rocket'), 'firing emits item_use');
+  // run it down: both cars brake (stay roughly put) while the faster rocket closes the gap
+  let hit = false;
+  for (let i = 0; i < 150 && !hit; i++) {
+    game.processInput('fire', { b: 1 }); game.processInput('tgt', { b: 1 }); game.update(16);
+    if (tgt.spinT > 0) hit = true;
+  }
+  assert.ok(hit, 'the rocket runs down the target and spins it out');
+  assert.equal(fire.spinT, 0, 'the firer is never hit by its own rocket');
+  assert.equal(game.rockets.length, 0, 'the rocket is consumed on impact');
+  assert.ok(events.some((e) => e.type === 'spin' && e.id === 'tgt' && e.cause === 'rocket'), 'the hit emits spin with cause rocket');
+});
+
+test('rockets favour the back of the field, and the LEADER never gets one', () => {
+  const g = new Game(['p1'], mkTrack(3), {});
+  let rocketLeader = 0, rocketLast = 0;
+  for (let i = 0; i < 6000; i++) if (g._roll(0) === 'rocket') rocketLeader++; // t=0 leader
+  for (let i = 0; i < 6000; i++) if (g._roll(1) === 'rocket') rocketLast++;   // t=1 last
+  assert.equal(rocketLeader, 0, 'the leader has no car ahead to hit → never rolls a rocket (rocket weight is 0 at t=0)');
+  assert.ok(rocketLast > 1500, `last place rolls plenty of rockets (${rocketLast}/6000)`);
+});
+
+test('a rocket fired with no car ahead (the leader) launches but expires — a whiff', () => {
+  const track = mkTrack(3);
+  const game = new Game(['lead', 'back'], track, {});
+  const lead = game.cars.get('lead'), back = game.cars.get('back');
+  Object.assign(lead, { totalS: 30, lat: 0, v: 2, item: 'rocket', pickupAge: 99 });
+  Object.assign(back, { totalS: 5, lat: 0, v: 2 }); // behind the firer → never a target
+  game.processInput('lead', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.rockets.length, 1, 'the leader still launches the rocket');
+  assert.equal(game.rockets[0].targetId, null, 'no car ahead → no lock');
+  // ROCKET_LIFE is 10s; 700 braked ticks (~11s) outlasts it without either car finishing
+  for (let i = 0; i < 700; i++) { game.processInput('lead', { b: 1 }); game.processInput('back', { b: 1 }); game.update(16); }
+  assert.equal(game.rockets.length, 0, 'the target-less rocket expires (whiff)');
+  assert.equal(back.spinT, 0, 'the car behind the firer is never hit');
+  assert.equal(lead.spinT, 0, 'nor the firer itself');
+});
+
+test('a rocket hit cancels an in-progress crash and starts a fresh one', () => {
+  const track = mkTrack(3);
+  const events = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => events.push(e) });
+  const c = game.cars.get('p1');
+  // mid-crash from a banana: partway through the spin, whirl wound up
+  Object.assign(c, { spinT: 0.3, spin: 4.0 });
+  game._spinOut(c, 'rocket'); // a rocket strikes the already-spinning car
+  assert.equal(c.spin, 0, 'the whirl is reset — the banana crash is cancelled');
+  assert.ok(c.spinT > 0.9, `the spin timer is re-armed to full, not the 0.3 that was left (spinT=${c.spinT.toFixed(2)})`);
+  assert.ok(events.some((e) => e.type === 'spin' && e.cause === 'rocket' && e.id === 'p1'),
+    'a fresh rocket spin event fires (drives a new explosion + boom)');
 });

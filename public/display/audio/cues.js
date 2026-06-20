@@ -50,7 +50,12 @@ function noiseBuf(ctx) {
 // decoded buffer is cached per-context; until it resolves the engine voice is
 // simply silent — in practice the decode finishes during the lobby, long before
 // the first race frame asks for an engine.
-const SAMPLE_URLS = { engine: '/assets/audio/engine_loop.ogg' };
+const SAMPLE_URLS = {
+  engine: '/assets/audio/engine_loop.ogg',
+  // The rocket impact — a real CC0 recording (assets/audio/sfx/SFX.LICENSE.txt), decoded with
+  // the engine loop on the first user gesture and played one-shot by the rocket_hit cue.
+  explosionPunch: '/assets/audio/sfx/explosion-punch.ogg'
+};
 const sampleBufs = new WeakMap(); // ctx -> { engine: AudioBuffer, ... }
 
 export async function loadSampleBuffers(ctx) {
@@ -98,6 +103,26 @@ function bakedLoopVoice(ctx, dest, bufFn, opts = {}) {
       try { src.stop(at + 0.5); } catch (_) { /* already stopped */ }
     }
   };
+}
+
+// One-shot sample play: a decoded buffer (or a leading WINDOW of it) with a quick fade
+// in/out, optionally pitch-shifted. Returns the played duration (0 if the buffer hasn't
+// decoded yet — then it's silently inert, like the engine voice). The rocket cues use this
+// to play real CC0 recordings (assets/audio/sfx) instead of synthesis. `dur` trims a long
+// clip (e.g. the explosion's 4 s tail) to a tidy length with a fade-out.
+function playSample(ctx, dest, t, name, gain = 1) {
+  const buf = sampleBuf(ctx, name);
+  if (!buf) return 0;                                   // decode hasn't landed yet → silent (like the engine voice)
+  const peak = Math.max(gain, 0.0002), dur = buf.duration;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.004);     // tiny attack, no click
+  g.gain.setValueAtTime(peak, t + dur - 0.06);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);     // tiny release
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  src.connect(g); g.connect(dest);
+  src.start(t);
+  return dur;
 }
 
 // ---- building blocks ----
@@ -201,7 +226,9 @@ export const DEFAULT_PICKS = {
   lap: 'plink2',
   screech: 'rumble',
   join: 'risingtwo',
-  engine_putt: 'realloop' // the recorded engine loop, pitch-shifted by speed (Tim, 2026-06-13)
+  engine_putt: 'realloop', // the recorded engine loop, pitch-shifted by speed (Tim, 2026-06-13)
+  rocket_fire: 'jet',      // rocket FLIGHT — continuous airy jet loop, held for the whole air time
+  rocket_hit: 'punch'      // rocket detonation — punchy CC0 explosion sample
   // Cut after auditioning: 'ready' (the roulette's reveal pop already lands
   // that beat), 'final_lap' (redundant with the lap chime) and 'finish' (the
   // chequered-flag crossing plays the ordinary lap chime — the results screen
@@ -509,6 +536,42 @@ export const CUES = [
           return bakedLoopVoice(ctx, dest, (c) => sampleBuf(c, 'engine'),
             { rate0: 0.9, rateSpan: 0.75, lp0: 900, lpSpan: 5200, gain0: 0.007, gainSpan: 0.06, Q: 0.6 });
         }
+      }
+    ]
+  },
+  {
+    id: 'rocket_fire',
+    label: 'Rocket flight (jet)',
+    desc: 'The rocket FLIGHT sound — a sustained airy jet loop held for the whole air time (starts at launch, stops on impact). CONTINUOUS: the host drives the level by distance to the nearest player (closer = louder).',
+    continuous: true,
+    variants: [
+      {
+        id: 'jet', label: 'airy jet loop',
+        start(ctx, dest) {
+          const src = ctx.createBufferSource(); src.buffer = noiseBuf(ctx); src.loop = true;
+          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 0.5;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800; lp.Q.value = 0.4;
+          const out = ctx.createGain(); out.gain.value = 0.0001;
+          src.connect(bp); bp.connect(lp); lp.connect(out); out.connect(dest);
+          src.start(ctx.currentTime);
+          return {
+            set(level) { const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
+              out.gain.setTargetAtTime(0.0001 + l * 1.3, at, 0.05);        // filtered noise → high gain
+              bp.frequency.setTargetAtTime(950 + l * 1500, at, 0.08); },   // brighter as it nears
+            stop() { const at = ctx.currentTime; out.gain.setTargetAtTime(0.0001, at, 0.06); try { src.stop(at + 0.3); } catch (_) { /* stopped */ } }
+          };
+        }
+      }
+    ]
+  },
+  {
+    id: 'rocket_hit',
+    label: 'Rocket hit',
+    desc: 'A rocket detonates on a car — a real CC0 explosion recording (assets/audio/sfx). One-shot; the host scales its level by distance to the nearest player.',
+    variants: [
+      {
+        id: 'punch', label: 'punchy explosion (CC0 sample)',
+        play(ctx, dest, t = ctx.currentTime) { return playSample(ctx, dest, t, 'explosionPunch'); }
       }
     ]
   }

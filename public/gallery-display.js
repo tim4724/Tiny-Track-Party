@@ -13,6 +13,7 @@ var DISPLAY_CARDS = [
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
   { key: 'features',  title: 'Mechanics' },
+  { key: 'rocket',    title: 'Rocket strike', animated: true },
   { key: 'paused',    title: 'Paused' },
   { key: 'reconnect', title: 'Reconnect' },
   { key: 'finished',  title: 'Player finished' },

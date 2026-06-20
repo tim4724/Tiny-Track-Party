@@ -203,10 +203,14 @@ const RIDE_DAMP = 18;
 // Labels are kept for the slot's tooltip/aria. Boost is inline SVG; banana is a
 // 2D render of the actual Kenney item-banana GLB, baked offline like the car
 // picker thumbs (scripts/capture-item-icon.js → assets/toycar/thumbs/).
-const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA' };
+const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET' };
 const ITEM_ICONS = {
   boost: '<svg viewBox="0 0 24 24" fill="none" stroke="#12a99a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,13.5 12,7.5 19,13.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>',
-  banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">'
+  banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">',
+  // Toy rocket: cream body (red outline), blue porthole, red fins, orange flame — the
+  // 2D echo of the in-race procedural model (matched to the same toy palette). Inline
+  // SVG like boost, so no baked asset / CSP change is needed.
+  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="#e6492d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c2.7 2.3 4 5.4 4 9.3 0 2-.5 3.8-1.3 5.2H9.3C8.5 15.3 8 13.5 8 11.5c0-3.9 1.3-7 4-9.3z" fill="#fff3e0"/><circle cx="12" cy="9.2" r="1.5" fill="#2d9cdb" stroke="none"/><path d="M8.2 14.2 5.5 16.6l.3 3 2.9-1.4M15.8 14.2l2.7 2.4-.3 3-2.9-1.4z" fill="#e6492d"/><path d="M10.3 19.6c.5 1.3 1.7 2.2 1.7 2.2s1.2-.9 1.7-2.2" stroke="#f2784b"/></svg>'
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
 
@@ -481,6 +485,13 @@ export class SceneRenderer {
 
   // Per-frame prop reconcile from the engine snapshot (item boxes, bananas, ?bbox).
   syncProps(snap) { this.props.sync(snap); }
+
+  // Spawn a rocket-impact burst at a car (the detonation point). Driven from the engine's
+  // rocket spin event; no-op if the car has no render mesh (e.g. just removed).
+  rocketImpact(id) {
+    const c = this.cars.get(id);
+    if (c && c.group) this.props.spawnImpact(c.group);
+  }
 
   // Restore every warning cone to its home pose (new game / fresh race).
   resetCones() { this.props.resetCones(); }

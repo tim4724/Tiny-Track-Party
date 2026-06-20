@@ -1,0 +1,11 @@
+Rocket sound effects — all CC0 1.0 (public domain dedication), no attribution
+required. These notes are kept only so we remember where each clip came from.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+explosion-punch.ogg
+  Source : "Explosions" (explosion3) — author EZduzziteh
+  From   : https://opengameart.org/content/explosions-4
+  License: CC0 1.0
+
+Used as the rocket item's impact (rocket_hit) cue — see public/display/audio/cues.js.
+The rocket flight (rocket_fire) is a synthesised jet loop, not a sample.

@@ -42,6 +42,38 @@ const BOX_SHADOW_R = 0.3;       // blob radius in world units (box footprint ≈
 const BOX_SHADOW_COLOR = 0x1c1a18; // near-black warm, same as the car under-AO + skid scuffs
 const BOX_SHADOW_OPACITY = 0.4;
 
+// In-flight homing rocket (see _buildRocketProto + _syncRockets): a small toy rocket
+// that flies a touch above the road, nose along travel, spinning about its axis with a
+// flickering tail flame. Built once (shared geo/mats) and cloned per live rocket.
+const ROCKET_SCALE = 1.6;      // overall size multiplier on the built proto — bigger so it reads at race speed
+const ROCKET_HOVER = 0.32;     // how high the rocket flies above the road surface (world units; raised for the bigger body)
+const ROCKET_ROLL = 9.0;       // spin about its travel axis (rad/s) — the toy "whizzing" read
+
+// Rocket impact burst (see spawnImpact + _stepImpacts): a warm additive flash ball plus a
+// thin shockwave RING — both at the detonation point on the car body (in the AIR, not painted
+// on the road), so the blast and its wave read as one event. The ring billboards to face each
+// cell's camera (impactRingBillboard) and expands at CONSTANT width, so it's a crisp pulse,
+// not a fattening donut. No smoke/particles — clean asphalt has nothing to kick up.
+const IMPACT_TIME = 0.7;        // total burst lifetime (s) — deliberately SLOW so the explosion lingers long
+                               // enough to read ("a rocket hit them"), not a blink-and-miss flash
+const IMPACT_FLASH_TIME = 0.5;  // flash ball: a brief hold then a slow fade over this window
+const IMPACT_FLASH_R = 0.62;    // flash ball peak radius (world units) — bigger fireball
+const IMPACT_RING_R0 = 0.25;    // shockwave ring start radius
+const IMPACT_RING_R1 = 2.0;     // shockwave ring end radius — sweeps wider for an explosion read
+const IMPACT_RING_W = 0.05;     // ring half-thickness — held CONSTANT as it expands (thin pulse, not a donut)
+const IMPACT_RING_OPACITY = 0.55; // ring peak alpha — kept subordinate to the flash
+const IMPACT_FOLLOW = 10;       // how hard the flash ball tracks the (spinning-away) car (per second); the
+                               // shockwave ring stays put at the impact point, the fireball trails the car
+
+// Camera-facing billboard for the impact ring: orient its plane toward each rendering camera,
+// then rebuild matrixWorld by hand — onBeforeRender runs AFTER the renderer derived it, and it
+// fires once per split-screen cell, so the ring reads as a flat halo in every cell at once.
+function impactRingBillboard(renderer, scene, camera) {
+  this.quaternion.setFromRotationMatrix(camera.matrixWorld);
+  this.updateMatrix();
+  this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
+}
+
 export class TrackProps {
   constructor(scene, protos, bbox) {
     this.protos = protos;     // shared GLB prototype cache (filled by SceneRenderer.load)
@@ -76,6 +108,32 @@ export class TrackProps {
     this._coneTmp2 = new THREE.Vector3();
     this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector
     this._liveBananas = new Set();         // reused per-frame live-id set; cleared, never reallocated
+    // Homing rockets: reconciled by id from snapshot.rockets (like bananas), animated
+    // in _stepRockets. The proto is built once (shared geo/mats) and cloned per rocket;
+    // the flame material is held so its flicker can be driven once per frame.
+    this._rocketMeshes = new Map();        // rocket id -> cloned mesh group
+    this._liveRockets = new Set();         // reused per-frame live-id set
+    this._rocketFlameMat = null;           // set by _buildRocketProto; flickered in _stepRockets
+    this._rocketProto = this._buildRocketProto();
+    this._rkFwd = new THREE.Vector3();     // scratch: per-frame rocket orientation basis
+    this._rkUp = new THREE.Vector3();
+    this._rkSide = new THREE.Vector3();
+    this._rkBasis = new THREE.Matrix4();
+    this._yAxis = new THREE.Vector3(0, 1, 0); // rocket builds nose-up (+Y); spun about this after orienting
+    // Rocket impact bursts: shared unit geo (scaled per frame) + per-burst cloned additive
+    // materials (so each fades independently). Geo is renderer-lifetime, never disposed.
+    this._impacts = [];
+    this._impactSphereGeo = new THREE.IcosahedronGeometry(1, 2); // unit flash ball (scaled per frame)
+    this._impactFlashMatProto = new THREE.MeshBasicMaterial({
+      color: 0xffe0a8, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    // Air shockwave ring: warm-white additive, billboarded to face the camera (impactRingBillboard).
+    // No polygonOffset/road-decal tricks — it floats at the detonation point, not on the asphalt.
+    this._impactRingMatProto = new THREE.MeshBasicMaterial({
+      color: 0xffe6b0, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this._impUp = new THREE.Vector3();   // scratch for the per-burst up vector
+    this._impPos = new THREE.Vector3();
   }
 
   // Rebuild everything for a new track layout.
@@ -89,6 +147,8 @@ export class TrackProps {
   step(dt, cars) {
     this._stepCones(dt, cars);
     this._stepBoxes(dt);
+    this._stepRockets(dt);
+    this._stepImpacts(dt);
   }
 
   // Boost pads + item boxes (static, authored). Pads are glowing chevron discs;
@@ -100,6 +160,9 @@ export class TrackProps {
     for (const b of (this._boxes || [])) { for (const m of (b.mats || [])) m.dispose(); if (b.geom) b.geom.dispose(); }
     this._boxes = [];
     this._bananaMeshes = new Map();
+    this._rocketMeshes = new Map(); // cleared with the hazardGroup on a track change; clones share the proto's geo/mats (never disposed)
+    for (const im of (this._impacts || [])) { im.flash.material.dispose(); im.ring.geometry.dispose(); im.ring.material.dispose(); } // dispose per-burst clones/geo; meshes go with the hazardGroup clear
+    this._impacts = [];
     const cl = track.centerline;
     const Y = new THREE.Vector3(0, 1, 0);
     for (const p of (track.pads || [])) {
@@ -241,6 +304,7 @@ export class TrackProps {
       } else ring(d.s, d.lat, d.radius, COL[d.kind] || 0xffffff);
     }
     for (const b of (snap.bananas || [])) ring(b.s, b.lat, b.radius || 0.6, 0xff9f1c);
+    for (const r of (snap.rockets || [])) ring(r.s, r.lat, 0.3, 0x2d9cdb);
     for (const c of (snap.cars || [])) {
       if (c.totalS == null) continue;
       const f = cl.sampleAt(c.totalS), up = f.up.clone().normalize();
@@ -253,6 +317,7 @@ export class TrackProps {
   // cooldown) item boxes, and create/move/remove dropped-banana meshes by id.
   sync(snap) {
     this._drawDebug(snap); // ?bbox overlay (no-op unless enabled)
+    this._syncRockets(snap); // before the banana block's early-return guards
     if (this._boxes && snap.boxes) {
       for (let i = 0; i < this._boxes.length; i++) {
         const b = this._boxes[i];
@@ -520,6 +585,151 @@ export class TrackProps {
       cn.mesh.position.copy(cn.home);
       cn.mesh.quaternion.copy(cn.homeQuat);
       cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
+    }
+  }
+
+  // Build the shared toy-rocket prototype ONCE (cloned per live rocket in _syncRockets):
+  // a cream nose cone + bright-red body + three dark fins, with an additive tail flame
+  // whose flicker is driven via the held material. Built nose-up (local +Y) so
+  // _syncRockets can map +Y onto the travel tangent. Geo/mats are renderer-lifetime
+  // (shared across all clones), never disposed — like the box-shadow blob.
+  _buildRocketProto() {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe6492d, roughness: 0.5, metalness: 0.05 }); // toy red
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0xfff3e0, roughness: 0.5 });                  // cream nose
+    const finMat = new THREE.MeshStandardMaterial({ color: 0x37414f, roughness: 0.6 });                   // dark fins
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.2, 14), bodyMat);
+    // A long, sharp nose (base radius = the body top, so no mushroom join) — the clear
+    // "this end forward" cue that keeps the silhouette from reading bi-directional.
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.17, 14), noseMat); nose.position.y = 0.185;
+    g.add(body, nose);
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.085, 0.07), finMat);
+      const a = i * (2 * Math.PI / 3);
+      fin.position.set(Math.cos(a) * 0.085, -0.055, Math.sin(a) * 0.085);
+      fin.rotation.y = Math.PI / 2 - a; // turn the fin's depth (local +Z) to point radially outward
+      g.add(fin);
+    }
+    // Additive tail flame — small + glowing (not a second cone), pointing out the BACK
+    // (local -Y → trails the travel direction). Flicker driven via the held material.
+    this._rocketFlameMat = new THREE.MeshBasicMaterial({
+      color: 0xffb33b, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.09, 12), this._rocketFlameMat);
+    flame.position.y = -0.145; flame.rotation.x = Math.PI;
+    g.add(flame);
+    g.scale.setScalar(ROCKET_SCALE); // clones inherit this (the scale survives _syncRockets' quaternion/position writes)
+    return g;
+  }
+
+  // Per-frame reconcile of in-flight rockets from the snapshot (mirrors the banana block):
+  // clone the proto on first sight, place + orient it each frame (nose along the travel
+  // tangent, flying ROCKET_HOVER above the road, spun about its axis), and remove it when
+  // the engine drops the id (hit or expiry). Clones share the proto geo/mats, so removal
+  // just detaches — nothing is disposed.
+  _syncRockets(snap) {
+    if (!this._rocketMeshes) return;
+    const incoming = snap.rockets || [];
+    if (incoming.length === 0 && this._rocketMeshes.size === 0) return; // steady state: no work
+    const live = this._liveRockets; live.clear();
+    for (const r of incoming) {
+      live.add(r.id);
+      let m = this._rocketMeshes.get(r.id);
+      if (!m && this._centerline && this._rocketProto) {
+        m = this._rocketProto.clone(true);
+        m.userData.roll = 0;
+        const sh = new THREE.Mesh(this._boxShadowGeo, this._boxShadowMat); // shared blob, scaled to the bigger rocket
+        sh.scale.setScalar(0.95); sh.renderOrder = -1;
+        m.userData.shadow = sh;
+        this.hazardGroup.add(sh);
+        this.hazardGroup.add(m);
+        this._rocketMeshes.set(r.id, m);
+      }
+      if (m) {
+        const f = this._centerline.sampleAt(r.s);
+        const fwd = this._rkFwd.copy(f.tangent).normalize();
+        const up = this._rkUp.copy(f.up).normalize();
+        const side = this._rkSide.copy(fwd).cross(up).normalize();
+        m.position.copy(f.pos).addScaledVector(f.lateral, r.lat).addScaledVector(up, ROCKET_HOVER);
+        m.quaternion.setFromRotationMatrix(this._rkBasis.makeBasis(side, fwd, up)); // local +Y → travel
+        m.rotateOnAxis(this._yAxis, m.userData.roll || 0);                          // spin about the travel axis
+        const sh = m.userData.shadow; // ground blob flat on the road directly beneath
+        if (sh) {
+          sh.position.copy(f.pos).addScaledVector(f.lateral, r.lat).addScaledVector(up, 0.02);
+          sh.quaternion.setFromUnitVectors(this._zAxis, up);
+        }
+      }
+    }
+    for (const [id, m] of this._rocketMeshes) {
+      if (!live.has(id)) {
+        if (m.userData.shadow) this.hazardGroup.remove(m.userData.shadow); // shared blob → detach, never dispose
+        this.hazardGroup.remove(m);
+        this._rocketMeshes.delete(id);
+      }
+    }
+  }
+
+  // Animate the live rockets: accumulate a spin angle (applied in _syncRockets after the
+  // orientation) and flicker the shared tail flame. Cheap; a no-op when nothing's in flight.
+  _stepRockets(dt) {
+    if (!this._rocketMeshes || !this._rocketMeshes.size) return;
+    for (const m of this._rocketMeshes.values()) m.userData.roll = (m.userData.roll || 0) + ROCKET_ROLL * dt;
+    this._rocketClock = (this._rocketClock || 0) + dt;
+    if (this._rocketFlameMat) this._rocketFlameMat.opacity = 0.5 + 0.4 * (0.5 + 0.5 * Math.sin(this._rocketClock * 38));
+  }
+
+  // Spawn a one-shot impact burst at a car (the rocket's detonation point). `carGroup` is
+  // the target car's render group — we read its position + up (road normal). Each burst owns
+  // cloned additive materials (independent fade) over shared unit geo; _stepImpacts advances
+  // and removes them. Driven from main.js on the rocket spin event.
+  spawnImpact(carGroup) {
+    if (!carGroup || !this._impacts) return;
+    const up = this._impUp.set(0, 1, 0).applyQuaternion(carGroup.quaternion).normalize();
+    const center = this._impPos.copy(carGroup.position).addScaledVector(up, 0.3); // detonation point on the car body
+    const flash = new THREE.Mesh(this._impactSphereGeo, this._impactFlashMatProto.clone());
+    flash.position.copy(center);
+    // Air shockwave ring at the SAME point — a thin camera-facing halo, not a ground decal.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(IMPACT_RING_R0 - IMPACT_RING_W, IMPACT_RING_R0 + IMPACT_RING_W, 48),
+      this._impactRingMatProto.clone());
+    ring.position.copy(center);
+    ring.onBeforeRender = impactRingBillboard; // re-faces each cell's camera every render
+    this.hazardGroup.add(flash);
+    this.hazardGroup.add(ring);
+    this._impacts.push({ flash, ring, t: 0, car: carGroup }); // car ref → the flash trails it (see _stepImpacts)
+  }
+
+  // Advance the impact bursts: the flash ball pops then fades fast; the shockwave ring expands
+  // (ease-out) at CONSTANT width — rebuilt each frame from the new radius — then fades. Remove +
+  // dispose finished bursts (each ring owns its geometry, so dispose it too).
+  _stepImpacts(dt) {
+    if (!this._impacts || !this._impacts.length) return;
+    for (const im of this._impacts) {
+      im.t += dt;
+      const tr = Math.min(1, im.t / IMPACT_TIME);             // ring progress
+      const tf = Math.min(1, im.t / IMPACT_FLASH_TIME);       // flash progress
+      const R = IMPACT_RING_R0 + (IMPACT_RING_R1 - IMPACT_RING_R0) * (1 - (1 - tr) * (1 - tr)); // ease-out radius
+      im.ring.geometry.dispose();
+      im.ring.geometry = new THREE.RingGeometry(Math.max(0.001, R - IMPACT_RING_W), R + IMPACT_RING_W, 48); // thin, constant width
+      im.ring.material.opacity = IMPACT_RING_OPACITY * (1 - tr);
+      im.flash.scale.setScalar(IMPACT_FLASH_R * (0.5 + 0.5 * Math.min(1, tf * 5))); // pop to full fast (~0.1s)
+      // hold the fireball bright briefly, then a slow ease-out — so the hit lingers and reads
+      im.flash.material.opacity = tf < 0.25 ? 1 : Math.max(0, 1 - (tf - 0.25) / 0.75);
+      if (tf >= 1) im.flash.visible = false;
+      // The fireball TRAILS the car as it spins away (the ring stays at the impact point).
+      if (im.car) {
+        const up = this._impUp.set(0, 1, 0).applyQuaternion(im.car.quaternion).normalize();
+        const target = this._impPos.copy(im.car.position).addScaledVector(up, 0.3);
+        im.flash.position.lerp(target, Math.min(1, IMPACT_FOLLOW * dt));
+      }
+    }
+    if (this._impacts.some((im) => im.t >= IMPACT_TIME)) {
+      this._impacts = this._impacts.filter((im) => {
+        if (im.t < IMPACT_TIME) return true;
+        this.hazardGroup.remove(im.flash); this.hazardGroup.remove(im.ring);
+        im.flash.material.dispose();
+        im.ring.geometry.dispose(); im.ring.material.dispose(); // per-burst clones + per-ring geometry
+        return false;
+      });
     }
   }
 }

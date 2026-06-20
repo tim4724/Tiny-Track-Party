@@ -178,6 +178,11 @@ export class RaceAudio {
   }
   bananaDrop() { this._play('banana_drop'); }
   spin() { this._play('banana_slip'); } // oil shares the comedy cue
+  // Rocket FLIGHT — a sustained voice (like boost wind / engine), one per in-flight rocket id,
+  // held from launch to impact. level 0 stops + frees it. The host drives level by the rocket's
+  // distance to the nearest player (see main.js driveRocketAudio). NOT a one-shot.
+  rocketFlight(id, level) { this._stateVoice('rocket_fire', id, Math.max(0, Math.min(1, level))); }
+  rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); } // detonation thump; level scaled by distance to a player (main.js), default full (gallery)
   lap() {
     const now = performance.now();
     if (now - this._lastLap < LAP_GAP_MS) return;

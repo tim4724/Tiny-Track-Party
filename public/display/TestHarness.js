@@ -220,6 +220,8 @@ export function runDisplayScenario(opts, ctx) {
     function setupFeatures() {
       const { scene, track } = ctx;
       scene.orbit = false;
+      scene.bboxOrbit = false; // clear the lobby attract-orbit flag main.js set at boot — else the
+                               // overview loop sweeps the WHOLE track and ignores our cluster framing
       const cl = track.centerline, L = track.length;
       const s0 = longestStraight(cl, L) + 3; // a few units in for runway
       const at = (d) => ((s0 + d) % L + L) % L;
@@ -240,25 +242,32 @@ export function runDisplayScenario(opts, ctx) {
       const car = engine.cars.get(0);
       Object.assign(car, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (won't tick — frozen)
       engine.bananas.push({ id: 1, s: at(8), lat: -0.5, owner: 'none' });
+      engine.rockets.push({ id: 1, s: at(4.2), lat: 0.7, owner: 'none' }); // a homing rocket mid-flight in the lineup
       engine._recomputePoses();
 
       const snap = engine.getSnapshot();
       const c0 = snap.cars[0];
       scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul); // boostMul → aura
-      scene.syncProps(snap); // box mesh + dropped-banana mesh
+      scene.syncProps(snap); // box + dropped-banana + in-flight rocket meshes
 
-      // Frame it: behind + above the boosting car, looking down the straight at the cluster.
-      const fcar = cl.sampleAt(s0), tan = fcar.tangent.clone().normalize();
-      const pos = fcar.pos.clone().addScaledVector(tan, -4.5).addScaledVector(fcar.lateral, 1.2);
-      pos.y += 3.2;
-      scene.overview.position.copy(pos);
+      // Frame the cluster from an elevated 3/4 angle, off to one side looking ACROSS it, so
+      // every piece reads at once and the straight's vanishing line falls off to the side
+      // (rather than shrinking the whole lineup down a long-straight perspective).
+      const ctr = cl.sampleAt(at(4));
+      const cf = ctr.tangent.clone().normalize(), clat = ctr.lateral.clone().normalize(), cup = ctr.up.clone().normalize();
+      const pos = ctr.pos.clone().addScaledVector(cf, -4.6).addScaledVector(clat, 6.0).addScaledVector(cup, 5.0);
+      scene._ovTarget = ctr.pos.clone().addScaledVector(cf, -0.5).addScaledVector(cup, 0.2);
       scene._ovPos = pos.clone();
-      scene._ovTarget = cl.sampleAt(at(6)).pos.clone();
+      scene.overview.position.copy(pos);
       scene.overview.lookAt(scene._ovTarget);
 
-      // Car stays put, but re-pose it each frame so the boost aura keeps pulsating
-      // (boxes/cones idle-animate via the render loop regardless).
-      scene.onFrame = () => scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul);
+      // Car stays put, but re-pose it + re-sync props each frame so the boost aura keeps
+      // pulsating and the rocket keeps spinning with its flickering flame (boxes/cones
+      // idle-animate via the render loop regardless).
+      scene.onFrame = () => {
+        scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul);
+        scene.syncProps(snap);
+      };
 
       // Standalone (own tab): let the viewer fly around the feature cluster. In the
       // gallery iframe this is a no-op, so the frozen 3/4 framing above is kept.
@@ -286,7 +295,32 @@ export function runDisplayScenario(opts, ctx) {
     const statsFor = window.carStats || (() => undefined);
     const field = ids.map((i) => ({ id: i, stats: statsFor(i) }));
 
-    let engine = new Game(field, track, { onEvent() {} });
+    // The 'rocket' scenario routes the engine's hit event to the impact burst (live
+    // main.js does this in onRaceEvent; the gallery has no relay, so we wire it here).
+    // Sound only plays STANDALONE (own tab, not a gallery-grid iframe) — a wall of
+    // thumbnails all firing rockets would be cacophony. Audio stays locked until the
+    // viewer's first click (main.js wires the gesture-resume); window.__audio is the
+    // shared RaceAudio the host built. Same not-in-iframe gate as the free camera.
+    let inIframe = true;
+    try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+    const sfx = (!inIframe && window.__audio) ? window.__audio : null;
+    // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
+    // held for the whole air time — not a one-shot. Only the impact is event-driven here.
+    const events = kind === 'rocket'
+      ? { onEvent: (ev) => {
+          if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
+        } }
+      : { onEvent() {} };
+    let galleryRocketIds = new Set();
+    function driveGalleryRocketAudio() {
+      if (!sfx) return;
+      const seen = new Set();
+      for (const r of engine.rockets) { seen.add(r.id); sfx.rocketFlight(r.id, 1); } // demo: full level (no human-distance to scale by)
+      for (const id of galleryRocketIds) if (!seen.has(id)) sfx.rocketFlight(id, 0);
+      galleryRocketIds = seen;
+    }
+
+    let engine = new Game(field, track, events);
     window.__engine = engine;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
@@ -299,7 +333,7 @@ export function runDisplayScenario(opts, ctx) {
     };
     placeGrid();
 
-    const live = kind === 'racing';
+    const live = kind === 'racing' || kind === 'rocket';
 
     // Self-driving preview: every car is an AI racer using the SAME pure-pursuit
     // autopilot as the live CPU fill (AiDriver), so the gallery shows the real bot
@@ -312,9 +346,27 @@ export function runDisplayScenario(opts, ctx) {
       }
     }
 
+    // 'rocket' demo: every ~1.3s hand the LAST-place car a homing rocket and fire it at the
+    // car directly ahead, so the split-screen preview continuously shows the rocket flying +
+    // its impact burst. One in flight per car at a time, so it doesn't turn into a barrage.
+    let rocketCd = 0.8; // first strike shortly after the start
+    function fireRocketFromBack(dt) {
+      rocketCd -= dt;
+      if (rocketCd > 0) return;
+      rocketCd = 1.3;
+      const liveCars = [...engine.cars.values()].filter((c) => !c.finished);
+      if (liveCars.length < 2) return;
+      liveCars.sort((a, b) => a.totalS - b.totalS);
+      const firer = liveCars[0];
+      if (engine.rockets.some((r) => r.owner === firer.id)) return; // one already in flight from this car
+      firer.item = 'rocket';
+      engine._useItem(firer); // locks the car ahead + spawns the rocket (+events → impact burst)
+    }
+
     let lastHud = 0;
     scene.onFrame = (dt) => {
       if (live) {
+        if (kind === 'rocket') fireRocketFromBack(dt);
         autosteer();
         engine.update(dt * 1000);
       }
@@ -323,6 +375,7 @@ export function runDisplayScenario(opts, ctx) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
+      if (kind === 'rocket') driveGalleryRocketAudio(); // sustained jet per in-flight rocket
       if (live) {
         const now = performance.now();
         if (now - lastHud > 160) {
@@ -331,8 +384,9 @@ export function runDisplayScenario(opts, ctx) {
         }
         // Endless preview: once everyone crosses the line, reset and lap again.
         if (engine.raceOver) {
-          engine = new Game(field, track, { onEvent() {} });
+          engine = new Game(field, track, events);
           window.__engine = engine;
+          rocketCd = 0.8;
           placeGrid();
         }
       }
