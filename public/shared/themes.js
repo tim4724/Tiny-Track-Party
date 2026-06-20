@@ -19,7 +19,7 @@
 export const THEMES = {
   // ── grass — the canonical Sunny Circuit biome. Every value here is the VERBATIM
   // constant the renderer used before theming existed; do not drift it, or the
-  // Backyard/Rooftop cups (which resolve to grass) change look.
+  // Backyard cup (which resolves to grass) changes look.
   grass: {
     sky:    { zenith: 0x59a7e8, horizon: 0x8ecae6, below: 0xc8e9f2 },
     fog:    0x8ecae6,
@@ -27,6 +27,19 @@ export const THEMES = {
     key:    { color: 0xfff1d0, intensity: 1.4 },
     ground: { kind: 'lawn' },
     hills:  [0x8cc578, 0x7cb86a, 0x9bce86],
+  },
+
+  // ── sunset — golden hour over the grass world. SAME grass ground + scenery as
+  // `grass` (green trees still read right), so it needs NO new ground texture or props:
+  // a warm low-key sun, a peach-to-periwinkle sky over a warm apricot-haze fog, and
+  // warm dusk hills. The warm key light alone turns the green grass golden.
+  sunset: {
+    sky:    { zenith: 0x5e74c0, horizon: 0xffb878, below: 0xffd9a8 },
+    fog:    0xffb878,
+    hemi:   { sky: 0xffd0a0, ground: 0x8c7a66, intensity: 2.0 },
+    key:    { color: 0xffa850, intensity: 1.55 },
+    ground: { kind: 'lawn' },
+    hills:  [0xc69a86, 0xb98a72, 0xd0a890],
   },
 
   // ── beach — the Easy on-ramp biome. Brighter, warmer sun; a paler turquoise
@@ -46,7 +59,7 @@ export const THEMES = {
 // the renderer is always safe to call themeForCup() with whatever a track carries.
 const CUP_BIOME = {
   backyard: 'grass',
-  rooftop:  'grass',
+  rooftop:  'sunset',
   beach:    'beach',
 };
 
