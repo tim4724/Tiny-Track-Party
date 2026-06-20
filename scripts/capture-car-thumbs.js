@@ -13,7 +13,9 @@
 //
 // Framing is fixed from the model's bounding SPHERE (rotation-invariant), so the
 // car holds the same size/position through the whole spin instead of jittering.
-// A ShadowMaterial ground catches a soft contact shadow that turns with the car.
+// The ground shadow reproduces the in-race look (SceneRenderer._bakeCarShadow): the
+// car's baked top-down SILHOUETTE, tinted warm near-black with a tight penumbra,
+// laid flat under the car and parented to the turntable so it spins with the car.
 //
 //   node scripts/capture-car-thumbs.js                    # all roster cars
 //   node scripts/capture-car-thumbs.js --name vehicle-racer-low
@@ -100,26 +102,19 @@ async function main() {
         renderer.setSize(size, size, false);
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setClearColor(0x000000, 0);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         const scene = new THREE.Scene();
-        // Toy lighting matched to SceneRenderer / capture-item-icon.js.
+        // Toy lighting matched to SceneRenderer / capture-item-icon.js. The key only LIGHTS
+        // the body now — it casts no shadow (cars don't cast the sun shadow in-race either);
+        // the ground shadow below is the car's baked top-down silhouette, like the engine.
         scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
         const key = new THREE.DirectionalLight(0xfff1d0, 1.4);
         key.position.set(6, 12, 4);
-        key.castShadow = true;
-        key.shadow.mapSize.set(2048, 2048);
-        key.shadow.camera.near = 0.5; key.shadow.camera.far = 60;
-        const s = 0.9;
-        Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s });
-        key.shadow.bias = -0.0008;
         scene.add(key);
 
         const gltf = await new Promise((resolve, reject) =>
           new GLTFLoader().load(`/assets/toycar/${name}.glb`, resolve, undefined, reject));
         const model = gltf.scene;
-        model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
 
         // Centre on origin so the turntable spins in place.
         const box0 = new THREE.Box3().setFromObject(model);
@@ -130,15 +125,79 @@ async function main() {
         pivot.add(model);
         scene.add(pivot);
 
-        // Ground shadow-catcher just under the wheels (model recentred → minY shifts).
-        const minY = box0.min.y - center0.y;
-        const ground = new THREE.Mesh(
-          new THREE.PlaneGeometry(8, 8),
-          new THREE.ShadowMaterial({ opacity: 0.26 }));
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = minY + 0.001;
-        ground.receiveShadow = true;
-        scene.add(ground);
+        // Ground shadow — reproduce the in-race look (SceneRenderer._bakeCarShadow). The
+        // car's shadow in the game is NOT a cast shadow: it's the car's own top-down
+        // SILHOUETTE (cabin + wheels) baked flat on the ground, tinted warm near-black with
+        // a tight penumbra, sitting straight under the car. Bake the same silhouette here —
+        // same overscan / colour / opacity / blur constants — so the lobby turntable's shadow
+        // matches the one players see while racing instead of a soft offset cast blob.
+        const SHADOW_OVERSCAN = 1.45;   // keep in sync with SceneRenderer.SHADOW_OVERSCAN
+        const SHADOW_COLOR = 0x171513;  // SceneRenderer.UNDER_AO_COLOR (warm near-black)
+        const SHADOW_OPACITY = 0.55;    // SceneRenderer.UNDER_AO_OPACITY base (no brake-dive load on a turntable)
+
+        // Footprint of the centred model (== the engine's footW/footL: a full bbox at rest).
+        const fbb = new THREE.Box3().setFromObject(model);
+        const footW = (fbb.max.x - fbb.min.x) || 0.1, footL = (fbb.max.z - fbb.min.z) || 0.1;
+        const fcx = (fbb.min.x + fbb.max.x) / 2, fcz = (fbb.min.z + fbb.max.z) / 2;
+        const hw = (footW / 2) * SHADOW_OVERSCAN, hl = (footL / 2) * SHADOW_OVERSCAN;
+
+        // Render a flat-white top-down mask of the model on transparent, framed to the
+        // footprint × overscan, then blur it on a 2D canvas for the soft edge — exactly the
+        // engine's bake. Length runs up the texture (+Z → vertical), width across (+X).
+        const ocam = new THREE.OrthographicCamera(-hw, hw, hl, -hl, 0.01, (fbb.max.y - fbb.min.y) + 2);
+        ocam.position.set(fcx, fbb.max.y + 1, fcz);
+        ocam.up.set(0, 0, 1);
+        ocam.lookAt(fcx, fbb.min.y, fcz);
+        const TW = 128, TH = Math.max(16, Math.round(TW * (hl / hw)));
+        const rt = new THREE.WebGLRenderTarget(TW, TH);
+        const maskScene = new THREE.Scene();
+        const maskModel = model.clone(true);
+        maskScene.add(maskModel);
+        maskScene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // flat unlit → pure silhouette
+        renderer.setRenderTarget(rt);
+        renderer.clear();
+        renderer.render(maskScene, ocam);
+        const px = new Uint8Array(TW * TH * 4);
+        renderer.readRenderTargetPixels(rt, 0, 0, TW, TH, px);
+        renderer.setRenderTarget(null);
+        rt.dispose();
+        // White rgb everywhere (so blurring fades ALPHA only — no dark fringe); alpha from the
+        // mask. readRenderTargetPixels reads bottom-to-top, and the overhead camera's screen-X
+        // runs opposite world +X (up=+Z, looking −Y), so flip BOTH axes to land a faithful
+        // top-down map in the canvas (row 0 = world +Z up, col 0 = world −X). With the quad's
+        // default flipY this maps u→world +X and v→world +Z, so the silhouette lies exactly
+        // over the car (no nose↔tail or left↔right swap).
+        const mask = document.createElement('canvas'); mask.width = TW; mask.height = TH;
+        const mctx = mask.getContext('2d');
+        const img = mctx.createImageData(TW, TH);
+        for (let y = 0; y < TH; y++) {
+          for (let x = 0; x < TW; x++) {
+            const dst = (y * TW + x) * 4, src = ((TH - 1 - y) * TW + (TW - 1 - x)) * 4;
+            img.data[dst] = 255; img.data[dst + 1] = 255; img.data[dst + 2] = 255;
+            img.data[dst + 3] = px[src + 3];
+          }
+        }
+        mctx.putImageData(img, 0, 0);
+        const soft = document.createElement('canvas'); soft.width = TW; soft.height = TH;
+        const softctx = soft.getContext('2d');
+        softctx.filter = `blur(${Math.max(2, Math.round(TW * 0.022))}px)`; // tight penumbra, same as the engine
+        softctx.drawImage(mask, 0, 0);
+        const shadowTex = new THREE.CanvasTexture(soft);
+        shadowTex.colorSpace = THREE.SRGBColorSpace;
+
+        // A flat quad under the wheels, sized to the footprint × overscan and parented to the
+        // turntable so the silhouette spins WITH the car (stays aligned at every yaw).
+        const shadow = new THREE.Mesh(
+          new THREE.PlaneGeometry(footW * SHADOW_OVERSCAN, footL * SHADOW_OVERSCAN),
+          new THREE.MeshBasicMaterial({
+            map: shadowTex, color: SHADOW_COLOR, transparent: true, opacity: SHADOW_OPACITY,
+            depthWrite: false, side: THREE.DoubleSide,
+          }));
+        // +π/2 lays the quad flat with local +y → world +Z and local +x → world +X, so the
+        // top-down silhouette sits true under the car; DoubleSide keeps it visible from above.
+        shadow.rotation.x = Math.PI / 2;
+        shadow.position.set(fcx, fbb.min.y + 0.001, fcz);
+        pivot.add(shadow);
 
         // Fixed framing from the bounding sphere (rotation-invariant).
         const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
