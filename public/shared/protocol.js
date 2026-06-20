@@ -124,17 +124,18 @@ var CAR_MODEL_YAW = [0, 0, 0, 0];
 // rails the same bend much faster. So the spread here is deliberately wide. The
 // two fast cars split "fast" by axis: BOLT owns outright TOP SPEED (highest vmax —
 // the name promises lightning, so it's the fastest thing on a straight), while
-// RUMBLE is the heavy that's quick-but-second flat-out and wins by WEIGHT — it
-// shoves everyone off-line (an edge the solo lap-time probe can't even see).
-// Each car owns a track family: Bolt the flowing straights, Carve the tight
-// corners, Dash the medium mix, Rumble the scrum.
-// Spread tuned against the cup tracks with scripts/probe-car-matrix.js (Bolt wins
-// every flowing track, Carve every tight one, Dash the medium, Rumble 2nd-fastest
-// on every straight + the collision king); re-run it after edits.
+// RUMBLE is the heavy bruiser that wins by WEIGHT — it shoves everyone off-line
+// (an edge the solo lap-time probe can't see). Each car owns a track family:
+// Bolt the flowing straights, Carve the tight corners, Dash the medium mix,
+// Rumble the scrum.
+// Spread tuned against the cup tracks with scripts/probe-car-matrix.js so Bolt
+// wins fast tracks but has real bad tracks, Carve keeps tight tracks, and Dash
+// can take medium/technical layouts. Re-run it after edits; use the packed-race
+// probe for Rumble's collision value.
 var CAR_STATS = [
   // accel, vmax, turn(=handling), mass — max holdable corner speed ≈ turn·9 u/s in the tightest corners.
-  { accel: 1.00, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced benchmark, no weakness; owns the medium tracks, lowest variance
-  { accel: 1.05, vmax: 1.14, turn: 0.91, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), twitchy in tight corners. Owns the flowing tracks
+  { accel: 1.03, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced benchmark with the best launch; owns medium/technical tracks, lowest variance
+  { accel: 1.05, vmax: 1.11, turn: 0.89, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks but pays in tight ones
   { accel: 1.02, vmax: 0.97, turn: 1.26, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner carver, rails the tightest bend; pays with a low top end. Owns the tight tracks
   { accel: 0.96, vmax: 1.10, turn: 0.90, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: strong grunt + 2nd-fastest flat-out, ponderous in corners, heaviest by far (wins every shove)
 ];
