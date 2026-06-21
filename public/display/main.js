@@ -382,6 +382,7 @@ scene.onFrame = (dt) => {
   const snap = session.getSnapshot();
   let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop (see below)
   for (const c of snap.cars) {
+    scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (idempotent)
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
     // Curb scrub — loudness by distance to the nearest human (the player's own car
     // is at distance 0 → the ceiling). Unlike the one-shot cues this is a continuous

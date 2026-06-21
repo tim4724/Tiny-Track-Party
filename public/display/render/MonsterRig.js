@@ -100,8 +100,10 @@ export function buildMonsterRig(carScene, monsterScene, opts = {}) {
   rig.add(base);
 
   // Car body = the car GLB with its wheels (and the exposed axle rod, if any)
-  // stripped, so only the body shell remains.
+  // stripped, so only the body shell remains. Named so the in-race transform can
+  // grab it as the lean/pitch handle (SceneRenderer.setCarMonster).
   const body = carScene.clone(true);
+  body.name = 'monster-body';
   for (const w of findWheels(body)) w.parent && w.parent.remove(w);
   const axle = body.getObjectByName('axle');
   if (axle) axle.parent && axle.parent.remove(axle);

@@ -17,6 +17,7 @@ import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, 
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
+import { buildMonsterRig, MONSTER_BASE_ASSET } from './render/MonsterRig.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
@@ -203,16 +204,25 @@ const RIDE_DAMP = 18;
 // Labels are kept for the slot's tooltip/aria. Boost is inline SVG; banana is a
 // 2D render of the actual Kenney item-banana GLB, baked offline like the car
 // picker thumbs (scripts/capture-item-icon.js → assets/toycar/thumbs/).
-const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET' };
+const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
 const ITEM_ICONS = {
   boost: '<svg viewBox="0 0 24 24" fill="none" stroke="#12a99a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,13.5 12,7.5 19,13.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>',
   banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">',
   // Toy rocket: cream body (red outline), blue porthole, red fins, orange flame — the
   // 2D echo of the in-race procedural model (matched to the same toy palette). Inline
   // SVG like boost, so no baked asset / CSP change is needed.
-  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="#e6492d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c2.7 2.3 4 5.4 4 9.3 0 2-.5 3.8-1.3 5.2H9.3C8.5 15.3 8 13.5 8 11.5c0-3.9 1.3-7 4-9.3z" fill="#fff3e0"/><circle cx="12" cy="9.2" r="1.5" fill="#2d9cdb" stroke="none"/><path d="M8.2 14.2 5.5 16.6l.3 3 2.9-1.4M15.8 14.2l2.7 2.4-.3 3-2.9-1.4z" fill="#e6492d"/><path d="M10.3 19.6c.5 1.3 1.7 2.2 1.7 2.2s1.2-.9 1.7-2.2" stroke="#f2784b"/></svg>'
+  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="#e6492d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c2.7 2.3 4 5.4 4 9.3 0 2-.5 3.8-1.3 5.2H9.3C8.5 15.3 8 13.5 8 11.5c0-3.9 1.3-7 4-9.3z" fill="#fff3e0"/><circle cx="12" cy="9.2" r="1.5" fill="#2d9cdb" stroke="none"/><path d="M8.2 14.2 5.5 16.6l.3 3 2.9-1.4M15.8 14.2l2.7 2.4-.3 3-2.9-1.4z" fill="#e6492d"/><path d="M10.3 19.6c.5 1.3 1.7 2.2 1.7 2.2s1.2-.9 1.7-2.2" stroke="#f2784b"/></svg>',
+  // Monster truck: a chunky cab on a high frame over two fat tyres — the 2D echo of
+  // the in-race transform (gunmetal frame, purple cab nod to the kit body, dark
+  // tyres). Inline SVG like boost/rocket, so no baked asset / CSP change is needed.
+  monster: '<svg viewBox="0 0 24 24" fill="none" stroke="#3a3f47" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11.5h14l-1.3-3.2a1.6 1.6 0 0 0-1.5-1H7.8a1.6 1.6 0 0 0-1.5 1L5 11.5z" fill="#7b4fc0"/><path d="M3.5 11.5h17v2.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z" fill="#565b63"/><circle cx="7.2" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="16.8" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7.2" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/><circle cx="16.8" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/></svg>'
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
+
+// The exact per-car handles setCarPose / SkidMarks read each frame. Swapping these (and
+// the visible model) IS the whole monster transform — everything else (the chase cam,
+// boost disk, ground shadow, HUD) is model-agnostic and just follows. See setCarMonster.
+const MONSTER_HANDLE_KEYS = ['car', 'body', 'bodyBaseQuat', 'frontWheels', 'backWheels', 'allWheels', 'baseYaw', 'pitchSign', 'wheelbase', 'wheelRadius', 'skidWidth', 'footW', 'footL'];
 
 export class SceneRenderer {
   constructor(container, colors) {
@@ -877,7 +887,9 @@ export class SceneRenderer {
   // track.instances (see main.js), so adding a new piece needs no change here.
   async load(trackGlbs) {
     const loader = new GLTFLoader();
-    const need = [...new Set([...trackGlbs, ...CAR_MODELS, ...SCENERY_MODELS])];
+    // The monster-truck base GLB is the chassis+wheels the "monster" item grafts the
+    // player's car body onto (built per car on first transform — see setCarMonster).
+    const need = [...new Set([...trackGlbs, ...CAR_MODELS, MONSTER_BASE_ASSET, ...SCENERY_MODELS])];
     await Promise.all(need.map((name) => new Promise((resolve, reject) => {
       loader.load(ASSET(name), (gltf) => {
         if (CAR_MODELS.includes(name)) this._glossCarMats(gltf.scene);
@@ -1480,6 +1492,90 @@ export class SceneRenderer {
     c.body.quaternion.copy(savedQ);        // restore (the frame loop re-applies lean)
     // plate local (in the body's frame) = (group<-body)^-1 * desired
     gb.invert().multiply(pg).decompose(c.plate.position, c.plate.quaternion, c.plate.scale);
+  }
+
+  // Build (once, lazily) the MONSTER-TRUCK visual for a car: the kit's monster
+  // chassis + wheels with THIS car's body grafted where the cab was (see MonsterRig).
+  // The rig is parented INTO the car's group, hidden; setCarMonster toggles it and
+  // repoints the per-frame animation handles onto it, so the existing setCarPose /
+  // SkidMarks machinery drives it unchanged. Returns false if the monster proto isn't
+  // loaded (the engine transform still runs — there's just no on-screen morph).
+  _buildMonsterVisual(c) {
+    const monProto = this.protos.get(MONSTER_BASE_ASSET);
+    const carProto = this.protos.get(CAR_MODELS[c.carIndex % CAR_MODELS.length]) || this.protos.get(CAR_MODELS[0]);
+    if (!monProto || !carProto) return false;
+    const rig = buildMonsterRig(carProto, monProto);
+    // Face travel like the normal car (kit models face -Z; addCar applies this same PI
+    // flip + any per-model yaw fix). Apply the yaw with the rig ISOLATED (not yet under
+    // the posed group) and measure the animation signs there, so its world matrix equals
+    // the group-local frame addCar measures in (group at identity).
+    const baseYaw = Math.PI + (CAR_MODEL_YAW[c.carIndex % CAR_MODELS.length] || 0);
+    rig.rotation.y = baseYaw;
+    rig.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+    rig.updateWorldMatrix(true, true);
+
+    const byName = (n) => rig.getObjectByName(n);
+    const frontWheels = ['wheel-fl', 'wheel-fr'].map(byName).filter(Boolean);
+    const backWheels = ['wheel-bl', 'wheel-br'].map(byName).filter(Boolean);
+    const allWheels = [...backWheels, ...frontWheels];
+    const body = byName('monster-body') || rig; // the grafted car body = the lean/pitch handle
+    for (const w of frontWheels) w.rotation.order = 'YXZ'; // steer yaw before roll (matches addCar)
+
+    // Roll/pitch axis signs, measured exactly as addCar does (local +X column of each
+    // node, in the isolated rig frame = group space): +rotation about group +X rolls
+    // forward / noses down.
+    const axisV = new THREE.Vector3();
+    for (const w of allWheels) { axisV.setFromMatrixColumn(w.matrixWorld, 0); w.userData.rollSign = axisV.x >= 0 ? 1 : -1; }
+    const pitchSign = (axisV.setFromMatrixColumn(body.matrixWorld, 0).x >= 0) ? 1 : -1;
+
+    // Wheelbase for the ground-conform probes; footprint for the boost disk + shadow
+    // sizing; tyre radius/width for wheel roll + skid marks. Same measurements as addCar.
+    const axleMid = (arr) => {
+      const v = new THREE.Vector3();
+      for (const o of arr) v.add(o.getWorldPosition(new THREE.Vector3()));
+      return arr.length ? v.multiplyScalar(1 / arr.length) : v;
+    };
+    const wheelbase = (frontWheels.length && backWheels.length) ? axleMid(frontWheels).distanceTo(axleMid(backWheels)) : c.wheelbase;
+    const fb = new THREE.Box3().setFromObject(rig);
+    const footW = fb.max.x - fb.min.x, footL = fb.max.z - fb.min.z;
+    let skidWidth = c.skidWidth, wheelRadius = c.wheelRadius;
+    if (backWheels.length) {
+      const wb = new THREE.Box3().setFromObject(backWheels[0]).getSize(new THREE.Vector3());
+      skidWidth = Math.min(0.3, Math.max(0.06, Math.min(wb.x, wb.z))); // fat monster tyres mark wider
+      wheelRadius = Math.max(0.04, wb.y / 2);
+    }
+
+    rig.visible = false;
+    c.group.add(rig); // now inherits the group's per-frame track pose
+    c.monsterRig = rig;
+    c.monsterHandles = {
+      car: rig, body, bodyBaseQuat: body.quaternion.clone(), frontWheels, backWheels, allWheels,
+      baseYaw, pitchSign, wheelbase, wheelRadius, skidWidth, footW, footL
+    };
+    return true;
+  }
+
+  // Toggle a car's MONSTER-TRUCK transform (driven from the engine snapshot's `monster`
+  // flag — see main.js; idempotent, so it's safe to call every frame). The name plate is
+  // a child of the normal body, so it hides with the normal car while transformed — the
+  // player's identity stays on the cell HUD.
+  setCarMonster(id, on) {
+    const c = this.cars.get(id);
+    if (!c || !!c._monsterOn === !!on) return;
+    const KEYS = MONSTER_HANDLE_KEYS;
+    if (on) {
+      if (!c.monsterRig && !this._buildMonsterVisual(c)) return; // proto missing → no morph
+      c._normal = {};
+      for (const k of KEYS) c._normal[k] = c[k];
+      c._normal.car.visible = false;          // hide the normal model
+      c.monsterRig.visible = true;
+      for (const k of KEYS) c[k] = c.monsterHandles[k];
+      c._monsterOn = true;
+    } else {
+      if (c.monsterRig) c.monsterRig.visible = false;
+      if (c._normal) { c._normal.car.visible = true; for (const k of KEYS) c[k] = c._normal[k]; }
+      c._monsterOn = false;
+    }
   }
 
   removeCar(id) {

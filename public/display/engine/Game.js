@@ -143,17 +143,35 @@ const ROCKET_HIT = 0.6;        // arclength lead (units) at which the rocket det
 const ROCKET_LIFE = 10.0;      // seconds a rocket flies before it expires (a whiff) — generous so it reliably
                                // runs its target down; a target-less rocket just flies straight until this cap
 
+// ---- Monster truck (catch-up transform item) ----
+// A trailing player's car BECOMES a monster truck for a few seconds: a heavy,
+// slightly faster tank that ploughs through the field. While transformed it is
+// IMMUNE to the spin-out hazards it would normally fear — oil slicks and dropped
+// bananas (it just crushes them) — and every car it TOUCHES is spun out (a body-
+// check, see _collidePair). A rocket can STILL spin it out, though, so the field
+// keeps one way to stop a rampage. The transform LENGTH scales with how far back
+// the player is (the catch-up factor t, 0=leader…1=last): a back-marker gets the
+// full ride, a midfielder a brief one. Numbers are STARTING VALUES (tune in playtest).
+const MONSTER_DUR_MIN = 4.0;   // transform seconds at t=0 (front — rare; base<0 keeps it off the leader)
+const MONSTER_DUR_MAX = 8.0;   // transform seconds at t=1 (dead last)
+const MONSTER_MASS_MUL = 8.0;  // ×mass while transformed → the monster barely budges and shoves light cars aside
+const MONSTER_VMAX_MUL = 1.10; // ×top speed while transformed → "slightly faster" (the catch-up payoff)
+
 // Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
 // roll time (t = 0 leader … 1 last). The LEADER draws only Boost/Banana — NEVER a
 // rocket: it has no car ahead to hit, so a rocket would just whiff (the rocket's
 // negative base zeroes its weight across the front of the field). The back draws the
-// comeback Boost + the offensive Rocket (catch up AND attack ahead). Rough mix →
-// leader: 20% boost / 80% banana / 0% rocket; midfield: 34 / 43 / 23; last: 43% boost
-// / 14% banana / 43% rocket.
+// comeback Boost, the offensive Rocket (catch up AND attack ahead) and — only in the
+// deep back field — the Monster transform. Both rocket and monster have base<0 so the
+// front of the field can't roll them; the monster's is steep enough that only the back
+// HALF (t>0.5) ever sees it, peaking at last. Rough mix → leader: 20% boost / 80% banana;
+// midfield (t≈0.5): 34% boost / 43% banana / 23% rocket / 0% monster; last (t=1): 33%
+// boost / 11% banana / 33% rocket / 22% monster.
 const ITEM_TABLE = [
-  { id: 'boost',  base: 1.0, slope:  2.0 },
-  { id: 'banana', base: 4.0, slope: -3.0 },
-  { id: 'rocket', base: -0.3, slope: 3.3 } // base<0 → weight is 0 for the leader (and the very front), ramps to 3.0 at last
+  { id: 'boost',   base: 1.0,  slope:  2.0 },
+  { id: 'banana',  base: 4.0,  slope: -3.0 },
+  { id: 'rocket',  base: -0.3, slope:  3.3 }, // base<0 → weight 0 for the leader (and the very front), ramps to 3.0 at last
+  { id: 'monster', base: -2.0, slope:  4.0 }  // base<0 → weight 0 across the front; only the back HALF (t>0.5) rolls it, → 2.0 at last
 ];
 
 // Item rolls draw from a seeded PRNG (mulberry32, engine/util.js) so a race is
@@ -247,6 +265,7 @@ export class Game {
         boxIn: new Set(),// box indices currently overlapped (rising-edge pickup)
         boostT: 0,       // seconds left on an active boost (0 = none)
         boostMul: 1,     // current boost multiplier on the speed ceiling
+        monsterT: 0,     // seconds left as a MONSTER TRUCK (0 = normal car) — heavy, immune to oil/banana, crushes cars it touches
         item: null,      // held item id (null = empty slot)
         pickupAge: 999,  // seconds since the held item was ROLLED from a box (gates use; see ITEM_USE_READY). Large so a directly-set item is usable at once
         useSeq: 0,       // last seen use-counter from the controller (dedup; matches the controller's reset)
@@ -366,7 +385,11 @@ export class Game {
       {
         const oil = this._enterZones(c, this.hazards, c.oilIn);
         const ban = this._enterBanana(c);
-        if (oil || ban) {
+        // A MONSTER TRUCK is immune to its own crash hazards: it still keeps oilIn in
+        // sync (above) and CONSUMES a banana it rolls over (crushed — _enterBanana
+        // already removed it), but it does NOT spin out. A rocket can still spin it
+        // (that path is _stepRockets → _spinOut, deliberately not gated here).
+        if ((oil || ban) && c.monsterT <= 0) {
           // A fresh hazard (re)arms the spin: entering a SECOND slick/banana mid-spin
           // extends it rather than being silently swallowed (the rising-edge sets keep
           // one slick from re-firing every frame). Keep the whirl angle continuous if
@@ -404,13 +427,19 @@ export class Game {
       // drag, so it coasts through the hazard.
       if (c.boostT > 0) { c.boostT -= dt; if (c.boostT < 0) c.boostT = 0; }
       else if (c.boostMul > 1) c.boostMul = Math.max(1, c.boostMul - BOOST_FADE * dt); // post-hold taper
+      // MONSTER TRUCK timer: tick the transform down; when it lapses, emit so the
+      // renderer can morph the car back. The heavy mass + body-check live in
+      // _collidePair and the hazard immunity above — both read c.monsterT directly.
+      if (c.monsterT > 0) { c.monsterT -= dt; if (c.monsterT <= 0) { c.monsterT = 0; this.onEvent({ type: 'monster_end', id: c.id }); } }
       const boosting = c.boostMul > 1;
       // A live boost OVERRIDES the brake: while boosting the brake can't pull the
       // ceiling down, so a pad/item before a loop guarantees the car keeps the speed
       // to clear it — you can't accidentally (or deliberately) brake the boost off.
       // Brake control returns the instant the multiplier bleeds back to 1.
       const brakeEff = boosting ? 0 : c.brake;
-      const targetV = c.vmax * c.boostMul * (1 - brakeEff);
+      // A monster rides slightly higher top speed (stacks over any boost it grabs).
+      const vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
+      const targetV = vmaxEff * c.boostMul * (1 - brakeEff);
       if (spinning) c.v = Math.max(0, c.v - SPIN_DRAG * dt);
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
@@ -674,6 +703,13 @@ export class Game {
       // value is the frame's start) and is stepped from the next frame on.
       const target = this._nextCarAhead(c);
       this.rockets.push({ id: ++this._rocketSeq, s: c.totalS, lat: c.lat, owner: c.id, targetId: target ? target.id : null, life: 0 });
+    } else if (c.item === 'monster') {
+      // Become a monster truck. The transform LENGTH scales with how far back you are
+      // (tCatch — the same catch-up factor the roll used; 0=leader … 1=last), so a
+      // back-marker gets the full ride and a midfielder a brief one. The heavy mass,
+      // speed bump, hazard immunity and body-check all key off c.monsterT elsewhere.
+      const t = Math.max(0, Math.min(1, c.tCatch));
+      c.monsterT = MONSTER_DUR_MIN + (MONSTER_DUR_MAX - MONSTER_DUR_MIN) * t;
     }
     c.item = null;
   }
@@ -811,10 +847,21 @@ export class Game {
     const penL = sumWid - Math.abs(dl);
     if (penS <= 0 || penL <= 0) return;      // no overlap on one axis → no contact
 
+    // MONSTER TRUCK body-check: a transformed car crushes anything it touches — the
+    // OTHER car spins out (a fresh stun). Guarded on the victim not already spinning so
+    // sustained contact re-stuns only after it recovers, never pinning the timer at max.
+    // Two monsters just bump (neither crushes the other). The heavy monster mass below
+    // then shoves the victim aside while the monster keeps its line.
+    if (a.monsterT > 0 && b.monsterT <= 0 && b.spinT <= 0) this._spinOut(b, 'monster');
+    if (b.monsterT > 0 && a.monsterT <= 0 && a.spinT <= 0) this._spinOut(a, 'monster');
+
     // Inverse-mass shares: the lighter car takes the larger push and the larger
     // velocity change (invA/invSum == b.mass/mSum), so a heavy car barely budges
-    // and keeps its momentum — the "stronger car dominates" feel.
-    const invA = 1 / a.mass, invB = 1 / b.mass, invSum = invA + invB;
+    // and keeps its momentum — the "stronger car dominates" feel. A monster truck's
+    // mass is multiplied so it ploughs through the field and is itself near-immovable.
+    const massA = a.monsterT > 0 ? a.mass * MONSTER_MASS_MUL : a.mass;
+    const massB = b.monsterT > 0 ? b.mass * MONSTER_MASS_MUL : b.mass;
+    const invA = 1 / massA, invB = 1 / massB, invSum = invA + invB;
     const aShare = invA / invSum;
     const bShare = invB / invSum;
 
@@ -907,6 +954,8 @@ export class Game {
         // catch-up + item observables: boostActive/boostMul drive the boost FX (intensity
         // telegraphs the position-scaled size); item is the held pickup (HUD + controller).
         item: c.item, boostActive: c.boostMul > 1.001, boostMul: c.boostMul, tCatch: c.tCatch,
+        monster: c.monsterT > 0, // car is currently a monster truck — renderer morphs the model; HUD/cam may react
+
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
         totalS: c.totalS, halfLen: c.halfLen, halfWid: c.halfWid
       });

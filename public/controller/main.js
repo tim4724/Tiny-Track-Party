@@ -762,7 +762,7 @@ actionBtn.addEventListener('pointerleave', releaseAction);
 // The item's IDENTITY is shown on the main display (flashy roulette there); the
 // phone stays a clean driving surface. The only controller-side cue is the USE
 // button lighting up when you're holding something + a light buzz on pickup.
-const ITEM_LABEL = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET' };
+const ITEM_LABEL = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
 let _heldItem = undefined;
 function setHeldItem(item) {
   if (item === _heldItem) return;            // only react on a change

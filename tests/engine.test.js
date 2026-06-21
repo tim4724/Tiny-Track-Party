@@ -1247,3 +1247,117 @@ test('a rocket hit cancels an in-progress crash and starts a fresh one', () => {
   assert.ok(events.some((e) => e.type === 'spin' && e.cause === 'rocket' && e.id === 'p1'),
     'a fresh rocket spin event fires (drives a new explosion + boom)');
 });
+
+// ---- monster truck (catch-up transform item) -------------------------------
+
+test('the monster is a DEEP back-field item: the leader and midfield never roll it', () => {
+  const g = new Game(['x'], mkTrack(3), {});
+  let lead = 0, mid = 0, last = 0;
+  for (let i = 0; i < 6000; i++) if (g._roll(0) === 'monster') lead++;   // t=0 leader
+  for (let i = 0; i < 6000; i++) if (g._roll(0.5) === 'monster') mid++;  // t=0.5 midfield
+  for (let i = 0; i < 6000; i++) if (g._roll(1) === 'monster') last++;   // t=1 last
+  assert.equal(lead, 0, 'the leader never rolls a monster (weight 0 across the front)');
+  assert.equal(mid, 0, 'the midfield never rolls one either (weight is still 0 at t=0.5)');
+  assert.ok(last > 800, `last place rolls plenty of monsters (${last}/6000)`);
+});
+
+test('firing a monster transforms the car, for LONGER the further back you are', () => {
+  const game = new Game(['p1'], mkTrack(3), {});
+  const c = game.cars.get('p1');
+  // Fire directly (bypasses update()'s catch-up recompute) so the tCatch we set is the
+  // one the duration reads — exactly how the rocket/spin tests poke the engine internals.
+  c.item = 'monster'; c.tCatch = 0; game._useItem(c);
+  const front = c.monsterT;
+  c.item = 'monster'; c.tCatch = 1; game._useItem(c);
+  const back = c.monsterT;
+  assert.ok(front > 0, `a leader-position monster still lasts a beat (${front.toFixed(1)}s)`);
+  assert.ok(back > front + 2, `dead last gets a much longer transform (${back.toFixed(1)}s vs ${front.toFixed(1)}s)`);
+  assert.equal(c.item, null, 'the item is consumed on use');
+});
+
+test('a monster truck is immune to oil + bananas (it crushes them), but a normal car still spins', () => {
+  const track = mkTrack(3);
+  // Two slicks side by side so the two cars never touch (a body-check would confound it).
+  track.hazards = [{ s: 8, lat: -0.5, radius: 0.5 }, { s: 8, lat: 0.5, radius: 0.5 }];
+  const game = new Game(['mon', 'norm'], track, {});
+  const mon = game.cars.get('mon'), norm = game.cars.get('norm');
+  Object.assign(mon, { totalS: 8, lat: -0.5, v: 6, monsterT: 5 });
+  Object.assign(norm, { totalS: 8, lat: 0.5, v: 6, monsterT: 0 });
+  game.processInput('mon', { b: 0 }); game.processInput('norm', { b: 0 });
+  game.update(16);
+  assert.equal(mon.spinT, 0, 'the monster drives over oil without spinning out');
+  assert.ok(norm.spinT > 0, 'a normal car on the same kind of slick still spins');
+  assert.ok(game.getSnapshot().cars.find((x) => x.id === 'mon').monster, 'the snapshot flags the monster');
+
+  // and it crushes a dropped banana it rolls over — consumed, no spin
+  Object.assign(mon, { spinT: 0, totalS: 30, lat: 0 });
+  game.bananas.push({ id: 1, s: 30, lat: 0, owner: 'someone-else' });
+  game.update(16);
+  assert.equal(mon.spinT, 0, 'the monster shrugs off the banana');
+  assert.equal(game.bananas.length, 0, 'the banana is crushed (consumed) under the monster');
+});
+
+test('a rocket can STILL spin a monster out — the field keeps a counter to a rampage', () => {
+  // The hazard immunity is deliberately scoped to oil/banana; a rocket (which spins via
+  // _spinOut, not the hazard block) bypasses it so a monster isn't unstoppable.
+  const game = new Game(['fire', 'tgt'], mkTrack(3), {});
+  const tgt = game.cars.get('tgt');
+  Object.assign(tgt, { totalS: 8, lat: 0, v: 2, monsterT: 5 });
+  Object.assign(game.cars.get('fire'), { totalS: 6, lat: 0, v: 2 });
+  game.rockets.push({ id: 1, s: 7.4, lat: 0, owner: 'fire', targetId: 'tgt', life: 0 });
+  game.processInput('tgt', { b: 1 }); // sit roughly still so the rocket closes
+  let hit = false;
+  for (let i = 0; i < 60 && !hit; i++) { game.update(16); if (tgt.spinT > 0) hit = true; }
+  assert.ok(hit, 'the rocket runs down the monster and spins it out anyway');
+});
+
+test('a monster truck crushes any car it touches (the victim crashes; the monster does not)', () => {
+  // a is the monster, dead level with b and overlapping laterally.
+  const { a, b } = collide(
+    { totalS: 5, lat: 0, v: 6, heading: 0, monsterT: 5 },
+    { totalS: 5, lat: 0.2, v: 6, heading: 0 }
+  );
+  assert.ok(b.spinT > 0, 'the car the monster touches is spun out');
+  assert.equal(a.spinT, 0, 'the monster itself is unharmed by the contact');
+});
+
+test('a monster shoves the car it hits aside while barely moving itself (heavy mass)', () => {
+  const a0 = 0, b0 = 0.2;
+  const { a, b } = collide(
+    { totalS: 5, lat: a0, v: 0, heading: 0, monsterT: 5 },
+    { totalS: 5, lat: b0, v: 0, heading: 0 }
+  );
+  const dMon = Math.abs(a.lat - a0), dVictim = Math.abs(b.lat - b0);
+  assert.ok(dVictim > dMon * 4, `the light car is shoved far more than the monster budges (victim ${dVictim.toFixed(3)} vs monster ${dMon.toFixed(3)})`);
+});
+
+test('two monsters just bump — neither crushes the other', () => {
+  const { a, b } = collide(
+    { totalS: 5, lat: 0, v: 6, heading: 0, monsterT: 5 },
+    { totalS: 5, lat: 0.2, v: 6, heading: 0, monsterT: 5 }
+  );
+  assert.equal(a.spinT, 0, 'monster A is not crushed by monster B');
+  assert.equal(b.spinT, 0, 'monster B is not crushed by monster A');
+});
+
+test('the monster transform lifts the speed ceiling above the car normal top speed', () => {
+  const game = new Game(['p1'], mkTrack(3), {});
+  const c = game.cars.get('p1');
+  // Sit at the normal top speed on the opening straight: a normal car holds vmax, but a
+  // monster's raised ceiling lets it keep pulling above it.
+  Object.assign(c, { totalS: 2, lat: 0, heading: 0, v: c.vmax, monsterT: 5 });
+  for (let i = 0; i < 5; i++) { game.processInput('p1', { b: 0 }); game.update(16); }
+  assert.ok(c.v > c.vmax + 0.1, `a monster pulls above its normal top speed (v=${c.v.toFixed(2)} vs vmax ${c.vmax.toFixed(2)})`);
+});
+
+test('the monster transform lapses on its timer with a monster_end event + snapshot clear', () => {
+  const events = [];
+  const game = new Game(['p1'], mkTrack(3), { onEvent: (e) => events.push(e) });
+  const c = game.cars.get('p1');
+  Object.assign(c, { totalS: 2, lat: 0, v: 4, monsterT: 0.4 });
+  assert.ok(game.getSnapshot().cars[0].monster, 'flagged as a monster mid-transform');
+  for (let i = 0; i < 40; i++) { game.processInput('p1', { b: 0 }); game.update(16); } // 0.64s > 0.4s
+  assert.equal(c.monsterT, 0, 'the transform has lapsed');
+  assert.ok(events.some((e) => e.type === 'monster_end' && e.id === 'p1'), 'a monster_end event fires when it lapses');
+  assert.equal(game.getSnapshot().cars[0].monster, false, 'the snapshot flag clears');
+});
