@@ -380,17 +380,16 @@ scene.onFrame = (dt) => {
     return;                               // session ended; the results overlay covers the scene
   }
   const snap = session.getSnapshot();
-  let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop
+  let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop (see below)
   for (const c of snap.cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
-    // Curb scrub — loudness by 3D distance to the nearest human: the player's own
-    // car is at distance 0 → gain 1 (the global max); a CPU's fades with proximity
-    // (audible but quiet far off, not popping on/off). RaceAudio's screech throttle
-    // is a SINGLE shared gate, so we must not let a faint distant scrub consume it
-    // ahead of a nearer one: keep only the loudest this frame and fire it below.
+    // Curb scrub — loudness by distance to the nearest human (the player's own car
+    // is at distance 0 → the ceiling). Unlike the one-shot cues this is a continuous
+    // grind on a single shared throttle, so only in-scene scrubs (≥ the FLOOR)
+    // compete and the loudest wins the window — a distant AI wall-grind can't claim it.
     if (c.onWall && c.spd > 0.35) {
       const g = audibility(c.pose && c.pose.pos);
-      if (g > 0 && (!bestScrub || g > bestScrub.g)) bestScrub = { spd: c.spd, g };
+      if (g >= AUD_FLOOR && (!bestScrub || g > bestScrub.g)) bestScrub = { spd: c.spd, g };
     }
     // State-driven voices per HUMAN car — each level follows the physics this
     // frame: boost wind from the boost multiplier, tire squeal from hard
@@ -410,10 +409,7 @@ scene.onFrame = (dt) => {
       audio.engineDrive(c.id, c.spd / 1.2);
     }
   }
-  // The nearest/loudest curb scrub owns the shared throttle — but an inaudibly
-  // faint far scrub (≈ below −26 dB) must not claim it ahead of a louder one that
-  // may start within the gap window, so ignore anything under a hearing floor.
-  if (bestScrub && bestScrub.g >= 0.05) audio.screech(bestScrub.spd, bestScrub.g);
+  if (bestScrub) audio.screech(bestScrub.spd, bestScrub.g); // the nearest scrub owns the shared throttle
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   driveRocketAudio(snap); // sustained jet per in-flight rocket, level by distance to the nearest player
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
