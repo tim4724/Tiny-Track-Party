@@ -1703,7 +1703,13 @@ export class SceneRenderer {
     return true;
   }
 
-  setCarPose(id, pos, forward, up, steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1, brake = 0) {
+  // The car's per-frame pose + animation inputs. `pos/forward/up` are the required
+  // world pose; the rest ride in an options bag (was an 8-deep positional tail that
+  // forced callers to pad `false, 0, 0` to reach boostMul). `steerInput` still
+  // defaults to `steer` — the on-screen indicator mirrors raw tilt unless told otherwise.
+  setCarPose(id, pos, forward, up, {
+    steer = 0, spd = 0, scrub = false, steerInput = steer, spin = 0, boostMul = 1, brake = 0,
+  } = {}) {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer; c.brakeAmt = brake;

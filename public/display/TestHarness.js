@@ -176,7 +176,7 @@ export function runDisplayScenario(opts, ctx) {
         }
         engine.update(dt * 1000);
         for (const c of engine.getSnapshot().cars) {
-          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput);
+          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput });
         }
         // Endless preview: once everyone finishes, reset and lap again.
         if (engine.raceOver) {
@@ -246,7 +246,7 @@ export function runDisplayScenario(opts, ctx) {
 
       const snap = engine.getSnapshot();
       const c0 = snap.cars[0];
-      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul); // boostMul → aura
+      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul }); // boostMul → aura
       scene.syncProps(snap); // box + dropped-banana + in-flight rocket meshes
 
       // Frame the cluster from an elevated 3/4 angle, off to one side looking ACROSS it, so
@@ -264,7 +264,7 @@ export function runDisplayScenario(opts, ctx) {
       // pulsating and the rocket keeps spinning with its flickering flame (boxes/cones
       // idle-animate via the render loop regardless).
       scene.onFrame = () => {
-        scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, 0, 1, false, 0, 0, c0.boostMul);
+        scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul });
         scene.syncProps(snap);
       };
 
@@ -407,7 +407,7 @@ export function runDisplayScenario(opts, ctx) {
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
         scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul });
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
       if (kind === 'rocket') driveGalleryRocketAudio(); // sustained jet per in-flight rocket
@@ -439,7 +439,7 @@ export function runDisplayScenario(opts, ctx) {
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.
       for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
       for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
       }
       scene.onFrame = null; // frozen: no per-frame re-pose
@@ -453,7 +453,7 @@ export function runDisplayScenario(opts, ctx) {
       for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
       giveItems(engine); // populate the cell item slots so the preview isn't all empty
       for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
       }
       scene.onFrame = null; // frozen: no per-frame re-pose
@@ -482,7 +482,7 @@ export function runDisplayScenario(opts, ctx) {
       }
       giveItems(engine); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
       for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, 0, false, c.steerInput);
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
       }
       scene.onFrame = null; // frozen
