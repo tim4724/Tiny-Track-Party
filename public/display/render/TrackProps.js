@@ -682,27 +682,20 @@ export class TrackProps {
   // the target car's render group — we read its position + up (road normal). Each burst owns
   // cloned additive materials (independent fade) over shared unit geo; _stepImpacts advances
   // and removes them. Driven from main.js on the rocket spin event.
-  // opts (all optional): flashColor / ringColor recolour the additive flash + ring (the
-  // rocket keeps the warm default; the monster transform passes a violet power-surge),
-  // scale multiplies the burst radius (a transform reads bigger than a strike), and lift
-  // raises the detonation point above the car body.
-  spawnImpact(carGroup, opts = {}) {
+  spawnImpact(carGroup) {
     if (!carGroup || !this._impacts) return;
-    const { flashColor = null, ringColor = null, scale = 1, lift = 0.3 } = opts;
     const up = this._impUp.set(0, 1, 0).applyQuaternion(carGroup.quaternion).normalize();
-    const center = this._impPos.copy(carGroup.position).addScaledVector(up, lift); // detonation point on the car body
+    const center = this._impPos.copy(carGroup.position).addScaledVector(up, 0.3); // detonation point on the car body
     const flash = new THREE.Mesh(this._impactSphereGeo, this._impactFlashMatProto.clone());
-    if (flashColor != null) flash.material.color.set(flashColor);
     flash.position.copy(center);
     // Air shockwave ring at the SAME point — a thin camera-facing halo, not a ground decal.
-    const ring = new THREE.Mesh(new THREE.RingGeometry((IMPACT_RING_R0 - IMPACT_RING_W) * scale, (IMPACT_RING_R0 + IMPACT_RING_W) * scale, 48),
+    const ring = new THREE.Mesh(new THREE.RingGeometry(IMPACT_RING_R0 - IMPACT_RING_W, IMPACT_RING_R0 + IMPACT_RING_W, 48),
       this._impactRingMatProto.clone());
-    if (ringColor != null) ring.material.color.set(ringColor);
     ring.position.copy(center);
     ring.onBeforeRender = impactRingBillboard; // re-faces each cell's camera every render
     this.hazardGroup.add(flash);
     this.hazardGroup.add(ring);
-    this._impacts.push({ flash, ring, t: 0, car: carGroup, scale, lift }); // car ref → the flash trails it (see _stepImpacts)
+    this._impacts.push({ flash, ring, t: 0, car: carGroup }); // car ref → the flash trails it (see _stepImpacts)
   }
 
   // Advance the impact bursts: the flash ball pops then fades fast; the shockwave ring expands
@@ -714,19 +707,18 @@ export class TrackProps {
       im.t += dt;
       const tr = Math.min(1, im.t / IMPACT_TIME);             // ring progress
       const tf = Math.min(1, im.t / IMPACT_FLASH_TIME);       // flash progress
-      const sc = im.scale || 1;
-      const R = (IMPACT_RING_R0 + (IMPACT_RING_R1 - IMPACT_RING_R0) * (1 - (1 - tr) * (1 - tr))) * sc; // ease-out radius
+      const R = IMPACT_RING_R0 + (IMPACT_RING_R1 - IMPACT_RING_R0) * (1 - (1 - tr) * (1 - tr)); // ease-out radius
       im.ring.geometry.dispose();
       im.ring.geometry = new THREE.RingGeometry(Math.max(0.001, R - IMPACT_RING_W), R + IMPACT_RING_W, 48); // thin, constant width
       im.ring.material.opacity = IMPACT_RING_OPACITY * (1 - tr);
-      im.flash.scale.setScalar(IMPACT_FLASH_R * sc * (0.5 + 0.5 * Math.min(1, tf * 5))); // pop to full fast (~0.1s)
+      im.flash.scale.setScalar(IMPACT_FLASH_R * (0.5 + 0.5 * Math.min(1, tf * 5))); // pop to full fast (~0.1s)
       // hold the fireball bright briefly, then a slow ease-out — so the hit lingers and reads
       im.flash.material.opacity = tf < 0.25 ? 1 : Math.max(0, 1 - (tf - 0.25) / 0.75);
       if (tf >= 1) im.flash.visible = false;
       // The fireball TRAILS the car as it spins away (the ring stays at the impact point).
       if (im.car) {
         const up = this._impUp.set(0, 1, 0).applyQuaternion(im.car.quaternion).normalize();
-        const target = this._impPos.copy(im.car.position).addScaledVector(up, im.lift != null ? im.lift : 0.3);
+        const target = this._impPos.copy(im.car.position).addScaledVector(up, 0.3);
         im.flash.position.lerp(target, Math.min(1, IMPACT_FOLLOW * dt));
       }
     }

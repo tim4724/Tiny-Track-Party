@@ -228,6 +228,8 @@ export const DEFAULT_PICKS = {
   brake: 'rubber',
   banana_drop: 'plop',
   banana_slip: 'dizzy',
+  monster_inflate: 'pump',
+  monster_deflate: 'hiss',
   lap: 'plink2',
   screech: 'rumble',
   join: 'risingtwo',
@@ -468,6 +470,39 @@ export const CUES = [
           tremTone(ctx, dest, t, { f: 650 * j, to: 170 * j, dur: 0.7, type: 'sine', vol: 0.27, tremHz: 7.5, depth: 0.9 });
           tone(ctx, dest, t + 0.68, { f: 120 * j, dur: 0.1, type: 'sine', vol: 0.22, a: 0.005 });
           return 0.9;
+        }
+      }
+    ]
+  },
+  {
+    id: 'monster_inflate',
+    label: 'Monster inflate',
+    desc: 'A car bursts/pumps up into a monster truck — pneumatic air rushing in + pressure rising, capped by a soft "locked" thump. Physical, not a sting.',
+    variants: [
+      {
+        id: 'pump', label: 'A · air pump-up',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.4);
+          noise(ctx, dest, t, { dur: 0.30, f: 280, fTo: 1500, Q: 0.8, vol: 0.16, a: 0.02, type: 'bandpass' }); // air rushing in
+          tone(ctx, dest, t, { f: 150 * j, to: 470 * j, dur: 0.30, type: 'triangle', vol: 0.16, a: 0.02 });      // pressure rising
+          tone(ctx, dest, t + 0.30, { f: 90, dur: 0.10, type: 'sine', vol: 0.22, a: 0.004 });                    // locked-in thump
+          return 0.42;
+        }
+      }
+    ]
+  },
+  {
+    id: 'monster_deflate',
+    label: 'Monster deflate',
+    desc: 'The monster truck powers down + deflates back to a car — air sputtering out (a fast flutter = the pre-shrink jitter) on a falling pitch. Physical, not a sting.',
+    variants: [
+      {
+        id: 'hiss', label: 'A · air sputter-down',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.4);
+          tremTone(ctx, dest, t, { f: 430 * j, to: 120 * j, dur: 0.32, type: 'triangle', vol: 0.18, tremHz: 22, depth: 0.7 }); // sputtering descent
+          noise(ctx, dest, t, { dur: 0.30, f: 1300, fTo: 280, Q: 0.8, vol: 0.13, a: 0.01, type: 'bandpass' });                  // air hissing out
+          return 0.36;
         }
       }
     ]

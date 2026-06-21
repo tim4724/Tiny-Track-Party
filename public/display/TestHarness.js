@@ -312,9 +312,12 @@ export function runDisplayScenario(opts, ctx) {
         } }
       : kind === 'monster'
       ? { onEvent: (ev) => {
-          // the monster's transform burst is spawned by setCarMonster (snapshot-driven, in
-          // onFrame) — here we only voice the cars it body-checks: the comedy spin slip.
-          if (ev.type === 'spin' && sfx) sfx.spin();
+          if (!sfx) return;
+          // the morph itself is snapshot-driven in onFrame (setCarMonster); here we voice the
+          // transform: inflate on use, deflate on lapse, and the comedy slip on a body-check.
+          if (ev.type === 'item_use' && ev.item === 'monster') sfx.monsterInflate();
+          else if (ev.type === 'monster_end') sfx.monsterDeflate();
+          else if (ev.type === 'spin') sfx.spin();
         } }
       : { onEvent() {} };
     let galleryRocketIds = new Set();

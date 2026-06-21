@@ -801,8 +801,14 @@ function audioForRaceEvent(e) {
     // WIND in onFrame tracks the resulting speed state instead.)
     case 'item_use':
       if (g > 0 && e.item === 'banana') audio.bananaDrop(g);
+      else if (g > 0 && e.item === 'monster') audio.monsterInflate(g); // pump-up as the car transforms
       // the rocket's launch+flight is a SUSTAINED voice driven per-frame in onFrame
       // (driveRocketAudio), not a one-shot here; boost item-use stays silent.
+      break;
+    // The monster transform lapsing back to a car: the deflate sputter (pairs with the
+    // on-screen shrink). World cue, scaled by distance to the nearest human like the rest.
+    case 'monster_end':
+      if (g > 0) audio.monsterDeflate(g);
       break;
     case 'spin':
       // rocket → boom (its own distance metric, kept in step with the flight so the

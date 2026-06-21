@@ -184,6 +184,10 @@ export class RaceAudio {
   // audibility()): full for the player's own car, quieter for a distant CPU.
   bananaDrop(vol = 1) { this._play('banana_drop', vol); }
   spin(vol = 1) { this._play('banana_slip', vol); } // oil shares the comedy cue
+  // Monster-truck transform: inflate (pump up) on use, deflate (sputter down) on lapse.
+  // World cues — scaled by distance to the nearest human, like the other one-shots.
+  monsterInflate(vol = 1) { this._play('monster_inflate', vol); }
+  monsterDeflate(vol = 1) { this._play('monster_deflate', vol); }
   // Rocket FLIGHT — a sustained voice (like boost wind / engine), one per in-flight rocket id,
   // held from launch to impact. level 0 stops + frees it. The host drives level by the rocket's
   // distance to the nearest player (see main.js driveRocketAudio). NOT a one-shot.

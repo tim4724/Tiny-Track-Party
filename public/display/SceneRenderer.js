@@ -224,14 +224,14 @@ const ITEM_KEYS = Object.keys(ITEM_ICONS);
 // boost disk, ground shadow, HUD) is model-agnostic and just follows. See setCarMonster.
 const MONSTER_HANDLE_KEYS = ['car', 'body', 'bodyBaseQuat', 'frontWheels', 'backWheels', 'allWheels', 'baseYaw', 'pitchSign', 'wheelbase', 'wheelRadius', 'skidWidth', 'footW', 'footL'];
 
-// Transform cue: the rig springs from small to full (ease-out-back) over MONSTER_POP_TIME
-// so the swap reads as the car BURSTING into a monster, paired with an air shockwave burst
-// (recoloured violet to tie to the HUD monster icon). The revert pops a cooler, smaller one.
-const MONSTER_POP_TIME = 0.34;   // grow-in duration (s)
-// Lifted well ABOVE the truck roofline: the chase cam sits tight behind the (big) monster,
-// so a burst at body height is occluded — popping it overhead reads as a clear "poof".
-const MONSTER_BURST = { flashColor: 0xece0ff, ringColor: 0x8b5cf6, scale: 1.7, lift: 1.35 }; // near-white core reads on the sky; violet ring ties to the icon
-const MONSTER_REVERT_BURST = { flashColor: 0xe6f3ff, ringColor: 0x7fb7ff, scale: 0.9, lift: 1.1 };
+// Transform cue: the rig springs from small to full (ease-OUT-back, a clean overshoot) on the
+// way IN, and on lapse shrinks back the SAME way over the SAME duration with an ease-IN-back
+// anticipation — a little "jitter" where it bulges a touch before deflating. The grow/shrink
+// alone is the cue: no burst FX (an earlier fireball + ring read as a violent explosion).
+const MONSTER_POP_TIME = 0.34;     // grow-in AND shrink-out duration (s) — same for both
+const MONSTER_POP_START = 0.5;     // scale the rig grows from / shrinks back to before the model swap
+const MONSTER_GROW_BACK = 1.70158; // ease-out-back overshoot on the way in (the grow looks good — leave it)
+const MONSTER_SHRINK_BACK = 2.8;   // ease-in-back anticipation on the way out — higher = more pre-shrink jitter
 
 export class SceneRenderer {
   constructor(container, colors) {
@@ -1570,26 +1570,33 @@ export class SceneRenderer {
   // player's identity stays on the cell HUD.
   setCarMonster(id, on) {
     const c = this.cars.get(id);
-    if (!c || !!c._monsterOn === !!on) return;
+    if (!c) return;
+    const want = !!on;
+    if (want === !!c._monsterOn) return; // engine desire unchanged
+    c._monsterOn = want;
     const KEYS = MONSTER_HANDLE_KEYS;
-    if (on) {
-      if (!c.monsterRig && !this._buildMonsterVisual(c)) return; // proto missing → no morph
-      c._normal = {};
-      for (const k of KEYS) c._normal[k] = c[k];
-      c._normal.car.visible = false;          // hide the normal model
-      c.monsterRig.visible = true;
-      for (const k of KEYS) c[k] = c.monsterHandles[k];
-      c._monsterOn = true;
-      // Visualize it: start the rig small (setCarPose springs it to full over
-      // MONSTER_POP_TIME) and fire a violet power-surge burst at the car.
-      c.monsterRig.scale.setScalar(0.5);
+    if (want) {
+      // Become a monster: swap the visible model + animation handles to the rig (unless an
+      // in-flight shrink is still showing it), then run the GROW-IN. setCarPose ticks the scale.
+      const showing = c._monsterPhase === 'in' || c._monsterPhase === 'on' || c._monsterPhase === 'out';
+      if (!showing) {
+        if (!c.monsterRig && !this._buildMonsterVisual(c)) { c._monsterOn = false; return; } // proto missing → no morph
+        c._normal = {};
+        for (const k of KEYS) c._normal[k] = c[k];
+        c._normal.car.visible = false;        // hide the normal model
+        c.monsterRig.visible = true;
+        for (const k of KEYS) c[k] = c.monsterHandles[k];
+        c.monsterRig.scale.setScalar(MONSTER_POP_START); // start small; setCarPose springs it up
+      }
+      c._monsterPhase = 'in';
       c.monsterPopT = 0;
-      this.props.spawnImpact(c.group, MONSTER_BURST);
     } else {
-      if (c.monsterRig) { c.monsterRig.visible = false; c.monsterRig.scale.setScalar(1); }
-      if (c._normal) { c._normal.car.visible = true; for (const k of KEYS) c[k] = c._normal[k]; }
-      c._monsterOn = false;
-      this.props.spawnImpact(c.group, MONSTER_REVERT_BURST); // punctuate the power-down
+      // Lapse: run the DEFLATE (shrink) — keep the rig + handles until setCarPose finishes the
+      // shrink and swaps the normal car back in. No-op if nothing is currently showing.
+      if (c._monsterPhase === 'in' || c._monsterPhase === 'on') {
+        c._monsterPhase = 'out';
+        c.monsterPopT = 0;
+      }
     }
   }
 
@@ -1663,15 +1670,28 @@ export class SceneRenderer {
     // shadow's silhouette whirls with it too, folded into the conform basis at the END of
     // setCarPose (it spins the in-surface forward/right by `spin`).
     c.car.rotation.y = c.baseYaw + spin;
-    // Monster transform grow-in: spring the rig from half-size to full (ease-out-back,
-    // a slight overshoot) over MONSTER_POP_TIME right after the swap, so the change reads
-    // as the car BURSTING into a monster instead of popping in at full size. c.car IS the
-    // rig while transformed, so scaling it scales the whole monster.
-    if (c._monsterOn && c.monsterPopT < MONSTER_POP_TIME) {
+    // Monster transform scale animation. c.car IS the rig during 'in'/'out', so scaling it
+    // scales the whole monster. GROW-IN ('in'): ease-out-back spring from MONSTER_POP_START to
+    // full — reads as the car BURSTING into a monster. SHRINK-OUT ('out'): ease-in-back back
+    // down, so it bulges a touch (the pre-shrink "jitter") before deflating; when it finishes
+    // we swap the normal car back in. Both run over MONSTER_POP_TIME.
+    if (c._monsterPhase === 'in') {
       c.monsterPopT = Math.min(MONSTER_POP_TIME, c.monsterPopT + this._frameDt);
-      const p = c.monsterPopT / MONSTER_POP_TIME;
-      const eb = 1 + 2.70158 * Math.pow(p - 1, 3) + 1.70158 * Math.pow(p - 1, 2); // ease-out-back
-      c.car.scale.setScalar(0.5 + 0.5 * eb);
+      const p = c.monsterPopT / MONSTER_POP_TIME, k = MONSTER_GROW_BACK;
+      const eb = 1 + (k + 1) * Math.pow(p - 1, 3) + k * Math.pow(p - 1, 2); // ease-out-back (overshoots past 1)
+      c.car.scale.setScalar(MONSTER_POP_START + (1 - MONSTER_POP_START) * eb);
+      if (p >= 1) { c.car.scale.setScalar(1); c._monsterPhase = 'on'; }
+    } else if (c._monsterPhase === 'out') {
+      c.monsterPopT = Math.min(MONSTER_POP_TIME, c.monsterPopT + this._frameDt);
+      const p = c.monsterPopT / MONSTER_POP_TIME, k = MONSTER_SHRINK_BACK;
+      const eib = (k + 1) * p * p * p - k * p * p; // ease-in-back (dips <0 early → bulges >1 = the jitter)
+      c.monsterRig.scale.setScalar(1 + (MONSTER_POP_START - 1) * eib);
+      if (p >= 1) {
+        // shrink done → swap the normal car back in
+        c.monsterRig.visible = false; c.monsterRig.scale.setScalar(1);
+        if (c._normal) { c._normal.car.visible = true; for (const kk of MONSTER_HANDLE_KEYS) c[kk] = c._normal[kk]; }
+        c._monsterPhase = undefined;
+      }
     }
     // (The boost disk is updated at the END of setCarPose — it needs the surface
     // basis computed below to conform its circle onto the road.)
