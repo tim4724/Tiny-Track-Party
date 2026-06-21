@@ -224,6 +224,15 @@ const ITEM_KEYS = Object.keys(ITEM_ICONS);
 // boost disk, ground shadow, HUD) is model-agnostic and just follows. See setCarMonster.
 const MONSTER_HANDLE_KEYS = ['car', 'body', 'bodyBaseQuat', 'frontWheels', 'backWheels', 'allWheels', 'baseYaw', 'pitchSign', 'wheelbase', 'wheelRadius', 'skidWidth', 'footW', 'footL'];
 
+// Transform cue: the rig springs from small to full (ease-out-back) over MONSTER_POP_TIME
+// so the swap reads as the car BURSTING into a monster, paired with an air shockwave burst
+// (recoloured violet to tie to the HUD monster icon). The revert pops a cooler, smaller one.
+const MONSTER_POP_TIME = 0.34;   // grow-in duration (s)
+// Lifted well ABOVE the truck roofline: the chase cam sits tight behind the (big) monster,
+// so a burst at body height is occluded — popping it overhead reads as a clear "poof".
+const MONSTER_BURST = { flashColor: 0xece0ff, ringColor: 0x8b5cf6, scale: 1.7, lift: 1.35 }; // near-white core reads on the sky; violet ring ties to the icon
+const MONSTER_REVERT_BURST = { flashColor: 0xe6f3ff, ringColor: 0x7fb7ff, scale: 0.9, lift: 1.1 };
+
 export class SceneRenderer {
   constructor(container, colors) {
     this.container = container;
@@ -1571,10 +1580,16 @@ export class SceneRenderer {
       c.monsterRig.visible = true;
       for (const k of KEYS) c[k] = c.monsterHandles[k];
       c._monsterOn = true;
+      // Visualize it: start the rig small (setCarPose springs it to full over
+      // MONSTER_POP_TIME) and fire a violet power-surge burst at the car.
+      c.monsterRig.scale.setScalar(0.5);
+      c.monsterPopT = 0;
+      this.props.spawnImpact(c.group, MONSTER_BURST);
     } else {
-      if (c.monsterRig) c.monsterRig.visible = false;
+      if (c.monsterRig) { c.monsterRig.visible = false; c.monsterRig.scale.setScalar(1); }
       if (c._normal) { c._normal.car.visible = true; for (const k of KEYS) c[k] = c._normal[k]; }
       c._monsterOn = false;
+      this.props.spawnImpact(c.group, MONSTER_REVERT_BURST); // punctuate the power-down
     }
   }
 
@@ -1648,6 +1663,16 @@ export class SceneRenderer {
     // shadow's silhouette whirls with it too, folded into the conform basis at the END of
     // setCarPose (it spins the in-surface forward/right by `spin`).
     c.car.rotation.y = c.baseYaw + spin;
+    // Monster transform grow-in: spring the rig from half-size to full (ease-out-back,
+    // a slight overshoot) over MONSTER_POP_TIME right after the swap, so the change reads
+    // as the car BURSTING into a monster instead of popping in at full size. c.car IS the
+    // rig while transformed, so scaling it scales the whole monster.
+    if (c._monsterOn && c.monsterPopT < MONSTER_POP_TIME) {
+      c.monsterPopT = Math.min(MONSTER_POP_TIME, c.monsterPopT + this._frameDt);
+      const p = c.monsterPopT / MONSTER_POP_TIME;
+      const eb = 1 + 2.70158 * Math.pow(p - 1, 3) + 1.70158 * Math.pow(p - 1, 2); // ease-out-back
+      c.car.scale.setScalar(0.5 + 0.5 * eb);
+    }
     // (The boost disk is updated at the END of setCarPose — it needs the surface
     // basis computed below to conform its circle onto the road.)
     // Persistent pose vectors (created once per car) reused every frame — no GC.

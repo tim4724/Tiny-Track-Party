@@ -406,8 +406,9 @@ scene.onFrame = (dt) => {
       audio.brakeSkid(c.id, c.brake * Math.max(0, Math.min(1, (c.spd - 0.2) / 0.4)));
       // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
       // Divisor maps normal top speed (~1.0) to near-full and lets boost (~1.6)
-      // peg the top of the range; starting value, tune by ear in ?solo=1.
-      audio.engineDrive(c.id, c.spd / 1.2);
+      // peg the top of the range; starting value, tune by ear in ?solo=1. While a
+      // monster truck, the same loop deepens into a heavy big-truck growl.
+      audio.engineDrive(c.id, c.spd / 1.2, c.monster);
     }
   }
   if (bestScrub) audio.screech(bestScrub.spd, bestScrub.g); // the nearest scrub owns the shared throttle

@@ -137,7 +137,7 @@ export class RaceAudio {
   // live physics every frame (boost wind, cornering squeal, brake skid). A
   // voice starts when its level rises above the floor and dies when it falls
   // back — call these from the render loop with the snapshot values.
-  _stateVoice(cueId, id, level) {
+  _stateVoice(cueId, id, level, mod) {
     if (!this.ready) return;
     const key = cueId + ':' + id;
     let voice = this._voices.get(key);
@@ -151,7 +151,7 @@ export class RaceAudio {
       voice = v.start(this.ctx, this.master);
       this._voices.set(key, voice);
     }
-    voice.set(level);
+    voice.set(level, mod); // mod (optional) deepens the engine voice into a monster-truck growl
   }
   // boostMul 1.0 → silent; the pad/item peak (~1.6) → full level.
   boostWind(id, boostMul) { this._stateVoice('boost', id, Math.max(0, Math.min(1, (boostMul - 1) / 0.6))); }
@@ -161,8 +161,11 @@ export class RaceAudio {
   // loop, pitch + level following the car's speed every frame (silent at rest).
   // Called per HUMAN car from the render loop; CPU cars stay silent (an 8-car
   // engine chorus would be mud, same reasoning as corner/brake).
-  engineDrive(id, level) {
-    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)));
+  // monster=true DEEPENS the engine into a heavy big-truck growl for the duration of a
+  // monster-truck transform: pitch down, a touch louder, top end muffled. Starting values.
+  engineDrive(id, level, monster = false) {
+    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)),
+      monster ? { rateMul: 0.6, gainMul: 1.45, lpMul: 0.82 } : null);
   }
   // Kill all live voices — pause, race end, return to lobby. Without this a
   // frozen frame would hold its sounds forever (the loop stops updating levels).

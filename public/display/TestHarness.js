@@ -310,6 +310,12 @@ export function runDisplayScenario(opts, ctx) {
       ? { onEvent: (ev) => {
           if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
         } }
+      : kind === 'monster'
+      ? { onEvent: (ev) => {
+          // the monster's transform burst is spawned by setCarMonster (snapshot-driven, in
+          // onFrame) — here we only voice the cars it body-checks: the comedy spin slip.
+          if (ev.type === 'spin' && sfx) sfx.spin();
+        } }
       : { onEvent() {} };
     let galleryRocketIds = new Set();
     function driveGalleryRocketAudio() {
@@ -333,7 +339,7 @@ export function runDisplayScenario(opts, ctx) {
     };
     placeGrid();
 
-    const live = kind === 'racing' || kind === 'rocket';
+    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
 
     // Self-driving preview: every car is an AI racer using the SAME pure-pursuit
     // autopilot as the live CPU fill (AiDriver), so the gallery shows the real bot
@@ -363,19 +369,49 @@ export function runDisplayScenario(opts, ctx) {
       engine._useItem(firer); // locks the car ahead + spawns the rocket (+events → impact burst)
     }
 
+    // 'monster' demo: transform a car into a monster truck, then a short gap after it lapses
+    // before the next one — so the preview loops the burst + grow-in AND the monster ploughing
+    // through the field (the cars it touches crash out). To guarantee a body-check to show off
+    // (in real play you fire it yourself; here we stage the encounter), pick the car with the
+    // SMALLEST gap to the car directly ahead so the heavier, faster monster runs it down fast.
+    let monsterCd = 0.8; // first transform shortly after the start
+    function transformFromBack(dt) {
+      if ([...engine.cars.values()].some((c) => c.monsterT > 0)) return; // one transform at a time
+      monsterCd -= dt;
+      if (monsterCd > 0) return;
+      monsterCd = 1.6; // gap before the next transform once this one lapses
+      const liveCars = [...engine.cars.values()].filter((c) => !c.finished);
+      if (liveCars.length < 2) return;
+      let firer = null, best = Infinity;
+      for (const c of liveCars) {
+        let gapAhead = Infinity;
+        for (const o of liveCars) { if (o === c) continue; const g = o.totalS - c.totalS; if (g > 0 && g < gapAhead) gapAhead = g; }
+        if (gapAhead < best) { best = gapAhead; firer = c; }
+      }
+      if (!firer) firer = liveCars.sort((a, b) => a.totalS - b.totalS)[0];
+      firer.item = 'monster';
+      firer.tCatch = 1;       // the full-length transform, for a good showcase
+      engine._useItem(firer); // flips monsterT on → snapshot.monster → setCarMonster morphs it
+    }
+
     let lastHud = 0;
     scene.onFrame = (dt) => {
       if (live) {
         if (kind === 'rocket') fireRocketFromBack(dt);
+        if (kind === 'monster') transformFromBack(dt);
         autosteer();
         engine.update(dt * 1000);
       }
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
+        scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul);
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
       if (kind === 'rocket') driveGalleryRocketAudio(); // sustained jet per in-flight rocket
+      // Monster demo (standalone tab only): voice the transformed car's deep big-truck
+      // engine growl, silent otherwise — so the gallery hears the sound change too.
+      if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, true);
       if (live) {
         const now = performance.now();
         if (now - lastHud > 160) {
@@ -386,7 +422,7 @@ export function runDisplayScenario(opts, ctx) {
         if (engine.raceOver) {
           engine = new Game(field, track, events);
           window.__engine = engine;
-          rocketCd = 0.8;
+          rocketCd = 0.8; monsterCd = 0.8;
           placeGrid();
         }
       }

@@ -91,11 +91,16 @@ function bakedLoopVoice(ctx, dest, bufFn, opts = {}) {
   src.connect(lp); lp.connect(out); out.connect(dest);
   src.start(ctx.currentTime);
   return {
-    set(level) {
+    // mod (optional): { rateMul, gainMul, lpMul } scale the pitch / loudness / lowpass
+    // cutoff away from the speed curve — used to DEEPEN the engine into a big-truck growl
+    // while a car is a monster truck (rateMul<1 = lower pitch, lpMul<1 = muffled top end).
+    // setTargetAtTime smooths the jump, so it glides into/out of the growl, not a click.
+    set(level, mod) {
       const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
-      src.playbackRate.setTargetAtTime(rate0 + l * rateSpan, at, 0.12); // RPM
-      lp.frequency.setTargetAtTime(lp0 + l * lpSpan, at, 0.1);
-      out.gain.setTargetAtTime(gain0 + l * gainSpan, at, 0.08);
+      const rMul = (mod && mod.rateMul) || 1, gMul = (mod && mod.gainMul) || 1, fMul = (mod && mod.lpMul) || 1;
+      src.playbackRate.setTargetAtTime((rate0 + l * rateSpan) * rMul, at, 0.12); // RPM
+      lp.frequency.setTargetAtTime((lp0 + l * lpSpan) * fMul, at, 0.1);
+      out.gain.setTargetAtTime((gain0 + l * gainSpan) * gMul, at, 0.08);
     },
     stop() {
       const at = ctx.currentTime;
