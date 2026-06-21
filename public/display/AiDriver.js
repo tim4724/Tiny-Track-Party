@@ -12,7 +12,16 @@ import { mulberry32, wrapDelta } from './engine/util.js';
 
 const LOOKAHEAD = 7.5;   // world units down the centerline a bot aims at
 const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
-const AI_ITEM_HOLD = 70; // frames a bot holds a fresh item before firing (~1.2s @60fps; lets the pickup roulette finish)
+
+// ---- held-item firing (see AiController.drive / _wantsToUse) ----
+// A bot used to dump every item on a fixed ~1.2s timer, so it looked like it fired on
+// pickup and the whole field fired on one cadence. Now each pickup gets a SEEDED,
+// randomised minimum hold, and the bot then waits for a moment the item actually pays.
+const AI_HOLD_MIN = 90;   // frames a bot sits on a fresh item before it'll consider firing (~1.5s @60fps — covers the pickup roulette and kills "fires on pickup")
+const AI_HOLD_SPAN = 150; // + up to this many more frames, seeded per pickup, so the field doesn't fire on one shared cadence (≈1.5–4.0s total)
+const AI_HOLD_MAX = 480;  // after ~8s a bot stops waiting for the perfect opening and takes the next one (holding forfeits every box it passes — don't hoard)
+const BANANA_DROP_FAR = 14;   // world units: drop a banana only when a rival is this close behind (a real trap, not litter on empty track)
+const ROCKET_FIRE_RANGE = 80; // cumulative units: fire a rocket only when the car ahead is within reach (beyond this a homing shot just whiffs)
 
 // ---- organic steer wander (seeded) ----
 // Bots used to rail one fixed lane forever, which read as robotic. Each bot now eases
@@ -41,6 +50,37 @@ const EVADE_LOOK = 3.5;   // fixed (short) steering lookahead while evading — 
 const BANANA_AVOID_R = 0.6; // mirrors the engine's BANANA_RADIUS (bananas carry no radius field)
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+// ---- race-context reads for item timing ----
+// Nearest live rival physically behind on the ribbon (wrapped to the nearest lap copy),
+// in world units — the car most likely to drive over a banana we drop. Infinity when the
+// track's empty behind us or there's no game (the gallery preview passes none).
+function nearestBehind(car, game) {
+  if (!game || !game.cars) return Infinity;
+  const L = game.length;
+  let best = Infinity;
+  for (const o of game.cars.values()) {
+    if (o.id === car.id || o.finished) continue;
+    const ds = wrapDelta(car.totalS - o.totalS, L); // + = o sits behind us
+    if (ds > 0 && ds < best) best = ds;
+  }
+  return best;
+}
+
+// Cumulative arclength gap to the car directly AHEAD in the standings — the rocket's
+// lock target (mirrors the engine's _nextCarAhead, which fires on cumulative totalS so a
+// back-marker locks the car one place up, not whoever's physically nearest). null when
+// this car is the leader (nothing ahead → a rocket would whiff).
+function gapToCarAhead(car, game) {
+  if (!game || !game.cars) return null;
+  let best = null;
+  for (const o of game.cars.values()) {
+    if (o.id === car.id || o.finished) continue;
+    const gap = o.totalS - car.totalS;
+    if (gap > 0 && (best == null || gap < best)) best = gap;
+  }
+  return best;
+}
 
 // Find the nearest hazard sitting on the bot's intended line and pick a lane past it.
 // `game` exposes hazards (oil: {s,lat,radius}) + bananas ({s,lat,owner}) in centerline
@@ -159,14 +199,18 @@ export class AiController {
     this._weave = 0;        // current wander offset, eased toward _weaveTarget
     this._weaveTarget = 0;  // re-rolled every _weaveT frames
     this._weaveT = 0;       // frames until the next target re-roll (0 → re-roll on the first drive)
+    this._useSeq = 0;       // wrapping use-counter handed to the engine (advances only on the fire frame)
+    this._lastItem = null;  // item held last frame (detects a fresh pickup → restart the hold)
+    this._heldFrames = 0;   // frames the current item has been held
+    this._holdMin = 0;      // this pickup's seeded minimum hold (frames) before firing is considered
   }
   // {s, b, u} ready to hand straight to engine.processInput(id, ...). `u` is a
   // wrapping use-counter (same protocol as the phone's ACTION button): a bot HOLDS a
-  // freshly-collected item for a beat (AI_ITEM_HOLD frames) — so it reads on screen
-  // and the pickup roulette can finish — then fires it on a STRAIGHT (corner
-  // anticipation ≈ 0): boost where it pays off, a banana dropped for chasers. CPU
-  // cars thus contest items instead of hoarding. Deterministic (no RNG): the counter
-  // only advances on the use frame.
+  // freshly-collected item for a seeded minimum (so it reads on screen, the pickup
+  // roulette can finish, and the field fires on staggered cadences) and then spends it
+  // when it pays off — see _wantsToUse. CPU cars thus contest items instead of hoarding.
+  // The counter only advances on the use frame; the per-pickup hold is the one RNG draw,
+  // off the same seeded stream as the wander, so a seeded race still replays identically.
   drive(car, centerline, game) {
     // Wander: ease a seeded signal toward a target re-rolled now and then (smooth, ±1).
     if (--this._weaveT <= 0) {
@@ -192,12 +236,37 @@ export class AiController {
       s = clamp(s + this._weave * STEER_WANDER * room * curbRoom, -1, 1);
     }
     const corner = cornerBrake(car, centerline);
-    if (this._useSeq == null) this._useSeq = 0;
+    // Held-item firing. A bot reads the race before it spends an item instead of dumping
+    // it the instant the roulette stops — so it no longer looks like it fires on pickup.
+    // A fresh pickup restarts the hold and rolls a seeded minimum (so the field fires on
+    // staggered cadences, not one shared timer); _wantsToUse then waits for a moment the
+    // item actually pays. The use-counter only advances on the fire frame (deterministic).
     const item = car && car.item;
-    if (item && item === this._lastItem) this._heldFrames = (this._heldFrames || 0) + 1;
-    else { this._lastItem = item || null; this._heldFrames = 0; } // fresh pickup → restart the hold
-    if (item && this._heldFrames >= AI_ITEM_HOLD && corner < 0.05) this._useSeq = (this._useSeq + 1) & 255;
+    if (item && item === this._lastItem) {
+      this._heldFrames++;
+    } else {
+      this._lastItem = item || null;
+      this._heldFrames = 0;
+      // Roll this pickup's hold ONLY when actually holding, so item-free bots draw nothing
+      // from the RNG and keep their weave stream (and seeded replays) identical.
+      this._holdMin = item ? AI_HOLD_MIN + Math.floor(this._rng() * AI_HOLD_SPAN) : 0;
+    }
+    if (item && this._heldFrames >= this._holdMin && this._wantsToUse(item, car, game, corner)) {
+      this._useSeq = (this._useSeq + 1) & 255;
+    }
     return { s, b: Math.max(1 - this.skill, corner), u: this._useSeq };
+  }
+
+  // Is NOW a good moment to fire the held item? Called once the per-pickup minimum hold
+  // has elapsed, so this is purely the "does it pay off" gate. Each item type waits for
+  // its own opening; an item held past AI_HOLD_MAX relaxes its gate so the bot spends it
+  // rather than hoarding (every box it passes while holding is forfeited, by design).
+  _wantsToUse(item, car, game, corner) {
+    const overdue = this._heldFrames >= AI_HOLD_MAX;
+    if (item === 'boost')  return corner < 0.05 || (overdue && corner < 0.2);             // on a straight, where the speed sticks
+    if (item === 'banana') { const d = nearestBehind(car, game); return (d > 0 && d <= BANANA_DROP_FAR) || overdue; } // drop on a tailgater
+    if (item === 'rocket') { const d = gapToCarAhead(car, game); return d != null && (d <= ROCKET_FIRE_RANGE || overdue); } // need a target in reach
+    return true; // unknown item type → fall back to firing once held
   }
 }
 

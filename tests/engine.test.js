@@ -441,6 +441,53 @@ test('cornerBrake lifts a low-handling bot for corners, cutting its curb time vs
   assert.ok(bot.wall < flat.wall * 0.6, `cornerBrake roughly halves curb time (${bot.wall} vs flat-out ${flat.wall})`);
 });
 
+// First frame the controller's use-counter advances while holding `item` (pose-pinned at
+// `s`), or -1 if it never fires across `frames`. Positions stay fixed (no game.update), so
+// this isolates the AI's fire DECISION from the engine's own use gate.
+function firstFireFrame(item, s, game, id, frames = 320, seed = 4) {
+  const car = game.cars.get(id);
+  Object.assign(car, { totalS: s, lat: 0, item });
+  game._recomputePoses();
+  const bot = new AiController({ skill: 1.0, seed });
+  for (let i = 0; i < frames; i++) {
+    if (bot.drive(car, game.centerline, game).u !== 0) return i;
+  }
+  return -1;
+}
+
+test('a bot does not fire on pickup — it holds the item past a minimum (AI_HOLD_MIN ~1.5s)', () => {
+  // A banana with a rival glued to the bumper is the most "fire it NOW" case there is —
+  // and even then the bot sits on it for the minimum hold (covers the pickup roulette).
+  const track = mkTrack(3);
+  const game = new Game(['runner', 'tail'], track, {});
+  Object.assign(game.cars.get('tail'), { totalS: 22, lat: 0 }); // 8u behind runner → a real tailgater
+  const fired = firstFireFrame('banana', 30, game, 'runner');
+  assert.ok(fired >= 90, `held the fresh item at least the min hold, not fired on pickup (fired frame ${fired})`);
+});
+
+test('a bot drops a banana only when a rival is close behind (a trap, not litter)', () => {
+  const track = mkTrack(3);
+  // Tailgater within range → the banana gets dropped on them.
+  const trap = new Game(['runner', 'tail'], track, {});
+  Object.assign(trap.cars.get('tail'), { totalS: 22, lat: 0 }); // 8u behind → within BANANA_DROP_FAR
+  assert.ok(firstFireFrame('banana', 30, trap, 'runner') >= 0, 'drops the banana on a close tailgater');
+  // Same banana, nobody behind (the only rival is far AHEAD) → held, not wasted on empty track.
+  const clear = new Game(['runner', 'lead'], track, {});
+  Object.assign(clear.cars.get('lead'), { totalS: 60, lat: 0 }); // ahead of the runner
+  assert.equal(firstFireFrame('banana', 30, clear, 'runner'), -1, 'a banana with nobody behind is held, not dropped on empty track');
+});
+
+test('a bot fires a rocket only when a target is ahead in range (a homing shot needs one)', () => {
+  const track = mkTrack(3);
+  // Car ahead within reach → the rocket launches.
+  const target = new Game(['back', 'front'], track, {});
+  Object.assign(target.cars.get('front'), { totalS: 50, lat: 0 }); // 30u ahead → within ROCKET_FIRE_RANGE
+  assert.ok(firstFireFrame('rocket', 20, target, 'back') >= 0, 'fires the rocket at a car ahead in range');
+  // Leader with a rocket and nobody ahead → never fired (no whiffs into empty track).
+  const leader = new Game(['solo'], track, {});
+  assert.equal(firstFireFrame('rocket', 20, leader, 'solo'), -1, 'a rocket with nobody ahead is held, never whiffed');
+});
+
 test('straight-line speed is not handling-limited (only corners cost speed)', () => {
   // Neutral steer → no cornering → low- and high-handling cars reach the same top
   // speed (vmax is unchanged here, only turn differs).
