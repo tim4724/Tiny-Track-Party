@@ -11,7 +11,6 @@ import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
-import { wrapDelta } from './engine/util.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
@@ -383,9 +382,12 @@ scene.onFrame = (dt) => {
   const snap = session.getSnapshot();
   for (const c of snap.cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
-    // Curb scrub — humans always (their cell shows it), CPU cars only while on
-    // some human's camera; RaceAudio spaces the bursts.
-    if (c.onWall && c.spd > 0.35 && (!aiBots.has(c.id) || cpuCarOnScreen(c.id))) audio.screech(c.spd);
+    // Curb scrub — loudness by 3D distance to the nearest human: the player's own
+    // car is at distance 0 → full; a CPU's scrub fades with proximity (audible but
+    // quiet far off, not popping on/off). audibility() is 0 only past the scene's
+    // earshot, which gates the call. RaceAudio spaces the bursts.
+    const scrubGain = audibility(c.pose && c.pose.pos);
+    if (c.onWall && c.spd > 0.35 && scrubGain > 0) audio.screech(c.spd, scrubGain);
     // State-driven voices per HUMAN car — each level follows the physics this
     // frame: boost wind from the boost multiplier, tire squeal from hard
     // steering at speed (squared so gentle corrections stay silent; a spinning
@@ -686,88 +688,118 @@ function startRace() {
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
 
-// A CPU car is "on screen" when it sits in some human's chase view: the camera
-// hangs ~2 units behind its car looking ahead, so the visible stretch is from
-// just behind a human to a run of track in front. Starting values (tune by ear
-// in ?solo=1): beyond ~20 units a car is a speck, behind the camera it's gone.
-const VIS_BEHIND = 2, VIS_AHEAD = 20;
-function cpuCarOnScreen(id) {
-  if (!session) return false;
-  const cpu = session.engine.cars.get(id);
-  if (!cpu) return false;
+// ---- spatial audio: world-cue loudness by 3D distance to the nearest human ----
+// The split-screen cells ARE the listeners: each shows one human car, so a world
+// sound is loud when it happens next to a human and fades with straight-line WORLD
+// distance to the nearest one — never gating hard to silence inside the scene, so
+// distant action stays present, just quiet. This is the whole sound model: one
+// curve, shared by every world cue (curb scrub, grabs, banana, spin, rocket). It
+// replaces the old binary "is this CPU car on a human's camera?" visibility gate
+// and generalises what used to be the rocket's private distance falloff.
+//
+// Distance is true 3D proximity (Vector3.distanceTo): a car physically near a
+// human is loud even when far apart in race position — an overpass, a crossing, a
+// doubled-back straight — which reads on screen as "it's right there". Cheap: ≤4
+// humans × a handful of sources per frame. Starting values — tune by ear in ?solo=1.
+const AUD_NEAR = 8;     // within this many world units of a human → full volume (the pack around you)
+const AUD_FAR = 34;     // by here it has faded to the distance FLOOR (the far edge of the chase view)
+const AUD_FLOOR = 0.18; // quietest a still-in-scene source gets — distant but present, never silent here
+const AUD_CUT = 64;     // past here: out of the scene → silent (FLOOR tapers to 0 across [FAR, CUT], no click)
+
+// Min straight-line world distance from point `p` to any human car (Infinity with
+// no humans / no live poses). Humans are the only listeners — CPU cars have no cell.
+function nearestHumanDist(p) {
+  if (!session) return Infinity;
+  let best = Infinity;
   for (const [hid, h] of session.engine.cars) {
     if (aiBots.has(hid)) continue;
-    const ds = wrapDelta(cpu.totalS - h.totalS, session.engine.length);
-    if (ds >= -VIS_BEHIND && ds <= VIS_AHEAD) return true;
+    const hp = h.pose && h.pose.pos;
+    if (!hp) continue;
+    const d = hp.distanceTo(p);
+    if (d < best) best = d;
   }
-  return false;
+  return best;
+}
+// Loudness in [0,1] for a world cue at world position `p` (1 within AUD_NEAR of a
+// human, FLOOR at AUD_FAR, 0 past AUD_CUT). A human's own car is at distance 0 → 1,
+// so this needs no human/CPU branch: a player's own moments come out full for free.
+// A missing position (`!p`) plays full rather than dropping the cue.
+function audibility(p) {
+  if (!p) return 1;
+  const d = nearestHumanDist(p);
+  if (d <= AUD_NEAR) return 1;
+  if (d >= AUD_CUT) return 0;
+  if (d <= AUD_FAR) return 1 - (1 - AUD_FLOOR) * (d - AUD_NEAR) / (AUD_FAR - AUD_NEAR);
+  return AUD_FLOOR * (1 - (d - AUD_FAR) / (AUD_CUT - AUD_FAR));
+}
+// Loudness for a race event = its car's world position through audibility;
+// idless/global events (no positioned source) play full.
+function eventGain(e) {
+  if (e == null || e.id == null) return 1;
+  const c = session && session.engine.cars.get(e.id);
+  return audibility(c && c.pose && c.pose.pos);
 }
 
-// Rocket flight audio: a sustained jet per in-flight rocket, held the whole air time, its
-// level scaled by ARCLENGTH DISTANCE to the nearest human (closer = louder, silent past
-// ROCKET_AUDIBLE). This is the one place the game scales a voice by emitter distance — the
-// rest of the audio just gates on/off by camera visibility. Voices stop when a rocket leaves
-// the snapshot (hit/expired). `rs` is the rocket's wrapped arclength; humans carry cumulative
-// totalS, so wrapDelta gives the real on-track gap.
-const ROCKET_AUDIBLE = 26; // arclength units: full at 0, fades to silent here
-let _rocketVoiceIds = new Set();
-function rocketAudibility(rs) {
-  if (!session) return 0;
-  const len = session.engine.length; let best = Infinity;
-  for (const [hid, h] of session.engine.cars) {
-    if (aiBots.has(hid)) continue;
-    const gap = Math.abs(wrapDelta(rs - h.totalS, len));
-    if (gap < best) best = gap;
-  }
-  return best < ROCKET_AUDIBLE ? Math.max(0.2, 1 - best / ROCKET_AUDIBLE) : 0;
+// A rocket lives in the engine's (arclength, lat) space — rebuild its world point
+// the same way the engine poses cars (centreline sample + lateral offset) so the
+// flight is measured in the SAME 3D metric as its target-car impact below.
+function rocketWorldPos(r) {
+  const f = session.engine.centerline.sampleAt(r.s); // r.s is wrapped to [0, length); sampleAt wraps anyway
+  return f.pos.clone().addScaledVector(f.lateral, r.lat);
 }
+// Rocket flight: a sustained jet per in-flight rocket, held the whole air time, its
+// level set by the SAME audibility curve as every other world cue (so the jet and
+// its boom always agree, and a rocket near a human is loud while a far one is a
+// quiet whoosh). Voices stop when a rocket leaves the snapshot (hit/expired).
+let _rocketVoiceIds = new Set();
 function driveRocketAudio(snap) {
   const seen = new Set();
-  for (const r of (snap.rockets || [])) { seen.add(r.id); audio.rocketFlight(r.id, rocketAudibility(r.s)); }
+  for (const r of (snap.rockets || [])) { seen.add(r.id); audio.rocketFlight(r.id, audibility(rocketWorldPos(r))); }
   for (const id of _rocketVoiceIds) if (!seen.has(id)) audio.rocketFlight(id, 0); // stop the ones that just landed/expired
   _rocketVoiceIds = seen;
 }
-// Loudness of a rocket IMPACT, kept CONSISTENT with the flight so you never get a jet that
-// fades in with no boom: the detonation is at the target car, so reuse the flight's distance
-// metric on the target's position (a human hit → always full). The old cpuCarOnScreen gate
-// was a narrower, asymmetric window than the flight's range → "zisch but no explosion" at
-// certain distances (the bug). Returns 0 when no player is in earshot of the impact.
+// Loudness of a rocket IMPACT, kept CONSISTENT with the flight so you never get a
+// jet that fades in with no boom: the detonation is at the target car, so reuse
+// audibility on the target's world position (a human hit → always full), with a
+// payoff floor so an audible jet always lands an audible boom. Returns 0 only when
+// the impact is out of every human's earshot.
 function rocketImpactLevel(targetId) {
   const t = session && session.engine.cars.get(targetId);
   if (!t) return 1;                    // target already gone (rare) — just play it
   if (!aiBots.has(targetId)) return 1; // a human got hit → full
-  const a = rocketAudibility(t.totalS);
+  const a = audibility(t.pose && t.pose.pos);
   return a > 0 ? Math.max(0.45, a) : 0; // audible whenever the flight was, with a clear payoff floor
 }
 
-// Map engine events onto cues — sound only for what's VISIBLE (same principle
-// as the controller haptics: feedback must map to something the player can
-// see). A human's moments are always on screen (their split-screen cell); a
-// CPU car's world moments (boost, banana, spin) sound only while it's in a
-// human's view. HUD-narration cues stay human-only regardless: the roulette
+// Map engine events onto cues. World moments (a car's grab, banana drop, spin,
+// curb scrub) are scaled by distance to the nearest human (eventGain): close =
+// loud, far = quiet but present — so the player's own moments come out full (gap
+// 0) and a CPU's fade with distance instead of popping on/off as they enter or
+// leave a camera. HUD-narration cues stay human-only and full: the roulette
 // describes the player's item slot, and lap / finish narrate their cell's HUD.
 function audioForRaceEvent(e) {
   const isHuman = e.id == null || !aiBots.has(e.id);
-  const visible = isHuman || cpuCarOnScreen(e.id);
+  const g = eventGain(e); // 1 for the player's own car / idless cues, distance-scaled for CPUs
   switch (e.type) {
     case 'pickup':
       // A finished car has no HUD item slot to narrate, so its victory-lap grabs play
-      // just the world pop (like a CPU grab on camera) — never the player roulette chain.
-      if (isHuman && !e.finished) audio.pickup(); // pop + roulette tick-down
-      else if (visible) audio.pickupPop();        // CPU / finished grab on camera: world pop
+      // just the world pop (like a CPU grab) — never the player roulette chain.
+      if (isHuman && !e.finished) audio.pickup(); // pop + roulette tick-down (player's own slot)
+      else if (g > 0) audio.pickupPop(g);         // any other grab: world pop, by distance
       break;
     // (boost item-use and pad crossings make no one-shot sound — the boost
     // WIND in onFrame tracks the resulting speed state instead.)
     case 'item_use':
-      if (visible && e.item === 'banana') audio.bananaDrop();
+      if (g > 0 && e.item === 'banana') audio.bananaDrop(g);
       // the rocket's launch+flight is a SUSTAINED voice driven per-frame in onFrame
       // (driveRocketAudio), not a one-shot here; boost item-use stays silent.
       break;
     case 'spin':
-      // rocket → boom, gated/scaled by distance to a player (same metric as the flight, so the
-      // jet and its explosion are always heard together); oil/banana → comedy slip, camera-gated.
+      // rocket → boom (its own distance metric, kept in step with the flight so the
+      // jet and explosion are always heard together); oil/banana → comedy slip,
+      // scaled by distance to the nearest human like every other world cue.
       if (e.cause === 'rocket') { const lvl = rocketImpactLevel(e.id); if (lvl > 0) audio.rocketHit(lvl); }
-      else if (visible) audio.spin();
+      else if (g > 0) audio.spin(g);
       break;
     // The chequered-flag crossing chimes like any other lap (a 'finish' fanfare
     // was auditioned and cut) — the results overlay carries the celebration.
