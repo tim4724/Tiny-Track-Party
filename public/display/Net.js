@@ -35,7 +35,28 @@ const LIVENESS_TICK_MS = 1000;
 // room (the phones just see a short "waiting for the big screen" blip) instead
 // of creating a fresh one and orphaning every controller in the dead room.
 // sessionStorage is per-tab on purpose: a second display tab gets its own room.
+// The blob also carries the display's clientId secret (see genDisplayClientId).
 const ROOM_KEY = 'tinytrack_display_room';
+
+// The display's clientId doubles as the bearer secret for slot 0: the relay keys
+// the authoritative seat by it, and a socket that presents it EVICTS the incumbent
+// (close 4000). A constant like 'display' would be no secret at all — the room code
+// is on-screen and this source is public, so anyone could claim slot 0 and hijack
+// the big screen out from under the host. So mint a per-session random secret and
+// persist it with the room (_saveRoom), so a display RELOAD still reclaims slot 0
+// while an outsider holding only the room code can't forge it. Prefer the CSPRNG;
+// the Math.random tail is a last resort for exotic non-secure contexts (real
+// deploys are https/localhost, where crypto.randomUUID is always present).
+function genDisplayClientId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return 'display-' + crypto.randomUUID();
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const a = new Uint8Array(16); crypto.getRandomValues(a);
+      return 'display-' + Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (_) { /* fall through to the non-crypto path */ }
+  return 'display-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 export class DisplayNet extends GameNet {
   constructor(opts = {}) {
@@ -88,6 +109,7 @@ export class DisplayNet extends GameNet {
     this.flow = new RoomFlow();
     this.roomCode = null;
     this.instance = null;
+    this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
     this.baseUrlOverride = null;
     this._inRoom = false; // true between a created/joined ack and the socket dropping
 
@@ -118,11 +140,15 @@ export class DisplayNet extends GameNet {
       if (saved && saved.room) {
         this.roomCode = saved.room;
         this.instance = saved.instance || null;
+        this.clientId = saved.cid || null; // reuse the secret so a reload lands on slot 0
       }
     } catch (_) { /* no restore — create a fresh room */ }
+    // Mint a fresh secret on a cold boot (or a legacy blob without one). Done here,
+    // before _connect, so the create/join always carries our clientId.
+    if (!this.clientId) this.clientId = genDisplayClientId();
   }
   _saveRoom() {
-    try { sessionStorage.setItem(ROOM_KEY, JSON.stringify({ room: this.roomCode, instance: this.instance })); } catch (_) {}
+    try { sessionStorage.setItem(ROOM_KEY, JSON.stringify({ room: this.roomCode, instance: this.instance, cid: this.clientId })); } catch (_) {}
   }
   _forgetRoom() {
     try { sessionStorage.removeItem(ROOM_KEY); } catch (_) {}
@@ -162,8 +188,9 @@ export class DisplayNet extends GameNet {
     const url = (this.roomCode && this.instance)
       ? RELAY_URL + '/' + enc(this.roomCode) + '?instance=' + enc(this.instance)
       : RELAY_URL;
-    // 'display' is a stable per-slot bearer secret → reconnect lands on slot 0.
-    this.party = new PartyConnection(url, { clientId: 'display' });
+    // Per-session secret (genDisplayClientId) keyed to slot 0 → reconnect/reload
+    // lands back on slot 0, while an outsider with only the room code can't forge it.
+    this.party = new PartyConnection(url, { clientId: this.clientId });
 
     this.party.onOpen = () => {
       if (this.roomCode) this.party.join(this.roomCode);

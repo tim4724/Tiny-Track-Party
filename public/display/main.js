@@ -383,7 +383,7 @@ scene.onFrame = (dt) => {
   let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop (see below)
   for (const c of snap.cars) {
     scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (idempotent)
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, c.steer, c.spd, c.onWall, c.steerInput, c.spin, c.boostMul, c.brake);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
     // Curb scrub — loudness by distance to the nearest human (the player's own car
     // is at distance 0 → the ceiling). Unlike the one-shot cues this is a continuous
     // grind on a single shared throttle, so only in-scene scrubs (≥ the FLOOR)
@@ -1036,7 +1036,7 @@ function syncSessionFrozen() {
 function freezeCars(snap) {
   if (!session) return;
   for (const c of (snap || session.getSnapshot()).cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, 0, 0, false, 0);
+    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up); // static repose — all anim inputs default
   }
 }
 

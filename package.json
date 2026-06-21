@@ -13,13 +13,18 @@
     "artwork": "node scripts/capture-artwork.js",
     "icon:item": "node scripts/capture-item-icon.js",
     "thumbs:car": "node scripts/capture-car-thumbs.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "1.60.0",
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
     "three": "^0.184.0",
     "ws": "^8.21.0"
   }

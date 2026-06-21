@@ -10,6 +10,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      # Gates on errors only; no-unused-vars / style rules are warnings and
+      # do not fail the build (see eslint.config.mjs).
+      - run: npm run lint
+
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 5

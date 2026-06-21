@@ -10,6 +10,7 @@
 // single screen without ever touching the relay. UI regressions show up here.
 // =====================================================================
 
+// eslint-disable-next-line no-unused-vars -- global consumed cross-file by the other classic gallery <script>s (shared scope)
 var Gallery = (function() {
   // Car livery palette names, indexed to match protocol.js CAR_COLORS.
   var PLAYER_COLOR_NAMES = ['red', 'amber', 'green', 'blue', 'purple', 'pink', 'orange', 'cyan'];

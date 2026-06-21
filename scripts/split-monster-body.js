@@ -88,7 +88,6 @@ const pods = rest.filter((c) => Math.abs(ctr(c)[0]) > 0.1 && ctr(c)[1] > 0.25); 
 const afterPods = rest.filter((c) => !pods.includes(c));
 const spoiler = afterPods.reduce((b, c) => (topY(c) > topY(b) ? c : b), afterPods[0]); // highest remaining = rear bar
 const trim = [...pods, spoiler];
-const frame = afterPods.filter((c) => c !== spoiler);
 
 if (pods.length !== 4) throw new Error(`expected 4 wheel pods, found ${pods.length} — selector needs review`);
 
