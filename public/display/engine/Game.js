@@ -405,7 +405,12 @@ export class Game {
       if (c.boostT > 0) { c.boostT -= dt; if (c.boostT < 0) c.boostT = 0; }
       else if (c.boostMul > 1) c.boostMul = Math.max(1, c.boostMul - BOOST_FADE * dt); // post-hold taper
       const boosting = c.boostMul > 1;
-      const targetV = c.vmax * c.boostMul * (1 - c.brake);
+      // A live boost OVERRIDES the brake: while boosting the brake can't pull the
+      // ceiling down, so a pad/item before a loop guarantees the car keeps the speed
+      // to clear it — you can't accidentally (or deliberately) brake the boost off.
+      // Brake control returns the instant the multiplier bleeds back to 1.
+      const brakeEff = boosting ? 0 : c.brake;
+      const targetV = c.vmax * c.boostMul * (1 - brakeEff);
       if (spinning) c.v = Math.max(0, c.v - SPIN_DRAG * dt);
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);

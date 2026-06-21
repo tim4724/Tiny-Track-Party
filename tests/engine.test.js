@@ -814,6 +814,24 @@ test('a boost pad fires once per cross (rising-edge), not every frame', () => {
   for (let i = 0; i < 30; i++) { game.processInput('p1', { b: 1 }); game.update(16); assert.equal(car.boostT, 0, 'parked on a pad does not re-arm'); }
 });
 
+test('a held brake cannot stop an active boost (pad/item before a loop)', () => {
+  const track = mkTrack(3);
+  track.pads = [{ s: 8, lat: 0, radius: 1.0 }];
+  const game = new Game(['p1'], track, {});
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });
+  // Cross the pad while mashing full brake — the boost should still launch the car.
+  game.processInput('p1', { s: 0, b: 1 }); game.update(16);
+  assert.ok(car.boostT > 0, 'boost armed on the pad');
+  let maxV = 0;
+  for (let i = 0; i < 40; i++) { game.processInput('p1', { s: 0, b: 1 }); game.update(16); maxV = Math.max(maxV, car.v); }
+  assert.ok(maxV > car.vmax + 0.5, `brake cannot hold the car down while boosting (peak ${maxV.toFixed(2)} vs vmax ${car.vmax})`);
+  // Once the boost fully bleeds off, the held brake takes back over and stops the car.
+  for (let i = 0; i < 200; i++) { game.processInput('p1', { s: 0, b: 1 }); game.update(16); }
+  assert.equal(car.boostMul, 1, 'boost fully bled off');
+  assert.ok(car.v < 0.5, `brake control returns after the boost (v=${car.v.toFixed(2)})`);
+});
+
 test('a full-width strip pad (loop launch) boosts a car at the lane EDGE, not just centre', () => {
   const track = mkTrack(3);
   // A rectangular launch strip: a longitudinal band (2·1.1 long) spanning the full road
