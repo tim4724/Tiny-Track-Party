@@ -444,9 +444,8 @@ export const CUES = [
         id: 'plop', label: 'A · plop',
         play(ctx, dest, t = ctx.currentTime) {
           const j = jitter();
-          // vols trimmed ~0.65× (2026-06-21) — point-blank (distance gain 1) read too loud.
-          tone(ctx, dest, t, { f: 320 * j, to: 130 * j, dur: 0.09, type: 'sine', vol: 0.2, a: 0.005 });
-          noise(ctx, dest, t + 0.05, { dur: 0.05, f: 350, Q: 1, vol: 0.08 });
+          tone(ctx, dest, t, { f: 320 * j, to: 130 * j, dur: 0.09, type: 'sine', vol: 0.3, a: 0.005 });
+          noise(ctx, dest, t + 0.05, { dur: 0.05, f: 350, Q: 1, vol: 0.12 });
           return 0.25;
         }
       },
@@ -461,9 +460,8 @@ export const CUES = [
         id: 'dizzy', label: 'A · dizzy wah-wah',
         play(ctx, dest, t = ctx.currentTime) {
           const j = jitter(0.5);
-          // vols trimmed ~0.65× (2026-06-21) — point-blank (distance gain 1) read too loud.
-          tremTone(ctx, dest, t, { f: 650 * j, to: 170 * j, dur: 0.7, type: 'sine', vol: 0.18, tremHz: 7.5, depth: 0.9 });
-          tone(ctx, dest, t + 0.68, { f: 120 * j, dur: 0.1, type: 'sine', vol: 0.14, a: 0.005 });
+          tremTone(ctx, dest, t, { f: 650 * j, to: 170 * j, dur: 0.7, type: 'sine', vol: 0.27, tremHz: 7.5, depth: 0.9 });
+          tone(ctx, dest, t + 0.68, { f: 120 * j, dur: 0.1, type: 'sine', vol: 0.22, a: 0.005 });
           return 0.9;
         }
       }

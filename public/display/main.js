@@ -709,7 +709,9 @@ function startRace() {
 // human is loud even when far apart in race position — an overpass, a crossing, a
 // doubled-back straight — which reads on screen as "it's right there". Cheap: ≤4
 // humans × a handful of sources per frame. Starting values — tune by ear in ?solo=1.
-const AUD_NEAR = 8;     // within this many world units of a human → full volume (the pack around you)
+const AUD_PEAK = 0.7;  // loudness at point-blank (≤ AUD_NEAR) — the ceiling for EVERY world cue, so even
+                       //   your own car's events don't slam full master (HUD cues bypass this and stay full)
+const AUD_NEAR = 8;     // within this many world units of a human → AUD_PEAK (the pack around you)
 const AUD_FAR = 34;     // by here it has faded to the distance FLOOR (the far edge of the chase view)
 const AUD_FLOOR = 0.18; // quietest a still-in-scene source gets — distant but present, never silent here
 const AUD_CUT = 64;     // past here: out of the scene → silent (FLOOR tapers to 0 across [FAR, CUT], no click)
@@ -728,22 +730,24 @@ function nearestHumanDist(p) {
   }
   return best;
 }
-// Loudness in [0,1] for a world cue at world position `p` (1 within AUD_NEAR of a
-// human, FLOOR at AUD_FAR, 0 past AUD_CUT). A human's own car is at distance 0 → 1,
-// so this needs no human/CPU branch: a player's own moments come out full for free.
-// A missing position (`!p`) plays full rather than dropping the cue.
+// Loudness in [0, AUD_PEAK] for a world cue at world position `p` (AUD_PEAK within
+// AUD_NEAR of a human, FLOOR at AUD_FAR, 0 past AUD_CUT). A human's own car is at
+// distance 0 → AUD_PEAK, so this needs no human/CPU branch: a player's own moments
+// come out at the ceiling for free. A missing position (`!p`) plays at the ceiling
+// rather than dropping the cue. (HUD cues — lap/roulette/countdown — never reach
+// here; they bypass the distance model and play at full master.)
 function audibility(p) {
-  if (!p) return 1;
+  if (!p) return AUD_PEAK;
   const d = nearestHumanDist(p);
-  if (d <= AUD_NEAR) return 1;
+  if (d <= AUD_NEAR) return AUD_PEAK;
   if (d >= AUD_CUT) return 0;
-  if (d <= AUD_FAR) return 1 - (1 - AUD_FLOOR) * (d - AUD_NEAR) / (AUD_FAR - AUD_NEAR);
+  if (d <= AUD_FAR) return AUD_PEAK - (AUD_PEAK - AUD_FLOOR) * (d - AUD_NEAR) / (AUD_FAR - AUD_NEAR);
   return AUD_FLOOR * (1 - (d - AUD_FAR) / (AUD_CUT - AUD_FAR));
 }
 // Loudness for a race event = its car's world position through audibility;
-// idless/global events (no positioned source) play full.
+// idless/global events (no positioned source) play at the world-cue ceiling.
 function eventGain(e) {
-  if (e == null || e.id == null) return 1;
+  if (e == null || e.id == null) return AUD_PEAK;
   const c = session && session.engine.cars.get(e.id);
   return audibility(c && c.pose && c.pose.pos);
 }
