@@ -223,20 +223,25 @@ const PADS = {
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
-// = lateral offset. A row of 4 spread across the lane.
+// = lateral offset. A row is 4 spread across the lane; each track lays down TWO rows
+// ~half a lap apart so there's a fresh pickup on each side of the lap (you can only hold
+// one item, so a second grab point beats clustering them). The second `u` per track sits
+// on the gentlest open stretch ~0.5 lap from the first — lowest curvature/grade, off the
+// bridge decks and loops (pickups are safe, so a low deck is otherwise fine).
 const BOX_LANES = [-1.05, -0.35, 0.35, 1.05];
 const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
+const boxRows = (...us) => us.flatMap(boxRow);
 const BOXES = {
-  // Backyard Cup — a row of 4 across a gentle stretch (pickups are safe, so a low deck is fine).
-  bowtie:      boxRow(0.53),
-  pretzel:    boxRow(0.05),
-  lasso:      boxRow(0.39),
-  cloverleaf: boxRow(0.41),
-  meadow:     boxRow(0.13),   // on the straight between the first chicane and the hill
-  switchback: boxRow(0.20),
-  crossover:  boxRow(0.66),
-  riverside:  boxRow(0.30),
-  twister:    boxRow(0.039) // early on the launch straight — grab an item, then fly
+  // Backyard Cup — two rows of 4 on gentle stretches (pickups are safe, so a low deck is fine).
+  bowtie:      boxRows(0.53, 0.85),
+  pretzel:    boxRows(0.05, 0.73),
+  lasso:      boxRows(0.39, 0.89),
+  cloverleaf: boxRows(0.41, 0.88),
+  meadow:     boxRows(0.13, 0.64),   // straight after the first chicane, then side C's mirror straight
+  switchback: boxRows(0.20, 0.73),
+  crossover:  boxRows(0.66, 0.13),
+  riverside:  boxRows(0.30, 0.78),
+  twister:    boxRows(0.039, 0.57) // early on the launch straight, then the far flat — grab, fly, grab again
 };
 
 // Support poles — SOLID obstacles cars collide with (unlike oils, which only spin you).
