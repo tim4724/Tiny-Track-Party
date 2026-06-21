@@ -18,6 +18,7 @@ import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
 import { buildMonsterRig, MONSTER_BASE_ASSET } from './render/MonsterRig.js';
+import { ChaseCamera } from './ChaseCamera.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
@@ -26,21 +27,8 @@ const ASSET = (name) => `/assets/toycar/${name}.glb`;
 const CAR_MODELS = window.CAR_MODELS;
 const CAR_MODEL_YAW = window.CAR_MODEL_YAW || []; // per-model facing fix (see protocol.js)
 
-// Chase camera: sits behind the CAR's heading and looks at it, with the position
-// and look-target damped so it lags and swings smoothly behind through turns
-// (the standard spring chase-cam every kart racer uses).
-// Close chase that sits LOW and just behind the car with a fairly tight lens, so
-// the camera stays comfortable to drive rather than steeply top-down.
-const CHASE_DIST = 1.35, CHASE_HEIGHT = 0.64, CHASE_LOOK = 1.5; // close, low, slight look-down (dolly'd ~33% nearer so the car reads bigger)
-const CHASE_TGT_UP = 0.11;    // look point barely above the road → camera pitches onto the car
-const CAM_POS_RATE = 7.0, CAM_TGT_RATE = 13.0; // damping speed per second (higher = snappier)
-// The position spring lags the car by ~velocity/rate, so the faster you go the
-// further back the camera sits — at full boost that lag alone shrinks the car
-// more than the FOV/dist cues do. So the follow rate climbs with spd² (applied
-// in _updateChase): fast straights/boosts tighten and stay glued (car stays
-// big), while slow corners keep the low base rate and its loose swing-behind.
-const CAM_POS_RATE_SPD = 13.0; // extra follow rate per spd² (see above)
-const CAM_RATE_SPD_MAX = 1.6;  // cap the spd feeding that term so a future >1.6 boost can't drive the cam toward rigid
+// The per-player spring chase camera (position/look-target damping, speed FOV +
+// pull-back) lives in ./ChaseCamera.js — one instance per car (c.chase).
 const LEAN_MAX = 0.05;        // max body roll (rad) at full steer — subtle
 const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 // Weight transfer: smoothed d(spd)/dt pitches the body — nose-down dive under
@@ -69,16 +57,7 @@ const PITCH_RATE = 6;         // pitch damping (1/s) — a soft suspension settl
 // and rejected for clipping the speed feel — a proportional scale keeps it.)
 const ROLL_SEG_MAX = 1.5;      // per-frame travel beyond this = respawn/teleport → don't spin across it
 const WHEEL_SPIN_SCALE = 0.4;  // visual roll as a fraction of literal ω=v/r (1.0 = physically literal)
-const BASE_FOV = 55;          // camera FOV at rest — tighter lens, less wide-angle stretch
-// Sense of speed (no shake): FOV widens and the chase camera stretches back with
-// speed. `spd` is normalised to the car's own vmax but a BOOST raises v above it
-// (spd reaches ~1.6), so both cues automatically over-extend during a boost — the
-// kick is proportional to how fast you ACTUALLY go. The FOV response is
-// asymmetric: it kicks wide fast (a boost lands as a hit) and eases back slow
-// (running out of boost is a taper, not a snap). Starting values.
-const FOV_GAIN = 4;           // extra FOV degrees at top speed (~+6° at full boost) — trimmed so the car doesn't shrink at speed
-const FOV_RISE = 9, FOV_FALL = 3; // FOV damping rates (1/s): fast in, slow out
-const CHASE_DIST_GAIN = 0.06; // extra chase distance at full speed — a hint of pull-away (kept tiny: distance shrink is pure car-shrink, no speed-feel upside)
+// (FOV-at-speed + chase pull-back constants moved to ChaseCamera.js)
 // BOOST wind streaks: a few additive white-teal streaks slicing past the car while
 // boostMul > 1 — the Mario-Kart "cutting through air" idiom. World-space (not a
 // screen overlay) so every split-screen cell sees a rival's boost too, same as the
@@ -247,7 +226,7 @@ export class SceneRenderer {
     this.container = container;
     this.colors = colors || ['#e6492d'];
     this.protos = new Map();
-    this.cars = new Map();      // id -> { group, plate, cam, camPos, camTarget, label, pose }
+    this.cars = new Map();      // id -> { group, plate, chase, cam, label, pose }
     this._plateAnchors = new Map(); // model name -> { z, y, w } rear-plate placement (per model)
     this._order = [];           // stable cell order
     this._running = false;
@@ -291,14 +270,13 @@ export class SceneRenderer {
     // the per-cast cost was growing with track length (setCarPose's hot path).
     this._collideGrid = null;
     this._collideCell = 6; // world units per cell (~tile-sized; tracks use SCALE=2)
-    // Scratch objects reused every frame so the per-car hot paths (setCarPose,
-    // _updateChase) allocate NOTHING — steady-state garbage was forcing GC pauses
-    // that showed up as frame-time spikes (the stutter under load).
+    // Scratch objects reused every frame so the per-car hot path (setCarPose)
+    // allocates NOTHING — steady-state garbage was forcing GC pauses that showed
+    // up as frame-time spikes (the stutter under load). (The chase camera owns its
+    // own scratch in ChaseCamera.js.)
     this._sx = new THREE.Vector3();
     this._syy = new THREE.Vector3();
     this._sBasis = new THREE.Matrix4();
-    this._sWant = new THREE.Vector3();
-    this._sTarget = new THREE.Vector3();
     this._dsV = new THREE.Vector3();       // scratch for the per-frame travel delta (wheel roll)
     // Boost-disk conform: a dedicated raycaster (cast along the surface normal, not
     // straight down — so it works on a loop's wall/ceiling) plus the scratch vectors
@@ -1353,7 +1331,7 @@ export class SceneRenderer {
     boostDisk.visible = false;
     this.scene.add(boostDisk);
 
-    const cam = new THREE.PerspectiveCamera(62, 1, 0.1, 600);
+    const chase = new ChaseCamera();
 
     // AI/CPU cars (opts.cell === false) race in the shared world — so they show up
     // in every human's chase view — but get NO split-screen cell of their own. A
@@ -1470,11 +1448,10 @@ export class SceneRenderer {
     const c = {
       group, car, body, bodyBaseQuat,
       frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
-      wheelbase, skidWidth, wheelRadius, pitchSign, plate, cam, boostDisk, aoMat, ao,
+      wheelbase, skidWidth, wheelRadius, pitchSign, plate, chase, cam: chase.camera, boostDisk, aoMat, ao,
       streakGroup, streaks, footW, footL,
       carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
-      camPos: new THREE.Vector3(), camTarget: new THREE.Vector3(),
-      label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, init: false, lean: 0,
+      label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, lean: 0,
       wheelRoll: 0, pitch: 0, prevSpd: 0, lastPos: null, // wheel-roll + weight-transfer state (setCarPose)
       reconnecting: false, reconnectEl: null, // dropped-player reconnect card (centred in this cell, like finishEl)
       rideOff: null // damped ride-height offset from the centreline (setCarPose)
@@ -2033,37 +2010,6 @@ export class SceneRenderer {
   start() { if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); } }
   stop() { this._running = false; }
 
-  _updateChase(c, dt) {
-    const { pos, forward, up } = c.pose;
-    const baseFov = BASE_FOV, height = CHASE_HEIGHT;
-    const spd = c.spd || 0; // normalised to vmax; exceeds 1 under boost (see FOV_GAIN notes)
-    // ideal pose: behind the CAR's heading, stretching further back with speed
-    // (the car visibly pulls away from the camera as it accelerates), looking
-    // just ahead of it.
-    const dist = CHASE_DIST + CHASE_DIST_GAIN * spd;
-    const want = this._sWant.copy(pos).addScaledVector(forward, -dist).addScaledVector(up, height);
-    const target = this._sTarget.copy(pos).addScaledVector(forward, CHASE_LOOK).addScaledVector(up, CHASE_TGT_UP);
-    // frame-rate-independent damping → smooth lag/swing behind the car through turns.
-    // Follow rate climbs with speed² so the spring lag (≈v/rate) doesn't pull the
-    // car small at max speed; the quadratic keeps the rate near base through slow
-    // corners (loose swing preserved) and only tightens on fast straights/boosts.
-    // spd is capped here so an over-1.6 boost can't ramp the rate toward rigid.
-    const rateSpd = Math.min(spd, CAM_RATE_SPD_MAX);
-    const aPos = 1 - Math.exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);
-    const aTgt = 1 - Math.exp(-CAM_TGT_RATE * dt);
-    if (!c.init) { c.camPos.copy(want); c.camTarget.copy(target); c.init = true; }
-    else { c.camPos.lerp(want, aPos); c.camTarget.lerp(target, aTgt); }
-    c.cam.position.copy(c.camPos);
-    // sense of speed: widen FOV with speed (no shake) — fast attack so a boost
-    // lands as a kick, slow release so it tapers off rather than snapping back
-    const fovTarget = baseFov + spd * FOV_GAIN;
-    const fovRate = fovTarget > (c.fov || baseFov) ? FOV_RISE : FOV_FALL;
-    c.fov = (c.fov || baseFov) + (fovTarget - (c.fov || baseFov)) * (1 - Math.exp(-fovRate * dt));
-    c.cam.fov = c.fov;
-    c.cam.up.copy(up);
-    c.cam.lookAt(c.camTarget);
-  }
-
   _loop(t) {
     if (!this._running) return;
     const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
@@ -2174,11 +2120,11 @@ export class SceneRenderer {
       const col = i % cols, row = Math.floor(i / cols);
       const xDB = col * cwDB;
       const yBottomDB = DBH - (row + 1) * chDB;  // three viewport origin = lower-left
-      this._updateChase(c, dt);
+      c.chase.update(c.pose, c.spd, dt);
       c.cam.aspect = cwDB / chDB; c.cam.updateProjectionMatrix();
 
       // Fade any monster looming in front of THIS cell's own car to 50% so it doesn't hide it
-      // (per-cell — the chase cam is current after _updateChase). A monster never fades in its
+      // (per-cell — the chase cam is current after c.chase.update). A monster never fades in its
       // own cell. Usually 0 monsters, so this whole pass is a no-op.
       for (const m of monsters) this._setMonsterOpacity(m, (m !== c && this._monsterBlocksView(m, c)) ? MONSTER_FADE_OPACITY : 1);
 
