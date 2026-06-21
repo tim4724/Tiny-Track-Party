@@ -128,9 +128,10 @@ export class RaceAudio {
     this._play('roulette');
   }
 
-  // Just the world pop — no roulette/ready chain. For CPU pickups that happen
-  // on camera: the box bounce is visible but there's no HUD slot to narrate.
-  pickupPop() { this._play('pickup'); }
+  // Just the world pop — no roulette/ready chain. For any non-player grab (a CPU,
+  // or a finished human's victory lap): the box bounce is a world event, so it's
+  // scaled by `vol` (distance to the nearest human — see main.js audibility()).
+  pickupPop(vol = 1) { this._play('pickup', vol); }
 
   // STATE-DRIVEN voices: a continuous sound per (cue, car) whose level follows
   // live physics every frame (boost wind, cornering squeal, brake skid). A
@@ -176,8 +177,10 @@ export class RaceAudio {
       if (key.endsWith(':' + id)) { voice.stop(); this._voices.delete(key); }
     }
   }
-  bananaDrop() { this._play('banana_drop'); }
-  spin() { this._play('banana_slip'); } // oil shares the comedy cue
+  // World cues, scaled by `vol` (distance to the nearest human — see main.js
+  // audibility()): full for the player's own car, quieter for a distant CPU.
+  bananaDrop(vol = 1) { this._play('banana_drop', vol); }
+  spin(vol = 1) { this._play('banana_slip', vol); } // oil shares the comedy cue
   // Rocket FLIGHT — a sustained voice (like boost wind / engine), one per in-flight rocket id,
   // held from launch to impact. level 0 stops + frees it. The host drives level by the rocket's
   // distance to the nearest player (see main.js driveRocketAudio). NOT a one-shot.
@@ -189,11 +192,14 @@ export class RaceAudio {
     this._lastLap = now;
     this._play('lap');
   }
-  screech(intensity = 1) {
+  // intensity = how hard the scrub (from speed); dist = spatial attenuation in
+  // [0,1] (1 for the player's own car, lower for a distant CPU's curb contact on
+  // a human's screen — see main.js audibility()).
+  screech(intensity = 1, dist = 1) {
     const now = performance.now();
     if (now - this._lastScreech < SCREECH_GAP_MS) return;
     this._lastScreech = now;
-    this._play('screech', Math.max(0.3, Math.min(1, intensity)));
+    this._play('screech', Math.max(0.3, Math.min(1, intensity)) * dist);
   }
   join() { this._play('join'); }
 
