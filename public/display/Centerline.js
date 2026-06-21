@@ -2,7 +2,6 @@
 // with cumulative arclength, interpolated with a non-uniform Catmull-Rom spline.
 // Constructed by TrackBuilder from the welded + smoothed world points; importable
 // standalone for tests or tools that don't need the full track-building pipeline.
-import * as THREE from 'three';
 
 // A drivable centerline: closed polyline of frames (pos, tangent, up, lateral)
 // with cumulative arclength. sampleAt(s) interpolates, wrapping at the lap line.
@@ -13,18 +12,54 @@ import * as THREE from 'three';
 // its path direction jumps ~1° at each sample, an ~10 Hz shimmy through curves.
 // The spline gives a C1-smooth path, and we return its OWN derivative as the
 // tangent so the car's facing and its direction of travel agree by construction.
+//
+// Allocation: the per-frame physics calls sampleAt/projectNear several times per
+// car, so the math runs through scratch buffers (this._m*, this._d, this._scratch)
+// rather than minting throwaway Vector3s. sampleAt still returns a FRESH frame the
+// caller owns; only the transient internals are pooled. projectNear's Newton loop —
+// historically the hottest allocator (up to 9 sampleAt calls per car per frame) —
+// reuses one scratch frame for every probe and allocates only the frame it returns.
+// Scratch vectors are cloned off a real sample position so this module stays free
+// of a direct three import (TrackBuilder owns the only Vector3 constructor).
 export class Centerline {
   constructor(samples, length) {
     this.samples = samples;     // [{pos, tangent, up, lateral, width, s}]
     this.length = length;
+    // Reusable scratch — cloned off an existing Vector3 so we need no three import.
+    if (samples && samples.length) {
+      const v = () => samples[0].pos.clone();
+      this._mB = v(); this._mC = v(); // Catmull-Rom finite-difference tangents
+      this._d = v();                  // (point − frame) difference for dot products
+      this._scratch = this._frame();  // one persistent frame for projectNear's loop
+    }
   }
-  sampleAt(s) {
+
+  // A fresh frame object with its own Vector3s. The shape sampleAt returns.
+  _frame() {
+    const v = () => this.samples[0].pos.clone();
+    return { pos: v(), tangent: v(), up: v(), lateral: v(), width: 0 };
+  }
+
+  // Largest index i with samples[i].s <= s (capped at n−1, the wrap segment).
+  // Binary search over the monotonic cumulative arclengths — same result the old
+  // linear scan produced, but log(n) instead of O(n) per sample.
+  _seg(s) {
+    const a = this.samples;
+    let lo = 0, hi = a.length - 1, i = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (a[mid].s <= s) { i = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return i;
+  }
+
+  // Interpolate the frame at arclength s INTO the caller-owned `out` (whose pos,
+  // tangent, up, lateral are existing Vector3s we overwrite). Returns `out`.
+  _sampleInto(s, out) {
     const len = this.length;
     s = ((s % len) + len) % len;
     const a = this.samples, n = a.length;
-    // linear scan is fine (a few hundred points); could binary search later.
-    let i = 0;
-    while (i < n - 1 && a[i + 1].s <= s) i++;
+    const i = this._seg(s);
 
     // Four-point stencil around the segment [i, i+1], wrapping the closed loop.
     // Arclengths are unwrapped relative to the segment start so they stay
@@ -41,23 +76,27 @@ export class Centerline {
     const u = (s - sB) / h, u2 = u * u, u3 = u2 * u;
     // Non-uniform Catmull-Rom = cubic Hermite with finite-difference tangents
     // (per unit arclength) at the two knots; tangents scaled by the segment span.
-    const mB = pC.pos.clone().sub(pA.pos).multiplyScalar(h / ((sC - sA) || 1e-6));
-    const mC = pD.pos.clone().sub(pB.pos).multiplyScalar(h / ((sD - sB) || 1e-6));
+    const mB = this._mB.copy(pC.pos).sub(pA.pos).multiplyScalar(h / ((sC - sA) || 1e-6));
+    const mC = this._mC.copy(pD.pos).sub(pB.pos).multiplyScalar(h / ((sD - sB) || 1e-6));
     const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u;
     const h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
-    const pos = pB.pos.clone().multiplyScalar(h00)
+    out.pos.copy(pB.pos).multiplyScalar(h00)
       .addScaledVector(mB, h10).addScaledVector(pC.pos, h01).addScaledVector(mC, h11);
     // Derivative of the same curve → tangent (motion direction == facing).
     const g00 = 6 * u2 - 6 * u, g10 = 3 * u2 - 4 * u + 1;
     const g01 = -6 * u2 + 6 * u, g11 = 3 * u2 - 2 * u;
-    const tangent = pB.pos.clone().multiplyScalar(g00)
+    out.tangent.copy(pB.pos).multiplyScalar(g00)
       .addScaledVector(mB, g10).addScaledVector(pC.pos, g01).addScaledVector(mC, g11).normalize();
 
     const f = u;
-    const up = pB.up.clone().lerp(pC.up, f).normalize();
-    const lateral = tangent.clone().cross(up).normalize();
-    const width = (pB.width != null) ? pB.width + (pC.width - pB.width) * f : undefined;
-    return { pos, tangent, up, lateral, width };
+    out.up.copy(pB.up).lerp(pC.up, f).normalize();
+    out.lateral.copy(out.tangent).cross(out.up).normalize();
+    out.width = (pB.width != null) ? pB.width + (pC.width - pB.width) * f : undefined;
+    return out;
+  }
+
+  sampleAt(s) {
+    return this._sampleInto(s, this._frame());
   }
 
   // Project a world POINT onto the centreline near a known arclength `sHint`, returning
@@ -80,17 +119,18 @@ export class Centerline {
     const lo = sHint - maxStep, hi = sHint + maxStep;
     let s = sHint;
     for (let i = 0; i < 8; i++) { // 8 gives headroom over the ~0.45×/step convergence; most calls early-break
-      const f = this.sampleAt(s);
-      const along = point.clone().sub(f.pos).dot(f.tangent);
+      const f = this._sampleInto(s, this._scratch); // pooled probe — never escapes
+      const along = this._d.copy(point).sub(f.pos).dot(f.tangent);
       s += along;
       if (s < lo) s = lo; else if (s > hi) s = hi; // clamp every step: never leave the local strand
       if (Math.abs(along) < 1e-6) break;
     }
-    const frame = this.sampleAt(s);
-    return { s, lat: point.clone().sub(frame.pos).dot(frame.lateral), frame };
+    const frame = this.sampleAt(s); // fresh frame the caller owns
+    return { s, lat: this._d.copy(point).sub(frame.pos).dot(frame.lateral), frame };
   }
 
   // Drivable width at arclength s (world units). Convenience over sampleAt for callers
   // that only need the width (the renderer's per-ring sweep, the physics curb clamp).
-  widthAt(s) { return this.sampleAt(s).width; }
+  // Reads through the pooled probe frame — the number escapes, the frame doesn't.
+  widthAt(s) { return this._sampleInto(s, this._scratch).width; }
 }
