@@ -410,7 +410,10 @@ scene.onFrame = (dt) => {
       audio.engineDrive(c.id, c.spd / 1.2);
     }
   }
-  if (bestScrub) audio.screech(bestScrub.spd, bestScrub.g); // the nearest/loudest curb scrub owns the shared throttle
+  // The nearest/loudest curb scrub owns the shared throttle — but an inaudibly
+  // faint far scrub (≈ below −26 dB) must not claim it ahead of a louder one that
+  // may start within the gap window, so ignore anything under a hearing floor.
+  if (bestScrub && bestScrub.g >= 0.05) audio.screech(bestScrub.spd, bestScrub.g);
   scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   driveRocketAudio(snap); // sustained jet per in-flight rocket, level by distance to the nearest player
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
