@@ -155,7 +155,9 @@ const ROCKET_LIFE = 10.0;      // seconds a rocket flies before it expires (a wh
 const MONSTER_DUR_MIN = 4.0;   // transform seconds at t=0 (front — rare; base<0 keeps it off the leader)
 const MONSTER_DUR_MAX = 8.0;   // transform seconds at t=1 (dead last)
 const MONSTER_MASS_MUL = 8.0;  // ×mass while transformed → the monster barely budges and shoves light cars aside
-const MONSTER_VMAX_MUL = 1.10; // ×top speed while transformed → "slightly faster" (the catch-up payoff)
+const MONSTER_VMAX_MUL = 1.25; // ×top speed while transformed → a solid catch-up surge
+const MONSTER_FOOTPRINT_MUL = 1.3; // ×collision half-extents while transformed → the body-check reaches as
+                                   // wide as the monster looks (the fat tyres splay past the car's box)
 
 // Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
 // roll time (t = 0 leader … 1 last). The LEADER draws only Boost/Banana — NEVER a
@@ -809,7 +811,8 @@ export class Game {
   _collidePole(c, p) {
     const ds = wrapDelta(c.totalS - p.s, this.length);
     const dl = c.lat - p.lat;
-    const R = (c.halfLen + c.halfWid) / 2 + p.radius;   // car-disc + post radius
+    const fp = c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1; // a monster clears posts from a bigger radius too
+    const R = (c.halfLen + c.halfWid) / 2 * fp + p.radius;   // car-disc + post radius
     let dist = Math.hypot(ds, dl);
     if (dist >= R) return;                              // discs clear → no contact
     let nS, nL;                                          // outward contact normal, post → car
@@ -841,8 +844,10 @@ export class Game {
     // applying them to the cumulative totalS stays correct across the lap seam.
     const ds = wrapDelta(b.totalS - a.totalS, this.length); // +: b is ahead of a along the track
     const dl = b.lat - a.lat;                // +: b sits to a's +lateral side
-    const sumLen = (a.halfLen + b.halfLen) * COLLIDE_SHRINK;
-    const sumWid = (a.halfWid + b.halfWid) * COLLIDE_SHRINK;
+    // A monster truck collides from a bigger footprint than its car box (it looks bigger).
+    const fa = a.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1, fb = b.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1;
+    const sumLen = (a.halfLen * fa + b.halfLen * fb) * COLLIDE_SHRINK;
+    const sumWid = (a.halfWid * fa + b.halfWid * fb) * COLLIDE_SHRINK;
     const penS = sumLen - Math.abs(ds);
     const penL = sumWid - Math.abs(dl);
     if (penS <= 0 || penL <= 0) return;      // no overlap on one axis → no contact
@@ -957,7 +962,9 @@ export class Game {
         monster: c.monsterT > 0, // car is currently a monster truck — renderer morphs the model; HUD/cam may react
 
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
-        totalS: c.totalS, halfLen: c.halfLen, halfWid: c.halfWid
+        totalS: c.totalS,
+        halfLen: c.halfLen * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1),
+        halfWid: c.halfWid * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1)
       });
     }
     // Static boxes (available = off cooldown) + live dropped bananas, for the renderer

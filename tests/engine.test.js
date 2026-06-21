@@ -1340,6 +1340,19 @@ test('two monsters just bump — neither crushes the other', () => {
   assert.equal(b.spinT, 0, 'monster B is not crushed by monster A');
 });
 
+test('a monster collides from a bigger footprint than its car box (matches the visible size)', () => {
+  // A lateral gap that CLEARS two normal cars but falls INSIDE a monster's widened box.
+  // halfWid 0.26 each, COLLIDE_SHRINK 0.9 → normal contact needs |dl| < ~0.468; the monster's
+  // ×1.3 widens its half to ~0.338 → contact out to ~0.527. Pick dl = 0.50 (between the two).
+  const gap = 0.50;
+  const normal = collide({ totalS: 5, lat: 0, v: 0, heading: 0 }, { totalS: 5, lat: gap, v: 0, heading: 0 });
+  assert.equal(normal.b.spinT, 0, 'two normal cars at this gap do NOT touch (no crash)');
+  assert.ok(Math.abs(normal.b.lat - gap) < 1e-9, 'and are not pushed apart (clear of each other)');
+
+  const mon = collide({ totalS: 5, lat: 0, v: 0, heading: 0, monsterT: 5 }, { totalS: 5, lat: gap, v: 0, heading: 0 });
+  assert.ok(mon.b.spinT > 0, 'a monster at the SAME gap reaches the car and crushes it (wider footprint)');
+});
+
 test('the monster transform lifts the speed ceiling above the car normal top speed', () => {
   const game = new Game(['p1'], mkTrack(3), {});
   const c = game.cars.get('p1');

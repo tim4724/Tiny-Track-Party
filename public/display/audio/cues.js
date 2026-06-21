@@ -228,8 +228,8 @@ export const DEFAULT_PICKS = {
   brake: 'rubber',
   banana_drop: 'plop',
   banana_slip: 'dizzy',
-  monster_inflate: 'pump',
-  monster_deflate: 'hiss',
+  monster_inflate: 'turbo', // Tim's gallery pick (2026-06-21)
+  monster_deflate: 'hiss',  // Tim's gallery pick (2026-06-21)
   lap: 'plink2',
   screech: 'rumble',
   join: 'risingtwo',
@@ -477,7 +477,7 @@ export const CUES = [
   {
     id: 'monster_inflate',
     label: 'Monster inflate',
-    desc: 'A car bursts/pumps up into a monster truck — pneumatic air rushing in + pressure rising, capped by a soft "locked" thump. Physical, not a sting.',
+    desc: 'A car pumps/powers up into a monster truck (pairs with the on-screen grow-in). Five physical takes — pick one. All non-musical: air, hydraulics, turbo, no stings.',
     variants: [
       {
         id: 'pump', label: 'A · air pump-up',
@@ -488,21 +488,98 @@ export const CUES = [
           tone(ctx, dest, t + 0.30, { f: 90, dur: 0.10, type: 'sine', vol: 0.22, a: 0.004 });                    // locked-in thump
           return 0.42;
         }
+      },
+      {
+        id: 'hydraulic', label: 'B · hydraulic lift',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.3);
+          tone(ctx, dest, t, { f: 70 * j, to: 185 * j, dur: 0.34, type: 'sawtooth', vol: 0.12, a: 0.03 }); // motor groan rising
+          noise(ctx, dest, t, { dur: 0.34, f: 200, fTo: 620, Q: 1.2, vol: 0.08, a: 0.03, type: 'lowpass' });
+          knock(ctx, dest, t + 0.34, 150, 0.3); // jacks up, settles
+          return 0.46;
+        }
+      },
+      {
+        id: 'turbo', label: 'C · turbo spool',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.3);
+          // ~0.34s total to match the grow-in animation (MONSTER_POP_TIME)
+          tone(ctx, dest, t, { f: 320 * j, to: 1300 * j, dur: 0.31, type: 'triangle', vol: 0.12, a: 0.03 });  // rising whine
+          noise(ctx, dest, t, { dur: 0.31, f: 500, fTo: 2600, Q: 0.7, vol: 0.13, a: 0.03, type: 'bandpass' }); // whoosh under it
+          return 0.34;
+        }
+      },
+      {
+        id: 'airblast', label: 'D · air-blast lock',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.4);
+          noise(ctx, dest, t, { dur: 0.16, f: 2200, fTo: 700, Q: 0.9, vol: 0.18, a: 0.004, type: 'bandpass' }); // pressurised inject
+          tone(ctx, dest, t, { f: 200 * j, to: 520 * j, dur: 0.14, type: 'triangle', vol: 0.12, a: 0.004 });
+          tone(ctx, dest, t + 0.16, { f: 110, dur: 0.12, type: 'sine', vol: 0.24, a: 0.003 });                  // slams into place
+          noise(ctx, dest, t + 0.16, { dur: 0.05, f: 240, Q: 1.5, vol: 0.12, a: 0.002, type: 'lowpass' });
+          return 0.34;
+        }
+      },
+      {
+        id: 'riser', label: 'E · power-up surge',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.3);
+          noise(ctx, dest, t, { dur: 0.40, f: 120, fTo: 900, Q: 0.6, vol: 0.16, a: 0.10, type: 'lowpass' }); // broad rumble swelling
+          tone(ctx, dest, t, { f: 80 * j, to: 240 * j, dur: 0.40, type: 'triangle', vol: 0.12, a: 0.10 });
+          tone(ctx, dest, t + 0.40, { f: 100, dur: 0.10, type: 'sine', vol: 0.18, a: 0.004 });                // soft cap
+          return 0.52;
+        }
       }
     ]
   },
   {
     id: 'monster_deflate',
     label: 'Monster deflate',
-    desc: 'The monster truck powers down + deflates back to a car — air sputtering out (a fast flutter = the pre-shrink jitter) on a falling pitch. Physical, not a sting.',
+    desc: 'The monster powers down + deflates back to a car (pairs with the shrink). Five physical takes — pick one. All non-musical: air release, hydraulics, wind-down.',
     variants: [
       {
         id: 'hiss', label: 'A · air sputter-down',
         play(ctx, dest, t = ctx.currentTime) {
           const j = jitter(0.4);
+          // ~0.34s total to match the shrink-out animation (MONSTER_POP_TIME)
           tremTone(ctx, dest, t, { f: 430 * j, to: 120 * j, dur: 0.32, type: 'triangle', vol: 0.18, tremHz: 22, depth: 0.7 }); // sputtering descent
-          noise(ctx, dest, t, { dur: 0.30, f: 1300, fTo: 280, Q: 0.8, vol: 0.13, a: 0.01, type: 'bandpass' });                  // air hissing out
+          noise(ctx, dest, t, { dur: 0.33, f: 1300, fTo: 280, Q: 0.8, vol: 0.13, a: 0.01, type: 'bandpass' });                  // air hissing out
+          return 0.34;
+        }
+      },
+      {
+        id: 'release', label: 'B · pneumatic release',
+        play(ctx, dest, t = ctx.currentTime) {
+          noise(ctx, dest, t, { dur: 0.34, f: 3000, fTo: 600, Q: 0.6, vol: 0.18, a: 0.004, type: 'highpass' }); // sharp air dump
+          tone(ctx, dest, t, { f: 300, to: 90, dur: 0.30, type: 'triangle', vol: 0.08, a: 0.01 });
           return 0.36;
+        }
+      },
+      {
+        id: 'hydraulicdown', label: 'C · hydraulic lower',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.3);
+          tone(ctx, dest, t, { f: 170 * j, to: 60 * j, dur: 0.34, type: 'sawtooth', vol: 0.12, a: 0.02 }); // motor lowering
+          noise(ctx, dest, t, { dur: 0.34, f: 500, fTo: 160, Q: 1.0, vol: 0.08, a: 0.02, type: 'lowpass' });
+          knock(ctx, dest, t + 0.32, 120, 0.26); // sets down
+          return 0.44;
+        }
+      },
+      {
+        id: 'raspberry', label: 'D · deflating raspberry',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.4);
+          tremTone(ctx, dest, t, { f: 240 * j, to: 70 * j, dur: 0.36, type: 'sawtooth', vol: 0.16, tremHz: 14, depth: 0.9 }); // low flutter out
+          return 0.38;
+        }
+      },
+      {
+        id: 'winddown', label: 'E · turbo wind-down',
+        play(ctx, dest, t = ctx.currentTime) {
+          const j = jitter(0.3);
+          tone(ctx, dest, t, { f: 1200 * j, to: 200 * j, dur: 0.42, type: 'triangle', vol: 0.13, a: 0.02 });   // whine spinning down
+          noise(ctx, dest, t, { dur: 0.42, f: 1800, fTo: 400, Q: 0.7, vol: 0.07, a: 0.02, type: 'bandpass' });
+          return 0.44;
         }
       }
     ]

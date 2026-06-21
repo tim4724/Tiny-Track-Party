@@ -232,6 +232,15 @@ const MONSTER_POP_TIME = 0.34;     // grow-in AND shrink-out duration (s) — sa
 const MONSTER_POP_START = 0.5;     // scale the rig grows from / shrinks back to before the model swap
 const MONSTER_GROW_BACK = 1.70158; // ease-out-back overshoot on the way in (the grow looks good — leave it)
 const MONSTER_SHRINK_BACK = 2.8;   // ease-in-back anticipation on the way out — higher = more pre-shrink jitter
+// Occlusion fade: a monster truck is big and tall, so in a split-screen cell it can loom in front
+// of that cell's own car (between the close, elevated chase cam and the car) and hide it. Fade it
+// to MONSTER_FADE_OPACITY IN THAT CELL ONLY (per-cell — the scene renders once per camera). The
+// test is pure proximity: the monster is in FRONT of the camera, CLOSER to it than the car (so
+// between cam and car, not beyond it), and within MONSTER_BLOCK_DIST of the car. (Screen-projection
+// of the monster's centre misreads here — its ground origin projects off-frame while its tall body
+// fills it — so distance-in-front is the reliable signal.)
+const MONSTER_FADE_OPACITY = 0.5;  // how see-through a view-blocking monster goes
+const MONSTER_BLOCK_DIST = 3.0;    // world-units: a monster this close to the car, in front of it, counts as blocking
 
 export class SceneRenderer {
   constructor(container, colors) {
@@ -1561,7 +1570,39 @@ export class SceneRenderer {
       car: rig, body, bodyBaseQuat: body.quaternion.clone(), frontWheels, backWheels, allWheels,
       baseYaw, pitchSign, wheelbase, wheelRadius, skidWidth, footW, footL
     };
+    // Clone every material on the rig so the view-blocking fade (setCarMonster occlusion) can
+    // change THIS monster's opacity without touching other cars that share the source materials.
+    // Kept transparent always (opacity 1 reads opaque) so the per-cell fade only flips opacity +
+    // depthWrite — no per-cell material recompile (toggling `transparent` would thrash the cache).
+    const fadeMats = [];
+    const cloneMat = (m) => { const cm = m.clone(); cm.transparent = true; cm.depthWrite = true; cm.opacity = 1; fadeMats.push(cm); return cm; };
+    rig.traverse((o) => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(cloneMat) : cloneMat(o.material); });
+    c.monsterMats = fadeMats;
+    c._monsterOpacity = 1;
     return true;
+  }
+
+  // Set a monster rig's opacity for the cell about to render (1 = solid, <1 = see-through so
+  // it doesn't hide the car behind it). depthWrite follows: a faded monster must NOT write depth
+  // or the car behind it would be depth-rejected and stay invisible. No-op if unchanged.
+  _setMonsterOpacity(c, op) {
+    if (!c.monsterMats || c._monsterOpacity === op) return;
+    c._monsterOpacity = op;
+    const dw = op >= 1;
+    for (const m of c.monsterMats) { m.opacity = op; m.depthWrite = dw; }
+  }
+
+  // Does monster rig `m` loom in front of cell-focus car `f` from `f`'s chase camera? Pure proximity:
+  // `m` is in FRONT of the camera (not behind it), CLOSER to the camera than `f` (between cam and car,
+  // not beyond it), and within MONSTER_BLOCK_DIST of `f`. No projection — just positions.
+  _monsterBlocksView(m, f) {
+    const cam = f.cam.position, fp = f.group.position, mp = m.group.position;
+    const fx = fp.x - cam.x, fy = fp.y - cam.y, fz = fp.z - cam.z;     // cam → car
+    const mx = mp.x - cam.x, my = mp.y - cam.y, mz = mp.z - cam.z;     // cam → monster
+    if (mx * fx + my * fy + mz * fz <= 0) return false;               // monster is behind the camera → not in view
+    if (mx * mx + my * my + mz * mz >= fx * fx + fy * fy + fz * fz) return false; // monster farther than the car → beyond it, not occluding
+    const dx = mp.x - fp.x, dy = mp.y - fp.y, dz = mp.z - fp.z;
+    return dx * dx + dy * dy + dz * dz < MONSTER_BLOCK_DIST * MONSTER_BLOCK_DIST; // close enough to the car to loom over it
   }
 
   // Toggle a car's MONSTER-TRUCK transform (driven from the engine snapshot's `monster`
@@ -1587,6 +1628,7 @@ export class SceneRenderer {
         c.monsterRig.visible = true;
         for (const k of KEYS) c[k] = c.monsterHandles[k];
         c.monsterRig.scale.setScalar(MONSTER_POP_START); // start small; setCarPose springs it up
+        this._setMonsterOpacity(c, 1); // show solid; the per-cell render fades it only where it blocks
       }
       c._monsterPhase = 'in';
       c.monsterPopT = 0;
@@ -2116,6 +2158,10 @@ export class SceneRenderer {
     const cw = Math.floor(W / cols), ch = Math.floor(H / rows);          // CSS px → DOM labels
     const cwDB = Math.floor(DBW / cols), chDB = Math.floor(DBH / rows);  // target px → cell viewports
 
+    // Monster trucks currently on screen — for the per-cell occlusion fade below.
+    const monsters = [];
+    for (const cc of this.cars.values()) if (cc.monsterRig && cc.monsterRig.visible) monsters.push(cc);
+
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
       if (!c.pose) return;
@@ -2124,6 +2170,11 @@ export class SceneRenderer {
       const yBottomDB = DBH - (row + 1) * chDB;  // three viewport origin = lower-left
       this._updateChase(c, dt);
       c.cam.aspect = cwDB / chDB; c.cam.updateProjectionMatrix();
+
+      // Fade any monster looming in front of THIS cell's own car to 50% so it doesn't hide it
+      // (per-cell — the chase cam is current after _updateChase). A monster never fades in its
+      // own cell. Usually 0 monsters, so this whole pass is a no-op.
+      for (const m of monsters) this._setMonsterOpacity(m, (m !== c && this._monsterBlocksView(m, c)) ? MONSTER_FADE_OPACITY : 1);
 
       // (the rear plate sits on the bumper, not over the track, so it never
       // blocks the chase view — no need to hide your own car's plate)

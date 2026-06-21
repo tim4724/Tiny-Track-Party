@@ -17,7 +17,7 @@ import * as THREE from 'three';
 
 const WHEEL_NAMES = ['wheel-fl', 'wheel-fr', 'wheel-bl', 'wheel-br'];
 
-// The kit GLB that supplies the monster chassis + wheels (see split-monster-cab.js).
+// The kit GLB that supplies the monster chassis + wheels (see split-monster-body.js).
 export const MONSTER_BASE_ASSET = 'vehicle-monster-truck';
 
 // The kit chassis is part-grey, part-PURPLE (the shock towers sit in a purple band
@@ -26,11 +26,9 @@ export const MONSTER_BASE_ASSET = 'vehicle-monster-truck';
 // proper monster suspension under any body.
 const MONSTER_CHASSIS_COLOR = 0x565b63;
 
-export const MONSTER_DEFAULTS = {
-  bodyScale: 1.0,  // scale applied to the grafted car body
-  mountLift: 0.0,  // extra Y nudge on top of bottom-aligning the body into the cab slot
-  baseScale: 1.0,  // overall rig scale — the in-game "bigger" multiplier rides on top
-};
+// Y nudge on top of bottom-aligning the body into the cab slot; slightly negative drops
+// the cab down so the suspension RODS meet its underside.
+const MOUNT_LIFT = -0.07;
 
 function findWheels(root) {
   return WHEEL_NAMES.map((n) => root.getObjectByName(n)).filter(Boolean);
@@ -90,8 +88,7 @@ export function buildMonsterChassis(monsterScene) {
 // vehicle-monster-truck scene. Returns a THREE.Group resting on the ground (wheels
 // touch y≈0), authored facing preserved (the caller rotates it for travel like any
 // other car). Inputs are cloned, so the source scenes are untouched.
-export function buildMonsterRig(carScene, monsterScene, opts = {}) {
-  const o = { ...MONSTER_DEFAULTS, ...opts };
+export function buildMonsterRig(carScene, monsterScene) {
   const rig = new THREE.Group();
   rig.name = 'monster-rig';
 
@@ -107,7 +104,6 @@ export function buildMonsterRig(carScene, monsterScene, opts = {}) {
   for (const w of findWheels(body)) w.parent && w.parent.remove(w);
   const axle = body.getObjectByName('axle');
   if (axle) axle.parent && axle.parent.remove(axle);
-  body.scale.setScalar(o.bodyScale);
   body.updateMatrixWorld(true);
   const bb = new THREE.Box3().setFromObject(body);
 
@@ -119,12 +115,10 @@ export function buildMonsterRig(carScene, monsterScene, opts = {}) {
     const bbCtr = bb.getCenter(new THREE.Vector3());
     body.position.set(
       slotCtr.x - bbCtr.x,
-      (slot.min.y - bb.min.y) + o.mountLift,
+      (slot.min.y - bb.min.y) + MOUNT_LIFT,
       slotCtr.z - bbCtr.z
     );
   }
   rig.add(body);
-
-  rig.scale.setScalar(o.baseScale);
   return rig;
 }
