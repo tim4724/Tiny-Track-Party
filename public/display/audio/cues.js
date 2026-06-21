@@ -556,7 +556,7 @@ export const CUES = [
           src.start(ctx.currentTime);
           return {
             set(level) { const l = Math.max(0, Math.min(1, level)), at = ctx.currentTime;
-              out.gain.setTargetAtTime(0.0001 + l * 1.3, at, 0.05);        // filtered noise → high gain
+              out.gain.setTargetAtTime(0.0001 + l * 0.8, at, 0.05);        // filtered noise → high gain (trimmed from 1.3, 2026-06-21: too loud)
               bp.frequency.setTargetAtTime(950 + l * 1500, at, 0.08); },   // brighter as it nears
             stop() { const at = ctx.currentTime; out.gain.setTargetAtTime(0.0001, at, 0.06); try { src.stop(at + 0.3); } catch (_) { /* stopped */ } }
           };
@@ -571,7 +571,7 @@ export const CUES = [
     variants: [
       {
         id: 'punch', label: 'punchy explosion (CC0 sample)',
-        play(ctx, dest, t = ctx.currentTime) { return playSample(ctx, dest, t, 'explosionPunch'); }
+        play(ctx, dest, t = ctx.currentTime) { return playSample(ctx, dest, t, 'explosionPunch', 0.6); } // gain 0.6: the raw sample peak read too loud (2026-06-21)
       }
     ]
   }
