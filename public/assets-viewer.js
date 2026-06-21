@@ -5,8 +5,20 @@
 // same model. No relay, no game logic — just the kit on display.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { buildMonsterRig, buildMonsterChassis, MONSTER_BASE_ASSET } from '/display/render/MonsterRig.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
+
+// Synthetic "monster variant" rigs — a playable car's body remounted on big
+// monster wheels (see MonsterRig.js). Not files on disk: composed client-side
+// and injected into the layout so the look can be eyeballed next to the kit.
+// Mapping mirrors CAR_MODELS/CAR_NAMES in shared/protocol.js (the playable four).
+const MONSTER_VARIANTS = [
+  { key: 'monster-dash',   model: 'vehicle-racer-low' },
+  { key: 'monster-bolt',   model: 'vehicle-speedster' },
+  { key: 'monster-carve',  model: 'vehicle-racer' },
+  { key: 'monster-rumble', model: 'vehicle-vintage-racer' },
+];
 
 // Category rules, in display order. The first matching `test` wins, so more
 // specific prefixes are listed before the broader ones. `track-road-wide` (the
@@ -21,6 +33,7 @@ const CATEGORIES = [
   { key: 'markers',        label: 'Gates & Markers',         color: '#d24b8f', test: (n) => n === 'gate' || n === 'gate-finish' },
   { key: 'supports',       label: 'Supports',                color: '#8a6f54', test: (n) => n.startsWith('supports') },
   { key: 'vehicles',       label: 'Vehicles',                color: '#3f8ddd', test: (n) => n.startsWith('vehicle') },
+  { key: 'monster',        label: 'Monster Variants',        color: '#7b4fc0', test: (n) => n.startsWith('monster-') },
   { key: 'wheels',         label: 'Wheels',                  color: '#5b6b76', test: (n) => n.startsWith('wheel') },
   { key: 'items',          label: 'Items & Pickups',         color: '#4bb05a', test: (n) => n.startsWith('item') },
   { key: 'scenery',        label: 'Scenery',                 color: '#3f9b6b', test: (n) => n === 'tree' || n === 'tree-pine' },
@@ -218,12 +231,28 @@ async function main() {
     console.error('could not fetch asset manifest', e);
   }
 
+  const scenes = await Promise.all(names.map(loadModel));
+  const byName = new Map(names.map((n, i) => [n, scenes[i]]));
+
+  // Compose the monster variants from the loaded car bodies + the monster-truck
+  // chassis, and inject them as extra "models" so the rest of the pipeline
+  // (bucketing, layout, labels, legend) treats them like any other asset.
+  const monsterBase = byName.get(MONSTER_BASE_ASSET);
+  if (monsterBase) {
+    // The bare chassis (cab removed, recoloured) on its own, first in the block.
+    byName.set('monster-chassis', buildMonsterChassis(monsterBase));
+    names.push('monster-chassis');
+    for (const v of MONSTER_VARIANTS) {
+      const car = byName.get(v.model);
+      if (!car) continue;
+      byName.set(v.key, buildMonsterRig(car, monsterBase));
+      names.push(v.key);
+    }
+  }
+
   // Bucket by category, preserving the category display order.
   const buckets = new Map(CATEGORIES.map((c) => [c.key, []]));
   for (const n of names) buckets.get(categoryOf(n).key).push(n);
-
-  const scenes = await Promise.all(names.map(loadModel));
-  const byName = new Map(names.map((n, i) => [n, scenes[i]]));
 
   const worldBox = new THREE.Box3();
   let focusBox = null; // the wide-road block — what we open framed on
@@ -282,13 +311,24 @@ async function main() {
       ]) { worldBox.expandByPoint(new THREE.Vector3(...corner)); catBox.expandByPoint(new THREE.Vector3(...corner)); }
     });
 
-    if (cat.key === 'road-wide') focusBox = catBox;
+    if (cat.key === 'monster') focusBox = catBox;
     cursorZ += rows * pitch + CATEGORY_GAP;
   }
 
-  // Open framed on the wide-road family (the focus of the project); the rest of
-  // the kit recedes behind it for context. Fall back to the whole layout.
-  frameOn(focusBox || worldBox);
+  // Open looking right at the Monster Variants row. Use a LOW front framing (not
+  // the generic 3/4 overhead) so the big category header floats above the trucks
+  // instead of covering them, and fit the row across the screen's width.
+  if (focusBox) {
+    const center = focusBox.getCenter(new THREE.Vector3());
+    const size = focusBox.getSize(new THREE.Vector3());
+    const halfW = Math.max(size.x, 4) / 2;
+    const hfov = 2 * Math.atan(Math.tan((camera.fov * Math.PI / 180) / 2) * camera.aspect);
+    const dist = (halfW / Math.tan(hfov / 2)) * 1.15; // fit the row width + a margin
+    camera.position.set(center.x, center.y + 0.7, center.z - dist);
+    lookAtPoint(new THREE.Vector3(center.x, center.y + 0.15, center.z));
+  } else {
+    frameOn(worldBox);
+  }
 
   buildLegend();
   // One frame, then reveal — avoids a flash of an empty scene.
