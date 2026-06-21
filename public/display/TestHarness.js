@@ -59,7 +59,6 @@ function showCamHint() {
 //   ctx:  { scene, track, scenePromise }  (live instances built by main.js)
 export function runDisplayScenario(opts, ctx) {
   const COLORS = window.CAR_COLORS || ['#e6492d'];
-  const TOTAL_LAPS = window.TOTAL_LAPS || 3;
   const scenario = opts.scenario || 'racing';
   // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
   const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));

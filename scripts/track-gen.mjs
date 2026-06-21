@@ -115,7 +115,7 @@ export function evaluateSeed(seed) {
   let plan, flat;
   try { plan = genPlan(seed); flat = buildTrack({ waypoints: plan }); }
   catch (e) { return { seed, pass: false, reason: 'plan failed: ' + e.message }; }
-  const L = flat.length, S = flat.centerline.samples, n = S.length;
+  const L = flat.length;
   // smoothness: worst |heading step| per 0.1 world units (skip bridges/loops/flares)
   let prev = null, worstStep = 0;
   for (let s = 0; s <= L; s += 0.1) {

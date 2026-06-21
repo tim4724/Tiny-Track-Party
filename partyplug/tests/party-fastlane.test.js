@@ -1,6 +1,6 @@
 'use strict';
 
-const { test, describe, beforeEach } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 // PartyFastlane's WebRTC handshake (open/closeFastlane/ICE) needs
