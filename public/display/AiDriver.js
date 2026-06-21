@@ -86,7 +86,7 @@ const TURN_RATE_FALLBACK = 1.2; // matches Game's base TURN_RATE (cars without a
 const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
-const CORNER_MARGIN = 0.86;     // target as a fraction of the max holdable corner speed (pure-pursuit cuts the apex, so leave a little room)
+const CORNER_MARGIN = 0.95;     // target as a fraction of the max holdable corner speed. Was 0.86, but bots never once touched a curb across the whole catalogue at that value (or even at 1.0) — the 7.5u lookahead keeps them on a smoothed line, so the feared apex-cut washout doesn't happen. 0.95 recovers the speed they were needlessly braking away while banking a hair of safety for items/contact noise.
 const BRAKE_DECEL_REF = 4.0;    // assumed braking deceleration (u/s², a touch under the engine's BRAKE_DECEL 4.5 → brake just early enough, not late)
 
 // Local track curvature (rad per world unit) at arclength s — the turn between two
@@ -110,7 +110,7 @@ export function cornerBrake(car, centerline, { turn } = {}) {
   const yaw = turn || car.turn || TURN_RATE_FALLBACK;
   // Grippy cars can chase the apex aggressively; a low-grip car (low yaw) overshoots the
   // pure-pursuit cut and washes onto the curb, so give it a more conservative margin.
-  const margin = CORNER_MARGIN * clamp(yaw / TURN_RATE_FALLBACK, 0.78, 1.0);
+  const margin = CORNER_MARGIN * clamp(yaw / TURN_RATE_FALLBACK, 0.88, 1.0); // floor raised from 0.78: the low-handling cars were the most over-braked yet still never washed out
   const v = car.v;
   let brake = 0;
   for (let d = BRAKE_LOOK_NEAR; d <= BRAKE_LOOK_FAR; d += BRAKE_LOOK_STEP) {
@@ -203,14 +203,18 @@ export class AiController {
 
 // Bot field, strongest first. Tuned for the OVAL (maxLat ~1.5): a spread of
 // cruise speeds and held lanes so the AI feels like distinct racers. The lead bot
-// (Bolt) now runs flat-out on the straights (skill 1.0) so a human can't out-drag it
-// for free; the field steps down from there but stays a genuine challenge. Each bot
-// also wanders its lane (seeded) and dodges hazards, so they no longer rail one line
-// or feed themselves to bananas. Bots fill from the front — a lobby missing a single
-// player gets the strong leader.
+// (Bolt) runs flat-out on the straights (skill 1.0) so a human can't out-drag it
+// for free; the field steps down from there but stays a genuine challenge. The
+// ladder is deliberately SHALLOW (1.00 → 0.93, a 7% cruise spread): the old wider
+// step (down to 0.86) left the back half sandbagging the straights — feathering the
+// brake every frame — which read as "the AI is too easy" because the trailing bots
+// were ~14% slower than the leader on every straight. Now even the tail bot pushes.
+// Each bot also wanders its lane (seeded) and dodges hazards, so they no longer rail
+// one line or feed themselves to bananas. Bots fill from the front — a lobby missing
+// a single player gets the strong leader.
 export const AI_PERSONALITIES = [
   { name: 'Bolt',  skill: 1.00, laneBias: -0.6 },
-  { name: 'Pixel', skill: 0.94, laneBias:  0.6 },
-  { name: 'Rusty', skill: 0.90, laneBias: -0.25 },
-  { name: 'Zippy', skill: 0.86, laneBias:  0.25 },
+  { name: 'Pixel', skill: 0.97, laneBias:  0.6 },
+  { name: 'Rusty', skill: 0.95, laneBias: -0.25 },
+  { name: 'Zippy', skill: 0.93, laneBias:  0.25 },
 ];
