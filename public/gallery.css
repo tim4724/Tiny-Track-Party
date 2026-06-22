@@ -112,6 +112,34 @@ button.card-btn { padding: 2px 6px; min-height: 20px; font-size: 11px; line-heig
   z-index: 1;
 }
 
+/* Play/pause control for animated previews. The preview iframe is
+   pointer-events:none (page-scroll pass-through), so the control is a
+   parent-document overlay over the frame — making the whole preview a
+   click-to-play surface. Paused: a dimming scrim + ▶; playing: it clears and
+   reveals a ❚❚ on hover. */
+.frame-wrap .frame-play {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0; padding: 0; border: 0; cursor: pointer;
+  background: transparent; color: #fff;
+  transition: background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.frame-wrap.pending .frame-play { display: none; } /* let the loading state show through */
+.frame-wrap .frame-play__icon {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1;
+  background: rgba(10,14,28,0.58); color: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  transition: opacity 0.18s ease, transform 0.12s ease;
+}
+.frame-wrap .frame-play:hover .frame-play__icon { transform: scale(1.06); }
+.frame-wrap .frame-play.is-paused { background: rgba(6,10,20,0.34); }
+.frame-wrap .frame-play:not(.is-paused) .frame-play__icon { opacity: 0; }
+.frame-wrap .frame-play:not(.is-paused):hover { background: rgba(6,10,20,0.20); }
+.frame-wrap .frame-play:not(.is-paused):hover .frame-play__icon { opacity: 1; }
+
 /* --- Sound gallery (/gallery-sounds.html) — soundboard cards, no iframes. --- */
 .sound-hint { font-size: 12px; color: #888; max-width: 760px; line-height: 1.5; margin-bottom: 14px; }
 .sound-grid {

@@ -69,6 +69,35 @@ export function runDisplayScenario(opts, ctx) {
 
   window.__TEST__ = window.__TEST__ || {};
 
+  // ---- gallery power saver ----
+  // The gallery mounts ~11 live WebGL scenes at once; left alone each runs a full
+  // render loop forever — even the frozen previews, which redraw an unchanging frame
+  // 60×/sec. Hold every preview on a single painted frame (pauseAfterFrame) and then
+  // leave it idle. Animated previews additionally expose window.__preview so the
+  // gallery CARD can drive play/pause from the parent document — the preview iframe is
+  // pointer-events:none (page-scroll pass-through, gallery.css), so it can't take the
+  // click itself. A standalone tab (own window) ignores all this and runs freely: you
+  // opened it to watch or to fly the free-cam. Call holdFrame AFTER the scene's first
+  // state is set, so the held frame shows that state.
+  // In a gallery iframe, or our own tab? (Reused by setupRace's audio gate below.)
+  // A cross-origin top throws → treat as framed.
+  let inIframe = true;
+  try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+  function holdFrame(live) {
+    if (!inIframe) return;                // own tab → keep running (watch / inspect)
+    ctx.scene.pauseAfterFrame();          // paint the state just set, then idle
+    if (live) window.__preview = {        // parent gallery card drives play/pause
+      play: () => ctx.scene.start(),
+      pause: () => ctx.scene.pauseAfterFrame(),
+      running: () => !!ctx.scene._running
+    };
+  }
+  // DOM-only previews (welcome / lobby / device-choice) drive no 3D — the WebGL
+  // backdrop sits dimmed behind them — so let it paint once, then idle for good.
+  if ((scenario === 'welcome' || scenario === 'lobby' || scenario === 'device-choice') && ctx.scenePromise) {
+    ctx.scenePromise.then(() => holdFrame(false)).catch(() => {});
+  }
+
   // ---- lobby roster ----
   // Slots usually fill 0..players-1; if the chosen host lives outside that
   // range, swap in the host slot so the previewed roster actually contains it.
@@ -185,6 +214,7 @@ export function runDisplayScenario(opts, ctx) {
           placeGrid();
         }
       };
+      holdFrame(true); // gallery: hold the turntable on a still frame; the card's ▶ orbits it
     }
     return;
   }
@@ -271,6 +301,7 @@ export function runDisplayScenario(opts, ctx) {
       // Standalone (own tab): let the viewer fly around the feature cluster. In the
       // gallery iframe this is a no-op, so the frozen 3/4 framing above is kept.
       enableFreeCamIfStandalone(scene);
+      holdFrame(false); // gallery: a labelled showcase — one painted frame says it all
     }
     return;
   }
@@ -299,9 +330,8 @@ export function runDisplayScenario(opts, ctx) {
     // Sound only plays STANDALONE (own tab, not a gallery-grid iframe) — a wall of
     // thumbnails all firing rockets would be cacophony. Audio stays locked until the
     // viewer's first click (main.js wires the gesture-resume); window.__audio is the
-    // shared RaceAudio the host built. Same not-in-iframe gate as the free camera.
-    let inIframe = true;
-    try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+    // shared RaceAudio the host built. Same not-in-iframe gate as the free camera
+    // (inIframe is computed once at the top of runDisplayScenario).
     const sfx = (!inIframe && window.__audio) ? window.__audio : null;
     // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
     // held for the whole air time — not a one-shot. Only the impact is event-driven here.
@@ -509,6 +539,10 @@ export function runDisplayScenario(opts, ctx) {
       listEl.appendChild(joinLi);
       el('results').classList.remove('hidden');
     }
+    // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
+    // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint
+    // once and stay idle. Standalone tabs ignore this and run freely.
+    holdFrame(live);
   }
 
   function runCountdown() {

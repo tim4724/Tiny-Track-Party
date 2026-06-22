@@ -50,7 +50,8 @@ function render() {
       title: t.name,
       frameClass: 'display',
       logical: d,
-      url: cardURL(id)
+      url: cardURL(id),
+      animated: true // every track preview is a slowly orbiting turntable
     });
     strip.appendChild(card);
     allCards.push(card);

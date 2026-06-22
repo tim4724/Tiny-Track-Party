@@ -256,6 +256,35 @@ var Gallery = (function() {
     var iframe = document.createElement('iframe');
     iframe.setAttribute('title', opts.title);
     wrap.appendChild(iframe);
+
+    // Animated previews idle on a single painted frame to save GPU (see the display
+    // TestHarness). The preview iframe is pointer-events:none (page-scroll pass-through),
+    // so it can't take a click — this overlay lives in the parent doc and turns the whole
+    // preview into a play/pause surface. Paused: a dimming scrim + ▶. Playing: it clears;
+    // hovering reveals the ❚❚ to pause again. Drives the iframe's window.__preview hook.
+    if (opts.animated) {
+      var playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'frame-play is-paused';
+      var playIcon = document.createElement('span');
+      playIcon.className = 'frame-play__icon';
+      playBtn.appendChild(playIcon);
+      wrap.appendChild(playBtn);
+      var paused = true; // matches the scene's initial auto-idle (holdFrame)
+      var applyPlayUI = function() {
+        playBtn.classList.toggle('is-paused', paused);
+        playIcon.textContent = paused ? '▶' : '❚❚';
+        playBtn.setAttribute('aria-label', paused ? 'Play preview' : 'Pause preview');
+      };
+      applyPlayUI();
+      playBtn.addEventListener('click', function() {
+        var p; try { p = iframe.contentWindow && iframe.contentWindow.__preview; } catch (_) { p = null; }
+        if (!p) return;            // scene not booted yet — ignore (it's still idle)
+        paused = !paused;
+        if (paused) p.pause(); else p.play();
+        applyPlayUI();
+      });
+    }
     card.appendChild(wrap);
 
     // Mutable dim state — applyDims lets callers re-layout an existing card

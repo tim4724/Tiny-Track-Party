@@ -78,7 +78,8 @@ function render() {
       frameClass: 'display',
       logical: d,
       url: cardURL(c),
-      replayable: !!c.replayable
+      replayable: !!c.replayable,
+      animated: !!c.animated
     });
     strip.appendChild(card);
     allCards.push(card);

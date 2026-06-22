@@ -2007,8 +2007,23 @@ export class SceneRenderer {
     }
   }
 
-  start() { if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); } }
+  start() {
+    this._idleAfterFrame = false;                 // re-entering cancels a pending idle (hover after a leave)
+    if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); }
+  }
   stop() { this._running = false; }
+  // Render exactly one more frame with the state set so far, then halt the loop.
+  // Gallery previews hold a still frame this way instead of redrawing an unchanged
+  // scene at 60fps: frozen previews never resume; animated cards resume via start()
+  // when their play button is clicked. The held frame still renders fully, so
+  // resuming picks up seamlessly.
+  pauseAfterFrame() { if (this._running) this._idleAfterFrame = true; }
+  // Tail of every _loop iteration: idle if asked (after this frame's present), else
+  // queue the next frame.
+  _scheduleNext() {
+    if (this._idleAfterFrame) { this._idleAfterFrame = false; this._running = false; return; }
+    requestAnimationFrame((tt) => this._loop(tt));
+  }
 
   _loop(t) {
     if (!this._running) return;
@@ -2102,7 +2117,7 @@ export class SceneRenderer {
       r.render(this.scene, this.overview);
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; if (c.reconnectEl) c.reconnectEl.style.display = 'none'; }
       this._present();
-      requestAnimationFrame((tt) => this._loop(tt));
+      this._scheduleNext();
       return;
     }
 
@@ -2195,6 +2210,6 @@ export class SceneRenderer {
     });
 
     this._present();
-    requestAnimationFrame((tt) => this._loop(tt));
+    this._scheduleNext();
   }
 }
