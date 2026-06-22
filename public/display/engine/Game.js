@@ -108,12 +108,14 @@ const SPREAD_REF_FRAC = 0.15;  // spread-denominator floor = 15% of lap length (
 const T_TAU = 0.6;             // tCatch smoothing time-constant (s)
 // Boost: a transient multiplier on the speed ceiling that bleeds gently after it
 // expires (so it doesn't fight BRAKE_DECEL's snap-back). Pads scale the peak by t;
-// the boost ITEM is a fixed, position-independent burst.
+// the boost ITEM holds at a fixed peak but for a t-scaled duration — everyone hits the
+// same top speed, but the further back you are the longer you hold it (a catch-up edge).
 const PAD_BOOST_MIN = 1.25;    // pad peak ×vmax for the leader (t=0) — never a dead pad
 const PAD_BOOST_MAX = 1.60;    // pad peak ×vmax for last place (t=1)
 const BOOST_DURATION = 1.4;    // flat-hold boost time (s) from a pad
-const BOOST_ITEM_MUL = 1.5;    // boost-item peak ×vmax (position-independent — it's earned)
-const BOOST_ITEM_DURATION = 1.6; // flat-hold boost time (s) from a used boost item
+const BOOST_ITEM_MUL = 1.5;    // boost-item peak ×vmax (position-independent — everyone hits the same ceiling)
+const BOOST_ITEM_DUR_MIN = 1.6; // boost-item hold (s) for the leader (t=0) — the old flat value
+const BOOST_ITEM_DUR_MAX = 3.0; // boost-item hold (s) for dead last (t=1) — held ~2× longer as a catch-up
 // A freshly-ROLLED item can't be fired until this many seconds after pickup, so it
 // can't be used before the player sees what they got — the gate covers the HUD's
 // reveal roulette (~0.86s, see SceneRenderer._rouletteChip). Items set by any other
@@ -149,31 +151,47 @@ const ROCKET_LIFE = 10.0;      // seconds a rocket flies before it expires (a wh
 // IMMUNE to the spin-out hazards it would normally fear — oil slicks and dropped
 // bananas (it just crushes them) — and every car it TOUCHES is spun out (a body-
 // check, see _collidePair). A rocket can STILL spin it out, though, so the field
-// keeps one way to stop a rampage. The transform LENGTH scales with how far back
-// the player is (the catch-up factor t, 0=leader…1=last): a back-marker gets the
-// full ride, a midfielder a brief one. Numbers are STARTING VALUES (tune in playtest).
-const MONSTER_DUR_MIN = 4.0;   // transform seconds at t=0 (front — rare; base<0 keeps it off the leader)
-const MONSTER_DUR_MAX = 8.0;   // transform seconds at t=1 (dead last)
+// keeps one way to stop a rampage. WHO rolls it is decided by PLACE (back of the field
+// only), but the transform LENGTH scales with DISTANCE behind the leader (the catch-up
+// factor c.tCatch, 0=on the leader…1=adrift): a car truly dropped off gets the full
+// ride, one that's last-but-close a brief one. Numbers are STARTING VALUES (tune in playtest).
+const MONSTER_DUR_MIN = 4.0;   // transform seconds at tCatch=0 (right on the leader — brief)
+const MONSTER_DUR_MAX = 8.0;   // transform seconds at tCatch=1 (adrift at the back)
 const MONSTER_MASS_MUL = 8.0;  // ×mass while transformed → the monster barely budges and shoves light cars aside
 const MONSTER_VMAX_MUL = 1.25; // ×top speed while transformed → a solid catch-up surge
 const MONSTER_FOOTPRINT_MUL = 1.3; // ×collision half-extents while transformed → the body-check reaches as
                                    // wide as the monster looks (the fat tyres splay past the car's box)
 
-// Position-weighted item table. weight(t) = max(0, base + slope·t); normalised at
-// roll time (t = 0 leader … 1 last). The LEADER draws only Boost/Banana — NEVER a
-// rocket: it has no car ahead to hit, so a rocket would just whiff (the rocket's
-// negative base zeroes its weight across the front of the field). The back draws the
-// comeback Boost, the offensive Rocket (catch up AND attack ahead) and — only in the
-// deep back field — the Monster transform. Both rocket and monster have base<0 so the
-// front of the field can't roll them; the monster's is steep enough that only the back
-// HALF (t>0.5) ever sees it, peaking at last. Rough mix → leader: 20% boost / 80% banana;
-// midfield (t≈0.5): 34% boost / 43% banana / 23% rocket / 0% monster; last (t=1): 33%
-// boost / 11% banana / 33% rocket / 22% monster.
-const ITEM_TABLE = [
-  { id: 'boost',   base: 1.0,  slope:  2.0 },
-  { id: 'banana',  base: 4.0,  slope: -3.0 },
-  { id: 'rocket',  base: -0.3, slope:  3.3 }, // base<0 → weight 0 for the leader (and the very front), ramps to 3.0 at last
-  { id: 'monster', base: -2.0, slope:  4.0 }  // base<0 → weight 0 across the front; only the back HALF (t>0.5) rolls it, → 2.0 at last
+// Place-weighted item table — one row per finishing place, authored as clean weights
+// that each sum to 100 (a Mario-Kart-style hand-tuned lookup, NOT a formula). The roll
+// reads a car's PLACE via _placeT (leader → 0 … last → 1) and SNAPS to the nearest row
+// (round(t·(rows-1))); it never interpolates, so every field size from 4 to 8 cars draws
+// whole-number weights. An 8-car race uses all 8 rows 1:1; a 4-car race picks rows
+// 1/3/6/8 (placeT 0, ⅓, ⅔, 1 → indices 0,2,5,7); 5–7 cars pick clean subsets between.
+// The LEADER (row 1) draws only Boost/Banana — never a Rocket (no car ahead to hit, it
+// would whiff) and never a Monster. Banana fades front→back (gone by last), the Rocket
+// humps in the upper-mid "snipe zone" (a car just ahead to take) then settles to a steady
+// 20% behind, and the Monster ramps in over the back half to dominate last place.
+// Probability is PLACE; durations are DISTANCE (c.tCatch) — see _useItem.
+//        boost banana rocket monster
+//   1st    20    80     0      0
+//   2nd    25    55    20      0
+//   3rd    30    30    40      0   ← rocket peak (snipe zone)
+//   4th    30    30    30     10
+//   5th    30    25    25     20
+//   6th    30    25    20     25
+//   7th    30    10    20     40
+//   8th    30     0    20     50
+const ITEM_IDS = ['boost', 'banana', 'rocket', 'monster'];
+const ITEM_PLACE_TABLE = [ // weights aligned to ITEM_IDS; each row sums to 100
+  [20, 80,  0,  0], // 1st (leader)
+  [25, 55, 20,  0], // 2nd
+  [30, 30, 40,  0], // 3rd — rocket peak
+  [30, 30, 30, 10], // 4th
+  [30, 25, 25, 20], // 5th
+  [30, 25, 20, 25], // 6th
+  [30, 10, 20, 40], // 7th
+  [30,  0, 20, 50]  // 8th (last)
 ];
 
 // Item rolls draw from a seeded PRNG (mulberry32, engine/util.js) so a race is
@@ -648,7 +666,7 @@ export class Game {
       const inside = b.cooldown <= 0 && this._inZone(c, b, b.radius);
       if (inside && !c.boxIn.has(i)) {
         if (c.item == null) {
-          c.item = this._roll(c.tCatch); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
+          c.item = this._roll(this._placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
           this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: c.finished });
         } else if (c.finished) {
           // Finished + full slot: pop the box (cooldown + pickup pop) but HOLD the current
@@ -662,13 +680,27 @@ export class Game {
     }
   }
 
-  // Weighted item roll using the seeded PRNG. weight(t)=max(0, base+slope·t).
+  // Item-roll position factor = discrete finishing PLACE, normalised to 0..1:
+  // leader (rank 1) → 0, last (rank N) → 1, evenly spaced in between (4 cars →
+  // 0, ⅓, ⅔, 1). Pure standings — NOT the distance gap; a car that's last on the
+  // board rolls the back-marker table even if it's right on the leader's bumper.
+  // (c.rank is set by _rank() at the end of each update / at init, so it's at most
+  // one frame stale here.) Durations key off distance instead (c.tCatch) — see _useItem.
+  _placeT(c) {
+    const n = this.cars.size;
+    return n > 1 ? (c.rank - 1) / (n - 1) : 0;
+  }
+
+  // Weighted item roll using the seeded PRNG. The place factor t (from _placeT, 0 = leader
+  // … 1 = last) snaps to the nearest authored row; one weighted draw from that row. The
+  // weights are normalised here too (defensive), so a row never has to sum to exactly 100.
   _roll(t) {
-    let total = 0; const w = [];
-    for (const it of ITEM_TABLE) { const x = Math.max(0, it.base + it.slope * t); w.push(x); total += x; }
+    const last = ITEM_PLACE_TABLE.length - 1;
+    const row = ITEM_PLACE_TABLE[Math.max(0, Math.min(last, Math.round(t * last)))];
+    let total = 0; for (const x of row) total += x;
     let r = this.rng() * total;
-    for (let i = 0; i < ITEM_TABLE.length; i++) { r -= w[i]; if (r <= 0) return ITEM_TABLE[i].id; }
-    return ITEM_TABLE[ITEM_TABLE.length - 1].id;
+    for (let i = 0; i < ITEM_IDS.length; i++) { r -= row[i]; if (r <= 0) return ITEM_IDS[i]; }
+    return ITEM_IDS[ITEM_IDS.length - 1];
   }
 
   // Fire the held item (press-to-use). Boost reuses the pad boost state; Banana drops
@@ -677,8 +709,13 @@ export class Game {
   _useItem(c) {
     this.onEvent({ type: 'item_use', id: c.id, item: c.item });
     if (c.item === 'boost') {
+      // Same peak ceiling for everyone, but the HOLD scales with DISTANCE behind the
+      // leader (c.tCatch — gap / field spread, from _computeCatchUp; the monster's
+      // duration reads the same factor). NOT the place the roll used: a back-marker that
+      // closes the gap holds it less; one adrift holds it ~2× as long.
+      const t = Math.max(0, Math.min(1, c.tCatch));
       c.boostMul = Math.max(c.boostMul, BOOST_ITEM_MUL);
-      c.boostT = Math.max(c.boostT, BOOST_ITEM_DURATION);
+      c.boostT = Math.max(c.boostT, BOOST_ITEM_DUR_MIN + (BOOST_ITEM_DUR_MAX - BOOST_ITEM_DUR_MIN) * t);
     } else if (c.item === 'banana') {
       // Drop straight out the back along the car's HEADING, not down the centreline.
       // A centreline drop (same lat, s-BANANA_BACK) lands beside the tail — with no
@@ -706,9 +743,10 @@ export class Game {
       const target = this._nextCarAhead(c);
       this.rockets.push({ id: ++this._rocketSeq, s: c.totalS, lat: c.lat, owner: c.id, targetId: target ? target.id : null, life: 0 });
     } else if (c.item === 'monster') {
-      // Become a monster truck. The transform LENGTH scales with how far back you are
-      // (tCatch — the same catch-up factor the roll used; 0=leader … 1=last), so a
-      // back-marker gets the full ride and a midfielder a brief one. The heavy mass,
+      // Become a monster truck. The transform LENGTH scales with DISTANCE behind the
+      // leader (tCatch — gap / field spread, NOT the place that decided the roll; 0=on
+      // the leader … 1=adrift), so a car that's truly dropped off gets the full ride and
+      // one that rolled it while still close a brief one. The heavy mass,
       // speed bump, hazard immunity and body-check all key off c.monsterT elsewhere.
       const t = Math.max(0, Math.min(1, c.tCatch));
       c.monsterT = MONSTER_DUR_MIN + (MONSTER_DUR_MAX - MONSTER_DUR_MIN) * t;

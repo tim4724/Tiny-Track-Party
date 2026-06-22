@@ -1092,6 +1092,37 @@ test('item rolls are deterministic for a seed and position-weighted by t', () =>
   assert.ok(bananaLeader > bananaLast + 400, `leader rolls more bananas than last (${bananaLeader} vs ${bananaLast})`);
 });
 
+test('the roll factor is PLACE, not distance: _placeT maps rank → 0..1 evenly', () => {
+  const g = new Game(['a', 'b', 'c', 'd'], mkTrack(3), {});
+  const cars = [...g.cars.values()];
+  cars[0].rank = 1; cars[1].rank = 2; cars[2].rank = 3; cars[3].rank = 4;
+  assert.equal(g._placeT(cars[0]), 0, 'leader → 0');
+  assert.ok(Math.abs(g._placeT(cars[1]) - 1 / 3) < 1e-9, '2nd of 4 → 1/3');
+  assert.ok(Math.abs(g._placeT(cars[2]) - 2 / 3) < 1e-9, '3rd of 4 → 2/3');
+  assert.equal(g._placeT(cars[3]), 1, 'last → 1');
+  // A single live car never divides by zero — it's simply the leader.
+  const solo = new Game(['only'], mkTrack(3), {});
+  assert.equal(solo._placeT([...solo.cars.values()][0]), 0, 'lone car → 0 (no /0)');
+});
+
+test('a box grab rolls on PLACE, ignoring the distance gap (last-but-close still draws the back table)', () => {
+  // The roll keys off finishing PLACE, not the distance factor the durations use. Force
+  // the contradiction in a 4-car field: the LAST-placed car is glued to the leader by
+  // distance (tCatch 0), the LEADER is adrift (tCatch 1). Place must still decide the table.
+  const g = new Game(['a', 'b', 'c', 'd'], mkTrack(3), {});
+  const cars = [...g.cars.values()];
+  const leader = cars[0], backmarker = cars[1];
+  leader.rank = 1; leader.tCatch = 1;          // 1st by place, adrift by distance
+  backmarker.rank = 4; backmarker.tCatch = 0;  // last by place, glued to the leader
+  let leaderMonsters = 0, lastMonsters = 0;
+  for (let i = 0; i < 4000; i++) {
+    if (g._roll(g._placeT(leader)) === 'monster') leaderMonsters++;
+    if (g._roll(g._placeT(backmarker)) === 'monster') lastMonsters++;
+  }
+  assert.equal(leaderMonsters, 0, 'the leader never rolls a monster even when adrift by distance');
+  assert.ok(lastMonsters > 1500, `last place rolls plenty of monsters even when close (~50%, ${lastMonsters}/4000)`);
+});
+
 test('item moments emit events: pickup, item_use, pad, spin', () => {
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
@@ -1327,7 +1358,7 @@ test('rockets favour the back of the field, and the LEADER never gets one', () =
   for (let i = 0; i < 6000; i++) if (g._roll(0) === 'rocket') rocketLeader++; // t=0 leader
   for (let i = 0; i < 6000; i++) if (g._roll(1) === 'rocket') rocketLast++;   // t=1 last
   assert.equal(rocketLeader, 0, 'the leader has no car ahead to hit → never rolls a rocket (rocket weight is 0 at t=0)');
-  assert.ok(rocketLast > 1500, `last place rolls plenty of rockets (${rocketLast}/6000)`);
+  assert.ok(rocketLast > 1000, `last place rolls plenty of rockets (~20%, ${rocketLast}/6000)`); // rocket is 20% at t=1 by design (~1200/6000)
 });
 
 test('a rocket fired with no car ahead (the leader) launches but expires — a whiff', () => {
@@ -1362,15 +1393,26 @@ test('a rocket hit cancels an in-progress crash and starts a fresh one', () => {
 
 // ---- monster truck (catch-up transform item) -------------------------------
 
-test('the monster is a DEEP back-field item: the leader and midfield never roll it', () => {
+test('the monster is a back-field item: the FRONT of the field never rolls it', () => {
+  // Monster weight is 0 across the front rows of the place table (leader + the next two
+  // place-slots). Sample the leader (t=0) and a front-third slot (t=2/7 → master row 3,
+  // monster 0); both must come up empty. It dominates last place (t=1 → 50%).
   const g = new Game(['x'], mkTrack(3), {});
-  let lead = 0, mid = 0, last = 0;
-  for (let i = 0; i < 6000; i++) if (g._roll(0) === 'monster') lead++;   // t=0 leader
-  for (let i = 0; i < 6000; i++) if (g._roll(0.5) === 'monster') mid++;  // t=0.5 midfield
-  for (let i = 0; i < 6000; i++) if (g._roll(1) === 'monster') last++;   // t=1 last
-  assert.equal(lead, 0, 'the leader never rolls a monster (weight 0 across the front)');
-  assert.equal(mid, 0, 'the midfield never rolls one either (weight is still 0 at t=0.5)');
-  assert.ok(last > 800, `last place rolls plenty of monsters (${last}/6000)`);
+  let front = 0, last = 0;
+  for (let i = 0; i < 6000; i++) { if (g._roll(0) === 'monster') front++; if (g._roll(2 / 7) === 'monster') front++; }
+  for (let i = 0; i < 6000; i++) if (g._roll(1) === 'monster') last++;
+  assert.equal(front, 0, 'the leader and front of the field never roll a monster (weight 0 there)');
+  assert.ok(last > 2000, `last place rolls plenty of monsters (~50%, ${last}/6000)`);
+});
+
+test('the rocket humps in the upper-mid "snipe zone", not at the back', () => {
+  // The rocket peaks (~40%) around the 3rd place-slot — a car just ahead to take — and
+  // settles to a steady ~20% deeper in the field. Guards the non-monotonic shape that a
+  // straight base+slope·t line could never produce.
+  const g = new Game(['x'], mkTrack(3), {});
+  let snipe = 0, back = 0;
+  for (let i = 0; i < 6000; i++) { if (g._roll(2 / 7) === 'rocket') snipe++; if (g._roll(1) === 'rocket') back++; }
+  assert.ok(snipe > back + 600, `rocket is commoner in the snipe zone than at the back (${snipe} vs ${back})`);
 });
 
 test('firing a monster transforms the car, for LONGER the further back you are', () => {
