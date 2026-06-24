@@ -129,7 +129,12 @@ const BOX_RADIUS = 0.65;       // fallback item-box radius
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
 const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
-const BANANA_BACK = 1.2;       // how far behind the dropper a banana lands (units)
+const BANANA_BACK = 0.7;       // how far behind the dropper a banana lands (units) — tucked
+                               // just behind the rear bumper (car half-len ~0.44 + banana
+                               // half-depth ~0.23), so the dropper actually sees it land
+const BANANA_OWNER_IMMUNE = 5.0; // seconds the dropper is immune to their OWN banana — long
+                               // enough to drive clear of the drop spot, far shorter than a
+                               // lap (~40-60s) so it bites them when they loop back onto it
 
 // ---- Homing rocket (offensive item) ----
 // A fired rocket locks the car directly AHEAD in the standings and runs it down
@@ -254,7 +259,7 @@ export class Game {
       : { s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS });
     this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
-    this.bananas = [];      // [{ id, s, lat, owner }] — live dropped bananas (live on drop; owner-skipped)
+    this.bananas = [];      // [{ id, s, lat, owner, armAt }] — live dropped bananas (live on drop; owner-immune until armAt)
     this._bananaSeq = 0;
     this.rockets = [];      // [{ id, s (cumulative arclength), lat, owner, targetId, life }] — live homing rockets
     this._rocketSeq = 0;
@@ -377,7 +382,7 @@ export class Game {
     if (dt <= 0) return;
     this.elapsed += dt;
     this._computeCatchUp(dt);   // per-car tRaw/tCatch from the field spread
-    this._tickProps(dt);        // box respawn cooldowns + banana life/arm
+    this._tickProps(dt);        // box respawn cooldowns
     this._stepRockets(dt);      // advance live homing rockets BEFORE the car loop, so a hit lands on the target's own frame
 
     for (const c of this.cars.values()) {
@@ -704,8 +709,9 @@ export class Game {
   }
 
   // Fire the held item (press-to-use). Boost reuses the pad boost state; Banana drops
-  // a hazard just behind the dropper — live immediately (so a tailgater is hit at once)
-  // and owner-skipped forever, so the dropper can never trip it.
+  // a hazard just behind the dropper — live immediately (so a tailgater is hit at once),
+  // owner-immune for a few seconds after the drop, then live for the owner too (so a
+  // forgotten trap bites you when you lap back onto it a round later).
   _useItem(c) {
     this.onEvent({ type: 'item_use', id: c.id, item: c.item });
     if (c.item === 'boost') {
@@ -732,7 +738,13 @@ export class Game {
       const lim = this._curbLimit(hit.frame.width); // keep it on the road if the tail swung wide near a curb
       const lat = Math.max(-lim, Math.min(lim, hit.lat));
       const s = ((hit.s % this.length) + this.length) % this.length;
-      this.bananas.push({ id: ++this._bananaSeq, s, lat, owner: c.id });
+      // Owner immunity is just a short window after the drop: the banana lands right behind
+      // them, so without it a tight-corner projection inside BANANA_RADIUS could self-hit at
+      // once. After BANANA_OWNER_IMMUNE it goes live for the owner too — by then they've long
+      // since driven clear, but they'll lap back onto it a round later and crash into their
+      // own trap (everyone else hits it from the start). armAt is an elapsed-time stamp.
+      const armAt = this.elapsed + BANANA_OWNER_IMMUNE;
+      this.bananas.push({ id: ++this._bananaSeq, s, lat, owner: c.id, armAt });
     } else if (c.item === 'rocket') {
       // Lock the car directly AHEAD in the standings (smallest cumulative totalS gap
       // ahead; finished cars excluded). The leader may fire with no car ahead — the
@@ -754,15 +766,17 @@ export class Game {
     c.item = null;
   }
 
-  // Overlap of a live dropped banana (skips the owner and un-armed ones). A hit
-  // CONSUMES the banana — Mario-Kart style — so it can't pile up or re-fire: no
-  // rising-edge bookkeeping needed, the banana is simply gone next frame. Returns
-  // true if this car hit one → caller spins the car out (reusing the oil spin).
+  // Overlap of a live dropped banana. The owner is skipped only for a short window after
+  // they drop it (armAt — see _useItem); everyone else trips it at once. A hit CONSUMES the
+  // banana — Mario-Kart style — so it can't pile up or re-fire: no rising-edge
+  // bookkeeping needed, the banana is simply gone next frame. Returns true if this car
+  // hit one → caller spins the car out (reusing the oil spin).
   _enterBanana(c) {
     if (!this.bananas.length) return false;
     let hit = false;
     for (const b of this.bananas) {
-      if (b.hit || b.owner === c.id) continue; // already consumed this frame, or the dropper itself
+      if (b.hit) continue;                                       // already consumed this frame
+      if (b.owner === c.id && this.elapsed < (b.armAt ?? Infinity)) continue; // owner, still in the post-drop window
       if (this._inZone(c, b, BANANA_RADIUS)) { b.hit = true; hit = true; }
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);

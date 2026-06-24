@@ -1275,7 +1275,7 @@ test('a dropped banana is live immediately — a tailgater is hit the same frame
   const dropper = game.cars.get('drop'), tail = game.cars.get('tail');
   Object.assign(dropper, { totalS: 12, lat: 0, v: 0, item: 'banana' });
   // tailgater sits right where the banana will land (BANANA_BACK behind the dropper)
-  Object.assign(tail, { totalS: 12 - 1.2, lat: 0, v: 0 });
+  Object.assign(tail, { totalS: 12 - 0.7, lat: 0, v: 0 });
   game.elapsed = 2;
   // single tick: the drop (action button) happens, then the tailgater — iterated
   // after the dropper — is already sitting on the live banana and trips it
@@ -1283,6 +1283,30 @@ test('a dropped banana is live immediately — a tailgater is hit the same frame
   assert.ok(tail.spinT > 0, 'the tailgater spins out on the freshly dropped banana');
   assert.equal(dropper.spinT, 0, 'the dropper itself never trips it');
   assert.equal(game.bananas.length, 0, 'the hit consumed the banana');
+});
+
+test('a banana goes live for its OWNER after a few seconds — a forgotten trap bites you', () => {
+  const track = mkTrack(3);
+  const game = new Game(['drop'], track, {});
+  const c = game.cars.get('drop');
+  Object.assign(c, { totalS: 12, lat: 0, v: 0, item: 'banana' });
+  game.elapsed = 2;
+  game.processInput('drop', { u: 1, b: 1 }); game.update(16);
+  assert.equal(game.bananas.length, 1, 'banana dropped');
+  const b = game.bananas[0];
+
+  // Within the immunity window: park the owner right on top of their own banana → immune.
+  Object.assign(c, { totalS: b.s, lat: b.lat, v: 0 });
+  game.processInput('drop', { b: 1 }); game.update(16);
+  assert.equal(c.spinT, 0, 'the owner is immune right after dropping');
+  assert.equal(game.bananas.length, 1, 'and does not consume it while immune');
+
+  // Past BANANA_OWNER_IMMUNE (the owner has lapped back onto it a round later) → it bites.
+  game.elapsed = 9; // drop was at ~2s; the 5s window has long since lapsed
+  Object.assign(c, { totalS: b.s, lat: b.lat, v: 0 });
+  game.processInput('drop', { b: 1 }); game.update(16);
+  assert.ok(c.spinT > 0, 'once the window passes the owner crashes into their own banana');
+  assert.equal(game.bananas.length, 0, 'and consumes it, like anyone else');
 });
 
 test('a dropped banana trails the car along its HEADING, not down the centreline', () => {
@@ -1304,9 +1328,9 @@ test('a dropped banana trails the car along its HEADING, not down the centreline
   const fb = game.centerline.sampleAt(b.s);
   const toBanana = fb.pos.clone().addScaledVector(fb.lateral, b.lat).sub(carPos); // car → banana
   // Sits ~BANANA_BACK behind, directly opposite the nose. A centreline drop at this yaw
-  // could only reach back·fwd ≈ -1.2·cos(0.6) ≈ -0.99; behind-the-heading gives ≈ -1.2.
-  assert.ok(Math.abs(toBanana.length() - 1.2) < 0.15, `~BANANA_BACK behind (got ${toBanana.length().toFixed(2)})`);
-  assert.ok(toBanana.dot(fwd) < -1.1, 'behind the nose along the heading, not down the centreline');
+  // could only reach back·fwd ≈ -0.7·cos(0.6) ≈ -0.58; behind-the-heading gives ≈ -0.7.
+  assert.ok(Math.abs(toBanana.length() - 0.7) < 0.12, `~BANANA_BACK behind (got ${toBanana.length().toFixed(2)})`);
+  assert.ok(toBanana.dot(fwd) < -0.65, 'behind the nose along the heading, not down the centreline');
   assert.ok(Math.abs(b.lat) > 0.3, `gained the yaw's lateral component (lat ${b.lat.toFixed(2)})`); // not a same-lat drop
 });
 

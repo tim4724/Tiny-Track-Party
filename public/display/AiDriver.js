@@ -98,7 +98,10 @@ function avoidThreat(car, lane, game, maxLat) {
   };
   for (const h of (game.hazards || [])) consider(h, h.radius);
   for (const p of (game.poles || [])) consider(p, p.radius);  // solid poles: dodge like an oil, but they STOP you, not spin you
-  for (const b of (game.bananas || [])) if (b.owner !== car.id) consider(b, BANANA_AVOID_R); // skip our own bananas — they can't spin us (matches the engine's _enterBanana)
+  // Skip our OWN banana only during the short post-drop immunity window. Once it's armed
+  // (armAt — an elapsed-time stamp, see Game._useItem) it spins us like anyone's, so dodge
+  // it. Mirrors the engine's _enterBanana owner gate exactly.
+  for (const b of (game.bananas || [])) if (b.owner !== car.id || game.elapsed >= (b.armAt ?? Infinity)) consider(b, BANANA_AVOID_R);
   if (!best) return null;
   const m = Math.max(0.1, maxLat - 0.1);                     // keep the dodge inside the curb
   const off = best.r + EVADE_CLEAR;
