@@ -67,17 +67,18 @@ function nearestBehind(car, game) {
   return best;
 }
 
-// Cumulative arclength gap to the car directly AHEAD in the standings — the rocket's
-// lock target (mirrors the engine's _nextCarAhead, which fires on cumulative totalS so a
-// back-marker locks the car one place up, not whoever's physically nearest). null when
-// this car is the leader (nothing ahead → a rocket would whiff).
+// Forward arclength to the car PHYSICALLY just ahead on the track — the rocket's lock target
+// (mirrors the engine's _nextCarAhead: nearest car in front by lap-wrapped position, not standings;
+// cars closer than ROCKET_TARGET_MIN are skipped). null when nothing live is ahead → a rocket whiffs.
+const ROCKET_TARGET_MIN = 0.5; // keep in sync with engine/Game.js
 function gapToCarAhead(car, game) {
-  if (!game || !game.cars) return null;
+  if (!game || !game.cars || !game.length) return null;
+  const L = game.length;
   let best = null;
   for (const o of game.cars.values()) {
     if (o.id === car.id || o.finished) continue;
-    const gap = o.totalS - car.totalS;
-    if (gap > 0 && (best == null || gap < best)) best = gap;
+    const fwd = (((o.totalS - car.totalS) % L) + L) % L;
+    if (fwd >= ROCKET_TARGET_MIN && (best == null || fwd < best)) best = fwd;
   }
   return best;
 }

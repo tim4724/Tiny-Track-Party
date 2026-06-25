@@ -262,6 +262,7 @@ export class SceneRenderer {
     this._rayDown = new THREE.Vector3(0, -1, 0);
     this._headFlat = new THREE.Vector3();  // car heading flattened to horizontal (probe placement)
     this._frameDt = 1 / 60;                 // last frame dt (set in _loop; setCarPose reads it)
+    this._timeScale = 1;                    // DEBUG slow-mo: _loop scales dt by this (1 = normal); see setTimeScale
     this._normalMat = new THREE.Matrix3(); // for road-tile world normals
     this._hitNormal = new THREE.Vector3();
     // Spatial bucket for the ground-conform raycast: a grid (x,z) -> tiles
@@ -498,6 +499,10 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (c && c.group) this.props.spawnImpact(c.group);
   }
+
+  // Detonate a timed-out rocket where it died — same burst as a hit, but at a track point (s, lat)
+  // instead of on a car. Driven from the engine's rocket_expire event (a whiff self-destructing).
+  rocketExpire(s, lat) { this.props.spawnImpactAt(s, lat); }
 
   // Restore every warning cone to its home pose (new game / fresh race).
   resetCones() { this.props.resetCones(); }
@@ -2012,6 +2017,9 @@ export class SceneRenderer {
     if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); }
   }
   stop() { this._running = false; }
+  // DEBUG slow-mo: scale the per-frame dt the whole scene runs on (1 = normal, 0.1 = tenth speed). Driven
+  // live by the debug panel's "Time scale" slider (and the ?timescale= query param it prefills from).
+  setTimeScale(n) { const v = parseFloat(n); this._timeScale = Number.isFinite(v) ? Math.max(0.05, Math.min(4, v)) : 1; return this._timeScale; }
   // Render exactly one more frame with the state set so far, then halt the loop.
   // Gallery previews hold a still frame this way instead of redrawing an unchanged
   // scene at 60fps: frozen previews never resume; animated cards resume via start()
@@ -2028,7 +2036,9 @@ export class SceneRenderer {
   _loop(t) {
     if (!this._running) return;
     const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
-    const dt = Math.min(rawMs / 1000, 0.05);
+    // One global dt drives EVERYTHING downstream (sim, props, skids, clouds, camera damping), so the
+    // DEBUG slow-mo scale here slows the whole scene uniformly. rawMs stays real → the FPS meter is honest.
+    const dt = Math.min(rawMs / 1000, 0.05) * this._timeScale;
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
     if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas

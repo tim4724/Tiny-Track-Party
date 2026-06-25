@@ -45,8 +45,8 @@ const BOX_SHADOW_OPACITY = 0.4;
 // In-flight homing rocket (see _buildRocketProto + _syncRockets): a small toy rocket
 // that flies a touch above the road, nose along travel, spinning about its axis with a
 // flickering tail flame. Built once (shared geo/mats) and cloned per live rocket.
-const ROCKET_SCALE = 1.6;      // overall size multiplier on the built proto — bigger so it reads at race speed
-const ROCKET_HOVER = 0.32;     // how high the rocket flies above the road surface (world units; raised for the bigger body)
+const ROCKET_SCALE = 1.12;     // overall size multiplier on the built proto (still reads at race speed)
+const ROCKET_HOVER = 0.32;     // how high the rocket flies above the road surface (world units)
 const ROCKET_ROLL = 9.0;       // spin about its travel axis (rad/s) — the toy "whizzing" read
 
 // Rocket impact burst (see spawnImpact + _stepImpacts): a warm additive flash ball plus a
@@ -693,16 +693,33 @@ export class TrackProps {
     if (!carGroup || !this._impacts) return;
     const up = this._impUp.set(0, 1, 0).applyQuaternion(carGroup.quaternion).normalize();
     const center = this._impPos.copy(carGroup.position).addScaledVector(up, 0.3); // detonation point on the car body
+    this._spawnBurst(center, carGroup); // car ref → the flash trails it as it spins away (see _stepImpacts)
+  }
+
+  // Same burst at a fixed TRACK point (s along the ribbon, lat off-centre) rather than on a car —
+  // a rocket self-destructing where it timed out (a whiff that detonates instead of vanishing).
+  // Driven from the engine's rocket_expire event; no car ref, so the fireball stays put.
+  spawnImpactAt(s, lat) {
+    if (!this._impacts || !this._centerline) return;
+    const f = this._centerline.sampleAt(s);
+    const up = this._impUp.copy(f.up).normalize();
+    const center = this._impPos.copy(f.pos).addScaledVector(f.lateral, lat || 0).addScaledVector(up, ROCKET_HOVER);
+    this._spawnBurst(center, null);
+  }
+
+  // Build one impact burst at `center`: a warm flash ball + a camera-facing shockwave ring (each
+  // owns cloned additive materials so they fade independently). `car` (or null) is stashed so
+  // _stepImpacts can trail the flash after a spinning car — a null-car burst holds its spot.
+  _spawnBurst(center, car) {
     const flash = new THREE.Mesh(this._impactSphereGeo, this._impactFlashMatProto.clone());
     flash.position.copy(center);
-    // Air shockwave ring at the SAME point — a thin camera-facing halo, not a ground decal.
     const ring = new THREE.Mesh(new THREE.RingGeometry(IMPACT_RING_R0 - IMPACT_RING_W, IMPACT_RING_R0 + IMPACT_RING_W, 48),
       this._impactRingMatProto.clone());
     ring.position.copy(center);
     ring.onBeforeRender = impactRingBillboard; // re-faces each cell's camera every render
     this.hazardGroup.add(flash);
     this.hazardGroup.add(ring);
-    this._impacts.push({ flash, ring, t: 0, car: carGroup }); // car ref → the flash trails it (see _stepImpacts)
+    this._impacts.push({ flash, ring, t: 0, car });
   }
 
   // Advance the impact bursts: the flash ball pops then fades fast; the shockwave ring expands

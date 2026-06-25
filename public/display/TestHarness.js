@@ -338,6 +338,7 @@ export function runDisplayScenario(opts, ctx) {
     const events = kind === 'rocket'
       ? { onEvent: (ev) => {
           if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
+          else if (ev.type === 'rocket_expire') { scene.rocketExpire(ev.s, ev.lat); if (sfx) sfx.rocketHit(); } // whiff self-destruct
         } }
       : kind === 'monster'
       ? { onEvent: (ev) => {

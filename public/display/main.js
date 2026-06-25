@@ -832,6 +832,12 @@ function onRaceEvent(e) {
   // Rocket strike: pop a one-shot impact burst on the target (frustum culling drops it
   // off-screen). Skipped during the silent fast-forward, like the audio above.
   if (!fastForwarding && e.type === 'spin' && e.cause === 'rocket') scene.rocketImpact(e.id);
+  // A rocket self-destructing at the end of its flight (a whiff): detonate at its track point.
+  if (!fastForwarding && e.type === 'rocket_expire') {
+    scene.rocketExpire(e.s, e.lat);
+    const lvl = audibility(rocketWorldPos({ s: e.s, lat: e.lat })); // boom scaled by distance to the nearest human
+    if (lvl > 0) audio.rocketHit(lvl);
+  }
   if (e.type !== 'finish') return;
   if (fastForwarding) return; // endRace sends the final board once; don't spam one per AI car
   // If that finish was the last human's, we're about to fast-forward to the flag
@@ -1241,6 +1247,11 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
     min: 0.6, max: 3, step: 0.05, value: steerDefault, live: setSteerExpo,
     format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
+  // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) for slow-mo inspection — no
+  // reload. 1 = normal; drag down to watch fast action (e.g. a rocket strike) play out frame by frame.
+  { key: 'timescale', label: 'Time scale', hint: 'slow-mo · live', type: 'range',
+    min: 0.1, max: 1, step: 0.05, value: 1, live: (n) => scene.setTimeScale(n),
+    format: (n) => n.toFixed(2) + '×' + (Math.abs(n - 1) < 1e-9 ? ' · normal' : '') },
   { section: 'Track' },
   { key: 'track', label: 'Preselect', type: 'select',
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
