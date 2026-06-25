@@ -60,7 +60,10 @@ const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 // Cars are glued to the centerline ribbon, so two nearby cars live in a locally
 // flat plane spanned by arclength `totalS` and lateral offset `lat` (both world
 // units). Collision is therefore a 2D box overlap in (s, lat): cheap, robust, and
-// it "just works" through loops/hills because it never touches world XYZ.
+// it "just works" through loops/hills because it never touches world XYZ. The box
+// is the car's HEADING-ORIENTED footprint projected onto the (s, lat) axes (see
+// _footprint), so a yawed body collides from its real corners — not a fixed
+// axis-aligned box that an angled car would poke straight through.
 const COLLIDE_SHRINK = 0.9;    // footprints a touch tighter than the mesh so a bump reads as contact, not a gap
 // One impulse model for both contact axes (see _collidePair). RESTITUTION is the
 // bounciness of the impact along the contact normal: ~0 = a solid inelastic thunk
@@ -567,6 +570,21 @@ export class Game {
     return this._curbLimit(this.centerline.widthAt ? this.centerline.widthAt(s) : null);
   }
 
+  // Oriented-footprint half-extents projected onto the (s, lat) axes for a car at its
+  // CURRENT heading. A yawed body reaches FURTHER across the road and LESS along it than
+  // its resting box (project a rectangle rotated by θ: along = hl·|cosθ| + hw·|sinθ|,
+  // side = hl·|sinθ| + hw·|cosθ|). Collisions and the curb clamp read these so an angled
+  // car's real corners — not a heading-blind box — decide contact, which is what stops a
+  // hard-cornering body from clipping into curbs and other cars. Monster trucks collide
+  // from a widened footprint (they look bigger). restSide is the side extent at heading 0
+  // (= hw), so the curb clamp can isolate just the EXTRA reach the yaw adds.
+  _footprint(c) {
+    const fp = c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1;
+    const hl = c.halfLen * fp, hw = c.halfWid * fp;
+    const ch = Math.abs(Math.cos(c.heading || 0)), sh = Math.abs(Math.sin(c.heading || 0));
+    return { along: hl * ch + hw * sh, side: hl * sh + hw * ch, restSide: hw };
+  }
+
   // Rubbing a curb pins the car just inside it and bleeds speed toward a cap (a fraction of
   // the car's own top speed) — slows you, never a hard stop. Runs twice a frame (integration
   // + post-collision re-clamp); both read the cached c.curbLim (same totalS, no re-sample).
@@ -574,7 +592,12 @@ export class Game {
     // onWall is cleared once per frame at the top of update()'s loop, not here — a car pinned
     // at the curb sits exactly AT the limit, so the second pass wouldn't re-detect it.
     const cap = c.vmax * WALL_SPEED_FRAC;
-    const lim = c.curbLim != null ? c.curbLim : this.maxLat;
+    const base = c.curbLim != null ? c.curbLim : this.maxLat;
+    // Pull the CENTRE's limit in by exactly the extra lateral reach the heading adds (0 when
+    // straight), so the body's OUTER edge stops where it would at rest instead of poking
+    // through the curb when the car is angled. Floored so a pinch + full yaw can't invert it.
+    const fpt = this._footprint(c);
+    const lim = Math.max(0.05, base - (fpt.side - fpt.restSide));
     if (c.lat > lim || c.lat < -lim) {
       c.lat = c.lat > 0 ? lim : -lim;
       c.onWall = true;
@@ -896,10 +919,14 @@ export class Game {
     // applying them to the cumulative totalS stays correct across the lap seam.
     const ds = wrapDelta(b.totalS - a.totalS, this.length); // +: b is ahead of a along the track
     const dl = b.lat - a.lat;                // +: b sits to a's +lateral side
-    // A monster truck collides from a bigger footprint than its car box (it looks bigger).
-    const fa = a.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1, fb = b.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1;
-    const sumLen = (a.halfLen * fa + b.halfLen * fb) * COLLIDE_SHRINK;
-    const sumWid = (a.halfWid * fa + b.halfWid * fb) * COLLIDE_SHRINK;
+    // Each car's oriented footprint projected onto the (s, lat) axes: a yawed body reaches
+    // further across the road, so contact registers from the car's real corners rather than a
+    // heading-blind box (no more clipping when a car is sideways). Monster footprint is folded
+    // into _footprint. The AABB overlap on these projected extents stays cheap and keeps the
+    // rear-end/side-bump resolution below intact.
+    const fpa = this._footprint(a), fpb = this._footprint(b);
+    const sumLen = (fpa.along + fpb.along) * COLLIDE_SHRINK;
+    const sumWid = (fpa.side + fpb.side) * COLLIDE_SHRINK;
     const penS = sumLen - Math.abs(ds);
     const penL = sumWid - Math.abs(dl);
     if (penS <= 0 || penL <= 0) return;      // no overlap on one axis → no contact
@@ -1014,7 +1041,8 @@ export class Game {
         monster: c.monsterT > 0, // car is currently a monster truck — renderer morphs the model; HUD/cam may react
 
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
-        totalS: c.totalS,
+        // heading lets the overlay orient the box to the body (the engine collides oriented).
+        totalS: c.totalS, heading: c.heading,
         halfLen: c.halfLen * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1),
         halfWid: c.halfWid * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1)
       });

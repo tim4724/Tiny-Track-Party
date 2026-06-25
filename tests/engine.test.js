@@ -152,10 +152,31 @@ test('hard steering reaches the curb but never gets stuck and cannot u-turn', ()
   const game = new Game(['p1'], track, {});
   for (let i = 0; i < 130; i++) { game.processInput('p1', { s: 1 }); game.update(16); }
   const car = game.getSnapshot().cars[0];
-  assert.ok(Math.abs(car.lat) >= game.maxLat - 0.05, 'holding full steer should drive into a curb');
+  // The curb clamp pins the car's BODY edge at the curb, not its centre: a hard-steered car
+  // carries a big yaw, so its oriented footprint reaches further across and the centre sits
+  // back by that extra reach (it no longer pokes the body through the curb). So check the car
+  // is pinned to the wall and drove most of the way out, allowing for the heading inset.
+  assert.ok(car.onWall, 'holding full steer should pin the body against the curb');
+  assert.ok(Math.abs(car.lat) >= game.maxLat - 0.3, 'holding full steer should drive the body into the curb');
   assert.ok(car.v > 1, `rubbing the curb should slow but never stop (v=${car.v.toFixed(2)})`);
   // u-turn guard: heading magnitude stays within the clamp (can't point backward)
   assert.ok(Math.abs(game.cars.get('p1').heading) <= 1.26, 'heading must stay clamped (no u-turn)');
+});
+
+test('the curb clamp insets a yawed car so its body edge — not its centre — meets the curb', () => {
+  const game = new Game(['p1'], mkTrack(3), {});
+  const c = game.cars.get('p1');
+  // A straight car is allowed right up to the cached curb limit (no heading inset).
+  Object.assign(c, { totalS: 5, lat: game.maxLat + 0.5, heading: 0, v: c.vmax, curbLim: game.maxLat });
+  game._clampCurb(c, 0.016);
+  const straightLat = Math.abs(c.lat);
+  // Yawed hard: the SAME clamp pulls the centre in by the extra lateral reach the heading
+  // adds, so the body's outer edge stops at the curb instead of poking through it.
+  Object.assign(c, { totalS: 5, lat: game.maxLat + 0.5, heading: 1.2, v: c.vmax, curbLim: game.maxLat });
+  game._clampCurb(c, 0.016);
+  const yawedLat = Math.abs(c.lat);
+  assert.ok(Math.abs(straightLat - game.maxLat) < 1e-9, 'a straight car sits right at the curb limit');
+  assert.ok(yawedLat < straightLat - 0.1, `a yawed car is held further in (${yawedLat.toFixed(2)} vs ${straightLat.toFixed(2)})`);
 });
 
 test('a full race finishes and emits events', () => {
@@ -751,6 +772,20 @@ test('a gentle side lean imparts no knock — only a hard converge does (not bou
   const ram = collide({ totalS: 5, lat: 0, v: 6, heading: -0.3 }, { totalS: 5, lat: 0.25, v: 6, heading: 0 });
   assert.ok(ram.a.vlat < 0, `swerver is knocked back off its line (vlat=${ram.a.vlat.toFixed(2)})`);
   assert.ok(ram.b.vlat > 0, `rammed car is shoved aside (vlat=${ram.b.vlat.toFixed(2)})`);
+});
+
+test('an angled car collides from its oriented footprint, not a heading-blind box', () => {
+  // A lateral gap that CLEARS two STRAIGHT cars (side reach = halfWid 0.26 each, COLLIDE_SHRINK
+  // 0.9 → contact needs |dl| < ~0.468) but falls INSIDE two YAWED cars: a 0.6 rad heading swings
+  // each body across the road so its lateral reach grows past the gap. This is what stops a
+  // hard-cornering car from clipping through a neighbour it visibly overlaps.
+  const gap = 0.55;
+  const straight = collide({ totalS: 5, lat: 0, v: 0, heading: 0 }, { totalS: 5, lat: gap, v: 0, heading: 0 });
+  assert.ok(Math.abs(straight.b.lat - gap) < 1e-9, 'two straight cars at this gap stay clear (not pushed apart)');
+
+  const yawed = collide({ totalS: 5, lat: 0, v: 0, heading: 0.6 }, { totalS: 5, lat: gap, v: 0, heading: 0.6 });
+  assert.ok(yawed.b.lat - gap > 1e-3, 'two yawed cars at the SAME gap overlap and shove apart (oriented footprint)');
+  assert.ok(yawed.a.lat < 0, 'the de-penetration is mutual — the left car is shoved the other way');
 });
 
 test('the stronger car dominates a rear-end: it keeps its pace, the light one is launched', () => {
