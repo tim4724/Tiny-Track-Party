@@ -19,3 +19,11 @@ export function mulberry32(a) {
 export function wrapDelta(ds, len) {
   return ds - Math.round(ds / len) * len;
 }
+
+// Wrap an arclength (an absolute position or a signed gap) to [0, len) — the
+// forward-going complement of wrapDelta. A negative input (a car behind, a
+// cumulative s before the seam) comes back as the distance the long way round,
+// which is what the rocket's "physically ahead" queries want.
+export function wrapS(s, len) {
+  return ((s % len) + len) % len;
+}

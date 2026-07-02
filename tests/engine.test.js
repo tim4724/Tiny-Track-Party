@@ -7,11 +7,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, Game, AiController, RaceSession;
+let buildTrack, Game, TUNING, AiController, RaceSession;
 test.before(async () => {
   const tb = await import('../public/display/TrackBuilder.js');
   buildTrack = tb.buildTrack;
-  Game = (await import('../public/display/engine/Game.js')).Game;
+  ({ Game, TUNING } = await import('../public/display/engine/Game.js'));
   AiController = (await import('../public/display/AiDriver.js')).AiController;
   RaceSession = (await import('../public/display/RaceSession.js')).RaceSession;
 });
@@ -619,6 +619,16 @@ test('a bot fires a rocket only when a target is ahead in range (a homing shot n
   // Leader with a rocket and nobody ahead → never fired (no whiffs into empty track).
   const leader = new Game(['solo'], track, {});
   assert.equal(firstFireFrame('rocket', 20, leader, 'solo'), -1, 'a rocket with nobody ahead is held, never whiffed');
+  // Since targeting went lap-wrapped, "someone ahead" is nearly always true — a rival
+  // BEHIND reads as almost-a-lap ahead. On a track longer than ROCKET_FIRE_RANGE that
+  // wrapped gap is out of reach, and the bot must keep holding even once overdue
+  // (an overdue escape here fired a guaranteed-whiff rocket that orbited the lap).
+  const long = buildTrack([...run(12), arc(RL, 90), ...run(6), arc(RL, 90), ...run(12), arc(RL, 90), ...run(6), arc(RL, 90)]);
+  long.totalLaps = 3;
+  const wrapped = new Game(['leader', 'trail'], long, {});
+  Object.assign(wrapped.cars.get('trail'), { totalS: 22, lat: 0 }); // 8u BEHIND the leader → wraps to ~L−8 "ahead", far beyond reach
+  assert.equal(firstFireFrame('rocket', 30, wrapped, 'leader', 600), -1,
+    'a rival behind (wrapped nearly a lap ahead) is out of reach — held past the overdue point, never orbit-whiffed');
 });
 
 test('straight-line speed is not handling-limited (only corners cost speed)', () => {
@@ -1310,7 +1320,7 @@ test('a dropped banana is live immediately — a tailgater is hit the same frame
   const dropper = game.cars.get('drop'), tail = game.cars.get('tail');
   Object.assign(dropper, { totalS: 12, lat: 0, v: 0, item: 'banana' });
   // tailgater sits right where the banana will land (BANANA_BACK behind the dropper)
-  Object.assign(tail, { totalS: 12 - 0.7, lat: 0, v: 0 });
+  Object.assign(tail, { totalS: 12 - TUNING.BANANA_BACK, lat: 0, v: 0 });
   game.elapsed = 2;
   // single tick: the drop (action button) happens, then the tailgater — iterated
   // after the dropper — is already sitting on the live banana and trips it
@@ -1337,7 +1347,7 @@ test('a banana goes live for its OWNER after a few seconds — a forgotten trap 
   assert.equal(game.bananas.length, 1, 'and does not consume it while immune');
 
   // Past BANANA_OWNER_IMMUNE (the owner has lapped back onto it a round later) → it bites.
-  game.elapsed = 9; // drop was at ~2s; the 5s window has long since lapsed
+  game.elapsed = b.armAt + 2; // the banana carries its own arm time — comfortably past it
   Object.assign(c, { totalS: b.s, lat: b.lat, v: 0 });
   game.processInput('drop', { b: 1 }); game.update(16);
   assert.ok(c.spinT > 0, 'once the window passes the owner crashes into their own banana');
@@ -1363,9 +1373,11 @@ test('a dropped banana trails the car along its HEADING, not down the centreline
   const fb = game.centerline.sampleAt(b.s);
   const toBanana = fb.pos.clone().addScaledVector(fb.lateral, b.lat).sub(carPos); // car → banana
   // Sits ~BANANA_BACK behind, directly opposite the nose. A centreline drop at this yaw
-  // could only reach back·fwd ≈ -0.7·cos(0.6) ≈ -0.58; behind-the-heading gives ≈ -0.7.
-  assert.ok(Math.abs(toBanana.length() - 0.7) < 0.12, `~BANANA_BACK behind (got ${toBanana.length().toFixed(2)})`);
-  assert.ok(toBanana.dot(fwd) < -0.65, 'behind the nose along the heading, not down the centreline');
+  // could only reach back·fwd ≈ -BANANA_BACK·cos(0.6) ≈ -0.83·BANANA_BACK; behind-the-heading
+  // gives ≈ -BANANA_BACK. The 0.93 threshold splits those two outcomes at any sane tune.
+  const BACK = TUNING.BANANA_BACK;
+  assert.ok(Math.abs(toBanana.length() - BACK) < 0.12, `~BANANA_BACK behind (got ${toBanana.length().toFixed(2)})`);
+  assert.ok(toBanana.dot(fwd) < -BACK * 0.93, 'behind the nose along the heading, not down the centreline');
   assert.ok(Math.abs(b.lat) > 0.3, `gained the yaw's lateral component (lat ${b.lat.toFixed(2)})`); // not a same-lat drop
 });
 
@@ -1446,7 +1458,8 @@ test('a rocket fired at a near-level target still flies (no instant invisible hi
   const game = new Game(['fire', 'tgt'], mkTrack(3), {});
   const fire = game.cars.get('fire'), tgt = game.cars.get('tgt');
   Object.assign(fire, { totalS: 2, lat: 0, v: 3, item: 'rocket', pickupAge: 99 });
-  Object.assign(tgt, { totalS: 2.55, lat: 0, v: 3 }); // a valid lock (≥ ROCKET_TARGET_MIN) but already inside ROCKET_HIT (0.6)
+  // a valid lock (≥ ROCKET_TARGET_MIN) but already inside ROCKET_HIT
+  Object.assign(tgt, { totalS: 2 + (TUNING.ROCKET_TARGET_MIN + TUNING.ROCKET_HIT) / 2, lat: 0, v: 3 });
   game.processInput('fire', { u: 1 }); game.update(16);
   const r = game.rockets[0];
   assert.ok(r, 'the rocket launches');
@@ -1457,8 +1470,32 @@ test('a rocket fired at a near-level target still flies (no instant invisible hi
     if (tgt.spinT > 0) hitLife = r.life;
   }
   assert.ok(hitLife !== null, 'it eventually lands');
-  assert.ok(hitLife >= 0.35, `the hit is held back so the rocket is on screen first (life=${hitLife.toFixed(2)}s ≈ ROCKET_MIN_LIFE)`);
+  assert.ok(hitLife >= TUNING.ROCKET_MIN_LIFE - 0.05, `the hit is held back so the rocket is on screen first (life=${hitLife.toFixed(2)}s ≈ ROCKET_MIN_LIFE)`); // 0.05 = tick quantization slack
   assert.equal(fire.spinT, 0, 'still never the firer');
+});
+
+test('a fast firer\'s rocket never overshoots a slow near target into a lap-long orbit', () => {
+  // Regression: the rocket leaves the muzzle at the FIRER's speed and sheds it at only
+  // ROCKET_DECEL, so a fast firer locking a slow car just ahead used to fly PAST it inside
+  // the ROCKET_MIN_LIFE no-detonate window — the lap-wrapped gap flipped to ~L and the
+  // rocket chased a full extra lap (an expire-whiff on real tracks). The advance is now
+  // clamped at the target. Lanes are separated so a firer-target body-shove can't
+  // accidentally rescue the hit.
+  const game = new Game(['fire', 'tgt'], mkTrack(9), {});
+  const fire = game.cars.get('fire'), tgt = game.cars.get('tgt');
+  Object.assign(fire, { totalS: 2, lat: 0.8, v: 14, item: 'rocket', pickupAge: 99 }); // boosted-fast firer
+  Object.assign(tgt, { totalS: 2.55, lat: -0.8, v: 2 });                              // slow car just ahead
+  game.processInput('fire', { u: 1 }); game.update(16);
+  const r = game.rockets[0];
+  let hitLife = null, maxFwd = 0;
+  for (let i = 0; i < 300 && hitLife === null; i++) {
+    game.processInput('fire', { b: 1 }); game.processInput('tgt', { b: 1 }); game.update(16);
+    maxFwd = Math.max(maxFwd, (((tgt.totalS - r.s) % game.length) + game.length) % game.length);
+    if (tgt.spinT > 0) hitLife = r.life;
+  }
+  assert.ok(hitLife !== null, 'the shot lands');
+  assert.ok(hitLife < 1.0, `lands at the min-life floor, not after an orbit (life=${hitLife.toFixed(2)}s)`);
+  assert.ok(maxFwd < 3, `the rocket never gets ahead of its mark (max wrapped gap ${maxFwd.toFixed(2)}u of L=${game.length.toFixed(0)})`);
 });
 
 test('rockets favour the back of the field, and the LEADER never gets one', () => {

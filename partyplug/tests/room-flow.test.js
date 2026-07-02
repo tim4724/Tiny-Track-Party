@@ -437,10 +437,13 @@ describe('RoomFlow — order re-snapshot on COUNTDOWN', () => {
 });
 
 // =====================================================================
-// Liveness (presence-timeout decisions) — the Step 4 fold-in. These pure,
-// nowMs-injected predicates replace the display glue's peerLivenessExpired /
-// allPlayersDisconnected / hasLateJoiners / lateJoinerGraceTimer and are the
-// real test gate for that behavior (the display glue has no unit coverage).
+// Liveness (presence-timeout decisions) — the kit's pure, nowMs-injected
+// liveness engine. THIS game adopts only onSeen/expiredPeers (display/Net.js
+// stamps traffic and applies expiries); allParticipantsDisconnected /
+// hasLateJoiners / graceTick are kit parity — public/display/main.js keeps
+// deliberately game-shaped auto-pause/abandon logic (participants = engine
+// cars minus AI bots, COUNTDOWN coverage, connected-filtered late joiners).
+// These tests are the real gate for the engine either way.
 // =====================================================================
 
 // Helper: a flow already in PLAYING with the given participant order.
@@ -666,6 +669,6 @@ describe('RoomFlow — liveness: clearDisconnected re-stamps last-seen', () => {
   });
 });
 
-// RoomFlow's clock-free purity is enforced by the central portable-purity gate
-// (tests/portable-purity.test.js), which scans RoomFlow.js alongside the engine
-// modules native loads into JSC/QuickJS.
+// RoomFlow's clock-free purity (no Date.now/Math.random/DOM — all timing is
+// nowMs-injected by the host) is enforced by tests/portable-purity.test.js,
+// which scans RoomFlow.js alongside the game's engine modules.

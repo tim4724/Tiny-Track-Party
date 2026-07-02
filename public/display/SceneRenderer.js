@@ -514,7 +514,15 @@ export class SceneRenderer {
     // full-screen present quad, so canvas AA would be a no-op (and an unused multisample
     // backbuffer).
     const r = new THREE.WebGLRenderer({ antialias: false });
-    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Opt-in resolution cap (?dpr=0.5): gallery preview iframes lay out at full logical
+    // size (1920×1080) and are only shrunk by a parent CSS transform, which changes
+    // neither innerWidth nor devicePixelRatio — so without the cap each thumbnail
+    // renders and RETAINS 4K-class buffers (~100MB of framebuffers per card on a 2×
+    // screen) for a ~500px card. The gallery passes dpr=0.5; the card's "open" link
+    // strips it, so a real tab stays full-res. Guarded > 0: dpr=0 would allocate a
+    // zero-sized drawing buffer.
+    const dprCap = (() => { try { return parseFloat(new URLSearchParams(location.search).get('dpr')); } catch (_) { return NaN; } })();
+    r.setPixelRatio(Math.min(devicePixelRatio, Number.isFinite(dprCap) && dprCap > 0 ? dprCap : 2));
     r.setSize(window.innerWidth, window.innerHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.autoClear = false; // we clear once per frame, then render N viewports
@@ -733,7 +741,14 @@ export class SceneRenderer {
   }
 
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
-  _onResize() { this.renderer.setSize(window.innerWidth, window.innerHeight); this._resizePost(); }
+  _onResize() {
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this._resizePost();
+    // setSize/_resizePost reallocate (and clear) the drawing buffer + render target. A
+    // running loop repaints on the next rAF, but a preview idled by pauseAfterFrame would
+    // stay blank forever (frozen cards have no play button) — repaint one frame, re-idle.
+    if (!this._running) { this.start(); this.pauseAfterFrame(); }
+  }
 
   // Force the distance fog fully OFF (the gallery grid + free-cam inspector want the whole
   // circuit with zero haze). When left enabled (the default), the render loop picks the
@@ -2017,6 +2032,9 @@ export class SceneRenderer {
     if (!this._running) { this._running = true; this._last = performance.now(); requestAnimationFrame((t) => this._loop(t)); }
   }
   stop() { this._running = false; }
+  // Is the render loop live right now? (false once pauseAfterFrame has idled it.)
+  // The gallery play overlay derives its ▶/❚❚ state from this instead of guessing.
+  isRunning() { return !!this._running; }
   // DEBUG slow-mo: scale the per-frame dt the whole scene runs on (1 = normal, 0.1 = tenth speed). Driven
   // live by the debug panel's "Time scale" slider (and the ?timescale= query param it prefills from).
   setTimeScale(n) { const v = parseFloat(n); this._timeScale = Number.isFinite(v) ? Math.max(0.05, Math.min(4, v)) : 1; return this._timeScale; }

@@ -131,6 +131,18 @@ export class DisplayNet extends GameNet {
     // _clearReady already announced (flags were wiped), that publish carried
     // the new state — skip the duplicate.
     this.flow.on('statechange', ({ to }) => {
+      // Race start: re-stamp every CONNECTED seat's liveness so silence accumulated in
+      // the lobby (where expiredPeers is gated off) isn't charged against the first
+      // COUNTDOWN tick — a phone whose 1 Hz ping was throttled >3s before the host hit
+      // Start would otherwise be dropped one tick in. The 3s window must run from race
+      // start. Deliberately NOT flow.clearDisconnected(now): flipping a grace-pending
+      // seat back to connected here would orphan its reconnect QR and 90s expiry timer
+      // (only _seen/markReconnected/_claimReconnect may flip presence). Disconnected
+      // seats keep their stale stamp; expiredPeers already skips them.
+      if (to === ROOM_STATE.COUNTDOWN) {
+        const now = Date.now();
+        for (const p of this.flow.list()) if (p.connected) this.flow.onSeen(p.peerIndex, now);
+      }
       const announced = to === ROOM_STATE.LOBBY && this._clearReady();
       if (!announced) this._publishLobby();
     });

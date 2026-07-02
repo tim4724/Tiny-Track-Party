@@ -13,7 +13,7 @@
 // AiDriver is dependency-free (no THREE), so this keeps Game loadable in both the
 // browser and the Node tests.
 import { pursue, cornerBrake } from '../AiDriver.js';
-import { mulberry32, wrapDelta } from './util.js';
+import { mulberry32, wrapDelta, wrapS } from './util.js';
 
 // Base handling numbers — the "Racer" benchmark. Per-car stats (see DEFAULT_STATS
 // and the `stats` constructor arg) scale these so each model feels distinct while
@@ -100,13 +100,15 @@ const SPIN_DRAG = 2.5;         // gentle deceleration (units/s²) while spinning
 const SPIN_TURNS = 2;          // cosmetic whole turns over SPIN_TIME (a multiple of 2π → no snap on reset)
 
 // ---- Catch-up mechanics (boost pads + items) ----
-// The whole "help the cars behind" system rides on ONE per-car factor t∈[0,1]
-// (0 = leader, 1 = last), recomputed each frame from the field's SPREAD along the
-// track. Boost pads scale a boost MAGNITUDE by t; item boxes roll from a t-WEIGHTED
-// table. Same factor, same direction ("further back → better stuff"), one mental
-// model. Two flavours are stored: tRaw (unsmoothed — pads read it at the cross
-// frame so a position swap can't invert the boost) and tCatch (smoothed — item
-// rolls read it so a momentary swap doesn't flip a roll). All STARTING VALUES.
+// "Help the cars behind" splits across two axes. DISTANCE behind the leader is a
+// per-car factor t∈[0,1] (0 = leader, 1 = adrift), recomputed each frame from the
+// field's SPREAD along the track; it drives MAGNITUDES and DURATIONS: pads scale
+// their boost peak by it, and item effects (boost-item hold, monster length) last
+// longer the further back you are. Item roll PROBABILITY instead reads discrete
+// finishing PLACE (_placeT → ITEM_PLACE_TABLE), so the table is a clean per-place
+// lookup. Two distance flavours are stored: tRaw (unsmoothed — pads read it at the
+// cross frame so a position swap can't invert the boost) and tCatch (smoothed —
+// item durations read it so a momentary swap doesn't flip a ride's length).
 const SPREAD_REF_FRAC = 0.15;  // spread-denominator floor = 15% of lap length (never divide by a bunched pack)
 const T_TAU = 0.6;             // tCatch smoothing time-constant (s)
 // Boost: a transient multiplier on the speed ceiling that bleeds gently after it
@@ -169,7 +171,7 @@ const ROCKET_IMPACT = 1.2;       // u/s — closing rate at the moment of contac
 const ROCKET_APPROACH_K = 1.8;   // 1/s — decel-in steepness: closing eases to ROCKET_IMPACT over the last ~11 units (long slow-in)
 const ROCKET_ACCEL = 18.0;       // u/s² — speed ramp UP: gentle so it eases OUT of the launcher, not a hard whoosh
 const ROCKET_DECEL = 16.0;       // u/s² — speed ramp DOWN: gentle so it eases IN to the target over a long final glide
-const ROCKET_WHIFF_SPEED = 22.0; // u/s — a target-less rocket settles to this, flying straight until ROCKET_LIFE
+const ROCKET_WHIFF_SPEED = ROCKET_CRUISE; // u/s — a target-less rocket settles to cruise pace, flying straight until ROCKET_LIFE
 const ROCKET_LAUNCH_AHEAD = 0.7; // u — spawn this far past the firer's nose (car half-length ≈ 0.44) so it reads as
                                  // a launch, not a blob riding on the car; clamped so it never eats a close target's run-in
 
@@ -252,6 +254,12 @@ function byRaceOrder(a, b) {
   return b.totalS - a.totalS;
 }
 
+// Tuning knobs the unit tests position fixtures by (a tailgater sits where the banana
+// LANDS, a rocket lock straddles the min/hit band). Exported so a playtest retune moves
+// the fixtures with it instead of breaking assertions that re-hardcoded the old numbers.
+// Read-only introspection — gameplay code keeps using the consts directly.
+export const TUNING = { BANANA_BACK, BANANA_OWNER_IMMUNE, ROCKET_HIT, ROCKET_TARGET_MIN, ROCKET_MIN_LIFE };
+
 export class Game {
   constructor(playerIds, track, callbacks = {}) {
     this.centerline = track.centerline;
@@ -319,7 +327,7 @@ export class Game {
         useSeq: 0,       // last seen use-counter from the controller (dedup; matches the controller's reset)
         wantUse: false,  // a fresh ACTION press is queued for this frame
         tRaw: 0,         // catch-up factor, unsmoothed (pads read this)
-        tCatch: 0,       // catch-up factor, smoothed (item rolls read this)
+        tCatch: 0,       // catch-up factor, smoothed (item DURATIONS read this — boost hold, monster length; rolls key off place, see _placeT)
         lap: 0,
         finished: false,
         finishTime: null,
@@ -599,11 +607,16 @@ export class Game {
   // from a widened footprint (they look bigger). restSide is the side extent at heading 0
   // (= hw), so the curb clamp can isolate just the EXTRA reach the yaw adds.
   _footprint(c) {
-    const fp = c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1;
+    const fp = this._footprintMul(c);
     const hl = c.halfLen * fp, hw = c.halfWid * fp;
     const ch = Math.abs(Math.cos(c.heading || 0)), sh = Math.abs(Math.sin(c.heading || 0));
     return { along: hl * ch + hw * sh, side: hl * sh + hw * ch, restSide: hw };
   }
+
+  // Collision half-extent multiplier while transformed (a monster collides wider than its
+  // car box). The pole disc and the debug-overlay extents in getSnapshot must use this too,
+  // so ?bbox always shows the box collisions actually use.
+  _footprintMul(c) { return c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1; }
 
   // Rubbing a curb pins the car just inside it and bleeds speed toward a cap (a fraction of
   // the car's own top speed) — slows you, never a hard stop. Runs twice a frame (integration
@@ -664,7 +677,8 @@ export class Game {
   // Catch-up factor per LIVE car: t = how far behind the leader, normalised by the
   // field spread (floored so a bunched pack doesn't blow up). tRaw is read by pads
   // (at the cross frame — must not lag a position swap); tCatch is the smoothed value
-  // item rolls read. Finished cars are coasting ghosts and excluded from the spread.
+  // item DURATIONS read (rolls key off place — see _placeT). Finished cars are
+  // coasting ghosts and excluded from the spread.
   _computeCatchUp(dt) {
     let lead = -Infinity, tail = Infinity, n = 0;
     for (const c of this.cars.values()) {
@@ -780,7 +794,7 @@ export class Game {
       const hit = this.centerline.projectNear(world, c.totalS, BANANA_BACK + 0.5);
       const lim = this._curbLimit(hit.frame.width); // keep it on the road if the tail swung wide near a curb
       const lat = Math.max(-lim, Math.min(lim, hit.lat));
-      const s = ((hit.s % this.length) + this.length) % this.length;
+      const s = wrapS(hit.s, this.length);
       // Owner immunity is just a short window after the drop: the banana lands right behind
       // them, so without it a tight-corner projection inside BANANA_RADIUS could self-hit at
       // once. After BANANA_OWNER_IMMUNE it goes live for the owner too — by then they've long
@@ -789,15 +803,15 @@ export class Game {
       const armAt = this.elapsed + BANANA_OWNER_IMMUNE;
       this.bananas.push({ id: ++this._bananaSeq, s, lat, owner: c.id, armAt });
     } else if (c.item === 'rocket') {
-      // Lock the car physically just ahead on the track (see _nextCarAhead); a shot with nothing live
+      // Lock the car physically just ahead on the track (see nextCarAhead); a shot with nothing live
       // in front launches anyway and self-destructs at the end of its run (a whiff). The rocket starts
       // at the firer's CUMULATIVE totalS (this runs before the motion step, so the value is the frame's
       // start) and is stepped from the next frame on; it only ever heads forward, so it can't hit its firer.
-      const target = this._nextCarAhead(c);
+      const target = this.nextCarAhead(c);
       // Launch just AHEAD of the firer's nose so it reads as a shot, not a blob materialising on the car —
       // but never within a close target's run-in (clamp the offset so the spawn gap stays > ROCKET_HIT and
       // the paced approach still plays out). A target-less whiff gets the full offset.
-      const fwd = target ? (((target.totalS - c.totalS) % this.length) + this.length) % this.length : Infinity;
+      const fwd = target ? wrapS(target.totalS - c.totalS, this.length) : Infinity;
       const ahead = Math.min(ROCKET_LAUNCH_AHEAD, Math.max(0, (fwd - ROCKET_HIT) * 0.5));
       this.rockets.push({
         id: ++this._rocketSeq, s: c.totalS + ahead, lat: c.lat, owner: c.id, targetId: target ? target.id : null,
@@ -837,12 +851,14 @@ export class Game {
   // in front but a lap down, is a valid target; one a lap ahead of you but physically behind is not).
   // Live cars only (finished cars are coasting ghosts, excluded). Cars closer than ROCKET_TARGET_MIN
   // are skipped (you don't lock a car you're overlapping). Returns null when nothing live is ahead.
-  _nextCarAhead(c) {
+  // Public read: AiDriver asks this for its fire decision, so the bot evaluates exactly the car a
+  // fired rocket would lock — one implementation, no drift.
+  nextCarAhead(c) {
     const L = this.length;
     let best = null, bestGap = Infinity;
     for (const o of this.cars.values()) {
       if (o === c || o.finished) continue;
-      const fwd = (((o.totalS - c.totalS) % L) + L) % L; // forward distance along the track, 0..L (lap-agnostic)
+      const fwd = wrapS(o.totalS - c.totalS, L); // forward distance along the track, 0..L (lap-agnostic)
       if (fwd >= ROCKET_TARGET_MIN && fwd < bestGap) { bestGap = fwd; best = o; }
     }
     return best;
@@ -862,7 +878,7 @@ export class Game {
       r.life += dt;
       const t = r.targetId != null ? this.cars.get(r.targetId) : null;
       if (t && !t.finished) {
-        const fwd = (((t.totalS - r.s) % L) + L) % L;       // physical forward gap rocket→target (lap-wrapped)
+        const fwd = wrapS(t.totalS - r.s, L);               // physical forward gap rocket→target (lap-wrapped)
         const reach = Math.max(0, fwd - ROCKET_HIT);        // arclength still to cover before it detonates
         // Closing rate = slowest of: cruise (far run-down), the min-flight pace (don't arrive early), and
         // the decel-into-impact ramp (slow, readable contact). On top of the target's own speed → always closes.
@@ -872,7 +888,13 @@ export class Game {
         const vWant = Math.max(0, t.v) + close;
         const accel = vWant > r.v ? ROCKET_ACCEL : ROCKET_DECEL; // ramp up on the launch, down into the target
         r.v += Math.max(-accel * dt, Math.min(accel * dt, vWant - r.v));
-        r.s += r.v * dt;
+        // The advance is CLAMPED at the target: v leaves the muzzle at the firer's speed and sheds
+        // only ROCKET_DECEL per second, so a fast firer's rocket would otherwise fly PAST a slow
+        // near target inside the ROCKET_MIN_LIFE no-detonate window — the wrapped fwd gap then
+        // flips to ~L and the rocket orbits a whole lap (a guaranteed expire-whiff on real tracks).
+        // Clamping to fwd parks it on the target's tail until the min-life gate opens; the same
+        // clamp kills tunneling past the ROCKET_HIT window at the 0.05s dt cap.
+        r.s += Math.min(r.v * dt, fwd);
         r.lat += (t.lat - r.lat) * Math.min(1, ROCKET_HOME * dt); // home onto the target's lane
         // Caught up → detonate, but never before ROCKET_MIN_LIFE: a rocket spawned already within
         // ROCKET_HIT (a near-level target) instead rides just behind its mark for a beat so it's seen.
@@ -886,7 +908,7 @@ export class Game {
       // Out of fuel without a hit (a whiff): self-destruct where it is — emit the position so the
       // renderer can detonate it there (a boom, not a silent vanish). Skip if it already hit this frame.
       if (!r.hit && r.life > ROCKET_LIFE) {
-        this.onEvent({ type: 'rocket_expire', id: r.id, s: ((r.s % L) + L) % L, lat: r.lat });
+        this.onEvent({ type: 'rocket_expire', id: r.id, s: wrapS(r.s, L), lat: r.lat });
         r.hit = true;
       }
     }
@@ -935,8 +957,7 @@ export class Game {
   _collidePole(c, p) {
     const ds = wrapDelta(c.totalS - p.s, this.length);
     const dl = c.lat - p.lat;
-    const fp = c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1; // a monster clears posts from a bigger radius too
-    const R = (c.halfLen + c.halfWid) / 2 * fp + p.radius;   // car-disc + post radius
+    const R = (c.halfLen + c.halfWid) / 2 * this._footprintMul(c) + p.radius; // car-disc (monster-widened) + post radius
     let dist = Math.hypot(ds, dl);
     if (dist >= R) return;                              // discs clear → no contact
     let nS, nL;                                          // outward contact normal, post → car
@@ -1071,6 +1092,7 @@ export class Game {
   getSnapshot() {
     const cars = [];
     for (const c of this.cars.values()) {
+      const fpMul = this._footprintMul(c); // debug-overlay extents match the collision footprint
       cars.push({
         // v (raw speed) + lat (lateral offset) are the engine's physics observables —
         // the in-game display only needs normalized spd, but the unit tests assert on them.
@@ -1092,8 +1114,8 @@ export class Game {
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
         // heading lets the overlay orient the box to the body (the engine collides oriented).
         totalS: c.totalS, heading: c.heading,
-        halfLen: c.halfLen * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1),
-        halfWid: c.halfWid * (c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1)
+        halfLen: c.halfLen * fpMul,
+        halfWid: c.halfWid * fpMul
       });
     }
     // Static boxes (available = off cooldown) + live dropped bananas, for the renderer
@@ -1106,7 +1128,7 @@ export class Game {
       // can place them by (s, lat) like every other prop (it derives the facing/bank from
       // the centreline tangent at s). owner is exposed for any per-cell FX gating.
       rockets: this.rockets.map((r) => ({
-        id: r.id, s: ((r.s % this.length) + this.length) % this.length, lat: r.lat, owner: r.owner
+        id: r.id, s: wrapS(r.s, this.length), lat: r.lat, owner: r.owner
       }))
     };
   }

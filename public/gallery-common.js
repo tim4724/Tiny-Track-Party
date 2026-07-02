@@ -87,13 +87,24 @@ var Gallery = (function() {
   }
 
   // Display page is served at `/`. Any scenario keeps the page off the relay.
+  // dpr=0.5 caps the preview's render resolution (SceneRenderer reads it): the iframe
+  // lays out at full logical size (1920×1080) and is only shrunk by a parent CSS
+  // transform, so without the cap every ~500px thumbnail renders and retains 4K-class
+  // framebuffers on a 2× screen. Still ~2× oversampled at typical card scale (~0.26).
+  // The card's "open ↗" link strips it (openHref), so a real tab renders full-res.
   function displayURL(state, scenario, extra) {
     var p = {
       scenario: scenario,
-      players: state.players
+      players: state.players,
+      dpr: 0.5
     };
     if (extra) for (var k in extra) p[k] = extra[k];
     return '/' + qs(p);
+  }
+
+  // The same page as a standalone tab: drop the preview-only low-res cap.
+  function openHref(url) {
+    return url.replace(/([?&])dpr=[^&]*&?/, '$1').replace(/[?&]$/, '');
   }
 
   // Controller page is served at its canonical path. (It's also reachable in
@@ -243,7 +254,7 @@ var Gallery = (function() {
     }
     var link = document.createElement('a');
     link.className = 'open-link'; link.target = '_blank'; link.rel = 'noopener';
-    link.textContent = 'open ↗'; link.href = opts.url;
+    link.textContent = 'open ↗'; link.href = openHref(opts.url);
     actions.appendChild(link);
     head.appendChild(actions);
     card.appendChild(head);
@@ -280,8 +291,12 @@ var Gallery = (function() {
       playBtn.addEventListener('click', function() {
         var p; try { p = iframe.contentWindow && iframe.contentWindow.__preview; } catch (_) { p = null; }
         if (!p) return;            // scene not booted yet — ignore (it's still idle)
-        paused = !paused;
-        if (paused) p.pause(); else p.play();
+        // Re-derive state from the scene, not a blind toggle: an iframe reload or
+        // retarget (_setUrl) resets the scene to its holdFrame idle, and a stale local
+        // flag would then show ❚❚ over a frozen preview and need two clicks to recover.
+        var wasRunning = p.running();
+        if (wasRunning) p.pause(); else p.play();
+        paused = wasRunning;
         applyPlayUI();
       });
     }
@@ -326,7 +341,7 @@ var Gallery = (function() {
     var _loadGen = 0;
     function loadUrl(url) {
       var gen = ++_loadGen;
-      link.href = url;
+      link.href = openHref(url);
       var task = enqueueLoad(iframe, url, function() {
         if (card._task === task) card._task = null;
         if (gen !== _loadGen) return;
@@ -358,7 +373,7 @@ var Gallery = (function() {
     // lazy-mount it updates _initialUrl so lazyMount picks the new target.
     card._setUrl = function(url) {
       card._initialUrl = url;
-      link.href = url;
+      link.href = openHref(url);
       if (card._task) {
         // A load for this card is queued or in flight. If it hasn't started,
         // retarget it in place (no stale-URL load, no extra slot consumed);

@@ -89,7 +89,7 @@ export function runDisplayScenario(opts, ctx) {
     if (live) window.__preview = {        // parent gallery card drives play/pause
       play: () => ctx.scene.start(),
       pause: () => ctx.scene.pauseAfterFrame(),
-      running: () => !!ctx.scene._running
+      running: () => ctx.scene.isRunning()
     };
   }
   // DOM-only previews (welcome / lobby / device-choice) drive no 3D — the WebGL

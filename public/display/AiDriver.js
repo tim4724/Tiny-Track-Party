@@ -8,7 +8,7 @@
 // (display/main.js) and the gallery preview (TestHarness). It operates on engine
 // car POSES — the THREE.Vector3s the engine already placed on car.pose — so it
 // imports no THREE and always reads the same frame the engine produced.
-import { mulberry32, wrapDelta } from './engine/util.js';
+import { mulberry32, wrapDelta, wrapS } from './engine/util.js';
 
 const LOOKAHEAD = 7.5;   // world units down the centerline a bot aims at
 const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
@@ -67,20 +67,13 @@ function nearestBehind(car, game) {
   return best;
 }
 
-// Forward arclength to the car PHYSICALLY just ahead on the track — the rocket's lock target
-// (mirrors the engine's _nextCarAhead: nearest car in front by lap-wrapped position, not standings;
-// cars closer than ROCKET_TARGET_MIN are skipped). null when nothing live is ahead → a rocket whiffs.
-const ROCKET_TARGET_MIN = 0.5; // keep in sync with engine/Game.js
+// Forward arclength to the car PHYSICALLY just ahead on the track — asked of the engine
+// itself (Game.nextCarAhead) so the bot evaluates exactly the car a fired rocket would
+// lock: one implementation, no drift. null when nothing live is ahead → a rocket whiffs.
 function gapToCarAhead(car, game) {
-  if (!game || !game.cars || !game.length) return null;
-  const L = game.length;
-  let best = null;
-  for (const o of game.cars.values()) {
-    if (o.id === car.id || o.finished) continue;
-    const fwd = (((o.totalS - car.totalS) % L) + L) % L;
-    if (fwd >= ROCKET_TARGET_MIN && (best == null || fwd < best)) best = fwd;
-  }
-  return best;
+  if (!game || !game.nextCarAhead) return null;
+  const o = game.nextCarAhead(car);
+  return o ? wrapS(o.totalS - car.totalS, game.length) : null;
 }
 
 // Find the nearest hazard sitting on the bot's intended line and pick a lane past it.
@@ -269,7 +262,11 @@ export class AiController {
     const overdue = this._heldFrames >= AI_HOLD_MAX;
     if (item === 'boost')  return corner < 0.05 || (overdue && corner < 0.2);             // on a straight, where the speed sticks
     if (item === 'banana') { const d = nearestBehind(car, game); return (d > 0 && d <= BANANA_DROP_FAR) || overdue; } // drop on a tailgater
-    if (item === 'rocket') { const d = gapToCarAhead(car, game); return d != null && (d <= ROCKET_FIRE_RANGE || overdue); } // need a target in reach
+    // A homing shot needs a target in REACH — no overdue escape: since targeting went
+    // lap-wrapped, "someone ahead" is almost always true (a car 5u behind reads as ~L−5
+    // ahead), so an overdue leader would lob a guaranteed-whiff rocket that orbits until
+    // ROCKET_LIFE and detonates on empty track. Holding costs forfeited boxes, by design.
+    if (item === 'rocket') { const d = gapToCarAhead(car, game); return d != null && d <= ROCKET_FIRE_RANGE; }
     return true; // unknown item type → fall back to firing once held
   }
 }
