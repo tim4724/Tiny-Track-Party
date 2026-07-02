@@ -127,10 +127,12 @@ export class DisplayNet extends GameNet {
     // lobby, so the next race needs a fresh round of "I'm ready" taps (stale
     // flags would leave the host's "Start race" pre-armed for the new race).
     // Then republish the snapshot: the retained copy carries roomState, and a
-    // replay to a (re)joining phone must never hand it a stale phase.
+    // replay to a (re)joining phone must never hand it a stale phase. When
+    // _clearReady already announced (flags were wiped), that publish carried
+    // the new state — skip the duplicate.
     this.flow.on('statechange', ({ to }) => {
-      if (to === ROOM_STATE.LOBBY) this._clearReady();
-      this._publishLobby();
+      const announced = to === ROOM_STATE.LOBBY && this._clearReady();
+      if (!announced) this._publishLobby();
     });
   }
 
@@ -177,11 +179,13 @@ export class DisplayNet extends GameNet {
     }));
   }
   // Drop every player's ready flag (entering the lobby). Announce only if
-  // something actually changed, so the first lobby entry stays quiet.
+  // something actually changed, so the first lobby entry stays quiet. Returns
+  // whether it announced, so the statechange handler can skip its own publish.
   _clearReady() {
     let changed = false;
     for (const p of this.flow.list()) { if (p.ready) { p.ready = false; changed = true; } }
     if (changed) this._announce();
+    return changed;
   }
   _usedColors() {
     const s = new Set();
