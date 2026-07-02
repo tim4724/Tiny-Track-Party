@@ -45,7 +45,7 @@ var MSG = {
 
   // Display -> specific controller
   WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
-  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag)
+  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag). Rides the relay's RETAINED HOST STATE (set_state), not a fanout: pushed live on change, replayed to each (re)joiner right after `joined`
   PLAYER_STATE: 'player_state', // {item} — lights the controller's ITEM button (the phone shows no place/lap; standings live on the display)
   PONG: 'pong',
 

@@ -7,13 +7,15 @@
 // app server's RELAY_URL env (injected as the relay-url <meta>; see
 // shared/protocol.js); playwright.config.js boots both servers.
 //
-//   Client → relay:  create { clientId, maxClients }
-//   Client → relay:  join   { clientId, room }
-//   Client → relay:  send   { data, to? }
+//   Client → relay:  create    { clientId, maxClients }
+//   Client → relay:  join      { clientId, room }
+//   Client → relay:  send      { data, to? }
+//   Client → relay:  set_state { data }        // host (slot 0) only, <= 16 KiB
 //   relay  → client: created     { room, index: 0 }
-//   relay  → client: joined      { room, index, peers: number[] }
+//   relay  → client: joined      { room, index, peers: number[] }  // then a `state` replay, if retained
 //   relay  → client: peer_joined { index } / peer_left { index }
 //   relay  → client: message     { from, data }
+//   relay  → client: state       { data }      // retained host snapshot: live push + post-join replay
 //   relay  → client: error       { message }   // 'Room not found' / 'Room is full'
 //
 // Slot semantics mirror the real relay: indices are keyed by clientId, stable
@@ -26,8 +28,13 @@ const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.RELAY_PORT || 4201);
 
-// code -> { code, maxClients, slots: Map<clientId, index>, sockets: Map<index, ws>, nextIndex }
+// code -> { code, maxClients, slots: Map<clientId, index>, sockets: Map<index, ws>,
+//           nextIndex, state? }  // state = retained host snapshot (set_state)
 const rooms = new Map();
+
+// Real-relay cap on the retained snapshot (Party-Sockets MAX_STATE_BYTES), kept
+// here so an oversize snapshot fails in E2E the same way it would in prod.
+const MAX_STATE_BYTES = 16 * 1024;
 
 // Unambiguous A-Z/2-9 (no I/O/0/1), like the real relay's short codes.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -89,6 +96,9 @@ wss.on('connection', (ws) => {
       const peers = [];
       for (const [i, s] of r.sockets) { if (i !== idx && s.readyState === 1) peers.push(i); }
       send(ws, { type: 'joined', room: r.code, index: idx, peers });
+      // Replay the retained host snapshot right after `joined`, same shape as a
+      // live push, so a (re)joiner catches up with one handler (cf. real relay).
+      if (r.state !== undefined) send(ws, { type: 'state', data: r.state });
       for (const s of others()) send(s, { type: 'peer_joined', index: idx });
 
     } else if (msg.type === 'send') {
@@ -96,6 +106,19 @@ wss.on('connection', (ws) => {
       const payload = { type: 'message', from: index, data: msg.data };
       if (msg.to != null) send(room.sockets.get(msg.to), payload);
       else for (const s of others()) send(s, payload);
+
+    } else if (msg.type === 'set_state') {
+      // Retained host snapshot: slot 0 only (the creator's slot, never
+      // reassigned), JSON-serializable, capped like prod. Stored on the room,
+      // pushed live to everyone but the sender; (re)joiners get it replayed.
+      if (!room) return;
+      if (index !== 0) { send(ws, { type: 'error', message: 'Only the host can set state' }); return; }
+      if (msg.data === undefined) { send(ws, { type: 'error', message: 'State data is required' }); return; }
+      if (Buffer.byteLength(JSON.stringify(msg.data)) > MAX_STATE_BYTES) {
+        send(ws, { type: 'error', message: 'State too large' }); return;
+      }
+      room.state = msg.data;
+      for (const s of others()) send(s, { type: 'state', data: msg.data });
     }
   });
 

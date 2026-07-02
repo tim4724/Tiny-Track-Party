@@ -43,8 +43,8 @@ declare class RoomFlow {
   rekey(oldId: number, newId: number): boolean;
   markDisconnected(peerIndex: number): void;
   markReconnected(peerIndex: number): void;
-  /** Mark everyone present (e.g. at game start). */
-  clearDisconnected(): void;
+  /** Mark everyone present (e.g. at game start). Pass nowMs to also re-stamp every player's last-seen so a pre-start-quiet peer isn't instantly expired during countdown. */
+  clearDisconnected(nowMs?: number): void;
 
   // --- lifecycle ---
   /** Validated state transition; the primary API. Returns false on an invalid transition. */
@@ -61,6 +61,20 @@ declare class RoomFlow {
    * consumers re-render.
    */
   reset(): void;
+
+  // --- liveness (presence-timeout detection; pure, nowMs-injected) ---
+  /** Record that we just heard from a peer. Ignores unknown peers. */
+  onSeen(peerIndex: number, nowMs: number): void;
+  /** True once a peer has been silent longer than the liveness window. Always false when enabledProvider() returns false. */
+  isExpired(peerIndex: number, nowMs: number): boolean;
+  /** Peers that just crossed the liveness window and are not already disconnected. Empty in lobby / when liveness is disabled. */
+  expiredPeers(nowMs: number): number[];
+  /** True when every active participant is currently disconnected (false if there is no active order). */
+  allParticipantsDisconnected(): boolean;
+  /** True when any roster member is not in the active participant order (a late joiner). */
+  hasLateJoiners(): boolean;
+  /** Deadline-driven late-joiner grace: arms on the first qualifying call, returns true exactly once when graceMs elapses. */
+  graceTick(nowMs: number): boolean;
 
   // --- reads ---
   isHost(peerIndex: number): boolean;
@@ -97,5 +111,16 @@ declare namespace RoomFlow {
   interface Options {
     /** Returns the transport-designated master peerIndex (e.g. AirConsole), or null. */
     masterProvider?: () => number | null | undefined;
+    /** Liveness (presence-timeout) tuning. All time is injected as nowMs; RoomFlow reads no clock. */
+    liveness?: LivenessOptions;
+  }
+
+  interface LivenessOptions {
+    /** Silence (ms) after which a peer is considered expired. Default Infinity (never). */
+    timeoutMs?: number;
+    /** Late-joiner grace window (ms) before returning to lobby when all participants are gone. Default 0. */
+    graceMs?: number;
+    /** Returns false to suppress all liveness expiry (e.g. AirConsole). Read live, not at construction. */
+    enabledProvider?: () => boolean;
   }
 }

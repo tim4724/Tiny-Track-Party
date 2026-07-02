@@ -160,6 +160,43 @@ describe('PartyConnection', () => {
     });
   });
 
+  test('setState sends a set_state message with the snapshot', () => {
+    const pc = new PartyConnection('wss://test.example.com', { clientId: 'display' });
+    pc.connect();
+    MockWebSocket._instances[0]._simulateOpen();
+    pc.setState({ hostPeerIndex: 1, players: { 1: { name: 'A', color: 2 } } });
+    assert.deepStrictEqual(MockWebSocket._instances[0]._sent[0], {
+      type: 'set_state',
+      data: { hostPeerIndex: 1, players: { 1: { name: 'A', color: 2 } } }
+    });
+  });
+
+  test('onState fires for a state message and carries the snapshot data', () => {
+    const pc = new PartyConnection('wss://test.example.com');
+    let received;
+    let protocolSawState = false;
+    pc.onState = (data) => { received = data; };
+    pc.onProtocol = (type) => { if (type === 'state') protocolSawState = true; };
+    pc.connect();
+    MockWebSocket._instances[0]._simulateOpen();
+    MockWebSocket._instances[0]._simulateMessage({ type: 'state', data: { hostPeerIndex: 0, players: {} } });
+    assert.deepStrictEqual(received, { hostPeerIndex: 0, players: {} });
+    // state routes to onState, never to onProtocol
+    assert.strictEqual(protocolSawState, false);
+  });
+
+  test('a state message with no onState handler is dropped (not routed to onProtocol)', () => {
+    const pc = new PartyConnection('wss://test.example.com');
+    let protocolCalls = 0;
+    pc.onProtocol = () => { protocolCalls++; };
+    pc.connect();
+    MockWebSocket._instances[0]._simulateOpen();
+    // The display authors state but sets no onState; the relay still replays
+    // the retained blob to it on rejoin. It must be inert, not an error.
+    MockWebSocket._instances[0]._simulateMessage({ type: 'state', data: { x: 1 } });
+    assert.strictEqual(protocolCalls, 0);
+  });
+
   test('connected returns true when WebSocket is open', () => {
     const pc = new PartyConnection('wss://test.example.com');
     assert.ok(!pc.connected); // null before connect

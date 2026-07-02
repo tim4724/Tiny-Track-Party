@@ -36,10 +36,26 @@
     this.state = STATES.LOBBY;
     this.players = new Map();        // peerIndex -> player record
     this.hostPeerIndex = null;       // sticky host slot (raw; see `host` getter for effective)
-    this._joinSeq = 0;               // monotonic joinedAt source (Date.now collides in same ms)
+    this._joinSeq = 0;               // monotonic joinedAt source (wall-clock ms collide within a tick)
     this._disconnected = new Set();  // peerIndices currently in the disconnect window
     this._order = [];                // active participants (snapshotted on COUNTDOWN, or via setActiveOrder)
     this._listeners = {};
+
+    // Liveness (presence-timeout) decisions. Clock-free: every method is a pure
+    // predicate the host calls with an injected nowMs. The detectors NEVER
+    // mutate _disconnected and never _emit — the host applies a detected expiry
+    // through the existing markDisconnected path, keeping the single-writer
+    // invariant intact. opts.liveness?: { timeoutMs, graceMs, enabledProvider }.
+    var liveness = opts.liveness || {};
+    this._lastSeen = new Map();      // peerIndex -> last nowMs we heard from it
+    this._livenessTimeoutMs = liveness.timeoutMs != null ? liveness.timeoutMs : Infinity;
+    this._graceMs = liveness.graceMs || 0;
+    // Optional () => boolean. When it returns false, liveness expiry is
+    // suppressed (e.g. AirConsole, where the SDK owns connection tracking). Read
+    // live so a host that sets it up after construction is detected correctly.
+    this._livenessEnabledProvider =
+      typeof liveness.enabledProvider === 'function' ? liveness.enabledProvider : null;
+    this._graceDeadline = null;      // nowMs the late-joiner grace fires at, or null
   }
 
   RoomFlow.STATES = STATES;
@@ -129,6 +145,7 @@
     var wasHost = peerIndex === this.hostPeerIndex;
     this.players.delete(peerIndex);
     this._disconnected.delete(peerIndex);
+    this._lastSeen.delete(peerIndex);
     var oi = this._order.indexOf(peerIndex);
     if (oi >= 0) this._order.splice(oi, 1);
     if (wasHost && (this.state === STATES.LOBBY || this.state === STATES.RESULTS)) {
@@ -156,6 +173,15 @@
     this.players.set(newId, rec);
     this._disconnected.delete(oldId);
     this._disconnected.delete(newId);
+    this._lastSeen.delete(newId);          // drop the placeholder slot's stamp
+    // Carry the kept record's last-seen across the identity change so rekey is
+    // self-correct on its own. The reconnect caller (claimReconnectPeer) refreshes
+    // it via onSeen() right after, so this carry is belt-and-suspenders there; it
+    // matters for any future caller that rekeys without an immediate re-stamp.
+    if (this._lastSeen.has(oldId)) {
+      this._lastSeen.set(newId, this._lastSeen.get(oldId));
+      this._lastSeen.delete(oldId);
+    }
     for (var i = 0; i < this._order.length; i++) {
       if (this._order[i] === oldId) this._order[i] = newId;
     }
@@ -198,7 +224,14 @@
   // Clear every disconnect flag, marking all current players present. Used at
   // game start / lobby return where stale blip flags must not suppress host
   // eligibility for the new round.
-  RoomFlow.prototype.clearDisconnected = function () {
+  RoomFlow.prototype.clearDisconnected = function (nowMs) {
+    // Re-stamp liveness on this "everyone present" transition (game start / lobby
+    // return) so a controller that went quiet just before isn't instantly flagged
+    // by expiredPeers() during COUNTDOWN (where the LOBBY gate no longer applies).
+    // Callers pass nowMs; omitting it preserves the legacy clear-only behavior.
+    if (nowMs != null) {
+      for (var seenEntry of this.players) this._lastSeen.set(seenEntry[0], nowMs);
+    }
     if (this._disconnected.size === 0) return;
     var prevHost = this.host;
     this._disconnected.clear();
@@ -321,12 +354,11 @@
     if (to === from) return true;
     var allowed = VALID_TRANSITIONS[from];
     if (!allowed || allowed.indexOf(to) < 0) {
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('RoomFlow: invalid transition ' + from + ' -> ' + to);
-      }
+      if (typeof console !== 'undefined' && console.warn) console.warn('RoomFlow: invalid transition ' + from + ' -> ' + to);
       return false;
     }
     this.state = to;
+    if (to !== STATES.PLAYING) this._graceDeadline = null;
     if (to === STATES.COUNTDOWN) this._snapshotOrder();
     if (to === STATES.LOBBY) this._order = [];
     if (to === STATES.LOBBY || to === STATES.RESULTS) this._reconcileStickyHost();
@@ -346,6 +378,84 @@
 
   RoomFlow.prototype.returnToLobby = function () {
     return this.transitionTo(STATES.LOBBY);
+  };
+
+  // =====================================================================
+  // Liveness (presence-timeout detection)
+  // =====================================================================
+  // All methods are pure, nowMs-injected predicates. They never mutate
+  // _disconnected and never _emit; the host pulls the result and applies an
+  // expiry through markDisconnected so hostchange still fires exactly once and
+  // the single-writer invariant holds.
+
+  // Record that we just heard from a peer (a controller message, a heartbeat,
+  // a rejoin). Ignores unknown peers so a stray packet can't resurrect a stamp.
+  RoomFlow.prototype.onSeen = function (peerIndex, nowMs) {
+    if (this.players.has(peerIndex)) this._lastSeen.set(peerIndex, nowMs);
+  };
+
+  // Has this peer gone silent past the liveness window? Suppressed entirely
+  // when enabledProvider() returns false (e.g. AirConsole, where the SDK's
+  // connect/disconnect is authoritative and the relay PING is dropped). The
+  // boundary is strict `>`: exactly-at-timeout is still considered alive. A peer
+  // with no stamp (registered via peer_joined but never sent a message) is
+  // treated as always-alive here; its only cleanup path is peer_left.
+  RoomFlow.prototype.isExpired = function (peerIndex, nowMs) {
+    if (this._livenessEnabledProvider && !this._livenessEnabledProvider()) return false;
+    return this._lastSeen.has(peerIndex) &&
+      (nowMs - this._lastSeen.get(peerIndex) > this._livenessTimeoutMs);
+  };
+
+  // Peers that just crossed the liveness window and are not already flagged
+  // disconnected. Empty in LOBBY (a silent idle controller there is fine) and
+  // empty when liveness is disabled (the enabledProvider no-op in isExpired).
+  RoomFlow.prototype.expiredPeers = function (nowMs) {
+    if (this.state === STATES.LOBBY) return [];
+    var out = [];
+    for (var id of this.players.keys()) {
+      if (this._disconnected.has(id)) continue;
+      if (this.isExpired(id, nowMs)) out.push(id);
+    }
+    return out;
+  };
+
+  // Are every active participant (the `_order`) currently disconnected? False
+  // when there is no active order (e.g. lobby) so an empty game never auto-pauses.
+  RoomFlow.prototype.allParticipantsDisconnected = function () {
+    if (this._order.length === 0) return false;
+    for (var i = 0; i < this._order.length; i++) {
+      if (!this._disconnected.has(this._order[i])) return false;
+    }
+    return true;
+  };
+
+  // Any roster member who is not in the active participant order (joined after
+  // the game started). They're who the grace window waits for.
+  RoomFlow.prototype.hasLateJoiners = function () {
+    for (var id of this.players.keys()) {
+      if (this._order.indexOf(id) < 0) return true;
+    }
+    return false;
+  };
+
+  // Deadline-driven late-joiner grace. While PLAYING with every participant
+  // gone but late joiners waiting, the first call arms a deadline at
+  // nowMs + graceMs and returns false; later calls return true exactly once
+  // when the deadline elapses (clearing it), false before. Any frame where the
+  // condition no longer holds (a participant reconnected, state changed) clears
+  // the deadline, so a reconnect implicitly cancels the return-to-lobby.
+  RoomFlow.prototype.graceTick = function (nowMs) {
+    if (this.state === STATES.PLAYING &&
+        this.allParticipantsDisconnected() &&
+        this.hasLateJoiners()) {
+      // graceMs=0 still arms here and fires on the NEXT qualifying tick (deadline
+      // == nowMs), i.e. one tick of delay rather than firing immediately.
+      if (this._graceDeadline == null) { this._graceDeadline = nowMs + this._graceMs; return false; }
+      if (nowMs >= this._graceDeadline) { this._graceDeadline = null; return true; }
+      return false;
+    }
+    this._graceDeadline = null;
+    return false;
   };
 
   // =====================================================================
@@ -388,6 +498,8 @@
     // DisplayState does), so reassigning would leave them on a stale Map.
     this.players.clear();
     this._disconnected.clear();
+    this._lastSeen.clear();
+    this._graceDeadline = null;
     this._order = [];
     this.hostPeerIndex = null;
     this._joinSeq = 0;
