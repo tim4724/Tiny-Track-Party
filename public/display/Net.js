@@ -20,8 +20,11 @@ const RECONNECT_GRACE_MS = 90000;
 // Controller liveness. The relay only reports a drop when a socket actually
 // CLOSES — a locked phone or dead Wi-Fi leaves it dangling for minutes. Phones
 // ping at 1 Hz (controller/Net.js), so a seat silent past this window is treated
-// as dropped through the same path as a real peer_left. Lobby seats are exempt:
-// peer_left stays the authority there, so a brief blip can't kick a lobby seat.
+// as dropped through the same path as a real peer_left. Detection lives in
+// RoomFlow (opts.liveness + onSeen/expiredPeers, nowMs-injected); this module
+// just stamps traffic and applies expiries. Lobby seats are exempt (expiredPeers
+// is empty there): peer_left stays the authority, so a brief blip can't kick a
+// lobby seat.
 const LIVENESS_TIMEOUT_MS = 3000;
 // Display self-heartbeat: each liveness tick relays a message to our own slot.
 // An echo overdue past this window means OUR socket is half-dead (the relay
@@ -90,9 +93,8 @@ export class DisplayNet extends GameNet {
     this._reconnectSeats = new Map();
     this._reconnectTimers = new Map();
 
-    // Liveness bookkeeping: peerIndex -> last proof-of-life timestamp, plus the
-    // self-heartbeat in-flight state (see _livenessTick).
-    this._lastSeen = new Map();
+    // Liveness tick + self-heartbeat in-flight state (see _livenessTick).
+    // Per-peer last-seen stamps live in RoomFlow (fed via _seen → flow.onSeen).
     this._livenessTimer = null;
     this._hbPending = false;
     this._hbSentAt = 0;
@@ -106,7 +108,7 @@ export class DisplayNet extends GameNet {
     // host's "Start race" button stays disabled until then.
     this.trackId = opts.defaultTrackId != null ? opts.defaultTrackId : null;
 
-    this.flow = new RoomFlow();
+    this.flow = new RoomFlow({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
     this.roomCode = null;
     this.instance = null;
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
@@ -124,7 +126,12 @@ export class DisplayNet extends GameNet {
     // Ready flags are lobby-only: wipe them whenever the room lands back in the
     // lobby, so the next race needs a fresh round of "I'm ready" taps (stale
     // flags would leave the host's "Start race" pre-armed for the new race).
-    this.flow.on('statechange', ({ to }) => { if (to === ROOM_STATE.LOBBY) this._clearReady(); });
+    // Then republish the snapshot: the retained copy carries roomState, and a
+    // replay to a (re)joining phone must never hand it a stale phase.
+    this.flow.on('statechange', ({ to }) => {
+      if (to === ROOM_STATE.LOBBY) this._clearReady();
+      this._publishLobby();
+    });
   }
 
   async start() {
@@ -155,10 +162,11 @@ export class DisplayNet extends GameNet {
   }
 
   // ---- roster helpers ----
-  // Echo roster state everywhere it's consumed: every phone (LOBBY_UPDATE) and
-  // the display's own UI. Called on any roster/host/ready/car change.
+  // Echo roster state everywhere it's consumed: the retained snapshot every
+  // phone sees (LOBBY_UPDATE) and the display's own UI. Called on any
+  // roster/host/ready/car change.
   _announce() {
-    this._broadcastLobby();
+    this._publishLobby();
     this.onRosterChange(this.roster(), this.flow.host);
   }
   roster() {
@@ -318,7 +326,7 @@ export class DisplayNet extends GameNet {
         const idOk = this.tracks.some((t) => t.id === data.trackId);
         if (from === this.flow.host && this.roomState === ROOM_STATE.LOBBY && idOk && data.trackId !== this.trackId) {
           this.trackId = data.trackId;
-          this._broadcastLobby();
+          this._publishLobby();
           this.onTrackChange(this.trackId);
         }
         break;
@@ -358,8 +366,7 @@ export class DisplayNet extends GameNet {
     // resumes driving — and offer a reconnect QR for that exact seat. The car is
     // only forfeited if the seat's grace window elapses (playerleave → forfeitCar).
     if (this.roomState === ROOM_STATE.LOBBY) {
-      this._lastSeen.delete(peerIndex);
-      this.flow.removePlayer(peerIndex); // emits rosterchange → announce()
+      this.flow.removePlayer(peerIndex); // emits rosterchange → announce(); drops its last-seen stamp
     } else {
       this._dropSeat(peerIndex);
     }
@@ -378,7 +385,6 @@ export class DisplayNet extends GameNet {
   // for an intentional LEAVE and when the reconnect grace window elapses.
   _expireSeat(peerIndex) {
     this._clearReconnect(peerIndex);
-    this._lastSeen.delete(peerIndex);
     if (!this.flow.has(peerIndex)) return;
     this.fastlane.close(peerIndex);
     this.flow.removePlayer(peerIndex);
@@ -399,7 +405,7 @@ export class DisplayNet extends GameNet {
   // go silent and resume WITHOUT its socket ever closing (locked screen, network
   // blip), so presence must flip back here, not only on peer_joined.
   _seen(peerIndex) {
-    this._lastSeen.set(peerIndex, Date.now());
+    this.flow.onSeen(peerIndex, Date.now()); // no-op for unseated peers
     if (this.flow.isDisconnected(peerIndex)) {
       this.flow.markReconnected(peerIndex); // emits rosterchange → announce + auto-pause refresh
       this._clearReconnect(peerIndex);
@@ -424,13 +430,10 @@ export class DisplayNet extends GameNet {
       this._hbSentAt = now;
       this.party.sendTo(0, { type: '_heartbeat' });
     }
-    // Per-controller silence check — mid-game only (see LIVENESS_TIMEOUT_MS).
-    if (this.roomState === ROOM_STATE.LOBBY) return;
-    for (const p of this.flow.list()) {
-      if (!p.connected) continue;
-      const seen = this._lastSeen.get(p.peerIndex);
-      if (seen != null && now - seen > LIVENESS_TIMEOUT_MS) this._dropSeat(p.peerIndex);
-    }
+    // Per-controller silence check. RoomFlow owns the detection (mid-game only —
+    // expiredPeers is empty in the lobby); applying the drop stays here so
+    // markDisconnected keeps its single writer.
+    for (const id of this.flow.expiredPeers(now)) this._dropSeat(id);
   }
 
   _resyncPeers(peers) {
@@ -446,6 +449,9 @@ export class DisplayNet extends GameNet {
     }
     // Re-welcome everyone so their controllers clear any reconnect overlay.
     for (const p of this.flow.list()) this.party.sendTo(p.peerIndex, this._welcomeFor(p.peerIndex));
+    // Overwrite the snapshot retained from before the reload: this fresh flow is
+    // now the authority, and the next joiner must not be replayed the old roster.
+    this._publishLobby();
   }
 
   // ---- reconnect (dropped-seat) handling ----
@@ -460,8 +466,10 @@ export class DisplayNet extends GameNet {
     if (!this.flow.has(oldId) || !this.flow.isDisconnected(oldId)) return false;
     this.fastlane.close(oldId);
     this.fastlane.close(fromId);
-    this._lastSeen.delete(oldId);
-    this.flow.rekey(oldId, fromId); // moves the seat record, marks it reconnected
+    this.flow.rekey(oldId, fromId); // moves the seat record (+ last-seen stamp), marks it reconnected
+    // Re-stamp now: the carried stamp is from before the drop (> timeout old), so
+    // without this the reclaimed seat could expire again on the very next tick.
+    this.flow.onSeen(fromId, Date.now());
     this.onPlayerRekey(oldId, fromId); // move their still-racing car onto the new slot
     this._clearReconnect(oldId);
     this._clearReconnect(fromId);
@@ -521,15 +529,21 @@ export class DisplayNet extends GameNet {
       trackId: this.trackId      // current selection
     };
   }
-  _broadcastLobby() {
-    const payload = {
+  // Publish the lobby snapshot as the room's retained host state (relay
+  // set_state): one message where the per-phone fanout used to be N. The relay
+  // pushes it live to every controller and replays it right after `joined`, so
+  // a (re)joining phone catches up on roster/track before WELCOME round-trips.
+  // Same payload shape as the old relayed message — controllers funnel the
+  // replayed/pushed snapshot into their existing LOBBY_UPDATE handler.
+  _publishLobby() {
+    if (!this.party) return;
+    this.party.setState({
       type: MSG.LOBBY_UPDATE,
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       players: this.roster(),
       trackId: this.trackId      // catalog is static (WELCOME) — echo just the pick
-    };
-    for (const p of this.flow.list()) this.party.sendTo(p.peerIndex, payload);
+    });
   }
 
   broadcast(data) { if (this.party) this.party.broadcast(data); }

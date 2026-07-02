@@ -104,6 +104,12 @@ export class ControllerNet extends GameNet {
       if (data.type === MSG.PONG) { this._handlePong(data); return; }
       this.onMessage(data);
     };
+    // Retained host snapshot (the display's set_state): the lobby roster, pushed
+    // live on each change and replayed by the relay right after our `joined` —
+    // so a (re)join catches up on roster/track before WELCOME round-trips. The
+    // payload carries the same type tag a relayed message would (LOBBY_UPDATE),
+    // so it funnels into the one handler.
+    this.party.onState = (data) => { if (data && data.type) this.onMessage(data); };
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
