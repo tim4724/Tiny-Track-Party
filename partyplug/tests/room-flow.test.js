@@ -435,3 +435,237 @@ describe('RoomFlow — order re-snapshot on COUNTDOWN', () => {
     assert.deepEqual(f._order, [1, 2, 3]);
   });
 });
+
+// =====================================================================
+// Liveness (presence-timeout decisions) — the Step 4 fold-in. These pure,
+// nowMs-injected predicates replace the display glue's peerLivenessExpired /
+// allPlayersDisconnected / hasLateJoiners / lateJoinerGraceTimer and are the
+// real test gate for that behavior (the display glue has no unit coverage).
+// =====================================================================
+
+// Helper: a flow already in PLAYING with the given participant order.
+function playing(order, opts) {
+  const f = new RoomFlow(opts);
+  for (const id of order) f.addPlayer(id);
+  f.transitionTo(S.COUNTDOWN);
+  f.transitionTo(S.PLAYING);
+  f.setActiveOrder(order);
+  return f;
+}
+
+describe('RoomFlow — liveness: onSeen / isExpired', () => {
+  it('isExpired crosses the window on a strict > boundary', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1);
+    f.onSeen(1, 1000);
+    assert.equal(f.isExpired(1, 1000 + 3000), false);   // exactly at timeout: alive
+    assert.equal(f.isExpired(1, 1001 + 3000), true);    // 1ms past: expired
+  });
+
+  it('is false for a peer never seen (no stamp)', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1);
+    assert.equal(f.isExpired(1, 1e9), false);
+  });
+
+  it('onSeen only stamps known peers', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.onSeen(7, 1000);                 // 7 not in roster
+    assert.equal(f.isExpired(7, 1e9), false);
+    assert.equal(f._lastSeen.has(7), false);
+  });
+
+  it('onSeen resets the window', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1);
+    f.onSeen(1, 1000);
+    assert.equal(f.isExpired(1, 4500), true);   // would have expired
+    f.onSeen(1, 4400);                            // re-seen near expiry
+    assert.equal(f.isExpired(1, 4500), false);  // window reset (4500-4400=100)
+  });
+
+  it('default timeout is Infinity — a peer never expires without a configured window', () => {
+    const f = new RoomFlow();                    // no liveness opts
+    f.addPlayer(1);
+    f.onSeen(1, 0);
+    assert.equal(f.isExpired(1, Number.MAX_SAFE_INTEGER), false);
+  });
+});
+
+describe('RoomFlow — liveness: AirConsole no-op (enabledProvider)', () => {
+  it('suppresses all expiry when enabledProvider() is false, leaving host eligibility intact', () => {
+    let enabled = false;
+    const f = playing([1, 2], { liveness: { timeoutMs: 3000, enabledProvider: () => enabled } });
+    f.onSeen(1, 0); f.onSeen(2, 0);
+    assert.equal(f.isExpired(1, 1e9), false);   // far past the window
+    assert.equal(f.isExpired(2, 1e9), false);
+    assert.deepEqual(f.expiredPeers(1e9), []);
+    assert.equal(f.host, 1);                     // the would-be-expired host stays eligible
+    // Flip the provider on (relay mode) and the same silence now expires.
+    enabled = true;
+    assert.equal(f.isExpired(1, 1e9), true);
+    assert.deepEqual(f.expiredPeers(1e9), [1, 2]);
+  });
+});
+
+describe('RoomFlow — liveness: expiredPeers gating', () => {
+  it('returns [] in LOBBY regardless of silence (state gate)', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1); f.addPlayer(2);
+    f.onSeen(1, 0); f.onSeen(2, 0);
+    assert.deepEqual(f.expiredPeers(1e9), []);
+  });
+
+  it('excludes already-disconnected peers and returns only crossed-threshold peers', () => {
+    const f = playing([1, 2, 3], { liveness: { timeoutMs: 3000 } });
+    f.onSeen(1, 0); f.onSeen(2, 0); f.onSeen(3, 0);
+    f.markDisconnected(2);                        // already flagged -> excluded
+    assert.deepEqual(f.expiredPeers(1e9), [1, 3]);
+    f.onSeen(3, 1e9);                              // 3 fresh -> only 1 remains expired
+    assert.deepEqual(f.expiredPeers(1e9), [1]);
+  });
+});
+
+describe('RoomFlow — liveness: allParticipantsDisconnected', () => {
+  it('is false with no active order, true only when every participant is gone', () => {
+    const f = new RoomFlow();
+    f.addPlayer(1); f.addPlayer(2);
+    assert.equal(f.allParticipantsDisconnected(), false);  // _order empty
+    f.setActiveOrder([1, 2]);
+    assert.equal(f.allParticipantsDisconnected(), false);  // both present
+    f.markDisconnected(1);
+    assert.equal(f.allParticipantsDisconnected(), false);  // 2 still present
+    f.markDisconnected(2);
+    assert.equal(f.allParticipantsDisconnected(), true);   // all gone
+    f.markReconnected(2);
+    assert.equal(f.allParticipantsDisconnected(), false);  // reconnect drops it
+  });
+});
+
+describe('RoomFlow — liveness: hasLateJoiners', () => {
+  it('is true when a roster member is outside the active order', () => {
+    const f = new RoomFlow();
+    f.addPlayer(1); f.addPlayer(2);
+    f.setActiveOrder([1, 2]);
+    assert.equal(f.hasLateJoiners(), false);     // equal sets
+    f.addPlayer(3);                               // joined after the order snapshot
+    assert.equal(f.hasLateJoiners(), true);
+  });
+});
+
+describe('RoomFlow — liveness: graceTick (late-joiner -> lobby deadline)', () => {
+  it('arms once, fires exactly once at the deadline, then is idempotent', () => {
+    const f = playing([1], { liveness: { graceMs: 5000 } });
+    f.addPlayer(2);                               // late joiner
+    f.markDisconnected(1);                         // sole participant drops
+    assert.equal(f.graceTick(1000), false);       // arms at 1000+5000
+    assert.equal(f._graceDeadline, 6000);
+    assert.equal(f.graceTick(6000 - 1), false);   // before the deadline
+    assert.equal(f.graceTick(6000), true);        // fires
+    assert.equal(f._graceDeadline, null);         // and clears
+    assert.equal(f.graceTick(7000), false);       // does not immediately re-fire
+  });
+
+  it('cancels (clears the deadline) when a participant reconnects', () => {
+    const f = playing([1], { liveness: { graceMs: 5000 } });
+    f.addPlayer(2);
+    f.markDisconnected(1);
+    assert.equal(f.graceTick(1000), false);       // arms
+    f.markReconnected(1);                          // participant back
+    assert.equal(f.graceTick(2000), false);       // condition gone -> no fire
+    assert.equal(f._graceDeadline, null);
+  });
+
+  it('never arms without a late joiner (all participants gone but nobody waiting)', () => {
+    const f = playing([1, 2], { liveness: { graceMs: 5000 } });
+    f.markDisconnected(1); f.markDisconnected(2);  // all gone, no late joiner
+    assert.equal(f.graceTick(1000), false);
+    assert.equal(f._graceDeadline, null);
+    assert.equal(f.graceTick(99999), false);
+  });
+
+  it('clears the deadline on transition away from PLAYING', () => {
+    const f = playing([1], { liveness: { graceMs: 5000 } });
+    f.addPlayer(2);
+    f.markDisconnected(1);
+    f.graceTick(1000);
+    assert.equal(f._graceDeadline, 6000);
+    f.endGame();                                   // PLAYING -> RESULTS
+    assert.equal(f._graceDeadline, null);
+  });
+
+  it('reset() clears the grace deadline and last-seen stamps', () => {
+    const f = playing([1], { liveness: { graceMs: 5000 } });
+    f.onSeen(1, 0);
+    f.addPlayer(2);
+    f.markDisconnected(1);
+    f.graceTick(1000);
+    assert.equal(f._graceDeadline, 6000);
+    assert.ok(f._lastSeen.size > 0);
+    f.reset();
+    assert.equal(f._graceDeadline, null);
+    assert.equal(f._lastSeen.size, 0);
+  });
+});
+
+describe('RoomFlow — liveness: lifecycle stamp hygiene', () => {
+  it('removePlayer drops the last-seen stamp', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1);
+    f.onSeen(1, 0);
+    f.removePlayer(1);
+    assert.equal(f._lastSeen.has(1), false);
+  });
+
+  it('rekey moves the last-seen stamp from oldId to newId and drops the placeholder', () => {
+    const f = playing([1, 2], { liveness: { timeoutMs: 3000 } });
+    f.onSeen(1, 100);
+    f.markDisconnected(1);
+    f.addPlayer(5);                                // claimant placeholder
+    f.onSeen(5, 999);
+    assert.equal(f.rekey(1, 5), true);
+    assert.equal(f._lastSeen.has(1), false);
+    assert.equal(f._lastSeen.get(5), 100);        // kept record's stamp followed
+  });
+});
+
+describe('RoomFlow — host re-broadcast dedup (pure half)', () => {
+  // Justifies leaving the glue's _lastBroadcastedHostId sentinel native: the
+  // pure election already dedups by prevHost!==host, emitting hostchange only
+  // when the EFFECTIVE host actually moves.
+  it('does not emit hostchange on a no-op (non-host) mark, emits once on a real shift', () => {
+    const f = playing([1, 2, 3]);                  // host 1
+    const log = record(f);
+    f.markDisconnected(3);                          // non-host -> effective host unchanged
+    assert.equal(f.host, 1);
+    assert.equal(log.filter((e) => e[0] === 'hostchange').length, 0);
+    f.markDisconnected(1);                          // host blips -> effective host -> 2
+    assert.equal(f.host, 2);
+    assert.equal(log.filter((e) => e[0] === 'hostchange').length, 1);
+  });
+});
+
+describe('RoomFlow — liveness: clearDisconnected re-stamps last-seen', () => {
+  it('clearDisconnected(nowMs) refreshes stamps so a pre-start-quiet peer is not expired during COUNTDOWN', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1); f.addPlayer(2);
+    f.onSeen(1, 1000); f.onSeen(2, 1000);          // both last seen at t=1000
+    f.transitionTo(S.COUNTDOWN);                    // COUNTDOWN: the LOBBY gate no longer applies
+    assert.deepEqual(f.expiredPeers(5000), [1, 2], '>3s stale -> would expire mid-countdown');
+
+    f.clearDisconnected(5000);                      // game start marks all present AND re-stamps
+    assert.deepEqual(f.expiredPeers(5000), [], 'fresh stamps -> nobody expired right after start');
+  });
+
+  it('clearDisconnected() without nowMs leaves stamps untouched (legacy behavior)', () => {
+    const f = new RoomFlow({ liveness: { timeoutMs: 3000 } });
+    f.addPlayer(1);
+    f.onSeen(1, 1000);
+    f.clearDisconnected();                          // no nowMs -> no re-stamp
+    assert.equal(f.isExpired(1, 5000), true, 'stamp unchanged when nowMs omitted');
+  });
+});
+
+// RoomFlow's clock-free purity is enforced by the central portable-purity gate
+// (tests/portable-purity.test.js), which scans RoomFlow.js alongside the engine
+// modules native loads into JSC/QuickJS.

@@ -19,6 +19,8 @@ declare class PartyConnection {
   pinInstance(baseUrl: string, room: string, instance: string): void;
   sendTo(to: number, data: any): void;
   broadcast(data: any): void;
+  /** Publish a retained state snapshot (host/slot-0 only). Replayed to clients on (re)join and pushed live to peers. <= 16 KiB serialized. */
+  setState(data: any): void;
   reconnectNow(): void;
   resetReconnectCount(): void;
   close(): void;
@@ -29,6 +31,8 @@ declare class PartyConnection {
   onError: (() => void) | null;
   onMessage: ((from: number, data: any) => void) | null;
   onProtocol: ((type: string, msg: any) => void) | null;
+  /** Fires with the host's retained snapshot: replayed right after `joined` on (re)join, and on each host update. */
+  onState: ((data: any) => void) | null;
 }
 
 declare namespace PartyConnection {
