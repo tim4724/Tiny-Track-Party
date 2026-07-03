@@ -585,6 +585,7 @@ export function buildScenery(R, track, theme) {
   const groundY = R.ground.position.y;
   const treeGeoms = []; // colormap-textured silhouettes (a biome's textured models share ONE map)
   const bareGeoms = []; // untextured silhouettes — palette tint baked into vertex colours
+  const _tintMisses = new Set(); // warn once per unmatched authored colour (see below)
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
   const P = new THREE.Vector3(), S = new THREE.Vector3();
   const UP = new THREE.Vector3(0, 1, 0);
@@ -629,7 +630,17 @@ export function buildScenery(R, track, theme) {
         // tint is a hex (whole model, e.g. a cactus) OR a map of authored-hex →
         // replacement-hex for multi-part models (e.g. a palm: fronds + trunk differ).
         let t = tintHex;
-        if (t != null && typeof t === 'object') t = part.mat ? t[part.mat.color.getHexString()] : undefined;
+        if (t != null && typeof t === 'object') {
+          const authored = part.mat ? part.mat.color.getHexString() : '';
+          t = t[authored];
+          // A miss means the palette's keys drifted from the model's authored colours
+          // (re-exported kit, typo). The fallback still renders — flag it so an asset
+          // swap shows up in the console, not just as an off-colour prop on screen.
+          if (t == null && !_tintMisses.has(authored)) {
+            _tintMisses.add(authored);
+            console.warn(`buildScenery: tint map has no entry for authored colour #${authored}; using the model's own colour`);
+          }
+        }
         const c = new THREE.Color();
         if (t != null) c.set(t).convertSRGBToLinear();
         else if (part.mat) c.copy(part.mat.color); // GLTF material colours are already linear
