@@ -1,11 +1,14 @@
-// Track gallery — one card per named track, each an iframe loading the real
-// display in track-preview mode (/?scenario=track&track=<id>): the whole
-// layout under a slowly orbiting overview camera with a small AI field driving
-// it. Reuses the shared Gallery helpers (card factory, lazy mount, AR scaling).
+// Track gallery — one SECTION per cup: the shipped tracks first, then the audition
+// CANDIDATES baked by scripts/gen-candidates.mjs (8 per section), each card an iframe
+// loading the real display in track-preview mode (/?scenario=track&track=<id>): the
+// whole layout under a slowly orbiting overview camera with a small AI field driving
+// it (+ the live minimap). This is the selection surface — pick winners here, promote
+// them via gen-tracks.mjs / tracks.js, re-bake, and drop them from the candidates.
 //
 // This is an ES module (so it can import the track catalogue directly) but it
 // still leans on the classic-script `window.Gallery` loaded just before it.
-import { TRACKS, TRACK_ORDER } from '/shared/tracks.js';
+import { TRACKS, CUPS } from '/shared/tracks.js';
+import { CANDIDATE_TRACKS } from '/shared/candidateTracks.js';
 
 const Gallery = window.Gallery;
 const state = Gallery.loadState();
@@ -37,17 +40,12 @@ function render() {
   const host = document.getElementById('track-rows');
   host.innerHTML = '';
 
-  const strip = document.createElement('div');
-  strip.className = 'scenario-strip';
-  strip.style.setProperty('--row-cols', state.trackCardsPerRow);
-
   allCards = [];
   const d = dims();
-  for (const id of TRACK_ORDER) {
-    const t = TRACKS[id];
-    if (!t) continue;
+  const addCard = (strip, id, name, tag) => {
     const card = Gallery.makeCard({
-      title: t.name,
+      title: name,
+      tag,
       frameClass: 'display',
       logical: d,
       url: cardURL(id),
@@ -55,8 +53,23 @@ function render() {
     });
     strip.appendChild(card);
     allCards.push(card);
+  };
+
+  for (const cup of CUPS) {
+    const h = document.createElement('h2');
+    h.className = 'rail-title';
+    h.textContent = cup.name;
+    host.appendChild(h);
+
+    const strip = document.createElement('div');
+    strip.className = 'scenario-strip';
+    strip.style.setProperty('--row-cols', state.trackCardsPerRow);
+    for (const id of cup.tracks) if (TRACKS[id]) addCard(strip, id, TRACKS[id].name, '· shipped');
+    for (const [id, def] of Object.entries(CANDIDATE_TRACKS)) {
+      if (def.cup === cup.id) addCard(strip, id, def.name, '· candidate');
+    }
+    host.appendChild(strip);
   }
-  host.appendChild(strip);
   lazyIo = Gallery.lazyMount(allCards);
 }
 

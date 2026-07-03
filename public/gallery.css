@@ -46,6 +46,16 @@ select:hover, button.ctrl:hover, button.card-btn:hover { background: #1e1e42; bo
 
 section.rail { padding: 20px 20px 8px; }
 
+/* Cup section headers on the tracks gallery (one strip per cup). */
+.rail-title {
+  margin: 22px 2px 10px;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9aa3c7;
+}
+.rail-title:first-child { margin-top: 2px; }
+
 /* Single flat grid of all gallery cards. --row-cols is set inline from the
    header's cards-per-row selector. */
 .scenario-strip {

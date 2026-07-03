@@ -306,6 +306,26 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     instances.push({ glb: 'gate-finish', matrix: m });
   }
 
+  // A support post standing in (or near) a drivable corridor must be CLEARLY placed:
+  // either at least POST_CLEAR outside every corridor, or a POST_DEEP-visible obstacle
+  // inside one (which then gets a collision autoPole below). The sliver zone between —
+  // a post peeking a few cm past the kerb — is banned: its ghost collision pole would
+  // bonk rail-riding cars off something they can't see ("the invisible pole").
+  // intrusionOf: how far a column's edge protrudes past the kerb into the deepest
+  // upright corridor its vertical span crosses (negative = clear by that much).
+  const POST_CLEAR = 0.15, POST_DEEP = 0.5;
+  const intrusionOf = (x, z, radius, baseY, topY) => {
+    let worst = -Infinity;
+    for (let j = 0; j < n; j++) {
+      const sm = samples[j];
+      if (sm.up.y < 0.9) continue;                                  // tilted stunt flank — not a corridor
+      if (sm.pos.y < baseY - 0.5 || sm.pos.y > topY - 0.5) continue; // column doesn't cross this road
+      const d = Math.hypot(x - sm.pos.x, z - sm.pos.z);
+      worst = Math.max(worst, sm.width / 2 + radius - d);
+    }
+    return worst;
+  };
+
   // ---- Support pillars under raised bridge/ramp segments (opt `pillars: true`) ----
   // March the flagged samples at a fixed arclength spacing and record a vertical column
   // running from the grass plane up to just under the deck (SceneRenderer renders each as
@@ -344,6 +364,11 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
         if (dx * dx + dz * dz < clear * clear) { onRoad = true; break; }
       }
       if (onRoad) continue;
+      // Ban the sliver zone against ANY corridor the column crosses (the check above
+      // only sees clearly-lower roads; a graze against a similar-height deck slipped
+      // through). Deep intruders are kept — a visible on-road post with collision.
+      const intr = intrusionOf(smp.pos.x, smp.pos.z, RADIUS, groundY - EMBED, topY);
+      if (intr > -POST_CLEAR && intr < POST_DEEP) continue;
       pillars.push({ x: smp.pos.x, z: smp.pos.z, baseY: groundY - EMBED, topY, radius: RADIUS });
     }
   }
@@ -411,11 +436,103 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     }
   }
 
+  // ---- Loop support shafts — a vertical post bracing each 360° loop's lower-OUTER flank
+  // (one per side), from the grass up to the ring's underside. The PLACEMENT lives here
+  // (single source of truth) so the collision pass below can see it; the renderer
+  // (render/track.js buildLoopPoles) just skins each entry, clipping the shaft top to the
+  // contact sample's underside plane. Detection: inverted stretches (up.y < 0.3) are loop
+  // crowns; walk each out to ground level, brace where the road is angled ~60° (up.y≈0.5).
+  const supportPosts = [];
+  {
+    const RAD = 0.36, OFFSET = 0.45; // slim shaft, nudged out past the road's outer face
+    const crowns = [];
+    let cur = null;
+    for (let i = 0; i < n; i++) {
+      if (samples[i].up.y < 0.3) { if (!cur) { cur = [i, i]; crowns.push(cur); } else cur[1] = i; }
+      else cur = null;
+    }
+    for (const [a0, b0] of crowns) {
+      if (b0 - a0 < 4) continue;
+      let a = a0, b = b0;
+      while (a > 0 && samples[a].pos.y > 0.6) a--;
+      while (b < n - 1 && samples[b].pos.y > 0.6) b++;
+      let cx = 0, cz = 0, cnt = 0;
+      for (let i = a; i <= b; i++) { cx += samples[i].pos.x; cz += samples[i].pos.z; cnt++; }
+      cx /= cnt; cz /= cnt;
+      let apex = a;
+      for (let i = a; i <= b; i++) if (samples[i].pos.y > samples[apex].pos.y) apex = i;
+      for (const [lo, hi] of [[a, apex], [apex, b]]) {
+        let best = null;
+        for (let i = lo; i <= hi; i++) {
+          const s = samples[i];
+          if (s.pos.y < 1.5 || s.pos.y > 3.2 || s.up.y < 0.3) continue;
+          const sc = Math.abs(s.up.y - 0.5);
+          if (!best || sc < best.sc) best = { s, sc };
+        }
+        if (!best) continue;
+        const c = best.s;
+        let ox = c.pos.x - cx, oz = c.pos.z - cz;
+        const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+        // The default offset leaves the shaft grazing the ring's own mouth corridor by
+        // ~0.2 — the invisible-pole sliver. Step it outward until it clears every
+        // corridor by POST_CLEAR (the diagonal top-clip keeps it flush against the
+        // flank's underside wherever it lands); a shaft that can't clear is dropped —
+        // a ring missing one brace reads fine, a phantom wall does not.
+        let placed = null;
+        for (let off = OFFSET; off <= OFFSET + 0.61; off += 0.15) {
+          const x = c.pos.x + ox * off, z = c.pos.z + oz * off;
+          if (intrusionOf(x, z, RAD, groundY, c.pos.y) <= -POST_CLEAR) { placed = { x, z }; break; }
+        }
+        if (!placed) continue;
+        supportPosts.push({
+          x: placed.x, z: placed.z, radius: RAD, baseY: groundY,
+          contact: { pos: { x: c.pos.x, y: c.pos.y, z: c.pos.z }, up: { x: c.up.x, y: c.up.y, z: c.up.z } }
+        });
+      }
+    }
+  }
+
+  // ---- Collision poles for supports standing IN a drivable corridor. A pillar or loop
+  // shaft is a real column the player can see; where one rises through the road corridor
+  // cars must HIT it, not ghost through. Placement above bans the sliver zone, so any
+  // intrusion that reaches here is ≥ POST_DEEP at its deepest — a visible obstacle; the
+  // 0.25 emission floor just trims collision at the run's shallow ends. Emit an engine
+  // pole (same (s, lat) collision the authored Twister pole uses) every ~2.5 units along
+  // the obstructed stretch; `ghost: true` tells the renderer it's already drawn as
+  // pillar/shaft, so buildPoles must not draw it again. main.js merges these into
+  // track.poles for the engine + AI.
+  const autoPoles = [];
+  {
+    const posts = [
+      ...pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY })),
+      ...supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y }))
+    ];
+    for (const post of posts) {
+      let lastEmit = -Infinity;
+      for (let j = 0; j < n; j++) {
+        const sm = samples[j];
+        if (sm.up.y < 0.9) continue;                                   // tilted stunt flank — not a corridor
+        if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue; // shaft doesn't cross this road
+        const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (sm.width / 2 + post.radius - d < 0.25) continue;           // shallow end of the run — no phantom edge
+        if (sm.s - lastEmit >= 2.5) {
+          const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
+          const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;    // signed offset along the road's lateral
+          autoPoles.push({ s: sm.s, lat, radius: post.radius, ghost: true });
+          lastEmit = sm.s;
+        }
+      }
+    }
+  }
+
   return {
     instances,
     pillars,
     hills,
     loopStarts,
+    supportPosts,
+    autoPoles,
     centerline: new Centerline(samples, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,

@@ -1,6 +1,14 @@
-// Resolved waypoints for the seeded multi-crossing tracks (generated offline by
-// scripts/gen-tracks.mjs — solver-placed elevation baked in; pure data, no Three.js).
-import { GEN_TRACKS } from './genTracks.js';
+// Resolved waypoints for the seeded generated tracks (generated offline by
+// scripts/gen-tracks.mjs — solver-placed elevation + difficulty-profile decoration
+// baked in; pure data, no Three.js). GEN_FURNITURE carries the auto-placed
+// oils/pads/boxes (scripts/track-gen.mjs placeFurniture) for the non-classic tracks;
+// the original Backyard four keep their hand-tuned furniture below.
+import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
+
+// Auto-placed furniture for a generated track — tolerant of a not-yet-baked id, so the
+// registry can name a new track BEFORE gen-tracks.mjs runs (the bake pipeline itself
+// imports this module via TrackBuilder; a hard read here would deadlock that workflow).
+const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
 
 // Track catalogue — DATA ONLY, no Three.js. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
@@ -163,6 +171,130 @@ export const TWISTER = [
   arc(RL, -90, { bank: 10 })                          // SW corner, into the grid
 ];
 
+// ---- Helix (Expert): the double-spiral skyway. Climb Twister's 450° spiral to a long
+// pillared bridge riding the east side at height, then corkscrew back to earth through
+// a SAME-hand descending spiral; the south leg home threads an S-pair of tilted toy
+// loops. Same-hand spirals wind the lap to a net -1080° (3 full turns — the plan is
+// still a simple rounded rectangle, like Twister's -720 double wind). Composed by
+// scripts/compose-stunt.mjs: the grid/top-leg lengths are its closure solve, each
+// stunt's `roll` its probe-measured holonomy trim (spiral-down needs ~none — the
+// descent's twist self-cancels against the same-hand climb already trimmed upstream).
+export const HELIX = [
+  straight(28),                                                      // grid, north-bound
+  arc(RL, -90),                                                      // NE corner (unbanked — the spirals carry the cup's lean)
+  straight(26),                                                      // top leg, east-bound
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 39.6 }), // SPIRAL UP
+  straight(28, { pillars: true }),                                   // THE SKYWAY, south-bound at height
+  arc(RL, -450, { rise: -2.6, bank: 10, pillars: true, roll: -0.5 }),// SPIRAL DOWN (same hand)
+  straight(8),                                                       // south leg — boost — straight into
+  loop(2.2, { drift: 3, roll: 52 }),                                 // TOY LOOP L
+  straight(10),                                                      // beat (rings stay 20 world apart)
+  loop(2.2, { drift: -3, roll: -57.1 }),                             // TOY LOOP R (the S-pair)
+  straight(8),                                                       // south-west run home
+  arc(RL, -90)                                                       // SW corner into the grid
+];
+
+// ---- Skyline (Expert): the big-air one. A HALF-LOOP fires the pack straight up onto
+// an 8-world-high skyway ridden back over its own approach — an Immelmann: the deck
+// carries the 180° righting roll, eased across the whole span (peak twist ~0.17
+// rad/world, inside the helicoid test's 0.21 bound) — then a banked descending U-turn
+// swings outboard and dives home past one tilted toy loop. Composed by
+// scripts/compose-stunt.mjs (solved legs + probe-measured roll trims, like Helix).
+export const SKYLINE = [
+  straight(13.8),                                                    // grid, north-bound (+1.8 with the south-bound run
+  arc(RL, 90),                                                       //  below: slides the whole stunt section 3.6 world
+  straight(16),                                                      //  north of the south edge, whose deck merged with
+  arc(RL, 90),                                                       //  the half-loop mouth; closure stays exact)
+  straight(14),                                                      // boost approach, south-bound
+  loop(2.0),                                                         // HALF-LOOP UP → 8 world, heading flipped, frame inverted
+  straight(24, { roll: 180, pillars: true }),                        // SKYWAY back over the approach — rolls upright
+  arc(RL, 180, { rise: -2.0, bank: 10, pillars: true, roll: 6 }),    // descending U, swings outboard
+  straight(6, { rise: -2.0, pillars: true }),                        // dive to ground
+  straight(6),                                                       // flat beat — boost — straight into
+  loop(2.2, { drift: -3, roll: -84 }),                               // TOY LOOP
+  straight(11.8),                                                    // south-bound run (+1.8, see the grid straight)
+  arc(RL, 90),                                                       // SW corner
+  straight(27.37),                                                   // south edge home (closure-solved)
+  arc(RL, 90)                                                        // into the grid
+];
+
+// ---- Coaster (Hard): the airtime one, and the Rooftop cup's no-tilt on-ramp. A
+// camelback run of three shrinking net-flat humps the pack crests light, one tilted toy
+// loop, then a big grass summit up-and-over with a blind exit. No banking anywhere.
+// Composed by scripts/compose-stunt.mjs (solved legs + probe-measured loop trim).
+export const COASTER = [
+  ...run(6),                                                         // grid, north-bound
+  arc(RL, -90),                                                      // NE corner
+  straight(9, { bump: 0.8 }),                                        // CAMELBACK RUN — three shrinking humps
+  straight(9, { bump: 0.6 }),
+  straight(9, { bump: 0.45 }),
+  straight(14),                                                      // breather (closure-solved)
+  arc(RL, -90),
+  straight(18),                                                      // boost — straight into (closure-solved)
+  loop(2.2, { drift: 3, roll: 60 }),                                 // TOY LOOP
+  straight(6),                                                       // beat
+  arc(RL, -90),
+  straight(8),
+  straight(9, { rise: 1.8 }),                                        // THE SUMMIT — a grass mountain up...
+  straight(9, { rise: -1.8 }),                                       // ...and over, blind exit
+  straight(6, { lateral: -0.8 }), straight(6, { lateral: 0.8 }),     // soft chicane on the run home
+  straight(6),
+  arc(RL, -90)                                                       // SW corner into the grid
+];
+
+// ---- Gauntlet (Expert): thread the needle. The lap fires straight THROUGH the ring
+// of its own toy loop — a pillared ramp narrows as it climbs, crests dead-centre in
+// the ring's opening (5.0 world; the hole faces ±lateral, so the ramp runs
+// perpendicular to the loop's travel), then plunges onto a low bridge that clears the
+// loop's own boost leg before dropping home. Composed by scripts/compose-stunt.mjs:
+// the align solver (solveAlign + measureRing) parked the crest 0.00 world off the
+// ring axis; the odd lengths are its alignment + closure solves.
+export const GAUNTLET = [
+  straight(14),                                                      // grid, north-bound
+  arc(RL, -90),                                                      // NE corner
+  straight(12),                                                      // east leg
+  arc(RL, -90),                                                      // south-bound
+  straight(8),                                                       // boost — straight into
+  loop(2.2, { drift: 3, roll: 66 }),                                 // THE RING (opening faces ±X)
+  straight(10),                                                      // south spacing
+  arc(RL, -90),                                                      // west-bound
+  straight(6.315),                                                   // overshoot past the ring (align-solved)
+  arc(RL, -90),                                                      // north-bound
+  straight(5.815),                                                   // back to ring latitude (align-solved)
+  arc(RL, -90),                                                      // east — straight at the ring
+  straight(9, { rise: 2.51, pillars: true, width: [2.5, 2.2] }),     // THE RAMP — narrows, crests in the ring
+  straight(6, { rise: -1.61, pillars: true, width: [2.2, 2.5] }),    // THE PLUNGE through and out
+  straight(8, { pillars: true }),                                    // low bridge over the boost leg
+  straight(5, { rise: -0.9, pillars: true }),                        // final drop to ground
+  straight(8),                                                       // east run out
+  arc(RL, -90),                                                      // south-bound
+  straight(9.63),                                                    // (closure-solved 7.815, then +1.815 with the home leg
+  arc(RL, -90),                                                      //  below: the south edge sat only 4 world from the
+  straight(44.685),                                                  //  overshoot corridor — decks merged; stretching this
+  arc(RL, -90),                                                      //  anti-parallel pair slides it 3.6 world clear while
+  straight(7.815)                                                    //  keeping closure exact)
+];
+
+// ---- Skysnake (Hard): a slalom IN THE SKY. The spiral climbs to 5.2 world, the road
+// weaves an S-S through the clouds on pillars, then dives home past a toy loop.
+// Composed by scripts/compose-stunt.mjs (solved grid leg + probe-measured roll trims).
+export const SKYSNAKE = [
+  straight(40.837),                                                  // grid straight (closure-solved)
+  arc(RL, -90),                                                      // east
+  straight(10),
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 18 }),   // SPIRAL UP → south
+  arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
+  arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
+  straight(6, { pillars: true }),
+  straight(10, { rise: -2.6, pillars: true }),                       // dive to ground
+  straight(5),                                                       // boost — straight into
+  loop(2.2, { drift: -3, roll: -90 }),                               // TOY LOOP
+  straight(8),
+  arc(RL, -90),                                                      // west
+  straight(7),
+  arc(RL, -90)                                                       // home
+];
+
 // ---- Meadow Mile (Easy): the gentle teaching circuit. A roomy rounded rectangle on big
 // sweeping (RL) corners — the easiest line to hold — with one soft chicane and a rolling
 // half-hill per long side, and open sweeper short sides. No stunts, no banking, nothing
@@ -184,32 +316,28 @@ export const MEADOW = [
 // start/finish) and `lat` (lateral offset in world units; 0 = centreline). `radius`
 // and `cones` optional. Off-centre so a careful line can thread past; tune by driving.
 const OILS = {
-  // Backyard Cup — off-line slicks on gentle GROUND stretches that are also in the OPEN: no
-  // overpass deck overhead (else the warning cones tangle with the deck/pillars and read as
-  // misplaced) and never on a high bridge (a forced spin mustn't throw you off a deck).
-  bowtie:     [ { u: 0.04, lat: 0.7 }, { u: 0.89, lat: -0.7 } ],
-  pretzel:    [ { u: 0.46, lat: 0.7 }, { u: 0.71, lat: -0.7 } ],
-  lasso:      [ { u: 0.71, lat: 0.7 }, { u: 0.83, lat: -0.7 } ],
-  cloverleaf: [ { u: 0.04, lat: 0.7 }, { u: 0.78, lat: -0.7 } ],
+  // (Generated cups — Beach/Backyard/Canyon — carry auto-placed furniture in
+  // GEN_FURNITURE; only the segment-DSL tracks and the retired trio are authored here.)
   // Easiest track → a single, clearly off-line slick a careful line threads past.
   meadow:     [ { u: 0.74, lat: 0.8 } ],
   switchback: [ { u: 0.34, lat: 0.7 }, { u: 0.80, lat: -0.7 } ],
   crossover:  [ { u: 0.22, lat: 0.0 }, { u: 0.52, lat: 0.8 }, { u: 0.84, lat: -0.6 } ],
   riverside:  [ { u: 0.16, lat: -0.7 }, { u: 0.46, lat: 0.7 }, { u: 0.74, lat: 0.0 } ],
   // Flats only — never on a loop or the spiral, where a forced spin would be cruel.
-  twister:    [ { u: 0.232, lat: 0.7 }, { u: 0.732, lat: -0.7 } ]
+  twister:    [ { u: 0.232, lat: 0.7 }, { u: 0.732, lat: -0.7 } ],
+  // Auto-placed (scripts/track-gen.mjs placeFurniture on the composed geometry) —
+  // gentle open ground, clear of decks, spirals and the loops.
+  helix:      [ { u: 0.198, lat: 0.7 }, { u: 0.829, lat: -0.7 } ],
+  skyline:    [ { u: 0.263, lat: 0.7 }, { u: 0.463, lat: -0.7 } ],
+  coaster:    [ { u: 0.334, lat: 0.7 }, { u: 0.645, lat: -0.7 } ],
+  gauntlet:   [ { u: 0.29, lat: 0.7 }, { u: 0.795, lat: -0.7 } ],
+  skysnake:   [ { u: 0.211, lat: 0.7 }, { u: 0.844, lat: -0.7 } ]
 };
 
 // Boost pads — drive-over speed strips, position-scaled for catch-up. Place on STRAIGHTS
 // (XZ curvature ≈ 0, where the boost isn't wasted mid-corner), centred (lat 0) on the
 // racing line. `u` = fraction of lap. A pure climb/descent counts as straight.
 const PADS = {
-  // Backyard Cup — two pads each on the gentlest stretches, ~half a lap apart. A pure
-  // climb/descent counts as straight, so these may sit on a ramp, just not mid-corner.
-  bowtie:      [ { u: 0.26, lat: 0.0 }, { u: 0.72, lat: 0.0 } ],
-  pretzel:    [ { u: 0.11, lat: 0.0 }, { u: 0.56, lat: 0.0 } ],
-  lasso:      [ { u: 0.13, lat: 0.0 }, { u: 0.61, lat: 0.0 } ],
-  cloverleaf: [ { u: 0.26, lat: 0.0 }, { u: 0.68, lat: 0.0 } ],
   // Centred on the two long open sweepers (the short sides) — the cleanest straights.
   meadow:     [ { u: 0.38, lat: 0.0 }, { u: 0.88, lat: 0.0 } ],
   switchback: [ { u: 0.15, lat: 0.0 }, { u: 0.65, lat: 0.0 } ],
@@ -219,7 +347,13 @@ const PADS = {
   // strip at its mouth (see main.js / TrackBuilder.loopStarts), so the pack is
   // always fired INTO each ring on boost — the two manual circular loop-feeders
   // that used to sit before loop 1 and loop 2 are now redundant.
-  twister:    []
+  twister:    [],
+  // Auto-placed on the cleanest straights (the loop mouths add their own strips).
+  helix:      [ { u: 0.063, lat: 0.0 }, { u: 0.445, lat: 0.0 } ],
+  skyline:    [ { u: 0.119, lat: 0.0 }, { u: 0.6, lat: 0.0 } ],
+  coaster:    [ { u: 0.064, lat: 0.0 }, { u: 0.463, lat: 0.0 } ],
+  gauntlet:   [ { u: 0.105, lat: 0.0 }, { u: 0.683, lat: 0.0 } ],
+  skysnake:   [ { u: 0.066, lat: 0.0 }, { u: 0.633, lat: 0.0 } ]
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
@@ -232,16 +366,16 @@ const BOX_LANES = [-1.05, -0.35, 0.35, 1.05];
 const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
 const boxRows = (...us) => us.flatMap(boxRow);
 const BOXES = {
-  // Backyard Cup — two rows of 4 on gentle stretches (pickups are safe, so a low deck is fine).
-  bowtie:      boxRows(0.53, 0.85),
-  pretzel:    boxRows(0.05, 0.73),
-  lasso:      boxRows(0.39, 0.89),
-  cloverleaf: boxRows(0.41, 0.88),
   meadow:     boxRows(0.13, 0.64),   // straight after the first chicane, then side C's mirror straight
   switchback: boxRows(0.20, 0.73),
   crossover:  boxRows(0.66, 0.13),
   riverside:  boxRows(0.30, 0.78),
-  twister:    boxRows(0.039, 0.57) // early on the launch straight, then the far flat — grab, fly, grab again
+  twister:    boxRows(0.039, 0.57), // early on the launch straight, then the far flat — grab, fly, grab again
+  helix:      boxRows(0.086, 0.705),  // auto-placed: the grid run, then the south leg past the loops
+  skyline:    boxRows(0.148, 0.723),  // auto-placed: the north leg, then the flat past the toy loop
+  coaster:    boxRows(0.093, 0.492),  // auto-placed: the grid run, then the boost straight
+  gauntlet:   boxRows(0.128, 0.559),  // auto-placed: the east leg, then the exit run past the plunge
+  skysnake:   boxRows(0.096, 0.715)   // auto-placed: the grid straight, then the flat past the toy loop
 };
 
 // Support poles — SOLID obstacles cars collide with (unlike oils, which only spin you).
@@ -258,22 +392,59 @@ const POLES = {
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
 // `difficulty` is a display label only (the picker badges it; cups order easy→hard).
 export const TRACKS = {
-  // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation)
-  bowtie: {
-    name: 'Bowtie', difficulty: 'Medium', waypoints: GEN_TRACKS.bowtie,
-    oils: OILS.bowtie, pads: PADS.bowtie, boxes: BOXES.bowtie
+  // Beach Cup — SEEDED easy circuits (scan-seeds `easy` profile: sweeping corners,
+  // rolling hills + hops, width play, no crossings; auto-placed furniture).
+  tidepool: {
+    name: 'Tidepool', difficulty: 'Easy', waypoints: GEN_TRACKS.tidepool,
+    oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes
+  },
+  cove: {
+    name: 'Cove', difficulty: 'Easy', waypoints: GEN_TRACKS.cove,
+    oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes
+  },
+  driftwood: {
+    name: 'Driftwood', difficulty: 'Easy', waypoints: GEN_TRACKS.driftwood,
+    oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes
+  },
+  riptide: {
+    name: 'Riptide', difficulty: 'Easy', waypoints: GEN_TRACKS.riptide,
+    oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes
+  },
+  // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation,
+  // decorated mid profile; auto-placed furniture).
+  ribbon: {
+    name: 'Ribbon', difficulty: 'Medium', waypoints: GEN_TRACKS.ribbon,
+    oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes
   },
   pretzel: {
     name: 'Pretzel', difficulty: 'Hard', waypoints: GEN_TRACKS.pretzel,
-    oils: OILS.pretzel, pads: PADS.pretzel, boxes: BOXES.pretzel
+    oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes
   },
-  lasso: {
-    name: 'Lasso', difficulty: 'Hard', waypoints: GEN_TRACKS.lasso,
-    oils: OILS.lasso, pads: PADS.lasso, boxes: BOXES.lasso
+  tangle: {
+    name: 'Tangle', difficulty: 'Hard', waypoints: GEN_TRACKS.tangle,
+    oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes
   },
   cloverleaf: {
     name: 'Cloverleaf', difficulty: 'Expert', waypoints: GEN_TRACKS.cloverleaf,
-    oils: OILS.cloverleaf, pads: PADS.cloverleaf, boxes: BOXES.cloverleaf
+    oils: genFurn('cloverleaf').oils, pads: genFurn('cloverleaf').pads, boxes: genFurn('cloverleaf').boxes
+  },
+  // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
+  // crossings, width pinches, crest hills; auto-placed furniture).
+  wash: {
+    name: 'Wash', difficulty: 'Hard', waypoints: GEN_TRACKS.wash,
+    oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes
+  },
+  gulch: {
+    name: 'Gulch', difficulty: 'Hard', waypoints: GEN_TRACKS.gulch,
+    oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes
+  },
+  crag: {
+    name: 'Crag', difficulty: 'Hard', waypoints: GEN_TRACKS.crag,
+    oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes
+  },
+  sidewinder: {
+    name: 'Sidewinder', difficulty: 'Expert', waypoints: GEN_TRACKS.sidewinder,
+    oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
   crossover: {
@@ -281,8 +452,31 @@ export const TRACKS = {
     oils: OILS.crossover, pads: PADS.crossover, boxes: BOXES.crossover
   },
   twister: {
+    // Retired from the cup 2026-07-04 audition (kept defined: the spiral/tilted-loop/
+    // pole geometry regression suite runs against it).
     name: 'Twister', difficulty: 'Expert', segments: TWISTER,
     oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister, poles: POLES.twister
+  },
+  skysnake: {
+    name: 'Skysnake', difficulty: 'Hard', segments: SKYSNAKE,
+    oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake
+  },
+  gauntlet: {
+    name: 'Gauntlet', difficulty: 'Expert', segments: GAUNTLET,
+    oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet
+  },
+  coaster: {
+    // Retired from the cup 2026-07-04 audition (kept defined: camelback-bump coverage).
+    name: 'Coaster', difficulty: 'Hard', segments: COASTER,
+    oils: OILS.coaster, pads: PADS.coaster, boxes: BOXES.coaster
+  },
+  helix: {
+    name: 'Helix', difficulty: 'Expert', segments: HELIX,
+    oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix
+  },
+  skyline: {
+    name: 'Skyline', difficulty: 'Expert', segments: SKYLINE,
+    oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline
   },
   // Retired — in no cup, so they don't appear in the picker; kept defined only so the
   // geometry regression tests keep exercising the segment-DSL builders they use.
@@ -308,8 +502,10 @@ export const TRACKS = {
 // Place-based names that double as each cup's future biome (themed environments,
 // later phase): Backyard = grass/grounded; Rooftop = ramps/overpass/stunts.
 export const CUPS = [
-  { id: 'backyard', name: 'Backyard Cup', tracks: ['bowtie', 'pretzel', 'lasso', 'cloverleaf'] }, // seeded multi-crossing circuits
-  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['crossover', 'twister'] }      // overpass + stunts (rooftop biome)
+  { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
+  { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits
+  { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (biome TBD → grass)
+  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] } // crazy: stunts (rooftop biome); crossover/coaster/twister retired
 ];
 
 // Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —
