@@ -514,42 +514,77 @@ test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface
   assert.ok(dot > 0.98, `pose.up should match the local surface normal (|dot|=${dot.toFixed(3)} ≈ ${(Math.acos(Math.min(1, dot)) * 180 / Math.PI).toFixed(1)}° off)`);
 });
 
-// SUPPORT-POST COLLISION. Bridge pillars and loop-support shafts are real columns the
-// player can see; where one rises through a drivable corridor the engine must collide
-// cars with it (ghost autoPoles), not let them drive through. Recompute the corridor
-// test here from the builder's own outputs and assert every obstruction is covered.
-test('every support post standing in a drivable corridor carries a collision pole', () => {
+// SUPPORT-POST COLLISION + THE SLIVER BAN. Bridge pillars and loop-support shafts are
+// real columns the player can see; where one rises through a drivable corridor the
+// engine must collide cars with it (ghost autoPoles), not let them drive through. And
+// the in-between is BANNED: a post peeking a few cm past the kerb would carry a
+// collision disc far bigger than its visible sliver — "the invisible pole". Placement
+// must leave every post clearly out (≥ POST_CLEAR margin) or clearly in (a ≥ POST_DEEP
+// visible obstacle, pole-covered). Recompute the corridor test here from the builder's
+// own outputs.
+test('support posts are clearly out of the corridor or visibly in it with a collision pole', () => {
   let covered = 0;
   for (const [name, def] of Object.entries(TRACKS)) {
     const t = buildTrack(def);
     const ss = t.centerline.samples;
     const posts = [
-      ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY })),
-      ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y }))
+      ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
+      ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
     ];
     for (const post of posts) {
+      let peak = -Infinity;
       for (const sm of ss) {
         if (sm.up.y < 0.9) continue;
         if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue;
         const d = Math.hypot(post.x - sm.pos.x, post.z - sm.pos.z);
-        if (d >= sm.width / 2 + post.radius) continue;
-        // obstructed sample → an autoPole must sit on this strand within a couple of units
+        const intr = sm.width / 2 + post.radius - d;
+        peak = Math.max(peak, intr);
+        if (intr < 0.45) continue;
+        // deeply obstructed sample → an autoPole must sit on this strand within reach
         const hit = t.autoPoles.some((ap) => {
           const ds = Math.min(Math.abs(ap.s - sm.s), t.length - Math.abs(ap.s - sm.s));
           return ds < 4 && ap.ghost;
         });
-        assert.ok(hit, `track "${name}": support at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) obstructs the road at s=${sm.s.toFixed(1)} with no collision pole`);
+        assert.ok(hit, `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) obstructs the road at s=${sm.s.toFixed(1)} with no collision pole`);
         covered++;
       }
+      assert.ok(peak <= 0.02 || peak >= 0.45,
+        `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) grazes a corridor by ${peak.toFixed(2)} — the invisible-pole sliver zone`);
     }
     // every autoPole itself sits within some corridor (no stray phantom collisions)
     for (const ap of t.autoPoles) {
       assert.ok(Math.abs(ap.lat) < t.roadWidth, `track "${name}": autoPole lat ${ap.lat.toFixed(2)} is outside any plausible corridor`);
     }
   }
-  // the known offenders (crossover's on-road pillar, the loop-shaft grazes) keep this
-  // test honest — if placement changes ever drop to zero obstructions, that's suspicious.
+  // the known deep intruder (retired crossover's on-road pillar) keeps this test
+  // honest — if placement changes ever drop to zero obstructions, that's suspicious.
   assert.ok(covered > 0, 'expected at least one corridor-obstructing support across the catalogue');
+});
+
+// SURFACE OVERLAP. The 3D strand gate below tolerates two strands 1.5 apart — fine for
+// a bridge (vertical separation) but at the SAME level two 5-wide decks would visibly
+// merge (this shipped on Gauntlet + Skyline before the audit caught it). Upright decks
+// only: a tilted stunt flank's width doesn't span horizontally (a ring's side wall
+// extends along its axis), so the width-sum test would false-positive on the by-design
+// thread-the-ring clearance.
+test('no two same-level upright strands overlap road surfaces', () => {
+  const KERB = 0.42, LEVEL = 0.6;
+  for (const [name, def] of Object.entries(TRACKS)) {
+    const t = buildTrack(def);
+    const ss = t.centerline.samples, N = ss.length, L = t.length;
+    for (let i = 0; i < N; i += 2) {
+      for (let j = i + 2; j < N; j += 2) {
+        if (ss[i].up.y < 0.9 || ss[j].up.y < 0.9) continue;
+        const arc = Math.min(Math.abs(ss[i].s - ss[j].s), L - Math.abs(ss[i].s - ss[j].s));
+        if (arc < 8) continue;
+        if (Math.abs(ss[i].pos.y - ss[j].pos.y) >= LEVEL) continue;
+        const h = Math.hypot(ss[i].pos.x - ss[j].pos.x, ss[i].pos.z - ss[j].pos.z);
+        const need = ss[i].width / 2 + ss[j].width / 2 + KERB;
+        assert.ok(h >= need,
+          `track "${name}": same-level strands overlap at s=${ss[i].s.toFixed(0)}↔${ss[j].s.toFixed(0)} (horiz ${h.toFixed(2)} < ${need.toFixed(2)})`);
+      }
+    }
+  }
 });
 
 // COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the

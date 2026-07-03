@@ -201,10 +201,10 @@ export const HELIX = [
 // swings outboard and dives home past one tilted toy loop. Composed by
 // scripts/compose-stunt.mjs (solved legs + probe-measured roll trims, like Helix).
 export const SKYLINE = [
-  ...run(3),                                                         // grid, north-bound
-  arc(RL, 90),                                                       // NW corner (unbanked — only the falling U leans)
-  straight(16),                                                      // north leg, west-bound
-  arc(RL, 90),                                                       // (θ=180)
+  straight(13.8),                                                    // grid, north-bound (+1.8 with the south-bound run
+  arc(RL, 90),                                                       //  below: slides the whole stunt section 3.6 world
+  straight(16),                                                      //  north of the south edge, whose deck merged with
+  arc(RL, 90),                                                       //  the half-loop mouth; closure stays exact)
   straight(14),                                                      // boost approach, south-bound
   loop(2.0),                                                         // HALF-LOOP UP → 8 world, heading flipped, frame inverted
   straight(24, { roll: 180, pillars: true }),                        // SKYWAY back over the approach — rolls upright
@@ -212,7 +212,7 @@ export const SKYLINE = [
   straight(6, { rise: -2.0, pillars: true }),                        // dive to ground
   straight(6),                                                       // flat beat — boost — straight into
   loop(2.2, { drift: -3, roll: -84 }),                               // TOY LOOP
-  straight(10),                                                      // south-bound run
+  straight(11.8),                                                    // south-bound run (+1.8, see the grid straight)
   arc(RL, 90),                                                       // SW corner
   straight(27.37),                                                   // south edge home (closure-solved)
   arc(RL, 90)                                                        // into the grid
@@ -268,11 +268,11 @@ export const GAUNTLET = [
   straight(5, { rise: -0.9, pillars: true }),                        // final drop to ground
   straight(8),                                                       // east run out
   arc(RL, -90),                                                      // south-bound
-  straight(7.815),                                                   // (closure-solved)
-  arc(RL, -90),                                                      // west-bound
-  straight(44.685),                                                  // south edge home (closure-solved)
-  arc(RL, -90),                                                      // north into the grid
-  straight(6)
+  straight(9.63),                                                    // (closure-solved 7.815, then +1.815 with the home leg
+  arc(RL, -90),                                                      //  below: the south edge sat only 4 world from the
+  straight(44.685),                                                  //  overshoot corridor — decks merged; stretching this
+  arc(RL, -90),                                                      //  anti-parallel pair slides it 3.6 world clear while
+  straight(7.815)                                                    //  keeping closure exact)
 ];
 
 // ---- Skysnake (Hard): a slalom IN THE SKY. The spiral climbs to 5.2 world, the road
