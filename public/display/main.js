@@ -87,9 +87,10 @@ const _isDebugSolo = _trackParams.has('solo');
 const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
 // AUDITION CANDIDATES (gallery-tracks sections): an unknown ?track= id is looked up in
 // the candidate catalogue and built like any track — but only the ONE requested id, and
-// only when named, so the phones' picker and normal boot never pay for them. Candidates
-// live outside TRACKS/CUPS until one is promoted (scripts/gen-candidates.mjs).
-if (_qTrack && !built.has(_qTrack) && CANDIDATE_TRACKS[_qTrack]) {
+// only in a ?scenario= test surface: a LIVE lobby preselecting a candidate would offer
+// phones a track their picker catalog doesn't contain. Candidates live outside
+// TRACKS/CUPS until one is promoted (scripts/gen-candidates.mjs).
+if (_isTestMode && _qTrack && !built.has(_qTrack) && CANDIDATE_TRACKS[_qTrack]) {
   built.set(_qTrack, buildEntry({ id: _qTrack, ...CANDIDATE_TRACKS[_qTrack] }));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;

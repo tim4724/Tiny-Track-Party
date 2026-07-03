@@ -42,7 +42,8 @@ for (const [name, make] of Object.entries(CANDIDATE_DESIGNS)) {
   const furn = placeFurniture(t, { oils: 2 });
   out[id] = { name: name[0].toUpperCase() + name.slice(1), cup: 'rooftop', segments: r.segs, ...furn };
   console.log(`${id.padEnd(16)} len ${r.grade.len} (~${r.ai.lapSec}s)  strand ${r.grade.minStrand}  twist ${r.grade.twistRate}  seam ${r.grade.seamUp}  closed ${r.grade.closed}`);
-  if (!r.grade.closed || r.grade.minStrand < 1.5 || r.grade.twistRate >= 0.21 || r.grade.seamUp < 0.9) {
+  if (!r.grade.closed || r.grade.minStrand < 1.5 || r.grade.twistRate >= 0.21 || r.grade.seamUp < 0.9
+    || (r.grade.sameLevelGap != null && r.grade.sameLevelGap < 0)) {
     console.log(`  ⚠ ${id} fails a structural gate — fix the design before auditioning it`);
     process.exitCode = 1;
   }

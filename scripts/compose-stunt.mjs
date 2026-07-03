@@ -182,11 +182,21 @@ function grade(segs) {
     worstTwist = Math.max(worstTwist, Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub))) / ds);
   }
   let minStrand = Infinity, strandAt = null;
+  // sameLevelGap: worst (horizontal − required) between arc-distant UPRIGHT strands at
+  // the same height — negative means the 5-wide decks visibly merge, which the 3D
+  // minStrand gate cannot see (it shipped that way on Gauntlet + Skyline once; the
+  // audit + unit suite now ban it, and this makes a re-composition fail at the source).
+  let sameLevelGap = Infinity, sameLevelAt = null;
   for (let i = 0; i < ss.length; i += 2) for (let j = i + 2; j < ss.length; j += 2) {
     const arcD = Math.min(Math.abs(ss[i].s - ss[j].s), L - Math.abs(ss[i].s - ss[j].s));
     if (arcD < 6) continue;
     const d = ss[i].pos.distanceTo(ss[j].pos);
     if (d < minStrand) { minStrand = d; strandAt = [Math.round(ss[i].s), Math.round(ss[j].s)]; }
+    if (arcD < 8 || ss[i].up.y < 0.9 || ss[j].up.y < 0.9) continue;
+    if (Math.abs(ss[i].pos.y - ss[j].pos.y) >= 0.6) continue;
+    const h = Math.hypot(ss[i].pos.x - ss[j].pos.x, ss[i].pos.z - ss[j].pos.z);
+    const gap = h - (ss[i].width / 2 + ss[j].width / 2 + 0.42);
+    if (gap < sameLevelGap) { sameLevelGap = gap; sameLevelAt = [Math.round(ss[i].s), Math.round(ss[j].s)]; }
   }
   for (const sm of ss) {
     maxY = Math.max(maxY, sm.pos.y);
@@ -195,7 +205,9 @@ function grade(segs) {
   }
   return { closed: t.closed, gap: +t.gap.toFixed(3), len: Math.round(L),
     twistRate: +worstTwist.toFixed(3), seamUp: +minUpSeam.toFixed(3),
-    minStrand: +minStrand.toFixed(2), strandAt, maxY: +maxY.toFixed(1), inverted, sideways,
+    minStrand: +minStrand.toFixed(2), strandAt,
+    sameLevelGap: sameLevelGap === Infinity ? null : +sameLevelGap.toFixed(2), sameLevelAt,
+    maxY: +maxY.toFixed(1), inverted, sideways,
     seamVert: +ss[0].up.y.toFixed(3) };
 }
 
@@ -356,6 +368,12 @@ export function designSkysnake() {
   return { name: 'skysnake', segs };
 }
 
+// NB: the SHIPPED segment lists in tracks.js are canonical, not these designs — the
+// audit round moved Gauntlet's and Skyline's south edges via manual anti-parallel leg
+// tweaks the closure solver knows nothing about. Re-composing a design reproduces the
+// PRE-audit geometry: always run scripts/audit-tracks.mjs (and the unit suite) before
+// pasting fresh numbers over the shipped ones. grade().sameLevelGap flags the deck-
+// overlap class at composition time.
 export const DESIGNS = {
   helix: designHelix, skyline: designSkyline, coaster: designCoaster,
   gauntlet: designGauntlet, skysnake: designSkysnake
