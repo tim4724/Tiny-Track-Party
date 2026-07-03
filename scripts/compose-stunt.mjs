@@ -91,6 +91,41 @@ export function solveClosureAuto(segs, { minLen = 3 } = {}) {
   return best;
 }
 
+// ---- alignment: solve two legs so a LATER point on the lap hits a plan target ----
+// Same 2×2 linear solve as closure, different objective: adjust segs[iA]/segs[iB]
+// (both BEFORE segment iTarget) so the cursor at the START of iTarget lands on
+// (tx, tz) (unscaled plan coords). Used by Gauntlet to park the ramp crest dead-
+// centre in its loop's ring opening.
+export function solveAlign(segs, iA, iB, iTarget, tx, tz) {
+  const cur = planWalk(segs.slice(0, iTarget));
+  const thA = headingAt(segs, iA), thB = headingAt(segs, iB);
+  const [ax, az] = dirV(thA), [bx, bz] = dirV(thB);
+  const det = ax * bz - az * bx;
+  if (Math.abs(det) < 1e-3) throw new Error('alignment legs are (near-)parallel');
+  const gx = tx - cur.x, gz = tz - cur.z;
+  const dA = (gx * bz - gz * bx) / det, dB = (ax * gz - az * gx) / det;
+  segs[iA].length = +(segs[iA].length + dA).toFixed(3);
+  segs[iB].length = +(segs[iB].length + dB).toFixed(3);
+  if (segs[iA].length < 2 || segs[iB].length < 2)
+    throw new Error(`alignment legs went too short (${segs[iA].length}, ${segs[iB].length})`);
+  return { dA, dB };
+}
+
+// Measure a built track's (single) toy-loop ring: centre = mean of the ring samples
+// (a uniformly-sampled full circle averages to its centre), in WORLD units.
+export function measureRing(segs) {
+  const t = buildTrack(segs, { startGate: false });
+  const ss = t.centerline.samples, n = ss.length;
+  let a = -1, b = -1;
+  for (let i = 0; i < n; i++) if (ss[i].up.y < 0.3) { if (a < 0) a = i; b = i; }
+  if (a < 0) throw new Error('no inverted crown found — is there a loop?');
+  while (a > 0 && ss[a].pos.y > 0.6) a--;
+  while (b < n - 1 && ss[b].pos.y > 0.6) b++;
+  let cx = 0, cy = 0, cz = 0, cnt = 0;
+  for (let i = a; i <= b; i++) { cx += ss[i].pos.x; cy += ss[i].pos.y; cz += ss[i].pos.z; cnt++; }
+  return { x: cx / cnt, y: cy / cnt, z: cz / cnt };
+}
+
 // ---- roll trims: sweep each marked element to minimize off-stunt tilt ----
 // Score: ground-level, near-level road should sit upright (authored banks ≤10° pass
 // under the 12° allowance); un-cancelled holonomy tilts whole flat stretches 30-70°.
@@ -246,97 +281,130 @@ export function designCoaster() {
 }
 
 // ---- AUDITION VARIANTS (gallery-tracks candidates — composed but not registered) ----
+// Round 2 ("the trick tracks need to be more exciting"): bigger verticality, steeper
+// plunges, and the thread-the-ring signature move. The rejected round-1 variants
+// (skyfall/bigdipper/orbit/boomerang) live in git history.
 
-// SKYFALL — Skyline's documented no-inversion fallback, as its own track: spiral climb
-// to a 5.2-world skyway, a banked descending corner, a long ramp home past a toy loop.
-export function designSkyfall() {
+// GAUNTLET — thread the needle: the lap fires straight THROUGH the ring of its own toy
+// loop. A pillared ramp climbs to the ring's measured centre height, crests dead-centre
+// in the opening (the hole faces ±lateral, so the ramp runs perpendicular to the loop's
+// travel), and plunges down the far side. The `align` hook measures the built ring and
+// solves the two _align legs so the crest lands on its axis (the modern version of the
+// old jump-through-loop probe work on Twister).
+export function designGauntlet() {
   const segs = [
-    ...run(3),                                                        // grid θ=0
-    arc(RL, -90),                                                     // θ=-90
-    straight(12, { _leg: true }),                                     // top leg east
-    arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90)
-    straight(22, { pillars: true, _leg: true }),                      // SKYWAY south @2.6
-    arc(RL, -90, { rise: -1.2, bank: 10, pillars: true, _sweep: true }), // descending corner (θ=-270)
-    straight(10, { rise: -1.4, pillars: true }),                      // ramp down, west-bound
-    straight(6),                                                      // beat — boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP (jogs outboard)
-    straight(8, { _leg: true }),                                      // west run home
-    arc(RL, -90)                                                      // into the grid (θ=-360... net -720)
+    straight(14),                                                     // grid θ=0, north
+    arc(RL, -90),                                                     // θ=-90 east
+    straight(12),                                                     // east leg
+    arc(RL, -90),                                                     // θ=-180 south
+    straight(8),                                                      // boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // THE RING (opening faces ±X)
+    straight(10),                                                     // spacing south
+    arc(RL, -90),                                                     // θ=-270 west
+    straight(14, { _align: true }),                                   // overshoot WEST past the ring (align leg 1)
+    arc(RL, -90),                                                     // θ=-360 north
+    straight(12, { _align: true }),                                   // come back NORTH to ring latitude (align leg 2)
+    arc(RL, -90),                                                     // θ=-450 — EAST, straight at the ring
+    straight(9, { pillars: true, width: [2.5, 2.2], _ramp: 'up' }),   // THE RAMP (rise set from the measured ring)
+    straight(6, { pillars: true, width: [2.2, 2.5], _ramp: 'down' }), // THE PLUNGE through the ring...
+    straight(8, { pillars: true }),                                   // ...onto a low bridge OVER the boost leg
+    straight(5, { rise: -0.9, pillars: true }),                       // final drop to ground
+    straight(8, { _leg: true }),                                      // east run out
+    arc(RL, -90),                                                     // θ=-540 south
+    straight(6, { _leg: true }),
+    arc(RL, -90),                                                     // θ=-630 west
+    straight(24, { _leg: true }),                                     // south edge home
+    arc(RL, -90),                                                     // θ=-720 north
+    straight(6, { _leg: true })                                       // into the grid
   ];
-  return { name: 'skyfall', segs };
+  return { name: 'gauntlet', segs, align: alignGauntlet };
+}
+function alignGauntlet(segs) {
+  const SCALE = 2; // TrackBuilder's plan→world factor (plan coords here are unscaled)
+  const iUp = segs.findIndex((s) => s._ramp === 'up');
+  const iDown = segs.findIndex((s) => s._ramp === 'down');
+  const [iA, iB] = segs.map((s, i) => (s._align ? i : -1)).filter((i) => i >= 0);
+  const ring = measureRing(segs);                       // world coords; the ring sits before the align legs, so it won't move
+  const lip = +(ring.y / SCALE).toFixed(2);
+  segs[iUp].rise = lip;                                 // crest at the ring's centre height
+  segs[iDown].rise = +(0.9 - lip).toFixed(2);           // plunge down to the 0.9 bridge that clears the boost leg
+  const r = solveAlign(segs, iA, iB, iDown, ring.x / SCALE, ring.z / SCALE);
+  const crest = planWalk(segs.slice(0, iDown));
+  const err = Math.hypot(crest.x - ring.x / SCALE, crest.z - ring.z / SCALE) * SCALE;
+  console.log(`  gauntlet align: legs ${r.dA >= 0 ? '+' : ''}${r.dA.toFixed(2)}/${r.dB >= 0 ? '+' : ''}${r.dB.toFixed(2)}, crest ${err.toFixed(2)} world off ring axis, lip ${ring.y.toFixed(1)} world`);
+  if (err > 1.0) throw new Error(`gauntlet crest ${err.toFixed(2)} world off the ring axis`);
 }
 
-// BIGDIPPER — Coaster's big sibling: FIVE shrinking camelbacks down one whole side,
-// then a toy-loop S-pair on the return. Still zero banking, zero inversion.
-export function designBigdipper() {
+// TOWER — the big one: a 2¼-turn corkscrew tower (-810°) climbing to a 6.8-world sky
+// run, then THE DROP — a freefall dive back to ground straight into a toy loop.
+// Successive winds sit 3.0 world apart (strand gate is 1.5).
+export function designTower() {
   const segs = [
-    straight(16, { _leg: true }),                                     // grid θ=0 (the only N-S absorber)
-    arc(RL, -90),
-    straight(7, { bump: 0.85 }), straight(7, { bump: 0.7 }), straight(7, { bump: 0.55 }),
-    straight(7, { bump: 0.4 }), straight(7, { bump: 0.3 }),           // THE DIPPER RUN
+    straight(16, { _leg: true }),                                     // grid θ=0
+    arc(RL, -90),                                                     // θ=-90 east
+    straight(12, { _leg: true }),                                     // approach
+    arc(RL, -810, { rise: 3.4, bank: 10, pillars: true, _sweep: true }), // THE TOWER (net -90)
+    straight(18, { pillars: true, _leg: true }),                      // sky run south @6.8 world
+    straight(12, { rise: -3.4, pillars: true }),                      // THE DROP (peak slope ~0.53)
+    straight(6),                                                      // flat beat — boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
+    straight(8, { _leg: true }),                                      // south leg
+    arc(RL, -90),                                                     // θ=-270 west
+    straight(14, { _leg: true }),                                     // west leg
+    arc(RL, -90)                                                      // home (net -1080)
+  ];
+  return { name: 'tower', segs };
+}
+
+// LEAPFROG — three pillared KICKER ramps in a row: sharp crest, steeper plunge (peak
+// ~30° down) — the closest the ribbon gets to a jump — then a toy loop on the return.
+export function designLeapfrog() {
+  const segs = [
+    straight(14, { _leg: true }),                                     // grid θ=0
+    arc(RL, -90),                                                     // east
+    straight(4),
+    straight(5, { rise: 1.1, pillars: true }), straight(3.5, { rise: -1.1, pillars: true }), // KICKER 1
+    straight(3),
+    straight(5, { rise: 0.9, pillars: true }), straight(3, { rise: -0.9, pillars: true }),   // KICKER 2
+    straight(3),
+    straight(5, { rise: 0.7, pillars: true }), straight(3, { rise: -0.7, pillars: true }),   // KICKER 3
     straight(6, { _leg: true }),
-    arc(RL, -90),
-    straight(14, { _leg: true }),                                     // boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP L
-    straight(10),                                                     // beat
-    loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP R
-    straight(6, { _leg: true }),
-    arc(RL, -90),
-    straight(10, { _leg: true }),
+    arc(RL, -90),                                                     // south
+    straight(12, { _leg: true }),                                     // boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
+    straight(6),
+    arc(RL, -90),                                                     // west
+    straight(14, { _leg: true }),
     arc(RL, -90)
   ];
-  return { name: 'bigdipper', segs };
+  return { name: 'leapfrog', segs };
 }
 
-// ORBIT — a figure-8 in the Crossover mould (3 right + 3 left corners net 0°, one
-// pillared bridge flying the crossing) with a couple of camelbacks on the far side
-// and a toy loop on the bottom lobe. Crossover's spirit, remixed with the new toys.
-export function designOrbit() {
+// SKYSNAKE — a slalom IN THE SKY: spiral up to 5.2 world, weave an S-S through the
+// clouds on pillars, then dive home past a toy loop.
+export function designSkysnake() {
   const segs = [
-    ...run(5),                                                        // SPINE θ=0 (the strand the bridge crosses)
-    arc(RL, -90), straight(6, { _leg: true }), arc(RL, -90),          // top lobe (cw) → θ=-180
-    straight(7, { bump: 0.7 }), straight(7, { bump: 0.5 }),           // camelbacks down the far side
-    straight(6, { _leg: true }),
-    arc(RL, -90),                                                     // θ=-270, west-bound
-    straight(4, { rise: 1.0, pillars: true }),
-    straight(12, { pillars: true, _leg: true }),                      // THE BRIDGE over the spine
-    straight(4, { rise: -1.0, pillars: true }),
-    arc(RL, 90),                                                      // θ=-180
-    straight(8, { _leg: true }),                                      // boost — straight into
-    loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP
-    straight(4),
-    arc(RL, 90), straight(12, { _leg: true }), arc(RL, 90),           // bottom lobe (ccw) → θ=0
-    straight(8, { _leg: true })                                       // back to the spine
-  ];
-  return { name: 'orbit', segs };
-}
-
-// BOOMERANG — the L-shaped grand tour (Riverside's 5-left + 1-right skeleton) with a
-// big summit on one arm and a toy loop on the other. Flowing, no banking.
-export function designBoomerang() {
-  const segs = [
-    straight(12, { _leg: true }),                                     // grid θ=0 (the L-shape's long arm absorber)
-    arc(RL, 90),                                                      // θ=90
+    straight(14, { _leg: true }),                                     // grid θ=0
+    arc(RL, -90),                                                     // east
     straight(10, { _leg: true }),
-    arc(RL, 90),                                                      // θ=180
-    straight(8, { rise: 1.6 }), straight(8, { rise: -1.6 }),          // THE SUMMIT
-    straight(4, { _leg: true }),
-    arc(RL, -90),                                                     // the re-entrant elbow (θ=90)
+    arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90) → south
+    arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),  // THE SKY WEAVE (net 0)
+    arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
+    straight(6, { pillars: true }),
+    straight(10, { rise: -2.6, pillars: true }),                      // dive to ground
+    straight(5),                                                      // boost — straight into
+    loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP
     straight(8, { _leg: true }),
-    arc(RL, 90),                                                      // θ=180
-    straight(6),                                                      // boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
-    straight(6, { _leg: true }),
-    arc(RL, 90),                                                      // θ=270
+    arc(RL, -90),                                                     // west
     straight(12, { _leg: true }),
-    arc(RL, 90)                                                       // home (θ=360)
+    arc(RL, -90)                                                      // home (net -720)
   ];
-  return { name: 'boomerang', segs };
+  return { name: 'skysnake', segs };
 }
 
 export const DESIGNS = { helix: designHelix, skyline: designSkyline, coaster: designCoaster };
 export const CANDIDATE_DESIGNS = {
-  skyfall: designSkyfall, bigdipper: designBigdipper, orbit: designOrbit, boomerang: designBoomerang
+  gauntlet: designGauntlet, tower: designTower, leapfrog: designLeapfrog, skysnake: designSkysnake
 };
 
 // Solve + trim one design in place; returns the report pieces. Sweep/leg markers are
@@ -345,10 +413,13 @@ export const CANDIDATE_DESIGNS = {
 export async function compose(design) {
   const { name, segs } = design;
   const rollIdx = segs.map((s, i) => i).filter((i) => segs[i]._sweep);
+  // alignment (e.g. Gauntlet's thread-the-ring) runs FIRST: its legs sit between the
+  // stunt and the closure legs, so the closure solve afterwards absorbs the shift.
+  if (design.align) design.align(segs);
   const c = solveClosureAuto(segs);
   for (const i of rollIdx) segs[i].roll = segs[i].roll || 0;
   const r = sweepRolls(segs, rollIdx);
-  for (const s of segs) { delete s._sweep; delete s._leg; }
+  for (const s of segs) { delete s._sweep; delete s._leg; delete s._align; delete s._ramp; }
   const g = grade(segs);
   const m = measureTrack(buildTrack(segs));
   const ai = await aiProbe(segs);

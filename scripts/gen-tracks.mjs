@@ -15,25 +15,25 @@ import { bakeSeed, buildTrack, placeFurniture, PROFILES } from './track-gen.mjs'
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 
 // which {seed, profile} becomes which track id (re-pick by editing this, then re-run)
+// User-picked rosters (audition round of 2026-07-03; see gallery-tracks.html).
 const SEEDS = {
-  // Beach Cup (Easy) — scan-seeds easy picks: distinct flowing shapes, hop/hill-decorated
+  // Beach Cup (Easy)
   tidepool:   { seed: 88,  profile: 'easy' },
-  lagoon:     { seed: 381, profile: 'easy' },
-  boardwalk:  { seed: 125, profile: 'easy' },
-  breakwater: { seed: 297, profile: 'easy' },
-  // Backyard Cup — the original classic seeds, re-baked through the decorated mid
-  // profile (same plans/crossings — mid shares classic's grammar — plus hills/hops/
-  // width play) with auto furniture. The frozen `classic` profile stays in track-gen
-  // as provenance for the pre-decoration bakes.
-  bowtie:     { seed: 92,  profile: 'mid' },
+  cove:       { seed: 250, profile: 'easy' },
+  driftwood:  { seed: 138, profile: 'easy' },
+  riptide:    { seed: 330, profile: 'easy' },
+  // Backyard Cup (middle) — pretzel/cloverleaf are original classic seeds re-baked
+  // through the decorated mid profile (same plans/crossings — mid shares classic's
+  // grammar). The frozen `classic` profile stays in track-gen as provenance.
+  ribbon:     { seed: 128, profile: 'mid' },
   pretzel:    { seed: 13,  profile: 'mid' },
-  lasso:      { seed: 17,  profile: 'mid' },
+  tangle:     { seed: 372, profile: 'mid' },
   cloverleaf: { seed: 121, profile: 'mid' },
-  // Canyon Cup (Hard) — scan-seeds hard picks: hairpins + stacked crossings
+  // Canyon Cup (Hard)
+  wash:       { seed: 193, profile: 'hard' },
   gulch:      { seed: 550, profile: 'hard' },
+  crag:       { seed: 276, profile: 'hard' },
   sidewinder: { seed: 62,  profile: 'hard' },
-  mesa:       { seed: 107, profile: 'hard' },
-  rattler:    { seed: 383, profile: 'hard' },
 };
 
 const out = {}, furn = {};

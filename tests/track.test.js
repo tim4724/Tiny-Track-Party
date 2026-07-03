@@ -589,9 +589,12 @@ test('grass hills berm raised non-pillared road, never bridges or loops', () => 
 
 // The seeded Backyard tracks are waypoint/spline tracks: every one mixes flown-over
 // crossings (bridge -> pillars) with raised non-bridge ramps (-> grass berms). Guards
-// against buildSplineTrack silently dropping the pillar or berm pass on a geometry change.
+// against buildSplineTrack silently dropping the pillar or berm pass on a geometry
+// change. The roster is derived from the cup, so re-picks don't stale this test.
 test('seeded Backyard tracks produce both bridge pillars and grass berms', () => {
-  for (const id of ['bowtie', 'pretzel', 'lasso', 'cloverleaf']) {
+  const backyard = TRACK_LIST.filter((t) => t.cup === 'backyard');
+  assert.ok(backyard.length >= 2, 'the Backyard cup should have tracks');
+  for (const { id } of backyard) {
     const t = buildTrack(TRACKS[id]);
     assert.ok(t.pillars.length > 0, `${id}: bridged crossings should stand pillars`);
     assert.ok(t.hills.length > 0, `${id}: raised non-bridge ramps should grow berms`);

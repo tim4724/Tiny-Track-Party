@@ -11,7 +11,7 @@
 // is exactly what you want to see); catalog:<ids> reads shipped tracks.
 import fs from 'fs';
 import { bakeSeed, buildTrack } from './track-gen.mjs';
-import { DESIGNS, compose } from './compose-stunt.mjs';
+import { DESIGNS, CANDIDATE_DESIGNS, compose } from './compose-stunt.mjs';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const outIdx = process.argv.indexOf('--out');
@@ -53,7 +53,7 @@ for (const arg of args) {
   for (const item of (list || '').split(',').filter(Boolean)) {
     try {
       if (kind === 'stunt') {
-        const design = DESIGNS[item]();
+        const design = (DESIGNS[item] || CANDIDATE_DESIGNS[item])();
         let note;
         try {
           const r = await compose(design);

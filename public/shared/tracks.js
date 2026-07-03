@@ -339,31 +339,31 @@ export const TRACKS = {
     name: 'Tidepool', difficulty: 'Easy', waypoints: GEN_TRACKS.tidepool,
     oils: genFurn('tidepool').oils, pads: genFurn('tidepool').pads, boxes: genFurn('tidepool').boxes
   },
-  lagoon: {
-    name: 'Lagoon', difficulty: 'Easy', waypoints: GEN_TRACKS.lagoon,
-    oils: genFurn('lagoon').oils, pads: genFurn('lagoon').pads, boxes: genFurn('lagoon').boxes
+  cove: {
+    name: 'Cove', difficulty: 'Easy', waypoints: GEN_TRACKS.cove,
+    oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes
   },
-  boardwalk: {
-    name: 'Boardwalk', difficulty: 'Easy', waypoints: GEN_TRACKS.boardwalk,
-    oils: genFurn('boardwalk').oils, pads: genFurn('boardwalk').pads, boxes: genFurn('boardwalk').boxes
+  driftwood: {
+    name: 'Driftwood', difficulty: 'Easy', waypoints: GEN_TRACKS.driftwood,
+    oils: genFurn('driftwood').oils, pads: genFurn('driftwood').pads, boxes: genFurn('driftwood').boxes
   },
-  breakwater: {
-    name: 'Breakwater', difficulty: 'Easy', waypoints: GEN_TRACKS.breakwater,
-    oils: genFurn('breakwater').oils, pads: genFurn('breakwater').pads, boxes: genFurn('breakwater').boxes
+  riptide: {
+    name: 'Riptide', difficulty: 'Easy', waypoints: GEN_TRACKS.riptide,
+    oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes
   },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation,
-  // re-baked through the decorated mid profile; auto-placed furniture).
-  bowtie: {
-    name: 'Bowtie', difficulty: 'Medium', waypoints: GEN_TRACKS.bowtie,
-    oils: genFurn('bowtie').oils, pads: genFurn('bowtie').pads, boxes: genFurn('bowtie').boxes
+  // decorated mid profile; auto-placed furniture).
+  ribbon: {
+    name: 'Ribbon', difficulty: 'Medium', waypoints: GEN_TRACKS.ribbon,
+    oils: genFurn('ribbon').oils, pads: genFurn('ribbon').pads, boxes: genFurn('ribbon').boxes
   },
   pretzel: {
     name: 'Pretzel', difficulty: 'Hard', waypoints: GEN_TRACKS.pretzel,
     oils: genFurn('pretzel').oils, pads: genFurn('pretzel').pads, boxes: genFurn('pretzel').boxes
   },
-  lasso: {
-    name: 'Lasso', difficulty: 'Hard', waypoints: GEN_TRACKS.lasso,
-    oils: genFurn('lasso').oils, pads: genFurn('lasso').pads, boxes: genFurn('lasso').boxes
+  tangle: {
+    name: 'Tangle', difficulty: 'Hard', waypoints: GEN_TRACKS.tangle,
+    oils: genFurn('tangle').oils, pads: genFurn('tangle').pads, boxes: genFurn('tangle').boxes
   },
   cloverleaf: {
     name: 'Cloverleaf', difficulty: 'Expert', waypoints: GEN_TRACKS.cloverleaf,
@@ -371,21 +371,21 @@ export const TRACKS = {
   },
   // Canyon Cup — SEEDED hard circuits (scan-seeds `hard` profile: hairpins, stacked
   // crossings, width pinches, crest hills; auto-placed furniture).
+  wash: {
+    name: 'Wash', difficulty: 'Hard', waypoints: GEN_TRACKS.wash,
+    oils: genFurn('wash').oils, pads: genFurn('wash').pads, boxes: genFurn('wash').boxes
+  },
   gulch: {
     name: 'Gulch', difficulty: 'Hard', waypoints: GEN_TRACKS.gulch,
     oils: genFurn('gulch').oils, pads: genFurn('gulch').pads, boxes: genFurn('gulch').boxes
   },
-  mesa: {
-    name: 'Mesa', difficulty: 'Hard', waypoints: GEN_TRACKS.mesa,
-    oils: genFurn('mesa').oils, pads: genFurn('mesa').pads, boxes: genFurn('mesa').boxes
+  crag: {
+    name: 'Crag', difficulty: 'Hard', waypoints: GEN_TRACKS.crag,
+    oils: genFurn('crag').oils, pads: genFurn('crag').pads, boxes: genFurn('crag').boxes
   },
   sidewinder: {
-    name: 'Sidewinder', difficulty: 'Hard', waypoints: GEN_TRACKS.sidewinder,
+    name: 'Sidewinder', difficulty: 'Expert', waypoints: GEN_TRACKS.sidewinder,
     oils: genFurn('sidewinder').oils, pads: genFurn('sidewinder').pads, boxes: genFurn('sidewinder').boxes
-  },
-  rattler: {
-    name: 'Rattler', difficulty: 'Expert', waypoints: GEN_TRACKS.rattler,
-    oils: genFurn('rattler').oils, pads: genFurn('rattler').pads, boxes: genFurn('rattler').boxes
   },
   // Rooftop Cup — segment-DSL stunt circuits (overpass + loops).
   crossover: {
@@ -432,9 +432,9 @@ export const TRACKS = {
 // Place-based names that double as each cup's future biome (themed environments,
 // later phase): Backyard = grass/grounded; Rooftop = ramps/overpass/stunts.
 export const CUPS = [
-  { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'lagoon', 'boardwalk', 'breakwater'] }, // easy: flowing sweepers + hops (beach biome)
-  { id: 'backyard', name: 'Backyard Cup', tracks: ['bowtie', 'pretzel', 'lasso', 'cloverleaf'] }, // middle: seeded multi-crossing circuits
-  { id: 'canyon',   name: 'Canyon Cup',   tracks: ['gulch', 'mesa', 'sidewinder', 'rattler'] },   // hard: hairpins + stacked crossings (biome TBD → grass)
+  { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
+  { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits
+  { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (biome TBD → grass)
   { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['coaster', 'helix', 'skyline', 'twister'] } // crazy: stunts (rooftop biome); crossover retired 2026-07-03
 ];
 

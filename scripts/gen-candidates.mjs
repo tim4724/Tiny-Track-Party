@@ -19,12 +19,10 @@ import { bakeSeed, buildTrack, placeFurniture, PROFILES } from './track-gen.mjs'
 import { CANDIDATE_DESIGNS, compose } from './compose-stunt.mjs';
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 
-// which {seed, profile} auditions in which cup section (shipped picks live in gen-tracks.mjs)
-const SEED_CANDIDATES = {
-  beach:    [ { seed: 110, profile: 'easy' }, { seed: 138, profile: 'easy' }, { seed: 250, profile: 'easy' }, { seed: 330, profile: 'easy' } ],
-  backyard: [ { seed: 94,  profile: 'mid' },  { seed: 128, profile: 'mid' },  { seed: 168, profile: 'mid' },  { seed: 372, profile: 'mid' } ],
-  canyon:   [ { seed: 18,  profile: 'hard' }, { seed: 193, profile: 'hard' }, { seed: 276, profile: 'hard' }, { seed: 519, profile: 'hard' } ],
-};
+// which {seed, profile} auditions in which cup section (shipped picks live in
+// gen-tracks.mjs). The seeded cups' rosters were settled in the 2026-07-03 audition —
+// currently only the Rooftop runs candidates (CANDIDATE_DESIGNS below).
+const SEED_CANDIDATES = {};
 
 const out = {};
 for (const [cup, list] of Object.entries(SEED_CANDIDATES)) {
