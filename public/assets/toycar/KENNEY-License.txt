@@ -26,3 +26,13 @@
 	• Twitter:   twitter.com/KenneyNL
 	• Instagram: instagram.com/kenney_nl
 	• Mastodon:  mastodon.gamedev.place/@kenney
+		------------------------------
+
+	This folder also contains models from Kenney's Nature Kit (2.3)
+	(cactus-short.glb, cactus-tall.glb — renamed from cactus_short/
+	cactus_tall), same author, same CC0 license as above.
+	Later additions from the same kit: palm-tall.glb, palm-bend.glb
+	(renamed from tree_palmTall/tree_palmBend).
+
+	tree-snow-a/b/c.glb come from Kenney's Holiday Kit (1.0) — same
+	author, same CC0 license as above.

@@ -1,7 +1,8 @@
 // Track-independent world dressing: sky dome, drifting clouds, horizon hills,
 // the toy lighting rig and the ground plane. Built once per renderer; returns the
 // pieces the frame loop / per-track fitting need to touch — PLUS the handles
-// (sky, hemi, hills) that applyEnvTheme() recolours when the cup's biome changes.
+// (sky, hemi, hills, clouds) that applyEnvTheme() re-dresses when the cup's biome
+// changes (recolour/re-tint in place; hills also reshape on a dome↔mesa switch).
 //
 // All look that varies per cup lives in a THEME (see shared/themes.js): sky colours,
 // ground texture, hill colours, light tint/intensity. Everything is built from the
@@ -9,7 +10,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeLawnTexture, makeSandTexture } from './textures.js';
+import { makeCloudTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -31,7 +32,10 @@ const _groundTexCache = new Map();
 function groundTexture(kind = 'lawn') {
   let tex = _groundTexCache.get(kind);
   if (tex) return tex;
-  tex = (kind === 'sand') ? makeSandTexture() : makeLawnTexture();
+  tex = (kind === 'sand') ? makeSandTexture()
+      : (kind === 'redrock') ? makeRedRockTexture()
+      : (kind === 'snow') ? makeSnowTexture()
+      : makeLawnTexture();
   // Tile across the big plane at the same world scale as the old 600u lawn (UVs run 0..1
   // over the plane, so repeat == tiles across it). Berm UVs in track.js use worldXZ /
   // GROUND_SIZE to match this exactly — so EVERY ground kind must share this repeat.
@@ -66,17 +70,17 @@ function paintSky(skyGeo, theme) {
   colAttr.needsUpdate = true;
 }
 
-// Recolour the merged horizon-hill ring from a theme. The ring is HILL_DOMES domes
-// concatenated in order, each `domeVerts` vertices (stored on the mesh at build), so
-// dome i owns the contiguous vertex block [i*domeVerts, (i+1)*domeVerts). Cycling the
-// theme's hill colours over that block recolours in place — no rebuild, no GPU leak.
+// Recolour the merged horizon-hill ring from a theme. The ring is `count` features
+// concatenated in order, each `featureVerts` vertices (both stored on the mesh at
+// build), so feature i owns the contiguous vertex block [i*per, (i+1)*per). Cycling
+// the theme's hill colours over that block recolours in place — no rebuild, no GPU leak.
 function paintHills(hills, theme) {
   const colAttr = hills.geometry.attributes.color;
   const arr = colAttr.array;
-  const per = hills.userData.domeVerts;
+  const per = hills.userData.featureVerts;
   const cols = theme.hills;
   const hc = new THREE.Color();
-  for (let i = 0; i < HILL_DOMES; i++) {
+  for (let i = 0; i < hills.userData.count; i++) {
     hc.set(cols[i % cols.length]).convertSRGBToLinear();
     for (let k = 0; k < per; k++) {
       const v = (i * per + k) * 3;
@@ -84,6 +88,68 @@ function paintHills(hills, theme) {
     }
   }
   colAttr.needsUpdate = true;
+}
+
+// Horizon-ring geometry for a biome's hill silhouette. 'dome' is the original ring of
+// squashed toy spheres — every literal is the pre-theming original, so grass stays
+// byte-identical. 'mesa' is a ring of flat-topped buttes (truncated cones): the crisp
+// plateau edge (the caps keep their own normals) against sloped talus is what reads
+// "canyon" in silhouette where a dome reads "meadow". Placeholder colour attribute on
+// every feature — paintHills overwrites it from the theme.
+function buildHillRingGeometry(shape = 'dome') {
+  let proto, count;
+  if (shape === 'mesa') {
+    proto = new THREE.CylinderGeometry(0.58, 1, 1, 9, 1); // plateau ≈ 0.6× the talus foot
+    proto.translate(0, 0.5, 0); // base at y=0 → the y scale below IS the plateau height
+    count = 14; // mesas are broad — fewer fill the ring without fusing into a wall
+  } else {
+    proto = new THREE.SphereGeometry(1, 8, 5); // far, fog-soft, non-uniformly squashed — faceting invisible at this resolution
+    count = HILL_DOMES;
+  }
+  proto.deleteAttribute('uv');
+  const featureVerts = proto.attributes.position.count;
+  const geoms = [];
+  for (let i = 0; i < count; i++) {
+    const g = proto.clone();
+    if (shape === 'mesa') {
+      g.rotateY((i % 7) * 0.9); // vary the facet phase so the ring doesn't read as stamped
+      g.scale(20 + (i % 4) * 8, 8 + (i % 3) * 4.5, 16 + ((i + 2) % 4) * 7);
+      const a = (i / count) * Math.PI * 2 + (i % 5) * 0.17;
+      const r = 152 + (i % 3) * 20;
+      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the ground plane
+    } else {
+      g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
+      const a = (i / HILL_DOMES) * Math.PI * 2 + (i % 5) * 0.13;
+      const r = 150 + (i % 3) * 18;
+      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the grass plane
+    }
+    // placeholder per-vertex colour attribute (paintHills overwrites it from the theme)
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(featureVerts * 3), 3));
+    geoms.push(g);
+  }
+  proto.dispose();
+  const geometry = mergeGeometries(geoms, false);
+  for (const g of geoms) g.dispose(); // copied into the merge
+  return { geometry, featureVerts, count };
+}
+
+// Sky-puff dressing defaults — the canonical fat white cumulus (all literals are the
+// pre-theming constants; a theme without `clouds` gets exactly this). `scale`/`aspect`
+// multiply each sprite's authored base width, so wisp biomes can stretch and thin the
+// same 8 sprites instead of rebuilding them; `count` just hides the tail.
+const DEF_CLOUDS = { count: 8, opacity: 0.8, scale: 1, aspect: 0.42, tint: 0xffffff };
+
+// Re-dress the (already built) cloud sprites for a biome. Sprites are never created
+// or destroyed on a theme switch — visibility, opacity, tint and scale are the knobs.
+function applyClouds(clouds, theme) {
+  const c = { ...DEF_CLOUDS, ...(theme.clouds || {}) };
+  clouds.forEach((sprite, i) => {
+    sprite.visible = i < c.count;
+    sprite.material.opacity = c.opacity;
+    sprite.material.color.set(c.tint);
+    const w = sprite.userData.w * c.scale;
+    sprite.scale.set(w, w * c.aspect, 1);
+  });
 }
 
 export function buildEnvironment(scene, theme = THEMES.grass) {
@@ -104,7 +170,9 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
 
   // Clouds: a handful of soft sprite puffs drifting slowly. Sprites billboard
   // per camera, so they read correctly in every split-screen cell; fog:false
-  // because they live past the fog's far end. Drift is stepped in _loop.
+  // because they live past the fog's far end. Drift is stepped in _loop. Always
+  // 8 sprites built (the roomiest biome's worth); the theme dresses them —
+  // count/opacity/tint/stretch via applyClouds — so a biome swap never rebuilds.
   const clouds = [];
   {
     const cloudTex = makeCloudTexture();
@@ -115,40 +183,27 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
       const a = (i / 8) * Math.PI * 2 + (i % 3) * 0.45;
       const r = 180 + (i % 4) * 38;
       sprite.position.set(Math.cos(a) * r, 42 + (i % 3) * 16, Math.sin(a) * r);
-      const w = 50 + (i % 3) * 20;
-      sprite.scale.set(w, w * 0.42, 1);
+      sprite.userData.w = 50 + (i % 3) * 20; // authored base width — applyClouds scales from this
       clouds.push(sprite);
       scene.add(sprite);
     }
+    applyClouds(clouds, theme);
   }
 
-  // Horizon hills: one merged ring of squashed toy domes, far outside any track and
-  // deep in the fog tail, so they render as soft pale silhouettes — depth for the
-  // diorama without competing with it. Colours come from the theme (paintHills); the
-  // per-dome vertex count is stashed so a biome swap can recolour in place.
+  // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
+  // for the diorama without competing with it. Shape comes from the theme (domes vs
+  // mesas — buildHillRingGeometry), colours from paintHills; the per-feature vertex
+  // count/total are stashed so a biome swap can recolour (or reshape) in place.
   let hills;
   {
-    const hillProto = new THREE.SphereGeometry(1, 8, 5); // far, fog-soft, non-uniformly squashed — faceting invisible at this resolution
-    hillProto.deleteAttribute('uv');
-    const domeVerts = hillProto.attributes.position.count;
-    const geoms = [];
-    for (let i = 0; i < HILL_DOMES; i++) {
-      const g = hillProto.clone();
-      g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
-      const a = (i / HILL_DOMES) * Math.PI * 2 + (i % 5) * 0.13;
-      const r = 150 + (i % 3) * 18;
-      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the grass plane
-      // placeholder per-vertex colour attribute (paintHills overwrites it from the theme)
-      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(domeVerts * 3), 3));
-      geoms.push(g);
-    }
-    hillProto.dispose();
+    const ring = buildHillRingGeometry(theme.hillShape);
     hills = new THREE.Mesh(
-      mergeGeometries(geoms, false),
-      new THREE.MeshLambertMaterial({ vertexColors: true }) // matte fog-soft domes — Lambert skips the unused PBR specular/GGX path
+      ring.geometry,
+      new THREE.MeshLambertMaterial({ vertexColors: true }) // matte fog-soft silhouettes — Lambert skips the unused PBR specular/GGX path
     );
-    for (const g of geoms) g.dispose(); // copied into the merge
-    hills.userData.domeVerts = domeVerts;
+    hills.userData.featureVerts = ring.featureVerts;
+    hills.userData.count = ring.count;
+    hills.userData.shape = theme.hillShape || 'dome';
     paintHills(hills, theme);
     scene.add(hills);
   }
@@ -201,13 +256,26 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
-// and hill ring in place, swap the ground texture, and retint both lights. Cheap and
-// allocation-light (no mesh rebuilds, textures are cached) so the host can switch cups
-// in the lobby with no hitch. Fog + scene.background colour are the renderer's job
-// (it owns the three fog profiles); this handles only the world dressing.
+// and hill ring in place, re-dress the cloud sprites, swap the ground texture, and
+// retint both lights. Cheap and allocation-light (textures cached, no sprite churn) so
+// the host can switch cups in the lobby with no hitch. The one exception: a hill-SHAPE
+// change (dome ↔ mesa) rebuilds the ring geometry — 14–18 low-poly features, still
+// hitchless, and only paid when the silhouette actually differs. Fog + background
+// colour are the renderer's job (it owns the three fog profiles); this handles only
+// the world dressing.
 export function applyEnvTheme(env, theme) {
   paintSky(env.sky.geometry, theme);
+  const shape = theme.hillShape || 'dome';
+  if (env.hills.userData.shape !== shape) {
+    env.hills.geometry.dispose();
+    const ring = buildHillRingGeometry(shape);
+    env.hills.geometry = ring.geometry;
+    env.hills.userData.featureVerts = ring.featureVerts;
+    env.hills.userData.count = ring.count;
+    env.hills.userData.shape = shape;
+  }
   paintHills(env.hills, theme);
+  applyClouds(env.clouds, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);

@@ -13,8 +13,50 @@
 //   hemi:   { sky, ground, intensity }  hemisphere fill light (sky tint / bounce tint)
 //   key:    { color, intensity }        warm directional "sun" (the plastic shine)
 //   ground: { kind }                    procedural ground texture id (see textures.js:
-//                                       'lawn' | 'sand')
-//   hills:  [c0, c1, c2]                horizon-dome ring colours, cycled i%len
+//                                       'lawn' | 'sand' | 'redrock' | 'snow')
+//   hills:  [c0, c1, c2]                horizon-ring colours, cycled i%len
+//   hillShape: (optional)               horizon-ring silhouette: 'dome' (default — soft
+//                                       meadow mounds) | 'mesa' (flat-topped buttes);
+//                                       a shape change rebuilds the ring (environment.js)
+//   clouds: (optional)                  { count ≤8, opacity, scale, aspect, tint } sky-puff
+//                                       dressing; omit for the canonical fat white cumulus
+//                                       (8 × opacity .8). scale/aspect stretch the sprites
+//                                       (wisps = wider, flatter), tint warms/cools them
+//   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
+//            placement logic (seeded stream, corridor clearance, clustering) is shared;
+//            the palette decides WHAT gets stamped, so a desert never grows oak trees:
+//     trees:   [{ model, w, s, tint? }]  weighted GLB silhouettes; w's should sum to 1.
+//              s is [base, spread] — a stamp's scale is base + rand()*spread (kept as
+//              the raw pair so the arithmetic matches the pre-theming literals
+//              bit-for-bit). tint applies ONLY to untextured models (e.g. the
+//              Nature-Kit cacti/palms): baked into vertex colours. A hex recolours
+//              the whole model; a { 'authoredHex': newHex } map recolours per part
+//              (palms: fronds + trunk carry different authored colours). Colormap-
+//              textured kit models ignore it. Within one biome all TEXTURED models
+//              must share a single colormap (they merge into one mesh/material).
+//     bush:    { model, s, sink, tint? } the "bush" trick — a donor silhouette sunk to
+//              its canopy (procedural bush shapes failed, see buildScenery) — or null.
+//              tint as in trees, for untextured donors
+//     mix:     { tree, bush }     CUMULATIVE roll thresholds: roll < tree → tree,
+//              roll < bush → bush, else rock. tree === bush means "no bushes".
+//     rocks:   [c0, c1, ...]      boulder tint family (flat-shaded, per-vertex)
+//     rockS:   [base, spread]     boulder radius = base + rand()*spread
+//     density: 0..1               per-side spawn chance at each corridor candidate
+
+// Green-parkland scenery, shared by every biome that keeps the grass world (grass +
+// sunset — golden light over the SAME trees is the sunset look). Every value is the
+// VERBATIM pre-theming constant from buildScenery; do not drift it, or grass-cup
+// tracks lose their byte-identical guarantee (scenery placement is seeded, so any
+// changed literal reshuffles the whole scatter).
+const GRASS_SCENERY = {
+  trees:   [{ model: 'tree', w: 0.65, s: [2.3, 1.1] },       // round oak — the staple
+            { model: 'tree-pine', w: 0.35, s: [2.3, 1.1] }], // pine as the accent
+  bush:    { model: 'tree', s: [1.1, 0.7], sink: 0.3 },
+  mix:     { tree: 0.62, bush: 0.9 },
+  rocks:   [0xc6cbd6, 0xb4bac8, 0x9aa1b4], // pillar-concrete family
+  rockS:   [0.3, 0.45],
+  density: 0.62,
+};
 
 export const THEMES = {
   // ── grass — the canonical Sunny Circuit biome. Every value here is the VERBATIM
@@ -27,6 +69,7 @@ export const THEMES = {
     key:    { color: 0xfff1d0, intensity: 1.4 },
     ground: { kind: 'lawn' },
     hills:  [0x8cc578, 0x7cb86a, 0x9bce86],
+    scenery: GRASS_SCENERY,
   },
 
   // ── sunset — golden hour over the grass world. SAME grass ground + scenery as
@@ -40,6 +83,7 @@ export const THEMES = {
     key:    { color: 0xffa850, intensity: 1.55 },
     ground: { kind: 'lawn' },
     hills:  [0xc69a86, 0xb98a72, 0xd0a890],
+    scenery: GRASS_SCENERY,
   },
 
   // ── beach — the Easy on-ramp biome. Brighter, warmer sun; a paler turquoise
@@ -52,8 +96,89 @@ export const THEMES = {
     key:    { color: 0xfff0cf, intensity: 1.55 },
     ground: { kind: 'sand' },
     hills:  [0xe6d29a, 0xefe2b3, 0xd9c187],
+    // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
+    // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
+    // boulders, scattered sparser than parkland so the beach reads open and airy.
+    scenery: {
+      trees:   [{ model: 'palm-tall', w: 0.55, s: [1.6, 0.6],
+                  tint: { '70e6d6': 0x4fae6b, 'f2be9e': 0xc09a72 } },
+                { model: 'palm-bend', w: 0.45, s: [1.5, 0.6],
+                  tint: { '70e6d6': 0x54b573, 'f2be9e': 0xb8926c } }],
+      bush:    null,
+      mix:     { tree: 0.45, bush: 0.45 }, // no bushes; the rest rolls "rock"
+      rocks:   [0xdccfa8, 0xcfbd90, 0xbca878],
+      rockS:   [0.55, 0.75], // boulder-sized, not pebbles
+      density: 0.5,
+    },
+  },
+
+  // ── canyon — hot red-rock badlands (the Hard cup's biome; dormant until the canyon
+  // cup lands in tracks.js, meanwhile reachable via ?biome=canyon). A dusty near-white
+  // horizon haze over terracotta ground, rust mesa-coloured buttes, and a hot slightly
+  // orange sun — bleached desert light rather than sunset gold.
+  canyon: {
+    sky:    { zenith: 0x4292d4, horizon: 0xe8c8a2, below: 0xf4e3c6 },
+    fog:    0xe8c8a2,
+    hemi:   { sky: 0xffeedd, ground: 0xb9825e, intensity: 2.15 },
+    key:    { color: 0xffdca6, intensity: 1.6 },
+    ground: { kind: 'redrock' },
+    hills:  [0xc47a52, 0xa96545, 0xd68f62],
+    hillShape: 'mesa', // flat-topped buttes on the horizon, not meadow mounds
+    // Bone-dry air: no fat cumulus. A few high, stretched, barely-there wisps with a
+    // warm dust tint — enough to keep the sky from reading empty on a long straight.
+    clouds: { count: 3, opacity: 0.3, scale: 1.35, aspect: 0.2, tint: 0xfff2e2 },
+    scenery: {
+      // Saguaros as the signature silhouette, barrel cacti as the low accent — both
+      // are the Nature Kit's untextured models (CC0, same low-poly language as the
+      // toy-car kit), so `tint` picks their green: dusty sage, not lawn green.
+      trees:   [{ model: 'cactus-tall',  w: 0.6, s: [2.3, 0.7],   tint: 0x6da85c },
+                { model: 'cactus-short', w: 0.4, s: [1.15, 0.55], tint: 0x7cb464 }],
+      bush:    null,
+      mix:     { tree: 0.4, bush: 0.4 }, // no bushes; the rest rolls "rock"
+      rocks:   [0xc07a55, 0xa8623f, 0xd39a70], // rust → dusty ochre family
+      rockS:   [0.6, 0.9],  // canyon-scale boulders
+      density: 0.45,        // sparser than the shore; deserts read empty on purpose
+    },
+  },
+
+  // ── snow — winter alpine (no cup yet; reachable via ?biome=snow, ready for a future
+  // ladder slot). Cold pale light under a flat overcast: an ice-haze horizon, white
+  // hill domes (snowed-over mounds — the dome silhouette is right here), grey-white
+  // flattened cloud deck, and a near-white sun kept bright enough for TV readability.
+  // Scenery leans on one trick: PINES ONLY. Dropping the round oak (bare in winter)
+  // and bushes makes the same kit assets read "winter forest" with zero new models.
+  snow: {
+    sky:    { zenith: 0x6f9fd4, horizon: 0xdfe9f2, below: 0xf3f8fc },
+    fog:    0xdfe9f2,
+    hemi:   { sky: 0xedf3fc, ground: 0xb2bdcc, intensity: 2.25 },
+    key:    { color: 0xf4f8ff, intensity: 1.45 },
+    ground: { kind: 'snow' },
+    hills:  [0xeef4f9, 0xdfe9f2, 0xf7fafc],
+    clouds: { count: 6, opacity: 0.55, scale: 1.25, aspect: 0.3, tint: 0xe9edf2 }, // low flat overcast
+    scenery: {
+      // Snow-capped pines from the Holiday Kit (textured — all three share its
+      // colormap, satisfying the one-colormap rule; native ~1.9 tall vs the toy-car
+      // pine's 0.83, hence the smaller s). Three variants so a treeline never
+      // reads as stamped clones.
+      trees:   [{ model: 'tree-snow-a', w: 0.4,  s: [1.05, 0.4] },
+                { model: 'tree-snow-b', w: 0.35, s: [1.05, 0.4] },
+                { model: 'tree-snow-c', w: 0.25, s: [1.05, 0.4] }],
+      bush:    null,
+      mix:     { tree: 0.55, bush: 0.55 }, // no bushes; the rest rolls "rock"
+      rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite
+      rockS:   [0.4, 0.6], // a touch bigger than parkland — reads as snow-shouldered
+      density: 0.55,
+    },
   },
 };
+
+// Union of every GLB the biome scenery palettes reference. The display preloads this
+// whole set once (SceneRenderer.load), so switching cups/biomes in the lobby never
+// waits on a model fetch — the per-model cost is tiny (the kit props are a few KB).
+export const SCENERY_MODELS = [...new Set(Object.values(THEMES).flatMap((t) => [
+  ...t.scenery.trees.map((e) => e.model),
+  ...(t.scenery.bush ? [t.scenery.bush.model] : []),
+]))];
 
 // Cup id → biome name. Cups absent here (or an undefined cup) fall back to grass, so
 // the renderer is always safe to call themeForCup() with whatever a track carries.
@@ -61,6 +186,7 @@ const CUP_BIOME = {
   backyard: 'grass',
   rooftop:  'sunset',
   beach:    'beach',
+  canyon:   'canyon',
 };
 
 // Resolve a cup id to its biome object. Returns a STABLE reference per biome, so the

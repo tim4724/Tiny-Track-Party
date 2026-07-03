@@ -297,6 +297,87 @@ function makeSandTexture() {
   return tex;
 }
 
+// Red rock: hot canyon floor — the same tiled-canvas idiom as lawn/sand (so berm UVs
+// line up), but the banding is geological, not mowed: sediment strata in alternating
+// warm hues (rust ↔ dusty tan, a touch more contrast than sand's wind ripples) over a
+// terracotta base, with drift blotches and a darker iron-fleck speckle. Reads as baked
+// desert dirt up close and flat burnt-orange at speed.
+function makeRedRockTexture() {
+  const s = 256, strata = 8;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const base = [211, 150, 113]; // pale dusty terracotta (#d39671) — clay, not Mars
+  for (let i = 0; i < strata; i++) {
+    // alternate toward rust (redder, darker) and dusty tan (paler, yellower) — a hue
+    // wobble, not just luminance, so the bands read as sediment rather than stripes.
+    // Kept near sand's ripple contrast: the warm fog + key light already amplify it.
+    const rust = i % 2;
+    const fr = rust ? 1.008 : 0.997, fg = rust ? 0.972 : 1.024, fb = rust ? 0.958 : 1.036;
+    ctx.fillStyle = `rgb(${Math.round(base[0] * fr)},${Math.round(base[1] * fg)},${Math.round(base[2] * fb)})`;
+    ctx.fillRect(Math.floor(i * s / strata), 0, Math.ceil(s / strata), s);
+  }
+  // soft weathering blotches so the strata don't read as a print
+  ctx.filter = 'blur(6px)';
+  for (let i = 0; i < 28; i++) {
+    const f = (i % 2 ? 1.05 : 0.93);
+    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.32)`;
+    const x = (i * 73) % s, y = (i * 131) % s, r = 9 + (i * 37) % 21;
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.65, i, 0, Math.PI * 2); ctx.fill();
+  }
+  // iron flecks — darker rust grains, only legible up close
+  ctx.filter = 'none';
+  for (let i = 0; i < 120; i++) {
+    const x = (i * 53) % s, y = (i * 97) % s;
+    ctx.fillStyle = `rgba(120,62,38,${(0.06 + (i % 3) * 0.03).toFixed(2)})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(18, 18);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Snow: fresh cover under winter light — the same tiled-canvas idiom as its siblings
+// (berm UVs line up). Banding is wind-drift like the sand but at whisper contrast
+// (near-white hides nothing), blotches are soft shadowed dips with a cool blue cast,
+// and the speckle is sparse ice-grey flecks — no dark grit, snow stays clean.
+function makeSnowTexture() {
+  const s = 256, drifts = 10;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const base = [237, 242, 247]; // near-white with a cold cast (#edf2f7)
+  for (let i = 0; i < drifts; i++) {
+    const f = i % 2 ? 1.012 : 0.988; // whisper-contrast drift banding
+    ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
+    ctx.fillRect(Math.floor(i * s / drifts), 0, Math.ceil(s / drifts), s);
+  }
+  // soft dips/drifts — cool blue-grey shadows so the cover reads sculpted, not flat
+  ctx.filter = 'blur(7px)';
+  for (let i = 0; i < 24; i++) {
+    const dip = i % 2;
+    ctx.fillStyle = dip ? 'rgba(196,210,226,0.35)' : 'rgba(255,255,255,0.4)';
+    const x = (i * 73) % s, y = (i * 131) % s, r = 10 + (i * 37) % 22;
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.65, i, 0, Math.PI * 2); ctx.fill();
+  }
+  // sparse ice flecks — barely-there cool grains, legible only up close
+  ctx.filter = 'none';
+  for (let i = 0; i < 90; i++) {
+    const x = (i * 53) % s, y = (i * 97) % s;
+    ctx.fillStyle = `rgba(168,184,204,${(0.05 + (i % 3) * 0.025).toFixed(3)})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(18, 18);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
 // (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
 // the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
@@ -455,6 +536,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture, makeSandTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };
