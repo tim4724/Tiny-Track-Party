@@ -620,15 +620,25 @@ describe('RoomFlow — liveness: lifecycle stamp hygiene', () => {
     assert.equal(f._lastSeen.has(1), false);
   });
 
-  it('rekey moves the last-seen stamp from oldId to newId and drops the placeholder', () => {
+  it('rekey keeps the newer of the two last-seen stamps (the claimant\'s fresh one wins)', () => {
+    const f = playing([1, 2], { liveness: { timeoutMs: 3000 } });
+    f.onSeen(1, 100);                              // dropped seat's stale stamp
+    f.markDisconnected(1);
+    f.addPlayer(5);                                // claimant placeholder
+    f.onSeen(5, 999);                              // fresh traffic from the claimant
+    assert.equal(f.rekey(1, 5), true);
+    assert.equal(f._lastSeen.has(1), false);
+    assert.equal(f._lastSeen.get(5), 999);        // fresh stamp survives — the next
+    // sweep must not expire a seat the moment it reconnects
+  });
+
+  it('rekey falls back to the old seat\'s stamp when the placeholder was never seen', () => {
     const f = playing([1, 2], { liveness: { timeoutMs: 3000 } });
     f.onSeen(1, 100);
     f.markDisconnected(1);
-    f.addPlayer(5);                                // claimant placeholder
-    f.onSeen(5, 999);
+    f.addPlayer(5);                                // placeholder with no traffic yet
     assert.equal(f.rekey(1, 5), true);
-    assert.equal(f._lastSeen.has(1), false);
-    assert.equal(f._lastSeen.get(5), 100);        // kept record's stamp followed
+    assert.equal(f._lastSeen.get(5), 100);        // old stamp carried, not dropped
   });
 });
 

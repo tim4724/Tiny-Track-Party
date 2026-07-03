@@ -94,6 +94,7 @@ new PartyConnection(relayUrl, { clientId?, maxReconnectAttempts = 5 })
 | `pinInstance(baseUrl, room, instance)` | Pin auto-reconnect to a relay shard (rebuilds the sharded URL) |
 | `sendTo(to, data)` | Send to one slot |
 | `broadcast(data)` | Send to all peers |
+| `setState(data)` | Publish the retained room snapshot (host/slot-0 only; ≤ 16 KiB serialized) |
 | `reconnectNow()` / `resetReconnectCount()` | Manual reconnect control |
 | `close()` | Tear down, stop reconnecting |
 
@@ -104,6 +105,12 @@ Callbacks (assigned as properties):
 - `onError()`
 - `onMessage(from, data)` for game messages
 - `onProtocol(type, msg)` for relay events (`created`, `joined`, `peer_joined`, `peer_left`)
+- `onState(data)` for the host's retained snapshot: the relay keeps the latest
+  `setState` blob on the room, pushes it live to current peers (sender
+  excluded), and replays it right after `joined` on every (re)join — so a
+  briefly-dropped client catches up without the host fanning out per-recipient
+  messages. Routed to `onState`, never `onProtocol`, so a host that authors
+  state but never consumes it (the usual display) just leaves `onState` unset.
 
 Props: `relayUrl`, `clientId`, `reconnectAttempt`.
 
@@ -130,7 +137,7 @@ the display auto-accepts. 3s of silence fires `onPeerClosed`.
 ### `RoomFlow` — headless room/lobby/host state machine
 
 ```js
-new RoomFlow({ masterProvider? })
+new RoomFlow({ masterProvider?, liveness? })
 RoomFlow.STATES // { LOBBY, COUNTDOWN, PLAYING, RESULTS }
 ```
 
@@ -142,7 +149,7 @@ Roster (the `fields` object is opaque game data: color, name, score, etc.):
 | `removePlayer(peerIndex)` | Hard leave |
 | `rekey(oldId, newId)` | Reconnect-claim: move a record to a new peerIndex, preserving it + host slot |
 | `markDisconnected(peerIndex)` / `markReconnected(peerIndex)` | Soft blip window |
-| `clearDisconnected()` | Mark everyone present (e.g. at game start) |
+| `clearDisconnected(nowMs?)` | Mark everyone present (e.g. at game start); passing `nowMs` also re-stamps last-seen so a pre-start-quiet peer isn't instantly expired |
 
 The game owns its per-player fields and mutates them on the live record directly
 (e.g. `flow.get(id).score = 10`); RoomFlow never reads them. The only fields it
@@ -159,6 +166,22 @@ event-driven consumers re-render on a room wipe.
 Reads: `state`, `host` (effective), `hostPeerIndex` (sticky), `isHost(peerIndex)`,
 `list()`, `get(peerIndex)`, `has(peerIndex)`, `size`, `connectedCount`,
 `isDisconnected(peerIndex)`.
+
+Liveness (half-open presence timeout — opt in via
+`liveness: { timeoutMs?, graceMs?, enabledProvider? }`): a half-open dead
+connection (sleeping phone, dropped Wi-Fi) never closes its socket, so the
+relay's `peer_left` alone can't catch it. The host stamps every inbound message
+with `onSeen(peerIndex, nowMs)` and polls the pure predicates: `isExpired(id,
+nowMs)`, `expiredPeers(nowMs)` (silent-past-`timeoutMs` peers; always empty in
+`LOBBY`), `allParticipantsDisconnected()`, `hasLateJoiners()`, and
+`graceTick(nowMs)` (arms a `graceMs` return-to-lobby deadline while every
+participant is gone but late joiners wait; fires `true` exactly once). The
+detectors never mutate presence and never emit — the host applies an expiry
+through the normal `markDisconnected` path, keeping the single-writer
+invariant. All time is an injected `nowMs`; RoomFlow stays clock-free (the
+reference game's `tests/portable-purity.test.js` gates this). Set
+`enabledProvider: () => false` where the transport owns connection tracking
+(e.g. a platform SDK). See `RoomFlow.d.ts` for the full signatures.
 
 Static: `RoomFlow.lowestFreeSlot(used, max)` returns the lowest free dense slot
 in `[0, max)` given the slot values in use. Pure and **sparse-safe** — pass slot
@@ -249,7 +272,7 @@ Read these before building a game on RoomFlow:
 The networking and flow layers are the parts genuinely shared by every game in
 this style, so they came first. The following are reusable in principle but are
 better extracted **against a second game** than guessed at from one. The first
-two are the next planned additions:
+is the next planned addition:
 
 - **Cross-device claim (optional).** Same-device reconnect needs no kit help:
   the Party Sockets relay keys slots by `clientId` and restores the **same**
@@ -261,11 +284,6 @@ two are the next planned additions:
   `claim=<index>` reconnect QR); a `flow.claim(token, newPeerIndex)` helper could
   fold the eligibility check + rekey into the kit if cross-device takeover is a
   feature you want.
-- **Half-open liveness.** The relay broadcasts `peer_left` on a clean socket
-  close (surfaced via `onProtocol`), but a *half-open* dead connection (sleeping
-  phone, dropped Wi-Fi with a fastlane-idle WS) won't close on its own. Detecting
-  that needs a heartbeat + timeout that calls `markDisconnected`/`markReconnected`
-  (today the game wires this; the kit only exposes the manual flags).
 - **Lobby + join flow** (QR rendering, roster cards, name/identity picker, the
   screen shell). The DOM stays game-side; the *logic* (seat allocation via
   `lowestFreeSlot`, host gating) is shareable.
@@ -275,7 +293,10 @@ two are the next planned additions:
   touching the protocol.
 - **A native-ESM build.** Today the modules are CommonJS/UMD; an ESM build (or a
   monorepo workspace package) would remove vendor-and-drift for bundler-based
-  games.
+  games. (Partially there: the reference game's `scripts/build.js` already
+  esbuild-bundles `RoomFlow` together with its engine into an iife `HexCore`
+  artifact, `dist/partycore.js`, that JavaScriptCore/QuickJS load on native. That
+  consumes the UMD form; a true ESM build is still the cleaner end state.)
 
 ---
 
