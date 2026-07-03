@@ -245,7 +245,99 @@ export function designCoaster() {
   return { name: 'coaster', segs };
 }
 
+// ---- AUDITION VARIANTS (gallery-tracks candidates — composed but not registered) ----
+
+// SKYFALL — Skyline's documented no-inversion fallback, as its own track: spiral climb
+// to a 5.2-world skyway, a banked descending corner, a long ramp home past a toy loop.
+export function designSkyfall() {
+  const segs = [
+    ...run(3),                                                        // grid θ=0
+    arc(RL, -90),                                                     // θ=-90
+    straight(12, { _leg: true }),                                     // top leg east
+    arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90)
+    straight(22, { pillars: true, _leg: true }),                      // SKYWAY south @2.6
+    arc(RL, -90, { rise: -1.2, bank: 10, pillars: true, _sweep: true }), // descending corner (θ=-270)
+    straight(10, { rise: -1.4, pillars: true }),                      // ramp down, west-bound
+    straight(6),                                                      // beat — boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP (jogs outboard)
+    straight(8, { _leg: true }),                                      // west run home
+    arc(RL, -90)                                                      // into the grid (θ=-360... net -720)
+  ];
+  return { name: 'skyfall', segs };
+}
+
+// BIGDIPPER — Coaster's big sibling: FIVE shrinking camelbacks down one whole side,
+// then a toy-loop S-pair on the return. Still zero banking, zero inversion.
+export function designBigdipper() {
+  const segs = [
+    straight(16, { _leg: true }),                                     // grid θ=0 (the only N-S absorber)
+    arc(RL, -90),
+    straight(7, { bump: 0.85 }), straight(7, { bump: 0.7 }), straight(7, { bump: 0.55 }),
+    straight(7, { bump: 0.4 }), straight(7, { bump: 0.3 }),           // THE DIPPER RUN
+    straight(6, { _leg: true }),
+    arc(RL, -90),
+    straight(14, { _leg: true }),                                     // boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP L
+    straight(10),                                                     // beat
+    loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP R
+    straight(6, { _leg: true }),
+    arc(RL, -90),
+    straight(10, { _leg: true }),
+    arc(RL, -90)
+  ];
+  return { name: 'bigdipper', segs };
+}
+
+// ORBIT — a figure-8 in the Crossover mould (3 right + 3 left corners net 0°, one
+// pillared bridge flying the crossing) with a couple of camelbacks on the far side
+// and a toy loop on the bottom lobe. Crossover's spirit, remixed with the new toys.
+export function designOrbit() {
+  const segs = [
+    ...run(5),                                                        // SPINE θ=0 (the strand the bridge crosses)
+    arc(RL, -90), straight(6, { _leg: true }), arc(RL, -90),          // top lobe (cw) → θ=-180
+    straight(7, { bump: 0.7 }), straight(7, { bump: 0.5 }),           // camelbacks down the far side
+    straight(6, { _leg: true }),
+    arc(RL, -90),                                                     // θ=-270, west-bound
+    straight(4, { rise: 1.0, pillars: true }),
+    straight(12, { pillars: true, _leg: true }),                      // THE BRIDGE over the spine
+    straight(4, { rise: -1.0, pillars: true }),
+    arc(RL, 90),                                                      // θ=-180
+    straight(8, { _leg: true }),                                      // boost — straight into
+    loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP
+    straight(4),
+    arc(RL, 90), straight(12, { _leg: true }), arc(RL, 90),           // bottom lobe (ccw) → θ=0
+    straight(8, { _leg: true })                                       // back to the spine
+  ];
+  return { name: 'orbit', segs };
+}
+
+// BOOMERANG — the L-shaped grand tour (Riverside's 5-left + 1-right skeleton) with a
+// big summit on one arm and a toy loop on the other. Flowing, no banking.
+export function designBoomerang() {
+  const segs = [
+    straight(12, { _leg: true }),                                     // grid θ=0 (the L-shape's long arm absorber)
+    arc(RL, 90),                                                      // θ=90
+    straight(10, { _leg: true }),
+    arc(RL, 90),                                                      // θ=180
+    straight(8, { rise: 1.6 }), straight(8, { rise: -1.6 }),          // THE SUMMIT
+    straight(4, { _leg: true }),
+    arc(RL, -90),                                                     // the re-entrant elbow (θ=90)
+    straight(8, { _leg: true }),
+    arc(RL, 90),                                                      // θ=180
+    straight(6),                                                      // boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
+    straight(6, { _leg: true }),
+    arc(RL, 90),                                                      // θ=270
+    straight(12, { _leg: true }),
+    arc(RL, 90)                                                       // home (θ=360)
+  ];
+  return { name: 'boomerang', segs };
+}
+
 export const DESIGNS = { helix: designHelix, skyline: designSkyline, coaster: designCoaster };
+export const CANDIDATE_DESIGNS = {
+  skyfall: designSkyfall, bigdipper: designBigdipper, orbit: designOrbit, boomerang: designBoomerang
+};
 
 // Solve + trim one design in place; returns the report pieces. Sweep/leg markers are
 // derived from the segment flags (hand-counted indices kept going stale) and stripped

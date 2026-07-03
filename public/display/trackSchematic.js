@@ -39,6 +39,10 @@ export function trackSchematic(track) {
   return {
     viewBox: `0 0 ${VIEW} ${VIEW}`,
     d,
-    start: { x: px(xs[0]), y: pz(zs[0]) }
+    start: { x: px(xs[0]), y: pz(zs[0]) },
+    // World→map projection, so overlays (the track-preview minimap) can plot LIVE
+    // positions onto the same schematic: mapX = offX + (worldX - minX)·scale, and
+    // likewise for z. Pure extra data — phones that only read viewBox/d/start ignore it.
+    proj: { minX: +minX.toFixed(2), minZ: +minZ.toFixed(2), scale: +scale.toFixed(4), offX: +offX.toFixed(2), offZ: +offZ.toFixed(2) }
   };
 }

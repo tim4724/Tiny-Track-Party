@@ -11,6 +11,7 @@ import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
+import { trackSchematic } from './trackSchematic.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -21,6 +22,63 @@ const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost'
 const giveItems = (engine) => { for (const c of engine.cars.values()) c.item = PREVIEW_ITEMS[c.id] || null; };
 
 const el = (id) => document.getElementById(id);
+
+// ---- track-preview minimap ----
+// A small schematic overlay (bottom-left) with LIVE car dots, so the orbiting
+// whole-layout shot always carries a readable map of the line. The path is the exact
+// SVG the phones' track picker renders; trackSchematic's `proj` maps world x/z onto it.
+function buildMinimap(parent, track, colors) {
+  const schem = trackSchematic(track);
+  if (!schem.d || !schem.proj) return null;
+  const old = parent.querySelector('#track-minimap');
+  if (old) old.remove();
+  const NS = 'http://www.w3.org/2000/svg';
+  const wrap = document.createElement('div');
+  wrap.id = 'track-minimap';
+  wrap.style.cssText = 'position:absolute;left:16px;bottom:16px;width:170px;height:170px;'
+    + 'background:rgba(22,26,36,.55);border-radius:14px;padding:6px;pointer-events:none;z-index:30;';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', schem.viewBox);
+  svg.style.cssText = 'width:100%;height:100%;display:block;';
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', schem.d);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'rgba(255,255,255,.92)');
+  path.setAttribute('stroke-width', '4');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('stroke-linecap', 'round');
+  svg.appendChild(path);
+  const start = document.createElementNS(NS, 'circle');
+  start.setAttribute('cx', schem.start.x);
+  start.setAttribute('cy', schem.start.y);
+  start.setAttribute('r', '2.6');
+  start.setAttribute('fill', '#fff');
+  start.setAttribute('stroke', '#20242c');
+  start.setAttribute('stroke-width', '1');
+  svg.appendChild(start);
+  wrap.appendChild(svg);
+  parent.appendChild(wrap);
+  const proj = schem.proj, dots = new Map();
+  return {
+    update(cars) {
+      for (const c of cars) {
+        if (!c.pose) continue;
+        let dot = dots.get(c.id);
+        if (!dot) {
+          dot = document.createElementNS(NS, 'circle');
+          dot.setAttribute('r', '3.4');
+          dot.setAttribute('fill', colors[c.id % colors.length]);
+          dot.setAttribute('stroke', '#171a21');
+          dot.setAttribute('stroke-width', '1.2');
+          svg.appendChild(dot);
+          dots.set(c.id, dot);
+        }
+        dot.setAttribute('cx', (proj.offX + (c.pose.pos.x - proj.minX) * proj.scale).toFixed(1));
+        dot.setAttribute('cy', (proj.offZ + (c.pose.pos.z - proj.minZ) * proj.scale).toFixed(1));
+      }
+    }
+  };
+}
 
 // Standalone inspector camera. When a preview page is opened on its OWN (not in a
 // gallery iframe), hand the overview camera to the viewer — drag to look, scroll to
@@ -191,6 +249,8 @@ export function runDisplayScenario(opts, ctx) {
       // so _order stays empty and the overview camera frames the whole track.
       ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { cell: false }));
 
+      const minimap = buildMinimap(el('race'), track, COLORS);
+
       const placeGrid = () => {
         for (const c of engine.getSnapshot().cars) {
           if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
@@ -204,9 +264,11 @@ export function runDisplayScenario(opts, ctx) {
           if (!c.finished && c.pose) engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline, engine)); // pass the game so preview bots dodge hazards/poles too
         }
         engine.update(dt * 1000);
-        for (const c of engine.getSnapshot().cars) {
+        const snap = engine.getSnapshot();
+        for (const c of snap.cars) {
           if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput });
         }
+        if (minimap) minimap.update(snap.cars);
         // Endless preview: once everyone finishes, reset and lap again.
         if (engine.raceOver) {
           engine = new Game(ids, track, { onEvent() {} });

@@ -3,6 +3,7 @@
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
+import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
 import { themeByName, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
@@ -24,7 +25,7 @@ const show = (name) => { for (const k of Object.keys(screens)) screens[k].classL
 // no rebuild. The catalog (id + name + top-down SVG path) is what the controllers'
 // track picker renders; `built` keeps the geometry for the race + the 3D preview.
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
-const built = new Map(TRACK_LIST.map((t) => {
+function buildEntry(t) {
   const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
   b.cup = t.cup;             // carry the cup id onto the geometry → SceneRenderer picks the biome theme
   // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
@@ -60,8 +61,9 @@ const built = new Map(TRACK_LIST.map((t) => {
   // stand in a drivable corridor (ghost — already drawn as the support itself).
   b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }))
     .concat(b.autoPoles || []);
-  return [t.id, b];
-}));
+  return b;
+}
+const built = new Map(TRACK_LIST.map((t) => [t.id, buildEntry(t)]));
 const trackCatalog = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
   svg: trackSchematic(built.get(t.id))
@@ -83,6 +85,13 @@ const _isTestMode = !!_trackParams.get('scenario');
 // the bootstrap tail below.
 const _isDebugSolo = _trackParams.has('solo');
 const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
+// AUDITION CANDIDATES (gallery-tracks sections): an unknown ?track= id is looked up in
+// the candidate catalogue and built like any track — but only the ONE requested id, and
+// only when named, so the phones' picker and normal boot never pay for them. Candidates
+// live outside TRACKS/CUPS until one is promoted (scripts/gen-candidates.mjs).
+if (_qTrack && !built.has(_qTrack) && CANDIDATE_TRACKS[_qTrack]) {
+  built.set(_qTrack, buildEntry({ id: _qTrack, ...CANDIDATE_TRACKS[_qTrack] }));
+}
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
