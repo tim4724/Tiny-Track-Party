@@ -234,7 +234,7 @@
     // by expiredPeers() during COUNTDOWN (where the LOBBY gate no longer applies).
     // Callers pass nowMs; omitting it preserves the legacy clear-only behavior.
     if (nowMs != null) {
-      for (var entry of this.players) this._lastSeen.set(entry[0], nowMs);
+      for (var seenEntry of this.players) this._lastSeen.set(seenEntry[0], nowMs);
     }
     if (this._disconnected.size === 0) return;
     var prevHost = this.host;
