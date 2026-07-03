@@ -13,7 +13,7 @@
 //   hemi:   { sky, ground, intensity }  hemisphere fill light (sky tint / bounce tint)
 //   key:    { color, intensity }        warm directional "sun" (the plastic shine)
 //   ground: { kind }                    procedural ground texture id (see textures.js:
-//                                       'lawn' | 'sand')
+//                                       'lawn' | 'sand' | 'redrock')
 //   hills:  [c0, c1, c2]                horizon-dome ring colours, cycled i%len
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
@@ -94,6 +94,28 @@ export const THEMES = {
       density: 0.5,
     },
   },
+
+  // ── canyon — hot red-rock badlands (the Hard cup's biome; dormant until the canyon
+  // cup lands in tracks.js, meanwhile reachable via ?biome=canyon). A dusty near-white
+  // horizon haze over terracotta ground, rust mesa-coloured hills, and a hot slightly
+  // orange sun — bleached desert light rather than sunset gold. v1 scenery is sparse
+  // big red boulders; cacti/dead wood join in the Nature-Kit asset round.
+  canyon: {
+    sky:    { zenith: 0x4292d4, horizon: 0xe8c8a2, below: 0xf4e3c6 },
+    fog:    0xe8c8a2,
+    hemi:   { sky: 0xffeedd, ground: 0xb9825e, intensity: 2.15 },
+    key:    { color: 0xffdca6, intensity: 1.6 },
+    ground: { kind: 'redrock' },
+    hills:  [0xc47a52, 0xa96545, 0xd68f62],
+    scenery: {
+      trees:   [],
+      bush:    null,
+      mix:     { tree: 0, bush: 0 }, // every spawn rolls "rock"
+      rocks:   [0xc07a55, 0xa8623f, 0xd39a70], // rust → dusty ochre family
+      rockS:   [0.6, 0.9],  // canyon-scale boulders — the only silhouette, so they carry it
+      density: 0.45,        // sparser than the shore; deserts read empty on purpose
+    },
+  },
 };
 
 // Union of every GLB the biome scenery palettes reference. The display preloads this
@@ -110,6 +132,7 @@ const CUP_BIOME = {
   backyard: 'grass',
   rooftop:  'sunset',
   beach:    'beach',
+  canyon:   'canyon',
 };
 
 // Resolve a cup id to its biome object. Returns a STABLE reference per biome, so the

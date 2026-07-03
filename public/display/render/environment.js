@@ -9,7 +9,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeLawnTexture, makeSandTexture } from './textures.js';
+import { makeCloudTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -31,7 +31,9 @@ const _groundTexCache = new Map();
 function groundTexture(kind = 'lawn') {
   let tex = _groundTexCache.get(kind);
   if (tex) return tex;
-  tex = (kind === 'sand') ? makeSandTexture() : makeLawnTexture();
+  tex = (kind === 'sand') ? makeSandTexture()
+      : (kind === 'redrock') ? makeRedRockTexture()
+      : makeLawnTexture();
   // Tile across the big plane at the same world scale as the old 600u lawn (UVs run 0..1
   // over the plane, so repeat == tiles across it). Berm UVs in track.js use worldXZ /
   // GROUND_SIZE to match this exactly — so EVERY ground kind must share this repeat.
