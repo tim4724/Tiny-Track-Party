@@ -28,10 +28,12 @@
 //     trees:   [{ model, w, s, tint? }]  weighted GLB silhouettes; w's should sum to 1.
 //              s is [base, spread] — a stamp's scale is base + rand()*spread (kept as
 //              the raw pair so the arithmetic matches the pre-theming literals
-//              bit-for-bit). tint (hex) applies ONLY to untextured models (e.g. the
-//              Nature-Kit cacti): it's baked into vertex colours; colormap-textured
-//              kit models ignore it. Within one biome all TEXTURED models must share
-//              a single colormap (they merge into one mesh/material).
+//              bit-for-bit). tint applies ONLY to untextured models (e.g. the
+//              Nature-Kit cacti/palms): baked into vertex colours. A hex recolours
+//              the whole model; a { 'authoredHex': newHex } map recolours per part
+//              (palms: fronds + trunk carry different authored colours). Colormap-
+//              textured kit models ignore it. Within one biome all TEXTURED models
+//              must share a single colormap (they merge into one mesh/material).
 //     bush:    { model, s, sink } the "bush" trick — a donor silhouette sunk to its
 //              canopy (procedural bush shapes failed, see buildScenery) — or null
 //     mix:     { tree, bush }     CUMULATIVE roll thresholds: roll < tree → tree,
@@ -93,16 +95,18 @@ export const THEMES = {
     key:    { color: 0xfff0cf, intensity: 1.55 },
     ground: { kind: 'sand' },
     hills:  [0xe6d29a, 0xefe2b3, 0xd9c187],
-    // No green trees on sand: until the palm round lands (the Nature Kit is already
-    // in the repo pipeline — see canyon's cacti), the shore is dressed with weathered
-    // sandstone boulders only, scattered sparser than parkland so the beach reads
-    // open and airy.
+    // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
+    // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
+    // boulders, scattered sparser than parkland so the beach reads open and airy.
     scenery: {
-      trees:   [],
+      trees:   [{ model: 'palm-tall', w: 0.55, s: [1.6, 0.6],
+                  tint: { '70e6d6': 0x4fae6b, 'f2be9e': 0xc09a72 } },
+                { model: 'palm-bend', w: 0.45, s: [1.5, 0.6],
+                  tint: { '70e6d6': 0x54b573, 'f2be9e': 0xb8926c } }],
       bush:    null,
-      mix:     { tree: 0, bush: 0 }, // every spawn rolls "rock"
+      mix:     { tree: 0.45, bush: 0.45 }, // no bushes; the rest rolls "rock"
       rocks:   [0xdccfa8, 0xcfbd90, 0xbca878],
-      rockS:   [0.55, 0.75], // rocks carry the whole shore — boulder-sized, not pebbles
+      rockS:   [0.55, 0.75], // boulder-sized, not pebbles
       density: 0.5,
     },
   },
@@ -152,7 +156,13 @@ export const THEMES = {
     hills:  [0xeef4f9, 0xdfe9f2, 0xf7fafc],
     clouds: { count: 6, opacity: 0.55, scale: 1.25, aspect: 0.3, tint: 0xe9edf2 }, // low flat overcast
     scenery: {
-      trees:   [{ model: 'tree-pine', w: 1, s: [2.3, 1.1] }], // the alpine silhouette
+      // Snow-capped pines from the Holiday Kit (textured — all three share its
+      // colormap, satisfying the one-colormap rule; native ~1.9 tall vs the toy-car
+      // pine's 0.83, hence the smaller s). Three variants so a treeline never
+      // reads as stamped clones.
+      trees:   [{ model: 'tree-snow-a', w: 0.4,  s: [1.05, 0.4] },
+                { model: 'tree-snow-b', w: 0.35, s: [1.05, 0.4] },
+                { model: 'tree-snow-c', w: 0.25, s: [1.05, 0.4] }],
       bush:    null,
       mix:     { tree: 0.55, bush: 0.55 }, // no bushes; the rest rolls "rock"
       rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite

@@ -626,8 +626,12 @@ export function buildScenery(R, track, theme) {
         // No colormap to modulate — bake the actual colour: the palette entry's tint
         // (authorial control; the Nature-Kit plain colours rarely fit a biome) or the
         // model's own material colour as the fallback, shaded like the textured pool.
+        // tint is a hex (whole model, e.g. a cactus) OR a map of authored-hex →
+        // replacement-hex for multi-part models (e.g. a palm: fronds + trunk differ).
+        let t = tintHex;
+        if (t != null && typeof t === 'object') t = part.mat ? t[part.mat.color.getHexString()] : undefined;
         const c = new THREE.Color();
-        if (tintHex != null) c.set(tintHex).convertSRGBToLinear();
+        if (t != null) c.set(t).convertSRGBToLinear();
         else if (part.mat) c.copy(part.mat.color); // GLTF material colours are already linear
         else c.set(0xffffff);
         c.multiplyScalar(shade);
