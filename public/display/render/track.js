@@ -419,8 +419,10 @@ export function buildHills(R, track) {
 // the collision (cars hit its (s, lat) footprint); here we just draw it — matte toy concrete
 // like the pillars.
 export function buildPoles(R, track) {
-  const list = track.poles;
-  if (!list || !list.length || !track.centerline) return;
+  // ghost poles are collision-only proxies for supports ALREADY drawn (bridge pillars /
+  // loop shafts standing in the corridor — see TrackBuilder's autoPoles); skip their mesh.
+  const list = (track.poles || []).filter((p) => !p.ghost);
+  if (!list.length || !track.centerline) return;
   const cl = track.centerline, samples = cl.samples;
   const TUCK = 0.34, EMBED = 0.06, POST_UP = 2.0; // POST_UP = how far a no-deck-overhead post stands above the road
   const geoms = [];
@@ -452,57 +454,34 @@ export function buildPoles(R, track) {
 }
 
 // Loop support poles — a VERTICAL post under each 360° loop, one on each side, holding it up
-// from below. The post stands beneath the loop's lower-OUTER flank (where the road is angled
-// ~60° and its underside faces down-and-out, and the road has curved away below — so a vertical
-// shaft there has clear air all the way to the ground). Its TOP is cut to the road's underside
-// plane (a diagonal, not a flat top) so it meets the angled road flush instead of poking through
-// it. We auto-detect loops and brace each at one lower-flank point per side. Purely visual.
+// from below. PLACEMENT lives in TrackBuilder (track.supportPosts — the single source of
+// truth, so the collision pass sees the same shafts; each carries the flank contact sample).
+// Here we just skin each entry: a cylinder from the grass whose TOP is cut to the road's
+// underside plane (a diagonal, not a flat top) so it meets the angled road flush instead of
+// poking through it.
 export function buildLoopPoles(R, track) {
-  const cl = track.centerline;
-  if (!cl || !cl.samples.length) return;
-  const ss = cl.samples, n = ss.length, gy = R.ground.position.y;
-  const loops = [];
-  let cur = null;
-  for (let i = 0; i < n; i++) {
-    if (ss[i].up.y < 0.3) { if (!cur) { cur = [i, i]; loops.push(cur); } else cur[1] = i; }
-    else cur = null;
-  }
-  const RAD = 0.36, EMBED = 0.1, DECK = 0.34, OFFSET = 0.45; // OFFSET nudges the shaft out past the road's outer face; slim RAD keeps margin
+  const list = track.supportPosts;
+  if (!list || !list.length) return;
+  const gy = R.ground.position.y;
+  const EMBED = 0.1, DECK = 0.34;
   const geoms = [];
-  for (const [a0, b0] of loops) {
-    if (b0 - a0 < 4) continue;
-    let a = a0, b = b0;
-    while (a > 0 && ss[a].pos.y > 0.6) a--;
-    while (b < n - 1 && ss[b].pos.y > 0.6) b++;
-    let cx = 0, cz = 0, cnt = 0;
-    for (let i = a; i <= b; i++) { cx += ss[i].pos.x; cz += ss[i].pos.z; cnt++; }
-    cx /= cnt; cz /= cnt;
-    let apex = a;
-    for (let i = a; i <= b; i++) if (ss[i].pos.y > ss[apex].pos.y) apex = i; // top of the loop splits its two sides
-    for (const [lo, hi] of [[a, apex], [apex, b]]) {
-      // one contact per side: a lower-flank sample where the road is angled ~60° (up.y ≈ 0.5)
-      let best = null;
-      for (let i = lo; i <= hi; i++) { const s = ss[i]; if (s.pos.y < 1.5 || s.pos.y > 3.2 || s.up.y < 0.3) continue; const sc = Math.abs(s.up.y - 0.5); if (!best || sc < best.sc) best = { s, sc }; }
-      if (!best) continue;
-      const c = best.s;
-      let ox = c.pos.x - cx, oz = c.pos.z - cz; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol; // outward (away from loop centre)
-      const sx = c.pos.x + ox * OFFSET, sz = c.pos.z + oz * OFFSET; // shaft, nudged out to clear the road's outer face
-      // road UNDERSIDE plane at the contact: a point a deck-thickness behind the surface, normal = up.
-      const ux = c.up.x, uy = c.up.y, uz = c.up.z;
-      const Ux = c.pos.x - ux * DECK, Uy = c.pos.y - uy * DECK, Uz = c.pos.z - uz * DECK;
-      const H = (c.pos.y + 1.0) - (gy - EMBED); // build tall, then clip the top to the plane below
-      const g = new THREE.CylinderGeometry(RAD, RAD, H, 12);
-      g.translate(sx, gy - EMBED + H / 2, sz);
-      const p = g.attributes.position;
-      for (let v = 0; v < p.count; v++) {
-        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
-        const planeY = Uy - (ux * (vx - Ux) + uz * (vz - Uz)) / uy; // y of the underside plane at (vx, vz)
-        if (vy > planeY) p.setY(v, planeY);                          // diagonal cut → flush with the angled underside
-      }
-      p.needsUpdate = true;
-      g.computeVertexNormals();
-      geoms.push(g);
+  for (const post of list) {
+    const c = post.contact;
+    // road UNDERSIDE plane at the contact: a point a deck-thickness behind the surface, normal = up.
+    const ux = c.up.x, uy = c.up.y, uz = c.up.z;
+    const Ux = c.pos.x - ux * DECK, Uy = c.pos.y - uy * DECK, Uz = c.pos.z - uz * DECK;
+    const H = (c.pos.y + 1.0) - (gy - EMBED); // build tall, then clip the top to the plane below
+    const g = new THREE.CylinderGeometry(post.radius, post.radius, H, 12);
+    g.translate(post.x, gy - EMBED + H / 2, post.z);
+    const p = g.attributes.position;
+    for (let v = 0; v < p.count; v++) {
+      const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+      const planeY = Uy - (ux * (vx - Ux) + uz * (vz - Uz)) / uy; // y of the underside plane at (vx, vz)
+      if (vy > planeY) p.setY(v, planeY);                          // diagonal cut → flush with the angled underside
     }
+    p.needsUpdate = true;
+    g.computeVertexNormals();
+    geoms.push(g);
   }
   if (!geoms.length) return;
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);

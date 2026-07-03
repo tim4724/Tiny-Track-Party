@@ -16,16 +16,19 @@ const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 
 // which {seed, profile} becomes which track id (re-pick by editing this, then re-run)
 const SEEDS = {
-  // Backyard Cup — the original classic bakes (frozen; hand-tuned furniture in tracks.js)
-  bowtie:     { seed: 92,  profile: 'classic' },
-  pretzel:    { seed: 13,  profile: 'classic' },
-  lasso:      { seed: 17,  profile: 'classic' },
-  cloverleaf: { seed: 121, profile: 'classic' },
-  // Beach Cup (Easy) — scan-seeds easy picks: distinct flowing shapes, no crossings
-  lagoon:     { seed: 63,  profile: 'easy' },
-  sandbar:    { seed: 45,  profile: 'easy' },
-  driftwood:  { seed: 110, profile: 'easy' },
+  // Beach Cup (Easy) — scan-seeds easy picks: distinct flowing shapes, hop/hill-decorated
+  tidepool:   { seed: 88,  profile: 'easy' },
+  lagoon:     { seed: 381, profile: 'easy' },
   boardwalk:  { seed: 125, profile: 'easy' },
+  breakwater: { seed: 297, profile: 'easy' },
+  // Backyard Cup — the original classic seeds, re-baked through the decorated mid
+  // profile (same plans/crossings — mid shares classic's grammar — plus hills/hops/
+  // width play) with auto furniture. The frozen `classic` profile stays in track-gen
+  // as provenance for the pre-decoration bakes.
+  bowtie:     { seed: 92,  profile: 'mid' },
+  pretzel:    { seed: 13,  profile: 'mid' },
+  lasso:      { seed: 17,  profile: 'mid' },
+  cloverleaf: { seed: 121, profile: 'mid' },
   // Canyon Cup (Hard) — scan-seeds hard picks: hairpins + stacked crossings
   gulch:      { seed: 550, profile: 'hard' },
   sidewinder: { seed: 62,  profile: 'hard' },

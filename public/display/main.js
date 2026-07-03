@@ -56,7 +56,10 @@ const built = new Map(TRACK_LIST.map((t) => {
   b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
   // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
   // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).
-  b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }));
+  // The builder's autoPoles ride along: collision proxies for pillars/loop shafts that
+  // stand in a drivable corridor (ghost — already drawn as the support itself).
+  b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }))
+    .concat(b.autoPoles || []);
   return [t.id, b];
 }));
 const trackCatalog = TRACK_LIST.map((t) => ({

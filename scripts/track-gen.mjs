@@ -81,8 +81,8 @@ export const PROFILES = {
     pChicane: 0.12, chicane: { angle: 30, r: 16 },
     midStraight: [14, 30], pExtra: 0.45, extraLen: [10, 20],
     closerR: [14, 22], finalStraight: [12, 22], target: [350, 395],
-    decor: { hills: [1, 2], hillAmp: [0.5, 0.9], hillHW: [3, 4],
-      bank: 9, bankRun: 4, maxBanked: 2, flares: 2, flareW: [3.1, 3.4], pinches: 0, pinchW: 0 },
+    decor: { hills: [1, 2], hillAmp: [0.5, 0.9], hillHW: [3, 4], hops: [2, 4], hopAmp: [0.12, 0.3],
+      bank: 8, bankRun: 4, maxBanked: 1, flares: 2, flareW: [3.1, 3.4], pinches: 1, pinchW: 2.35 },
     oilCount: 1,
     // Calibrated against the catalogue (probe-difficulty.mjs): meadow — the canonical
     // Easy — measures brake 0.04, minR 6.8, dens 0.041; bowtie (Medium) brake 0.01.
@@ -98,11 +98,13 @@ export const PROFILES = {
     pChicane: 0.16, chicane: { angle: 38, r: 13 },
     midStraight: [12, 28], pExtra: 0.4, extraLen: [8, 18],
     closerR: [10, 18], finalStraight: [10, 20], target: [420, 470],
-    decor: { hills: [1, 2], hillAmp: [0.6, 1.1], hillHW: [2, 4],
-      bank: 8, bankRun: 4, maxBanked: 1, flares: 1, flareW: [3.0, 3.3], pinches: 0, pinchW: 0 },
+    decor: { hills: [1, 2], hillAmp: [0.6, 1.1], hillHW: [2, 4], hops: [2, 4], hopAmp: [0.15, 0.35],
+      bank: 8, bankRun: 4, maxBanked: 1, flares: 2, flareW: [3.0, 3.4], pinches: 1, pinchW: 2.25 },
     oilCount: 2,
-    // Band of the shipped Backyard four: brake 0.01-0.17, minR 2.2-7.2, dens 0.030-0.044.
-    gates: { len: [410, 480], crossings: [1, 2], minRadius: [2.0, 99], hairpins: [0, 1],
+    // Band of the shipped Backyard four: brake 0.01-0.17, minR 2.2-7.2, dens 0.030-0.044,
+    // crossings 12-16 (!) — crossing count is DRAMA, not difficulty; corners/braking are
+    // the difficulty axis, so the band is generous on crossings and strict on those.
+    gates: { len: [410, 480], crossings: [1, 16], minRadius: [2.0, 99], hairpins: [0, 2],
       cornerDensity: [0.025, 0.06], brakeFrac: [0.02, 0.35] }
   },
   // HARD — dense and technical: more features per lap, genuinely tight corners up to
@@ -115,8 +117,8 @@ export const PROFILES = {
     pChicane: 0.2, chicane: { angle: 45, r: 10 },
     midStraight: [10, 22], pExtra: 0.35, extraLen: [8, 14],
     closerR: [9, 14], finalStraight: [8, 16], target: [430, 480],
-    decor: { hills: [2, 3], hillAmp: [0.8, 1.6], hillHW: [2, 3],
-      bank: 8, bankRun: 5, maxBanked: 1, flares: 0, flareW: [0, 0], pinches: 2, pinchW: 2.15 },
+    decor: { hills: [2, 3], hillAmp: [0.8, 1.6], hillHW: [2, 3], hops: [1, 3], hopAmp: [0.15, 0.4],
+      bank: 8, bankRun: 5, maxBanked: 1, flares: 1, flareW: [3.0, 3.3], pinches: 2, pinchW: 2.15 },
     oilCount: 2,
     // Calibration: switchback (the canonical Hard) probes brake 0.66 — but its lap is
     // 25s of wall-to-wall corners; at Backyard lap length (~50s) even a 3-hairpin
@@ -188,25 +190,25 @@ export function solveElevation(wpPairs, M) {
 // heights are load-bearing there, and the grid must stay flat, level and default-width.
 // Decoration draws from its own seeded rng stream (never the plan's), so the same seed
 // yields the same plan across profiles that differ only in decor.
-export function decoratePlan(wps, wpPairs, prof, seed) {
+export function decoratePlan(wps, wpPairs, prof, seed, salt = 0) {
   const D = prof.decor; if (!D) return wps;
-  const rng = mulberry32((seed ^ 0xDEC0) >>> 0), rand = (lo, hi) => lo + rng() * (hi - lo);
+  const rng = mulberry32((seed ^ 0xDEC0 ^ Math.imul(salt, 0x9E3779B9)) >>> 0), rand = (lo, hi) => lo + rng() * (hi - lo);
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
   const m = wps.length, at = (i) => wps[((i % m) + m) % m];
-  // Two protection masks. `prot` (crossing zones + the seam) guards every pass: solver
-  // heights are load-bearing there and the grid must stay flat/level/default-width.
-  // Hills ADDITIONALLY need genuinely flat ground (protFlat: any solver lift at all —
-  // a mound on a bridge ramp would fight the crossing clearance). Banking and width
-  // only avoid real DECKS (y > 0.6): on a multi-crossing track the solver's smoothing
-  // leaves centimetre-scale y residue across most of the lap, and a gate on that
-  // residue silently starves both passes (the shipped-hard-cup bug this replaces).
-  const prot = new Array(m).fill(false);
-  const mark = (i, r) => { for (let d = -r; d <= r; d++) prot[(((i + d) % m) + m) % m] = true; };
-  for (const [a, b] of wpPairs) { mark(a, 2); mark(b, 2); }
-  mark(0, 2); // the grid straddles the seam
-  const protFlat = prot.map((p, i) => p || wps[i].y > 0.05);
-  const onDeck = (i) => wps[i].y > 0.6;
-
+  // Protection masks. On a multi-crossing plan the solver lifts the ENTIRE lap into a
+  // rolling baseline (only the seam is pinned to 0), so "flat ground" doesn't exist —
+  // eligibility must be defined RELATIVE to that baseline or decoration never lands:
+  //  - `prot` (crossing zones ±1 + the seam) guards every pass — solver heights are
+  //    load-bearing right at a crossing and the grid stays level/default-width.
+  //  - hills/hops (protHills) additionally avoid each crossing's LOWER strand (a mound
+  //    there rises toward the deck above, eating the solved clearance) and the high
+  //    skyways (h > 2.0 — headroom under the maxY gate). Elsewhere a bump ADDS to the
+  //    smooth baseline, which is harmless.
+  //  - banking / width games run anywhere outside `prot`: neither moves the plan, and
+  //    the pillar pass re-measures the decorated width when standing columns.
+  // The trimmed margins are NOT load-bearing: every candidate is re-measured on its
+  // DECORATED geometry (evaluateSeed's minBridge/step gates) and every shipped bake
+  // runs the "no overlapping strands" suite, so real crowding fails loudly.
   // Per-waypoint plan turn: angle between the incoming and outgoing legs, signed so
   // LEFT (in the world frame the builder uses: +bank leans toward lateral-LEFT) is +1.
   // Left of travel is -X when heading +Z, i.e. cross(v1, v2).y < 0 → left turn.
@@ -217,10 +219,35 @@ export function decoratePlan(wps, wpPairs, prof, seed) {
     return Math.atan2(cross, dot); // + = left
   };
 
+  // Plan curvature at a waypoint (rad per unscaled unit): per-wp turn alone can't tell a
+  // sweeper from a hairpin — the turtle emits ~16° per point on EVERY arc — so divide by
+  // the local leg length.
+  const kAt = (i) => {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1);
+    const l1 = Math.hypot(p1.x - p0.x, p1.z - p0.z), l2 = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    return Math.abs(turnAt(i)) / Math.max(0.5, (l1 + l2) / 2);
+  };
+
+  const prot = new Array(m).fill(false);
+  const mark = (arr, i, r) => { for (let d = -r; d <= r; d++) arr[(((i + d) % m) + m) % m] = true; };
+  for (const [a, b] of wpPairs) { mark(prot, a, 1); mark(prot, b, 1); }
+  mark(prot, 0, 2); // the grid straddles the seam
+  const protHills = prot.slice();
+  for (const [a, b] of wpPairs) mark(protHills, wps[a].y < wps[b].y ? a : b, 1); // the under-strand
+  for (let i = 0; i < m; i++) {
+    if (wps[i].y > 2.0) protHills[i] = true;           // high skyways
+    // ...and TIGHT corners: the centripetal Catmull-Rom parameterizes by 3D distance,
+    // so lifting a waypoint re-times the x/z interpolation around it — a bump on a
+    // tight corner can sharpen the plan turn past the smoothness gate (and a blind hop
+    // into a hairpin is mean design anyway). Sweepers (world radius ≳ 10) keep their
+    // mounds; kAt ≥ 0.2 unscaled ≈ tighter than that.
+    if (kAt(i) >= 0.2) protHills[i] = true;
+  }
+
   // ROLLING HILLS: raised-cosine bumps dropped onto flat, unprotected runs — the berm
   // pass grows grass under them, so they read as terrain, not ramps. A bump's feet land
   // at zero rise, so it splices smoothly into the flat ground either side.
-  const used = protFlat.slice(); // hills also shouldn't stack on each other
+  const used = protHills.slice(); // hills also shouldn't stack on each other
   const nHills = randInt(...D.hills);
   for (let hIdx = 0, tries = 0; hIdx < nHills && tries < 30; tries++) {
     const hw = randInt(...D.hillHW), c = randInt(0, m - 1);
@@ -236,6 +263,27 @@ export function decoratePlan(wps, wpPairs, prof, seed) {
     hIdx++;
   }
 
+  // HOPS: pocket-size bumps — a quick rise-and-fall the car crests with a little kick.
+  // Same flat-ground rules as hills (the berm pass grows a grass hump under each), just
+  // smaller and more frequent: hw=1 raises a single waypoint (feet land at zero either
+  // side, the spline rounds it into a hop), hw=2 a short roller.
+  if (D.hops) {
+    const nHops = randInt(...D.hops);
+    for (let hIdx = 0, tries = 0; hIdx < nHops && tries < 40; tries++) {
+      const hw = randInt(1, 2), c = randInt(0, m - 1);
+      let free = true;
+      for (let d = -hw; d <= hw; d++) if (used[(((c + d) % m) + m) % m]) { free = false; break; }
+      if (!free) continue;
+      const amp = rand(...D.hopAmp);
+      for (let d = -hw; d <= hw; d++) {
+        const j = (((c + d) % m) + m) % m;
+        wps[j].y = (wps[j].y || 0) + amp * (1 + Math.cos(Math.PI * d / hw)) / 2;
+        used[j] = true;
+      }
+      hIdx++;
+    }
+  }
+
   // BANKED SWEEPERS: find sustained same-hand cornering runs (every waypoint turning
   // the same way, hard enough to be a real corner) on open ground, and lean the road
   // into the turn. Only the run's INTERIOR waypoints carry the bank — the per-waypoint
@@ -244,10 +292,10 @@ export function decoratePlan(wps, wpPairs, prof, seed) {
   let banked = 0;
   for (let i = 0; i < m && banked < D.maxBanked; i++) {
     const t0 = turnAt(i);
-    if (Math.abs(t0) < K_TURN || prot[i] || onDeck(i)) continue;
+    if (Math.abs(t0) < K_TURN || prot[i]) continue;
     const sgn = Math.sign(t0);
     let j = i;
-    while (j < m && !prot[j] && !onDeck(j) && Math.sign(turnAt(j)) === sgn && Math.abs(turnAt(j)) >= K_TURN) j++;
+    while (j < m && !prot[j] && Math.sign(turnAt(j)) === sgn && Math.abs(turnAt(j)) >= K_TURN) j++;
     const runLen = j - i;
     if (runLen >= D.bankRun) {
       for (let k = i + 1; k < j - 1; k++) wps[k].bank = sgn * D.bank;
@@ -264,10 +312,10 @@ export function decoratePlan(wps, wpPairs, prof, seed) {
   // cleanly — demanding dead-straight starves the pass on organic shapes.
   const straightRuns = [], cornerRuns = [];
   for (let i = 0; i < m;) {
-    if (prot[i] || onDeck(i)) { i++; continue; }
+    if (prot[i]) { i++; continue; }
     const straight = Math.abs(turnAt(i)) < 0.035, corner = Math.abs(turnAt(i)) >= K_TURN;
     let j = i;
-    while (j < m && !prot[j] && !onDeck(j)
+    while (j < m && !prot[j]
       && (straight ? Math.abs(turnAt(j)) < 0.035 : corner ? Math.abs(turnAt(j)) >= K_TURN : false)) j++;
     if (straight && j - i >= 4) straightRuns.push([i, j]);
     if (corner && j - i >= 3) cornerRuns.push([i, j]);
@@ -287,6 +335,12 @@ export function decoratePlan(wps, wpPairs, prof, seed) {
 
 // Resolve a seed through the full pipeline WITHOUT rounding: plan → crossings →
 // elevation solve → decoration. Returns everything evaluateSeed/bakeSeed need.
+//
+// Decoration is SELF-HEALING: a bump re-times the centripetal spline around it, and an
+// unlucky roll can sharpen a marginal corner past the smoothness gate even with the
+// tight-corner exclusions. Rather than starving every track to save one unlucky seed,
+// re-roll the decoration stream (salt 1, 2, …) until the decorated track passes a quick
+// smoothness check; salt 0 first keeps existing bakes reproducible.
 export function resolveSeed(seed, profileName = 'classic') {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
@@ -294,8 +348,28 @@ export function resolveSeed(seed, profileName = 'classic') {
   const flat = buildTrack({ waypoints: plan });
   const wpPairs = findCrossings(flat, plan);
   const h = solveElevation(wpPairs, plan.length);
-  const wps = plan.map((p, i) => ({ x: p.x, z: p.z, y: h[i] }));
-  decoratePlan(wps, wpPairs, prof, seed);
+  const worstStepOf = (wps) => {
+    const t = buildTrack({ waypoints: wps });
+    let prev = null, worst = 0;
+    for (let s = 0; s <= t.length; s += 0.1) {
+      const f = t.centerline.sampleAt(s);
+      if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || t.centerline.widthAt(s) > 5.4) { prev = null; continue; }
+      const hd = Math.atan2(f.tangent.x, f.tangent.z);
+      if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worst = Math.max(worst, Math.abs(d)); }
+      prev = hd;
+    }
+    return worst;
+  };
+  let wps = null, best = null, bestStep = Infinity;
+  for (let salt = 0; salt < 4; salt++) {
+    const cand = plan.map((p, i) => ({ x: p.x, z: p.z, y: h[i] }));
+    decoratePlan(cand, wpPairs, prof, seed, salt);
+    if (!prof.decor) { wps = cand; break; }
+    const step = worstStepOf(cand);
+    if (step < 0.078) { wps = cand; break; }          // safely under the 0.08 gate
+    if (step < bestStep) { bestStep = step; best = cand; }
+  }
+  if (!wps) wps = best; // all salts marginal — keep the least bad; the gates will judge it
   return { prof, plan, flat, wpPairs, h, wps };
 }
 
@@ -391,6 +465,7 @@ async function loadEngine() {
 export async function aiProbe(def, { laps = 3 } = {}) {
   const { Game, AiController } = await loadEngine();
   const track = buildTrack(def);
+  track.poles = track.autoPoles; // corridor-blocking supports collide in the live game — probe with them
   track.totalLaps = laps;
   const engine = new Game([0], track, { onEvent() {} });
   const bot = new AiController({ skill: 1.0, laneBias: 0, seed: 7 });

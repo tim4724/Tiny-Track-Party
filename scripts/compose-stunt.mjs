@@ -169,10 +169,12 @@ function grade(segs) {
 // descending spiral; the south leg home threads an S-pair of tilted toy loops. All
 // proven Twister motifs, recomposed. Same-hand spirals wind the lap to a net -1080°
 // (3 full turns, like Twister's -720) — the plan stays a simple rounded rectangle.
+// (Corners are deliberately UNBANKED — user: tilted curves only in a few places; the
+// two spirals keep their bank, which is structural to how a climbing helix reads.)
 export function designHelix() {
   const segs = [
     straight(12, { _leg: true }),                                     // grid, north-bound (θ=0; the alt N-S leg)
-    arc(RL, -90, { bank: 10 }),                                       // NE of grid (θ=-90)
+    arc(RL, -90),                                                     // NE of grid (θ=-90)
     straight(12, { _leg: true }),                                     // top leg, east-bound
     arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90)
     straight(28, { pillars: true, _leg: true }),                      // THE SKYWAY south (θ=-180)
@@ -182,7 +184,7 @@ export function designHelix() {
     straight(10),                                                     // beat — rings stay 20 world apart
     loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP R (jogs back)
     straight(8, { _leg: true }),                                      // south-west run home (θ=-270)
-    arc(RL, -90, { bank: 10 })                                        // SW corner into the grid (θ=-360)
+    arc(RL, -90)                                                      // SW corner into the grid (θ=-360)
   ];
   return { name: 'helix', segs };
 }
@@ -194,12 +196,14 @@ export function designHelix() {
 // OUTBOARD (away from every other strand) and dives home past one tilted toy loop.
 // If the Immelmann reads badly in 3D, swap the half-loop+roll for a spiral climb
 // (Helix-style) and keep the rest.
+// (Unbanked corners here too — the descending U keeps its 10°: a fast falling curve at
+// altitude is the one place the lean is load-bearing.)
 export function designSkyline() {
   const segs = [
     ...run(3),                                                        // grid (θ=0)
-    arc(RL, 90, { bank: 10 }),                                        // (θ=90)
+    arc(RL, 90),                                                      // (θ=90)
     straight(16, { _leg: true }),                                     // north leg west-bound
-    arc(RL, 90, { bank: 10 }),                                        // (θ=180)
+    arc(RL, 90),                                                      // (θ=180)
     straight(14),                                                     // boost approach, south-bound
     loop(2.0),                                                        // HALF-LOOP UP → elev 4.0, θ→0, frame inverted
     straight(24, { roll: 180, pillars: true }),                       // SKYWAY back over the approach — rolls upright
@@ -208,14 +212,40 @@ export function designSkyline() {
     straight(6),                                                      // flat beat — boost — straight into
     loop(2.2, { drift: -3, _sweep: true }),                           // TOY LOOP (drifts further west, outboard)
     straight(12, { _leg: true }),                                     // (θ=180)
-    arc(RL, 90, { bank: 10 }),                                        // (θ=270)
+    arc(RL, 90),                                                      // (θ=270)
     straight(10, { _leg: true }),                                     // south edge, east-bound
-    arc(RL, 90, { bank: 10 })                                         // home (θ=360)
+    arc(RL, 90)                                                       // home (θ=360)
   ];
   return { name: 'skyline', segs };
 }
 
-export const DESIGNS = { helix: designHelix, skyline: designSkyline };
+// COASTER — the airtime one, and the cup's no-tilt on-ramp: a CAMELBACK RUN of three
+// shrinking humps (each a net-flat `bump` the pack crests light), a toy loop, then one
+// big summit hill up-and-over. No banking anywhere, no inversion beyond the loop.
+export function designCoaster() {
+  const segs = [
+    ...run(6),                                                        // grid, north-bound (θ=0)
+    arc(RL, -90),                                                     // NE corner (θ=-90)
+    straight(9, { bump: 0.8 }),                                       // CAMELBACK RUN — three shrinking humps
+    straight(9, { bump: 0.6 }),
+    straight(9, { bump: 0.45 }),
+    straight(10, { _leg: true }),                                     // breather
+    arc(RL, -90),                                                     // (θ=-180)
+    straight(16, { _leg: true }),                                     // boost — straight into
+    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
+    straight(6),                                                      // beat
+    arc(RL, -90),                                                     // (θ=-270)
+    straight(8),
+    straight(9, { rise: 1.8 }),                                       // THE SUMMIT — a grass mountain up...
+    straight(9, { rise: -1.8 }),                                      // ...and over, blind exit
+    straight(6, { lateral: -0.8 }), straight(6, { lateral: 0.8 }),    // soft chicane on the run home
+    straight(6, { _leg: true }),
+    arc(RL, -90)                                                      // SW corner into the grid (θ=-360)
+  ];
+  return { name: 'coaster', segs };
+}
+
+export const DESIGNS = { helix: designHelix, skyline: designSkyline, coaster: designCoaster };
 
 // Solve + trim one design in place; returns the report pieces. Sweep/leg markers are
 // derived from the segment flags (hand-counted indices kept going stale) and stripped

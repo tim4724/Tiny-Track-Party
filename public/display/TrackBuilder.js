@@ -411,11 +411,93 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     }
   }
 
+  // ---- Loop support shafts — a vertical post bracing each 360° loop's lower-OUTER flank
+  // (one per side), from the grass up to the ring's underside. The PLACEMENT lives here
+  // (single source of truth) so the collision pass below can see it; the renderer
+  // (render/track.js buildLoopPoles) just skins each entry, clipping the shaft top to the
+  // contact sample's underside plane. Detection: inverted stretches (up.y < 0.3) are loop
+  // crowns; walk each out to ground level, brace where the road is angled ~60° (up.y≈0.5).
+  const supportPosts = [];
+  {
+    const RAD = 0.36, OFFSET = 0.45; // slim shaft, nudged out past the road's outer face
+    const crowns = [];
+    let cur = null;
+    for (let i = 0; i < n; i++) {
+      if (samples[i].up.y < 0.3) { if (!cur) { cur = [i, i]; crowns.push(cur); } else cur[1] = i; }
+      else cur = null;
+    }
+    for (const [a0, b0] of crowns) {
+      if (b0 - a0 < 4) continue;
+      let a = a0, b = b0;
+      while (a > 0 && samples[a].pos.y > 0.6) a--;
+      while (b < n - 1 && samples[b].pos.y > 0.6) b++;
+      let cx = 0, cz = 0, cnt = 0;
+      for (let i = a; i <= b; i++) { cx += samples[i].pos.x; cz += samples[i].pos.z; cnt++; }
+      cx /= cnt; cz /= cnt;
+      let apex = a;
+      for (let i = a; i <= b; i++) if (samples[i].pos.y > samples[apex].pos.y) apex = i;
+      for (const [lo, hi] of [[a, apex], [apex, b]]) {
+        let best = null;
+        for (let i = lo; i <= hi; i++) {
+          const s = samples[i];
+          if (s.pos.y < 1.5 || s.pos.y > 3.2 || s.up.y < 0.3) continue;
+          const sc = Math.abs(s.up.y - 0.5);
+          if (!best || sc < best.sc) best = { s, sc };
+        }
+        if (!best) continue;
+        const c = best.s;
+        let ox = c.pos.x - cx, oz = c.pos.z - cz;
+        const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+        supportPosts.push({
+          x: c.pos.x + ox * OFFSET, z: c.pos.z + oz * OFFSET, radius: RAD, baseY: groundY,
+          contact: { pos: { x: c.pos.x, y: c.pos.y, z: c.pos.z }, up: { x: c.up.x, y: c.up.y, z: c.up.z } }
+        });
+      }
+    }
+  }
+
+  // ---- Collision poles for supports standing IN a drivable corridor. A pillar or loop
+  // shaft is a real column the player can see; where one rises through the road corridor
+  // (the crossover pillar, a loop shaft grazing its ring's mouth) cars must HIT it, not
+  // ghost through. Emit an engine pole (same (s, lat) collision the authored Twister pole
+  // uses) per obstructed strand pass; `ghost: true` tells the renderer it's already drawn
+  // as pillar/shaft, so buildPoles must not draw it again. main.js merges these into
+  // track.poles for the engine + AI.
+  const autoPoles = [];
+  {
+    const posts = [
+      ...pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY })),
+      ...supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y }))
+    ];
+    for (const post of posts) {
+      // A shallow graze (post riding the corridor edge) can obstruct several world units
+      // of road, but an engine pole is a point in (s, lat) — so lay one every ~2.5 units
+      // along the obstructed stretch, each at the post's offset AT that sample.
+      let lastEmit = -Infinity;
+      for (let j = 0; j < n; j++) {
+        const sm = samples[j];
+        if (sm.up.y < 0.9) continue;                                   // tilted stunt flank — not a corridor
+        if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue; // shaft doesn't cross this road
+        const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d >= sm.width / 2 + post.radius) continue;
+        if (sm.s - lastEmit >= 2.5) {
+          const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
+          const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;    // signed offset along the road's lateral
+          autoPoles.push({ s: sm.s, lat, radius: post.radius, ghost: true });
+          lastEmit = sm.s;
+        }
+      }
+    }
+  }
+
   return {
     instances,
     pillars,
     hills,
     loopStarts,
+    supportPosts,
+    autoPoles,
     centerline: new Centerline(samples, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,
