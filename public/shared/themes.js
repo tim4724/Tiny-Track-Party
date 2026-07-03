@@ -34,8 +34,9 @@
 //              (palms: fronds + trunk carry different authored colours). Colormap-
 //              textured kit models ignore it. Within one biome all TEXTURED models
 //              must share a single colormap (they merge into one mesh/material).
-//     bush:    { model, s, sink } the "bush" trick — a donor silhouette sunk to its
-//              canopy (procedural bush shapes failed, see buildScenery) — or null
+//     bush:    { model, s, sink, tint? } the "bush" trick — a donor silhouette sunk to
+//              its canopy (procedural bush shapes failed, see buildScenery) — or null.
+//              tint as in trees, for untextured donors
 //     mix:     { tree, bush }     CUMULATIVE roll thresholds: roll < tree → tree,
 //              roll < bush → bush, else rock. tree === bush means "no bushes".
 //     rocks:   [c0, c1, ...]      boulder tint family (flat-shaded, per-vertex)
@@ -113,9 +114,8 @@ export const THEMES = {
 
   // ── canyon — hot red-rock badlands (the Hard cup's biome; dormant until the canyon
   // cup lands in tracks.js, meanwhile reachable via ?biome=canyon). A dusty near-white
-  // horizon haze over terracotta ground, rust mesa-coloured hills, and a hot slightly
-  // orange sun — bleached desert light rather than sunset gold. v1 scenery is sparse
-  // big red boulders; cacti/dead wood join in the Nature-Kit asset round.
+  // horizon haze over terracotta ground, rust mesa-coloured buttes, and a hot slightly
+  // orange sun — bleached desert light rather than sunset gold.
   canyon: {
     sky:    { zenith: 0x4292d4, horizon: 0xe8c8a2, below: 0xf4e3c6 },
     fog:    0xe8c8a2,

@@ -685,7 +685,7 @@ export function buildScenery(R, track, theme) {
         // bush model, and procedural domes never matched (flat side facets render
         // as dark holes against the sunlit lawn) — a buried trunk reuses the
         // canopy's authored colours/facets for an exact style match, free.
-        placeTree(x, z, { parts: treeSrc.get(sc.bush.model),
+        placeTree(x, z, { parts: treeSrc.get(sc.bush.model), tint: sc.bush.tint,
                           s: sc.bush.s[0] + rand() * sc.bush.s[1], sink: sc.bush.sink });
       } else {
         // half-sunk boulder
