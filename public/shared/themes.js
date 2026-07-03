@@ -14,7 +14,14 @@
 //   key:    { color, intensity }        warm directional "sun" (the plastic shine)
 //   ground: { kind }                    procedural ground texture id (see textures.js:
 //                                       'lawn' | 'sand' | 'redrock')
-//   hills:  [c0, c1, c2]                horizon-dome ring colours, cycled i%len
+//   hills:  [c0, c1, c2]                horizon-ring colours, cycled i%len
+//   hillShape: (optional)               horizon-ring silhouette: 'dome' (default — soft
+//                                       meadow mounds) | 'mesa' (flat-topped buttes);
+//                                       a shape change rebuilds the ring (environment.js)
+//   clouds: (optional)                  { count ≤8, opacity, scale, aspect, tint } sky-puff
+//                                       dressing; omit for the canonical fat white cumulus
+//                                       (8 × opacity .8). scale/aspect stretch the sprites
+//                                       (wisps = wider, flatter), tint warms/cools them
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -107,6 +114,10 @@ export const THEMES = {
     key:    { color: 0xffdca6, intensity: 1.6 },
     ground: { kind: 'redrock' },
     hills:  [0xc47a52, 0xa96545, 0xd68f62],
+    hillShape: 'mesa', // flat-topped buttes on the horizon, not meadow mounds
+    // Bone-dry air: no fat cumulus. A few high, stretched, barely-there wisps with a
+    // warm dust tint — enough to keep the sky from reading empty on a long straight.
+    clouds: { count: 3, opacity: 0.3, scale: 1.35, aspect: 0.2, tint: 0xfff2e2 },
     scenery: {
       trees:   [],
       bush:    null,
