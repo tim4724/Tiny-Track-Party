@@ -25,9 +25,13 @@
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
-//     trees:   [{ model, w, s }]  weighted GLB silhouettes; w's should sum to 1. s is
-//              [base, spread] — a stamp's scale is base + rand()*spread (kept as the
-//              raw pair so the arithmetic matches the pre-theming literals bit-for-bit)
+//     trees:   [{ model, w, s, tint? }]  weighted GLB silhouettes; w's should sum to 1.
+//              s is [base, spread] — a stamp's scale is base + rand()*spread (kept as
+//              the raw pair so the arithmetic matches the pre-theming literals
+//              bit-for-bit). tint (hex) applies ONLY to untextured models (e.g. the
+//              Nature-Kit cacti): it's baked into vertex colours; colormap-textured
+//              kit models ignore it. Within one biome all TEXTURED models must share
+//              a single colormap (they merge into one mesh/material).
 //     bush:    { model, s, sink } the "bush" trick — a donor silhouette sunk to its
 //              canopy (procedural bush shapes failed, see buildScenery) — or null
 //     mix:     { tree, bush }     CUMULATIVE roll thresholds: roll < tree → tree,
@@ -89,9 +93,10 @@ export const THEMES = {
     key:    { color: 0xfff0cf, intensity: 1.55 },
     ground: { kind: 'sand' },
     hills:  [0xe6d29a, 0xefe2b3, 0xd9c187],
-    // No green trees on sand: until the palm/beach-prop asset round lands, the shore
-    // is dressed with weathered sandstone boulders only, scattered sparser than
-    // parkland so the beach reads open and airy.
+    // No green trees on sand: until the palm round lands (the Nature Kit is already
+    // in the repo pipeline — see canyon's cacti), the shore is dressed with weathered
+    // sandstone boulders only, scattered sparser than parkland so the beach reads
+    // open and airy.
     scenery: {
       trees:   [],
       bush:    null,
@@ -119,11 +124,15 @@ export const THEMES = {
     // warm dust tint — enough to keep the sky from reading empty on a long straight.
     clouds: { count: 3, opacity: 0.3, scale: 1.35, aspect: 0.2, tint: 0xfff2e2 },
     scenery: {
-      trees:   [],
+      // Saguaros as the signature silhouette, barrel cacti as the low accent — both
+      // are the Nature Kit's untextured models (CC0, same low-poly language as the
+      // toy-car kit), so `tint` picks their green: dusty sage, not lawn green.
+      trees:   [{ model: 'cactus-tall',  w: 0.6, s: [2.3, 0.7],   tint: 0x6da85c },
+                { model: 'cactus-short', w: 0.4, s: [1.15, 0.55], tint: 0x7cb464 }],
       bush:    null,
-      mix:     { tree: 0, bush: 0 }, // every spawn rolls "rock"
+      mix:     { tree: 0.4, bush: 0.4 }, // no bushes; the rest rolls "rock"
       rocks:   [0xc07a55, 0xa8623f, 0xd39a70], // rust → dusty ochre family
-      rockS:   [0.6, 0.9],  // canyon-scale boulders — the only silhouette, so they carry it
+      rockS:   [0.6, 0.9],  // canyon-scale boulders
       density: 0.45,        // sparser than the shore; deserts read empty on purpose
     },
   },

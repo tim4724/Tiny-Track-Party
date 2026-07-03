@@ -26,3 +26,8 @@
 	• Twitter:   twitter.com/KenneyNL
 	• Instagram: instagram.com/kenney_nl
 	• Mastodon:  mastodon.gamedev.place/@kenney
+		------------------------------
+
+	This folder also contains models from Kenney's Nature Kit (2.3)
+	(cactus-short.glb, cactus-tall.glb — renamed from cactus_short/
+	cactus_tall), same author, same CC0 license as above.
