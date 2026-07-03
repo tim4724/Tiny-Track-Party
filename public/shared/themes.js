@@ -13,7 +13,7 @@
 //   hemi:   { sky, ground, intensity }  hemisphere fill light (sky tint / bounce tint)
 //   key:    { color, intensity }        warm directional "sun" (the plastic shine)
 //   ground: { kind }                    procedural ground texture id (see textures.js:
-//                                       'lawn' | 'sand' | 'redrock')
+//                                       'lawn' | 'sand' | 'redrock' | 'snow')
 //   hills:  [c0, c1, c2]                horizon-ring colours, cycled i%len
 //   hillShape: (optional)               horizon-ring silhouette: 'dome' (default — soft
 //                                       meadow mounds) | 'mesa' (flat-topped buttes);
@@ -134,6 +134,30 @@ export const THEMES = {
       rocks:   [0xc07a55, 0xa8623f, 0xd39a70], // rust → dusty ochre family
       rockS:   [0.6, 0.9],  // canyon-scale boulders
       density: 0.45,        // sparser than the shore; deserts read empty on purpose
+    },
+  },
+
+  // ── snow — winter alpine (no cup yet; reachable via ?biome=snow, ready for a future
+  // ladder slot). Cold pale light under a flat overcast: an ice-haze horizon, white
+  // hill domes (snowed-over mounds — the dome silhouette is right here), grey-white
+  // flattened cloud deck, and a near-white sun kept bright enough for TV readability.
+  // Scenery leans on one trick: PINES ONLY. Dropping the round oak (bare in winter)
+  // and bushes makes the same kit assets read "winter forest" with zero new models.
+  snow: {
+    sky:    { zenith: 0x6f9fd4, horizon: 0xdfe9f2, below: 0xf3f8fc },
+    fog:    0xdfe9f2,
+    hemi:   { sky: 0xedf3fc, ground: 0xb2bdcc, intensity: 2.25 },
+    key:    { color: 0xf4f8ff, intensity: 1.45 },
+    ground: { kind: 'snow' },
+    hills:  [0xeef4f9, 0xdfe9f2, 0xf7fafc],
+    clouds: { count: 6, opacity: 0.55, scale: 1.25, aspect: 0.3, tint: 0xe9edf2 }, // low flat overcast
+    scenery: {
+      trees:   [{ model: 'tree-pine', w: 1, s: [2.3, 1.1] }], // the alpine silhouette
+      bush:    null,
+      mix:     { tree: 0.55, bush: 0.55 }, // no bushes; the rest rolls "rock"
+      rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite
+      rockS:   [0.4, 0.6], // a touch bigger than parkland — reads as snow-shouldered
+      density: 0.55,
     },
   },
 };
