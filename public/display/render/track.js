@@ -6,10 +6,6 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GROUND_SIZE } from './environment.js';
 
-// Trackside scenery GLBs (always preloaded — every track scatters them, see
-// _buildScenery). Order matters: [0] is the round tree, [1] the pine.
-export const SCENERY_MODELS = ['tree', 'tree-pine'];
-
 // Build the visible road + kerbs by sweeping a fixed cross-section along the track
 // centreline, plus a chunked road-surface proxy for the ground-conform raycast. The
 // road is fully procedural (no GLB tiles): width comes from the track, the kerb is a
@@ -521,15 +517,21 @@ export function buildLoopPoles(R, track) {
   R._mergedMats.push(mat);
 }
 
-// Trackside scenery — the kit's own GLB trees (round + pine, with small
-// sunken trees standing in for bushes) plus faceted boulders, scattered on
-// the grass outside the racing corridor. The parallax of things streaming
-// past is the strongest speed cue there is (trackside, not on the car — see
-// the wheel-roll notes above). Trees + bushes bake into ONE textured mesh
-// (they all share the kit colormap) and the boulders into ONE vertex-
-// coloured mesh — two draw calls total, like the road; castShadow stays
-// off because the grass doesn't receive shadows anyway.
-export function buildScenery(R, track) {
+// Trackside scenery — GLB silhouettes (trees/bushes via the sunk-tree trick) plus
+// faceted boulders, scattered outside the racing corridor. The parallax of things
+// streaming past is the strongest speed cue there is (trackside, not on the car —
+// see the wheel-roll notes above). Silhouettes bake into ONE textured mesh (kit
+// models share the colormap) and the boulders into ONE vertex-coloured mesh — two
+// draw calls total, like the road; castShadow stays off because the ground doesn't
+// receive shadows anyway.
+//
+// WHAT gets scattered comes from the biome's `theme.scenery` palette (shared/
+// themes.js): model mix, bush donor, rock tints, density. The placement machinery
+// below is palette-agnostic — but the rand() STREAM is part of the output, so the
+// call order/values here must not drift for a fixed palette (the grass palette
+// encodes the pre-theming literals; grass-cup tracks must stay byte-identical).
+export function buildScenery(R, track, theme) {
+  const sc = theme.scenery;
   const cl = track.centerline;
   if (!cl || !cl.samples.length) return;
 
@@ -556,13 +558,15 @@ export function buildScenery(R, track) {
     return true;
   };
 
-  // Tree sources: each SCENERY_MODELS proto reduced to bake-ready
-  // {geometry, matrixWorld} parts plus the shared colormap material. The kit
-  // models are toy-tiny (0.83 tall — shorter than two cars), so placements
-  // scale them up to diorama size below.
-  const treeSrc = [];
+  // Silhouette sources: every proto the palette references (tree entries + the bush
+  // donor), reduced to bake-ready {geometry, matrixWorld} parts plus the shared
+  // colormap material. The kit models are toy-tiny (0.83 tall — shorter than two
+  // cars), so placements scale them up to diorama size below.
+  const treeSrc = new Map(); // model name -> parts[]
   let colorMat = null;
-  for (const name of SCENERY_MODELS) {
+  const modelNames = [...new Set([...sc.trees.map((e) => e.model),
+                                  ...(sc.bush ? [sc.bush.model] : [])])];
+  for (const name of modelNames) {
     const root = R.protos.get(name);
     if (!root) continue;
     root.updateMatrixWorld(true);
@@ -573,7 +577,7 @@ export function buildScenery(R, track) {
       const m = Array.isArray(o.material) ? o.material[0] : o.material;
       if (!colorMat && m && m.map) colorMat = m;
     });
-    if (parts.length) treeSrc.push(parts);
+    if (parts.length) treeSrc.set(name, parts);
   }
 
   const KEEP = ['position', 'normal', 'uv']; // merged attribute sets must match
@@ -583,10 +587,18 @@ export function buildScenery(R, track) {
   const P = new THREE.Vector3(), S = new THREE.Vector3();
   const UP = new THREE.Vector3(0, 1, 0);
   const placeTree = (x, z, opts = {}) => {
-    if (!treeSrc.length) return;
-    // 65% round / 35% pine — pines as the accent, not an evergreen forest
-    const parts = opts.parts || treeSrc[rand() < 0.65 ? 0 : treeSrc.length - 1];
-    const s = opts.s != null ? opts.s : 2.3 + rand() * 1.1; // ≈1.9–2.8 world tall (≈3–5 car heights)
+    let parts = opts.parts, s = opts.s;
+    if (!parts) {
+      if (!sc.trees.length) return;
+      // weighted silhouette pick — ONE rand() regardless of entry count (grass:
+      // 65% round / 35% pine — pines as the accent, not an evergreen forest)
+      const r = rand();
+      let acc = 0, entry = sc.trees[sc.trees.length - 1];
+      for (const e of sc.trees) { acc += e.w; if (r < acc) { entry = e; break; } }
+      parts = treeSrc.get(entry.model);
+      if (s == null) s = entry.s[0] + rand() * entry.s[1]; // grass ≈1.9–2.8 world tall (≈3–5 car heights)
+    }
+    if (!parts) return;
     Q.setFromAxisAngle(UP, rand() * Math.PI * 2);
     S.set(s, s * (0.92 + rand() * 0.16), s); // slight height jitter
     P.set(x, groundY - (opts.sink || 0) * s, z); // sink: bury the trunk (bushes, below)
@@ -620,21 +632,19 @@ export function buildScenery(R, track) {
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     return g;
   };
-  const ROCK_GREYS = [0xc6cbd6, 0xb4bac8, 0x9aa1b4]; // pillar-concrete family
-
   const plainGeoms = [];
   const step = 7; // candidate spacing along the lap (world units)
   for (let d = 0; d < cl.length && treeGeoms.length + plainGeoms.length < 500; d += step) {
     const f = cl.sampleAt(d);
     const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
     for (const side of [-1, 1]) {
-      if (rand() > 0.62) continue; // leave gaps — a hedge-wall reads fake
+      if (rand() > sc.density) continue; // leave gaps — a hedge-wall reads fake
       const lat = side * (half + 2.5 + rand() * 9);
       const x = f.pos.x + f.lateral.x * lat + (rand() - 0.5) * 3;
       const z = f.pos.z + f.lateral.z * lat + (rand() - 0.5) * 3;
       if (!isClear(x, z)) continue;
       const roll = rand();
-      if (roll < 0.62) {
+      if (roll < sc.mix.tree) {
         placeTree(x, z);
         // copse: sometimes 1–2 companions huddle by the first trunk —
         // clusters read as parkland, an even sprinkle reads as noise
@@ -646,16 +656,17 @@ export function buildScenery(R, track) {
             if (isClear(ex, ez)) placeTree(ex, ez);
           }
         }
-      } else if (roll < 0.9) {
-        // "bush" = a small round tree sunk to its canopy. The kit has no bush
-        // model, and procedural domes never matched (flat side facets render
+      } else if (roll < sc.mix.bush) {
+        // "bush" = the palette's donor silhouette sunk to its canopy. The kit has no
+        // bush model, and procedural domes never matched (flat side facets render
         // as dark holes against the sunlit lawn) — a buried trunk reuses the
         // canopy's authored colours/facets for an exact style match, free.
-        placeTree(x, z, { parts: treeSrc[0], s: 1.1 + rand() * 0.7, sink: 0.3 });
+        placeTree(x, z, { parts: treeSrc.get(sc.bush.model),
+                          s: sc.bush.s[0] + rand() * sc.bush.s[1], sink: sc.bush.sink });
       } else {
         // half-sunk boulder
-        const rr = 0.3 + rand() * 0.45;
-        const grey = ROCK_GREYS[Math.floor(rand() * ROCK_GREYS.length)];
+        const rr = sc.rockS[0] + rand() * sc.rockS[1];
+        const grey = sc.rocks[Math.floor(rand() * sc.rocks.length)];
         const rock = tint(rockProto.clone(), grey, 0.92 + rand() * 0.16);
         rock.scale(rr, rr * (0.55 + rand() * 0.3), rr);
         rock.rotateY(rand() * Math.PI * 2);

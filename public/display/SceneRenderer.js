@@ -12,8 +12,8 @@ import {
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
 import { buildEnvironment, applyEnvTheme } from './render/environment.js';
-import { THEMES, themeForCup } from '../shared/themes.js';
-import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, SCENERY_MODELS } from './render/track.js';
+import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
+import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery } from './render/track.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
@@ -1077,7 +1077,7 @@ export class SceneRenderer {
     buildHills(this, track);
     buildPoles(this, track);
     buildLoopPoles(this, track);
-    buildScenery(this, track);
+    buildScenery(this, track, theme); // scenery palette (which props, tints, density) is the biome's
 
     if (debug) {
       // Magenta centreline overlay (inspection aid). Lift each point a little along
