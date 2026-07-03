@@ -27,8 +27,12 @@ export function trackSchematic(track) {
   // Center the (possibly non-square) extent inside the square viewBox.
   const offX = PAD + (VIEW - 2 * PAD - (maxX - minX) * scale) / 2;
   const offZ = PAD + (VIEW - 2 * PAD - (maxZ - minZ) * scale) / 2;
-  const px = (x) => +(offX + (x - minX) * scale).toFixed(1);
-  const pz = (z) => +(offZ + (z - minZ) * scale).toFixed(1);
+  // Rounding can produce -0 (e.g. +(-0.001).toFixed(2)), which JSON flattens to 0 —
+  // so a baked schematic (gen-track-schematics.js) would never deepStrictEqual the
+  // runtime value. Normalize it away everywhere a number leaves this module.
+  const z0 = (n) => (n === 0 ? 0 : n);
+  const px = (x) => z0(+(offX + (x - minX) * scale).toFixed(1));
+  const pz = (z) => z0(+(offZ + (z - minZ) * scale).toFixed(1));
 
   let d = '';
   for (let i = 0; i < samples.length; i++) {
@@ -43,6 +47,6 @@ export function trackSchematic(track) {
     // World→map projection, so overlays (the track-preview minimap) can plot LIVE
     // positions onto the same schematic: mapX = offX + (worldX - minX)·scale, and
     // likewise for z. Pure extra data — phones that only read viewBox/d/start ignore it.
-    proj: { minX: +minX.toFixed(2), minZ: +minZ.toFixed(2), scale: +scale.toFixed(4), offX: +offX.toFixed(2), offZ: +offZ.toFixed(2) }
+    proj: { minX: z0(+minX.toFixed(2)), minZ: z0(+minZ.toFixed(2)), scale: z0(+scale.toFixed(4)), offX: z0(+offX.toFixed(2)), offZ: z0(+offZ.toFixed(2)) }
   };
 }

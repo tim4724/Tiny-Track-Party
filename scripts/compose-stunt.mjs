@@ -284,11 +284,6 @@ export function designCoaster() {
   return { name: 'coaster', segs };
 }
 
-// ---- AUDITION VARIANTS (gallery-tracks candidates — composed but not registered) ----
-// Round 2 ("the trick tracks need to be more exciting"): bigger verticality, steeper
-// plunges, and the thread-the-ring signature move. The rejected round-1 variants
-// (skyfall/bigdipper/orbit/boomerang) live in git history.
-
 // GAUNTLET — thread the needle: the lap fires straight THROUGH the ring of its own toy
 // loop. A pillared ramp climbs to the ring's measured centre height, crests dead-centre
 // in the opening (the hole faces ±lateral, so the ramp runs perpendicular to the loop's
@@ -339,81 +334,6 @@ function alignGauntlet(segs) {
   if (err > 1.0) throw new Error(`gauntlet crest ${err.toFixed(2)} world off the ring axis`);
 }
 
-// HALO — the Gauntlet move at altitude: a spiral climbs to a pillared skyway that fires
-// straight THROUGH the ring of a GIANT ground loop (r 2.6 — apex 10.4 world, centre
-// ~5.5), then a banked descending U brings the lap home past a toy loop. The `align`
-// hook sets the spiral's rise to the measured ring-centre height and solves the two
-// _align legs (before the spiral) so the skyway joint sits dead-centre in the opening.
-export function designHalo() {
-  const segs = [
-    straight(14),                                                     // grid θ=0, north
-    arc(RL, -90),                                                     // θ=-90 east
-    straight(12),                                                     // top leg east
-    arc(RL, -90),                                                     // θ=-180 south
-    straight(8),                                                      // boost — straight into
-    loop(2.6, { drift: 3.2, _sweep: true }),                          // THE BIG RING (opening faces ±X)
-    straight(12),                                                     // south run
-    arc(RL, -90),                                                     // θ=-270 west
-    straight(16, { _align: true }),                                   // bottom leg west (align leg 1)
-    arc(RL, -90),                                                     // θ=-360 north
-    straight(10, { _align: true }),                                   // northbound approach (align leg 2)
-    arc(RL, -450, { bank: 10, pillars: true, _sweep: true, _ramp: 'spiral' }), // SPIRAL UP (net -90) → east, rise set from the ring
-    straight(8, { pillars: true }),                                   // skyway in...
-    straight(8, { pillars: true, _ramp: 'joint' }),                   // ...THROUGH THE RING (joint = ring centre) and out
-    straight(6, { rise: -1.0, pillars: true }),                       // start down
-    arc(RL, -90, { rise: -1.0, bank: 10, pillars: true, _sweep: true }), // banked descending corner → south
-    straight(8, { pillars: true, _ramp: 'drop' }),                    // final drop to ground (rise set from the ring)
-    straight(6),                                                      // flat beat — boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
-    straight(6, { _leg: true }),
-    arc(RL, -90),                                                     // θ=-990 west
-    straight(18, { _leg: true }),                                     // south edge home
-    arc(RL, -90),                                                     // θ=-1080 north
-    straight(6, { _leg: true })                                       // into the grid
-  ];
-  return { name: 'halo', segs, align: alignHalo };
-}
-function alignHalo(segs) {
-  const SCALE = 2;
-  const iSpiral = segs.findIndex((s) => s._ramp === 'spiral');
-  const iJoint = segs.findIndex((s) => s._ramp === 'joint');
-  const iDrop = segs.findIndex((s) => s._ramp === 'drop');
-  const [iA, iB] = segs.map((s, i) => (s._align ? i : -1)).filter((i) => i >= 0);
-  const ring = measureRing(segs);                       // the BIG ring — first crown on the lap, before the align legs
-  const lift = +(ring.y / SCALE).toFixed(2);
-  segs[iSpiral].rise = lift;                            // skyway level = ring centre
-  segs[iDrop].rise = +(-(lift - 2.0)).toFixed(2);       // the two -1.0 steps before it shed the rest
-  const r = solveAlign(segs, iA, iB, iJoint, ring.x / SCALE, ring.z / SCALE);
-  const joint = planWalk(segs.slice(0, iJoint));
-  const err = Math.hypot(joint.x - ring.x / SCALE, joint.z - ring.z / SCALE) * SCALE;
-  console.log(`  halo align: legs ${r.dA >= 0 ? '+' : ''}${r.dA.toFixed(2)}/${r.dB >= 0 ? '+' : ''}${r.dB.toFixed(2)}, skyway ${err.toFixed(2)} world off ring axis, level ${ring.y.toFixed(1)} world`);
-  if (err > 1.0) throw new Error(`halo skyway ${err.toFixed(2)} world off the ring axis`);
-}
-
-// SLINGSHOT — the coaster drop: spiral to a 5.2-world sky run, FREEFALL DIVE into a
-// near-ground valley, swing UP a kicker wall and over, then a toy loop home. Pure
-// profile drama — no alignment needed.
-export function designSlingshot() {
-  const segs = [
-    straight(14, { _leg: true }),                                     // grid θ=0
-    arc(RL, -90),                                                     // east
-    straight(10, { _leg: true }),
-    arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, _sweep: true }), // SPIRAL UP (net -90) → south
-    straight(10, { pillars: true }),                                  // sky run @5.2 world
-    straight(8, { rise: -2.4, pillars: true }),                       // THE DIVE (peak ~0.56 — twister-drop class)
-    straight(6, { rise: 1.2, pillars: true }),                        // up the far wall...
-    straight(5, { rise: -1.4, pillars: true }),                       // ...over the kicker and down
-    straight(6),                                                      // flat beat — boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
-    straight(8, { _leg: true }),
-    arc(RL, -90),                                                     // west
-    straight(16, { _leg: true }),
-    arc(RL, -90),                                                     // home (net -720)
-    straight(6, { _leg: true })
-  ];
-  return { name: 'slingshot', segs };
-}
-
 // SKYSNAKE — a slalom IN THE SKY: spiral up to 5.2 world, weave an S-S through the
 // clouds on pillars, then dive home past a toy loop.
 export function designSkysnake() {
@@ -436,10 +356,14 @@ export function designSkysnake() {
   return { name: 'skysnake', segs };
 }
 
-export const DESIGNS = { helix: designHelix, skyline: designSkyline, coaster: designCoaster };
-export const CANDIDATE_DESIGNS = {
-  gauntlet: designGauntlet, skysnake: designSkysnake, halo: designHalo, slingshot: designSlingshot
+export const DESIGNS = {
+  helix: designHelix, skyline: designSkyline, coaster: designCoaster,
+  gauntlet: designGauntlet, skysnake: designSkysnake
 };
+// Audition pool (gallery-tracks candidates). Empty since the 2026-07-04 round settled
+// the Rooftop roster; rejected designs (skyfall/bigdipper/orbit/boomerang/tower/
+// leapfrog/halo/slingshot) live in git history.
+export const CANDIDATE_DESIGNS = {};
 
 // Solve + trim one design in place; returns the report pieces. Sweep/leg markers are
 // derived from the segment flags (hand-counted indices kept going stale) and stripped

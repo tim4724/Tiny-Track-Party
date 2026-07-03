@@ -242,6 +242,59 @@ export const COASTER = [
   arc(RL, -90)                                                       // SW corner into the grid
 ];
 
+// ---- Gauntlet (Expert): thread the needle. The lap fires straight THROUGH the ring
+// of its own toy loop — a pillared ramp narrows as it climbs, crests dead-centre in
+// the ring's opening (5.0 world; the hole faces ±lateral, so the ramp runs
+// perpendicular to the loop's travel), then plunges onto a low bridge that clears the
+// loop's own boost leg before dropping home. Composed by scripts/compose-stunt.mjs:
+// the align solver (solveAlign + measureRing) parked the crest 0.00 world off the
+// ring axis; the odd lengths are its alignment + closure solves.
+export const GAUNTLET = [
+  straight(14),                                                      // grid, north-bound
+  arc(RL, -90),                                                      // NE corner
+  straight(12),                                                      // east leg
+  arc(RL, -90),                                                      // south-bound
+  straight(8),                                                       // boost — straight into
+  loop(2.2, { drift: 3, roll: 66 }),                                 // THE RING (opening faces ±X)
+  straight(10),                                                      // south spacing
+  arc(RL, -90),                                                      // west-bound
+  straight(6.315),                                                   // overshoot past the ring (align-solved)
+  arc(RL, -90),                                                      // north-bound
+  straight(5.815),                                                   // back to ring latitude (align-solved)
+  arc(RL, -90),                                                      // east — straight at the ring
+  straight(9, { rise: 2.51, pillars: true, width: [2.5, 2.2] }),     // THE RAMP — narrows, crests in the ring
+  straight(6, { rise: -1.61, pillars: true, width: [2.2, 2.5] }),    // THE PLUNGE through and out
+  straight(8, { pillars: true }),                                    // low bridge over the boost leg
+  straight(5, { rise: -0.9, pillars: true }),                        // final drop to ground
+  straight(8),                                                       // east run out
+  arc(RL, -90),                                                      // south-bound
+  straight(7.815),                                                   // (closure-solved)
+  arc(RL, -90),                                                      // west-bound
+  straight(44.685),                                                  // south edge home (closure-solved)
+  arc(RL, -90),                                                      // north into the grid
+  straight(6)
+];
+
+// ---- Skysnake (Hard): a slalom IN THE SKY. The spiral climbs to 5.2 world, the road
+// weaves an S-S through the clouds on pillars, then dives home past a toy loop.
+// Composed by scripts/compose-stunt.mjs (solved grid leg + probe-measured roll trims).
+export const SKYSNAKE = [
+  straight(40.837),                                                  // grid straight (closure-solved)
+  arc(RL, -90),                                                      // east
+  straight(10),
+  arc(RL, -450, { rise: 2.6, bank: 10, pillars: true, roll: 18 }),   // SPIRAL UP → south
+  arc(RL, 45, { pillars: true }), arc(RL, -45, { pillars: true }),   // THE SKY WEAVE @5.2 world
+  arc(RL, -45, { pillars: true }), arc(RL, 45, { pillars: true }),
+  straight(6, { pillars: true }),
+  straight(10, { rise: -2.6, pillars: true }),                       // dive to ground
+  straight(5),                                                       // boost — straight into
+  loop(2.2, { drift: -3, roll: -90 }),                               // TOY LOOP
+  straight(8),
+  arc(RL, -90),                                                      // west
+  straight(7),
+  arc(RL, -90)                                                       // home
+];
+
 // ---- Meadow Mile (Easy): the gentle teaching circuit. A roomy rounded rectangle on big
 // sweeping (RL) corners — the easiest line to hold — with one soft chicane and a rolling
 // half-hill per long side, and open sweeper short sides. No stunts, no banking, nothing
@@ -276,7 +329,9 @@ const OILS = {
   // gentle open ground, clear of decks, spirals and the loops.
   helix:      [ { u: 0.198, lat: 0.7 }, { u: 0.829, lat: -0.7 } ],
   skyline:    [ { u: 0.263, lat: 0.7 }, { u: 0.463, lat: -0.7 } ],
-  coaster:    [ { u: 0.334, lat: 0.7 }, { u: 0.645, lat: -0.7 } ]
+  coaster:    [ { u: 0.334, lat: 0.7 }, { u: 0.645, lat: -0.7 } ],
+  gauntlet:   [ { u: 0.29, lat: 0.7 }, { u: 0.795, lat: -0.7 } ],
+  skysnake:   [ { u: 0.211, lat: 0.7 }, { u: 0.844, lat: -0.7 } ]
 };
 
 // Boost pads — drive-over speed strips, position-scaled for catch-up. Place on STRAIGHTS
@@ -296,7 +351,9 @@ const PADS = {
   // Auto-placed on the cleanest straights (the loop mouths add their own strips).
   helix:      [ { u: 0.063, lat: 0.0 }, { u: 0.445, lat: 0.0 } ],
   skyline:    [ { u: 0.119, lat: 0.0 }, { u: 0.6, lat: 0.0 } ],
-  coaster:    [ { u: 0.064, lat: 0.0 }, { u: 0.463, lat: 0.0 } ]
+  coaster:    [ { u: 0.064, lat: 0.0 }, { u: 0.463, lat: 0.0 } ],
+  gauntlet:   [ { u: 0.105, lat: 0.0 }, { u: 0.683, lat: 0.0 } ],
+  skysnake:   [ { u: 0.066, lat: 0.0 }, { u: 0.633, lat: 0.0 } ]
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
@@ -316,7 +373,9 @@ const BOXES = {
   twister:    boxRows(0.039, 0.57), // early on the launch straight, then the far flat — grab, fly, grab again
   helix:      boxRows(0.086, 0.705),  // auto-placed: the grid run, then the south leg past the loops
   skyline:    boxRows(0.148, 0.723),  // auto-placed: the north leg, then the flat past the toy loop
-  coaster:    boxRows(0.093, 0.492)   // auto-placed: the grid run, then the boost straight
+  coaster:    boxRows(0.093, 0.492),  // auto-placed: the grid run, then the boost straight
+  gauntlet:   boxRows(0.128, 0.559),  // auto-placed: the east leg, then the exit run past the plunge
+  skysnake:   boxRows(0.096, 0.715)   // auto-placed: the grid straight, then the flat past the toy loop
 };
 
 // Support poles — SOLID obstacles cars collide with (unlike oils, which only spin you).
@@ -393,10 +452,21 @@ export const TRACKS = {
     oils: OILS.crossover, pads: PADS.crossover, boxes: BOXES.crossover
   },
   twister: {
+    // Retired from the cup 2026-07-04 audition (kept defined: the spiral/tilted-loop/
+    // pole geometry regression suite runs against it).
     name: 'Twister', difficulty: 'Expert', segments: TWISTER,
     oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister, poles: POLES.twister
   },
+  skysnake: {
+    name: 'Skysnake', difficulty: 'Hard', segments: SKYSNAKE,
+    oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake
+  },
+  gauntlet: {
+    name: 'Gauntlet', difficulty: 'Expert', segments: GAUNTLET,
+    oils: OILS.gauntlet, pads: PADS.gauntlet, boxes: BOXES.gauntlet
+  },
   coaster: {
+    // Retired from the cup 2026-07-04 audition (kept defined: camelback-bump coverage).
     name: 'Coaster', difficulty: 'Hard', segments: COASTER,
     oils: OILS.coaster, pads: PADS.coaster, boxes: BOXES.coaster
   },
@@ -435,7 +505,7 @@ export const CUPS = [
   { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
   { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits
   { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (biome TBD → grass)
-  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['coaster', 'helix', 'skyline', 'twister'] } // crazy: stunts (rooftop biome); crossover retired 2026-07-03
+  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] } // crazy: stunts (rooftop biome); crossover/coaster/twister retired
 ];
 
 // Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —
