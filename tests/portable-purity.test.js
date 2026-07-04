@@ -14,7 +14,8 @@ const path = require('node:path');
 const ENGINE_DIR = path.join(__dirname, '../public/display/engine');
 const FILES = [
   ...fs.readdirSync(ENGINE_DIR).filter((f) => f.endsWith('.js')).map((f) => path.join(ENGINE_DIR, f)),
-  path.join(__dirname, '../partyplug/RoomFlow.js')
+  path.join(__dirname, '../partyplug/RoomFlow.js'),
+  path.join(__dirname, '../public/display/GrandPrix.js') // cup scoring: outside engine/, same purity promise
 ];
 
 // API-shaped patterns (call sites / property reads, not bare words). Scanned on
