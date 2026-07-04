@@ -57,10 +57,14 @@
 //                read as `shoulder` instead — desert roads aren't crisply lined
 //     shoulder:  dusty edge tint for the dropped-lines case (defaults to asphalt)
 //     skirt:     deck side/belly colour (defaults to asphalt — timber for a boardwalk)
-//     planks:    { period, tones: [...], seam } repaints the deck as boardwalk planks:
-//                tones cycle per plank along the lap, seam is the thin groove band
-//                between planks (also interrupts the painted lines/dash — paint sits
-//                ON the planks). The dash keeps its speedometer job in every variant.
+//     planks:    { period, tones: [...], seam } repaints the deck as a boardwalk —
+//                a GRID of boards: rows every `period` along the lap (seam = the
+//                groove band between rows, which also interrupts the painted lines/
+//                dash — paint sits ON the boards), and board columns across the road
+//                (the road halves are subdivided; each cell hashes row × lane into
+//                `tones`, and rings beside a seam get a bevel shade/highlight so
+//                boards read as chamfered 3D pieces). ≥4 tones keeps neighbouring
+//                cells distinct. The dash keeps its speedometer job in every variant.
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon
@@ -155,11 +159,15 @@ export const THEMES = {
       skirt: 0x8f7351,             // understructure timber (deck sides + belly)
       // Tones sit a notch darker + redder than the sand texture so the deck still
       // separates from the beach (the road must never blend into the ground). The
-      // tone SPREAD is wide on purpose: at distance the per-plank tone steps are
-      // what read as planks (seams minify away), while up close the seam grooves
-      // take over — softer than the tones' full range so the near-field bar that
-      // sweeps under the camera stays gentle.
-      planks: { period: 1.5, tones: [0xcda172, 0xb9854e, 0xd8b183], seam: 0x9a7850 },
+      // tone SPREAD is wide on purpose: the deck is a GRID of board cells (rows along
+      // the lap × lanes across — see buildRibbonRoad's board columns), and the
+      // per-cell tone hash is most of the "wood" read; at distance the seams minify
+      // away and only the tone patchwork carries it. 5 tones so the (row, lane) hash
+      // never repeats on neighbours. Seam stays softer than the tones' full range so
+      // the groove bar sweeping under the camera stays gentle.
+      planks: { period: 1.5,
+                tones: [0xcda172, 0xb9854e, 0xd8b183, 0xc08c58, 0xd3a976],
+                seam: 0x9a7850 },
     },
     structure: 0x9a7b55, // overpass supports become timber piles
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
