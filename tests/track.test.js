@@ -5,12 +5,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, TRACKS, TRACK_LIST, trackSchematic, TRACK_SCHEMATICS;
+let buildTrack, TRACKS, TRACK_LIST, trackSchematic, TRACK_SCHEMATICS, postAtSample;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
   TRACKS = mod.TRACKS;
   TRACK_LIST = mod.TRACK_LIST;
+  postAtSample = mod.postAtSample;
   trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
   TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
 });
@@ -523,19 +524,13 @@ test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface
 // its footprint + sampling slack): the RADIAL distance a strand climbing over its own
 // support measures to the pillar under its deck fabricated "deep intruders" two units
 // down the road and planted collision poles mid-road on the approach (shipped on
-// Sidewinder; retired Crossover had one dead-centre). Mirrors TrackBuilder's
-// postAtSample.
+// Sidewinder; retired Crossover had one dead-centre). Measured with TrackBuilder's own
+// exported postAtSample — a hand-synced copy of the measure is how the radial bug
+// slipped its regression test.
 const postsOf = (t) => [
   ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
   ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
 ];
-const lateralIntrusion = (sm, post) => {
-  const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
-  const tl = Math.hypot(sm.tangent.x, sm.tangent.z) || 1;
-  if (Math.abs((dx * sm.tangent.x + dz * sm.tangent.z) / tl) > post.radius + 0.35) return null; // not abeam
-  const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
-  return sm.width / 2 + post.radius - Math.abs((dx * sm.lateral.x + dz * sm.lateral.z) / ll);
-};
 // Every autoPole's (s, lat) must reconstruct to a REAL post's footprint — a collision
 // pole with no visible column at its world position IS the invisible pole.
 const assertPolesReconstruct = (t, name) => {
@@ -543,7 +538,7 @@ const assertPolesReconstruct = (t, name) => {
   for (const ap of t.autoPoles) {
     const f = t.centerline.sampleAt(ap.s);
     const px = f.pos.x + f.lateral.x * ap.lat, pz = f.pos.z + f.lateral.z * ap.lat;
-    const bd = Math.min(Infinity, ...posts.map((p) => Math.hypot(p.x - px, p.z - pz)));
+    const bd = Math.min(...posts.map((p) => Math.hypot(p.x - px, p.z - pz)));
     assert.ok(bd <= ap.radius + 0.4,
       `track "${name}": autoPole @ s=${ap.s.toFixed(1)} lat=${ap.lat.toFixed(2)} reconstructs ${bd.toFixed(2)} from any post — an invisible pole`);
   }
@@ -556,10 +551,9 @@ test('support posts are clearly out of the corridor or visibly in it with a coll
     for (const post of postsOf(t)) {
       let peak = -Infinity;
       for (const sm of ss) {
-        if (sm.up.y < 0.9) continue;
-        if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue;
-        const intr = lateralIntrusion(sm, post);
-        if (intr == null) continue;
+        const rel = postAtSample(sm, post);
+        if (!rel) continue;
+        const intr = rel.intrusion;
         peak = Math.max(peak, intr);
         if (intr < 0.45) continue;
         // deeply obstructed sample → an autoPole must sit on this strand within reach
@@ -595,7 +589,7 @@ test('no phantom poles under a strand climbing over its own supports', () => {
 // deck can host one), so prove emission still works on a synthetic layout built to hit
 // it: a bridge deck (y=0.9 plan → 1.8 world) runs parallel 2.2 world beside a lower
 // road (0.9 world — inside the band), so pillar feet stand 0.8 deep in the lower
-// corridor. Every pole must sit AT its visible column, kerbside of the lower lane.
+// corridor. Every pole must sit AT its visible column.
 test('a pillar standing in a corridor emits its collision pole at the visible column', () => {
   const FIXTURE = { waypoints: [
     { x: 0, z: 0, y: 0 },

@@ -1,4 +1,4 @@
-// Geometry audit for every named track — catches the two failure classes the strand
+// Geometry audit for every named track — catches the failure classes the strand
 // gate (3D centreline distance ≥ 1.5) is blind to:
 //   1. SURFACE OVERLAP — two strands far apart along the lap but side-by-side at the
 //      SAME level: centrelines 1.6 apart pass the 3D gate while the 5-wide road decks
@@ -9,10 +9,14 @@
 //      only a few cm into a corridor: the ghost collision pole bonks rail-riding cars
 //      while the visible sliver hides behind the kerb. Posts should be clearly OUT
 //      (with margin) or clearly IN (a visible obstacle).
+//   3. PHANTOM POLES — a collision pole whose (s, lat) doesn't reconstruct to any real
+//      post's world position: an invisible mid-lane wall (the radial-intrusion bug
+//      shipped one on Sidewinder).
 //   node scripts/audit-tracks.mjs
 import { buildTrack } from './track-gen.mjs';
 
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const { postAtSample } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
 
 const KERB = 0.22 + 0.2;   // kerb width + height margin around the drivable deck
 const LEVEL = 0.6;         // |Δy| below this = same level (deck 0.34 + kerb 0.2 + slack)
@@ -47,18 +51,8 @@ for (const [name, def] of Object.entries(TRACKS)) {
   }
 
   // 2. support-post corridor grazes (0 < intrusion < 0.5 → invisible-pole zone).
-  // Intrusion is LATERAL, measured only at samples the post is ABEAM of (tangential
-  // offset within its footprint + slack) — the radial distance a climbing strand
-  // measures to a post two units down the road says nothing about the corridor at
-  // that sample (mirrors TrackBuilder's postAtSample).
-  const abeam = (sm, post) => {
-    const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
-    const tl = Math.hypot(sm.tangent.x, sm.tangent.z) || 1;
-    if (Math.abs((dx * sm.tangent.x + dz * sm.tangent.z) / tl) > post.radius + 0.35) return null;
-    const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
-    const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;
-    return { lat, intrusion: sm.width / 2 + post.radius - Math.abs(lat) };
-  };
+  // postAtSample (imported from TrackBuilder — the same function placement uses) gates
+  // on upright/height-band/abeam and measures the LATERAL intrusion.
   const posts = [
     ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
     ...(t.supportPosts || []).map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
@@ -66,9 +60,7 @@ for (const [name, def] of Object.entries(TRACKS)) {
   for (const post of posts) {
     let deepest = 0, at = 0;
     for (const sm of ss) {
-      if (sm.up.y < 0.9) continue;
-      if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue;
-      const hit = abeam(sm, post);
+      const hit = postAtSample(sm, post);
       if (hit && hit.intrusion > deepest) { deepest = hit.intrusion; at = sm.s; }
     }
     if (deepest > 0 && deepest < 0.5) rows.push(`POST GRAZE ${post.kind} intrudes ${deepest.toFixed(2)} @ s=${at.toFixed(0)} (invisible-pole zone)`);
