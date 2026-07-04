@@ -149,25 +149,16 @@ export const THEMES = {
     hillShape: 'island', // sparse offshore chain — the sea must show BETWEEN the hills
     water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8 },
     fogTune: 1.3, // clear seaside air: push the chase-cam fog out so the water reads from track level
-    // Boardwalk: the deck is sun-bleached planks laid across the direction of travel
-    // (three driftwood tones cycling per plank, a darker groove between), white-washed
-    // rail kerbs, timber understructure. Paint (edge lines + dash) sits ON the planks,
-    // so the grooves interrupt it.
+    // Sun-bleached coastal asphalt — the CANONICAL circuit road (white lines, dash,
+    // the classic coral-red/white kerbs, which already read seaside), just lighter
+    // and warmer, as if years of salt sun baked it. The road stays in the same
+    // family as every other biome's; the sea, sand and palms do the theming.
+    // (A wooden boardwalk deck was built and iterated three times here — it always
+    // read as the odd one out against the other biomes' asphalt. Don't revive it.)
     road: {
-      line:  0xf7f2e2,             // warm off-white paint over wood
-      kerb:  [0xf2ede0, 0xcdbb9a], // whitewash / weathered-driftwood rail bands
-      skirt: 0x8f7351,             // understructure timber (deck sides + belly)
-      // ONE clean wood colour at whisper contrast (±3% between planks — enough that
-      // the deck doesn't read as a single extrusion, never enough to see "stripes"),
-      // sitting darker + redder than the sand so the road separates from the beach.
-      // The regular seam grooves + the chamfer bevel are the whole "wood" read —
-      // visible tone steps were tried twice (full-width bands, then a per-board
-      // checkerboard) and both read as painted patchwork, not timber.
-      planks: { period: 1.5,
-                tones: [0xc79c6a, 0xc09565, 0xcda270],
-                seam: 0x8d6c46 },
+      asphalt: 0x6c6a74,
     },
-    structure: 0x9a7b55, // overpass supports become timber piles
+    structure: 0x9a7b55, // overpass supports stay timber piles — pier flavour without touching the road read
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
