@@ -997,7 +997,7 @@ export class SceneRenderer {
     // trackGroup itself). The loop below then bakes the remaining GLB scenery (the
     // start/finish gate); the grid/framing/shadow afterwards run on `collide.children`
     // + centreline samples regardless.
-    buildRibbonRoad(this, track, collide);
+    buildRibbonRoad(this, track, collide, theme); // road palette (asphalt/kerbs/planks) is the biome's
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;
@@ -1086,10 +1086,10 @@ export class SceneRenderer {
       }
     }
 
-    buildPillars(this, track);
+    buildPillars(this, track, theme);  // supports carry the biome's structure tint
     buildHills(this, track);
-    buildPoles(this, track);
-    buildLoopPoles(this, track);
+    buildPoles(this, track, theme);
+    buildLoopPoles(this, track, theme);
     buildScenery(this, track, theme); // scenery palette (which props, tints, density) is the biome's
 
     if (debug) {

@@ -41,6 +41,29 @@
 //                                       in — thick dusty air. The gallery/overview fog
 //                                       is untouched (framing the whole track stays
 //                                       readable in the picker)
+//   road: (optional)                    ribbon-road palette (buildRibbonRoad, render/
+//                                       track.js). Omit for the canonical circuit look —
+//                                       the defaults live in track.js as the verbatim
+//                                       pre-theming literals, so grass/sunset carry no
+//                                       entry. All fields optional:
+//     asphalt:   deck colour            (default 0x5a6078 — Kenney blue-grey plastic)
+//     line:      painted edge-line/dash colour (default 0xc4c4d9)
+//     dash:      centre-dash override — canyon paints it highway yellow while the
+//                edge treatment differs (defaults to `line`)
+//     kerb:      [a, b] kerb band pair (default red/white); a ≈ b = unstriped banks
+//     kerbW/kerbH: kerb cross-section overrides (snow widens + raises the kerb into
+//                a ploughed snowbank; visual only — the physics corridor is untouched)
+//     edgeLines: false drops the painted side lines; their strips (plus the kerb gap)
+//                read as `shoulder` instead — desert roads aren't crisply lined
+//     shoulder:  dusty edge tint for the dropped-lines case (defaults to asphalt)
+//     skirt:     deck side/belly colour (defaults to asphalt — timber for a boardwalk)
+//     planks:    { period, tones: [...], seam } repaints the deck as boardwalk planks:
+//                tones cycle per plank along the lap, seam is the thin groove band
+//                between planks (also interrupts the painted lines/dash — paint sits
+//                ON the planks). The dash keeps its speedometer job in every variant.
+//   structure: (optional)               support pillars/poles/loop-shaft tint (default
+//                                       0x9aa1b4 toy concrete) — timber piles under a
+//                                       beach overpass, red-rock columns in the canyon
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -122,6 +145,23 @@ export const THEMES = {
     hillShape: 'island', // sparse offshore chain — the sea must show BETWEEN the hills
     water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8 },
     fogTune: 1.3, // clear seaside air: push the chase-cam fog out so the water reads from track level
+    // Boardwalk: the deck is sun-bleached planks laid across the direction of travel
+    // (three driftwood tones cycling per plank, a darker groove between), white-washed
+    // rail kerbs, timber understructure. Paint (edge lines + dash) sits ON the planks,
+    // so the grooves interrupt it.
+    road: {
+      line:  0xf7f2e2,             // warm off-white paint over wood
+      kerb:  [0xf2ede0, 0xcdbb9a], // whitewash / weathered-driftwood rail bands
+      skirt: 0x8f7351,             // understructure timber (deck sides + belly)
+      // Tones sit a notch darker + redder than the sand texture so the deck still
+      // separates from the beach (the road must never blend into the ground). The
+      // tone SPREAD is wide on purpose: at distance the per-plank tone steps are
+      // what read as planks (seams minify away), while up close the seam grooves
+      // take over — softer than the tones' full range so the near-field bar that
+      // sweeps under the camera stays gentle.
+      planks: { period: 1.5, tones: [0xcda172, 0xb9854e, 0xd8b183], seam: 0x9a7850 },
+    },
+    structure: 0x9a7b55, // overpass supports become timber piles
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
@@ -158,6 +198,17 @@ export const THEMES = {
     fogTune: 0.72, // sand-fog: the dusty horizon starts noticeably closer than clear air
     // Blowing dust: wide sand-tinted banks at mesa height, drifting with the clouds.
     haze: { count: 4, opacity: 0.16, tint: 0xe9c9a0, scale: 1 },
+    // Desert highway: sun-baked warm asphalt, NO painted edge lines (a dusty shoulder
+    // fades to the kerb instead), a faded-yellow centre dash — the instantly readable
+    // "desert road" trope, and the dash keeps its near-field speedometer job.
+    road: {
+      asphalt: 0x6e6560,           // warm sun-baked grey (stock deck is cool blue-grey)
+      dash:    0xd9b054,           // faded highway yellow
+      edgeLines: false,
+      shoulder: 0x7d6f5f,          // dusty edge band where the lines would be
+      kerb:  [0xc06a42, 0xe3cfa4], // rust / sand
+    },
+    structure: 0xb4714d, // supports read as red-rock columns, not city concrete
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the
@@ -199,6 +250,16 @@ export const THEMES = {
       rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite
       rockS:   [0.4, 0.6], // a touch bigger than parkland — reads as snow-shouldered
       density: 0.55,
+    },
+    // Wet ploughed asphalt between snowbanks: a darker, colder deck (free contrast
+    // against the white ground — the readability risk of this biome), ice-tinted
+    // paint, and the kerbs become plain white banks — wider and taller than a racing
+    // kerb, with only a whisper of two-tone banding so edge distance still reads.
+    road: {
+      asphalt: 0x494f5e,           // wet cold asphalt
+      line:  0xc2d6e6,             // ice-blue paint
+      kerb:  [0xeff4f9, 0xdde7f0], // near-white bank pair (whisper contrast)
+      kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
   },
 };

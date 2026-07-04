@@ -6,6 +6,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GROUND_SIZE } from './environment.js';
 
+// Support-structure tint (bridge pillars, corridor poles, loop shafts): the biome's
+// `structure` hex — timber piles (beach), red-rock columns (canyon) — or the canonical
+// toy concrete when the theme doesn't care.
+const STRUCTURE = (theme) => (theme && theme.structure) || 0x9aa1b4;
+
 // Build the visible road + kerbs by sweeping a fixed cross-section along the track
 // centreline, plus a chunked road-surface proxy for the ground-conform raycast. The
 // road is fully procedural (no GLB tiles): width comes from the track, the kerb is a
@@ -13,17 +18,25 @@ import { GROUND_SIZE } from './environment.js';
 // into a wall the way scaling the old GLB tiles did. One merged vertex-coloured mesh
 // (asphalt + white edge lines + red/white kerb + side skirt); adds it to trackGroup
 // and the collision chunks to `collide`.
-export function buildRibbonRoad(R, track, collide) {
+//
+// LOOK comes from the biome's optional `road` palette (shared/themes.js): every
+// default below is the verbatim pre-theming literal, so a theme without `road`
+// (grass, sunset) builds byte-identical buffers. The palette recolours (asphalt/
+// lines/dash/kerb/skirt), reshapes the kerb (kerbW/kerbH — snowbanks), drops the
+// edge lines for a dusty shoulder (canyon), or repaints the whole deck as boardwalk
+// planks (beach) — all vertex paint on the same sweep, no new geometry or textures.
+export function buildRibbonRoad(R, track, collide, theme) {
   const cl = track.centerline;
   if (!cl || !cl.samples.length) return;
+  const rd = (theme && theme.road) || {};
 
   // Drivable width is per-sample (centerline.width / roadWidth) — the road can flare
   // and pinch along the lap, and the physics curb corridor follows it (Game.maxLatAt).
   // `defHalf` is the fallback half-width; the kerb/line cross-section is fixed.
   const defHalf = (track.roadWidth || 5) / 2;
   const halfAt = (i) => (frames[i].width != null ? frames[i].width : track.roadWidth || 5) / 2;
-  const cw = 0.22;        // kerb lateral width
-  const ch = 0.20;        // kerb height — low; a kerb, not a wall
+  const cw = rd.kerbW ?? 0.22; // kerb lateral width (visual only — outside the physics corridor)
+  const ch = rd.kerbH ?? 0.20; // kerb height — low; a kerb, not a wall
   const deck = 0.34;      // side-skirt drop (visual deck thickness below the road)
   const gap = Math.min(0.07, defHalf * 0.3);     // asphalt gap between kerb and edge line
   const lw = Math.min(0.20, defHalf * 0.5 - gap);// painted white edge-line width
@@ -65,10 +78,32 @@ export function buildRibbonRoad(R, track, collide) {
   // does (raw vertex-colour floats are NOT auto-converted — doing it here keeps the
   // albedo identical to what the textured tiles sample).
   const c = (hex) => { const k = new THREE.Color(hex); return [k.r, k.g, k.b]; };
-  const ASPHALT = c(0x5a6078);   // road surface
-  const LINE = c(0xc4c4d9);      // painted road marking (Kenney's light road-line swatch)
-  const KERB_RED = c(0xfa6b41);  // kerb red — Kenney's is a warm orange-red, not crimson
-  const KERB_WHITE = c(0xf8f8fb);// kerb white
+  const ASPHALT = c(rd.asphalt ?? 0x5a6078);          // road surface
+  const LINE = c(rd.line ?? 0xc4c4d9);                // painted road marking (Kenney's light road-line swatch)
+  const DASH = c(rd.dash ?? rd.line ?? 0xc4c4d9);     // centre dash paint (canyon: highway yellow)
+  const KERB_A = c(rd.kerb ? rd.kerb[0] : 0xfa6b41);  // kerb band A — Kenney's warm orange-red, not crimson
+  const KERB_B = c(rd.kerb ? rd.kerb[1] : 0xf8f8fb);  // kerb band B — kerb white
+  const SKIRT = c(rd.skirt ?? rd.asphalt ?? 0x5a6078);// deck sides + belly (boardwalk: timber)
+  const SHOULDER = c(rd.shoulder ?? rd.asphalt ?? 0x5a6078); // edge band when edgeLines is off
+  const edgeLines = rd.edgeLines !== false;
+
+  // Boardwalk planks (rd.planks): repaint deck rings by plank index along the lap.
+  // A plank is ringsPerPlank rings; its FIRST ring paints the seam groove (one ring
+  // ≈ 0.2-0.3u — chunky toy scale, reads as the bevel between planks, and streams
+  // past at ~6 planks/s at top speed — the same readable cadence as the centre
+  // dash). Tones cycle so neighbouring planks never match. `tone(i)` is the deck
+  // base colour everywhere planks are on; ASPHALT otherwise.
+  const planks = rd.planks || null;
+  let ringsPerPlank = 0, plankTones = null, plankSeam = null;
+  if (planks) {
+    ringsPerPlank = Math.max(2, Math.round(planks.period / (cl.length / N)));
+    plankTones = planks.tones.map(c);
+    plankSeam = c(planks.seam);
+  }
+  const tone = planks
+    ? (i) => plankTones[Math.floor(i / ringsPerPlank) % plankTones.length]
+    : () => ASPHALT;
+  const isSeam = (i) => planks !== null && (i % ringsPerPlank === 0);
 
   // Cross-section anatomy, left → right: asphalt is flat (y=0) across the drivable width;
   // inside each kerb sits a small asphalt `gap`, then a thin painted white line, then the
@@ -103,13 +138,13 @@ export function buildRibbonRoad(R, track, collide) {
     { a: 1,  b: 2,  kind: 'kerb', side: 'L' },  // left kerb OUTER face (road level → top) — striped
     { a: 2,  b: 3,  kind: 'kerb', side: 'L' },  // left kerb top
     { a: 3,  b: 4,  kind: 'kerb', side: 'L' },  // left kerb inner face
-    { a: 4,  b: 5,  kind: 'road'  },            // gap asphalt between kerb and left line
+    { a: 4,  b: 5,  kind: 'gap'   },            // gap asphalt between kerb and left line (shoulder when lines are off)
     { a: 5,  b: 6,  kind: 'line'  },            // left white edge line
     { a: 6,  b: 7,  kind: 'road'  },            // asphalt, left half
-    { a: 7,  b: 8,  kind: 'dash'  },            // centre dash (LINE/ASPHALT bands along the lap)
+    { a: 7,  b: 8,  kind: 'dash'  },            // centre dash (DASH/deck bands along the lap)
     { a: 8,  b: 9,  kind: 'road'  },            // asphalt, right half
     { a: 9,  b: 10, kind: 'line'  },            // right white edge line
-    { a: 10, b: 11, kind: 'road'  },            // gap asphalt between right line and kerb
+    { a: 10, b: 11, kind: 'gap'   },            // gap asphalt between right line and kerb
     { a: 11, b: 12, kind: 'kerb', side: 'R' },  // right kerb inner face
     { a: 12, b: 13, kind: 'kerb', side: 'R' },  // right kerb top
     { a: 13, b: 14, kind: 'kerb', side: 'R' },  // right kerb OUTER face (top → road level) — striped
@@ -207,7 +242,7 @@ export function buildRibbonRoad(R, track, collide) {
     return { d, eff: total / bands };
   };
   const kerbL = kerbDist(-1), kerbR = kerbDist(1);
-  const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_RED : KERB_WHITE);
+  const bandCol = (k, i) => ((Math.floor(k.d[i] / k.eff) % 2) === 0 ? KERB_A : KERB_B);
 
   // Centre dash: ring i is dash-on for the first dashRingsOn rings of each cycle. N is
   // an exact multiple of the cycle count (see resample above), so every dash spans the
@@ -271,13 +306,24 @@ export function buildRibbonRoad(R, track, collide) {
     const ni = (i + 1) % N;
     const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
     const bare = bareAsphalt(i);
-    const colD = (dashOn(i) && !bare) ? LINE : ASPHALT;
-    const colLine = bare ? ASPHALT : LINE;
+    // Ring colour precedence: bare (launch-strip zone — clean deck, no seams either,
+    // so the pad reads as paint on a smooth patch) > plank seam (the groove interrupts
+    // painted lines/dash — paint sits ON the planks) > the strip's own paint > deck.
+    const deckCol = tone(i);
+    const seam = !bare && isSeam(i);
+    const colRoad = seam ? plankSeam : deckCol;
+    const colD = bare ? deckCol : seam ? plankSeam : dashOn(i) ? DASH : deckCol;
+    const colLine = bare ? deckCol : seam ? plankSeam : edgeLines ? LINE : SHOULDER;
+    // Kerb gap: shoulder-tinted only when the edge lines are off (canyon's dusty edge);
+    // under planks it's deck — boardwalk planks run rail to rail.
+    const colGap = bare ? deckCol : seam ? plankSeam : (planks || edgeLines) ? deckCol : SHOULDER;
     for (const st of STRIPS) {
       emitPt(i, st.a); emitPt(i, st.b); emitPt(ni, st.b);  // tri 1: ia, ib, nb
       emitPt(i, st.a); emitPt(ni, st.b); emitPt(ni, st.a); // tri 2: ia, nb, na
       const kerbCol = st.side === 'R' ? colR : colL;
-      pushStripCol(st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine : st.kind === 'dash' ? colD : ASPHALT, st);
+      pushStripCol(st.kind === 'kerb' ? kerbCol : st.kind === 'line' ? colLine
+        : st.kind === 'dash' ? colD : st.kind === 'gap' ? colGap
+        : st.kind === 'skirt' ? SKIRT : colRoad, st);
     }
   }
   const full = mkGeom(pos, col); // solves vertex normals over the whole ribbon
@@ -336,7 +382,7 @@ export function buildRibbonRoad(R, track, collide) {
 // the grass plane up to just under the deck, merged into ONE matte mesh. They cast a
 // contact shadow so the column reads as planted on the ground. Off-road, so they're kept
 // OUT of the collision proxy — purely visual (a car never drives onto a pillar).
-export function buildPillars(R, track) {
+export function buildPillars(R, track, theme) {
   const list = track.pillars;
   if (!list || !list.length) return;
   const geoms = [];
@@ -348,7 +394,7 @@ export function buildPillars(R, track) {
   }
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose(); // copied into `merged`
-  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete
+  const mat = new THREE.MeshLambertMaterial({ color: STRUCTURE(theme) }); // matte toy concrete (or the biome's structure tint)
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false; // geometry is baked in world space (translate above)
   mesh.castShadow = true;
@@ -418,7 +464,7 @@ export function buildHills(R, track) {
 // the spiral's summit) it stands up from the road as a post you crest into. The engine owns
 // the collision (cars hit its (s, lat) footprint); here we just draw it — matte toy concrete
 // like the pillars.
-export function buildPoles(R, track) {
+export function buildPoles(R, track, theme) {
   // ghost poles are collision-only proxies for supports ALREADY drawn (bridge pillars /
   // loop shafts standing in the corridor — see TrackBuilder's autoPoles); skip their mesh.
   const list = (track.poles || []).filter((p) => !p.ghost);
@@ -443,7 +489,7 @@ export function buildPoles(R, track) {
   }
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete (like pillars)
+  const mat = new THREE.MeshLambertMaterial({ color: STRUCTURE(theme) }); // matte structure tint (like pillars)
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false;
   mesh.castShadow = true;
@@ -459,7 +505,7 @@ export function buildPoles(R, track) {
 // Here we just skin each entry: a cylinder from the grass whose TOP is cut to the road's
 // underside plane (a diagonal, not a flat top) so it meets the angled road flush instead of
 // poking through it.
-export function buildLoopPoles(R, track) {
+export function buildLoopPoles(R, track, theme) {
   const list = track.supportPosts;
   if (!list || !list.length) return;
   const gy = R.ground.position.y;
@@ -486,7 +532,7 @@ export function buildLoopPoles(R, track) {
   if (!geoms.length) return;
   const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
   if (geoms.length > 1) for (const g of geoms) g.dispose();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x9aa1b4 }); // matte toy concrete (like pillars)
+  const mat = new THREE.MeshLambertMaterial({ color: STRUCTURE(theme) }); // matte structure tint (like pillars)
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false;
   mesh.castShadow = true;
