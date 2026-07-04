@@ -846,23 +846,20 @@ export function buildLandmarks(R, track, theme) {
       const tail = new THREE.ConeGeometry(0.55, 1.1, 6);
       tail.rotateX(-Math.PI / 2 - 0.65);                        // flicks up and aft
       part(tail, 0, 1.75, -1.85, YELLOW, 0.98);
-      const head = new THREE.IcosahedronGeometry(0.85, 1);
-      part(head, 0, 2.85, 0.75, YELLOW, 1.02);
-      // bill: wide flattened upper + a slimmer lower lip under it — the two-tier
-      // silhouette is what reads "duck bill" rather than "beak" at TV distance
-      const bill = new THREE.ConeGeometry(0.36, 0.8, 7);
-      bill.rotateX(Math.PI / 2);                                // cone +Y → +Z, toward the road
-      bill.scale(1, 0.5, 1);
-      part(bill, 0, 2.76, 1.62, BILL);
-      const lip = new THREE.ConeGeometry(0.26, 0.55, 7);
-      lip.rotateX(Math.PI / 2);
-      lip.scale(1, 0.42, 1);
-      part(lip, 0, 2.58, 1.5, BILL, 0.88);
-      // eyes: white toy-eye balls with dark pupils, centred ON the head surface
-      // (r 0.85 — offsets short of the radius bury a dot inside the head)
+      const head = new THREE.IcosahedronGeometry(0.9, 1);
+      part(head, 0, 2.72, 0.7, YELLOW, 1.02);                   // chubby, settled into the body (no neck)
+      // bill: one wide, flat, rounded shovel — a squashed sphere, not cones. The
+      // pointed cone pair read as an open pecking beak (user: creepy); the
+      // rubber-duck icon is a broad smiling paddle.
+      const bill = new THREE.IcosahedronGeometry(0.5, 1);
+      bill.scale(1.7, 0.45, 1.15);
+      part(bill, 0, 2.55, 1.5, BILL);
+      // eyes: simple dark toy dots WIDE APART on the SIDES of the head (the coal-dot
+      // idiom the snowman uses). Close-set forward-facing eyes gave the duck a stare
+      // — a duck's eyes sit lateral. Centres ON the head sphere's surface (r 0.9;
+      // anything short of the radius buries the dot inside the head).
       for (const sd of [-1, 1]) {
-        part(new THREE.IcosahedronGeometry(0.17, 1), sd * 0.41, 3.09, 1.45, 0xf7f5ee);
-        part(new THREE.IcosahedronGeometry(0.085, 0), sd * 0.47, 3.13, 1.56, 0x343a44);
+        part(new THREE.IcosahedronGeometry(0.14, 1), sd * 0.68, 2.99, 1.23, 0x343a44);
       }
       break;
     }
