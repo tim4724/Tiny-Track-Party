@@ -30,8 +30,13 @@ test('shell join skips the name screen, seats the injected name, never persists 
   // Straight to the lobby — the name form was never shown or filled.
   await zoe.waitForSelector(visible('#lobby'));
   await expect(zoe.locator('#name')).toHaveClass(/hidden/);
+  // The name still seats the display roster and feeds our labels…
   await expect(zoe.locator('#me-name')).toHaveText('Zoe');
   await expect(page.locator('#players')).toContainText('Zoe');
+  // …but in the shell those labels are hidden: the launcher's native top-bar chip
+  // already shows the name, so the in-game copies would be a redundant duplicate.
+  await expect(zoe.locator('#me-name')).toBeHidden();
+  await expect(zoe.locator('.cg-shell')).toHaveCount(1);
 
   // §1: the injected identity must not leak into the game's own name storage.
   expect(await zoe.evaluate(() => localStorage.getItem('tinytrack_name'))).toBeNull();

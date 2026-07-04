@@ -29,6 +29,11 @@ const inShell = _cgParams.has('cgv');
 // The launcher's name gate guarantees non-blank ≤16 chars; we still sanitize
 // defensively (trim/truncate) exactly as the standalone name form does.
 const shellName = inShell ? cleanName(_cgParams.get('cgName')) : '';
+// Flag the shell on <html> so CSS can drop our own name labels: the launcher
+// already shows the player's name in its native top-bar chip, so the in-game
+// copies (lobby identity, in-race HUD, how-to-drive demo) are redundant there.
+// Gated on cgv like every other shell behaviour, so the plain browser is unchanged.
+document.documentElement.classList.toggle('cg-shell', inShell);
 
 // Report a TERMINAL session end to the launcher (§3), feature-detected + fire-once.
 // Terminal = the session cannot continue (room gone/closed, join rejected, seat

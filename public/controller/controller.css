@@ -255,6 +255,15 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* Couch Games shell: the launcher owns identity and shows the player's name in
+   its native top-bar chip, so our own copies are duplicates — drop them (lobby
+   identity, in-race HUD, the how-to-drive demo phone). The `?` help button keeps
+   its margin-left:auto so it stays pinned right in the now name-less lobby row;
+   .hud-top keeps its min-height so the HUD's top spacing is unchanged. */
+.cg-shell .lobby-me__name,
+.cg-shell .hud-name,
+.cg-shell .phone-name { display: none; }
+
 .steer { margin-top: auto; }
 .steer__track {
   position: relative; height: 2.8rem; overflow: hidden;
