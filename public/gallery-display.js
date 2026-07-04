@@ -18,7 +18,9 @@ var DISPLAY_CARDS = [
   { key: 'paused',    title: 'Paused' },
   { key: 'reconnect', title: 'Reconnect' },
   { key: 'finished',  title: 'Player finished' },
-  { key: 'results',   title: 'Results' }
+  { key: 'results',   title: 'Results' },
+  { key: 'intermission', title: 'Cup intermission' },
+  { key: 'podium',    title: 'Cup podium' }
 ];
 
 var state = Gallery.loadState();

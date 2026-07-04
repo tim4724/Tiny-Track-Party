@@ -13,7 +13,8 @@ import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
-import { makeShuffleBag } from './GrandPrix.js';
+import { CupSeries, makeShuffleBag } from './GrandPrix.js';
+import { CUPS } from '../shared/tracks.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
@@ -486,6 +487,8 @@ const net = new DisplayNet({
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
     else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
+    // Host's "Next race" during a cup intermission (advanceSeriesRace re-checks room state).
+    else if (data.type === MSG.SERIES_NEXT && from === net.flow.host) advanceSeriesRace();
     // Pause / resume / new game can come from any player's controller.
     else if (data.type === MSG.PAUSE_GAME) pauseRace();
     else if (data.type === MSG.RESUME_GAME) resumeRace();
@@ -556,6 +559,7 @@ function refreshAbandonTimer() {
 // still-racing car — engine, render entry and results identity — onto the new
 // slot so that phone drives it and the camera keeps following the same car.
 function rekeyCarPlayer(oldId, newId) {
+  if (series) series.rekey(oldId, newId); // banked cup points follow the player, car or no car
   if (!session || !session.rekeyCar(oldId, newId)) return;
   scene.rekeyCar(oldId, newId);
   audio.stopCarVoices(oldId); // the loop re-creates voices under newId next frame
@@ -566,6 +570,17 @@ function rekeyCarPlayer(oldId, newId) {
 // ("CPU") racers (see buildField), so a short-handed lobby still gets a real race.
 const FIELD_SIZE = MAX_PLAYERS;
 const AI_PREFIX = 'ai-';
+
+// ---- Grand Prix series ----
+// Picking a cup runs its 4 tracks back-to-back: each endRace banks points into
+// `series` (GrandPrix.js), holds the room in RESULTS for an intermission, then
+// chains straight into the next race (advanceSeriesRace) — the lobby only
+// returns after the podium (or on any quit path, which cancels the series).
+const INTERMISSION_MS = 10000;  // auto-advance budget; the host can advance early
+let series = null;              // live CupSeries, or null (single race / no cup)
+let seriesTimer = null;         // auto-advance timeout (armed per intermission)
+let seriesDeadline = 0;         // when it fires — the countdown label reads this
+let intermissionTicker = null;  // 1 Hz "starting in N…" refresh
 
 // Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
 let lastRosterCount = 0;
@@ -651,7 +666,17 @@ function startRace() {
   // reconnect QR) but doesn't get a car until they're back.
   const players = net.flow.list().filter((p) => p.connected);
   if (!players.length) return;
+  // Cup mode: this Start commits to the whole Grand Prix. The series engine
+  // walks the cup from race 1 (the lobby preview already sits on it — the cup
+  // pick resolved trackId to its first track).
+  series = net.mode === 'cup' ? new CupSeries(CUPS.find((c) => c.id === net.cupId)) : null;
+  launchRace(players);
+}
 
+// The actual race launch, shared by the lobby start above and the series chain
+// (advanceSeriesRace) — everything from here down assumes the go/no-go guards
+// already passed and `track` is the circuit to race.
+function launchRace(players) {
   // Fresh seed per race so item rolls (and AI lane wander) vary game-to-game. The
   // display is the sole authority, so picking it here (with the page RNG) keeps the
   // engine deterministic from the seed while the rolls aren't identical every game.
@@ -710,6 +735,37 @@ function startRace() {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
   }
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
+}
+
+// Chain into the cup's next race, straight from the intermission (RESULTS →
+// COUNTDOWN — no lobby in between; RoomFlow allows the transition). Reached
+// three ways: the intermission's auto-advance timer, the host's "Next race"
+// (SERIES_NEXT / the display's results button). startRace's LOBBY guard stays
+// intact, so nothing else — a stale START_GAME, __startRace — can skip an
+// intermission.
+function advanceSeriesRace() {
+  if (net.roomState !== ROOM_STATE.RESULTS || !series || series.finished || !sceneReady) return;
+  clearTimeout(endTimer);          // endRace armed the 60s back-to-lobby failsafe — it must not yank race N+1
+  clearSeriesTimers();
+  // Who was waiting out the last race, BEFORE the field rebuild seats them.
+  // Their phones sit on "you're in the next race!" and only a fresh WELCOME
+  // (inRace now true) flips them to the wheel — GAME_END never comes mid-cup.
+  const joiners = lateJoiners();
+  const players = net.flow.list().filter((p) => p.connected);
+  if (!players.length) { returnToLobby(); return; } // everyone left mid-intermission
+  series.advance();
+  net.setTrack(series.currentTrackId);   // publishes + selectTrack (track/totalLaps swap)
+  // selectTrack outside the lobby skips the scene swap (no preview to fade);
+  // a chained start has no lobby step, so place the new circuit explicitly —
+  // the results overlay covers the pop.
+  scene.setTrack(track, { debug: _showCenterline });
+  launchRace(players);
+  for (const p of joiners) net.resendWelcome(p.peerIndex);
+}
+
+function clearSeriesTimers() {
+  clearTimeout(seriesTimer); seriesTimer = null;
+  clearInterval(intermissionTicker); intermissionTicker = null;
 }
 
 // ---- spatial audio: world-cue loudness by 3D distance to the nearest human ----
@@ -902,6 +958,20 @@ function standingsPayload(results, over) {
       time: res.time
     };
   });
+  // Cup: stamp every racer's banked points, and re-sort the FINAL board into
+  // cup-standings order (points → latest-race placement — the intermission and
+  // podium story). Live boards (over=false) stay in race order: mid-race the
+  // drama is who crosses the line, not the tally.
+  if (series) {
+    const cup = new Map(series.standings().map((r, i) => [r.playerId, { row: r, seq: i }]));
+    for (const o of order) {
+      const s = cup.get(o.playerId);
+      o.points = s ? s.row.points : 0;
+      if (over) o.gained = s ? s.row.gained : 0;
+    }
+    if (over) order.sort((a, b) => (cup.has(a.playerId) ? cup.get(a.playerId).seq : Infinity)
+      - (cup.has(b.playerId) ? cup.get(b.playerId).seq : Infinity));
+  }
   // Anyone who joined mid-race has no car this round (the field is locked at
   // the start) — list them under the racers, flagged `joining`, so every board
   // shows who's waiting on the next race instead of silently omitting them.
@@ -912,8 +982,23 @@ function standingsPayload(results, over) {
     type: MSG.STANDINGS,
     over: !!over,
     hostPeerIndex: net.flow.host,
+    ...(series ? { series: seriesInfo() } : {}),
     total: order.length,   // racers + joining rows — always matches order
     order
+  };
+}
+
+// The cup's progress chip on every STANDINGS board: which race of how many,
+// what's next (null after the last race), and whether this board is the podium
+// (`final`). autoAdvanceMs lets the phones caption the auto-start.
+function seriesInfo() {
+  const next = series.finished ? null : TRACK_LIST.find((t) => t.id === series.nextTrackId);
+  return {
+    cupId: series.cup.id, cupName: series.cup.name,
+    raceIndex: series.raceIndex, raceCount: series.raceCount,
+    nextTrackId: next ? next.id : null, nextTrackName: next ? next.name : null,
+    final: series.finished,
+    autoAdvanceMs: window.__intermissionMs || INTERMISSION_MS
   };
 }
 
@@ -935,6 +1020,9 @@ const RESULTS_FAILSAFE_MS = 60000;
 let endTimer = null;
 function endRace(results) {
   net.flow.transitionTo(ROOM_STATE.RESULTS);
+  // Bank the cup points FIRST — the final board broadcast below must already
+  // carry this race's gains, and the intermission/podium reads them too.
+  if (series) series.applyRace(results.results, currentField);
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
   audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
   audio.stopMusic();                           // race over → results screen is quiet
@@ -948,46 +1036,145 @@ function endRace(results) {
   showResults(results);
   clearTimeout(endTimer);
   endTimer = setTimeout(returnToLobby, RESULTS_FAILSAFE_MS);
+  // Mid-cup: this results screen is an INTERMISSION — arm the auto-advance into
+  // the next race (the host can jump it early via SERIES_NEXT / the on-screen
+  // button; advanceSeriesRace disarms the failsafe above). __intermissionMs is
+  // the E2E hook, like __countdownSeconds.
+  if (series && !series.finished) {
+    const wait = window.__intermissionMs || INTERMISSION_MS;
+    seriesDeadline = Date.now() + wait;
+    seriesTimer = setTimeout(advanceSeriesRace, wait);
+    intermissionTicker = setInterval(renderIntermissionCountdown, 500);
+  }
 }
 
+// Tick the intermission's "starting in N…" against the auto-advance deadline
+// (a fresh ceil each beat instead of a decrementing counter, so it can't drift).
+function renderIntermissionCountdown() {
+  const secs = el('results-next-secs');
+  if (secs) secs.textContent = String(Math.max(0, Math.ceil((seriesDeadline - Date.now()) / 1000)));
+}
+
+// The results overlay in its three dressings: plain single-race board, cup
+// intermission (points + "next up" footer), cup podium (top-three steps).
+// Rows come from the same standingsPayload the phones get, so both screens
+// always tell the same story (order, points, joining rows).
 function showResults(results) {
-  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
+  const board = standingsPayload(results, true);
+  const s = board.series || null;
+  const podium = !!(s && s.final);
+  const intermission = !!(s && !s.final);
+
+  el('results-title').textContent = podium ? s.cupName : s ? 'Standings' : 'Results';
+  const sub = el('results-sub');
+  sub.classList.toggle('hidden', !s);
+  if (s) sub.textContent = podium ? 'Final standings' : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
+
+  renderPodium(el('results-podium'), podium ? board.order : null);
+
   const list = el('results-list');
   list.innerHTML = '';
-  for (const res of results.results) {
-    const p = byId.get(res.playerId) || {};
+  for (const row of podium ? board.order.slice(3) : board.order) { // the podium holds the top three
     const li = document.createElement('li');
+    if (row.joining) li.className = 'is-joining';
     const dot = document.createElement('span');
     dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
-    const time = document.createElement('span');
-    time.className = 'res-time';
-    time.textContent = res.finished ? `${res.time.toFixed(1)}s` : 'DNF';
+    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
     // The name is player-supplied — appended as TEXT, never markup (same rule as
     // the controller's results list and renderJoinUrl).
-    li.append(dot, ` ${(p.name || res.playerId)}${p.ai ? ' (CPU)' : ''} `, time);
+    li.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''} `);
+    if (row.joining) {
+      const t = document.createElement('span');
+      t.className = 'res-time';
+      t.textContent = 'Next race';
+      li.appendChild(t);
+    } else if (s) {
+      // Cup boards tell the points story ("+9 · 15 pts"); the lap clock already
+      // had its moment on the finish cards.
+      const gain = document.createElement('span');
+      gain.className = 'res-gain' + (row.gained ? '' : ' is-zero');
+      gain.textContent = `+${row.gained || 0}`;
+      const pts = document.createElement('span');
+      pts.className = 'res-pts';
+      pts.textContent = `${row.points || 0} pts`;
+      li.append(gain, pts);
+    } else {
+      const t = document.createElement('span');
+      t.className = 'res-time';
+      t.textContent = row.finished ? `${row.time.toFixed(1)}s` : 'DNF';
+      li.appendChild(t);
+    }
     list.appendChild(li);
   }
-  // Late joiners under the field: no rank or time — they're in the next race.
-  for (const p of lateJoiners()) {
-    const li = document.createElement('li');
-    li.className = 'is-joining';
+
+  // Intermission footer: what's next + the auto-advance countdown (ticked by
+  // renderIntermissionCountdown against seriesDeadline).
+  const next = el('results-next');
+  next.classList.toggle('hidden', !intermission);
+  if (intermission) {
+    next.textContent = 'Next up: ';
+    const b = document.createElement('b');
+    b.textContent = s.nextTrackName || '';
+    const secs = document.createElement('span');
+    secs.id = 'results-next-secs';
+    secs.textContent = String(Math.ceil((window.__intermissionMs || INTERMISSION_MS) / 1000));
+    next.append(b, ' — starting in ', secs, '…');
+  }
+
+  el('results-newgame').textContent = intermission ? 'Next race ▸' : 'New Game';
+  el('results').classList.toggle('is-podium', podium); // list ranks from 4th under the steps
+  el('results').classList.remove('hidden');
+}
+
+// Top-three steps, arranged 2nd | 1st | 3rd; hidden outside podium boards. AI
+// keep their (CPU) tag — beating them is the story of a short-handed cup.
+function renderPodium(wrap, order) {
+  wrap.innerHTML = '';
+  const top = order ? order.filter((r) => !r.joining).slice(0, 3) : [];
+  wrap.classList.toggle('hidden', !top.length);
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  for (const place of [2, 1, 3]) {
+    const row = top[place - 1];
+    if (!row) continue;
+    const col = document.createElement('div');
+    col.className = 'podium__col';
+    col.dataset.place = String(place);
+    const who = document.createElement('div');
+    who.className = 'podium__who';
     const dot = document.createElement('span');
     dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[p.colorIndex] || '#888';
-    const time = document.createElement('span');
-    time.className = 'res-time';
-    time.textContent = 'Next race';
-    li.append(dot, ` ${p.name} `, time);
-    list.appendChild(li);
+    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
+    who.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''}`);
+    const pts = document.createElement('div');
+    pts.className = 'podium__pts';
+    pts.textContent = `${row.points || 0} pts`;
+    const step = document.createElement('div');
+    step.className = 'podium__step';
+    step.textContent = MEDALS[place - 1];
+    col.append(who, pts, step);
+    wrap.appendChild(col);
   }
-  el('results').classList.remove('hidden');
 }
 
 function returnToLobby() {
   if (net.roomState === ROOM_STATE.LOBBY) return;
   clearTimeout(endTimer);
   clearTimeout(abandonTimer); abandonTimer = null;
+  series = null;        // every exit route cancels a running cup (quit, abandon, failsafe)
+  clearSeriesTimers();
+  // Re-aim the pick for the next lobby: random re-rolls every visit; a cup
+  // rewinds to its race 1 (a quit/finished cup left trackId mid-cup, and the
+  // next Start races a fresh series from the top). Done while still in
+  // RESULTS/PLAYING so selectTrack skips its lobby crossfade — the scene swap
+  // rides this function's own fade below.
+  let trackSwapped = false;
+  if (net.mode === 'random') {
+    net.setTrack(randomBag.draw());
+    trackSwapped = true;
+  } else if (net.mode === 'cup') {
+    const cup = CUPS.find((c) => c.id === net.cupId);
+    if (cup && net.trackId !== cup.tracks[0]) { net.setTrack(cup.tracks[0]); trackSwapped = true; }
+  }
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
@@ -1008,6 +1195,7 @@ function returnToLobby() {
   // drop the race cars + restart the demo under cover so the reset doesn't pop on screen.
   fadeBackdrop(() => {
     for (const c of scene.cars.keys()) scene.removeCar(c);
+    if (trackSwapped) scene.setTrack(track, { debug: _showCenterline }); // the re-aimed pick (random re-roll / cup rewind)
     refreshLobbyDemo();           // AI back to driving the picked cars
   });
 }
@@ -1103,8 +1291,13 @@ if (!_isTestMode && _audioSupported) {
 
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
-el('pause-newgame').addEventListener('click', returnToLobby);
-el('results-newgame').addEventListener('click', returnToLobby);
+el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit — cancels a cup too
+// On the results board the same button is "Next race ▸" during a cup
+// intermission and "New Game" otherwise (label swapped by showResults).
+el('results-newgame').addEventListener('click', () => {
+  if (series && !series.finished) advanceSeriesRace();
+  else returnToLobby();
+});
 
 // ---- join link → clipboard ----
 // Brief confirmation toast; auto-hides. Re-trigger restarts the timer.
@@ -1236,6 +1429,7 @@ if (_scenario) {
   startWhenDeviceChosen(); // net.start(), gated on the device chooser where it shows
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
+window.__series = () => series; // live CupSeries (null outside a cup) — E2E + console poking
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
 
@@ -1251,7 +1445,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results']
+    options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

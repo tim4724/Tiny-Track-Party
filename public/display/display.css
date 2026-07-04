@@ -360,6 +360,8 @@ html.cam-free #race { pointer-events: none; }
   list-style: none; padding: 0; margin: 0; counter-reset: li;
   font-size: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; min-width: 24rem;
 }
+/* podium boards: the top three stand on the steps, so the list ranks from 4th */
+#results.is-podium #results-list { counter-reset: li 3; }
 #results-list li {
   counter-increment: li;
   display: flex; align-items: center; gap: 0.7rem;
@@ -376,6 +378,41 @@ html.cam-free #race { pointer-events: none; }
 #results-list li.is-joining::before { content: '–'; }
 #results-list li.is-joining .res-time { font-style: italic; }
 #results-newgame { margin-top: 1.8rem; }
+
+/* ---- cup dressing (intermission + podium) ---- */
+.results-sub {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(1.1rem, 2vw, 1.6rem); color: var(--ink-2);
+  margin: -0.8rem 0 1.2rem;
+}
+/* cup boards trade the race time for points: this race's gain + the cup total */
+.res-gain { margin-left: auto; color: var(--brand); font-weight: 800; }
+.res-gain.is-zero { color: var(--ink-3); }
+.res-pts { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.6em; text-align: right; }
+/* "Next up: Gulch — starting in 8…" under the intermission board */
+.results-next { margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.1rem, 2vw, 1.5rem); color: var(--ink-2); }
+.results-next b { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
+
+/* podium — 2nd | 1st | 3rd rising steps; the champion pops in like the GO! banner */
+.results-podium { display: flex; align-items: flex-end; gap: 1.1rem; margin-bottom: 1.6rem; }
+.podium__col { display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
+.podium__col[data-place="1"] { animation: podium-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.podium__who { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.35rem; color: var(--ink); }
+.podium__col[data-place="1"] .podium__who { font-size: 1.6rem; }
+.podium__pts { font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.podium__step {
+  width: 8rem; display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-sm) var(--r-sm) 0 0; box-shadow: var(--shadow-pop);
+  font-size: 2.2rem;
+}
+.podium__col[data-place="1"] .podium__step { height: 6rem; }
+.podium__col[data-place="2"] .podium__step { height: 4rem; }
+.podium__col[data-place="3"] .podium__step { height: 2.9rem; font-size: 1.9rem; }
+@keyframes podium-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
 
 /* ---- Pause ---- */
 /* Pause button — pinned top-right over the scene during the countdown + race.

@@ -12,9 +12,14 @@ import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, seatCountText } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
+import { POINTS_BY_RANK } from './GrandPrix.js';
+import { CUPS, TRACKS } from '../shared/tracks.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
+// Banked cup points per row for the intermission/podium previews: leader swap
+// drama (row 2 leads the cup despite row 1 winning this race).
+const FAKE_POINTS = [10, 15, 6, 3, 2, 1, 0, 0];
 // Held items per slot for the frozen previews (reconnect / finished) so the cell
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
@@ -600,6 +605,56 @@ export function runDisplayScenario(opts, ctx) {
         `<span class="stand__dot" style="background:${COLORS[j % COLORS.length] || '#888'}"></span> ${FAKE_NAMES[j]}` +
         `<span class="res-time">Next race</span>`;
       listEl.appendChild(joinLi);
+      el('results').classList.remove('hidden');
+    } else if (kind === 'intermission' || kind === 'podium') {
+      // Cup dressings of the results overlay (mirrors showResults' series
+      // branches): frozen grid behind either the mid-cup intermission (points
+      // board + "next up" footer) or the final podium. Real cup/track names,
+      // fake points — with a leader swap so the board shows cup order beating
+      // this race's finish order.
+      const cup = CUPS[0];
+      const final = kind === 'podium';
+      const raceIdx = final ? cup.tracks.length - 1 : 1;
+      const rows = buildSlots(players).map((s, i) => ({
+        slot: s, name: FAKE_NAMES[s],
+        gained: POINTS_BY_RANK[i] || 0,
+        points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
+      })).sort((a, b) => b.points - a.points);
+      el('results-title').textContent = final ? cup.name : 'Standings';
+      const sub = el('results-sub');
+      sub.classList.remove('hidden');
+      sub.textContent = final ? 'Final standings' : `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
+      const cupRow = (r) =>
+        `<span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}` +
+        `<span class="res-gain${r.gained ? '' : ' is-zero'}">+${r.gained}</span><span class="res-pts">${r.points} pts</span>`;
+      const podiumEl = el('results-podium');
+      podiumEl.innerHTML = '';
+      podiumEl.classList.toggle('hidden', !final);
+      if (final) {
+        const MEDALS = ['🥇', '🥈', '🥉'];
+        for (const place of [2, 1, 3]) {
+          const r = rows[place - 1];
+          if (!r) continue;
+          const col = document.createElement('div');
+          col.className = 'podium__col';
+          col.dataset.place = String(place);
+          col.innerHTML =
+            `<div class="podium__who"><span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}</div>` +
+            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${MEDALS[place - 1]}</div>`;
+          podiumEl.appendChild(col);
+        }
+      }
+      const listEl = el('results-list'); listEl.innerHTML = '';
+      for (const r of final ? rows.slice(3) : rows) {
+        const li = document.createElement('li');
+        li.innerHTML = cupRow(r);
+        listEl.appendChild(li);
+      }
+      const next = el('results-next');
+      next.classList.toggle('hidden', final);
+      if (!final) next.innerHTML = `Next up: <b>${TRACKS[cup.tracks[raceIdx + 1]].name}</b> — starting in 8…`;
+      el('results-newgame').textContent = final ? 'New Game' : 'Next race ▸';
+      el('results').classList.toggle('is-podium', final); // list ranks from 4th under the steps
       el('results').classList.remove('hidden');
     }
     // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
