@@ -38,19 +38,25 @@ export function makeShuffleBag(ids, rng) {
   };
 }
 
-// One cup's 4-race series. Participants are keyed by playerId (peerIndex for
+// One cup's 4-race series — or, with `drawNext`, an ENDLESS run (random mode):
+// the track list grows one draw at a time and the series never finishes; only
+// a lobby return ends it. Participants are keyed by playerId (peerIndex for
 // humans, 'ai-N' for bots — stable while the roster holds). Everyone ever seen
 // stays on the board: a dropped player keeps their points and simply stops
 // gaining; a late joiner scores from the race they first appear in.
 export class CupSeries {
-  constructor(cup) {
-    this.cup = cup;              // a CUPS entry: {id, name, tracks: [4 ids]}
+  constructor(cup, opts) {
+    // Clone the track list: endless play appends draws to it, and the cup
+    // passed in may be the shared CUPS entry.
+    this.cup = { id: cup.id, name: cup.name, tracks: [...cup.tracks] };
+    this.drawNext = (opts && opts.drawNext) || null; // endless: () => next track id
     this.raceIndex = 0;          // 0-based race currently being raced / just raced
     this._lastApplied = -1;      // raceIndex of the last applyRace (for tie-breaks)
     this._done = false;          // final race's results are in → podium time
     this._meta = new Map();      // playerId → {name, colorIndex, ai, points, gained, lastRank, lastRaceIndex}
   }
 
+  get endless() { return !!this.drawNext; }
   get raceCount() { return this.cup.tracks.length; }
   get currentTrackId() { return this.cup.tracks[this.raceIndex]; }
   get nextTrackId() {
@@ -77,7 +83,13 @@ export class CupSeries {
       m.lastRaceIndex = this.raceIndex;
     }
     this._lastApplied = this.raceIndex;
-    if (this.raceIndex >= this.raceCount - 1) this._done = true;
+    // Endless play draws the next race instead of ever finishing — the
+    // intermission needs its name (nextTrackId) before advance() runs.
+    if (this.drawNext) {
+      if (this.raceIndex >= this.raceCount - 1) this.cup.tracks.push(this.drawNext());
+    } else if (this.raceIndex >= this.raceCount - 1) {
+      this._done = true;
+    }
   }
 
   // Move to the next race (the intermission's "Next race ▸"). No-op past the end.

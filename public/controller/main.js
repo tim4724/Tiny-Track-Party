@@ -341,7 +341,9 @@ function showResultsScreen() {
 function renderResults(data) {
   const s = data.series;
   el('results-title').textContent = !s ? 'Results'
-    : s.final ? `${s.cupName} — Final` : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
+    : s.final ? `${s.cupName} — Final`
+      : s.endless ? `Race ${s.raceIndex + 1}`                  // endless random: no "of N"
+        : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
   const cupBoard = !!(s && data.over);
   const list = el('result-list');
   list.innerHTML = '';
@@ -388,7 +390,9 @@ function renderResultFoot(data) {
   const wait = el('result-wait');
   const s = data.series;
   const intermission = !!(s && !s.final && data.over);
-  el('quitcup-btn').classList.toggle('hidden', !(intermission && amHost));
+  const quit = el('quitcup-btn');
+  quit.classList.toggle('hidden', !(intermission && amHost));
+  if (intermission) quit.textContent = s.endless ? 'Back to lobby' : 'End cup early';
   if (!data.over) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');

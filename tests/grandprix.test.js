@@ -111,6 +111,31 @@ test('advancement walks the cup: track ids, finished flag, end clamp', () => {
   assert.equal(byId(s, 1).points, 4 * POINTS_BY_RANK[0]);
 });
 
+test('endless series (drawNext) always has a next race and never finishes', () => {
+  const draws = ['t1', 't2', 't3'];
+  let i = 0;
+  const s = new CupSeries({ id: 'random', name: 'Random', tracks: ['seed'] }, { drawNext: () => draws[i++ % draws.length] });
+  assert.equal(s.endless, true);
+  assert.equal(s.currentTrackId, 'seed');
+  assert.equal(s.nextTrackId, null);              // nothing drawn until results are in
+  for (let n = 0; n < 6; n++) {
+    s.applyRace([res(1, 1)], [seat(1)]);
+    assert.equal(s.finished, false, 'endless play never reaches a podium');
+    assert.ok(s.nextTrackId, 'every intermission has the next draw on deck');
+    s.advance();
+  }
+  assert.equal(s.raceIndex, 6);
+  assert.equal(byId(s, 1).points, 6 * POINTS_BY_RANK[0]); // the tally keeps running
+});
+
+test('a series never mutates the cup entry it was built from', () => {
+  const cup = { id: 'random', name: 'Random', tracks: ['seed'] };
+  const s = new CupSeries(cup, { drawNext: () => 'drawn' });
+  s.applyRace([res(1, 1)], [seat(1)]);            // appends the draw to the SERIES list
+  assert.deepEqual(cup.tracks, ['seed'], 'caller-owned track list untouched');
+  assert.equal(s.nextTrackId, 'drawn');
+});
+
 // Deterministic LCG so bag behaviour is reproducible (the display injects
 // Math.random; the purity gate keeps it OUT of GrandPrix.js itself).
 const lcg = (seed) => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000;

@@ -40,8 +40,8 @@ var MSG = {
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
   SELECT_TRACK: 'select_track', // {trackId} — legacy exact pick; handled as SELECT_MODE {mode:'track'} (kept for deploy-skew phones)
-  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?} — host's lobby pick: exact track, a cup (4-race Grand Prix), or a random draw (re-tap re-rolls)
-  SERIES_NEXT: 'series_next',   // host only, during a cup intermission — start the next series race now (the display also auto-advances)
+  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), or random (ENDLESS run of drawn tracks; re-tap re-rolls the preview)
+  SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
@@ -56,8 +56,9 @@ var MSG = {
   GAME_START: 'game_start',
   STANDINGS: 'standings',       // {over, hostPeerIndex, total, order:[{playerId,name,colorIndex,ai,finished,time}]}
                                 // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay.
-                                // During a cup: + series {cupId,cupName,raceIndex,raceCount,nextTrackId,nextTrackName,final,autoAdvanceMs},
-                                // rows carry points (cup total; over=true also gained), and over=true boards come in CUP-standings order
+                                // During a series (cup or endless random): + series {cupId,cupName,endless,raceIndex,raceCount|null,
+                                // nextTrackId,nextTrackName,final,autoAdvanceMs}, rows carry points (running total; over=true also
+                                // gained), and over=true boards come in CUP-standings order
   GAME_END: 'game_end',         // {results} — sent on return-to-lobby; controllers go back to the lobby
   GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
   GAME_RESUMED: 'game_resumed'  // race resumed — controllers hide the pause overlay

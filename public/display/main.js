@@ -666,10 +666,14 @@ function startRace() {
   // reconnect QR) but doesn't get a car until they're back.
   const players = net.flow.list().filter((p) => p.connected);
   if (!players.length) return;
-  // Cup mode: this Start commits to the whole Grand Prix. The series engine
+  // Cup mode: this Start commits to the whole Grand Prix — the series engine
   // walks the cup from race 1 (the lobby preview already sits on it — the cup
-  // pick resolved trackId to its first track).
-  series = net.mode === 'cup' ? new CupSeries(CUPS.find((c) => c.id === net.cupId)) : null;
+  // pick resolved trackId to its first track). Random mode: an ENDLESS series
+  // seeded with the previewed draw, each intermission pulling the next track
+  // from the bag; only a lobby return ends it. Exact picks stay single races.
+  series = net.mode === 'cup' ? new CupSeries(CUPS.find((c) => c.id === net.cupId))
+    : net.mode === 'random' ? new CupSeries({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
+      : null;
   launchRace(players);
 }
 
@@ -714,7 +718,12 @@ function launchRace(players) {
       el('countdown').textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
       el('countdown').classList.toggle('is-go', n === 0);
       audio.countdown(n);
-      net.broadcast({ type: MSG.COUNTDOWN, n });
+      // The n<0 beat only clears the LOCAL banner — never broadcast it. The
+      // phones' COUNTDOWN handler flips them onto the drive HUD, so a race that
+      // ends within a second of GO (fast-forwarded finishes under test) would
+      // otherwise have this trailing beat land AFTER the final standings and
+      // yank their results board back to the wheel.
+      if (n >= 0) net.broadcast({ type: MSG.COUNTDOWN, n });
     },
     onRaceStart() {
       // Fires on the "GO!" beat — physics are live and the GO! banner is still
@@ -988,14 +997,17 @@ function standingsPayload(results, over) {
   };
 }
 
-// The cup's progress chip on every STANDINGS board: which race of how many,
-// what's next (null after the last race), and whether this board is the podium
-// (`final`). autoAdvanceMs lets the phones caption the auto-start.
+// The cup's progress chip on every STANDINGS board: which race of how many
+// (raceCount is null for endless random play — there is no "of N"), what's
+// next (null after a cup's last race), and whether this board is the podium
+// (`final`; never for endless). autoAdvanceMs lets the phones caption the
+// auto-start.
 function seriesInfo() {
   const next = series.finished ? null : TRACK_LIST.find((t) => t.id === series.nextTrackId);
   return {
     cupId: series.cup.id, cupName: series.cup.name,
-    raceIndex: series.raceIndex, raceCount: series.raceCount,
+    endless: series.endless,
+    raceIndex: series.raceIndex, raceCount: series.endless ? null : series.raceCount,
     nextTrackId: next ? next.id : null, nextTrackName: next ? next.name : null,
     final: series.finished,
     autoAdvanceMs: window.__intermissionMs || INTERMISSION_MS
@@ -1068,7 +1080,11 @@ function showResults(results) {
   el('results-title').textContent = podium ? s.cupName : s ? 'Standings' : 'Results';
   const sub = el('results-sub');
   sub.classList.toggle('hidden', !s);
-  if (s) sub.textContent = podium ? 'Final standings' : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
+  if (s) {
+    sub.textContent = podium ? 'Final standings'
+      : s.endless ? `${s.cupName} · Race ${s.raceIndex + 1}`               // endless: no "of N"
+        : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
+  }
 
   renderPodium(el('results-podium'), podium ? board.order : null);
 

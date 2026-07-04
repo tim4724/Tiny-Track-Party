@@ -71,20 +71,26 @@ function cupMeter(level) {
   return meter;
 }
 
-// One big mode tile (🎲 Random or a cup). `body` fills the art slot (die glyph /
-// 2×2 mini-maps); `open` marks the cup whose exact-track panel is showing while
-// the ring sits on a track tile below it.
-function modeTile({ label, sub, body, meter, mine, open, canPick, onTap }) {
+// One compact mode tile (🎲 Random or a cup): name line (optional glyph), the
+// cup's tendency meter, and a small hint ("4 races" / "endless"). No track art —
+// the panel a picked cup opens below is where the tracks show. `open` marks the
+// cup whose panel is showing while the ring sits on a track tile inside it.
+function modeTile({ label, glyph, sub, meter, mine, open, canPick, onTap }) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'mode-opt' + (mine ? ' mode-opt--mine' : open ? ' mode-opt--open' : '');
   if (mine) btn.setAttribute('aria-current', 'true');
   btn.setAttribute('aria-label', label);
   btn.disabled = !canPick;
-  btn.appendChild(body);
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
-  lab.textContent = label;
+  if (glyph) {
+    const g = document.createElement('span');
+    g.setAttribute('aria-hidden', 'true');
+    g.textContent = `${glyph} `;
+    lab.appendChild(g);
+  }
+  lab.append(label);
   btn.appendChild(lab);
   if (meter) btn.appendChild(meter);
   const hint = document.createElement('span');
@@ -137,23 +143,15 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   const grid = document.createElement('div');
   grid.className = 'modepick';
 
-  const die = document.createElement('span');
-  die.className = 'mode-opt__die';
-  die.textContent = '🎲';
-  die.setAttribute('aria-hidden', 'true');
   grid.appendChild(modeTile({
-    label: 'Random', sub: '1 race', body: die,
+    label: 'Random', glyph: '🎲', sub: 'endless',
     mine: sel.mode === 'random', open: false, canPick,
     onTap: () => pick({ mode: 'random' })  // re-tap re-rolls — deliberately not filtered
   }));
 
   for (const g of groups) {
-    const maps = document.createElement('span');
-    maps.className = 'mode-opt__maps';
-    maps.setAttribute('aria-hidden', 'true');
-    for (const t of g.items.slice(0, 4)) maps.appendChild(schematicSvg(t.svg || {}));
     grid.appendChild(modeTile({
-      label: g.name, sub: `${g.items.length} races`, body: maps,
+      label: g.name, sub: `${g.items.length} races`,
       meter: g.diff != null ? cupMeter(g.diff) : null,
       mine: sel.mode === 'cup' && sel.cupId === g.id,
       open: expanded === g.id, canPick,

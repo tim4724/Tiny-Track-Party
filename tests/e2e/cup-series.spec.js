@@ -113,6 +113,41 @@ test('"End cup early" cancels the series and a restart begins at race 1', async 
     .toEqual({ race: 0, track: BEACH[0] });
 });
 
+test('Random runs an endless series of drawn tracks until the host ends it', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__intermissionMs = 60000; });
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  // The Beach auto-pick lands first (fresh phone); then the host taps 🎲.
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.locator('.mode-opt', { hasText: 'Random' }).click();
+  await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.trackId != null, null, { timeout: 10000 });
+  const first = await page.evaluate(() => window.__net.trackId);
+
+  await startRace(alice, []);
+  await waitForRacing(page);
+  await finishHumans(page);
+  await inResults(page);
+  // Endless intermission: numbered but not "of N", always a next draw on deck,
+  // and the ghost reads as the way OUT (there is no podium to reach).
+  await expect(page.locator('#results-sub')).toHaveText('Random · Race 1');
+  await expect(page.locator(visible('#results-next'))).toBeVisible();
+  await expect(alice.locator('#newgame-btn')).toHaveText('Next race ▸');
+  await expect(alice.locator('#quitcup-btn')).toHaveText('Back to lobby');
+
+  await alice.click('#newgame-btn');
+  await waitForRacing(page);
+  expect(await page.evaluate(() => window.__net.trackId)).not.toBe(first); // the bag never repeats back-to-back
+  expect(await page.evaluate(() => window.__series().finished)).toBe(false);
+
+  await finishHumans(page);
+  await inResults(page);
+  await expect(page.locator('#results-sub')).toHaveText('Random · Race 2');
+  await alice.click('#quitcup-btn'); // the only way an endless run ends
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
+  expect(await page.evaluate(() => ({ series: window.__series(), mode: window.__net.mode })))
+    .toEqual({ series: null, mode: 'random' });
+});
+
 test('a mid-cup joiner is seated into the next series race and scores from there', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
