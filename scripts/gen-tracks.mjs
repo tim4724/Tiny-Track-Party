@@ -22,6 +22,12 @@ const SEEDS = {
   cove:       { seed: 250, profile: 'easy' },
   driftwood:  { seed: 138, profile: 'easy' },
   riptide:    { seed: 330, profile: 'easy' },
+  // Snow Cup (Medium) — the gentle end of the mid grammar: low brake fraction, no
+  // hairpins, roomy min radii, but still crossings + real climb so nothing reads flat.
+  powder:     { seed: 27,  profile: 'mid' },
+  flurry:     { seed: 477, profile: 'mid' },
+  glacier:    { seed: 290, profile: 'mid' },
+  avalanche:  { seed: 125, profile: 'mid' },
   // Backyard Cup (middle) — pretzel/cloverleaf are original classic seeds re-baked
   // through the decorated mid profile (same plans/crossings — mid shares classic's
   // grammar). The frozen `classic` profile stays in track-gen as provenance.

@@ -410,6 +410,24 @@ export const TRACKS = {
     name: 'Riptide', difficulty: 'Easy', waypoints: GEN_TRACKS.riptide,
     oils: genFurn('riptide').oils, pads: genFurn('riptide').pads, boxes: genFurn('riptide').boxes
   },
+  // Snow Cup — SEEDED medium circuits (the gentle end of the mid profile: low brake
+  // fraction, no hairpins, roomy radii, but real crossings + climb; auto-placed furniture).
+  powder: {
+    name: 'Powder', difficulty: 'Medium', waypoints: GEN_TRACKS.powder,
+    oils: genFurn('powder').oils, pads: genFurn('powder').pads, boxes: genFurn('powder').boxes
+  },
+  flurry: {
+    name: 'Flurry', difficulty: 'Medium', waypoints: GEN_TRACKS.flurry,
+    oils: genFurn('flurry').oils, pads: genFurn('flurry').pads, boxes: genFurn('flurry').boxes
+  },
+  glacier: {
+    name: 'Glacier', difficulty: 'Medium', waypoints: GEN_TRACKS.glacier,
+    oils: genFurn('glacier').oils, pads: genFurn('glacier').pads, boxes: genFurn('glacier').boxes
+  },
+  avalanche: {
+    name: 'Avalanche', difficulty: 'Hard', waypoints: GEN_TRACKS.avalanche,
+    oils: genFurn('avalanche').oils, pads: genFurn('avalanche').pads, boxes: genFurn('avalanche').boxes
+  },
   // Backyard Cup — SEEDED multi-crossing circuits (overpasses + solver-placed elevation,
   // decorated mid profile; auto-placed furniture).
   ribbon: {
@@ -499,13 +517,14 @@ export const TRACKS = {
 // CUPS is the SOURCE OF TRUTH for track ordering — TRACK_ORDER / TRACK_LIST below are
 // derived by flattening it, so a track appears in the picker iff it's listed in a cup.
 // New track: add the descriptor to TRACKS above, then drop its id into a cup here.
-// Place-based names that double as each cup's future biome (themed environments,
-// later phase): Backyard = grass/grounded; Rooftop = ramps/overpass/stunts.
+// Cup order IS the difficulty ladder (tendencies 1→2→3→3→4); each cup's biome is
+// mapped in themes.js CUP_BIOME (Backyard keeps the canonical grass look).
 export const CUPS = [
   { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
-  { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits
-  { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (biome TBD → grass)
-  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] } // crazy: stunts (rooftop biome); crossover/coaster/twister retired
+  { id: 'snow',     name: 'Snow Cup',     tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings + climb (snow biome)
+  { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
+  { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
+  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] } // crazy: stunts (sunset biome); crossover/coaster/twister retired
 ];
 
 // Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —

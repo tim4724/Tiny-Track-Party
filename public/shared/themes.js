@@ -249,8 +249,8 @@ export const THEMES = {
     },
   },
 
-  // ── snow — winter alpine (no cup yet; reachable via ?biome=snow, ready for a future
-  // ladder slot). Cold pale light under a flat overcast: an ice-haze horizon, white
+  // ── snow — winter alpine (the Snow cup's biome — the Medium rung of the ladder).
+  // Cold pale light under a flat overcast: an ice-haze horizon, white
   // hill domes (snowed-over mounds — the dome silhouette is right here), grey-white
   // flattened cloud deck, and a near-white sun kept bright enough for TV readability.
   // Scenery leans on one trick: PINES ONLY. Dropping the round oak (bare in winter)
@@ -304,10 +304,11 @@ export const SCENERY_MODELS = [...new Set(Object.values(THEMES).flatMap((t) => [
 // Cup id → biome name. Cups absent here (or an undefined cup) fall back to grass, so
 // the renderer is always safe to call themeForCup() with whatever a track carries.
 const CUP_BIOME = {
-  backyard: 'grass',
-  rooftop:  'sunset',
   beach:    'beach',
+  snow:     'snow',
+  backyard: 'grass',
   canyon:   'canyon',
+  rooftop:  'sunset',
 };
 
 // Resolve a cup id to its biome object. Returns a STABLE reference per biome, so the
