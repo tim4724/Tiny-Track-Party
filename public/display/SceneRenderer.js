@@ -1240,7 +1240,7 @@ export class SceneRenderer {
     sc.near = Math.max(0.5, -maxZ - M); sc.far = -minZ + M;
     sc.updateProjectionMatrix();
 
-    this.props.setTrack(track);
+    this.props.setTrack(track, theme);
     // Bake the sun shadow ONCE for this static track. The track geometry above is the
     // only shadow caster (cars/boxes/bananas/cones cast no real shadow — they carry
     // ground blobs instead), and both it and the light are fixed, so one render here is

@@ -3,7 +3,7 @@
 // the ?bbox collision-outline debug overlay. Owns the hazard scene group; the
 // engine stays authoritative — everything here is render-side juice.
 import * as THREE from 'three';
-import { makePadTexture, makePadStripTexture, makeBlobShadowTexture } from './textures.js';
+import { makePadTexture, makePadStripTexture, makeBlobShadowTexture, makeWetSignTexture } from './textures.js';
 
 // Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
 // a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
@@ -11,6 +11,7 @@ import { makePadTexture, makePadStripTexture, makeBlobShadowTexture } from './te
 // consistent across every split-screen view (one shared scene). Starting values.
 const OIL_RADIUS_FALLBACK = 0.7; // puddle radius when a hazard omits one (display normally sizes it to track width)
 const CONE_H = 0.3;            // cone height in world units (small toy marker)
+const WETSIGN_H = 0.46;       // beach "wet floor" A-frame sign height (a touch taller than a cone)
 const CONE_KICK_R = 0.7;      // car-centre → cone distance (world units) that punts a cone
 const CONE_KICK_MIN = 2.5;    // launch speed even at a crawl
 const CONE_KICK_GAIN = 6.0;   // extra launch speed at full pace (× the car's normalised speed)
@@ -19,6 +20,7 @@ const CONE_GRAVITY = 16.0;    // fall acceleration (units/s²)
 const CONE_RESTITUTION = 0.42;// vertical bounciness on hitting the road
 const CONE_FRICTION = 0.6;    // horizontal speed + tumble retained per ground contact
 const CONE_SETTLE = 0.4;      // residual speed below which a cone comes to rest
+const MARKER_TOPPLE = 7.0;    // rad/s a knocked marker eases over to lie flat (sign→face, cone→side) vs freezing on a corner
 const CONE_EDGE_MARGIN = 0.35;// keep cones this far inside the road edge (off the curb/wall)
 const CONE_WALL_RESTITUTION = 0.5; // bounce energy kept when a kicked cone hits the curb
 
@@ -106,6 +108,8 @@ export class TrackProps {
     this._zAxis = new THREE.Vector3(0, 0, 1); // CircleGeometry faces +Z → reused to lay blobs in the road plane
     this._coneTmp = new THREE.Vector3();   // scratch for the airborne-cone road clamp
     this._coneTmp2 = new THREE.Vector3();
+    this._gCorner = new THREE.Vector3();   // scratch for the marker ground-clamp / topple-pose vector maths
+    this._downVec = new THREE.Vector3(0, -1, 0); // reused target for the sign topple-to-flat pose
     this._sBananaUp = new THREE.Vector3(); // scratch for the per-frame banana up vector
     this._liveBananas = new Set();         // reused per-frame live-id set; cleared, never reallocated
     // Homing rockets: reconciled by id from snapshot.rockets (like bananas), animated
@@ -136,9 +140,11 @@ export class TrackProps {
     this._impPos = new THREE.Vector3();
   }
 
-  // Rebuild everything for a new track layout.
-  setTrack(track) {
-    this._buildHazards(track);
+  // Rebuild everything for a new track layout. `theme` is the resolved cup biome
+  // (see SceneRenderer.setTrack) — hazards read it so the beach cup's slicks
+  // render as water puddles ringed with wet-floor signs instead of oil + cones.
+  setTrack(track, theme) {
+    this._buildHazards(track, theme);
     this._buildProps(track);
     this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in sync)
   }
@@ -186,7 +192,7 @@ export class TrackProps {
         polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
       }));
       face.userData.owned = true; // owns its geometry+material (dispose on rebuild)
-      face.position.copy(f.pos).addScaledVector(f.lateral, p.lat).addScaledVector(up, 0.025);
+      face.position.copy(f.pos).addScaledVector(f.lateral, p.lat); // FLUSH on the road (no lift); polygonOffset+depthWrite:false stop z-fighting — a physical lift reads as hovering from the low chase cam
       // basis (lateral=X, tangent=Y, up=Z) lays the face in the road plane with its
       // texture +Y (chevrons) pointing along travel.
       face.quaternion.setFromRotationMatrix(
@@ -401,12 +407,17 @@ export class TrackProps {
     }
   }
 
-  // Draw the track's oil slicks: a glossy dark disc on the road per hazard, ringed
-  // with item-cone warning markers. Static (placed once from track.hazards +
+  // Draw the track's road slicks: a translucent disc on the road per hazard, ringed
+  // with kickable warning markers. Static (placed once from track.hazards +
   // centreline), so this just rebuilds the hazardGroup when the track changes.
-  // Cone meshes share the cached proto geometry/material, so only the disc (its
-  // own geometry + material) is disposed on rebuild — never the shared proto.
-  _buildHazards(track) {
+  // Marker meshes share a cached proto (item-cone GLB, or the wet-sign proto below),
+  // so only the disc (its own geometry + material) is disposed on rebuild.
+  //
+  // Two looks, chosen by the cup biome: the default is a dark OIL film ringed with
+  // orange cones; a biome that carries a `water` palette (the beach cup) instead
+  // gets a turquoise WATER puddle ringed with yellow "wet floor" A-frame signs. The
+  // spin-out mechanic (engine-side) is identical either way — a wet road is slippery.
+  _buildHazards(track, theme) {
     this.hazardGroup.traverse((m) => {
       if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
     });
@@ -423,75 +434,247 @@ export class TrackProps {
     if (!hz.length) return;
     const cl = track.centerline;
     const coneEdge = this._roadHalf - CONE_EDGE_MARGIN; // max lateral offset that stays off the curb
-    const coneProto = this.protos.get('item-cone');
+    const water = theme && theme.water;                 // beach cup → water puddle + wet-floor signs
+    const markerProto = water ? this._wetSignProto() : this.protos.get('item-cone');
+    const markerH = water ? WETSIGN_H : CONE_H;
     const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+    const basis = new THREE.Matrix4(), fwd = new THREE.Vector3();
     for (const h of hz) {
       const radius = h.radius || OIL_RADIUS_FALLBACK;
       const f = cl.sampleAt(h.s);
       const up = f.up.clone().normalize();
-      // oil disc — flat on the road, a hair above it, pulled forward in depth so it
-      // never z-fights the road tiles (same polygonOffset trick as the skid decals).
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(radius, 36),
-        // A wet FILM on the road, not a hole: dark slate-blue and semi-transparent
-        // so the road grain reads through it (there's no env map, so gloss/metalness
-        // can't sell "wet" — translucency + tint does). depthWrite off + polygon
-        // offset keep it from z-fighting the road, same as the skid decals.
-        new THREE.MeshStandardMaterial({
-          color: 0x161425, roughness: 0.25, metalness: 0.2,
-          transparent: true, opacity: 0.7, depthWrite: false,
-          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
-        })
-      );
+      // slick disc — laid FLUSH on the road (no vertical lift, which reads as hovering
+      // from the low chase cam) and pulled forward in depth by polygonOffset so it never
+      // z-fights the road tiles (same trick as the skid decals; renderOrder stacks the
+      // coplanar disc/foam layers).
+      const discMat = water
+        // A turquoise WATER puddle: the beach's shallow-sea tint, translucent so the
+        // road grain shows through (it's a wet sheet, not a hole). Lighter and more
+        // see-through than the oil film so it reads as clean water, not a stain.
+        ? new THREE.MeshStandardMaterial({
+            color: water.shallow, roughness: 0.15, metalness: 0.15,
+            transparent: true, opacity: 0.55, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+          })
+        // A dark OIL film: slate-blue and semi-transparent (there's no env map, so
+        // gloss can't sell "wet" — translucency + tint does).
+        : new THREE.MeshStandardMaterial({
+            color: 0x161425, roughness: 0.25, metalness: 0.2,
+            transparent: true, opacity: 0.7, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+          });
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 36), discMat);
       disc.userData.owned = true; // disc owns its geometry+material (dispose on rebuild)
-      disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat).addScaledVector(up, 0.02);
+      disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat); // FLUSH on the road (no lift → no hover); polygonOffset+depthWrite:false handle z-fighting
       disc.quaternion.setFromUnitVectors(Z, up); // CircleGeometry faces +Z → lay it in the road plane
       disc.receiveShadow = true;
-      disc.renderOrder = -1; // under the cars' skid decals
+      disc.renderOrder = -2; // below the foam rim (-1); both under the cars' skid decals
       this.hazardGroup.add(disc);
-      // cones ringing the slick. Phase by half a step so a 4-cone ring lands on the
-      // corners (none dead-centre on the racing line). Non-collidable — a warning.
-      if (!coneProto) continue;
+      // a foam rim ring on the water puddle so it reads as a pool with a shore, not
+      // just a tinted patch. Same flat-on-road placement as the disc, drawn on top.
+      if (water) {
+        const rim = new THREE.Mesh(
+          new THREE.RingGeometry(radius * 0.82, radius, 40),
+          new THREE.MeshBasicMaterial({
+            color: water.foam, transparent: true, opacity: 0.5, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+          })
+        );
+        rim.userData.owned = true;
+        rim.position.copy(disc.position); // flush with the disc; its stronger polygonOffset (below) paints it on top
+        rim.quaternion.copy(disc.quaternion);
+        rim.renderOrder = -1;
+        this.hazardGroup.add(rim);
+      }
+      // markers ringing the slick. Phase by half a step so a 4-marker ring lands on
+      // the corners (none dead-centre on the racing line). Non-collidable — a warning.
+      if (!markerProto) continue;
       const n = h.cones || 4;
       const ring = radius * 1.05;
       for (let i = 0; i < n; i++) {
         const a = (i + 0.5) * (2 * Math.PI / n);
         const ds = Math.cos(a) * ring, dl = Math.sin(a) * ring;
         const coneS = h.s + ds;
-        const cf = cl.sampleAt(coneS);                // re-sample so cones follow track curvature
+        const cf = cl.sampleAt(coneS);                // re-sample so markers follow track curvature
         const cup = cf.up.clone().normalize();
         const clat = Math.max(-coneEdge, Math.min(coneEdge, h.lat + dl)); // keep it inside the curb
-        const cone = coneProto.clone(true);
-        const box = new THREE.Box3().setFromObject(cone);
-        cone.scale.setScalar(CONE_H / Math.max(1e-3, box.max.y - box.min.y));
-        cone.position.copy(cf.pos).addScaledVector(cf.lateral, clat);
-        cone.quaternion.setFromUnitVectors(Y, cup); // stand the cone up on the road normal
-        // Cones cast no real sun shadow: the directional map is baked once per track and
-        // frozen, but cones MOVE when a passing car kicks them (see _stepCones) — a baked
-        // shadow would stick at the cone's home spot. They sit on the oil disc that already
-        // grounds them, so no blob is needed.
-        this.hazardGroup.add(cone);
-        // register it as a kickable prop (see _stepCones): rest pose + scratch state
+        const marker = markerProto.clone(true);
+        const box = new THREE.Box3().setFromObject(marker); // local bbox at scale 1, identity orientation
+        const sc = markerH / Math.max(1e-3, box.max.y - box.min.y);
+        marker.scale.setScalar(sc);
+        // Real (scaled, local-frame) surface vertices for the ground clamp in _stepCones:
+        // a kicked marker keeps its LOWEST rotated VERTEX on the road, so it rests ON the
+        // surface. Bbox CORNERS would float a tilted cone (its box has an empty low corner
+        // well below the tapered surface); actual verts hug the true silhouette. Gathered
+        // now — before position/quaternion are set — so they're in the marker's local frame.
+        marker.updateMatrixWorld(true);
+        const groundPts = [];
+        marker.traverse((o) => {
+          if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+          const pa = o.geometry.attributes.position, stride = Math.max(1, Math.floor(pa.count / 300));
+          for (let i = 0; i < pa.count; i += stride)
+            groundPts.push(new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld));
+        });
+        marker.position.copy(cf.pos).addScaledVector(cf.lateral, clat);
+        if (water) {
+          // The A-frame sign has a front and a back, so give it a full yaw: stand it
+          // on the road normal with its faces pointing along the track (readable by
+          // cars approaching from either direction). Cones are radial → no yaw needed.
+          const lat = cf.lateral.clone().normalize();
+          fwd.copy(lat).cross(cup).normalize(); // guaranteed-perpendicular forward (± tangent)
+          marker.quaternion.setFromRotationMatrix(basis.makeBasis(lat, cup, fwd));
+        } else {
+          marker.quaternion.setFromUnitVectors(Y, cup); // stand the cone up on the road normal
+        }
+        // Markers cast no real sun shadow: the directional map is baked once per track
+        // and frozen, but they MOVE when a passing car kicks them (see _stepCones) — a
+        // baked shadow would stick at the home spot. They sit on the slick disc that
+        // already grounds them, so no blob is needed.
+        this.hazardGroup.add(marker);
+        // register it as a kickable prop (see _stepCones): rest pose + scratch state.
+        // Both cones AND signs STAY knocked over once a car hits them (they only stand
+        // back up on a new race) and topple to a stable flat pose on settle rather than
+        // balancing on a corner: signs fall onto a big face (faceNormals → _flatPose),
+        // cones fall onto their side (_coneFlatPose). flatTarget is the ease-to quaternion.
         this._cones.push({
-          mesh: cone, home: cone.position.clone(), homeQuat: cone.quaternion.clone(), homeS: coneS,
-          vel: new THREE.Vector3(), spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0, airborne: false
+          mesh: marker, home: marker.position.clone(), homeQuat: marker.quaternion.clone(), homeS: coneS,
+          vel: new THREE.Vector3(), spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0, airborne: false,
+          groundPts, restRoadY: null,
+          faceNormals: water ? markerProto.userData.faceNormals : null, flatTarget: null
         });
       }
     }
   }
 
-  // Advance the kickable warning cones one frame. A resting cone slerps back
-  // upright and watches for a car centre within CONE_KICK_R — contact punts it
+  // Build (once, cached) the beach "wet floor" A-frame sign prototype cloned per
+  // ring marker in _buildHazards. Two safety-yellow panels hinged at a top ridge and
+  // splayed at the base form the folding-sign tent. Each panel is a SOLID extruded
+  // trapezoid — real thickness + beveled (rounded, molded-plastic) edges + a punched-
+  // through carry-handle hole at the top — so it reads as a 3D object from every
+  // angle, not a paper cutout. The skidding-car warning is mapped onto the front/back
+  // faces (material group 0); the beveled sides use a plain darker-yellow edge material
+  // (group 1). Built base-on-ground (feet at y≈0, ridge at y=H=1) so _buildHazards
+  // scales it to WETSIGN_H by bbox height, exactly like the cone. Geo/mats/texture are
+  // renderer-lifetime (shared across every clone), never disposed — like the rocket proto.
+  _wetSignProto() {
+    if (this._wetSign) return this._wetSign;
+    const H = 1.0, B = 0.30;                    // ridge height, base half-splay (front/back feet at ±B)
+    const L = Math.hypot(H, B);                 // panel slope length (ridge → foot)
+    const Wp = L * 0.66;                         // panel width across the ridge
+    const topHW = Wp * 0.33, botHW = Wp * 0.50;  // trapezoid half-widths — MUST match makeWetSignTexture
+    const Td = 0.05, bev = 0.018;                // plastic thickness + edge bevel
+
+    // trapezoid outline (x = width, y = up the slope; centred on the panel plane),
+    // wider at the base, with an oval carry-handle hole punched near the top.
+    const shape = new THREE.Shape();
+    shape.moveTo(-topHW, L / 2); shape.lineTo(topHW, L / 2);
+    shape.lineTo(botHW, -L / 2); shape.lineTo(-botHW, -L / 2); shape.closePath();
+    const hole = new THREE.Path();
+    hole.absellipse(0, L * 0.42, Wp * 0.17, L * 0.045, 0, Math.PI * 2, false);
+    shape.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: Td, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 1, curveSegments: 10
+    });
+    geo.translate(0, 0, -Td / 2);               // centre the slab thickness on the panel plane
+    // Remap UVs from panel coords so the warning texture spans the trapezoid 1:1
+    // (u across the width, v up the slope). Side/bevel verts get UVs too but their
+    // material ignores the map, so a blanket remap is safe.
+    const pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / Wp + 0.5, pos.getY(i) / L + 0.5);
+
+    const faceMat = new THREE.MeshStandardMaterial({ map: makeWetSignTexture(), roughness: 0.6, metalness: 0 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe0a800, roughness: 0.6, metalness: 0 }); // molded-plastic rim
+    const mats = [faceMat, edgeMat];            // ExtrudeGeometry: group 0 = caps, group 1 = sides
+
+    const g = new THREE.Group();
+    const M = new THREE.Matrix4();
+    for (const s of [1, -1]) {                  // s=+1 front panel (faces +Z), s=-1 back panel (faces -Z)
+      const panel = new THREE.Mesh(geo, mats);
+      const upAxis = new THREE.Vector3(0, H, -s * B).normalize(); // foot → ridge
+      const width = new THREE.Vector3(s, 0, 0);                   // flip width on the back → proper basis
+      const normal = new THREE.Vector3().crossVectors(width, upAxis).normalize();
+      panel.quaternion.setFromRotationMatrix(M.makeBasis(width, upAxis, normal));
+      panel.position.set(0, H / 2, s * B / 2);  // centre of the ridge→foot span
+      g.add(panel);
+    }
+    // Local outward normals of the two big faces — the flat, STABLE resting faces a
+    // knocked sign topples onto (see _flatPose). Read straight off the proto (not a
+    // clone: Object3D.clone JSON-mangles userData objects), so store plain Vector3s.
+    g.userData.faceNormals = [
+      new THREE.Vector3(0, B, H).normalize(),   // front panel (+Z-ish)
+      new THREE.Vector3(0, B, -H).normalize(),  // back panel (−Z-ish)
+    ];
+    this._wetSign = g;
+    return g;
+  }
+
+  // How far a kicked marker's LOWEST point sits below its origin in its current
+  // rotation: min over the cached local surface verts of (quaternion·v).y (≤ 0; ~0
+  // upright). The ground clamp keeps origin.y = roadY − this, so a tumbled/knocked
+  // marker rests ON the road by its true silhouette instead of burying its origin
+  // (its geometry extends above the base, so a tilt would otherwise sink it in).
+  _groundOffset(cn) {
+    let min = Infinity;
+    const q = cn.mesh.quaternion;
+    for (const c of cn.groundPts) { const y = this._gCorner.copy(c).applyQuaternion(q).y; if (y < min) min = y; }
+    return min;
+  }
+
+  // Target orientation for a knocked SIGN to lie flat on the road: rotate its current
+  // pose the minimal amount so whichever big face is already most downward points
+  // straight down (a flat, stable rest). Picking the most-downward face makes it topple
+  // the short way, like real gravity — so it never freezes balanced on a corner/edge.
+  _flatPose(cn) {
+    const q = cn.mesh.quaternion;
+    let best = null, bestY = Infinity;
+    for (const n of cn.faceNormals) {
+      const wy = this._gCorner.copy(n).applyQuaternion(q).y; // world y of this face normal
+      if (wy < bestY) { bestY = wy; best = best || new THREE.Vector3(); best.copy(this._gCorner); }
+    }
+    // qfix (world-space) swings `best` onto straight-down; pre-multiply to keep yaw.
+    return new THREE.Quaternion().setFromUnitVectors(best.normalize(), this._downVec).multiply(q);
+  }
+
+  // Target orientation for a knocked CONE to lie on its side, resting on its SLANT
+  // (not balancing on the base rim). A cone tapers, so lying flat its axis tilts up
+  // toward the base by ψ = asin(baseRadius / height): the apex dips to the ground on
+  // the lean side, the base end sits up. We aim the axis (local +Y, base→apex) along
+  // the lean direction but pitched DOWN by ψ. If it settled near-vertical (no lean),
+  // topple along the launch direction (⟂ to the tumble spinAxis) so cones vary.
+  _coneFlatPose(cn) {
+    const q = cn.mesh.quaternion;
+    const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(q); // world cone axis (unit)
+    const hlen = Math.hypot(axis.x, axis.z);
+    let dirx, dirz;
+    if (hlen > 1e-3) { dirx = axis.x / hlen; dirz = axis.z / hlen; }
+    else { const sl = Math.hypot(cn.spinAxis.x, cn.spinAxis.z) || 1; dirx = cn.spinAxis.z / sl; dirz = -cn.spinAxis.x / sl; }
+    // half-angle from the local surface verts: base half-width r vs height h (scaled)
+    let maxY = -Infinity, minY = Infinity, r = 0;
+    for (const c of cn.groundPts) { if (c.y > maxY) maxY = c.y; if (c.y < minY) minY = c.y; const rr = Math.max(Math.abs(c.x), Math.abs(c.z)); if (rr > r) r = rr; }
+    const psi = Math.asin(Math.min(1, r / Math.max(1e-3, maxY - minY)));
+    const cx = Math.cos(psi), sy = Math.sin(psi);
+    const target = this._gCorner.set(dirx * cx, -sy, dirz * cx); // apex dips ψ below horizontal, toward the lean
+    return new THREE.Quaternion().setFromUnitVectors(axis, target).multiply(q);
+  }
+
+  // Advance the kickable warning markers one frame. A resting marker (still standing,
+  // or already toppled) watches for a car centre within CONE_KICK_R — contact punts it
   // away from the car (faster the quicker the car), arcing + tumbling. An airborne
-  // cone falls under gravity, bounces off the road with restitution + friction,
-  // and settles where it lands once its energy drops below CONE_SETTLE. Purely
-  // cosmetic (the sim ignores cones), so it lives entirely here.
+  // marker falls under gravity, bounces off the road with restitution + friction, and
+  // once its energy drops below CONE_SETTLE topples to a stable flat pose where it stays
+  // knocked over. Purely cosmetic (the sim ignores markers), so it lives entirely here.
   _stepCones(dt, cars) {
     if (!this._cones || !this._cones.length) return;
     for (const cn of this._cones) {
       const m = cn.mesh;
       if (!cn.airborne) {
-        if (!m.quaternion.equals(cn.homeQuat)) m.quaternion.slerp(cn.homeQuat, 1 - Math.exp(-8 * dt));
+        // a knocked marker topples over to lie flat (sign → face, cone → side), easing
+        // there and re-grounding each frame so it never freezes balanced on a corner.
+        if (cn.flatTarget) {
+          m.quaternion.rotateTowards(cn.flatTarget, MARKER_TOPPLE * dt);
+          if (cn.restRoadY != null) m.position.y = cn.restRoadY - this._groundOffset(cn);
+          if (m.quaternion.angleTo(cn.flatTarget) < 1e-3) cn.flatTarget = null; // flat + grounded → done
+        }
         for (const c of cars.values()) {
           if (!c.pose) continue;
           const spd = c.spd || 0;
@@ -507,6 +690,7 @@ export class TrackProps {
           cn.spinAxis.set(-dirz, 0, dirx).normalize(); // tumble about a horizontal axis ⟂ to launch
           cn.spinRate = power * 2.2;
           cn.airborne = true;
+          cn.flatTarget = null; // re-kicked before it finished toppling → tumble afresh
           break;
         }
         continue;
@@ -527,12 +711,18 @@ export class TrackProps {
         latOff = this._coneTmp2.copy(m.position).sub(f.pos).dot(f.lateral);
         roadY = f.pos.y + f.lateral.y * latOff; // road surface at this lateral offset (follows the bank)
       }
-      if (m.position.y <= roadY) {
-        m.position.y = roadY;
+      cn.restRoadY = roadY; // remember the settle-spot road height for the resting re-clamp
+      // Clamp on the marker's LOWEST rotated corner, not its origin: a tumbling sign/
+      // cone extends above its base, so pinning the origin to the deck would sink the
+      // rest of it in. gOff (≤ 0) lifts the origin so the silhouette lands on the road.
+      const gOff = this._groundOffset(cn);
+      if (m.position.y + gOff <= roadY) {
+        m.position.y = roadY - gOff;
         if (cn.vel.y < 0) cn.vel.y = -cn.vel.y * CONE_RESTITUTION;
         cn.vel.x *= CONE_FRICTION; cn.vel.z *= CONE_FRICTION; cn.spinRate *= CONE_FRICTION;
         if (cn.vel.y < CONE_SETTLE && (cn.vel.x * cn.vel.x + cn.vel.z * cn.vel.z) < CONE_SETTLE * CONE_SETTLE) {
           cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
+          cn.flatTarget = cn.faceNormals ? this._flatPose(cn) : this._coneFlatPose(cn); // topple to flat (face / side)
         }
       }
       // keep it ON the road: clamp the lateral offset (per-sample edge: in a flared section
@@ -591,7 +781,7 @@ export class TrackProps {
     for (const cn of this._cones) {
       cn.mesh.position.copy(cn.home);
       cn.mesh.quaternion.copy(cn.homeQuat);
-      cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false;
+      cn.vel.set(0, 0, 0); cn.spinRate = 0; cn.airborne = false; cn.flatTarget = null; cn.restRoadY = null;
     }
   }
 

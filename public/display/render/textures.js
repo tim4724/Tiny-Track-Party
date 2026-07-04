@@ -418,6 +418,70 @@ function makeSnowTexture() {
   return tex;
 }
 
+// Wet-floor A-frame sign FACE (beach cup's slip warning, replacing the orange cone).
+// This is mapped onto the front/back of a solid extruded-trapezoid panel (see
+// TrackProps._wetSignProto) — the mesh owns the trapezoid silhouette + thickness +
+// carry-handle hole, so this just paints the graphic that fills that trapezoid: a
+// black warning triangle around a skidding CAR (this is a racing game, not the usual
+// slipping person) over two wavy skid streaks. The whole canvas is filled safety-
+// yellow (the panel geometry masks it to the trapezoid, so nothing here needs to be
+// transparent), with the TOP band left clear for the punched handle hole. Baked
+// black-on-yellow so it reads at TV distance. The half-widths below track the
+// trapezoid fractions in _wetSignProto (topHW 0.33, botHW 0.50 of the panel width).
+function makeWetSignTexture() {
+  const W = 150, H = 232;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const cx = W / 2;
+  ctx.fillStyle = '#f6c400'; ctx.fillRect(0, 0, W, H);         // safety yellow (geometry masks to trapezoid)
+
+  // inset dark rim following the trapezoid edges → reads as the sign's moulded frame
+  const topHW = W * 0.33 - 9, botHW = W * 0.50 - 9, topY = 9, botY = H - 9;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = '#1c1c1c';
+  ctx.beginPath();
+  ctx.moveTo(cx - topHW, topY); ctx.lineTo(cx + topHW, topY);
+  ctx.lineTo(cx + botHW, botY); ctx.lineTo(cx - botHW, botY); ctx.closePath();
+  ctx.stroke();
+
+  // warning triangle (black stroke, yellow interior) — sits BELOW the top handle band
+  const tApexY = H * 0.22, tBaseY = H * 0.74, tHW = W * 0.30;
+  ctx.beginPath();
+  ctx.moveTo(cx, tApexY); ctx.lineTo(cx + tHW, tBaseY); ctx.lineTo(cx - tHW, tBaseY); ctx.closePath();
+  ctx.lineWidth = 9; ctx.strokeStyle = '#141414'; ctx.stroke();
+
+  // skidding car pictogram, centred in the triangle and tilted as if sliding.
+  ctx.save();
+  ctx.translate(cx, (tApexY + tBaseY) / 2 + 4);
+  ctx.rotate(-0.16);
+  ctx.fillStyle = '#141414';
+  const bw = W * 0.30, bh = bw * 0.40;                          // body
+  ctx.beginPath(); ctx.roundRect(-bw / 2, -bh / 2, bw, bh, bh * 0.4); ctx.fill();
+  const rw = bw * 0.5, rh = bh * 0.9;                           // cabin/roof bump, set back
+  ctx.beginPath(); ctx.roundRect(-rw * 0.65, -bh / 2 - rh * 0.72, rw, rh, rh * 0.4); ctx.fill();
+  const wr = bh * 0.52;                                         // wheels poke below the body
+  for (const wx of [-bw * 0.28, bw * 0.30]) {
+    ctx.beginPath(); ctx.arc(wx, bh / 2, wr, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // two wavy skid streaks under the car (upright, along the triangle base)
+  ctx.strokeStyle = '#141414'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  for (const dy of [-6, 6]) {
+    const y = tBaseY - 14 + dy;
+    ctx.beginPath();
+    ctx.moveTo(cx - tHW * 0.7, y);
+    ctx.quadraticCurveTo(cx - tHW * 0.25, y - 12, cx, y);
+    ctx.quadraticCurveTo(cx + tHW * 0.25, y + 12, cx + tHW * 0.7, y);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 // Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
 // (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
 // the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
@@ -577,5 +641,5 @@ export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
-  makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
+  makePadTexture, makePadStripTexture, makeWetSignTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };
