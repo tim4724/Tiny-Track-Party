@@ -11,7 +11,7 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment, applyEnvTheme } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme, WATER_LIFT, WATER_INNER } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery } from './render/track.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
@@ -84,6 +84,11 @@ const BBOX_CLEARANCE = 8;        // world units the orbit sits OUTSIDE the track
 const BBOX_HEIGHT_K = 0.7;       // camera height = this × the AVERAGE bbox half-extent …
 const BBOX_HEIGHT_BASE = 24;     // … + this base — high enough to look DOWN onto the track so the frame
                                  // fills with ground + hazed field, not the empty sky/horizon
+// Race chase-cam fog profile (clear-air baseline). A biome's `fogTune` scalar (<1 =
+// dusty air, e.g. canyon sand-fog) multiplies BOTH distances here and the lobby
+// perimeter fog's — the overview/gallery fog is exempt so track framing stays crisp.
+const RACE_FOG_NEAR = 70;
+const RACE_FOG_FAR = 170;
 // Tyre-contact cues that ground the car ON the road (vs hovering over it):
 //   • Skidmarks — dark tyre tracks laid under the rear wheels while cornering /
 //     curb-scrubbing / hard-braking / launching, fading over SKID_LIFE down to
@@ -567,7 +572,7 @@ export class SceneRenderer {
     // (fog colour == sky colour). Both are THREE.Fog of the same type, so swapping between
     // them only changes near/far uniforms — it never recompiles materials (no hitch on
     // weak GPUs). setFog(false) forces fog off entirely (gallery grid / inspector).
-    this._raceFog = new THREE.Fog(this._themeFog, 70, 170);
+    this._raceFog = new THREE.Fog(this._themeFog, RACE_FOG_NEAR, RACE_FOG_FAR);
     this._overviewFog = null;
     this._fogEnabled = true;
     scene.fog = this._raceFog;
@@ -579,6 +584,8 @@ export class SceneRenderer {
     const env = buildEnvironment(scene, baseTheme);
     this._env = env;
     this._clouds = env.clouds; // drifted in _loop
+    this._haze = env.haze;     // low dust banks (canyon) — drifted in _loop, pushed out in setTrack
+    this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
     this._hills = env.hills;   // horizon-hill ring; pushed out past the track in setTrack
@@ -941,6 +948,12 @@ export class SceneRenderer {
     this._themeFog = theme.fog;
     this.scene.background.set(theme.fog);
     this._raceFog.color.set(theme.fog);
+    // Dusty biomes pull the chase-cam fog in (fogTune < 1 — canyon sand-haze); the
+    // perimeter fog gets the same scalar where it's built (setTrack). Overview fog
+    // is exempt: the track picker must frame the whole circuit crisply in any air.
+    const tune = theme.fogTune || 1;
+    this._raceFog.near = RACE_FOG_NEAR * tune;
+    this._raceFog.far = RACE_FOG_FAR * tune;
     if (this._overviewFog) this._overviewFog.color.set(theme.fog);
     if (this._bbFog) this._bbFog.color.set(theme.fog);
     this._theme = theme;
@@ -1099,7 +1112,27 @@ export class SceneRenderer {
     // Push the horizon-hill ring (built at radius ~150 about the world origin) out past the
     // track's farthest reach so a large circuit can't drive into the scenery. XZ only (keep
     // the squashed height + base sink); never below 1× (small tracks keep the authored ring).
-    if (this._hills) { const sf = Math.max(1, (maxR + 60) / 150); this._hills.scale.set(sf, 1, sf); }
+    // The sea ring and the dust banks ride the SAME factor: the shoreline stays just inside
+    // the (now pushed-out) headlands, and the dust keeps drifting among the mesas — neither
+    // may end up hanging over (or under) a big circuit.
+    if (this._hills) {
+      const sf = Math.max(1, (maxR + 60) / 150);
+      this._hills.scale.set(sf, 1, sf);
+      if (this._water) {
+        // The sea gets its OWN fit, tighter than the hills': shoreline just past the
+        // scenery band (props reach ~20u beyond the farthest track point), so the water
+        // starts close enough to survive the race fog from the low chase cam. Floor at
+        // 0.5× so a tiny test track doesn't shrink the foam line into invisibility.
+        // Headlands intruding past the shoreline become islands — that's the look.
+        const wf = Math.max(0.5, (maxR + 30) / WATER_INNER);
+        this._water.scale.set(wf, 1, wf);
+        this._water.position.y = this.ground.position.y + WATER_LIFT; // re-base on the track's groundY
+      }
+      if (this._haze) for (const h of this._haze) {
+        h.position.x = h.userData.home.x * sf;
+        h.position.z = h.userData.home.z * sf;
+      }
+    }
     this._trackCenter = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.5 + 8;
@@ -1147,7 +1180,10 @@ export class SceneRenderer {
     // Perimeter-orbit fog: with the camera hugging the track, keep the near road crisp but
     // haze the open field SOON so the empty grass outside the circuit dissolves into the sky
     // instead of reading as a flat plane (tighter than the whole-track overview fog above).
-    this._bbFog = new THREE.Fog(this._themeFog, 55, 55 + Math.max(110, Math.max(halfX, halfZ) * 1.2));
+    // Scaled by the biome's fogTune like the race fog (dusty canyon air thickens here too).
+    const fogTune = this._theme.fogTune || 1;
+    this._bbFog = new THREE.Fog(this._themeFog,
+      55 * fogTune, (55 + Math.max(110, Math.max(halfX, halfZ) * 1.2)) * fogTune);
 
     // Aim + size the sun's shadow camera to cover the whole track. The light direction
     // is near-VERTICAL (2,12,1.5) — only slightly raked: cars/props no longer cast the
@@ -2071,6 +2107,15 @@ export class SceneRenderer {
     for (const cl of this._clouds) {
       cl.position.x += 0.7 * dt;
       if (cl.position.x > 300) cl.position.x = -300;
+    }
+    // dust banks blow faster than the clouds above them (wind shear sells "dust",
+    // not "low cloud"); wrap scales with the hill push-out so banks re-enter from
+    // outside the horizon ring even on a big circuit
+    const hazeWrap = 300 * (this._hills ? this._hills.scale.x : 1);
+    for (const h of this._haze) {
+      if (!h.visible) continue;
+      h.position.x += 2.2 * dt;
+      if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
     }
 
     const W = window.innerWidth, H = window.innerHeight;

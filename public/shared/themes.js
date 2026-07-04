@@ -16,12 +16,31 @@
 //                                       'lawn' | 'sand' | 'redrock' | 'snow')
 //   hills:  [c0, c1, c2]                horizon-ring colours, cycled i%len
 //   hillShape: (optional)               horizon-ring silhouette: 'dome' (default — soft
-//                                       meadow mounds) | 'mesa' (flat-topped buttes);
+//                                       meadow mounds) | 'mesa' (flat-topped buttes) |
+//                                       'island' (sparse low offshore chain, for watery
+//                                       biomes — wide sea gaps between features);
 //                                       a shape change rebuilds the ring (environment.js)
 //   clouds: (optional)                  { count ≤8, opacity, scale, aspect, tint } sky-puff
 //                                       dressing; omit for the canonical fat white cumulus
 //                                       (8 × opacity .8). scale/aspect stretch the sprites
 //                                       (wisps = wider, flatter), tint warms/cools them
+//   water: (optional)                   { foam, shallow, deep } — a sea ring past the
+//                                       horizon hills (built once, hidden for landlocked
+//                                       biomes): a foam line at the shore, shallow →
+//                                       deep radial gradient out to the fog. The hills
+//                                       rise out of it as headlands/islands. Fitted per
+//                                       track alongside the hill push-out, so the tide
+//                                       never floods a large circuit.
+//   haze: (optional)                    { count ≤5, opacity, tint, scale } low, wide
+//                                       dust/mist banks drifting at hill height (the
+//                                       cloud sprites' ground-level sibling); omit for
+//                                       clear air (count 0). Reads as blowing dust
+//                                       (canyon) — structure the uniform fog can't give
+//   fogTune: (optional)                 scalar on the RACE + lobby-perimeter fog
+//                                       distances (1 = clear default). <1 pulls the fog
+//                                       in — thick dusty air. The gallery/overview fog
+//                                       is untouched (framing the whole track stays
+//                                       readable in the picker)
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -87,15 +106,22 @@ export const THEMES = {
   },
 
   // ── beach — the Easy on-ramp biome. Brighter, warmer sun; a paler turquoise
-  // horizon over a turquoise-haze fog; warm sand ground; pale dune hills. The
-  // biggest possible departure from grass, on purpose (it stress-tests theming).
+  // horizon over a turquoise-haze fog; warm sand ground; and the thing that makes
+  // it a BEACH rather than a desert: the sea. A turquoise water ring surrounds the
+  // sand past the dunes (foam line at the shore, shallow → deep out to the fog),
+  // and the dune hills rise out of it as headlands — every long view ends in water.
   beach: {
-    sky:    { zenith: 0x37b4e6, horizon: 0xbfe7ec, below: 0xf2efd7 },
+    sky:    { zenith: 0x37b4e6, horizon: 0xbfe7ec, below: 0xcdeef0 }, // below-horizon haze aqua, not sand — it now sits over water
     fog:    0xbfe7ec,
     hemi:   { sky: 0xffffff, ground: 0xd2bd8a, intensity: 2.35 },
     key:    { color: 0xfff0cf, intensity: 1.55 },
     ground: { kind: 'sand' },
-    hills:  [0xe6d29a, 0xefe2b3, 0xd9c187],
+    // Two dune tones + one scrub-grass green: a vegetated headland every third
+    // feature keeps the coast from reading as bare desert dunes.
+    hills:  [0xe6d29a, 0xefe2b3, 0x9fc48e],
+    hillShape: 'island', // sparse offshore chain — the sea must show BETWEEN the hills
+    water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8 },
+    fogTune: 1.3, // clear seaside air: push the chase-cam fog out so the water reads from track level
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
@@ -115,7 +141,9 @@ export const THEMES = {
   // ── canyon — hot red-rock badlands (the Hard cup's biome; dormant until the canyon
   // cup lands in tracks.js, meanwhile reachable via ?biome=canyon). A dusty near-white
   // horizon haze over terracotta ground, rust mesa-coloured buttes, and a hot slightly
-  // orange sun — bleached desert light rather than sunset gold.
+  // orange sun — bleached desert light rather than sunset gold. The air itself is the
+  // signature: fogTune pulls the chase-cam fog in (sand haze, not clear alpine air)
+  // and low dust banks drift across the mesas.
   canyon: {
     sky:    { zenith: 0x4292d4, horizon: 0xe8c8a2, below: 0xf4e3c6 },
     fog:    0xe8c8a2,
@@ -127,6 +155,9 @@ export const THEMES = {
     // Bone-dry air: no fat cumulus. A few high, stretched, barely-there wisps with a
     // warm dust tint — enough to keep the sky from reading empty on a long straight.
     clouds: { count: 3, opacity: 0.3, scale: 1.35, aspect: 0.2, tint: 0xfff2e2 },
+    fogTune: 0.72, // sand-fog: the dusty horizon starts noticeably closer than clear air
+    // Blowing dust: wide sand-tinted banks at mesa height, drifting with the clouds.
+    haze: { count: 4, opacity: 0.16, tint: 0xe9c9a0, scale: 1 },
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the

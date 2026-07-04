@@ -1,8 +1,10 @@
 // Track-independent world dressing: sky dome, drifting clouds, horizon hills,
-// the toy lighting rig and the ground plane. Built once per renderer; returns the
-// pieces the frame loop / per-track fitting need to touch — PLUS the handles
-// (sky, hemi, hills, clouds) that applyEnvTheme() re-dresses when the cup's biome
-// changes (recolour/re-tint in place; hills also reshape on a dome↔mesa switch).
+// the toy lighting rig, the ground plane — plus the biome-gated extras (sea ring,
+// dust banks), always built and hidden until a theme asks for them. Built once per
+// renderer; returns the pieces the frame loop / per-track fitting need to touch —
+// PLUS the handles (sky, hemi, hills, clouds, haze, water) that applyEnvTheme()
+// re-dresses when the cup's biome changes (recolour/re-tint in place; hills also
+// reshape on a dome↔mesa switch).
 //
 // All look that varies per cup lives in a THEME (see shared/themes.js): sky colours,
 // ground texture, hill colours, light tint/intensity. Everything is built from the
@@ -94,14 +96,20 @@ function paintHills(hills, theme) {
 // squashed toy spheres — every literal is the pre-theming original, so grass stays
 // byte-identical. 'mesa' is a ring of flat-topped buttes (truncated cones): the crisp
 // plateau edge (the caps keep their own normals) against sloped talus is what reads
-// "canyon" in silhouette where a dome reads "meadow". Placeholder colour attribute on
-// every feature — paintHills overwrites it from the theme.
+// "canyon" in silhouette where a dome reads "meadow". 'island' is the coastal variant:
+// FEWER, LOWER, FARTHER domes — an offshore island chain with wide sea gaps, so a
+// water ring stays visible between them from a track-level camera (18 fat domes read
+// as an enclosing dune wall and hide the sea entirely). Placeholder colour attribute
+// on every feature — paintHills overwrites it from the theme.
 function buildHillRingGeometry(shape = 'dome') {
   let proto, count;
   if (shape === 'mesa') {
     proto = new THREE.CylinderGeometry(0.58, 1, 1, 9, 1); // plateau ≈ 0.6× the talus foot
     proto.translate(0, 0.5, 0); // base at y=0 → the y scale below IS the plateau height
     count = 14; // mesas are broad — fewer fill the ring without fusing into a wall
+  } else if (shape === 'island') {
+    proto = new THREE.SphereGeometry(1, 8, 5); // same fog-soft squashed dome as 'dome'
+    count = 9; // sparse — the gaps ARE the view (open sea between headlands)
   } else {
     proto = new THREE.SphereGeometry(1, 8, 5); // far, fog-soft, non-uniformly squashed — faceting invisible at this resolution
     count = HILL_DOMES;
@@ -117,6 +125,13 @@ function buildHillRingGeometry(shape = 'dome') {
       const a = (i / count) * Math.PI * 2 + (i % 5) * 0.17;
       const r = 152 + (i % 3) * 20;
       g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the ground plane
+    } else if (shape === 'island') {
+      // low + wide (a headland silhouette, not a mound) and pushed out past the
+      // shoreline: the waterline cuts their sunk bases → they rise out of the sea
+      g.scale(28 + (i % 4) * 11, 3.5 + (i % 3) * 2.2, 20 + ((i + 1) % 4) * 8);
+      const a = (i / count) * Math.PI * 2 + (i % 5) * 0.21;
+      const r = 172 + (i % 3) * 24;
+      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r);
     } else {
       g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
       const a = (i / HILL_DOMES) * Math.PI * 2 + (i % 5) * 0.13;
@@ -138,6 +153,106 @@ function buildHillRingGeometry(shape = 'dome') {
 // multiply each sprite's authored base width, so wisp biomes can stretch and thin the
 // same 8 sprites instead of rebuilding them; `count` just hides the tail.
 const DEF_CLOUDS = { count: 8, opacity: 0.8, scale: 1, aspect: 0.42, tint: 0xffffff };
+
+// ── Sea ring (theme.water) ────────────────────────────────────────────────────
+// A flat ring of water surrounding the play field, starting just inside the horizon-
+// hill ring (WATER_INNER < the hills' ~150 centre radius) so the hill features rise
+// OUT of it as headlands/islands, and running far past the fog so it meets the sky.
+// Radial vertex-colour bands sell the read: a thin bright foam line at the shore,
+// a shallow turquoise band, then deepening blue. Always built (visible only when the
+// theme carries `water`); setTrack refits the shoreline PER TRACK — hugging just past
+// the scenery band — so the sea stays visible from the low chase cam (a fixed radius
+// would drown in the race fog on a large circuit) yet never floods the road.
+export const WATER_INNER = 135; // authored shoreline radius (exported: setTrack refits it per track)
+export const WATER_LIFT = 0.12; // floats just above the ground plane; unnoticeable as a step
+                                // from the ≥30u any camera keeps from the shore, and enough
+                                // depth separation to never z-fight the sand below (exported:
+                                // setTrack re-bases the sheet when a track moves groundY)
+// Band radii paired with a colour parameter: 0..1 lerps foam→shallow, 1..2
+// shallow→deep. The last ring just extends the deep colour out under the fog.
+const WATER_BANDS = [
+  [WATER_INNER,        0], // shoreline — pure foam
+  [WATER_INNER + 3,    0], // foam line (thin, bright)
+  [WATER_INNER + 8,    1], // foam dissolves into the shallows fast
+  [WATER_INNER + 60,   1.55],
+  [WATER_INNER + 180,  2], // fully deep
+  [2600,               2],
+];
+const WATER_SEG = 96; // ring segments — the shoreline circle reads smooth at any radius
+
+function buildWaterGeometry() {
+  const rings = WATER_BANDS.length, verts = WATER_SEG + 1;
+  const pos = new Float32Array(rings * verts * 3);
+  const nrm = new Float32Array(rings * verts * 3);
+  for (let ri = 0; ri < rings; ri++) {
+    const r = WATER_BANDS[ri][0];
+    for (let si = 0; si <= WATER_SEG; si++) {
+      const a = (si / WATER_SEG) * Math.PI * 2;
+      const v = (ri * verts + si) * 3;
+      pos[v] = Math.cos(a) * r; pos[v + 1] = 0; pos[v + 2] = Math.sin(a) * r;
+      nrm[v + 1] = 1; // flat sheet, straight-up normals (built in XZ — no mesh rotation)
+    }
+  }
+  const idx = [];
+  for (let ri = 0; ri < rings - 1; ri++) {
+    for (let si = 0; si < WATER_SEG; si++) {
+      const a = ri * verts + si, b = a + verts;
+      // CCW seen from +Y (tangential × radial = up): a → a+1 (along the ring) → b
+      // (outward). The other order back-faces every camera above the sheet.
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rings * verts * 3), 3));
+  geo.setIndex(idx);
+  return geo;
+}
+
+// Re-dress the (always-built) sea ring for a biome: visibility + the three-stop
+// radial gradient baked into vertex colours. No water in the theme → hidden.
+function applyWater(water, theme) {
+  water.visible = !!theme.water;
+  if (!theme.water) return;
+  const foam = new THREE.Color(theme.water.foam).convertSRGBToLinear();
+  const shallow = new THREE.Color(theme.water.shallow).convertSRGBToLinear();
+  const deep = new THREE.Color(theme.water.deep).convertSRGBToLinear();
+  const colAttr = water.geometry.attributes.color;
+  const arr = colAttr.array;
+  const verts = WATER_SEG + 1;
+  const c = new THREE.Color();
+  for (let ri = 0; ri < WATER_BANDS.length; ri++) {
+    const t = WATER_BANDS[ri][1];
+    if (t <= 1) c.copy(foam).lerp(shallow, t);
+    else c.copy(shallow).lerp(deep, t - 1);
+    for (let si = 0; si < verts; si++) {
+      const v = (ri * verts + si) * 3;
+      arr[v] = c.r; arr[v + 1] = c.g; arr[v + 2] = c.b;
+    }
+  }
+  colAttr.needsUpdate = true;
+}
+
+// ── Dust banks (theme.haze) ──────────────────────────────────────────────────
+// The cloud sprites' ground-level sibling: a few very wide, very flat, tinted banks
+// drifting at hill height. Distance fog gives uniform haze; these give the haze
+// STRUCTURE — dust blowing across the mesas. Hidden for clear-air biomes (count 0).
+// Authored positions sit around the hill ring; setTrack scales them outward with the
+// same factor as the hills so they never hang over a big circuit.
+const DEF_HAZE = { count: 0, opacity: 0.15, tint: 0xffffff, scale: 1 };
+const HAZE_ASPECT = 0.14; // banks, not puffs — far flatter than any cloud
+
+function applyHaze(haze, theme) {
+  const h = { ...DEF_HAZE, ...(theme.haze || {}) };
+  haze.forEach((sprite, i) => {
+    sprite.visible = i < h.count;
+    sprite.material.opacity = h.opacity;
+    sprite.material.color.set(h.tint);
+    const w = sprite.userData.w * h.scale;
+    sprite.scale.set(w, w * HAZE_ASPECT, 1);
+  });
+}
 
 // Re-dress the (already built) cloud sprites for a biome. Sprites are never created
 // or destroyed on a theme switch — visibility, opacity, tint and scale are the knobs.
@@ -174,6 +289,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   // 8 sprites built (the roomiest biome's worth); the theme dresses them —
   // count/opacity/tint/stretch via applyClouds — so a biome swap never rebuilds.
   const clouds = [];
+  const haze = [];
   {
     const cloudTex = makeCloudTexture();
     for (let i = 0; i < 8; i++) {
@@ -188,6 +304,38 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
       scene.add(sprite);
     }
     applyClouds(clouds, theme);
+
+    // Dust banks: same soft texture, but low (hill height), huge and bank-flat.
+    // Always 5 built; the theme dresses them (applyHaze) — most biomes hide all 5.
+    // Authored positions are remembered so setTrack can push them out with the hills.
+    for (let i = 0; i < 5; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: cloudTex, transparent: true, opacity: 0.15, fog: false, depthWrite: false
+      }));
+      const a = (i / 5) * Math.PI * 2 + (i % 2) * 0.7;
+      const r = 132 + (i % 3) * 34;
+      const home = { x: Math.cos(a) * r, y: 9 + (i % 3) * 7, z: Math.sin(a) * r };
+      sprite.position.set(home.x, home.y, home.z);
+      sprite.userData.home = home;             // authored spot — setTrack rescales XZ from this
+      sprite.userData.w = 95 + (i % 3) * 28;   // authored base width — applyHaze scales from this
+      haze.push(sprite);
+      scene.add(sprite);
+    }
+    applyHaze(haze, theme);
+  }
+
+  // Sea ring: built once, shown only by watery biomes (applyWater). Lambert like the
+  // ground — the flat sheet takes the biome's light tint, and vertex colours carry
+  // the shore-to-deep gradient. Distance fog dissolves it into the sky as usual.
+  let water;
+  {
+    water = new THREE.Mesh(
+      buildWaterGeometry(),
+      new THREE.MeshLambertMaterial({ vertexColors: true })
+    );
+    water.position.y = -1.0 + WATER_LIFT; // follows the ground plane; setTrack re-bases on groundY moves
+    applyWater(water, theme);
+    scene.add(water);
   }
 
   // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
@@ -252,7 +400,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, key, hemi, ground, hills, sky };
+  return { clouds, haze, water, key, hemi, ground, hills, sky };
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
@@ -276,6 +424,8 @@ export function applyEnvTheme(env, theme) {
   }
   paintHills(env.hills, theme);
   applyClouds(env.clouds, theme);
+  applyHaze(env.haze, theme);
+  applyWater(env.water, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);
