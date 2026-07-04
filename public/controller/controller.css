@@ -15,6 +15,14 @@
   --safe-right:  max(var(--cg-safe-right,  0px), env(safe-area-inset-right,  0px));
   --safe-bottom: max(var(--cg-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
   --safe-left:   max(var(--cg-safe-left,   0px), env(safe-area-inset-left,   0px));
+
+  /* Screen margin = the safe inset, floored at a small design gutter. A plain
+     12px edge (never the old 7vh/8vw, which read as a huge margin on tall
+     phones) that still clears a real notch/home-indicator when one is larger. */
+  --edge-top:    max(var(--safe-top),    12px);
+  --edge-right:  max(var(--safe-right),  12px);
+  --edge-bottom: max(var(--safe-bottom), 12px);
+  --edge-left:   max(var(--safe-left),   12px);
 }
 
 html, body {
@@ -35,13 +43,13 @@ body::before {
 }
 * { -webkit-tap-highlight-color: transparent; }
 /* Pad past the notch/home-indicator (viewport-fit=cover lets content reach the
-   physical edges) on top of the design breathing room. */
+   physical edges); a slim 12px gutter otherwise (--edge-*). */
 section {
   position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column;
   padding:
-    calc(7vh + var(--safe-top)) calc(8vw + var(--safe-right))
-    calc(7vh + var(--safe-bottom)) calc(8vw + var(--safe-left));
+    var(--edge-top) var(--edge-right)
+    var(--edge-bottom) var(--edge-left);
 }
 /* the join screen is sparse — center it so it isn't top-heavy */
 #name { justify-content: center; padding-bottom: calc(12vh + var(--safe-bottom)); }
@@ -594,11 +602,6 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
 @media (orientation: landscape) {
-  section {
-    padding:
-      calc(4vh + var(--safe-top)) calc(6vw + var(--safe-right))
-      calc(4vh + var(--safe-bottom)) calc(6vw + var(--safe-left));
-  }
   #drive-hud { gap: 0.8rem; }
   #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
   #action-btn.action { padding: 2.8rem 1.4rem; }   /* match BRAKE's height + h-pad in landscape (equal halves) */
