@@ -1146,10 +1146,9 @@ export class SceneRenderer {
         h.position.z = h.userData.home.z * sf;
       }
     }
-    // Biome landmark (lighthouse/arch/snowman) — AFTER the hills fit above: the
-    // lighthouse anchors to an island of the just-scaled ring. Joins trackGroup, so
-    // it's rebuilt/disposed with the track, and the arch (castShadow) lands before
-    // the one-time shadow bake below.
+    // Biome landmarks (lighthouse/sailboat/hoodoo/snowman) — AFTER the hills fit
+    // above: the offshore pieces anchor to the just-scaled ring and shoreline fit.
+    // They join trackGroup, so they're rebuilt/disposed with the track.
     buildLandmarks(this, track, theme);
     this._trackCenter = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());

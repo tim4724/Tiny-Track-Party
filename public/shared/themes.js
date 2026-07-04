@@ -59,7 +59,9 @@
 //     shoulder:  dusty edge tint for the dropped-lines case (defaults to asphalt)
 //     skirt:     deck side/belly colour (defaults to asphalt — timber for a boardwalk)
 //     planks:    { period, tones: [...], seam } repaints the deck as boardwalk
-//                planks: a full-width plank every `period` along the lap, `seam` =
+//                planks (no shipped theme uses this today — beach tried and retired
+//                it; kept for the planned wooden Tabletop biome). A full-width
+//                plank every `period` along the lap, `seam` =
 //                the groove band between planks (it also interrupts the painted
 //                lines/dash — paint sits ON the boards), and the rings beside a
 //                seam get a bevel highlight/shade so each plank reads as a

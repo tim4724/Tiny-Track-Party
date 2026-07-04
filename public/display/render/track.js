@@ -4,7 +4,7 @@
 // disposables in R._mergedGeoms/R._mergedMats (freed on the next setTrack).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GROUND_SIZE } from './environment.js';
+import { GROUND_SIZE, WATER_INNER, WATER_LIFT } from './environment.js';
 
 // Support-structure tint (bridge pillars, corridor poles, loop shafts): the biome's
 // `structure` hex — timber piles (beach), red-rock columns (canyon) — or the canonical
@@ -24,7 +24,8 @@ const STRUCTURE = (theme) => (theme && theme.structure) || 0x9aa1b4;
 // (grass, sunset) builds byte-identical buffers. The palette recolours (asphalt/
 // lines/dash/kerb/skirt), reshapes the kerb (kerbW/kerbH — snowbanks), drops the
 // edge lines for a dusty shoulder (canyon), or repaints the whole deck as boardwalk
-// planks (beach) — all vertex paint on the same sweep, no new geometry or textures.
+// planks (unused today — kept for the planned wooden Tabletop biome) — all vertex
+// paint on the same sweep, no new geometry or textures.
 export function buildRibbonRoad(R, track, collide, theme) {
   const cl = track.centerline;
   if (!cl || !cl.samples.length) return;
@@ -83,7 +84,7 @@ export function buildRibbonRoad(R, track, collide, theme) {
   const DASH = c(rd.dash ?? rd.line ?? 0xc4c4d9);     // centre dash paint (canyon: highway yellow)
   const KERB_A = c(rd.kerb ? rd.kerb[0] : 0xfa6b41);  // kerb band A — Kenney's warm orange-red, not crimson
   const KERB_B = c(rd.kerb ? rd.kerb[1] : 0xf8f8fb);  // kerb band B — kerb white
-  const SKIRT = c(rd.skirt ?? rd.asphalt ?? 0x5a6078);// deck sides + belly (boardwalk: timber)
+  const SKIRT = c(rd.skirt ?? rd.asphalt ?? 0x5a6078);// deck sides + belly
   const SHOULDER = c(rd.shoulder ?? rd.asphalt ?? 0x5a6078); // edge band when edgeLines is off
   const edgeLines = rd.edgeLines !== false;
 
@@ -629,30 +630,28 @@ export function buildLandmarks(R, track, theme) {
   const gy = R.ground.position.y;
   const geoms = [];
 
-  if (kinds.includes('lighthouse')) {
-    // The LOWEST island: the tower dominates the silhouette instead of poking out
-    // of a tall dune. Anchors are authored coords — scale XZ by the hills' push-out
-    // (setTrack has already fitted the ring when this runs).
-    const anchors = (R._hills && R._hills.userData.anchors) || [];
-    if (!anchors.length) return;
-    let best = anchors[0];
-    for (const a of anchors) if (a.top < best.top) best = a;
+  // The LOWEST island of the horizon ring anchors both offshore pieces: the tower
+  // dominates a low silhouette instead of poking out of a tall dune, and the boat
+  // takes its bearing from the same island. Anchors are authored coords — scale XZ
+  // by the hills' push-out (setTrack has already fitted the ring when this runs).
+  const anchors = (R._hills && R._hills.userData.anchors) || [];
+  let lowest = anchors[0];
+  for (const a of anchors) if (a.top < lowest.top) lowest = a;
+
+  if (kinds.includes('lighthouse') && lowest) {
     const sf = R._hills.scale.x;
-    geoms.push(...lighthouseGeoms(best.x * sf, gy + best.top - 0.8, best.z * sf)); // base sunk into the island crown
+    geoms.push(...lighthouseGeoms(lowest.x * sf, gy + lowest.top - 0.8, lowest.z * sf)); // base sunk into the island crown
   }
 
   if (kinds.includes('sailboat')) {
     // Anchored out in the shallows, a third of the way round from the lighthouse's
     // island so the two never share a sight-line. Radius = the per-track shoreline
     // fit (set just above in setTrack) + a margin into open water.
-    const anchors = (R._hills && R._hills.userData.anchors) || [];
     const fit = (R._water && R._water.userData.fit) || 1;
-    let low = anchors[0];
-    for (const a of anchors) if (a.top < low.top) low = a;
-    const ba = (low ? Math.atan2(low.z, low.x) : 0) + 2.3;
-    const br = fit * 135 + 22; // WATER_INNER-derived shoreline + open-water margin
+    const ba = (lowest ? Math.atan2(lowest.z, lowest.x) : 0) + 2.3;
+    const br = fit * WATER_INNER + 22; // shoreline + open-water margin
     const bx = Math.cos(ba) * br, bz = Math.sin(ba) * br;
-    const wy = gy + 0.12; // the water sheet's lift (see environment WATER_LIFT)
+    const wy = gy + WATER_LIFT; // ride ON the water sheet
     const yaw = rand() * Math.PI * 2;
     // Parts are authored in the boat's LOCAL frame (+Z = bow, origin at the
     // waterline under the mast), then heeled a few degrees — a sailing boat
@@ -697,15 +696,15 @@ export function buildLandmarks(R, track, theme) {
     // tried and rejected). Rock tints cycle per drum — echoes the mesa strata.
     const rocks = (theme.scenery && theme.scenery.rocks) || [0xc07a55, 0xa8623f, 0xd39a70];
     const hoodoo = (hx, hz, T) => { // T = total height
-      const R = [0.20, 0.15, 0.115, 0.095].map((k) => k * T); // drum radii, bottom → waist
-      const H = [0.30, 0.24, 0.19].map((k) => k * T);         // drum heights (stem ≈ 0.73 T)
+      const radii = [0.20, 0.15, 0.115, 0.095].map((k) => k * T); // drum radii, bottom → waist
+      const hts = [0.30, 0.24, 0.19].map((k) => k * T);           // drum heights (stem ≈ 0.73 T)
       let cy = 0;
       for (let li = 0; li < 3; li++) {
-        const g = new THREE.CylinderGeometry(R[li + 1], R[li], H[li], 8);
+        const g = new THREE.CylinderGeometry(radii[li + 1], radii[li], hts[li], 8);
         g.rotateY(rand() * Math.PI * 2); // vary facet phase per drum
-        g.translate(hx, gy + cy + H[li] / 2 - 0.15, hz); // first drum sunk into the dirt
+        g.translate(hx, gy + cy + hts[li] / 2 - 0.15, hz); // first drum sunk into the dirt
         geoms.push(tintGeo(g, rocks[li % rocks.length], 0.9 + rand() * 0.18));
-        cy += H[li];
+        cy += hts[li];
       }
       const cap = new THREE.IcosahedronGeometry(0.24 * T, 0); // the balanced boulder — wider than the waist
       cap.scale(1, 0.62, 0.88);
@@ -722,7 +721,7 @@ export function buildLandmarks(R, track, theme) {
       const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
       // the cluster spreads ~±4u around the anchor — clear the whole footprint
       if (!isClear(x, z, 5)) continue;
-      const tx = f.tangent ? f.tangent.x : -f.lateral.z, tz = f.tangent ? f.tangent.z : f.lateral.x;
+      const tx = f.tangent.x, tz = f.tangent.z;
       hoodoo(x, z, 8.6);                                              // the tall one
       hoodoo(x + tx * 3.8 + f.lateral.x * side * 1.6, z + tz * 3.8 + f.lateral.z * side * 1.6, 5.4);
       hoodoo(x - tx * 3.2 + f.lateral.x * side * 2.2, z - tz * 3.2 + f.lateral.z * side * 2.2, 3.6);
@@ -742,8 +741,8 @@ export function buildLandmarks(R, track, theme) {
       if (!isClear(x, z, 2.6)) continue;
       const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // faces the road
       const yaw = Math.atan2(fx, fz);
-      const ball = (r, cy, hex, detail = 1) => {
-        const g = new THREE.IcosahedronGeometry(r, detail);
+      const ball = (r, cy, hex) => {
+        const g = new THREE.IcosahedronGeometry(r, 1);
         g.translate(x, gy + cy, z);
         geoms.push(tintGeo(g, hex, 0.98));
       };
