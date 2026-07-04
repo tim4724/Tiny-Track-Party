@@ -38,17 +38,22 @@
   <!-- Lobby — who you are, your car, the track (the shared display owns the
        player roster). -->
   <section id="lobby" class="hidden">
-    <!-- your identity, up top — name in your livery colour (no dot needed). The
-         "?" reopens the How-to-Drive popup (always available in the lobby; it
-         also auto-shows once on the first visit — see openHelp in main.js). -->
+    <!-- your identity, up top — name in your livery colour (no dot needed). Hidden
+         wholesale inside the Couch Games shell (the launcher shows the name in its
+         own chip), where the row collapses to nothing. -->
     <div class="lobby-me">
       <span id="me-name" class="lobby-me__name"></span>
-      <button id="help-btn" class="help-btn icon-btn" type="button" aria-label="How to drive" aria-haspopup="dialog">?</button>
     </div>
 
-    <!-- your car -->
-    <div class="lobby-head"><span class="pill">Car</span></div>
-    <div id="car-hero" class="car-hero"></div>
+    <!-- your car — no section header; the card speaks for itself. The "?" reopens
+         the How-to-Drive popup (always available in the lobby; also auto-shows once
+         on the first visit — see openHelp in main.js) and is folded into the hero
+         card's top-right corner. It sits OUTSIDE #car-hero (which buildCarPicker
+         rewrites) so the render never wipes it. -->
+    <div class="car-card">
+      <button id="help-btn" class="help-btn icon-btn" type="button" aria-label="How to drive" aria-haspopup="dialog">?</button>
+      <div id="car-hero" class="car-hero"></div>
+    </div>
     <div id="carpick" class="carpick"></div>
 
     <!-- what to race — host only: 🎲 Random / a cup (4-race Grand Prix) / an

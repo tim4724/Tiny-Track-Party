@@ -93,12 +93,21 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
 
+/* Card wrapper — just an anchor for the folded-in "?" help button, which sits in
+   the hero's top-right corner. It wraps only #car-hero (NOT the strip), so its box
+   tracks the hero exactly; buildCarPicker only rewrites #car-hero, so the button
+   (a sibling) survives every re-render. */
+.car-card { position: relative; margin-bottom: 0.9rem; }
+
 /* Hero — the chosen car shown large with its name + handling stats, like a
-   feature card. Soft surface so it pops; row layout stays short in landscape. */
+   feature card. Soft surface so it pops; row layout stays short in landscape.
+   The folded-in "?" clears the content two ways: the name reserves room with its
+   own padding-right, and the button is sized to overlap only the name row (the
+   stat bars sit below it) — see .car-hero__name / .help-btn. */
 .car-hero {
   display: flex; align-items: center; gap: 0.9rem;
   background: var(--surface); border: 3px solid var(--hairline); border-radius: var(--r);
-  box-shadow: var(--shadow-pop); padding: 0.8rem 1rem; margin-bottom: 0.9rem;
+  box-shadow: var(--shadow-pop); padding: 0.8rem 1rem;
 }
 /* The square .carthumb (theme.css) sizes to this box; the livery ring lives on
    the strip tile, not here, so the big render reads clean. */
@@ -107,6 +116,8 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-hero__name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.35rem;
   line-height: 1; color: var(--ink);
+  /* keep a long name clear of the corner "?" — ellipsise before it */
+  padding-right: 2.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Handling stat bars — one chunky rounded pill per stat, filled in the player's
@@ -257,10 +268,10 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Couch Games shell: the launcher owns identity and shows the player's name in
    its native top-bar chip, so our own copies are duplicates — drop them (lobby
-   identity, in-race HUD, the how-to-drive demo phone). The `?` help button keeps
-   its margin-left:auto so it stays pinned right in the now name-less lobby row;
-   .hud-top keeps its min-height so the HUD's top spacing is unchanged. */
-.cg-shell .lobby-me__name,
+   identity, in-race HUD, the how-to-drive demo phone). The whole lobby identity
+   row collapses (the `?` now lives in the car card, not this row); .hud-top keeps
+   its min-height so the HUD's top spacing is unchanged. */
+.cg-shell .lobby-me,
 .cg-shell .hud-name,
 .cg-shell .phone-name { display: none; }
 
@@ -588,10 +599,18 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
-/* The persistent "?" trigger in the lobby — a ghost icon button next to the player
-   name (same size as the pause/game buttons so it's an easy tap target); margin-left
-   pushes it to the row's end so the name's ellipsis never collides with it. */
-.help-btn { flex: none; width: 3.2rem; height: 3.2rem; margin-left: auto; font-family: var(--font-display); font-size: 1.7rem; }
+/* The persistent "?" trigger in the lobby — folded into the car hero's top-right
+   corner (absolute over the .car-card anchor). A compact round ghost chip: it reads
+   as a subtle affordance on the card, not a second button competing with the strip.
+   Sized to overlap only the name row so the stat bars below stay clear. */
+.help-btn {
+  position: absolute; z-index: 2;
+  top: 0.5rem; right: 0.55rem;
+  width: 2.4rem; height: 2.4rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  font-family: var(--font-display); font-size: 1.3rem; line-height: 1;
+}
 /* The game-screen "?" — fixed, just left of the pause button (same row, same size). */
 .help-btn-game {
   position: fixed; z-index: 8;

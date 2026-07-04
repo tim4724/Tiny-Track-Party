@@ -6,15 +6,32 @@
 // its cup + a top-down SVG path; see display/trackSchematic.js). Only the HOST
 // picks, so `canPick` gates the taps — read-only rendering is for the gallery.
 
+import { themeForCup } from './themes.js';
+
 const SVGNS = 'http://www.w3.org/2000/svg';
 
+// The picker themes each cup by its biome so a panel reads at a glance as grass /
+// sand / desert / dusk. We derive the tint from the biome's first horizon-hill
+// colour (grass green, beach sand, canyon terracotta, sunset rose) — the same
+// source of truth the 3D world themes from, so the two can't drift — softened
+// toward white by `pct`. Cups with no biome fall back to grass (the canonical pale
+// green, matching the old default). `pct` is how much biome colour survives: ~26%
+// for the schematic FIELD (the ground the ribbon sits on), a whisper for the panel
+// behind the tiles so the two read as one biome instead of clashing.
+function biomeTint(cupId, pct) {
+  const hex = '#' + (themeForCup(cupId).hills[0] >>> 0).toString(16).padStart(6, '0');
+  return `color-mix(in srgb, ${hex} ${pct}%, #fff)`;
+}
+
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
-// toy "track ribbon" look) plus a dot at the start/finish line.
-function schematicSvg(svg) {
+// toy "track ribbon" look) plus a dot at the start/finish line. `fieldTint` (a CSS
+// colour) paints the field behind the ribbon; omit to keep the CSS default.
+function schematicSvg(svg, fieldTint) {
   const el = document.createElementNS(SVGNS, 'svg');
   el.setAttribute('viewBox', svg.viewBox || '0 0 100 100');
   el.setAttribute('class', 'track-map');
   el.setAttribute('aria-hidden', 'true');
+  if (fieldTint) el.style.background = fieldTint;
   if (svg.d) {
     const casing = document.createElementNS(SVGNS, 'path');
     casing.setAttribute('d', svg.d);
@@ -46,7 +63,7 @@ function trackTile(t, mine, canPick, onPick) {
   if (mine) btn.setAttribute('aria-current', 'true');
   btn.setAttribute('aria-label', t.name);
   btn.disabled = !canPick;
-  btn.appendChild(schematicSvg(t.svg || {}));
+  btn.appendChild(schematicSvg(t.svg || {}, biomeTint(t.cup, 26)));
   const lab = document.createElement('span');
   lab.className = 'track-opt__name';
   lab.textContent = t.name;
@@ -164,6 +181,9 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   if (openCup) {
     const panel = document.createElement('div');
     panel.className = 'modepick__tracks';
+    // Whisper of the cup's biome behind the tiles so the panel + its (more
+    // strongly tinted) track fields read as one biome, not green-on-terracotta.
+    panel.style.background = biomeTint(openCup.id, 12);
     const tgrid = document.createElement('div');
     tgrid.className = 'trackpick__grid';
     for (const t of openCup.items) {
