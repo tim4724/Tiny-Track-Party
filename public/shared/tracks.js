@@ -524,7 +524,9 @@ export const CUPS = [
   { id: 'snow',     name: 'Snow Cup',     tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings + climb (snow biome)
   { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
   { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
-  { id: 'rooftop',  name: 'Rooftop Cup',  tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] } // crazy: stunts (sunset biome); crossover/coaster/twister retired
+  // crazy: stunts (playroom biome — orange plastic track); crossover/coaster/twister retired.
+  // id stays 'rooftop' (wired into CUP_BIOME/selections); only the display name moved.
+  { id: 'rooftop',  name: 'Playroom Cup', tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
 ];
 
 // Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —

@@ -12,7 +12,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -37,6 +37,7 @@ function groundTexture(kind = 'lawn') {
   tex = (kind === 'sand') ? makeSandTexture()
       : (kind === 'redrock') ? makeRedRockTexture()
       : (kind === 'snow') ? makeSnowTexture()
+      : (kind === 'wood') ? makeWoodFloorTexture()
       : makeLawnTexture();
   // Tile across the big plane at the same world scale as the old 600u lawn (UVs run 0..1
   // over the plane, so repeat == tiles across it). Berm UVs in track.js use worldXZ /
@@ -115,6 +116,12 @@ function buildHillRingGeometry(shape = 'dome') {
     proto = new THREE.CylinderGeometry(0.58, 1, 1, 9, 1); // plateau ≈ 0.6× the talus foot
     proto.translate(0, 0.5, 0); // base at y=0 → the y scale below IS the plateau height
     count = 14; // mesas are broad — fewer fill the ring without fusing into a wall
+  } else if (shape === 'block') {
+    // playroom: giant toy building blocks scattered on the floor — near-cubes at
+    // casual, unaligned yaws (a crisp box silhouette where a dome reads "hill")
+    proto = new THREE.BoxGeometry(1, 1, 1);
+    proto.translate(0, 0.5, 0); // base at y=0 → the y scale below IS the block height
+    count = 10; // a scatter of big blocks with gaps — a tidy floor, not a wall
   } else if (shape === 'island') {
     proto = new THREE.SphereGeometry(1, 8, 5); // same fog-soft squashed dome as 'dome'
     count = 9; // sparse — the gaps ARE the view (open sea between headlands)
@@ -135,6 +142,15 @@ function buildHillRingGeometry(shape = 'dome') {
       g.scale(20 + (i % 4) * 8, sy, 16 + ((i + 2) % 4) * 7);
       a = (i / count) * Math.PI * 2 + (i % 5) * 0.17;
       r = 152 + (i % 3) * 20;
+    } else if (shape === 'block') {
+      // near-cubes (a toy block is a cube, mild wobble so they don't read stamped).
+      // Scale BEFORE the yaw — yawing first would shear the box under the
+      // non-uniform scale and the crisp block silhouette is the whole point.
+      sy = 13 + (i % 3) * 5;
+      g.scale(14 + (i % 4) * 5, sy, 14 + ((i + 2) % 4) * 5);
+      g.rotateY((i % 7) * 0.85); // casually dropped, not grid-aligned
+      a = (i / count) * Math.PI * 2 + (i % 5) * 0.23;
+      r = 158 + (i % 3) * 22;
     } else if (shape === 'island') {
       // low + wide (a headland silhouette, not a mound) and pushed out past the
       // shoreline: the waterline cuts their sunk bases → they rise out of the sea

@@ -418,6 +418,56 @@ function makeSnowTexture() {
   return tex;
 }
 
+// Wood floor: honey playroom floorboards — the same tiled-canvas idiom as its
+// siblings (berm UVs line up), but the banding IS the boards: each vertical band
+// is one plank with a dark seam line between neighbours plus staggered end-joints,
+// per-board tone wobble so the floor doesn't read as one veneer sheet, soft grain
+// blotches, and a sparse darker knot speckle. Reads as a sunlit wooden floor up
+// close and warm honey at speed.
+function makeWoodFloorTexture() {
+  const s = 256, boards = 8, bw = s / boards;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const base = [201, 156, 104]; // warm honey oak (#c99c68)
+  for (let i = 0; i < boards; i++) {
+    // per-board tone: a small deterministic wobble (±4%), not strict alternation —
+    // real boards vary randomly, a checker cadence reads as tiles
+    const f = 0.96 + ((i * 37) % 5) * 0.02;
+    ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
+    ctx.fillRect(Math.floor(i * bw), 0, Math.ceil(bw), s);
+  }
+  // soft grain blotches so the boards don't read as flat paint
+  ctx.filter = 'blur(6px)';
+  for (let i = 0; i < 26; i++) {
+    const f = (i % 2 ? 1.05 : 0.94);
+    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.3)`;
+    const x = (i * 73) % s, y = (i * 131) % s, r = 9 + (i * 37) % 20;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 0.5, r, i, 0, Math.PI * 2); ctx.fill(); // grain runs ALONG the boards (tall, thin)
+  }
+  ctx.filter = 'none';
+  // board seams: a thin dark line between planks…
+  ctx.fillStyle = 'rgba(96,66,40,0.55)';
+  for (let i = 1; i < boards; i++) ctx.fillRect(Math.floor(i * bw) - 1, 0, 2, s);
+  // …and staggered end-joints across each board (offset per board so joints never align)
+  for (let i = 0; i < boards; i++) {
+    const y = (i * 149 + 40) % s;
+    ctx.fillRect(Math.floor(i * bw), y, Math.ceil(bw), 2);
+  }
+  // sparse knots — small dark grains, legible only up close
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 53) % s, y = (i * 97) % s;
+    ctx.fillStyle = `rgba(110,74,44,${(0.08 + (i % 3) * 0.04).toFixed(2)})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(18, 18);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // Wet-floor A-frame sign FACE (beach cup's slip warning, replacing the orange cone).
 // This is mapped onto the front/back of a solid extruded-trapezoid panel (see
 // TrackProps._wetSignProto) — the mesh owns the trapezoid silhouette + thickness +
@@ -640,6 +690,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
   makePadTexture, makePadStripTexture, makeWetSignTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

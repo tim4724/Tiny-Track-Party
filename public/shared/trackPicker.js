@@ -11,8 +11,8 @@ import { themeForCup } from './themes.js';
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 // The picker themes each cup by its biome so a panel reads at a glance as grass /
-// sand / desert / dusk. We derive the tint from the biome's first horizon-hill
-// colour (grass green, beach sand, canyon terracotta, sunset rose) — the same
+// sand / desert / toy-box. We derive the tint from the biome's first horizon-hill
+// colour (grass green, beach sand, canyon terracotta, playroom block-red) — the same
 // source of truth the 3D world themes from, so the two can't drift — softened
 // toward white by `pct`. Cups with no biome fall back to grass (the canonical pale
 // green, matching the old default). `pct` is how much biome colour survives: ~26%

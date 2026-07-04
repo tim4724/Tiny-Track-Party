@@ -13,12 +13,14 @@
 //   hemi:   { sky, ground, intensity }  hemisphere fill light (sky tint / bounce tint)
 //   key:    { color, intensity }        warm directional "sun" (the plastic shine)
 //   ground: { kind }                    procedural ground texture id (see textures.js:
-//                                       'lawn' | 'sand' | 'redrock' | 'snow')
+//                                       'lawn' | 'sand' | 'redrock' | 'snow' | 'wood')
 //   hills:  [c0, c1, c2]                horizon-ring colours, cycled i%len
 //   hillShape: (optional)               horizon-ring silhouette: 'dome' (default — soft
 //                                       meadow mounds) | 'mesa' (flat-topped buttes) |
 //                                       'island' (sparse low offshore chain, for watery
-//                                       biomes — wide sea gaps between features);
+//                                       biomes — wide sea gaps between features) |
+//                                       'block' (giant toy building blocks scattered on
+//                                       the floor — the playroom's "horizon");
 //                                       a shape change rebuilds the ring (environment.js)
 //   clouds: (optional)                  { count ≤8, opacity, scale, aspect, tint } sky-puff
 //                                       dressing; omit for the canonical fat white cumulus
@@ -87,8 +89,10 @@
 //                                       shore island) | 'sailboat' (anchored in the
 //                                       shallows) | 'hoodoo' (balanced-rock family
 //                                       trackside — skipped if no safe spot exists) |
-//                                       'snowman' (trackside greeter). Procedural toy
-//                                       geometry, no assets.
+//                                       'snowman' (trackside greeter) | 'blocks'
+//                                       (stacked giant alphabet blocks) | 'duck'
+//                                       (bath-toy duck watching the race). Procedural
+//                                       toy geometry, no assets.
 //   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed,
 //                                       flap, flapHz } — soaring silhouettes, each
 //                                       circling its own roost on a ring of radius rc
@@ -148,7 +152,8 @@ export const THEMES = {
     scenery: GRASS_SCENERY,
   },
 
-  // ── sunset — golden hour over the grass world. SAME grass ground + scenery as
+  // ── sunset — golden hour over the grass world (no cup since the stunt cup went
+  // playroom; reachable via ?biome=sunset). SAME grass ground + scenery as
   // `grass` (green trees still read right), so it needs NO new ground texture or props:
   // a warm low-key sun, a peach-to-periwinkle sky over a warm apricot-haze fog, and
   // warm dusk hills. The warm key light alone turns the green grass golden.
@@ -301,6 +306,57 @@ export const THEMES = {
     gate: 0xdfe9f6, // cold-cast gate grade
     landmark: 'snowman', // trackside greeter just off the racing line
   },
+
+  // ── playroom — the stunt cup's biome: a toy racetrack set up on a sunlit
+  // playroom floor. The loops/corkscrews/launch ramps ARE the classic snap-together
+  // toy stunt set, so the road finally admits it: bright orange moulded-plastic
+  // deck between solid blue clip-on rails (no painted edge lines — plastic isn't
+  // painted; the cream centre dash stays as a printed decal, keeping its
+  // speedometer job). Indoors, but still broad daylight — afternoon sun through a
+  // window (readability rule: no dark scenes) — over a honey floorboard "ground",
+  // with giant pastel building blocks as the horizon and toy-bit clutter trackside.
+  playroom: {
+    sky:    { zenith: 0x8cbcea, horizon: 0xf3e3c3, below: 0xfaf0da }, // pale nursery-blue wall up top, warm window-glow at the skirting
+    fog:    0xf3e3c3,
+    hemi:   { sky: 0xfff2dc, ground: 0xa88860, intensity: 2.2 },     // warm room light, wood-floor bounce
+    key:    { color: 0xffeac2, intensity: 1.5 },                     // low afternoon sun through the window
+    ground: { kind: 'wood' },
+    // Giant toy blocks scattered on the floor past the fog: soft plastic
+    // primaries. hills[0] also tints the controller's cup panel (trackPicker) —
+    // the warm red keeps the playroom distinct from beach sand / canyon clay.
+    hills:  [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c],
+    hillShape: 'block',
+    // Indoors: no cumulus. A few faint warm puffs stay as drifting sunbeam
+    // bloom so the (very visible — stunt tracks are tall) sky isn't a flat wall.
+    clouds: { count: 3, opacity: 0.22, scale: 1.3, aspect: 0.3, tint: 0xffedd2 },
+    fogTune: 1.25, // clear indoor air — the tall stunt structures must read from track level
+    // The star: orange moulded-plastic track. Deck + shoulder are one clean
+    // injection-moulded orange (edgeLines off — no paint on plastic), the kerbs
+    // become chunky solid-blue clip-on rails (whisper two-tone so edge distance
+    // still reads), and the underside is a darker moulded orange.
+    road: {
+      asphalt: 0xe8731f,           // toy-track orange (bright, not neon — soft-toy rule)
+      dash:    0xfdf4de,           // printed cream lane decal — keeps the speedometer read
+      edgeLines: false,            // moulded plastic has no painted lines
+      kerb:  [0x3e6ed8, 0x4677e0], // solid blue snap-on rails (whisper contrast pair)
+      kerbW: 0.26, kerbH: 0.26,    // beefier rail profile — visual only, physics untouched
+      skirt: 0xc25e14,             // darker plastic underside/sides
+    },
+    structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
+    landmark: ['blocks', 'duck'], // alphabet-block stack + a bath-toy duck spectator
+    gate: 0xfff3e2, // warm indoor-light gate grade
+    scenery: {
+      // No trees indoors — the "boulder" channel does all the work: faceted
+      // toy bits (dice/gems/beanbags) in the same plastic primaries as the
+      // horizon blocks, scattered sparse — floors are tidier than meadows.
+      trees:   [],
+      bush:    null,
+      mix:     { tree: 0, bush: 0 }, // everything rolls "rock"
+      rocks:   [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c],
+      rockS:   [0.5, 0.7], // chunky toy-piece scale
+      density: 0.35,
+    },
+  },
 };
 
 // Union of every GLB the biome scenery palettes reference. The display preloads this
@@ -318,7 +374,7 @@ const CUP_BIOME = {
   snow:     'snow',
   backyard: 'grass',
   canyon:   'canyon',
-  rooftop:  'sunset',
+  rooftop:  'playroom', // the stunt cup — displayed as "Playroom Cup"; id kept for wiring
 };
 
 // Resolve a cup id to its biome object. Returns a STABLE reference per biome, so the

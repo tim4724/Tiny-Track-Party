@@ -561,6 +561,8 @@ export function buildLoopPoles(R, track, theme) {
 //   'sailboat'   — anchored offshore, out in the shallows (beach)
 //   'hoodoo'     — a balanced-rock family trackside at a clear stretch (canyon)
 //   'snowman'    — trackside greeter just off the racing line (snow)
+//   'blocks'     — stacked giant alphabet blocks trackside (playroom)
+//   'duck'       — a bath-toy duck watching the race (playroom)
 // A landmark that can't find a safe spot simply doesn't spawn (hoodoo/snowman scan;
 // the offshore pair always can). Placement is deterministic per track — same every load.
 
@@ -762,6 +764,89 @@ export function buildLandmarks(R, track, theme) {
       };
       dot(-0.18, 3.28, 0.46); dot(0.18, 3.28, 0.46);            // eyes
       dot(0, 2.28, 0.72); dot(0, 1.98, 0.76); dot(0, 1.68, 0.72); // buttons
+      break;
+    }
+  }
+
+  if (kinds.includes('blocks')) {
+    // Giant alphabet blocks (playroom) — two on the floor, a third balanced on top
+    // askew. Each block is a coloured cube with a lighter inset face panel proud of
+    // every visible side (the classic toy-block anatomy — without the panels a plain
+    // cube reads as a shipping crate). First clear trackside stretch, like the hoodoos.
+    const tones = [0xe66a5a, 0x5a8fd8, 0xf2c14e]; // the theme's block primaries
+    const block = (bx, bz, size, cy, yaw, hex) => {
+      const body = new THREE.BoxGeometry(size, size, size);
+      body.rotateY(yaw);
+      body.translate(bx, gy + cy + size / 2, bz);
+      geoms.push(tintGeo(body, hex, 0.97 + rand() * 0.06));
+      // face panels: thin lighter plates centred on the 4 sides + top (bottom hidden)
+      const p = size * 0.72, t = 0.05, off = size / 2 + t / 2 - 0.01;
+      const plates = [
+        [off, 0, 0, t, p, p], [-off, 0, 0, t, p, p],   // ±x sides
+        [0, 0, off, p, p, t], [0, 0, -off, p, p, t],   // ±z sides
+        [0, off, 0, p, t, p],                          // top
+      ];
+      for (const [px, py, pz, sx, sYY, sz] of plates) {
+        const plate = new THREE.BoxGeometry(sx, sYY, sz);
+        plate.translate(px, py, pz);
+        plate.rotateY(yaw);
+        plate.translate(bx, gy + cy + size / 2, bz);
+        geoms.push(tintGeo(plate, 0xf7ead2, 0.98)); // warm cream face
+      }
+    };
+    const L = cl.length, step = 3;
+    for (let s = 55; s < L - 10; s += step) { // start past the duck's stretch — two spectators, two spots
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // ground-level roadside only
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + 6.0);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      if (!isClear(x, z, 5)) continue; // the stack spreads ~±3.5u around the anchor
+      const tx = f.tangent.x, tz = f.tangent.z;
+      block(x, z, 3.2, 0, rand() * 0.6, tones[0]);                                              // the big one
+      block(x + tx * 3.4 + f.lateral.x * side * 1.3, z + tz * 3.4 + f.lateral.z * side * 1.3,
+            2.6, 0, 0.5 + rand() * 0.5, tones[1]);                                              // its neighbour
+      block(x + tx * 0.4, z + tz * 0.4, 2.4, 3.2, rand() * Math.PI * 0.5, tones[2]);            // balanced on top, askew
+      break;
+    }
+  }
+
+  if (kinds.includes('duck')) {
+    // Bath-toy duck (playroom) — a chunky yellow spectator facing the road, built
+    // like the snowman: first clear spot past the opening straight. Parts are
+    // authored in the duck's LOCAL frame (+Z = bill) then swung to face the road.
+    const YELLOW = 0xf6cf46, BILL = 0xf2953c;
+    const L = cl.length, step = 3;
+    for (let s = 30; s < L - 10; s += step) {
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // on the floor, not a ramp shoulder
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + 4.2);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      if (!isClear(x, z, 3)) continue;
+      const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // faces the road
+      const yaw = Math.atan2(fx, fz);
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      const body = new THREE.IcosahedronGeometry(1.5, 1);
+      body.scale(1.05, 0.8, 1.3);
+      part(body, 0, 1.15, -0.2, YELLOW);                        // hull, settled on the floor
+      const tail = new THREE.ConeGeometry(0.55, 1.1, 6);
+      tail.rotateX(-Math.PI / 2 - 0.65);                        // flicks up and aft
+      part(tail, 0, 1.75, -1.85, YELLOW, 0.98);
+      const head = new THREE.IcosahedronGeometry(0.85, 1);
+      part(head, 0, 2.85, 0.75, YELLOW, 1.02);
+      const bill = new THREE.ConeGeometry(0.34, 0.75, 7);
+      bill.rotateX(Math.PI / 2);                                // cone +Y → +Z, toward the road
+      bill.scale(1, 0.5, 1);                                    // flattened duck bill
+      part(bill, 0, 2.72, 1.6, BILL);
+      for (const ex of [-0.34, 0.34]) {                         // eyes
+        part(new THREE.IcosahedronGeometry(0.1, 0), ex, 3.12, 1.3, 0x343a44);
+      }
       break;
     }
   }
