@@ -32,6 +32,13 @@
 //                                       track alongside the hill push-out, so the tide
 //                                       never floods a large circuit; `wet` tints the
 //                                       damp-sand band hugging the waterline.
+//   ice: (optional)                     { sheet, frost } — reskin the road OIL slicks as
+//                                       frozen ICE sheets (TrackProps._buildHazards):
+//                                       `sheet` tints the glassy translucent disc, `frost`
+//                                       the rime ring at its edge. Visual only — the
+//                                       spin-out mechanic and warning cones are untouched
+//                                       (black oil reads wrong on ploughed snow; a biome
+//                                       with `water` gets puddles + signs instead)
 //   haze: (optional)                    { count ≤5, opacity, tint, scale } low, wide
 //                                       dust/mist banks drifting at hill height (the
 //                                       cloud sprites' ground-level sibling); omit for
@@ -288,6 +295,9 @@ export const THEMES = {
       kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
     snowfall: { count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    // Oil slicks read as black stains on ploughed snow — reskin them as ICE sheets:
+    // a glassy pale-blue glaze with a near-white frost rim. Same spin-out, same cones.
+    ice: { sheet: 0xa9d7ee, frost: 0xf0f8fd },
     gate: 0xdfe9f6, // cold-cast gate grade
     landmark: 'snowman', // trackside greeter just off the racing line
   },

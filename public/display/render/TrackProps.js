@@ -413,10 +413,12 @@ export class TrackProps {
   // Marker meshes share a cached proto (item-cone GLB, or the wet-sign proto below),
   // so only the disc (its own geometry + material) is disposed on rebuild.
   //
-  // Two looks, chosen by the cup biome: the default is a dark OIL film ringed with
+  // Three looks, chosen by the cup biome: the default is a dark OIL film ringed with
   // orange cones; a biome that carries a `water` palette (the beach cup) instead
-  // gets a turquoise WATER puddle ringed with yellow "wet floor" A-frame signs. The
-  // spin-out mechanic (engine-side) is identical either way — a wet road is slippery.
+  // gets a turquoise WATER puddle ringed with yellow "wet floor" A-frame signs; one
+  // with an `ice` palette (the snow cup) gets a glassy frozen SHEET with a frost rim
+  // but keeps the standard cones (the sign swap is beach-only vocabulary). The
+  // spin-out mechanic (engine-side) is identical in all three — a slick road slides.
   _buildHazards(track, theme) {
     this.hazardGroup.traverse((m) => {
       if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
@@ -435,6 +437,7 @@ export class TrackProps {
     const cl = track.centerline;
     const coneEdge = this._roadHalf - CONE_EDGE_MARGIN; // max lateral offset that stays off the curb
     const water = theme && theme.water;                 // beach cup → water puddle + wet-floor signs
+    const ice = !water && theme && theme.ice;           // snow cup → frozen sheet (cones kept)
     const markerProto = water ? this._wetSignProto() : this.protos.get('item-cone');
     const markerH = water ? WETSIGN_H : CONE_H;
     const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
@@ -456,6 +459,15 @@ export class TrackProps {
             transparent: true, opacity: 0.55, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
           })
+        // A frozen ICE sheet: pale glacial blue, glassier (lower roughness) and more
+        // see-through than either wet look — the dark asphalt showing through the
+        // glaze is what says "black ice", not a painted blue patch.
+        : ice
+        ? new THREE.MeshStandardMaterial({
+            color: ice.sheet, roughness: 0.06, metalness: 0.1,
+            transparent: true, opacity: 0.45, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+          })
         // A dark OIL film: slate-blue and semi-transparent (there's no env map, so
         // gloss can't sell "wet" — translucency + tint does).
         : new THREE.MeshStandardMaterial({
@@ -470,13 +482,14 @@ export class TrackProps {
       disc.receiveShadow = true;
       disc.renderOrder = -2; // below the foam rim (-1); both under the cars' skid decals
       this.hazardGroup.add(disc);
-      // a foam rim ring on the water puddle so it reads as a pool with a shore, not
-      // just a tinted patch. Same flat-on-road placement as the disc, drawn on top.
-      if (water) {
+      // a rim ring so the slick reads as a feature with an edge, not just a tinted
+      // patch: foam shore on the water puddle, rime frost on the ice sheet. Same
+      // flat-on-road placement as the disc, drawn on top.
+      if (water || ice) {
         const rim = new THREE.Mesh(
           new THREE.RingGeometry(radius * 0.82, radius, 40),
           new THREE.MeshBasicMaterial({
-            color: water.foam, transparent: true, opacity: 0.5, depthWrite: false,
+            color: water ? water.foam : ice.frost, transparent: true, opacity: 0.5, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
           })
         );
