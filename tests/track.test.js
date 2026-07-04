@@ -518,26 +518,48 @@ test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface
 // real columns the player can see; where one rises through a drivable corridor the
 // engine must collide cars with it (ghost autoPoles), not let them drive through. And
 // the in-between is BANNED: a post peeking a few cm past the kerb would carry a
-// collision disc far bigger than its visible sliver — "the invisible pole". Placement
-// must leave every post clearly out (≥ POST_CLEAR margin) or clearly in (a ≥ POST_DEEP
-// visible obstacle, pole-covered). Recompute the corridor test here from the builder's
-// own outputs.
+// collision disc far bigger than its visible sliver — "the invisible pole". Intrusion
+// is LATERAL, counted only at samples the post is ABEAM of (tangential offset within
+// its footprint + sampling slack): the RADIAL distance a strand climbing over its own
+// support measures to the pillar under its deck fabricated "deep intruders" two units
+// down the road and planted collision poles mid-road on the approach (shipped on
+// Sidewinder; retired Crossover had one dead-centre). Mirrors TrackBuilder's
+// postAtSample.
+const postsOf = (t) => [
+  ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
+  ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
+];
+const lateralIntrusion = (sm, post) => {
+  const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
+  const tl = Math.hypot(sm.tangent.x, sm.tangent.z) || 1;
+  if (Math.abs((dx * sm.tangent.x + dz * sm.tangent.z) / tl) > post.radius + 0.35) return null; // not abeam
+  const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
+  return sm.width / 2 + post.radius - Math.abs((dx * sm.lateral.x + dz * sm.lateral.z) / ll);
+};
+// Every autoPole's (s, lat) must reconstruct to a REAL post's footprint — a collision
+// pole with no visible column at its world position IS the invisible pole.
+const assertPolesReconstruct = (t, name) => {
+  const posts = postsOf(t);
+  for (const ap of t.autoPoles) {
+    const f = t.centerline.sampleAt(ap.s);
+    const px = f.pos.x + f.lateral.x * ap.lat, pz = f.pos.z + f.lateral.z * ap.lat;
+    const bd = Math.min(Infinity, ...posts.map((p) => Math.hypot(p.x - px, p.z - pz)));
+    assert.ok(bd <= ap.radius + 0.4,
+      `track "${name}": autoPole @ s=${ap.s.toFixed(1)} lat=${ap.lat.toFixed(2)} reconstructs ${bd.toFixed(2)} from any post — an invisible pole`);
+  }
+};
+
 test('support posts are clearly out of the corridor or visibly in it with a collision pole', () => {
-  let covered = 0;
   for (const [name, def] of Object.entries(TRACKS)) {
     const t = buildTrack(def);
     const ss = t.centerline.samples;
-    const posts = [
-      ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
-      ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
-    ];
-    for (const post of posts) {
+    for (const post of postsOf(t)) {
       let peak = -Infinity;
       for (const sm of ss) {
         if (sm.up.y < 0.9) continue;
         if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue;
-        const d = Math.hypot(post.x - sm.pos.x, post.z - sm.pos.z);
-        const intr = sm.width / 2 + post.radius - d;
+        const intr = lateralIntrusion(sm, post);
+        if (intr == null) continue;
         peak = Math.max(peak, intr);
         if (intr < 0.45) continue;
         // deeply obstructed sample → an autoPole must sit on this strand within reach
@@ -546,19 +568,61 @@ test('support posts are clearly out of the corridor or visibly in it with a coll
           return ds < 4 && ap.ghost;
         });
         assert.ok(hit, `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) obstructs the road at s=${sm.s.toFixed(1)} with no collision pole`);
-        covered++;
       }
       assert.ok(peak <= 0.02 || peak >= 0.45,
         `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) grazes a corridor by ${peak.toFixed(2)} — the invisible-pole sliver zone`);
     }
-    // every autoPole itself sits within some corridor (no stray phantom collisions)
-    for (const ap of t.autoPoles) {
-      assert.ok(Math.abs(ap.lat) < t.roadWidth, `track "${name}": autoPole lat ${ap.lat.toFixed(2)} is outside any plausible corridor`);
-    }
+    assertPolesReconstruct(t, name);
   }
-  // the known deep intruder (retired crossover's on-road pillar) keeps this test
-  // honest — if placement changes ever drop to zero obstructions, that's suspicious.
-  assert.ok(covered > 0, 'expected at least one corridor-obstructing support across the catalogue');
+});
+
+// THE PHANTOM-POLE REGRESSION. Sidewinder (live, Canyon Cup) and retired Crossover each
+// shipped one collision pole with no post at its world position: a pillar under the
+// strand's own rising/falling deck, whose ground-level approach re-entered the pillar's
+// height band 2+ units down the road — the radial intrusion measure read that as a deep
+// on-road obstruction and planted an invisible mid-lane pole. Neither track has any
+// corridor-blocking post, so neither may emit collision poles at all.
+test('no phantom poles under a strand climbing over its own supports', () => {
+  for (const name of ['sidewinder', 'crossover']) {
+    const t = buildTrack(TRACKS[name]);
+    assert.equal(t.autoPoles.length, 0,
+      `track "${name}": expected zero autoPoles (its pillars all stand under their own deck), got ${t.autoPoles.length}`);
+  }
+});
+
+// DEEP-INTRUDER FIXTURE. No shipped track keeps a post inside a corridor (placement's
+// keep-outs make that band deliberately narrow: only a road 0.8–1.0 below a pillared
+// deck can host one), so prove emission still works on a synthetic layout built to hit
+// it: a bridge deck (y=0.9 plan → 1.8 world) runs parallel 2.2 world beside a lower
+// road (0.9 world — inside the band), so pillar feet stand 0.8 deep in the lower
+// corridor. Every pole must sit AT its visible column, kerbside of the lower lane.
+test('a pillar standing in a corridor emits its collision pole at the visible column', () => {
+  const FIXTURE = { waypoints: [
+    { x: 0, z: 0, y: 0 },
+    { x: 10, z: 0, y: 0.225 },
+    { x: 20, z: 0, y: 0.45 },
+    { x: 30, z: 0, y: 0.45 },
+    { x: 40, z: 0, y: 0.45 },
+    { x: 50, z: 0, y: 0.45 },
+    { x: 60, z: 0, y: 0.45 },
+    { x: 72, z: 6, y: 0.3 },
+    { x: 78, z: 18, y: 0.75 },
+    { x: 72, z: 30, y: 0.9 },
+    { x: 58, z: 16, y: 0.9, bridge: true },
+    { x: 45, z: 1.1, y: 0.9, bridge: true },
+    { x: 35, z: 1.1, y: 0.9, bridge: true },
+    { x: 25, z: 1.1, y: 0.9, bridge: true },
+    { x: 15, z: 1.1, y: 0.9, bridge: true },
+    { x: 5, z: 6, y: 0.3 },
+    { x: -8, z: 14, y: 0.3 },
+    { x: -12, z: 8, y: 0.1 },
+    { x: -8, z: 2, y: 0 },
+  ] };
+  const t = buildTrack(FIXTURE);
+  assert.ok(t.pillars.length > 0, 'fixture should stand bridge pillars');
+  assert.ok(t.autoPoles.length >= 5, `fixture's parallel run should emit collision poles (got ${t.autoPoles.length})`);
+  assert.ok(t.autoPoles.every((ap) => ap.ghost), 'auto-emitted poles are ghosts (drawn as the pillar itself)');
+  assertPolesReconstruct(t, 'deep-intruder fixture');
 });
 
 // SURFACE OVERLAP. The 3D strand gate below tolerates two strands 1.5 apart — fine for
