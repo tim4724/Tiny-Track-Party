@@ -29,8 +29,11 @@ test('host can still start after the display reloads (lobby track desync repair)
   await expect(page.locator('#players')).toContainText('Alice'); // roster re-synced
   await expect(page.locator('#players')).toContainText('Bob');
 
-  // The reloaded display starts with no track; the host must re-assert its pick.
+  // The reloaded display starts with no track; the host must re-assert its pick —
+  // the full MODE (cup/random/track), not just a track id, so the repair restores
+  // what Start will actually run.
   await page.waitForFunction(hasTrack, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__net.mode != null, null, { timeout: 10000 });
 
   // The whole point: pressing Start now actually flips the display into the race
   // (before the repair it was enabled here but a silent no-op on the display).
