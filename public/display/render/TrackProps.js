@@ -143,10 +143,58 @@ export class TrackProps {
   // Rebuild everything for a new track layout. `theme` is the resolved cup biome
   // (see SceneRenderer.setTrack) — hazards read it so the beach cup's slicks
   // render as water puddles ringed with wet-floor signs instead of oil + cones.
-  setTrack(track, theme) {
-    this._buildHazards(track, theme);
+  // `conform` is the renderer's road-snap raycast ((pt, up, out) → out on the deck,
+  // or null off-track); the slick decals bake it into their geometry at build.
+  setTrack(track, theme, conform) {
+    this._buildHazards(track, theme, conform);
     this._buildProps(track);
     this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in sync)
+  }
+
+  // Road-conformed disc (r0 = 0) or annulus (r0 > 0) for the slick decals, built in
+  // WORLD space. A flat CircleGeometry is tangent to the road only at its centre, so
+  // on any crest/dip/bank the deck rose through it (clipping) — and the old fix, a
+  // 0.02 lift, read as hovering from the low chase cam. Instead lay the vertices out
+  // on the tangent plane and drop EACH one onto the deck along the sample's up — the
+  // boost disk's per-frame conform (SceneRenderer._roadHitAlong), but done ONCE here:
+  // hazards are static, so the bent sheet bakes into the geometry for free. The
+  // basis is right = lateral, fwd = up × right (right-handed, so triangles wound
+  // CCW seen from +up face the sky); a vertex past the road edge keeps its tangent-
+  // plane position (conform → null), matching the flat disc's old edge behaviour.
+  _conformedSheet(centre, right, up, r0, r1, segs, bands, conform) {
+    const fwd = new THREE.Vector3().crossVectors(up, right).normalize();
+    const pt = new THREE.Vector3(), out = new THREE.Vector3();
+    const disc = r0 === 0;                     // disc: centre vertex + fan; annulus: bands only
+    const loops = [];                          // radii of the vertex loops, inner → outer
+    for (let k = disc ? 1 : 0; k <= bands; k++) loops.push(r0 + (r1 - r0) * (k / bands));
+    const verts = [];                          // flat xyz, loop-major; index 0 = centre when disc
+    const snap = () => {
+      if (!conform || !conform(pt, up, out)) out.copy(pt);
+      verts.push(out.x, out.y, out.z);
+    };
+    if (disc) { pt.copy(centre); snap(); }
+    for (const r of loops) {
+      for (let i = 0; i < segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        pt.copy(centre).addScaledVector(right, Math.cos(a) * r).addScaledVector(fwd, Math.sin(a) * r);
+        snap();
+      }
+    }
+    const idx = [];
+    const base = disc ? 1 : 0;                 // first loop's start index
+    if (disc) for (let i = 0; i < segs; i++) idx.push(0, base + i, base + (i + 1) % segs);
+    for (let k = 0; k < loops.length - 1; k++) {
+      const lo = base + k * segs, hi = lo + segs;
+      for (let i = 0; i < segs; i++) {
+        const j = (i + 1) % segs;
+        idx.push(lo + i, hi + i, hi + j, lo + i, hi + j, lo + j);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
   }
 
   // Advance the cosmetic prop animations one frame.
@@ -419,7 +467,9 @@ export class TrackProps {
   // with an `ice` palette (the snow cup) gets a glassy frozen SHEET with a frost rim
   // but keeps the standard cones (the sign swap is beach-only vocabulary). The
   // spin-out mechanic (engine-side) is identical in all three — a slick road slides.
-  _buildHazards(track, theme) {
+  // `conform` (from SceneRenderer via setTrack) bakes every disc/rim vertex onto the
+  // road deck so the sheets bend over crests/banks instead of clipping.
+  _buildHazards(track, theme, conform) {
     this.hazardGroup.traverse((m) => {
       if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
     });
@@ -440,16 +490,19 @@ export class TrackProps {
     const ice = !water && theme && theme.ice;           // snow cup → frozen sheet (cones kept)
     const markerProto = water ? this._wetSignProto() : this.protos.get('item-cone');
     const markerH = water ? WETSIGN_H : CONE_H;
-    const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+    const Y = new THREE.Vector3(0, 1, 0);
     const basis = new THREE.Matrix4(), fwd = new THREE.Vector3();
     for (const h of hz) {
       const radius = h.radius || OIL_RADIUS_FALLBACK;
       const f = cl.sampleAt(h.s);
       const up = f.up.clone().normalize();
+      const centre = f.pos.clone().addScaledVector(f.lateral, h.lat || 0);
       // slick disc — laid FLUSH on the road (no vertical lift, which reads as hovering
       // from the low chase cam) and pulled forward in depth by polygonOffset so it never
       // z-fights the road tiles (same trick as the skid decals; renderOrder stacks the
-      // coplanar disc/foam layers).
+      // coplanar disc/foam layers). The geometry is road-CONFORMED (_conformedSheet):
+      // each vertex baked onto the deck, so the sheet bends over crests/banks instead
+      // of a flat disc clipping through them.
       const discMat = water
         // A turquoise WATER puddle: the beach's shallow-sea tint, translucent so the
         // road grain shows through (it's a wet sheet, not a hole). Lighter and more
@@ -475,28 +528,28 @@ export class TrackProps {
             transparent: true, opacity: 0.7, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
           });
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 36), discMat);
+      // 3 radial bands × 36 segments (~110 verts) bend cleanly over any crest a
+      // puddle-sized patch can span; built in world space (identity transform).
+      const disc = new THREE.Mesh(this._conformedSheet(centre, f.lateral, up, 0, radius, 36, 3, conform), discMat);
       disc.userData.owned = true; // disc owns its geometry+material (dispose on rebuild)
-      disc.position.copy(f.pos).addScaledVector(f.lateral, h.lat); // FLUSH on the road (no lift → no hover); polygonOffset+depthWrite:false handle z-fighting
-      disc.quaternion.setFromUnitVectors(Z, up); // CircleGeometry faces +Z → lay it in the road plane
+      disc.matrixAutoUpdate = false; // vertices are baked in world space
       disc.receiveShadow = true;
       disc.renderOrder = -2; // below the foam rim (-1); both under the cars' skid decals
       this.hazardGroup.add(disc);
       // a rim ring so the slick reads as a feature with an edge, not just a tinted
       // patch: foam shore on the water puddle, rime frost on the ice sheet. Same
-      // flat-on-road placement as the disc, drawn on top.
+      // flush, road-conformed treatment as the disc, drawn on top.
       if (water || ice) {
         const rim = new THREE.Mesh(
-          new THREE.RingGeometry(radius * 0.82, radius, 40),
+          this._conformedSheet(centre, f.lateral, up, radius * 0.82, radius, 40, 1, conform),
           new THREE.MeshBasicMaterial({
             color: water ? water.foam : ice.frost, transparent: true, opacity: 0.5, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
           })
         );
         rim.userData.owned = true;
-        rim.position.copy(disc.position); // flush with the disc; its stronger polygonOffset (below) paints it on top
-        rim.quaternion.copy(disc.quaternion);
-        rim.renderOrder = -1;
+        rim.matrixAutoUpdate = false;
+        rim.renderOrder = -1; // its stronger polygonOffset paints it over the coplanar disc
         this.hazardGroup.add(rim);
       }
       // markers ringing the slick. Phase by half a step so a 4-marker ring lands on

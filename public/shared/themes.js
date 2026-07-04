@@ -91,8 +91,9 @@
 //                                       trackside — skipped if no safe spot exists) |
 //                                       'snowman' (trackside greeter) | 'blocks'
 //                                       (stacked giant alphabet blocks) | 'duck'
-//                                       (bath-toy duck watching the race). Procedural
-//                                       toy geometry, no assets.
+//                                       (bath-toy duck watching the race) | 'ball'
+//                                       (panelled play ball). Procedural toy
+//                                       geometry, no assets.
 //   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed,
 //                                       flap, flapHz } — soaring silhouettes, each
 //                                       circling its own roost on a ring of radius rc
@@ -343,7 +344,7 @@ export const THEMES = {
       skirt: 0xc25e14,             // darker plastic underside/sides
     },
     structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
-    landmark: ['blocks', 'duck'], // alphabet-block stack + a bath-toy duck spectator
+    landmark: ['blocks', 'duck', 'ball'], // alphabet-block stack, bath-toy duck spectator, panelled play ball
     gate: 0xfff3e2, // warm indoor-light gate grade
     scenery: {
       // No trees indoors — the "boulder" channel does all the work: faceted

@@ -563,6 +563,7 @@ export function buildLoopPoles(R, track, theme) {
 //   'snowman'    — trackside greeter just off the racing line (snow)
 //   'blocks'     — stacked giant alphabet blocks trackside (playroom)
 //   'duck'       — a bath-toy duck watching the race (playroom)
+//   'ball'       — a panelled play ball settled askew trackside (playroom)
 // A landmark that can't find a safe spot simply doesn't spawn (hoodoo/snowman scan;
 // the offshore pair always can). Placement is deterministic per track — same every load.
 
@@ -833,20 +834,84 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(g, hex, shade));
       };
       const body = new THREE.IcosahedronGeometry(1.5, 1);
-      body.scale(1.05, 0.8, 1.3);
-      part(body, 0, 1.15, -0.2, YELLOW);                        // hull, settled on the floor
+      body.scale(1.1, 0.82, 1.35);
+      part(body, 0, 1.2, -0.2, YELLOW);                         // chesty hull, settled on the floor
+      for (const sd of [-1, 1]) {                               // wing slabs against the hull
+        const wing = new THREE.IcosahedronGeometry(0.8, 1);
+        wing.scale(0.3, 0.66, 1.2);                             // flattened along the side, swept long
+        wing.rotateX(-0.38);                                    // rear tip sweeps up
+        wing.rotateZ(sd * 0.22);                                // top edge tucks into the hull
+        part(wing, sd * 1.44, 1.55, -0.45, YELLOW, 0.94);       // a shade darker → reads as a part, not a lump
+      }
       const tail = new THREE.ConeGeometry(0.55, 1.1, 6);
       tail.rotateX(-Math.PI / 2 - 0.65);                        // flicks up and aft
       part(tail, 0, 1.75, -1.85, YELLOW, 0.98);
       const head = new THREE.IcosahedronGeometry(0.85, 1);
       part(head, 0, 2.85, 0.75, YELLOW, 1.02);
-      const bill = new THREE.ConeGeometry(0.34, 0.75, 7);
+      // bill: wide flattened upper + a slimmer lower lip under it — the two-tier
+      // silhouette is what reads "duck bill" rather than "beak" at TV distance
+      const bill = new THREE.ConeGeometry(0.36, 0.8, 7);
       bill.rotateX(Math.PI / 2);                                // cone +Y → +Z, toward the road
-      bill.scale(1, 0.5, 1);                                    // flattened duck bill
-      part(bill, 0, 2.72, 1.6, BILL);
-      for (const ex of [-0.34, 0.34]) {                         // eyes
-        part(new THREE.IcosahedronGeometry(0.1, 0), ex, 3.12, 1.3, 0x343a44);
+      bill.scale(1, 0.5, 1);
+      part(bill, 0, 2.76, 1.62, BILL);
+      const lip = new THREE.ConeGeometry(0.26, 0.55, 7);
+      lip.rotateX(Math.PI / 2);
+      lip.scale(1, 0.42, 1);
+      part(lip, 0, 2.58, 1.5, BILL, 0.88);
+      // eyes: white toy-eye balls with dark pupils, centred ON the head surface
+      // (r 0.85 — offsets short of the radius bury a dot inside the head)
+      for (const sd of [-1, 1]) {
+        part(new THREE.IcosahedronGeometry(0.17, 1), sd * 0.41, 3.09, 1.45, 0xf7f5ee);
+        part(new THREE.IcosahedronGeometry(0.085, 0), sd * 0.47, 3.13, 1.56, 0x343a44);
       }
+      break;
+    }
+  }
+
+  if (kinds.includes('ball')) {
+    // Toy play ball (playroom) — the classic panelled beach ball. Panels can't come
+    // from tintGeo (one colour per geometry): paint per-vertex instead, colouring
+    // each TRIANGLE by its centroid's longitude (per-face, so panel edges stay
+    // crisp — per-vertex lerping would smear the seams) with white polar caps.
+    // Both seam families must land ON the sphere's own grid lines or they saw-tooth:
+    // widthSegments is a multiple of the panel count (meridian seams on column
+    // lines) and the caps are cut by centroid LATITUDE at a whole ring (2 of 12),
+    // not by a raw |y| threshold that slices through a triangle row. Painted in the
+    // sphere's local frame, THEN tilted/yawed — a settled ball never sits pole-up,
+    // and the tilt is what makes the panels read.
+    const BR = 1.5; // ball radius (R is the renderer)
+    const PANELS = [0xdf4a3c, 0xf5f2ea, 0x3f6fd1, 0xf5f2ea, 0xf2c14e, 0xf5f2ea]
+      .map((h) => new THREE.Color(h).convertSRGBToLinear());
+    const CAP = new THREE.Color(0xf5f2ea).convertSRGBToLinear();
+    const L = cl.length, step = 3;
+    for (let s = 85; s < L - 10; s += step) { // its own stretch, past the duck (30) and blocks (55)
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // on the floor
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + 4.8);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      if (!isClear(x, z, 2.8)) continue;
+      const g = new THREE.SphereGeometry(BR, 18, 12).toNonIndexed();
+      g.deleteAttribute('uv');
+      const p = g.attributes.position, n = p.count;
+      const col = new Float32Array(n * 3);
+      const CAP_LAT = Math.PI / 6; // 2 of the 12 latitude rings at each pole stay white
+      for (let t = 0; t < n; t += 3) {
+        const cx = (p.getX(t) + p.getX(t + 1) + p.getX(t + 2)) / 3;
+        const cy = (p.getY(t) + p.getY(t + 1) + p.getY(t + 2)) / 3;
+        const cz = (p.getZ(t) + p.getZ(t + 1) + p.getZ(t + 2)) / 3;
+        // centroid polar angle — a triangle row never straddles a ring, so testing
+        // against a ring angle keeps the cap edge a clean circle
+        const lat = Math.acos(cy / Math.sqrt(cx * cx + cy * cy + cz * cz));
+        const c = (lat < CAP_LAT || lat > Math.PI - CAP_LAT) ? CAP
+          : PANELS[Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * PANELS.length) % PANELS.length];
+        for (let v = t; v < t + 3; v++) { col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b; }
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      g.rotateZ(0.35 + rand() * 0.4);      // settled askew — poles off vertical
+      g.rotateY(rand() * Math.PI * 2);
+      g.translate(x, gy + BR * 0.92, z);    // a whisper of settle-sink into the floor
+      geoms.push(g);
       break;
     }
   }

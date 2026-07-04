@@ -1240,7 +1240,17 @@ export class SceneRenderer {
     sc.near = Math.max(0.5, -maxZ - M); sc.far = -minZ + M;
     sc.updateProjectionMatrix();
 
-    this.props.setTrack(track, theme);
+    // Hazard decals conform to the road AT BUILD TIME (they're static): hand props
+    // the same normal-cast raycast the boost disk uses per frame, so a puddle's
+    // vertices bend over crests/banks instead of a flat disc clipping the deck.
+    // Runs after the _collideGrid build above — the cast needs it. Build-time only,
+    // so the shared-scratch discipline of the frame loop doesn't apply; `out` copies
+    // the shared hit before the next cast.
+    this.props.setTrack(track, theme, (pt, up, out) => {
+      this._diskOrigin.copy(pt).addScaledVector(up, BOOST_RAY_UP);
+      const hit = this._roadHitAlong(this._diskOrigin, up, pt);
+      return hit ? out.copy(hit) : null;
+    });
     // Bake the sun shadow ONCE for this static track. The track geometry above is the
     // only shadow caster (cars/boxes/bananas/cones cast no real shadow — they carry
     // ground blobs instead), and both it and the light are fixed, so one render here is
