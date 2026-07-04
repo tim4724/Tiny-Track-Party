@@ -2130,12 +2130,14 @@ export class SceneRenderer {
       h.position.x += 2.2 * dt;
       if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
     }
-    // shoreline breathing: the sea ring swells ±0.4% around its per-track fit
-    // (±~0.4u at the foam line, one lap of the swell every ~14s) — enough motion
-    // to read "water", far too slow to distract
+    // shoreline breathing: the sea ring swells ±1.2% around its per-track fit —
+    // the foam line laps ~1.3u up and down the beach every ~8s (the wet-sand band
+    // rides along as its child, so damp sand "uncovers" as the tide pulls back).
+    // The first cut (±0.4% / 14s) was invisible; this is the smallest amplitude
+    // that clearly reads as moving water from the chase cam.
     if (this._water.visible) {
       this._waterT += dt;
-      const w = (this._water.userData.fit || 1) * (1 + Math.sin(this._waterT * 0.45) * 0.004);
+      const w = (this._water.userData.fit || 1) * (1 + Math.sin(this._waterT * 0.8) * 0.012);
       this._water.scale.set(w, 1, w);
     }
     // snowfall: flakes sink at their own speeds and ride the clouds' eastward wind,

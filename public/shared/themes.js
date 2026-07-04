@@ -75,11 +75,11 @@
 //                                       omit for dry biomes
 //   landmark: (optional)                ONE hero set-piece, placed by rule per track
 //                                       (render/track.js buildLandmarks): 'lighthouse'
-//                                       (on the lowest offshore island) | 'arch' (rock
-//                                       arch spanning a straight, flat, open stretch —
-//                                       skipped if no safe spot exists) | 'snowman'
-//                                       (trackside greeter). Procedural toy geometry,
-//                                       no assets.
+//                                       (on the lowest offshore island) | 'hoodoo'
+//                                       (balanced-rock family trackside at a clear
+//                                       stretch — skipped if no safe spot exists) |
+//                                       'snowman' (trackside greeter). Procedural toy
+//                                       geometry, no assets.
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -219,7 +219,7 @@ export const THEMES = {
       kerb:  [0xc06a42, 0xe3cfa4], // rust / sand
     },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
-    landmark: 'arch', // a rock arch spans the road at one straight, open stretch
+    landmark: 'hoodoo', // balanced-rock family at one clear roadside stretch (a road-spanning arch was rejected)
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the

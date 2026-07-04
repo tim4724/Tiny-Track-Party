@@ -556,9 +556,9 @@ export function buildLoopPoles(R, track, theme) {
 // geometry (faceted primitives, vertex colours, Lambert) merged into a single mesh
 // in trackGroup — a postcard moment, not a scenery system:
 //   'lighthouse' — on the LOWEST offshore island of the horizon ring (beach)
-//   'arch'       — a rock arch spanning the road at a straight, flat, open stretch (canyon)
+//   'hoodoo'     — a balanced-rock family trackside at a clear stretch (canyon)
 //   'snowman'    — trackside greeter just off the racing line (snow)
-// A landmark that can't find a safe spot simply doesn't spawn (arch/snowman scan;
+// A landmark that can't find a safe spot simply doesn't spawn (hoodoo/snowman scan;
 // lighthouse always can). Placement is deterministic per track — same every load.
 
 // Bake a hex colour (× shade) into per-vertex colours — the boulders' tint idiom.
@@ -577,13 +577,16 @@ function tintGeo(g0, hex, shade = 1) {
 }
 
 // The lighthouse: stacked banded tower (the two red bands are the icon), gallery,
-// glowing lamp room, dark cap. ~9.5 units tall — reads as a silhouette on the
-// horizon through the sea haze, crisp from the lobby/gallery orbit.
+// glowing lamp room, dark cap. LH_SCALE sizes the whole build (~16.5 units tall at
+// 1.75) — it stands 130-220u out on its island, so it must read as a proper tower
+// through the sea haze, not a distant peg.
+const LH_SCALE = 1.75;
 function lighthouseGeoms(x, y, z) {
+  const S = LH_SCALE;
   const parts = [];
   const seg = (r0, r1, h, cy, hex, radial = 10) => {
-    const g = new THREE.CylinderGeometry(r0, r1, h, radial);
-    g.translate(x, y + cy, z);
+    const g = new THREE.CylinderGeometry(r0 * S, r1 * S, h * S, radial);
+    g.translate(x, y + cy * S, z);
     parts.push(tintGeo(g, hex));
   };
   const bands = [0xf5efe2, 0xe4604a, 0xf5efe2, 0xe4604a]; // white/coral tower bands
@@ -593,8 +596,8 @@ function lighthouseGeoms(x, y, z) {
   }
   seg(1.05, 1.05, 0.32, 7.76, 0x5c6470); // gallery deck
   seg(0.62, 0.62, 0.85, 8.35, 0xffd98a); // lamp room — warm, reads lit
-  const cap = new THREE.ConeGeometry(0.85, 0.9, 10);
-  cap.translate(x, y + 9.2, z);
+  const cap = new THREE.ConeGeometry(0.85 * S, 0.9 * S, 10);
+  cap.translate(x, y + 9.2 * S, z);
   parts.push(tintGeo(cap, 0xb2453a));
   return parts;
 }
@@ -636,49 +639,44 @@ export function buildLandmarks(R, track, theme) {
     geoms.push(...lighthouseGeoms(best.x * sf, gy + best.top - 0.8, best.z * sf)); // base sunk into the island crown
   }
 
-  if (kind === 'arch') {
-    // Scan for a straight, flat, open stretch: low heading change over ±6u, deck at
-    // ground level, nothing overhead (a crossing deck would thread the arch), clear
-    // of launch pads and the start gate, and both LEG spots clear of every strand.
-    const L = cl.length, step = 2;
-    for (let s = 28; s < L - 28; s += step) {
-      const f0 = cl.sampleAt(s - 6), f1 = cl.sampleAt(s), f2 = cl.sampleAt(s + 6);
-      if (f1.pos.y - gy > 1.6) continue;                       // elevated deck — skip
-      const h0 = Math.atan2(f0.lateral.x, f0.lateral.z), h2 = Math.atan2(f2.lateral.x, f2.lateral.z);
-      let dh = Math.abs(h2 - h0); if (dh > Math.PI) dh = Math.PI * 2 - dh;
-      if (dh > 0.15) continue;                                 // bending — skip
-      if ((track.pads || []).some((p) => Math.min(Math.abs(p.s - s), L - Math.abs(p.s - s)) < 14)) continue;
-      const half = halfOf(f1);
-      const Rr = half + 2.7;                                   // legs land Rr outside the centreline
-      let overhead = false;
-      for (const q of samples) {
-        const dx = q.pos.x - f1.pos.x, dz = q.pos.z - f1.pos.z;
-        if (dx * dx + dz * dz < (Rr + 2) * (Rr + 2) && q.pos.y - f1.pos.y > 1.5) { overhead = true; break; }
+  if (kind === 'hoodoo') {
+    // Balanced-rock hoodoos — the cartoon-desert icon: a tall eroded stem (stacked
+    // tapered drums, waisted toward the top) with a wider boulder balanced on it.
+    // A family of three at staggered heights stands trackside at the first clear,
+    // ground-level spot: a landmark you drive PAST (a road-spanning rock arch was
+    // tried and rejected). Rock tints cycle per drum — echoes the mesa strata.
+    const rocks = (theme.scenery && theme.scenery.rocks) || [0xc07a55, 0xa8623f, 0xd39a70];
+    const hoodoo = (hx, hz, T) => { // T = total height
+      const R = [0.20, 0.15, 0.115, 0.095].map((k) => k * T); // drum radii, bottom → waist
+      const H = [0.30, 0.24, 0.19].map((k) => k * T);         // drum heights (stem ≈ 0.73 T)
+      let cy = 0;
+      for (let li = 0; li < 3; li++) {
+        const g = new THREE.CylinderGeometry(R[li + 1], R[li], H[li], 8);
+        g.rotateY(rand() * Math.PI * 2); // vary facet phase per drum
+        g.translate(hx, gy + cy + H[li] / 2 - 0.15, hz); // first drum sunk into the dirt
+        geoms.push(tintGeo(g, rocks[li % rocks.length], 0.9 + rand() * 0.18));
+        cy += H[li];
       }
-      if (overhead) continue;
-      const lx = f1.pos.x + f1.lateral.x * Rr, lz = f1.pos.z + f1.lateral.z * Rr;
-      const rx = f1.pos.x - f1.lateral.x * Rr, rz = f1.pos.z - f1.lateral.z * Rr;
-      if (!isClear(lx, lz, 1.8) || !isClear(rx, rz, 1.8)) continue;
-      // Faceted half-torus straddling the road, rock-tinted with per-facet shade
-      // jitter (the boulders' look at architectural scale). Upright regardless of
-      // any road bank — it's geology, not track furniture.
-      const g = new THREE.TorusGeometry(Rr, 1.15, 7, 11, Math.PI).toNonIndexed();
-      g.deleteAttribute('uv');
-      g.computeVertexNormals();
-      const rocks = (theme.scenery && theme.scenery.rocks) || [0xc07a55, 0xa8623f];
-      const n = g.attributes.position.count;
-      const arr = new Float32Array(n * 3);
-      const c = new THREE.Color();
-      for (let v = 0; v < n; v += 3) { // one tint per facet — flat-shaded rock
-        c.set(rocks[Math.floor(rand() * rocks.length)]).convertSRGBToLinear().multiplyScalar(0.9 + rand() * 0.2);
-        for (let k = 0; k < 3; k++) { arr[(v + k) * 3] = c.r; arr[(v + k) * 3 + 1] = c.g; arr[(v + k) * 3 + 2] = c.b; }
-      }
-      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-      const yaw = Math.atan2(f1.lateral.x, f1.lateral.z);
-      g.rotateY(yaw + Math.PI / 2);      // torus plane (XY) → stand across the road's lateral
-      g.translate(f1.pos.x, f1.pos.y - 0.25, f1.pos.z); // feet planted just below deck level
-      geoms.push(g);
-      break; // one arch is a landmark; two is a theme park
+      const cap = new THREE.IcosahedronGeometry(0.24 * T, 0); // the balanced boulder — wider than the waist
+      cap.scale(1, 0.62, 0.88);
+      cap.rotateY(rand() * Math.PI * 2);
+      cap.translate(hx, gy + cy + 0.1 * T - 0.15, hz);
+      geoms.push(tintGeo(cap, rocks[Math.floor(rand() * rocks.length)], 0.95 + rand() * 0.15));
+    };
+    const L = cl.length, step = 3;
+    for (let s = 35; s < L - 10; s += step) {
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // ground-level roadside only
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + 6.5);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      // the cluster spreads ~±4u around the anchor — clear the whole footprint
+      if (!isClear(x, z, 5)) continue;
+      const tx = f.tangent ? f.tangent.x : -f.lateral.z, tz = f.tangent ? f.tangent.z : f.lateral.x;
+      hoodoo(x, z, 8.6);                                              // the tall one
+      hoodoo(x + tx * 3.8 + f.lateral.x * side * 1.6, z + tz * 3.8 + f.lateral.z * side * 1.6, 5.4);
+      hoodoo(x - tx * 3.2 + f.lateral.x * side * 2.2, z - tz * 3.2 + f.lateral.z * side * 2.2, 3.6);
+      break; // one family is a landmark; a forest of them is scenery
     }
   }
 
@@ -725,7 +723,7 @@ export function buildLandmarks(R, track, theme) {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const mesh = new THREE.Mesh(merged, mat);
   mesh.matrixAutoUpdate = false;
-  mesh.castShadow = kind === 'arch'; // the arch throws a real band across the road (baked once); the others' shadows land on non-receiving ground
+  mesh.castShadow = false; // trackside/offshore — their sun shadows would land on the non-receiving ground
   mesh.receiveShadow = false;
   R.trackGroup.add(mesh);
   R._mergedGeoms.push(merged);
