@@ -787,8 +787,8 @@ export function buildLandmarks(R, track, theme) {
         [0, 0, off, p, p, t], [0, 0, -off, p, p, t],   // ±z sides
         [0, off, 0, p, t, p],                          // top
       ];
-      for (const [px, py, pz, sx, sYY, sz] of plates) {
-        const plate = new THREE.BoxGeometry(sx, sYY, sz);
+      for (const [px, py, pz, sx, sy, sz] of plates) {
+        const plate = new THREE.BoxGeometry(sx, sy, sz);
         plate.translate(px, py, pz);
         plate.rotateY(yaw);
         plate.translate(bx, gy + cy + size / 2, bz);
@@ -899,8 +899,8 @@ export function buildLandmarks(R, track, theme) {
         const cz = (p.getZ(t) + p.getZ(t + 1) + p.getZ(t + 2)) / 3;
         // centroid polar angle — a triangle row never straddles a ring, so testing
         // against a ring angle keeps the cap edge a clean circle
-        const lat = Math.acos(cy / Math.sqrt(cx * cx + cy * cy + cz * cz));
-        const c = (lat < CAP_LAT || lat > Math.PI - CAP_LAT) ? CAP
+        const polar = Math.acos(cy / Math.sqrt(cx * cx + cy * cy + cz * cz));
+        const c = (polar < CAP_LAT || polar > Math.PI - CAP_LAT) ? CAP
           : PANELS[Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * PANELS.length) % PANELS.length];
         for (let v = t; v < t + 3; v++) { col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b; }
       }
