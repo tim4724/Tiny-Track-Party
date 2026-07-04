@@ -654,24 +654,39 @@ export function buildLandmarks(R, track, theme) {
     const bx = Math.cos(ba) * br, bz = Math.sin(ba) * br;
     const wy = gy + 0.12; // the water sheet's lift (see environment WATER_LIFT)
     const yaw = rand() * Math.PI * 2;
-    const cy2 = Math.cos(yaw), sy2 = Math.sin(yaw);
-    // hull: a toy-red box riding low in the water, nosed by the yaw
-    const hull = new THREE.BoxGeometry(5.2, 1.1, 1.8);
-    hull.rotateY(yaw);
-    hull.translate(bx, wy + 0.28, bz);
-    geoms.push(tintGeo(hull, 0xd94f3d));
-    // mast + a thin 3-sided cone squashed into a triangular white sail
-    const mast = new THREE.CylinderGeometry(0.09, 0.09, 5.0, 6);
-    mast.translate(bx + cy2 * 0.4, wy + 2.8, bz - sy2 * 0.4);
-    geoms.push(tintGeo(mast, 0x8a6f4d));
-    // Sail: a slender 3-sided cone, only mildly flattened — a paper-thin sail
-    // vanishes when seen edge-on, and the boat must read from EVERY bearing
-    // (cameras circle the whole island).
-    const sail = new THREE.ConeGeometry(1.45, 3.9, 3);
-    sail.scale(1, 1, 0.45);
-    sail.rotateY(yaw);
-    sail.translate(bx - cy2 * 1.0, wy + 2.9, bz + sy2 * 1.0);
-    geoms.push(tintGeo(sail, 0xf7f5ee));
+    // Parts are authored in the boat's LOCAL frame (+Z = bow, origin at the
+    // waterline under the mast), then heeled a few degrees — a sailing boat
+    // leans — and swung to the anchorage bearing. Toy sloop anatomy: red hull
+    // with a pointed bow wedge and a white gunwale stripe, cream cabin, mast,
+    // main sail + jib (both slender 3-sided cones, only mildly flattened — a
+    // paper-thin sail vanishes edge-on and the cameras circle the whole
+    // island), and a little pennant at the masthead.
+    const HEEL = 0.09;
+    const part = (g, lx, ly, lz, hex) => {
+      g.translate(lx, ly, lz);
+      g.rotateZ(HEEL);
+      g.rotateY(yaw);
+      g.translate(bx, wy, bz);
+      geoms.push(tintGeo(g, hex));
+    };
+    part(new THREE.BoxGeometry(1.8, 1.0, 4.6), 0, 0.28, -0.5, 0xd94f3d);   // hull
+    const bow = new THREE.ConeGeometry(0.9, 1.7, 4);                        // 4-sided pyramid...
+    bow.rotateX(Math.PI / 2);                                               // ...apex swung to +Z
+    bow.scale(1, 0.55, 1);                                                  // diamond squashed to hull height
+    part(bow, 0, 0.28, 2.6, 0xd94f3d);                                      // pointed prow
+    part(new THREE.BoxGeometry(1.92, 0.2, 4.7), 0, 0.82, -0.5, 0xf7f5ee);   // gunwale stripe
+    part(new THREE.BoxGeometry(1.1, 0.6, 1.4), 0, 1.15, -1.3, 0xf3e9d8);    // cabin
+    part(new THREE.CylinderGeometry(0.09, 0.09, 5.6, 6), 0, 3.6, 0.3, 0x8a6f4d); // mast
+    const main = new THREE.ConeGeometry(1.6, 4.4, 3);
+    main.scale(1, 1, 0.45);
+    part(main, 0, 3.35, -0.85, 0xf7f5ee);                                   // main sail, aft of the mast
+    const jib = new THREE.ConeGeometry(1.05, 3.1, 3);
+    jib.scale(1, 1, 0.4);
+    part(jib, 0, 2.7, 1.35, 0xfdf8ec);                                      // jib, fore
+    const pennant = new THREE.ConeGeometry(0.26, 0.7, 3);
+    pennant.rotateX(-Math.PI / 2);                                          // streams aft
+    pennant.scale(1, 0.5, 1);
+    part(pennant, 0, 6.35, -0.1, 0xd94f3d);                                 // masthead pennant
   }
 
   if (kinds.includes('hoodoo')) {

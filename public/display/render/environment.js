@@ -341,7 +341,7 @@ function applySnowfall(snow, theme) {
 // variety (roost angle, height offset, phase, speed factor) is baked at build; the
 // theme dresses count/tint/size and sets the shared orbit numbers, which the loop
 // reads from `birds.cfg`.
-const DEF_BIRDS = { count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2 };
+const DEF_BIRDS = { count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8 };
 
 function applyBirds(birds, theme) {
   const b = theme.birds ? { ...DEF_BIRDS, ...theme.birds } : null;

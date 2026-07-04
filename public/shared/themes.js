@@ -80,11 +80,12 @@
 //                                       trackside — skipped if no safe spot exists) |
 //                                       'snowman' (trackside greeter). Procedural toy
 //                                       geometry, no assets.
-//   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed } —
-//                                       soaring silhouettes, each circling its own
-//                                       roost on a ring of radius rc (orbit radius rb,
-//                                       height y); gulls low over the beach shoreline,
-//                                       vultures high over a canyon mesa
+//   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed,
+//                                       flap, flapHz } — soaring silhouettes, each
+//                                       circling its own roost on a ring of radius rc
+//                                       (orbit radius rb, height y). flap = wing-beat
+//                                       depth (1 = busy gull, ~0.15 = soaring vulture)
+//                                       at flapHz beats/s
 //   gate: (optional)                    near-white colour-grade multiplied onto the
 //                                       start/finish gate's colormap (sun-bleach /
 //                                       heat / cold) — a tint, not a repaint
@@ -180,7 +181,7 @@ export const THEMES = {
     },
     structure: 0x9a7b55, // overpass supports stay timber piles — pier flavour without touching the road read
     landmark: ['lighthouse', 'sailboat'], // beacon on the lowest island + a boat in the shallows
-    birds: { count: 4, tint: 0x51616d, size: 2.4, y: 15, rc: 118, rb: 26, speed: 0.22 }, // gulls working the shoreline
+    birds: { count: 4, tint: 0x51616d, size: 3.0, y: 13, rc: 100, rb: 32, speed: 0.26, flap: 1, flapHz: 2.1 }, // gulls working the shoreline, flapping busily
     gate: 0xfff1de, // sun-bleached gate grade
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
@@ -230,7 +231,7 @@ export const THEMES = {
     },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
     landmark: 'hoodoo', // balanced-rock family at one clear roadside stretch (a road-spanning arch was rejected)
-    birds: { count: 2, tint: 0x3a322c, size: 3.1, y: 34, rc: 150, rb: 17, speed: 0.1 }, // vultures riding a thermal over the mesas
+    birds: { count: 2, tint: 0x3a322c, size: 3.6, y: 36, rc: 150, rb: 20, speed: 0.1, flap: 0.15, flapHz: 0.5 }, // vultures riding a thermal — soaring, barely a wing-beat
     gate: 0xffdec2, // hot dusty gate grade
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both

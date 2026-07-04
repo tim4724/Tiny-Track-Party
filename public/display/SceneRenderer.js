@@ -2137,7 +2137,11 @@ export class SceneRenderer {
     }
     // birds: each soars a lazy circle around its authored roost (gulls over the
     // shoreline, vultures over a mesa), with per-bird phase/speed offsets and a
-    // gentle vertical bob. Roost centres follow the hill push-out live.
+    // gentle vertical bob. Roost centres follow the hill push-out live. The
+    // WING-BEAT is a flap envelope on the sprite's height — squashing the glyph
+    // toward a line and back reads as beating wings even at speck size, and the
+    // motion (not the glyph) is what makes a distant sprite read "bird" at all.
+    // cfg.flap = beat depth (gulls ~1 flap busily, vultures ~0.15 mostly soar).
     if (this._birds.cfg) {
       this._birdT += dt;
       const bsf = this._hills ? this._hills.scale.x : 1;
@@ -2151,6 +2155,8 @@ export class SceneRenderer {
           cfg.y + u.dy + Math.sin(ph * 2.3) * 0.9,
           Math.sin(u.a0) * cfg.rc * bsf + Math.sin(ph) * cfg.rb
         );
+        const beat = 0.5 + 0.5 * Math.sin((this._birdT * u.sp * cfg.flapHz + u.ph) * Math.PI * 2);
+        b.scale.y = cfg.size * 0.5 * (1 - cfg.flap * 0.48 * beat);
       }
     }
     // snowfall: flakes sink at their own speeds and ride the clouds' eastward wind,
