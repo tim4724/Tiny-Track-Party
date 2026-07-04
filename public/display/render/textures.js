@@ -209,6 +209,28 @@ function makeBlobShadowTexture() {
   return tex;
 }
 
+// Bird glyph: the classic two-arc soaring silhouette (an "m" of wings), stroked
+// white — the sprite material's colour tints it per biome (slate gulls, dark
+// vultures). Billboarding flattens it, but at 100+ units a gliding bird IS a
+// flat glyph against the sky.
+function makeBirdTexture() {
+  const w = 64, h = 32;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.strokeStyle = 'rgba(255,255,255,1)';
+  ctx.lineWidth = 4.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(6, 22);
+  ctx.quadraticCurveTo(20, 6, 32, 18);  // left wing
+  ctx.quadraticCurveTo(44, 6, 58, 22);  // right wing
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Snowflake dot: a small soft radial puff for the falling-snow Points cloud —
 // crisp core, quick falloff (a flake, not a glow).
 function makeSnowflakeTexture() {
@@ -554,6 +576,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

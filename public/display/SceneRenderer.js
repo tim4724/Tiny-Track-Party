@@ -585,8 +585,9 @@ export class SceneRenderer {
     this._env = env;
     this._clouds = env.clouds; // drifted in _loop
     this._haze = env.haze;     // low dust banks (canyon) — drifted in _loop, pushed out in setTrack
-    this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack; breathes in _loop
-    this._waterT = 0;          // shoreline-breathing phase
+    this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack
+    this._birds = env.birds;   // circling gulls/vultures — stepped in _loop
+    this._birdT = 0;           // shared soaring phase
     this._snowfall = env.snowfall; // falling flakes (snow) — stepped in _loop, spread scaled in setTrack
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
@@ -1069,6 +1070,10 @@ export class SceneRenderer {
     for (const { srcMat, geoms } of buckets.values()) {
       const mat = srcMat.clone();          // shares the proto's colormap texture
       mat.side = THREE.DoubleSide;          // keep mirrored-tile faces drawn + lit
+      // Biome colour-grade on the GLB scenery (today: the start/finish gate).
+      // material.color MULTIPLIES the colormap, so themes use near-white tints —
+      // sun-bleach/heat/cold grades, not repaints. No theme.gate → stays white.
+      if (theme.gate) mat.color.set(theme.gate);
       this._mergedMats.push(mat);
       const addMesh = (geo) => {
         const mesh = new THREE.Mesh(geo, mat);
@@ -1126,7 +1131,7 @@ export class SceneRenderer {
         // starts close enough to survive the race fog from the low chase cam. Floor at
         // 0.5× so a tiny test track doesn't shrink the foam line into invisibility.
         // Headlands intruding past the shoreline become islands — that's the look.
-        // The fit is remembered — _loop multiplies a slow breathing pulse onto it.
+        // (A tidal breathing pulse on this fit was tried and cut — not worth it.)
         const wf = Math.max(0.5, (maxR + 30) / WATER_INNER);
         this._water.userData.fit = wf;
         this._water.scale.set(wf, 1, wf);
@@ -2130,15 +2135,23 @@ export class SceneRenderer {
       h.position.x += 2.2 * dt;
       if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
     }
-    // shoreline breathing: the sea ring swells ±1.2% around its per-track fit —
-    // the foam line laps ~1.3u up and down the beach every ~8s (the wet-sand band
-    // rides along as its child, so damp sand "uncovers" as the tide pulls back).
-    // The first cut (±0.4% / 14s) was invisible; this is the smallest amplitude
-    // that clearly reads as moving water from the chase cam.
-    if (this._water.visible) {
-      this._waterT += dt;
-      const w = (this._water.userData.fit || 1) * (1 + Math.sin(this._waterT * 0.8) * 0.012);
-      this._water.scale.set(w, 1, w);
+    // birds: each soars a lazy circle around its authored roost (gulls over the
+    // shoreline, vultures over a mesa), with per-bird phase/speed offsets and a
+    // gentle vertical bob. Roost centres follow the hill push-out live.
+    if (this._birds.cfg) {
+      this._birdT += dt;
+      const bsf = this._hills ? this._hills.scale.x : 1;
+      const cfg = this._birds.cfg;
+      for (const b of this._birds) {
+        if (!b.visible) continue;
+        const u = b.userData;
+        const ph = u.ph + this._birdT * cfg.speed * u.sp;
+        b.position.set(
+          Math.cos(u.a0) * cfg.rc * bsf + Math.cos(ph) * cfg.rb,
+          cfg.y + u.dy + Math.sin(ph * 2.3) * 0.9,
+          Math.sin(u.a0) * cfg.rc * bsf + Math.sin(ph) * cfg.rb
+        );
+      }
     }
     // snowfall: flakes sink at their own speeds and ride the clouds' eastward wind,
     // wrapping within the authored spread (the mesh scale handles big circuits)

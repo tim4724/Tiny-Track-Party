@@ -30,9 +30,8 @@
 //                                       → deep radial gradient out to the fog. The hills
 //                                       rise out of it as headlands/islands. Fitted per
 //                                       track alongside the hill push-out, so the tide
-//                                       never floods a large circuit; the shoreline
-//                                       BREATHES (a slow ±0.4% swell) and `wet` tints
-//                                       the damp-sand band hugging the waterline.
+//                                       never floods a large circuit; `wet` tints the
+//                                       damp-sand band hugging the waterline.
 //   haze: (optional)                    { count ≤5, opacity, tint, scale } low, wide
 //                                       dust/mist banks drifting at hill height (the
 //                                       cloud sprites' ground-level sibling); omit for
@@ -73,13 +72,22 @@
 //   snowfall: (optional)                { count ≤900, size, tint } — falling flakes
 //                                       (one Points cloud) drifting over the play field;
 //                                       omit for dry biomes
-//   landmark: (optional)                ONE hero set-piece, placed by rule per track
-//                                       (render/track.js buildLandmarks): 'lighthouse'
-//                                       (on the lowest offshore island) | 'hoodoo'
-//                                       (balanced-rock family trackside at a clear
-//                                       stretch — skipped if no safe spot exists) |
+//   landmark: (optional)                hero set-piece kind or array of kinds, placed
+//                                       by rule per track (render/track.js build-
+//                                       Landmarks): 'lighthouse' (on the lowest off-
+//                                       shore island) | 'sailboat' (anchored in the
+//                                       shallows) | 'hoodoo' (balanced-rock family
+//                                       trackside — skipped if no safe spot exists) |
 //                                       'snowman' (trackside greeter). Procedural toy
 //                                       geometry, no assets.
+//   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed } —
+//                                       soaring silhouettes, each circling its own
+//                                       roost on a ring of radius rc (orbit radius rb,
+//                                       height y); gulls low over the beach shoreline,
+//                                       vultures high over a canyon mesa
+//   gate: (optional)                    near-white colour-grade multiplied onto the
+//                                       start/finish gate's colormap (sun-bleach /
+//                                       heat / cold) — a tint, not a repaint
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -171,7 +179,9 @@ export const THEMES = {
       asphalt: 0x6c6a74,
     },
     structure: 0x9a7b55, // overpass supports stay timber piles — pier flavour without touching the road read
-    landmark: 'lighthouse', // white-and-coral tower on the lowest offshore island
+    landmark: ['lighthouse', 'sailboat'], // beacon on the lowest island + a boat in the shallows
+    birds: { count: 4, tint: 0x51616d, size: 2.4, y: 15, rc: 118, rb: 26, speed: 0.22 }, // gulls working the shoreline
+    gate: 0xfff1de, // sun-bleached gate grade
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
@@ -220,6 +230,8 @@ export const THEMES = {
     },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
     landmark: 'hoodoo', // balanced-rock family at one clear roadside stretch (a road-spanning arch was rejected)
+    birds: { count: 2, tint: 0x3a322c, size: 3.1, y: 34, rc: 150, rb: 17, speed: 0.1 }, // vultures riding a thermal over the mesas
+    gate: 0xffdec2, // hot dusty gate grade
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the
@@ -273,6 +285,7 @@ export const THEMES = {
       kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
     snowfall: { count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    gate: 0xdfe9f6, // cold-cast gate grade
     landmark: 'snowman', // trackside greeter just off the racing line
   },
 };

@@ -551,15 +551,17 @@ export function buildLoopPoles(R, track, theme) {
   R._mergedMats.push(mat);
 }
 
-// ── Landmarks — ONE hero set-piece per biome (theme.landmark), placed by rule like
-// the loop launch pads, never hand-placed per track. Each is pure procedural toy
-// geometry (faceted primitives, vertex colours, Lambert) merged into a single mesh
-// in trackGroup — a postcard moment, not a scenery system:
+// ── Landmarks — hero set-pieces per biome (theme.landmark: one kind or an array),
+// placed by rule like the loop launch pads, never hand-placed per track. Each is
+// pure procedural toy geometry (faceted primitives, vertex colours, Lambert), all
+// kinds merged into a single mesh in trackGroup — postcard moments, not a scenery
+// system:
 //   'lighthouse' — on the LOWEST offshore island of the horizon ring (beach)
+//   'sailboat'   — anchored offshore, out in the shallows (beach)
 //   'hoodoo'     — a balanced-rock family trackside at a clear stretch (canyon)
 //   'snowman'    — trackside greeter just off the racing line (snow)
 // A landmark that can't find a safe spot simply doesn't spawn (hoodoo/snowman scan;
-// lighthouse always can). Placement is deterministic per track — same every load.
+// the offshore pair always can). Placement is deterministic per track — same every load.
 
 // Bake a hex colour (× shade) into per-vertex colours — the boulders' tint idiom.
 // Also normalises the geometry for the landmark merges: non-indexed, no uv, so
@@ -603,9 +605,9 @@ function lighthouseGeoms(x, y, z) {
 }
 
 export function buildLandmarks(R, track, theme) {
-  const kind = theme.landmark;
+  const kinds = theme.landmark ? [].concat(theme.landmark) : [];
   const cl = track.centerline;
-  if (!kind || !cl || !cl.samples.length) return;
+  if (!kinds.length || !cl || !cl.samples.length) return;
   // Deterministic per-track stream, seeded like buildScenery (facet shading etc.).
   let seed = 51966;
   const idStr = String(track.id || track.name || '') + Math.round(cl.length * 100);
@@ -627,7 +629,7 @@ export function buildLandmarks(R, track, theme) {
   const gy = R.ground.position.y;
   const geoms = [];
 
-  if (kind === 'lighthouse') {
+  if (kinds.includes('lighthouse')) {
     // The LOWEST island: the tower dominates the silhouette instead of poking out
     // of a tall dune. Anchors are authored coords — scale XZ by the hills' push-out
     // (setTrack has already fitted the ring when this runs).
@@ -639,7 +641,40 @@ export function buildLandmarks(R, track, theme) {
     geoms.push(...lighthouseGeoms(best.x * sf, gy + best.top - 0.8, best.z * sf)); // base sunk into the island crown
   }
 
-  if (kind === 'hoodoo') {
+  if (kinds.includes('sailboat')) {
+    // Anchored out in the shallows, a third of the way round from the lighthouse's
+    // island so the two never share a sight-line. Radius = the per-track shoreline
+    // fit (set just above in setTrack) + a margin into open water.
+    const anchors = (R._hills && R._hills.userData.anchors) || [];
+    const fit = (R._water && R._water.userData.fit) || 1;
+    let low = anchors[0];
+    for (const a of anchors) if (a.top < low.top) low = a;
+    const ba = (low ? Math.atan2(low.z, low.x) : 0) + 2.3;
+    const br = fit * 135 + 22; // WATER_INNER-derived shoreline + open-water margin
+    const bx = Math.cos(ba) * br, bz = Math.sin(ba) * br;
+    const wy = gy + 0.12; // the water sheet's lift (see environment WATER_LIFT)
+    const yaw = rand() * Math.PI * 2;
+    const cy2 = Math.cos(yaw), sy2 = Math.sin(yaw);
+    // hull: a toy-red box riding low in the water, nosed by the yaw
+    const hull = new THREE.BoxGeometry(5.2, 1.1, 1.8);
+    hull.rotateY(yaw);
+    hull.translate(bx, wy + 0.28, bz);
+    geoms.push(tintGeo(hull, 0xd94f3d));
+    // mast + a thin 3-sided cone squashed into a triangular white sail
+    const mast = new THREE.CylinderGeometry(0.09, 0.09, 5.0, 6);
+    mast.translate(bx + cy2 * 0.4, wy + 2.8, bz - sy2 * 0.4);
+    geoms.push(tintGeo(mast, 0x8a6f4d));
+    // Sail: a slender 3-sided cone, only mildly flattened — a paper-thin sail
+    // vanishes when seen edge-on, and the boat must read from EVERY bearing
+    // (cameras circle the whole island).
+    const sail = new THREE.ConeGeometry(1.45, 3.9, 3);
+    sail.scale(1, 1, 0.45);
+    sail.rotateY(yaw);
+    sail.translate(bx - cy2 * 1.0, wy + 2.9, bz + sy2 * 1.0);
+    geoms.push(tintGeo(sail, 0xf7f5ee));
+  }
+
+  if (kinds.includes('hoodoo')) {
     // Balanced-rock hoodoos — the cartoon-desert icon: a tall eroded stem (stacked
     // tapered drums, waisted toward the top) with a wider boulder balanced on it.
     // A family of three at staggered heights stands trackside at the first clear,
@@ -680,7 +715,7 @@ export function buildLandmarks(R, track, theme) {
     }
   }
 
-  if (kind === 'snowman') {
+  if (kinds.includes('snowman')) {
     // First clear spot past the opening straight, just off the racing line.
     const L = cl.length, step = 3;
     for (let s = 30; s < L - 10; s += step) {

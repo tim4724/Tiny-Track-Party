@@ -3,7 +3,7 @@
 // with its wet-sand edge, dust banks, snowfall), always built and hidden until a
 // theme asks for them. Built once per renderer; returns the pieces the frame loop /
 // per-track fitting need to touch — PLUS the handles (sky, hemi, hills, clouds,
-// haze, water, snowfall) that applyEnvTheme() re-dresses when the cup's biome
+// haze, water, snowfall, birds) that applyEnvTheme() re-dresses when the cup's biome
 // changes (recolour/re-tint in place; hills also reshape on a dome↔mesa switch).
 //
 // All look that varies per cup lives in a THEME (see shared/themes.js): sky colours,
@@ -12,7 +12,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeSnowflakeTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -225,8 +225,7 @@ function buildWaterGeometry() {
 // Wet-sand band: a translucent dark overlay ring hugging the INSIDE of the
 // shoreline, alpha-fading from nothing (dry sand) to a damp brown right at the
 // foam. Built as a CHILD of the water mesh, so it rides the per-track shoreline
-// fit AND the tide's breathing pulse for free — the damp edge follows the
-// waterline. RGBA vertex colours; unlit (it's a darkening glaze over the lit,
+// fit for free. RGBA vertex colours; unlit (it's a darkening glaze over the lit,
 // textured sand, like a shadow).
 const WET_BANDS = [ // [radius, alpha]
   [WATER_INNER - 7, 0],
@@ -333,6 +332,26 @@ function applySnowfall(snow, theme) {
   snow.geometry.setDrawRange(0, Math.min(s.count ?? 650, snow.userData.speed.length));
   snow.material.size = s.size ?? 0.3;
   snow.material.color.set(s.tint ?? 0xffffff);
+}
+
+// ── Birds (theme.birds) ──────────────────────────────────────────────────────
+// A few soaring silhouettes, each circling its own authored roost — gulls over the
+// beach shoreline, vultures high over a canyon mesa. Sprites like the clouds (they
+// billboard per split-screen cell); the frame loop does the circling. Per-bird
+// variety (roost angle, height offset, phase, speed factor) is baked at build; the
+// theme dresses count/tint/size and sets the shared orbit numbers, which the loop
+// reads from `birds.cfg`.
+const DEF_BIRDS = { count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2 };
+
+function applyBirds(birds, theme) {
+  const b = theme.birds ? { ...DEF_BIRDS, ...theme.birds } : null;
+  birds.cfg = b; // the frame loop's one-stop config (null = nothing to step)
+  birds.forEach((sprite, i) => {
+    sprite.visible = !!b && i < b.count;
+    if (!b) return;
+    sprite.material.color.set(b.tint);
+    sprite.scale.set(b.size, b.size * 0.5, 1); // glyph texture is 2:1
+  });
 }
 
 // ── Dust banks (theme.haze) ──────────────────────────────────────────────────
@@ -454,6 +473,27 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   applySnowfall(snowfall, theme);
   scene.add(snowfall);
 
+  // Birds: 4 sprites built (the roomiest biome's worth), dressed by applyBirds and
+  // circled by the frame loop. fog:false like the clouds — they live in clear sky.
+  const birds = [];
+  {
+    const birdTex = makeBirdTexture();
+    for (let i = 0; i < 4; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: birdTex, transparent: true, fog: false, depthWrite: false
+      }));
+      sprite.userData = {
+        a0: (i / 4) * Math.PI * 2 + (i % 3) * 0.8, // roost bearing on the ring
+        dy: (i % 3) * 2.5,                          // per-bird soaring altitude offset
+        ph: i * 2.1,                                // orbit phase offset
+        sp: 0.82 + (i % 4) * 0.12,                  // per-bird speed factor
+      };
+      birds.push(sprite);
+      scene.add(sprite);
+    }
+    applyBirds(birds, theme);
+  }
+
   // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
   // for the diorama without competing with it. Shape comes from the theme (domes vs
   // mesas — buildHillRingGeometry), colours from paintHills; the per-feature vertex
@@ -517,7 +557,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, haze, water, snowfall, key, hemi, ground, hills, sky };
+  return { clouds, haze, water, snowfall, birds, key, hemi, ground, hills, sky };
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
@@ -545,6 +585,7 @@ export function applyEnvTheme(env, theme) {
   applyHaze(env.haze, theme);
   applyWater(env.water, theme);
   applySnowfall(env.snowfall, theme);
+  applyBirds(env.birds, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);
