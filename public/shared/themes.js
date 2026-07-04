@@ -57,14 +57,14 @@
 //                read as `shoulder` instead — desert roads aren't crisply lined
 //     shoulder:  dusty edge tint for the dropped-lines case (defaults to asphalt)
 //     skirt:     deck side/belly colour (defaults to asphalt — timber for a boardwalk)
-//     planks:    { period, tones: [...], seam } repaints the deck as a boardwalk —
-//                a GRID of boards: rows every `period` along the lap (seam = the
-//                groove band between rows, which also interrupts the painted lines/
-//                dash — paint sits ON the boards), and board columns across the road
-//                (the road halves are subdivided; each cell hashes row × lane into
-//                `tones`, and rings beside a seam get a bevel shade/highlight so
-//                boards read as chamfered 3D pieces). ≥4 tones keeps neighbouring
-//                cells distinct. The dash keeps its speedometer job in every variant.
+//     planks:    { period, tones: [...], seam } repaints the deck as boardwalk
+//                planks: a full-width plank every `period` along the lap, `seam` =
+//                the groove band between planks (it also interrupts the painted
+//                lines/dash — paint sits ON the boards), and the rings beside a
+//                seam get a bevel highlight/shade so each plank reads as a
+//                chamfered 3D piece. Keep `tones` at whisper contrast: the seams
+//                are the wood cue; visible tone steps read as painted patchwork.
+//                The dash keeps its speedometer job in every variant.
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon
@@ -157,17 +157,15 @@ export const THEMES = {
       line:  0xf7f2e2,             // warm off-white paint over wood
       kerb:  [0xf2ede0, 0xcdbb9a], // whitewash / weathered-driftwood rail bands
       skirt: 0x8f7351,             // understructure timber (deck sides + belly)
-      // Tones sit a notch darker + redder than the sand texture so the deck still
-      // separates from the beach (the road must never blend into the ground). The
-      // tone SPREAD is wide on purpose: the deck is a GRID of board cells (rows along
-      // the lap × lanes across — see buildRibbonRoad's board columns), and the
-      // per-cell tone hash is most of the "wood" read; at distance the seams minify
-      // away and only the tone patchwork carries it. 5 tones so the (row, lane) hash
-      // never repeats on neighbours. Seam stays softer than the tones' full range so
-      // the groove bar sweeping under the camera stays gentle.
+      // ONE clean wood colour at whisper contrast (±3% between planks — enough that
+      // the deck doesn't read as a single extrusion, never enough to see "stripes"),
+      // sitting darker + redder than the sand so the road separates from the beach.
+      // The regular seam grooves + the chamfer bevel are the whole "wood" read —
+      // visible tone steps were tried twice (full-width bands, then a per-board
+      // checkerboard) and both read as painted patchwork, not timber.
       planks: { period: 1.5,
-                tones: [0xcda172, 0xb9854e, 0xd8b183, 0xc08c58, 0xd3a976],
-                seam: 0x9a7850 },
+                tones: [0xc79c6a, 0xc09565, 0xcda270],
+                seam: 0x8d6c46 },
     },
     structure: 0x9a7b55, // overpass supports become timber piles
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
