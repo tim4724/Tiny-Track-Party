@@ -39,13 +39,15 @@ var MSG = {
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
-  SELECT_TRACK: 'select_track', // {trackId} — host picks the race track in the lobby
+  SELECT_TRACK: 'select_track', // {trackId} — legacy exact pick; handled as SELECT_MODE {mode:'track'} (kept for deploy-skew phones)
+  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?} — host's lobby pick: exact track, a cup (4-race Grand Prix), or a random draw (re-tap re-rolls)
+  SERIES_NEXT: 'series_next',   // host only, during a cup intermission — start the next series race now (the display also auto-advances)
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
   // Display -> specific controller
-  WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
-  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ trackId; each player carries a `ready` flag). Rides the relay's RETAINED HOST STATE (set_state), not a fanout: pushed live on change, replayed to each (re)joiner right after `joined`
+  WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, mode, cupId, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
+  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ mode/cupId/trackId; each player carries a `ready` flag). trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Rides the relay's RETAINED HOST STATE (set_state), not a fanout: pushed live on change, replayed to each (re)joiner right after `joined`
   PLAYER_STATE: 'player_state', // {item} — lights the controller's ITEM button (the phone shows no place/lap; standings live on the display)
   PONG: 'pong',
 
@@ -53,7 +55,9 @@ var MSG = {
   COUNTDOWN: 'countdown',       // {n} 3..2..1..GO
   GAME_START: 'game_start',
   STANDINGS: 'standings',       // {over, hostPeerIndex, total, order:[{playerId,name,colorIndex,ai,finished,time}]}
-                                // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay
+                                // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay.
+                                // During a cup: + series {cupId,cupName,raceIndex,raceCount,nextTrackId,nextTrackName,final,autoAdvanceMs},
+                                // rows carry points (cup total; over=true also gained), and over=true boards come in CUP-standings order
   GAME_END: 'game_end',         // {results} — sent on return-to-lobby; controllers go back to the lobby
   GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
   GAME_RESUMED: 'game_resumed'  // race resumed — controllers hide the pause overlay

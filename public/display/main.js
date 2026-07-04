@@ -13,6 +13,7 @@ import { renderSeats, seatCountText } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
+import { makeShuffleBag } from './GrandPrix.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
@@ -446,10 +447,14 @@ scene.onFrame = (dt) => {
 };
 
 // ---- net ----
+// Random-mode track draws: one bag for the room's lifetime, so "random" walks
+// the whole catalogue before any repeat (page RNG, like track.seed).
+const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
   trackCatalog,
   defaultTrackId: selectedTrackId,
+  drawRandomTrack: () => randomBag.draw(),
   onTrackChange: selectTrack,
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; we highlight that

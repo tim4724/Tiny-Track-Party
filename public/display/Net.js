@@ -101,12 +101,20 @@ export class DisplayNet extends GameNet {
 
     // Track selector state. `tracks` is the catalog the display computed (id +
     // name + feature chips + schematic SVG), sent to phones in WELCOME so their
-    // picker can render without any game geometry. `trackId` is the current pick;
-    // only the host may change it (in the lobby), via SELECT_TRACK.
+    // picker can render without any game geometry. Only the host may change the
+    // pick (in the lobby), via SELECT_MODE (or the legacy SELECT_TRACK).
     this.tracks = opts.trackCatalog || [];
     // null until a track is picked — the lobby shows the plain diorama and the
-    // host's "Start race" button stays disabled until then.
+    // host's "Start race" button stays disabled until then. `trackId` is always
+    // the RESOLVED concrete track (exact pick / a cup's current race / the
+    // random draw): the 3D preview, startRace and the phones all key on it.
     this.trackId = opts.defaultTrackId != null ? opts.defaultTrackId : null;
+    // What the trackId MEANS: 'track' = single race on exactly it, 'cup' = it's
+    // the current race of cupId's 4-race Grand Prix, 'random' = it was drawn by
+    // drawRandomTrack (game-supplied shuffle bag; re-picking random re-rolls).
+    this.mode = this.trackId != null ? 'track' : null;
+    this.cupId = null;
+    this.drawRandomTrack = opts.drawRandomTrack || null;
 
     this.flow = new RoomFlow({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
     this.roomCode = null;
@@ -335,18 +343,14 @@ export class DisplayNet extends GameNet {
         }
         break;
       }
-      case MSG.SELECT_TRACK: {
-        // Host-only lobby choice of the race track. Validate the id against the
-        // catalog, store it, echo to every phone (LOBBY_UPDATE.trackId), and tell
-        // the display so it can swap the 3D preview.
-        const idOk = this.tracks.some((t) => t.id === data.trackId);
-        if (from === this.flow.host && this.roomState === ROOM_STATE.LOBBY && idOk && data.trackId !== this.trackId) {
-          this.trackId = data.trackId;
-          this._publishLobby();
-          this.onTrackChange(this.trackId);
-        }
+      case MSG.SELECT_TRACK:
+        // Legacy exact pick (a mid-deploy phone that predates modes) — same
+        // validation and effect as SELECT_MODE {mode:'track'}.
+        this._applyMode(from, { mode: 'track', trackId: data.trackId });
         break;
-      }
+      case MSG.SELECT_MODE:
+        this._applyMode(from, data);
+        break;
       case MSG.PING:
         this.party.sendTo(from, { type: MSG.PONG, t: data.t });
         break;
@@ -354,6 +358,56 @@ export class DisplayNet extends GameNet {
         // START_GAME / control / etc. — hand to the game layer.
         this.onControllerMessage(from, data);
     }
+  }
+
+  // Host's lobby pick — exact track, a cup (Grand Prix), or a random draw.
+  // Validates, resolves the concrete trackId, echoes to every phone
+  // (LOBBY_UPDATE mode/cupId/trackId) and tells the display to swap the 3D
+  // preview. Same-pick taps no-op EXCEPT random, where a re-tap re-rolls.
+  _applyMode(from, data) {
+    if (from !== this.flow.host || this.roomState !== ROOM_STATE.LOBBY) return;
+    let cupId = null, trackId;
+    if (data.mode === 'track') {
+      if (!this.tracks.some((t) => t.id === data.trackId)) return;
+      if (this.mode === 'track' && data.trackId === this.trackId) return;
+      trackId = data.trackId;
+    } else if (data.mode === 'cup') {
+      // The catalog is in CUPS order, so a cup's first entry is its race 1.
+      const first = this.tracks.find((t) => t.cup === data.cupId);
+      if (!first) return;
+      if (this.mode === 'cup' && data.cupId === this.cupId) return;
+      cupId = data.cupId;
+      trackId = first.id;
+    } else if (data.mode === 'random') {
+      if (!this.drawRandomTrack) return;
+      trackId = this.drawRandomTrack();
+    } else return;
+    this.mode = data.mode;
+    this.cupId = cupId;
+    this.trackId = trackId;
+    this._publishLobby();
+    this.onTrackChange(this.trackId);
+  }
+
+  // Game-layer track swap that keeps mode/cupId as they are: the series engine
+  // advancing to a cup's next race, or the lobby re-drawing a random pick.
+  // Single writer with _applyMode, so trackId always flows out the same way
+  // (publish + preview swap).
+  setTrack(id) {
+    if (!this.tracks.some((t) => t.id === id) || id === this.trackId) return;
+    this.trackId = id;
+    this._publishLobby();
+    this.onTrackChange(id);
+  }
+
+  // Re-send a seat's WELCOME outside the join path. A chained series race
+  // starts with no lobby round-trip, so a phone that was waiting out the last
+  // race ("you're in the next race!") only learns it now has a car from a
+  // fresh WELCOME (inRace flips true) — GAME_END, the usual reset, never comes.
+  resendWelcome(peerIndex) {
+    if (!this.party || !this.flow.has(peerIndex)) return;
+    this.party.sendTo(peerIndex, this._welcomeFor(peerIndex));
+    this.onPlayerWelcomed(peerIndex);
   }
 
   _addPeer(peerIndex) {
@@ -542,7 +596,9 @@ export class DisplayNet extends GameNet {
       paused: !!this.isPaused(),        // mid-race: re-sync the pause overlay a rejoiner missed
       players: this.roster(),
       tracks: this.tracks,       // full catalog (static) — sent once, on join
-      trackId: this.trackId      // current selection
+      mode: this.mode,           // what the pick means ('track'|'cup'|'random')
+      cupId: this.cupId,
+      trackId: this.trackId      // resolved current selection
     };
   }
   // Publish the lobby snapshot as the room's retained host state (relay
@@ -558,7 +614,9 @@ export class DisplayNet extends GameNet {
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       players: this.roster(),
-      trackId: this.trackId      // catalog is static (WELCOME) — echo just the pick
+      mode: this.mode,           // catalog is static (WELCOME) — echo just the pick
+      cupId: this.cupId,
+      trackId: this.trackId      // ...resolved to a concrete track
     });
   }
 
