@@ -209,6 +209,24 @@ function makeBlobShadowTexture() {
   return tex;
 }
 
+// Snowflake dot: a small soft radial puff for the falling-snow Points cloud —
+// crisp core, quick falloff (a flake, not a glow).
+function makeSnowflakeTexture() {
+  const s = 32;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, 1, s / 2, s / 2, s / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.9)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Cloud sprite: a few overlapping blurred white blobs — a soft toy cumulus.
 // Every blob keeps blur-tail clearance (~2× the blur radius) from the canvas
 // edges: a tail that crosses the edge gets sliced into a hard flat line — the
@@ -536,6 +554,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture,
   makePadTexture, makePadStripTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

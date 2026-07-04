@@ -551,6 +551,187 @@ export function buildLoopPoles(R, track, theme) {
   R._mergedMats.push(mat);
 }
 
+// ── Landmarks — ONE hero set-piece per biome (theme.landmark), placed by rule like
+// the loop launch pads, never hand-placed per track. Each is pure procedural toy
+// geometry (faceted primitives, vertex colours, Lambert) merged into a single mesh
+// in trackGroup — a postcard moment, not a scenery system:
+//   'lighthouse' — on the LOWEST offshore island of the horizon ring (beach)
+//   'arch'       — a rock arch spanning the road at a straight, flat, open stretch (canyon)
+//   'snowman'    — trackside greeter just off the racing line (snow)
+// A landmark that can't find a safe spot simply doesn't spawn (arch/snowman scan;
+// lighthouse always can). Placement is deterministic per track — same every load.
+
+// Bake a hex colour (× shade) into per-vertex colours — the boulders' tint idiom.
+// Also normalises the geometry for the landmark merges: non-indexed, no uv, so
+// primitives (indexed cylinders/cones, non-indexed icosahedra) mix freely.
+function tintGeo(g0, hex, shade = 1) {
+  const g = g0.index ? g0.toNonIndexed() : g0;
+  if (g !== g0) g0.dispose();
+  g.deleteAttribute('uv');
+  const c = new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(shade);
+  const n = g.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+
+// The lighthouse: stacked banded tower (the two red bands are the icon), gallery,
+// glowing lamp room, dark cap. ~9.5 units tall — reads as a silhouette on the
+// horizon through the sea haze, crisp from the lobby/gallery orbit.
+function lighthouseGeoms(x, y, z) {
+  const parts = [];
+  const seg = (r0, r1, h, cy, hex, radial = 10) => {
+    const g = new THREE.CylinderGeometry(r0, r1, h, radial);
+    g.translate(x, y + cy, z);
+    parts.push(tintGeo(g, hex));
+  };
+  const bands = [0xf5efe2, 0xe4604a, 0xf5efe2, 0xe4604a]; // white/coral tower bands
+  for (let i = 0; i < 4; i++) {
+    const h = 1.9, r0 = 1.22 - (i + 1) * 0.09, r1 = 1.22 - i * 0.09;
+    seg(r0, r1, h, i * h + h / 2, bands[i]);
+  }
+  seg(1.05, 1.05, 0.32, 7.76, 0x5c6470); // gallery deck
+  seg(0.62, 0.62, 0.85, 8.35, 0xffd98a); // lamp room — warm, reads lit
+  const cap = new THREE.ConeGeometry(0.85, 0.9, 10);
+  cap.translate(x, y + 9.2, z);
+  parts.push(tintGeo(cap, 0xb2453a));
+  return parts;
+}
+
+export function buildLandmarks(R, track, theme) {
+  const kind = theme.landmark;
+  const cl = track.centerline;
+  if (!kind || !cl || !cl.samples.length) return;
+  // Deterministic per-track stream, seeded like buildScenery (facet shading etc.).
+  let seed = 51966;
+  const idStr = String(track.id || track.name || '') + Math.round(cl.length * 100);
+  for (let i = 0; i < idStr.length; i++) seed = ((seed ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+  const samples = cl.samples;
+  const defHalf = (track.roadWidth || 5) / 2;
+  const halfOf = (s) => (s.width != null ? s.width / 2 : defHalf);
+  // Clear of the WHOLE corridor (all strands — the buildScenery rule) by `m` units.
+  const isClear = (x, z, m) => {
+    for (const s of samples) {
+      const lim = halfOf(s) + m;
+      const dx = x - s.pos.x, dz = z - s.pos.z;
+      if (dx * dx + dz * dz < lim * lim) return false;
+    }
+    return true;
+  };
+  const gy = R.ground.position.y;
+  const geoms = [];
+
+  if (kind === 'lighthouse') {
+    // The LOWEST island: the tower dominates the silhouette instead of poking out
+    // of a tall dune. Anchors are authored coords — scale XZ by the hills' push-out
+    // (setTrack has already fitted the ring when this runs).
+    const anchors = (R._hills && R._hills.userData.anchors) || [];
+    if (!anchors.length) return;
+    let best = anchors[0];
+    for (const a of anchors) if (a.top < best.top) best = a;
+    const sf = R._hills.scale.x;
+    geoms.push(...lighthouseGeoms(best.x * sf, gy + best.top - 0.8, best.z * sf)); // base sunk into the island crown
+  }
+
+  if (kind === 'arch') {
+    // Scan for a straight, flat, open stretch: low heading change over ±6u, deck at
+    // ground level, nothing overhead (a crossing deck would thread the arch), clear
+    // of launch pads and the start gate, and both LEG spots clear of every strand.
+    const L = cl.length, step = 2;
+    for (let s = 28; s < L - 28; s += step) {
+      const f0 = cl.sampleAt(s - 6), f1 = cl.sampleAt(s), f2 = cl.sampleAt(s + 6);
+      if (f1.pos.y - gy > 1.6) continue;                       // elevated deck — skip
+      const h0 = Math.atan2(f0.lateral.x, f0.lateral.z), h2 = Math.atan2(f2.lateral.x, f2.lateral.z);
+      let dh = Math.abs(h2 - h0); if (dh > Math.PI) dh = Math.PI * 2 - dh;
+      if (dh > 0.15) continue;                                 // bending — skip
+      if ((track.pads || []).some((p) => Math.min(Math.abs(p.s - s), L - Math.abs(p.s - s)) < 14)) continue;
+      const half = halfOf(f1);
+      const Rr = half + 2.7;                                   // legs land Rr outside the centreline
+      let overhead = false;
+      for (const q of samples) {
+        const dx = q.pos.x - f1.pos.x, dz = q.pos.z - f1.pos.z;
+        if (dx * dx + dz * dz < (Rr + 2) * (Rr + 2) && q.pos.y - f1.pos.y > 1.5) { overhead = true; break; }
+      }
+      if (overhead) continue;
+      const lx = f1.pos.x + f1.lateral.x * Rr, lz = f1.pos.z + f1.lateral.z * Rr;
+      const rx = f1.pos.x - f1.lateral.x * Rr, rz = f1.pos.z - f1.lateral.z * Rr;
+      if (!isClear(lx, lz, 1.8) || !isClear(rx, rz, 1.8)) continue;
+      // Faceted half-torus straddling the road, rock-tinted with per-facet shade
+      // jitter (the boulders' look at architectural scale). Upright regardless of
+      // any road bank — it's geology, not track furniture.
+      const g = new THREE.TorusGeometry(Rr, 1.15, 7, 11, Math.PI).toNonIndexed();
+      g.deleteAttribute('uv');
+      g.computeVertexNormals();
+      const rocks = (theme.scenery && theme.scenery.rocks) || [0xc07a55, 0xa8623f];
+      const n = g.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      const c = new THREE.Color();
+      for (let v = 0; v < n; v += 3) { // one tint per facet — flat-shaded rock
+        c.set(rocks[Math.floor(rand() * rocks.length)]).convertSRGBToLinear().multiplyScalar(0.9 + rand() * 0.2);
+        for (let k = 0; k < 3; k++) { arr[(v + k) * 3] = c.r; arr[(v + k) * 3 + 1] = c.g; arr[(v + k) * 3 + 2] = c.b; }
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      const yaw = Math.atan2(f1.lateral.x, f1.lateral.z);
+      g.rotateY(yaw + Math.PI / 2);      // torus plane (XY) → stand across the road's lateral
+      g.translate(f1.pos.x, f1.pos.y - 0.25, f1.pos.z); // feet planted just below deck level
+      geoms.push(g);
+      break; // one arch is a landmark; two is a theme park
+    }
+  }
+
+  if (kind === 'snowman') {
+    // First clear spot past the opening straight, just off the racing line.
+    const L = cl.length, step = 3;
+    for (let s = 30; s < L - 10; s += step) {
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // keep him on the ground, not a ramp shoulder
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + 3.6);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      if (!isClear(x, z, 2.6)) continue;
+      const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // faces the road
+      const yaw = Math.atan2(fx, fz);
+      const ball = (r, cy, hex, detail = 1) => {
+        const g = new THREE.IcosahedronGeometry(r, detail);
+        g.translate(x, gy + cy, z);
+        geoms.push(tintGeo(g, hex, 0.98));
+      };
+      ball(1.05, 0.72, 0xf6f9fc); // base, sunk into the snow
+      ball(0.78, 2.02, 0xfafcfe);
+      ball(0.54, 3.08, 0xf6f9fc); // head
+      const carrot = new THREE.ConeGeometry(0.14, 0.62, 7);
+      carrot.rotateX(Math.PI / 2).rotateY(yaw);                 // cone +Y → +Z → face the road
+      carrot.translate(x + fx * 0.72, gy + 3.12, z + fz * 0.72);
+      geoms.push(tintGeo(carrot, 0xe8833a));
+      // coal: two eyes on the head + three buttons down the belly, offset in the
+      // facing frame (right vector = fz, -fx)
+      const dot = (ox, oy, oz) => {
+        const g = new THREE.IcosahedronGeometry(0.075, 0);
+        g.translate(x + fx * oz + fz * ox, gy + oy, z + fz * oz - fx * ox);
+        geoms.push(tintGeo(g, 0x343a44));
+      };
+      dot(-0.18, 3.28, 0.46); dot(0.18, 3.28, 0.46);            // eyes
+      dot(0, 2.28, 0.72); dot(0, 1.98, 0.76); dot(0, 1.68, 0.72); // buttons
+      break;
+    }
+  }
+
+  if (!geoms.length) return;
+  const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false);
+  if (geoms.length > 1) for (const g of geoms) g.dispose();
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.matrixAutoUpdate = false;
+  mesh.castShadow = kind === 'arch'; // the arch throws a real band across the road (baked once); the others' shadows land on non-receiving ground
+  mesh.receiveShadow = false;
+  R.trackGroup.add(mesh);
+  R._mergedGeoms.push(merged);
+  R._mergedMats.push(mat);
+}
+
 // Trackside scenery — GLB silhouettes (trees/bushes via the sunk-tree trick) plus
 // faceted boulders, scattered outside the racing corridor. The parallax of things
 // streaming past is the strongest speed cue there is (trackside, not on the car —

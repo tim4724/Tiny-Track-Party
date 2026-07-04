@@ -24,13 +24,15 @@
 //                                       dressing; omit for the canonical fat white cumulus
 //                                       (8 × opacity .8). scale/aspect stretch the sprites
 //                                       (wisps = wider, flatter), tint warms/cools them
-//   water: (optional)                   { foam, shallow, deep } — a sea ring past the
-//                                       horizon hills (built once, hidden for landlocked
-//                                       biomes): a foam line at the shore, shallow →
-//                                       deep radial gradient out to the fog. The hills
+//   water: (optional)                   { foam, shallow, deep, wet? } — a sea ring past
+//                                       the horizon hills (built once, hidden for land-
+//                                       locked biomes): a foam line at the shore, shallow
+//                                       → deep radial gradient out to the fog. The hills
 //                                       rise out of it as headlands/islands. Fitted per
 //                                       track alongside the hill push-out, so the tide
-//                                       never floods a large circuit.
+//                                       never floods a large circuit; the shoreline
+//                                       BREATHES (a slow ±0.4% swell) and `wet` tints
+//                                       the damp-sand band hugging the waterline.
 //   haze: (optional)                    { count ≤5, opacity, tint, scale } low, wide
 //                                       dust/mist banks drifting at hill height (the
 //                                       cloud sprites' ground-level sibling); omit for
@@ -68,6 +70,16 @@
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon
+//   snowfall: (optional)                { count ≤900, size, tint } — falling flakes
+//                                       (one Points cloud) drifting over the play field;
+//                                       omit for dry biomes
+//   landmark: (optional)                ONE hero set-piece, placed by rule per track
+//                                       (render/track.js buildLandmarks): 'lighthouse'
+//                                       (on the lowest offshore island) | 'arch' (rock
+//                                       arch spanning a straight, flat, open stretch —
+//                                       skipped if no safe spot exists) | 'snowman'
+//                                       (trackside greeter). Procedural toy geometry,
+//                                       no assets.
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -147,7 +159,7 @@ export const THEMES = {
     // feature keeps the coast from reading as bare desert dunes.
     hills:  [0xe6d29a, 0xefe2b3, 0x9fc48e],
     hillShape: 'island', // sparse offshore chain — the sea must show BETWEEN the hills
-    water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8 },
+    water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8, wet: 0x8f7c58 },
     fogTune: 1.3, // clear seaside air: push the chase-cam fog out so the water reads from track level
     // Sun-bleached coastal asphalt — the CANONICAL circuit road (white lines, dash,
     // the classic coral-red/white kerbs, which already read seaside), just lighter
@@ -159,6 +171,7 @@ export const THEMES = {
       asphalt: 0x6c6a74,
     },
     structure: 0x9a7b55, // overpass supports stay timber piles — pier flavour without touching the road read
+    landmark: 'lighthouse', // white-and-coral tower on the lowest offshore island
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
@@ -206,6 +219,7 @@ export const THEMES = {
       kerb:  [0xc06a42, 0xe3cfa4], // rust / sand
     },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
+    landmark: 'arch', // a rock arch spans the road at one straight, open stretch
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the
@@ -258,6 +272,8 @@ export const THEMES = {
       kerb:  [0xeff4f9, 0xdde7f0], // near-white bank pair (whisper contrast)
       kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
+    snowfall: { count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    landmark: 'snowman', // trackside greeter just off the racing line
   },
 };
 

@@ -1,10 +1,10 @@
 // Track-independent world dressing: sky dome, drifting clouds, horizon hills,
-// the toy lighting rig, the ground plane — plus the biome-gated extras (sea ring,
-// dust banks), always built and hidden until a theme asks for them. Built once per
-// renderer; returns the pieces the frame loop / per-track fitting need to touch —
-// PLUS the handles (sky, hemi, hills, clouds, haze, water) that applyEnvTheme()
-// re-dresses when the cup's biome changes (recolour/re-tint in place; hills also
-// reshape on a dome↔mesa switch).
+// the toy lighting rig, the ground plane — plus the biome-gated extras (sea ring
+// with its wet-sand edge, dust banks, snowfall), always built and hidden until a
+// theme asks for them. Built once per renderer; returns the pieces the frame loop /
+// per-track fitting need to touch — PLUS the handles (sky, hemi, hills, clouds,
+// haze, water, snowfall) that applyEnvTheme() re-dresses when the cup's biome
+// changes (recolour/re-tint in place; hills also reshape on a dome↔mesa switch).
 //
 // All look that varies per cup lives in a THEME (see shared/themes.js): sky colours,
 // ground texture, hill colours, light tint/intensity. Everything is built from the
@@ -12,7 +12,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -76,17 +76,25 @@ function paintSky(skyGeo, theme) {
 // concatenated in order, each `featureVerts` vertices (both stored on the mesh at
 // build), so feature i owns the contiguous vertex block [i*per, (i+1)*per). Cycling
 // the theme's hill colours over that block recolours in place — no rebuild, no GPU leak.
+// Mesas additionally get sediment STRATA: subtle horizontal bands keyed on world
+// height, so the lines align across every butte (consistent geology). Domes and
+// islands stay solid — the grass ring must remain byte-identical.
 function paintHills(hills, theme) {
   const colAttr = hills.geometry.attributes.color;
   const arr = colAttr.array;
   const per = hills.userData.featureVerts;
   const cols = theme.hills;
+  const mesa = hills.userData.shape === 'mesa';
+  const posArr = hills.geometry.attributes.position.array;
   const hc = new THREE.Color();
   for (let i = 0; i < hills.userData.count; i++) {
     hc.set(cols[i % cols.length]).convertSRGBToLinear();
     for (let k = 0; k < per; k++) {
       const v = (i * per + k) * 3;
-      arr[v] = hc.r; arr[v + 1] = hc.g; arr[v + 2] = hc.b;
+      // ±4% alternating bands every 2.6 world units of height — visible as strata
+      // through the dust haze without turning the buttes stripy.
+      const f = mesa ? ((Math.floor((posArr[v + 1] + 1) / 2.6) % 2) ? 0.96 : 1.04) : 1;
+      arr[v] = hc.r * f; arr[v + 1] = hc.g * f; arr[v + 2] = hc.b * f;
     }
   }
   colAttr.needsUpdate = true;
@@ -117,27 +125,31 @@ function buildHillRingGeometry(shape = 'dome') {
   proto.deleteAttribute('uv');
   const featureVerts = proto.attributes.position.count;
   const geoms = [];
+  const anchors = []; // per-feature {x, z, top} in AUTHORED coords (setTrack scales XZ) — landmark placement (lighthouse on an island)
   for (let i = 0; i < count; i++) {
     const g = proto.clone();
+    let sy, a, r;
     if (shape === 'mesa') {
       g.rotateY((i % 7) * 0.9); // vary the facet phase so the ring doesn't read as stamped
-      g.scale(20 + (i % 4) * 8, 8 + (i % 3) * 4.5, 16 + ((i + 2) % 4) * 7);
-      const a = (i / count) * Math.PI * 2 + (i % 5) * 0.17;
-      const r = 152 + (i % 3) * 20;
-      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the ground plane
+      sy = 8 + (i % 3) * 4.5;
+      g.scale(20 + (i % 4) * 8, sy, 16 + ((i + 2) % 4) * 7);
+      a = (i / count) * Math.PI * 2 + (i % 5) * 0.17;
+      r = 152 + (i % 3) * 20;
     } else if (shape === 'island') {
       // low + wide (a headland silhouette, not a mound) and pushed out past the
       // shoreline: the waterline cuts their sunk bases → they rise out of the sea
-      g.scale(28 + (i % 4) * 11, 3.5 + (i % 3) * 2.2, 20 + ((i + 1) % 4) * 8);
-      const a = (i / count) * Math.PI * 2 + (i % 5) * 0.21;
-      const r = 172 + (i % 3) * 24;
-      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r);
+      sy = 3.5 + (i % 3) * 2.2;
+      g.scale(28 + (i % 4) * 11, sy, 20 + ((i + 1) % 4) * 8);
+      a = (i / count) * Math.PI * 2 + (i % 5) * 0.21;
+      r = 172 + (i % 3) * 24;
     } else {
-      g.scale(26 + (i % 4) * 9, 7 + (i % 3) * 4, 22 + ((i + 1) % 4) * 8);
-      const a = (i / HILL_DOMES) * Math.PI * 2 + (i % 5) * 0.13;
-      const r = 150 + (i % 3) * 18;
-      g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the grass plane
+      sy = 7 + (i % 3) * 4;
+      g.scale(26 + (i % 4) * 9, sy, 22 + ((i + 1) % 4) * 8);
+      a = (i / HILL_DOMES) * Math.PI * 2 + (i % 5) * 0.13;
+      r = 150 + (i % 3) * 18;
     }
+    g.translate(Math.cos(a) * r, -1.0, Math.sin(a) * r); // base sunk to the ground plane
+    anchors.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, top: sy - 1.0 });
     // placeholder per-vertex colour attribute (paintHills overwrites it from the theme)
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(featureVerts * 3), 3));
     geoms.push(g);
@@ -145,7 +157,7 @@ function buildHillRingGeometry(shape = 'dome') {
   proto.dispose();
   const geometry = mergeGeometries(geoms, false);
   for (const g of geoms) g.dispose(); // copied into the merge
-  return { geometry, featureVerts, count };
+  return { geometry, featureVerts, count, anchors };
 }
 
 // Sky-puff dressing defaults — the canonical fat white cumulus (all literals are the
@@ -210,8 +222,48 @@ function buildWaterGeometry() {
   return geo;
 }
 
+// Wet-sand band: a translucent dark overlay ring hugging the INSIDE of the
+// shoreline, alpha-fading from nothing (dry sand) to a damp brown right at the
+// foam. Built as a CHILD of the water mesh, so it rides the per-track shoreline
+// fit AND the tide's breathing pulse for free — the damp edge follows the
+// waterline. RGBA vertex colours; unlit (it's a darkening glaze over the lit,
+// textured sand, like a shadow).
+const WET_BANDS = [ // [radius, alpha]
+  [WATER_INNER - 7, 0],
+  [WATER_INNER - 2.5, 0.22],
+  [WATER_INNER + 0.6, 0.34], // tucks just under the foam edge
+];
+
+function buildWetGeometry() {
+  const rings = WET_BANDS.length, verts = WATER_SEG + 1;
+  const pos = new Float32Array(rings * verts * 3);
+  const col = new Float32Array(rings * verts * 4);
+  for (let ri = 0; ri < rings; ri++) {
+    const [r, alpha] = WET_BANDS[ri];
+    for (let si = 0; si <= WATER_SEG; si++) {
+      const a = (si / WATER_SEG) * Math.PI * 2;
+      const v = ri * verts + si;
+      pos[v * 3] = Math.cos(a) * r; pos[v * 3 + 1] = 0; pos[v * 3 + 2] = Math.sin(a) * r;
+      col[v * 4 + 3] = alpha; // rgb painted by applyWater
+    }
+  }
+  const idx = [];
+  for (let ri = 0; ri < rings - 1; ri++) {
+    for (let si = 0; si < WATER_SEG; si++) {
+      const a = ri * verts + si, b = a + verts;
+      idx.push(a, a + 1, b, a + 1, b + 1, b); // CCW from +Y (see buildWaterGeometry)
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 4)); // itemSize 4 → vertex alpha
+  geo.setIndex(idx);
+  return geo;
+}
+
 // Re-dress the (always-built) sea ring for a biome: visibility + the three-stop
-// radial gradient baked into vertex colours. No water in the theme → hidden.
+// radial gradient baked into vertex colours, plus the wet-sand child ring's tint.
+// No water in the theme → hidden (children hide with the parent).
 function applyWater(water, theme) {
   water.visible = !!theme.water;
   if (!theme.water) return;
@@ -232,6 +284,55 @@ function applyWater(water, theme) {
     }
   }
   colAttr.needsUpdate = true;
+  const wet = water.userData.wet;
+  if (wet) {
+    c.set(theme.water.wet ?? 0x8f7c58).convertSRGBToLinear(); // damp sand, or a sensible default
+    const wcol = wet.geometry.attributes.color;
+    for (let v = 0; v < wcol.count; v++) { wcol.setX(v, c.r); wcol.setY(v, c.g); wcol.setZ(v, c.b); }
+    wcol.needsUpdate = true;
+  }
+}
+
+// ── Snowfall (theme.snowfall) ────────────────────────────────────────────────
+// A single THREE.Points cloud of soft flakes drifting down over the play field —
+// one draw call for hundreds of flakes (sprites would be one call each). Built
+// once, hidden unless the theme asks; positions are AUTHORED around the origin
+// (setTrack scales XZ with the hill push-out) and stepped in the frame loop
+// (fall + the clouds' eastward wind, wrapping top-to-bottom and edge-to-edge).
+export const SNOW_R = 170; // authored spread — matches the hill ring's reach (exported: the frame loop wraps against both)
+export const SNOW_H = 34;  // wrap height
+
+function buildSnowfall() {
+  const MAX = 900; // roomiest biome's worth; theme `count` draws a prefix (setDrawRange)
+  let seed = 74747;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pos = new Float32Array(MAX * 3);
+  const speed = new Float32Array(MAX);
+  for (let i = 0; i < MAX; i++) {
+    const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * SNOW_R; // sqrt → uniform over the disc
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = rand() * SNOW_H;
+    pos[i * 3 + 2] = Math.sin(a) * r;
+    speed[i] = 1.1 + rand() * 1.4; // world units/s — a lazy toy-snow fall, not a blizzard
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const snow = new THREE.Points(geo, new THREE.PointsMaterial({
+    map: makeSnowflakeTexture(), size: 0.3, transparent: true, opacity: 0.85,
+    depthWrite: false, sizeAttenuation: true // fog default ON — far flakes dissolve into the haze
+  }));
+  snow.userData.speed = speed;
+  snow.frustumCulled = false; // the cloud spans the whole field — the sphere test always passes
+  return snow;
+}
+
+function applySnowfall(snow, theme) {
+  const s = theme.snowfall;
+  snow.visible = !!s;
+  if (!s) return;
+  snow.geometry.setDrawRange(0, Math.min(s.count ?? 650, snow.userData.speed.length));
+  snow.material.size = s.size ?? 0.3;
+  snow.material.color.set(s.tint ?? 0xffffff);
 }
 
 // ── Dust banks (theme.haze) ──────────────────────────────────────────────────
@@ -327,6 +428,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   // Sea ring: built once, shown only by watery biomes (applyWater). Lambert like the
   // ground — the flat sheet takes the biome's light tint, and vertex colours carry
   // the shore-to-deep gradient. Distance fog dissolves it into the sky as usual.
+  // The wet-sand band rides along as a child (it fits + breathes with the shoreline).
   let water;
   {
     water = new THREE.Mesh(
@@ -334,9 +436,23 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
       new THREE.MeshLambertMaterial({ vertexColors: true })
     );
     water.position.y = -1.0 + WATER_LIFT; // follows the ground plane; setTrack re-bases on groundY moves
+    const wet = new THREE.Mesh(
+      buildWetGeometry(),
+      new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false })
+    );
+    wet.position.y = -0.05; // just below the water sheet, still clear of the sand below
+    water.add(wet);
+    water.userData.wet = wet;
     applyWater(water, theme);
     scene.add(water);
   }
+
+  // Snowfall: one Points cloud, hidden unless the theme carries `snowfall`; the
+  // frame loop steps it (SceneRenderer._loop) and setTrack scales its spread.
+  const snowfall = buildSnowfall();
+  snowfall.position.y = -1.0; // flakes' authored y is height above the ground plane
+  applySnowfall(snowfall, theme);
+  scene.add(snowfall);
 
   // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
   // for the diorama without competing with it. Shape comes from the theme (domes vs
@@ -352,6 +468,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
     hills.userData.featureVerts = ring.featureVerts;
     hills.userData.count = ring.count;
     hills.userData.shape = theme.hillShape || 'dome';
+    hills.userData.anchors = ring.anchors;
     paintHills(hills, theme);
     scene.add(hills);
   }
@@ -400,7 +517,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, haze, water, key, hemi, ground, hills, sky };
+  return { clouds, haze, water, snowfall, key, hemi, ground, hills, sky };
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
@@ -421,11 +538,13 @@ export function applyEnvTheme(env, theme) {
     env.hills.userData.featureVerts = ring.featureVerts;
     env.hills.userData.count = ring.count;
     env.hills.userData.shape = shape;
+    env.hills.userData.anchors = ring.anchors;
   }
   paintHills(env.hills, theme);
   applyClouds(env.clouds, theme);
   applyHaze(env.haze, theme);
   applyWater(env.water, theme);
+  applySnowfall(env.snowfall, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);

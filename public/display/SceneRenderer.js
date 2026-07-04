@@ -11,9 +11,9 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment, applyEnvTheme, WATER_LIFT, WATER_INNER } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme, WATER_LIFT, WATER_INNER, SNOW_R, SNOW_H } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
-import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery } from './render/track.js';
+import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
@@ -585,7 +585,9 @@ export class SceneRenderer {
     this._env = env;
     this._clouds = env.clouds; // drifted in _loop
     this._haze = env.haze;     // low dust banks (canyon) — drifted in _loop, pushed out in setTrack
-    this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack
+    this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack; breathes in _loop
+    this._waterT = 0;          // shoreline-breathing phase
+    this._snowfall = env.snowfall; // falling flakes (snow) — stepped in _loop, spread scaled in setTrack
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
     this._hills = env.hills;   // horizon-hill ring; pushed out past the track in setTrack
@@ -1124,15 +1126,26 @@ export class SceneRenderer {
         // starts close enough to survive the race fog from the low chase cam. Floor at
         // 0.5× so a tiny test track doesn't shrink the foam line into invisibility.
         // Headlands intruding past the shoreline become islands — that's the look.
+        // The fit is remembered — _loop multiplies a slow breathing pulse onto it.
         const wf = Math.max(0.5, (maxR + 30) / WATER_INNER);
+        this._water.userData.fit = wf;
         this._water.scale.set(wf, 1, wf);
         this._water.position.y = this.ground.position.y + WATER_LIFT; // re-base on the track's groundY
+      }
+      if (this._snowfall) {
+        this._snowfall.scale.set(sf, 1, sf); // flake spread follows the hill push-out
+        this._snowfall.position.y = this.ground.position.y;
       }
       if (this._haze) for (const h of this._haze) {
         h.position.x = h.userData.home.x * sf;
         h.position.z = h.userData.home.z * sf;
       }
     }
+    // Biome landmark (lighthouse/arch/snowman) — AFTER the hills fit above: the
+    // lighthouse anchors to an island of the just-scaled ring. Joins trackGroup, so
+    // it's rebuilt/disposed with the track, and the arch (castShadow) lands before
+    // the one-time shadow bake below.
+    buildLandmarks(this, track, theme);
     this._trackCenter = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.5 + 8;
@@ -2116,6 +2129,30 @@ export class SceneRenderer {
       if (!h.visible) continue;
       h.position.x += 2.2 * dt;
       if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
+    }
+    // shoreline breathing: the sea ring swells ±0.4% around its per-track fit
+    // (±~0.4u at the foam line, one lap of the swell every ~14s) — enough motion
+    // to read "water", far too slow to distract
+    if (this._water.visible) {
+      this._waterT += dt;
+      const w = (this._water.userData.fit || 1) * (1 + Math.sin(this._waterT * 0.45) * 0.004);
+      this._water.scale.set(w, 1, w);
+    }
+    // snowfall: flakes sink at their own speeds and ride the clouds' eastward wind,
+    // wrapping within the authored spread (the mesh scale handles big circuits)
+    if (this._snowfall.visible) {
+      const attr = this._snowfall.geometry.attributes.position;
+      const arr = attr.array, spd = this._snowfall.userData.speed;
+      const n = Math.min(spd.length, this._snowfall.geometry.drawRange.count);
+      for (let i = 0; i < n; i++) {
+        let y = arr[i * 3 + 1] - spd[i] * dt;
+        if (y < 0) y += SNOW_H;
+        arr[i * 3 + 1] = y;
+        let x = arr[i * 3] + 0.7 * dt;
+        if (x > SNOW_R) x -= SNOW_R * 2;
+        arr[i * 3] = x;
+      }
+      attr.needsUpdate = true;
     }
 
     const W = window.innerWidth, H = window.innerHeight;
