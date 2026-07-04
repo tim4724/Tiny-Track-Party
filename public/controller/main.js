@@ -4,7 +4,7 @@
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
-import { buildTrackPicker } from '../shared/trackPicker.js';
+import { buildModePicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
@@ -62,9 +62,9 @@ let myName = '';           // this player's name, shown at the top of the lobby
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
-let trackCatalog = [];     // [{id,name,svg}] from the display (WELCOME)
-let selectedTrackId = null; // current track pick (host-controlled, echoed to all)
-let displayTrackId = null;  // track the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
+let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] from the display (WELCOME)
+let selectedMode = null;   // current pick {mode:'track'|'cup'|'random', trackId?, cupId?} (host-controlled, echoed to all)
+let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 // Joined while a race was already running (WELCOME said inRace:false): we have
@@ -76,12 +76,18 @@ let waitingForNextRace = false;
 let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
 
 const NAME_KEY = 'tinytrack_name';
-const TRACK_KEY = 'tinytrack_track';   // host's last-picked track id
+const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?, cupId?}
+const TRACK_KEY = 'tinytrack_track';   // legacy pre-mode key (bare track id) — read-only fallback
 const CAR_KEY = 'tinytrack_car';       // last-picked car model index
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
 const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (_) {} };
-const storedTrackId = () => { try { return localStorage.getItem(TRACK_KEY); } catch (_) { return null; } };
-const saveTrackId = (id) => { try { localStorage.setItem(TRACK_KEY, id); } catch (_) {} };
+const storedMode = () => {
+  try { const v = JSON.parse(localStorage.getItem(MODE_KEY) || 'null'); if (v && v.mode) return v; } catch (_) {}
+  // Upgrade path: a phone that last picked before modes existed keeps its favourite track.
+  try { const id = localStorage.getItem(TRACK_KEY); if (id) return { mode: 'track', trackId: id }; } catch (_) {}
+  return null;
+};
+const saveMode = (m) => { try { localStorage.setItem(MODE_KEY, JSON.stringify(m)); } catch (_) {} };
 const storedCarIndex = () => { try { const v = parseInt(localStorage.getItem(CAR_KEY), 10); return Number.isInteger(v) ? v : null; } catch (_) { return null; } };
 const saveCarIndex = (i) => { try { localStorage.setItem(CAR_KEY, String(i)); } catch (_) {} };
 
@@ -170,6 +176,15 @@ function setJoining(on) {
   el('name-input').disabled = on;
 }
 
+// The display's pick as {mode, cupId, trackId} (WELCOME / LOBBY_UPDATE carry it
+// flat). A display that predates modes sends a bare trackId — read it as an
+// exact pick so a mid-deploy pairing still works.
+function modeFrom(data) {
+  if (data.mode) return { mode: data.mode, cupId: data.cupId != null ? data.cupId : null, trackId: data.trackId != null ? data.trackId : null };
+  if (data.trackId != null) return { mode: 'track', cupId: null, trackId: data.trackId };
+  return null;
+}
+
 function handleMessage(data) {
   switch (data.type) {
     case MSG.WELCOME: {
@@ -182,8 +197,8 @@ function handleMessage(data) {
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
       if (data.tracks) trackCatalog = data.tracks;       // catalog ships once, on join
-      displayTrackId = data.trackId != null ? data.trackId : null; // what the display has on record
-      if (data.trackId != null) selectedTrackId = data.trackId;
+      displayMode = modeFrom(data);                      // what the display has on record
+      if (displayMode) selectedMode = displayMode;
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
       amReady = !!(me && me.ready);
@@ -223,8 +238,8 @@ function handleMessage(data) {
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
-      displayTrackId = data.trackId != null ? data.trackId : null; // what the display has on record
-      if (data.trackId != null) selectedTrackId = data.trackId; // host's pick, echoed to all
+      displayMode = modeFrom(data);                    // what the display has on record
+      if (displayMode) selectedMode = displayMode;     // host's pick, echoed to all
       // The display is authoritative — adopt the colour + car it has on record
       // for us (colour is auto-assigned; car confirms our pick).
       const me = (data.players || []).find((p) => p.peerIndex === net.peerIndex);
@@ -379,10 +394,10 @@ function applyLivery() {
 // the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
 // display's record. Layout lives in shared/carPicker.js (shared with the gallery).
 function renderLobby() {
-  maybeAutoSelectTrack();   // host: leave the display's plain diorama for the 3D preview right away
+  maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
-  renderTrackPicker();
+  renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
   if (waitingForNextRace) {
     // Late joiner: a race is running without us. No ready button (readiness
@@ -398,7 +413,7 @@ function renderLobby() {
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
-    canStart: !!selectedTrackId,  // host can't start without a track (auto-picked, so ~always true)
+    canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
     host: hostP && { name: hostP.name, color: CAR_COLORS[hostP.colorIndex] },
     others: roster   // every non-host racer but me (for the host that's everyone else)
       .filter((p) => p.peerIndex !== net.peerIndex && p.peerIndex !== hostPeerIndex && p.connected !== false)
@@ -406,51 +421,70 @@ function renderLobby() {
   });
 }
 
-// Track picker — host only: schematic maps from the display's catalog, tap to
-// change the track (SELECT_TRACK). Everyone else gets no picker at all — the
-// big screen shows the host's pick. Also hidden until the catalog arrives
-// (older display / pre-WELCOME). Layout in shared/trackPicker.js.
-function renderTrackPicker() {
+// Mode picker — host only: 🎲 Random + one tile per cup (a cup pick runs its
+// 4-race Grand Prix; the open cup's panel offers exact single-track picks).
+// Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
+// shows the host's pick. Also hidden until the catalog arrives (older display /
+// pre-WELCOME). Layout in shared/trackPicker.js.
+function renderModePicker() {
   const wrap = el('trackpick');
   if (!amHost || !trackCatalog.length) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  buildTrackPicker({
+  buildModePicker({
     stripEl: el('track-strip'),
-    catalog: trackCatalog, selected: selectedTrackId, canPick: true, onPick: chooseTrack
+    catalog: trackCatalog, selection: selectedMode, canPick: true, onPickMode: chooseMode
   });
 }
 
-// Host auto-picks a track the moment they reach the lobby, so the display leaves
-// its plain diorama for the live 3D preview without waiting for a tap. The pick
-// is this phone's last-used track (saved on tap), falling back to the first in
-// the catalog. Sent as SELECT_TRACK exactly like a manual choice — the display
-// echoes it back to everyone via LOBBY_UPDATE. No-op for non-hosts or before the
-// catalog arrives.
-function maybeAutoSelectTrack() {
+// A stored pick is only worth re-asserting if this catalog still backs it
+// (tracks/cups can churn between visits; 'random' always resolves).
+function modeInCatalog(m) {
+  if (!m) return false;
+  if (m.mode === 'random') return true;
+  if (m.mode === 'cup') return trackCatalog.some((t) => t.cup === m.cupId);
+  if (m.mode === 'track') return trackCatalog.some((t) => t.id === m.trackId);
+  return false;
+}
+
+// Host auto-picks the moment they reach the lobby, so the display leaves its
+// plain diorama for the live 3D preview without waiting for a tap. The pick is
+// this phone's last-used mode (saved on tap; a pre-mode phone's bare track id
+// upgrades to an exact pick), falling back to the FIRST CUP — a fresh party's
+// Start launches the easy Grand Prix. Sent as SELECT_MODE exactly like a manual
+// choice — the display echoes it back to everyone via LOBBY_UPDATE. No-op for
+// non-hosts or before the catalog arrives.
+function maybeAutoSelectMode() {
   if (!amHost || !trackCatalog.length) return;
-  if (!selectedTrackId) {
-    // First lobby entry: seed the pick from this phone's last-used track.
-    const stored = storedTrackId();
-    const id = trackCatalog.some((t) => t.id === stored) ? stored : trackCatalog[0].id;
-    selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
-    net.send(MSG.SELECT_TRACK, { trackId: id });
+  if (!selectedMode) {
+    const stored = storedMode();
+    const firstCup = trackCatalog.find((t) => t.cup);
+    selectedMode = modeInCatalog(stored) ? stored
+      : firstCup ? { mode: 'cup', cupId: firstCup.cup }
+        : { mode: 'track', trackId: trackCatalog[0].id }; // cup-less catalog (older display)
+    net.send(MSG.SELECT_MODE, selectedMode); // optimistic; LOBBY_UPDATE is the source of truth
     return;
   }
   // Repair a desync: we hold a pick but the display reports none (it reloaded /
-  // reconnected and lost its track state while our phone kept ours). Without this
-  // the "Start race" button is enabled here (canStart = !!selectedTrackId) yet the
+  // reconnected and lost its selection while our phone kept ours). Without this
+  // the "Start race" button is enabled here (canStart = !!selectedMode) yet the
   // display's startRace() bails on its own null track, so the tap silently no-ops —
-  // and re-picking only helps if you choose a DIFFERENT track. Re-asserting our pick
-  // restores both the display's 3D preview and the start gate.
-  if (displayTrackId == null) net.send(MSG.SELECT_TRACK, { trackId: selectedTrackId });
+  // and re-picking only helps if you choose something DIFFERENT. Re-asserting our
+  // pick restores both the display's 3D preview and the start gate. (For 'random'
+  // the reloaded display re-rolls — its old draw died with it.)
+  if (displayMode == null) net.send(MSG.SELECT_MODE, selectedMode);
 }
 
-function chooseTrack(id) {
-  if (id === selectedTrackId) return;
-  selectedTrackId = id;   // optimistic; LOBBY_UPDATE is the source of truth
-  saveTrackId(id);        // remember it so the next lobby auto-picks this track
-  renderTrackPicker();    // move the ring + name now
-  net.send(MSG.SELECT_TRACK, { trackId: id });
+function chooseMode(pick) {
+  const cur = selectedMode || {};
+  const same = cur.mode === pick.mode
+    && (pick.mode === 'cup' ? cur.cupId === pick.cupId
+      : pick.mode === 'track' ? cur.trackId === pick.trackId
+        : false); // a Random re-tap re-rolls the draw — never filtered
+  if (same) return;
+  selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth
+  saveMode(pick);              // remember it so the next lobby auto-picks this mode
+  renderModePicker();          // move the ring (and open the cup's panel) now
+  net.send(MSG.SELECT_MODE, pick);
   buzz(15);
 }
 

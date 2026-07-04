@@ -5,7 +5,7 @@
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
 import { buildCarPicker } from '../shared/carPicker.js';
-import { buildTrackPicker } from '../shared/trackPicker.js';
+import { buildModePicker } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
@@ -49,16 +49,19 @@ export function runControllerScenario(opts) {
     });
   }
 
-  // Track picker — mirrors main.js renderTrackPicker: host only (non-host lobby
-  // has no picker at all). Host taps re-render so the gallery shows the ring move.
-  function renderTrackPicker(selected, canPick) {
+  // Mode picker — mirrors main.js renderModePicker: host only (non-host lobby
+  // has no picker at all). Host taps re-render so the gallery shows the ring
+  // move / the tapped cup's exact-pick panel open live.
+  function renderModePicker(selection, canPick) {
     if (!canPick) { el('trackpick').classList.add('hidden'); return; }
     el('trackpick').classList.remove('hidden');
-    buildTrackPicker({
-      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, selected, canPick: true,
-      onPick: (id) => renderTrackPicker(id, true)
+    buildModePicker({
+      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, selection, canPick: true,
+      onPickMode: (pick) => renderModePicker(pick, true)
     });
   }
+  // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
+  const DEFAULT_MODE = { mode: 'cup', cupId: PREVIEW_TRACKS[0].cup };
 
   // Lobby footer — the SAME renderer as main.js (renderReadyFoot), fed fake
   // roster data. For a non-host, tapping toggles the ready state so the gallery
@@ -136,7 +139,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color); // default pick mirrors the livery slot
-      renderTrackPicker(PREVIEW_TRACKS[0].id, true); // host enters with a track auto-picked
+      renderModePicker(DEFAULT_MODE, true); // host enters with the first cup auto-picked
       // Everyone else is already ready, so the host's "Start race" is enabled.
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
@@ -148,7 +151,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
-      renderTrackPicker(null, false); // non-host: no track picker (the big screen shows the pick)
+      renderModePicker(null, false); // non-host: no picker (the big screen shows the pick)
       // Already readied up and so is everyone else, so the note shows the
       // tinted-name "Waiting for <HOST> to start…" treatment.
       renderReadyPreview(false, true,
@@ -166,7 +169,7 @@ export function runControllerScenario(opts) {
       el('me-name').textContent = FAKE_NAMES[color];
       el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openHelp)
       renderCarPicker(color);
-      renderTrackPicker(PREVIEW_TRACKS[0].id, true);
+      renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
       ]);
@@ -183,7 +186,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
-      renderTrackPicker(PREVIEW_TRACKS[0].id, true);
+      renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
       ]);
@@ -206,7 +209,7 @@ export function runControllerScenario(opts) {
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       renderCarPicker(color);
-      renderTrackPicker(null, false);
+      renderModePicker(null, false);
       el('ready-btn').classList.add('hidden');
       el('ready-note').classList.remove('hidden');
       el('ready-note').textContent = 'You’re in the next race!'; // keep in sync with main.js renderLobby
