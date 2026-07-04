@@ -11,6 +11,40 @@ import { createWakeLock } from '../shared/wakeLock.js';
 const { MSG, CAR_COLORS, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
+// Sanitize a display name to the wire limit (trim + ≤16 chars). One source of
+// truth for the length cap, shared by the name form, the shell's injected name,
+// and the launcher's live rename. Returns '' for blank input — callers that need
+// a seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
+// missing cgName falls back to the name screen).
+const cleanName = (n) => (n || '').trim().slice(0, 16);
+
+// ---- Couch Games launcher shell (CONTRACT.md) ----
+// The launcher (native Android app hosting this page in a WebView) appends
+// ?cgv=<version>&cgName=<name> to the join URL. Its presence means "running
+// inside the Couch Games shell"; ALL shell behaviour is gated on it, so the same
+// deployed controller keeps working untouched in a plain browser. We accept any
+// cgv value (forward-compat: an unknown higher version is still "shell present").
+const _cgParams = new URLSearchParams(location.search);
+const inShell = _cgParams.has('cgv');
+// The launcher's name gate guarantees non-blank ≤16 chars; we still sanitize
+// defensively (trim/truncate) exactly as the standalone name form does.
+const shellName = inShell ? cleanName(_cgParams.get('cgName')) : '';
+
+// Report a TERMINAL session end to the launcher (§3), feature-detected + fire-once.
+// Terminal = the session cannot continue (room gone/closed, join rejected, seat
+// taken over). The launcher tears down the WebView and returns home with a message,
+// so we must NOT also navigate. Returns true once it has signalled (caller stops);
+// false when there's no host to signal (plain browser / shell without the interface)
+// so the caller falls back to its normal in-game handling.
+let _sessionEnded = false;
+function endSession(reason) {
+  if (!(window.CouchGamesHost && window.CouchGamesHost.gameEnded)) return false;
+  if (_sessionEnded) return true;  // fire-once on our side too; extra calls are ignored anyway
+  _sessionEnded = true;
+  window.CouchGamesHost.gameEnded(reason);
+  return true;
+}
+
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one
 // level above it (1). lobby↔game↔results are same-level shuffles. Used to push a
@@ -25,7 +59,9 @@ function show(name) {
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
   // back from anywhere in the room returns to the name screen in one step.
-  if ((SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
+  // In the shell the launcher owns the back gesture (it swallows it and shows its
+  // own LEAVE bar), so we push nothing — our own back handling would fight it (§1).
+  if (!inShell && (SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
 }
 
 // haptics — vibrate the phone (ignored where unsupported). The player's eyes are
@@ -106,6 +142,20 @@ const net = new ControllerNet({
     // the name screen (the button is hidden), but it prevents a player getting
     // stuck on a disabled button — display gone, kicked, or reconnect exhausted.
     setJoining(false);
+    // Shell: a TERMINAL link state ends the session — hand it to the launcher (§3)
+    // and stop; it tears down the WebView. Recoverable states (reconnecting, a
+    // display that may come back) are NOT terminal and stay in-game below as our
+    // own overlay. If the host interface is somehow absent, endSession returns
+    // false and we fall through to the normal in-game handling.
+    if (inShell) {
+      const reason = state === 'error'
+        ? (info === 'Room not found' ? 'room_not_found'
+          : info === 'Room is full' ? 'game_full' : 'game_ended')
+        : state === 'replaced' ? 'replaced'
+          : state === 'lost' ? 'game_ended'
+            : null;
+      if (reason && endSession(reason)) return;
+    }
     // In-room (lobby/game/results) the name-screen status line is off-screen, so a
     // dropped link needs the full-screen #conn overlay; on the name screen the
     // status text under the form is enough.
@@ -138,7 +188,9 @@ function showConn(title, msg, retry, leave) {
   el('conn-title').textContent = title;
   el('conn-msg').textContent = msg || '';
   el('conn-retry').classList.toggle('hidden', !retry);
-  el('conn-leave').classList.toggle('hidden', !leave);
+  // In the shell the launcher owns leaving (its LEAVE bar) — never show our own
+  // "Exit to start" escape hatch, which would fight it (§1).
+  el('conn-leave').classList.toggle('hidden', !leave || inShell);
   el('conn').classList.remove('hidden');
 }
 function hideConn() { el('conn').classList.add('hidden'); }
@@ -416,6 +468,14 @@ function renderResultFoot(data) {
 function applyLivery() {
   const c = CAR_COLORS[myColorIndex] || '#888';
   document.documentElement.style.setProperty('--car', c);
+  // Retint the launcher's accent chrome (name chip, spinner, rename sheet) to
+  // match this player's livery — a live §4 hint. Mutating the meta's content is
+  // what the launcher's observer watches; a plain browser ignores it. Guarded on
+  // a real colour so we don't advertise the grey placeholder before livery lands.
+  if (myColorIndex != null) {
+    const meta = document.querySelector('meta[name="cg-accent-color"]');
+    if (meta) meta.setAttribute('content', c);
+  }
 }
 
 // Car picker — the controller's lobby is just "pick your car" (the shared display
@@ -596,14 +656,17 @@ function leaveToName() {
   el('name-input').focus();
 }
 window.addEventListener('popstate', () => {
+  if (inShell) return;   // shell owns leaving (§1) — we never pushed, and don't self-leave
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
 
-el('name-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const n = el('name-input').value.trim().slice(0, 16) || 'Racer';
+// Join the room under `name`. `persist` saves it as this device's default for the
+// standalone name form; the shell passes false — the launcher owns identity and its
+// injected name must never leak into the game's own storage (§1).
+async function joinRace(name, { persist } = {}) {
+  const n = cleanName(name) || 'Racer';
   myName = n;
-  saveName(n);
+  if (persist) saveName(n);
   setStatus('');           // the disabled button signals the in-flight join
   setJoining(true);
   // Request motion permission within this user gesture (iOS requirement). AWAIT it
@@ -614,6 +677,10 @@ el('name-form').addEventListener('submit', async (e) => {
   // Android/desktop it resolves on the next microtask (no prompt, negligible delay).
   await tilt.enableMotion();
   net.connect(n);
+}
+el('name-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  joinRace(el('name-input').value, { persist: true });
 });
 
 // Lobby footer button — for the host it's "Start race" (enabled only once
@@ -848,7 +915,38 @@ function setHeldItem(item) {
   if (item) buzz(20);                        // eyes-free "you picked something up" (look at the TV for what)
 }
 
-show('name');
+// Live rename from the launcher (§2). The game implements, the launcher calls it
+// when the player edits their name in the in-game bar (and re-asserts it on every
+// load, belt-and-suspenders with the cgName param). Only meaningful in the shell —
+// a plain browser renames via the name screen. Applies locally (the labels that
+// carry the name) AND broadcasts to the display via a re-HELLO, exactly like a
+// join. We do NOT persist it (§1): the injected identity must not leak into the
+// game's own name storage.
+window.CouchGames = {
+  setName(name) {
+    if (!inShell) return;
+    const n = cleanName(name) || 'Racer';
+    myName = n;
+    el('me-name').textContent = n;                     // lobby identity
+    el('hud-name').textContent = n;                    // in-race HUD
+    if (helpOpen()) el('phone-name').textContent = n;  // how-to-drive demo phone
+    net.rename(n);                                     // → display roster + LOBBY_UPDATE echo
+  }
+};
+
+// Boot. In the shell the launcher owns identity: skip the name screen entirely
+// and join straight away with the injected name (never persisted). Otherwise land
+// on the name screen and wait for the player to pick a name. (Scenario/gallery
+// mode below never connects and always carries no cgv, so it's unaffected.)
+if (inShell && shellName) {
+  // Never flash the name screen (it's the default-visible section): hide it up
+  // front and go straight to joining. The launcher's own joining spinner floats
+  // over the blank sky until WELCOME lands and show('lobby') takes over.
+  screens.name.classList.add('hidden');
+  joinRace(shellName, { persist: false });
+} else {
+  show('name');
+}
 window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
 
 // Gallery / test mode: ?scenario=… lays out a single screen from fake data

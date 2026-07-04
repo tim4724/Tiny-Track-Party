@@ -135,6 +135,18 @@ export class ControllerNet extends GameNet {
     this.peerIndex = null;
   }
 
+  // Live rename: adopt the new name and re-introduce ourselves to the display so
+  // it updates our seat and re-broadcasts the roster (LOBBY_UPDATE) to everyone —
+  // the same HELLO path used on join and on display-return, so a fresh display
+  // also restores the new name. No-op until we've joined (peerIndex set); the name
+  // still rides the next HELLO. Used by the Couch Games launcher's setName (§2).
+  rename(name) {
+    this.playerName = name || this.playerName;
+    if (this.party && this.peerIndex != null) {
+      this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
+    }
+  }
+
   // Send to the display. FASTLANE_TYPES messages ride the WebRTC DataChannel
   // when it's open; everything else (and fallback) goes over the WS relay.
   send(type, payload) {
