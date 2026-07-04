@@ -580,7 +580,7 @@ const INTERMISSION_MS = 10000;  // auto-advance budget; the host can advance ear
 let series = null;              // live CupSeries, or null (single race / no cup)
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
-let intermissionTicker = null;  // 1 Hz "starting in N…" refresh
+let intermissionTicker = null;  // ½ s "starting in N…" refresh
 
 // Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
 let lastRosterCount = 0;

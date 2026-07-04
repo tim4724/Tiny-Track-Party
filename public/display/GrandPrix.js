@@ -1,7 +1,7 @@
-// Grand Prix series engine — the pure cup-scoring core behind "pick a Cup" mode.
-// A CupSeries walks one cup's tracks in CUPS order, banks points per race
-// (POINTS_BY_RANK by finish rank, DNF = 0) and answers the intermission /
-// podium standings. Display-side only, but kept dependency-free, clock-free and
+// Grand Prix series engine — the pure scoring core behind the Cup and Random
+// picks. A CupSeries walks one cup's tracks in CUPS order (or, with drawNext,
+// an endless run of drawn tracks), banks points per race (POINTS_BY_RANK by
+// finish rank, DNF = 0) and answers the intermission / podium standings. Display-side only, but kept dependency-free, clock-free and
 // RNG-injected (like engine/Game.js) so node:test drives it directly and the
 // portable-purity gate scans it: all identity/meta comes in through applyRace,
 // randomness comes in through makeShuffleBag's rng.
@@ -83,12 +83,11 @@ export class CupSeries {
       m.lastRaceIndex = this.raceIndex;
     }
     this._lastApplied = this.raceIndex;
-    // Endless play draws the next race instead of ever finishing — the
-    // intermission needs its name (nextTrackId) before advance() runs.
-    if (this.drawNext) {
-      if (this.raceIndex >= this.raceCount - 1) this.cup.tracks.push(this.drawNext());
-    } else if (this.raceIndex >= this.raceCount - 1) {
-      this._done = true;
+    if (this.raceIndex >= this.raceCount - 1) {
+      // Endless play draws the next race instead of ever finishing — the
+      // intermission needs its name (nextTrackId) before advance() runs.
+      if (this.drawNext) this.cup.tracks.push(this.drawNext());
+      else this._done = true;
     }
   }
 

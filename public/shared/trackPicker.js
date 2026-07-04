@@ -1,7 +1,7 @@
-// Mode picker UI — how the host picks what to race: 🎲 Random (one race on a
-// display-drawn track), a Cup (its 4 tracks back-to-back as a Grand Prix), or —
-// from the panel a picked cup opens — one exact track (single race). Five big
-// tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
+// Mode picker UI — how the host picks what to race: 🎲 Random (an endless run
+// of display-drawn tracks), a Cup (its 4 tracks back-to-back as a Grand Prix),
+// or — from the panel a picked cup opens — one exact track (single race). Five
+// compact tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
 // from the schematic catalog the display ships in WELCOME (each entry carries
 // its cup + a top-down SVG path; see display/trackSchematic.js). Only the HOST
 // picks, so `canPick` gates the taps — read-only rendering is for the gallery.

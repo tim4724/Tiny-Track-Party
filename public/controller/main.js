@@ -454,9 +454,9 @@ function renderLobby() {
   });
 }
 
-// Mode picker — host only: 🎲 Random + one tile per cup (a cup pick runs its
-// 4-race Grand Prix; the open cup's panel offers exact single-track picks).
-// Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
+// Mode picker — host only: 🎲 Random (endless drawn races) + one tile per cup
+// (a cup pick runs its 4-race Grand Prix; the open cup's panel offers exact
+// single-track picks). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
 // shows the host's pick. Also hidden until the catalog arrives (older display /
 // pre-WELCOME). Layout in shared/trackPicker.js.
 function renderModePicker() {
@@ -645,9 +645,9 @@ el('pause-btn').addEventListener('click', () => { buzz(15); net.send(MSG.PAUSE_G
 el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RESUME_GAME); });
 el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
 
-// Results overlay: only the host gets the button; it sends everyone to the lobby.
-// Host's results button: mid-cup it advances the series, otherwise back to the
-// lobby. The ghost "End cup early" is the intermission's escape hatch.
+// Host's results button: mid-series it advances to the next race, otherwise it
+// sends everyone to the lobby. The ghost quit button is the intermission's
+// escape hatch ("End cup early" / endless: "Back to lobby").
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
   buzz(15);
