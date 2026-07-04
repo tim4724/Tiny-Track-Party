@@ -335,7 +335,14 @@ function showResultsScreen() {
 }
 
 // Render the standings rows + the footer (host's "New game" vs a waiting note).
+// Cup boards (data.series) trade the lap clock for points — "+9 · 15 pts" — and
+// arrive from the display already in cup order; the title tracks the series
+// ("Race 2 of 4", then "Beach Cup — Final" on the podium board).
 function renderResults(data) {
+  const s = data.series;
+  el('results-title').textContent = !s ? 'Results'
+    : s.final ? `${s.cupName} — Final` : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
+  const cupBoard = !!(s && data.over);
   const list = el('result-list');
   list.innerHTML = '';
   (data.order || []).forEach((o) => {
@@ -350,33 +357,55 @@ function renderResults(data) {
     const name = document.createElement('span');
     name.className = 'res-name';
     name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
-    const time = document.createElement('span');
-    time.className = 'res-time';
-    time.textContent = o.joining ? 'Next race'
-      : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
-    li.append(dot, name, time);
+    li.append(dot, name);
+    if (cupBoard && !o.joining) {
+      const gain = document.createElement('span');
+      gain.className = 'res-gain' + (o.gained ? '' : ' is-zero');
+      gain.textContent = `+${o.gained || 0}`;
+      const pts = document.createElement('span');
+      pts.className = 'res-pts';
+      pts.textContent = `${o.points || 0} pts`;
+      li.append(gain, pts);
+    } else {
+      const time = document.createElement('span');
+      time.className = 'res-time';
+      time.textContent = o.joining ? 'Next race'
+        : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
+      li.appendChild(time);
+    }
     list.appendChild(li);
   });
   renderResultFoot(data);
 }
 
 // Footer: while cars are still out, a waiting note for everyone. Once the race is
-// over, the host gets the "New game" button; everyone else is told who to wait on.
+// over, the host gets the button — "Next race" during a cup intermission (plus the
+// ghost "End cup early", the only way to abandon a cup from here) or "New game"
+// otherwise; everyone else gets a note. Intermissions auto-advance, so non-hosts
+// see "starting soon" rather than a who-to-wait-on name.
 function renderResultFoot(data) {
   const btn = el('newgame-btn');
   const wait = el('result-wait');
+  const s = data.series;
+  const intermission = !!(s && !s.final && data.over);
+  el('quitcup-btn').classList.toggle('hidden', !(intermission && amHost));
   if (!data.over) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
     wait.textContent = 'Waiting for the other racers to finish…';
   } else if (amHost) {
+    btn.textContent = intermission ? 'Next race ▸' : 'New game';
     btn.classList.remove('hidden');
     wait.classList.add('hidden');
   } else {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
-    const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
-    renderWaitNote(wait, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start a new game…');
+    if (intermission) {
+      wait.textContent = `Next race starting soon: ${s.nextTrackName || '…'}`;
+    } else {
+      const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
+      renderWaitNote(wait, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start a new game…');
+    }
   }
 }
 
@@ -613,7 +642,15 @@ el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RE
 el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
 
 // Results overlay: only the host gets the button; it sends everyone to the lobby.
-el('newgame-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
+// Host's results button: mid-cup it advances the series, otherwise back to the
+// lobby. The ghost "End cup early" is the intermission's escape hatch.
+el('newgame-btn').addEventListener('click', () => {
+  if (!amHost) return;
+  buzz(15);
+  const s = lastStandings && lastStandings.series;
+  net.send(s && !s.final ? MSG.SERIES_NEXT : MSG.RETURN_TO_LOBBY);
+});
+el('quitcup-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
 
 // --- How-to-Drive popup ---
 // Purely INSTRUCTIONAL: teaches the controls (tilt/brake/item) + the keep-upright

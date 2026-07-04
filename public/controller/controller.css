@@ -396,6 +396,10 @@ input[type=text]:disabled { opacity: 0.6; }
 /* late joiner riding along under the field — no rank number, "Next race" status */
 .result-list li.is-joining::before { content: '–'; }
 .result-list li.is-joining .res-time { font-style: italic; }
+/* cup boards swap the lap clock for points: this race's gain + the running total */
+.result-list .res-gain { margin-left: auto; color: var(--brand); font-weight: 800; }
+.result-list .res-gain.is-zero { color: var(--ink-3); }
+.result-list .res-pts { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; }
 #result-foot { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
 #result-foot .btn { width: min(82%, 18rem); margin-top: 0; }
 .result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }

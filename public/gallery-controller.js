@@ -24,6 +24,8 @@ var CONTROLLER_CARDS = [
   { key: 'paused',          title: 'Paused',          perColor: true },
   { key: 'finished',        title: 'Finished',        perColor: true },
   { key: 'results',         title: 'Results',         perColor: true },
+  { key: 'intermission',    title: 'Cup intermission', perColor: true },
+  { key: 'cup-podium',      title: 'Cup podium',      perColor: true },
   { key: 'conn-lost',        title: 'Connection lost' },
   { key: 'conn-screen-gone', title: 'Big screen gone' },
   { key: 'conn-replaced',    title: 'Seat replaced' }
