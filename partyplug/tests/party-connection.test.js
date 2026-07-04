@@ -354,6 +354,24 @@ describe('PartyConnection - reconnect with exponential backoff', () => {
     });
   });
 
+  test('create with a controller-URL template includes url; undefined omits the field', () => {
+    // The relay rejects the whole create on an invalid template, so the field
+    // must be absent (not null/undefined) when the caller has none to register.
+    const pc = new PartyConnection('wss://test.example.com', { clientId: 'display' });
+    pc.connect();
+    MockWebSocket._instances[0]._simulateOpen();
+    pc.create(9, 'https://play.example.com/{room}#{instance}');
+    pc.create(9, undefined);
+    const sent = MockWebSocket._instances[0]._sent;
+    assert.deepStrictEqual(sent[0], {
+      type: 'create',
+      clientId: 'display',
+      maxClients: 9,
+      url: 'https://play.example.com/{room}#{instance}'
+    });
+    assert.deepStrictEqual(Object.keys(sent[1]), ['type', 'clientId', 'maxClients']);
+  });
+
   test('join sends correct relay message', () => {
     const pc = new PartyConnection('wss://test.example.com', { clientId: 'player1' });
     pc.connect();

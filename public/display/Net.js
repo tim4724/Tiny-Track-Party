@@ -226,7 +226,7 @@ export class DisplayNet extends GameNet {
 
     this.party.onOpen = () => {
       if (this.roomCode) this.party.join(this.roomCode);
-      else this.party.create(MAX_PLAYERS + 1); // +1 for the display itself
+      else this.party.create(MAX_PLAYERS + 1, this._controllerUrlTemplate()); // +1 for the display itself
     };
     this.party.onClose = () => { this._inRoom = false; };
     this.party.onProtocol = (type, msg) => this._onProtocol(type, msg);
@@ -627,9 +627,21 @@ export class DisplayNet extends GameNet {
   get roomState() { return this.flow.state; }
 
   // ---- join URL / QR base ----
+  _baseUrl() { return this.baseUrlOverride || window.location.origin; }
   _joinUrl() {
-    const base = this.baseUrlOverride || window.location.origin;
-    return base + '/' + this.roomCode + (this.instance ? '#' + enc(this.instance) : '');
+    return this._baseUrl() + '/' + this.roomCode + (this.instance ? '#' + enc(this.instance) : '');
+  }
+  // Controller-URL template registered with the relay on room create. The relay
+  // fills {room}/{instance} and hands the result to anyone holding only the room
+  // code (native shells via GET /room/:code, controllers in `joined`), so a
+  // code-only join can resolve which page to load. Mirrors the _joinUrl() shape
+  // (instance in the fragment, kept out of request logs). The relay accepts only
+  // absolute https templates and rejects the whole create on an invalid one, so
+  // plain-http origins (local dev, e2e) register none.
+  _controllerUrlTemplate() {
+    const base = this._baseUrl().replace(/\/+$/, '');
+    if (base.indexOf('https://') !== 0) return undefined;
+    return base + '/{room}#{instance}';
   }
   async _fetchBaseUrl() {
     const host = window.location.hostname;
