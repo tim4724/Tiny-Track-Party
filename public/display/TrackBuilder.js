@@ -203,6 +203,31 @@ export function buildTrack(track, opts = {}) {
   return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate });
 }
 
+// A support post's relation to ONE centreline sample — the single source of truth for
+// "does this column stand in this corridor, and how deep". Returns null unless the
+// sample is an upright corridor (not a tilted stunt flank), the post's vertical span
+// crosses the road there, and the post is ABEAM of it (tangential offset within the
+// post's own footprint plus sampling slack). Intrusion is then the LATERAL protrusion
+// of the post's edge past the kerb (negative = clear by that much). The RADIAL
+// post→sample distance must never stand in for intrusion: a strand climbing over its
+// own support re-enters the pillar's height band ~2.5 units down the road while still
+// radially close, which fabricated "deep intruders" and planted collision poles
+// mid-lane on the approach — the invisible pole that survived its own sliver ban
+// (shipped on Sidewinder; retired Crossover had one dead-centre). Exported so the
+// geometry audit (scripts/audit-tracks.mjs) and the unit tests measure with THIS
+// function — a hand-synced copy is how the radial bug slipped its regression test.
+export function postAtSample(sm, post) {
+  if (sm.up.y < 0.9) return null;                                        // tilted stunt flank — not a corridor
+  if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) return null; // column doesn't cross this road
+  const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
+  const tl = Math.hypot(sm.tangent.x, sm.tangent.z) || 1;
+  const tan = (dx * sm.tangent.x + dz * sm.tangent.z) / tl;
+  if (Math.abs(tan) > post.radius + 0.35) return null;                   // not abeam — no say
+  const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
+  const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;
+  return { lat, tan, intrusion: sm.width / 2 + post.radius - Math.abs(lat) };
+}
+
 // Shared finalize — frames (parallel transport + banking + holonomy unwind), support pillars,
 // grass-hill berms, the start gate, and the Centerline. Fed by BOTH the segment walk
 // (buildTrack) and the waypoint sampler (buildSplineTrack): the integrated centreline points
@@ -311,17 +336,15 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   // inside one (which then gets a collision autoPole below). The sliver zone between —
   // a post peeking a few cm past the kerb — is banned: its ghost collision pole would
   // bonk rail-riding cars off something they can't see ("the invisible pole").
-  // intrusionOf: how far a column's edge protrudes past the kerb into the deepest
-  // upright corridor its vertical span crosses (negative = clear by that much).
   const POST_CLEAR = 0.15, POST_DEEP = 0.5;
-  const intrusionOf = (x, z, radius, baseY, topY) => {
+  // intrusionOf: how far a column's edge protrudes past the kerb into the deepest
+  // upright corridor its vertical span crosses (negative = clear by that much;
+  // -Infinity = abeam of no corridor at all).
+  const intrusionOf = (post) => {
     let worst = -Infinity;
     for (let j = 0; j < n; j++) {
-      const sm = samples[j];
-      if (sm.up.y < 0.9) continue;                                  // tilted stunt flank — not a corridor
-      if (sm.pos.y < baseY - 0.5 || sm.pos.y > topY - 0.5) continue; // column doesn't cross this road
-      const d = Math.hypot(x - sm.pos.x, z - sm.pos.z);
-      worst = Math.max(worst, sm.width / 2 + radius - d);
+      const hit = postAtSample(samples[j], post);
+      if (hit) worst = Math.max(worst, hit.intrusion);
     }
     return worst;
   };
@@ -367,7 +390,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
       // Ban the sliver zone against ANY corridor the column crosses (the check above
       // only sees clearly-lower roads; a graze against a similar-height deck slipped
       // through). Deep intruders are kept — a visible on-road post with collision.
-      const intr = intrusionOf(smp.pos.x, smp.pos.z, RADIUS, groundY - EMBED, topY);
+      const intr = intrusionOf({ x: smp.pos.x, z: smp.pos.z, radius: RADIUS, baseY: groundY - EMBED, topY });
       if (intr > -POST_CLEAR && intr < POST_DEEP) continue;
       pillars.push({ x: smp.pos.x, z: smp.pos.z, baseY: groundY - EMBED, topY, radius: RADIUS });
     }
@@ -481,7 +504,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
         let placed = null;
         for (let off = OFFSET; off <= OFFSET + 0.61; off += 0.15) {
           const x = c.pos.x + ox * off, z = c.pos.z + oz * off;
-          if (intrusionOf(x, z, RAD, groundY, c.pos.y) <= -POST_CLEAR) { placed = { x, z }; break; }
+          if (intrusionOf({ x, z, radius: RAD, baseY: groundY, topY: c.pos.y }) <= -POST_CLEAR) { placed = { x, z }; break; }
         }
         if (!placed) continue;
         supportPosts.push({
@@ -495,12 +518,14 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   // ---- Collision poles for supports standing IN a drivable corridor. A pillar or loop
   // shaft is a real column the player can see; where one rises through the road corridor
   // cars must HIT it, not ghost through. Placement above bans the sliver zone, so any
-  // intrusion that reaches here is ≥ POST_DEEP at its deepest — a visible obstacle; the
-  // 0.25 emission floor just trims collision at the run's shallow ends. Emit an engine
-  // pole (same (s, lat) collision the authored Twister pole uses) every ~2.5 units along
-  // the obstructed stretch; `ghost: true` tells the renderer it's already drawn as
-  // pillar/shaft, so buildPoles must not draw it again. main.js merges these into
-  // track.poles for the engine + AI.
+  // intrusion that reaches here is ≥ POST_DEEP at its deepest — a visible obstacle;
+  // runs whose deepest intrusion stays under 0.25 are skipped (a kerb-grazer's collision
+  // disc would outweigh what's visible). Each contiguous abeam run is ONE road-crossing
+  // of the post: emit ONE engine pole (same (s, lat) collision the authored Twister pole
+  // uses) at the run's closest-abeam sample — that (s, lat) reconstructs to the visible
+  // column's own footprint, so the bonk always has a post to look at. `ghost: true`
+  // tells the renderer it's already drawn as pillar/shaft, so buildPoles must not draw
+  // it again. main.js merges these into track.poles for the engine + AI.
   const autoPoles = [];
   {
     const posts = [
@@ -508,21 +533,24 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
       ...supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y }))
     ];
     for (const post of posts) {
-      let lastEmit = -Infinity;
+      let run = null; // current contiguous abeam run: deepest intrusion gates, closest-abeam places
+      const flush = () => {
+        if (run && run.intrusion >= 0.25) autoPoles.push({ s: run.s, lat: run.lat, radius: post.radius, ghost: true });
+        run = null;
+      };
       for (let j = 0; j < n; j++) {
         const sm = samples[j];
-        if (sm.up.y < 0.9) continue;                                   // tilted stunt flank — not a corridor
-        if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue; // shaft doesn't cross this road
-        const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
-        const d = Math.hypot(dx, dz);
-        if (sm.width / 2 + post.radius - d < 0.25) continue;           // shallow end of the run — no phantom edge
-        if (sm.s - lastEmit >= 2.5) {
-          const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
-          const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;    // signed offset along the road's lateral
-          autoPoles.push({ s: sm.s, lat, radius: post.radius, ghost: true });
-          lastEmit = sm.s;
+        const hit = postAtSample(sm, post);
+        if (!hit) continue;                                            // post doesn't stand in this road here
+        if (run && sm.s - run.lastS > 1.0) flush();                    // arclength gap → a separate crossing
+        if (!run) run = { s: sm.s, lat: hit.lat, tan: hit.tan, intrusion: hit.intrusion, lastS: sm.s };
+        else {
+          run.lastS = sm.s;
+          run.intrusion = Math.max(run.intrusion, hit.intrusion);
+          if (Math.abs(hit.tan) < Math.abs(run.tan)) { run.s = sm.s; run.lat = hit.lat; run.tan = hit.tan; }
         }
       }
+      flush();
     }
   }
 

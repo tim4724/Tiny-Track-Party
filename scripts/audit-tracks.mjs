@@ -1,4 +1,4 @@
-// Geometry audit for every named track — catches the two failure classes the strand
+// Geometry audit for every named track — catches the failure classes the strand
 // gate (3D centreline distance ≥ 1.5) is blind to:
 //   1. SURFACE OVERLAP — two strands far apart along the lap but side-by-side at the
 //      SAME level: centrelines 1.6 apart pass the 3D gate while the 5-wide road decks
@@ -9,10 +9,14 @@
 //      only a few cm into a corridor: the ghost collision pole bonks rail-riding cars
 //      while the visible sliver hides behind the kerb. Posts should be clearly OUT
 //      (with margin) or clearly IN (a visible obstacle).
+//   3. PHANTOM POLES — a collision pole whose (s, lat) doesn't reconstruct to any real
+//      post's world position: an invisible mid-lane wall (the radial-intrusion bug
+//      shipped one on Sidewinder).
 //   node scripts/audit-tracks.mjs
 import { buildTrack } from './track-gen.mjs';
 
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const { postAtSample } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
 
 const KERB = 0.22 + 0.2;   // kerb width + height margin around the drivable deck
 const LEVEL = 0.6;         // |Δy| below this = same level (deck 0.34 + kerb 0.2 + slack)
@@ -46,7 +50,9 @@ for (const [name, def] of Object.entries(TRACKS)) {
     rows.push(`SURFACE OVERLAP ${worst.depth.toFixed(2)} deep @ s=${worst.s1.toFixed(0)}↔${worst.s2.toFixed(0)} (horiz ${worst.h.toFixed(2)} < ${worst.need.toFixed(2)}, Δy ${worst.dy.toFixed(2)})`);
   }
 
-  // 2. support-post corridor grazes (0 < intrusion < 0.5 → invisible-pole zone)
+  // 2. support-post corridor grazes (0 < intrusion < 0.5 → invisible-pole zone).
+  // postAtSample (imported from TrackBuilder — the same function placement uses) gates
+  // on upright/height-band/abeam and measures the LATERAL intrusion.
   const posts = [
     ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
     ...(t.supportPosts || []).map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
@@ -54,13 +60,21 @@ for (const [name, def] of Object.entries(TRACKS)) {
   for (const post of posts) {
     let deepest = 0, at = 0;
     for (const sm of ss) {
-      if (sm.up.y < 0.9) continue;
-      if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) continue;
-      const d = Math.hypot(post.x - sm.pos.x, post.z - sm.pos.z);
-      const intr = sm.width / 2 + post.radius - d;
-      if (intr > deepest) { deepest = intr; at = sm.s; }
+      const hit = postAtSample(sm, post);
+      if (hit && hit.intrusion > deepest) { deepest = hit.intrusion; at = sm.s; }
     }
     if (deepest > 0 && deepest < 0.5) rows.push(`POST GRAZE ${post.kind} intrudes ${deepest.toFixed(2)} @ s=${at.toFixed(0)} (invisible-pole zone)`);
+  }
+
+  // 3. phantom collision poles — every autoPole's (s, lat) must reconstruct to a REAL
+  // post's footprint (the pole IS the post's collision; a pole with no post at its world
+  // position is an invisible wall).
+  for (const ap of (t.autoPoles || [])) {
+    const f = t.centerline.sampleAt(ap.s);
+    const px = f.pos.x + f.lateral.x * ap.lat, pz = f.pos.z + f.lateral.z * ap.lat;
+    let bd = Infinity;
+    for (const post of posts) bd = Math.min(bd, Math.hypot(post.x - px, post.z - pz));
+    if (bd > ap.radius + 0.4) rows.push(`PHANTOM POLE @ s=${ap.s.toFixed(0)} lat=${ap.lat.toFixed(2)} — nearest post ${bd.toFixed(2)} away`);
   }
 
   if (rows.length) { issues += rows.length; console.log(`${name}:`); for (const r of rows) console.log('  ' + r); }
