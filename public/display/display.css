@@ -260,7 +260,7 @@ html.cam-free #race { pointer-events: none; }
 .cell-label__name {
   font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 2vw, 2.2rem);
   color: var(--c, var(--ink));
-  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  white-space: nowrap;
 }
 
 /* Place + lap — top-right of the cell, no card. Dark ink (legible on the constant
