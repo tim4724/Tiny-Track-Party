@@ -96,7 +96,9 @@ const POLE_MIN_KEEP = 0.3;     // a hit never drops you below this fraction of t
 // fallback; the display sizes each puddle to a fraction of the track width.
 const OIL_RADIUS = 0.7;        // default puddle radius (world units) when a hazard omits one
 const SPIN_TIME = 1.0;         // seconds of lost control per spin-out
-const SPIN_DRAG = 2.5;         // gentle deceleration (units/s²) while spinning — coasts through, no hard stop
+const SPIN_DRAG_RATE = 1.8;    // speed-proportional drag while spinning (fraction/s): v decays as e^(-rate·t),
+                               // so a spin sheds a FRACTION of current speed — faster/boosted cars lose more
+                               // (~83% of speed over the 1s spin). No hard stop; scales with how fast you hit.
 const SPIN_TURNS = 2;          // cosmetic whole turns over SPIN_TIME (a multiple of 2π → no snap on reset)
 
 // ---- Catch-up mechanics (boost pads + items) ----
@@ -496,7 +498,7 @@ export class Game {
       // A monster rides slightly higher top speed (stacks over any boost it grabs).
       const vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
       const targetV = vmaxEff * c.boostMul * (1 - brakeEff);
-      if (spinning) c.v = Math.max(0, c.v - SPIN_DRAG * dt);
+      if (spinning) c.v *= Math.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
 
