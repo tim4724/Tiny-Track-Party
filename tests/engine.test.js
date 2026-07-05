@@ -948,9 +948,9 @@ test('a finished car with a full slot keeps its item but still pops the box (coo
     'a full-slot finished car still emits a (finished) pickup so the box pops + sounds');
 });
 
-test('a LIVE car with a full slot still forfeits the box (finished-car rule does not leak)', () => {
-  // Guards the deliberate anti-hoarding rule for live cars: only FINISHED cars pop a box
-  // they can't take. (The reverse of the test above.)
+test('a LIVE car with a full slot consumes the box and REPLACES its held item', () => {
+  // A live car always takes the box, rerolling a fresh item over whatever it holds
+  // (driving through a box swaps in the new pickup). Only FINISHED cars hold instead.
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
   const events = [];
@@ -959,8 +959,11 @@ test('a LIVE car with a full slot still forfeits the box (finished-car rule does
   Object.assign(car, { totalS: 8, lat: 0, v: 0, item: 'boost' });
   game.elapsed = 2; // past the launch gate
   game.update(16);
-  assert.equal(game.getSnapshot().boxes[0], true, 'a live full-slot car leaves the box live');
-  assert.ok(!events.some((e) => e.type === 'pickup'), 'no pickup fires for a live full-slot car');
+  assert.equal(game.getSnapshot().boxes[0], false, 'a live full-slot car consumes the box (cooldown)');
+  assert.ok(car.item != null, 'the car holds a (rerolled) item after the grab');
+  assert.equal(car.pickupAge, 0, 'the replacement item resets the pickup age (fresh roll)');
+  assert.ok(events.some((e) => e.type === 'pickup' && e.id === 'p1' && e.finished === false),
+    'a live full-slot car emits a fresh pickup');
 });
 
 // ---- boost pads + catch-up factor -------------------------------------------
@@ -1088,7 +1091,9 @@ test('an item box fills the slot after the launch gate, then respawns', () => {
   game.processInput('p1', { b: 1 }); game.update(16);
   assert.ok(['boost', 'banana', 'rocket'].includes(car.item), `box fills the slot (got ${car.item})`);
   assert.equal(game.getSnapshot().boxes[0], false, 'box is on cooldown after pickup');
-  // respawn after BOX_RESPAWN
+  // respawn after BOX_RESPAWN — move the car clear of the box first, else a live car
+  // (which now re-grabs a box even with a full slot) would immediately re-consume it.
+  car.totalS = 40;
   for (let i = 0; i < 280; i++) { game.processInput('p1', { b: 1 }); game.update(16); } // ~4.5s
   assert.equal(game.getSnapshot().boxes[0], true, 'box respawns');
 });
@@ -1112,15 +1117,17 @@ test('a freshly-rolled item is held through the reveal gate, then the buffered p
   assert.equal(car.item, null, 'the buffered item fires once the reveal gate opens');
 });
 
-test('a full slot does not consume a box (it stays live for the next car)', () => {
+test('a full slot consumes a box and rerolls a fresh held item', () => {
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
   const game = new Game(['p1'], track, {});
   const car = game.cars.get('p1');
-  Object.assign(car, { totalS: 8, lat: 0, v: 0, item: 'boost' });
+  Object.assign(car, { totalS: 8, lat: 0, v: 0, item: 'boost', pickupAge: 999 });
   game.elapsed = 2;
   game.update(16);
-  assert.equal(game.getSnapshot().boxes[0], true, 'box not consumed while the slot is full');
+  assert.equal(game.getSnapshot().boxes[0], false, 'box consumed even with a full slot');
+  assert.ok(car.item != null, 'the car still holds an item after the grab');
+  assert.equal(car.pickupAge, 0, 'a fresh roll replaced the held item (pickup age reset)');
 });
 
 test('item rolls are deterministic for a seed and position-weighted by t', () => {

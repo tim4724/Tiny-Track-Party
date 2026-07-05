@@ -2040,6 +2040,18 @@ export class SceneRenderer {
     }
   }
 
+  // A fresh grab (fired once per pickup by onRaceEvent): ALWAYS re-spin the cell's
+  // roulette, even when a box swap re-rolls the SAME item id — so every pickup reads.
+  // setCarHud's polling only reveals a late-joiner's held item + clears the slot on use;
+  // it won't double-spin because this sets _chipItem before the next 6 Hz HUD poll.
+  itemPickup(id, item) {
+    const c = this.cars.get(id);
+    if (!c || !c.label || !item) return; // cell-less AI car → no HUD chip
+    c._chipItem = item;
+    if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
+    this._rouletteChip(c, item);
+  }
+
   // Slot-machine the cell's item slot: flick through the item ICONS, decelerating,
   // then land on `item` with a pop. Self-driven (setTimeout chain on c._chipTimer) so
   // it animates faster than the ~6 Hz setCarHud cadence; cancelled on change/teardown.

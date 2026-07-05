@@ -715,29 +715,30 @@ export class Game {
     this.onEvent({ type: 'pad', id: c.id });
   }
 
-  // Rising-edge overlap of an item BOX. A box on cooldown is inert. A LIVE car with a
-  // full slot does NOT consume the box (it stays live for the next car) — so holding
-  // an item means forfeiting every box you pass (defuses hoarding). On a fresh pickup
-  // the box goes on cooldown and the car rolls a t-weighted item. A FINISHED car always
-  // pops the box: empty → rolls (collects) one, full → keeps it (it can't use items, so
-  // hoarding is moot — the box still cools down + pops so the victory lap stays lively).
+  // Rising-edge overlap of an item BOX. A box on cooldown is inert. A LIVE car always
+  // consumes the box and rolls a fresh t-weighted item, REPLACING whatever it holds — so
+  // driving through a box with a full slot swaps in the new roll (the held item is unused
+  // state; active effects like boost/rocket are separate, so nothing in flight is lost).
+  // On a pickup the box goes on cooldown. A FINISHED car pops the box too: empty → rolls
+  // (collects) one, full → keeps it (it can't use items, so a reroll is moot — the box
+  // still cools down + pops so the victory lap stays lively).
   _enterBox(c) {
     if (!this.boxes.length) return;
     for (let i = 0; i < this.boxes.length; i++) {
       const b = this.boxes[i];
       const inside = b.cooldown <= 0 && this._inZone(c, b, b.radius);
       if (inside && !c.boxIn.has(i)) {
-        if (c.item == null) {
+        if (!c.finished || c.item == null) {
+          // Live car (any slot) or a finished car with an empty slot: roll a fresh item,
+          // replacing whatever's held. Latch membership so the box fires once.
           c.item = this._roll(this._placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
           this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: c.finished });
-        } else if (c.finished) {
+        } else {
           // Finished + full slot: pop the box (cooldown + pickup pop) but HOLD the current
           // item — no reroll. Latch membership so the box fires once, not every frame.
           b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
           this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: true });
         }
-        // live car, full slot: leave membership unset so it re-checks next frame (auto-grabs
-        // the instant the slot frees while still on the box).
       } else if (!inside) { c.boxIn.delete(i); }
     }
   }

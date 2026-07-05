@@ -912,6 +912,9 @@ function onRaceEvent(e) {
   // else as more cars finish.
   if (!e) return;
   if (!fastForwarding) audioForRaceEvent(e); // the fast-forward burst is silent — it's skipping, not racing
+  // A live car's grab always re-spins its cell roulette (incl. a box swap that re-rolls
+  // the same item) — a finished car's victory-lap grab has no usable slot, so no spin.
+  if (!fastForwarding && e.type === 'pickup' && !e.finished) scene.itemPickup(e.id, e.item);
   // Rocket strike: pop a one-shot impact burst on the target (frustum culling drops it
   // off-screen). Skipped during the silent fast-forward, like the audio above.
   if (!fastForwarding && e.type === 'spin' && e.cause === 'rocket') scene.rocketImpact(e.id);
