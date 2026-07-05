@@ -43,12 +43,12 @@ export function buildRibbonRoad(R, track, collide, theme) {
   const lw = Math.min(0.20, defHalf * 0.5 - gap);// painted white edge-line width
   const stripeLen = 2.0;                         // kerb red/white band length (world units)
   const dashW = 0.18;                            // painted centre-dash width
-  // Centre dash cadence: at top speed (~9 u/s) a 1.8u period streams past at
-  // ~5 cycles/s — a readable flow, not a strobe. The dash is the near-field
+  // Centre dash cadence: at top speed (~9 u/s) a 5.76u period streams past at
+  // ~1.6 cycles/s — a readable flow, not a strobe. The dash is the near-field
   // speedometer: right at the chase cam's focus, its flow rate IS the car's
   // actual speed (the asphalt itself is flat colour, so without it nothing
   // close to the car streams past). Starting values.
-  const DASH_PERIOD = 1.8, DASH_FRAC = 0.4;      // ~0.72u dash / ~1.08u gap
+  const DASH_PERIOD = 5.76, DASH_FRAC = 0.25;    // ~1.44u dash / ~4.32u gap
 
   // Resample the centreline at a uniform, fine arclength step. Raw samples are spaced
   // unevenly (~0.4 on tight corners, ~1.5 on straights) — far coarser than a painted
