@@ -187,8 +187,8 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-opt:active:not(:disabled) { transform: translateY(2px); }
 .mode-opt:disabled { cursor: default; }
-/* picked mode — ringed in the brand colour, like the car/track tiles */
-.mode-opt--mine { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand), #fff 64%), var(--shadow-pop); }
+/* picked mode — a single brand-colour border, like the car/track tiles */
+.mode-opt--mine { border-color: var(--brand); }
 /* a cup whose panel is open for an exact pick: held-open look, the ring lives
    on the track tile below */
 .mode-opt--open { border-color: color-mix(in srgb, var(--brand), var(--hairline) 55%); }
