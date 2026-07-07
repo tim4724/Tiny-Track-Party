@@ -1779,6 +1779,7 @@ export class SceneRenderer {
     const c = this.cars.get(id);
     if (!c) return;
     c.spd = spd; c.scrub = scrub; c.steerAmt = steer; c.brakeAmt = brake;
+    c.spinAmt = spin; // spin-out whirl angle — the skid trails read it (all four tyres scribble)
     // spin-out whirl: rotate the whole car model about its up axis on top of its
     // model-facing fix (the sim heading is untouched — this is purely cosmetic). The car
     // shadow's silhouette whirls with it too, folded into the conform basis at the END of
