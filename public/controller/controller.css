@@ -254,7 +254,11 @@ input[type=text]:disabled { opacity: 0.6; }
   align-items: stretch; justify-content: flex-start; user-select: none;
   padding-top: calc(0.6rem + var(--safe-top));
 }
-#drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; }
+/* Reserve the ping chip's row at the bottom: it's position:fixed at
+   bottom (0.5rem + safe-bottom) and ~1.7rem tall, so the ITEM/BRAKE buttons
+   would otherwise sit under it. This padding lifts them clear, leaving the
+   ping text just below with a minor gap to the screen edge. */
+#drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; padding-bottom: 1.7rem; }
 /* Player name only — top-left, tinted with the car livery (like the display's
    .cell-label__name). It shares the top row with the fixed pause/? buttons: a
    min-height matching the 3.2rem buttons + centred text levels it with them, and the
