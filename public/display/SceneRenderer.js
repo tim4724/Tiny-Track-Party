@@ -1239,6 +1239,12 @@ export class SceneRenderer {
     sc.left = minX - M; sc.right = maxX + M; sc.bottom = minY - M; sc.top = maxY + M;
     sc.near = Math.max(0.5, -maxZ - M); sc.far = -minZ + M;
     sc.updateProjectionMatrix();
+    // Refit the acne guard to THIS track's shadow texel size: the frustum above scales
+    // with the track, so a fixed normalBias tuned on small circuits under-biases big
+    // stunt layouts — steep receivers (loop interiors, banked walls) then show banded
+    // self-shadowing. ~2.5 texels clears the banding; 0.06 stays the small-track floor.
+    const texel = Math.max(sc.right - sc.left, sc.top - sc.bottom) / k.shadow.mapSize.x;
+    k.shadow.normalBias = Math.max(0.06, 2.5 * texel);
 
     // Hazard decals conform to the road AT BUILD TIME (they're static): hand props
     // the same normal-cast raycast the boost disk uses per frame, so a puddle's

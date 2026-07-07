@@ -550,7 +550,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   key.castShadow = !automation;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
-  key.shadow.normalBias = 0.06; // curved road → bias along the normal kills acne (a hair more for the coarser 2048² texel)
+  key.shadow.normalBias = 0.06; // curved road → bias along the normal kills acne; setTrack refits this to the track's shadow texel size
   scene.add(key);
   scene.add(key.target);
 

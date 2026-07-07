@@ -56,8 +56,11 @@ export function buildRibbonRoad(R, track, collide, theme) {
   // blobs. Step a few× finer than the SMALLEST band so every band renders cleanly. The
   // kerb stripe is now long (stripeLen), so the centre dash's on-length is the finest
   // feature; driving ds off it keeps the dash from quantising to ragged ring counts.
+  // Cap the step at 0.24 regardless of band size: the step also sets the GEOMETRY's
+  // ring density (loop/crest silhouettes), which must not coarsen just because the
+  // paint bands got longer (lengthening the dash once halved it — visible facets).
   const minBand = Math.min(stripeLen, DASH_PERIOD * DASH_FRAC);
-  let N = Math.min(4000, Math.max(8, Math.round(cl.length / Math.max(0.06, minBand / 3))));
+  let N = Math.min(4000, Math.max(8, Math.round(cl.length / Math.min(0.24, Math.max(0.06, minBand / 3)))));
   // The centre dash needs every segment the SAME length, so snap N to a whole number of
   // dash cycles: each cycle is then an exact integer ring run (dashOn below) and the
   // start/finish seam lands on a cycle boundary. (The kerb bands snap themselves — see
@@ -204,14 +207,44 @@ export function buildRibbonRoad(R, track, collide, theme) {
     }
   }
 
+  // ANALYTIC vertex normals, per ring × strip. The ribbon is non-indexed triangle soup
+  // (each quad owns its 6 verts so paint bands stay crisp), and computeVertexNormals on
+  // unindexed geometry is per-FACE — flat shading, which turns every ring into a lighting
+  // facet wherever the road curves vertically (loops/crests read as banded strips). The
+  // sweep frames give the exact surface instead: a strip's normal at ring i is
+  // across×tangent (matching the face winding below — the DoubleSide material flips it
+  // per-fragment), and both vary smoothly ring to ring, so shading is smooth ALONG the
+  // road while the duplicated verts keep profile corners (kerb walls, skirt folds) hard.
+  const S = STRIPS.length;
+  const tans = new Float32Array(N * 3); // centreline tangent per ring (central difference, wraps)
+  for (let i = 0; i < N; i++) {
+    const p = frames[(i + 1) % N].pos, q = frames[(i - 1 + N) % N].pos, o = i * 3;
+    tans[o] = p.x - q.x; tans[o + 1] = p.y - q.y; tans[o + 2] = p.z - q.z;
+  }
+  const norms = new Float32Array(N * S * 3);
+  for (let i = 0; i < N; i++) {
+    const tb = i * 3, tx = tans[tb], ty = tans[tb + 1], tz = tans[tb + 2];
+    for (let s = 0; s < S; s++) {
+      const st = STRIPS[s];
+      const oa = i * RP + st.a * 3, ob = i * RP + st.b * 3;
+      const ax = rings[ob] - rings[oa], ay = rings[ob + 1] - rings[oa + 1], az = rings[ob + 2] - rings[oa + 2];
+      let nx = ay * tz - az * ty, ny = az * tx - ax * tz, nz = ax * ty - ay * tx; // across × tangent
+      const len = Math.hypot(nx, ny, nz), o = (i * S + s) * 3;
+      if (len > 1e-9) { norms[o] = nx / len; norms[o + 1] = ny / len; norms[o + 2] = nz / len; }
+      else { const u = frames[i].up; norms[o] = -u.x; norms[o + 1] = -u.y; norms[o + 2] = -u.z; } // zero-width strip: winding-consistent "down"
+    }
+  }
+
   // Visible-mesh attributes, sized exactly (16 strips × 2 tris × 3 verts × 3 floats per
   // ring) and filled by cursor — no per-vertex array growth. Float32BufferAttribute takes
   // the typed array directly (no copy).
   const STRIDE = STRIPS.length * 6 * 3;
   const pos = new Float32Array(N * STRIDE);
   const col = new Float32Array(N * STRIDE);
-  let pc = 0, cc = 0;
+  const nrm = new Float32Array(N * STRIDE);
+  let pc = 0, cc = 0, nc = 0;
   const emitPt = (i, j) => { const o = i * RP + j * 3; pos[pc++] = rings[o]; pos[pc++] = rings[o + 1]; pos[pc++] = rings[o + 2]; };
+  const emitN = (i, s) => { const o = (i * S + s) * 3; nrm[nc++] = norms[o]; nrm[nc++] = norms[o + 1]; nrm[nc++] = norms[o + 2]; };
   // Per-strip colour push: the two triangles below are wound ia,ib,nb / ia,nb,na, so
   // the 6 verts map to profile points [a,b,b,a,b,a]. Each gets its base colour times
   // its own AO, so the darkening varies ACROSS the strip (a gradient) — that's what
@@ -271,13 +304,13 @@ export function buildRibbonRoad(R, track, collide, theme) {
     return false;
   };
 
-  const mkGeom = (positions, colors) => {
+  // Collision-proxy geometry: positions only. The proxy is an invisible MeshBasicMaterial
+  // raycast for ground-conform Y — it never shades, so colour/normal attributes are pure
+  // waste there. (The visible ribbon fills its own pos/col/nrm buffers in the sweep below,
+  // with the ANALYTIC normals — computeVertexNormals would flat-shade that unindexed soup.)
+  const mkGeom = (positions) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    // Normals only matter for the lit, visible road (colors set). The collision proxy is an
-    // invisible MeshBasicMaterial raycast for ground-conform Y — it never shades, so a normal
-    // attribute is pure waste there (one computeVertexNormals per 8-segment chunk).
-    if (colors) { g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.computeVertexNormals(); }
     return g;
   };
 
@@ -296,13 +329,11 @@ export function buildRibbonRoad(R, track, collide, theme) {
   // the drawn-when-visible draw calls) low while still culling most of a long track.
   // receiveShadow so the cars' shadows land on the road; castShadow is set per chunk below.
   //
-  // Build the FULL ribbon once and solve its vertex normals across the whole surface, THEN
-  // slice it into fixed-ring chunks. Solving normals per-chunk would split them at every
-  // seam (each boundary vertex seeing only one chunk's triangles), leaving a faint lighting
-  // facet on banked/graded seams; slicing ONE normal-solved buffer keeps the shading
-  // pixel-identical to the old single mesh. Each ring contributes a fixed run of vertices
-  // (STRIPS × 2 tris × 3), so a chunk is just a contiguous slice of the buffers. The sweep
-  // fills the preallocated pos/col typed arrays via emitPt/pushStripCol (cursor-advanced).
+  // Build the FULL ribbon once (positions + colours + the analytic normals above), THEN
+  // slice it into fixed-ring chunks — a shared boundary ring carries identical normals on
+  // both sides, so chunk seams shade seamlessly. Each ring contributes a fixed run of
+  // vertices (STRIPS × 2 tris × 3), so a chunk is just a contiguous slice of the buffers.
+  // The sweep fills the preallocated pos/col/nrm typed arrays via emitPt/emitN/pushStripCol.
   for (let i = 0; i < N; i++) {
     const ni = (i + 1) % N;
     const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
@@ -318,9 +349,12 @@ export function buildRibbonRoad(R, track, collide, theme) {
     const bevel = (!planks || bare || seam) ? 1 : ppos === 1 ? 1.08 : ppos === ringsPerPlank - 1 ? 0.9 : 1;
     // Deck colour: the plank's (whisper-contrast) tone, or plain asphalt.
     const deckCol = planks ? plankTones[Math.floor(i / ringsPerPlank) % plankTones.length] : ASPHALT;
-    for (const st of STRIPS) {
+    for (let s = 0; s < S; s++) {
+      const st = STRIPS[s];
       emitPt(i, st.a); emitPt(i, st.b); emitPt(ni, st.b);  // tri 1: ia, ib, nb
       emitPt(i, st.a); emitPt(ni, st.b); emitPt(ni, st.a); // tri 2: ia, nb, na
+      emitN(i, s); emitN(i, s); emitN(ni, s);              // each vert takes ITS ring's
+      emitN(i, s); emitN(ni, s); emitN(ni, s);             // strip normal → smooth sweep
       const k = st.kind;
       let cb, mul = 1;
       if (k === 'kerb') cb = st.side === 'R' ? colR : colL;
@@ -336,15 +370,13 @@ export function buildRibbonRoad(R, track, collide, theme) {
       pushStripCol(cb, st, mul);
     }
   }
-  const full = mkGeom(pos, col); // solves vertex normals over the whole ribbon
-  const fp = full.attributes.position.array, fc = full.attributes.color.array, fn = full.attributes.normal.array;
   const CHUNK_RINGS = 160; // keep chunk count (hence drawn-when-visible draw calls) low; STRIDE = floats/ring
   for (let lo = 0; lo < N; lo += CHUNK_RINGS) {
     const a = lo * STRIDE, z = Math.min(lo + CHUNK_RINGS, N) * STRIDE;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(fp.slice(a, z), 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(fc.slice(a, z), 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(fn.slice(a, z), 3));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos.slice(a, z), 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col.slice(a, z), 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm.slice(a, z), 3));
     g.computeBoundingSphere(); // per-chunk sphere → three frustum-culls off-screen chunks
     const mesh = new THREE.Mesh(g, mat);
     mesh.matrixAutoUpdate = false; // positions are already baked in world space
@@ -354,7 +386,7 @@ export function buildRibbonRoad(R, track, collide, theme) {
     // onto grass, which opts out of receiving (env.js), so its shadow is invisible — skip
     // it for free. An elevated deck genuinely shades the road below, so it keeps casting.
     let maxY = -Infinity;
-    for (let k = a + 1; k < z; k += 3) if (fp[k] > maxY) maxY = fp[k];
+    for (let k = a + 1; k < z; k += 3) if (pos[k] > maxY) maxY = pos[k];
     mesh.castShadow = maxY > 0.8; // > flat road's kerb-top (~0.2), with margin
     R.trackGroup.add(mesh);
     R._mergedGeoms.push(g);
@@ -370,7 +402,7 @@ export function buildRibbonRoad(R, track, collide, theme) {
   let chunk = [];
   const flush = () => {
     if (!chunk.length) return;
-    const cgeo = mkGeom(chunk, null);
+    const cgeo = mkGeom(chunk);
     const m = new THREE.Mesh(cgeo, collideMat);
     m.matrixAutoUpdate = false;
     collide.add(m);

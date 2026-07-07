@@ -109,6 +109,7 @@ const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+if (_isTestMode) window.__scene = scene; // test surfaces: let the inspector/automation drive the camera
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;
