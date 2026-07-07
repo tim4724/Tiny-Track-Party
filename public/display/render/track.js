@@ -784,19 +784,63 @@ export function buildLandmarks(R, track, theme) {
       ball(1.05, 0.72, 0xf6f9fc); // base, sunk into the snow
       ball(0.78, 2.02, 0xfafcfe);
       ball(0.54, 3.08, 0xf6f9fc); // head
-      const carrot = new THREE.ConeGeometry(0.14, 0.62, 7);
+
+      // Stubby carrot nose — short, blunt and smooth. The old cone (0.62 long, 7
+      // sides) read as a sharp needle; a wide-based, half-as-long, 12-sided cone
+      // reads as a friendly carrot.
+      const carrot = new THREE.ConeGeometry(0.17, 0.4, 12);
       carrot.rotateX(Math.PI / 2).rotateY(yaw);                 // cone +Y → +Z → face the road
-      carrot.translate(x + fx * 0.72, gy + 3.12, z + fz * 0.72);
+      carrot.translate(x + fx * 0.6, gy + 3.1, z + fz * 0.6);
       geoms.push(tintGeo(carrot, 0xe8833a));
-      // coal: two eyes on the head + three buttons down the belly, offset in the
-      // facing frame (right vector = fz, -fx)
-      const dot = (ox, oy, oz) => {
-        const g = new THREE.IcosahedronGeometry(0.075, 0);
+
+      // coal: eyes + smile on the head, three buttons down the belly. Offsets are in
+      // the facing frame — ox = right (right vector = fz, -fx), oz = toward the road.
+      const dot = (ox, oy, oz, r = 0.08) => {
+        const g = new THREE.IcosahedronGeometry(r, 0);
         g.translate(x + fx * oz + fz * ox, gy + oy, z + fz * oz - fx * ox);
         geoms.push(tintGeo(g, 0x343a44));
       };
-      dot(-0.18, 3.28, 0.46); dot(0.18, 3.28, 0.46);            // eyes
-      dot(0, 2.28, 0.72); dot(0, 1.98, 0.76); dot(0, 1.68, 0.72); // buttons
+      dot(-0.2, 3.32, 0.44); dot(0.2, 3.32, 0.44);              // eyes
+      for (let i = -2; i <= 2; i++)                             // upturned coal smile below the nose
+        dot(i * 0.12, 2.82 + i * i * 0.03, 0.46, 0.05);
+      dot(0, 2.30, 0.72); dot(0, 2.00, 0.76); dot(0, 1.70, 0.72); // buttons
+
+      // Bright knit beanie — folded brim, cone crown, white pom-pom — for a splash of
+      // colour against the white body (reads well trackside on a TV).
+      const HAT = 0x3b6fb0;
+      const brim = new THREE.CylinderGeometry(0.47, 0.47, 0.2, 16);
+      brim.translate(x, gy + 3.48, z);
+      geoms.push(tintGeo(brim, HAT, 1.08));                     // lighter fold
+      const crown = new THREE.ConeGeometry(0.43, 0.6, 16);
+      crown.translate(x, gy + 3.86, z);
+      geoms.push(tintGeo(crown, HAT));
+      const bobble = new THREE.IcosahedronGeometry(0.15, 1);
+      bobble.translate(x, gy + 4.2, z);
+      geoms.push(tintGeo(bobble, 0xf6f9fc));
+
+      // Knit scarf — a torus ring around the neck with a short tail draped down the
+      // front, matching the hat's warm accent.
+      const scarf = new THREE.TorusGeometry(0.47, 0.13, 8, 20);
+      scarf.rotateX(Math.PI / 2);                               // ring lies flat (around +Y)
+      scarf.translate(x, gy + 2.66, z);
+      geoms.push(tintGeo(scarf, 0xd8463f));
+      const tail = new THREE.BoxGeometry(0.24, 0.6, 0.12);
+      tail.translate(0, -0.3, 0);                               // hang from the ring
+      tail.rotateY(yaw);
+      tail.translate(x + fx * 0.42 + fz * 0.24, gy + 2.66, z + fz * 0.42 - fx * 0.24);
+      geoms.push(tintGeo(tail, 0xc63c36));
+
+      // Twig arms — thin tapered cylinders swung out to each side and tilted up, built
+      // along local +Y then rotated into the facing frame (local ±X → world right/left).
+      const arm = (s) => { // s = +1 right, -1 left
+        const a = new THREE.CylinderGeometry(0.04, 0.07, 1.15, 6);
+        a.translate(0, 0.55, 0);                                // base at origin, extends +Y
+        a.rotateZ(-s * (Math.PI / 2 - 0.5));                    // swing to the side, ~0.5rad upward
+        a.rotateY(yaw);
+        a.translate(x + fz * (s * 0.62), gy + 2.24, z - fx * (s * 0.62));
+        geoms.push(tintGeo(a, 0x6b4a2f));
+      };
+      arm(1); arm(-1);
       break;
     }
   }
