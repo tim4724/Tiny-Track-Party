@@ -290,7 +290,16 @@ export class Game {
     this.pads = (track.pads || []).map((p) => p.shape === 'strip'
       ? { s: p.s, lat: p.lat || 0, shape: 'strip', halfLen: p.halfLen, halfWidth: p.halfWidth }
       : { s: p.s, lat: p.lat || 0, radius: p.radius || PAD_RADIUS });
-    this.boxes = (track.boxes || []).map((b) => ({ s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0 }));
+    // A `row` id groups the ~4 boxes laid across the lane at one arclength (they share
+    // `s`): a car grabs at most ONE box per row per pass (see _enterBox), so clipping two
+    // adjacent lanes doesn't hand out two items. Boxes at distinct s each get their own row.
+    const _boxRows = new Map();
+    this.boxes = (track.boxes || []).map((b) => {
+      const key = Math.round((b.s || 0) * 100);   // rows share an arclength; tolerate float drift
+      let row = _boxRows.get(key);
+      if (row === undefined) { row = _boxRows.size; _boxRows.set(key, row); }
+      return { s: b.s, lat: b.lat || 0, radius: b.radius || BOX_RADIUS, cooldown: 0, row };
+    });
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
     this.bananas = [];      // [{ id, s, lat, owner, armAt }] — live dropped bananas (live on drop; owner-immune until armAt)
     this._bananaSeq = 0;
@@ -321,6 +330,7 @@ export class Game {
         oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
         padIn: new Set(),// pad indices currently overlapped (rising-edge boost)
         boxIn: new Set(),// box indices currently overlapped (rising-edge pickup)
+        rowIn: new Map(),// box ROW id -> a box index of that row, for rows grabbed this pass (one item per row; released once the car is clear of the row in arclength)
         boostT: 0,       // seconds left on an active boost (0 = none)
         boostMul: 1,     // current boost multiplier on the speed ceiling
         monsterT: 0,     // seconds left as a MONSTER TRUCK (0 = normal car) — heavy, immune to oil/banana, crushes cars it touches
@@ -730,18 +740,32 @@ export class Game {
       const b = this.boxes[i];
       const inside = b.cooldown <= 0 && this._inZone(c, b, b.radius);
       if (inside && !c.boxIn.has(i)) {
+        c.boxIn.add(i);   // latch membership so this box is evaluated once, not every frame
+        // One item per row per pass: if the car already grabbed another lane's box in this
+        // row, leave the rest of the row untouched (still live for OTHER cars) and skip. The
+        // lock is keyed on the ROW, not on overlap, so weaving laterally across the lanes
+        // (which briefly touches no box) can't sneak a second grab.
+        if (c.rowIn.has(b.row)) continue;
+        c.rowIn.set(b.row, i);
         if (!c.finished || c.item == null) {
           // Live car (any slot) or a finished car with an empty slot: roll a fresh item,
-          // replacing whatever's held. Latch membership so the box fires once.
-          c.item = this._roll(this._placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
+          // replacing whatever's held.
+          c.item = this._roll(this._placeT(c)); c.pickupAge = 0; b.cooldown = BOX_RESPAWN;
           this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: c.finished });
         } else {
           // Finished + full slot: pop the box (cooldown + pickup pop) but HOLD the current
-          // item — no reroll. Latch membership so the box fires once, not every frame.
-          b.cooldown = BOX_RESPAWN; c.boxIn.add(i);
+          // item — no reroll.
+          b.cooldown = BOX_RESPAWN;
           this.onEvent({ type: 'pickup', id: c.id, item: c.item, finished: true });
         }
       } else if (!inside) { c.boxIn.delete(i); }
+    }
+    // Release a row lock once the car is longitudinally clear of the row: past its arclength
+    // by more than a box radius, it can't overlap ANY box of that row whatever its lane, so
+    // it's free to grab there again next lap.
+    if (c.rowIn.size) for (const [row, bi] of c.rowIn) {
+      const rb = this.boxes[bi];
+      if (Math.abs(wrapDelta(c.totalS - rb.s, this.length)) > rb.radius) c.rowIn.delete(row);
     }
   }
 

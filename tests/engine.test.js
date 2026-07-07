@@ -1117,6 +1117,51 @@ test('a freshly-rolled item is held through the reveal gate, then the buffered p
   assert.equal(car.item, null, 'the buffered item fires once the reveal gate opens');
 });
 
+test('a car grabs at most one box per row, leaving the rest for other cars', () => {
+  const track = mkTrack(3);
+  // A row = several boxes at ONE arclength across the lane. A wide car centred between
+  // two of them overlaps both; only the first should be consumed.
+  track.boxes = [{ s: 8, lat: -0.3, radius: 1.0 }, { s: 8, lat: 0.3, radius: 1.0 }];
+  track.seed = 12345;
+  const events = [];
+  const game = new Game(['p1', 'p2'], track, { onEvent: (e) => e.type === 'pickup' && events.push(e) });
+  const car = game.cars.get('p1');
+  Object.assign(car, { totalS: 8, lat: 0, v: 0 });      // overlaps BOTH boxes (dist 0.3 < 1.0)
+  game.elapsed = 2;                                      // past the launch gate
+  game.processInput('p1', { b: 1 }); game.update(16);
+  assert.equal(events.filter((e) => e.id === 'p1').length, 1, 'exactly one pickup from the row');
+  const snap = game.getSnapshot().boxes;
+  assert.deepEqual(snap.filter((available) => !available).length, 1, 'only one box goes on cooldown');
+  assert.ok(snap.includes(true), 'the other box stays live for a different car');
+
+  // A SECOND car through the same row still gets the untouched box.
+  const car2 = game.cars.get('p2');
+  Object.assign(car2, { totalS: 8, lat: 0.3, v: 0 });
+  game.processInput('p2', { b: 1 }); game.update(16);
+  assert.equal(events.filter((e) => e.id === 'p2').length, 1, 'the other car grabs the remaining box');
+  assert.deepEqual(game.getSnapshot().boxes, [false, false], 'both boxes now spent');
+});
+
+test('weaving laterally across a row still yields only one box', () => {
+  const track = mkTrack(3);
+  // A full lane row at the real spacing/radius; the car SWEEPS across the lanes as it
+  // passes through — between two boxes it briefly overlaps none, so a lock keyed on
+  // overlap (rather than on the row) would release early and hand out a second item.
+  track.boxes = [-1.05, -0.35, 0.35, 1.05].map((lat) => ({ s: 8, lat, radius: 0.9 }));
+  track.seed = 12345;
+  let picks = 0;
+  const game = new Game(['p1'], track, { onEvent: (e) => e.type === 'pickup' && e.id === 'p1' && picks++ });
+  const car = game.cars.get('p1');
+  game.elapsed = 2;
+  // march through s=8 while sweeping lat from -1.05 to +1.05 across the whole row
+  for (let s = 5; s <= 11; s += 0.1) {
+    Object.assign(car, { totalS: s, lat: -1.05 + ((s - 5) / 6) * 2.1, v: 8 });
+    game.update(16);
+  }
+  assert.equal(picks, 1, 'one item despite sweeping across all four lanes');
+  assert.equal(game.getSnapshot().boxes.filter((available) => !available).length, 1, 'only one box consumed');
+});
+
 test('a full slot consumes a box and rerolls a fresh held item', () => {
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
