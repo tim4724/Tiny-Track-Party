@@ -786,12 +786,20 @@ export function buildLandmarks(R, track, theme) {
       ball(0.78, 2.02, 0xfafcfe);
       ball(0.54, 3.08, 0xf6f9fc); // head
 
-      // Stubby carrot nose — short, blunt, and drooping a touch so the tip reads as a
-      // soft nub rather than a spike (a long, level cone looks like a needle).
-      const carrot = new THREE.ConeGeometry(0.18, 0.32, 14);
-      carrot.rotateX(Math.PI / 2 + 0.16).rotateY(yaw);         // +Y → +Z (facing the road), tip dipped
-      carrot.translate(x + fx * 0.58, gy + 3.12, z + fz * 0.58);
-      geoms.push(tintGeo(carrot, 0xe8833a));
+      // Carrot nose — a short tapered cone whose narrow end is a NON-zero radius
+      // capped with a small sphere, so the tip is a soft round nub, not a sharp apex
+      // (a pointed cone read as a spike from the side). Drooped a touch, facing the road.
+      {
+        const noseLen = 0.32, tipR = 0.06;
+        const cone = new THREE.CylinderGeometry(tipR, 0.19, noseLen, 16); // narrow end (+Y) = the tip
+        const tip = new THREE.SphereGeometry(tipR, 12, 8);
+        tip.translate(0, noseLen / 2, 0);                       // round off the narrow end
+        for (const g of [cone, tip]) {
+          g.rotateX(Math.PI / 2 + 0.16).rotateY(yaw);           // +Y → +Z (facing the road), tip dipped
+          g.translate(x + fx * 0.58, gy + 3.12, z + fz * 0.58);
+          geoms.push(tintGeo(g, 0xe8833a));
+        }
+      }
 
       // coal: eyes + smile on the head, three buttons down the belly. Offsets are in
       // the facing frame — ox = right (right vector = fz, -fx), oz = toward the road.
@@ -826,11 +834,15 @@ export function buildLandmarks(R, track, theme) {
       scarf.rotateX(Math.PI / 2);                               // ring lies flat (around +Y)
       scarf.translate(x, gy + 2.66, z);
       geoms.push(tintGeo(scarf, 0xd8463f));
-      const tail = new THREE.BoxGeometry(0.24, 0.6, 0.12);
-      tail.translate(0, -0.3, 0);                               // hang from the ring
+      // draped over the belly, tilted forward so its face angles up into the sun — a
+      // flat, camera-facing slab read almost black (grazing Lambert light); same red
+      // as the ring so the two match.
+      const tail = new THREE.BoxGeometry(0.26, 0.62, 0.14);
+      tail.translate(0, -0.31, 0);                              // hang from the ring (pivot at the neck)
+      tail.rotateX(0.45);                                       // drape forward, hugging the belly bulge
       tail.rotateY(yaw);
-      tail.translate(x + fx * 0.42 + fz * 0.24, gy + 2.66, z + fz * 0.42 - fx * 0.24);
-      geoms.push(tintGeo(tail, 0xc63c36));
+      tail.translate(x + fx * 0.5, gy + 2.62, z + fz * 0.5);   // ride the belly surface, not buried inside it
+      geoms.push(tintGeo(tail, 0xd8463f, 1.04));
 
       // Twig arms — chunky rounded stubs swung out to each side and tilted up, built
       // along local +Y then rotated into the facing frame (local ±X → world right/left).
