@@ -848,15 +848,16 @@ export function buildLandmarks(R, track, theme) {
       // along local +Y then rotated into the facing frame (local ±X → world right/left).
       // Kept short and thick (not thin needles) to sit softly beside the round pines.
       const arm = (s) => { // s = +1 right, -1 left
+        const ax = x + fz * (s * 0.62), ay = gy + 2.24, az = z - fx * (s * 0.62); // shoulder anchor
         const a = new THREE.CylinderGeometry(0.06, 0.09, 0.95, 8);
         a.translate(0, 0.47, 0);                                // base at origin, extends +Y
         a.rotateZ(-s * (Math.PI / 2 - 0.5));                    // swing to the side, ~0.5rad upward
         a.rotateY(yaw);
-        a.translate(x + fz * (s * 0.62), gy + 2.24, z - fx * (s * 0.62));
+        a.translate(ax, ay, az);
         geoms.push(tintGeo(a, 0x6b4a2f));
         // rounded knob at the shoulder so the twig doesn't end in a hard disc
         const knob = new THREE.IcosahedronGeometry(0.09, 1);
-        knob.translate(x + fz * (s * 0.62), gy + 2.24, z - fx * (s * 0.62));
+        knob.translate(ax, ay, az);
         geoms.push(tintGeo(knob, 0x6b4a2f));
       };
       arm(1); arm(-1);
