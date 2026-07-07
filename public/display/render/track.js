@@ -777,7 +777,8 @@ export function buildLandmarks(R, track, theme) {
       const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // faces the road
       const yaw = Math.atan2(fx, fz);
       const ball = (r, cy, hex) => {
-        const g = new THREE.IcosahedronGeometry(r, 1);
+        // detail 2 → rounder silhouette so the body reads as soft as the snow pines
+        const g = new THREE.IcosahedronGeometry(r, 2);
         g.translate(x, gy + cy, z);
         geoms.push(tintGeo(g, hex, 0.98));
       };
@@ -785,18 +786,17 @@ export function buildLandmarks(R, track, theme) {
       ball(0.78, 2.02, 0xfafcfe);
       ball(0.54, 3.08, 0xf6f9fc); // head
 
-      // Stubby carrot nose — short, blunt and smooth. The old cone (0.62 long, 7
-      // sides) read as a sharp needle; a wide-based, half-as-long, 12-sided cone
-      // reads as a friendly carrot.
-      const carrot = new THREE.ConeGeometry(0.17, 0.4, 12);
-      carrot.rotateX(Math.PI / 2).rotateY(yaw);                 // cone +Y → +Z → face the road
-      carrot.translate(x + fx * 0.6, gy + 3.1, z + fz * 0.6);
+      // Stubby carrot nose — short, blunt, and drooping a touch so the tip reads as a
+      // soft nub rather than a spike (a long, level cone looks like a needle).
+      const carrot = new THREE.ConeGeometry(0.18, 0.32, 14);
+      carrot.rotateX(Math.PI / 2 + 0.16).rotateY(yaw);         // +Y → +Z (facing the road), tip dipped
+      carrot.translate(x + fx * 0.58, gy + 3.12, z + fz * 0.58);
       geoms.push(tintGeo(carrot, 0xe8833a));
 
       // coal: eyes + smile on the head, three buttons down the belly. Offsets are in
       // the facing frame — ox = right (right vector = fz, -fx), oz = toward the road.
       const dot = (ox, oy, oz, r = 0.08) => {
-        const g = new THREE.IcosahedronGeometry(r, 0);
+        const g = new THREE.IcosahedronGeometry(r, 1); // detail 1 → rounder coal lumps
         g.translate(x + fx * oz + fz * ox, gy + oy, z + fz * oz - fx * ox);
         geoms.push(tintGeo(g, 0x343a44));
       };
@@ -805,22 +805,24 @@ export function buildLandmarks(R, track, theme) {
         dot(i * 0.12, 2.82 + i * i * 0.03, 0.46, 0.05);
       dot(0, 2.30, 0.72); dot(0, 2.00, 0.76); dot(0, 1.70, 0.72); // buttons
 
-      // Bright knit beanie — folded brim, cone crown, white pom-pom — for a splash of
-      // colour against the white body (reads well trackside on a TV).
+      // Soft knit beanie — a rolled torus brim, a rounded dome crown (not a sharp
+      // cone — that spike read hard next to the round pines), and a white pom-pom.
       const HAT = 0x3b6fb0;
-      const brim = new THREE.CylinderGeometry(0.47, 0.47, 0.2, 16);
-      brim.translate(x, gy + 3.48, z);
+      const brim = new THREE.TorusGeometry(0.42, 0.15, 12, 24);
+      brim.rotateX(Math.PI / 2);                                // rolled ring lies flat around the crown
+      brim.translate(x, gy + 3.5, z);
       geoms.push(tintGeo(brim, HAT, 1.08));                     // lighter fold
-      const crown = new THREE.ConeGeometry(0.43, 0.6, 16);
-      crown.translate(x, gy + 3.86, z);
+      const crown = new THREE.SphereGeometry(0.42, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      crown.scale(1, 1.28, 1);                                  // upper hemisphere, stretched into a beanie
+      crown.translate(x, gy + 3.5, z);
       geoms.push(tintGeo(crown, HAT));
-      const bobble = new THREE.IcosahedronGeometry(0.15, 1);
-      bobble.translate(x, gy + 4.2, z);
+      const bobble = new THREE.IcosahedronGeometry(0.17, 2);
+      bobble.translate(x, gy + 4.12, z);
       geoms.push(tintGeo(bobble, 0xf6f9fc));
 
       // Knit scarf — a torus ring around the neck with a short tail draped down the
       // front, matching the hat's warm accent.
-      const scarf = new THREE.TorusGeometry(0.47, 0.13, 8, 20);
+      const scarf = new THREE.TorusGeometry(0.47, 0.14, 12, 24);
       scarf.rotateX(Math.PI / 2);                               // ring lies flat (around +Y)
       scarf.translate(x, gy + 2.66, z);
       geoms.push(tintGeo(scarf, 0xd8463f));
@@ -830,15 +832,20 @@ export function buildLandmarks(R, track, theme) {
       tail.translate(x + fx * 0.42 + fz * 0.24, gy + 2.66, z + fz * 0.42 - fx * 0.24);
       geoms.push(tintGeo(tail, 0xc63c36));
 
-      // Twig arms — thin tapered cylinders swung out to each side and tilted up, built
+      // Twig arms — chunky rounded stubs swung out to each side and tilted up, built
       // along local +Y then rotated into the facing frame (local ±X → world right/left).
+      // Kept short and thick (not thin needles) to sit softly beside the round pines.
       const arm = (s) => { // s = +1 right, -1 left
-        const a = new THREE.CylinderGeometry(0.04, 0.07, 1.15, 6);
-        a.translate(0, 0.55, 0);                                // base at origin, extends +Y
+        const a = new THREE.CylinderGeometry(0.06, 0.09, 0.95, 8);
+        a.translate(0, 0.47, 0);                                // base at origin, extends +Y
         a.rotateZ(-s * (Math.PI / 2 - 0.5));                    // swing to the side, ~0.5rad upward
         a.rotateY(yaw);
         a.translate(x + fz * (s * 0.62), gy + 2.24, z - fx * (s * 0.62));
         geoms.push(tintGeo(a, 0x6b4a2f));
+        // rounded knob at the shoulder so the twig doesn't end in a hard disc
+        const knob = new THREE.IcosahedronGeometry(0.09, 1);
+        knob.translate(x + fz * (s * 0.62), gy + 2.24, z - fx * (s * 0.62));
+        geoms.push(tintGeo(knob, 0x6b4a2f));
       };
       arm(1); arm(-1);
       break;
