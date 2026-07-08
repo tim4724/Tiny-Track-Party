@@ -273,6 +273,7 @@ export function runDisplayScenario(opts, ctx) {
         for (const c of snap.cars) {
           if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput });
         }
+        scene.syncProps(snap); // reconcile item boxes/bananas + draw the ?bbox car collision outlines
         if (minimap) minimap.update(snap.cars);
         // Endless preview: once everyone finishes, reset and lap again.
         if (engine.raceOver) {
