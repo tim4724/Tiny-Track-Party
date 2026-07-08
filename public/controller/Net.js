@@ -113,6 +113,11 @@ export class ControllerNet extends GameNet {
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
+      // The room itself is gone (the display closed it, or the relay's hostless
+      // grace expired after the big screen vanished). Terminal — a retry would
+      // only bounce off "Room not found" — so it gets its own status, distinct
+      // from 'lost' whose seat may still be reclaimable on the big screen.
+      if (meta && meta.roomClosed) { this.onStatus('room_closed'); return; }
       // attempt > max: PartyConnection has stopped retrying — the link is down for
       // good until the player acts. Surface a distinct 'lost' so the UI can offer a
       // retry (and point at the big screen's reconnect QR).

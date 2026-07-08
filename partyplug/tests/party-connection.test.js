@@ -171,6 +171,14 @@ describe('PartyConnection', () => {
     });
   });
 
+  test('closeRoom sends a close_room message', () => {
+    const pc = new PartyConnection('wss://test.example.com', { clientId: 'display' });
+    pc.connect();
+    MockWebSocket._instances[0]._simulateOpen();
+    pc.closeRoom();
+    assert.deepStrictEqual(MockWebSocket._instances[0]._sent[0], { type: 'close_room' });
+  });
+
   test('onState fires for a state message and carries the snapshot data', () => {
     const pc = new PartyConnection('wss://test.example.com');
     let received;
@@ -252,6 +260,24 @@ describe('PartyConnection - reconnect with exponential backoff', () => {
       attempt: 0,
       max: 0,
       meta: { replaced: true },
+    });
+    assert.strictEqual(MockWebSocket._instances.length, 1);
+  });
+
+  test('room-closed close (4001) stops reconnecting and reports roomClosed', () => {
+    const pc = new PartyConnection('wss://test.example.com', { maxReconnectAttempts: 3 });
+    let closeArgs = null;
+    pc.onClose = (attempt, max, meta) => { closeArgs = { attempt, max, meta }; };
+    pc.connect();
+
+    MockWebSocket._instances[0]._simulateClose({ code: 4001 });
+
+    assert.strictEqual(pc._shouldReconnect, false);
+    assert.strictEqual(pc.reconnectAttempt, 0);
+    assert.deepStrictEqual(closeArgs, {
+      attempt: 0,
+      max: 0,
+      meta: { roomClosed: true },
     });
     assert.strictEqual(MockWebSocket._instances.length, 1);
   });

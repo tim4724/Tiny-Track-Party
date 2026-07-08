@@ -34,6 +34,12 @@ const LIVENESS_TIMEOUT_MS = 3000;
 const HEARTBEAT_DEAD_MS = 6000;
 const LIVENESS_TICK_MS = 1000;
 
+// How long an open socket may sit without a created/joined answer before the
+// attempt is written off (party.failAttempt → normal backoff/retry). Guards the
+// silent failure mode where the relay accepts the socket but never answers the
+// create/join — which fires no error and no close.
+const CREATE_TIMEOUT_MS = 8000;
+
 // sessionStorage key for the live room, so a display RELOAD rejoins its own
 // room (the phones just see a short "waiting for the big screen" blip) instead
 // of creating a fresh one and orphaning every controller in the dead room.
@@ -122,6 +128,7 @@ export class DisplayNet extends GameNet {
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
     this.baseUrlOverride = null;
     this._inRoom = false; // true between a created/joined ack and the socket dropping
+    this._createTimer = null; // created/joined-answer watchdog (see _connect's onOpen)
 
     // Fastlane input counts as proof of life: a phone whose relay socket died
     // can still be driving over the open P2P channel — its car must not grow a
@@ -227,8 +234,28 @@ export class DisplayNet extends GameNet {
     this.party.onOpen = () => {
       if (this.roomCode) this.party.join(this.roomCode);
       else this.party.create(MAX_PLAYERS + 1, this._controllerUrlTemplate()); // +1 for the display itself
+      // A socket that opens but never gets a created/joined answer (relay
+      // rejected the create, reply lost) would otherwise hang forever — no
+      // close event ever fires. Count it as a failed attempt so the normal
+      // backoff/retry path runs. Cleared by created/joined; onClose clears it
+      // too so a socket already in backoff can't be double-failed.
+      clearTimeout(this._createTimer);
+      this._createTimer = setTimeout(() => { if (!this._inRoom) this.party.failAttempt(); }, CREATE_TIMEOUT_MS);
     };
-    this.party.onClose = () => { this._inRoom = false; };
+    this.party.onClose = (attempt, max, meta) => {
+      this._inRoom = false;
+      clearTimeout(this._createTimer);
+      // The room itself is gone — our own closeRoom() echoing back, or the
+      // relay tore it down. Terminal for the room but not for the display:
+      // forget it and open a fresh one (new code/QR), same fallback as a
+      // "Room not found" join.
+      if (meta && meta.roomClosed) {
+        this._forgetRoom();
+        this.roomCode = null;
+        this.instance = null;
+        this._connect();
+      }
+    };
     this.party.onProtocol = (type, msg) => this._onProtocol(type, msg);
     this.party.onMessage = (from, data) => this._onMessage(from, data);
     this.party.connect();
@@ -237,6 +264,7 @@ export class DisplayNet extends GameNet {
   _onProtocol(type, msg) {
     switch (type) {
       case 'created':
+        clearTimeout(this._createTimer);
         this.roomCode = msg.room;
         this.instance = msg.instance || null;
         if (this.instance) this.party.pinInstance(RELAY_URL, this.roomCode, this.instance);
@@ -246,6 +274,7 @@ export class DisplayNet extends GameNet {
         this.onRoomReady({ roomCode: this.roomCode, joinUrl: this._joinUrl() });
         break;
       case 'joined': // display reconnected to an existing room (in-session or after a reload)
+        clearTimeout(this._createTimer);
         this.roomCode = msg.room;
         this._resyncPeers(msg.peers || []);
         this.party.resetReconnectCount();
@@ -270,6 +299,11 @@ export class DisplayNet extends GameNet {
           this.roomCode = null;
           this.instance = null;
           this._connect();
+        } else if (!this._inRoom) {
+          // The CREATE was rejected (bad url template, server error): without a
+          // room there is nothing to fall back to, so write the attempt off and
+          // let the normal backoff retry it.
+          this.party.failAttempt();
         }
         break;
     }
@@ -619,6 +653,16 @@ export class DisplayNet extends GameNet {
       trackId: this.trackId      // ...resolved to a concrete track
     });
   }
+
+  // End the party for everyone: the relay deletes the room (stale rejoin links
+  // 404) and closes every socket with 4001 — phones bail terminally (their
+  // onClose {roomClosed}), while the display's own 4001 self-heals into a fresh
+  // room (see onClose in _connect). Deliberately NOT fired on pagehide, unlike
+  // the HexStacker reference: pagehide can't tell a reload from a real exit, and
+  // a reload must keep the room (the sessionStorage rejoin above). A closed tab
+  // is covered relay-side anyway — instant reap once no live sockets remain,
+  // else the ~2 min hostless grace, both ending in the same 4001 on the phones.
+  closeRoom() { if (this.party) this.party.closeRoom(); }
 
   broadcast(data) { if (this.party) this.party.broadcast(data); }
   sendTo(id, data) { if (this.party) this.party.sendTo(id, data); }
