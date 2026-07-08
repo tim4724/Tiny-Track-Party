@@ -89,19 +89,24 @@ new PartyConnection(relayUrl, { clientId?, maxReconnectAttempts = 5 })
 | Method | Purpose |
 | --- | --- |
 | `connect()` | Open the socket (auto-reconnects up to max) |
-| `create(maxClients)` | Create a room (display, slot 0) |
+| `create(maxClients, url?)` | Create a room (display, slot 0). `url` is an optional controller-URL template (`{room}`/`{instance}` placeholders) the relay resolves for clients that hold only the room code (in `created`/`joined` and via `GET /room/:code`). Absolute https only, or the relay rejects the create; omit it on non-https origins |
 | `join(room)` | Join a room by code (controller) |
 | `pinInstance(baseUrl, room, instance)` | Pin auto-reconnect to a relay shard (rebuilds the sharded URL) |
 | `sendTo(to, data)` | Send to one slot |
 | `broadcast(data)` | Send to all peers |
 | `setState(data)` | Publish the retained room snapshot (host/slot-0 only; ≤ 16 KiB serialized) |
+| `closeRoom()` | Tear the room down for everyone (host/slot-0 only): the relay deletes it (`GET /room/:code` turns 404) and closes every member socket with 4001, surfaced to them as `onClose` `{ roomClosed }` |
 | `reconnectNow()` / `resetReconnectCount()` | Manual reconnect control |
+| `failAttempt()` | Count the current socket as a failed attempt and run the normal backoff/give-up path — for failures only the caller can see (e.g. a socket that opened but the relay never answered create/join) |
 | `close()` | Tear down, stop reconnecting |
 
 Callbacks (assigned as properties):
 
 - `onOpen()`
 - `onClose(attempt, maxAttempts, meta?)` where `meta` may carry `{ replaced }`
+  (evicted by a same-clientId join, close 4000) or `{ roomClosed }` (the room
+  itself is gone: host `closeRoom()` or the relay's hostless grace, close 4001);
+  both are terminal, no auto-reconnect follows
 - `onError()`
 - `onMessage(from, data)` for game messages
 - `onProtocol(type, msg)` for relay events (`created`, `joined`, `peer_joined`, `peer_left`)

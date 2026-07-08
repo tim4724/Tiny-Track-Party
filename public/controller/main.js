@@ -158,7 +158,8 @@ const net = new ControllerNet({
           : info === 'Room is full' ? 'game_full' : 'game_ended')
         : state === 'replaced' ? 'replaced'
           : state === 'lost' ? 'game_ended'
-            : null;
+            : state === 'room_closed' ? 'game_ended'
+              : null;
       if (reason && endSession(reason)) return;
     }
     // In-room (lobby/game/results) the name-screen status line is off-screen, so a
@@ -172,6 +173,12 @@ const net = new ControllerNet({
     } else if (state === 'lost') {
       setStatus('Connection lost.');
       if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true, true);
+    } else if (state === 'room_closed') {
+      // The room is gone for good (host ended the party, or the big screen never
+      // came back) — no retry button: reconnecting would only bounce off
+      // "Room not found". Exiting to the start screen is the only move left.
+      setStatus('That race has ended — scan a fresh QR code on the big screen.');
+      if (inRoom) showConn('Race over', 'The party on the big screen has ended. Scan a fresh QR code to join the next one!', false, true);
     } else if (state === 'error') {
       setStatus(friendlyRelayError(info));
     } else if (state === 'display_gone') {
@@ -188,7 +195,8 @@ const net = new ControllerNet({
 
 // ---- connection overlay (screen-agnostic relay-link feedback) ----
 // `leave` shows the "Exit to start" escape hatch — on for every terminal state
-// (lost / display_gone / replaced), off while a reconnect is still in flight.
+// (lost / room_closed / display_gone / replaced), off while a reconnect is
+// still in flight.
 function showConn(title, msg, retry, leave) {
   el('conn-title').textContent = title;
   el('conn-msg').textContent = msg || '';

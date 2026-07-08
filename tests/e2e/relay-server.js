@@ -11,6 +11,7 @@
 //   Client → relay:  join      { clientId, room }
 //   Client → relay:  send      { data, to? }
 //   Client → relay:  set_state { data }        // host (slot 0) only, <= 16 KiB
+//   Client → relay:  close_room {}             // host (slot 0) only: delete the room, close every member socket with 4001
 //   relay  → client: created     { room, index: 0 }
 //   relay  → client: joined      { room, index, peers: number[] }  // then a `state` replay, if retained
 //   relay  → client: peer_joined { index } / peer_left { index }
@@ -22,7 +23,9 @@
 // for the room's lifetime and never reassigned; maxClients caps SLOTS (so a
 // dropped player's seat still counts); a second connection with the same
 // clientId takes the slot and the old socket is evicted with close code 4000
-// (PartyConnection surfaces that as "replaced").
+// (PartyConnection surfaces that as "replaced"). close_room mirrors the real
+// relay's room teardown: the room is deleted and every member socket closed
+// with 4001 (PartyConnection surfaces that as onClose {roomClosed}, terminal).
 
 const { WebSocketServer } = require('ws');
 
@@ -119,6 +122,18 @@ wss.on('connection', (ws) => {
       }
       room.state = msg.data;
       for (const s of others()) send(s, { type: 'state', data: msg.data });
+
+    } else if (msg.type === 'close_room') {
+      // Host-initiated teardown (real-relay parity): slot 0 only. Delete the
+      // room, then close every member socket — sender included — with 4001.
+      // No ack message: each member's own close frame is the notification.
+      if (!room) { send(ws, { type: 'error', message: 'Not in a room' }); return; }
+      if (index !== 0) { send(ws, { type: 'error', message: 'Only the host can close the room' }); return; }
+      rooms.delete(room.code);
+      for (const [i, s] of [...room.sockets]) {
+        room.sockets.delete(i); // detach first so each close handler finds nothing to tear down
+        if (s.readyState === 1) s.close(4001, 'room closed');
+      }
     }
   });
 

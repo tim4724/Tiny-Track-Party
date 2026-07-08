@@ -1,7 +1,9 @@
 // @ts-check
 // Regression: the host's "Start race" button must keep working after the display
-// reloads. The display owns the live track state (selectedTrackId); the host phone
-// owns the picker. If the display reloads (or reconnects) mid-lobby it comes back
+// comes back trackless in a room whose phones stayed connected. The display owns
+// the live track state (selectedTrackId); the host phone owns the picker. A
+// CRASHED display (no pagehide → no close_room → the room survives; a clean
+// reload tears the party down instead, see close-room.spec.js) rejoins mid-lobby
 // with no track, while the still-connected host keeps its pick — so the host's
 // Start button is enabled (canStart = !!selectedTrackId) yet the display's
 // startRace() silently bails on its own null track. The host must re-assert its
@@ -10,7 +12,7 @@ const { test, expect, openDisplay, joinController, startRace, waitForRacing, vis
 
 const hasTrack = () => window.__net && window.__net.trackId != null;
 
-test('host can still start after the display reloads (lobby track desync repair)', async ({ page, browser }) => {
+test('host can still start after the display crash-recovers (lobby track desync repair)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
   const alice = await joinController(browser, roomCode, 'Alice'); // first in → host
@@ -21,8 +23,10 @@ test('host can still start after the display reloads (lobby track desync repair)
   // Host auto-picks a track; the display adopts it for the 3D preview.
   await page.waitForFunction(hasTrack, null, { timeout: 10000 });
 
-  // The display reloads: fresh JS state drops its track (back to the diorama) while
-  // both phones stay connected and keep their selection.
+  // The display "crashes": suppress the pagehide teardown (a real crash never
+  // runs it), so the room survives and the reloaded page rejoins with fresh JS
+  // state — no track — while both phones stay connected and keep their selection.
+  await page.evaluate(() => { window.__net.shutdown = () => {}; });
   await page.reload();
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
   await page.evaluate(() => window.__sceneReady); // GLBs back in (startRace gates on sceneReady)

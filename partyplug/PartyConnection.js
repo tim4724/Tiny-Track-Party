@@ -20,8 +20,8 @@
  *   Client → PS:  create { clientId, maxClients, url? }
  *   Client → PS:  join   { clientId, room }
  *   Client → PS:  send   { data, to? }            // to is a peer index (number)
- *   PS → Client:  created      { room, index: 0, instance?, region? }
- *   PS → Client:  joined       { room, index, peers: number[] }
+ *   PS → Client:  created      { room, index: 0, instance?, region?, url? }
+ *   PS → Client:  joined       { room, index, peers: number[], url? }
  *   PS → Client:  peer_joined  { index }
  *   PS → Client:  peer_left    { index }
  *   PS → Client:  message      { from, data }     // from is a peer index (number)
@@ -40,7 +40,7 @@ class PartyConnection {
 
     // Callbacks
     this.onOpen = null;        // () => void
-    this.onClose = null;       // (attempt: number, maxAttempts: number, meta?: {replaced: boolean}) => void
+    this.onClose = null;       // (attempt: number, maxAttempts: number, meta?: {replaced?: boolean, roomClosed?: boolean}) => void
     this.onError = null;       // () => void
     this.onMessage = null;     // (from: number, data: object) => void
     this.onProtocol = null;    // (type: string, msg: object) => void
@@ -98,6 +98,14 @@ class PartyConnection {
         if (this.onClose) this.onClose(0, 0, { replaced: true });
         return;
       }
+      if (event && event.code === 4001) {
+        // The room itself is gone (host sent close_room, or the relay's
+        // hostless grace expired). Terminal: a reconnect would only bounce
+        // off "Room not found".
+        this._shouldReconnect = false;
+        if (this.onClose) this.onClose(0, 0, { roomClosed: true });
+        return;
+      }
       this.reconnectAttempt++;
       if (this.onClose) this.onClose(this.reconnectAttempt, this.maxReconnectAttempts);
       if (this._shouldReconnect && this.reconnectAttempt <= this.maxReconnectAttempts) {
@@ -135,10 +143,13 @@ class PartyConnection {
     }
   }
 
-  // `url` is an optional controller-URL template registered with the relay so a
-  // holder of only the room code (native shells via GET /room/:code, controllers
-  // in `joined`) can resolve which page to load. The relay fills {room}/{instance}
-  // and accepts only absolute https templates — pass undefined to register none.
+  // Create a room. `url` is an optional controller-URL template the relay
+  // retains on the room and hands (with {room}/{instance} filled in) to anyone
+  // who holds only the room code — in `created`/`joined` replies and via
+  // GET /room/:code — so a code-only client can resolve which page to load.
+  // The relay only accepts absolute https templates and rejects the whole
+  // create on an invalid one, so callers must omit it rather than send a
+  // non-https URL (e.g. a plain-http dev origin).
   create(maxClients, url) {
     var msg = { type: 'create', clientId: this.clientId, maxClients: maxClients };
     if (url) msg.url = url;
@@ -176,9 +187,35 @@ class PartyConnection {
     this._send({ type: 'set_state', data: data });
   }
 
+  // Tear the room down for everyone (host/slot-0 only; the relay rejects it
+  // from anyone else). The relay deletes the room, GET /room/:code turns 404
+  // (killing stale rejoin links), and every member socket is closed with 4001,
+  // which surfaces to them as onClose(0, 0, {roomClosed: true}). There is no
+  // ack message: the sender's own 4001 close is the confirmation, unless the
+  // caller close()s first (fine on pagehide, where the page is going away).
+  closeRoom() {
+    this._send({ type: 'close_room' });
+  }
+
   reconnectNow() {
     clearTimeout(this._reconnectTimer);
     this.connect();
+  }
+
+  // Treat the current socket as a failed attempt and drive the normal
+  // backoff/give-up path — for callers that detect failure themselves (e.g. a
+  // socket that opened but the relay never answered create/join, which never
+  // triggers onclose). Mirrors an unexpected onclose: discards the dead socket,
+  // bumps the attempt counter, notifies onClose, and either schedules a backoff
+  // reconnect or gives up once maxReconnectAttempts is passed.
+  failAttempt() {
+    if (!this._shouldReconnect) return;
+    this._discardOldWs();
+    this.reconnectAttempt++;
+    if (this.onClose) this.onClose(this.reconnectAttempt, this.maxReconnectAttempts);
+    if (this.reconnectAttempt <= this.maxReconnectAttempts) {
+      this._scheduleReconnect();
+    }
   }
 
   resetReconnectCount() {
