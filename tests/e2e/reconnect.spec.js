@@ -1,7 +1,9 @@
 // @ts-check
 // Reconnect flows: a reloaded phone reclaims its seat mid-race (same clientId
-// → same relay slot → WELCOME with inRace), and a reloaded display rejoins its
+// → same relay slot → WELCOME with inRace), and a CRASHED display rejoins its
 // OWN room (sessionStorage) and regathers the party instead of orphaning it.
+// (A clean display reload/exit tears the party down instead — pagehide sends
+// close_room; see close-room.spec.js.)
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('a reloaded phone rejoins straight into its still-running race', async ({ page, browser }) => {
@@ -52,12 +54,15 @@ test('a silent phone is dropped by liveness and restored when its pings resume',
   await expect(page.locator('.cell-reconnect')).toHaveCount(0);
 });
 
-test('a display reload rejoins its own room and regathers the party', async ({ page, browser }) => {
+test('a crashed display rejoins its own room and regathers the party', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
   const alice = await joinController(browser, roomCode, 'Alice');
   await expect(page.locator('#players')).toContainText('Alice');
 
+  // Crash simulation: a killed tab / bfcache freeze never runs the pagehide
+  // teardown, so the room outlives the page and sessionStorage rejoins it.
+  await page.evaluate(() => { window.__net.shutdown = () => {}; });
   await page.reload();
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
 

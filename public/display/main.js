@@ -508,6 +508,16 @@ function forfeitCar(peerIndex) {
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 
+// The TV tab going away IS the party ending: tear the room down so every phone
+// bails to its "Race over" screen at once (their sockets close 4001) and stale
+// join/rejoin links die with the room, instead of everyone waiting out the
+// relay's ~2 min hostless grace. pagehide also fires on a RELOAD — accepted:
+// a reloaded display simply opens a fresh room (reload isn't a real use case
+// on a TV). If the send never flushes (bfcache freeze, crash — no pagehide at
+// all), the room survives and the sessionStorage rejoin in DisplayNet turns
+// the next load into a crash recovery that regathers the party instead.
+window.addEventListener('pagehide', () => net.shutdown());
+
 // ---- auto-pause ----
 // A race with no connected human driving is a race nobody is playing: freeze it
 // instead of letting the bots run it to the flag. SILENT on purpose — no pause

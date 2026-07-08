@@ -40,9 +40,13 @@ const LIVENESS_TICK_MS = 1000;
 // create/join — which fires no error and no close.
 const CREATE_TIMEOUT_MS = 8000;
 
-// sessionStorage key for the live room, so a display RELOAD rejoins its own
-// room (the phones just see a short "waiting for the big screen" blip) instead
-// of creating a fresh one and orphaning every controller in the dead room.
+// sessionStorage key for the live room — a crash-recovery fallback. A page
+// exit normally ends the party (pagehide → shutdown → close_room), so on a
+// clean reload this saved room is already dead and the join bounces into the
+// fresh-room fallback. But pagehide's send is best-effort (bfcache freeze,
+// killed tab, crash): when it never flushed, the room is still alive on the
+// relay and the reloaded display rejoins it, regathering the party (the phones
+// just see a short "waiting for the big screen" blip).
 // sessionStorage is per-tab on purpose: a second display tab gets its own room.
 // The blob also carries the display's clientId secret (see genDisplayClientId).
 const ROOM_KEY = 'tinytrack_display_room';
@@ -657,12 +661,25 @@ export class DisplayNet extends GameNet {
   // End the party for everyone: the relay deletes the room (stale rejoin links
   // 404) and closes every socket with 4001 — phones bail terminally (their
   // onClose {roomClosed}), while the display's own 4001 self-heals into a fresh
-  // room (see onClose in _connect). Deliberately NOT fired on pagehide, unlike
-  // the HexStacker reference: pagehide can't tell a reload from a real exit, and
-  // a reload must keep the room (the sessionStorage rejoin above). A closed tab
-  // is covered relay-side anyway — instant reap once no live sockets remain,
-  // else the ~2 min hostless grace, both ending in the same 4001 on the phones.
+  // room (see onClose in _connect). For a page exit use shutdown() instead,
+  // which suppresses that self-heal.
   closeRoom() { if (this.party) this.party.closeRoom(); }
+
+  // Page-exit teardown (pagehide): the party is over for everyone, so tear the
+  // room down (phones bail terminally instead of waiting out the relay's ~2 min
+  // hostless grace) and stop reconnecting — party.close() also detaches the
+  // socket handlers, so our own 4001 echo can't fire the onClose self-heal and
+  // race a fresh room into existence on a dying page. Best-effort by nature:
+  // on a bfcache freeze / killed tab the close_room may never flush — then the
+  // room outlives us and the sessionStorage rejoin (ROOM_KEY above) turns the
+  // next load into a party-regathering crash recovery instead.
+  shutdown() {
+    if (this._livenessTimer) { clearInterval(this._livenessTimer); this._livenessTimer = null; }
+    clearTimeout(this._createTimer);
+    if (!this.party) return; // test/gallery/solo surfaces never opened the relay
+    this.party.closeRoom();
+    this.party.close();
+  }
 
   broadcast(data) { if (this.party) this.party.broadcast(data); }
   sendTo(id, data) { if (this.party) this.party.sendTo(id, data); }
