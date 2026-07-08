@@ -59,11 +59,14 @@ const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 // ---- Car-car collisions ----
 // Cars are glued to the centerline ribbon, so two nearby cars live in a locally
 // flat plane spanned by arclength `totalS` and lateral offset `lat` (both world
-// units). Collision is therefore a 2D box overlap in (s, lat): cheap, robust, and
-// it "just works" through loops/hills because it never touches world XYZ. The box
-// is the car's HEADING-ORIENTED footprint projected onto the (s, lat) axes (see
-// _footprint), so a yawed body collides from its real corners — not a fixed
-// axis-aligned box that an angled car would poke straight through.
+// units). Collision is an EXACT oriented-rectangle overlap in (s, lat) — a
+// separating-axis test between the two body boxes at their rendered yaw (see
+// _satRects): cheap, robust, and it "just works" through loops/hills because it
+// never touches world XYZ. Exactness matters: the old axis-projected AABB test
+// inflated a yawed body toward its bounding box (empty phantom corners, ~2× area
+// at 45°), so contact registered ahead of the nose and off the doors where no
+// bodywork is. The box orientation includes the cosmetic spin-out whirl
+// (_colYaw), so a spun-out car that LOOKS sideways also collides sideways.
 const COLLIDE_SHRINK = 0.9;    // footprints a touch tighter than the mesh so a bump reads as contact, not a gap
 // One impulse model for both contact axes (see _collidePair). RESTITUTION is the
 // bounciness of the impact along the contact normal: ~0 = a solid inelastic thunk
@@ -86,8 +89,10 @@ const POLE_MIN_KEEP = 0.3;     // a hit never drops you below this fraction of t
 // A puddle is a circle in (s, lat) space — the same locally-flat plane the car-car
 // collisions live in, so detection is cheap and "just works" through loops/hills.
 // Drive a car's CENTRE onto one and it SPINS OUT: steering goes dead and speed
-// bleeds for SPIN_TIME while the body whirls (the spin is cosmetic — the sim
-// heading is untouched; the renderer reads snapshot.spin). Detection is RISING-
+// bleeds for SPIN_TIME while the body whirls (the whirl doesn't steer — the sim
+// heading is untouched; the renderer reads snapshot.spin — but the COLLISION
+// shape does follow it via _colYaw, so a sideways-whirling body collides
+// sideways). Detection is RISING-
 // EDGE per puddle (enter → trigger once), so a car parked on a slick spins a
 // single time, not every frame — it must leave and re-enter to spin again.
 // Numbers are STARTING VALUES (tune in playtest). Hitting oil is NOT an abrupt
@@ -610,18 +615,28 @@ export class Game {
     return this._curbLimit(this.centerline.widthAt ? this.centerline.widthAt(s) : null);
   }
 
+  // The body's yaw for COLLISION SHAPES: steering heading plus the cosmetic spin-out
+  // whirl, i.e. the orientation the body is RENDERED at (the renderer adds snapshot.spin
+  // on top of the heading pose the same way). heading alone is clamped to ±MAX_HEADING,
+  // so without the spin term a spun-out car that looks perpendicular would still collide
+  // near-lengthwise — solid air off its nose, ghost doors. Velocity stays expressed via
+  // c.heading (the spin is not real motion), so only the shape whirls.
+  _colYaw(c) { return (c.heading || 0) + (c.spin || 0); }
+
   // Oriented-footprint half-extents projected onto the (s, lat) axes for a car at its
-  // CURRENT heading. A yawed body reaches FURTHER across the road and LESS along it than
-  // its resting box (project a rectangle rotated by θ: along = hl·|cosθ| + hw·|sinθ|,
-  // side = hl·|sinθ| + hw·|cosθ|). Collisions and the curb clamp read these so an angled
-  // car's real corners — not a heading-blind box — decide contact, which is what stops a
-  // hard-cornering body from clipping into curbs and other cars. Monster trucks collide
-  // from a widened footprint (they look bigger). restSide is the side extent at heading 0
-  // (= hw), so the curb clamp can isolate just the EXTRA reach the yaw adds.
+  // rendered yaw (_colYaw). A yawed body reaches FURTHER across the road and LESS along
+  // it than its resting box (project a rectangle rotated by θ: along = hl·|cosθ| +
+  // hw·|sinθ|, side = hl·|sinθ| + hw·|cosθ|). The curb clamp reads `side` (the exact
+  // lateral reach of the rotated rectangle) so an angled car's real corners stop at the
+  // curb; _collidePair uses along/side only as a cheap broadphase reject before the
+  // exact SAT test. Monster trucks collide from a widened footprint (they look bigger).
+  // restSide is the side extent at yaw 0 (= hw), so the curb clamp can isolate just the
+  // EXTRA reach the yaw adds.
   _footprint(c) {
     const fp = this._footprintMul(c);
     const hl = c.halfLen * fp, hw = c.halfWid * fp;
-    const ch = Math.abs(Math.cos(c.heading || 0)), sh = Math.abs(Math.sin(c.heading || 0));
+    const yaw = this._colYaw(c);
+    const ch = Math.abs(Math.cos(yaw)), sh = Math.abs(Math.sin(yaw));
     return { along: hl * ch + hw * sh, side: hl * sh + hw * ch, restSide: hw };
   }
 
@@ -973,24 +988,52 @@ export class Game {
     for (const c of list) this._clampCurb(c, dt);
   }
 
-  // A car vs an immovable support post. Treat the car as a disc and push it straight out of
-  // the post along the (s, lat) contact normal (post → car), always AWAY from the post — so a
-  // head-on pushes you back and a side-clip pushes you aside. Then shed the velocity driven
-  // INTO the post (inelastic): drive straight in and you lose most of your pace; pass cleanly
-  // alongside and you keep it. Speed is floored at POLE_MIN_KEEP of top speed, so a hit bumps
-  // you to a crawl but never freezes you — you nudge around it. Direction is positional, never
-  // velocity-based, so a curve's yaw can't flip it. The post's `s` is on ONE pass, so a car on
-  // the deck crossing overhead (far-away totalS) never matches.
+  // A car vs an immovable support post: the car's oriented body rectangle against the
+  // post's disc, exact in (s, lat) — the closest point on the (yawed, monster-widened)
+  // box to the post centre decides contact, so the nose reaches a post at halfLen and
+  // the doors at halfWid, matching the visible body (the old car-disc averaged the two:
+  // phantom side contact, a nose that sank in). Push the car straight out along the
+  // contact normal (post → car), always AWAY from the post — a head-on pushes you back,
+  // a side-clip pushes you aside. Then shed the velocity driven INTO the post
+  // (inelastic): drive straight in and you lose most of your pace; pass cleanly
+  // alongside and you keep it. Speed is floored at POLE_MIN_KEEP of top speed, so a hit
+  // bumps you to a crawl but never freezes you — you nudge around it. Direction is
+  // positional, never velocity-based, so a curve's yaw can't flip it. The post's `s` is
+  // on ONE pass, so a car on the deck crossing overhead (far-away totalS) never matches.
   _collidePole(c, p) {
     const ds = wrapDelta(c.totalS - p.s, this.length);
     const dl = c.lat - p.lat;
-    const R = (c.halfLen + c.halfWid) / 2 * this._footprintMul(c) + p.radius; // car-disc (monster-widened) + post radius
-    let dist = Math.hypot(ds, dl);
-    if (dist >= R) return;                              // discs clear → no contact
-    let nS, nL;                                          // outward contact normal, post → car
-    if (dist > 1e-3) { nS = ds / dist; nL = dl / dist; }
-    else { nS = -1; nL = 0; dist = 1e-3; }              // dead-on → treat as a pure head-on (push straight back)
-    const pen = R - dist;
+    const mul = this._footprintMul(c);
+    const hl = c.halfLen * mul, hw = c.halfWid * mul;
+    if (ds * ds + dl * dl >= (hl + hw + p.radius) ** 2) return; // cheap reject (circumscribing reach)
+    // Post centre in the body frame: axes u = (cosθ, -sinθ) forward, w = (sinθ, cosθ)
+    // side (the same (s, lat) convention as the car's velocity components).
+    const yaw = this._colYaw(c);
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const lx = -ds * cy + dl * sy;                      // (post − car) · u
+    const ly = -ds * sy - dl * cy;                      // (post − car) · w
+    // Closest point on the box to the post centre → contact when it's inside the disc.
+    const qx = Math.max(-hl, Math.min(hl, lx));
+    const qy = Math.max(-hw, Math.min(hw, ly));
+    const ex = lx - qx, ey = ly - qy;
+    const d2 = ex * ex + ey * ey;
+    if (d2 >= p.radius * p.radius) return;              // clear → no contact
+    let nS, nL, pen;                                     // outward contact normal (post → car) + depth
+    if (d2 > 1e-6) {
+      const dist = Math.sqrt(d2);
+      const nlx = -ex / dist, nly = -ey / dist;         // local normal, post → car
+      nS = nlx * cy + nly * sy;
+      nL = -nlx * sy + nly * cy;
+      pen = p.radius - dist;
+    } else {
+      // Post centre INSIDE the box: exit through the nearest face (ties → straight back).
+      const dx = hl - Math.abs(lx), dy = hw - Math.abs(ly);
+      let nlx = 0, nly = 0;
+      if (dx <= dy) { nlx = lx > 0 ? -1 : 1; pen = p.radius + dx; }
+      else { nly = ly > 0 ? -1 : 1; pen = p.radius + dy; }
+      nS = nlx * cy + nly * sy;
+      nL = -nlx * sy + nly * cy;
+    }
     c.totalS += nS * pen;                               // de-penetrate straight out of the post (away from it)
     c.lat += nL * pen;
     // Scrub the speed going INTO the post. Car velocity in (s, lat): forward speed along the
@@ -1001,8 +1044,11 @@ export class Game {
     // Only when you're driving INTO it: shed the into-post speed (head-on → near zero), but floor
     // it so the post bumps you to a crawl rather than freezing you. A glancing touch that isn't
     // driving in keeps its pace untouched (the floor must never hand a slow car free speed).
-    if (vn < 0) c.v = Math.max(POLE_MIN_KEEP * c.vmax, vS - vn * nS);
-    c.vlat = 0;
+    if (vn < 0) {
+      this._applyImpulse(c, -vn * nS, -vn * nL);        // remove the normal (into-post) velocity component
+      if (c.v < POLE_MIN_KEEP * c.vmax) c.v = POLE_MIN_KEEP * c.vmax;
+    }
+    c.vlat = 0;                                         // no residual slide INTO the post — a post stops you dead sideways
     if (Math.abs(nS) > 0.6) { c.boostT = 0; c.boostMul = 1; } // a head-on also kills an active boost
     c.onWall = true;                                    // contact flag → brake light + controller buzz
   }
@@ -1016,17 +1062,16 @@ export class Game {
     // applying them to the cumulative totalS stays correct across the lap seam.
     const ds = wrapDelta(b.totalS - a.totalS, this.length); // +: b is ahead of a along the track
     const dl = b.lat - a.lat;                // +: b sits to a's +lateral side
-    // Each car's oriented footprint projected onto the (s, lat) axes: a yawed body reaches
-    // further across the road, so contact registers from the car's real corners rather than a
-    // heading-blind box (no more clipping when a car is sideways). Monster footprint is folded
-    // into _footprint. The AABB overlap on these projected extents stays cheap and keeps the
-    // rear-end/side-bump resolution below intact.
+    // Broadphase: the projected AABBs from _footprint are a superset of the true bodies,
+    // so a miss here is a guaranteed miss — the exact SAT below only runs on near-misses.
     const fpa = this._footprint(a), fpb = this._footprint(b);
-    const sumLen = (fpa.along + fpb.along) * COLLIDE_SHRINK;
-    const sumWid = (fpa.side + fpb.side) * COLLIDE_SHRINK;
-    const penS = sumLen - Math.abs(ds);
-    const penL = sumWid - Math.abs(dl);
-    if (penS <= 0 || penL <= 0) return;      // no overlap on one axis → no contact
+    if (Math.abs(ds) >= (fpa.along + fpb.along) * COLLIDE_SHRINK) return;
+    if (Math.abs(dl) >= (fpa.side + fpb.side) * COLLIDE_SHRINK) return;
+    // Exact oriented-rectangle test: the old AABB overlap on the projected extents
+    // registered contact in the boxes' empty corners — phantom hits ahead of the nose
+    // and off the doors whenever a body was yawed (worst at 45°, ~2× the real area).
+    const hit = this._satRects(a, b, ds, dl);
+    if (!hit) return;                        // separating axis found → no contact
 
     // MONSTER TRUCK body-check: a transformed car crushes anything it touches — the
     // OTHER car spins out (a fresh stun). Guarded on the victim not already spinning so
@@ -1046,42 +1091,82 @@ export class Game {
     const aShare = invA / invSum;
     const bShare = invB / invSum;
 
-    if (penS <= penL) {
-      // ── REAR-END: contact normal lies along the track ──────────────────────
-      // Separate along s, then resolve the 1D impact as a mass-weighted impulse.
-      // With RESTITUTION≈0 it equalises the closing speed (a solid thunk, no
-      // rebound) — the heavy car keeps its pace and launches the light one forward,
-      // rather than both bouncing apart. This is the minimum speed change that
-      // still keeps the cars from interpenetrating, so the chaser sheds no more
-      // pace than physics demands.
-      const n = ds >= 0 ? 1 : -1;            // contact normal: a → b along the track
-      a.totalS -= n * penS * aShare;
-      b.totalS += n * penS * bShare;
-      const vrel = (b.v - a.v) * n;          // <0 ⇒ closing (the rear car is gaining)
-      if (vrel < 0) {
-        const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
-        a.v = Math.max(0, a.v - j * invA * n); // rear slows / front gets nudged on
-        b.v = Math.max(0, b.v + j * invB * n);
-      }
-    } else {
-      // ── SIDE BUMP: contact normal points sideways ──────────────────────────
-      // Separate sideways, then trade a mass-weighted impulse from the actual
-      // lateral closing speed — steering drift (−v·sin(heading)) plus any live
-      // knock. Forward speed is never touched, so racing door-to-door scrubs NO
-      // pace, and the knock scales with how hard the cars converge: a gentle lean
-      // barely registers, a committed swerve shoves the lighter car off its line.
-      const n = dl >= 0 ? 1 : -1;            // contact normal: a → b sideways (+lat)
-      a.lat -= n * penL * aShare;
-      b.lat += n * penL * bShare;
-      const vLatA = -a.v * Math.sin(a.heading) + a.vlat; // lateral velocity, +lat dir
-      const vLatB = -b.v * Math.sin(b.heading) + b.vlat;
-      const vrel = (vLatB - vLatA) * n;      // <0 ⇒ converging sideways
-      if (vrel < 0) {
-        const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
-        a.vlat -= j * invA * n;              // lighter car takes the bigger knock
-        b.vlat += j * invB * n;
+    // De-penetrate along the minimum-translation normal (a → b), split by inverse
+    // mass, then resolve the impact as ONE mass-weighted impulse along that normal.
+    // The normal comes from the SAT axis of least overlap, so a rear-end resolves
+    // along the track, a door-to-door bump resolves sideways, and an oblique
+    // corner-on-corner contact resolves along its true diagonal — one model, no
+    // axis special-casing. With RESTITUTION≈0 it equalises the closing speed (a
+    // solid thunk, no rebound): the heavy car keeps its pace and launches the light
+    // one, and this is the minimum speed change that still stops interpenetration.
+    // A contact that isn't closing (vrel ≥ 0) trades NO impulse — a gentle lean
+    // barely registers, and racing door-to-door scrubs no forward pace (a pure
+    // lateral normal leaves each car's forward speed exactly untouched, see
+    // _applyImpulse).
+    const { nS, nL, pen } = hit;
+    a.totalS -= nS * pen * aShare; a.lat -= nL * pen * aShare;
+    b.totalS += nS * pen * bShare; b.lat += nL * pen * bShare;
+    const vSa = a.v * Math.cos(a.heading), vLa = -a.v * Math.sin(a.heading) + (a.vlat || 0);
+    const vSb = b.v * Math.cos(b.heading), vLb = -b.v * Math.sin(b.heading) + (b.vlat || 0);
+    const vrel = (vSb - vSa) * nS + (vLb - vLa) * nL; // closing speed along the normal (<0 ⇒ converging)
+    if (vrel < 0) {
+      const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
+      this._applyImpulse(a, -j * invA * nS, -j * invA * nL); // lighter car takes the bigger knock
+      this._applyImpulse(b, j * invB * nS, j * invB * nL);
+    }
+  }
+
+  // Exact oriented-rectangle overlap in (s, lat): separating-axis test between the
+  // two body boxes at their rendered yaw (_colYaw), half-extents pre-shrunk by
+  // COLLIDE_SHRINK (a touch tighter than the mesh so a bump reads as contact, not a
+  // gap). Two rectangles only need their 4 edge normals as candidate axes; if any
+  // axis separates them there is no contact (null). Otherwise returns the
+  // minimum-translation vector: the unit normal (nS, nL) pointing a → b along the
+  // axis of least overlap, and the penetration depth along it.
+  _satRects(a, b, ds, dl) {
+    const ma = this._footprintMul(a) * COLLIDE_SHRINK, mb = this._footprintMul(b) * COLLIDE_SHRINK;
+    const hla = a.halfLen * ma, hwa = a.halfWid * ma;
+    const hlb = b.halfLen * mb, hwb = b.halfWid * mb;
+    const ya = this._colYaw(a), yb = this._colYaw(b);
+    const ca = Math.cos(ya), sa = Math.sin(ya), cb = Math.cos(yb), sb = Math.sin(yb);
+    // Body axes in the (s, lat) plane — forward u = (cosθ, -sinθ) matches the velocity
+    // convention (vS = v·cosθ, vL = -v·sinθ), side w = u rotated +90°.
+    const uaS = ca, uaL = -sa, waS = sa, waL = ca;
+    const ubS = cb, ubL = -sb, wbS = sb, wbL = cb;
+    let pen = Infinity, nS = 0, nL = 0;
+    const axes = [uaS, uaL, waS, waL, ubS, ubL, wbS, wbL];
+    for (let i = 0; i < 8; i += 2) {
+      const xS = axes[i], xL = axes[i + 1];
+      // Each box's projection radius onto the axis + the centre gap along it.
+      const ra = hla * Math.abs(uaS * xS + uaL * xL) + hwa * Math.abs(waS * xS + waL * xL);
+      const rb = hlb * Math.abs(ubS * xS + ubL * xL) + hwb * Math.abs(wbS * xS + wbL * xL);
+      const d = ds * xS + dl * xL;
+      const overlap = ra + rb - Math.abs(d);
+      if (overlap <= 0) return null;         // separating axis → no contact
+      if (overlap < pen) {                   // track the least-overlap axis (the MTV)
+        pen = overlap;
+        if (d >= 0) { nS = xS; nL = xL; }    // orient the normal a → b
+        else { nS = -xS; nL = -xL; }
       }
     }
+    return { nS, nL, pen };
+  }
+
+  // Apply a velocity delta (dS, dL) in the (s, lat) plane to a car's velocity state.
+  // The state is an OBLIQUE decomposition — v along the body heading plus a pure-
+  // lateral knock: vS = v·cos(h), vL = -v·sin(h) + vlat — so solve it exactly:
+  // v' = vS'/cos(h) (safe: |h| ≤ MAX_HEADING keeps cos ≥ ~0.32), then vlat' absorbs
+  // the rest. A pure-lateral delta therefore leaves v untouched (door-to-door keeps
+  // pace), and a pure-along delta on a straight car is a plain v change. The sim has
+  // no reverse: a shove past standstill parks the car (v floors at 0) and the
+  // leftover backward s-velocity is dropped, matching the old rear-end clamp.
+  _applyImpulse(c, dS, dL) {
+    const ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+    const wS = c.v * ch + dS;
+    const wL = -c.v * sh + (c.vlat || 0) + dL;
+    const v = Math.max(0, wS / ch);
+    c.v = v;
+    c.vlat = wL + v * sh;
   }
 
   // Per-car world pose for the renderer/camera. `up` is the LOCAL SURFACE normal at
@@ -1139,7 +1224,8 @@ export class Game {
         monster: c.monsterT > 0, // car is currently a monster truck — renderer morphs the model; HUD/cam may react
 
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
-        // heading lets the overlay orient the box to the body (the engine collides oriented).
+        // The overlay orients the box by heading + spin (= _colYaw): that oriented rectangle
+        // IS the shape _satRects tests, bar the pairwise COLLIDE_SHRINK.
         totalS: c.totalS, heading: c.heading,
         halfLen: c.halfLen * fpMul,
         halfWid: c.halfWid * fpMul

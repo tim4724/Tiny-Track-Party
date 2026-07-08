@@ -147,6 +147,29 @@ test('grazing a pole without driving into it does not boost a slow car (speed fl
   assert.ok(c.v < 2.0, `the post floor must not hand a slow grazer free speed (v=${c.v.toFixed(2)})`);
 });
 
+test('a pole meets the car BODY: the doors pass closer than the old car-disc, the nose reaches further', () => {
+  // The old test wrapped the car in a disc of radius (halfLen+halfWid)/2 = 0.35 — too fat
+  // beside the doors (phantom side clips), too short at the bumpers (the nose sank in).
+  // The exact box: side contact at halfWid 0.26 + pole radius, nose contact at halfLen 0.44 + radius.
+  const mkCar = (over) => {
+    const game = new Game(['p1'], mkTrack(3), {});
+    const c = game.cars.get('p1');
+    Object.assign(c, { heading: 0, vlat: 0 }, over);
+    return { game, c };
+  };
+  // Alongside at |dl| = 0.75: inside the old disc reach (0.35 + 0.45 = 0.8) but clear of
+  // the body's doors (0.26 + 0.45 = 0.71) — must pass untouched.
+  const pass = mkCar({ totalS: 5, lat: 0.75, v: 5 });
+  pass.game._collidePole(pass.c, { s: 5, lat: 0, radius: 0.45 });
+  assert.ok(Math.abs(pass.c.lat - 0.75) < 1e-9 && pass.c.v === 5, 'a car passing alongside clears the post at its real body width');
+  // Head-on at |ds| = 0.85: beyond the old disc reach (0.8) but inside the bumper's
+  // (0.44 + 0.45 = 0.89) — the nose must meet the post, not sink into it.
+  const nose = mkCar({ totalS: 5, lat: 0, v: 5 });
+  nose.game._collidePole(nose.c, { s: 5.85, lat: 0, radius: 0.45 });
+  assert.ok(nose.c.totalS < 5, 'a head-on contact begins at the front bumper (pushed back)');
+  assert.ok(nose.c.v < 5, 'and the into-post speed is shed');
+});
+
 test('hard steering reaches the curb but never gets stuck and cannot u-turn', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
@@ -796,6 +819,42 @@ test('an angled car collides from its oriented footprint, not a heading-blind bo
   const yawed = collide({ totalS: 5, lat: 0, v: 0, heading: 0.6 }, { totalS: 5, lat: gap, v: 0, heading: 0.6 });
   assert.ok(yawed.b.lat - gap > 1e-3, 'two yawed cars at the SAME gap overlap and shove apart (oriented footprint)');
   assert.ok(yawed.a.lat < 0, 'the de-penetration is mutual — the left car is shoved the other way');
+});
+
+test('no phantom corner contact — the tested shape is the body, not its bounding box', () => {
+  // The old test projected each yawed body onto the (s, lat) axes and overlapped the
+  // resulting AABBs, which filled the boxes' diagonal corners with solid air: at 45° yaw
+  // (hl 0.44, hw 0.26) the tested box grew to ~0.5×0.5, so contact registered ahead of
+  // the nose and off the doors. This diagonal offset sits INSIDE those projected AABBs
+  // (the old code collided) but clear of the real rectangles — SAT must let them pass.
+  const clear = collide({ totalS: 5, lat: 0, v: 0, heading: 0.785 }, { totalS: 5.75, lat: 0.6, v: 0, heading: 0 });
+  assert.ok(Math.abs(clear.b.totalS - 5.75) < 1e-9 && Math.abs(clear.b.lat - 0.6) < 1e-9,
+    'a diagonal near-miss past a 45°-yawed car stays a miss (no phantom corner hit)');
+
+  // Close in along the same diagonal until the real corners genuinely touch: the contact
+  // resolves along its true diagonal normal (both axes shove), not an axis special-case.
+  const touch = collide({ totalS: 5, lat: 0, v: 0, heading: 0.785 }, { totalS: 5.5, lat: 0.35, v: 0, heading: 0 });
+  assert.ok(touch.b.totalS > 5.5 && touch.b.lat > 0.35, 'a real corner-on-corner contact shoves along the diagonal');
+  assert.ok(touch.a.totalS < 5 && touch.a.lat < 0, 'and the de-penetration is mutual');
+});
+
+test('a spun-out car collides at its rendered whirl angle, not its steering heading', () => {
+  // Mid spin-out the renderer whirls the body by snapshot.spin on top of the heading;
+  // the collision shape follows (_colYaw), so a car that LOOKS sideways IS sideways:
+  // its doors become solid further out (side reach grows toward halfLen) and its
+  // nose/tail thin down (along reach shrinks toward halfWid).
+  const straightGap = collide({ totalS: 5, lat: 0, v: 0, heading: 0 }, { totalS: 5, lat: 0.5, v: 0, heading: 0 });
+  assert.ok(Math.abs(straightGap.b.lat - 0.5) < 1e-9, 'an unspun car at this side gap is clear (side reach = halfWid)');
+  const broadside = collide({ totalS: 5, lat: 0, v: 0, heading: 0 },
+    { totalS: 5, lat: 0.5, v: 0, heading: 0, spin: Math.PI / 2, spinT: 0.5 });
+  assert.ok(broadside.b.lat > 0.5, 'the SAME gap hits a whirled-sideways body broadside');
+
+  const straightNose = collide({ totalS: 5, lat: 0, v: 0, heading: 0 }, { totalS: 5.7, lat: 0, v: 0, heading: 0 });
+  assert.ok(straightNose.b.totalS > 5.7, 'two straight cars at this nose gap DO touch (calibrates the next assert)');
+  const thinTail = collide({ totalS: 5, lat: 0, v: 0, heading: 0 },
+    { totalS: 5.7, lat: 0, v: 0, heading: 0, spin: Math.PI / 2, spinT: 0.5 });
+  assert.ok(Math.abs(thinTail.b.totalS - 5.7) < 1e-9,
+    'nose-on, the whirled body is THIN — no solid air where its nose/tail used to be');
 });
 
 test('the stronger car dominates a rear-end: it keeps its pace, the light one is launched', () => {

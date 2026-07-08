@@ -333,10 +333,10 @@ export class TrackProps {
 
   // ?bbox debug: redraw the collision/trigger outlines each frame. Static props
   // (oil/pad/box) come from _dbgStatic; bananas + cars from the live snapshot.
-  // Car boxes are oriented to the body's heading (yaw about the surface up), matching
-  // the rendered pose — the engine collides from this same oriented footprint (projected
-  // onto the (s, lat) axes), so the outline tracks the body instead of the old fixed
-  // centreline-aligned box that an angled car would visibly poke through.
+  // Car boxes are oriented to the body's RENDERED yaw — heading plus the cosmetic
+  // spin-out whirl, matching the engine's _colYaw — and the engine's SAT test
+  // (_satRects) collides this exact oriented rectangle, so the outline IS the
+  // collision shape (bar the pairwise COLLIDE_SHRINK tightening on contact).
   _drawDebug(snap) {
     if (!this._bbox) return;
     const g = this._dbgGroup;
@@ -365,9 +365,9 @@ export class TrackProps {
       if (c.totalS == null) continue;
       const f = cl.sampleAt(c.totalS), up = f.up.clone().normalize();
       const center = f.pos.clone().addScaledVector(f.lateral, c.lat || 0).addScaledVector(up, 0.06);
-      // Yaw the box basis by the car's heading about the surface up, matching the body's
-      // render pose (forward = tangent rotated by heading about up). depthTest-off rect.
-      const h = c.heading || 0;
+      // Yaw the box basis by the car's rendered yaw (heading + spin whirl) about the
+      // surface up, matching the body's render pose. depthTest-off rect.
+      const h = (c.heading || 0) + (c.spin || 0);
       const along = f.tangent.clone().normalize().applyAxisAngle(up, h);
       const side = f.lateral.clone().normalize().applyAxisAngle(up, h);
       g.add(this._dbgRect(center, along, side, c.halfLen || 0.44, c.halfWid || 0.26, 0x39e639));
