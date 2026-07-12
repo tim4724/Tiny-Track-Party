@@ -1901,10 +1901,11 @@ export class SceneRenderer {
         } else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
         if (roadY != null) {
           // Snap to the road, but DAMP the OFFSET from the (smooth) centreline rather
-          // than the absolute height. The max() above jumps abruptly where ramp tiles
-          // overlap — a ~0.15-unit vertical POP at the ramp seams. Damping the small
-          // offset smooths those pops; the climb itself lives in the centreline height
-          // (pos.y), so it stays lag-free and the wheels keep tracking the road.
+          // than the absolute height. The probes (and the crest guard switching in and
+          // out) jump abruptly where road pieces overlap at a seam — a ~0.15-unit
+          // vertical POP. Damping the small offset smooths those pops; the climb itself
+          // lives in the centreline height (pos.y), so it stays lag-free and the wheels
+          // keep tracking the road.
           const offTarget = roadY - pos.y;
           const a = 1 - Math.exp(-RIDE_DAMP * this._frameDt); // frame-rate-independent smoothing
           c.rideOff = (c.rideOff == null) ? offTarget : c.rideOff + (offTarget - c.rideOff) * a;
