@@ -1864,10 +1864,12 @@ export class SceneRenderer {
 
     // Ground-conform. PITCH comes from the centreline forward (`fwd`): the centreline
     // is built once and filtered, so fwd.y is a SMOOTH road slope (the smootherstep
-    // climb on a ramp). HEIGHT comes from raycasting the rendered road under the axles
-    // so the wheels sit on the actual GLB. We split the two deliberately — re-pitching
-    // from the front/rear probe slope twitched the car at ramp seams (that probe is
-    // noisy: the GLB floor isn't a perfect smootherstep and tiles overlap). Heading
+    // climb on a ramp — and since the engine pose pitches it to the AXLE CHORD, it's
+    // the slope the wheelbase actually rests on through transitions). HEIGHT comes
+    // from raycasting the rendered road under the axles so the wheels sit on the
+    // actual mesh. We split the two deliberately — re-pitching from the front/rear
+    // probe slope twitched the car at ramp seams (that probe is noisy: the road
+    // floor isn't a perfect smootherstep and overlaps at seams). Heading
     // (yaw) is the centreline's; ROLL follows the road surface (`pose.up` — the local
     // swept-surface normal under the car): level on flat road, leaned with a banked
     // corner's cross slope, riding the wall through a corkscrew. (An earlier world-up
@@ -1885,12 +1887,18 @@ export class SceneRenderer {
         const half = c.wheelbase * 0.5;
         const yF = this._roadHitY(pos.x + this._headFlat.x * half, pos.z + this._headFlat.z * half, pos.y);
         const yB = this._roadHitY(pos.x - this._headFlat.x * half, pos.z - this._headFlat.z * half, pos.y);
-        // Ride on the HIGHEST road point under the footprint (front/centre/rear), not
-        // the chord mean: on flat/gentle ground these agree (still planted), but at a
-        // sharp crest it rides the peak so the road never pokes up through the belly.
+        // Ride on the AXLE MEAN (front+rear)/2 — the body is pitched to the axle
+        // chord (see the engine pose), so the mean is the height where BOTH axles
+        // touch the road. Riding max() instead floated the whole car by half the
+        // front↔rear height difference on every slope (visible daylight under the
+        // wheels all the way up a ramp). The centre probe survives only as a crest
+        // guard: where the deck bulges above the chord, ride the peak so the road
+        // never pokes up through the belly.
         let roadY = null;
-        if (yF != null && yB != null) roadY = (yC != null ? Math.max(yF, yB, yC) : Math.max(yF, yB));
-        else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
+        if (yF != null && yB != null) {
+          const mid = (yF + yB) / 2;
+          roadY = (yC != null ? Math.max(mid, yC) : mid);
+        } else if (yC != null) roadY = yC; // off the edge / gate seam: centre probe only
         if (roadY != null) {
           // Snap to the road, but DAMP the OFFSET from the (smooth) centreline rather
           // than the absolute height. The max() above jumps abruptly where ramp tiles

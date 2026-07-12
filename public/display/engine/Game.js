@@ -1176,6 +1176,14 @@ export class Game {
   // hugging car oriented to the frame up alone visibly floats off / digs into the
   // twisting road. Measured by sampling the frame a short step ahead; on untwisted
   // road (everything but a roll segment) the rate is ~0 and `up` is the frame up.
+  //
+  // PITCH is the AXLE CHORD, not the point tangent: a rigid car rests on its two
+  // axles, so its body sits along the chord between the road under the front and
+  // rear wheels. At a slope transition (ramp mouth, crest, valley) the centre-point
+  // tangent differs from that chord by the curvature sagitta, which visibly lifts
+  // one axle off the deck. The chord is sampled from the SAME smooth filtered
+  // centreline as everything else (±halfLen), so this stays twitch-free — only the
+  // out-of-plane (along `up`) part is folded in, leaving yaw exactly the heading's.
   _recomputePoses() {
     const TWIST_PROBE = 0.6; // arclength step for the twist-rate estimate (world units)
     for (const c of this.cars.values()) {
@@ -1187,9 +1195,19 @@ export class Game {
         const tau = Math.atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / TWIST_PROBE;
         if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, c.lat * tau).normalize();
       }
+      const forward = f.tangent.clone().applyAxisAngle(f.up, c.heading); // car faces its heading (yaw about the FRAME up)
+      // axle-chord pitch: rise/run of the chord between the two axle points, relative
+      // to the surface plane at the car (rise = 0 on constant slope → tangent wins)
+      const fR = this.centerline.sampleAt(c.totalS - c.halfLen);
+      const fF = this.centerline.sampleAt(c.totalS + c.halfLen);
+      const chord = fF.pos.addScaledVector(fF.lateral, c.lat)
+        .sub(fR.pos.addScaledVector(fR.lateral, c.lat));
+      const rise = chord.dot(up);
+      const run = chord.addScaledVector(up, -rise).length();
+      if (run > 1e-6) forward.addScaledVector(up, rise / run).normalize();
       c.pose = {
         pos: f.pos.clone().addScaledVector(f.lateral, c.lat),
-        forward: f.tangent.clone().applyAxisAngle(f.up, c.heading), // car faces its heading (yaw about the FRAME up)
+        forward,
         up
       };
     }
