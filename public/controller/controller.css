@@ -44,10 +44,14 @@ section {
     var(--edge-top) var(--edge-right)
     var(--edge-bottom) var(--edge-left);
 }
-/* The join screen lives STATICALLY in the top half: the software keyboard
-   (bottom ~45%) can never cover it, and there is no focus-driven relayout —
-   a conditional jump moved the Join button out from under the first tap. */
-#name { justify-content: flex-start; padding-top: calc(9vh + var(--safe-top)); }
+/* The join screen centres vertically in the AVAILABLE height. The keyboard
+   shrinks that height (interactive-widget=resizes-content shrinks the layout
+   viewport, and body's 100dvh + this section's flex:1 follow), so the content
+   glides up exactly as far as the keyboard takes — no focus-driven relayout
+   (a :focus-within jump once moved the Join button out from under the first
+   tap; iOS ignores the hint and natively pans the focused input into view).
+   The padding biases the centre upward a touch. */
+#name { justify-content: center; padding-bottom: calc(10vh + var(--safe-bottom)); }
 
 /* the name screen's wordmark badge (kit .wordmark supplies the die-cut look),
    centred over the form */
