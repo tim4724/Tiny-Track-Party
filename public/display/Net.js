@@ -715,9 +715,10 @@ export class DisplayNet extends GameNet {
   }
 }
 
-// Render a join URL into `el` as one line, wrapping the trailing room code in
-// a <span class="ticket__cd"> so it reads in the accent colour. The code is
-// the last path segment (e.g. the BZK4 in tinytrack.party/BZK4). Built with
+// Render a join URL into `el`, wrapping the trailing room code in a
+// <span class="ticket__cd"> so it reads in the accent colour. The code is the
+// last path segment (e.g. the BZK4 in tinytrack.party/BZK4). CSS makes that
+// span a block, so the host and the code land on separate lines. Built with
 // DOM nodes (not innerHTML) so the code is always treated as text.
 export function renderJoinUrl(el, fullText, code) {
   el.textContent = '';

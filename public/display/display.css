@@ -73,15 +73,30 @@ html, body {
    so the ticket holds its final footprint before the async QR fetch resolves
    (a blank <canvas> is 300×150 — without this the card would pop taller). */
 #qr { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; image-rendering: pixelated; }
+/* The URL must stay readable in full — it's the type-it-in fallback for anyone
+   who can't scan. So it WRAPS rather than truncating: an ellipsis eats the tail,
+   and the tail is the room code (preview hosts like
+   tinytrack-<branch>.couch-games.com are long enough to lose it entirely).
+   `anywhere` because a host has no spaces to break at. */
 .ticket__url {
   max-width: 100%;
   font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(16px, 1.55vw, 23px);
+  /* smaller than the code below it: the host is the boring half of the URL, and
+     a preview host (up to ~76 chars) needs the room to wrap in few lines */
+  font-size: clamp(13px, 1.15vw, 17px);
+  line-height: 1.25;
   color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow-wrap: anywhere;
 }
-/* the room code, inline in the URL — plain text in the accent colour */
-.ticket__cd { color: var(--accent); font-weight: 700; letter-spacing: 0.04em; }
+/* the room code — its own line under the host, in the accent colour, and the
+   biggest text on the ticket: it's the only part that changes per party and the
+   only part worth reading from the sofa. Always broken out (not just when the
+   host is long) so it lands in the same place on every screen. */
+.ticket__cd {
+  display: block;
+  font-size: 1.45em;
+  color: var(--accent); font-weight: 700; letter-spacing: 0.04em;
+}
 
 /* Cup slot (right rail) — empty pre-pick, the race card post-pick
    (renderCupSlot fills it). Centre-aligned with the join ticket. */
@@ -188,7 +203,17 @@ html, body {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: 1.15; color: var(--c, var(--ink));
 }
-.seat__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Names get up to TWO lines: "Alexandra Smith" wraps at the space instead of
+   clipping to "Alexandra …". `anywhere` keeps a long single-word name (no space
+   to break at, 16 chars max) breaking onto line 2 rather than hard-clipping;
+   past two lines the clamp ellipsises. The seats are one flex row of equal-height
+   cards, so a wrapped name lifts the whole dock rather than jostling one card. */
+.seat__label {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
 .seat--off { opacity: 0.5; }
 /* readiness check — a green circle checkmark on the card's top-right corner;
    present (invisible) on every taken seat and revealed once the player's
