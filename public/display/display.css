@@ -5,9 +5,7 @@
 
 html, body {
   margin: 0; height: 100%;
-  background:
-    radial-gradient(900px 520px at 18% -8%, var(--warm-haze), transparent 60%),
-    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 55%, #f4fbff 100%);
+  background: var(--paper);
   color: var(--ink);
   overflow: hidden;
 }
