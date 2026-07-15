@@ -197,19 +197,25 @@ html, body {
 }
 .seat:nth-child(odd)  { transform: rotate(-1.4deg); }
 .seat:nth-child(even) { transform: rotate(1.4deg); }
+/* The name box ALWAYS reserves both lines (--name-lines), so the card's height is
+   the same from the empty "Open" state through to a two-line name — the dock
+   can't lift when someone called "Alexandra Smith" joins. Shorter names (and
+   "Open") centre in the reserved box rather than hugging the render above. */
 .seat__name {
+  --name-lh: 1.15;
+  --name-lines: 2;
   max-width: 100%;
-  display: flex; justify-content: center;
+  min-height: calc(var(--name-lh) * var(--name-lines) * 1em);
+  display: flex; justify-content: center; align-items: center;
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: 1.15; color: var(--c, var(--ink));
+  font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: var(--name-lh); color: var(--c, var(--ink));
 }
-/* Names get up to TWO lines: "Alexandra Smith" wraps at the space instead of
-   clipping to "Alexandra …". `anywhere` keeps a long single-word name (no space
-   to break at, 16 chars max) breaking onto line 2 rather than hard-clipping;
-   past two lines the clamp ellipsises. The seats are one flex row of equal-height
-   cards, so a wrapped name lifts the whole dock rather than jostling one card. */
+/* Names break at the SPACE — "Alexandra Smith" stacks instead of clipping to
+   "Alexandra …". `anywhere` only kicks in for a name with no space to break at
+   (16 chars max, per the controller's input): it breaks mid-word rather than
+   hard-clipping, since the clamp ellipsises across lines, not within one. */
 .seat__label {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--name-lines);
   overflow: hidden;
   overflow-wrap: anywhere;
   text-align: center;
