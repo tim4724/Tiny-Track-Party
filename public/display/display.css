@@ -23,11 +23,10 @@ html, body {
   height: 100%;
   display: grid;
   grid-template-columns: clamp(240px, 24vw, 380px) 1fr clamp(190px, 17vw, 270px);
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 1fr auto;
   grid-template-areas:
-    "wordmark tagline cup"
-    "ticket   tagline cup"
-    "dock     dock    dock";
+    "ticket tagline cup"
+    "dock   dock    dock";
   column-gap: clamp(16px, 2vw, 36px);
   /* generous side gutters: the rails frame the centre without hugging the
      bezel (the middle stays open for the tagline / live track preview) */
@@ -36,14 +35,8 @@ html, body {
     clamp(16px, 3vh, 32px);
 }
 
-.lobby__wordmark {
-  grid-area: wordmark; justify-self: center;
-  margin-bottom: clamp(8px, 1.6vh, 18px);
-  font-size: clamp(20px, 2.1vw, 30px);   /* .l2 scales along at 1.24em */
-}
-
-/* Join ticket (left rail) — QR + URL + room-code tiles on one sticker card.
-   A <button>: the whole ticket copies the join link. */
+/* Join ticket (left rail) — the wordmark masthead over QR + URL + room-code
+   tiles, one sticker card. A <button>: the whole ticket copies the join link. */
 .ticket {
   grid-area: ticket; align-self: center;   /* centred in the band, under the wordmark */
   width: 100%;                        /* the QR is the lobby's MAIN element */
@@ -61,6 +54,14 @@ html, body {
 .ticket:hover { box-shadow: 8px 8px 0 var(--shadow-ink); }
 .ticket:active { transform: rotate(-1.2deg) translate(3px, 3px); box-shadow: 4px 4px 0 var(--shadow-ink); }
 .ticket:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+/* the in-card wordmark: the kit badge's white die-cut edge would vanish on the
+   white card, so here it's the plain ink/red lockup — same face, same tilt */
+.ticket__wordmark {
+  font-size: clamp(19px, 1.9vw, 28px);   /* .l2 scales along at 1.24em */
+  -webkit-text-stroke-width: 0;
+  filter: none;
+  margin: 0.1rem 0 0.15rem;
+}
 /* Reserve a square box up front (aspect-ratio, not the canvas' intrinsic size)
    so the ticket holds its final footprint before the async QR fetch resolves
    (a blank <canvas> is 300×150 — without this the card would pop taller). */

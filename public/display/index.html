@@ -85,12 +85,12 @@
        the host picks, floating over the live 3D preview after — nothing moves
        between the two. -->
   <section id="lobby">
-    <div class="wordmark lobby__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
-
-    <!-- Join ticket — ONE sticker card: QR, join URL, room-code letter tiles
+    <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
+         TINY TRACK PARTY! over QR, join URL and room-code letter tiles
          (filled by renderJoinUrl in Net.js). It's a <button>: click (or
          Enter/Space) copies the full join link, confirmed by the #toast. -->
     <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+      <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
       <span class="pill ticket__label">Join at</span>
       <canvas id="qr"></canvas>
       <div class="ticket__url" id="joinurl">…</div>
