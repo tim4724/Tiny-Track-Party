@@ -25,9 +25,9 @@ html, body {
   grid-template-columns: clamp(240px, 24vw, 380px) 1fr clamp(190px, 17vw, 270px);
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
-    "wordmark wordmark wordmark"
-    "ticket   tagline  cup"
-    "dock     dock     dock";
+    "wordmark tagline cup"
+    "ticket   tagline cup"
+    "dock     dock    dock";
   column-gap: clamp(16px, 2vw, 36px);
   /* generous side gutters: the rails frame the centre without hugging the
      bezel (the middle stays open for the tagline / live track preview) */
@@ -37,15 +37,15 @@ html, body {
 }
 
 .lobby__wordmark {
-  grid-area: wordmark; justify-self: start;
-  margin-bottom: clamp(10px, 2vh, 22px);
+  grid-area: wordmark; justify-self: center;
+  margin-bottom: clamp(8px, 1.6vh, 18px);
   font-size: clamp(20px, 2.1vw, 30px);   /* .l2 scales along at 1.24em */
 }
 
 /* Join ticket (left rail) — QR + URL + room-code tiles on one sticker card.
    A <button>: the whole ticket copies the join link. */
 .ticket {
-  grid-area: ticket; align-self: start;
+  grid-area: ticket; align-self: center;   /* centred in the band, under the wordmark */
   width: 100%;                        /* the QR is the lobby's MAIN element */
   max-width: 58vh;                    /* never taller than the band on squat windows */
   display: flex; flex-direction: column; align-items: center; gap: 0.55rem;
@@ -89,7 +89,7 @@ html, body {
 /* Cup slot (right rail) — dashed open slot pre-pick, the race card post-pick
    (renderCupSlot fills it). Top-aligned with the join ticket across the band. */
 .cup-slot {
-  grid-area: cup; align-self: start; justify-self: end;
+  grid-area: cup; align-self: center; justify-self: end;   /* centre-aligned with the ticket */
   width: 100%;
   max-width: 44vh;                    /* same squat-window guard as the ticket */
   display: flex; justify-content: center;
@@ -155,7 +155,7 @@ html, body {
    the revealed track preview owns the centre after that). */
 .tagline {
   grid-area: tagline; align-self: center; justify-self: center;
-  margin-bottom: 8vh;                 /* optical centre: sit a touch above true centre */
+  margin-bottom: 4vh;                 /* optical centre: sit a touch above true centre */
   transform: rotate(-3deg);
   display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
   text-align: center;
