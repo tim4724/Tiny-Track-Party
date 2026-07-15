@@ -4,14 +4,15 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
+import { schematicSvg, biomeTint } from '../shared/trackPicker.js';
 
 const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 
 // Render the roster into `listEl`: one card per player, padded with open-seat
 // placeholders to at least MAX_PLAYERS so the lobby card keeps a fixed size as
 // players trickle in (locked to the race field size so the lobby grid and the
-// grid that actually races never diverge). Each seat shows the car that player
-// picked (a real render), ringed + dotted in their livery. `seats` entries:
+// grid that actually races never diverge). Each seat card shows the car that
+// player picked (a real render) over their name in their livery colour:
 //   { name, colorIndex, carIndex?, connected?, host?, ready? }
 // carIndex falls back to colorIndex (the slot default before they pick);
 // connected === false dims the seat; host appends the ★; ready lights the pill.
@@ -25,12 +26,12 @@ export function renderSeats(listEl, seats) {
       seat.className = 'seat' + (p.connected === false ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
       seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
       const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
+      // the name itself carries the livery colour (via the seat's --c) — no dot
       const row = document.createElement('div');
       row.className = 'seat__name';
-      const dot = document.createElement('span'); dot.className = 'seat__dot';
       const nm = document.createElement('span'); nm.className = 'seat__label';
       nm.textContent = p.name;
-      row.appendChild(dot); row.appendChild(nm);
+      row.appendChild(nm);
       // host marker — a black star pinned to the seat's top-right corner (the
       // same slot as the ready check; the host never readies, so they can't
       // collide). Out of the name so a long name can't push it off-screen.
@@ -63,8 +64,43 @@ export function renderSeats(listEl, seats) {
   }
 }
 
-// Headline under the seat grid (shared for the same no-drift reason).
-// "joined", not "ready" — readiness is its own per-seat pill now.
-export function seatCountText(n) {
-  return n ? `${n} racer${n > 1 ? 's' : ''} joined` : 'Scan the QR code to join';
+// Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
+// live lobby (renderLobbyPick in main.js) and the gallery preview for the same
+// no-drift reason. Two states:
+//   pre-pick : null / no `name`         → the slot is simply EMPTY
+//   picked   : { name, races?, difficulty?, maps?, cupId? } → the race card:
+//              red cup sticker over the picked circuits as mini schematics
+//              (maps = [{ svg, n? }] — 4 numbered minis for a cup, 1 for an
+//              exact track / the random draw; cupId biome-tints their fields
+//              exactly like the phone picker), races pill + difficulty pips
+//              (0–4 filled; null hides the meter)
+export function renderCupSlot(slotEl, state) {
+  const picked = !!(state && state.name);
+  slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
+  if (!picked) return;
+  slotEl.querySelector('.cup-sticker').textContent = state.name;
+  const mapsEl = slotEl.querySelector('.cup-maps');
+  const maps = (state.maps || []).filter((m) => m && m.svg);
+  mapsEl.textContent = '';
+  mapsEl.classList.toggle('hidden', !maps.length);
+  mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
+  const tint = state.cupId ? biomeTint(state.cupId, 26) : undefined;
+  for (const m of maps) {
+    const tile = document.createElement('div');
+    tile.className = 'cup-maps__tile';
+    tile.appendChild(schematicSvg(m.svg, tint));
+    if (m.n != null) {
+      const n = document.createElement('span');
+      n.className = 'cup-maps__n';
+      n.textContent = m.n;
+      tile.appendChild(n);
+    }
+    mapsEl.appendChild(tile);
+  }
+  const races = slotEl.querySelector('.cup-races');
+  races.textContent = state.races || '';
+  races.classList.toggle('hidden', !state.races);
+  const meter = slotEl.querySelector('.cup-meter');
+  meter.classList.toggle('hidden', state.difficulty == null);
+  meter.querySelectorAll('i').forEach((pip, i) => pip.classList.toggle('is-on', i < (state.difficulty || 0)));
 }

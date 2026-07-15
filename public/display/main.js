@@ -9,7 +9,7 @@ import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, seatCountText } from './lobbySeats.js';
+import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
@@ -109,6 +109,9 @@ const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+// ?dividers=0 — drop the chunky ink lines between split-screen cells (default
+// ON; a debug-panel toggle so the look can be A/B'd at a party).
+scene.showDividers = _trackParams.get('dividers') !== '0';
 if (_isTestMode) window.__scene = scene; // test surfaces: let the inspector/automation drive the camera
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
@@ -457,11 +460,14 @@ const net = new DisplayNet({
   trackCatalog,
   defaultTrackId: selectedTrackId,
   drawRandomTrack: () => randomBag.draw(),
-  onTrackChange: selectTrack,
+  // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
+  // even when the resolved trackId didn't change (e.g. a mode switch landing
+  // on the same circuit, where selectTrack early-returns).
+  onTrackChange: (id) => { selectTrack(id); renderLobbyPick(); },
   onRoomReady: async ({ roomCode, joinUrl }) => {
-    // The room code rides along in the join URL's path; we highlight that
-    // trailing segment rather than showing the code separately.
-    currentJoinUrl = joinUrl;                   // the full link the join box copies
+    // The room code rides along in the join URL's path; the ticket shows one
+    // URL line with the trailing code highlighted in the accent colour.
+    currentJoinUrl = joinUrl;                   // the full link the join ticket copies
     try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
     catch (_) { el('joinurl').textContent = joinUrl; }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
@@ -604,8 +610,53 @@ function renderRoster(roster, hostPeerIndex) {
     name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
     connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
   })));
-  el('count').textContent = seatCountText(roster.length);
+  renderLobbyPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
+}
+
+// Lobby right-rail cup slot, driven by the same state as the phones'
+// track-pick UI (net.mode/cupId/trackId). Pre-pick the slot is empty;
+// post-pick it shows the race card (cup / exact track / random). The scan
+// hint under the ticket stays up for the whole lobby — joining is possible
+// until the race starts.
+function renderLobbyPick() {
+  const slot = el('cup-slot');
+  if (!slot) return;
+  const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
+  let state;
+  if (net.mode === 'cup') {
+    const cup = CUPS.find((c) => c.id === net.cupId);
+    const entry = trackCatalog.find((t) => t.cup === net.cupId);
+    state = {
+      name: cup ? cup.name : '?',
+      races: `${cup ? cup.tracks.length : 4} races`,
+      difficulty: entry ? entry.cupDifficulty : null,
+      // the cup's circuits as numbered minis — the GP menu at a glance
+      maps: cup ? cup.tracks.map((id, i) => ({ svg: svgOf(id), n: i + 1 })) : [],
+      cupId: net.cupId   // biome-tints the mini fields, like the phone picker
+    };
+  } else if (net.mode === 'track') {
+    const entry = trackCatalog.find((t) => t.id === net.trackId);
+    state = {
+      name: entry ? entry.name : '?',
+      races: '1 race',
+      difficulty: entry ? entry.cupDifficulty : null,
+      maps: [{ svg: svgOf(net.trackId) }],
+      cupId: entry ? entry.cup : null
+    };
+  } else if (net.mode === 'random') {
+    // an endless surprise series — the sticker sells the mode; the map shows
+    // this round's draw (it's also what the preview is orbiting)
+    const entry = trackCatalog.find((t) => t.id === net.trackId);
+    state = {
+      name: 'Random', races: 'endless', difficulty: null,
+      maps: [{ svg: svgOf(net.trackId) }],
+      cupId: entry ? entry.cup : null
+    };
+  } else {
+    state = null;   // no pick yet — the slot stays empty
+  }
+  renderCupSlot(slot, state);
 }
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
@@ -726,8 +777,13 @@ function launchRace(players) {
     onCountdownTick(n) {
       // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
       // over the next beat via .is-go). n < 0: banner gone.
-      el('countdown').textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
-      el('countdown').classList.toggle('is-go', n === 0);
+      const cd = el('countdown');
+      cd.textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
+      cd.classList.toggle('is-go', n === 0);
+      // slap each numeral in (re-add .slap around a reflow so the animation
+      // restarts on the same element); GO! keeps its own is-go fade-out.
+      cd.classList.remove('slap');
+      if (n > 0) { void cd.offsetWidth; cd.classList.add('slap'); }
       audio.countdown(n);
       // The n<0 beat only clears the LOCAL banner — never broadcast it. The
       // phones' COUNTDOWN handler flips them onto the drive HUD, so a race that
@@ -750,9 +806,13 @@ function launchRace(players) {
   });
   window.__engine = session.engine;
 
-  // Place cars at their grid poses immediately.
+  // Place cars at their grid poses immediately, and paint each cell's HUD
+  // (place badge + LAP pill) right away so the chrome sits at its final size
+  // through the countdown — no pop-in at GO (the racing loop takes over from
+  // the first ~6 Hz tick).
   for (const c of session.getSnapshot().cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
+    scene.setCarHud(c.id, c);
   }
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
@@ -1091,13 +1151,15 @@ function showResults(results) {
   const podium = !!(s && s.final);
   const intermission = !!(s && !s.final);
 
-  el('results-title').textContent = podium ? s.cupName : s ? 'Standings' : 'Results';
+  // Podium boards celebrate: "<cup> CHAMPS!" on a red header sticker (.is-podium h2).
+  el('results-title').textContent = podium ? `${s.cupName} CHAMPS!` : s ? 'Standings' : 'Results';
+  // Sub only during intermissions ("Cup · Race N of M") — the podium's CHAMPS
+  // header says it all.
   const sub = el('results-sub');
-  sub.classList.toggle('hidden', !s);
-  if (s) {
-    sub.textContent = podium ? 'Final standings'
-      : s.endless ? `${s.cupName} · Race ${s.raceIndex + 1}`               // endless: no "of N"
-        : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
+  sub.classList.toggle('hidden', !intermission);
+  if (intermission) {
+    sub.textContent = s.endless ? `${s.cupName} · Race ${s.raceIndex + 1}`  // endless: no "of N"
+      : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
   }
 
   renderPodium(el('results-podium'), podium ? board.order : null);
@@ -1107,12 +1169,14 @@ function showResults(results) {
   for (const row of podium ? board.order.slice(3) : board.order) { // the podium holds the top three
     const li = document.createElement('li');
     if (row.joining) li.className = 'is-joining';
-    const dot = document.createElement('span');
-    dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
-    // The name is player-supplied — appended as TEXT, never markup (same rule as
-    // the controller's results list and renderJoinUrl).
-    li.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''} `);
+    // The name is player-supplied — set as TEXT, never markup (same rule as
+    // the controller's results list and renderJoinUrl). It carries the
+    // player's livery colour itself — no swatch dot.
+    const nm = document.createElement('span');
+    nm.className = 'res-name';
+    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
+    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
+    li.append(nm, ' ');
     if (row.joining) {
       const t = document.createElement('span');
       t.className = 'res-time';
@@ -1158,29 +1222,31 @@ function showResults(results) {
 
 // Top-three steps, arranged 2nd | 1st | 3rd; hidden outside podium boards. AI
 // keep their (CPU) tag — beating them is the story of a short-handed cup.
+// Each step is a livery-coloured sticker block carrying its rank numeral.
 function renderPodium(wrap, order) {
   wrap.innerHTML = '';
   const top = order ? order.filter((r) => !r.joining).slice(0, 3) : [];
   wrap.classList.toggle('hidden', !top.length);
-  const MEDALS = ['🥇', '🥈', '🥉'];
   for (const place of [2, 1, 3]) {
     const row = top[place - 1];
     if (!row) continue;
     const col = document.createElement('div');
     col.className = 'podium__col';
     col.dataset.place = String(place);
+    col.style.setProperty('--c', CAR_COLORS[row.colorIndex] || '#888');
     const who = document.createElement('div');
     who.className = 'podium__who';
-    const dot = document.createElement('span');
-    dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
-    who.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''}`);
+    const nm = document.createElement('span');
+    nm.className = 'res-name';
+    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
+    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
+    who.append(nm);
     const pts = document.createElement('div');
     pts.className = 'podium__pts';
     pts.textContent = `${row.points || 0} pts`;
     const step = document.createElement('div');
     step.className = 'podium__step';
-    step.textContent = MEDALS[place - 1];
+    step.textContent = String(place);
     col.append(who, pts, step);
     wrap.appendChild(col);
   }
@@ -1429,7 +1495,8 @@ if (_scenario) {
     {
       scenario: _scn,
       players: _int(_params.get('players'), 4),
-      host: _params.get('host') === null ? null : _int(_params.get('host'), 0)
+      host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
+      picked: _params.get('picked') || false   // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
     },
     { scene, track, scenePromise }
   ));
@@ -1479,6 +1546,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
+  { key: 'picked', label: 'Picked mode', hint: 'lobby: post-pick chrome over the preview', type: 'select',
+    options: [{ value: 'cup', label: 'cup' }, { value: 'track', label: 'exact track' }, { value: 'random', label: 'random' }] },
   { section: 'Solo drive' },
   { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
     options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },
@@ -1503,6 +1572,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
   { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
     options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
+  { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
+    options: [{ value: '0', label: 'off' }] },
   { key: 'bbox', label: 'Collision boxes', type: 'flag' },
   ], { title: 'Display' });
 });

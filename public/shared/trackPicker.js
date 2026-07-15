@@ -18,7 +18,9 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 // green, matching the old default). `pct` is how much biome colour survives: ~26%
 // for the schematic FIELD (the ground the ribbon sits on), a whisper for the panel
 // behind the tiles so the two read as one biome instead of clashing.
-function biomeTint(cupId, pct) {
+// Exported alongside schematicSvg: the display's cup slot tints its minis the
+// same way, so the two surfaces can't drift.
+export function biomeTint(cupId, pct) {
   const hex = '#' + (themeForCup(cupId).hills[0] >>> 0).toString(16).padStart(6, '0');
   return `color-mix(in srgb, ${hex} ${pct}%, #fff)`;
 }
@@ -26,7 +28,8 @@ function biomeTint(cupId, pct) {
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
 // toy "track ribbon" look) plus a dot at the start/finish line. `fieldTint` (a CSS
 // colour) paints the field behind the ribbon; omit to keep the CSS default.
-function schematicSvg(svg, fieldTint) {
+// Exported: the display's lobby cup slot renders the same minis (renderCupSlot).
+export function schematicSvg(svg, fieldTint) {
   const el = document.createElementNS(SVGNS, 'svg');
   el.setAttribute('viewBox', svg.viewBox || '0 0 100 100');
   el.setAttribute('class', 'track-map');

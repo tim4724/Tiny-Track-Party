@@ -750,6 +750,34 @@ export class SceneRenderer {
     this.overlay = o;
   }
 
+  // Chunky ink rules between split-screen cells (.cell-divider, display.css).
+  // Default ON; main.js flips showDividers from the debug panel (?dividers=0)
+  // so the look can be A/B'd at a party. Rebuilt only when the grid layout (or
+  // the toggle) changes; the overview branch hides them with the other overlays.
+  _syncDividers(cols, rows, cw, ch, W, H) {
+    const sig = this.showDividers === false ? 'off' : `${cols}x${rows}:${cw}x${ch}`;
+    if (sig === this._divSig) return;
+    this._divSig = sig;
+    for (const d of this._dividers || []) d.remove();
+    this._dividers = [];
+    if (this.showDividers === false) return;
+    const mk = (x, y, w, h) => {
+      const d = document.createElement('div');
+      d.className = 'cell-divider';
+      d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
+      this.overlay.appendChild(d);
+      this._dividers.push(d);
+    };
+    for (let c = 1; c < cols; c++) mk(c * cw - 2, 0, 4, H);
+    for (let r = 1; r < rows; r++) mk(0, r * ch - 2, W, 4);
+  }
+  _hideDividers() {
+    if (this._divSig === 'hidden' || !(this._dividers || []).length) return;
+    this._divSig = 'hidden';
+    for (const d of this._dividers) d.remove();
+    this._dividers = [];
+  }
+
   _aspect() { return window.innerWidth / Math.max(1, window.innerHeight); }
   _onResize() {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -2284,6 +2312,7 @@ export class SceneRenderer {
       }
       r.render(this.scene, this.overview);
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; if (c.reconnectEl) c.reconnectEl.style.display = 'none'; }
+      this._hideDividers();
       this._present();
       this._scheduleNext();
       return;
@@ -2292,6 +2321,7 @@ export class SceneRenderer {
     const { cols, rows } = bestGrid(ids.length, W, H);
     const cw = Math.floor(W / cols), ch = Math.floor(H / rows);          // CSS px → DOM labels
     const cwDB = Math.floor(DBW / cols), chDB = Math.floor(DBH / rows);  // target px → cell viewports
+    this._syncDividers(cols, rows, cw, ch, W, H);
 
     // Monster trucks currently on screen — for the per-cell occlusion fade below.
     const monsters = [];
@@ -2350,9 +2380,9 @@ export class SceneRenderer {
       if (c.steerBar) {
         c.steerBar.style.display = cardInCell ? 'none' : 'block';
         c.steerBar.style.left = (x + cw / 2) + 'px';
-        // bottom-anchored: bar height is 1.6rem (~26px); the offset keeps its
-        // bottom edge at the same place it sat at the old 0.8rem height.
-        c.steerBar.style.top = (row * ch + ch - 47) + 'px';
+        // bottom-anchored: bar height is 34px (.cell-steer); the offset keeps
+        // a ~27px gap between its bottom edge and the cell bottom.
+        c.steerBar.style.top = (row * ch + ch - 61) + 'px';
       }
 
       // FINISHED overlay: centred in the cell while this player is finished and

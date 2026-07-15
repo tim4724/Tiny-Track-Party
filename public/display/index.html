@@ -50,6 +50,7 @@
     <div class="scene__sun"></div>
     <div class="scene__cloud scene__cloud--a"></div>
     <div class="scene__cloud scene__cloud--b"></div>
+    <div class="scene__cloud scene__cloud--c"></div>
     <div class="scene__grass"></div>
   </div>
 
@@ -78,30 +79,56 @@
     </div>
   </div>
 
-  <!-- Lobby -->
+  <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
+       (wordmark masthead + QR + scan hint) on the left rail, the cup slot on
+       the right rail, the seat dock bottom-centre. The chrome sits at the
+       SAME positions in both lobby states: on the paper stage before the host
+       picks, floating over the live 3D preview after — nothing moves between
+       the two. -->
   <section id="lobby">
-    <div class="lobby__left card">
-      <h1>Tiny Track <span>Party</span></h1>
-      <div class="join">
-        <button type="button" class="join__at" id="joinbox" aria-label="Copy join link">
-          <div class="join__label">Join at</div>
-          <div class="join__url" id="joinurl">…</div>
-        </button>
+    <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
+         TINY TRACK PARTY! over QR + the join URL (code highlighted in the
+         accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
+         Enter/Space) copies the full join link, confirmed by the #toast. -->
+    <div class="ticket-rail">
+      <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+        <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
+        <canvas id="qr"></canvas>
+        <div class="ticket__url" id="joinurl">…</div>
+      </button>
+      <!-- Scan hint — hangs just under the ticket for the whole lobby
+           (joining stays possible until the race starts). -->
+      <div class="tagline" id="tagline">
+        <div class="tagline__main">Scan the code with your phone!</div>
       </div>
-      <div id="count">Scan the QR code to join</div>
-      <!-- Seeded with four open-seat placeholders so the welcome card paints at its
-           full height on the first frame, before main.js runs. lobbySeats.js's
-           renderSeats() then replaces these (always keeping >=4 seats) as players
-           join — keep this markup in sync with its `seat--open` branch. -->
+    </div>
+
+    <!-- Cup slot — empty until the host picks on their phone, then the pick
+         as the race card (red cup sticker + minis + races pill + pips).
+         Filled by renderCupSlot (lobbySeats.js) via renderLobbyPick (main.js);
+         keep this markup in sync with what renderCupSlot expects. -->
+    <div class="cup-slot" id="cup-slot">
+      <div class="cup-slot__pick hidden">
+        <div class="cup-sticker"></div>
+        <div class="cup-maps"></div>
+        <div class="cup-races"></div>
+        <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
+         ticket's JOIN AT already carries the call-to-action). Seeded with four
+         open-seat placeholders so the dock paints at its full footprint on the
+         first frame, before main.js runs. lobbySeats.js's renderSeats() then
+         replaces these (always keeping >=4 seats) as players join — keep this
+         markup in sync with its `seat--open` branch. -->
+    <div class="lobby-foot">
       <div id="players">
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
       </div>
-    </div>
-    <div class="lobby__right">
-      <div class="qr-card"><canvas id="qr"></canvas></div>
     </div>
 
     <!-- Build badge: version + short commit, shown on preview (non-production)

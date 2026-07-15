@@ -10,10 +10,11 @@
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { renderSeats, seatCountText } from './lobbySeats.js';
+import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
 import { POINTS_BY_RANK } from './GrandPrix.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
+import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -188,7 +189,6 @@ export function runDisplayScenario(opts, ctx) {
       // preview the readiness pill: everyone but the host has readied up
       ready: hostPeerIndex != null && s !== hostPeerIndex
     })));
-    el('count').textContent = seatCountText(slots.length);
   }
 
   function fakeJoin(code) {
@@ -202,6 +202,7 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
+    renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     return;
   }
@@ -215,15 +216,59 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
+    renderCupSlot(el('cup-slot'), null);
     el('device-choice').style.display = 'flex';
     return;
   }
 
   if (scenario === 'lobby') {
     const slots = buildSlots(players);
+    const hostIdx = hostSlot(slots);
     show('lobby');
-    renderRoster(slots, hostSlot(slots));
+    renderRoster(slots, hostIdx);
     fakeJoin('TEST');
+    if (opts.picked) {
+      // Post-pick lobby: race card in the slot, hint gone, chrome floating
+      // over the live 3D preview (mirrors renderLobbyPick + the .is-dim
+      // reveal). `picked` picks the MODE: 'cup' (legacy '1'), 'track' or
+      // 'random'. Pair the card with a matching ?track=<id> so the orbiting
+      // preview shows the circuit the card names. The live lobby reads its
+      // schematics from main.js's prebuilt catalog; the harness builds them
+      // itself (pure geometry).
+      const mode = opts.picked === '1' ? 'cup' : String(opts.picked);
+      const qTrack = new URLSearchParams(location.search).get('track');
+      const mapOf = (id) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })) });
+      const entryOf = (id) => TRACK_LIST.find((t) => t.id === id);
+      const cupOf = (id) => CUPS.find((c) => c.tracks.includes(id));
+      let state;
+      if (mode === 'track') {
+        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[0].tracks[2];
+        const entry = entryOf(id), cup = cupOf(id);
+        state = {
+          name: entry ? entry.name : id, races: '1 race',
+          difficulty: entry ? entry.cupDifficulty : null,
+          maps: [mapOf(id)], cupId: cup && cup.id
+        };
+      } else if (mode === 'random') {
+        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[1].tracks[0];
+        const cup = cupOf(id);
+        state = { name: 'Random', races: 'endless', difficulty: null, maps: [mapOf(id)], cupId: cup && cup.id };
+      } else {
+        const cup = (qTrack && cupOf(qTrack)) || CUPS[0];
+        const first = TRACK_LIST.find((t) => t.cup === cup.id);
+        state = {
+          name: cup.name,
+          races: `${cup.tracks.length} races`,
+          difficulty: first ? first.cupDifficulty : null,
+          maps: cup.tracks.map((id, i) => ({ ...mapOf(id), n: i + 1 })),
+          cupId: cup.id
+        };
+      }
+      renderCupSlot(el('cup-slot'), state);
+      el('scene').classList.remove('hidden', 'is-dim');
+    } else {
+      renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
+    }
     return;
   }
 
@@ -593,7 +638,7 @@ export function runDisplayScenario(opts, ctx) {
         const col = COLORS[s % COLORS.length] || '#888';
         const li = document.createElement('li');
         li.innerHTML =
-          `<span class="stand__dot" style="background:${col}"></span> ${FAKE_NAMES[s]}` +
+          `<span class="res-name" style="--c:${col}">${FAKE_NAMES[s]}</span>` +
           `<span class="res-time">${FAKE_TIMES[i].toFixed(1)}s</span>`;
         listEl.appendChild(li);
       });
@@ -603,7 +648,7 @@ export function runDisplayScenario(opts, ctx) {
       const joinLi = document.createElement('li');
       joinLi.className = 'is-joining';
       joinLi.innerHTML =
-        `<span class="stand__dot" style="background:${COLORS[j % COLORS.length] || '#888'}"></span> ${FAKE_NAMES[j]}` +
+        `<span class="res-name" style="--c:${COLORS[j % COLORS.length] || '#888'}">${FAKE_NAMES[j]}</span>` +
         `<span class="res-time">Next race</span>`;
       listEl.appendChild(joinLi);
       el('results').classList.remove('hidden');
@@ -621,27 +666,27 @@ export function runDisplayScenario(opts, ctx) {
         gained: POINTS_BY_RANK[i] || 0,
         points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
       })).sort((a, b) => b.points - a.points);
-      el('results-title').textContent = final ? cup.name : 'Standings';
+      el('results-title').textContent = final ? `${cup.name} CHAMPS!` : 'Standings';
       const sub = el('results-sub');
-      sub.classList.remove('hidden');
-      sub.textContent = final ? 'Final standings' : `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
+      sub.classList.toggle('hidden', final);   // podium: the CHAMPS header says it all
+      if (!final) sub.textContent = `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
       const cupRow = (r) =>
-        `<span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}` +
+        `<span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span>` +
         `<span class="res-gain${r.gained ? '' : ' is-zero'}">+${r.gained}</span><span class="res-pts">${r.points} pts</span>`;
       const podiumEl = el('results-podium');
       podiumEl.innerHTML = '';
       podiumEl.classList.toggle('hidden', !final);
       if (final) {
-        const MEDALS = ['🥇', '🥈', '🥉'];
         for (const place of [2, 1, 3]) {
           const r = rows[place - 1];
           if (!r) continue;
           const col = document.createElement('div');
           col.className = 'podium__col';
           col.dataset.place = String(place);
+          col.style.setProperty('--c', COLORS[r.slot % COLORS.length] || '#888');
           col.innerHTML =
-            `<div class="podium__who"><span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}</div>` +
-            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${MEDALS[place - 1]}</div>`;
+            `<div class="podium__who"><span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span></div>` +
+            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${place}</div>`;
           podiumEl.appendChild(col);
         }
       }
@@ -675,6 +720,8 @@ export function runDisplayScenario(opts, ctx) {
       (function tick() {
         cd.textContent = seq[i];
         cd.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
+        cd.classList.remove('slap');                    // slap each numeral in, like the live race
+        if (seq[i] !== 'GO!') { void cd.offsetWidth; cd.classList.add('slap'); }
         i++;
         if (i < seq.length) timers.push(setTimeout(tick, 800));
         else timers.push(setTimeout(() => { cd.classList.remove('is-go'); cd.textContent = '3'; }, 1200)); // rest at "3"

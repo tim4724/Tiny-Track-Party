@@ -57,10 +57,10 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[race]);
   }
 
-  // Race 4: finish → podium (title = cup, top-three steps, "New game").
+  // Race 4: finish → podium (title = cup champs sticker, top-three steps, "New game").
   await finishHumans(page);
   await inResults(page);
-  await expect(page.locator('#results-title')).toHaveText('Beach Cup');
+  await expect(page.locator('#results-title')).toHaveText('Beach Cup CHAMPS!');
   expect(await page.locator('.podium__col').count()).toBe(3);
   await expect(alice.locator('#results-title')).toContainText('Beach Cup — Final');
   await expect(alice.locator('#newgame-btn')).toHaveText('New game');
