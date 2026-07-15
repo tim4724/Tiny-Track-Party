@@ -155,7 +155,9 @@ async function main() {
         const SHADOW_COLOR = 0x171513;  // SceneRenderer.UNDER_AO_COLOR (warm near-black)
         const SHADOW_OPACITY = 0.55;    // SceneRenderer.UNDER_AO_OPACITY base (no brake-dive load on a turntable)
 
-        // Footprint of the centred model (== the engine's footW/footL: a full bbox at rest).
+        // Bbox of the centred model, in world space — the pivot is still untransformed, so
+        // this is the car at rest. Doubles as the engine's footW/footL footprint (below) and
+        // the camera's framing input (further down); one traversal of the GLB serves both.
         const fbb = new THREE.Box3().setFromObject(model);
         const footW = (fbb.max.x - fbb.min.x) || 0.1, footL = (fbb.max.z - fbb.min.z) || 0.1;
         const fcx = (fbb.min.x + fbb.max.x) / 2, fcz = (fbb.min.z + fbb.max.z) / 2;
@@ -224,7 +226,7 @@ async function main() {
         // the ones a square frame used, so the car lands at exactly the size it always
         // has — the shorter frame below is a pure vertical CROP of that same projection,
         // not a rescale.
-        const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+        const sphere = fbb.getBoundingSphere(new THREE.Sphere());
         const hfov = 32;
         const aspect = size / height;
         // three's `fov` is VERTICAL: back out the vfov that holds hfov at 32 for this aspect.
@@ -232,13 +234,12 @@ async function main() {
         const cam = new THREE.PerspectiveCamera(vfov, aspect, 0.01, 100);
         const dist = (sphere.radius / Math.sin((hfov / 2) * Math.PI / 180)) * margin;
         const p = (pitch * Math.PI) / 180;
-        // VERTICAL framing centres the model's bbox — invariant under a yaw spin — rather
-        // than the sphere (whose radius is the car's LENGTH, which is what used to leave a
-        // tall band of air above the roof). `bias` then trims the aim off that centre to
-        // even out the padding, since the rendered content sits lower than the body bbox
-        // (contact shadow + look-down pitch); see the BIAS constant.
-        const mbb = new THREE.Box3().setFromObject(model);
-        const midY = (mbb.min.y + mbb.max.y) / 2;
+        // VERTICAL framing centres the model's bbox height — invariant under a yaw spin —
+        // rather than the sphere (whose radius is the car's LENGTH, which is what used to
+        // leave a tall band of air above the roof). `bias` then trims the aim off that
+        // centre to even out the padding, since the rendered content sits lower than the
+        // body bbox (contact shadow + look-down pitch); see the BIAS constant.
+        const midY = (fbb.min.y + fbb.max.y) / 2;
         const frameH = 2 * dist * Math.tan((vfov / 2) * Math.PI / 180);   // world units tall at the car
         const look = new THREE.Vector3(sphere.center.x, midY + frameH * bias, sphere.center.z);
         cam.position.set(look.x, look.y + Math.sin(p) * dist, look.z + Math.cos(p) * dist);

@@ -181,10 +181,10 @@ html, body {
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
-/* Seat card — a square sticker: the kart render on top, the player's name
-   (in their livery colour) beneath. Ready check / host star pinned to the
-   top-right corner. Neighbours lean opposite ways, like stickers slapped
-   down one after another. */
+/* Seat card — a sticker: the kart render on top, the player's name (in their
+   livery colour) beneath. Ready check / host star pinned to the top-right
+   corner. Neighbours lean opposite ways, like stickers slapped down one after
+   another. Every card is the same height whatever it holds — see .seat__name. */
 .seat {
   position: relative;
   width: clamp(100px, 9.5vw, 134px);
