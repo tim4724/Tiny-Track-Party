@@ -324,13 +324,6 @@ body {
   background: var(--grass);
   border-radius: 50% 50% 0 0 / 22% 22% 0 0;
 }
-/* one more confetti piece, low on the paper above the grass */
-.scene__grass::before {
-  content: ''; position: absolute; top: -14%; left: 22%;
-  width: 9px; height: 15px; border-radius: 3px;
-  background: var(--purple); transform: rotate(24deg);
-}
-
 /* Confetti rect for explicit placement — position + tint per instance:
      <i class="scene__confetti" style="top:20%;left:70%;--c:var(--green);--tilt:-20deg"></i> */
 .scene__confetti {

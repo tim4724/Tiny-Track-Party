@@ -166,44 +166,37 @@ html, body {
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
-/* Seat chip — a white sticker pill: mini car render, livery dot + name; ready
-   check / host star pinned to the top-right corner. Neighbours lean opposite
-   ways, like stickers slapped down one after another. */
+/* Seat card — a square sticker: the kart render on top, the player's name
+   (in their livery colour) beneath. Ready check / host star pinned to the
+   top-right corner. Neighbours lean opposite ways, like stickers slapped
+   down one after another. */
 .seat {
   position: relative;
-  display: flex; align-items: center; gap: 0.6rem;
-  height: 72px; padding: 0.3rem 0.9rem 0.3rem 0.6rem;
-  min-width: clamp(9.5rem, 12.5vw, 12.5rem);   /* filled + open share one footprint */
+  width: clamp(100px, 9.5vw, 134px);
+  display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+  padding: 0.45rem 0.5rem 0.55rem;
   background: var(--surface);
   border: 3px solid var(--ink);
-  border-radius: var(--r-pill);
+  border-radius: var(--r);
   box-shadow: var(--shadow-pop);
 }
 .seat:nth-child(odd)  { transform: rotate(-1.4deg); }
 .seat:nth-child(even) { transform: rotate(1.4deg); }
-.seat .carthumb { width: 58px; flex: none; }   /* car pinned left… */
 .seat__name {
-  flex: 1; min-width: 0;                        /* …name centred in the rest */
-  display: flex; align-items: center; justify-content: center;
-  /* nudge the centring left toward the PILL's optical centre (the flex area
-     starts after the car render, so its true centre sits too far right) */
-  padding-right: 2.3rem;
+  max-width: 100%;
+  display: flex; justify-content: center;
   font-family: var(--font-display); font-weight: 700;
-  /* the name IS the livery swatch — tinted text, no dot */
-  font-size: clamp(1.05rem, 1.45vw, 1.4rem); color: var(--c, var(--ink));
+  font-size: clamp(1rem, 1.3vw, 1.3rem); line-height: 1.15; color: var(--c, var(--ink));
 }
-.seat__label {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: clamp(5rem, 10vw, 10rem);
-}
+.seat__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat--off { opacity: 0.5; }
-/* readiness check — a green circle checkmark on the chip's top-right corner;
+/* readiness check — a green circle checkmark on the card's top-right corner;
    present (invisible) on every taken seat and revealed once the player's
-   "I'm ready" lands, so the chip layout never shifts. */
+   "I'm ready" lands, so the card layout never shifts. */
 .seat__ready {
   visibility: hidden;
-  position: absolute; top: -0.55rem; right: -0.3rem;
-  width: 1.5rem; aspect-ratio: 1;
+  position: absolute; top: -0.6rem; right: -0.55rem;
+  width: 1.6rem; aspect-ratio: 1;
   display: grid; place-items: center;
   color: #fff; background: var(--green);
   border: 2.5px solid var(--ink); border-radius: 50%;
@@ -213,8 +206,8 @@ html, body {
 /* host marker — a gold star with an ink stroke, same corner as the ready check
    (mutually exclusive: the host never readies). */
 .seat__host {
-  position: absolute; top: -0.85rem; right: -0.5rem;
-  width: 1.8rem; aspect-ratio: 1;
+  position: absolute; top: -0.9rem; right: -0.7rem;
+  width: 1.9rem; aspect-ratio: 1;
   display: grid; place-items: center;
 }
 .seat__host svg {
@@ -222,16 +215,16 @@ html, body {
   fill: #ffc83d; stroke: var(--ink); stroke-width: 1.7;
   stroke-linejoin: round; paint-order: stroke fill;
 }
-/* open seat — a dashed placeholder pill (the square .seat__open box from the
-   old card layout stays in the markup contract but isn't shown in the dock) */
+/* open seat — a dashed placeholder card of the SAME footprint: the empty
+   .seat__open square stands in for the kart render, "Open" sits where the
+   name goes */
 .seat--open {
   background: color-mix(in srgb, #fff 50%, transparent);
   border: 3px dashed rgba(42, 39, 53, 0.45);
   box-shadow: none;
-  padding: 0.3rem 1.2rem;
 }
 .seat--open .seat__name { color: var(--ink-3); }
-.seat--open .seat__open { display: none; }
+.seat--open .seat__open { width: 100%; aspect-ratio: 1 / 1; }
 
 /* Build/version badge — preview builds only (the server leaves it empty in
    production, and :empty hides it). Pinned to the lobby's bottom-right corner,
@@ -509,12 +502,7 @@ html.cam-free #race { pointer-events: none; }
 
 /* podium — 2nd | 1st | 3rd rising steps: livery-coloured sticker blocks with
    big rank numerals; the champion pops in like the GO! banner */
-.results-podium { position: relative; display: flex; align-items: flex-end; gap: 1.1rem; margin-bottom: 1.6rem; }
-.results-podium::before, .results-podium::after {
-  content: ''; position: absolute; width: 9px; height: 15px; border-radius: 3px;
-}
-.results-podium::before { top: -1.6rem; left: -2.4rem; background: var(--purple); transform: rotate(22deg); }
-.results-podium::after  { top: -0.8rem; right: -2.6rem; background: var(--green); transform: rotate(-14deg); }
+.results-podium { display: flex; align-items: flex-end; gap: 1.1rem; margin-bottom: 1.6rem; }
 .podium__col { display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
 .podium__col[data-place="1"] { animation: podium-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 .podium__who { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.35rem; color: var(--ink); }
