@@ -67,7 +67,7 @@ export function renderSeats(listEl, seats) {
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
 // live lobby (renderLobbyPick in main.js) and the gallery preview for the same
 // no-drift reason. Two states:
-//   pre-pick : { hostName? }             → dashed slot, "<host> picks the cup…"
+//   pre-pick : null / no `name`         → the slot is simply EMPTY
 //   picked   : { name, races?, difficulty?, maps?, cupId? } → the race card:
 //              red cup sticker over the picked circuits as mini schematics
 //              (maps = [{ svg, n? }] — 4 numbered minis for a cup, 1 for an
@@ -76,15 +76,8 @@ export function renderSeats(listEl, seats) {
 //              (0–4 filled; null hides the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
-  slotEl.querySelector('.cup-slot__empty').classList.toggle('hidden', picked);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
-  if (!picked) {
-    // textContent — the host name is player-supplied, never markup.
-    slotEl.querySelector('.cup-slot__empty').textContent = (state && state.hostName)
-      ? `${state.hostName} picks the cup on their phone…`
-      : 'Pick the cup on a phone…';
-    return;
-  }
+  if (!picked) return;
   slotEl.querySelector('.cup-sticker').textContent = state.name;
   const mapsEl = slotEl.querySelector('.cup-maps');
   const maps = (state.maps || []).filter((m) => m && m.svg);

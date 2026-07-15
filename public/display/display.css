@@ -76,19 +76,13 @@ html, body {
 /* the room code, inline in the URL — plain text in the accent colour */
 .ticket__cd { color: var(--accent); font-weight: 700; letter-spacing: 0.04em; }
 
-/* Cup slot (right rail) — dashed open slot pre-pick, the race card post-pick
-   (renderCupSlot fills it). Top-aligned with the join ticket across the band. */
+/* Cup slot (right rail) — empty pre-pick, the race card post-pick
+   (renderCupSlot fills it). Centre-aligned with the join ticket. */
 .cup-slot {
   grid-area: cup; align-self: center; justify-self: end;   /* centre-aligned with the ticket */
   width: 100%;
   max-width: 44vh;                    /* same squat-window guard as the ticket */
   display: flex; justify-content: center;
-}
-.cup-slot__empty {
-  width: 100%; padding: 1.1rem 0.9rem;
-  border: 3px dashed rgba(42, 39, 53, 0.5); border-radius: var(--r);
-  background: color-mix(in srgb, #fff 55%, transparent);
-  color: var(--ink-3); font-weight: 700; font-size: 0.95rem; text-align: center;
 }
 /* the pick sits on its own white sticker card (mirroring the join ticket's
    surface, leaning the other way) so it doesn't dangle in the air */
@@ -594,12 +588,12 @@ html.cam-free #race { pointer-events: none; }
    (the .slap class) since their element never re-enters the DOM. All of it
    only exists under prefers-reduced-motion: no-preference. */
 @media (prefers-reduced-motion: no-preference) {
-  .lobby__wordmark, .ticket, .cup-slot__empty, .cup-slot__pick, .tagline, .lobby-foot {
+  .lobby__wordmark, .ticket, .cup-slot__pick, .tagline, .lobby-foot {
     animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
   }
   .ticket { animation-delay: 40ms; }
   .tagline { animation-delay: 80ms; }
-  .cup-slot__empty, .cup-slot__pick { animation-delay: 120ms; }
+  .cup-slot__pick { animation-delay: 120ms; }
   .lobby-foot { animation-delay: 160ms; }
 
   #results h2, .results-sub, .results-podium, #results-list li, .results-next, #results-newgame {

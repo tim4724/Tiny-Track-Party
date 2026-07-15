@@ -654,8 +654,7 @@ function renderLobbyPick() {
       cupId: entry ? entry.cup : null
     };
   } else {
-    const h = net.flow.list().find((p) => p.peerIndex === net.flow.host);
-    state = { hostName: h && h.name };
+    state = null;   // no pick yet — the slot stays empty
   }
   renderCupSlot(slot, state);
   el('tagline').classList.toggle('hidden', net.mode !== null);

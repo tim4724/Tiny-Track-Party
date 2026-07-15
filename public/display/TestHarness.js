@@ -202,7 +202,7 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
-    renderCupSlot(el('cup-slot'), {});   // no host yet → generic pre-pick slot
+    renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     return;
   }
@@ -216,7 +216,7 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
-    renderCupSlot(el('cup-slot'), {});
+    renderCupSlot(el('cup-slot'), null);
     el('device-choice').style.display = 'flex';
     return;
   }
@@ -246,7 +246,7 @@ export function runDisplayScenario(opts, ctx) {
       el('tagline').classList.add('hidden');
       el('scene').classList.remove('hidden', 'is-dim');
     } else {
-      renderCupSlot(el('cup-slot'), { hostName: hostIdx == null ? null : FAKE_NAMES[hostIdx] });
+      renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     }
     return;
   }

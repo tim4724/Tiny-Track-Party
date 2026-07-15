@@ -95,12 +95,11 @@
       <div class="ticket__url" id="joinurl">…</div>
     </button>
 
-    <!-- Cup slot — a dashed open slot until the host picks on their phone,
-         then the pick as a red cup sticker + races pill + difficulty pips.
+    <!-- Cup slot — empty until the host picks on their phone, then the pick
+         as the race card (red cup sticker + minis + races pill + pips).
          Filled by renderCupSlot (lobbySeats.js) via renderLobbyPick (main.js);
          keep this markup in sync with what renderCupSlot expects. -->
     <div class="cup-slot" id="cup-slot">
-      <div class="cup-slot__empty">Pick the cup on a phone…</div>
       <div class="cup-slot__pick hidden">
         <div class="cup-sticker"></div>
         <div class="cup-maps"></div>
