@@ -2380,9 +2380,9 @@ export class SceneRenderer {
       if (c.steerBar) {
         c.steerBar.style.display = cardInCell ? 'none' : 'block';
         c.steerBar.style.left = (x + cw / 2) + 'px';
-        // bottom-anchored: bar height is 1.6rem (~26px); the offset keeps its
-        // bottom edge at the same place it sat at the old 0.8rem height.
-        c.steerBar.style.top = (row * ch + ch - 47) + 'px';
+        // bottom-anchored: bar height is 26px (.cell-steer); the offset keeps
+        // a ~27px gap between its bottom edge and the cell bottom.
+        c.steerBar.style.top = (row * ch + ch - 53) + 'px';
       }
 
       // FINISHED overlay: centred in the cell while this player is finished and

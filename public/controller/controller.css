@@ -149,8 +149,9 @@ input[type=text]:disabled { opacity: 0.6; }
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
 .car-opt:active { transform: translateY(2px); }
-/* selected strip tile: pale-blue sticker with the hard drop (the hero shows which it is) */
-.car-opt--mine { background: #E7F2FF; box-shadow: var(--shadow-pop); }
+/* selected strip tile: tinted toward YOUR livery with the hard drop (the hero
+   shows which it is; the pale-blue highlight didn't fit the warm palette) */
+.car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); box-shadow: var(--shadow-pop); }
 /* under the footer button: why it's gated / who we're waiting on */
 #ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
@@ -187,9 +188,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-opt--mine .mode-opt__name, .mode-opt--mine .mode-opt__sub { color: #fff; }
 .mode-opt--mine .trackpick__cup-meter > i { border-color: #fff; }
 .mode-opt--mine .trackpick__cup-meter > i.is-on { background: #fff; border-color: #fff; }
-/* a cup whose panel is open for an exact pick: held-open look, the ring lives
-   on the track tile below */
-.mode-opt--open { background: #E7F2FF; }
+/* a cup whose panel is open for an exact pick: held-open look (a light green
+   wash — green = the pick colour), the ring lives on the track tile below */
+.mode-opt--open { background: color-mix(in srgb, var(--green) 14%, #fff); }
 .mode-opt__name {
   font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
   color: var(--ink); max-width: 100%;

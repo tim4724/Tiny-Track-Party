@@ -63,10 +63,11 @@ export function renderSeats(listEl, seats) {
   }
 }
 
-// Headline under the seat grid (shared for the same no-drift reason).
-// "joined", not "ready" — readiness is its own per-seat pill now.
-export function seatCountText(n) {
-  return n ? `${n} racer${n > 1 ? 's' : ''} joined` : 'Scan the QR code to join';
+// Headline over the seat dock (shared for the same no-drift reason). Always
+// the scan prompt — a "N racers joined" count was tried and cut (the dock
+// itself already shows who's in; the QR call-to-action is the useful line).
+export function seatCountText() {
+  return 'Scan the QR code to join';
 }
 
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
