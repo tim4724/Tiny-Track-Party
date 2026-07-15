@@ -159,7 +159,7 @@
         <!-- The demo phone previews the REAL driving screen in miniature: the
              player's own name top-left (tinted with their livery, like the live HUD),
              a steer strip that fills with the lean, over the two buttons in their live
-             positions (ITEM amber LEFT, BRAKE red RIGHT). The phone leans side to side
+             positions (ITEM purple LEFT, BRAKE red RIGHT). The phone leans side to side
              (doodle-jump rotateY) and the strip slides in step. #phone-name is
              filled on open (openHelp / the gallery harness). -->
         <div class="steer-demo" aria-hidden="true">
@@ -169,8 +169,8 @@
                 <span id="phone-name" class="phone-name"></span>
                 <div class="mini-steer"><div class="mini-steer__fill"></div></div>
                 <div class="mini-controls">
-                  <span class="mini-btn mini-btn--item"></span>
-                  <span class="mini-btn mini-btn--brake"></span>
+                  <span class="mini-btn mini-btn--item">ITEM</span>
+                  <span class="mini-btn mini-btn--brake">BRAKE</span>
                 </div>
               </div>
             </div>
@@ -179,15 +179,16 @@
         <p class="help-steer__lead">Tilt your phone side to side</p>
       </div>
 
-      <!-- BRAKE + ITEM — SAME order as the live screen + the demo phone above: ITEM
-           (amber) on the LEFT, BRAKE (red) on the RIGHT. One short caption each. -->
+      <!-- BRAKE + ITEM — compact labels rather than fake buttons. Colours and
+           order match the larger, more realistic controls in the demo phone,
+           while the short captions remain exposed to assistive technology. -->
       <div class="help-controls">
         <div class="help-ctrl">
-          <span class="help-chip help-chip--item" aria-hidden="true">ITEM</span>
+          <span class="help-chip help-chip--item">ITEM</span>
           <span class="help-ctrl__cap">Tap to use a pickup</span>
         </div>
         <div class="help-ctrl">
-          <span class="help-chip help-chip--brake" aria-hidden="true">BRAKE</span>
+          <span class="help-chip help-chip--brake">BRAKE</span>
           <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
         </div>
       </div>

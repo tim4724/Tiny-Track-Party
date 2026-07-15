@@ -489,21 +489,41 @@ input[type=text]:disabled { opacity: 0.6; }
 .help-steer__lead { margin: 0; color: var(--ink); font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.2; }
 
 /* STEER demo — a stylized phone whose screen is a MINIATURE of the real driving
-   HUD: a steer strip up top, the two buttons below (ITEM amber left, BRAKE red
+   HUD: a steer strip up top, the two buttons below (ITEM purple left, BRAKE red
    right). The phone LEANS side to side (doodle-jump) — a 3D roll about its vertical
    axis (rotateY) inside a perspective box, NOT a flat in-plane twist — and the
    steer strip fills the matching side in lockstep. */
 .steer-demo { display: flex; flex-direction: column; align-items: center; padding: 0.35rem 0 0.5rem; perspective: 560px; }
-/* Wrapper carries the 3D lean. */
-.phone-lean { transform-style: preserve-3d; animation: phone-lean 2.6s ease-in-out infinite; }
-/* The phone: a chunky toy slab. A lit gradient + float shadow + top sheen give it a
-   little dimensionality so the 3D lean reads as a real object, not a flat cutout. */
+/* Wrapper carries the 3D lean and the slab's actual left/right depth planes. */
+.phone-lean {
+  position: relative; transform-style: preserve-3d;
+  animation: phone-lean 2.6s ease-in-out infinite;
+}
+.phone-lean::before,
+.phone-lean::after {
+  content: ''; position: absolute; pointer-events: none;
+  top: 20px; bottom: 20px; width: 12px;
+  background: linear-gradient(180deg, #536170 0%, #202a35 100%);
+  border: 2px solid #1b2430;
+  transform: rotateY(90deg);
+}
+.phone-lean::before { left: -6px; }
+.phone-lean::after  { right: -6px; }
+/* The phone is a small CSS 3D slab: the visible frame sits in front, a separate
+   plate sits 12px behind it, and the side planes above bridge that depth. */
 .phone-frame {
-  width: 94px; height: 174px;
+  position: relative; transform-style: preserve-3d; transform: translateZ(6px);
+  width: 112px; height: 208px;
   border: 3px solid #1b2430; border-radius: 20px;
   background: linear-gradient(155deg, #44515f 0%, var(--ink) 62%);
   padding: 6px;
-  box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.phone-frame::before {
+  content: ''; position: absolute; pointer-events: none;
+  inset: -3px; box-sizing: border-box;
+  background: linear-gradient(155deg, #36424f 0%, #141c25 68%);
+  border: 3px solid #1b2430; border-radius: 20px;
+  transform: translateZ(-12px);
 }
 /* The "screen" — a slice of the sunny sky (page gradient), laid out like the real
    HUD: the steer strip sits directly ON TOP of the buttons, both grouped at the
@@ -514,6 +534,7 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
   padding: 10px 8px;
   background: var(--paper);
+  transform: translateZ(1px);
 }
 /* Glassy screen sheen — a soft diagonal highlight (top-left) for a 3D, glossy feel.
    Fades out before the buttons so it never washes their colour. */
@@ -528,25 +549,40 @@ input[type=text]:disabled { opacity: 0.6; }
 .phone-name {
   align-self: flex-start; margin-bottom: auto; max-width: 100%;
   position: relative; z-index: 1;
-  font-family: var(--font-display); font-weight: 700; font-size: 11px; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 12px; line-height: 1;
   color: var(--car, var(--ink));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Mini steer strip — same anatomy as the HUD .steer__track, scaled down; the fill
-   slides with the lean. Sits just above the buttons. */
+/* Mini steer strip — the live HUD track scaled down: paper surface, ink outline,
+   centre marker, and the same livery-colour fill sliding with the phone lean. */
 .mini-steer {
-  position: relative; height: 9px; border-radius: var(--r-pill); overflow: hidden;
-  background: rgba(255, 255, 255, 0.82);
+  position: relative; height: 14px; overflow: hidden;
+  box-sizing: border-box;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r-pill);
+}
+.mini-steer::before {
+  content: ''; position: absolute; z-index: 2;
+  left: 50%; top: 0; bottom: 0; width: 1px;
+  background: color-mix(in srgb, var(--ink) 40%, transparent);
 }
 .mini-steer__fill {
-  position: absolute; top: 0; bottom: 0; left: 50%; width: 50%; margin-left: -25%;
+  position: absolute; z-index: 1; top: 0; bottom: 0; left: 50%; width: 50%; margin-left: -25%;
   background: var(--car); border-radius: var(--r-pill);
   animation: steer-slide 2.6s ease-in-out infinite;
 }
-/* Mini buttons — the two drive controls in their LIVE positions + colours: ITEM
-   (amber) left, BRAKE (red) right, so the demo screen matches the real one. */
+/* Mini buttons — scaled-down versions of the real controls: same labels, colours,
+   ink border and bottom ledge, in the same left/right positions. They live inside
+   the non-interactive phone illustration, so their realism teaches recognition
+   without creating another tappable-looking row in the modal itself. */
 .mini-controls { display: flex; gap: 6px; position: relative; z-index: 1; }
-.mini-btn { flex: 1; height: 50px; border-radius: 8px; border: 2px solid var(--ink); }
+.mini-btn {
+  flex: 1; height: 60px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-family: var(--font-display); font-weight: 700;
+  font-size: 7px; letter-spacing: 0.04em;
+  border-radius: 9px; border: 2px solid var(--ink);
+  box-shadow: 0 3px 0 var(--btn-ledge);
+}
 .mini-btn--item  { background: var(--item); }
 .mini-btn--brake { background: var(--danger); }
 /* Phone leans side to side and the strip fills the matching side, in lockstep. */
@@ -559,18 +595,18 @@ input[type=text]:disabled { opacity: 0.6; }
   50%      { transform: translateX(46%); }
 }
 
-/* BRAKE + ITEM — one compact row: a recognisable colour chip + a short caption. */
+/* BRAKE + ITEM — compact, shadowless labels rather than a second set of controls. */
 .help-controls { display: flex; gap: 0.6rem; }
 .help-ctrl { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; text-align: center; }
 .help-chip {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 100%; padding: 0.6rem 0.4rem;
-  font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; letter-spacing: 0.05em;
-  border-radius: var(--r-sm); user-select: none;
+  padding: 0.32rem 0.75rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em;
+  border-radius: var(--r-pill); user-select: none;
 }
-.help-chip--brake { color: #fff; background: var(--danger); border: 2.5px solid var(--ink); box-shadow: 0 4px 0 var(--btn-ledge); }
-.help-chip--item  { color: #fff; background: var(--item); border: 2.5px solid var(--ink); box-shadow: 0 4px 0 var(--btn-ledge); }
-.help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.82rem; line-height: 1.25; }
+.help-chip--brake { color: #fff; background: var(--danger); }
+.help-chip--item  { color: #fff; background: var(--item); }
+.help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
 
 /* "Got it" CTA — the primary close action, fills the column. */
 .help-done { width: 100%; margin-top: 0.1rem; }
@@ -640,6 +676,6 @@ input[type=text]:disabled { opacity: 0.6; }
   .help-card { gap: 0.6rem; padding: 0.9rem 1.1rem; }
   .help-steer { gap: 0.4rem; }
   .steer-demo { padding: 0.2rem 0; }
-  .phone-frame { width: 76px; height: 140px; }
-  .mini-btn { height: 42px; }
+  .phone-frame { width: 92px; height: 170px; }
+  .mini-btn { height: 50px; }
 }
