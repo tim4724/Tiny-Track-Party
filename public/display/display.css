@@ -12,11 +12,11 @@ html, body {
 
 /* ---- Lobby ---- */
 /* Sticker chrome on ONE poster grid over the full viewport (paper stage OR
-   live 3D preview behind — the layout is identical in both states):
-   a header band (wordmark), a content band where the join ticket and the cup
-   slot TOP-ALIGN on the same line with the tagline centred between them, and
-   a footer band (seat dock). Shared gutters, one alignment line per band —
-   the hand-slapped tilts stay playful because the grid beneath is straight. */
+   live 3D preview behind — the layout is identical in both states): a content
+   band where the join ticket (wordmark masthead + QR + scan hint) and the cup
+   slot CENTRE on the same line, and a footer band (seat dock). Shared
+   gutters, one alignment line per band — the hand-slapped tilts stay playful
+   because the grid beneath is straight. */
 #lobby {
   position: relative;
   z-index: 1;                 /* float the lobby over the #scene backdrop */
@@ -594,7 +594,7 @@ html.cam-free #race { pointer-events: none; }
    (the .slap class) since their element never re-enters the DOM. All of it
    only exists under prefers-reduced-motion: no-preference. */
 @media (prefers-reduced-motion: no-preference) {
-  .lobby__wordmark, .ticket, .cup-slot__pick, .tagline, .lobby-foot {
+  .ticket, .cup-slot__pick, .tagline, .lobby-foot {
     animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
   }
   .ticket { animation-delay: 40ms; }

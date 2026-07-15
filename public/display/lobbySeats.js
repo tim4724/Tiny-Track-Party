@@ -11,8 +11,8 @@ const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 // Render the roster into `listEl`: one card per player, padded with open-seat
 // placeholders to at least MAX_PLAYERS so the lobby card keeps a fixed size as
 // players trickle in (locked to the race field size so the lobby grid and the
-// grid that actually races never diverge). Each seat shows the car that player
-// picked (a real render), ringed + dotted in their livery. `seats` entries:
+// grid that actually races never diverge). Each seat card shows the car that
+// player picked (a real render) over their name in their livery colour:
 //   { name, colorIndex, carIndex?, connected?, host?, ready? }
 // carIndex falls back to colorIndex (the slot default before they pick);
 // connected === false dims the seat; host appends the ★; ready lights the pill.
