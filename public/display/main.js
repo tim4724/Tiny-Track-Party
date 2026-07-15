@@ -460,9 +460,9 @@ const net = new DisplayNet({
   trackCatalog,
   defaultTrackId: selectedTrackId,
   drawRandomTrack: () => randomBag.draw(),
-  // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot +
-  // tagline even when the resolved trackId didn't change (e.g. a mode switch
-  // landing on the same circuit, where selectTrack early-returns).
+  // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
+  // even when the resolved trackId didn't change (e.g. a mode switch landing
+  // on the same circuit, where selectTrack early-returns).
   onTrackChange: (id) => { selectTrack(id); renderLobbyPick(); },
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; the ticket shows one
@@ -614,11 +614,11 @@ function renderRoster(roster, hostPeerIndex) {
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
 
-// Lobby right-rail cup slot + centre tagline, driven by the same state as the
-// phones' track-pick UI (net.mode/cupId/trackId). Pre-pick: a dashed slot
-// naming the host + the "GRAB YOUR PHONES!" tagline. Post-pick: the cup (or
-// exact track / random) as a red sticker with races pill + difficulty pips —
-// and the tagline yields the centre to the revealed 3D preview.
+// Lobby right-rail cup slot, driven by the same state as the phones'
+// track-pick UI (net.mode/cupId/trackId). Pre-pick the slot is empty;
+// post-pick it shows the race card (cup / exact track / random). The scan
+// hint under the ticket stays up for the whole lobby — joining is possible
+// until the race starts.
 function renderLobbyPick() {
   const slot = el('cup-slot');
   if (!slot) return;
@@ -657,7 +657,6 @@ function renderLobbyPick() {
     state = null;   // no pick yet — the slot stays empty
   }
   renderCupSlot(slot, state);
-  el('tagline').classList.toggle('hidden', net.mode !== null);
 }
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's

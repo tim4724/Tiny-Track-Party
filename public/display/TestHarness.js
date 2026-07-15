@@ -265,7 +265,6 @@ export function runDisplayScenario(opts, ctx) {
         };
       }
       renderCupSlot(el('cup-slot'), state);
-      el('tagline').classList.add('hidden');
       el('scene').classList.remove('hidden', 'is-dim');
     } else {
       renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot

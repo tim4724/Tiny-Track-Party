@@ -142,9 +142,8 @@ html, body {
 }
 .cup-meter i.is-on { background: var(--red); }
 
-/* Scan hint — pre-pick only (renderLobbyPick hides it on the first pick).
-   A quiet white sticker hanging centred under the ticket; absolute, so its
-   toggle never shifts the card. */
+/* Scan hint — a quiet white sticker hanging centred under the ticket for the
+   whole lobby; absolute, so it never affects the card's position. */
 .tagline {
   position: absolute; top: calc(100% + 14px); left: 50%;
   transform: translateX(-50%) rotate(-2deg);
