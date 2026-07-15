@@ -1,4 +1,4 @@
-/* Display — big shared screen. "Sunny Circuit" look.
+/* Display — big shared screen. "Sticker Bash" look.
    Tokens + reusable bits live in /shared/theme.css; this file is layout +
    display-only composition. Class/ID names are contracted with display/main.js
    and SceneRenderer.js — don't rename without updating those. */
@@ -579,6 +579,34 @@ html.cam-free #race { pointer-events: none; }
 .device-card p { margin: 0; color: var(--ink-2); font-weight: 700; }
 @media (max-width: 700px), (max-height: 500px) {
   html:not(.device-choice-dismissed) #device-choice { display: flex; }
+}
+
+/* ---- Motion: sticker slap-ins (keyframes in theme.css) ----
+   Lobby chrome slaps on in a quick stagger every time #lobby is (re)shown
+   (display:none → shown restarts CSS animations), the cup sticker pops as the
+   pick lands (.cup-slot__pick loses .hidden), and the results board's pieces
+   land one after another on reveal. Countdown digits are re-triggered from JS
+   (the .slap class) since their element never re-enters the DOM. All of it
+   only exists under prefers-reduced-motion: no-preference. */
+@media (prefers-reduced-motion: no-preference) {
+  .lobby__wordmark, .ticket, .cup-slot__empty, .cup-slot__pick, .tagline, .lobby-foot {
+    animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
+  }
+  .ticket { animation-delay: 40ms; }
+  .tagline { animation-delay: 80ms; }
+  .cup-slot__empty, .cup-slot__pick { animation-delay: 120ms; }
+  .lobby-foot { animation-delay: 160ms; }
+
+  #results h2, .results-sub, .results-podium, #results-list li, .results-next, #results-newgame {
+    animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
+  }
+  .results-sub, .results-podium { animation-delay: 60ms; }
+  #results-list li:nth-child(1) { animation-delay: 100ms; }
+  #results-list li:nth-child(2) { animation-delay: 140ms; }
+  #results-list li:nth-child(3) { animation-delay: 180ms; }
+  #results-list li:nth-child(4) { animation-delay: 220ms; }
+  #results-list li:nth-child(n+5) { animation-delay: 260ms; }
+  .results-next, #results-newgame { animation-delay: 300ms; }
 }
 
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----

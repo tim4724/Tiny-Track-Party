@@ -769,8 +769,13 @@ function launchRace(players) {
     onCountdownTick(n) {
       // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
       // over the next beat via .is-go). n < 0: banner gone.
-      el('countdown').textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
-      el('countdown').classList.toggle('is-go', n === 0);
+      const cd = el('countdown');
+      cd.textContent = n > 0 ? n : n === 0 ? 'GO!' : '';
+      cd.classList.toggle('is-go', n === 0);
+      // slap each numeral in (re-add .slap around a reflow so the animation
+      // restarts on the same element); GO! keeps its own is-go fade-out.
+      cd.classList.remove('slap');
+      if (n > 0) { void cd.offsetWidth; cd.classList.add('slap'); }
       audio.countdown(n);
       // The n<0 beat only clears the LOCAL banner — never broadcast it. The
       // phones' COUNTDOWN handler flips them onto the drive HUD, so a race that

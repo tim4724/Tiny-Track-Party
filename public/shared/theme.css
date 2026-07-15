@@ -331,3 +331,19 @@ body {
   background: var(--c, var(--red));
   transform: rotate(var(--tilt, 0deg));
 }
+
+/* 7. Motion — the sticker SLAP-IN -----------------------------------------
+   Scale overshoot with a slight rotate wobble, ~240ms. Uses the independent
+   scale/rotate properties so it composes with any static transform the
+   element already carries (tilts, centring translates). Applied by page CSS
+   on screen entry (display:none → shown restarts CSS animations for free);
+   JS re-triggers it for same-element content swaps (countdown digits).
+   Reduced motion: the animation simply never exists. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes sticker-slap {
+    0%   { scale: 1.15; rotate: 2deg; opacity: 0; }
+    60%  { scale: 0.96; rotate: -0.6deg; opacity: 1; }
+    100% { scale: 1; rotate: 0deg; }
+  }
+  .slap { animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both; }
+}

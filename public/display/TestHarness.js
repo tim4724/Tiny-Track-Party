@@ -698,6 +698,8 @@ export function runDisplayScenario(opts, ctx) {
       (function tick() {
         cd.textContent = seq[i];
         cd.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
+        cd.classList.remove('slap');                    // slap each numeral in, like the live race
+        if (seq[i] !== 'GO!') { void cd.offsetWidth; cd.classList.add('slap'); }
         i++;
         if (i < seq.length) timers.push(setTimeout(tick, 800));
         else timers.push(setTimeout(() => { cd.classList.remove('is-go'); cd.textContent = '3'; }, 1200)); // rest at "3"

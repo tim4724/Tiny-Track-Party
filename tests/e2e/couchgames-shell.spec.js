@@ -81,11 +81,11 @@ test('theming metas ship and the accent retints to the player livery (§4); safe
   const zoe = await shellJoin(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
 
-  // §4: both hint metas are present. theme-color is the static sunny-sky top…
+  // §4: both hint metas are present. theme-color is the static warm paper…
   expect(await zoe.evaluate(() => {
     const m = document.querySelector('meta[name="theme-color"]');
     return m && m.getAttribute('content');
-  })).toBe('#a8e2ff');
+  })).toBe('#FFF6EB');
   // …and cg-accent-color has been retinted live to this player's livery colour
   // (first seat → red #e6492d), no longer the static default.
   await expect.poll(() => zoe.evaluate(() => {
