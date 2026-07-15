@@ -184,8 +184,9 @@ html, body {
    ways, like stickers slapped down one after another. */
 .seat {
   position: relative;
-  display: flex; align-items: center; gap: 0.6rem;
-  height: 72px; padding: 0.3rem 1.3rem 0.3rem 0.6rem;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  height: 72px; padding: 0.3rem 0.9rem;
+  min-width: clamp(9.5rem, 12.5vw, 12.5rem);   /* filled + open share one footprint */
   background: var(--surface);
   border: 3px solid var(--ink);
   border-radius: var(--r-pill);
@@ -237,10 +238,6 @@ html, body {
   border: 3px dashed rgba(42, 39, 53, 0.45);
   box-shadow: none;
   padding: 0.3rem 1.2rem;
-  /* roughly a filled chip's footprint, so the dock doesn't collapse around
-     one lonely name */
-  min-width: clamp(9.5rem, 12.5vw, 12.5rem);
-  justify-content: center;
 }
 .seat--open .seat__name { color: var(--ink-3); }
 .seat--open .seat__open { display: none; }
@@ -652,11 +649,14 @@ html.cam-free #race { pointer-events: none; }
     display: flex; flex-direction: column; align-items: center;
     gap: 1.4rem; padding: 1.4rem 1rem 2rem;
   }
-  .tagline { transform: rotate(-2deg); order: 1; margin-bottom: 0; }
-  .ticket { order: 2; width: min(70vw, 300px); max-width: none; }
-  .cup-slot { order: 3; width: min(70vw, 300px); max-width: none; }
+  .ticket { order: 1; width: min(84vw, 400px); max-width: none; }
+  .tagline { order: 2; transform: rotate(-2deg); margin-bottom: 0; }
+  .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
   .lobby-foot { order: 4; }
   #players { flex-wrap: wrap; justify-content: center; }
+  /* the stage clouds are placed for the wide layout — behind the stacked
+     column they poke out from odd corners, so they sit this one out */
+  .scene__cloud { display: none; }
   .version-badge { position: fixed; }
 }
 
