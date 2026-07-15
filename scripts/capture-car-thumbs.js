@@ -11,8 +11,15 @@
 // live origin so the vendored Three.js + importmap + CSP resolve, render into an
 // own transparent renderer with the game's toy lighting, then read PNGs back.
 //
-// Framing is fixed from the model's bounding SPHERE (rotation-invariant), so the
-// car holds the same size/position through the whole spin instead of jittering.
+// Framing splits the two axes, because a yaw turntable treats them differently:
+//   - HORIZONTAL from the model's bounding SPHERE (rotation-invariant), so the car
+//     holds the same size/position through the whole spin instead of jittering as
+//     its silhouette swings between length-on and width-on.
+//   - VERTICAL from the model's bbox height, which a yaw spin CANNOT change (the
+//     roofline is the roofline at every angle), so the frame can crop to it.
+// The frames are therefore WIDER THAN TALL (--aspect, 5:4): these cars are ~1.4x
+// longer than they are tall, and a sphere fit is sized by the long axis, so a square
+// frame spent ~40% of its height on empty air — nearly all of it above the roof.
 // The ground shadow reproduces the in-race look (SceneRenderer._bakeCarShadow): the
 // car's baked top-down SILHOUETTE, tinted warm near-black with a tight penumbra,
 // laid flat under the car and parented to the turntable so it spins with the car.
@@ -22,7 +29,8 @@
 //   node scripts/capture-car-thumbs.js --yaw 215 --pitch 22 --margin 1.18
 //
 // Flags: --name (one GLB basename, else all roster), --frames (24), --size (256
-// final px/frame), --yaw/--pitch (deg), --margin (sphere-fit slack), --port,
+// final px/frame WIDTH), --aspect (1.25 = 5:4, w/h), --yaw/--pitch (deg),
+// --margin (sphere-fit slack), --bias (look-at nudge, frame heights up), --port,
 // --headed.
 
 const http = require('http');
@@ -51,7 +59,19 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const MODELS = args.name ? [args.name] : ROSTER;
 const FRAMES = parseInt(args.frames, 10) || 24;   // keep in sync with SPIN_FRAMES (carThumbs.js)
-const SIZE = parseInt(args.size, 10) || 256;       // final px per square frame
+const SIZE = parseInt(args.size, 10) || 256;       // final px per frame (WIDTH)
+// Frame aspect (w/h). 5:4 fits the tallest roster car's full spin (it needs ~72% of
+// a square frame's height) with a little air left over — keep in sync with the
+// .carthumb aspect-ratio in theme.css.
+const ASPECT = args.aspect !== undefined ? parseFloat(args.aspect) : 1.25;
+const HEIGHT = Math.round(SIZE / ASPECT);
+// Look-at nudge as a fraction of the frame height (+ aims higher, so the car sits
+// LOWER in frame). Negative by default because the vertical fit centres the model's
+// BODY bbox, but the rendered content isn't centred on it: the contact shadow spreads
+// out below the wheels and the look-down pitch skews it further down the frame.
+// Fitted empirically — the value that lands top/bottom padding even across the roster
+// with no model's shadow touching the bottom edge.
+const BIAS = args.bias !== undefined ? parseFloat(args.bias) : -0.10;
 const YAW = args.yaw !== undefined ? parseFloat(args.yaw) : 305;   // hero turntable angle (deg) — front-3/4 from the right
 const PITCH = args.pitch !== undefined ? parseFloat(args.pitch) : 23; // look-down tilt (deg)
 const MARGIN = args.margin !== undefined ? parseFloat(args.margin) : 1.0; // sphere-fit slack
@@ -86,20 +106,20 @@ async function main() {
   try {
     await waitForServer(PORT);
     browser = await chromium.launch({ headless: !args.headed });
-    const page = await browser.newPage({ viewport: { width: SIZE, height: SIZE }, deviceScaleFactor: 2 });
+    const page = await browser.newPage({ viewport: { width: SIZE, height: HEIGHT }, deviceScaleFactor: 2 });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
 
     for (const name of MODELS) {
-      const { strip, still } = await page.evaluate(async ({ name, size, frames, yaw0, pitch, margin }) => {
+      const { strip, still } = await page.evaluate(async ({ name, size, height, frames, yaw0, pitch, margin, bias }) => {
         const THREE = await import('/vendor/three/three.module.js');
         const { GLTFLoader } = await import('/vendor/three/addons/loaders/GLTFLoader.js');
 
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(dpr);
-        renderer.setSize(size, size, false);
+        renderer.setSize(size, height, false);
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setClearColor(0x000000, 0);
 
@@ -199,22 +219,36 @@ async function main() {
         shadow.position.set(fcx, fbb.min.y + 0.001, fcz);
         pivot.add(shadow);
 
-        // Fixed framing from the bounding sphere (rotation-invariant).
+        // HORIZONTAL framing from the bounding sphere (rotation-invariant), so the car
+        // neither jitters nor rescales across the spin. HFOV and the camera distance are
+        // the ones a square frame used, so the car lands at exactly the size it always
+        // has — the shorter frame below is a pure vertical CROP of that same projection,
+        // not a rescale.
         const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
-        const fov = 32;
-        const cam = new THREE.PerspectiveCamera(fov, 1, 0.01, 100);
-        const dist = (sphere.radius / Math.sin((fov / 2) * Math.PI / 180)) * margin;
+        const hfov = 32;
+        const aspect = size / height;
+        // three's `fov` is VERTICAL: back out the vfov that holds hfov at 32 for this aspect.
+        const vfov = 2 * Math.atan(Math.tan((hfov / 2) * Math.PI / 180) / aspect) * 180 / Math.PI;
+        const cam = new THREE.PerspectiveCamera(vfov, aspect, 0.01, 100);
+        const dist = (sphere.radius / Math.sin((hfov / 2) * Math.PI / 180)) * margin;
         const p = (pitch * Math.PI) / 180;
-        // Bias the look-at slightly up so the contact shadow sits low in frame.
-        const look = new THREE.Vector3(sphere.center.x, sphere.center.y + sphere.radius * 0.06, sphere.center.z);
+        // VERTICAL framing centres the model's bbox — invariant under a yaw spin — rather
+        // than the sphere (whose radius is the car's LENGTH, which is what used to leave a
+        // tall band of air above the roof). `bias` then trims the aim off that centre to
+        // even out the padding, since the rendered content sits lower than the body bbox
+        // (contact shadow + look-down pitch); see the BIAS constant.
+        const mbb = new THREE.Box3().setFromObject(model);
+        const midY = (mbb.min.y + mbb.max.y) / 2;
+        const frameH = 2 * dist * Math.tan((vfov / 2) * Math.PI / 180);   // world units tall at the car
+        const look = new THREE.Vector3(sphere.center.x, midY + frameH * bias, sphere.center.z);
         cam.position.set(look.x, look.y + Math.sin(p) * dist, look.z + Math.cos(p) * dist);
         cam.lookAt(look);
 
         const strip = document.createElement('canvas');
-        strip.width = size * frames; strip.height = size;
+        strip.width = size * frames; strip.height = height;
         const sctx = strip.getContext('2d');
         const cell = document.createElement('canvas');
-        cell.width = cell.height = size;
+        cell.width = size; cell.height = height;
         const cctx = cell.getContext('2d');
 
         let still = null;
@@ -222,14 +256,14 @@ async function main() {
           pivot.rotation.y = ((yaw0 + (f * 360) / frames) * Math.PI) / 180;
           pivot.updateMatrixWorld(true);
           renderer.render(scene, cam);
-          // Downscale the @2x backing buffer into a crisp size×size cell.
-          cctx.clearRect(0, 0, size, size);
-          cctx.drawImage(renderer.domElement, 0, 0, size, size);
+          // Downscale the @2x backing buffer into a crisp size×height cell.
+          cctx.clearRect(0, 0, size, height);
+          cctx.drawImage(renderer.domElement, 0, 0, size, height);
           sctx.drawImage(cell, f * size, 0);
           if (f === 0) still = cell.toDataURL('image/png');
         }
         return { strip: strip.toDataURL('image/png'), still };
-      }, { name, size: SIZE, frames: FRAMES, yaw0: YAW, pitch: PITCH, margin: MARGIN });
+      }, { name, size: SIZE, height: HEIGHT, frames: FRAMES, yaw0: YAW, pitch: PITCH, margin: MARGIN, bias: BIAS });
 
       const write = (dataUrl, file) => {
         const b64 = dataUrl.replace(/^data:image\/png;base64,/, '');
@@ -237,7 +271,7 @@ async function main() {
       };
       write(still, `${name}.png`);
       write(strip, `${name}.strip.png`);
-      console.log(`Baked ${name}: ${name}.png (${SIZE}px) + ${name}.strip.png (${SIZE * FRAMES}×${SIZE})`);
+      console.log(`Baked ${name}: ${name}.png (${SIZE}×${HEIGHT}) + ${name}.strip.png (${SIZE * FRAMES}×${HEIGHT})`);
     }
   } finally {
     if (browser) await browser.close();

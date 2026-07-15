@@ -112,7 +112,7 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-card); padding: 0.8rem 1rem;
 }
-/* The square .carthumb (theme.css) sizes to this box; the livery ring lives on
+/* The 5:4 .carthumb (theme.css) sizes to this box; the livery ring lives on
    the strip tile, not here, so the big render reads clean. */
 .car-hero__view { flex: 0 0 40%; max-width: 9rem; }
 .car-hero__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }

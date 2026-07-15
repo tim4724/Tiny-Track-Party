@@ -18,6 +18,7 @@ const carStrip = (model) => BASE + model + '.strip.png';
 
 // Turntable: keep these in sync with the baked strips and the .carthumb__spin
 // background-size in theme.css (background-size width = SPIN_FRAMES * 100%).
+// Frames are 5:4 (256×205) — .carthumb's aspect-ratio must match, see theme.css.
 const SPIN_FRAMES = 24;
 const SPIN_FPS = 8; // 24 frames / 8 fps = 3s per full turn
 
@@ -56,7 +57,7 @@ function registerSpin(el) {
   if (!_raf) _raf = requestAnimationFrame(_tick);
 }
 
-// Build a car thumbnail node: a square box showing the still hero, plus (in spin
+// Build a car thumbnail node: a 5:4 box showing the still hero, plus (in spin
 // mode) a synchronized turntable overlay that fades in once its strip loads — so
 // there's never a blank frame and the static hero never ghosts behind the spin.
 // The caller sizes it (the box is width:100% of its container).

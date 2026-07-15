@@ -249,7 +249,8 @@ html, body {
   box-shadow: none;
 }
 .seat--open .seat__name { color: var(--ink-3); }
-.seat--open .seat__open { width: 100%; aspect-ratio: 1 / 1; }
+/* matches .carthumb's box (theme.css) so an open seat is the same size as a taken one */
+.seat--open .seat__open { width: 100%; aspect-ratio: 5 / 4; }
 
 /* Build/version badge — preview builds only (the server leaves it empty in
    production, and :empty hides it). Pinned to the lobby's bottom-right corner,
