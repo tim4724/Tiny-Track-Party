@@ -808,9 +808,13 @@ function launchRace(players) {
   });
   window.__engine = session.engine;
 
-  // Place cars at their grid poses immediately.
+  // Place cars at their grid poses immediately, and paint each cell's HUD
+  // (place badge + LAP pill) right away so the chrome sits at its final size
+  // through the countdown — no pop-in at GO (the racing loop takes over from
+  // the first ~6 Hz tick).
   for (const c of session.getSnapshot().cars) {
     if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
+    scene.setCarHud(c.id, c);
   }
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
@@ -1166,12 +1170,14 @@ function showResults(results) {
   for (const row of podium ? board.order.slice(3) : board.order) { // the podium holds the top three
     const li = document.createElement('li');
     if (row.joining) li.className = 'is-joining';
-    const dot = document.createElement('span');
-    dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
-    // The name is player-supplied — appended as TEXT, never markup (same rule as
-    // the controller's results list and renderJoinUrl).
-    li.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''} `);
+    // The name is player-supplied — set as TEXT, never markup (same rule as
+    // the controller's results list and renderJoinUrl). It carries the
+    // player's livery colour itself — no swatch dot.
+    const nm = document.createElement('span');
+    nm.className = 'res-name';
+    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
+    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
+    li.append(nm, ' ');
     if (row.joining) {
       const t = document.createElement('span');
       t.className = 'res-time';
@@ -1231,10 +1237,11 @@ function renderPodium(wrap, order) {
     col.style.setProperty('--c', CAR_COLORS[row.colorIndex] || '#888');
     const who = document.createElement('div');
     who.className = 'podium__who';
-    const dot = document.createElement('span');
-    dot.className = 'stand__dot';
-    dot.style.background = CAR_COLORS[row.colorIndex] || '#888';
-    who.append(dot, ` ${row.name}${row.ai ? ' (CPU)' : ''}`);
+    const nm = document.createElement('span');
+    nm.className = 'res-name';
+    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
+    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
+    who.append(nm);
     const pts = document.createElement('div');
     pts.className = 'podium__pts';
     pts.textContent = `${row.points || 0} pts`;

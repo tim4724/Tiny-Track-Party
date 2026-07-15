@@ -292,12 +292,6 @@ body {
 .scene { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
 
 .scene__sky { position: absolute; inset: 0; background: var(--paper); }
-/* two built-in confetti rects so every stage gets a sprinkle for free */
-.scene__sky::before, .scene__sky::after {
-  content: ''; position: absolute; width: 9px; height: 15px; border-radius: 3px;
-}
-.scene__sky::before { top: 16%; left: 13%; background: var(--red); transform: rotate(-18deg); }
-.scene__sky::after  { top: 9%; right: 21%; background: var(--blue); transform: rotate(14deg); }
 
 .scene__sun { display: none; }   /* retired — the sun was yellow */
 

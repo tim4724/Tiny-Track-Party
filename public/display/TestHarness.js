@@ -617,7 +617,7 @@ export function runDisplayScenario(opts, ctx) {
         const col = COLORS[s % COLORS.length] || '#888';
         const li = document.createElement('li');
         li.innerHTML =
-          `<span class="stand__dot" style="background:${col}"></span> ${FAKE_NAMES[s]}` +
+          `<span class="res-name" style="--c:${col}">${FAKE_NAMES[s]}</span>` +
           `<span class="res-time">${FAKE_TIMES[i].toFixed(1)}s</span>`;
         listEl.appendChild(li);
       });
@@ -627,7 +627,7 @@ export function runDisplayScenario(opts, ctx) {
       const joinLi = document.createElement('li');
       joinLi.className = 'is-joining';
       joinLi.innerHTML =
-        `<span class="stand__dot" style="background:${COLORS[j % COLORS.length] || '#888'}"></span> ${FAKE_NAMES[j]}` +
+        `<span class="res-name" style="--c:${COLORS[j % COLORS.length] || '#888'}">${FAKE_NAMES[j]}</span>` +
         `<span class="res-time">Next race</span>`;
       listEl.appendChild(joinLi);
       el('results').classList.remove('hidden');
@@ -650,7 +650,7 @@ export function runDisplayScenario(opts, ctx) {
       sub.classList.remove('hidden');
       sub.textContent = final ? 'Final standings' : `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
       const cupRow = (r) =>
-        `<span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}` +
+        `<span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span>` +
         `<span class="res-gain${r.gained ? '' : ' is-zero'}">+${r.gained}</span><span class="res-pts">${r.points} pts</span>`;
       const podiumEl = el('results-podium');
       podiumEl.innerHTML = '';
@@ -664,7 +664,7 @@ export function runDisplayScenario(opts, ctx) {
           col.dataset.place = String(place);
           col.style.setProperty('--c', COLORS[r.slot % COLORS.length] || '#888');
           col.innerHTML =
-            `<div class="podium__who"><span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}</div>` +
+            `<div class="podium__who"><span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span></div>` +
             `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${place}</div>`;
           podiumEl.appendChild(col);
         }
