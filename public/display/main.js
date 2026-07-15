@@ -1497,7 +1497,7 @@ if (_scenario) {
       scenario: _scn,
       players: _int(_params.get('players'), 4),
       host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
-      picked: _params.get('picked') === '1'   // lobby scenario: post-pick chrome over the live preview
+      picked: _params.get('picked') || false   // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
     },
     { scene, track, scenePromise }
   ));
@@ -1547,7 +1547,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
-  { key: 'picked', label: 'Cup picked', hint: 'lobby: post-pick chrome over the preview', type: 'flag' },
+  { key: 'picked', label: 'Picked mode', hint: 'lobby: post-pick chrome over the preview', type: 'select',
+    options: [{ value: 'cup', label: 'cup' }, { value: 'track', label: 'exact track' }, { value: 'random', label: 'random' }] },
   { section: 'Solo drive' },
   { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
     options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },

@@ -228,21 +228,43 @@ export function runDisplayScenario(opts, ctx) {
     renderRoster(slots, hostIdx);
     fakeJoin('TEST');
     if (opts.picked) {
-      // Post-pick lobby: the host chose a cup — red cup sticker in the slot,
-      // tagline gone, chrome floating over the live 3D preview (mirrors
-      // renderLobbyPick + the .is-dim reveal in the live lobby). The preview
-      // orbits the track main.js already loaded into the scene.
-      const cup = CUPS[0];
-      const first = TRACK_LIST.find((t) => t.cup === cup.id);
-      renderCupSlot(el('cup-slot'), {
-        name: cup.name,
-        races: `${cup.tracks.length} races`,
-        difficulty: first ? first.cupDifficulty : null,
-        // the live lobby reads these from main.js's prebuilt catalog; the
-        // harness builds the cup's four schematics itself (pure geometry)
-        maps: cup.tracks.map((id, i) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })), n: i + 1 })),
-        cupId: cup.id
-      });
+      // Post-pick lobby: race card in the slot, hint gone, chrome floating
+      // over the live 3D preview (mirrors renderLobbyPick + the .is-dim
+      // reveal). `picked` picks the MODE: 'cup' (legacy '1'), 'track' or
+      // 'random'. Pair the card with a matching ?track=<id> so the orbiting
+      // preview shows the circuit the card names. The live lobby reads its
+      // schematics from main.js's prebuilt catalog; the harness builds them
+      // itself (pure geometry).
+      const mode = opts.picked === '1' ? 'cup' : String(opts.picked);
+      const qTrack = new URLSearchParams(location.search).get('track');
+      const mapOf = (id) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })) });
+      const entryOf = (id) => TRACK_LIST.find((t) => t.id === id);
+      const cupOf = (id) => CUPS.find((c) => c.tracks.includes(id));
+      let state;
+      if (mode === 'track') {
+        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[0].tracks[2];
+        const entry = entryOf(id), cup = cupOf(id);
+        state = {
+          name: entry ? entry.name : id, races: '1 race',
+          difficulty: entry ? entry.cupDifficulty : null,
+          maps: [mapOf(id)], cupId: cup && cup.id
+        };
+      } else if (mode === 'random') {
+        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[1].tracks[0];
+        const cup = cupOf(id);
+        state = { name: 'Random', races: 'endless', difficulty: null, maps: [mapOf(id)], cupId: cup && cup.id };
+      } else {
+        const cup = (qTrack && cupOf(qTrack)) || CUPS[0];
+        const first = TRACK_LIST.find((t) => t.cup === cup.id);
+        state = {
+          name: cup.name,
+          races: `${cup.tracks.length} races`,
+          difficulty: first ? first.cupDifficulty : null,
+          maps: cup.tracks.map((id, i) => ({ ...mapOf(id), n: i + 1 })),
+          cupId: cup.id
+        };
+      }
+      renderCupSlot(el('cup-slot'), state);
       el('tagline').classList.add('hidden');
       el('scene').classList.remove('hidden', 'is-dim');
     } else {

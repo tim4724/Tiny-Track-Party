@@ -35,12 +35,19 @@ html, body {
     clamp(16px, 3vh, 32px);
 }
 
-/* Join ticket (left rail) — the wordmark masthead over QR + URL + room-code
-   tiles, one sticker card. A <button>: the whole ticket copies the join link. */
-.ticket {
-  grid-area: ticket; align-self: center;   /* centred in the band, under the wordmark */
-  width: 100%;                        /* the QR is the lobby's MAIN element */
+/* Left rail — the join ticket with the scan hint hanging under it. The rail
+   is the grid item; the hint is absolute so its pre/post-pick toggle never
+   moves the ticket. */
+.ticket-rail {
+  grid-area: ticket; align-self: center;
+  position: relative;
+  width: 100%;
   max-width: 58vh;                    /* never taller than the band on squat windows */
+}
+/* Join ticket — the wordmark masthead over QR + URL, one sticker card.
+   A <button>: the whole ticket copies the join link. */
+.ticket {
+  width: 100%;                        /* the QR is the lobby's MAIN element */
   display: flex; flex-direction: column; align-items: center; gap: 0.55rem;
   padding: 0.85rem 0.85rem 1rem;
   font: inherit; color: var(--ink); text-align: center;
@@ -135,14 +142,13 @@ html, body {
 }
 .cup-meter i.is-on { background: var(--red); }
 
-/* Centre hint — pre-pick only (renderLobbyPick hides it on the first pick;
-   the revealed track preview owns the centre after that). A quiet white
-   sticker, not a shout — the QR ticket is the hero. */
+/* Scan hint — pre-pick only (renderLobbyPick hides it on the first pick).
+   A quiet white sticker hanging centred under the ticket; absolute, so its
+   toggle never shifts the card. */
 .tagline {
-  grid-area: tagline; align-self: center; justify-self: center;
-  margin-bottom: 4vh;                 /* optical centre: sit a touch above true centre */
-  transform: rotate(-2deg);
-  display: flex; flex-direction: column; align-items: center;
+  position: absolute; top: calc(100% + 14px); left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: max-content; max-width: 120%;
   text-align: center;
   color: var(--ink); background: var(--surface);
   border: 3px solid var(--ink); border-radius: var(--r);
@@ -620,8 +626,10 @@ html.cam-free #race { pointer-events: none; }
     display: flex; flex-direction: column; align-items: center;
     gap: 1.4rem; padding: 1.4rem 1rem 2rem;
   }
-  .ticket { order: 1; width: min(84vw, 400px); max-width: none; }
-  .tagline { order: 2; transform: rotate(-2deg); margin-bottom: 0; }
+  .ticket-rail { order: 1; width: min(84vw, 400px); max-width: none; }
+  /* in the column the hint flows under the card instead of hanging over
+     whatever comes next */
+  .tagline { position: static; transform: rotate(-2deg); margin: 0.9rem auto 0; width: fit-content; }
   .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
   .lobby-foot { order: 4; }
   #players { flex-wrap: wrap; justify-content: center; }

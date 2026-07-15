@@ -10,6 +10,9 @@
 var DISPLAY_CARDS = [
   { key: 'welcome',   title: 'Welcome (waiting)' },
   { key: 'lobby',     title: 'Lobby',     hostVariant: true },
+  { key: 'lobby',     title: 'Lobby (cup picked)',    hostVariant: true, params: { picked: 'cup',    track: 'tidepool' } },
+  { key: 'lobby',     title: 'Lobby (track picked)',  hostVariant: true, params: { picked: 'track',  track: 'driftwood' } },
+  { key: 'lobby',     title: 'Lobby (random picked)', hostVariant: true, params: { picked: 'random', track: 'powder' } },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
   { key: 'features',  title: 'Mechanics' },
@@ -47,8 +50,10 @@ var allCards = [];
 var hostVariantCards = [];
 
 function cardURL(c) {
-  if (c.hostVariant) return Gallery.displayURL(state, c.key, { host: state.viewAs });
-  return Gallery.displayURL(state, c.key);
+  var extra = null;
+  if (c.params) { extra = {}; for (var k in c.params) extra[k] = c.params[k]; }
+  if (c.hostVariant) { extra = extra || {}; extra.host = state.viewAs; }
+  return extra ? Gallery.displayURL(state, c.key, extra) : Gallery.displayURL(state, c.key);
 }
 
 function cardTag(c) {

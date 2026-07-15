@@ -90,11 +90,19 @@
          TINY TRACK PARTY! over QR + the join URL (code highlighted in the
          accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
          Enter/Space) copies the full join link, confirmed by the #toast. -->
-    <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
-      <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
-      <canvas id="qr"></canvas>
-      <div class="ticket__url" id="joinurl">…</div>
-    </button>
+    <div class="ticket-rail">
+      <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+        <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
+        <canvas id="qr"></canvas>
+        <div class="ticket__url" id="joinurl">…</div>
+      </button>
+      <!-- Scan hint — pre-pick only, hanging just under the ticket (absolute,
+           so hiding it on pick never shifts the card). renderLobbyPick
+           toggles it. -->
+      <div class="tagline" id="tagline">
+        <div class="tagline__main">Scan the code with your phone!</div>
+      </div>
+    </div>
 
     <!-- Cup slot — empty until the host picks on their phone, then the pick
          as the race card (red cup sticker + minis + races pill + pips).
@@ -107,13 +115,6 @@
         <div class="cup-races"></div>
         <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
       </div>
-    </div>
-
-    <!-- Centre hint — pre-pick only, a quiet sticker pointing at the ticket.
-         Once the host picks, the revealed 3D preview owns the centre
-         (renderLobbyPick hides it). -->
-    <div class="tagline" id="tagline">
-      <div class="tagline__main">Scan the code with your phone!</div>
     </div>
 
     <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
