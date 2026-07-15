@@ -29,8 +29,10 @@ html, body {
     "ticket   tagline  cup"
     "dock     dock     dock";
   column-gap: clamp(16px, 2vw, 36px);
+  /* generous side gutters: the rails frame the centre without hugging the
+     bezel (the middle stays open for the tagline / live track preview) */
   padding:
-    clamp(14px, 2.4vh, 26px) clamp(20px, 2.6vw, 40px)
+    clamp(14px, 2.4vh, 26px) clamp(32px, 4.5vw, 88px)
     clamp(16px, 3vh, 32px);
 }
 
