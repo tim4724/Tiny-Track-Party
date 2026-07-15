@@ -282,8 +282,12 @@ html.cam-free #race { pointer-events: none; }
 #countdown {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display); font-weight: 700;
-  font-size: 26vh; color: #fff;
-  text-shadow: 0 6px 0 rgba(40, 70, 40, 0.28), 0 16px 32px rgba(0, 0, 0, 0.3);
+  font-size: 26vh; color: var(--ink);
+  /* die-cut sticker numerals — ink with the white cut edge, same technique as
+     the wordmark (degrades to plain ink text without paint-order) */
+  -webkit-text-stroke: 12px #fff;
+  paint-order: stroke fill;
+  filter: drop-shadow(6px 6px 0 rgba(42, 39, 53, 0.22));
   pointer-events: none;
 }
 /* "GO!" stays up the beat after the start (cars are already moving) and fades
@@ -294,38 +298,69 @@ html.cam-free #race { pointer-events: none; }
   to   { opacity: 0; transform: scale(1.35); }
 }
 
-/* per-viewport (split-screen) label, anchored at each cell's top-left. No card:
-   just the name + item indicator floating over the scene (cf. .cell-rank). */
+/* per-viewport (split-screen) label, anchored at each cell's top-left: the
+   player's name as a white sticker tag, the item slot beneath it. */
 .cell-label {
   position: absolute; display: none; margin: 0.7rem; pointer-events: none;
 }
-/* name on top, the big item indicator stacked + left-aligned below it (place + lap
+/* name on top, the item slot stacked + left-aligned below it (place + lap
    moved out to the top-right .cell-rank readout) */
 .cell-label__row { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 .cell-label__name {
-  font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 2vw, 2.2rem);
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(1.1rem, 1.5vw, 1.6rem);
+  line-height: 1;
   color: var(--c, var(--ink));
+  background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r-sm);
+  padding: 0.3em 0.55em;
+  transform: rotate(-2deg);
+  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+  white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Place + lap — top-right of the cell: a white sticker badge for the ordinal
+   over an ink "LAP 2/3" pill, the pair leaning +1.5°. Positioned by _loop; the
+   transform anchors its RIGHT edge to the left coord _loop sets (cell right). */
+.cell-rank {
+  position: absolute; display: none; transform: translateX(-100%) rotate(1.5deg);
+  transform-origin: top right;
+  text-align: right; pointer-events: none;
+}
+/* _loop shows the wrapper with display:block, so the badge + pill right-align
+   themselves (display:table shrink-wraps while honouring margin-left:auto). */
+.cell-rank__place {
+  display: table; margin-left: auto;
+  font-family: var(--font-display); font-weight: 700; line-height: 1;
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  color: var(--ink); background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r-sm);
+  padding: 0.22em 0.45em;
+  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+}
+.cell-rank__lap {
+  display: table; margin-left: auto; margin-top: 0.4rem;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(0.7rem, 1vw, 0.85rem); letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fff; background: var(--ink); border-radius: var(--r-pill);
+  padding: 0.32em 0.9em;
   white-space: nowrap;
 }
 
-/* Place + lap — top-right of the cell, no card. Dark ink (legible on the constant
-   blue sky, no shadow). Big ordinal place, a smaller "Lap n/N" beneath. Positioned by
-   _loop; the transform anchors its RIGHT edge to the left coord _loop sets (cell right). */
-.cell-rank {
-  position: absolute; display: none; transform: translateX(-100%);
-  text-align: right; pointer-events: none; color: var(--ink);
-}
-.cell-rank__place { font-family: var(--font-display); font-weight: 700; line-height: 1; font-size: clamp(2rem, 3.6vw, 3.2rem); }
-.cell-rank__lap { font-weight: 800; font-size: clamp(1.1rem, 1.75vw, 1.55rem); margin-top: 0.12rem; letter-spacing: 0.02em; white-space: nowrap; }
-
-/* Held-item indicator — a FIXED reserved box (no reflow when empty) under the player
-   name so players read what they got at a glance (the controller has no item UI;
-   place/lap live in .cell-rank). The dashed outline box is ALWAYS shown; the item
-   ICON sits inside it. No backing fill or shadow — the sky behind is a constant blue. */
+/* Held-item indicator — a FIXED reserved sticker slot (no reflow when empty)
+   under the player name so players read what they got at a glance (the
+   controller has no item UI; place/lap live in .cell-rank). Dashed ink outline
+   while empty; a solid white sticker with the hard drop once an item lands. */
 .cell-label__item {
-  flex: none; width: 120px; height: 120px; transform-origin: center;
+  flex: none; width: 44px; height: 44px; transform-origin: center;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 20px; border: 3px dashed color-mix(in srgb, var(--ink) 30%, transparent);
+  background: var(--surface);
+  border-radius: 10px; border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+}
+.cell-label__item.is-empty {
+  background: transparent;
+  border: 3px dashed color-mix(in srgb, var(--ink) 45%, transparent);
+  box-shadow: none;
 }
 .cell-label__item svg { width: 70%; height: 70%; display: block; }
 /* baked asset icons (e.g. the banana GLB render) — already square + padded */
@@ -347,30 +382,29 @@ html.cam-free #race { pointer-events: none; }
 
 /* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
 .cell-steer {
-  position: absolute; display: none; width: clamp(120px, 13vw, 240px); height: 1.6rem;
+  position: absolute; display: none; width: 150px; height: 20px;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.9); border: 1px solid var(--hairline);
+  background: var(--surface); border: 3px solid var(--ink);
   border-radius: var(--r-pill); overflow: hidden;
-  box-shadow: 0 4px 10px rgba(30, 60, 90, 0.18);
   pointer-events: none;
 }
-.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(40, 80, 120, 0.18); }
+.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--ink) 35%, transparent); }
 .cell-steer__fill {
   position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%;
   background: var(--c, var(--brand)); border-radius: var(--r-pill); transition: transform 0.05s linear;
 }
-/* per-cell FINISHED overlay — a floating frosted card centred in a player's
-   split-screen cell the moment they cross the line, while the rest of the field
-   is still racing. _loop sets left/top to the cell centre; translate centres it.
-   Lives in #scene (z-0) like the other cell overlays, so the full results screen
+/* per-cell FINISHED overlay — a sticker card centred in a player's split-screen
+   cell the moment they cross the line, while the rest of the field is still
+   racing. _loop sets left/top to the cell centre; translate centres it. Lives
+   in #scene (z-0) like the other cell overlays, so the full results screen
    (#results, in #race z-2) covers it once the race ends. */
 .cell-finish {
-  position: absolute; display: none; transform: translate(-50%, -50%);
-  flex-direction: column; align-items: center; gap: 0.25rem; text-align: center;
+  position: absolute; display: none; transform: translate(-50%, -50%) rotate(-1.5deg);
+  flex-direction: column; align-items: center; gap: 0.35rem; text-align: center;
   padding: clamp(0.7rem, 1.5vw, 1.3rem) clamp(1.1rem, 2.4vw, 2.2rem);
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: var(--r); border-top: 6px solid var(--c, var(--brand));
-  box-shadow: 0 14px 34px rgba(30, 60, 90, 0.3);
+  background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
   pointer-events: none;
 }
 .cell-finish__badge {
@@ -378,7 +412,7 @@ html.cam-free #race { pointer-events: none; }
   font-size: clamp(0.85rem, 1.4vw, 1.25rem); letter-spacing: 0.16em; text-transform: uppercase;
   color: #fff; background: var(--c, var(--brand));
   padding: 0.2rem 0.9rem; border-radius: var(--r-pill);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  border: 2.5px solid var(--ink);
 }
 .cell-finish__place {
   font-family: var(--font-display); font-weight: 700; line-height: 1;
@@ -389,17 +423,35 @@ html.cam-free #race { pointer-events: none; }
   color: var(--ink-2); font-variant-numeric: tabular-nums;
 }
 
-.stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; } /* results list */
+/* chunky ink rule between split-screen cells (created by SceneRenderer's
+   _syncDividers; default ON, ?dividers=0 via the debug panel turns it off) */
+.cell-divider { position: absolute; background: rgba(42, 39, 53, 0.88); pointer-events: none; }
 
-/* results overlay — bright frosted glass + a floating card */
+.stand__dot { width: 0.95rem; height: 0.95rem; border-radius: 50%; border: 2px solid var(--ink); } /* results list */
+
+/* results overlay — a full-screen paper board over the frozen race, with a
+   sprinkle of static confetti (boards only — never in-race) */
 #results {
   position: fixed; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  background: rgba(233, 248, 255, 0.72); backdrop-filter: blur(10px);
+  background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(10px);
 }
+#results::before, #results::after {
+  content: ''; position: absolute; width: 11px; height: 18px; border-radius: 3px;
+}
+#results::before { top: 14%; left: 22%; background: var(--red); transform: rotate(-20deg); }
+#results::after  { top: 22%; right: 19%; background: var(--blue); transform: rotate(16deg); }
 #results h2 {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(2.4rem, 6vw, 4.6rem); margin: 0 0 1rem; color: var(--ink);
+}
+/* podium boards: the title goes full celebration — a red header sticker */
+#results.is-podium h2 {
+  color: #fff; background: var(--red);
+  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  padding: 0.25em 0.7em;
+  transform: rotate(-2deg);
+  box-shadow: var(--shadow-card);
 }
 #results-list {
   list-style: none; padding: 0; margin: 0; counter-reset: li;
@@ -410,7 +462,7 @@ html.cam-free #race { pointer-events: none; }
 #results-list li {
   counter-increment: li;
   display: flex; align-items: center; gap: 0.7rem;
-  background: var(--surface); border: 1px solid var(--hairline);
+  background: var(--surface); border: 3px solid var(--ink);
   border-radius: var(--r-sm); padding: 0.7rem 1.1rem; font-weight: 800;
   box-shadow: var(--shadow-pop);
 }
@@ -438,8 +490,14 @@ html.cam-free #race { pointer-events: none; }
 .results-next { margin-top: 1.4rem; font-weight: 800; font-size: clamp(1.1rem, 2vw, 1.5rem); color: var(--ink-2); }
 .results-next b { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
 
-/* podium — 2nd | 1st | 3rd rising steps; the champion pops in like the GO! banner */
-.results-podium { display: flex; align-items: flex-end; gap: 1.1rem; margin-bottom: 1.6rem; }
+/* podium — 2nd | 1st | 3rd rising steps: livery-coloured sticker blocks with
+   big rank numerals; the champion pops in like the GO! banner */
+.results-podium { position: relative; display: flex; align-items: flex-end; gap: 1.1rem; margin-bottom: 1.6rem; }
+.results-podium::before, .results-podium::after {
+  content: ''; position: absolute; width: 9px; height: 15px; border-radius: 3px;
+}
+.results-podium::before { top: -1.6rem; left: -2.4rem; background: var(--purple); transform: rotate(22deg); }
+.results-podium::after  { top: -0.8rem; right: -2.6rem; background: var(--green); transform: rotate(-14deg); }
 .podium__col { display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
 .podium__col[data-place="1"] { animation: podium-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 .podium__who { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.35rem; color: var(--ink); }
@@ -447,9 +505,10 @@ html.cam-free #race { pointer-events: none; }
 .podium__pts { font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .podium__step {
   width: 8rem; display: flex; align-items: center; justify-content: center;
-  background: var(--surface); border: 1px solid var(--hairline);
+  color: #fff; background: var(--c, var(--surface));
+  border: 3px solid var(--ink);
   border-radius: var(--r-sm) var(--r-sm) 0 0; box-shadow: var(--shadow-pop);
-  font-size: 2.2rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 2.2rem;
 }
 .podium__col[data-place="1"] .podium__step { height: 6rem; }
 .podium__col[data-place="2"] .podium__step { height: 4rem; }
@@ -480,7 +539,7 @@ html.cam-free #race { pointer-events: none; }
 #pause-overlay {
   position: fixed; inset: 0; z-index: 20;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(233, 248, 255, 0.72); backdrop-filter: blur(10px);
+  background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
 }
 .pause-card {
   display: flex; flex-direction: column; align-items: center;
@@ -506,7 +565,7 @@ html.cam-free #race { pointer-events: none; }
   display: none; position: fixed; inset: 0; z-index: 30;
   align-items: center; justify-content: center;
   padding: 1.2rem;
-  background: rgba(233, 248, 255, 0.85); backdrop-filter: blur(10px);
+  background: rgba(255, 246, 235, 0.85); backdrop-filter: blur(10px);
 }
 .device-card {
   display: flex; flex-direction: column; align-items: center; text-align: center;
@@ -547,10 +606,11 @@ html.cam-free #race { pointer-events: none; }
 .toast {
   position: fixed; left: 50%; bottom: 2.5rem; transform: translate(-50%, 1rem);
   z-index: 10;
-  font-weight: 800; font-size: 1rem; color: #fff;
+  font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: #fff;
   background: var(--brand);
-  padding: 0.7rem 1.4rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-float);
+  border: 3px solid var(--ink);
+  padding: 0.6rem 1.3rem; border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
   opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
@@ -561,7 +621,7 @@ html.cam-free #race { pointer-events: none; }
 .sound-hint {
   position: fixed; left: 1rem; bottom: 1rem; z-index: 10;
   font: inherit; font-weight: 800; font-size: 0.95rem; color: #fff;
-  background: rgba(25, 35, 45, 0.7);
+  background: rgba(42, 39, 53, 0.7);
   border: 0; padding: 0.6rem 1.2rem; border-radius: var(--r-pill);
   box-shadow: var(--shadow-float);
   cursor: pointer;
@@ -578,13 +638,13 @@ html.cam-free #race { pointer-events: none; }
   display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font: inherit; font-weight: 700; font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.92); text-decoration: none;
-  background: rgba(25, 35, 45, 0.55);
+  background: rgba(42, 39, 53, 0.55);
   padding: 0.4rem 0.9rem; border-radius: var(--r-pill);
   box-shadow: var(--shadow-float);
   opacity: 0.78; transition: opacity 0.2s ease, background 0.2s ease;
 }
 .music-credit::before { content: "\266A\00a0\00a0"; opacity: 0.9; } /* ♪ */
-.music-credit:hover { opacity: 1; background: rgba(25, 35, 45, 0.72); }
+.music-credit:hover { opacity: 1; background: rgba(42, 39, 53, 0.72); }
 
 /* ---- Reconnect card ---- a QR for a dropped player, centred in their own
    split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for

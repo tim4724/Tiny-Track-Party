@@ -644,7 +644,7 @@ export function runDisplayScenario(opts, ctx) {
         gained: POINTS_BY_RANK[i] || 0,
         points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
       })).sort((a, b) => b.points - a.points);
-      el('results-title').textContent = final ? cup.name : 'Standings';
+      el('results-title').textContent = final ? `${cup.name} CHAMPS!` : 'Standings';
       const sub = el('results-sub');
       sub.classList.remove('hidden');
       sub.textContent = final ? 'Final standings' : `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
@@ -655,16 +655,16 @@ export function runDisplayScenario(opts, ctx) {
       podiumEl.innerHTML = '';
       podiumEl.classList.toggle('hidden', !final);
       if (final) {
-        const MEDALS = ['🥇', '🥈', '🥉'];
         for (const place of [2, 1, 3]) {
           const r = rows[place - 1];
           if (!r) continue;
           const col = document.createElement('div');
           col.className = 'podium__col';
           col.dataset.place = String(place);
+          col.style.setProperty('--c', COLORS[r.slot % COLORS.length] || '#888');
           col.innerHTML =
             `<div class="podium__who"><span class="stand__dot" style="background:${COLORS[r.slot % COLORS.length] || '#888'}"></span> ${r.name}</div>` +
-            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${MEDALS[place - 1]}</div>`;
+            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${place}</div>`;
           podiumEl.appendChild(col);
         }
       }

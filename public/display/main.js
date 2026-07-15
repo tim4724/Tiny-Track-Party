@@ -109,6 +109,9 @@ const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+// ?dividers=0 — drop the chunky ink lines between split-screen cells (default
+// ON; a debug-panel toggle so the look can be A/B'd at a party).
+scene.showDividers = _trackParams.get('dividers') !== '0';
 if (_isTestMode) window.__scene = scene; // test surfaces: let the inspector/automation drive the camera
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
@@ -1131,7 +1134,8 @@ function showResults(results) {
   const podium = !!(s && s.final);
   const intermission = !!(s && !s.final);
 
-  el('results-title').textContent = podium ? s.cupName : s ? 'Standings' : 'Results';
+  // Podium boards celebrate: "<cup> CHAMPS!" on a red header sticker (.is-podium h2).
+  el('results-title').textContent = podium ? `${s.cupName} CHAMPS!` : s ? 'Standings' : 'Results';
   const sub = el('results-sub');
   sub.classList.toggle('hidden', !s);
   if (s) {
@@ -1198,17 +1202,18 @@ function showResults(results) {
 
 // Top-three steps, arranged 2nd | 1st | 3rd; hidden outside podium boards. AI
 // keep their (CPU) tag — beating them is the story of a short-handed cup.
+// Each step is a livery-coloured sticker block carrying its rank numeral.
 function renderPodium(wrap, order) {
   wrap.innerHTML = '';
   const top = order ? order.filter((r) => !r.joining).slice(0, 3) : [];
   wrap.classList.toggle('hidden', !top.length);
-  const MEDALS = ['🥇', '🥈', '🥉'];
   for (const place of [2, 1, 3]) {
     const row = top[place - 1];
     if (!row) continue;
     const col = document.createElement('div');
     col.className = 'podium__col';
     col.dataset.place = String(place);
+    col.style.setProperty('--c', CAR_COLORS[row.colorIndex] || '#888');
     const who = document.createElement('div');
     who.className = 'podium__who';
     const dot = document.createElement('span');
@@ -1220,7 +1225,7 @@ function renderPodium(wrap, order) {
     pts.textContent = `${row.points || 0} pts`;
     const step = document.createElement('div');
     step.className = 'podium__step';
-    step.textContent = MEDALS[place - 1];
+    step.textContent = String(place);
     col.append(who, pts, step);
     wrap.appendChild(col);
   }
@@ -1545,6 +1550,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
   { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
     options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
+  { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
+    options: [{ value: '0', label: 'off' }] },
   { key: 'bbox', label: 'Collision boxes', type: 'flag' },
   ], { title: 'Display' });
 });
