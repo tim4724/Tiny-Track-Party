@@ -78,30 +78,58 @@
     </div>
   </div>
 
-  <!-- Lobby -->
+  <!-- Lobby — Sticker Bash chrome pinned to the glass: wordmark top-left, join
+       ticket on the left rail, cup slot on the right rail, tagline in the
+       centre (pre-pick only) and the seat dock bottom-centre. The chrome sits
+       at the SAME positions in both lobby states: on the paper stage before
+       the host picks, floating over the live 3D preview after — nothing moves
+       between the two. -->
   <section id="lobby">
-    <div class="lobby__left card">
-      <h1>Tiny Track <span>Party</span></h1>
-      <div class="join">
-        <button type="button" class="join__at" id="joinbox" aria-label="Copy join link">
-          <div class="join__label">Join at</div>
-          <div class="join__url" id="joinurl">…</div>
-        </button>
+    <div class="wordmark lobby__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+
+    <!-- Join ticket — ONE sticker card: QR, join URL, room-code letter tiles
+         (filled by renderJoinUrl in Net.js). It's a <button>: click (or
+         Enter/Space) copies the full join link, confirmed by the #toast. -->
+    <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+      <span class="pill ticket__label">Join at</span>
+      <canvas id="qr"></canvas>
+      <div class="ticket__url" id="joinurl">…</div>
+      <div class="ticket__code" id="joincode"></div>
+    </button>
+
+    <!-- Cup slot — a dashed open slot until the host picks on their phone,
+         then the pick as a red cup sticker + races pill + difficulty pips.
+         Filled by renderCupSlot (lobbySeats.js) via renderLobbyPick (main.js);
+         keep this markup in sync with what renderCupSlot expects. -->
+    <div class="cup-slot" id="cup-slot">
+      <div class="cup-slot__empty">Pick the cup on a phone…</div>
+      <div class="cup-slot__pick hidden">
+        <div class="cup-sticker"></div>
+        <div class="cup-races"></div>
+        <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
       </div>
+    </div>
+
+    <!-- Centre tagline — pre-pick only. Once the host picks, the revealed 3D
+         preview owns the centre (renderLobbyPick hides it). -->
+    <div class="tagline" id="tagline">
+      <div class="tagline__main">GRAB YOUR PHONES!</div>
+      <div class="tagline__sub">race starts when everyone’s ready</div>
+    </div>
+
+    <!-- Seat dock — headline over a horizontal row of sticker seat chips.
+         Seeded with four open-seat placeholders so the dock paints at its full
+         footprint on the first frame, before main.js runs. lobbySeats.js's
+         renderSeats() then replaces these (always keeping >=4 seats) as players
+         join — keep this markup in sync with its `seat--open` branch. -->
+    <div class="lobby-foot">
       <div id="count">Scan the QR code to join</div>
-      <!-- Seeded with four open-seat placeholders so the welcome card paints at its
-           full height on the first frame, before main.js runs. lobbySeats.js's
-           renderSeats() then replaces these (always keeping >=4 seats) as players
-           join — keep this markup in sync with its `seat--open` branch. -->
       <div id="players">
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
       </div>
-    </div>
-    <div class="lobby__right">
-      <div class="qr-card"><canvas id="qr"></canvas></div>
     </div>
 
     <!-- Build badge: version + short commit, shown on preview (non-production)

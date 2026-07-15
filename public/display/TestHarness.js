@@ -10,10 +10,11 @@
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { renderSeats, seatCountText } from './lobbySeats.js';
+import { renderSeats, seatCountText, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
 import { POINTS_BY_RANK } from './GrandPrix.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
+import { TRACK_LIST } from './TrackBuilder.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -192,7 +193,7 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   function fakeJoin(code) {
-    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code);
+    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code, el('joincode'));
     fetchQR((location.origin || 'https://tinytrack.party') + '/' + code)
       .then((m) => renderQR(el('qr'), m))
       .catch(() => { /* gallery still works without the QR */ });
@@ -202,6 +203,8 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
+    el('joincode').textContent = '';
+    renderCupSlot(el('cup-slot'), {});   // no host yet → generic pre-pick slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     return;
   }
@@ -215,15 +218,35 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
+    el('joincode').textContent = '';
+    renderCupSlot(el('cup-slot'), {});
     el('device-choice').style.display = 'flex';
     return;
   }
 
   if (scenario === 'lobby') {
     const slots = buildSlots(players);
+    const hostIdx = hostSlot(slots);
     show('lobby');
-    renderRoster(slots, hostSlot(slots));
+    renderRoster(slots, hostIdx);
     fakeJoin('TEST');
+    if (opts.picked) {
+      // Post-pick lobby: the host chose a cup — red cup sticker in the slot,
+      // tagline gone, chrome floating over the live 3D preview (mirrors
+      // renderLobbyPick + the .is-dim reveal in the live lobby). The preview
+      // orbits the track main.js already loaded into the scene.
+      const cup = CUPS[0];
+      const first = TRACK_LIST.find((t) => t.cup === cup.id);
+      renderCupSlot(el('cup-slot'), {
+        name: cup.name,
+        races: `${cup.tracks.length} races`,
+        difficulty: first ? first.cupDifficulty : null
+      });
+      el('tagline').classList.add('hidden');
+      el('scene').classList.remove('hidden', 'is-dim');
+    } else {
+      renderCupSlot(el('cup-slot'), { hostName: hostIdx == null ? null : FAKE_NAMES[hostIdx] });
+    }
     return;
   }
 

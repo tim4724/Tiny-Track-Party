@@ -11,160 +11,207 @@ html, body {
 }
 
 /* ---- Lobby ---- */
+/* Sticker chrome pinned to fixed rails over the full viewport (paper stage OR
+   live 3D preview behind — the positions are identical in both states). */
 #lobby {
   position: relative;
   z-index: 1;                 /* float the lobby over the #scene backdrop */
   height: 100%;
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  align-items: center;
-  gap: 4vw;
-  padding: 6vh 7vw;
 }
 
-.lobby__left {
-  padding: clamp(1.6rem, 3vw, 2.6rem) clamp(1.8rem, 3vw, 2.8rem);
-  /* .card surface comes from the class in the markup */
-}
-.lobby__left h1 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(2.4rem, 5.4vw, 4.4rem);
-  line-height: 0.98;
-  letter-spacing: 0.01em;
-  margin: 0 0 0.25em;
-  color: var(--ink);
-}
-.lobby__left h1 span { color: var(--brand); }
-.lobby__left .tagline {
-  color: var(--ink-2);
-  font-weight: 600;
-  font-size: clamp(1rem, 1.5vw, 1.35rem);
-  margin: 0 0 1.6rem;
-  max-width: 30rem;
+.lobby__wordmark {
+  position: absolute;
+  left: clamp(20px, 2.6vw, 40px); top: clamp(14px, 2.4vh, 26px);
+  font-size: clamp(20px, 2.1vw, 30px);   /* .l2 scales along at 1.24em */
 }
 
-/* join box — the URL already carries the room code (…/BZK4), so there's no
-   separate code chip. It's a <button>: click (or Enter/Space) copies the full
-   join link to the clipboard, confirmed by the #toast. */
-.join { margin-bottom: 1.3rem; }
-.join__at {
-  position: relative;
-  display: block; width: 100%; text-align: left;
-  font: inherit; color: inherit;
-  border-radius: var(--r-sm);
-  padding: 0.75rem 1rem;
-  background: var(--surface-2);
-  border: 2px solid var(--hairline);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
-}
-.join__at:hover { border-color: var(--brand); background: var(--surface); }
-.join__at:active { transform: translateY(1px); }
-.join__at:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
-.join__label {
-  font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--ink-3);
-}
-.join__url {
-  font-weight: 800; font-size: clamp(0.95rem, 1.3vw, 1.25rem);
-  color: var(--ink); margin-top: 0.2rem; word-break: break-all;
-}
-/* the room code, highlighted within the URL — swap the colour to taste */
-.join__code { color: var(--car-orange); letter-spacing: 0.03em; }
-
-#count {
-  display: flex; align-items: center; gap: 0.6rem;
-  font-weight: 800; color: var(--brand);
-  font-size: clamp(0.95rem, 1.3vw, 1.15rem);
-  margin: 0.2rem 0 1rem;
-}
-#count::before {
-  content: ''; width: 0.65rem; height: 0.65rem; border-radius: 50%;
-  background: var(--brand); box-shadow: 0 0 0 4px rgba(43, 182, 115, 0.2);
-}
-
-/* Player seats — laid out in a single row, wrapping only when the card runs
-   out of width. Empty seats render as placeholders (see renderRoster), so the
-   card keeps the same footprint from 0 players to full instead of reflowing as
-   people join. */
-/* Always FOUR seats in one row (room is capped at 4 players), each an equal
-   fraction of the card, so slots — and the card — scale fluidly with the
-   viewport instead of wrapping. Empty seats stay dashed placeholders so the
-   card keeps its footprint from 0 players to full as people join. */
-#players {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: clamp(0.5rem, 0.8vw, 1rem);
-}
-.seat {
-  position: relative;
+/* Join ticket (left rail) — QR + URL + room-code tiles on one sticker card.
+   A <button>: the whole ticket copies the join link. */
+.ticket {
+  position: absolute;
+  left: clamp(18px, 2.4vw, 36px); top: clamp(84px, 13.5vh, 122px);
+  width: clamp(168px, 15vw, 224px);
   display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
-  min-width: 0; padding: 0.7rem 0.6rem 0.65rem;
+  padding: 0.7rem 0.7rem 0.85rem;
+  font: inherit; color: var(--ink); text-align: center;
   background: var(--surface);
-  border: 3px solid var(--c, var(--hairline));
-  border-radius: var(--r);
+  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  transform: rotate(-1.2deg);
+  cursor: pointer;
+  transition: box-shadow 0.08s ease, transform 0.08s ease;
+}
+.ticket:hover { box-shadow: 8px 8px 0 rgba(42, 39, 53, 0.2); }
+.ticket:active { transform: rotate(-1.2deg) translate(3px, 3px); box-shadow: 4px 4px 0 rgba(42, 39, 53, 0.18); }
+.ticket:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+/* Reserve a square box up front (aspect-ratio, not the canvas' intrinsic size)
+   so the ticket holds its final footprint before the async QR fetch resolves
+   (a blank <canvas> is 300×150 — without this the card would pop taller). */
+#qr { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; image-rendering: pixelated; }
+.ticket__url {
+  max-width: 100%;
+  font-family: var(--font-display); font-weight: 600; font-size: 12.5px;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* the room code as coloured letter tiles (renderJoinUrl), hand-slapped ±2° */
+.ticket__code { display: flex; justify-content: center; gap: 5px; min-height: 29px; }
+.ticket__code:empty { display: none; }
+.code-tile {
+  width: 26px; height: 29px; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 15px; line-height: 1;
+  color: #fff;
+  border: 3px solid var(--ink); border-radius: 7px;
+  background: var(--red); transform: rotate(2deg);
+}
+.code-tile:nth-child(4n+2) { background: var(--blue);   transform: rotate(-2deg); }
+.code-tile:nth-child(4n+3) { background: var(--green);  transform: rotate(2deg); }
+.code-tile:nth-child(4n)   { background: var(--purple); transform: rotate(-2deg); }
+
+/* Cup slot (right rail) — dashed open slot pre-pick, red cup sticker + races
+   pill + difficulty pips post-pick (renderCupSlot fills it). */
+.cup-slot {
+  position: absolute;
+  right: clamp(18px, 2.4vw, 36px); top: clamp(92px, 14.5vh, 132px);
+  width: clamp(168px, 15vw, 230px);
+  display: flex; justify-content: center;
+}
+.cup-slot__empty {
+  width: 100%; padding: 1.1rem 0.9rem;
+  border: 3px dashed rgba(42, 39, 53, 0.5); border-radius: var(--r);
+  background: color-mix(in srgb, #fff 55%, transparent);
+  color: var(--ink-3); font-weight: 700; font-size: 0.95rem; text-align: center;
+}
+.cup-slot__pick { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.cup-sticker {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(1.2rem, 1.8vw, 1.7rem); line-height: 1.05;
+  color: #fff; text-align: center;
+  background: var(--red); border: 3px solid var(--ink); border-radius: var(--r);
+  padding: 0.45em 0.75em;
+  transform: rotate(-2deg);
+  box-shadow: 5px 5px 0 rgba(42, 39, 53, 0.2);
+}
+.cup-races {
+  font-family: var(--font-display); font-weight: 600; font-size: 0.78rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink);
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.3em 0.95em;
   box-shadow: var(--shadow-pop);
 }
-/* empty-seat placeholder — a square dashed box matching the .carthumb footprint */
-.seat__open {
-  width: 100%; aspect-ratio: 1 / 1; border-radius: var(--r-sm);
-  background: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.04) 0 7px, transparent 7px 14px);
+/* difficulty tendency — 4 pips, the first N filled RED (celebration colour;
+   never the old green→amber ramp) */
+.cup-meter { display: inline-flex; gap: 6px; }
+.cup-meter i {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid var(--ink); background: var(--surface);
 }
+.cup-meter i.is-on { background: var(--red); }
+
+/* Centre tagline — pre-pick only (renderLobbyPick hides it on the first pick;
+   the revealed track preview owns the centre after that). */
+.tagline {
+  position: absolute; left: 50%; top: 42%;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
+  text-align: center;
+  color: #fff; background: var(--red);
+  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  padding: clamp(1rem, 2.2vw, 1.7rem) clamp(1.4rem, 3vw, 2.6rem);
+  box-shadow: var(--shadow-card);
+}
+.tagline__main {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(26px, 3.6vw, 52px); line-height: 1; letter-spacing: 0.01em;
+}
+.tagline__sub { font-weight: 800; font-size: clamp(13px, 1.3vw, 19px); opacity: 0.95; }
+
+/* Seat dock (bottom-centre) — the joined headline over a horizontal row of
+   sticker seat chips. Room is capped at 4 players, so the dock never wraps. */
+.lobby-foot {
+  position: absolute; left: 0; right: 0; bottom: clamp(16px, 3.5vh, 34px);
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+}
+#count {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(0.85rem, 1.2vw, 1.05rem); color: var(--ink);
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.32em 0.95em;
+  box-shadow: var(--shadow-pop);
+  transform: rotate(1deg);
+}
+#count::before {
+  content: ''; width: 0.6rem; height: 0.6rem; border-radius: 50%;
+  background: var(--green); border: 2px solid var(--ink);
+}
+#players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
+/* Seat chip — a white sticker pill: mini car render, livery dot + name; ready
+   check / host star pinned to the top-right corner. Neighbours lean opposite
+   ways, like stickers slapped down one after another. */
+.seat {
+  position: relative;
+  display: flex; align-items: center; gap: 0.5rem;
+  height: 58px; padding: 0.3rem 1.05rem 0.3rem 0.5rem;
+  background: var(--surface);
+  border: 3px solid var(--ink);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
+}
+.seat:nth-child(odd)  { transform: rotate(-1.4deg); }
+.seat:nth-child(even) { transform: rotate(1.4deg); }
+.seat .carthumb { width: 44px; }
 .seat__name {
-  display: flex; align-items: center; gap: 0.45rem; max-width: 100%;
-  font-weight: 800; font-size: clamp(0.95rem, 1.15vw, 1.2rem); color: var(--ink);
+  display: flex; align-items: center; gap: 0.4rem;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(0.9rem, 1.15vw, 1.1rem); color: var(--ink);
 }
-.seat__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat__label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: clamp(4.5rem, 9vw, 9rem);
+}
 .seat__dot {
   width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none;
-  background: var(--c, #888); box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
+  background: var(--c, #888); border: 2px solid var(--ink);
 }
 .seat--off { opacity: 0.5; }
-/* readiness check — a brand-green circle checkmark pinned to the seat's
-   top-right corner; present (invisible) on every taken seat and revealed once
-   the player's "I'm ready" lands, so the seat layout never shifts. */
+/* readiness check — a green circle checkmark on the chip's top-right corner;
+   present (invisible) on every taken seat and revealed once the player's
+   "I'm ready" lands, so the chip layout never shifts. */
 .seat__ready {
   visibility: hidden;
-  position: absolute; top: 0.45rem; right: 0.45rem;
-  width: clamp(1.3rem, 1.9vw, 1.7rem); aspect-ratio: 1;
+  position: absolute; top: -0.55rem; right: -0.3rem;
+  width: 1.5rem; aspect-ratio: 1;
   display: grid; place-items: center;
-  color: #fff; background: var(--brand);
-  border: 2px solid #fff; border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+  color: #fff; background: var(--green);
+  border: 2.5px solid var(--ink); border-radius: 50%;
 }
 .seat__ready svg { width: 70%; height: 70%; }
 .seat--ready .seat__ready { visibility: visible; }
-/* host marker — a black star in the same top-right corner as the ready check
-   (mutually exclusive: the host never readies). A white drop-shadow keeps it
-   legible over any car livery behind it. */
+/* host marker — a gold star with an ink stroke, same corner as the ready check
+   (mutually exclusive: the host never readies). */
 .seat__host {
-  position: absolute; top: 0.4rem; right: 0.5rem;
-  width: clamp(1.4rem, 2vw, 1.8rem); aspect-ratio: 1;
+  position: absolute; top: -0.85rem; right: -0.5rem;
+  width: 1.8rem; aspect-ratio: 1;
   display: grid; place-items: center;
-  filter: drop-shadow(0 0 2px #fff) drop-shadow(0 1px 2px rgba(255, 255, 255, 0.9));
 }
-.seat__host svg { width: 100%; height: 100%; fill: var(--ink); }
+.seat__host svg {
+  width: 100%; height: 100%;
+  fill: #ffc83d; stroke: var(--ink); stroke-width: 1.7;
+  stroke-linejoin: round; paint-order: stroke fill;
+}
+/* open seat — a dashed placeholder pill (the square .seat__open box from the
+   old card layout stays in the markup contract but isn't shown in the dock) */
 .seat--open {
-  background: transparent; border-style: dashed; border-color: #d4deea;
+  background: color-mix(in srgb, #fff 50%, transparent);
+  border: 3px dashed rgba(42, 39, 53, 0.45);
   box-shadow: none;
+  padding: 0.3rem 1.2rem;
 }
 .seat--open .seat__name { color: var(--ink-3); }
 .seat--open .seat__dot { display: none; }
-
-/* QR — the join prompt lives in the welcome card's #count ("Scan the QR code to
-   join"), so the QR itself is just the centered card. */
-.lobby__right { position: relative; display: flex; align-items: center; justify-content: center; }
-.qr-card {
-  position: relative;
-  background: #fff; border-radius: var(--r-lg); padding: 1.1rem;
-  box-shadow: var(--shadow-float);
-}
-/* Reserve a square box up front (aspect-ratio, not the canvas' intrinsic size) so
-   the card holds its final footprint before the async QR fetch resolves. A blank
-   <canvas> is 300×150 (2:1); without this it would render half-height and the
-   card would pop taller the moment renderQR swaps in the square bitmap. */
-#qr { display: block; width: min(22vw, 32vh); aspect-ratio: 1 / 1; image-rendering: pixelated; }
+.seat--open .seat__open { display: none; }
 
 /* Build/version badge — preview builds only (the server leaves it empty in
    production, and :empty hides it). Pinned to the lobby's bottom-right corner,
@@ -476,19 +523,23 @@ html.cam-free #race { pointer-events: none; }
 }
 
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
-   The lobby is designed for a wide screen; on a narrow viewport the two-column
-   card | QR layout cramps. Stack instead: welcome card on top, QR below it. */
+   The rail layout is designed for a wide screen; on a narrow viewport stack
+   the chrome in one scrolling column instead. (The device chooser covers most
+   of these visits anyway.) */
 @media (max-width: 860px) {
   html, body { overflow-y: auto; }
   #lobby {
-    grid-template-columns: 1fr;
     height: auto; min-height: 100%;
-    align-content: start; justify-items: center;
-    gap: 5vw; padding: 6vh 6vw;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 1.4rem; padding: 1.4rem 1rem 2rem;
   }
-  .lobby__left { width: 100%; max-width: 30rem; }
-  .lobby__right { flex-direction: column; }
-  #qr { width: min(62vw, 38vh); }
+  .lobby__wordmark, .ticket, .cup-slot, .tagline, .lobby-foot { position: static; }
+  .tagline { transform: rotate(-2deg); order: 1; }
+  .ticket { order: 2; width: min(70vw, 260px); }
+  .cup-slot { order: 3; }
+  .lobby-foot { order: 4; }
+  #players { flex-wrap: wrap; justify-content: center; }
+  .version-badge { position: fixed; }
 }
 
 /* ---- Toast ---- transient confirmation (e.g. "Copied"), bottom-centre.

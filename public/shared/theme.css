@@ -304,10 +304,12 @@ body {
   border: 3px solid var(--ink); border-radius: 50%;
   clip-path: inset(0 0 40% 0);
 }
-.scene__cloud--a { top: 12%; right: 10%; width: 150px; height: 42px; transform: rotate(-2deg); }
+/* positioned clear of the display lobby's rails (ticket left, cup slot right)
+   and the centre tagline */
+.scene__cloud--a { top: 9%; left: 34%; width: 150px; height: 42px; transform: rotate(-2deg); }
 .scene__cloud--a::before { width: 62px; height: 62px; top: -26px; left: 24px; }
 .scene__cloud--a::after  { width: 46px; height: 46px; top: -16px; left: 82px; }
-.scene__cloud--b { top: 24%; right: 28%; width: 104px; height: 30px; transform: rotate(2deg); }
+.scene__cloud--b { top: 20%; right: 23%; width: 104px; height: 30px; transform: rotate(2deg); }
 .scene__cloud--b::before { width: 44px; height: 44px; top: -18px; left: 18px; }
 .scene__cloud--b::after  { width: 34px; height: 34px; top: -11px; left: 54px; }
 

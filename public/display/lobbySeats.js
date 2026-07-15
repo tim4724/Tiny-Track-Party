@@ -68,3 +68,29 @@ export function renderSeats(listEl, seats) {
 export function seatCountText(n) {
   return n ? `${n} racer${n > 1 ? 's' : ''} joined` : 'Scan the QR code to join';
 }
+
+// Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
+// live lobby (renderLobbyPick in main.js) and the gallery preview for the same
+// no-drift reason. Two states:
+//   pre-pick : { hostName? }             → dashed slot, "<host> picks the cup…"
+//   picked   : { name, races?, difficulty? } → red cup sticker + races pill +
+//              difficulty pips (0–4 filled; null hides the meter)
+export function renderCupSlot(slotEl, state) {
+  const picked = !!(state && state.name);
+  slotEl.querySelector('.cup-slot__empty').classList.toggle('hidden', picked);
+  slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
+  if (!picked) {
+    // textContent — the host name is player-supplied, never markup.
+    slotEl.querySelector('.cup-slot__empty').textContent = (state && state.hostName)
+      ? `${state.hostName} picks the cup on their phone…`
+      : 'Pick the cup on a phone…';
+    return;
+  }
+  slotEl.querySelector('.cup-sticker').textContent = state.name;
+  const races = slotEl.querySelector('.cup-races');
+  races.textContent = state.races || '';
+  races.classList.toggle('hidden', !state.races);
+  const meter = slotEl.querySelector('.cup-meter');
+  meter.classList.toggle('hidden', state.difficulty == null);
+  meter.querySelectorAll('i').forEach((pip, i) => pip.classList.toggle('is-on', i < (state.difficulty || 0)));
+}

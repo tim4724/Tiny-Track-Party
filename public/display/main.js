@@ -9,7 +9,7 @@ import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, seatCountText } from './lobbySeats.js';
+import { renderSeats, seatCountText, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
@@ -457,13 +457,16 @@ const net = new DisplayNet({
   trackCatalog,
   defaultTrackId: selectedTrackId,
   drawRandomTrack: () => randomBag.draw(),
-  onTrackChange: selectTrack,
+  // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot +
+  // tagline even when the resolved trackId didn't change (e.g. a mode switch
+  // landing on the same circuit, where selectTrack early-returns).
+  onTrackChange: (id) => { selectTrack(id); renderLobbyPick(); },
   onRoomReady: async ({ roomCode, joinUrl }) => {
-    // The room code rides along in the join URL's path; we highlight that
-    // trailing segment rather than showing the code separately.
-    currentJoinUrl = joinUrl;                   // the full link the join box copies
-    try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
-    catch (_) { el('joinurl').textContent = joinUrl; }
+    // The room code rides along in the join URL's path; the ticket shows the
+    // URL line (code stripped) with the code itself as letter tiles below.
+    currentJoinUrl = joinUrl;                   // the full link the join ticket copies
+    try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode, el('joincode')); }
+    catch (_) { el('joinurl').textContent = joinUrl; el('joincode').textContent = ''; }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
   },
   onRosterChange: renderRoster,
@@ -605,7 +608,44 @@ function renderRoster(roster, hostPeerIndex) {
     connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
   })));
   el('count').textContent = seatCountText(roster.length);
+  renderLobbyPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
+}
+
+// Lobby right-rail cup slot + centre tagline, driven by the same state as the
+// phones' track-pick UI (net.mode/cupId/trackId). Pre-pick: a dashed slot
+// naming the host + the "GRAB YOUR PHONES!" tagline. Post-pick: the cup (or
+// exact track / random) as a red sticker with races pill + difficulty pips —
+// and the tagline yields the centre to the revealed 3D preview.
+function renderLobbyPick() {
+  const slot = el('cup-slot');
+  if (!slot) return;
+  let state;
+  if (net.mode === 'cup') {
+    const cup = CUPS.find((c) => c.id === net.cupId);
+    const entry = trackCatalog.find((t) => t.cup === net.cupId);
+    state = {
+      name: cup ? cup.name : '?',
+      races: `${cup ? cup.tracks.length : 4} races`,
+      difficulty: entry ? entry.cupDifficulty : null
+    };
+  } else if (net.mode === 'track') {
+    const entry = trackCatalog.find((t) => t.id === net.trackId);
+    state = {
+      name: entry ? entry.name : '?',
+      races: '1 race',
+      difficulty: entry ? entry.cupDifficulty : null
+    };
+  } else if (net.mode === 'random') {
+    // an endless surprise series — the drawn circuit spins in the preview, but
+    // the sticker sells the mode, not the draw
+    state = { name: 'Random', races: 'endless', difficulty: null };
+  } else {
+    const h = net.flow.list().find((p) => p.peerIndex === net.flow.host);
+    state = { hostName: h && h.name };
+  }
+  renderCupSlot(slot, state);
+  el('tagline').classList.toggle('hidden', net.mode !== null);
 }
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
@@ -1429,7 +1469,8 @@ if (_scenario) {
     {
       scenario: _scn,
       players: _int(_params.get('players'), 4),
-      host: _params.get('host') === null ? null : _int(_params.get('host'), 0)
+      host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
+      picked: _params.get('picked') === '1'   // lobby scenario: post-pick chrome over the live preview
     },
     { scene, track, scenePromise }
   ));
@@ -1479,6 +1520,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
+  { key: 'picked', label: 'Cup picked', hint: 'lobby: post-pick chrome over the preview', type: 'flag' },
   { section: 'Solo drive' },
   { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
     options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },
