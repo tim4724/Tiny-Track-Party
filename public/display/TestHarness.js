@@ -192,7 +192,7 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   function fakeJoin(code) {
-    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code, el('joincode'));
+    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code);
     fetchQR((location.origin || 'https://tinytrack.party') + '/' + code)
       .then((m) => renderQR(el('qr'), m))
       .catch(() => { /* gallery still works without the QR */ });
@@ -202,7 +202,6 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
-    el('joincode').textContent = '';
     renderCupSlot(el('cup-slot'), {});   // no host yet → generic pre-pick slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     return;
@@ -217,7 +216,6 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
-    el('joincode').textContent = '';
     renderCupSlot(el('cup-slot'), {});
     el('device-choice').style.display = 'flex';
     return;

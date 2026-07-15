@@ -715,23 +715,20 @@ export class DisplayNet extends GameNet {
   }
 }
 
-// Render a join URL into the ticket: `el` gets the URL line with the trailing
-// room code stripped (the trailing "/" reads as "…then the code"), and the
-// code itself lands in `tilesEl` as one coloured letter tile per character
-// (<span class="code-tile">, tinted/tilted by CSS nth-child). The code is the
-// last path segment (e.g. the BZK4 in tinytrack.party/BZK4). Built with DOM
-// nodes (not innerHTML) so everything is always treated as text.
-export function renderJoinUrl(el, fullText, code, tilesEl) {
-  const hasCode = !!(code && fullText.endsWith(code));
-  el.textContent = hasCode ? fullText.slice(0, fullText.length - code.length) : fullText;
-  if (!tilesEl) return;
-  tilesEl.textContent = '';
-  if (!hasCode) return;
-  for (const ch of code) {
-    const t = document.createElement('span');
-    t.className = 'code-tile';
-    t.textContent = ch;
-    tilesEl.appendChild(t);
+// Render a join URL into `el` as one line, wrapping the trailing room code in
+// a <span class="ticket__cd"> so it reads in the accent colour. The code is
+// the last path segment (e.g. the BZK4 in tinytrack.party/BZK4). Built with
+// DOM nodes (not innerHTML) so the code is always treated as text.
+export function renderJoinUrl(el, fullText, code) {
+  el.textContent = '';
+  if (code && fullText.endsWith(code)) {
+    el.append(fullText.slice(0, fullText.length - code.length));
+    const span = document.createElement('span');
+    span.className = 'ticket__cd';
+    span.textContent = code;
+    el.appendChild(span);
+  } else {
+    el.textContent = fullText;
   }
 }
 

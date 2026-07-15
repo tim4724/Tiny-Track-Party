@@ -86,14 +86,13 @@
        between the two. -->
   <section id="lobby">
     <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
-         TINY TRACK PARTY! over QR, join URL and room-code letter tiles
-         (filled by renderJoinUrl in Net.js). It's a <button>: click (or
+         TINY TRACK PARTY! over QR + the join URL (code highlighted in the
+         accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
          Enter/Space) copies the full join link, confirmed by the #toast. -->
     <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
       <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
       <canvas id="qr"></canvas>
       <div class="ticket__url" id="joinurl">…</div>
-      <div class="ticket__code" id="joincode"></div>
     </button>
 
     <!-- Cup slot — a dashed open slot until the host picks on their phone,

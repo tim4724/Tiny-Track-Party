@@ -57,7 +57,7 @@ html, body {
 /* the in-card wordmark: the kit badge's white die-cut edge would vanish on the
    white card, so here it's the plain ink/red lockup — same face, same tilt */
 .ticket__wordmark {
-  font-size: clamp(19px, 1.9vw, 28px);   /* .l2 scales along at 1.24em */
+  font-size: clamp(25px, 2.5vw, 38px);   /* .l2 scales along at 1.24em */
   -webkit-text-stroke-width: 0;
   filter: none;
   margin: 0.1rem 0 0.15rem;
@@ -69,24 +69,12 @@ html, body {
 .ticket__url {
   max-width: 100%;
   font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(14px, 1.3vw, 19px);
+  font-size: clamp(16px, 1.55vw, 23px);
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* the room code as coloured letter tiles (renderJoinUrl), hand-slapped ±2°.
-   The row keeps its height while empty (room still opening / no code in the
-   welcome preview) so the ticket paints at its FINAL size on first frame. */
-.ticket__code { display: flex; justify-content: center; gap: 7px; min-height: 40px; }
-.code-tile {
-  width: 36px; height: 40px; display: grid; place-items: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 21px; line-height: 1;
-  color: #fff;
-  border: 3px solid var(--ink); border-radius: 9px;
-  background: var(--red); transform: rotate(2deg);
-}
-.code-tile:nth-child(4n+2) { background: var(--blue);   transform: rotate(-2deg); }
-.code-tile:nth-child(4n+3) { background: var(--green);  transform: rotate(2deg); }
-.code-tile:nth-child(4n)   { background: var(--purple); transform: rotate(-2deg); }
+/* the room code, inline in the URL — plain text in the accent colour */
+.ticket__cd { color: var(--accent); font-weight: 700; letter-spacing: 0.04em; }
 
 /* Cup slot (right rail) — dashed open slot pre-pick, the race card post-pick
    (renderCupSlot fills it). Top-aligned with the join ticket across the band. */
@@ -184,8 +172,8 @@ html, body {
    ways, like stickers slapped down one after another. */
 .seat {
   position: relative;
-  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-  height: 72px; padding: 0.3rem 0.9rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  height: 72px; padding: 0.3rem 0.9rem 0.3rem 0.6rem;
   min-width: clamp(9.5rem, 12.5vw, 12.5rem);   /* filled + open share one footprint */
   background: var(--surface);
   border: 3px solid var(--ink);
@@ -194,9 +182,10 @@ html, body {
 }
 .seat:nth-child(odd)  { transform: rotate(-1.4deg); }
 .seat:nth-child(even) { transform: rotate(1.4deg); }
-.seat .carthumb { width: 58px; }
+.seat .carthumb { width: 58px; flex: none; }   /* car pinned left… */
 .seat__name {
-  display: flex; align-items: center;
+  flex: 1; min-width: 0;                        /* …name centred in the rest */
+  display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display); font-weight: 700;
   /* the name IS the livery swatch — tinted text, no dot */
   font-size: clamp(1.05rem, 1.45vw, 1.4rem); color: var(--c, var(--ink));

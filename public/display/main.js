@@ -465,11 +465,11 @@ const net = new DisplayNet({
   // landing on the same circuit, where selectTrack early-returns).
   onTrackChange: (id) => { selectTrack(id); renderLobbyPick(); },
   onRoomReady: async ({ roomCode, joinUrl }) => {
-    // The room code rides along in the join URL's path; the ticket shows the
-    // URL line (code stripped) with the code itself as letter tiles below.
+    // The room code rides along in the join URL's path; the ticket shows one
+    // URL line with the trailing code highlighted in the accent colour.
     currentJoinUrl = joinUrl;                   // the full link the join ticket copies
-    try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode, el('joincode')); }
-    catch (_) { el('joinurl').textContent = joinUrl; el('joincode').textContent = ''; }
+    try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
+    catch (_) { el('joinurl').textContent = joinUrl; }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
   },
   onRosterChange: renderRoster,
