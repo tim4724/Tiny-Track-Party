@@ -11,26 +11,41 @@ html, body {
 }
 
 /* ---- Lobby ---- */
-/* Sticker chrome pinned to fixed rails over the full viewport (paper stage OR
-   live 3D preview behind — the positions are identical in both states). */
+/* Sticker chrome on ONE poster grid over the full viewport (paper stage OR
+   live 3D preview behind — the layout is identical in both states):
+   a header band (wordmark), a content band where the join ticket and the cup
+   slot TOP-ALIGN on the same line with the tagline centred between them, and
+   a footer band (seat dock). Shared gutters, one alignment line per band —
+   the hand-slapped tilts stay playful because the grid beneath is straight. */
 #lobby {
   position: relative;
   z-index: 1;                 /* float the lobby over the #scene backdrop */
   height: 100%;
+  display: grid;
+  grid-template-columns: clamp(240px, 24vw, 380px) 1fr clamp(190px, 17vw, 270px);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "wordmark wordmark wordmark"
+    "ticket   tagline  cup"
+    "dock     dock     dock";
+  column-gap: clamp(16px, 2vw, 36px);
+  padding:
+    clamp(14px, 2.4vh, 26px) clamp(20px, 2.6vw, 40px)
+    clamp(16px, 3vh, 32px);
 }
 
 .lobby__wordmark {
-  position: absolute;
-  left: clamp(20px, 2.6vw, 40px); top: clamp(14px, 2.4vh, 26px);
+  grid-area: wordmark; justify-self: start;
+  margin-bottom: clamp(10px, 2vh, 22px);
   font-size: clamp(20px, 2.1vw, 30px);   /* .l2 scales along at 1.24em */
 }
 
 /* Join ticket (left rail) — QR + URL + room-code tiles on one sticker card.
    A <button>: the whole ticket copies the join link. */
 .ticket {
-  position: absolute;
-  left: clamp(18px, 2.4vw, 40px); top: clamp(76px, 12.5vh, 118px);
-  width: clamp(240px, 24vw, 380px);   /* the QR is the lobby's MAIN element */
+  grid-area: ticket; align-self: start;
+  width: 100%;                        /* the QR is the lobby's MAIN element */
+  max-width: 58vh;                    /* never taller than the band on squat windows */
   display: flex; flex-direction: column; align-items: center; gap: 0.55rem;
   padding: 0.85rem 0.85rem 1rem;
   font: inherit; color: var(--ink); text-align: center;
@@ -69,12 +84,12 @@ html, body {
 .code-tile:nth-child(4n+3) { background: var(--green);  transform: rotate(2deg); }
 .code-tile:nth-child(4n)   { background: var(--purple); transform: rotate(-2deg); }
 
-/* Cup slot (right rail) — dashed open slot pre-pick, red cup sticker + races
-   pill + difficulty pips post-pick (renderCupSlot fills it). */
+/* Cup slot (right rail) — dashed open slot pre-pick, the race card post-pick
+   (renderCupSlot fills it). Top-aligned with the join ticket across the band. */
 .cup-slot {
-  position: absolute;
-  right: clamp(18px, 2.4vw, 40px); top: clamp(92px, 14.5vh, 132px);
-  width: clamp(190px, 17vw, 270px);
+  grid-area: cup; align-self: start; justify-self: end;
+  width: 100%;
+  max-width: 44vh;                    /* same squat-window guard as the ticket */
   display: flex; justify-content: center;
 }
 .cup-slot__empty {
@@ -137,8 +152,9 @@ html, body {
 /* Centre tagline — pre-pick only (renderLobbyPick hides it on the first pick;
    the revealed track preview owns the centre after that). */
 .tagline {
-  position: absolute; left: 50%; top: 42%;
-  transform: translate(-50%, -50%) rotate(-3deg);
+  grid-area: tagline; align-self: center; justify-self: center;
+  margin-bottom: 8vh;                 /* optical centre: sit a touch above true centre */
+  transform: rotate(-3deg);
   display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
   text-align: center;
   color: #fff; background: var(--red);
@@ -155,7 +171,7 @@ html, body {
 /* Seat dock (bottom-centre) — the joined headline over a horizontal row of
    sticker seat chips. Room is capped at 4 players, so the dock never wraps. */
 .lobby-foot {
-  position: absolute; left: 0; right: 0; bottom: clamp(16px, 3.5vh, 34px);
+  grid-area: dock;
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
@@ -636,10 +652,9 @@ html.cam-free #race { pointer-events: none; }
     display: flex; flex-direction: column; align-items: center;
     gap: 1.4rem; padding: 1.4rem 1rem 2rem;
   }
-  .lobby__wordmark, .ticket, .cup-slot, .tagline, .lobby-foot { position: static; }
-  .tagline { transform: rotate(-2deg); order: 1; }
-  .ticket { order: 2; width: min(70vw, 260px); }
-  .cup-slot { order: 3; }
+  .tagline { transform: rotate(-2deg); order: 1; margin-bottom: 0; }
+  .ticket { order: 2; width: min(70vw, 300px); max-width: none; }
+  .cup-slot { order: 3; width: min(70vw, 300px); max-width: none; }
   .lobby-foot { order: 4; }
   #players { flex-wrap: wrap; justify-content: center; }
   .version-badge { position: fixed; }
