@@ -10,11 +10,11 @@
 import { Game } from './engine/Game.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { renderSeats, seatCountText, renderCupSlot } from './lobbySeats.js';
+import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
 import { POINTS_BY_RANK } from './GrandPrix.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
-import { TRACK_LIST } from './TrackBuilder.js';
+import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -189,7 +189,6 @@ export function runDisplayScenario(opts, ctx) {
       // preview the readiness pill: everyone but the host has readied up
       ready: hostPeerIndex != null && s !== hostPeerIndex
     })));
-    el('count').textContent = seatCountText(slots.length);
   }
 
   function fakeJoin(code) {
@@ -240,7 +239,10 @@ export function runDisplayScenario(opts, ctx) {
       renderCupSlot(el('cup-slot'), {
         name: cup.name,
         races: `${cup.tracks.length} races`,
-        difficulty: first ? first.cupDifficulty : null
+        difficulty: first ? first.cupDifficulty : null,
+        // the live lobby reads these from main.js's prebuilt catalog; the
+        // harness builds the cup's four schematics itself (pure geometry)
+        maps: cup.tracks.map((id, i) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })), n: i + 1 }))
       });
       el('tagline').classList.add('hidden');
       el('scene').classList.remove('hidden', 'is-dim');

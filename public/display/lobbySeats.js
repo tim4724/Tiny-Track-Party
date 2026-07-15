@@ -4,6 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
+import { schematicSvg } from '../shared/trackPicker.js';
 
 const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 
@@ -63,19 +64,15 @@ export function renderSeats(listEl, seats) {
   }
 }
 
-// Headline over the seat dock (shared for the same no-drift reason). Always
-// the scan prompt — a "N racers joined" count was tried and cut (the dock
-// itself already shows who's in; the QR call-to-action is the useful line).
-export function seatCountText() {
-  return 'Scan the QR code to join';
-}
-
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
 // live lobby (renderLobbyPick in main.js) and the gallery preview for the same
 // no-drift reason. Two states:
 //   pre-pick : { hostName? }             → dashed slot, "<host> picks the cup…"
-//   picked   : { name, races?, difficulty? } → red cup sticker + races pill +
-//              difficulty pips (0–4 filled; null hides the meter)
+//   picked   : { name, races?, difficulty?, maps? } → the race card: red cup
+//              sticker over the picked circuits as mini schematics (maps =
+//              [{ svg, n? }] — 4 numbered minis for a cup, 1 for an exact
+//              track / the random draw), races pill + difficulty pips
+//              (0–4 filled; null hides the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__empty').classList.toggle('hidden', picked);
@@ -88,6 +85,23 @@ export function renderCupSlot(slotEl, state) {
     return;
   }
   slotEl.querySelector('.cup-sticker').textContent = state.name;
+  const mapsEl = slotEl.querySelector('.cup-maps');
+  const maps = (state.maps || []).filter((m) => m && m.svg);
+  mapsEl.textContent = '';
+  mapsEl.classList.toggle('hidden', !maps.length);
+  mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
+  for (const m of maps) {
+    const tile = document.createElement('div');
+    tile.className = 'cup-maps__tile';
+    tile.appendChild(schematicSvg(m.svg));
+    if (m.n != null) {
+      const n = document.createElement('span');
+      n.className = 'cup-maps__n';
+      n.textContent = m.n;
+      tile.appendChild(n);
+    }
+    mapsEl.appendChild(tile);
+  }
   const races = slotEl.querySelector('.cup-races');
   races.textContent = state.races || '';
   races.classList.toggle('hidden', !state.races);

@@ -41,8 +41,8 @@ html, body {
   cursor: pointer;
   transition: box-shadow 0.08s ease, transform 0.08s ease;
 }
-.ticket:hover { box-shadow: 8px 8px 0 rgba(42, 39, 53, 0.2); }
-.ticket:active { transform: rotate(-1.2deg) translate(3px, 3px); box-shadow: 4px 4px 0 rgba(42, 39, 53, 0.18); }
+.ticket:hover { box-shadow: 8px 8px 0 var(--shadow-ink); }
+.ticket:active { transform: rotate(-1.2deg) translate(3px, 3px); box-shadow: 4px 4px 0 var(--shadow-ink); }
 .ticket:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 /* Reserve a square box up front (aspect-ratio, not the canvas' intrinsic size)
    so the ticket holds its final footprint before the async QR fetch resolves
@@ -101,7 +101,21 @@ html, body {
   background: var(--red); border: 3px solid var(--ink); border-radius: var(--r);
   padding: 0.45em 0.75em;
   transform: rotate(-2deg);
-  box-shadow: 5px 5px 0 rgba(42, 39, 53, 0.2);
+  box-shadow: var(--shadow-card);
+}
+/* the picked circuits as mini schematics — a 2×2 grid for a cup's four races
+   (numbered), one full-width map for an exact pick / the random draw */
+.cup-maps { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.cup-maps--one { grid-template-columns: 1fr; }
+.cup-maps--one .track-map { max-width: 72%; margin: 0 auto; }
+.cup-maps__tile { position: relative; }
+.cup-maps__tile .track-map { border: 2.5px solid var(--ink); }
+.cup-maps__n {
+  position: absolute; top: -6px; left: -6px;
+  min-width: 1.5em; text-align: center;
+  font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; line-height: 1.5em;
+  color: #fff; background: var(--ink); border-radius: var(--r-pill);
+  padding: 0 0.3em;
 }
 .cup-races {
   font-family: var(--font-display); font-weight: 600; font-size: 0.78rem;
@@ -143,15 +157,6 @@ html, body {
 .lobby-foot {
   position: absolute; left: 0; right: 0; bottom: clamp(16px, 3.5vh, 34px);
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
-}
-#count {
-  display: inline-block;
-  font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(0.85rem, 1.2vw, 1.05rem); color: var(--ink);
-  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
-  padding: 0.32em 0.95em;
-  box-shadow: var(--shadow-pop);
-  transform: rotate(1deg);
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
 /* Seat chip — a white sticker pill: mini car render, livery dot + name; ready
@@ -298,7 +303,7 @@ html.cam-free #race { pointer-events: none; }
      the wordmark (degrades to plain ink text without paint-order) */
   -webkit-text-stroke: 12px #fff;
   paint-order: stroke fill;
-  filter: drop-shadow(6px 6px 0 rgba(42, 39, 53, 0.22));
+  filter: drop-shadow(6px 6px 0 var(--shadow-ink));
   pointer-events: none;
 }
 /* "GO!" stays up the beat after the start (cars are already moving) and fades
@@ -325,7 +330,7 @@ html.cam-free #race { pointer-events: none; }
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.3em 0.55em;
   transform: rotate(-2deg);
-  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+  box-shadow: var(--shadow-pop);
   white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -346,7 +351,7 @@ html.cam-free #race { pointer-events: none; }
   color: var(--ink); background: var(--surface);
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.22em 0.45em;
-  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+  box-shadow: var(--shadow-pop);
 }
 .cell-rank__lap {
   display: table; margin-left: auto; margin-top: 0.45rem;
@@ -366,7 +371,7 @@ html.cam-free #race { pointer-events: none; }
   display: flex; align-items: center; justify-content: center;
   background: var(--surface);
   border-radius: 13px; border: 3px solid var(--ink);
-  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.18);
+  box-shadow: var(--shadow-pop);
 }
 .cell-label__item.is-empty {
   background: transparent;

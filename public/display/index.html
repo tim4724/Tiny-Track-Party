@@ -105,6 +105,7 @@
       <div class="cup-slot__empty">Pick the cup on a phone…</div>
       <div class="cup-slot__pick hidden">
         <div class="cup-sticker"></div>
+        <div class="cup-maps"></div>
         <div class="cup-races"></div>
         <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
       </div>
@@ -117,13 +118,13 @@
       <div class="tagline__sub">race starts when everyone’s ready</div>
     </div>
 
-    <!-- Seat dock — headline over a horizontal row of sticker seat chips.
-         Seeded with four open-seat placeholders so the dock paints at its full
-         footprint on the first frame, before main.js runs. lobbySeats.js's
-         renderSeats() then replaces these (always keeping >=4 seats) as players
-         join — keep this markup in sync with its `seat--open` branch. -->
+    <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
+         ticket's JOIN AT already carries the call-to-action). Seeded with four
+         open-seat placeholders so the dock paints at its full footprint on the
+         first frame, before main.js runs. lobbySeats.js's renderSeats() then
+         replaces these (always keeping >=4 seats) as players join — keep this
+         markup in sync with its `seat--open` branch. -->
     <div class="lobby-foot">
-      <div id="count">Scan the QR code to join</div>
       <div id="players">
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>

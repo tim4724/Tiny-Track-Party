@@ -9,7 +9,7 @@ import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, seatCountText, renderCupSlot } from './lobbySeats.js';
+import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
 import { setSteerExpo, getSteerExpo } from './engine/Game.js';
@@ -610,7 +610,6 @@ function renderRoster(roster, hostPeerIndex) {
     name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
     connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
   })));
-  el('count').textContent = seatCountText(roster.length);
   renderLobbyPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
@@ -623,6 +622,7 @@ function renderRoster(roster, hostPeerIndex) {
 function renderLobbyPick() {
   const slot = el('cup-slot');
   if (!slot) return;
+  const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
   let state;
   if (net.mode === 'cup') {
     const cup = CUPS.find((c) => c.id === net.cupId);
@@ -630,19 +630,22 @@ function renderLobbyPick() {
     state = {
       name: cup ? cup.name : '?',
       races: `${cup ? cup.tracks.length : 4} races`,
-      difficulty: entry ? entry.cupDifficulty : null
+      difficulty: entry ? entry.cupDifficulty : null,
+      // the cup's circuits as numbered minis — the GP menu at a glance
+      maps: cup ? cup.tracks.map((id, i) => ({ svg: svgOf(id), n: i + 1 })) : []
     };
   } else if (net.mode === 'track') {
     const entry = trackCatalog.find((t) => t.id === net.trackId);
     state = {
       name: entry ? entry.name : '?',
       races: '1 race',
-      difficulty: entry ? entry.cupDifficulty : null
+      difficulty: entry ? entry.cupDifficulty : null,
+      maps: [{ svg: svgOf(net.trackId) }]
     };
   } else if (net.mode === 'random') {
-    // an endless surprise series — the drawn circuit spins in the preview, but
-    // the sticker sells the mode, not the draw
-    state = { name: 'Random', races: 'endless', difficulty: null };
+    // an endless surprise series — the sticker sells the mode; the map shows
+    // this round's draw (it's also what the preview is orbiting)
+    state = { name: 'Random', races: 'endless', difficulty: null, maps: [{ svg: svgOf(net.trackId) }] };
   } else {
     const h = net.flow.list().find((p) => p.peerIndex === net.flow.host);
     state = { hostName: h && h.name };

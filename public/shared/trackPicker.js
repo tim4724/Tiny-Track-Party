@@ -26,7 +26,8 @@ function biomeTint(cupId, pct) {
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
 // toy "track ribbon" look) plus a dot at the start/finish line. `fieldTint` (a CSS
 // colour) paints the field behind the ribbon; omit to keep the CSS default.
-function schematicSvg(svg, fieldTint) {
+// Exported: the display's lobby cup slot renders the same minis (renderCupSlot).
+export function schematicSvg(svg, fieldTint) {
   const el = document.createElementNS(SVGNS, 'svg');
   el.setAttribute('viewBox', svg.viewBox || '0 0 100 100');
   el.setAttribute('class', 'track-map');

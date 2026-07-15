@@ -94,10 +94,15 @@
   --r-lg:   22px;
   --r-pill: 999px;
 
-  /* -- shadows (hard offset, ZERO blur — the die-cut drop) ---------------- */
-  --shadow-pop:   3px 3px 0 rgba(42, 39, 53, 0.16);   /* chips, small stickers */
-  --shadow-card:  7px 7px 0 rgba(42, 39, 53, 0.18);   /* big sticker cards     */
-  --shadow-float: 7px 7px 0 rgba(42, 39, 53, 0.22);   /* hero / QR             */
+  /* -- shadows (hard offset, ZERO blur — the die-cut drop) -----------------
+     ONE rule: offset ≈ 2× the border width, alpha always 0.18 — so every
+     sticker reads as stamped by the same machine. Small elements (≤2.5px
+     border) take pop, 3px-bordered cards take card. Stage scenery (clouds)
+     deliberately runs lighter — it's backdrop, not chrome. */
+  --shadow-ink:   rgba(42, 39, 53, 0.18);             /* the one shadow colour */
+  --shadow-pop:   3px 3px 0 var(--shadow-ink);        /* chips, small stickers */
+  --shadow-card:  6px 6px 0 var(--shadow-ink);        /* big sticker cards     */
+  --shadow-float: 6px 6px 0 var(--shadow-ink);        /* alias — same as card  */
   --btn-ledge:    rgba(42, 39, 53, 0.9);              /* the push-button ledge */
 }
 
@@ -225,8 +230,16 @@ body {
   padding: 0.85rem 1rem;
   color: var(--ink);
   font-weight: 700;
-  box-shadow: 3px 3px 0 rgba(42, 39, 53, 0.13);
+  box-shadow: var(--shadow-pop);
 }
+
+/* Track schematic (built by schematicSvg in shared/trackPicker.js) — a field
+   with the toy road ribbon. Shared by the phone's track picker and the
+   display's lobby cup slot; the container sizes it. */
+.track-map { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: var(--r-sm); background: color-mix(in srgb, var(--brand), #fff 78%); }
+.track-map__casing { fill: none; stroke: #fff; stroke-width: 9; stroke-linejoin: round; stroke-linecap: round; }
+.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 5.5; stroke-linejoin: round; stroke-linecap: round; }
+.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 1.5; }
 
 /* Dot — a livery colour swatch; set its background inline from CAR_COLORS. */
 .dot {
@@ -266,7 +279,7 @@ body {
   -webkit-text-stroke: 7px #fff;
   paint-order: stroke fill;      /* white die-cut edge */
   transform: rotate(-2deg);
-  filter: drop-shadow(3px 3px 0 rgba(42, 39, 53, 0.22));
+  filter: drop-shadow(3px 3px 0 var(--shadow-ink));
 }
 .wordmark span { display: block; }
 .wordmark .l2 { color: var(--red); font-size: 1.24em; }
