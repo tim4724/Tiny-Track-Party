@@ -46,6 +46,10 @@ section {
 }
 /* the join screen is sparse — center it so it isn't top-heavy */
 #name { justify-content: center; padding-bottom: calc(12vh + var(--safe-bottom)); }
+/* While typing, anchor the form to the TOP instead: on browsers where the
+   keyboard doesn't shrink the layout viewport (iOS ignores the
+   interactive-widget hint), a centred input would sit under the keys. */
+#name:focus-within { justify-content: flex-start; padding-top: calc(6vh + var(--safe-top)); padding-bottom: 0; }
 
 /* the name screen's wordmark badge (kit .wordmark supplies the die-cut look) */
 .name-wordmark { font-size: 28px; margin: 0 0 0.6rem; align-self: flex-start; }

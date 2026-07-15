@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <!-- interactive-widget=resizes-content: the software keyboard SHRINKS the
+       layout viewport (Chrome/Android), so 100dvh flex centring re-centres in
+       the visible strip instead of leaving the name input under the keys.
+       iOS ignores it — #name:focus-within (controller.css) covers that. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <!-- Couch Games launcher theming hints (contract §4): the host tints its floating
        chrome to match. theme-color = the warm paper the page art fades into behind
        the status bar; cg-accent-color = the launcher accents (name chip, spinner,
