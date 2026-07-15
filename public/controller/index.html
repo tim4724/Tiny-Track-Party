@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <!-- Couch Games launcher theming hints (contract §4): the host tints its floating
-       chrome to match. theme-color = the sunny-sky top the page art fades into behind
+       chrome to match. theme-color = the warm paper the page art fades into behind
        the status bar; cg-accent-color = the launcher accents (name chip, spinner,
        rename sheet) — main.js retints it live to the player's livery colour. Pure
        cosmetics: a plain browser ignores cg-accent-color and honours theme-color as
        the standard PWA meta, so both are harmless outside the shell. -->
-  <meta name="theme-color" content="#a8e2ff" />
+  <meta name="theme-color" content="#FFF6EB" />
   <meta name="cg-accent-color" content="#2bb673" />
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
@@ -28,7 +28,7 @@
 <body>
   <!-- Name -->
   <section id="name">
-    <h1>Tiny Track <span>Party</span></h1>
+    <div class="wordmark name-wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="sub">Pick a name and jump in.</p>
     <form id="name-form">
       <input id="name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off" />

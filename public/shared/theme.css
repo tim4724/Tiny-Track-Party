@@ -99,9 +99,6 @@
   --shadow-card:  7px 7px 0 rgba(42, 39, 53, 0.18);   /* big sticker cards     */
   --shadow-float: 7px 7px 0 rgba(42, 39, 53, 0.22);   /* hero / QR             */
   --btn-ledge:    rgba(42, 39, 53, 0.9);              /* the push-button ledge */
-  /* retired top-sheen — transparent no-op kept only while page CSS still
-     references it (composes in comma-joined box-shadow lists). */
-  --inset-hi: inset 0 0 0 rgba(0, 0, 0, 0);
 }
 
 /* 3. Base / reset --------------------------------------------------------- */
