@@ -135,22 +135,23 @@ html, body {
 }
 .cup-meter i.is-on { background: var(--red); }
 
-/* Centre tagline — pre-pick only (renderLobbyPick hides it on the first pick;
-   the revealed track preview owns the centre after that). */
+/* Centre hint — pre-pick only (renderLobbyPick hides it on the first pick;
+   the revealed track preview owns the centre after that). A quiet white
+   sticker, not a shout — the QR ticket is the hero. */
 .tagline {
   grid-area: tagline; align-self: center; justify-self: center;
   margin-bottom: 4vh;                 /* optical centre: sit a touch above true centre */
-  transform: rotate(-3deg);
+  transform: rotate(-2deg);
   display: flex; flex-direction: column; align-items: center;
   text-align: center;
-  color: #fff; background: var(--red);
-  border: 3px solid var(--ink); border-radius: var(--r-lg);
-  padding: clamp(1rem, 2.2vw, 1.7rem) clamp(1.4rem, 3vw, 2.6rem);
-  box-shadow: var(--shadow-card);
+  color: var(--ink); background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r);
+  padding: 0.55em 1.1em;
+  box-shadow: var(--shadow-pop);
 }
 .tagline__main {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(26px, 3.6vw, 52px); line-height: 1; letter-spacing: 0.01em;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
 
 /* Seat dock (bottom-centre) — the joined headline over a horizontal row of

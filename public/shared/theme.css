@@ -291,7 +291,19 @@ body {
    events and sits at the bottom of the stacking order. NO SUN (it was yellow). */
 .scene { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
 
-.scene__sky { position: absolute; inset: 0; background: var(--paper); }
+.scene__sky {
+  position: absolute; inset: 0;
+  /* a soft warm glow high in the sky gives the paper some air */
+  background:
+    radial-gradient(120% 90% at 50% -20%, #fffdf7 0%, rgba(255, 253, 247, 0) 55%),
+    var(--paper);
+}
+/* rolling hills peeking over the grass band — two soft bumps for depth */
+.scene__sky::before, .scene__sky::after {
+  content: ''; position: absolute; border-radius: 50%;
+}
+.scene__sky::before { width: 74%; height: 30%; left: -16%; bottom: 11%; background: #d3edbb; }
+.scene__sky::after  { width: 82%; height: 36%; right: -20%; bottom: 9%; background: #e0f3cd; }
 
 .scene__sun { display: none; }   /* retired — the sun was yellow */
 
@@ -316,6 +328,9 @@ body {
 .scene__cloud--b { top: 20%; right: 23%; width: 104px; height: 30px; transform: rotate(2deg); }
 .scene__cloud--b::before { width: 44px; height: 44px; top: -18px; left: 18px; }
 .scene__cloud--b::after  { width: 34px; height: 34px; top: -11px; left: 54px; }
+.scene__cloud--c { top: 36%; right: 9%; width: 84px; height: 26px; transform: rotate(-2deg); }
+.scene__cloud--c::before { width: 36px; height: 36px; top: -15px; left: 14px; }
+.scene__cloud--c::after  { width: 28px; height: 28px; top: -9px; left: 44px; }
 
 /* Flat grass band, gently rounded top — stage scenery, no outline (outlines
    belong to the stickers sitting ON the stage). */
