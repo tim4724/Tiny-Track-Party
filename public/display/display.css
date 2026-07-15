@@ -22,7 +22,7 @@ html, body {
   z-index: 1;                 /* float the lobby over the #scene backdrop */
   height: 100%;
   display: grid;
-  grid-template-columns: clamp(240px, 24vw, 380px) 1fr clamp(190px, 17vw, 270px);
+  grid-template-columns: clamp(270px, 27vw, 430px) 1fr clamp(190px, 17vw, 270px);
   grid-template-rows: 1fr auto;
   grid-template-areas:
     "ticket tagline cup"
@@ -73,9 +73,10 @@ html, body {
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* the room code as coloured letter tiles (renderJoinUrl), hand-slapped ±2° */
+/* the room code as coloured letter tiles (renderJoinUrl), hand-slapped ±2°.
+   The row keeps its height while empty (room still opening / no code in the
+   welcome preview) so the ticket paints at its FINAL size on first frame. */
 .ticket__code { display: flex; justify-content: center; gap: 7px; min-height: 40px; }
-.ticket__code:empty { display: none; }
 .code-tile {
   width: 36px; height: 40px; display: grid; place-items: center;
   font-family: var(--font-display); font-weight: 700; font-size: 21px; line-height: 1;
@@ -183,8 +184,8 @@ html, body {
    ways, like stickers slapped down one after another. */
 .seat {
   position: relative;
-  display: flex; align-items: center; gap: 0.5rem;
-  height: 58px; padding: 0.3rem 1.05rem 0.3rem 0.5rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  height: 72px; padding: 0.3rem 1.3rem 0.3rem 0.6rem;
   background: var(--surface);
   border: 3px solid var(--ink);
   border-radius: var(--r-pill);
@@ -192,19 +193,16 @@ html, body {
 }
 .seat:nth-child(odd)  { transform: rotate(-1.4deg); }
 .seat:nth-child(even) { transform: rotate(1.4deg); }
-.seat .carthumb { width: 44px; }
+.seat .carthumb { width: 58px; }
 .seat__name {
-  display: flex; align-items: center; gap: 0.4rem;
-  font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(0.9rem, 1.15vw, 1.1rem); color: var(--ink);
+  display: flex; align-items: center;
+  font-family: var(--font-display); font-weight: 700;
+  /* the name IS the livery swatch — tinted text, no dot */
+  font-size: clamp(1.05rem, 1.45vw, 1.4rem); color: var(--c, var(--ink));
 }
 .seat__label {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: clamp(4.5rem, 9vw, 9rem);
-}
-.seat__dot {
-  width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none;
-  background: var(--c, #888); border: 2px solid var(--ink);
+  max-width: clamp(5rem, 10vw, 10rem);
 }
 .seat--off { opacity: 0.5; }
 /* readiness check — a green circle checkmark on the chip's top-right corner;
@@ -241,11 +239,10 @@ html, body {
   padding: 0.3rem 1.2rem;
   /* roughly a filled chip's footprint, so the dock doesn't collapse around
      one lonely name */
-  min-width: clamp(8.5rem, 11vw, 11rem);
+  min-width: clamp(9.5rem, 12.5vw, 12.5rem);
   justify-content: center;
 }
 .seat--open .seat__name { color: var(--ink-3); }
-.seat--open .seat__dot { display: none; }
 .seat--open .seat__open { display: none; }
 
 /* Build/version badge — preview builds only (the server leaves it empty in

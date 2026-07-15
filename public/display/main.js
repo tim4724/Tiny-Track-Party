@@ -632,7 +632,8 @@ function renderLobbyPick() {
       races: `${cup ? cup.tracks.length : 4} races`,
       difficulty: entry ? entry.cupDifficulty : null,
       // the cup's circuits as numbered minis — the GP menu at a glance
-      maps: cup ? cup.tracks.map((id, i) => ({ svg: svgOf(id), n: i + 1 })) : []
+      maps: cup ? cup.tracks.map((id, i) => ({ svg: svgOf(id), n: i + 1 })) : [],
+      cupId: net.cupId   // biome-tints the mini fields, like the phone picker
     };
   } else if (net.mode === 'track') {
     const entry = trackCatalog.find((t) => t.id === net.trackId);
@@ -640,12 +641,18 @@ function renderLobbyPick() {
       name: entry ? entry.name : '?',
       races: '1 race',
       difficulty: entry ? entry.cupDifficulty : null,
-      maps: [{ svg: svgOf(net.trackId) }]
+      maps: [{ svg: svgOf(net.trackId) }],
+      cupId: entry ? entry.cup : null
     };
   } else if (net.mode === 'random') {
     // an endless surprise series — the sticker sells the mode; the map shows
     // this round's draw (it's also what the preview is orbiting)
-    state = { name: 'Random', races: 'endless', difficulty: null, maps: [{ svg: svgOf(net.trackId) }] };
+    const entry = trackCatalog.find((t) => t.id === net.trackId);
+    state = {
+      name: 'Random', races: 'endless', difficulty: null,
+      maps: [{ svg: svgOf(net.trackId) }],
+      cupId: entry ? entry.cup : null
+    };
   } else {
     const h = net.flow.list().find((p) => p.peerIndex === net.flow.host);
     state = { hostName: h && h.name };

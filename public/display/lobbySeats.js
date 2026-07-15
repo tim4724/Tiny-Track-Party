@@ -4,7 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
-import { schematicSvg } from '../shared/trackPicker.js';
+import { schematicSvg, biomeTint } from '../shared/trackPicker.js';
 
 const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 
@@ -26,12 +26,12 @@ export function renderSeats(listEl, seats) {
       seat.className = 'seat' + (p.connected === false ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
       seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
       const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
+      // the name itself carries the livery colour (via the seat's --c) — no dot
       const row = document.createElement('div');
       row.className = 'seat__name';
-      const dot = document.createElement('span'); dot.className = 'seat__dot';
       const nm = document.createElement('span'); nm.className = 'seat__label';
       nm.textContent = p.name;
-      row.appendChild(dot); row.appendChild(nm);
+      row.appendChild(nm);
       // host marker — a black star pinned to the seat's top-right corner (the
       // same slot as the ready check; the host never readies, so they can't
       // collide). Out of the name so a long name can't push it off-screen.
@@ -68,10 +68,11 @@ export function renderSeats(listEl, seats) {
 // live lobby (renderLobbyPick in main.js) and the gallery preview for the same
 // no-drift reason. Two states:
 //   pre-pick : { hostName? }             → dashed slot, "<host> picks the cup…"
-//   picked   : { name, races?, difficulty?, maps? } → the race card: red cup
-//              sticker over the picked circuits as mini schematics (maps =
-//              [{ svg, n? }] — 4 numbered minis for a cup, 1 for an exact
-//              track / the random draw), races pill + difficulty pips
+//   picked   : { name, races?, difficulty?, maps?, cupId? } → the race card:
+//              red cup sticker over the picked circuits as mini schematics
+//              (maps = [{ svg, n? }] — 4 numbered minis for a cup, 1 for an
+//              exact track / the random draw; cupId biome-tints their fields
+//              exactly like the phone picker), races pill + difficulty pips
 //              (0–4 filled; null hides the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
@@ -90,10 +91,11 @@ export function renderCupSlot(slotEl, state) {
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
   mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
+  const tint = state.cupId ? biomeTint(state.cupId, 26) : undefined;
   for (const m of maps) {
     const tile = document.createElement('div');
     tile.className = 'cup-maps__tile';
-    tile.appendChild(schematicSvg(m.svg));
+    tile.appendChild(schematicSvg(m.svg, tint));
     if (m.n != null) {
       const n = document.createElement('span');
       n.className = 'cup-maps__n';

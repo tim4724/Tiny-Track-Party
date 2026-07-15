@@ -18,7 +18,9 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 // green, matching the old default). `pct` is how much biome colour survives: ~26%
 // for the schematic FIELD (the ground the ribbon sits on), a whisper for the panel
 // behind the tiles so the two read as one biome instead of clashing.
-function biomeTint(cupId, pct) {
+// Exported alongside schematicSvg: the display's cup slot tints its minis the
+// same way, so the two surfaces can't drift.
+export function biomeTint(cupId, pct) {
   const hex = '#' + (themeForCup(cupId).hills[0] >>> 0).toString(16).padStart(6, '0');
   return `color-mix(in srgb, ${hex} ${pct}%, #fff)`;
 }

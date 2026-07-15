@@ -242,7 +242,8 @@ export function runDisplayScenario(opts, ctx) {
         difficulty: first ? first.cupDifficulty : null,
         // the live lobby reads these from main.js's prebuilt catalog; the
         // harness builds the cup's four schematics itself (pure geometry)
-        maps: cup.tracks.map((id, i) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })), n: i + 1 }))
+        maps: cup.tracks.map((id, i) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })), n: i + 1 })),
+        cupId: cup.id
       });
       el('tagline').classList.add('hidden');
       el('scene').classList.remove('hidden', 'is-dim');
