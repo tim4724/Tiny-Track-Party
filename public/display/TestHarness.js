@@ -647,8 +647,8 @@ export function runDisplayScenario(opts, ctx) {
       })).sort((a, b) => b.points - a.points);
       el('results-title').textContent = final ? `${cup.name} CHAMPS!` : 'Standings';
       const sub = el('results-sub');
-      sub.classList.remove('hidden');
-      sub.textContent = final ? 'Final standings' : `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
+      sub.classList.toggle('hidden', final);   // podium: the CHAMPS header says it all
+      if (!final) sub.textContent = `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
       const cupRow = (r) =>
         `<span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span>` +
         `<span class="res-gain${r.gained ? '' : ' is-zero'}">+${r.gained}</span><span class="res-pts">${r.points} pts</span>`;

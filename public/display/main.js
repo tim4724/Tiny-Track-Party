@@ -1155,12 +1155,13 @@ function showResults(results) {
 
   // Podium boards celebrate: "<cup> CHAMPS!" on a red header sticker (.is-podium h2).
   el('results-title').textContent = podium ? `${s.cupName} CHAMPS!` : s ? 'Standings' : 'Results';
+  // Sub only during intermissions ("Cup · Race N of M") — the podium's CHAMPS
+  // header says it all.
   const sub = el('results-sub');
-  sub.classList.toggle('hidden', !s);
-  if (s) {
-    sub.textContent = podium ? 'Final standings'
-      : s.endless ? `${s.cupName} · Race ${s.raceIndex + 1}`               // endless: no "of N"
-        : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
+  sub.classList.toggle('hidden', !intermission);
+  if (intermission) {
+    sub.textContent = s.endless ? `${s.cupName} · Race ${s.raceIndex + 1}`  // endless: no "of N"
+      : `${s.cupName} · Race ${s.raceIndex + 1} of ${s.raceCount}`;
   }
 
   renderPodium(el('results-podium'), podium ? board.order : null);

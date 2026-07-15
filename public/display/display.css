@@ -395,13 +395,13 @@ html.cam-free #race { pointer-events: none; }
 
 /* per-cell steer indicator (mirrors the phone bar), centered at the cell bottom */
 .cell-steer {
-  position: absolute; display: none; width: clamp(170px, 15vw, 240px); height: 26px;
+  position: absolute; display: none; width: clamp(190px, 16.5vw, 270px); height: 34px;
   transform: translateX(-50%);
-  background: var(--surface); border: 3px solid var(--ink);
+  background: var(--surface); border: 4px solid var(--ink);
   border-radius: var(--r-pill); overflow: hidden;
   pointer-events: none;
 }
-.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.cell-steer::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
 .cell-steer__fill {
   position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%;
   background: var(--c, var(--brand)); border-radius: var(--r-pill); transition: transform 0.05s linear;

@@ -44,16 +44,14 @@ section {
     var(--edge-top) var(--edge-right)
     var(--edge-bottom) var(--edge-left);
 }
-/* the join screen is sparse — center it so it isn't top-heavy */
-#name { justify-content: center; padding-bottom: calc(12vh + var(--safe-bottom)); }
-/* While typing, anchor the form to the TOP instead: on browsers where the
-   keyboard doesn't shrink the layout viewport (iOS ignores the
-   interactive-widget hint), a centred input would sit under the keys. */
-#name:focus-within { justify-content: flex-start; padding-top: calc(6vh + var(--safe-top)); padding-bottom: 0; }
+/* The join screen lives STATICALLY in the top half: the software keyboard
+   (bottom ~45%) can never cover it, and there is no focus-driven relayout —
+   a conditional jump moved the Join button out from under the first tap. */
+#name { justify-content: flex-start; padding-top: calc(9vh + var(--safe-top)); }
 
-/* the name screen's wordmark badge (kit .wordmark supplies the die-cut look) */
-.name-wordmark { font-size: 28px; margin: 0 0 0.6rem; align-self: flex-start; }
-.sub { color: var(--ink-2); font-weight: 700; margin: 0 0 2rem; }
+/* the name screen's wordmark badge (kit .wordmark supplies the die-cut look),
+   centred over the form */
+.name-wordmark { font-size: 34px; margin: 0 0 1.6rem; align-self: center; text-align: center; }
 
 /* ---- name form ---- */
 input[type=text] {
@@ -285,10 +283,10 @@ input[type=text]:disabled { opacity: 0.6; }
 
 .steer { margin-top: auto; }
 .steer__track {
-  position: relative; height: 30px; overflow: hidden;
-  background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-pill);
+  position: relative; height: 44px; overflow: hidden;
+  background: var(--surface); border: 4px solid var(--ink); border-radius: var(--r-pill);
 }
-.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
 #steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: var(--r-pill); transition: transform 0.05s linear; }
 .steer__label { text-align: center; color: var(--ink-2); font-weight: 700; font-size: 0.9rem; margin-top: 0.5rem; }
 
