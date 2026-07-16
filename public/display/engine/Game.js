@@ -27,7 +27,7 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // direction). We subtract the track's own turn each step so NEUTRAL = straight
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
-const TURN_RATE = 1.05;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
+const TURN_RATE = 0.95;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
                           // STEER_SCRUB (scrubbing to 65% of vmax made every car ~1.5×
                           // tighter-cornering, so the fastest cars swept bends flat-out with
                           // no washout risk). At 1.05 a low-turn car driven flat-out into a

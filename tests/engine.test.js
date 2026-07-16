@@ -595,13 +595,14 @@ test('handling = cornering: turn sets corner speed (steer scrub) and how wide yo
 });
 
 test('cornerBrake lifts a low-handling bot for corners, cutting its curb time vs full throttle', () => {
-  // Same very-low-handling car (0.40 — low enough that the steer scrub alone can't
-  // save it), driven flat-out vs by the AI controller (bots hold no cruise brake, so
-  // the only braking IS corner anticipation). The bot brakes for bends it can't
-  // hold; flat-out the car washes into the curb and grinds along it.
+  // Same very-low-handling car (0.55 — low enough that the steer scrub alone can't
+  // save it, but not so hopeless that even a braked line drifts wide), driven
+  // flat-out vs by the AI controller (bots hold no cruise brake, so the only braking
+  // IS corner anticipation). The bot brakes for bends it can't hold; flat-out the
+  // car washes into the curb and grinds along it.
   function wallFrames(useBot) {
     const track = mkTrack(3);
-    const game = new Game([{ id: 'x', stats: { turn: 0.40 } }], track, {});
+    const game = new Game([{ id: 'x', stats: { turn: 0.55 } }], track, {});
     const bot = new AiController({ caution: 1.0 });
     let wall = 0, braked = false;
     for (let i = 0; i < 700; i++) {

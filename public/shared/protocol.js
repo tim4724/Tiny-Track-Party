@@ -152,9 +152,9 @@ var CAR_STATS = [
   // yaw makes corners a bigger share of every lap, so the same rotation needs less gap.
   // Flat-out washout risk now differentiates too: Bolt/Rumble curb in tight corners
   // driven without braking; Dash/Carve don't.)
-  { accel: 1.04, vmax: 1.02, turn: 1.06, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; lowest variance, owns the stunt cup
+  { accel: 1.04, vmax: 1.02, turn: 1.07, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; occasionally washes out flat-out (learn to brake), owns snow + the stunt cup
   { accel: 1.05, vmax: 1.06, turn: 0.95, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks; washes out flat-out in tight corners — brake or eat curb
-  { accel: 1.02, vmax: 0.99, turn: 1.27, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend, scrubs the least speed steering, never washes out; pays with the lowest top end. Owns the technical cups
+  { accel: 1.02, vmax: 0.98, turn: 1.27, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend, scrubs the least speed steering, NEVER washes out; pays with the lowest top end. Owns the technical cups when driven well
   { accel: 0.96, vmax: 1.04, turn: 0.98, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: 2nd-fastest flat-out, ponderous in corners (washes out like Bolt), heaviest by far (wins every shove)
 ];
 
