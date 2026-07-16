@@ -190,11 +190,17 @@ function selectTrack(id) {
 // Lobby backdrop: the sunny diorama is the persistent base layer; the 3D #scene sits over
 // it and is shown/hidden by OPACITY (.is-dim), not display, so it can crossfade straight in
 // over the diorama. No track picked (and not racing) → dim, so the diorama shows through.
+// The welcome board ALWAYS sits on the diorama (its copy is unreadable over a live
+// track), even if a pick exists — a phone picking while the TV is on the title
+// board, or a dev ?track= preselect. NEW GAME re-runs updateBackdrop to reveal.
+function backdropShow3D() {
+  if (currentScreen === 'welcome') return false;
+  return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
+}
 function updateBackdrop() {
-  const show3D = !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
   const sc = el('scene');
   sc.classList.remove('hidden');           // visibility is by opacity now, not display
-  sc.classList.toggle('is-dim', !show3D);
+  sc.classList.toggle('is-dim', !backdropShow3D());
 }
 
 // ---- lobby backdrop crossfade ----
@@ -229,8 +235,7 @@ function fadeBackdrop(mid) {
       sc.classList.remove('hidden');
       sc.classList.add('is-dim');           // hold the just-built track transparent for one frame…
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        const show3D = !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
-        sc.classList.toggle('is-dim', !show3D); // …then fade it in over the diorama
+        sc.classList.toggle('is-dim', !backdropShow3D()); // …then fade it in over the diorama
       }));
     }
   };
@@ -1348,7 +1353,15 @@ function returnToLobby() {
 function endParty() {
   returnToLobby(); // no-op from the lobby; full race teardown from anywhere else
   net.closeRoom();
+  // A fresh party starts clean: drop the ended party's pick so the welcome
+  // board and the next lobby sit on the paper diorama again, with an empty
+  // cup slot and no attract demo, exactly like a cold boot.
+  net.clearPick();
+  selectedTrackId = null;
+  renderLobbyPick();
+  refreshLobbyDemo();  // no pick → stops the attract demo
   show('welcome');
+  updateBackdrop();    // fade the 3D preview back out to the diorama
 }
 
 // ---- pause ----
@@ -1592,6 +1605,7 @@ if (_scenario) {
     }
     audio.resume();
     show('lobby');
+    updateBackdrop(); // a pick made while on the title board reveals its preview now
   });
 
   // Browser back: one level up the SCREEN_ORDER stack. race → lobby is the

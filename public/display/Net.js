@@ -663,6 +663,11 @@ export class DisplayNet extends GameNet {
     });
   }
 
+  // Reset the lobby pick to the pre-pick state (End party → fresh room: the
+  // next party must not inherit the old party's cup). The retained snapshot
+  // republishes with the cleared values when the fresh room comes up.
+  clearPick() { this.mode = null; this.cupId = null; this.trackId = null; }
+
   // End the party for everyone: the relay deletes the room (stale rejoin links
   // 404) and closes every socket with 4001 — phones bail terminally (their
   // onClose {roomClosed}), while the display's own 4001 self-heals into a fresh

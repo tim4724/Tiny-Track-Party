@@ -74,4 +74,11 @@ test('back from a race returns to the lobby (same reset as "New game"), party in
   await page.goBack();
   await page.waitForSelector(visible('#welcome'));
   await alice.waitForSelector(visible('#conn'), { timeout: 15000 });
+
+  // Ending the party also resets the pick: the title board (and the next
+  // lobby) sits on the 2D diorama again, not the dead party's track preview.
+  expect(await page.evaluate(() => ({
+    mode: window.__net.mode, track: window.__net.trackId,
+    dioramaShowing: document.getElementById('scene').classList.contains('is-dim')
+  }))).toEqual({ mode: null, track: null, dioramaShowing: true });
 });
