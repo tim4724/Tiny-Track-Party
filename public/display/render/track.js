@@ -1699,21 +1699,25 @@ export function buildLandmarks(R, track, theme) {
 //   pick(tints)     one rand() draw from a tint family
 //   groundY         the floor height to rest on
 export const CLUTTER_BUILDERS = {
-  // wildflower patch: daisy heads sitting straight ON the lawn — NO stem (the
-  // stem was the one rejected part of the daisy design; kit tulips were tried
-  // and liked less). Each head is a shallow upturned cup: five petals around a
-  // golden heart, tips raised so the bloom reads from the low chase cam too,
-  // with a pair of flat leaves peeking out underneath.
+  // wildflower patch: stocky daisies — the liked petal-cup head (five raised
+  // petals around a golden heart) on a SHORT, CHUNKY stalk, leaves at the
+  // base. Proportion is the whole trick: the head stays wider than the stem
+  // is tall, so it reads as a toy flower, never a lollipop on a stick (tall
+  // thin stems and fully stemless heads were both rejected).
   flower: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
     const n = 3 + Math.floor(rand() * 3);
     for (let i = 0; i < n; i++) {
       const a = rand() * Math.PI * 2, r = rand() * 0.85;
       const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
-      const s = 0.85 + rand() * 0.45; // per-bloom size
+      const s = 0.85 + rand() * 0.45;          // per-bloom size
+      const h = (0.26 + rand() * 0.12) * s;    // stalk height — well under the head's width
       const hex = pick(tints);
-      const ph = rand() * Math.PI * 2; // petal-ring phase
-      for (let k = 0; k < 2; k++) { // leaves under the head
+      const ph = rand() * Math.PI * 2;         // petal-ring phase
+      const stem = new THREE.CylinderGeometry(0.038 * s, 0.05 * s, h, 5);
+      stem.translate(fx, groundY + h / 2, fz);
+      put(stem, 0x4e8a44, 0.92 + rand() * 0.14);
+      for (let k = 0; k < 2; k++) { // leaves at the base
         const la = ph + k * 2.4 + 0.7;
         const leaf = new THREE.SphereGeometry(0.1 * s, 6, 4);
         leaf.scale(1.7, 0.3, 0.7);
@@ -1721,18 +1725,18 @@ export const CLUTTER_BUILDERS = {
         leaf.translate(fx + Math.cos(la) * 0.16 * s, groundY + 0.03, fz + Math.sin(la) * 0.16 * s);
         put(leaf, 0x5a9a50, 0.9 + rand() * 0.12);
       }
-      for (let k = 0; k < 5; k++) { // the petal cup
+      for (let k = 0; k < 5; k++) { // the petal cup, on the stalk top
         const pa = ph + (k / 5) * Math.PI * 2;
         const petal = new THREE.SphereGeometry(0.09 * s, 6, 4);
         petal.scale(1.5, 0.4, 0.85); // flat oval, long axis outward…
         petal.rotateZ(0.4);          // …outer tip raised — the cup
         petal.rotateY(-pa);
-        petal.translate(fx + Math.cos(pa) * 0.13 * s, groundY + 0.09 * s, fz + Math.sin(pa) * 0.13 * s);
+        petal.translate(fx + Math.cos(pa) * 0.13 * s, groundY + h + 0.02 * s, fz + Math.sin(pa) * 0.13 * s);
         put(petal, hex, 0.95 + rand() * 0.1);
       }
       const heart = new THREE.SphereGeometry(0.08 * s, 6, 5); // the golden centre
       heart.scale(1, 0.7, 1);
-      heart.translate(fx, groundY + 0.1 * s, fz);
+      heart.translate(fx, groundY + h + 0.03 * s, fz);
       put(heart, 0xf2c14e, 1.05);
     }
   },
