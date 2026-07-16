@@ -25,19 +25,24 @@ const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
 // the CC-BY attribution for Kevin MacLeod's tracks (see music/CREDITS.txt).
 // duration = whole seconds, baked so galleries can show a song's length
 // without loading its metadata (the race itself never reads it).
-const song = (file, title, duration) => ({
-  file: `/assets/audio/music/${file}`,
-  title,
-  duration,
+const MACLEOD = {
   artist: 'Kevin MacLeod',
   license: 'CC-BY 4.0',
   source: 'https://incompetech.com/music/royalty-free/music.html',
+};
+const song = (file, title, duration, credit = MACLEOD) => ({
+  file: `/assets/audio/music/${file}`,
+  title,
+  duration,
+  ...credit,
 });
 export const RACE_MUSIC = {
   beach: [
     song('beachfront_celebration.mp3', 'Beachfront Celebration', 187),
     song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217),
     song('paradise_found.mp3', 'Paradise Found', 187),
+    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212),
+    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162),
   ],
   playroom: [
     song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194),
@@ -47,15 +52,22 @@ export const RACE_MUSIC = {
     song('wallpaper.mp3', 'Wallpaper', 220),
     song('new_friendly.mp3', 'New Friendly', 169),
     song('glitter_blast.mp3', 'Glitter Blast', 178),
+    song('cloud_dancer.mp3', 'Cloud Dancer', 220),
+    song('digital_lemonade.mp3', 'Digital Lemonade', 180),
   ],
   grass: [
     song('happy_bee.mp3', 'Happy Bee', 302),
     song('hyperfun.mp3', 'Hyperfun', 233),
+    song('flying_kerfuffle.mp3', 'Flying Kerfuffle', 250),
+    song('bummin_on_tremelo.mp3', 'Bummin on Tremelo', 192),
   ],
   canyon: [
     song('still_pickin.mp3', 'Still Pickin', 298),
     song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181),
     song('surf_shimmy.mp3', 'Surf Shimmy', 123),
+    song('bama_country.mp3', 'Bama Country', 212),
+    song('guts_and_bourbon.mp3', 'Guts and Bourbon', 209),
+    song('neo_western.mp3', 'Neo Western', 146),
   ],
   // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
   // the neutral ex-global track rather than silence. Exported for the music

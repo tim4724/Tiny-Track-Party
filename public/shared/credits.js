@@ -5,9 +5,10 @@
 // `creditsFor(RACE_MUSIC)` and be done.
 //
 // Legal weight differs per section (each entry's `required` flag):
-//  - The music is CC-BY 4.0 → attribution is REQUIRED before public release.
-//    Songs are NOT listed statically — they derive from display/Audio.js
-//    RACE_MUSIC via creditsFor(), so a picks change can never desync the screen.
+//  - Music is mostly CC-BY 4.0 → attribution is REQUIRED before public release
+//    (CC0 songs ride along as courtesy credits). Songs are NOT listed statically
+//    — they derive from display/Audio.js RACE_MUSIC via creditsFor(), so a
+//    picks change can never desync the screen.
 //  - CC0 entries (Kenney kit, OpenGameArt clips) need nothing; we credit anyway.
 //  - OFL/MIT keep their license files in-repo (assets/fonts/, vendor/three/);
 //    the screen line is good practice, not the license mechanism.
@@ -88,7 +89,7 @@ export const ASSET_CREDITS = [
 ];
 
 // The credit line CC-BY 4.0 obliges us to show for the music (one line covers
-// every song since they share one author — see music/CREDITS.txt).
+// every CC-BY song since they share one author — see music/CREDITS.txt).
 export const MUSIC_ATTRIBUTION_LINE =
   'Music by Kevin MacLeod (incompetech.com) — ' +
   'Licensed under Creative Commons: By Attribution 4.0 — ' +
@@ -97,14 +98,15 @@ export const MUSIC_ATTRIBUTION_LINE =
 // Flatten a RACE_MUSIC map (display/Audio.js) + the static entries into
 // render-ready sections: [{ section, entries: [{title, author, license, url,
 // required}] }]. Songs dedup by title (a song may sit in several biome pools)
-// and sort alphabetically; music entries are the `required` ones.
+// and sort alphabetically; `required` follows the license (CC-BY obliges the
+// credit, CC0 songs are courtesy entries).
 export function creditsFor(raceMusic) {
   const byTitle = new Map();
   for (const pool of Object.values(raceMusic)) {
     for (const s of pool) {
       byTitle.set(s.title, {
         section: 'Music', title: s.title, author: s.artist,
-        license: s.license, url: s.source, required: true,
+        license: s.license, url: s.source, required: /CC-BY/i.test(s.license),
       });
     }
   }

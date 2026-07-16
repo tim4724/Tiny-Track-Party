@@ -32,9 +32,11 @@ test('creditsFor() lists every unique song exactly once, as required credits', (
   const uniqueTitles = new Set(Object.values(RACE_MUSIC).flat().map((s) => s.title));
   assert.equal(music.entries.length, uniqueTitles.size, 'one credit per unique song');
   for (const e of music.entries) {
-    assert.equal(e.required, true, `music credit '${e.title}' must be flagged required (CC-BY)`);
+    assert.equal(e.required, /CC-BY/i.test(e.license),
+      `music credit '${e.title}' required-flag must follow its license (CC-BY = required)`);
     assert.ok(e.author && e.license && e.url, `music credit '${e.title}' is complete`);
   }
+  assert.ok(music.entries.some((e) => e.required), 'the CC-BY songs keep their required credits');
 });
 
 test('static asset credits are complete and the CC-BY line names the licence', () => {
