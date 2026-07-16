@@ -219,7 +219,7 @@ const MONSTER_FOOTPRINT_MUL = 1.3; // ×collision half-extents while transformed
 //   6th    30    25    20     25
 //   7th    30    10    20     40
 //   8th    30     0    20     50
-const ITEM_IDS = ['boost', 'banana', 'rocket', 'monster'];
+export const ITEM_IDS = ['boost', 'banana', 'rocket', 'monster'];
 const ITEM_PLACE_TABLE = [ // weights aligned to ITEM_IDS; each row sums to 100
   [20, 80,  0,  0], // 1st (leader)
   [25, 55, 20,  0], // 2nd
@@ -308,6 +308,12 @@ export class Game {
     this.poles = (track.poles || []).map((p) => ({ s: p.s, lat: p.lat || 0, radius: p.radius || 0.45 })); // SOLID obstacles (see _collidePole); AI reads this off the game
     this.bananas = [];      // [{ id, s, lat, owner, armAt }] — live dropped bananas (live on drop; owner-immune until armAt)
     this._bananaSeq = 0;
+    // Authored bananas (dev/test tracks only — normal tracks never set track.bananas):
+    // seeded live with no owner, and they RESPAWN after a hit (liveAt, same idea as the
+    // box cooldown) so a collision test track stays stocked lap after lap.
+    for (const b of (track.bananas || [])) {
+      this.bananas.push({ id: ++this._bananaSeq, s: b.s, lat: b.lat || 0, owner: null, armAt: 0, respawn: true, liveAt: 0 });
+    }
     this.rockets = [];      // [{ id, s (cumulative arclength), lat, owner, targetId, life, v (ribbon speed) }] — live homing rockets
     this._rocketSeq = 0;
     // Deterministic item rolls from a per-race seed (track.seed; default if unset).
@@ -799,6 +805,7 @@ export class Game {
   // … 1 = last) snaps to the nearest authored row; one weighted draw from that row. The
   // weights are normalised here too (defensive), so a row never has to sum to exactly 100.
   _roll(t) {
+    if (this.forceItem) return this.forceItem; // DEBUG (?item=<id>): every box rolls this item
     const last = ITEM_PLACE_TABLE.length - 1;
     const row = ITEM_PLACE_TABLE[Math.max(0, Math.min(last, Math.round(t * last)))];
     let total = 0; for (const x of row) total += x;
@@ -881,8 +888,13 @@ export class Game {
     let hit = false;
     for (const b of this.bananas) {
       if (b.hit) continue;                                       // already consumed this frame
+      if (this.elapsed < (b.liveAt || 0)) continue;              // authored banana, waiting to respawn
       if (b.owner === c.id && this.elapsed < (b.armAt ?? Infinity)) continue; // owner, still in the post-drop window
-      if (this._inZone(c, b, BANANA_RADIUS)) { b.hit = true; hit = true; }
+      if (this._inZone(c, b, BANANA_RADIUS)) {
+        // Authored (respawning) bananas rearm instead of despawning — see the ctor seed.
+        if (b.respawn) { b.liveAt = this.elapsed + BOX_RESPAWN; hit = true; }
+        else { b.hit = true; hit = true; }
+      }
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
     return hit;
@@ -1254,7 +1266,8 @@ export class Game {
     return {
       cars, elapsed: this.elapsed,
       boxes: this.boxes.map((b) => b.cooldown <= 0),
-      bananas: this.bananas.map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS })),
+      bananas: this.bananas.filter((b) => this.elapsed >= (b.liveAt || 0))
+        .map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS })),
       // Live homing rockets: cumulative arclength wrapped to [0, length) so the renderer
       // can place them by (s, lat) like every other prop (it derives the facing/bank from
       // the centreline tangent at s). owner is exposed for any per-cell FX gating.

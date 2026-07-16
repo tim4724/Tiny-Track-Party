@@ -4,6 +4,7 @@ import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from
 import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
+import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
@@ -12,7 +13,7 @@ import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio, RACE_MUSIC } from './Audio.js';
-import { setSteerExpo, getSteerExpo } from './engine/Game.js';
+import { setSteerExpo, getSteerExpo, ITEM_IDS } from './engine/Game.js';
 import { CupSeries, makeShuffleBag } from './GrandPrix.js';
 import { CUPS } from '../shared/tracks.js';
 
@@ -63,6 +64,9 @@ function buildEntry(t) {
   // stand in a drivable corridor (ghost — already drawn as the support itself).
   b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }))
     .concat(b.autoPoles || []);
+  // Authored bananas (dev tracks only — see shared/devTracks.js): same u→s resolve.
+  // The engine seeds them live at race start and respawns them after each hit.
+  b.bananas = (t.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
   return b;
 }
 const built = new Map(TRACK_LIST.map((t) => [t.id, buildEntry(t)]));
@@ -87,13 +91,21 @@ const _isTestMode = !!_trackParams.get('scenario');
 // the bootstrap tail below.
 const _isDebugSolo = _trackParams.has('solo');
 const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
+// ?item=<id> — DEBUG: every item-box roll returns this item (e.g. ?item=monster on the
+// gym track). Unknown ids are ignored. ?bots=<n> — DEBUG: cap the AI fill to n bots
+// (?bots=0 = race alone) instead of topping up to FIELD_SIZE.
+const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
+const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
 // AUDITION CANDIDATES (gallery-tracks sections): an unknown ?track= id is looked up in
 // the candidate catalogue and built like any track — but only the ONE requested id, and
 // only in a ?scenario= test surface: a LIVE lobby preselecting a candidate would offer
 // phones a track their picker catalog doesn't contain. Candidates live outside
 // TRACKS/CUPS until one is promoted (scripts/gen-candidates.mjs).
-if (_isTestMode && _qTrack && !built.has(_qTrack) && CANDIDATE_TRACKS[_qTrack]) {
-  built.set(_qTrack, buildEntry({ id: _qTrack, ...CANDIDATE_TRACKS[_qTrack] }));
+// DEV_TRACKS (shared/devTracks.js) ride the same rule, additionally reachable in
+// ?solo (they're keyboard test ranges — e.g. the 'gym' collision track).
+if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
+  const _devDef = CANDIDATE_TRACKS[_qTrack] || DEV_TRACKS[_qTrack];
+  if (_devDef) built.set(_qTrack, buildEntry({ id: _qTrack, ..._devDef }));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
@@ -291,7 +303,9 @@ function scheduleLobbyDemo() {
 function cpuSeats(humans) {
   const used = new Set(humans.map((p) => p.colorIndex));
   const seats = [];
-  for (let n = 0; humans.length + seats.length < FIELD_SIZE; n++) {
+  // ?bots=<n> caps the AI fill (debug); default tops the grid up to FIELD_SIZE.
+  const fill = _qBots != null ? Math.min(FIELD_SIZE, humans.length + _qBots) : FIELD_SIZE;
+  for (let n = 0; humans.length + seats.length < fill; n++) {
     const colorIndex = RoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
     used.add(colorIndex);
     const carIndex = colorIndex % CAR_MODELS.length;
@@ -804,6 +818,7 @@ function launchRace(players) {
     },
     onRaceEnd: endRace,
   });
+  if (_qForceItem) session.engine.forceItem = _qForceItem; // ?item=<id>: every box rolls this
   window.__engine = session.engine;
 
   // Place cars at their grid poses immediately, and paint each cell's HUD
