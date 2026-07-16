@@ -384,6 +384,12 @@ export function themeForCup(cupId) {
   return THEMES[CUP_BIOME[cupId]] || THEMES.grass;
 }
 
+// The biome NAME for a cup — for callers keyed by name rather than theme object
+// (the per-biome race-music map in display/Audio.js). Same grass fallback.
+export function biomeNameForCup(cupId) {
+  return THEMES[CUP_BIOME[cupId]] ? CUP_BIOME[cupId] : 'grass';
+}
+
 // Look a biome up by name (for the `?biome=<name>` inspector override). Unknown → null.
 export function themeByName(name) {
   return THEMES[name] || null;

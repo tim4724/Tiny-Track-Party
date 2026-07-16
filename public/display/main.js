@@ -5,14 +5,14 @@ import { SceneRenderer } from './SceneRenderer.js';
 import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
-import { themeByName, BIOME_NAMES } from '../shared/themes.js';
+import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
-import { RaceAudio, RACE_MUSIC } from './Audio.js';
+import { RaceAudio } from './Audio.js';
 import { setSteerExpo, getSteerExpo, ITEM_IDS } from './engine/Game.js';
 import { CupSeries, makeShuffleBag } from './GrandPrix.js';
 import { CUPS } from '../shared/tracks.js';
@@ -357,19 +357,21 @@ function demoSig(field, trackId) {
 const audio = new RaceAudio();
 window.__audio = audio; // debug hook (alongside __engine/__track) — tune music/SFX by ear in ?solo
 
-// Now-playing credit chip (bottom-left): the current track + artist, linking to
-// its source — and the on-screen CC-BY attribution. Filled from the track
-// descriptor; toggled with the music lifecycle (shown on GO, hidden at results /
-// lobby). Values are static config, so textContent/href are safe to set raw.
+// Now-playing credit chip (bottom-left): the current song + artist, linking to
+// its source — and the on-screen CC-BY attribution. Filled from whichever song
+// startMusic picked for this race (audio.nowPlaying); toggled with the music
+// lifecycle (shown on GO, hidden at results / lobby). Values are static config,
+// so textContent/href are safe to set raw.
 function showMusicCredit(on) {
   const mc = el('music-credit');
   if (!mc) return;
-  if (on) {
-    mc.textContent = `${RACE_MUSIC.title} · ${RACE_MUSIC.artist}`;
-    mc.href = RACE_MUSIC.source;
-    mc.title = `${RACE_MUSIC.title} by ${RACE_MUSIC.artist} — ${RACE_MUSIC.license} (source ↗)`;
+  const np = audio.nowPlaying;
+  if (on && np) {
+    mc.textContent = `${np.title} · ${np.artist}`;
+    mc.href = np.source;
+    mc.title = `${np.title} by ${np.artist} — ${np.license} (source ↗)`;
   }
-  mc.classList.toggle('hidden', !on);
+  mc.classList.toggle('hidden', !(on && np));
 }
 
 // ---- race state ----
@@ -819,7 +821,10 @@ function launchRace(players) {
       // clean 3-lap is ~50-80 s.
       net.flow.transitionTo(ROOM_STATE.PLAYING);
       net.broadcast({ type: MSG.GAME_START });
-      audio.startMusic();                      // background track for the whole race
+      // Background song for the whole race, picked from the biome's pool. The
+      // ?biome inspector override steers the music too, so an override race
+      // sounds like it looks.
+      audio.startMusic(scene.biomeOverride ? _qBiome : biomeNameForCup(track.cup));
       showMusicCredit(true);                   // now-playing credit chip (bottom-left)
     },
     onRaceEnd: endRace,

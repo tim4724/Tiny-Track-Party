@@ -17,18 +17,51 @@ const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 const SCREECH_GAP_MS = 140; // min spacing so curb contact can't machine-gun
 const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
 
-// Background music: one shipped track for now (track-specific songs come later —
-// this will grow into a per-track map). Exported so the display can show an
-// on-screen credit chip (title + artist, linking to `source`) — which is also
-// how we satisfy the CC-BY attribution for Kevin MacLeod's "Wallpaper" (see
-// music/wallpaper.LICENSE.txt).
-export const RACE_MUSIC = {
-  file: '/assets/audio/music/wallpaper.mp3',
-  title: 'Wallpaper',
+// Background music, keyed by BIOME name (shared/themes.js biomeNameForCup —
+// the Backyard cup resolves to 'grass'). Each biome holds a POOL of songs that
+// share its mood; startMusic picks one at random per race, never repeating the
+// song that just played when the pool allows. Descriptors carry the credit-chip
+// fields (title + artist, linking to `source`) — which is also how we satisfy
+// the CC-BY attribution for Kevin MacLeod's tracks (see music/CREDITS.txt).
+// duration = whole seconds, baked so galleries can show a song's length
+// without loading its metadata (the race itself never reads it).
+const song = (file, title, duration) => ({
+  file: `/assets/audio/music/${file}`,
+  title,
+  duration,
   artist: 'Kevin MacLeod',
   license: 'CC-BY 4.0',
   source: 'https://incompetech.com/music/royalty-free/music.html',
+});
+export const RACE_MUSIC = {
+  beach: [
+    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187),
+    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217),
+    song('paradise_found.mp3', 'Paradise Found', 187),
+  ],
+  playroom: [
+    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194),
+    song('bit_shift.mp3', 'Bit Shift', 192),
+  ],
+  snow: [
+    song('wallpaper.mp3', 'Wallpaper', 220),
+    song('new_friendly.mp3', 'New Friendly', 169),
+    song('glitter_blast.mp3', 'Glitter Blast', 178),
+  ],
+  grass: [
+    song('happy_bee.mp3', 'Happy Bee', 302),
+    song('hyperfun.mp3', 'Hyperfun', 233),
+  ],
+  canyon: [
+    song('still_pickin.mp3', 'Still Pickin', 298),
+    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181),
+    song('surf_shimmy.mp3', 'Surf Shimmy', 123),
+  ],
+  // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
+  // the neutral ex-global track rather than silence. Exported for the music
+  // gallery, which shows the fallback on pickless cups.
 };
+export const MUSIC_FALLBACK = RACE_MUSIC.snow;
 // MUSIC_LEVEL is a STARTING VALUE — a bed under the SFX, not a wall of sound.
 // Tune by ear in ?solo=1: if it buries the cues, drop by 0.05; if it vanishes,
 // raise it. It rides the master gain, so the volume slider scales it too.
@@ -45,6 +78,7 @@ export class RaceAudio {
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
+    this.nowPlaying = null;   // the picked song descriptor — read by the credit chip
   }
 
   _ensure() {
@@ -218,8 +252,16 @@ export class RaceAudio {
   // memory. It's routed into the master gain so the limiter and volume slider
   // apply; if MediaElementSource isn't available it falls back to the element's
   // own volume scaled by the master level.
-  startMusic(url = RACE_MUSIC.file) {
+  //
+  // Takes the race's BIOME name and picks from that biome's pool — random, but
+  // never the song that just played (across races AND biomes) when there's an
+  // alternative, so a 4-race GP through one biome rotates its pool.
+  startMusic(biome) {
     if (!this.ready) return;
+    const pool = (RACE_MUSIC[biome] && RACE_MUSIC[biome].length) ? RACE_MUSIC[biome] : MUSIC_FALLBACK;
+    const fresh = pool.length > 1 ? pool.filter((s) => s.file !== this._musicUrl) : pool;
+    const pick = fresh[(Math.random() * fresh.length) | 0];
+    this.nowPlaying = pick;
     if (!this._music) {
       const el = new Audio();
       el.loop = true;
@@ -236,10 +278,10 @@ export class RaceAudio {
         el.volume = MUSIC_LEVEL * this._volume(); // routed straight to the device
       }
     }
-    // Swap src only on a real track change (per-track songs later); re-racing the
-    // same track keeps it buffered. createMediaElementSource follows the element,
-    // so the routing survives a src change.
-    if (this._musicUrl !== url) { this._music.src = url; this._musicUrl = url; }
+    // Swap src only on a real song change; re-racing the same song keeps it
+    // buffered. createMediaElementSource follows the element, so the routing
+    // survives a src change.
+    if (this._musicUrl !== pick.file) { this._music.src = pick.file; this._musicUrl = pick.file; }
     try { this._music.currentTime = 0; } catch (_) { /* not seekable yet */ }
     this._music.play().catch(() => { /* gesture/decoding race — stays silent */ });
   }
