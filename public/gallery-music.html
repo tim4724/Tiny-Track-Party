@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Music Gallery — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+<style>
+/* Page-local: per-cup music cards on the dark gallery theme. */
+.music-cup { margin: 0 0 22px; }
+/* Fixed grid columns (play · name · seek · time · licence) so the seek bar is
+   the same length on every row — only the name column truncates. */
+.music-row {
+  display: grid;
+  grid-template-columns: 34px 280px 1fr 96px 74px;
+  align-items: center; gap: 12px;
+  padding: 10px 12px; margin: 6px 0; border-radius: 10px;
+  background: #10102a; border: 1px solid rgba(255,255,255,0.08);
+}
+@media (max-width: 760px) { .music-row { grid-template-columns: 34px 170px 1fr 96px 74px; } }
+.music-row .title, .music-row .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-row .play {
+  width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
+  background: #1a1a3a; color: #e0e0ff; font-size: 14px; cursor: pointer; flex: none;
+}
+.music-row .play:hover { background: #24244c; }
+.music-row .play.on { background: #2a2a5a; border-color: #5060c0; }
+.music-row .title { font-weight: 700; font-size: 14px; }
+.music-row .sub { font-size: 12px; opacity: 0.65; margin-top: 2px; }
+.music-row .sub a { color: #9fb2ff; text-decoration: none; }
+.music-row .sub a:hover { text-decoration: underline; }
+.music-row .lic {
+  justify-self: end; border-radius: 999px; padding: 2px 9px;
+  font-size: 11px; font-weight: 800; background: #3a2f10; color: #ffd873;
+}
+.music-row .time { font-size: 12px; opacity: 0.7; font-variant-numeric: tabular-nums; text-align: right; }
+.music-row .seek { width: 100%; min-width: 0; accent-color: #5060c0; }
+.music-row.fallback { opacity: 0.75; border-style: dashed; }
+.music-row.fallback .lic { background: #2a2a3a; color: #aab; }
+.biome-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+.rail-note { font-size: 12px; opacity: 0.6; margin: -2px 0 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TINY TRACK · MUSIC</h1>
+
+  <div class="group">
+    <label class="checkbox-label" for="vol">Volume</label>
+    <input type="range" id="vol" min="0" max="100" value="60">
+  </div>
+
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html" class="active">Music</a>
+    <a href="/assets-viewer.html">Assets</a>
+  </nav>
+</header>
+
+<section class="rail">
+  <p class="sound-hint">The <strong>shipped race soundtrack</strong>, cup by cup — read live from the game’s
+  per-biome map (<code>display/Audio.js RACE_MUSIC</code>), so this page can’t drift from what a race plays.
+  A cup with several songs picks one at random per race (never repeating the last). Click ▶ to stream a track.
+  Candidates audition in the <a href="/music-pool-audition.html">Race Music pool</a>.</p>
+  <div id="music-cups"></div>
+</section>
+
+<script type="module" src="/gallery-music.js"></script>
+</body>
+</html>
