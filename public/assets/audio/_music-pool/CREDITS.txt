@@ -35,3 +35,21 @@ downloaded from incompetech.com; the manifest's `biome` field carries the target
   [CC-BY 4.0] beach    — Surf Shimmy / Island Meet and Greet / Paradise Found / Glitter Blast
   [CC-BY 4.0] snow     — Frost Waltz (Alternate) / Blippy Trance / New Friendly
   [CC-BY 4.0] playroom — Bit Shift / Bit Quest / Blip Stream / Pixel Peeker Polka - faster
+
+Round 3 candidates (2026-07-16) — biome-targeted, all Kevin MacLeod CC-BY 4.0,
+downloaded from incompetech.com; the manifest's `biome` field carries the target:
+  [CC-BY 4.0] canyon   — Guts and Bourbon / Bama Country / Neo Western / Matt's Blues
+  [CC-BY 4.0] beach    — Funin and Sunin / Arroz Con Pollo / Bummin on Tremelo / Tiki Bar Mixer
+  [CC-BY 4.0] playroom — Mega Hyper Ultrastorm / Pinball Spring 160 / Voxel Revolution / Salty Ditty
+  [CC-BY 4.0] grass    — Fuzzball Parade / Flying Kerfuffle / Raving Energy (faster) / Le Grand Chase
+  [CC-BY 4.0] snow     — Digital Lemonade / Pookatori and Friends / Balloon Game / Cloud Dancer
+
+Komiku (chezmonplaisir.bandcamp.com) — CC0 1.0 Universal (public domain, no
+attribution required). Downloaded from archive.org:
+  https://archive.org/details/Komikuitstimeforadventure
+  https://archive.org/details/Komiku-Poupis_incredible_adventures
+  [CC0] canyon   — Un désert
+  [CC0] grass    — De l'herbe sous les pieds
+  [CC0] beach    — Pirates libertaires / Surfing
+  [CC0] snow     — La montagne
+  [CC0] playroom — Jenifer The Game
