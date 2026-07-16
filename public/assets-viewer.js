@@ -236,18 +236,17 @@ async function main() {
   const scenes = await Promise.all(names.map(loadModel));
   const byName = new Map(names.map((n, i) => [n, scenes[i]]));
 
-  // Compose the monster variants from the loaded car bodies + the monster-truck
-  // chassis, and inject them as extra "models" so the rest of the pipeline
-  // (bucketing, layout, labels, legend) treats them like any other asset.
-  // The procedural finish gantry, once per biome (it's not a file on disk either) —
-  // same injection trick as the monster variants, so each shows up labelled in the
-  // Gates & Markers block wearing its theme's plastic colours + colour grade.
+  // The procedural finish gantry, once per biome (it's not a file on disk) — injected
+  // as an extra "model" so the rest of the pipeline (bucketing, layout, labels,
+  // legend) shows each labelled in the Gates & Markers block wearing its theme's
+  // plastic colours + colour grade.
   for (const [biome, theme] of Object.entries(THEMES)) {
-    const kerbW = (theme.road && theme.road.kerbW) || 0.22;
-    byName.set(`finish-gate-${biome}`, gantryGroup(theme, { roadWidth: 5, kerbW, dropDepth: 0.24 }));
+    byName.set(`finish-gate-${biome}`, gantryGroup(theme, { dropDepth: 0.24 }));
     names.push(`finish-gate-${biome}`);
   }
 
+  // Compose the monster variants from the loaded car bodies + the monster-truck
+  // chassis, and inject them the same way.
   const monsterBase = byName.get(MONSTER_BASE_ASSET);
   if (monsterBase) {
     // The bare chassis (cab removed, recoloured) on its own, first in the block.

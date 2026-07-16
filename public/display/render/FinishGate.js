@@ -33,8 +33,8 @@ const RING_H = 0.42;       // striped-pylon ring height (lighthouse bands)
 
 // Chequer / ring canvases are tiny and re-used across tracks — cache by key.
 const _texCache = new Map();
-function checkerTexture(cols, rows) {
-  const key = `check:${cols}x${rows}`;
+const hex = (h) => `#${h.toString(16).padStart(6, '0')}`;
+function bandTexture(key, cols, rows, colorAt) {
   if (_texCache.has(key)) return _texCache.get(key);
   const PX = 16;
   const cv = document.createElement('canvas');
@@ -42,46 +42,33 @@ function checkerTexture(cols, rows) {
   const ctx = cv.getContext('2d');
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      ctx.fillStyle = (x + y) % 2 ? '#fff6eb' : '#2a2735';
+      ctx.fillStyle = colorAt(x, y);
       ctx.fillRect(x * PX, y * PX, PX, PX);
     }
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.NearestFilter; // crisp check edges up close
+  tex.magFilter = THREE.NearestFilter; // crisp band edges up close
   _texCache.set(key, tex);
   return tex;
 }
+const checkerTexture = (cols, rows) =>
+  bandTexture(`check:${cols}x${rows}`, cols, rows, (x, y) => hex((x + y) % 2 ? PAPER : INK));
 // Horizontal two-colour bands for a striped pylon (the beach lighthouse look).
 // `bands` = how many rings the pylon's visible height is split into (odd count
-// so it starts and ends on the base colour).
-function ringTexture(baseHex, ringHex, bands) {
-  const key = `rings:${baseHex}:${ringHex}:${bands}`;
-  if (_texCache.has(key)) return _texCache.get(key);
-  const PX = 16;
-  const cv = document.createElement('canvas');
-  cv.width = PX; cv.height = bands * PX;
-  const ctx = cv.getContext('2d');
-  const hex = (h) => `#${h.toString(16).padStart(6, '0')}`;
-  for (let i = 0; i < bands; i++) {
-    ctx.fillStyle = i % 2 ? hex(ringHex) : hex(baseHex);
-    // canvas y runs top-down = cylinder v runs bottom-up — symmetric bands, no matter
-    ctx.fillRect(0, i * PX, PX, PX);
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.NearestFilter;
-  _texCache.set(key, tex);
-  return tex;
-}
+// so it starts and ends on the base colour — canvas y runs top-down vs cylinder
+// v bottom-up, but the bands are symmetric so it doesn't matter).
+const ringTexture = (baseHex, ringHex, bands) =>
+  bandTexture(`rings:${baseHex}:${ringHex}:${bands}`, 1, bands, (x, y) => hex(y % 2 ? ringHex : baseHex));
 
 // The gantry as a plain group in the road frame at s=0 (origin on the road
-// surface). `roadWidth`/`kerbW` size the span so the pylons stand clear beyond
-// the kerb; `dropDepth` is how far below the road surface the lawn lies there
-// (the feet sit on it and the pylons run down to them).
-export function gantryGroup(theme, { roadWidth = 5, kerbW = DEF_KERB_W, dropDepth = 0.35 } = {}) {
+// surface). `roadWidth` sizes the span — the pylons stand clear beyond the
+// biome's kerb (theme.road.kerbW); `dropDepth` is how far below the road surface
+// the lawn lies there (the feet sit on it and the pylons run down to them).
+export function gantryGroup(theme, { roadWidth = 5, dropDepth = 0.35 } = {}) {
   const style = (theme && theme.gantry) || DEFAULT_GANTRY;
   const grade = new THREE.Color((theme && theme.gate) || 0xffffff); // biome colour-grade
+  const kerbW = (theme && theme.road && theme.road.kerbW) || DEF_KERB_W;
   const halfSpan = roadWidth / 2 + kerbW + KERB_CLEAR + PYLON_R; // pylon axis, clear of the kerb
   const topY = CLEAR + BANNER_H;   // pylon top = banner top
   const footY = -dropDepth;        // lawn level in the road frame
@@ -96,7 +83,6 @@ export function gantryGroup(theme, { roadWidth = 5, kerbW = DEF_KERB_W, dropDept
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.x = x;
     group.add(mesh);
-    return mesh;
   };
 
   // Pylons — one tube each side, running from inside the foot up to the banner
@@ -150,8 +136,7 @@ export function buildFinishGate(R, track, theme) {
   // How far the lawn lies below the road surface at the line (feet stand on it);
   // small floor so the feet still tuck under the kerb skirt on a flush track.
   const dropDepth = Math.max(0.15, f.pos.y - (track.groundY != null ? track.groundY : f.pos.y - 0.35));
-  const kerbW = (theme && theme.road && theme.road.kerbW) || DEF_KERB_W;
-  const group = gantryGroup(theme, { roadWidth: track.roadWidth, kerbW, dropDepth });
+  const group = gantryGroup(theme, { roadWidth: track.roadWidth, dropDepth });
 
   // Orient into the world from the road frame at the line — banks with the road.
   group.matrix.makeBasis(f.lateral.clone(), f.up.clone(), f.tangent.clone());
