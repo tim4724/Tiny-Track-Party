@@ -514,6 +514,21 @@ test('a finished car outranks a still-racing car further along; lap display is 1
   assert.equal(b.lap, 1, 'a grid car on lap 0 (totalS>=0) shows lap 1 — the HUD lap is 1-based');
 });
 
+test('the grid lines up BEHIND the start line and crossing it is not a lap', () => {
+  const track = mkTrack(2);
+  const events = [];
+  const game = new Game(['p1', 'p2', 'p3'], track, { onEvent: (e) => events.push(e) });
+  for (const c of game.cars.values()) {
+    assert.ok(c.totalS < 0, `car ${c.id} spawns behind the line (totalS=${c.totalS})`);
+  }
+  assert.equal(game.getSnapshot().cars[0].lap, 1, 'the HUD shows lap 1 while still behind the line');
+  drive(game, track, 'p1', 3); // plenty to cross s=0 on the opening straight
+  const p1 = game.cars.get('p1');
+  assert.ok(p1.totalS > 0, `p1 crossed the line (totalS=${p1.totalS.toFixed(1)})`);
+  assert.ok(!events.some((e) => e.type === 'lap' && e.id === 'p1'), 'the first line crossing chimes no lap');
+  assert.equal(game.getSnapshot().cars.find((c) => c.id === 'p1').lap, 1, 'still lap 1 after crossing');
+});
+
 // ---- per-car stats ----------------------------------------------------------
 
 // Peak speed a lone car reaches over a full-throttle run. We track the MAX seen

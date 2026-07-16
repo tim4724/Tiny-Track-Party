@@ -223,7 +223,8 @@ test('every named track closes and includes a start gate', () => {
   for (const [name, def] of Object.entries(TRACKS)) {
     const t = buildTrack(def);
     assert.ok(t.closed, `track "${name}" should close (gap=${t.gap.toFixed(3)})`);
-    assert.ok(t.instances.some((i) => i.glb === 'gate-finish'), `track "${name}" missing start gate`);
+    // The gate itself is built render-side (render/FinishGate.js) from this flag.
+    assert.ok(t.startGate, `track "${name}" missing start gate`);
   }
 });
 

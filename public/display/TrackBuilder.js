@@ -28,7 +28,6 @@ export const SCALE = 2;    // unscaled track units → world (bigger track, more
 const ROAD_WIDTH = 2.5;    // default drivable width (unscaled); ×SCALE = 5.0 world. The
                            // single source of truth, read by the physics (maxLat in Game.js)
                            // AND the procedural road ribbon in SceneRenderer.
-const GATE_WIDTH = 1.55;   // gate-finish arch span (measured) — scaled up to span the road
 const DS = 0.25;           // centerline sample step (unscaled) — uniform arclength spacing,
                            // a few× finer than a kerb stripe and well above the min-seg floor.
 
@@ -53,11 +52,12 @@ const DEG = Math.PI / 180;
 
 // Build the track. `track` is a bare segment array OR a catalogue descriptor
 // ({ segments, width, ... }) from shared/tracks.js. `opts.startGate` (default true)
-// straddles the start/finish line with the gate-finish arch.
-// Returns { instances, centerline, length, closed, gap, roadWidth, groundY }.
-// `instances` carries only non-road scenery GLBs to place (currently the start/finish
-// gate); the road surface itself is generated procedurally from `centerline`, as are the
-// support pillars (`pillars`: vertical columns under any `pillars`-flagged bridge/ramp).
+// straddles the start/finish line with the procedural finish gantry (`startGate` on the
+// returned track — built render-side, see render/FinishGate.js).
+// Returns { instances, startGate, centerline, length, closed, gap, roadWidth, groundY }.
+// `instances` carries non-road scenery GLBs to place (none today); the road surface
+// itself is generated procedurally from `centerline`, as are the support pillars
+// (`pillars`: vertical columns under any `pillars`-flagged bridge/ramp).
 export function buildTrack(track, opts = {}) {
   // Two authoring models: a closed loop of WAYPOINTS (organic, flowing — buildSplineTrack)
   // or a sequence of parametric SEGMENTS (the turtle walk below; required for loops/spirals).
@@ -319,17 +319,6 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   const groundY = Math.min(minY - 0.3, minEdgeY - 0.12);
 
   const instances = [];
-  // Start/finish gate: the gate-finish arch straddling the line at s=0, oriented across
-  // the lane (X=lateral, Y=up, Z=travel), legs straddling the road onto the grass.
-  if (startGate) {
-    const g = samples[0];
-    const LEG_OVERHANG = 0.9; // how far each leg lands beyond the road edge, onto the grass
-    const GS = (trackWidth * SCALE + 2 * LEG_OVERHANG) / GATE_WIDTH; // straddle the full road
-    const m = new THREE.Matrix4().makeBasis(g.lateral.clone(), g.up.clone(), g.tangent.clone());
-    m.scale(new THREE.Vector3(GS, GS, GS));
-    m.setPosition(g.pos.clone().addScaledVector(g.up, -0.02 * SCALE)); // a hair into the road
-    instances.push({ glb: 'gate-finish', matrix: m });
-  }
 
   // A support post standing in (or near) a drivable corridor must be CLEARLY placed:
   // either at least POST_CLEAR outside every corridor, or a POST_DEEP-visible obstacle
@@ -556,6 +545,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
 
   return {
     instances,
+    startGate, // straddle s=0 with the finish gantry (built render-side — see render/FinishGate.js)
     pillars,
     hills,
     loopStarts,

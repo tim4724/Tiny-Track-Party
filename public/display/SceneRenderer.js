@@ -14,6 +14,7 @@ import {
 import { buildEnvironment, applyEnvTheme, WATER_LIFT, WATER_INNER, SNOW_R, SNOW_H } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
+import { buildFinishGate } from './render/FinishGate.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
 import { TrackProps } from './render/TrackProps.js';
 import { FpsMeter } from './render/FpsMeter.js';
@@ -1025,9 +1026,10 @@ export class SceneRenderer {
     const buckets = new Map(); // texture.uuid -> { srcMat, geoms: [] }
     const KEEP = ['position', 'normal', 'uv']; // attributes merged tiles must share
     // The road surface is procedural — swept along the centreline (fills `collide` +
-    // trackGroup itself). The loop below then bakes the remaining GLB scenery (the
-    // start/finish gate); the grid/framing/shadow afterwards run on `collide.children`
-    // + centreline samples regardless.
+    // trackGroup itself). The loop below then bakes any remaining GLB scenery (none
+    // today — the finish gantry is procedural too, see render/FinishGate.js); the
+    // grid/framing/shadow afterwards run on `collide.children` + centreline samples
+    // regardless.
     buildRibbonRoad(this, track, collide, theme); // road palette (asphalt/kerbs/planks) is the biome's
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
@@ -1098,9 +1100,9 @@ export class SceneRenderer {
     for (const { srcMat, geoms } of buckets.values()) {
       const mat = srcMat.clone();          // shares the proto's colormap texture
       mat.side = THREE.DoubleSide;          // keep mirrored-tile faces drawn + lit
-      // Biome colour-grade on the GLB scenery (today: the start/finish gate).
-      // material.color MULTIPLIES the colormap, so themes use near-white tints —
-      // sun-bleach/heat/cold grades, not repaints. No theme.gate → stays white.
+      // Biome colour-grade on the GLB scenery (none today; FinishGate applies the
+      // same grade itself). material.color MULTIPLIES the colormap, so themes use
+      // near-white tints — sun-bleach/heat/cold grades, not repaints.
       if (theme.gate) mat.color.set(theme.gate);
       this._mergedMats.push(mat);
       const addMesh = (geo) => {
@@ -1121,6 +1123,7 @@ export class SceneRenderer {
       }
     }
 
+    buildFinishGate(this, track, theme); // the chequered gantry over the line at s=0
     buildPillars(this, track, theme);  // supports carry the biome's structure tint
     buildHills(this, track);
     buildPoles(this, track, theme);

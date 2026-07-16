@@ -335,7 +335,7 @@ export class Game {
       const lane = (i % 2 === 0 ? -1 : 1) * Math.min(this.maxLat * 0.6, 0.5);
       this.cars.set(id, {
         id,
-        totalS: 1.0 + row * 1.6,  // staggered grid on the opening straight (s>0)
+        totalS: -(2.5 + row * 1.6), // staggered grid BEHIND the line (far enough back that the chase cams frame the gantry) — lap 1 starts by driving across it
         lat: lane,
         v: 0,
         vlat: 0,         // transient sideways velocity from a bump; decays (KNOCK_DAMP)
@@ -1258,7 +1258,7 @@ export class Game {
         // v (raw speed) + lat (lateral offset) are the engine's physics observables —
         // the in-game display only needs normalized spd, but the unit tests assert on them.
         id: c.id, pose: c.pose, lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd normalized 0..1 (per-car top speed)
-        lap: Math.min(this.totalLaps, c.lap + (c.totalS >= 0 ? 1 : 0)), // 1-based display lap
+        lap: Math.min(this.totalLaps, Math.max(1, c.lap + (c.totalS >= 0 ? 1 : 0))), // 1-based display lap (grid sits at s<0 — still "lap 1")
         totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually
         // turns (= STEER_SIGN * raw input), so the renderer's front wheels + body
