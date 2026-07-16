@@ -137,10 +137,10 @@ const ITEM_USE_READY = 0.9;    // starting value — bump if the reveal grows
 const BOOST_ACCEL = 22.0;      // ramp toward the boosted ceiling (u/s²) — snappy
 const BOOST_FADE = 0.5;        // after the hold, ease the multiplier back to 1 at this rate (×/s) → a gentle taper, not a snap
 const PAD_RADIUS = 0.65;       // fallback pad radius (the display sizes it per track)
-const BOX_RADIUS = 0.5;        // fallback item-box radius (mirrors the display default, roadWidth * 0.10)
+const BOX_RADIUS = 0.45;       // fallback item-box radius (mirrors the display default, roadWidth * 0.09)
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
-const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
+const BANANA_RADIUS = 0.55;    // dropped-banana trigger radius
 const BANANA_BACK = 0.7;       // how far behind the dropper a banana lands (units) — tucked
                                // just behind the rear bumper (car half-len ~0.44 + banana
                                // half-depth ~0.23), so the dropper actually sees it land

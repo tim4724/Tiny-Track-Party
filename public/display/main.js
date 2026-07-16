@@ -58,12 +58,12 @@ function buildEntry(t) {
       lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
     });
   }
-  // Item boxes: ~10% of road width (0.5 on the standard 5-wide road) ≈ the box mesh
+  // Item boxes: ~9% of road width (0.45 on the standard 5-wide road) ≈ the box mesh
   // (±0.15) + car half-width (0.26) + a whisker of forgiveness — "visually touching,
   // slightly generous". Was 0.18 (0.9): that made a 4-lane row an unbroken wall-to-wall
-  // tripwire and collected boxes half a lane away. Still over twice one frame of travel
-  // at boosted top speed (~0.24 @60fps), so a fast car can't tunnel through.
-  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.10 }));
+  // tripwire and collected boxes half a lane away. Still comfortably over one frame of
+  // travel at boosted top speed (~0.24 @60fps), so a fast car can't tunnel through.
+  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.09 }));
   // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
   // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).
   // The builder's autoPoles ride along: collision proxies for pillars/loop shafts that
