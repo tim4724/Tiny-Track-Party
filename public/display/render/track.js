@@ -1531,6 +1531,154 @@ export function buildLandmarks(R, track, theme) {
   R._mergedMats.push(mat);
 }
 
+// ── Clutter builders — one tiny procedural build per ground-detail kind, shared
+// by buildScenery's near-field pass (below) and the Asset World gallery
+// (/assets-viewer.js shows one of each). Each takes a ctx of the caller's
+// primitives — { rand, put, pick, groundY } — so the seeded stream and the
+// merge pool stay the caller's:
+//   rand()          the caller's seeded stream (order of calls is the contract)
+//   put(g, hex, sh) tint + collect a primitive into the caller's pool
+//   pick(tints)     one rand() draw from a tint family
+//   groundY         the floor height to rest on
+export const CLUTTER_BUILDERS = {
+  // wildflower patch: a handful of blossoms on little green stems
+  flower: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const n = 3 + Math.floor(rand() * 4);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2, r = rand() * 0.75;
+      const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
+      const stem = new THREE.CylinderGeometry(0.028, 0.036, 0.42, 5);
+      stem.translate(fx, groundY + 0.21, fz);
+      put(stem, 0x4e8a44, 0.92 + rand() * 0.16);
+      const bloom = new THREE.IcosahedronGeometry(0.13, 1);
+      bloom.translate(fx, groundY + 0.47, fz);
+      put(bloom, pick(tints), 0.95 + rand() * 0.12);
+    }
+  },
+  // seashell: a squashed half-dome, tipped a touch
+  shell: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const g = new THREE.SphereGeometry(0.24 + rand() * 0.1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    g.scale(1, 0.55, 1.2);
+    g.rotateZ(0.12 + rand() * 0.1);
+    g.rotateY(rand() * Math.PI * 2);
+    g.translate(x, groundY + 0.03, z);
+    put(g, pick(tints), 0.96 + rand() * 0.1);
+  },
+  // starfish: five flattened arms radiating from a small hub
+  starfish: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const hex = pick(tints), a0 = rand() * Math.PI * 2, s = 0.8 + rand() * 0.5;
+    const hub = new THREE.CylinderGeometry(0.11 * s, 0.13 * s, 0.09 * s, 5);
+    hub.translate(x, groundY + 0.045 * s, z);
+    put(hub, hex);
+    for (let k = 0; k < 5; k++) {
+      const arm = new THREE.ConeGeometry(0.1 * s, 0.44 * s, 5);
+      arm.rotateX(Math.PI / 2);       // apex points +Z
+      arm.scale(1, 0.45, 1);          // flattened against the sand
+      arm.translate(0, 0.045 * s, 0.28 * s);
+      arm.rotateY(a0 + (k / 5) * Math.PI * 2);
+      arm.translate(x, groundY, z);
+      put(arm, hex, 0.94 + (k % 2) * 0.08);
+    }
+  },
+  // bleached branch: two thin rods, kinked where they meet
+  driftwood: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const hex = pick(tints), a = rand() * Math.PI * 2;
+    const main = new THREE.CylinderGeometry(0.07, 0.09, 1.5, 6);
+    main.rotateZ(Math.PI / 2);
+    main.rotateY(a);
+    main.translate(x, groundY + 0.08, z);
+    put(main, hex);
+    const limb = new THREE.CylinderGeometry(0.05, 0.06, 0.9, 6);
+    limb.rotateZ(Math.PI / 2);
+    limb.rotateY(a + 0.6);
+    limb.translate(x + Math.cos(a) * 0.55, groundY + 0.06, z - Math.sin(a) * 0.55);
+    put(limb, hex, 0.92);
+  },
+  // pinecone: two stacked faceted lumps
+  pinecone: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const hex = pick(tints);
+    const base = new THREE.IcosahedronGeometry(0.16, 0);
+    base.translate(x, groundY + 0.13, z);
+    put(base, hex);
+    const top = new THREE.IcosahedronGeometry(0.11, 0);
+    top.translate(x, groundY + 0.32, z);
+    put(top, hex, 1.08);
+  },
+  // wind-blown snow heap
+  drift: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const g = new THREE.IcosahedronGeometry(1, 1);
+    g.scale(0.9 + rand() * 0.9, 0.28 + rand() * 0.12, 0.55 + rand() * 0.5);
+    g.rotateY(rand() * Math.PI * 2);
+    g.translate(x, groundY + 0.07, z);
+    put(g, pick(tints), 0.97 + rand() * 0.06);
+  },
+  // dry sage tuft (sometimes two clumped)
+  scrub: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const n = 1 + (rand() < 0.4 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const g = new THREE.IcosahedronGeometry(0.3 + rand() * 0.18, 0);
+      g.scale(1, 0.55 + rand() * 0.2, 1);
+      g.rotateY(rand() * Math.PI * 2);
+      g.translate(x + i * 0.5, groundY + 0.12, z + i * 0.3);
+      put(g, pick(tints), 0.9 + rand() * 0.2);
+    }
+  },
+  // little cluster of rust pebbles
+  pebbles: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const n = 3 + Math.floor(rand() * 2);
+    for (let i = 0; i < n; i++) {
+      const rr = 0.09 + rand() * 0.09;
+      const g = new THREE.IcosahedronGeometry(rr, 0);
+      g.translate(x + (rand() - 0.5) * 0.7, groundY + rr * 0.5, z + (rand() - 0.5) * 0.7);
+      put(g, pick(tints), 0.9 + rand() * 0.2);
+    }
+  },
+  // studded toy brick
+  brick: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const hex = pick(tints), a = rand() * Math.PI * 2;
+    const body = new THREE.BoxGeometry(0.62, 0.3, 0.34);
+    body.rotateY(a);
+    body.translate(x, groundY + 0.15, z);
+    put(body, hex);
+    for (const sd of [-1, 1]) {
+      const stud = new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8);
+      stud.translate(sd * 0.15, 0.34, 0);
+      stud.rotateY(a);
+      stud.translate(x, groundY, z);
+      put(stud, hex, 1.06);
+    }
+  },
+  // lost marble
+  marble: (ctx, x, z, tints) => {
+    const { put, pick, groundY } = ctx;
+    const g = new THREE.SphereGeometry(0.19, 10, 7);
+    g.translate(x, groundY + 0.19, z);
+    put(g, pick(tints), 1.05);
+  },
+  // fallen domino: white tile, dark midline
+  domino: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const a = rand() * Math.PI * 2;
+    const tile = new THREE.BoxGeometry(0.5, 0.09, 0.95);
+    tile.rotateY(a);
+    tile.translate(x, groundY + 0.05, z);
+    put(tile, pick(tints));
+    const line = new THREE.BoxGeometry(0.52, 0.02, 0.07);
+    line.rotateY(a);
+    line.translate(x, groundY + 0.1, z);
+    put(line, 0x3a3442);
+  },
+};
+
 // Trackside scenery — GLB silhouettes (trees/bushes via the sunk-tree trick) plus
 // faceted boulders, scattered outside the racing corridor. The parallax of things
 // streaming past is the strongest speed cue there is (trackside, not on the car —
@@ -1758,134 +1906,7 @@ export function buildScenery(R, track, theme) {
       gg.setAttribute('color', new THREE.BufferAttribute(arr, 3));
       clutterGeoms.push(gg);
     };
-    const pick = (tints) => tints[Math.floor(rand2() * tints.length)];
-    const builders = {
-      // wildflower patch: a handful of blossoms on little green stems
-      flower: (x, z, tints) => {
-        const n = 3 + Math.floor(rand2() * 4);
-        for (let i = 0; i < n; i++) {
-          const a = rand2() * Math.PI * 2, r = rand2() * 0.75;
-          const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
-          const stem = new THREE.CylinderGeometry(0.028, 0.036, 0.42, 5);
-          stem.translate(fx, groundY + 0.21, fz);
-          put(stem, 0x4e8a44, 0.92 + rand2() * 0.16);
-          const bloom = new THREE.IcosahedronGeometry(0.13, 1);
-          bloom.translate(fx, groundY + 0.47, fz);
-          put(bloom, pick(tints), 0.95 + rand2() * 0.12);
-        }
-      },
-      // seashell: a squashed half-dome, tipped a touch
-      shell: (x, z, tints) => {
-        const g = new THREE.SphereGeometry(0.24 + rand2() * 0.1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-        g.scale(1, 0.55, 1.2);
-        g.rotateZ(0.12 + rand2() * 0.1);
-        g.rotateY(rand2() * Math.PI * 2);
-        g.translate(x, groundY + 0.03, z);
-        put(g, pick(tints), 0.96 + rand2() * 0.1);
-      },
-      // starfish: five flattened arms radiating from a small hub
-      starfish: (x, z, tints) => {
-        const hex = pick(tints), a0 = rand2() * Math.PI * 2, s = 0.8 + rand2() * 0.5;
-        const hub = new THREE.CylinderGeometry(0.11 * s, 0.13 * s, 0.09 * s, 5);
-        hub.translate(x, groundY + 0.045 * s, z);
-        put(hub, hex);
-        for (let k = 0; k < 5; k++) {
-          const arm = new THREE.ConeGeometry(0.1 * s, 0.44 * s, 5);
-          arm.rotateX(Math.PI / 2);       // apex points +Z
-          arm.scale(1, 0.45, 1);          // flattened against the sand
-          arm.translate(0, 0.045 * s, 0.28 * s);
-          arm.rotateY(a0 + (k / 5) * Math.PI * 2);
-          arm.translate(x, groundY, z);
-          put(arm, hex, 0.94 + (k % 2) * 0.08);
-        }
-      },
-      // bleached branch: two thin rods, kinked where they meet
-      driftwood: (x, z, tints) => {
-        const hex = pick(tints), a = rand2() * Math.PI * 2;
-        const main = new THREE.CylinderGeometry(0.07, 0.09, 1.5, 6);
-        main.rotateZ(Math.PI / 2);
-        main.rotateY(a);
-        main.translate(x, groundY + 0.08, z);
-        put(main, hex);
-        const limb = new THREE.CylinderGeometry(0.05, 0.06, 0.9, 6);
-        limb.rotateZ(Math.PI / 2);
-        limb.rotateY(a + 0.6);
-        limb.translate(x + Math.cos(a) * 0.55, groundY + 0.06, z - Math.sin(a) * 0.55);
-        put(limb, hex, 0.92);
-      },
-      // pinecone: two stacked faceted lumps
-      pinecone: (x, z, tints) => {
-        const hex = pick(tints);
-        const base = new THREE.IcosahedronGeometry(0.16, 0);
-        base.translate(x, groundY + 0.13, z);
-        put(base, hex);
-        const top = new THREE.IcosahedronGeometry(0.11, 0);
-        top.translate(x, groundY + 0.32, z);
-        put(top, hex, 1.08);
-      },
-      // wind-blown snow heap
-      drift: (x, z, tints) => {
-        const g = new THREE.IcosahedronGeometry(1, 1);
-        g.scale(0.9 + rand2() * 0.9, 0.28 + rand2() * 0.12, 0.55 + rand2() * 0.5);
-        g.rotateY(rand2() * Math.PI * 2);
-        g.translate(x, groundY + 0.07, z);
-        put(g, pick(tints), 0.97 + rand2() * 0.06);
-      },
-      // dry sage tuft (sometimes two clumped)
-      scrub: (x, z, tints) => {
-        const n = 1 + (rand2() < 0.4 ? 1 : 0);
-        for (let i = 0; i < n; i++) {
-          const g = new THREE.IcosahedronGeometry(0.3 + rand2() * 0.18, 0);
-          g.scale(1, 0.55 + rand2() * 0.2, 1);
-          g.rotateY(rand2() * Math.PI * 2);
-          g.translate(x + i * 0.5, groundY + 0.12, z + i * 0.3);
-          put(g, pick(tints), 0.9 + rand2() * 0.2);
-        }
-      },
-      // little cluster of rust pebbles
-      pebbles: (x, z, tints) => {
-        const n = 3 + Math.floor(rand2() * 2);
-        for (let i = 0; i < n; i++) {
-          const rr = 0.09 + rand2() * 0.09;
-          const g = new THREE.IcosahedronGeometry(rr, 0);
-          g.translate(x + (rand2() - 0.5) * 0.7, groundY + rr * 0.5, z + (rand2() - 0.5) * 0.7);
-          put(g, pick(tints), 0.9 + rand2() * 0.2);
-        }
-      },
-      // studded toy brick
-      brick: (x, z, tints) => {
-        const hex = pick(tints), a = rand2() * Math.PI * 2;
-        const body = new THREE.BoxGeometry(0.62, 0.3, 0.34);
-        body.rotateY(a);
-        body.translate(x, groundY + 0.15, z);
-        put(body, hex);
-        for (const sd of [-1, 1]) {
-          const stud = new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8);
-          stud.translate(sd * 0.15, 0.34, 0);
-          stud.rotateY(a);
-          stud.translate(x, groundY, z);
-          put(stud, hex, 1.06);
-        }
-      },
-      // lost marble
-      marble: (x, z, tints) => {
-        const g = new THREE.SphereGeometry(0.19, 10, 7);
-        g.translate(x, groundY + 0.19, z);
-        put(g, pick(tints), 1.05);
-      },
-      // fallen domino: white tile, dark midline
-      domino: (x, z, tints) => {
-        const a = rand2() * Math.PI * 2;
-        const tile = new THREE.BoxGeometry(0.5, 0.09, 0.95);
-        tile.rotateY(a);
-        tile.translate(x, groundY + 0.05, z);
-        put(tile, pick(tints));
-        const line = new THREE.BoxGeometry(0.52, 0.02, 0.07);
-        line.rotateY(a);
-        line.translate(x, groundY + 0.1, z);
-        put(line, 0x3a3442);
-      },
-    };
+    const ctx = { rand: rand2, put, pick: (tints) => tints[Math.floor(rand2() * tints.length)], groundY };
     for (let d = 0; d < cl.length && clutterGeoms.length < 450; d += 5) {
       const f = cl.sampleAt(d);
       const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
@@ -1899,8 +1920,8 @@ export function buildScenery(R, track, theme) {
         const r = rand2();
         let acc = 0, entry = cc.kinds[cc.kinds.length - 1];
         for (const e of cc.kinds) { acc += e.w; if (r < acc) { entry = e; break; } }
-        const build = builders[entry.kind];
-        if (build) build(x, z, entry.tints || [0xffffff]);
+        const build = CLUTTER_BUILDERS[entry.kind];
+        if (build) build(ctx, x, z, entry.tints || [0xffffff]);
       }
     }
   }

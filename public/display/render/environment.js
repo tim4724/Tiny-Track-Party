@@ -479,7 +479,9 @@ export function stepKites(kites, dt, t, sf) {
 // a hanging basket. applyBalloon repaints the gores; stepBalloon drifts it.
 const DEF_BALLOON = { panels: [0xd94f3d, 0xf5f0e2], y: 42, r: 150, size: 6, bearing: 2.4, speed: 0.012 };
 
-function buildBalloon() {
+// Exported (with applyBalloon) for the Asset World gallery, which shows one of
+// each biome's balloon liveries alongside the kit models.
+export function buildBalloon() {
   const group = new THREE.Group();
   // envelope: unit sphere, slightly stretched — per-face gore colours painted by
   // applyBalloon. widthSegments MUST be a multiple of the gore count (8) so the
@@ -513,7 +515,7 @@ function buildBalloon() {
   return group;
 }
 
-function applyBalloon(balloon, theme) {
+export function applyBalloon(balloon, theme) {
   const b = theme.balloon ? { ...DEF_BALLOON, ...theme.balloon } : null;
   balloon.visible = !!b;
   balloon.userData.cfg = b;

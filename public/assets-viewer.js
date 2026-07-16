@@ -3,10 +3,21 @@
 // floating above. The point is a shared vocabulary: orbit around, read the
 // names, and we can all refer to "track-road-wide-corner-small" and mean the
 // same model. No relay, no game logic — just the kit on display.
+//
+// Alongside the files, every PROCEDURAL asset is shown too — the biome
+// landmarks (gnome, windmill, cabin…), the ground-clutter kinds, the hot-air
+// balloons and the sky glyphs — composed with the SAME builders the game uses
+// (render/track.js buildLandmarks / CLUTTER_BUILDERS, render/environment.js),
+// so what stands here is exactly what stands trackside. Animated set-pieces
+// (windmill rotor, wind-up train, chimney smoke) run live.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildMonsterRig, buildMonsterChassis, MONSTER_BASE_ASSET } from '/display/render/MonsterRig.js';
 import { gantryGroup } from '/display/render/FinishGate.js';
+import { buildLandmarks, CLUTTER_BUILDERS } from '/display/render/track.js';
+import { buildBalloon, applyBalloon } from '/display/render/environment.js';
+import { makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture } from '/display/render/textures.js';
 import { THEMES } from '/shared/themes.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
@@ -38,11 +49,122 @@ const CATEGORIES = [
   { key: 'monster',        label: 'Monster Variants',        color: '#7b4fc0', test: (n) => n.startsWith('monster-') },
   { key: 'wheels',         label: 'Wheels',                  color: '#5b6b76', test: (n) => n.startsWith('wheel') },
   { key: 'items',          label: 'Items & Pickups',         color: '#4bb05a', test: (n) => n.startsWith('item') },
-  { key: 'scenery',        label: 'Scenery',                 color: '#3f9b6b', test: (n) => n === 'tree' || n === 'tree-pine' },
+  { key: 'scenery',        label: 'Scenery (kit models)',    color: '#3f9b6b', test: (n) => n.startsWith('tree') || n.startsWith('palm') || n.startsWith('cactus') },
+  { key: 'landmarks',      label: 'Landmarks (procedural)',  color: '#c2564b', test: (n) => n.startsWith('landmark-') },
+  { key: 'clutter',        label: 'Ground clutter (procedural)', color: '#7c9a3f', test: (n) => n.startsWith('clutter-') },
+  { key: 'sky',            label: 'Sky & Glyphs (procedural)', color: '#4a8fd0', test: (n) => n.startsWith('sky-') },
   { key: 'effects',        label: 'Effects',                 color: '#94a3ad', test: (n) => n === 'smoke' },
   { key: 'other',          label: 'Other',                   color: '#888888', test: () => true }
 ];
 function categoryOf(name) { return CATEGORIES.find((c) => c.test(name)); }
+
+// ---- procedural showcases ----
+// Each biome landmark is built by the REAL buildLandmarks against a stub
+// renderer + a straight 200u "runway" track, then re-parented into a wrapper
+// group and re-centred by the layout like any other model. Animated pieces
+// (windmill rotor, wind-up train, chimney smoke) register their steppers with
+// the stub; we adopt them into the viewer's frame loop, so they run live here.
+// Which biome a kind belongs to decides its palette (hoodoos in canyon rocks…).
+const LANDMARK_HOME = {
+  lighthouse: 'beach', sailboat: 'beach', umbrella: 'beach', sandcastle: 'beach',
+  hoodoo: 'canyon', windmill: 'canyon',
+  snowman: 'snow', cabin: 'snow',
+  gnome: 'grass', doghouse: 'grass', picnic: 'grass',
+  blocks: 'playroom', duck: 'playroom', ball: 'playroom',
+  crayons: 'playroom', books: 'playroom', train: 'playroom',
+};
+
+const showcaseAnims = []; // adopted steppers, run in the render loop
+
+function stubTrack(kind) {
+  const samples = [];
+  for (let s = 0; s <= 200; s += 3) samples.push({ pos: { x: s, y: 0, z: 0 } });
+  return {
+    id: 'showcase-' + kind, // deterministic per-kind rand stream
+    roadWidth: 5,
+    centerline: {
+      samples,
+      length: 200,
+      sampleAt: (s) => ({ pos: { x: s, y: 0, z: 0 }, lateral: { x: 0, z: 1 }, tangent: { x: 1, z: 0 } }),
+    },
+  };
+}
+
+// The minimal SceneRenderer surface buildLandmarks touches. The hill anchor +
+// water fit stand in for the horizon ring so the offshore pair (lighthouse,
+// sailboat) has somewhere to land — the layout re-centres them anyway.
+function stubRenderer() {
+  return {
+    ground: { position: { y: 0 } },
+    trackGroup: new THREE.Group(),
+    _mergedGeoms: [], _mergedMats: [], _trackAnims: [],
+    _hills: { userData: { anchors: [{ x: 30, z: -20, top: 2.5 }] }, scale: { x: 1 } },
+    _water: { userData: { fit: 0.2 } },
+  };
+}
+
+function buildLandmarkShowcase(kind) {
+  const R = stubRenderer();
+  buildLandmarks(R, stubTrack(kind), { ...THEMES[LANDMARK_HOME[kind]], landmark: kind });
+  if (!R.trackGroup.children.length) return null;
+  const wrap = new THREE.Group();
+  // Re-parent instead of re-positioning: the anim closures keep writing the
+  // stub-track coordinates, which are now LOCAL to the wrapper — so moving the
+  // wrapper moves the whole act (train + rails + smoke) as one.
+  for (const c of [...R.trackGroup.children]) wrap.add(c);
+  for (const fn of R._trackAnims) {
+    fn(0, 0); // settle animated pieces into their t=0 pose BEFORE the layout measures the box (the train starts at the wrapper origin otherwise)
+    showcaseAnims.push(fn);
+  }
+  return wrap;
+}
+
+// One little diorama per clutter kind: a couple of instances via the shared
+// CLUTTER_BUILDERS, with the tint family the biome palettes actually use.
+const CLUTTER_TINTS = {};
+for (const t of Object.values(THEMES)) {
+  for (const e of ((t.scenery.clutter && t.scenery.clutter.kinds) || [])) {
+    if (!CLUTTER_TINTS[e.kind]) CLUTTER_TINTS[e.kind] = e.tints;
+  }
+}
+
+function buildClutterShowcase(kind, tints) {
+  let seed = 48271;
+  for (let i = 0; i < kind.length; i++) seed = ((seed ^ kind.charCodeAt(i)) * 16777619) >>> 0;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const geoms = [];
+  const ctx = {
+    rand,
+    groundY: 0,
+    pick: (t) => t[Math.floor(rand() * t.length)],
+    put: (g, hex, shade = 1) => { // the buildScenery tint idiom: non-indexed, uv-free, vertex-coloured
+      const gg = g.index ? g.toNonIndexed() : g;
+      if (gg !== g) g.dispose();
+      gg.deleteAttribute('uv');
+      const c = new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(shade);
+      const n = gg.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+      gg.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      geoms.push(gg);
+    },
+  };
+  const build = CLUTTER_BUILDERS[kind];
+  if (!build) return null;
+  build(ctx, 0, 0, tints);
+  build(ctx, 1.7, 1.0, tints); // a second instance so patch-kinds read as they scatter
+  const merged = mergeGeometries(geoms, false);
+  for (const g of geoms) g.dispose();
+  return new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ vertexColors: true }));
+}
+
+// Flier/kite glyphs as billboards, tinted the way their biomes fly them.
+function buildGlyphShowcase(tex, tint, aspect) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sprite.material.color.set(tint);
+  sprite.scale.set(3, 3 * aspect, 1); // the layout rests its bounding box on the ground
+  return sprite;
+}
 
 const COLS_MAX = 7;        // widest grid row before wrapping
 const CELL_GAP = 2.2;      // padding added to a category's largest footprint
@@ -260,6 +382,26 @@ async function main() {
     }
   }
 
+  // Procedural set-pieces — not files on disk: composed with the game's own
+  // builders and injected like the monster variants. Animated ones (windmill,
+  // train, chimney smoke) registered their steppers in showcaseAnims above.
+  const inject = (name, obj) => {
+    if (!obj) return;
+    byName.set(name, obj);
+    names.push(name);
+  };
+  for (const kind of Object.keys(LANDMARK_HOME)) inject('landmark-' + kind, buildLandmarkShowcase(kind));
+  for (const [kind, tints] of Object.entries(CLUTTER_TINTS)) inject('clutter-' + kind, buildClutterShowcase(kind, tints));
+  for (const theme of ['grass', 'sunset']) {
+    const b = buildBalloon();
+    applyBalloon(b, THEMES[theme]);
+    inject('sky-balloon-' + (theme === 'grass' ? 'meadow' : 'dusk'), b);
+  }
+  inject('sky-glyph-bird',      buildGlyphShowcase(makeBirdTexture(),      0x51616d, 0.5));
+  inject('sky-glyph-butterfly', buildGlyphShowcase(makeButterflyTexture(), 0xe66a5a, 0.5));
+  inject('sky-glyph-plane',     buildGlyphShowcase(makePlaneTexture(),     0xf6f2e2, 0.5));
+  inject('sky-glyph-kite',      buildGlyphShowcase(makeKiteTexture(),      0xd94f3d, 1));
+
   // Bucket by category, preserving the category display order.
   const buckets = new Map(CATEGORIES.map((c) => [c.key, []]));
   for (const n of names) buckets.get(categoryOf(n).key).push(n);
@@ -374,7 +516,15 @@ function buildLegend() {
     .join('');
 }
 
+let _animT = 0, _animLast = performance.now();
 renderer.setAnimationLoop(() => {
+  // step the adopted landmark animations (windmill rotor, wind-up train,
+  // chimney smoke) on the same clamped clock the game loop uses
+  const now = performance.now();
+  const dt = Math.min((now - _animLast) / 1000, 0.05);
+  _animLast = now;
+  _animT += dt;
+  for (const fn of showcaseAnims) fn(dt, _animT);
   flyStep();
   renderer.render(scene, camera);
 });
