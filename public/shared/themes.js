@@ -163,9 +163,10 @@
 //              the road than the props above — the near-field pass the chase cam
 //              actually sees. { kinds: [{ kind, w, … }], density }; kinds are
 //              procedural (render/track.js CLUTTER_BUILDERS, entry carries
-//              `tints`): 'shell' | 'starfish' | 'driftwood' | 'drift' (snow
-//              heap) | 'scrub' | 'pebbles' | 'brick' (studded toy brick) |
-//              'marble' | 'domino' — OR authored kit stamps: kind 'kit' with
+//              `tints`): 'flower' (stocky daisies) | 'shell' | 'starfish' |
+//              'driftwood' | 'drift' (snow heap) | 'scrub' | 'pebbles' |
+//              'brick' (studded toy brick) | 'marble' | 'domino' —
+//              OR authored kit stamps: kind 'kit' with
 //              { models: [names], s: [base, spread], per: [min, max], tint? }
 //              (2-3 GLBs per patch; the grass flowers). Placement draws from
 //              its OWN seeded stream, so adding or tuning clutter NEVER

@@ -2214,15 +2214,15 @@ export class SceneRenderer {
       h.position.x += 2.2 * dt;
       if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
     }
-    // fliers: each circles its authored roost (gulls over the shoreline, vultures
-    // over a mesa, butterflies over the parkland verge), with per-flier phase/
-    // speed offsets and a gentle vertical bob. Roost centres follow the hill
-    // push-out live. The WING-BEAT is a flap envelope on the sprite's height —
-    // squashing the glyph toward a line and back reads as beating wings even at
-    // speck size, and the motion (not the glyph) is what makes a distant sprite
-    // read "bird" at all. cfg.flap = beat depth (gulls ~1 flap busily, vultures
-    // ~0.15 mostly soar, the paper plane 0 — it banks instead, cfg.bank rolling
-    // the sprite into its turn).
+    // birds: each circles its authored roost (gulls over the shoreline, vultures
+    // over a mesa, geese across the winter sky), with per-bird phase/speed
+    // offsets and a gentle vertical bob. Roost centres follow the hill push-out
+    // live. The WING-BEAT is a flap envelope on the sprite's height — squashing
+    // the glyph toward a line and back reads as beating wings even at speck
+    // size, and the motion (not the glyph) is what makes a distant sprite read
+    // "bird" at all. cfg.flap = beat depth (gulls ~1 flap busily, vultures
+    // ~0.15 mostly soar). _birdT doubles as the shared clock for every stepped
+    // sky piece (kites/balloon/paper plane) and the track anims below.
     this._birdT += dt;
     if (this._birds.cfg) {
       const bsf = this._hills ? this._hills.scale.x : 1;
