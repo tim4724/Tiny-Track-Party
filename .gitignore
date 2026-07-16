@@ -3,6 +3,16 @@ node_modules/
 test-results/
 *.log
 .DS_Store
+# Audition candidate dumps. The CURATED state of each dir is committed
+# deliberately (force-added) so the audition galleries work from any checkout;
+# the ignore keeps future bulk pulls from sneaking in without an explicit
+# `git add -f`. Per-dir licences live next to the files.
+#   _stk-audition/    STK SFX (mixed CC-BY-SA/GPL/CC0)   → /sfx-audition.html
+#   _engine-audition/ OpenGameArt engine clips (mostly CC0) → /engine-audition.html
+#   _music-pool/      race-music candidates (all CC-BY 4.0) → /music-pool-audition.html
+public/assets/audio/_stk-audition/
+public/assets/audio/_engine-audition/
+public/assets/audio/_music-pool/
 # Local-only Claude Code state — keeps the .claude/ root committable for shared
 # project settings/hooks while excluding per-user runtime files (worktrees,
 # local settings, scheduler lock).

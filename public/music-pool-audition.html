@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<meta name="audition-dir" content="/assets/audio/_music-pool">
+<meta name="audition-fav-key" content="tinytrack_music_pool_v1">
+<title>Race Music Pool — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="/audition.css">
+</head>
+<body>
+<header>
+  <h1>RACE MUSIC · CC0 + CC-BY</h1>
+
+  <div class="group">
+    <label for="vol">Volume</label>
+    <input type="range" id="vol" min="0" max="100" value="60">
+  </div>
+
+  <div class="group">
+    <input type="search" id="filter" placeholder="filter title / composer…" style="width:180px">
+  </div>
+
+  <div class="group">
+    <label for="sort">Sort</label>
+    <select id="sort">
+      <option value="default">Manifest order</option>
+      <option value="dur-asc">Duration ↑ (shortest)</option>
+      <option value="dur-desc">Duration ↓ (longest)</option>
+    </select>
+  </div>
+
+  <button class="chip" id="copy-favs" title="Copy your starred filenames">Copy favorites</button>
+
+  <nav style="margin-left:auto;display:flex;gap:12px;font-size:13px;">
+    <a href="/gallery-sounds.html">Synth sounds</a>
+    <a href="/sfx-audition.html">STK SFX</a>
+    <a href="/engine-audition.html">Engine sounds</a>
+    <a href="/gallery-music.html">Game music</a>
+    <a href="/music-pool-audition.html">Race Music</a>
+  </nav>
+</header>
+
+<p class="note">
+  <strong>Candidate race soundtrack</strong> — bright, playful, instrumental tracks picked to fit the toy-car kit
+  (▶ streams a track, scrub with the bar). One source, <strong>no copyleft</strong>:
+  <strong>Kevin MacLeod / Incompetech</strong>, all <span class="badge attrib">CC-BY</span> — free to ship with a
+  one-line credit (baked into <code>_music-pool/CREDITS.txt</code>; the Kenney CC0 loops were cut — too short for
+  race music). Star ★ the keepers. Rows tagged <span class="ingame-tag">♫ in game</span> are already wired into a
+  biome pool — see the <a href="/gallery-music.html">Game music</a> tab; biome-targeted candidates show their
+  target biome (→ canyon) and the filter matches it (type e.g. “canyon”).
+</p>
+
+<div class="legend">
+  <span>Filter:</span>
+  <button class="chip active" data-f="all">All</button>
+  <button class="chip" data-f="picked">♫ In game</button>
+  <button class="chip" data-f="unpicked">Unpicked</button>
+  <button class="chip" data-f="fav">★ Favorites</button>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script type="module" src="/music-pool-audition.js"></script>
+</body>
+</html>

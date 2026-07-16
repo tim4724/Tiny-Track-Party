@@ -1,0 +1,70 @@
+/* Shared styles for the audio-audition surfaces (/sfx-audition.html,
+   /engine-audition.html run /sfx-audition.js; /music-pool-audition.html runs
+   /music-pool-audition.js). All configured per-page via
+   <meta name="audition-dir|audition-fav-key">. */
+body {
+  margin: 0;
+  font-family: var(--font-body, system-ui, sans-serif);
+  background: var(--bg, #eaf4ff);
+  color: var(--ink, #20303a);
+}
+header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center;
+  padding: 14px 20px;
+  background: var(--surface, #fff);
+  box-shadow: 0 2px 10px rgba(0,0,0,.08);
+}
+header h1 { font-family: var(--font-head, system-ui); font-size: 18px; margin: 0 12px 0 0; letter-spacing: .04em; }
+.group { display: flex; align-items: center; gap: 8px; }
+.group label { font-size: 12px; font-weight: 700; opacity: .75; }
+input[type=range] { width: 130px; }
+.note {
+  margin: 14px 20px 0; padding: 12px 14px; border-radius: 12px;
+  background: #fff6da; border: 1px solid #f0d98a; font-size: 13px; line-height: 1.5;
+}
+.legend { margin: 12px 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+.chip {
+  border: none; cursor: pointer; border-radius: 999px; padding: 6px 12px;
+  font-weight: 700; font-size: 12px; background: #dde7f0; color: #20303a;
+}
+.chip.active { background: #2f6fed; color: #fff; }
+.badge { border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+/* Tracks already wired into the game (music pool gallery). */
+.ingame-tag { margin-left: 8px; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 800; background: #d9e6ff; color: #2a4db0; white-space: nowrap; vertical-align: 1px; }
+.badge.free     { background: #d6f5dd; color: #1d7a3a; }   /* CC0 / public domain  */
+.badge.attrib   { background: #fff0c8; color: #8a6400; }   /* CC-BY (credit only)  */
+.badge.copyleft { background: #ffd9d9; color: #b02525; }   /* CC-BY-SA / GPL       */
+.badge.unknown  { background: #e2e2e2; color: #555; }
+
+.grid { padding: 4px 14px 80px; display: grid; gap: 8px; }
+.row {
+  display: grid;
+  grid-template-columns: 28px minmax(150px, 220px) 96px 1fr 150px;
+  align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 12px;
+  background: var(--surface, #fff); box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.row.fav { outline: 2px solid #ffb43a; }
+.row .name { font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
+.row .src { font-size: 11px; }
+.row .src a { color: #2f6fed; }
+.btns { display: flex; gap: 6px; }
+button.play {
+  border: none; cursor: pointer; border-radius: 8px; padding: 6px 9px;
+  font-size: 13px; font-weight: 700; background: #e7eef6; color: #20303a;
+}
+button.play.on { background: #2f6fed; color: #fff; }
+button.star { border: none; background: none; cursor: pointer; font-size: 18px; line-height: 1; color: #ffb43a; }
+.pitch { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.pitch input { width: 90px; }
+.hidden { display: none !important; }
+.count { font-size: 12px; opacity: .7; margin-left: auto; }
+
+/* Music rows: title + composer need more room, and full tracks get a scrub bar
+   instead of the SFX loop-pitch slider. */
+.row.music { grid-template-columns: 28px minmax(160px, 1fr) 96px auto minmax(160px, 260px); }
+.row.music .name { font-size: 14px; }
+.transport { display: flex; align-items: center; gap: 8px; }
+.transport .seek { flex: 1; min-width: 90px; }
+.transport .time { font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; white-space: nowrap; }

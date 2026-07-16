@@ -1,0 +1,37 @@
+Music candidates — credits & licenses
+=====================================
+
+
+Kevin MacLeod (incompetech.com) — Creative Commons Attribution 4.0 (CC-BY 4.0)
+  Required credit line if shipped, e.g.:
+  "<Track> by Kevin MacLeod | incompetech.com | Licensed under CC BY 4.0"
+  https://incompetech.com/music/royalty-free/music.html
+
+Tracks:
+  [CC-BY 4.0] Pixelland — Kevin MacLeod
+  [CC-BY 4.0] Carefree — Kevin MacLeod
+  [CC-BY 4.0] Monkeys Spinning Monkeys — Kevin MacLeod
+  [CC-BY 4.0] Wallpaper — Kevin MacLeod
+  [CC-BY 4.0] Fluffing a Duck — Kevin MacLeod
+  [CC-BY 4.0] Sneaky Snitch — Kevin MacLeod
+  [CC-BY 4.0] Spazzmatica Polka — Kevin MacLeod
+  [CC-BY 4.0] Beachfront Celebration — Kevin MacLeod
+  [CC-BY 4.0] Happy Bee — Kevin MacLeod
+  [CC-BY 4.0] Itty Bitty 8 Bit — Kevin MacLeod
+  [CC-BY 4.0] Hyperfun — Kevin MacLeod
+  [CC-BY 4.0] Run Amok — Kevin MacLeod
+  [CC-BY 4.0] Quirky Dog — Kevin MacLeod
+  [CC-BY 4.0] Cheery Monday — Kevin MacLeod
+  [CC-BY 4.0] Disco con Tutti — Kevin MacLeod
+  [CC-BY 4.0] Fast Talkin — Kevin MacLeod
+  [CC-BY 4.0] The Builder — Kevin MacLeod
+  [CC-BY 4.0] Jaunty Gumption — Kevin MacLeod
+  [CC-BY 4.0] Bumbly March — Kevin MacLeod
+
+Round 2 candidates (2026-07-16) — biome-targeted, all Kevin MacLeod CC-BY 4.0,
+downloaded from incompetech.com; the manifest's `biome` field carries the target:
+  [CC-BY 4.0] canyon   — Still Pickin / Hillbilly Swing / River Valley Breakdown
+                         / Corncob / Desert of Lost Souls / DarxieLand
+  [CC-BY 4.0] beach    — Surf Shimmy / Island Meet and Greet / Paradise Found / Glitter Blast
+  [CC-BY 4.0] snow     — Frost Waltz (Alternate) / Blippy Trance / New Friendly
+  [CC-BY 4.0] playroom — Bit Shift / Bit Quest / Blip Stream / Pixel Peeker Polka - faster
