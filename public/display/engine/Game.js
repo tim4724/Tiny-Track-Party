@@ -140,7 +140,7 @@ const PAD_RADIUS = 0.65;       // fallback pad radius (the display sizes it per 
 const BOX_RADIUS = 0.45;       // fallback item-box radius (mirrors the display default, roadWidth * 0.09)
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
-const BANANA_RADIUS = 0.55;    // dropped-banana trigger radius
+const BANANA_RADIUS = 0.5;     // dropped-banana trigger radius
 const BANANA_BACK = 0.7;       // how far behind the dropper a banana lands (units) — tucked
                                // just behind the rear bumper (car half-len ~0.44 + banana
                                // half-depth ~0.23), so the dropper actually sees it land

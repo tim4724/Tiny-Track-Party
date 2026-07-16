@@ -47,7 +47,7 @@ const EVADE_NEAR = -1.5;  // keep holding the dodge until the hazard is this far
 const EVADE_FAR = 13.0;   // start considering hazards this far ahead (world units) — commit early
 const EVADE_CLEAR = 0.5;  // lateral gap to leave around a hazard (car half-width + margin)
 const EVADE_LOOK = 3.5;   // fixed (short) steering lookahead while evading — sharp enough to reach the gap before the hazard (pure-pursuit lags position, so aim close), but not so tight it overshoots onto the curb
-const BANANA_AVOID_R = 0.55; // mirrors the engine's BANANA_RADIUS (bananas carry no radius field)
+const BANANA_AVOID_R = 0.5; // mirrors the engine's BANANA_RADIUS (bananas carry no radius field)
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
