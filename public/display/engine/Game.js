@@ -27,7 +27,11 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // direction). We subtract the track's own turn each step so NEUTRAL = straight
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
-const TURN_RATE = 1.2;    // rad/s at full tilt — calm
+const TURN_RATE = 1.05;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
+                          // STEER_SCRUB (scrubbing to 65% of vmax made every car ~1.5×
+                          // tighter-cornering, so the fastest cars swept bends flat-out with
+                          // no washout risk). At 1.05 a low-turn car driven flat-out into a
+                          // catalogue corner washes to the curb again; a grippy one holds it.
 const STEER_EXPO = 1.25;  // default response: near-linear with a slightly softened centre (1 = linear); tuned on hardware
 // Live-tunable steering response exponent. Shared by every engine (so a value set
 // in the display debug panel survives race/lobby re-creation) and read fresh each

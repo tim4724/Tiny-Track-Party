@@ -147,10 +147,15 @@ var CAR_STATS = [
   // both driving styles): disciplined/AI-style cup winners rotate (Bolt beach+snow, Carve
   // backyard+canyon, Dash rooftop, ≤1.3s spread); flat-out/casual style leaves Bolt a
   // ~0.5–0.8s identity edge, paid for by the lightest mass (loses every shove).
-  { accel: 1.04, vmax: 1.02, turn: 1.05, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; lowest variance, owns the stunt cup
-  { accel: 1.05, vmax: 1.06, turn: 0.92, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks, catchable in the twisty cups
-  { accel: 1.02, vmax: 0.99, turn: 1.30, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend and scrubs the least speed steering; pays with the lowest top end. Owns the technical cups
-  { accel: 0.96, vmax: 1.04, turn: 0.95, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: 2nd-fastest flat-out, ponderous in corners, heaviest by far (wins every shove)
+  // (Turn re-priced 2026-07-16 when the engine's base TURN_RATE dropped 1.2 → 1.05 to
+  // offset the steer scrub: the spread narrowed 0.92–1.30 → 0.97–1.24 because scarcer
+  // yaw makes corners a bigger share of every lap, so the same rotation needs less gap.
+  // Flat-out washout risk now differentiates too: Bolt/Rumble curb in tight corners
+  // driven without braking; Dash/Carve don't.)
+  { accel: 1.04, vmax: 1.02, turn: 1.06, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; lowest variance, owns the stunt cup
+  { accel: 1.05, vmax: 1.06, turn: 0.97, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks, catchable in the twisty cups
+  { accel: 1.02, vmax: 0.99, turn: 1.24, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend and scrubs the least speed steering; pays with the lowest top end. Owns the technical cups
+  { accel: 0.96, vmax: 1.04, turn: 0.99, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: 2nd-fastest flat-out, ponderous in corners, heaviest by far (wins every shove)
 ];
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash
