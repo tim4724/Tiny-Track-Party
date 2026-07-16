@@ -259,8 +259,9 @@ html, body {
 .seat--open .seat__open { width: 100%; aspect-ratio: 5 / 4; }
 
 /* Build/version badge — preview builds only (the server leaves it empty in
-   production, and :empty hides it). Pinned to the lobby's bottom-right corner,
-   deliberately quiet. Not uppercased so the commit hash stays lowercase hex. */
+   production, and :empty hides it). Pinned to the welcome board's bottom-right
+   corner, deliberately quiet. Not uppercased so the commit hash stays
+   lowercase hex. */
 .version-badge {
   position: absolute; right: clamp(0.7rem, 1.4vw, 1.4rem); bottom: clamp(0.7rem, 1.4vh, 1.3rem);
   z-index: 2;
@@ -699,7 +700,6 @@ html.cam-free #race { pointer-events: none; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */
   .scene__cloud { display: none; }
-  .version-badge { position: fixed; }
 }
 
 /* ---- Toast ---- transient confirmation (e.g. "Copied"), bottom-centre.

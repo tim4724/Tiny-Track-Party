@@ -90,6 +90,11 @@
     <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>
     <button id="newgame-btn" class="btn btn--brand welcome__btn">NEW GAME</button>
+    <!-- Build badge: version + short commit, shown on preview (non-production)
+         builds only. The server fills __VERSION_BADGE__ with "x.y.z (#sha)" off
+         production and leaves it empty in prod; .version-badge:empty hides it.
+         Lives on the title board so the lobby chrome stays clean. -->
+    <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
   </section>
 
   <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
@@ -143,12 +148,6 @@
         <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
       </div>
     </div>
-
-    <!-- Build badge: version + short commit, shown on preview (non-production)
-         builds only. The server fills __VERSION_BADGE__ with "x.y.z (#sha)" off
-         production and leaves it empty in prod; .version-badge:empty hides it.
-         Lives inside #lobby so it's gone once the race starts. -->
-    <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
   </section>
 
   <!-- Race: overlays over the persistent #scene backdrop -->

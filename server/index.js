@@ -40,7 +40,7 @@ const GIT_SHA = String(process.env.GIT_SHA || '').trim() || detectLocalSha();
 function getShortSha(sha) { return sha ? sha.slice(0, 7) : null; }
 const VERSION_LABEL = APP_VERSION + (!IS_PROD && getShortSha(GIT_SHA) ? ' (#' + getShortSha(GIT_SHA) + ')' : '');
 // Visible build badge — only on preview (non-production) builds. Empty in prod so
-// the lobby's `.version-badge:empty` rule hides it entirely. (There is no prod
+// the welcome board's `.version-badge:empty` rule hides it entirely. (There is no prod
 // deploy yet; this keeps the badge off the day there is one.)
 const VERSION_BADGE = IS_PROD ? '' : VERSION_LABEL;
 
