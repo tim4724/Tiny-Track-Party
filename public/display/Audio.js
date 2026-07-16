@@ -71,7 +71,6 @@ export const RACE_MUSIC = {
     song('happy_bee.mp3', 'Happy Bee', 302, -9.1),
     song('hyperfun.mp3', 'Hyperfun', 233, -19.1),
     song('flying_kerfuffle.mp3', 'Flying Kerfuffle', 250, -9.4),
-    song('bummin_on_tremelo.mp3', 'Bummin on Tremelo', 192, -18.8),
   ],
   canyon: [
     song('still_pickin.mp3', 'Still Pickin', 298, -13.9),

@@ -17,7 +17,7 @@ the live map, so it can't drift; tests/credits.test.js guards completeness):
   "Tiki Bar Mixer", "Arroz Con Pollo", "Itty Bitty 8 Bit", "Bit Shift",
   "Wallpaper", "New Friendly", "Glitter Blast", "Cloud Dancer",
   "Digital Lemonade", "Happy Bee", "Hyperfun", "Flying Kerfuffle",
-  "Bummin on Tremelo", "Still Pickin", "Desert of Lost Souls",
+  "Still Pickin", "Desert of Lost Souls",
   "Surf Shimmy", "Bama Country", "Guts and Bourbon", "Neo Western"
   by Kevin MacLeod (incompetech.com)
   Licensed under Creative Commons: By Attribution 4.0
@@ -41,7 +41,6 @@ picks randomly from its biome's pool, never repeating the previous song):
   happy_bee.mp3               Backyard  "Happy Bee"
   hyperfun.mp3                Backyard  "Hyperfun"
   flying_kerfuffle.mp3        Backyard  "Flying Kerfuffle"
-  bummin_on_tremelo.mp3       Backyard  "Bummin on Tremelo"
   still_pickin.mp3            Canyon    "Still Pickin"
   desert_of_lost_souls.mp3    Canyon    "Desert of Lost Souls"
   surf_shimmy.mp3             Canyon    "Surf Shimmy"
