@@ -4,8 +4,17 @@
 // production relay. Run with `npm run test:e2e`.
 const { defineConfig } = require('@playwright/test');
 
-const PORT = Number(process.env.PW_PORT || 4200);
-const RELAY_PORT = Number(process.env.PW_RELAY_PORT || 4201);
+// Default ports are derived per-worktree from this config's own path, so
+// concurrent runs in sibling worktrees (or parallel agents) don't collide on a
+// shared hardcoded pair — the webServers use reuseExistingServer:false, so a
+// collision means one run's server tears down the port the other is mid-request
+// on (ERR_CONNECTION_REFUSED). PW_PORT/PW_RELAY_PORT still override explicitly.
+// 200 slots across 4200–4599: app = base, relay = base+1 (stepped by 2).
+let slot = 0;
+for (const ch of __dirname) slot = (slot * 31 + ch.charCodeAt(0)) >>> 0;
+slot %= 200;
+const PORT = Number(process.env.PW_PORT || 4200 + slot * 2);
+const RELAY_PORT = Number(process.env.PW_RELAY_PORT || PORT + 1);
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
