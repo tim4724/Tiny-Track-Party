@@ -6,7 +6,8 @@
 // with every trigger type laid out on the straights, one cluster per kind, so you
 // can drive each at your own line/speed and FEEL the hit boxes:
 //   main straight  → item boxes (one isolated at lat 0, then a standard 4-lane row),
-//                    then poles (a ±1.0 gap to thread, then one dead-centre)
+//                    then an off-centre boost pad, then poles (a ±1.0 gap to
+//                    thread, then one dead-centre)
 //   back straight  → oil (centre, then edge), then three staggered bananas
 // Authored bananas respawn (engine seeds them with a box-style cooldown), so the
 // range stays stocked lap after lap. Drive it with:
@@ -32,6 +33,9 @@ export const DEV_TRACKS = {
       { u: 0.045, lat: 0 },                                        // isolated box — feel the radius exactly
       { u: 0.10, lat: -1.05 }, { u: 0.10, lat: -0.35 },            // the standard 4-lane row
       { u: 0.10, lat: 0.35 }, { u: 0.10, lat: 1.05 }
+    ],
+    pads: [
+      { u: 0.135, lat: 0.9 }                                        // one boost disc, off-centre — clip its edge to arm it
     ],
     poles: [
       { u: 0.17, lat: -1.0 }, { u: 0.17, lat: 1.0 },               // a gate to thread

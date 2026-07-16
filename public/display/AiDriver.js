@@ -45,9 +45,10 @@ const WANDER_CURB = 1.3;   // lateral room (to the curb) below which the weave f
 // in time (the expo steering ignores gentle ones). Evasion overrides the wander.
 const EVADE_NEAR = -1.5;  // keep holding the dodge until the hazard is this far BEHIND (don't cut back early and clip it)
 const EVADE_FAR = 13.0;   // start considering hazards this far ahead (world units) — commit early
-const EVADE_CLEAR = 0.5;  // lateral gap to leave around a hazard (car half-width + margin)
+const EVADE_CLEAR = 0.75; // lateral gap to leave around a hazard's OWN radius: triggers are
+                          // body-touch (car half-width ~0.26 reaches for us) + real margin ~0.5
 const EVADE_LOOK = 3.5;   // fixed (short) steering lookahead while evading — sharp enough to reach the gap before the hazard (pure-pursuit lags position, so aim close), but not so tight it overshoots onto the curb
-const BANANA_AVOID_R = 0.6; // mirrors the engine's BANANA_RADIUS (bananas carry no radius field)
+const BANANA_AVOID_R = 0.25; // mirrors the engine's BANANA_RADIUS (bananas carry no radius field)
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
