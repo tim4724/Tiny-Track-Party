@@ -218,6 +218,11 @@ jobs:
                   - name: redirect-to-https
           EOF
 
+          # Green job = new pod live. Without this, apply returns before the
+          # image is even pulled, and a crash-looping pod still reads as a
+          # successful deploy (same pattern as HexStacker's production deploy).
+          kubectl rollout status deployment/tinytrack -n "$NS" --timeout=180s
+
       - name: Publish preview URL
         env:
           BRANCH_RAW: ${{ github.ref_name }}
