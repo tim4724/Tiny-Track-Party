@@ -1160,34 +1160,60 @@ export function buildLandmarks(R, track, theme) {
   }
 
   if (kinds.includes('sandcastle')) {
-    // Bucket-castle on a patted-down mound: a tall keep, four corner towers,
-    // curtain walls, and a little pennant. All in the dune-sand family.
-    const spot = findSpot(80, 6.0, 4);
+    // Bucket-castle at true sandbox scale (second shrink on review): a damp
+    // moat ring, the patted mound, a CRENELLATED keep (flat top + merlons —
+    // the castle cue cones couldn't give), four bucket towers with patted
+    // cone caps, curtain walls, a dark gate with a drawbridge plank over the
+    // moat, pressed-in shells, and the pennant. Dune-sand family throughout.
+    const spot = findSpot(80, 6.0, 3.2);
     if (spot) {
       const { x, z, yaw } = spot;
-      const SAND = [0xe8d49e, 0xdfc98e];
+      const SAND = [0xe8d49e, 0xdfc98e], DAMP = 0xcfb381; // damp ring only a shade darker — opaque geometry, unlike the translucent wet-sand band
       const part = (g, lx, ly, lz, hex, shade = 1) => {
         g.translate(lx, ly, lz);
         g.rotateY(yaw);
         g.translate(x, gy, z);
         geoms.push(tintGeo(g, hex, shade));
       };
-      // Toy-bucket scale — a knee-high castle, not a fort (shrunk on review).
-      const S = 0.62;
-      part(new THREE.CylinderGeometry(2.1 * S, 2.6 * S, 0.6 * S, 14), 0, 0.3 * S, 0, SAND[0], 0.97); // the mound
+      const S = 0.44;
+      // damp moat ring under everything (the just-dug look), then the mound
+      part(new THREE.CylinderGeometry(3.0 * S, 3.2 * S, 0.06, 16), 0, 0.03, 0, DAMP, 0.98);
+      part(new THREE.CylinderGeometry(2.1 * S, 2.6 * S, 0.6 * S, 14), 0, 0.07 + 0.3 * S, 0, SAND[0], 0.97);
+      const MY = 0.07 + 0.6 * S; // mound top — every build sits on this
+      // the keep: straight drum, flat lid, a ring of merlons (crenellations)
+      const KR = 0.8 * S, KH = 1.9 * S;
+      part(new THREE.CylinderGeometry(KR * 0.94, KR, KH, 10), 0, MY + KH / 2, 0, SAND[0], 1.02);
+      part(new THREE.CylinderGeometry(KR * 0.98, KR * 0.94, 0.1 * S, 10), 0, MY + KH + 0.05 * S, 0, SAND[1]);
+      for (let mi = 0; mi < 6; mi++) {
+        const ma = (mi / 6) * Math.PI * 2 + 0.26;
+        const merlon = new THREE.BoxGeometry(0.34 * S, 0.3 * S, 0.16 * S);
+        merlon.rotateY(-ma);
+        part(merlon, Math.cos(ma) * KR * 0.82, MY + KH + 0.22 * S, Math.sin(ma) * KR * 0.82, SAND[1], 1.04);
+      }
       const tower = (lx, lz, r, h) => { // upturned-bucket drum + patted cone cap
-        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, 0.6 * S + h / 2, lz, SAND[0], 1.02);
-        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, 0.6 * S + h + r * 0.42, lz, SAND[1], 0.96);
+        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, MY + h / 2, lz, SAND[0], 1.02);
+        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, MY + h + r * 0.42, lz, SAND[1], 0.96);
       };
-      tower(0, 0, 0.85 * S, 2.1 * S); // the keep
       for (const [tx2, tz2] of [[1.35 * S, 1.35 * S], [-1.35 * S, 1.35 * S], [1.35 * S, -1.35 * S], [-1.35 * S, -1.35 * S]])
-        tower(tx2, tz2, 0.5 * S, 1.25 * S);
+        tower(tx2, tz2, 0.5 * S, 1.2 * S);
       for (const [wx, wz, ww, wd] of [[0, 1.35 * S, 1.9 * S, 0.3 * S], [0, -1.35 * S, 1.9 * S, 0.3 * S], [1.35 * S, 0, 0.3 * S, 1.9 * S], [-1.35 * S, 0, 0.3 * S, 1.9 * S]])
-        part(new THREE.BoxGeometry(ww, 0.8 * S, wd), wx, 1.0 * S, wz, SAND[0], 0.94); // curtain walls
-      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8 * S, 6), 0, 3.35 * S, 0, 0x8a6f4d); // mast
+        part(new THREE.BoxGeometry(ww, 0.75 * S, wd), wx, MY + 0.37 * S, wz, SAND[0], 0.94); // curtain walls
+      // gate on the road face (+Z): a dark arch in the front wall, and a
+      // drawbridge plank bridging the moat
+      part(new THREE.BoxGeometry(0.5 * S, 0.5 * S, 0.12 * S), 0, MY + 0.25 * S, 1.5 * S, 0x6b5a3e);
+      const plank = new THREE.BoxGeometry(0.55 * S, 0.05, 1.7 * S);
+      part(plank, 0, 0.08, 2.4 * S, 0x9a7050, 0.95);
+      // shells pressed into the mound flank
+      for (const [sa, sr] of [[0.8, 2.0], [2.4, 2.2], [4.2, 2.1]]) {
+        const shell = new THREE.SphereGeometry(0.16 * S, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        shell.scale(1, 0.5, 1.15);
+        shell.rotateY(sa);
+        part(shell, Math.cos(sa) * sr * S, 0.07 + 0.18 * S, Math.sin(sa) * sr * S, 0xecc8b4, 1.02);
+      }
+      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8 * S, 6), 0, MY + KH + 0.6 * S, 0, 0x8a6f4d); // mast
       const flag = new THREE.ConeGeometry(0.16 * S, 0.5 * S, 3);
       flag.rotateZ(-Math.PI / 2); // pennant streams sideways
-      part(flag, 0.3 * S, 3.6 * S, 0, 0xd94f3d);
+      part(flag, 0.3 * S, MY + KH + 0.85 * S, 0, 0xd94f3d);
     }
   }
 
