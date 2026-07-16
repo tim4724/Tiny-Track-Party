@@ -17,7 +17,7 @@ import { buildMonsterRig, buildMonsterChassis, MONSTER_BASE_ASSET } from '/displ
 import { gantryGroup } from '/display/render/FinishGate.js';
 import { buildLandmarks, CLUTTER_BUILDERS } from '/display/render/track.js';
 import { buildBalloon, applyBalloon } from '/display/render/environment.js';
-import { makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture } from '/display/render/textures.js';
+import { makeBirdTexture, makePlaneTexture, makeKiteTexture } from '/display/render/textures.js';
 import { THEMES } from '/shared/themes.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
@@ -397,10 +397,9 @@ async function main() {
     applyBalloon(b, THEMES[theme]);
     inject('sky-balloon-' + (theme === 'grass' ? 'meadow' : 'dusk'), b);
   }
-  inject('sky-glyph-bird',      buildGlyphShowcase(makeBirdTexture(),      0x51616d, 0.5));
-  inject('sky-glyph-butterfly', buildGlyphShowcase(makeButterflyTexture(), 0xe66a5a, 0.5));
-  inject('sky-glyph-plane',     buildGlyphShowcase(makePlaneTexture(),     0xf6f2e2, 0.5));
-  inject('sky-glyph-kite',      buildGlyphShowcase(makeKiteTexture(),      0xd94f3d, 1));
+  inject('sky-glyph-bird',  buildGlyphShowcase(makeBirdTexture(),  0x51616d, 0.5));
+  inject('sky-glyph-plane', buildGlyphShowcase(makePlaneTexture(), 0xf6f2e2, 0.5));
+  inject('sky-glyph-kite',  buildGlyphShowcase(makeKiteTexture(),  0xd94f3d, 1));
 
   // Bucket by category, preserving the category display order.
   const buckets = new Map(CATEGORIES.map((c) => [c.key, []]));

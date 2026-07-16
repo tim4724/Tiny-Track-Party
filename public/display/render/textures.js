@@ -231,50 +231,22 @@ function makeBirdTexture() {
   return tex;
 }
 
-// Butterfly glyph: two fat wing lobes (big fore, small hind) either side of a
-// short body stroke — the fliers' butterfly kind (grass/sunset). Same 2:1 canvas
-// as the bird so the sprite scale math is shared; the flap envelope squashing the
-// sprite reads as the wing-beat, so the glyph itself stays spread-winged.
-function makeButterflyTexture() {
-  const w = 64, h = 32;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = 'rgba(255,255,255,1)';
-  // forewings — large upper lobes
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(32 + s * 12, 12, 11, 8.5, s * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    // hindwings — smaller lower lobes
-    ctx.beginPath();
-    ctx.ellipse(32 + s * 8, 23, 7, 5.5, s * -0.4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.strokeStyle = 'rgba(255,255,255,1)';
-  ctx.lineWidth = 3.4;
-  ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(32, 5); ctx.lineTo(32, 27); ctx.stroke(); // body
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Paper-airplane glyph: the classic folded dart seen from below-side — a long
-// nose-right triangle with a darker centre fold notch. Flap 0 (it glides);
-// the loop banks it via sprite material rotation instead.
+// Paper-airplane glyph: the iconic TOP-DOWN dart — a symmetric arrowhead, nose
+// right, wings swept back to a V-notch tail, split by a centre-crease gap (the
+// fold). The two wings carry different alpha so the crease reads even at speck
+// size; flap 0 (it glides) — the loop banks it via sprite rotation instead.
 function makePlaneTexture() {
   const w = 64, h = 32;
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = 'rgba(255,255,255,1)';
-  ctx.beginPath(); // upper wing
-  ctx.moveTo(60, 14); ctx.lineTo(6, 4); ctx.lineTo(22, 16); ctx.closePath();
+  ctx.beginPath(); // upper wing — nose to swept-back tip, in to the tail notch
+  ctx.moveTo(61, 15); ctx.lineTo(6, 2); ctx.lineTo(21, 15); ctx.closePath();
   ctx.fill();
-  ctx.beginPath(); // lower wing, slightly darker to sell the fold
-  ctx.fillStyle = 'rgba(255,255,255,0.72)';
-  ctx.moveTo(60, 14); ctx.lineTo(22, 16); ctx.lineTo(14, 27); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; // lower wing a step dimmer — the fold
+  ctx.beginPath();
+  ctx.moveTo(61, 17); ctx.lineTo(6, 30); ctx.lineTo(21, 17); ctx.closePath();
   ctx.fill();
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -767,6 +739,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
   makePadTexture, makePadStripTexture, makeWetSignTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

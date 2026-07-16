@@ -13,7 +13,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -398,15 +398,15 @@ export function stepAmbient(amb, dt, t) {
 
 // ── Fliers (theme.birds) ─────────────────────────────────────────────────────
 // A few airborne silhouettes, each circling its own authored roost — gulls over
-// the beach shoreline, vultures high over a canyon mesa, butterflies low over
-// the parkland, a paper airplane gliding around the playroom. Sprites like the
-// clouds (they billboard per split-screen cell); the frame loop does the
-// circling. Per-flier variety (roost angle, height offset, phase, speed factor)
-// is baked at build; the theme dresses kind/count/tint/size and sets the shared
-// orbit numbers, which the loop reads from `birds.cfg`:
-//   kind:  'bird' (default) | 'butterfly' | 'plane' — picks the glyph
+// the beach shoreline, vultures high over a canyon mesa, a paper airplane
+// gliding around the playroom. Sprites like the clouds (they billboard per
+// split-screen cell); the frame loop does the circling. Per-flier variety
+// (roost angle, height offset, phase, speed factor) is baked at build; the
+// theme dresses kind/count/tint/size and sets the shared orbit numbers, which
+// the loop reads from `birds.cfg`:
+//   kind:  'bird' (default) | 'plane' — picks the glyph
 //   tints: optional per-flier colour array (cycled by index; wins over `tint`)
-//   dys:   scales the per-flier altitude jitter (butterflies hug their band)
+//   dys:   scales the per-flier altitude jitter (low kinds hug their band)
 //   bank:  sprite-rotation roll around the orbit (the plane leans into turns;
 //          flapping kinds leave it 0)
 const DEF_BIRDS = { kind: 'bird', count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8, dys: 1, bank: 0 };
@@ -417,7 +417,6 @@ function flierTexture(kind) {
   if (!_flierTex) {
     _flierTex = {
       bird: makeBirdTexture(),
-      butterfly: makeButterflyTexture(),
       plane: makePlaneTexture(),
     };
   }
@@ -472,12 +471,14 @@ export function stepKites(kites, dt, t, sf) {
 }
 
 // ── Hot-air balloon (theme.balloon) ──────────────────────────────────────────
-// A far-field hero: one gored balloon drifting a very slow circle at cloud
-// height (grass/sunset). Real 3D (Lambert, fogged like the hills — it hazes
-// with distance instead of glowing through the fog): a panelled envelope
-// painted per-face by longitude (the play-ball trick), a rigging frustum, and
-// a hanging basket. applyBalloon repaints the gores; stepBalloon drifts it.
-const DEF_BALLOON = { panels: [0xd94f3d, 0xf5f0e2], y: 42, r: 150, size: 6, bearing: 2.4, speed: 0.012 };
+// A mid-field hero: one gored balloon drifting a very slow circle at cloud
+// height (grass/sunset). Real 3D: a panelled envelope painted per-face by
+// longitude (the play-ball trick), a rigging frustum, and a hanging basket.
+// Lambert with fog OFF, like the clouds/fliers — at hill distance the race fog
+// greyed the gores into an unreadable blob, and the whole point of a balloon is
+// its colour. Kept nearer than the hill ring for the same reason.
+// applyBalloon repaints the gores; stepBalloon drifts it.
+const DEF_BALLOON = { panels: [0xd94f3d, 0xf5f0e2], y: 42, r: 112, size: 6, bearing: 2.4, speed: 0.012 };
 
 // Exported (with applyBalloon) for the Asset World gallery, which shows one of
 // each biome's balloon liveries alongside the kit models.
@@ -491,7 +492,7 @@ export function buildBalloon() {
   env.deleteAttribute('uv');
   env.scale(1, 1.08, 1);
   env.setAttribute('color', new THREE.BufferAttribute(new Float32Array(env.attributes.position.count * 3), 3));
-  const envelope = new THREE.Mesh(env, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const envelope = new THREE.Mesh(env, new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }));
   group.add(envelope);
   group.userData.envelope = envelope;
   // rigging + basket: static warm-brown parts, vertex-tinted into one mesh
@@ -511,7 +512,7 @@ export function buildBalloon() {
   const basket = new THREE.BoxGeometry(0.42, 0.32, 0.42);
   basket.translate(0, -1.6, 0);
   const parts = mergeGeometries([tintPart(rig, 0x6f5a40), tintPart(basket, 0x8a6f4d)], false);
-  group.add(new THREE.Mesh(parts, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  group.add(new THREE.Mesh(parts, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false })));
   return group;
 }
 

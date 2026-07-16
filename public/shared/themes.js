@@ -117,13 +117,12 @@
 //                                       airborne silhouettes, each circling its own
 //                                       roost on a ring of radius rc (orbit radius rb,
 //                                       height y). kind picks the glyph: 'bird'
-//                                       (default) | 'butterfly' | 'plane'. flap =
-//                                       wing-beat depth (1 = busy gull, ~0.15 =
-//                                       soaring vulture) at flapHz beats/s; tints
-//                                       cycles per flier; dys scales the per-flier
-//                                       altitude jitter (butterflies hug their band);
-//                                       bank rolls the sprite into its turn (the
-//                                       paper plane — flapping kinds leave it 0)
+//                                       (default) | 'plane'. flap = wing-beat depth
+//                                       (1 = busy gull, ~0.15 = soaring vulture) at
+//                                       flapHz beats/s; tints cycles per flier; dys
+//                                       scales the per-flier altitude jitter; bank
+//                                       rolls the sprite into its turn (the paper
+//                                       plane — flapping kinds leave it 0)
 //   kites: (optional)                   { count ≤2, tints, size, y } — bright kites
 //                                       bobbing on implied strings over the shore;
 //                                       anchored wander, not an orbit (beach)
@@ -163,11 +162,11 @@
 //     clutter: (optional)         small ground detail scattered DENSER and CLOSER to
 //              the road than the props above — the near-field pass the chase cam
 //              actually sees. { kinds: [{ kind, w, tints }], density }; kinds are
-//              procedural (render/track.js placeClutter): 'flower' | 'shell' |
-//              'starfish' | 'driftwood' | 'pinecone' | 'drift' (snow heap) |
-//              'scrub' | 'pebbles' | 'brick' (studded toy brick) | 'marble' |
-//              'domino'. Placement draws from its OWN seeded stream, so adding or
-//              tuning clutter NEVER reshuffles the tree/rock scatter.
+//              procedural (render/track.js CLUTTER_BUILDERS): 'flower' | 'shell' |
+//              'starfish' | 'driftwood' | 'drift' (snow heap) | 'scrub' |
+//              'pebbles' | 'brick' (studded toy brick) | 'marble' | 'domino'.
+//              Placement draws from its OWN seeded stream, so adding or tuning
+//              clutter NEVER reshuffles the tree/rock scatter.
 
 // Green-parkland scenery, shared by every biome that keeps the grass world (grass +
 // sunset — golden light over the SAME trees is the sunset look). Every value is the
@@ -203,11 +202,10 @@ export const THEMES = {
     ground: { kind: 'lawn' },
     hills:  [0x8cc578, 0x7cb86a, 0x9bce86],
     // The Backyard finally becomes a PLACE, not the default: garden clutter
-    // trackside (gnome/kennel/picnic), butterflies working the verge, drifting
-    // pollen in the sun, and a far hot-air balloon over the meadow hills.
+    // trackside (gnome/kennel/picnic), drifting pollen in the sun, and a
+    // hot-air balloon over the meadow. (Butterfly fliers were tried here and
+    // removed on review 2026-07-16.)
     ambient: { kind: 'pollen', count: 140, tint: 0xfff2c4 },
-    birds:  { kind: 'butterfly', count: 3, tints: [0xe66a5a, 0x8a76d8, 0xf7f5ee],
-              size: 1.15, y: 3, rc: 55, rb: 12, speed: 0.55, flap: 1, flapHz: 4.5, dys: 0.3 },
     balloon: { panels: [0xd94f3d, 0xf5f0e2], y: 44, size: 6 },
     landmark: ['gnome', 'doghouse', 'picnic'],
     scenery: GRASS_SCENERY,
@@ -375,11 +373,10 @@ export const THEMES = {
       rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite
       rockS:   [0.4, 0.6], // a touch bigger than parkland — reads as snow-shouldered
       density: 0.55,
-      // Verge detail: wind-blown snow heaps hugging the snowbanks, pinecones
-      // dropped by the treeline.
+      // Verge detail: wind-blown snow heaps hugging the snowbanks. (Pinecones
+      // were tried here and removed on review 2026-07-16 — too small to read.)
       clutter: {
-        kinds: [{ kind: 'drift',    w: 0.6, tints: [0xf3f7fb, 0xe9eff6] },
-                { kind: 'pinecone', w: 0.4, tints: [0x6b4a2f, 0x7c583a] }],
+        kinds: [{ kind: 'drift', w: 1, tints: [0xf3f7fb, 0xe9eff6] }],
         density: 0.3,
       },
     },
@@ -449,7 +446,7 @@ export const THEMES = {
     // Dust motes hanging in the window sunbeams — the indoor-afternoon icon —
     // and a paper airplane on a long lazy glide around the room.
     ambient: { kind: 'mote', count: 240, tint: 0xffdf9e },
-    birds: { kind: 'plane', count: 1, tint: 0xf6f2e2, size: 3.6, y: 24, rc: 100, rb: 34, speed: 0.28, flap: 0, bank: 0.4 },
+    birds: { kind: 'plane', count: 1, tint: 0xfaf7ec, size: 4.4, y: 24, rc: 100, rb: 34, speed: 0.28, flap: 0, bank: 0.4 },
     structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
     landmark: ['blocks', 'duck', 'ball', 'crayons', 'books', 'train'], // toy clutter + a wind-up train circling the floor
     gate: 0xfff3e2, // warm indoor-light gate grade

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GROUND_SIZE, WATER_INNER, WATER_LIFT } from './environment.js';
-import { makeCloudTexture } from './textures.js';
+import { makeCloudTexture, flipWinding } from './textures.js';
 
 // Chimney-smoke sprite texture (the cabin landmark) — one shared soft puff,
 // built lazily; SpriteMaterial.dispose never frees a shared texture, so the
@@ -751,10 +751,12 @@ export function buildLandmarks(R, track, theme) {
     // Parts are authored in the boat's LOCAL frame (+Z = bow, origin at the
     // waterline under the mast), then heeled a few degrees — a sailing boat
     // leans — and swung to the anchorage bearing. Toy sloop anatomy: red hull
-    // with a pointed bow wedge and a white gunwale stripe, cream cabin, mast,
-    // main sail + jib (both slender 3-sided cones, only mildly flattened — a
-    // paper-thin sail vanishes edge-on and the cameras circle the whole
-    // island), and a little pennant at the masthead.
+    // with a pointed bow wedge and a white gunwale stripe, cream cabin, and a
+    // proper sloop rig (reworked on review — the old cone sails read as
+    // blobs): mast + boom, a big triangular MAIN aft with a red racing band,
+    // a smaller JIB forward, pennant at the masthead. Sails are thin 3-sided
+    // prisms — crisp triangle silhouettes that still catch light edge-on
+    // (paper-thin planes vanish; the cameras circle the whole island).
     const HEEL = 0.09;
     const part = (g, lx, ly, lz, hex) => {
       g.translate(lx, ly, lz);
@@ -763,6 +765,14 @@ export function buildLandmarks(R, track, theme) {
       g.translate(bx, wy, bz);
       geoms.push(tintGeo(g, hex));
     };
+    // a standing sail triangle: thin 3-prism in the boat's fore-aft plane,
+    // apex up (cylinder axis → X for thickness; thetaStart puts a vertex at +Y)
+    const sail = (sy, sz) => {
+      const g = new THREE.CylinderGeometry(1, 1, 0.09, 3, 1, false, Math.PI / 2);
+      g.rotateZ(Math.PI / 2);
+      g.scale(1, sy, sz);
+      return g;
+    };
     part(new THREE.BoxGeometry(1.8, 1.0, 4.6), 0, 0.28, -0.5, 0xd94f3d);   // hull
     const bow = new THREE.ConeGeometry(0.9, 1.7, 4);                        // 4-sided pyramid...
     bow.rotateX(Math.PI / 2);                                               // ...apex swung to +Z
@@ -770,17 +780,17 @@ export function buildLandmarks(R, track, theme) {
     part(bow, 0, 0.28, 2.6, 0xd94f3d);                                      // pointed prow
     part(new THREE.BoxGeometry(1.92, 0.2, 4.7), 0, 0.82, -0.5, 0xf7f5ee);   // gunwale stripe
     part(new THREE.BoxGeometry(1.1, 0.6, 1.4), 0, 1.15, -1.3, 0xf3e9d8);    // cabin
-    part(new THREE.CylinderGeometry(0.09, 0.09, 5.6, 6), 0, 3.6, 0.3, 0x8a6f4d); // mast
-    const main = new THREE.ConeGeometry(1.6, 4.4, 3);
-    main.scale(1, 1, 0.45);
-    part(main, 0, 3.35, -0.85, 0xf7f5ee);                                   // main sail, aft of the mast
-    const jib = new THREE.ConeGeometry(1.05, 3.1, 3);
-    jib.scale(1, 1, 0.4);
-    part(jib, 0, 2.7, 1.35, 0xfdf8ec);                                      // jib, fore
+    part(new THREE.CylinderGeometry(0.1, 0.07, 5.8, 6), 0, 2.9, 0.3, 0x8a6f4d); // mast, tapering
+    const boom = new THREE.CylinderGeometry(0.06, 0.06, 2.7, 6);            // main boom, swung aft
+    boom.rotateX(Math.PI / 2);
+    part(boom, 0, 1.55, -0.85, 0x8a6f4d);
+    part(sail(2.4, 1.3), 0, 2.85, -0.85, 0xf7f5ee);                         // MAIN: foot on the boom, leading edge on the mast
+    part(new THREE.BoxGeometry(0.11, 0.42, 1.4), 0, 2.2, -0.85, 0xd94f3d);  // red racing band across the main
+    part(sail(1.55, 0.95), 0, 2.25, 1.3, 0xfdf8ec);                         // JIB, forward of the mast
     const pennant = new THREE.ConeGeometry(0.26, 0.7, 3);
     pennant.rotateX(-Math.PI / 2);                                          // streams aft
     pennant.scale(1, 0.5, 1);
-    part(pennant, 0, 6.35, -0.1, 0xd94f3d);                                 // masthead pennant
+    part(pennant, 0, 5.85, -0.1, 0xd94f3d);                                 // masthead pennant
   }
 
   if (kinds.includes('hoodoo')) {
@@ -1092,25 +1102,35 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(g, hex, shade));
       };
       const TILT = 0.2; // leans gently toward the road
-      const pole = new THREE.CylinderGeometry(0.07, 0.09, 3.5, 8);
-      pole.translate(0, 1.75, 0);
+      // pole runs UP INTO the dome (tip well above the canopy rim), so the
+      // fabric visibly hangs off its stick instead of floating beside it
+      const pole = new THREE.CylinderGeometry(0.07, 0.09, 4.1, 8);
+      pole.translate(0, 2.05, 0);
       pole.rotateX(TILT);
       part(pole, 0, 0, 0, 0xf0e6d4);
-      // canopy: an open dome, coral/cream gores by longitude (per-face —
-      // the seams stay crisp)
+      // canopy: an open dome, coral/cream gores by longitude (per-face — the
+      // seams stay crisp). TWO shells: the merged landmark material is single-
+      // sided, so a lone dome vanishes when seen from below — a slightly
+      // smaller inner copy with flipped winding (darker, in shade) lines the
+      // underside.
       const CA = new THREE.Color(0xe4604a).convertSRGBToLinear();
       const CB = new THREE.Color(0xf7f0e2).convertSRGBToLinear();
-      const canopy = new THREE.SphereGeometry(2.0, 20, 5, 0, Math.PI * 2, 0, Math.PI / 2.4);
-      canopy.scale(1, 0.62, 1);
-      const painted = paintFaces(canopy, (cx, cy, cz) =>
-        (Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * 10) % 2) ? CA : CB);
-      painted.translate(0, 3.32, 0); // rides the pole top…
-      painted.rotateX(TILT);         // …and leans with it
-      painted.rotateY(yaw);
-      painted.translate(x, gy, z);
-      geoms.push(painted);
+      const CAd = CA.clone().multiplyScalar(0.72), CBd = CB.clone().multiplyScalar(0.72);
+      const gores = (dark) => (cx, cy, cz) =>
+        (Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * 10) % 2) ? (dark ? CAd : CA) : (dark ? CBd : CB);
+      for (const inner of [false, true]) {
+        const dome = new THREE.SphereGeometry(inner ? 1.97 : 2.0, 20, 5, 0, Math.PI * 2, 0, Math.PI / 2.15);
+        dome.scale(1, 0.62, 1);
+        const painted = paintFaces(dome, gores(inner));
+        if (inner) flipWinding(painted); // faces point down/inward — visible from beneath
+        painted.translate(0, 3.06, 0);   // rim wraps the pole tip…
+        painted.rotateX(TILT);           // …and leans with it
+        painted.rotateY(yaw);
+        painted.translate(x, gy, z);
+        geoms.push(painted);
+      }
       const finial = new THREE.SphereGeometry(0.11, 8, 6);
-      finial.translate(0, 3.62, 0);
+      finial.translate(0, 4.36, 0); // caps the dome crown
       finial.rotateX(TILT);
       part(finial, 0, 0, 0, 0xe4604a);
       // towel, beside the shade with a cream end-stripe
@@ -1135,20 +1155,22 @@ export function buildLandmarks(R, track, theme) {
         g.translate(x, gy, z);
         geoms.push(tintGeo(g, hex, shade));
       };
-      part(new THREE.CylinderGeometry(2.1, 2.6, 0.6, 14), 0, 0.3, 0, SAND[0], 0.97); // the mound
+      // Toy-bucket scale — a knee-high castle, not a fort (shrunk on review).
+      const S = 0.62;
+      part(new THREE.CylinderGeometry(2.1 * S, 2.6 * S, 0.6 * S, 14), 0, 0.3 * S, 0, SAND[0], 0.97); // the mound
       const tower = (lx, lz, r, h) => { // upturned-bucket drum + patted cone cap
-        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, 0.6 + h / 2, lz, SAND[0], 1.02);
-        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, 0.6 + h + r * 0.42, lz, SAND[1], 0.96);
+        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, 0.6 * S + h / 2, lz, SAND[0], 1.02);
+        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, 0.6 * S + h + r * 0.42, lz, SAND[1], 0.96);
       };
-      tower(0, 0, 0.85, 2.1); // the keep
-      for (const [tx2, tz2] of [[1.35, 1.35], [-1.35, 1.35], [1.35, -1.35], [-1.35, -1.35]])
-        tower(tx2, tz2, 0.5, 1.25);
-      for (const [wx, wz, ww, wd] of [[0, 1.35, 1.9, 0.3], [0, -1.35, 1.9, 0.3], [1.35, 0, 0.3, 1.9], [-1.35, 0, 0.3, 1.9]])
-        part(new THREE.BoxGeometry(ww, 0.8, wd), wx, 1.0, wz, SAND[0], 0.94); // curtain walls
-      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6), 0, 3.35, 0, 0x8a6f4d); // mast
-      const flag = new THREE.ConeGeometry(0.16, 0.5, 3);
+      tower(0, 0, 0.85 * S, 2.1 * S); // the keep
+      for (const [tx2, tz2] of [[1.35 * S, 1.35 * S], [-1.35 * S, 1.35 * S], [1.35 * S, -1.35 * S], [-1.35 * S, -1.35 * S]])
+        tower(tx2, tz2, 0.5 * S, 1.25 * S);
+      for (const [wx, wz, ww, wd] of [[0, 1.35 * S, 1.9 * S, 0.3 * S], [0, -1.35 * S, 1.9 * S, 0.3 * S], [1.35 * S, 0, 0.3 * S, 1.9 * S], [-1.35 * S, 0, 0.3 * S, 1.9 * S]])
+        part(new THREE.BoxGeometry(ww, 0.8 * S, wd), wx, 1.0 * S, wz, SAND[0], 0.94); // curtain walls
+      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8 * S, 6), 0, 3.35 * S, 0, 0x8a6f4d); // mast
+      const flag = new THREE.ConeGeometry(0.16 * S, 0.5 * S, 3);
       flag.rotateZ(-Math.PI / 2); // pennant streams sideways
-      part(flag, 0.3, 3.6, 0, 0xd94f3d);
+      part(flag, 0.3 * S, 3.6 * S, 0, 0xd94f3d);
     }
   }
 
@@ -1315,7 +1337,6 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(g, hex, shade));
       };
       part(new THREE.ConeGeometry(0.62, 1.3, 10), 0, 0.65, 0, 0x3b6fb0); // coat
-      part(new THREE.BoxGeometry(0.5, 0.16, 0.2), 0, 0.75, 0.42, 0x2f2b38); // belt buckle glint
       for (const sd of [-1, 1]) // boots peeking out
         part(new THREE.IcosahedronGeometry(0.13, 1), sd * 0.24, 0.09, 0.14, 0x4a3a2e);
       part(new THREE.SphereGeometry(0.36, 12, 9), 0, 1.42, 0, 0xf0c8a2); // head
@@ -1330,12 +1351,15 @@ export function buildLandmarks(R, track, theme) {
   }
 
   if (kinds.includes('doghouse')) {
-    // Backyard kennel: warm red walls, dark gabled roof, an arched doorway
-    // (dark slab + disc), and the food bowl out front.
+    // Backyard kennel: warm red walls under a proper triangular gable (a
+    // 45°-rotated box — its top half IS the prism, the rest hides in the
+    // walls), dark overhanging roof slabs, a white-trimmed arched doorway,
+    // and the food bowl + a bone out front. (Reworked on review — the first
+    // pass faked the gable with a stepped box and read muddled.)
     const spot = findSpot(60, 4.6, 3.2);
     if (spot) {
       const { x, z, yaw } = spot;
-      const WALL = 0xb85c48, ROOF = 0x6e4a38;
+      const WALL = 0xc4573f, ROOF = 0x5e4434, TRIM = 0xf5f0e2, DARK = 0x3a3040;
       const part = (g, lx, ly, lz, hex, shade = 1) => {
         g.translate(lx, ly, lz);
         g.rotateY(yaw);
@@ -1343,18 +1367,39 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(g, hex, shade));
       };
       part(new THREE.BoxGeometry(2.3, 1.5, 2.6), 0, 0.75, 0, WALL);
-      part(new THREE.BoxGeometry(1.5, 0.8, 2.5), 0, 1.85, 0, WALL, 0.97); // shoulders into the roof (hides the gable gap)
-      for (const sd of [-1, 1]) { // roof slabs, ridge along local Z
-        const slab = new THREE.BoxGeometry(1.66, 0.14, 2.95);
-        slab.rotateZ(sd * 0.72);
-        part(slab, sd * -0.6, 2.02, 0, ROOF);
+      const gable = new THREE.BoxGeometry(1.64, 1.64, 2.55); // diamond: apex ~1.16 over the wall top
+      gable.rotateZ(Math.PI / 4);
+      part(gable, 0, 1.5, 0, WALL, 0.98);
+      for (const sd of [-1, 1]) { // roof slabs follow the 45° gable, eaves overhanging
+        const slab = new THREE.BoxGeometry(1.85, 0.13, 3.0);
+        slab.rotateZ(sd * -Math.PI / 4);
+        part(slab, sd * 0.62, 2.08, 0, ROOF);
       }
-      part(new THREE.BoxGeometry(0.24, 0.18, 3.0), 0, 2.56, 0, ROOF, 1.08); // ridge cap
-      part(new THREE.BoxGeometry(0.85, 0.85, 0.12), 0, 0.43, 1.32, 0x3a3040); // doorway slab…
+      const ridge = new THREE.BoxGeometry(0.26, 0.26, 3.05); // diamond ridge cap along the apex
+      ridge.rotateZ(Math.PI / 4);
+      part(ridge, 0, 2.7, 0, ROOF, 1.12);
+      // doorway: white surround, dark arched opening proud of it
+      part(new THREE.BoxGeometry(1.0, 0.98, 0.1), 0, 0.49, 1.31, TRIM);
+      const rim = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 12);
+      rim.rotateX(Math.PI / 2);
+      part(rim, 0, 0.98, 1.31, TRIM);
+      part(new THREE.BoxGeometry(0.84, 0.84, 0.12), 0, 0.42, 1.33, DARK);
       const arch = new THREE.CylinderGeometry(0.42, 0.42, 0.12, 12);
       arch.rotateX(Math.PI / 2);
-      part(arch, 0, 0.85, 1.32, 0x3a3040); // …arched top
+      part(arch, 0, 0.84, 1.33, DARK);
       part(new THREE.CylinderGeometry(0.32, 0.26, 0.2, 10), 1.35, 0.1, 1.7, 0xd8463f); // food bowl
+      // the bone: a cream bar with knuckle lobes at each end
+      const boneYaw = 0.7;
+      const bar = new THREE.CylinderGeometry(0.07, 0.07, 0.55, 6);
+      bar.rotateZ(Math.PI / 2);
+      bar.rotateY(boneYaw);
+      part(bar, -1.15, 0.08, 1.55, 0xf3ecdc);
+      for (const be of [-1, 1]) for (const bs of [-1, 1]) {
+        const lobe = new THREE.SphereGeometry(0.09, 6, 5);
+        lobe.translate(be * 0.28, 0, bs * 0.07);
+        lobe.rotateY(boneYaw);
+        part(lobe, -1.15, 0.09, 1.55, 0xf3ecdc);
+      }
     }
   }
 
@@ -1390,20 +1435,27 @@ export function buildLandmarks(R, track, theme) {
   }
 
   if (kinds.includes('crayons')) {
-    // Spilled crayons: five fat wax sticks in the plastic primaries, scattered
-    // in a loose fan, one tipped up against the pile.
+    // Spilled crayons: four fat wax sticks lying loosely parallel — as if
+    // tipped from their box — spaced wider than a crayon so nothing clips,
+    // with a fifth thrown across the top of the row.
     const spot = findSpot(110, 4.4, 3);
     if (spot) {
       const { x, z } = spot;
       const COLS = [0xd8463f, 0x3f6fd1, 0x3fa14e, 0xf2a83c, 0x8a76d8];
+      const a0 = rand() * Math.PI * 2;              // the spill's heading
+      const px2 = Math.sin(a0), pz2 = Math.cos(a0); // spread axis (perpendicular to the sticks)
       for (let i = 0; i < 5; i++) {
-        const a = rand() * Math.PI * 2;
-        const ox = (rand() - 0.5) * 2.4, oz = (rand() - 0.5) * 2.4;
-        const tip = i === 4 ? 0.2 : 0; // the propped one tilts up
+        const onTop = i === 4;
+        const ai = onTop ? a0 + 1.25 : a0 + (rand() - 0.5) * 0.2; // near-parallel; the top one crosses
+        const off = onTop ? 0.15 : (i - 1.5) * 0.6;               // row spacing > crayon diameter (0.36)
+        const slide = onTop ? 0 : (rand() - 0.5) * 0.8;           // stagger along each stick
+        const ox = px2 * off + Math.cos(ai) * slide;
+        const oz = pz2 * off - Math.sin(ai) * slide;
+        const lift = onTop ? 0.33 : 0;                            // rests on the row's wraps
         const make = (g, hex, shade) => {
-          g.rotateZ(Math.PI / 2 - tip); // lie flat along local X
-          g.rotateY(a);
-          g.translate(x + ox, gy + 0.17 + tip * 0.9, z + oz);
+          g.rotateZ(Math.PI / 2); // lie flat along local X
+          g.rotateY(ai);
+          g.translate(x + ox, gy + 0.17 + lift, z + oz);
           geoms.push(tintGeo(g, hex, shade));
         };
         const body = new THREE.CylinderGeometry(0.16, 0.16, 2.3, 9);
@@ -1451,19 +1503,36 @@ export function buildLandmarks(R, track, theme) {
   }
 
   if (kinds.includes('train')) {
-    // Wind-up toy train trundling a slow circle on the floor, key turning as it
-    // goes — needs a big clear disc; a layout that never leaves one simply gets
-    // no train. Painted toy rails mark the route (static); the loco is its own
-    // little group stepped by the anim registry.
-    const RT = 5.5; // route radius
-    const spot = findSpot(40, RT + 4.5, RT + 2.5);
+    // Wind-up toy train trundling a slow OVAL on the floor (a proper toy-train
+    // stadium: two straights + two half-circle ends, long axis along the road),
+    // key turning as it goes — needs a big clear patch; a layout that never
+    // leaves one simply gets no train. Toy rails mark the route (static); the
+    // loco is its own little group stepped by the anim registry.
+    const RT = 5, LT = 7;          // end radius + straight length
+    const OM = RT + LT / 2 + 1.5;  // footprint radius kept clear
+    const spot = findSpot(40, OM + 2, OM);
     if (spot) {
       const cx2 = spot.x, cz2 = spot.z;
-      for (const rr of [RT - 0.32, RT + 0.32]) { // the two rails
-        const rail = new THREE.TorusGeometry(rr, 0.05, 6, 48);
-        rail.rotateX(Math.PI / 2);
-        rail.translate(cx2, gy + 0.03, cz2);
-        geoms.push(tintGeo(rail, 0x8a6f4d, 0.9));
+      const ao = Math.atan2(-spot.tz, spot.tx); // oval long axis rides the road tangent (rotateY frame)
+      const co = Math.cos(ao), so = Math.sin(ao);
+      for (const rr of [RT - 0.32, RT + 0.32]) { // the two rails: 2 straights + 2 half-torus ends each
+        for (const zs of [-rr, rr]) {
+          const straight = new THREE.CylinderGeometry(0.05, 0.05, LT, 6);
+          straight.rotateZ(Math.PI / 2); // axis → local X
+          straight.translate(0, 0, zs);
+          straight.rotateY(ao);
+          straight.translate(cx2, gy + 0.03, cz2);
+          geoms.push(tintGeo(straight, 0x8a6f4d, 0.9));
+        }
+        for (const es of [1, -1]) {
+          const end = new THREE.TorusGeometry(rr, 0.05, 6, 24, Math.PI);
+          end.rotateX(Math.PI / 2);            // into the floor plane (arc bulges +Z…)
+          end.rotateY(es * (Math.PI / 2));     // …swung to bulge past ±X (the straight ends)
+          end.translate(es * (LT / 2), 0, 0);
+          end.rotateY(ao);
+          end.translate(cx2, gy + 0.03, cz2);
+          geoms.push(tintGeo(end, 0x8a6f4d, 0.9));
+        }
       }
       const parts = []; // the loco, authored facing +Z
       const lp = (g, lx, ly, lz, hex, shade = 1) => {
@@ -1509,10 +1578,26 @@ export function buildLandmarks(R, track, theme) {
       R.trackGroup.add(train);
       R._mergedGeoms.push(trainGeo, keyGeo);
       R._mergedMats.push(mat);
+      const PERIM = 2 * LT + 2 * Math.PI * RT;
       animate((dt, t) => {
-        const a = t * 0.32; // ~1.8 u/s — a wind-up trundle
-        train.position.set(cx2 + Math.cos(a) * RT, gy, cz2 + Math.sin(a) * RT);
-        train.rotation.y = -a;    // nose along the tangent
+        const s = (t * 1.9) % PERIM; // ~1.9 u/s — a wind-up trundle
+        let lpx, lpz, dx, dz;        // stadium frame: straights along X at z = ±RT, run CCW
+        if (s < LT) {                                     // near straight, heading +X
+          lpx = -LT / 2 + s; lpz = -RT; dx = 1; dz = 0;
+        } else if (s < LT + Math.PI * RT) {               // right end
+          const u = (s - LT) / RT;
+          lpx = LT / 2 + Math.sin(u) * RT; lpz = -Math.cos(u) * RT;
+          dx = Math.cos(u); dz = Math.sin(u);
+        } else if (s < 2 * LT + Math.PI * RT) {           // far straight, heading -X
+          lpx = LT / 2 - (s - LT - Math.PI * RT); lpz = RT; dx = -1; dz = 0;
+        } else {                                          // left end
+          const u = (s - 2 * LT - Math.PI * RT) / RT;
+          lpx = -LT / 2 - Math.sin(u) * RT; lpz = Math.cos(u) * RT;
+          dx = -Math.cos(u); dz = -Math.sin(u);
+        }
+        // into world through the same rotateY(ao) frame the rails were baked in
+        train.position.set(cx2 + lpx * co + lpz * so, gy, cz2 - lpx * so + lpz * co);
+        train.rotation.y = Math.atan2(dx * co + dz * so, -dx * so + dz * co); // nose along the tangent
         key.rotation.y = t * 2.6; // winding as it goes
       });
     }
@@ -1541,19 +1626,38 @@ export function buildLandmarks(R, track, theme) {
 //   pick(tints)     one rand() draw from a tint family
 //   groundY         the floor height to rest on
 export const CLUTTER_BUILDERS = {
-  // wildflower patch: a handful of blossoms on little green stems
+  // wildflower patch: daisy-style blossoms — a ring of flat oval petals around
+  // a golden heart on a leafed stem (a single blob read as a lollipop, not a
+  // flower — reworked on review)
   flower: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
-    const n = 3 + Math.floor(rand() * 4);
+    const n = 2 + Math.floor(rand() * 3);
     for (let i = 0; i < n; i++) {
-      const a = rand() * Math.PI * 2, r = rand() * 0.75;
+      const a = rand() * Math.PI * 2, r = rand() * 0.8;
       const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
-      const stem = new THREE.CylinderGeometry(0.028, 0.036, 0.42, 5);
-      stem.translate(fx, groundY + 0.21, fz);
+      const h = 0.4 + rand() * 0.16; // stem height
+      const stem = new THREE.CylinderGeometry(0.025, 0.032, h, 5);
+      stem.translate(fx, groundY + h / 2, fz);
       put(stem, 0x4e8a44, 0.92 + rand() * 0.16);
-      const bloom = new THREE.IcosahedronGeometry(0.13, 1);
-      bloom.translate(fx, groundY + 0.47, fz);
-      put(bloom, pick(tints), 0.95 + rand() * 0.12);
+      const leaf = new THREE.SphereGeometry(0.07, 6, 4); // one leaf partway up
+      leaf.scale(1.7, 0.35, 0.8);
+      leaf.rotateY(a);
+      leaf.translate(fx + 0.09, groundY + h * 0.45, fz);
+      put(leaf, 0x5a9a50, 0.95);
+      const hex = pick(tints);
+      const ph = rand() * Math.PI * 2; // petal-ring phase
+      for (let k = 0; k < 5; k++) {
+        const pa = ph + (k / 5) * Math.PI * 2;
+        const petal = new THREE.SphereGeometry(0.075, 6, 4);
+        petal.scale(1.5, 0.45, 0.85); // flat oval, long axis outward
+        petal.rotateY(-pa);
+        petal.translate(fx + Math.cos(pa) * 0.115, groundY + h + 0.02, fz + Math.sin(pa) * 0.115);
+        put(petal, hex, 0.95 + rand() * 0.1);
+      }
+      const heart = new THREE.SphereGeometry(0.06, 6, 5); // the golden centre
+      heart.scale(1, 0.7, 1);
+      heart.translate(fx, groundY + h + 0.045, fz);
+      put(heart, 0xf2c14e, 1.05);
     }
   },
   // seashell: a squashed half-dome, tipped a touch
@@ -1597,17 +1701,6 @@ export const CLUTTER_BUILDERS = {
     limb.rotateY(a + 0.6);
     limb.translate(x + Math.cos(a) * 0.55, groundY + 0.06, z - Math.sin(a) * 0.55);
     put(limb, hex, 0.92);
-  },
-  // pinecone: two stacked faceted lumps
-  pinecone: (ctx, x, z, tints) => {
-    const { rand, put, pick, groundY } = ctx;
-    const hex = pick(tints);
-    const base = new THREE.IcosahedronGeometry(0.16, 0);
-    base.translate(x, groundY + 0.13, z);
-    put(base, hex);
-    const top = new THREE.IcosahedronGeometry(0.11, 0);
-    top.translate(x, groundY + 0.32, z);
-    put(top, hex, 1.08);
   },
   // wind-blown snow heap
   drift: (ctx, x, z, tints) => {
@@ -1664,18 +1757,27 @@ export const CLUTTER_BUILDERS = {
     g.translate(x, groundY + 0.19, z);
     put(g, pick(tints), 1.05);
   },
-  // fallen domino: white tile, dark midline
+  // fallen domino: white tile, dark midline, and PIPS — 3 up one half, 5 the
+  // other — little dark studs proud of the face (the bare midline tile read as
+  // a blank chip, not a domino — reworked on review)
   domino: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
     const a = rand() * Math.PI * 2;
-    const tile = new THREE.BoxGeometry(0.5, 0.09, 0.95);
-    tile.rotateY(a);
-    tile.translate(x, groundY + 0.05, z);
-    put(tile, pick(tints));
-    const line = new THREE.BoxGeometry(0.52, 0.02, 0.07);
-    line.rotateY(a);
-    line.translate(x, groundY + 0.1, z);
-    put(line, 0x3a3442);
+    const loc = (g, lx, ly, lz, hex, shade) => { // tile-local frame
+      g.translate(lx, ly, lz);
+      g.rotateY(a);
+      g.translate(x, groundY, z);
+      put(g, hex, shade);
+    };
+    loc(new THREE.BoxGeometry(0.56, 0.12, 1.06), 0, 0.06, 0, pick(tints));
+    loc(new THREE.BoxGeometry(0.58, 0.025, 0.06), 0, 0.12, 0, 0x3a3442);
+    const PIPS = [
+      [0, -0.28], [-0.14, -0.15], [0.14, -0.41],                            // 3, on the diagonal
+      [-0.14, 0.15], [0.14, 0.15], [0, 0.28], [-0.14, 0.41], [0.14, 0.41],  // 5, corners + centre
+    ];
+    for (const [ux, uz] of PIPS) {
+      loc(new THREE.CylinderGeometry(0.045, 0.045, 0.035, 6), ux, 0.128, uz, 0x3a3442);
+    }
   },
 };
 
@@ -1907,7 +2009,7 @@ export function buildScenery(R, track, theme) {
       clutterGeoms.push(gg);
     };
     const ctx = { rand: rand2, put, pick: (tints) => tints[Math.floor(rand2() * tints.length)], groundY };
-    for (let d = 0; d < cl.length && clutterGeoms.length < 450; d += 5) {
+    for (let d = 0; d < cl.length && clutterGeoms.length < 700; d += 5) { // cap raised with the petal-count flowers — still one merged draw call
       const f = cl.sampleAt(d);
       const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
       for (const side of [-1, 1]) {
