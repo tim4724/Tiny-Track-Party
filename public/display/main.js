@@ -41,12 +41,10 @@ function buildEntry(t) {
     radius: o.radius != null ? o.radius : b.roadWidth * 0.2,
     cones: o.cones
   }));
-  // Boost pads + item boxes: same u→s resolve. Every trigger radius is the PROP's
-  // own size — the engine tests it against the car's oriented body rectangle
-  // (Game._carTouchesCircle), so the car's reach comes from the car, and tunneling
-  // is covered by its half-length. Pads keep ~18% of road width: that's the painted
-  // disc itself (edge-clipping the paint arms it). Read by the engine (detection)
-  // + renderer (meshes).
+  // Boost pads + item boxes: same u→s resolve. Triggers are point-car-vs-circle
+  // (Game._inZone) — deliberately simple and identical for every car — so a radius
+  // means "prop size + the car reach folded in". Pads keep ~18% of road width (the
+  // painted disc). Read by the engine (detection) + renderer (meshes).
   const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
   b.pads = (t.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
   // Every looping gets a full-width RECTANGULAR launch strip at its mouth, so a loop is
@@ -60,9 +58,12 @@ function buildEntry(t) {
       lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
     });
   }
-  // Item boxes: ~6% of road width (0.3 on the standard 5-wide road) ≈ the floating
-  // box mesh + a small forgiveness margin — "I touched it, I got it".
-  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.06 }));
+  // Item boxes: ~10% of road width (0.5 on the standard 5-wide road) ≈ the box mesh
+  // (±0.15) + car half-width (0.26) + a whisker of forgiveness — "visually touching,
+  // slightly generous". Was 0.18 (0.9): that made a 4-lane row an unbroken wall-to-wall
+  // tripwire and collected boxes half a lane away. Still over twice one frame of travel
+  // at boosted top speed (~0.24 @60fps), so a fast car can't tunnel through.
+  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.10 }));
   // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
   // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).
   // The builder's autoPoles ride along: collision proxies for pillars/loop shafts that

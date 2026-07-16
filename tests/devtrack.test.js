@@ -21,7 +21,7 @@ function buildGym() {
   const b = buildTrack(t);
   const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
   b.hazards = (t.oils || []).map((o) => ({ s: u2s(o.u), lat: o.lat || 0, radius: b.roadWidth * 0.2 }));
-  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: b.roadWidth * 0.06 }));
+  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: b.roadWidth * 0.10 }));
   b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: 0.45 }));
   b.bananas = (t.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
   b.totalLaps = 9;
@@ -76,25 +76,25 @@ test('gym: a centreline lap trips box → oil → banana, forceItem rolls monste
   assert.equal(game.getSnapshot().bananas.length, seeded, 'the crushed banana respawned after its cooldown');
 });
 
-test('gym: box pickup is body-touch — reach comes from the car footprint, monster reaches further', () => {
+test('gym: box pickup is point-based with the tuned 0.5 radius — same reach for every car', () => {
   const track = buildGym();
   const game = new Game(['p1'], track, {});
   game.forceItem = 'monster';
   const c = game.cars.get('p1');
-  const box = game.boxes[0]; // the isolated centreline box, radius 0.3
-  // Park the body beside the box (yaw 0 → lateral reach = halfWid) and poll the
-  // trigger directly; reset the latches + cooldown between probes.
+  const box = game.boxes[0]; // the isolated centreline box, radius 0.5
+  // Park the car's CENTRE at a lateral offset from the box and poll the trigger
+  // directly; reset the latches + cooldown between probes.
   const grab = (lat) => {
     c.totalS = box.s; c.lat = lat; c.heading = 0; c.spin = 0;
     c.item = null; c.boxIn.clear(); c.rowIn.clear(); box.cooldown = 0;
     game._enterBox(c);
     return c.item;
   };
-  // Normal car: halfWid 0.26 + box 0.3 → lateral reach 0.56.
-  assert.equal(grab(0.66), null, 'daylight between body and box — no grab');
-  assert.equal(grab(0.46), 'monster', 'doors touch the box — grab');
-  // Monster truck: halfWid ×1.3 → reach ≈ 0.64. Same offsets, wider body.
+  assert.ok(Math.abs(box.radius - 0.5) < 1e-9, 'sanity: 10% of the 5-wide road');
+  assert.equal(grab(0.45), 'monster', 'centre inside the tuned radius — grab');
+  assert.equal(grab(0.55), null, 'centre outside — no grab');
+  // The car is a point BY DESIGN: reach is identical for every footprint, so a
+  // monster truck grabs exactly what a normal car grabs — no footprint creep.
   c.monsterT = 5;
-  assert.equal(grab(0.66), null, 'still daylight even for the monster');
-  assert.equal(grab(0.60), 'monster', 'the widened monster footprint reaches what a car cannot');
+  assert.equal(grab(0.55), null, 'monster reach is unchanged (point test ignores footprint)');
 });

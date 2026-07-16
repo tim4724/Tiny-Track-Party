@@ -137,12 +137,10 @@ const ITEM_USE_READY = 0.9;    // starting value — bump if the reveal grows
 const BOOST_ACCEL = 22.0;      // ramp toward the boosted ceiling (u/s²) — snappy
 const BOOST_FADE = 0.5;        // after the hold, ease the multiplier back to 1 at this rate (×/s) → a gentle taper, not a snap
 const PAD_RADIUS = 0.65;       // fallback pad radius (the display sizes it per track)
-const BOX_RADIUS = 0.3;        // fallback item-box radius — the BOX's own size (the car
-                               // brings its body to the touch test, see _carTouchesCircle)
+const BOX_RADIUS = 0.5;        // fallback item-box radius (mirrors the display default, roadWidth * 0.10)
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
-const BANANA_RADIUS = 0.25;    // the banana's own size (≈ its visual half-depth — the car
-                               // brings its body to the touch test, see _carTouchesCircle)
+const BANANA_RADIUS = 0.6;     // dropped-banana trigger radius
 const BANANA_BACK = 0.7;       // how far behind the dropper a banana lands (units) — tucked
                                // just behind the rear bumper (car half-len ~0.44 + banana
                                // half-depth ~0.23), so the dropper actually sees it land
@@ -683,7 +681,7 @@ export class Game {
     let entered = false;
     for (let i = 0; i < zones.length; i++) {
       const z = zones[i];
-      const hit = z.shape === 'strip' ? this._inStrip(c, z) : this._carTouchesCircle(c, z, z.radius);
+      const hit = z.shape === 'strip' ? this._inStrip(c, z) : this._inZone(c, z, z.radius);
       if (hit) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
       else inSet.delete(i);
     }
@@ -692,42 +690,21 @@ export class Game {
 
   // Rectangular overlap in the same (arclength, lateral) plane — a full-width launch
   // STRIP at a loop mouth: a longitudinal band `|ds| < halfLen` across the lane
-  // `|dl| < halfWidth` (the road half-width, so any car on the road crosses it),
-  // widened by the car's projected body extents so the strip arms when the NOSE
-  // touches the paint (same body-touch rule as _carTouchesCircle). The arclength
-  // gap wraps to the shortest way round the closed lap.
+  // `|dl| < halfWidth` (the road half-width, so any car on the road crosses it). The
+  // arclength gap wraps to the shortest way round the closed lap, like _inZone.
   _inStrip(c, z) {
     const ds = wrapDelta(c.totalS - z.s, this.length);
     const dl = c.lat - z.lat;
-    const fpt = this._footprint(c);
-    return Math.abs(ds) < z.halfLen + fpt.along && Math.abs(dl) < z.halfWidth + fpt.side;
+    return Math.abs(ds) < z.halfLen && Math.abs(dl) < z.halfWidth;
   }
 
-  // Body-touch overlap in the shared (arclength, lateral) trigger plane — the ONE
-  // geometry test behind oil/pad zones, item boxes, and bananas: the car's
-  // yaw-oriented collision rectangle (the same monster-widened footprint the solid
-  // collisions use) against the prop's disc, exact via the closest point on the box
-  // (the contact half of _collidePole). `radius` is the prop's OWN size — the car
-  // contributes its body, so a trigger fires exactly when the visible car touches
-  // the visible prop: the nose reaches it at halfLen, the doors at halfWid, a wider
-  // car (or a monster truck) reaches further because it IS further. Never fold an
-  // assumed car size into a prop radius again. The arclength gap wraps to the
-  // shortest way round the closed lap.
-  _carTouchesCircle(c, z, radius) {
+  // Circle overlap in the shared (arclength, lateral) trigger plane — the one
+  // geometry test behind oil/pad zones, item boxes, and bananas. The arclength
+  // gap wraps to the shortest way round the closed lap.
+  _inZone(c, z, radius) {
     const ds = wrapDelta(c.totalS - z.s, this.length);
-    const dl = c.lat - (z.lat || 0);
-    const mul = this._footprintMul(c);
-    const hl = c.halfLen * mul, hw = c.halfWid * mul;
-    if (ds * ds + dl * dl >= (hl + hw + radius) ** 2) return false; // cheap reject (circumscribing reach)
-    // Prop centre in the body frame (axes as in _collidePole), then the closest
-    // point on the rectangle decides the touch.
-    const yaw = this._colYaw(c);
-    const cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const lx = -ds * cy + dl * sy;                      // (prop − car) · u
-    const ly = -ds * sy - dl * cy;                      // (prop − car) · w
-    const ex = lx - Math.max(-hl, Math.min(hl, lx));
-    const ey = ly - Math.max(-hw, Math.min(hw, ly));
-    return ex * ex + ey * ey < radius * radius;
+    const dl = c.lat - z.lat;
+    return (ds * ds + dl * dl) < radius * radius;
   }
 
   // Catch-up factor per LIVE car: t = how far behind the leader, normalised by the
@@ -782,7 +759,7 @@ export class Game {
     if (!this.boxes.length) return;
     for (let i = 0; i < this.boxes.length; i++) {
       const b = this.boxes[i];
-      const inside = b.cooldown <= 0 && this._carTouchesCircle(c, b, b.radius);
+      const inside = b.cooldown <= 0 && this._inZone(c, b, b.radius);
       if (inside && !c.boxIn.has(i)) {
         c.boxIn.add(i);   // latch membership so this box is evaluated once, not every frame
         // One item per row per pass: if the car already grabbed another lane's box in this
@@ -805,14 +782,11 @@ export class Game {
       } else if (!inside) { c.boxIn.delete(i); }
     }
     // Release a row lock once the car is longitudinally clear of the row: past its arclength
-    // by more than a box radius + the body's circumscribing reach, it can't overlap ANY box
-    // of that row whatever its lane or yaw, so it's free to grab there again next lap.
-    if (c.rowIn.size) {
-      const reach = (c.halfLen + c.halfWid) * this._footprintMul(c);
-      for (const [row, bi] of c.rowIn) {
-        const rb = this.boxes[bi];
-        if (Math.abs(wrapDelta(c.totalS - rb.s, this.length)) > rb.radius + reach) c.rowIn.delete(row);
-      }
+    // by more than a box radius, it can't overlap ANY box of that row whatever its lane, so
+    // it's free to grab there again next lap.
+    if (c.rowIn.size) for (const [row, bi] of c.rowIn) {
+      const rb = this.boxes[bi];
+      if (Math.abs(wrapDelta(c.totalS - rb.s, this.length)) > rb.radius) c.rowIn.delete(row);
     }
   }
 
@@ -916,7 +890,7 @@ export class Game {
       if (b.hit) continue;                                       // already consumed this frame
       if (this.elapsed < (b.liveAt || 0)) continue;              // authored banana, waiting to respawn
       if (b.owner === c.id && this.elapsed < (b.armAt ?? Infinity)) continue; // owner, still in the post-drop window
-      if (this._carTouchesCircle(c, b, BANANA_RADIUS)) {
+      if (this._inZone(c, b, BANANA_RADIUS)) {
         // Authored (respawning) bananas rearm instead of despawning — see the ctor seed.
         if (b.respawn) { b.liveAt = this.elapsed + BOX_RESPAWN; hit = true; }
         else { b.hit = true; hit = true; }

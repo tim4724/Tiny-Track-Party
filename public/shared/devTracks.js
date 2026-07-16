@@ -35,7 +35,7 @@ export const DEV_TRACKS = {
       { u: 0.10, lat: 0.35 }, { u: 0.10, lat: 1.05 }
     ],
     pads: [
-      { u: 0.135, lat: 0.9 }                                        // one boost disc, off-centre — clip its edge to arm it
+      { u: 0.135, lat: 0.9 }                                        // one boost disc, off-centre
     ],
     poles: [
       { u: 0.17, lat: -1.0 }, { u: 0.17, lat: 1.0 },               // a gate to thread
