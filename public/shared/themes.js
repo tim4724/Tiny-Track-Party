@@ -80,26 +80,57 @@
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon
-//   snowfall: (optional)                { count ≤900, size, tint } — falling flakes
-//                                       (one Points cloud) drifting over the play field;
-//                                       omit for dry biomes
+//   ambient: (optional)                 { kind, count ≤1400, size?, tint?, opacity?,
+//                                       fall?, wind?, bob?, band? } — one Points cloud
+//                                       of ambient particles over the play field; the
+//                                       KIND presets the motion (environment.js
+//                                       AMB_KINDS), explicit fields override:
+//                                       'flake' (lazy falling snow) | 'mote' (golden
+//                                       sunbeam dust, near-still) | 'sand' (fast low
+//                                       wind-blown grit) | 'pollen' (light seeds on a
+//                                       breeze). Omit for still air.
+//   ambientByTrack: (optional)          { trackId: {…} } per-track ambient overrides
+//                                       merged over `ambient` (the snow cup scales its
+//                                       flurry per track: a glacier is sparse, a
+//                                       whiteout track dense)
 //   landmark: (optional)                hero set-piece kind or array of kinds, placed
 //                                       by rule per track (render/track.js build-
 //                                       Landmarks): 'lighthouse' (on the lowest off-
 //                                       shore island) | 'sailboat' (anchored in the
-//                                       shallows) | 'hoodoo' (balanced-rock family
-//                                       trackside — skipped if no safe spot exists) |
-//                                       'snowman' (trackside greeter) | 'blocks'
+//                                       shallows) | 'umbrella' (beach umbrella + towel
+//                                       + cooler) | 'sandcastle' (bucket-castle) |
+//                                       'hoodoo' (balanced-rock family trackside —
+//                                       skipped if no safe spot exists) | 'windmill'
+//                                       (western water-pump tower, rotor SPINS) |
+//                                       'snowman' (trackside greeter) | 'cabin' (log
+//                                       cabin, chimney smoke DRIFTS) | 'blocks'
 //                                       (stacked giant alphabet blocks) | 'duck'
 //                                       (bath-toy duck watching the race) | 'ball'
-//                                       (panelled play ball). Procedural toy
-//                                       geometry, no assets.
-//   birds: (optional)                   { count ≤4, tint, size, y, rc, rb, speed,
-//                                       flap, flapHz } — soaring silhouettes, each
-//                                       circling its own roost on a ring of radius rc
-//                                       (orbit radius rb, height y). flap = wing-beat
-//                                       depth (1 = busy gull, ~0.15 = soaring vulture)
-//                                       at flapHz beats/s
+//                                       (panelled play ball) | 'gnome' (garden gnome)
+//                                       | 'doghouse' (kennel) | 'picnic' (checkered
+//                                       blanket + basket + cooler) | 'crayons'
+//                                       (spilled crayons) | 'books' (stacked picture
+//                                       books) | 'train' (wind-up toy train circling
+//                                       the floor). Procedural toy geometry, no assets.
+//   birds: (optional)                   { kind?, count ≤4, tint | tints[], size, y, rc,
+//                                       rb, speed, flap, flapHz, dys?, bank? } —
+//                                       airborne silhouettes, each circling its own
+//                                       roost on a ring of radius rc (orbit radius rb,
+//                                       height y). kind picks the glyph: 'bird'
+//                                       (default) | 'butterfly' | 'plane'. flap =
+//                                       wing-beat depth (1 = busy gull, ~0.15 =
+//                                       soaring vulture) at flapHz beats/s; tints
+//                                       cycles per flier; dys scales the per-flier
+//                                       altitude jitter (butterflies hug their band);
+//                                       bank rolls the sprite into its turn (the
+//                                       paper plane — flapping kinds leave it 0)
+//   kites: (optional)                   { count ≤2, tints, size, y } — bright kites
+//                                       bobbing on implied strings over the shore;
+//                                       anchored wander, not an orbit (beach)
+//   balloon: (optional)                 { panels: [a, b], y, size } — one far-field
+//                                       hot-air balloon drifting a very slow lap of
+//                                       the horizon at cloud height; gored envelope
+//                                       alternates the two panel colours (grass/sunset)
 //   gate: (optional)                    near-white colour-grade multiplied onto the
 //                                       start/finish gate's colours (sun-bleach /
 //                                       heat / cold) — a tint, not a repaint
@@ -129,6 +160,14 @@
 //     rocks:   [c0, c1, ...]      boulder tint family (flat-shaded, per-vertex)
 //     rockS:   [base, spread]     boulder radius = base + rand()*spread
 //     density: 0..1               per-side spawn chance at each corridor candidate
+//     clutter: (optional)         small ground detail scattered DENSER and CLOSER to
+//              the road than the props above — the near-field pass the chase cam
+//              actually sees. { kinds: [{ kind, w, tints }], density }; kinds are
+//              procedural (render/track.js placeClutter): 'flower' | 'shell' |
+//              'starfish' | 'driftwood' | 'pinecone' | 'drift' (snow heap) |
+//              'scrub' | 'pebbles' | 'brick' (studded toy brick) | 'marble' |
+//              'domino'. Placement draws from its OWN seeded stream, so adding or
+//              tuning clutter NEVER reshuffles the tree/rock scatter.
 
 // Green-parkland scenery, shared by every biome that keeps the grass world (grass +
 // sunset — golden light over the SAME trees is the sunset look). Every value is the
@@ -143,6 +182,13 @@ const GRASS_SCENERY = {
   rocks:   [0xc6cbd6, 0xb4bac8, 0x9aa1b4], // pillar-concrete family
   rockS:   [0.3, 0.45],
   density: 0.62,
+  // Near-field pass (own rand stream — the scatter above is untouched): wildflower
+  // patches on the verge. Soft meadow colours, no chrome-yellow neon — poppy red,
+  // daisy cream, cornflower, and a warm gold.
+  clutter: {
+    kinds: [{ kind: 'flower', w: 1, tints: [0xe4604a, 0xf5f0e2, 0x6f8fd8, 0xe8b84a] }],
+    density: 0.3,
+  },
 };
 
 export const THEMES = {
@@ -156,6 +202,14 @@ export const THEMES = {
     key:    { color: 0xfff1d0, intensity: 1.4 },
     ground: { kind: 'lawn' },
     hills:  [0x8cc578, 0x7cb86a, 0x9bce86],
+    // The Backyard finally becomes a PLACE, not the default: garden clutter
+    // trackside (gnome/kennel/picnic), butterflies working the verge, drifting
+    // pollen in the sun, and a far hot-air balloon over the meadow hills.
+    ambient: { kind: 'pollen', count: 140, tint: 0xfff2c4 },
+    birds:  { kind: 'butterfly', count: 3, tints: [0xe66a5a, 0x8a76d8, 0xf7f5ee],
+              size: 1.15, y: 3, rc: 55, rb: 12, speed: 0.55, flap: 1, flapHz: 4.5, dys: 0.3 },
+    balloon: { panels: [0xd94f3d, 0xf5f0e2], y: 44, size: 6 },
+    landmark: ['gnome', 'doghouse', 'picnic'],
     scenery: GRASS_SCENERY,
   },
 
@@ -171,6 +225,11 @@ export const THEMES = {
     key:    { color: 0xffa850, intensity: 1.55 },
     ground: { kind: 'lawn' },
     hills:  [0xc69a86, 0xb98a72, 0xd0a890],
+    // Golden-hour air: backlit seeds drifting through the low sun, and the
+    // evening balloon ride — dusk gold + violet gores against the peach sky.
+    ambient: { kind: 'pollen', count: 160, tint: 0xffd9a0 },
+    balloon: { panels: [0xf2c14e, 0x8a76d8], y: 46, size: 6 },
+    landmark: ['gnome', 'doghouse', 'picnic'], // the same backyard, later in the day
     scenery: GRASS_SCENERY,
   },
 
@@ -201,8 +260,9 @@ export const THEMES = {
       asphalt: 0x6c6a74,
     },
     structure: 0x9a7b55, // overpass supports stay timber piles — pier flavour without touching the road read
-    landmark: ['lighthouse', 'sailboat'], // beacon on the lowest island + a boat in the shallows
+    landmark: ['lighthouse', 'sailboat', 'umbrella', 'sandcastle'], // offshore pair + a day-at-the-beach pair trackside
     birds: { count: 4, tint: 0x51616d, size: 3.0, y: 13, rc: 100, rb: 32, speed: 0.26, flap: 1, flapHz: 2.1 }, // gulls working the shoreline, flapping busily
+    kites: { count: 2, tints: [0xd94f3d, 0x3f8fd1], size: 2.8, y: 13 }, // bright diamonds tugging over the shore
     gate: 0xfff1de, // sun-bleached gate grade
     gantry: { pylon: 0xfff6eb, rings: 0xff5040, finial: 0xff5040 }, // lighthouse posts — echoes the beacon landmark
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
@@ -218,6 +278,14 @@ export const THEMES = {
       rocks:   [0xdccfa8, 0xcfbd90, 0xbca878],
       rockS:   [0.55, 0.75], // boulder-sized, not pebbles
       density: 0.5,
+      // Tide-line finds close to the road: shells, a starfish here and there,
+      // a bleached driftwood branch. Coral/cream — the beach's warm family.
+      clutter: {
+        kinds: [{ kind: 'shell',     w: 0.45, tints: [0xf5ead8, 0xecc8b4, 0xd9b8c4] },
+                { kind: 'starfish',  w: 0.3,  tints: [0xe4784f, 0xd95f6a] },
+                { kind: 'driftwood', w: 0.25, tints: [0xcbb794, 0xb8a686] }],
+        density: 0.28,
+      },
     },
   },
 
@@ -251,8 +319,10 @@ export const THEMES = {
       shoulder: 0x7d6f5f,          // dusty edge band where the lines would be
       kerb:  [0xc06a42, 0xe3cfa4], // rust / sand
     },
+    // Grit on the wind: fast low sand streaks under the drifting dust banks.
+    ambient: { kind: 'sand', count: 180, tint: 0xe9c9a0 },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
-    landmark: 'hoodoo', // balanced-rock family at one clear roadside stretch (a road-spanning arch was rejected)
+    landmark: ['hoodoo', 'windmill'], // balanced rocks + a spinning water-pump tower (a road-spanning arch was rejected)
     birds: { count: 2, tint: 0x3a322c, size: 3.6, y: 36, rc: 150, rb: 20, speed: 0.1, flap: 0.15, flapHz: 0.5 }, // vultures riding a thermal — soaring, barely a wing-beat
     gate: 0xffdec2, // hot dusty gate grade
     gantry: { pylon: 0x8a5f3e, finial: 0xfff6eb }, // weathered timber posts — desert-highway signage
@@ -267,6 +337,14 @@ export const THEMES = {
       rocks:   [0xc07a55, 0xa8623f, 0xd39a70], // rust → dusty ochre family
       rockS:   [0.6, 0.9],  // canyon-scale boulders
       density: 0.45,        // sparser than the shore; deserts read empty on purpose
+      // Roadside detail stays dry and sparse: sage scrub tufts, sun-bleached
+      // branches, little clusters of rust pebbles.
+      clutter: {
+        kinds: [{ kind: 'scrub',     w: 0.5,  tints: [0x8a8f56, 0x7c8a4e, 0x9c9460] },
+                { kind: 'driftwood', w: 0.22, tints: [0xd8c8a8, 0xc4b494] },
+                { kind: 'pebbles',   w: 0.28, tints: [0xc07a55, 0xa8623f, 0xd39a70] }],
+        density: 0.25,
+      },
     },
   },
 
@@ -297,6 +375,13 @@ export const THEMES = {
       rocks:   [0xcdd4e0, 0xb9c1d0, 0x9fa8ba], // cold blue-grey granite
       rockS:   [0.4, 0.6], // a touch bigger than parkland — reads as snow-shouldered
       density: 0.55,
+      // Verge detail: wind-blown snow heaps hugging the snowbanks, pinecones
+      // dropped by the treeline.
+      clutter: {
+        kinds: [{ kind: 'drift',    w: 0.6, tints: [0xf3f7fb, 0xe9eff6] },
+                { kind: 'pinecone', w: 0.4, tints: [0x6b4a2f, 0x7c583a] }],
+        density: 0.3,
+      },
     },
     // Wet ploughed asphalt between snowbanks: a darker, colder deck (free contrast
     // against the white ground — the readability risk of this biome), ice-tinted
@@ -308,13 +393,22 @@ export const THEMES = {
       kerb:  [0xeff4f9, 0xdde7f0], // near-white bank pair (whisper contrast)
       kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
-    snowfall: { count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    ambient: { kind: 'flake', count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    // Weather varies ACROSS the cup: each track patches the flake cloud, so the
+    // four races read as four different winter days, not one repeated snow globe.
+    ambientByTrack: {
+      powder:    { count: 520, size: 0.28 },            // fresh powder — settled, light fall
+      flurry:    { count: 1150 },                       // the name track: a proper flurry
+      glacier:   { count: 240, size: 0.22 },            // high, cold, clear — fine sparse ice dust
+      avalanche: { count: 950, size: 0.36, wind: 1.6 }, // big wind-driven flakes, the heaviest sky
+    },
+    birds: { count: 2, tint: 0x555b66, size: 3.4, y: 32, rc: 140, rb: 24, speed: 0.12, flap: 0.7, flapHz: 1.3 }, // a pair of geese crossing high
     // Oil slicks read as black stains on ploughed snow — reskin them as ICE sheets:
     // a glassy pale-blue glaze with a near-white frost rim. Same spin-out, same cones.
     ice: { sheet: 0xa9d7ee, frost: 0xf0f8fd },
     gate: 0xdfe9f6, // cold-cast gate grade
     gantry: { pylon: 0x3f7bd9, finial: 0xfff6eb }, // ski-gate blue — pops against the white world
-    landmark: 'snowman', // trackside greeter just off the racing line
+    landmark: ['snowman', 'cabin'], // trackside greeter + a log cabin with smoke curling from the chimney
   },
 
   // ── playroom — the stunt cup's biome: a toy racetrack set up on a sunlit
@@ -352,8 +446,12 @@ export const THEMES = {
       kerbW: 0.26, kerbH: 0.26,    // beefier rail profile — visual only, physics untouched
       skirt: 0xc25e14,             // darker plastic underside/sides
     },
+    // Dust motes hanging in the window sunbeams — the indoor-afternoon icon —
+    // and a paper airplane on a long lazy glide around the room.
+    ambient: { kind: 'mote', count: 240, tint: 0xffdf9e },
+    birds: { kind: 'plane', count: 1, tint: 0xf6f2e2, size: 3.6, y: 24, rc: 100, rb: 34, speed: 0.28, flap: 0, bank: 0.4 },
     structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
-    landmark: ['blocks', 'duck', 'ball'], // alphabet-block stack, bath-toy duck spectator, panelled play ball
+    landmark: ['blocks', 'duck', 'ball', 'crayons', 'books', 'train'], // toy clutter + a wind-up train circling the floor
     gate: 0xfff3e2, // warm indoor-light gate grade
     gantry: { pylon: 0x5cb168, finial: 0xff5040 }, // green toy plastic + red dome — a third primary next to the orange deck / blue rails
     scenery: {
@@ -366,6 +464,14 @@ export const THEMES = {
       rocks:   [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c],
       rockS:   [0.5, 0.7], // chunky toy-piece scale
       density: 0.35,
+      // Floor detail: stray studded bricks, a marble or two, a fallen domino —
+      // the small stuff a tidy-up always misses.
+      clutter: {
+        kinds: [{ kind: 'brick',  w: 0.5,  tints: [0xe66a5a, 0x5a8fd8, 0xf2c14e, 0x6cbf6c] },
+                { kind: 'marble', w: 0.3,  tints: [0x7db8e8, 0xe89a8a, 0x9cd89c] },
+                { kind: 'domino', w: 0.2,  tints: [0xf5f2ea] }],
+        density: 0.22,
+      },
     },
   },
 };

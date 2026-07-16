@@ -49,6 +49,9 @@ function show(name) {
 function buildEntry(t) {
   const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
   b.cup = t.cup;             // carry the cup id onto the geometry → SceneRenderer picks the biome theme
+  b.trackId = t.id;          // registry id, for per-track theme patches (ambientByTrack).
+                             // NOT `id` — buildScenery/buildLandmarks seed their rand
+                             // streams from track.id, and reseeding reshuffles every scatter.
   // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
   // now that the built geometry knows the lap length. Read by the engine (spin-out
   // detection) and the renderer (drawing the puddle + cones), both off track.hazards.

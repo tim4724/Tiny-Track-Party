@@ -11,7 +11,7 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment, applyEnvTheme, WATER_LIFT, WATER_INNER, SNOW_R, SNOW_H } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, WATER_LIFT, WATER_INNER } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
 import { buildFinishGate } from './render/FinishGate.js';
@@ -587,9 +587,12 @@ export class SceneRenderer {
     this._clouds = env.clouds; // drifted in _loop
     this._haze = env.haze;     // low dust banks (canyon) — drifted in _loop, pushed out in setTrack
     this._water = env.water;   // sea ring (beach) — pushed out with the hills in setTrack
-    this._birds = env.birds;   // circling gulls/vultures — stepped in _loop
+    this._birds = env.birds;   // circling fliers (gulls/vultures/butterflies/plane) — stepped in _loop
     this._birdT = 0;           // shared soaring phase
-    this._snowfall = env.snowfall; // falling flakes (snow) — stepped in _loop, spread scaled in setTrack
+    this._kites = env.kites;   // anchored shore kites (beach) — stepped in _loop
+    this._balloon = env.balloon; // far-field hot-air balloon (grass/sunset) — stepped in _loop
+    this._ambient = env.ambient; // ambient particles (flakes/motes/sand/pollen) — stepped in _loop, spread scaled in setTrack
+    this._trackAnims = [];     // per-track animated set-pieces (windmill rotor, toy train, chimney smoke) — rebuilt with the track, stepped in _loop
     this._key = env.key;       // shadow camera fitted per-track in setTrack
     this.ground = env.ground;
     this._hills = env.hills;   // horizon-hill ring; pushed out past the track in setTrack
@@ -1013,6 +1016,13 @@ export class SceneRenderer {
     const theme = this.biomeOverride || themeForCup(track.cup);
     if (theme !== this._theme) this._applyTheme(theme);
     if (track.groundY != null) this.ground.position.y = track.groundY;
+    // Per-track ambient patch (theme.ambientByTrack, keyed on the registry id):
+    // the snow cup scales its flurry density per track. Re-applied every switch —
+    // the previous track may have patched the same theme's numbers.
+    applyAmbient(this._ambient, theme, theme.ambientByTrack && theme.ambientByTrack[track.trackId]);
+    // Animated set-pieces (windmill rotor, toy train, chimney smoke) are rebuilt
+    // with the track — buildLandmarks registers steppers here, _loop runs them.
+    this._trackAnims = [];
 
     // Build the track in two parallel forms:
     //   • collision proxy — one clone per tile (geometry shared with the proto,
@@ -1168,9 +1178,9 @@ export class SceneRenderer {
         this._water.scale.set(wf, 1, wf);
         this._water.position.y = this.ground.position.y + WATER_LIFT; // re-base on the track's groundY
       }
-      if (this._snowfall) {
-        this._snowfall.scale.set(sf, 1, sf); // flake spread follows the hill push-out
-        this._snowfall.position.y = this.ground.position.y;
+      if (this._ambient) {
+        this._ambient.scale.set(sf, 1, sf); // particle spread follows the hill push-out
+        this._ambient.position.y = this.ground.position.y;
       }
       if (this._haze) for (const h of this._haze) {
         h.position.x = h.userData.home.x * sf;
@@ -2203,15 +2213,17 @@ export class SceneRenderer {
       h.position.x += 2.2 * dt;
       if (h.position.x > hazeWrap) h.position.x = -hazeWrap;
     }
-    // birds: each soars a lazy circle around its authored roost (gulls over the
-    // shoreline, vultures over a mesa), with per-bird phase/speed offsets and a
-    // gentle vertical bob. Roost centres follow the hill push-out live. The
-    // WING-BEAT is a flap envelope on the sprite's height — squashing the glyph
-    // toward a line and back reads as beating wings even at speck size, and the
-    // motion (not the glyph) is what makes a distant sprite read "bird" at all.
-    // cfg.flap = beat depth (gulls ~1 flap busily, vultures ~0.15 mostly soar).
+    // fliers: each circles its authored roost (gulls over the shoreline, vultures
+    // over a mesa, butterflies over the parkland verge), with per-flier phase/
+    // speed offsets and a gentle vertical bob. Roost centres follow the hill
+    // push-out live. The WING-BEAT is a flap envelope on the sprite's height —
+    // squashing the glyph toward a line and back reads as beating wings even at
+    // speck size, and the motion (not the glyph) is what makes a distant sprite
+    // read "bird" at all. cfg.flap = beat depth (gulls ~1 flap busily, vultures
+    // ~0.15 mostly soar, the paper plane 0 — it banks instead, cfg.bank rolling
+    // the sprite into its turn).
+    this._birdT += dt;
     if (this._birds.cfg) {
-      this._birdT += dt;
       const bsf = this._hills ? this._hills.scale.x : 1;
       const cfg = this._birds.cfg;
       for (const b of this._birds) {
@@ -2220,29 +2232,24 @@ export class SceneRenderer {
         const ph = u.ph + this._birdT * cfg.speed * u.sp;
         b.position.set(
           Math.cos(u.a0) * cfg.rc * bsf + Math.cos(ph) * cfg.rb,
-          cfg.y + u.dy + Math.sin(ph * 2.3) * 0.9,
+          cfg.y + u.dy * cfg.dys + Math.sin(ph * 2.3) * 0.9,
           Math.sin(u.a0) * cfg.rc * bsf + Math.sin(ph) * cfg.rb
         );
         const beat = 0.5 + 0.5 * Math.sin((this._birdT * u.sp * cfg.flapHz + u.ph) * Math.PI * 2);
         b.scale.y = cfg.size * 0.5 * (1 - cfg.flap * 0.48 * beat);
+        if (cfg.bank) b.material.rotation = Math.sin(ph + Math.PI / 2) * cfg.bank;
       }
     }
-    // snowfall: flakes sink at their own speeds and ride the clouds' eastward wind,
-    // wrapping within the authored spread (the mesh scale handles big circuits)
-    if (this._snowfall.visible) {
-      const attr = this._snowfall.geometry.attributes.position;
-      const arr = attr.array, spd = this._snowfall.userData.speed;
-      const n = Math.min(spd.length, this._snowfall.geometry.drawRange.count);
-      for (let i = 0; i < n; i++) {
-        let y = arr[i * 3 + 1] - spd[i] * dt;
-        if (y < 0) y += SNOW_H;
-        arr[i * 3 + 1] = y;
-        let x = arr[i * 3] + 0.7 * dt;
-        if (x > SNOW_R) x -= SNOW_R * 2;
-        arr[i * 3] = x;
-      }
-      attr.needsUpdate = true;
+    {
+      const sf = this._hills ? this._hills.scale.x : 1;
+      stepKites(this._kites, dt, this._birdT, sf);       // shore kites bob on their strings
+      stepBalloon(this._balloon, dt, this._birdT, sf);   // the balloon drifts its slow lap
     }
+    // ambient particles (flakes/motes/sand/pollen) sink/ride the wind per their
+    // kind, wrapping within the authored spread (mesh scale handles big circuits)
+    stepAmbient(this._ambient, dt, this._birdT);
+    // per-track animated set-pieces (windmill rotor, wind-up train, chimney smoke)
+    for (const fn of this._trackAnims) fn(dt, this._birdT);
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;

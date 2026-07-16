@@ -5,6 +5,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GROUND_SIZE, WATER_INNER, WATER_LIFT } from './environment.js';
+import { makeCloudTexture } from './textures.js';
+
+// Chimney-smoke sprite texture (the cabin landmark) — one shared soft puff,
+// built lazily; SpriteMaterial.dispose never frees a shared texture, so the
+// cache survives track switches.
+let _smokeTex = null;
+const smokeTexture = () => _smokeTex || (_smokeTex = makeCloudTexture());
 
 // Support-structure tint (bridge pillars, corridor poles, loop shafts): the biome's
 // `structure` hex — timber piles (beach), red-rock columns (canyon) — or the canonical
@@ -665,6 +672,59 @@ export function buildLandmarks(R, track, theme) {
   const gy = R.ground.position.y;
   const geoms = [];
 
+  // Landmarks placed so far ({x, z, r} footprints): later kinds keep clear of
+  // earlier ones, so a biome with several trackside pieces never stacks the
+  // gnome inside the kennel. Pushing consumes no rand(), so recording the
+  // ORIGINAL kinds' spots leaves their placement byte-identical.
+  const placed = [];
+  const clearSpot = (x, z, m) => isClear(x, z, m) && placed.every((p) => {
+    const dx = x - p.x, dz = z - p.z, lim = m + p.r;
+    return dx * dx + dz * dz >= lim * lim;
+  });
+  // Scan the lap from `s0` for a clear, ground-level roadside anchor — the shared
+  // placement rule of every NEW trackside kind (the original kinds keep their own
+  // verbatim loops: this helper draws rand() differently, and their streams must
+  // not drift). Returns the anchor + a road-facing frame, records the footprint.
+  //   off = lateral clearance past the kerb, m = footprint radius kept clear
+  const findSpot = (s0, off, m) => {
+    const L = cl.length;
+    for (let s = s0; s < L - 10; s += 3) {
+      const f = cl.sampleAt(s);
+      if (f.pos.y - gy > 0.8) continue; // ground-level roadside only
+      const side = rand() < 0.5 ? -1 : 1;
+      const lat = side * (halfOf(f) + off);
+      const x = f.pos.x + f.lateral.x * lat, z = f.pos.z + f.lateral.z * lat;
+      if (!clearSpot(x, z, m)) continue;
+      placed.push({ x, z, r: m });
+      const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // toward the road
+      return { x, z, fx, fz, yaw: Math.atan2(fx, fz), tx: f.tangent.x, tz: f.tangent.z, side };
+    }
+    return null;
+  };
+  // Per-face vertex paint for multi-colour pieces (checker blankets, gore
+  // stripes): colour each triangle by its centroid — per-face keeps the seams
+  // crisp where per-vertex lerping would smear them (the play-ball trick).
+  const paintFaces = (g0, pick) => {
+    const g = g0.index ? g0.toNonIndexed() : g0;
+    if (g !== g0) g0.dispose();
+    g.deleteAttribute('uv');
+    const p = g.attributes.position, n = p.count;
+    const col = new Float32Array(n * 3);
+    for (let t = 0; t < n; t += 3) {
+      const c = pick(
+        (p.getX(t) + p.getX(t + 1) + p.getX(t + 2)) / 3,
+        (p.getY(t) + p.getY(t + 1) + p.getY(t + 2)) / 3,
+        (p.getZ(t) + p.getZ(t + 1) + p.getZ(t + 2)) / 3
+      );
+      for (let v = t; v < t + 3; v++) { col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  };
+  // Register an animated set-piece: its own (small) mesh/group in trackGroup +
+  // a stepper run by SceneRenderer._loop until the next setTrack rebuild.
+  const animate = (fn) => (R._trackAnims || (R._trackAnims = [])).push(fn);
+
   // The LOWEST island of the horizon ring anchors both offshore pieces: the tower
   // dominates a low silhouette instead of poking out of a tall dune, and the boat
   // takes its bearing from the same island. Anchors are authored coords — scale XZ
@@ -760,6 +820,7 @@ export function buildLandmarks(R, track, theme) {
       hoodoo(x, z, 8.6);                                              // the tall one
       hoodoo(x + tx * 3.8 + f.lateral.x * side * 1.6, z + tz * 3.8 + f.lateral.z * side * 1.6, 5.4);
       hoodoo(x - tx * 3.2 + f.lateral.x * side * 2.2, z - tz * 3.2 + f.lateral.z * side * 2.2, 3.6);
+      placed.push({ x, z, r: 6 }); // keep later kinds off the family's footprint
       break; // one family is a landmark; a forest of them is scenery
     }
   }
@@ -861,6 +922,7 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(knob, 0x6b4a2f));
       };
       arm(1); arm(-1);
+      placed.push({ x, z, r: 3 });
       break;
     }
   }
@@ -904,6 +966,7 @@ export function buildLandmarks(R, track, theme) {
       block(x + tx * 3.4 + f.lateral.x * side * 1.3, z + tz * 3.4 + f.lateral.z * side * 1.3,
             2.6, 0, 0.5 + rand() * 0.5, tones[1]);                                              // its neighbour
       block(x + tx * 0.4, z + tz * 0.4, 2.4, 3.2, rand() * Math.PI * 0.5, tones[2]);            // balanced on top, askew
+      placed.push({ x, z, r: 5.5 });
       break;
     }
   }
@@ -957,6 +1020,7 @@ export function buildLandmarks(R, track, theme) {
       for (const sd of [-1, 1]) {
         part(new THREE.IcosahedronGeometry(0.14, 1), sd * 0.68, 2.99, 1.23, 0x343a44);
       }
+      placed.push({ x, z, r: 3 });
       break;
     }
   }
@@ -1005,7 +1069,452 @@ export function buildLandmarks(R, track, theme) {
       g.rotateY(rand() * Math.PI * 2);
       g.translate(x, gy + BR * 0.92, z);    // a whisper of settle-sink into the floor
       geoms.push(g);
+      placed.push({ x, z, r: 2.5 });
       break;
+    }
+  }
+
+  // ── New kinds (biome round 2) — every block below runs AFTER the original
+  // kinds, so the shared rand() stream's prefix (and the original landmarks'
+  // placement) is byte-identical on every existing track. Each uses findSpot
+  // (clear of the corridor AND of everything placed above).
+
+  if (kinds.includes('umbrella')) {
+    // A day at the beach: a tilted gore-striped parasol, a towel laid out
+    // beside it, and a cooler. Local frame: +Z faces the road.
+    const spot = findSpot(45, 5.2, 4);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      const TILT = 0.2; // leans gently toward the road
+      const pole = new THREE.CylinderGeometry(0.07, 0.09, 3.5, 8);
+      pole.translate(0, 1.75, 0);
+      pole.rotateX(TILT);
+      part(pole, 0, 0, 0, 0xf0e6d4);
+      // canopy: an open dome, coral/cream gores by longitude (per-face —
+      // the seams stay crisp)
+      const CA = new THREE.Color(0xe4604a).convertSRGBToLinear();
+      const CB = new THREE.Color(0xf7f0e2).convertSRGBToLinear();
+      const canopy = new THREE.SphereGeometry(2.0, 20, 5, 0, Math.PI * 2, 0, Math.PI / 2.4);
+      canopy.scale(1, 0.62, 1);
+      const painted = paintFaces(canopy, (cx, cy, cz) =>
+        (Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * 10) % 2) ? CA : CB);
+      painted.translate(0, 3.32, 0); // rides the pole top…
+      painted.rotateX(TILT);         // …and leans with it
+      painted.rotateY(yaw);
+      painted.translate(x, gy, z);
+      geoms.push(painted);
+      const finial = new THREE.SphereGeometry(0.11, 8, 6);
+      finial.translate(0, 3.62, 0);
+      finial.rotateX(TILT);
+      part(finial, 0, 0, 0, 0xe4604a);
+      // towel, beside the shade with a cream end-stripe
+      part(new THREE.BoxGeometry(2.7, 0.06, 1.5), 2.5, 0.05, 0.5, 0x5fc4b8);
+      part(new THREE.BoxGeometry(2.7, 0.075, 0.34), 2.5, 0.05, 1.05, 0xf7f0e2);
+      // cooler: red box, cream lid
+      part(new THREE.BoxGeometry(0.7, 0.5, 0.45), -2.1, 0.27, 0.4, 0xd8463f);
+      part(new THREE.BoxGeometry(0.74, 0.14, 0.49), -2.1, 0.59, 0.4, 0xf5f0e2);
+    }
+  }
+
+  if (kinds.includes('sandcastle')) {
+    // Bucket-castle on a patted-down mound: a tall keep, four corner towers,
+    // curtain walls, and a little pennant. All in the dune-sand family.
+    const spot = findSpot(80, 6.0, 4);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const SAND = [0xe8d49e, 0xdfc98e];
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      part(new THREE.CylinderGeometry(2.1, 2.6, 0.6, 14), 0, 0.3, 0, SAND[0], 0.97); // the mound
+      const tower = (lx, lz, r, h) => { // upturned-bucket drum + patted cone cap
+        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, 0.6 + h / 2, lz, SAND[0], 1.02);
+        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, 0.6 + h + r * 0.42, lz, SAND[1], 0.96);
+      };
+      tower(0, 0, 0.85, 2.1); // the keep
+      for (const [tx2, tz2] of [[1.35, 1.35], [-1.35, 1.35], [1.35, -1.35], [-1.35, -1.35]])
+        tower(tx2, tz2, 0.5, 1.25);
+      for (const [wx, wz, ww, wd] of [[0, 1.35, 1.9, 0.3], [0, -1.35, 1.9, 0.3], [1.35, 0, 0.3, 1.9], [-1.35, 0, 0.3, 1.9]])
+        part(new THREE.BoxGeometry(ww, 0.8, wd), wx, 1.0, wz, SAND[0], 0.94); // curtain walls
+      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6), 0, 3.35, 0, 0x8a6f4d); // mast
+      const flag = new THREE.ConeGeometry(0.16, 0.5, 3);
+      flag.rotateZ(-Math.PI / 2); // pennant streams sideways
+      part(flag, 0.3, 3.6, 0, 0xd94f3d);
+    }
+  }
+
+  if (kinds.includes('windmill')) {
+    // Western water-pump windmill: a tapered timber derrick with a SPINNING
+    // multi-blade steel rotor and a red tail fin. The rotor is its own small
+    // mesh, stepped via the per-track anim registry; everything else merges.
+    const spot = findSpot(70, 7.5, 5);
+    if (spot) {
+      const { x, z, yaw, fx, fz } = spot;
+      const H = 10.5; // hub height
+      const TIMBER = 0x9a7050, STEEL = 0xc6cbd6;
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      // four legs leaning in from a 2.7-square base to a 0.7-square at the platform
+      const UPV = new THREE.Vector3(0, 1, 0);
+      const legDir = new THREE.Vector3();
+      const legM = new THREE.Matrix4();
+      const legQ = new THREE.Quaternion();
+      for (const [sx2, sz2] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        legDir.set((0.35 - 1.35) * sx2, H, (0.35 - 1.35) * sz2);
+        const len = legDir.length();
+        const leg = new THREE.CylinderGeometry(0.1, 0.15, len, 6);
+        leg.translate(0, len / 2, 0); // base at origin
+        legQ.setFromUnitVectors(UPV, legDir.normalize());
+        leg.applyMatrix4(legM.makeRotationFromQuaternion(legQ));
+        part(leg, 1.35 * sx2, 0, 1.35 * sz2, TIMBER, 0.94 + ((sx2 + sz2 + 2) % 3) * 0.04);
+      }
+      // two brace frames girdling the tower
+      for (const bh of [3.6, 7.0]) {
+        const hw = 1.35 + (0.35 - 1.35) * (bh / H); // tower half-width at this height
+        for (const [bx, bz, bw, bd] of [[0, hw, hw * 2 + 0.2, 0.09], [0, -hw, hw * 2 + 0.2, 0.09], [hw, 0, 0.09, hw * 2 + 0.2], [-hw, 0, 0.09, hw * 2 + 0.2]])
+          part(new THREE.BoxGeometry(bw, 0.09, bd), bx, bh, bz, TIMBER, 0.9);
+      }
+      part(new THREE.BoxGeometry(1.35, 0.14, 1.35), 0, H + 0.07, 0, TIMBER, 1.05); // platform
+      part(new THREE.BoxGeometry(0.45, 0.4, 0.8), 0, H + 0.35, 0.05, STEEL, 0.9);  // gear housing
+      // tail vane: boom aft (away from the road) with a red fin
+      part(new THREE.BoxGeometry(0.08, 0.08, 1.6), 0, H + 0.35, -0.95, STEEL, 0.85);
+      const fin = new THREE.BoxGeometry(0.05, 0.75, 0.9);
+      part(fin, 0, H + 0.42, -1.85, 0xd8463f);
+      // the rotor: hub + 12 flat blades fanned in the local XY plane (faces +Z =
+      // the road), spun about its facing axis every frame
+      const rparts = [];
+      const hub = new THREE.CylinderGeometry(0.22, 0.22, 0.2, 10);
+      hub.rotateX(Math.PI / 2);
+      rparts.push(tintGeo(hub, STEEL, 1.05));
+      for (let bi = 0; bi < 12; bi++) {
+        const blade = new THREE.BoxGeometry(0.3, 1.8, 0.04);
+        blade.translate(0, 1.1, 0);
+        blade.rotateZ((bi / 12) * Math.PI * 2);
+        rparts.push(tintGeo(blade, STEEL, 0.92 + (bi % 3) * 0.05));
+      }
+      const rim = new THREE.TorusGeometry(1.95, 0.045, 6, 28); // the outer band tying the fan together
+      rparts.push(tintGeo(rim, STEEL, 0.88));
+      const rotorGeo = mergeGeometries(rparts, false);
+      for (const g of rparts) g.dispose();
+      const rotor = new THREE.Mesh(rotorGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+      rotor.castShadow = rotor.receiveShadow = false;
+      rotor.position.set(x + fx * 0.75, gy + H + 0.35, z + fz * 0.75); // proud of the housing, facing the road
+      R.trackGroup.add(rotor);
+      R._mergedGeoms.push(rotorGeo);
+      R._mergedMats.push(rotor.material);
+      const yawQ = new THREE.Quaternion().setFromAxisAngle(UPV, yaw);
+      const spinQ = new THREE.Quaternion();
+      const ZAX = new THREE.Vector3(0, 0, 1);
+      animate((dt, t) => {
+        rotor.quaternion.copy(yawQ).multiply(spinQ.setFromAxisAngle(ZAX, t * 0.85));
+      });
+    }
+  }
+
+  if (kinds.includes('cabin')) {
+    // Log cabin under a snow-heaped roof, chimney smoke curling up: stacked
+    // log courses (the alternating overlap makes the corner notches for free),
+    // gable ends of shortening logs, a warm lit window. Local +Z faces the road.
+    const spot = findSpot(65, 7.0, 5);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      for (let row = 0; row < 5; row++) { // log courses
+        const ly = 0.26 + row * 0.5;
+        for (const zoff of [1.8, -1.8]) { // front/back walls run along local X
+          const g = new THREE.CylinderGeometry(0.26, 0.26, 5.0, 7);
+          g.rotateZ(Math.PI / 2);
+          part(g, 0, ly, zoff, row % 2 ? LOG : LOG2, 0.97 + (row % 3) * 0.03);
+        }
+        for (const xoff of [2.3, -2.3]) { // side walls along local Z, half a course up
+          const g = new THREE.CylinderGeometry(0.26, 0.26, 4.0, 7);
+          g.rotateX(Math.PI / 2);
+          part(g, xoff, ly + 0.25, 0, row % 2 ? LOG2 : LOG, 0.96 + (row % 2) * 0.04);
+        }
+      }
+      for (let gi = 0; gi < 3; gi++) { // gable ends: shortening courses up to the ridge
+        const ly = 2.76 + gi * 0.48;
+        for (const zoff of [1.8, -1.8]) {
+          const g = new THREE.CylinderGeometry(0.24, 0.24, 3.4 - gi * 1.1, 7);
+          g.rotateZ(Math.PI / 2);
+          part(g, 0, ly, zoff, gi % 2 ? LOG : LOG2);
+        }
+      }
+      for (const sd of [-1, 1]) { // snow-heaped roof slabs, ridge along local Z
+        const slab = new THREE.BoxGeometry(3.05, 0.22, 5.4);
+        slab.rotateZ(sd * 0.6);
+        part(slab, sd * -1.2, 3.6, 0, SNOWC);
+      }
+      const ridge = new THREE.CylinderGeometry(0.18, 0.18, 5.45, 7); // snow-capped ridge log
+      ridge.rotateX(Math.PI / 2);
+      part(ridge, 0, 4.32, 0, SNOWC, 0.98);
+      // door + the warm lit window (the postcard cue), on the road face
+      part(new THREE.BoxGeometry(0.9, 1.5, 0.14), 0.95, 0.75, 1.98, 0x4a3a2e);
+      part(new THREE.BoxGeometry(0.78, 0.68, 0.14), -1.0, 1.35, 1.98, 0xffd98a);
+      part(new THREE.BoxGeometry(0.92, 0.1, 0.16), -1.0, 1.74, 1.99, 0x4a3a2e); // lintel
+      // stone chimney breaking the rear roof slope
+      part(new THREE.BoxGeometry(0.55, 2.3, 0.55), -0.95, 3.5, -0.95, 0x9fa8ba);
+      part(new THREE.BoxGeometry(0.68, 0.14, 0.68), -0.95, 4.68, -0.95, 0xb9c1d0); // cap
+      // smoke: three shared-texture puffs rising, growing and fading on a loop
+      const cy2 = Math.cos(yaw), sy2 = Math.sin(yaw);
+      const smx = x + (-0.95) * cy2 + (-0.95) * sy2;
+      const smz = z - (-0.95) * sy2 + (-0.95) * cy2;
+      const smTop = gy + 4.75;
+      const puffs = [];
+      for (let i = 0; i < 3; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: smokeTexture(), transparent: true, opacity: 0, depthWrite: false, color: 0xeef2f6,
+        }));
+        sp.position.set(smx, smTop, smz);
+        R.trackGroup.add(sp);
+        R._mergedMats.push(sp.material);
+        puffs.push(sp);
+      }
+      animate((dt, t) => {
+        for (let i = 0; i < 3; i++) {
+          const u = (t * 0.16 + i / 3) % 1; // ~6s per puff, staggered thirds
+          const sp = puffs[i];
+          sp.position.set(smx + u * 1.7 + Math.sin(t * 0.8 + i * 2.1) * 0.15, smTop + u * 3.4, smz);
+          const w = 0.7 + u * 2.2;
+          sp.scale.set(w, w * 0.62, 1);
+          sp.material.opacity = 0.42 * Math.min(1, u * 5) * (1 - u); // quick fade-in, slow dissolve
+        }
+      });
+    }
+  }
+
+  if (kinds.includes('gnome')) {
+    // Garden gnome greeting the racers: bell-cone coat, white beard, and THE
+    // cue — a tall floppy red hat. Faces the road like the snowman.
+    const spot = findSpot(30, 3.4, 2.2);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      part(new THREE.ConeGeometry(0.62, 1.3, 10), 0, 0.65, 0, 0x3b6fb0); // coat
+      part(new THREE.BoxGeometry(0.5, 0.16, 0.2), 0, 0.75, 0.42, 0x2f2b38); // belt buckle glint
+      for (const sd of [-1, 1]) // boots peeking out
+        part(new THREE.IcosahedronGeometry(0.13, 1), sd * 0.24, 0.09, 0.14, 0x4a3a2e);
+      part(new THREE.SphereGeometry(0.36, 12, 9), 0, 1.42, 0, 0xf0c8a2); // head
+      part(new THREE.IcosahedronGeometry(0.1, 1), 0, 1.4, 0.35, 0xe8a87e); // nose
+      const beard = new THREE.IcosahedronGeometry(0.32, 1); // soft white bib
+      beard.scale(1, 1.2, 0.62);
+      part(beard, 0, 1.12, 0.18, 0xf5f2ea);
+      const hat = new THREE.ConeGeometry(0.42, 1.25, 10); // the hat
+      hat.rotateX(-0.12); // a lazy kink back
+      part(hat, 0, 2.1, -0.04, 0xd8463f);
+    }
+  }
+
+  if (kinds.includes('doghouse')) {
+    // Backyard kennel: warm red walls, dark gabled roof, an arched doorway
+    // (dark slab + disc), and the food bowl out front.
+    const spot = findSpot(60, 4.6, 3.2);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const WALL = 0xb85c48, ROOF = 0x6e4a38;
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      part(new THREE.BoxGeometry(2.3, 1.5, 2.6), 0, 0.75, 0, WALL);
+      part(new THREE.BoxGeometry(1.5, 0.8, 2.5), 0, 1.85, 0, WALL, 0.97); // shoulders into the roof (hides the gable gap)
+      for (const sd of [-1, 1]) { // roof slabs, ridge along local Z
+        const slab = new THREE.BoxGeometry(1.66, 0.14, 2.95);
+        slab.rotateZ(sd * 0.72);
+        part(slab, sd * -0.6, 2.02, 0, ROOF);
+      }
+      part(new THREE.BoxGeometry(0.24, 0.18, 3.0), 0, 2.56, 0, ROOF, 1.08); // ridge cap
+      part(new THREE.BoxGeometry(0.85, 0.85, 0.12), 0, 0.43, 1.32, 0x3a3040); // doorway slab…
+      const arch = new THREE.CylinderGeometry(0.42, 0.42, 0.12, 12);
+      arch.rotateX(Math.PI / 2);
+      part(arch, 0, 0.85, 1.32, 0x3a3040); // …arched top
+      part(new THREE.CylinderGeometry(0.32, 0.26, 0.2, 10), 1.35, 0.1, 1.7, 0xd8463f); // food bowl
+    }
+  }
+
+  if (kinds.includes('picnic')) {
+    // Picnic spread: a red/cream checkered blanket thrown a touch askew, a
+    // wicker basket with an arc handle, a cooler, two paper plates.
+    const spot = findSpot(95, 4.8, 3.2);
+    if (spot) {
+      const { x, z, yaw } = spot;
+      const CR = new THREE.Color(0xd8463f).convertSRGBToLinear();
+      const CW = new THREE.Color(0xf5f0e2).convertSRGBToLinear();
+      const blanket = new THREE.BoxGeometry(3.4, 0.06, 3.4, 5, 1, 5);
+      const painted = paintFaces(blanket, (cx, cy, cz) =>
+        ((Math.floor((cx + 1.7) / 0.68) + Math.floor((cz + 1.7) / 0.68)) % 2) ? CR : CW);
+      painted.rotateY(yaw + 0.26);
+      painted.translate(x, gy + 0.04, z);
+      geoms.push(painted);
+      const part = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        g.rotateY(yaw);
+        g.translate(x, gy, z);
+        geoms.push(tintGeo(g, hex, shade));
+      };
+      part(new THREE.BoxGeometry(0.85, 0.55, 0.55), 0.7, 0.3, 0.6, 0x8a6f4d); // basket
+      const handle = new THREE.TorusGeometry(0.3, 0.05, 8, 14, Math.PI); // arc across it
+      handle.rotateY(Math.PI / 2);
+      part(handle, 0.7, 0.57, 0.6, 0x6e563c);
+      part(new THREE.BoxGeometry(0.72, 0.5, 0.5), -0.85, 0.29, -0.7, 0xd8463f);  // cooler
+      part(new THREE.BoxGeometry(0.76, 0.14, 0.54), -0.85, 0.6, -0.7, 0xf5f0e2); // its lid
+      for (const [px2, pz2] of [[-0.35, 0.9], [0.55, -0.55]]) // plates
+        part(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12), px2, 0.07, pz2, 0xf7f5ee);
+    }
+  }
+
+  if (kinds.includes('crayons')) {
+    // Spilled crayons: five fat wax sticks in the plastic primaries, scattered
+    // in a loose fan, one tipped up against the pile.
+    const spot = findSpot(110, 4.4, 3);
+    if (spot) {
+      const { x, z } = spot;
+      const COLS = [0xd8463f, 0x3f6fd1, 0x3fa14e, 0xf2a83c, 0x8a76d8];
+      for (let i = 0; i < 5; i++) {
+        const a = rand() * Math.PI * 2;
+        const ox = (rand() - 0.5) * 2.4, oz = (rand() - 0.5) * 2.4;
+        const tip = i === 4 ? 0.2 : 0; // the propped one tilts up
+        const make = (g, hex, shade) => {
+          g.rotateZ(Math.PI / 2 - tip); // lie flat along local X
+          g.rotateY(a);
+          g.translate(x + ox, gy + 0.17 + tip * 0.9, z + oz);
+          geoms.push(tintGeo(g, hex, shade));
+        };
+        const body = new THREE.CylinderGeometry(0.16, 0.16, 2.3, 9);
+        make(body, COLS[i], 1);
+        const tipCone = new THREE.ConeGeometry(0.16, 0.42, 9);
+        tipCone.translate(0, 1.36, 0);
+        make(tipCone, COLS[i], 1.08);
+        const wrap = new THREE.CylinderGeometry(0.18, 0.18, 1.3, 9); // the paper label band
+        make(wrap, COLS[i], 0.88);
+      }
+    }
+  }
+
+  if (kinds.includes('books')) {
+    // Three stacked picture books, spines offset askew: white page blocks
+    // sandwiched by coloured cover boards.
+    const spot = findSpot(130, 4.6, 3);
+    if (spot) {
+      const { x, z } = spot;
+      const COVERS = [0x3f6fd1, 0xd8463f, 0x3fa14e];
+      let ty = 0;
+      for (let i = 0; i < 3; i++) {
+        const w = 2.6 - i * 0.35, d = 1.9 - i * 0.22, h = 0.42;
+        const a = (rand() - 0.5) * 0.7;
+        const put = (g, hex, shade = 1) => {
+          g.rotateY(a);
+          g.translate(x, gy, z);
+          geoms.push(tintGeo(g, hex, shade));
+        };
+        const pages = new THREE.BoxGeometry(w - 0.18, h - 0.13, d - 0.12);
+        pages.translate(0.06, ty + h / 2, 0);
+        put(pages, 0xf7f5ee);
+        const top = new THREE.BoxGeometry(w, 0.07, d);
+        top.translate(0, ty + h - 0.035, 0);
+        put(top, COVERS[i]);
+        const bot = new THREE.BoxGeometry(w, 0.07, d);
+        bot.translate(0, ty + 0.035, 0);
+        put(bot, COVERS[i], 0.94);
+        const spine = new THREE.BoxGeometry(0.1, h, d);
+        spine.translate(-w / 2 + 0.05, ty + h / 2, 0);
+        put(spine, COVERS[i], 0.88);
+        ty += h;
+      }
+    }
+  }
+
+  if (kinds.includes('train')) {
+    // Wind-up toy train trundling a slow circle on the floor, key turning as it
+    // goes — needs a big clear disc; a layout that never leaves one simply gets
+    // no train. Painted toy rails mark the route (static); the loco is its own
+    // little group stepped by the anim registry.
+    const RT = 5.5; // route radius
+    const spot = findSpot(40, RT + 4.5, RT + 2.5);
+    if (spot) {
+      const cx2 = spot.x, cz2 = spot.z;
+      for (const rr of [RT - 0.32, RT + 0.32]) { // the two rails
+        const rail = new THREE.TorusGeometry(rr, 0.05, 6, 48);
+        rail.rotateX(Math.PI / 2);
+        rail.translate(cx2, gy + 0.03, cz2);
+        geoms.push(tintGeo(rail, 0x8a6f4d, 0.9));
+      }
+      const parts = []; // the loco, authored facing +Z
+      const lp = (g, lx, ly, lz, hex, shade = 1) => {
+        g.translate(lx, ly, lz);
+        const gg = tintGeo(g, hex, shade);
+        parts.push(gg);
+      };
+      lp(new THREE.BoxGeometry(1.0, 0.36, 2.4), 0, 0.52, 0, 0x3b6fb0);      // chassis
+      const boiler = new THREE.CylinderGeometry(0.44, 0.44, 1.45, 12);
+      boiler.rotateX(Math.PI / 2);
+      lp(boiler, 0, 1.02, 0.45, 0xd8463f);                                  // boiler
+      lp(new THREE.BoxGeometry(1.05, 0.95, 0.85), 0, 1.15, -0.85, 0x3b6fb0); // cab
+      lp(new THREE.BoxGeometry(1.15, 0.16, 1.0), 0, 1.72, -0.85, 0xd8463f);  // cab roof
+      lp(new THREE.CylinderGeometry(0.14, 0.2, 0.5, 10), 0, 1.62, 0.95, 0xf2c14e); // funnel
+      lp(new THREE.SphereGeometry(0.18, 10, 7), 0, 1.5, 0.25, 0xf2c14e);     // steam dome
+      for (const sd of [-1, 1]) for (const wz of [0.65, -0.65]) {
+        const wheel = new THREE.CylinderGeometry(0.3, 0.3, 0.14, 12);
+        wheel.rotateZ(Math.PI / 2);
+        lp(wheel, sd * 0.56, 0.3, wz, 0x2f2b38);
+      }
+      const trainGeo = mergeGeometries(parts, false);
+      for (const g of parts) g.dispose();
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      const train = new THREE.Group();
+      const body = new THREE.Mesh(trainGeo, mat);
+      body.castShadow = body.receiveShadow = false;
+      train.add(body);
+      const keyParts = []; // the wind-up key over the cab
+      const stem = new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8);
+      stem.translate(0, 0.25, 0);
+      keyParts.push(tintGeo(stem, 0xf2c14e));
+      for (const sd of [-1, 1]) {
+        const wing = new THREE.BoxGeometry(0.5, 0.3, 0.09);
+        wing.translate(sd * 0.28, 0.62, 0);
+        keyParts.push(tintGeo(wing, 0xf2c14e, 0.95));
+      }
+      const keyGeo = mergeGeometries(keyParts, false);
+      for (const g of keyParts) g.dispose();
+      const key = new THREE.Mesh(keyGeo, mat);
+      key.castShadow = key.receiveShadow = false;
+      key.position.set(0, 1.8, -0.85);
+      train.add(key);
+      R.trackGroup.add(train);
+      R._mergedGeoms.push(trainGeo, keyGeo);
+      R._mergedMats.push(mat);
+      animate((dt, t) => {
+        const a = t * 0.32; // ~1.8 u/s — a wind-up trundle
+        train.position.set(cx2 + Math.cos(a) * RT, gy, cz2 + Math.sin(a) * RT);
+        train.rotation.y = -a;    // nose along the tangent
+        key.rotation.y = t * 2.6; // winding as it goes
+      });
     }
   }
 
@@ -1217,6 +1726,185 @@ export function buildScenery(R, track, theme) {
   }
   rockProto.dispose();
 
+  // ── Ground clutter (sc.clutter) — the NEAR-FIELD pass: small detail scattered
+  // denser and closer to the kerb than the props above (the chase cam mostly
+  // sees the first few metres of verge — that's where detail per pixel lives).
+  // Placement draws from its OWN seeded stream: the tree/rock scatter above must
+  // stay byte-identical when a palette adds or tunes clutter.
+  const clutterGeoms = [];
+  const cc = sc.clutter;
+  if (cc && cc.kinds && cc.kinds.length) {
+    let seed2 = 5381;
+    for (let i = 0; i < idStr.length; i++) seed2 = ((seed2 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+    const rand2 = () => ((seed2 = (seed2 * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const CL_MARGIN = 0.7; // hugs the verge, never the deck
+    const isClearC = (x, z) => {
+      for (const s of samples) {
+        const half = (s.width != null ? s.width / 2 : defHalf) + CL_MARGIN;
+        const dx = x - s.pos.x, dz = z - s.pos.z;
+        if (dx * dx + dz * dz < half * half) return false;
+      }
+      return true;
+    };
+    // non-indexed + uv-free (like the landmark pieces) so mixed prims merge
+    const put = (g, hex, shade = 1) => {
+      const gg = g.index ? g.toNonIndexed() : g;
+      if (gg !== g) g.dispose();
+      gg.deleteAttribute('uv');
+      const c = new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(shade);
+      const n = gg.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+      gg.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      clutterGeoms.push(gg);
+    };
+    const pick = (tints) => tints[Math.floor(rand2() * tints.length)];
+    const builders = {
+      // wildflower patch: a handful of blossoms on little green stems
+      flower: (x, z, tints) => {
+        const n = 3 + Math.floor(rand2() * 4);
+        for (let i = 0; i < n; i++) {
+          const a = rand2() * Math.PI * 2, r = rand2() * 0.75;
+          const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
+          const stem = new THREE.CylinderGeometry(0.028, 0.036, 0.42, 5);
+          stem.translate(fx, groundY + 0.21, fz);
+          put(stem, 0x4e8a44, 0.92 + rand2() * 0.16);
+          const bloom = new THREE.IcosahedronGeometry(0.13, 1);
+          bloom.translate(fx, groundY + 0.47, fz);
+          put(bloom, pick(tints), 0.95 + rand2() * 0.12);
+        }
+      },
+      // seashell: a squashed half-dome, tipped a touch
+      shell: (x, z, tints) => {
+        const g = new THREE.SphereGeometry(0.24 + rand2() * 0.1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        g.scale(1, 0.55, 1.2);
+        g.rotateZ(0.12 + rand2() * 0.1);
+        g.rotateY(rand2() * Math.PI * 2);
+        g.translate(x, groundY + 0.03, z);
+        put(g, pick(tints), 0.96 + rand2() * 0.1);
+      },
+      // starfish: five flattened arms radiating from a small hub
+      starfish: (x, z, tints) => {
+        const hex = pick(tints), a0 = rand2() * Math.PI * 2, s = 0.8 + rand2() * 0.5;
+        const hub = new THREE.CylinderGeometry(0.11 * s, 0.13 * s, 0.09 * s, 5);
+        hub.translate(x, groundY + 0.045 * s, z);
+        put(hub, hex);
+        for (let k = 0; k < 5; k++) {
+          const arm = new THREE.ConeGeometry(0.1 * s, 0.44 * s, 5);
+          arm.rotateX(Math.PI / 2);       // apex points +Z
+          arm.scale(1, 0.45, 1);          // flattened against the sand
+          arm.translate(0, 0.045 * s, 0.28 * s);
+          arm.rotateY(a0 + (k / 5) * Math.PI * 2);
+          arm.translate(x, groundY, z);
+          put(arm, hex, 0.94 + (k % 2) * 0.08);
+        }
+      },
+      // bleached branch: two thin rods, kinked where they meet
+      driftwood: (x, z, tints) => {
+        const hex = pick(tints), a = rand2() * Math.PI * 2;
+        const main = new THREE.CylinderGeometry(0.07, 0.09, 1.5, 6);
+        main.rotateZ(Math.PI / 2);
+        main.rotateY(a);
+        main.translate(x, groundY + 0.08, z);
+        put(main, hex);
+        const limb = new THREE.CylinderGeometry(0.05, 0.06, 0.9, 6);
+        limb.rotateZ(Math.PI / 2);
+        limb.rotateY(a + 0.6);
+        limb.translate(x + Math.cos(a) * 0.55, groundY + 0.06, z - Math.sin(a) * 0.55);
+        put(limb, hex, 0.92);
+      },
+      // pinecone: two stacked faceted lumps
+      pinecone: (x, z, tints) => {
+        const hex = pick(tints);
+        const base = new THREE.IcosahedronGeometry(0.16, 0);
+        base.translate(x, groundY + 0.13, z);
+        put(base, hex);
+        const top = new THREE.IcosahedronGeometry(0.11, 0);
+        top.translate(x, groundY + 0.32, z);
+        put(top, hex, 1.08);
+      },
+      // wind-blown snow heap
+      drift: (x, z, tints) => {
+        const g = new THREE.IcosahedronGeometry(1, 1);
+        g.scale(0.9 + rand2() * 0.9, 0.28 + rand2() * 0.12, 0.55 + rand2() * 0.5);
+        g.rotateY(rand2() * Math.PI * 2);
+        g.translate(x, groundY + 0.07, z);
+        put(g, pick(tints), 0.97 + rand2() * 0.06);
+      },
+      // dry sage tuft (sometimes two clumped)
+      scrub: (x, z, tints) => {
+        const n = 1 + (rand2() < 0.4 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const g = new THREE.IcosahedronGeometry(0.3 + rand2() * 0.18, 0);
+          g.scale(1, 0.55 + rand2() * 0.2, 1);
+          g.rotateY(rand2() * Math.PI * 2);
+          g.translate(x + i * 0.5, groundY + 0.12, z + i * 0.3);
+          put(g, pick(tints), 0.9 + rand2() * 0.2);
+        }
+      },
+      // little cluster of rust pebbles
+      pebbles: (x, z, tints) => {
+        const n = 3 + Math.floor(rand2() * 2);
+        for (let i = 0; i < n; i++) {
+          const rr = 0.09 + rand2() * 0.09;
+          const g = new THREE.IcosahedronGeometry(rr, 0);
+          g.translate(x + (rand2() - 0.5) * 0.7, groundY + rr * 0.5, z + (rand2() - 0.5) * 0.7);
+          put(g, pick(tints), 0.9 + rand2() * 0.2);
+        }
+      },
+      // studded toy brick
+      brick: (x, z, tints) => {
+        const hex = pick(tints), a = rand2() * Math.PI * 2;
+        const body = new THREE.BoxGeometry(0.62, 0.3, 0.34);
+        body.rotateY(a);
+        body.translate(x, groundY + 0.15, z);
+        put(body, hex);
+        for (const sd of [-1, 1]) {
+          const stud = new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8);
+          stud.translate(sd * 0.15, 0.34, 0);
+          stud.rotateY(a);
+          stud.translate(x, groundY, z);
+          put(stud, hex, 1.06);
+        }
+      },
+      // lost marble
+      marble: (x, z, tints) => {
+        const g = new THREE.SphereGeometry(0.19, 10, 7);
+        g.translate(x, groundY + 0.19, z);
+        put(g, pick(tints), 1.05);
+      },
+      // fallen domino: white tile, dark midline
+      domino: (x, z, tints) => {
+        const a = rand2() * Math.PI * 2;
+        const tile = new THREE.BoxGeometry(0.5, 0.09, 0.95);
+        tile.rotateY(a);
+        tile.translate(x, groundY + 0.05, z);
+        put(tile, pick(tints));
+        const line = new THREE.BoxGeometry(0.52, 0.02, 0.07);
+        line.rotateY(a);
+        line.translate(x, groundY + 0.1, z);
+        put(line, 0x3a3442);
+      },
+    };
+    for (let d = 0; d < cl.length && clutterGeoms.length < 450; d += 5) {
+      const f = cl.sampleAt(d);
+      const half = (f.width != null ? f.width : track.roadWidth || 5) / 2;
+      for (const side of [-1, 1]) {
+        if (rand2() > cc.density) continue;
+        const lat = side * (half + 1.3 + rand2() * 3.4);
+        const x = f.pos.x + f.lateral.x * lat + (rand2() - 0.5) * 1.6;
+        const z = f.pos.z + f.lateral.z * lat + (rand2() - 0.5) * 1.6;
+        if (!isClearC(x, z)) continue;
+        // weighted kind pick — ONE rand2 regardless of entry count
+        const r = rand2();
+        let acc = 0, entry = cc.kinds[cc.kinds.length - 1];
+        for (const e of cc.kinds) { acc += e.w; if (r < acc) { entry = e; break; } }
+        const build = builders[entry.kind];
+        if (build) build(x, z, entry.tints || [0xffffff]);
+      }
+    }
+  }
+
   const addMerged = (geoms, mat) => {
     if (!geoms.length) { mat.dispose(); return; }
     const merged = mergeGeometries(geoms, false);
@@ -1237,4 +1925,6 @@ export function buildScenery(R, track, theme) {
   // smooth-shaded, unlike the deliberately faceted boulders below
   addMerged(bareGeoms, new THREE.MeshLambertMaterial({ vertexColors: true }));
   addMerged(plainGeoms, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true }));
+  // near-field ground clutter: one more merged mesh/draw call, matte like the rest
+  addMerged(clutterGeoms, new THREE.MeshLambertMaterial({ vertexColors: true }));
 }

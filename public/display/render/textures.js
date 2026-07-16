@@ -231,6 +231,83 @@ function makeBirdTexture() {
   return tex;
 }
 
+// Butterfly glyph: two fat wing lobes (big fore, small hind) either side of a
+// short body stroke — the fliers' butterfly kind (grass/sunset). Same 2:1 canvas
+// as the bird so the sprite scale math is shared; the flap envelope squashing the
+// sprite reads as the wing-beat, so the glyph itself stays spread-winged.
+function makeButterflyTexture() {
+  const w = 64, h = 32;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  // forewings — large upper lobes
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(32 + s * 12, 12, 11, 8.5, s * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // hindwings — smaller lower lobes
+    ctx.beginPath();
+    ctx.ellipse(32 + s * 8, 23, 7, 5.5, s * -0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,1)';
+  ctx.lineWidth = 3.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(32, 5); ctx.lineTo(32, 27); ctx.stroke(); // body
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Paper-airplane glyph: the classic folded dart seen from below-side — a long
+// nose-right triangle with a darker centre fold notch. Flap 0 (it glides);
+// the loop banks it via sprite material rotation instead.
+function makePlaneTexture() {
+  const w = 64, h = 32;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  ctx.beginPath(); // upper wing
+  ctx.moveTo(60, 14); ctx.lineTo(6, 4); ctx.lineTo(22, 16); ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); // lower wing, slightly darker to sell the fold
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.moveTo(60, 14); ctx.lineTo(22, 16); ctx.lineTo(14, 27); ctx.closePath();
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Kite glyph: a tall diamond with a wiggling bow-tail below — the beach's
+// anchored flier. Square canvas; the sprite is scaled square too.
+function makeKiteTexture() {
+  const s = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  ctx.beginPath(); // diamond — wider shoulders up top, long point down
+  ctx.moveTo(32, 2); ctx.lineTo(48, 18); ctx.lineTo(32, 40); ctx.lineTo(16, 18);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); // tail — a lazy S below the diamond
+  ctx.moveTo(32, 40);
+  ctx.quadraticCurveTo(40, 48, 32, 53);
+  ctx.quadraticCurveTo(24, 58, 30, 62);
+  ctx.stroke();
+  for (const [bx, by] of [[36, 47], [27, 57]]) { // little tail bows
+    ctx.beginPath(); ctx.arc(bx, by, 2.6, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Snowflake dot: a small soft radial puff for the falling-snow Points cloud —
 // crisp core, quick falloff (a flake, not a glow).
 function makeSnowflakeTexture() {
@@ -690,6 +767,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
   makePadTexture, makePadStripTexture, makeWetSignTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

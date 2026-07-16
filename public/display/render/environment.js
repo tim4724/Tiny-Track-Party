@@ -1,9 +1,10 @@
 // Track-independent world dressing: sky dome, drifting clouds, horizon hills,
 // the toy lighting rig, the ground plane — plus the biome-gated extras (sea ring
-// with its wet-sand edge, dust banks, snowfall), always built and hidden until a
-// theme asks for them. Built once per renderer; returns the pieces the frame loop /
-// per-track fitting need to touch — PLUS the handles (sky, hemi, hills, clouds,
-// haze, water, snowfall, birds) that applyEnvTheme() re-dresses when the cup's biome
+// with its wet-sand edge, dust banks, ambient particles, fliers, kites, the
+// hot-air balloon), always built and hidden until a theme asks for them. Built
+// once per renderer; returns the pieces the frame loop / per-track fitting need
+// to touch — PLUS the handles (sky, hemi, hills, clouds, haze, water, ambient,
+// birds, kites, balloon) that applyEnvTheme() re-dresses when the cup's biome
 // changes (recolour/re-tint in place; hills also reshape on a dome↔mesa switch).
 //
 // All look that varies per cup lives in a THEME (see shared/themes.js): sky colours,
@@ -12,7 +13,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeButterflyTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -308,56 +309,120 @@ function applyWater(water, theme) {
   }
 }
 
-// ── Snowfall (theme.snowfall) ────────────────────────────────────────────────
-// A single THREE.Points cloud of soft flakes drifting down over the play field —
-// one draw call for hundreds of flakes (sprites would be one call each). Built
-// once, hidden unless the theme asks; positions are AUTHORED around the origin
-// (setTrack scales XZ with the hill push-out) and stepped in the frame loop
-// (fall + the clouds' eastward wind, wrapping top-to-bottom and edge-to-edge).
-export const SNOW_R = 170; // authored spread — matches the hill ring's reach (exported: the frame loop wraps against both)
-export const SNOW_H = 34;  // wrap height
+// ── Ambient particles (theme.ambient) ────────────────────────────────────────
+// A single THREE.Points cloud drifting over the play field — one draw call for
+// hundreds of particles (sprites would be one call each). Built once, hidden
+// unless the theme asks; positions are AUTHORED around the origin (setTrack
+// scales XZ with the hill push-out) and stepped by stepAmbient (fall + wind +
+// bob, wrapping within the kind's height band and edge-to-edge). Kinds preset
+// the motion so each biome's air reads differently from the SAME cloud:
+//   flake  — lazy toy snow, full-height fall (the original snowfall, verbatim)
+//   mote   — near-still golden dust hanging in a sunbeam (playroom)
+//   sand   — fast low streaks of wind-blown grit (canyon)
+//   pollen — light seeds drifting on a breeze (grass parkland)
+export const AMB_R = 170; // authored spread — matches the hill ring's reach (exported: the step wraps against it)
+export const AMB_H = 34;  // full wrap height (kinds take a `band` fraction of it)
 
-function buildSnowfall() {
-  const MAX = 900; // roomiest biome's worth; theme `count` draws a prefix (setDrawRange)
+// Per-kind motion/appearance presets. `fall` scales the per-particle sink speed
+// (1 = the snow fall), `wind` is the eastward drift u/s, `bob` a vertical
+// wander velocity, `band` the fraction of AMB_H the particles live in.
+const AMB_KINDS = {
+  flake:  { size: 0.3,  opacity: 0.85, fall: 1,    wind: 0.7, bob: 0,    band: 1 },
+  mote:   { size: 0.13, opacity: 0.5,  fall: 0.05, wind: 0.4, bob: 0.4,  band: 0.5 },
+  sand:   { size: 0.17, opacity: 0.4,  fall: 0,    wind: 9,   bob: 0.5,  band: 0.1 },
+  pollen: { size: 0.15, opacity: 0.5,  fall: 0.1,  wind: 1.2, bob: 0.6,  band: 0.35 },
+};
+
+function buildAmbient() {
+  const MAX = 1400; // roomiest biome's worth; theme `count` draws a prefix (setDrawRange)
   let seed = 74747;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   const pos = new Float32Array(MAX * 3);
   const speed = new Float32Array(MAX);
   for (let i = 0; i < MAX; i++) {
-    const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * SNOW_R; // sqrt → uniform over the disc
+    const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * AMB_R; // sqrt → uniform over the disc
     pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = rand() * SNOW_H;
+    pos[i * 3 + 1] = rand() * AMB_H;
     pos[i * 3 + 2] = Math.sin(a) * r;
-    speed[i] = 1.1 + rand() * 1.4; // world units/s — a lazy toy-snow fall, not a blizzard
+    speed[i] = 1.1 + rand() * 1.4; // world units/s at fall=1 — a lazy toy-snow fall, not a blizzard
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const snow = new THREE.Points(geo, new THREE.PointsMaterial({
+  const amb = new THREE.Points(geo, new THREE.PointsMaterial({
     map: makeSnowflakeTexture(), size: 0.3, transparent: true, opacity: 0.85,
-    depthWrite: false, sizeAttenuation: true // fog default ON — far flakes dissolve into the haze
+    depthWrite: false, sizeAttenuation: true // fog default ON — far particles dissolve into the haze
   }));
-  snow.userData.speed = speed;
-  snow.frustumCulled = false; // the cloud spans the whole field — the sphere test always passes
-  return snow;
+  amb.userData.speed = speed;
+  amb.frustumCulled = false; // the cloud spans the whole field — the sphere test always passes
+  return amb;
 }
 
-function applySnowfall(snow, theme) {
-  const s = theme.snowfall;
-  snow.visible = !!s;
-  if (!s) return;
-  snow.geometry.setDrawRange(0, Math.min(s.count ?? 650, snow.userData.speed.length));
-  snow.material.size = s.size ?? 0.3;
-  snow.material.color.set(s.tint ?? 0xffffff);
+// Dress the cloud for a biome (or hide it). `patch` lets a track override its
+// biome's numbers — theme.ambientByTrack[trackId] (snow scales flurry density
+// per track); kind/motion presets merge under both.
+export function applyAmbient(amb, theme, patch) {
+  const a = theme.ambient;
+  amb.visible = !!a;
+  if (!a) { amb.userData.cfg = null; return; }
+  const cfg = { ...(AMB_KINDS[a.kind] || AMB_KINDS.flake), ...a, ...(patch || {}) };
+  cfg.bandH = Math.max(2, AMB_H * cfg.band);
+  amb.geometry.setDrawRange(0, Math.min(cfg.count ?? 650, amb.userData.speed.length));
+  amb.material.size = cfg.size;
+  amb.material.opacity = cfg.opacity;
+  amb.material.color.set(cfg.tint ?? 0xffffff);
+  amb.userData.cfg = cfg;
 }
 
-// ── Birds (theme.birds) ──────────────────────────────────────────────────────
-// A few soaring silhouettes, each circling its own authored roost — gulls over the
-// beach shoreline, vultures high over a canyon mesa. Sprites like the clouds (they
-// billboard per split-screen cell); the frame loop does the circling. Per-bird
-// variety (roost angle, height offset, phase, speed factor) is baked at build; the
-// theme dresses count/tint/size and sets the shared orbit numbers, which the loop
-// reads from `birds.cfg`.
-const DEF_BIRDS = { count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8 };
+// Frame step: sink at fall-scaled per-particle speeds, ride the eastward wind,
+// wander vertically (bob), wrapping within the kind's height band and the
+// authored spread (the mesh scale handles big circuits). For the flake kind
+// this is motion-identical to the original snowfall step.
+export function stepAmbient(amb, dt, t) {
+  const cfg = amb.userData.cfg;
+  if (!amb.visible || !cfg) return;
+  const attr = amb.geometry.attributes.position;
+  const arr = attr.array, spd = amb.userData.speed;
+  const n = Math.min(spd.length, amb.geometry.drawRange.count);
+  const bandH = cfg.bandH;
+  for (let i = 0; i < n; i++) {
+    let y = arr[i * 3 + 1] - spd[i] * cfg.fall * dt;
+    if (cfg.bob) y += Math.sin(t * 1.3 + spd[i] * 37) * cfg.bob * dt;
+    if (y < 0) y += bandH; else if (y >= bandH) y -= bandH;
+    arr[i * 3 + 1] = y;
+    let x = arr[i * 3] + cfg.wind * dt;
+    if (x > AMB_R) x -= AMB_R * 2;
+    arr[i * 3] = x;
+  }
+  attr.needsUpdate = true;
+}
+
+// ── Fliers (theme.birds) ─────────────────────────────────────────────────────
+// A few airborne silhouettes, each circling its own authored roost — gulls over
+// the beach shoreline, vultures high over a canyon mesa, butterflies low over
+// the parkland, a paper airplane gliding around the playroom. Sprites like the
+// clouds (they billboard per split-screen cell); the frame loop does the
+// circling. Per-flier variety (roost angle, height offset, phase, speed factor)
+// is baked at build; the theme dresses kind/count/tint/size and sets the shared
+// orbit numbers, which the loop reads from `birds.cfg`:
+//   kind:  'bird' (default) | 'butterfly' | 'plane' — picks the glyph
+//   tints: optional per-flier colour array (cycled by index; wins over `tint`)
+//   dys:   scales the per-flier altitude jitter (butterflies hug their band)
+//   bank:  sprite-rotation roll around the orbit (the plane leans into turns;
+//          flapping kinds leave it 0)
+const DEF_BIRDS = { kind: 'bird', count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8, dys: 1, bank: 0 };
+
+// Glyph textures, one per kind, built lazily once and shared by every sprite.
+let _flierTex = null;
+function flierTexture(kind) {
+  if (!_flierTex) {
+    _flierTex = {
+      bird: makeBirdTexture(),
+      butterfly: makeButterflyTexture(),
+      plane: makePlaneTexture(),
+    };
+  }
+  return _flierTex[kind] || _flierTex.bird;
+}
 
 function applyBirds(birds, theme) {
   const b = theme.birds ? { ...DEF_BIRDS, ...theme.birds } : null;
@@ -365,9 +430,120 @@ function applyBirds(birds, theme) {
   birds.forEach((sprite, i) => {
     sprite.visible = !!b && i < b.count;
     if (!b) return;
-    sprite.material.color.set(b.tint);
+    const tex = flierTexture(b.kind);
+    if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
+    sprite.material.color.set(Array.isArray(b.tints) ? b.tints[i % b.tints.length] : b.tint);
+    sprite.material.rotation = 0; // banking kinds roll it per-frame
     sprite.scale.set(b.size, b.size * 0.5, 1); // glyph texture is 2:1
   });
+}
+
+// ── Kites (theme.kites) ──────────────────────────────────────────────────────
+// One or two bright kites bobbing on an implied string over the shore — an
+// ANCHORED flier: each wanders around its authored spot instead of orbiting.
+// Always 2 sprites built; the theme dresses count/tints/size/height and
+// stepKites does the bobbing (plus a gentle sprite-rotation sway).
+const DEF_KITES = { count: 0, tints: [0xd94f3d, 0x3f8fd1], size: 2.6, y: 12 };
+
+function applyKites(kites, theme) {
+  const k = theme.kites ? { ...DEF_KITES, ...theme.kites } : null;
+  kites.cfg = k;
+  kites.forEach((sprite, i) => {
+    sprite.visible = !!k && i < k.count;
+    if (!k) return;
+    sprite.material.color.set(k.tints[i % k.tints.length]);
+    sprite.scale.set(k.size, k.size, 1); // kite glyph is square (diamond + tail)
+  });
+}
+
+export function stepKites(kites, dt, t, sf) {
+  const cfg = kites.cfg;
+  if (!cfg) return;
+  for (const sprite of kites) {
+    if (!sprite.visible) continue;
+    const u = sprite.userData;
+    sprite.position.set(
+      Math.cos(u.a0) * u.r * sf + Math.sin(t * 0.55 + u.ph) * 2.2,
+      cfg.y + Math.sin(t * 0.85 + u.ph * 2) * 1.6 + Math.sin(t * 2.1 + u.ph) * 0.35,
+      Math.sin(u.a0) * u.r * sf + Math.cos(t * 0.5 + u.ph) * 2.2
+    );
+    sprite.material.rotation = Math.sin(t * 0.9 + u.ph) * 0.14; // tugging on the string
+  }
+}
+
+// ── Hot-air balloon (theme.balloon) ──────────────────────────────────────────
+// A far-field hero: one gored balloon drifting a very slow circle at cloud
+// height (grass/sunset). Real 3D (Lambert, fogged like the hills — it hazes
+// with distance instead of glowing through the fog): a panelled envelope
+// painted per-face by longitude (the play-ball trick), a rigging frustum, and
+// a hanging basket. applyBalloon repaints the gores; stepBalloon drifts it.
+const DEF_BALLOON = { panels: [0xd94f3d, 0xf5f0e2], y: 42, r: 150, size: 6, bearing: 2.4, speed: 0.012 };
+
+function buildBalloon() {
+  const group = new THREE.Group();
+  // envelope: unit sphere, slightly stretched — per-face gore colours painted by
+  // applyBalloon. widthSegments MUST be a multiple of the gore count (8) so the
+  // colour seams land on the sphere's own meridian lines — else they saw-tooth
+  // (the play-ball lesson, see render/track.js).
+  const env = new THREE.SphereGeometry(1, 16, 12).toNonIndexed();
+  env.deleteAttribute('uv');
+  env.scale(1, 1.08, 1);
+  env.setAttribute('color', new THREE.BufferAttribute(new Float32Array(env.attributes.position.count * 3), 3));
+  const envelope = new THREE.Mesh(env, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  group.add(envelope);
+  group.userData.envelope = envelope;
+  // rigging + basket: static warm-brown parts, vertex-tinted into one mesh
+  const tintPart = (g, hex) => {
+    const gg = g.index ? g.toNonIndexed() : g;
+    if (gg !== g) g.dispose();
+    gg.deleteAttribute('uv');
+    const c = new THREE.Color(hex).convertSRGBToLinear();
+    const n = gg.attributes.position.count;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    gg.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    return gg;
+  };
+  const rig = new THREE.CylinderGeometry(0.55, 0.2, 0.55, 8, 1, true);
+  rig.translate(0, -1.18, 0);
+  const basket = new THREE.BoxGeometry(0.42, 0.32, 0.42);
+  basket.translate(0, -1.6, 0);
+  const parts = mergeGeometries([tintPart(rig, 0x6f5a40), tintPart(basket, 0x8a6f4d)], false);
+  group.add(new THREE.Mesh(parts, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  return group;
+}
+
+function applyBalloon(balloon, theme) {
+  const b = theme.balloon ? { ...DEF_BALLOON, ...theme.balloon } : null;
+  balloon.visible = !!b;
+  balloon.userData.cfg = b;
+  if (!b) return;
+  balloon.scale.setScalar(b.size);
+  // paint the envelope's gores: alternate the panel colours by face-centroid
+  // longitude — 8 gores, seams landing on the sphere's own meridian lines
+  const GORES = 8;
+  const cols = b.panels.map((h) => new THREE.Color(h).convertSRGBToLinear());
+  const geo = balloon.userData.envelope.geometry;
+  const p = geo.attributes.position, col = geo.attributes.color.array;
+  for (let t = 0; t < p.count; t += 3) {
+    const cx = (p.getX(t) + p.getX(t + 1) + p.getX(t + 2)) / 3;
+    const cz = (p.getZ(t) + p.getZ(t + 1) + p.getZ(t + 2)) / 3;
+    const gore = Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * GORES) % GORES;
+    const c = cols[gore % cols.length];
+    for (let v = t; v < t + 3; v++) { col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b; }
+  }
+  geo.attributes.color.needsUpdate = true;
+}
+
+export function stepBalloon(balloon, dt, t, sf) {
+  const cfg = balloon.userData.cfg;
+  if (!cfg) return;
+  const a = cfg.bearing + t * cfg.speed; // a full lap of the horizon takes ~9 min
+  balloon.position.set(
+    Math.cos(a) * cfg.r * sf,
+    cfg.y + Math.sin(t * 0.11) * 1.4, // thermals — a slow breathe, not a bounce
+    Math.sin(a) * cfg.r * sf
+  );
 }
 
 // ── Dust banks (theme.haze) ──────────────────────────────────────────────────
@@ -482,33 +658,61 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
     scene.add(water);
   }
 
-  // Snowfall: one Points cloud, hidden unless the theme carries `snowfall`; the
-  // frame loop steps it (SceneRenderer._loop) and setTrack scales its spread.
-  const snowfall = buildSnowfall();
-  snowfall.position.y = -1.0; // flakes' authored y is height above the ground plane
-  applySnowfall(snowfall, theme);
-  scene.add(snowfall);
+  // Ambient particles: one Points cloud, hidden unless the theme carries
+  // `ambient`; stepAmbient steps it (from SceneRenderer._loop) and setTrack
+  // scales its spread (plus applies any per-track patch).
+  const ambient = buildAmbient();
+  ambient.position.y = -1.0; // particles' authored y is height above the ground plane
+  applyAmbient(ambient, theme);
+  scene.add(ambient);
 
-  // Birds: 4 sprites built (the roomiest biome's worth), dressed by applyBirds and
-  // circled by the frame loop. fog:false like the clouds — they live in clear sky.
+  // Fliers: 4 sprites built (the roomiest biome's worth), dressed by applyBirds
+  // (kind/tint/size) and circled by the frame loop. fog:false like the clouds —
+  // they live in clear sky.
   const birds = [];
   {
-    const birdTex = makeBirdTexture();
     for (let i = 0; i < 4; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: birdTex, transparent: true, fog: false, depthWrite: false
+        map: flierTexture('bird'), transparent: true, fog: false, depthWrite: false
       }));
       sprite.userData = {
         a0: (i / 4) * Math.PI * 2 + (i % 3) * 0.8, // roost bearing on the ring
-        dy: (i % 3) * 2.5,                          // per-bird soaring altitude offset
+        dy: (i % 3) * 2.5,                          // per-flier altitude offset (scaled by cfg.dys)
         ph: i * 2.1,                                // orbit phase offset
-        sp: 0.82 + (i % 4) * 0.12,                  // per-bird speed factor
+        sp: 0.82 + (i % 4) * 0.12,                  // per-flier speed factor
       };
       birds.push(sprite);
       scene.add(sprite);
     }
     applyBirds(birds, theme);
   }
+
+  // Kites: 2 sprites, anchored bobbers over the shore (beach). Dressed by
+  // applyKites, stepped by stepKites. fog:false — bright toy colours must not
+  // grey out over the water.
+  const kites = [];
+  {
+    const kiteTex = makeKiteTexture();
+    for (let i = 0; i < 2; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: kiteTex, transparent: true, fog: false, depthWrite: false
+      }));
+      sprite.userData = {
+        a0: 0.9 + i * 2.6,   // authored anchor bearing
+        r: 105 + i * 18,     // anchor radius (scaled with the hill push-out)
+        ph: i * 1.7,         // bob phase
+      };
+      kites.push(sprite);
+      scene.add(sprite);
+    }
+    applyKites(kites, theme);
+  }
+
+  // Hot-air balloon: one far-field drifter (grass/sunset). Built once, hidden
+  // unless the theme asks; applyBalloon paints the gores, stepBalloon drifts it.
+  const balloon = buildBalloon();
+  applyBalloon(balloon, theme);
+  scene.add(balloon);
 
   // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
   // for the diorama without competing with it. Shape comes from the theme (domes vs
@@ -573,7 +777,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, haze, water, snowfall, birds, key, hemi, ground, hills, sky };
+  return { clouds, haze, water, ambient, birds, kites, balloon, key, hemi, ground, hills, sky };
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
@@ -600,8 +804,10 @@ export function applyEnvTheme(env, theme) {
   applyClouds(env.clouds, theme);
   applyHaze(env.haze, theme);
   applyWater(env.water, theme);
-  applySnowfall(env.snowfall, theme);
+  applyAmbient(env.ambient, theme);
   applyBirds(env.birds, theme);
+  applyKites(env.kites, theme);
+  applyBalloon(env.balloon, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);
