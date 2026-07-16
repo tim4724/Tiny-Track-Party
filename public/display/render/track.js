@@ -750,13 +750,16 @@ export function buildLandmarks(R, track, theme) {
     const yaw = rand() * Math.PI * 2;
     // Parts are authored in the boat's LOCAL frame (+Z = bow, origin at the
     // waterline under the mast), then heeled a few degrees — a sailing boat
-    // leans — and swung to the anchorage bearing. Toy sloop anatomy: red hull
-    // with a pointed bow wedge and a white gunwale stripe, cream cabin, and a
-    // proper sloop rig (reworked on review — the old cone sails read as
-    // blobs): mast + boom, a big triangular MAIN aft with a red racing band,
-    // a smaller JIB forward, pennant at the masthead. Sails are thin 3-sided
-    // prisms — crisp triangle silhouettes that still catch light edge-on
-    // (paper-thin planes vanish; the cameras circle the whole island).
+    // leans — and swung to the anchorage bearing. Toy sloop anatomy (third
+    // pass — the box hull with a stuck-on arrow prow and centred-apex
+    // pennant-triangle sails both read wrong): a red hull with a cream
+    // gunwale band running right around, both closing at a POINTED STEM
+    // (45°-rotated boxes — vertical bow faces like a real stem, not a flat
+    // arrowhead), cabin with a red roof, and a proper sloop rig: mast + boom
+    // and two RIGHT-TRIANGLE sails — a shear puts each apex directly over a
+    // base corner, so the luff runs vertically up the mast/forestay the way
+    // sails actually hang. Sails stay thin prisms (paper-thin planes vanish
+    // edge-on; the cameras circle the whole island).
     const HEEL = 0.09;
     const part = (g, lx, ly, lz, hex) => {
       g.translate(lx, ly, lz);
@@ -765,28 +768,42 @@ export function buildLandmarks(R, track, theme) {
       g.translate(bx, wy, bz);
       geoms.push(tintGeo(g, hex));
     };
-    // a standing sail triangle: thin 3-prism in the boat's fore-aft plane,
-    // apex up (cylinder axis → X for thickness; thetaStart puts a vertex at +Y)
-    const sail = (sy, sz) => {
+    // right-triangle sail: a thin 3-prism (apex up), base dropped to y=0,
+    // sheared so the apex sits over the `lead` base corner (+1 = forward/+Z,
+    // -1 = aft/−Z) — that edge becomes the vertical luff. 1.5·sy tall,
+    // 1.732·sz along the foot.
+    const sail = (sy, sz, lead) => {
       const g = new THREE.CylinderGeometry(1, 1, 0.09, 3, 1, false, Math.PI / 2);
       g.rotateZ(Math.PI / 2);
       g.scale(1, sy, sz);
+      g.translate(0, 0.5 * sy, 0);
+      const k = (lead * 0.866 * sz) / (1.5 * sy); // shear: z += k·y
+      g.applyMatrix4(new THREE.Matrix4().set(
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, k, 1, 0,
+        0, 0, 0, 1
+      ));
+      g.computeVertexNormals(); // the shear skews the prism's normals
       return g;
     };
-    part(new THREE.BoxGeometry(1.8, 1.0, 4.6), 0, 0.28, -0.5, 0xd94f3d);   // hull
-    const bow = new THREE.ConeGeometry(0.9, 1.7, 4);                        // 4-sided pyramid...
-    bow.rotateX(Math.PI / 2);                                               // ...apex swung to +Z
-    bow.scale(1, 0.55, 1);                                                  // diamond squashed to hull height
-    part(bow, 0, 0.28, 2.6, 0xd94f3d);                                      // pointed prow
-    part(new THREE.BoxGeometry(1.92, 0.2, 4.7), 0, 0.82, -0.5, 0xf7f5ee);   // gunwale stripe
-    part(new THREE.BoxGeometry(1.1, 0.6, 1.4), 0, 1.15, -1.3, 0xf3e9d8);    // cabin
+    part(new THREE.BoxGeometry(1.7, 0.55, 4.4), 0, 0.2, -0.6, 0xd94f3d);   // hull, slightly settled into the water
+    const stem = new THREE.BoxGeometry(1.2, 0.55, 1.2);
+    stem.rotateY(Math.PI / 4);
+    part(stem, 0, 0.2, 1.6, 0xd94f3d);                                      // pointed stem closing the hull
+    part(new THREE.BoxGeometry(1.9, 0.34, 4.6), 0, 0.62, -0.6, 0xf7f5ee);   // gunwale band, proud of the hull…
+    const stem2 = new THREE.BoxGeometry(1.34, 0.34, 1.34);
+    stem2.rotateY(Math.PI / 4);
+    part(stem2, 0, 0.62, 1.7, 0xf7f5ee);                                    // …closing at its own pointed stem
+    part(new THREE.BoxGeometry(1.05, 0.5, 1.5), 0, 1.04, -1.2, 0xf3e9d8);   // cabin
+    part(new THREE.BoxGeometry(1.2, 0.1, 1.65), 0, 1.33, -1.2, 0xd94f3d);   // cabin roof
     part(new THREE.CylinderGeometry(0.1, 0.07, 5.8, 6), 0, 2.9, 0.3, 0x8a6f4d); // mast, tapering
-    const boom = new THREE.CylinderGeometry(0.06, 0.06, 2.7, 6);            // main boom, swung aft
+    const boom = new THREE.CylinderGeometry(0.06, 0.06, 2.5, 6);            // main boom, swung aft
     boom.rotateX(Math.PI / 2);
     part(boom, 0, 1.55, -0.85, 0x8a6f4d);
-    part(sail(2.4, 1.3), 0, 2.85, -0.85, 0xf7f5ee);                         // MAIN: foot on the boom, leading edge on the mast
-    part(new THREE.BoxGeometry(0.11, 0.42, 1.4), 0, 2.2, -0.85, 0xd94f3d);  // red racing band across the main
-    part(sail(1.55, 0.95), 0, 2.25, 1.3, 0xfdf8ec);                         // JIB, forward of the mast
+    part(sail(2.53, 1.31, 1), 0, 1.55, -0.915, 0xf7f5ee);                   // MAIN: vertical luff up the mast, foot on the boom
+    part(new THREE.BoxGeometry(0.11, 0.42, 1.7), 0, 2.3, -0.69, 0xd94f3d);  // red racing band across the main
+    part(sail(2.27, 1.115, -1), 0, 1.0, 1.386, 0xfdf8ec);                   // JIB: vertical luff at the mast, foot running to the bow
     const pennant = new THREE.ConeGeometry(0.26, 0.7, 3);
     pennant.rotateX(-Math.PI / 2);                                          // streams aft
     pennant.scale(1, 0.5, 1);
