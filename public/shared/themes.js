@@ -185,17 +185,12 @@ const GRASS_SCENERY = {
   rockS:   [0.3, 0.45],
   density: 0.62,
   // Near-field pass (own rand stream — the scatter above is untouched):
-  // wildflower patches on the verge, straight from Kenney's Nature Kit (three
-  // procedural attempts all read wrong — authored models match the rest of
-  // the vegetation). Blooms keep their authored red/purple/yellow; the tint
-  // map recolours the kit's teal stems to leaf green, like the palms.
+  // wildflower patches on the verge — stemless procedural daisies (petal cup
+  // + golden heart flat on the lawn; the stem was the rejected part, and the
+  // Nature-Kit tulips were tried and liked less than the daisy look). Soft
+  // meadow colours: poppy red, daisy cream, cornflower, warm gold.
   clutter: {
-    kinds: [{ kind: 'kit', w: 1,
-              models: ['flower-red-a', 'flower-red-b', 'flower-red-c',
-                       'flower-purple-a', 'flower-purple-b', 'flower-purple-c',
-                       'flower-yellow-a', 'flower-yellow-b', 'flower-yellow-c'],
-              s: [2.0, 1.2], per: [2, 3],
-              tint: { '73eddd': 0x4e8a44 } }],
+    kinds: [{ kind: 'flower', w: 1, tints: [0xe4604a, 0xf5f0e2, 0x6f8fd8, 0xe8b84a] }],
     density: 0.3,
   },
 };

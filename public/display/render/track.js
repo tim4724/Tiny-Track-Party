@@ -1699,9 +1699,43 @@ export function buildLandmarks(R, track, theme) {
 //   pick(tints)     one rand() draw from a tint family
 //   groundY         the floor height to rest on
 export const CLUTTER_BUILDERS = {
-  // (Flowers graduated from procedural builds to Kenney Nature-Kit GLBs —
-  // three procedural passes read as lollipops/sticks/splats. Kit stamps go
-  // through the 'kit' clutter kind in buildScenery, not this table.)
+  // wildflower patch: daisy heads sitting straight ON the lawn — NO stem (the
+  // stem was the one rejected part of the daisy design; kit tulips were tried
+  // and liked less). Each head is a shallow upturned cup: five petals around a
+  // golden heart, tips raised so the bloom reads from the low chase cam too,
+  // with a pair of flat leaves peeking out underneath.
+  flower: (ctx, x, z, tints) => {
+    const { rand, put, pick, groundY } = ctx;
+    const n = 3 + Math.floor(rand() * 3);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2, r = rand() * 0.85;
+      const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
+      const s = 0.85 + rand() * 0.45; // per-bloom size
+      const hex = pick(tints);
+      const ph = rand() * Math.PI * 2; // petal-ring phase
+      for (let k = 0; k < 2; k++) { // leaves under the head
+        const la = ph + k * 2.4 + 0.7;
+        const leaf = new THREE.SphereGeometry(0.1 * s, 6, 4);
+        leaf.scale(1.7, 0.3, 0.7);
+        leaf.rotateY(-la);
+        leaf.translate(fx + Math.cos(la) * 0.16 * s, groundY + 0.03, fz + Math.sin(la) * 0.16 * s);
+        put(leaf, 0x5a9a50, 0.9 + rand() * 0.12);
+      }
+      for (let k = 0; k < 5; k++) { // the petal cup
+        const pa = ph + (k / 5) * Math.PI * 2;
+        const petal = new THREE.SphereGeometry(0.09 * s, 6, 4);
+        petal.scale(1.5, 0.4, 0.85); // flat oval, long axis outward…
+        petal.rotateZ(0.4);          // …outer tip raised — the cup
+        petal.rotateY(-pa);
+        petal.translate(fx + Math.cos(pa) * 0.13 * s, groundY + 0.09 * s, fz + Math.sin(pa) * 0.13 * s);
+        put(petal, hex, 0.95 + rand() * 0.1);
+      }
+      const heart = new THREE.SphereGeometry(0.08 * s, 6, 5); // the golden centre
+      heart.scale(1, 0.7, 1);
+      heart.translate(fx, groundY + 0.1 * s, fz);
+      put(heart, 0xf2c14e, 1.05);
+    }
+  },
   // seashell: a squashed half-dome, tipped a touch
   shell: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
