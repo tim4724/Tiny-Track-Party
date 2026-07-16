@@ -16,8 +16,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildMonsterRig, buildMonsterChassis, MONSTER_BASE_ASSET } from '/display/render/MonsterRig.js';
 import { gantryGroup } from '/display/render/FinishGate.js';
 import { buildLandmarks, CLUTTER_BUILDERS } from '/display/render/track.js';
-import { buildBalloon, applyBalloon } from '/display/render/environment.js';
-import { makeBirdTexture, makePlaneTexture, makeKiteTexture } from '/display/render/textures.js';
+import { buildBalloon, applyBalloon, buildPaperPlane, applyPaperPlane } from '/display/render/environment.js';
+import { makeBirdTexture, makeKiteTexture } from '/display/render/textures.js';
 import { THEMES } from '/shared/themes.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
@@ -397,9 +397,13 @@ async function main() {
     applyBalloon(b, THEMES[theme]);
     inject('sky-balloon-' + (theme === 'grass' ? 'meadow' : 'dusk'), b);
   }
-  inject('sky-glyph-bird',  buildGlyphShowcase(makeBirdTexture(),  0x51616d, 0.5));
-  inject('sky-glyph-plane', buildGlyphShowcase(makePlaneTexture(), 0xf6f2e2, 0.5));
-  inject('sky-glyph-kite',  buildGlyphShowcase(makeKiteTexture(),  0xd94f3d, 1));
+  inject('sky-glyph-bird', buildGlyphShowcase(makeBirdTexture(), 0x51616d, 0.5));
+  inject('sky-glyph-kite', buildGlyphShowcase(makeKiteTexture(), 0xd94f3d, 1));
+  {
+    const dart = buildPaperPlane(); // the playroom's 3D folded dart
+    applyPaperPlane(dart, THEMES.playroom);
+    inject('sky-paper-plane', dart);
+  }
 
   // Bucket by category, preserving the category display order.
   const buckets = new Map(CATEGORIES.map((c) => [c.key, []]));

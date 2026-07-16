@@ -112,17 +112,17 @@
 //                                       (spilled crayons) | 'books' (stacked picture
 //                                       books) | 'train' (wind-up toy train circling
 //                                       the floor). Procedural toy geometry, no assets.
-//   birds: (optional)                   { kind?, count ≤4, tint | tints[], size, y, rc,
-//                                       rb, speed, flap, flapHz, dys?, bank? } —
-//                                       airborne silhouettes, each circling its own
-//                                       roost on a ring of radius rc (orbit radius rb,
-//                                       height y). kind picks the glyph: 'bird'
-//                                       (default) | 'plane'. flap = wing-beat depth
-//                                       (1 = busy gull, ~0.15 = soaring vulture) at
-//                                       flapHz beats/s; tints cycles per flier; dys
-//                                       scales the per-flier altitude jitter; bank
-//                                       rolls the sprite into its turn (the paper
-//                                       plane — flapping kinds leave it 0)
+//   birds: (optional)                   { count ≤4, tint | tints[], size, y, rc, rb,
+//                                       speed, flap, flapHz, dys? } — bird
+//                                       silhouettes, each circling its own roost on
+//                                       a ring of radius rc (orbit radius rb, height
+//                                       y). flap = wing-beat depth (1 = busy gull,
+//                                       ~0.15 = soaring vulture) at flapHz beats/s;
+//                                       tints cycles per flier; dys scales the
+//                                       per-flier altitude jitter
+//   paperPlane: (optional)              { tint, size, y, rc, rb, speed, bank } — one
+//                                       REAL-3D folded paper dart gliding a lazy
+//                                       circle, banking into the turn (playroom)
 //   kites: (optional)                   { count ≤2, tints, size, y } — bright kites
 //                                       bobbing on implied strings over the shore;
 //                                       anchored wander, not an orbit (beach)
@@ -318,7 +318,7 @@ export const THEMES = {
       kerb:  [0xc06a42, 0xe3cfa4], // rust / sand
     },
     // Grit on the wind: fast low sand streaks under the drifting dust banks.
-    ambient: { kind: 'sand', count: 180, tint: 0xe9c9a0 },
+    ambient: { kind: 'sand', count: 700, tint: 0xe9c9a0 },
     structure: 0xb4714d, // supports read as red-rock columns, not city concrete
     landmark: ['hoodoo', 'windmill'], // balanced rocks + a spinning water-pump tower (a road-spanning arch was rejected)
     birds: { count: 2, tint: 0x3a322c, size: 3.6, y: 36, rc: 150, rb: 20, speed: 0.1, flap: 0.15, flapHz: 0.5 }, // vultures riding a thermal — soaring, barely a wing-beat
@@ -390,14 +390,14 @@ export const THEMES = {
       kerb:  [0xeff4f9, 0xdde7f0], // near-white bank pair (whisper contrast)
       kerbW: 0.55, kerbH: 0.3,     // squat ploughed bank, not a kerb
     },
-    ambient: { kind: 'flake', count: 650, size: 0.3, tint: 0xffffff }, // lazy drifting flakes — one Points draw call
+    ambient: { kind: 'flake', count: 1200, size: 0.3, tint: 0xffffff }, // thick drifting flakes — still one Points draw call
     // Weather varies ACROSS the cup: each track patches the flake cloud, so the
     // four races read as four different winter days, not one repeated snow globe.
     ambientByTrack: {
-      powder:    { count: 520, size: 0.28 },            // fresh powder — settled, light fall
-      flurry:    { count: 1150 },                       // the name track: a proper flurry
-      glacier:   { count: 240, size: 0.22 },            // high, cold, clear — fine sparse ice dust
-      avalanche: { count: 950, size: 0.36, wind: 1.6 }, // big wind-driven flakes, the heaviest sky
+      powder:    { count: 1000, size: 0.28 },            // fresh powder — settled, steady fall
+      flurry:    { count: 2000 },                        // the name track: a PROPER flurry
+      glacier:   { count: 550, size: 0.22 },             // high, cold, clearer — fine ice dust
+      avalanche: { count: 1800, size: 0.36, wind: 1.6 }, // big wind-driven flakes, the heaviest sky
     },
     birds: { count: 2, tint: 0x555b66, size: 3.4, y: 32, rc: 140, rb: 24, speed: 0.12, flap: 0.7, flapHz: 1.3 }, // a pair of geese crossing high
     // Oil slicks read as black stains on ploughed snow — reskin them as ICE sheets:
@@ -444,9 +444,10 @@ export const THEMES = {
       skirt: 0xc25e14,             // darker plastic underside/sides
     },
     // Dust motes hanging in the window sunbeams — the indoor-afternoon icon —
-    // and a paper airplane on a long lazy glide around the room.
+    // and a paper airplane on a long lazy glide around the room (REAL 3D —
+    // a folded dart that banks into its turns; glyph sprites never read).
     ambient: { kind: 'mote', count: 240, tint: 0xffdf9e },
-    birds: { kind: 'plane', count: 1, tint: 0xfaf7ec, size: 4.4, y: 24, rc: 100, rb: 34, speed: 0.28, flap: 0, bank: 0.4 },
+    paperPlane: { tint: 0xfaf7ec, size: 3.2, y: 22, rc: 95, rb: 32, speed: 0.3, bank: 0.4 },
     structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
     landmark: ['blocks', 'duck', 'ball', 'crayons', 'books', 'train'], // toy clutter + a wind-up train circling the floor
     gate: 0xfff3e2, // warm indoor-light gate grade

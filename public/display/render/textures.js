@@ -231,27 +231,9 @@ function makeBirdTexture() {
   return tex;
 }
 
-// Paper-airplane glyph: the iconic TOP-DOWN dart — a symmetric arrowhead, nose
-// right, wings swept back to a V-notch tail, split by a centre-crease gap (the
-// fold). The two wings carry different alpha so the crease reads even at speck
-// size; flap 0 (it glides) — the loop banks it via sprite rotation instead.
-function makePlaneTexture() {
-  const w = 64, h = 32;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = 'rgba(255,255,255,1)';
-  ctx.beginPath(); // upper wing — nose to swept-back tip, in to the tail notch
-  ctx.moveTo(61, 15); ctx.lineTo(6, 2); ctx.lineTo(21, 15); ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'; // lower wing a step dimmer — the fold
-  ctx.beginPath();
-  ctx.moveTo(61, 17); ctx.lineTo(6, 30); ctx.lineTo(21, 17); ctx.closePath();
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+// (A paper-airplane glyph lived here through two redraws — side dart, then
+// top-down dart — and never read as a plane at sprite size. The playroom's
+// flier is now real 3D: environment.js buildPaperPlane.)
 
 // Kite glyph: a tall diamond with a wiggling bow-tail below — the beach's
 // anchored flier. Square canvas; the sprite is scaled square too.
@@ -705,6 +687,6 @@ function makePlate(name, colorHex, anchor) {
 export {
   flipWinding, bestGrid,
   makeSkidTexture, makeStreakTexture, makeStreakGeometry, streakBillboard,
-  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
+  makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makeBlobShadowTexture, makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture,
   makePadTexture, makePadStripTexture, makeWetSignTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 };

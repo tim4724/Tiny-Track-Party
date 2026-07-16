@@ -11,7 +11,7 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, WATER_LIFT, WATER_INNER } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, stepPaperPlane, WATER_LIFT, WATER_INNER } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
 import { buildFinishGate } from './render/FinishGate.js';
@@ -591,6 +591,7 @@ export class SceneRenderer {
     this._birdT = 0;           // shared soaring phase
     this._kites = env.kites;   // anchored shore kites (beach) — stepped in _loop
     this._balloon = env.balloon; // far-field hot-air balloon (grass/sunset) — stepped in _loop
+    this._paperPlane = env.paperPlane; // 3D paper dart (playroom) — stepped in _loop
     this._ambient = env.ambient; // ambient particles (flakes/motes/sand/pollen) — stepped in _loop, spread scaled in setTrack
     this._trackAnims = [];     // per-track animated set-pieces (windmill rotor, toy train, chimney smoke) — rebuilt with the track, stepped in _loop
     this._key = env.key;       // shadow camera fitted per-track in setTrack
@@ -2237,13 +2238,13 @@ export class SceneRenderer {
         );
         const beat = 0.5 + 0.5 * Math.sin((this._birdT * u.sp * cfg.flapHz + u.ph) * Math.PI * 2);
         b.scale.y = cfg.size * 0.5 * (1 - cfg.flap * 0.48 * beat);
-        if (cfg.bank) b.material.rotation = Math.sin(ph + Math.PI / 2) * cfg.bank;
       }
     }
     {
       const sf = this._hills ? this._hills.scale.x : 1;
-      stepKites(this._kites, dt, this._birdT, sf);       // shore kites bob on their strings
-      stepBalloon(this._balloon, dt, this._birdT, sf);   // the balloon drifts its slow lap
+      stepKites(this._kites, dt, this._birdT, sf);           // shore kites bob on their strings
+      stepBalloon(this._balloon, dt, this._birdT, sf);       // the balloon drifts its slow lap
+      stepPaperPlane(this._paperPlane, dt, this._birdT, sf); // the paper dart glides + banks
     }
     // ambient particles (flakes/motes/sand/pollen) sink/ride the wind per their
     // kind, wrapping within the authored spread (mesh scale handles big circuits)

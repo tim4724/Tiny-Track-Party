@@ -13,7 +13,7 @@
 // is byte-identical to the pre-theming renderer when no biome override is attached.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makePlaneTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
+import { makeCloudTexture, makeSnowflakeTexture, makeBirdTexture, makeKiteTexture, makeLawnTexture, makeSandTexture, makeRedRockTexture, makeSnowTexture, makeWoodFloorTexture } from './textures.js';
 import { THEMES } from '../../shared/themes.js';
 
 // Lawn ground plane extent. Made FAR larger than any track (tracks span ~100-300u) so the
@@ -334,7 +334,7 @@ const AMB_KINDS = {
 };
 
 function buildAmbient() {
-  const MAX = 1400; // roomiest biome's worth; theme `count` draws a prefix (setDrawRange)
+  const MAX = 2400; // roomiest biome's worth (a proper flurry); theme `count` draws a prefix (setDrawRange)
   let seed = 74747;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   const pos = new Float32Array(MAX * 3);
@@ -398,30 +398,17 @@ export function stepAmbient(amb, dt, t) {
 
 // ── Fliers (theme.birds) ─────────────────────────────────────────────────────
 // A few airborne silhouettes, each circling its own authored roost — gulls over
-// the beach shoreline, vultures high over a canyon mesa, a paper airplane
-// gliding around the playroom. Sprites like the clouds (they billboard per
-// split-screen cell); the frame loop does the circling. Per-flier variety
-// (roost angle, height offset, phase, speed factor) is baked at build; the
-// theme dresses kind/count/tint/size and sets the shared orbit numbers, which
-// the loop reads from `birds.cfg`:
-//   kind:  'bird' (default) | 'plane' — picks the glyph
+// the beach shoreline, vultures high over a canyon mesa, geese crossing the
+// winter sky. Sprites like the clouds (they billboard per split-screen cell);
+// the frame loop does the circling. Per-flier variety (roost angle, height
+// offset, phase, speed factor) is baked at build; the theme dresses count/
+// tint/size and sets the shared orbit numbers, which the loop reads from
+// `birds.cfg`:
 //   tints: optional per-flier colour array (cycled by index; wins over `tint`)
 //   dys:   scales the per-flier altitude jitter (low kinds hug their band)
-//   bank:  sprite-rotation roll around the orbit (the plane leans into turns;
-//          flapping kinds leave it 0)
-const DEF_BIRDS = { kind: 'bird', count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8, dys: 1, bank: 0 };
-
-// Glyph textures, one per kind, built lazily once and shared by every sprite.
-let _flierTex = null;
-function flierTexture(kind) {
-  if (!_flierTex) {
-    _flierTex = {
-      bird: makeBirdTexture(),
-      plane: makePlaneTexture(),
-    };
-  }
-  return _flierTex[kind] || _flierTex.bird;
-}
+// (The playroom's paper airplane graduated from a glyph sprite to real 3D —
+// see buildPaperPlane below; two glyph passes never read as a plane.)
+const DEF_BIRDS = { count: 0, tint: 0xffffff, size: 2.4, y: 18, rc: 120, rb: 22, speed: 0.2, flap: 0.8, flapHz: 1.8, dys: 1 };
 
 function applyBirds(birds, theme) {
   const b = theme.birds ? { ...DEF_BIRDS, ...theme.birds } : null;
@@ -429,12 +416,62 @@ function applyBirds(birds, theme) {
   birds.forEach((sprite, i) => {
     sprite.visible = !!b && i < b.count;
     if (!b) return;
-    const tex = flierTexture(b.kind);
-    if (sprite.material.map !== tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; }
     sprite.material.color.set(Array.isArray(b.tints) ? b.tints[i % b.tints.length] : b.tint);
-    sprite.material.rotation = 0; // banking kinds roll it per-frame
     sprite.scale.set(b.size, b.size * 0.5, 1); // glyph texture is 2:1
   });
+}
+
+// ── Paper airplane (theme.paperPlane) ────────────────────────────────────────
+// The playroom's flier as REAL 3D — a folded dart of three flat triangles
+// (two dihedral-V wings + a hanging keel), gliding a lazy circle and BANKING
+// into it. A billboard glyph was tried twice and never read as a plane; the
+// 3D fold reads from every camera. DoubleSide (paper has two faces),
+// fog:false like the other sky pieces.
+const DEF_PLANE = { tint: 0xfaf7ec, size: 3.2, y: 22, a0: 1.3, rc: 95, rb: 32, speed: 0.3, bank: 0.4 };
+
+export function buildPaperPlane() {
+  const geo = new THREE.BufferGeometry();
+  // unit dart, nose +Z: wingtips swept back and RAISED (the dihedral V), keel below
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([
+    0, 0, 0.55,   0, 0.02, -0.5,   -0.42, 0.17, -0.5,  // left wing
+    0, 0, 0.55,   0.42, 0.17, -0.5,   0, 0.02, -0.5,   // right wing
+    0, 0, 0.55,   0, -0.2, -0.42,   0, 0.02, -0.5,     // keel
+  ], 3));
+  geo.computeVertexNormals();
+  const plane = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, fog: false }));
+  plane.visible = false;
+  return plane;
+}
+
+export function applyPaperPlane(plane, theme) {
+  const p = theme.paperPlane ? { ...DEF_PLANE, ...theme.paperPlane } : null;
+  plane.userData.cfg = p;
+  plane.visible = !!p;
+  if (!p) return;
+  plane.material.color.set(p.tint);
+  plane.scale.setScalar(p.size);
+}
+
+const _planeYawQ = new THREE.Quaternion();
+const _planeRollQ = new THREE.Quaternion();
+const _YAXIS = new THREE.Vector3(0, 1, 0);
+const _ZAXIS = new THREE.Vector3(0, 0, 1);
+
+export function stepPaperPlane(plane, dt, t, sf) {
+  const cfg = plane.userData.cfg;
+  if (!cfg) return;
+  const ph = t * cfg.speed;
+  const cx = Math.cos(cfg.a0) * cfg.rc * sf, cz = Math.sin(cfg.a0) * cfg.rc * sf; // roost follows the hill push-out
+  plane.position.set(
+    cx + Math.cos(ph) * cfg.rb,
+    cfg.y + Math.sin(ph * 2.1) * 1.1, // long shallow swoops
+    cz + Math.sin(ph) * cfg.rb
+  );
+  // nose along the orbit tangent, rolled into the turn (plus a light wobble)
+  const yaw = Math.atan2(-Math.sin(ph), Math.cos(ph));
+  _planeYawQ.setFromAxisAngle(_YAXIS, yaw);
+  _planeRollQ.setFromAxisAngle(_ZAXIS, cfg.bank + Math.sin(t * 0.7) * 0.12);
+  plane.quaternion.copy(_planeYawQ).multiply(_planeRollQ);
 }
 
 // ── Kites (theme.kites) ──────────────────────────────────────────────────────
@@ -670,13 +707,14 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   scene.add(ambient);
 
   // Fliers: 4 sprites built (the roomiest biome's worth), dressed by applyBirds
-  // (kind/tint/size) and circled by the frame loop. fog:false like the clouds —
+  // (tint/size) and circled by the frame loop. fog:false like the clouds —
   // they live in clear sky.
   const birds = [];
   {
+    const birdTex = makeBirdTexture();
     for (let i = 0; i < 4; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: flierTexture('bird'), transparent: true, fog: false, depthWrite: false
+        map: birdTex, transparent: true, fog: false, depthWrite: false
       }));
       sprite.userData = {
         a0: (i / 4) * Math.PI * 2 + (i % 3) * 0.8, // roost bearing on the ring
@@ -716,6 +754,11 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   const balloon = buildBalloon();
   applyBalloon(balloon, theme);
   scene.add(balloon);
+
+  // Paper airplane: the playroom's 3D flier, gliding + banking (stepPaperPlane).
+  const paperPlane = buildPaperPlane();
+  applyPaperPlane(paperPlane, theme);
+  scene.add(paperPlane);
 
   // Horizon hills: one merged ring of far silhouettes deep in the fog tail — depth
   // for the diorama without competing with it. Shape comes from the theme (domes vs
@@ -780,7 +823,7 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   ground.receiveShadow = false;
   scene.add(ground);
 
-  return { clouds, haze, water, ambient, birds, kites, balloon, key, hemi, ground, hills, sky };
+  return { clouds, haze, water, ambient, birds, kites, balloon, paperPlane, key, hemi, ground, hills, sky };
 }
 
 // Re-skin the (already built) environment for a new biome: recolour the sky gradient
@@ -811,6 +854,7 @@ export function applyEnvTheme(env, theme) {
   applyBirds(env.birds, theme);
   applyKites(env.kites, theme);
   applyBalloon(env.balloon, theme);
+  applyPaperPlane(env.paperPlane, theme);
   env.ground.material.map = groundTexture(theme.ground.kind);
   env.ground.material.needsUpdate = true;
   env.hemi.color.set(theme.hemi.sky);

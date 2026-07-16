@@ -660,16 +660,20 @@ export function buildLandmarks(R, track, theme) {
   const samples = cl.samples;
   const defHalf = (track.roadWidth || 5) / 2;
   const halfOf = (s) => (s.width != null ? s.width / 2 : defHalf);
-  // Clear of the WHOLE corridor (all strands — the buildScenery rule) by `m` units.
+  const gy = R.ground.position.y;
+  // Clear of the WHOLE corridor (all strands — the buildScenery rule) by `m`
+  // units. Elevated strands claim EXTRA ground: their support berms flare
+  // 0.6 + 0.8·height beyond the deck edge (buildHills), so a spot beside a
+  // raised run must also clear the mound or the piece clips into the grass.
   const isClear = (x, z, m) => {
     for (const s of samples) {
-      const lim = halfOf(s) + m;
+      const h = s.pos.y - gy;
+      const lim = halfOf(s) + m + (h > 0.5 ? 0.6 + 0.8 * h : 0);
       const dx = x - s.pos.x, dz = z - s.pos.z;
       if (dx * dx + dz * dz < lim * lim) return false;
     }
     return true;
   };
-  const gy = R.ground.position.y;
   const geoms = [];
 
   // Landmarks placed so far ({x, z, r} footprints): later kinds keep clear of
@@ -698,6 +702,32 @@ export function buildLandmarks(R, track, theme) {
       placed.push({ x, z, r: m });
       const fx = -f.lateral.x * side, fz = -f.lateral.z * side; // toward the road
       return { x, z, fx, fz, yaw: Math.atan2(fx, fz), tx: f.tangent.x, tz: f.tangent.z, side };
+    }
+    return null;
+  };
+  // INFIELD placement: spiral out from the layout's centroid for a clear patch
+  // — the middle of a loop is prime real estate the chase cams keep panning
+  // across, and roadside-only placement made every biome read as a fence line.
+  // Returns the same frame shape as findSpot (yaw random — there's no single
+  // road to face); null when the layout never leaves a hole (figure-8s cross
+  // in the middle), so callers fall back to a roadside spot.
+  const findSpotMid = (m) => {
+    let mx = 0, mz = 0;
+    for (const s of samples) { mx += s.pos.x; mz += s.pos.z; }
+    mx /= samples.length; mz /= samples.length;
+    for (let ring = 0; ring < 9; ring++) {
+      const rr = ring * 3.5;
+      const n = ring === 0 ? 1 : 8;
+      const a0 = rand() * Math.PI * 2;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + (k / n) * Math.PI * 2;
+        const px = mx + Math.cos(a) * rr, pz = mz + Math.sin(a) * rr;
+        if (!clearSpot(px, pz, m)) continue;
+        placed.push({ x: px, z: pz, r: m });
+        const yaw2 = rand() * Math.PI * 2;
+        const fx = Math.sin(yaw2), fz = Math.cos(yaw2);
+        return { x: px, z: pz, fx, fz, yaw: yaw2, tx: fz, tz: -fx, side: 1 };
+      }
     }
     return null;
   };
@@ -1160,15 +1190,16 @@ export function buildLandmarks(R, track, theme) {
   }
 
   if (kinds.includes('sandcastle')) {
-    // Bucket-castle at true sandbox scale (second shrink on review): a damp
-    // moat ring, the patted mound, a CRENELLATED keep (flat top + merlons —
-    // the castle cue cones couldn't give), four bucket towers with patted
-    // cone caps, curtain walls, a dark gate with a drawbridge plank over the
-    // moat, pressed-in shells, and the pennant. Dune-sand family throughout.
-    const spot = findSpot(80, 6.0, 3.2);
+    // Bucket-castle at sandbox scale, built STRAIGHT ON the beach (the mound
+    // platform + moat ring were tried and rejected on review): a CRENELLATED
+    // keep (flat top + merlons — the castle cue cones can't give), four
+    // bucket towers with patted cone caps, curtain walls, a dark gateway, and
+    // shells dotted around the base. Prefers the infield of the loop, falling
+    // back to the roadside. Dune-sand family throughout.
+    const spot = findSpotMid(3.2) || findSpot(80, 6.0, 3.2);
     if (spot) {
       const { x, z, yaw } = spot;
-      const SAND = [0xe8d49e, 0xdfc98e], DAMP = 0xcfb381; // damp ring only a shade darker — opaque geometry, unlike the translucent wet-sand band
+      const SAND = [0xe8d49e, 0xdfc98e];
       const part = (g, lx, ly, lz, hex, shade = 1) => {
         g.translate(lx, ly, lz);
         g.rotateY(yaw);
@@ -1176,44 +1207,36 @@ export function buildLandmarks(R, track, theme) {
         geoms.push(tintGeo(g, hex, shade));
       };
       const S = 0.44;
-      // damp moat ring under everything (the just-dug look), then the mound
-      part(new THREE.CylinderGeometry(3.0 * S, 3.2 * S, 0.06, 16), 0, 0.03, 0, DAMP, 0.98);
-      part(new THREE.CylinderGeometry(2.1 * S, 2.6 * S, 0.6 * S, 14), 0, 0.07 + 0.3 * S, 0, SAND[0], 0.97);
-      const MY = 0.07 + 0.6 * S; // mound top — every build sits on this
       // the keep: straight drum, flat lid, a ring of merlons (crenellations)
       const KR = 0.8 * S, KH = 1.9 * S;
-      part(new THREE.CylinderGeometry(KR * 0.94, KR, KH, 10), 0, MY + KH / 2, 0, SAND[0], 1.02);
-      part(new THREE.CylinderGeometry(KR * 0.98, KR * 0.94, 0.1 * S, 10), 0, MY + KH + 0.05 * S, 0, SAND[1]);
+      part(new THREE.CylinderGeometry(KR * 0.94, KR, KH, 10), 0, KH / 2, 0, SAND[0], 1.02);
+      part(new THREE.CylinderGeometry(KR * 0.98, KR * 0.94, 0.1 * S, 10), 0, KH + 0.05 * S, 0, SAND[1]);
       for (let mi = 0; mi < 6; mi++) {
         const ma = (mi / 6) * Math.PI * 2 + 0.26;
         const merlon = new THREE.BoxGeometry(0.34 * S, 0.3 * S, 0.16 * S);
         merlon.rotateY(-ma);
-        part(merlon, Math.cos(ma) * KR * 0.82, MY + KH + 0.22 * S, Math.sin(ma) * KR * 0.82, SAND[1], 1.04);
+        part(merlon, Math.cos(ma) * KR * 0.82, KH + 0.22 * S, Math.sin(ma) * KR * 0.82, SAND[1], 1.04);
       }
       const tower = (lx, lz, r, h) => { // upturned-bucket drum + patted cone cap
-        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, MY + h / 2, lz, SAND[0], 1.02);
-        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, MY + h + r * 0.42, lz, SAND[1], 0.96);
+        part(new THREE.CylinderGeometry(r * 0.92, r, h, 10), lx, h / 2, lz, SAND[0], 1.02);
+        part(new THREE.ConeGeometry(r * 1.08, r * 0.9, 10), lx, h + r * 0.42, lz, SAND[1], 0.96);
       };
       for (const [tx2, tz2] of [[1.35 * S, 1.35 * S], [-1.35 * S, 1.35 * S], [1.35 * S, -1.35 * S], [-1.35 * S, -1.35 * S]])
         tower(tx2, tz2, 0.5 * S, 1.2 * S);
       for (const [wx, wz, ww, wd] of [[0, 1.35 * S, 1.9 * S, 0.3 * S], [0, -1.35 * S, 1.9 * S, 0.3 * S], [1.35 * S, 0, 0.3 * S, 1.9 * S], [-1.35 * S, 0, 0.3 * S, 1.9 * S]])
-        part(new THREE.BoxGeometry(ww, 0.75 * S, wd), wx, MY + 0.37 * S, wz, SAND[0], 0.94); // curtain walls
-      // gate on the road face (+Z): a dark arch in the front wall, and a
-      // drawbridge plank bridging the moat
-      part(new THREE.BoxGeometry(0.5 * S, 0.5 * S, 0.12 * S), 0, MY + 0.25 * S, 1.5 * S, 0x6b5a3e);
-      const plank = new THREE.BoxGeometry(0.55 * S, 0.05, 1.7 * S);
-      part(plank, 0, 0.08, 2.4 * S, 0x9a7050, 0.95);
-      // shells pressed into the mound flank
-      for (const [sa, sr] of [[0.8, 2.0], [2.4, 2.2], [4.2, 2.1]]) {
+        part(new THREE.BoxGeometry(ww, 0.75 * S, wd), wx, 0.37 * S, wz, SAND[0], 0.94); // curtain walls
+      part(new THREE.BoxGeometry(0.5 * S, 0.5 * S, 0.12 * S), 0, 0.25 * S, 1.5 * S, 0x6b5a3e); // dark gateway on the facing wall
+      // shells dotted around the base
+      for (const [sa, sr] of [[0.8, 2.1], [2.4, 2.4], [4.2, 2.2]]) {
         const shell = new THREE.SphereGeometry(0.16 * S, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
         shell.scale(1, 0.5, 1.15);
         shell.rotateY(sa);
-        part(shell, Math.cos(sa) * sr * S, 0.07 + 0.18 * S, Math.sin(sa) * sr * S, 0xecc8b4, 1.02);
+        part(shell, Math.cos(sa) * sr * S, 0.02, Math.sin(sa) * sr * S, 0xecc8b4, 1.02);
       }
-      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8 * S, 6), 0, MY + KH + 0.6 * S, 0, 0x8a6f4d); // mast
+      part(new THREE.CylinderGeometry(0.03, 0.03, 0.8 * S, 6), 0, KH + 0.6 * S, 0, 0x8a6f4d); // mast
       const flag = new THREE.ConeGeometry(0.16 * S, 0.5 * S, 3);
       flag.rotateZ(-Math.PI / 2); // pennant streams sideways
-      part(flag, 0.3 * S, MY + KH + 0.85 * S, 0, 0xd94f3d);
+      part(flag, 0.3 * S, KH + 0.85 * S, 0, 0xd94f3d);
     }
   }
 
@@ -1221,7 +1244,9 @@ export function buildLandmarks(R, track, theme) {
     // Western water-pump windmill: a tapered timber derrick with a SPINNING
     // multi-blade steel rotor and a red tail fin. The rotor is its own small
     // mesh, stepped via the per-track anim registry; everything else merges.
-    const spot = findSpot(70, 7.5, 5);
+    // Stands WELL BACK from the road — a mid-distance silhouette, not a fence
+    // post (placement variety, review round 3).
+    const spot = findSpot(70, 13 + rand() * 5, 5);
     if (spot) {
       const { x, z, yaw, fx, fz } = spot;
       const H = 10.5; // hub height
@@ -1292,8 +1317,10 @@ export function buildLandmarks(R, track, theme) {
   if (kinds.includes('cabin')) {
     // Log cabin under a snow-heaped roof, chimney smoke curling up: stacked
     // log courses (the alternating overlap makes the corner notches for free),
-    // gable ends of shortening logs, a warm lit window. Local +Z faces the road.
-    const spot = findSpot(65, 7.0, 5);
+    // gable ends of shortening logs, a warm lit window. Local +Z faces the
+    // road. Set back in the treeline — a cabin ON the verge read like a toll
+    // booth (placement variety, review round 3).
+    const spot = findSpot(65, 10 + rand() * 5, 5);
     if (spot) {
       const { x, z, yaw } = spot;
       const LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
@@ -1397,9 +1424,9 @@ export function buildLandmarks(R, track, theme) {
     // Backyard kennel: warm red walls under a proper triangular gable (a
     // 45°-rotated box — its top half IS the prism, the rest hides in the
     // walls), dark overhanging roof slabs, a white-trimmed arched doorway,
-    // and the food bowl + a bone out front. (Reworked on review — the first
-    // pass faked the gable with a stepped box and read muddled.)
-    const spot = findSpot(60, 4.6, 3.2);
+    // and the food bowl + a bone out front. Sits a lawn's depth back from
+    // the kerb (placement variety, review round 3).
+    const spot = findSpot(60, 8 + rand() * 3, 3.2);
     if (spot) {
       const { x, z, yaw } = spot;
       const WALL = 0xc4573f, ROOF = 0x5e4434, TRIM = 0xf5f0e2, DARK = 0x3a3040;
@@ -1448,8 +1475,10 @@ export function buildLandmarks(R, track, theme) {
 
   if (kinds.includes('picnic')) {
     // Picnic spread: a red/cream checkered blanket thrown a touch askew, a
-    // wicker basket with an arc handle, a cooler, two paper plates.
-    const spot = findSpot(95, 4.8, 3.2);
+    // wicker basket with an arc handle, a cooler, two paper plates. Prefers
+    // the INFIELD — a picnic in the middle of the park, watching the race go
+    // round (placement variety, review round 3); roadside as the fallback.
+    const spot = findSpotMid(3.2) || findSpot(95, 4.8, 3.2);
     if (spot) {
       const { x, z, yaw } = spot;
       const CR = new THREE.Color(0xd8463f).convertSRGBToLinear();
@@ -1514,8 +1543,9 @@ export function buildLandmarks(R, track, theme) {
 
   if (kinds.includes('books')) {
     // Three stacked picture books, spines offset askew: white page blocks
-    // sandwiched by coloured cover boards.
-    const spot = findSpot(130, 4.6, 3);
+    // sandwiched by coloured cover boards. Mid-distance — someone left them
+    // out on the floor, not lined up against the rails (placement variety).
+    const spot = findSpot(130, 8 + rand() * 3, 3);
     if (spot) {
       const { x, z } = spot;
       const COVERS = [0x3f6fd1, 0xd8463f, 0x3fa14e];
@@ -1553,7 +1583,7 @@ export function buildLandmarks(R, track, theme) {
     // loco is its own little group stepped by the anim registry.
     const RT = 5, LT = 7;          // end radius + straight length
     const OM = RT + LT / 2 + 1.5;  // footprint radius kept clear
-    const spot = findSpot(40, OM + 2, OM);
+    const spot = findSpotMid(OM) || findSpot(40, OM + 2, OM); // the middle of the room first — a train set belongs in the middle of the floor
     if (spot) {
       const cx2 = spot.x, cz2 = spot.z;
       const ao = Math.atan2(-spot.tz, spot.tx); // oval long axis rides the road tangent (rotateY frame)
@@ -1669,37 +1699,37 @@ export function buildLandmarks(R, track, theme) {
 //   pick(tints)     one rand() draw from a tint family
 //   groundY         the floor height to rest on
 export const CLUTTER_BUILDERS = {
-  // wildflower patch: daisy-style blossoms — a ring of flat oval petals around
-  // a golden heart on a leafed stem (a single blob read as a lollipop, not a
-  // flower — reworked on review)
+  // wildflower patch: daisy rosettes sitting IN the grass — bigger heads on
+  // barely-there stems over a leaf tuft (round 1's blob read as a lollipop;
+  // round 2's tall stems read as flowers ON STICKS — the blooms now hug the
+  // lawn like ground cover)
   flower: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
     const n = 2 + Math.floor(rand() * 3);
     for (let i = 0; i < n; i++) {
       const a = rand() * Math.PI * 2, r = rand() * 0.8;
       const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
-      const h = 0.4 + rand() * 0.16; // stem height
-      const stem = new THREE.CylinderGeometry(0.025, 0.032, h, 5);
+      const h = 0.16 + rand() * 0.08; // barely a stem — the head floats just over the lawn
+      const stem = new THREE.CylinderGeometry(0.03, 0.04, h, 5);
       stem.translate(fx, groundY + h / 2, fz);
       put(stem, 0x4e8a44, 0.92 + rand() * 0.16);
-      const leaf = new THREE.SphereGeometry(0.07, 6, 4); // one leaf partway up
-      leaf.scale(1.7, 0.35, 0.8);
-      leaf.rotateY(a);
-      leaf.translate(fx + 0.09, groundY + h * 0.45, fz);
-      put(leaf, 0x5a9a50, 0.95);
+      const tuft = new THREE.SphereGeometry(0.11, 6, 4); // leaf tuft the head grows out of
+      tuft.scale(1.5, 0.4, 1.5);
+      tuft.translate(fx, groundY + 0.04, fz);
+      put(tuft, 0x5a9a50, 0.9 + rand() * 0.12);
       const hex = pick(tints);
       const ph = rand() * Math.PI * 2; // petal-ring phase
       for (let k = 0; k < 5; k++) {
         const pa = ph + (k / 5) * Math.PI * 2;
-        const petal = new THREE.SphereGeometry(0.075, 6, 4);
-        petal.scale(1.5, 0.45, 0.85); // flat oval, long axis outward
+        const petal = new THREE.SphereGeometry(0.09, 6, 4);
+        petal.scale(1.5, 0.4, 0.85); // flat oval, long axis outward
         petal.rotateY(-pa);
-        petal.translate(fx + Math.cos(pa) * 0.115, groundY + h + 0.02, fz + Math.sin(pa) * 0.115);
+        petal.translate(fx + Math.cos(pa) * 0.14, groundY + h + 0.02, fz + Math.sin(pa) * 0.14);
         put(petal, hex, 0.95 + rand() * 0.1);
       }
-      const heart = new THREE.SphereGeometry(0.06, 6, 5); // the golden centre
-      heart.scale(1, 0.7, 1);
-      heart.translate(fx, groundY + h + 0.045, fz);
+      const heart = new THREE.SphereGeometry(0.075, 6, 5); // the golden centre
+      heart.scale(1, 0.65, 1);
+      heart.translate(fx, groundY + h + 0.05, fz);
       put(heart, 0xf2c14e, 1.05);
     }
   },
@@ -2031,9 +2061,13 @@ export function buildScenery(R, track, theme) {
     for (let i = 0; i < idStr.length; i++) seed2 = ((seed2 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
     const rand2 = () => ((seed2 = (seed2 * 1664525 + 1013904223) >>> 0) / 4294967296);
     const CL_MARGIN = 0.7; // hugs the verge, never the deck
+    // Elevated strands claim extra ground for their support berms (0.6 + 0.8·h
+    // flare — see buildHills/buildLandmarks): without the term, flowers and
+    // drifts CLIP INTO the mounds beside raised runs.
     const isClearC = (x, z) => {
       for (const s of samples) {
-        const half = (s.width != null ? s.width / 2 : defHalf) + CL_MARGIN;
+        const h = s.pos.y - groundY;
+        const half = (s.width != null ? s.width / 2 : defHalf) + CL_MARGIN + (h > 0.5 ? 0.6 + 0.8 * h : 0);
         const dx = x - s.pos.x, dz = z - s.pos.z;
         if (dx * dx + dz * dz < half * half) return false;
       }
