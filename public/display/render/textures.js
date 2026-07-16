@@ -317,9 +317,9 @@ function makeCloudTexture() {
   return tex;
 }
 
-// Lawn: mowing stripes (alternating ±4% luminance bands) plus a few soft
-// blotches, tiled across the ground plane. Subtle — it should read as "lawn"
-// only when you look, never as a pattern.
+// Lawn: mowing stripes (alternating ±4% luminance bands), tiled across the
+// ground plane. Subtle — it should read as "lawn" only when you look, never
+// as a pattern.
 function makeLawnTexture() {
   const s = 256, stripes = 8;
   const cv = document.createElement('canvas');
@@ -331,14 +331,11 @@ function makeLawnTexture() {
     ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
     ctx.fillRect(Math.floor(i * s / stripes), 0, Math.ceil(s / stripes), s);
   }
-  // faint organic blotches so the stripes don't read as a perfect print
-  ctx.filter = 'blur(7px)';
-  for (let i = 0; i < 26; i++) {
-    const f = (i % 2 ? 1.05 : 0.95);
-    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.35)`;
-    const x = (i * 73) % s, y = (i * 131) % s, r = 10 + (i * 37) % 22;
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.6, i, 0, Math.PI * 2); ctx.fill();
-  }
+  // NO blotch pass. Every ground kind used to layer soft blurred ellipses over
+  // the banding ("organic variation") — but the same elongated marks repeated
+  // every ~33u tile and read as FOOTPRINT TRAILS across the plate (worst where
+  // no stripes masked them). Removed everywhere on review 2026-07-16; the
+  // banding + per-kind speckle carry the texture.
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -349,7 +346,7 @@ function makeLawnTexture() {
 
 // Sand: warm pale beach grit — the same tiled-canvas idiom as the lawn (so berm UVs
 // line up), but mowing stripes become gentle wind ripples (subtler ± luminance) over
-// a tan base, with soft blotches and a fine darker speckle so it reads as "sand" up
+// a tan base, with a fine darker speckle so it reads as "sand" up
 // close without becoming a pattern at a distance. The caller (environment.js) overrides
 // .repeat for the big ground plane, exactly as it does for the lawn.
 function makeSandTexture() {
@@ -363,16 +360,8 @@ function makeSandTexture() {
     ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
     ctx.fillRect(Math.floor(i * s / ripples), 0, Math.ceil(s / ripples), s);
   }
-  // soft drift blotches so the ripples don't read as a print
-  ctx.filter = 'blur(6px)';
-  for (let i = 0; i < 30; i++) {
-    const f = (i % 2 ? 1.04 : 0.94);
-    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.3)`;
-    const x = (i * 73) % s, y = (i * 131) % s, r = 8 + (i * 37) % 20;
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.7, i, 0, Math.PI * 2); ctx.fill();
-  }
+  // (blotch pass removed — see makeLawnTexture: it tiled into footprint trails)
   // fine darker grains — only legible up close, gives the "grit" read
-  ctx.filter = 'none';
   for (let i = 0; i < 140; i++) {
     const x = (i * 53) % s, y = (i * 97) % s;
     ctx.fillStyle = `rgba(150,120,80,${(0.05 + (i % 3) * 0.03).toFixed(2)})`;
@@ -389,7 +378,7 @@ function makeSandTexture() {
 // Red rock: hot canyon floor — the same tiled-canvas idiom as lawn/sand (so berm UVs
 // line up), but the banding is geological, not mowed: sediment strata in alternating
 // warm hues (rust ↔ dusty tan, a touch more contrast than sand's wind ripples) over a
-// terracotta base, with drift blotches and a darker iron-fleck speckle. Reads as baked
+// terracotta base, with a darker iron-fleck speckle. Reads as baked
 // desert dirt up close and flat burnt-orange at speed.
 function makeRedRockTexture() {
   const s = 256, strata = 8;
@@ -406,16 +395,8 @@ function makeRedRockTexture() {
     ctx.fillStyle = `rgb(${Math.round(base[0] * fr)},${Math.round(base[1] * fg)},${Math.round(base[2] * fb)})`;
     ctx.fillRect(Math.floor(i * s / strata), 0, Math.ceil(s / strata), s);
   }
-  // soft weathering blotches so the strata don't read as a print
-  ctx.filter = 'blur(6px)';
-  for (let i = 0; i < 28; i++) {
-    const f = (i % 2 ? 1.05 : 0.93);
-    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.32)`;
-    const x = (i * 73) % s, y = (i * 131) % s, r = 9 + (i * 37) % 21;
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.65, i, 0, Math.PI * 2); ctx.fill();
-  }
+  // (blotch pass removed — see makeLawnTexture: it tiled into footprint trails)
   // iron flecks — darker rust grains, only legible up close
-  ctx.filter = 'none';
   for (let i = 0; i < 120; i++) {
     const x = (i * 53) % s, y = (i * 97) % s;
     ctx.fillStyle = `rgba(120,62,38,${(0.06 + (i % 3) * 0.03).toFixed(2)})`;
@@ -444,16 +425,8 @@ function makeSnowTexture() {
     ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
     ctx.fillRect(Math.floor(i * s / drifts), 0, Math.ceil(s / drifts), s);
   }
-  // soft dips/drifts — cool blue-grey shadows so the cover reads sculpted, not flat
-  ctx.filter = 'blur(7px)';
-  for (let i = 0; i < 24; i++) {
-    const dip = i % 2;
-    ctx.fillStyle = dip ? 'rgba(196,210,226,0.35)' : 'rgba(255,255,255,0.4)';
-    const x = (i * 73) % s, y = (i * 131) % s, r = 10 + (i * 37) % 22;
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.65, i, 0, Math.PI * 2); ctx.fill();
-  }
+  // (blotch pass removed — see makeLawnTexture: it tiled into footprint trails)
   // sparse ice flecks — barely-there cool grains, legible only up close
-  ctx.filter = 'none';
   for (let i = 0; i < 90; i++) {
     const x = (i * 53) % s, y = (i * 97) % s;
     ctx.fillStyle = `rgba(168,184,204,${(0.05 + (i % 3) * 0.025).toFixed(3)})`;
@@ -486,15 +459,8 @@ function makeWoodFloorTexture() {
     ctx.fillStyle = `rgb(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)})`;
     ctx.fillRect(Math.floor(i * bw), 0, Math.ceil(bw), s);
   }
-  // soft grain blotches so the boards don't read as flat paint
-  ctx.filter = 'blur(6px)';
-  for (let i = 0; i < 26; i++) {
-    const f = (i % 2 ? 1.05 : 0.94);
-    ctx.fillStyle = `rgba(${Math.round(base[0] * f)},${Math.round(base[1] * f)},${Math.round(base[2] * f)},0.3)`;
-    const x = (i * 73) % s, y = (i * 131) % s, r = 9 + (i * 37) % 20;
-    ctx.beginPath(); ctx.ellipse(x, y, r * 0.5, r, i, 0, Math.PI * 2); ctx.fill(); // grain runs ALONG the boards (tall, thin)
-  }
-  ctx.filter = 'none';
+  // (grain-blotch pass removed — see makeLawnTexture: it tiled into footprint
+  // trails; the per-board tone wobble + seams + knots carry the wood read)
   // board seams: a thin dark line between planks…
   ctx.fillStyle = 'rgba(96,66,40,0.55)';
   for (let i = 1; i < boards; i++) ctx.fillRect(Math.floor(i * bw) - 1, 0, 2, s);
