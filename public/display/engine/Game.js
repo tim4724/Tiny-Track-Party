@@ -69,7 +69,12 @@ const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 // Boost overrides scrub like it overrides brake (pads before loops stay a
 // guarantee). That's the whole point of the stat: corners are where handling bites.
 // (AI + victory-lap cars brake for corners on their own — see AiDriver.cornerBrake.)
-const STEER_SCRUB = 0.35; // speed-ceiling fraction shed at FULL LOCK (quadratic in steer input)
+const STEER_SCRUB = 0.28; // speed-ceiling fraction shed at FULL LOCK (quadratic in steer input).
+                          // Was 0.35 — that much auto-slow settled full-lock speed close to the
+                          // holdable corner speed, so the fast cars swept tight bends hands-off
+                          // ("the scrub brakes for you"). 0.28 keeps the speed-cost feel but stays
+                          // fast enough into tight corners that a low-turn car must BRAKE or wash
+                          // out (flat-out washouts roughly double); the curb rash makes that bill.
 
 // ---- Car-car collisions ----
 // Cars are glued to the centerline ribbon, so two nearby cars live in a locally
