@@ -1707,10 +1707,19 @@ export const CLUTTER_BUILDERS = {
   flower: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
     const n = 3 + Math.floor(rand() * 3);
+    const spots = []; // blooms placed so far — heads must not overlap
     for (let i = 0; i < n; i++) {
-      const a = rand() * Math.PI * 2, r = rand() * 0.85;
-      const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
       const s = 0.85 + rand() * 0.45;          // per-bloom size
+      const headR = 0.28 * s;                  // petal-tip reach
+      // a few placement tries per bloom; a patch too crowded just grows fewer
+      let fx = null, fz = null;
+      for (let t = 0; t < 6 && fx == null; t++) {
+        const a = rand() * Math.PI * 2, r = rand() * 0.9;
+        const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        if (spots.every((sp) => Math.hypot(px - sp.x, pz - sp.z) >= headR + sp.r + 0.05)) { fx = px; fz = pz; }
+      }
+      if (fx == null) continue;
+      spots.push({ x: fx, z: fz, r: headR });
       const h = (0.26 + rand() * 0.12) * s;    // stalk height — well under the head's width
       const hex = pick(tints);
       const ph = rand() * Math.PI * 2;         // petal-ring phase
