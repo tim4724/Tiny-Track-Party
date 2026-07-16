@@ -83,9 +83,9 @@
        room is already warming behind it (net.start() runs at boot, gated only
        on the device chooser), so NEW GAME reveals a lobby whose QR is ready.
        Being the session's first real click, the button also carries the
-       browser unlocks that need a user gesture: fullscreen + audio
-       (startParty in main.js). Back from the lobby returns here, ending the
-       party (see the popstate handler in main.js). -->
+       browser unlocks that need a user gesture: fullscreen + audio (the
+       newgame-btn click handler in main.js). Back from the lobby returns
+       here, ending the party (see the popstate handler in main.js). -->
   <section id="welcome">
     <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>
