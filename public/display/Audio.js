@@ -30,44 +30,56 @@ const MACLEOD = {
   license: 'CC-BY 4.0',
   source: 'https://incompetech.com/music/royalty-free/music.html',
 };
-const song = (file, title, duration, credit = MACLEOD) => ({
+// lufs = the file's integrated EBU R128 loudness, measured once at wiring time:
+//   ffmpeg -i song.mp3 -map 0:a -filter ebur128=framelog=quiet -f null -
+// (read the summary's "I:" line). The catalogue is mastered all over the place
+// (-19.1 .. -8.7 LUFS as shipped — the hottest song lands >2x as loud as the
+// quietest), so each song carries a gain trimming it to a common target and
+// every pick sits at the same perceived level. The target sits just under the
+// quietest pick so gains stay ≤ 1 (safe for plain el.volume routing); if a new
+// pick measures quieter, lower the target and raise MUSIC_LEVEL by the same dB
+// (the credits test pins gain ≤ 1 so a too-quiet pick fails loudly).
+const MUSIC_TARGET_LUFS = -19.2;
+const song = (file, title, duration, lufs, credit = MACLEOD) => ({
   file: `/assets/audio/music/${file}`,
   title,
   duration,
+  lufs,
+  gain: 10 ** ((MUSIC_TARGET_LUFS - lufs) / 20),
   ...credit,
 });
 export const RACE_MUSIC = {
   beach: [
-    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187),
-    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217),
-    song('paradise_found.mp3', 'Paradise Found', 187),
-    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212),
-    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162),
+    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187, -9.2),
+    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217, -13.6),
+    song('paradise_found.mp3', 'Paradise Found', 187, -11.5),
+    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212, -15.3),
+    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162, -13.2),
   ],
   playroom: [
-    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194),
-    song('bit_shift.mp3', 'Bit Shift', 192),
+    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194, -11.9),
+    song('bit_shift.mp3', 'Bit Shift', 192, -13.3),
   ],
   snow: [
-    song('wallpaper.mp3', 'Wallpaper', 220),
-    song('new_friendly.mp3', 'New Friendly', 169),
-    song('glitter_blast.mp3', 'Glitter Blast', 178),
-    song('cloud_dancer.mp3', 'Cloud Dancer', 220),
-    song('digital_lemonade.mp3', 'Digital Lemonade', 180),
+    song('wallpaper.mp3', 'Wallpaper', 220, -11.2),
+    song('new_friendly.mp3', 'New Friendly', 169, -15.7),
+    song('glitter_blast.mp3', 'Glitter Blast', 178, -15.1),
+    song('cloud_dancer.mp3', 'Cloud Dancer', 220, -13.6),
+    song('digital_lemonade.mp3', 'Digital Lemonade', 180, -14.0),
   ],
   grass: [
-    song('happy_bee.mp3', 'Happy Bee', 302),
-    song('hyperfun.mp3', 'Hyperfun', 233),
-    song('flying_kerfuffle.mp3', 'Flying Kerfuffle', 250),
-    song('bummin_on_tremelo.mp3', 'Bummin on Tremelo', 192),
+    song('happy_bee.mp3', 'Happy Bee', 302, -9.1),
+    song('hyperfun.mp3', 'Hyperfun', 233, -19.1),
+    song('flying_kerfuffle.mp3', 'Flying Kerfuffle', 250, -9.4),
+    song('bummin_on_tremelo.mp3', 'Bummin on Tremelo', 192, -18.8),
   ],
   canyon: [
-    song('still_pickin.mp3', 'Still Pickin', 298),
-    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181),
-    song('surf_shimmy.mp3', 'Surf Shimmy', 123),
-    song('bama_country.mp3', 'Bama Country', 212),
-    song('guts_and_bourbon.mp3', 'Guts and Bourbon', 209),
-    song('neo_western.mp3', 'Neo Western', 146),
+    song('still_pickin.mp3', 'Still Pickin', 298, -13.9),
+    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181, -16.7),
+    song('surf_shimmy.mp3', 'Surf Shimmy', 123, -13.4),
+    song('bama_country.mp3', 'Bama Country', 212, -18.2),
+    song('guts_and_bourbon.mp3', 'Guts and Bourbon', 209, -8.7),
+    song('neo_western.mp3', 'Neo Western', 146, -15.7),
   ],
   // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
   // the neutral ex-global track rather than silence. Exported for the music
@@ -77,8 +89,10 @@ export const MUSIC_FALLBACK = RACE_MUSIC.snow;
 // MUSIC_LEVEL is a STARTING VALUE — a bed under the SFX, not a wall of sound.
 // Tune by ear in ?solo=1: if it buries the cues, drop by 0.05; if it vanishes,
 // raise it. It rides the master gain, so the volume slider scales it too.
-// Settled at 0.28 by ear — a touch forward of the SFX bed (Tim, 2026-06-14).
-const MUSIC_LEVEL = 0.28;
+// Settled at 0.28 by ear (Tim, 2026-06-14) when songs played raw; per-song
+// gains now trim every pick to MUSIC_TARGET_LUFS (≈5 dB below the old average
+// pick), so the level here is 0.28 × 10^(5.2/20) — same perceived bed height.
+const MUSIC_LEVEL = 0.51;
 
 export class RaceAudio {
   constructor() {
@@ -282,14 +296,16 @@ export class RaceAudio {
       try {
         const node = this.ctx.createMediaElementSource(el);
         const g = this.ctx.createGain();
-        g.gain.value = MUSIC_LEVEL;
         node.connect(g);
         g.connect(this.master);
         this._musicGain = g; // kept for inspection / live level tuning
-      } catch (_) {
-        el.volume = MUSIC_LEVEL * this._volume(); // routed straight to the device
-      }
+      } catch (_) { /* no MediaElementSource — level lands on el.volume below */ }
     }
+    // Per-pick loudness trim: MUSIC_LEVEL is the bed height, pick.gain flattens
+    // the catalogue's mastering spread so every song sits at that height.
+    const level = MUSIC_LEVEL * (pick.gain || 1);
+    if (this._musicGain) this._musicGain.gain.value = level;
+    else this._music.volume = level * this._volume(); // routed straight to the device
     // Swap src only on a real song change; re-racing the same song keeps it
     // buffered. createMediaElementSource follows the element, so the routing
     // survives a src change.

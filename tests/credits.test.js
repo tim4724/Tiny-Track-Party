@@ -24,6 +24,18 @@ test('every RACE_MUSIC song carries full attribution fields', () => {
   assert.ok(MUSIC_FALLBACK.length > 0, 'MUSIC_FALLBACK must never be empty (it is the no-silence guarantee)');
 });
 
+test('every song carries a loudness measurement and an attenuating gain', () => {
+  for (const [biome, pool] of Object.entries(RACE_MUSIC)) {
+    for (const s of pool) {
+      assert.ok(Number.isFinite(s.lufs) && s.lufs < 0,
+        `${biome}: '${s.title}' needs a measured integrated LUFS (see the ffmpeg recipe in Audio.js)`);
+      assert.ok(s.gain > 0 && s.gain <= 1,
+        `${biome}: '${s.title}' gain ${s.gain} outside (0, 1] — a pick quieter than ` +
+        'MUSIC_TARGET_LUFS means the target (and MUSIC_LEVEL) need rebalancing');
+    }
+  }
+});
+
 test('creditsFor() lists every unique song exactly once, as required credits', () => {
   const sections = creditsFor(RACE_MUSIC);
   const music = sections.find((s) => s.section === 'Music');

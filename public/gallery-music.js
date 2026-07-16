@@ -15,7 +15,11 @@ function volNorm() {
   const r = parseInt(localStorage.getItem(VOL_KEY), 10);
   return Number.isFinite(r) ? Math.max(0, Math.min(100, r)) / 100 : 0.6;
 }
-player.volume = volNorm();
+// The playing song's loudness trim (song.gain — the race applies the same one),
+// so browsing the pools here previews them at matched perceived level.
+let playGain = 1;
+const applyVolume = () => { player.volume = Math.min(1, volNorm() * playGain); };
+applyVolume();
 
 const fmtTime = (t) => Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : '0:00';
 
@@ -84,6 +88,8 @@ function songRow(song, { fallback = false } = {}) {
     if (current && current.btn === btn) { stopPlayback(); return; }
     stopPlayback();
     player.src = song.file;
+    playGain = song.gain || 1;
+    applyVolume();
     player.currentTime = 0;
     current = { btn, time, seek, durTxt };
     btn.classList.add('on'); btn.textContent = '■';
@@ -131,7 +137,7 @@ const vol = document.getElementById('vol');
 vol.value = String(Math.round(volNorm() * 100));
 vol.addEventListener('input', () => {
   try { localStorage.setItem(VOL_KEY, vol.value); } catch (_) {}
-  player.volume = Math.max(0, Math.min(1, +vol.value / 100));
+  applyVolume();
 });
 
 // A forgotten background track is exactly what this page shouldn't do.
