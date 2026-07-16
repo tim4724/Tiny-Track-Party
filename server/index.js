@@ -266,3 +266,12 @@ server.listen(PORT, () => {
   console.log(`Display:              http://localhost:${PORT}/`);
   console.log(`(Phones need HTTPS for tilt sensors — front this with a tunnel/cert.)`);
 });
+
+// Node runs as PID 1 in the container, where SIGTERM's default disposition is
+// ignored — without this handler every pod hangs for the full
+// terminationGracePeriodSeconds until SIGKILL on each deploy.
+process.on('SIGTERM', () => {
+  server.close(() => process.exit(0));
+  server.closeIdleConnections();
+  setTimeout(() => process.exit(0), 5000).unref();
+});
