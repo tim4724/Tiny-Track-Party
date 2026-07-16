@@ -101,6 +101,12 @@ const POLE_MIN_KEEP = 0.3;     // a hit never drops you below this fraction of t
 // fallback; the display sizes each puddle to a fraction of the track width.
 const OIL_RADIUS = 0.7;        // default puddle radius (world units) when a hazard omits one
 const SPIN_TIME = 1.0;         // seconds of lost control per spin-out
+const OIL_REARM = 4.0;         // seconds before the SAME slick can spin the same car again.
+                               // The trigger is rising-edge, but a spinning car pinned on a
+                               // wall (or crawling) wiggles across the circle's boundary —
+                               // each re-entry was a fresh edge, chaining spins from one
+                               // puddle. Comfortably past SPIN_TIME + a slow crossing, far
+                               // under a lap, so a normal re-visit next lap still bites.
 const SPIN_DRAG_RATE = 1.8;    // speed-proportional drag while spinning (fraction/s): v decays as e^(-rate·t),
                                // so a spin sheds a FRACTION of current speed — faster/boosted cars lose more
                                // (~83% of speed over the 1s spin). No hard stop; scales with how fast you hit.
@@ -339,6 +345,7 @@ export class Game {
         spin: 0,         // cosmetic spin-out angle (rad) — renderer whirls the body by this
         spinT: 0,        // seconds left in the current spin-out (0 = in control)
         oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
+        oilCd: new Map(),// puddle index → elapsed time its next spin re-arms (see OIL_REARM)
         padIn: new Set(),// pad indices currently overlapped (rising-edge boost)
         boxIn: new Set(),// box indices currently overlapped (rising-edge pickup)
         rowIn: new Map(),// box ROW id -> a box index of that row, for rows grabbed this pass (one item per row; released once the car is clear of the row in arclength)
@@ -462,7 +469,7 @@ export class Game {
         if (c.spinT <= 0) { c.spinT = 0; c.spin = 0; spinning = false; }
       }
       {
-        const oil = this._enterZones(c, this.hazards, c.oilIn);
+        const oil = this._enterZones(c, this.hazards, c.oilIn, c.oilCd, OIL_REARM);
         const ban = this._enterBanana(c);
         // A MONSTER TRUCK is immune to its own crash hazards: it still keeps oilIn in
         // sync (above) and CONSUMES a banana it rolls over (crushed — _enterBanana
@@ -676,14 +683,25 @@ export class Game {
   // plane as the car-car collisions, with the arclength gap wrapped to the
   // shortest way round the closed lap. Membership (`inSet`, per car) is kept so
   // a car sitting in a zone doesn't re-trigger every frame — only a fresh enter
-  // fires. (Item boxes keep their own loop: cooldown + full-slot rules differ.)
-  _enterZones(c, zones, inSet) {
+  // fires. Optional per-zone re-arm (`cd` map + `rearmS`, oil only): a fresh
+  // enter inside the window latches membership but does NOT fire, so wiggling
+  // across a zone's boundary (wall-pinned spin) can't chain-trigger it — pads
+  // deliberately skip this, re-crossing a pad should always boost. (Item boxes
+  // keep their own loop: cooldown + full-slot rules differ.)
+  _enterZones(c, zones, inSet, cd, rearmS) {
     let entered = false;
     for (let i = 0; i < zones.length; i++) {
       const z = zones[i];
       const hit = z.shape === 'strip' ? this._inStrip(c, z) : this._inZone(c, z, z.radius);
-      if (hit) { if (!inSet.has(i)) { inSet.add(i); entered = true; } }
-      else inSet.delete(i);
+      if (hit) {
+        if (!inSet.has(i)) {
+          inSet.add(i);
+          if (!cd || this.elapsed >= (cd.get(i) || 0)) {
+            entered = true;
+            if (cd) cd.set(i, this.elapsed + rearmS);
+          }
+        }
+      } else inSet.delete(i);
     }
     return entered;
   }

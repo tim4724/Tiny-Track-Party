@@ -976,6 +976,27 @@ test('a finished car still spins out on hazards (oil + banana) during its victor
   assert.equal(game.bananas.length, 0, 'the banana is consumed by the finished car');
 });
 
+test('the same oil slick cannot chain-spin a boundary-wiggling car (per-slick re-arm)', () => {
+  // The oil trigger is rising-edge, so a spinning car pinned against a wall used to
+  // wiggle across the puddle's boundary and eat a fresh spin on every re-entry.
+  // OIL_REARM gives each (car, slick) pair a cooldown; a later re-visit still bites.
+  const track = mkTrack(3);
+  track.hazards = [{ s: 30, lat: 0, radius: 1.0 }];
+  const spins = [];
+  const game = new Game(['p1'], track, { onEvent: (e) => { if (e.type === 'spin') spins.push(e); } });
+  const car = game.cars.get('p1');
+  const place = (s) => { Object.assign(car, { totalS: s, lat: 0, v: 0 }); game.update(16); };
+  place(30);
+  assert.equal(spins.length, 1, 'first entry spins');
+  place(32); place(30); place(32); place(30);  // wiggle out and back across the edge
+  assert.equal(spins.length, 1, 'boundary wiggling cannot re-trigger the same slick');
+  // Hold the car clear until the re-arm window (4s) passes, then re-enter fresh.
+  car.spinT = 0; car.spin = 0;
+  for (let i = 0; i < 300; i++) place(50);     // ~4.8s of game time, off the slick
+  place(30);
+  assert.equal(spins.length, 2, 'a genuine later re-visit spins again');
+});
+
 test('a finished car collects an item on its victory lap (box pops + cooldown, world-pop pickup)', () => {
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
