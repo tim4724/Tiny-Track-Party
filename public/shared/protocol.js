@@ -138,11 +138,19 @@ var CAR_MODEL_YAW = [0, 0, 0, 0];
 // can take medium/technical layouts. Re-run it after edits; use the packed-race
 // probe for Rumble's collision value.
 var CAR_STATS = [
-  // accel, vmax, turn(=handling), mass — max holdable corner speed ≈ turn·9 u/s in the tightest corners.
-  { accel: 1.03, vmax: 1.00, turn: 1.00, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced benchmark with the best launch; owns medium/technical tracks, lowest variance
-  { accel: 1.05, vmax: 1.11, turn: 0.89, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks but pays in tight ones
-  { accel: 1.02, vmax: 0.97, turn: 1.26, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner carver, rails the tightest bend; pays with a low top end. Owns the tight tracks
-  { accel: 0.96, vmax: 1.10, turn: 0.90, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: strong grunt + 2nd-fastest flat-out, ponderous in corners, heaviest by far (wins every shove)
+  // accel, vmax, turn(=handling), mass. Turn caps corner speed two ways: holdable line
+  // ≈ turn/κ (understeer past it), and the engine's steer scrub — cornering costs speed
+  // in proportion to steering input, and a grippy car needs less input for the same bend.
+  // The vmax spread is deliberately TIGHT (0.99–1.06): vmax bills on every meter of every
+  // lap while turn only bills in corners, so a wide vmax gap (the old 0.97–1.11) made the
+  // fastest car unbeatable everywhere. Sim-tuned (2026-07-16, solo laps × all 20 tracks,
+  // both driving styles): disciplined/AI-style cup winners rotate (Bolt beach+snow, Carve
+  // backyard+canyon, Dash rooftop, ≤1.3s spread); flat-out/casual style leaves Bolt a
+  // ~0.5–0.8s identity edge, paid for by the lightest mass (loses every shove).
+  { accel: 1.04, vmax: 1.02, turn: 1.05, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; lowest variance, owns the stunt cup
+  { accel: 1.05, vmax: 1.06, turn: 0.92, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks, catchable in the twisty cups
+  { accel: 1.02, vmax: 0.99, turn: 1.30, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend and scrubs the least speed steering; pays with the lowest top end. Owns the technical cups
+  { accel: 0.96, vmax: 1.04, turn: 0.95, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: 2nd-fastest flat-out, ponderous in corners, heaviest by far (wins every shove)
 ];
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash

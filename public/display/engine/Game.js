@@ -47,14 +47,21 @@ const WALL_SPEED_FRAC = 0.5; // curb speed cap as a fraction of the car's own to
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 
-// ---- Cornering (understeer, not auto-slowdown) ----
+// ---- Cornering (understeer + steer scrub) ----
 // The "Handling" stat IS the car's turn rate (c.turn). The sim does NOT brake for
 // you: carry too much speed into a bend and a low-handling car simply can't yaw
 // fast enough to hold the line (it needs κ·v rad/s, but maxes out at c.turn·
 // authority) — so it washes wide (understeer) into the curb, which slows it. You
 // have to brake yourself. A grippy car (high c.turn) holds a much tighter, faster
-// line. That's the whole point of the stat: corners are where weight/handling bite.
+// line. On top of that, WORKING THE WHEEL COSTS SPEED (STEER_SCRUB): the speed
+// ceiling drops with steering input (quadratic, so lane corrections are ~free but
+// full lock bites). Because a grippy car needs LESS input for the same curve
+// (input ≈ κ·v / (c.turn·authority)), the same bend scrubs it far less — handling
+// now bills on every corner, not only the ones tight enough to force a brake.
+// Boost overrides scrub like it overrides brake (pads before loops stay a
+// guarantee). That's the whole point of the stat: corners are where handling bites.
 // (AI + victory-lap cars brake for corners on their own — see AiDriver.cornerBrake.)
+const STEER_SCRUB = 0.35; // speed-ceiling fraction shed at FULL LOCK (quadratic in steer input)
 
 // ---- Car-car collisions ----
 // Cars are glued to the centerline ribbon, so two nearby cars live in a locally
@@ -523,9 +530,18 @@ export class Game {
       // to clear it — you can't accidentally (or deliberately) brake the boost off.
       // Brake control returns the instant the multiplier bleeds back to 1.
       const brakeEff = boosting ? 0 : c.brake;
+      // STEERING input (shaped): also feeds the corner scrub below, so it's computed
+      // ahead of the longitudinal step.
+      const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
+      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
+      // CORNER SCRUB: steering drops the speed ceiling (see the Cornering block up top).
+      // Quadratic → small corrections/weave are ~free, committed cornering bites; a
+      // grippy car needs less input for the same bend, so it sheds less. Boost overrides
+      // it exactly like the brake (a pad before a loop still guarantees the speed).
+      const scrubEff = boosting ? 0 : STEER_SCRUB * steerIn * steerIn;
       // A monster rides slightly higher top speed (stacks over any boost it grabs).
       const vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
-      const targetV = vmaxEff * c.boostMul * (1 - brakeEff);
+      const targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
       if (spinning) c.v *= Math.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
@@ -536,8 +552,6 @@ export class Game {
       // wide → understeer. authority ramps steering in with speed; non-linear so
       // small tilts barely steer.
       const authority = 0.4 + 0.6 * Math.min(1, c.v / (c.vmax * 0.5));
-      const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
-      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
       // Steered heading (relative to the road) for THIS step. It feeds the world facing
       // vector below and is then re-derived from the projection, so c.heading isn't
       // mutated until the end — the final c.heading is `fwd` re-expressed vs the new tangent.

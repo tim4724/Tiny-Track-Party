@@ -566,37 +566,43 @@ test('accel stat scales how fast a car gets up to speed', () => {
   assert.ok(quick > sluggish * 1.5, `more accel → quicker off the line (${sluggish.toFixed(1)} vs ${quick.toFixed(1)})`);
 });
 
-test('handling = cornering: a low-handling car washes wide at full speed; a grippy one holds the line', () => {
-  // Drive the racing line at FULL throttle (never brake). A grippy car can yaw fast
-  // enough to hold the line; a low-handling car can't (κ·v > turn·authority) so it
-  // understeers wide into the curb. The sim does NOT auto-slow — that's the point.
+test('handling = cornering: turn sets corner speed (steer scrub) and how wide you run', () => {
+  // Drive the racing line at FULL throttle (never brake). Steering scrubs the speed
+  // ceiling (STEER_SCRUB, quadratic in input), so a low-handling car — which needs
+  // more lock for the same bend — sheds far more corner speed than a grippy one, and
+  // still runs wider (κ·v > turn·authority → understeer). The scrub self-slowing
+  // softens a MODERATE grip deficit into a wide-but-recoverable line; a really
+  // low-grip car still washes all the way into the curb.
   function corner(turnMult) {
     const track = mkTrack(3);
     const game = new Game([{ id: 'x', stats: { turn: turnMult } }], track, {});
-    let maxAbsLat = 0, hitWall = false;
+    let maxAbsLat = 0, hitWall = false, minV = Infinity;
     for (let i = 0; i < 700; i++) {
       game.processInput('x', { s: followSteer(game, track, 'x'), b: 0 });
       game.update(16);
       const c = game.cars.get('x');
-      if (i > 200) { maxAbsLat = Math.max(maxAbsLat, Math.abs(c.lat)); if (c.onWall) hitWall = true; }
+      if (i > 200) { maxAbsLat = Math.max(maxAbsLat, Math.abs(c.lat)); if (c.onWall) hitWall = true; minV = Math.min(minV, c.v); }
     }
-    return { maxAbsLat, hitWall };
+    return { maxAbsLat, hitWall, minV };
   }
   const loose = corner(0.70);
   const grippy = corner(1.32);
-  assert.ok(loose.maxAbsLat > grippy.maxAbsLat + 0.3, `low-handling car runs wider (loose ${loose.maxAbsLat.toFixed(2)} vs grippy ${grippy.maxAbsLat.toFixed(2)})`);
-  assert.ok(loose.hitWall, 'a low-handling car at full speed washes into the curb');
+  const sled = corner(0.40);
+  assert.ok(loose.maxAbsLat > grippy.maxAbsLat + 0.15, `low-handling car runs wider (loose ${loose.maxAbsLat.toFixed(2)} vs grippy ${grippy.maxAbsLat.toFixed(2)})`);
+  assert.ok(grippy.minV > loose.minV + 1.0, `the same bend scrubs the low-handling car harder (loose ${loose.minV.toFixed(1)} vs grippy ${grippy.minV.toFixed(1)} u/s)`);
   assert.ok(!grippy.hitWall, 'a grippy car holds the racing line at full speed');
+  assert.ok(sled.hitWall, 'a really low-grip car at full speed still washes into the curb');
 });
 
 test('cornerBrake lifts a low-handling bot for corners, cutting its curb time vs full throttle', () => {
-  // Same low-handling car, driven flat-out vs by the AI controller (skill 1 → no
-  // cruise handicap, so the only braking IS corner anticipation). The bot brakes
-  // for bends it can't hold, so it spends far less time washed into the curb.
+  // Same very-low-handling car (0.40 — low enough that the steer scrub alone can't
+  // save it), driven flat-out vs by the AI controller (bots hold no cruise brake, so
+  // the only braking IS corner anticipation). The bot brakes for bends it can't
+  // hold; flat-out the car washes into the curb and grinds along it.
   function wallFrames(useBot) {
     const track = mkTrack(3);
-    const game = new Game([{ id: 'x', stats: { turn: 0.70 } }], track, {});
-    const bot = new AiController({ skill: 1.0 });
+    const game = new Game([{ id: 'x', stats: { turn: 0.40 } }], track, {});
+    const bot = new AiController({ caution: 1.0 });
     let wall = 0, braked = false;
     for (let i = 0; i < 700; i++) {
       const c = game.cars.get('x');
@@ -609,7 +615,8 @@ test('cornerBrake lifts a low-handling bot for corners, cutting its curb time vs
   }
   const bot = wallFrames(true), flat = wallFrames(false);
   assert.ok(bot.braked, 'the bot lifts/brakes for corners it cannot take flat-out');
-  assert.ok(bot.wall < flat.wall * 0.6, `cornerBrake roughly halves curb time (${bot.wall} vs flat-out ${flat.wall})`);
+  assert.ok(flat.wall > 50, `flat-out, the car spends real time pinned to the curb (${flat.wall} frames)`);
+  assert.ok(bot.wall < flat.wall * 0.2, `cornerBrake all but eliminates curb time (${bot.wall} vs flat-out ${flat.wall})`);
 });
 
 // First frame the controller's use-counter advances while holding `item` (pose-pinned at
@@ -619,7 +626,7 @@ function firstFireFrame(item, s, game, id, frames = 320, seed = 4) {
   const car = game.cars.get(id);
   Object.assign(car, { totalS: s, lat: 0, item });
   game._recomputePoses();
-  const bot = new AiController({ skill: 1.0, seed });
+  const bot = new AiController({ caution: 1.0, seed });
   for (let i = 0; i < frames; i++) {
     if (bot.drive(car, game.centerline, game).u !== 0) return i;
   }
@@ -1400,7 +1407,7 @@ test('an AI car uses items instead of hoarding (picks up then fires on a straigh
   const game = new Game(['x'], track, {});
   game.elapsed = 2; // past the launch gate
   const car = game.cars.get('x');
-  const bot = new AiController({ skill: 1 });
+  const bot = new AiController({ caution: 1 });
   let everHeld = false, everUsed = false;
   for (let i = 0; i < 400; i++) {
     game.processInput('x', bot.drive(car, track.centerline));
@@ -1420,7 +1427,7 @@ test('an AI bot steers around a hazard on its line instead of spinning out', () 
     const track = mkTrack(3);
     track.hazards = [{ s: 10, lat: 0, radius: 0.7 }];
     const game = new Game(['bot'], track, {});
-    const bot = new AiController({ skill: 1, laneBias: 0, seed: 1 });
+    const bot = new AiController({ caution: 1, laneBias: 0, seed: 1 });
     const c = game.cars.get('bot');
     Object.assign(c, { totalS: 2, lat: 0, v: c.vmax });
     game._recomputePoses(); // pose at the assigned spot before the first steer
