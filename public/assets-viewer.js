@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildMonsterRig, buildMonsterChassis, MONSTER_BASE_ASSET } from '/display/render/MonsterRig.js';
+import { gantryGroup } from '/display/render/FinishGate.js';
+import { THEMES } from '/shared/themes.js';
 
 const ASSET = (name) => `/assets/toycar/${name}.glb`;
 
@@ -30,7 +32,7 @@ const CATEGORIES = [
   { key: 'striped-narrow', label: 'Track · Striped · narrow', color: '#c98aa0', test: (n) => n.startsWith('track-striped-narrow') },
   { key: 'orange-wide',    label: 'Track · Orange · wide',   color: '#e0a92e', test: (n) => n.startsWith('track-wide') },
   { key: 'orange-narrow',  label: 'Track · Orange · narrow', color: '#c9b15a', test: (n) => n.startsWith('track-narrow') },
-  { key: 'markers',        label: 'Gates & Markers',         color: '#d24b8f', test: (n) => n === 'gate' || n === 'gate-finish' },
+  { key: 'markers',        label: 'Gates & Markers',         color: '#d24b8f', test: (n) => n === 'gate' || n === 'gate-finish' || n.startsWith('finish-gate') },
   { key: 'supports',       label: 'Supports',                color: '#8a6f54', test: (n) => n.startsWith('supports') },
   { key: 'vehicles',       label: 'Vehicles',                color: '#3f8ddd', test: (n) => n.startsWith('vehicle') },
   { key: 'monster',        label: 'Monster Variants',        color: '#7b4fc0', test: (n) => n.startsWith('monster-') },
@@ -237,6 +239,15 @@ async function main() {
   // Compose the monster variants from the loaded car bodies + the monster-truck
   // chassis, and inject them as extra "models" so the rest of the pipeline
   // (bucketing, layout, labels, legend) treats them like any other asset.
+  // The procedural finish gantry, once per biome (it's not a file on disk either) —
+  // same injection trick as the monster variants, so each shows up labelled in the
+  // Gates & Markers block wearing its theme's plastic colours + colour grade.
+  for (const [biome, theme] of Object.entries(THEMES)) {
+    const kerbW = (theme.road && theme.road.kerbW) || 0.22;
+    byName.set(`finish-gate-${biome}`, gantryGroup(theme, { roadWidth: 5, kerbW, dropDepth: 0.24 }));
+    names.push(`finish-gate-${biome}`);
+  }
+
   const monsterBase = byName.get(MONSTER_BASE_ASSET);
   if (monsterBase) {
     // The bare chassis (cab removed, recoloured) on its own, first in the block.
@@ -255,7 +266,9 @@ async function main() {
   for (const n of names) buckets.get(categoryOf(n).key).push(n);
 
   const worldBox = new THREE.Box3();
-  let focusBox = null; // the wide-road block — what we open framed on
+  // Which category block to open framed on: ?focus=<category key> (see CATEGORIES).
+  const focusKey = new URLSearchParams(location.search).get('focus') || 'monster';
+  let focusBox = null;
   const tmp = new THREE.Box3();
   let cursorZ = 0;
 
@@ -311,14 +324,17 @@ async function main() {
       ]) { worldBox.expandByPoint(new THREE.Vector3(...corner)); catBox.expandByPoint(new THREE.Vector3(...corner)); }
     });
 
-    if (cat.key === 'monster') focusBox = catBox;
+    if (cat.key === focusKey) focusBox = catBox;
     cursorZ += rows * pitch + CATEGORY_GAP;
   }
 
-  // Open looking right at the Monster Variants row. Use a LOW front framing (not
-  // the generic 3/4 overhead) so the big category header floats above the trucks
-  // instead of covering them, and fit the row across the screen's width.
-  if (focusBox) {
+  // Open looking right at the focused block. The default (Monster Variants) uses a
+  // LOW front framing so its category header floats above the trucks — but that
+  // framing backs the camera into the neighbouring blocks on wide categories, so
+  // any other ?focus target takes the generic 3/4 overhead instead.
+  if (focusBox && focusKey !== 'monster') {
+    frameOn(focusBox);
+  } else if (focusBox) {
     const center = focusBox.getCenter(new THREE.Vector3());
     const size = focusBox.getSize(new THREE.Vector3());
     const halfW = Math.max(size.x, 4) / 2;

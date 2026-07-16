@@ -101,8 +101,14 @@
 //                                       depth (1 = busy gull, ~0.15 = soaring vulture)
 //                                       at flapHz beats/s
 //   gate: (optional)                    near-white colour-grade multiplied onto the
-//                                       start/finish gate's colormap (sun-bleach /
+//                                       start/finish gate's colours (sun-bleach /
 //                                       heat / cold) — a tint, not a repaint
+//   gantry: (optional)                  finish-gantry plastic colours (render/
+//                                       FinishGate.js): { pylon, finial, rings? }.
+//                                       rings wraps lighthouse bands (rings colour
+//                                       over pylon colour) around the posts. Default
+//                                       is celebration red posts + paper domes; the
+//                                       chequer banner is always ink/paper.
 //   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
@@ -198,6 +204,7 @@ export const THEMES = {
     landmark: ['lighthouse', 'sailboat'], // beacon on the lowest island + a boat in the shallows
     birds: { count: 4, tint: 0x51616d, size: 3.0, y: 13, rc: 100, rb: 32, speed: 0.26, flap: 1, flapHz: 2.1 }, // gulls working the shoreline, flapping busily
     gate: 0xfff1de, // sun-bleached gate grade
+    gantry: { pylon: 0xfff6eb, rings: 0xff5040, finial: 0xff5040 }, // lighthouse posts — echoes the beacon landmark
     // Palms (Nature Kit, untextured — the tint maps recolour authored teal fronds /
     // peach trunk to tropical green / sun-bleached tan) over weathered sandstone
     // boulders, scattered sparser than parkland so the beach reads open and airy.
@@ -248,6 +255,7 @@ export const THEMES = {
     landmark: 'hoodoo', // balanced-rock family at one clear roadside stretch (a road-spanning arch was rejected)
     birds: { count: 2, tint: 0x3a322c, size: 3.6, y: 36, rc: 150, rb: 20, speed: 0.1, flap: 0.15, flapHz: 0.5 }, // vultures riding a thermal — soaring, barely a wing-beat
     gate: 0xffdec2, // hot dusty gate grade
+    gantry: { pylon: 0x8a5f3e, finial: 0xfff6eb }, // weathered timber posts — desert-highway signage
     scenery: {
       // Saguaros as the signature silhouette, barrel cacti as the low accent — both
       // are the Nature Kit's untextured models (CC0, same low-poly language as the
@@ -305,6 +313,7 @@ export const THEMES = {
     // a glassy pale-blue glaze with a near-white frost rim. Same spin-out, same cones.
     ice: { sheet: 0xa9d7ee, frost: 0xf0f8fd },
     gate: 0xdfe9f6, // cold-cast gate grade
+    gantry: { pylon: 0x3f7bd9, finial: 0xfff6eb }, // ski-gate blue — pops against the white world
     landmark: 'snowman', // trackside greeter just off the racing line
   },
 
@@ -346,6 +355,7 @@ export const THEMES = {
     structure: 0x4a6fc4, // support columns read as the kit's blue connector pieces
     landmark: ['blocks', 'duck', 'ball'], // alphabet-block stack, bath-toy duck spectator, panelled play ball
     gate: 0xfff3e2, // warm indoor-light gate grade
+    gantry: { pylon: 0x5cb168, finial: 0xff5040 }, // green toy plastic + red dome — a third primary next to the orange deck / blue rails
     scenery: {
       // No trees indoors — the "boulder" channel does all the work: faceted
       // toy bits (dice/gems/beanbags) in the same plastic primaries as the
