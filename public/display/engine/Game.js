@@ -909,9 +909,10 @@ export class Game {
       if (this.elapsed < (b.liveAt || 0)) continue;              // authored banana, waiting to respawn
       if (b.owner === c.id && this.elapsed < (b.armAt ?? Infinity)) continue; // owner, still in the post-drop window
       if (this._inZone(c, b, BANANA_RADIUS)) {
+        hit = true;
         // Authored (respawning) bananas rearm instead of despawning — see the ctor seed.
-        if (b.respawn) { b.liveAt = this.elapsed + BOX_RESPAWN; hit = true; }
-        else { b.hit = true; hit = true; }
+        if (b.respawn) b.liveAt = this.elapsed + BOX_RESPAWN;
+        else b.hit = true;
       }
     }
     if (hit) this.bananas = this.bananas.filter((b) => !b.hit);
