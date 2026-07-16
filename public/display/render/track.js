@@ -1699,40 +1699,9 @@ export function buildLandmarks(R, track, theme) {
 //   pick(tints)     one rand() draw from a tint family
 //   groundY         the floor height to rest on
 export const CLUTTER_BUILDERS = {
-  // wildflower patch: daisy rosettes sitting IN the grass — bigger heads on
-  // barely-there stems over a leaf tuft (round 1's blob read as a lollipop;
-  // round 2's tall stems read as flowers ON STICKS — the blooms now hug the
-  // lawn like ground cover)
-  flower: (ctx, x, z, tints) => {
-    const { rand, put, pick, groundY } = ctx;
-    const n = 2 + Math.floor(rand() * 3);
-    for (let i = 0; i < n; i++) {
-      const a = rand() * Math.PI * 2, r = rand() * 0.8;
-      const fx = x + Math.cos(a) * r, fz = z + Math.sin(a) * r;
-      const h = 0.16 + rand() * 0.08; // barely a stem — the head floats just over the lawn
-      const stem = new THREE.CylinderGeometry(0.03, 0.04, h, 5);
-      stem.translate(fx, groundY + h / 2, fz);
-      put(stem, 0x4e8a44, 0.92 + rand() * 0.16);
-      const tuft = new THREE.SphereGeometry(0.11, 6, 4); // leaf tuft the head grows out of
-      tuft.scale(1.5, 0.4, 1.5);
-      tuft.translate(fx, groundY + 0.04, fz);
-      put(tuft, 0x5a9a50, 0.9 + rand() * 0.12);
-      const hex = pick(tints);
-      const ph = rand() * Math.PI * 2; // petal-ring phase
-      for (let k = 0; k < 5; k++) {
-        const pa = ph + (k / 5) * Math.PI * 2;
-        const petal = new THREE.SphereGeometry(0.09, 6, 4);
-        petal.scale(1.5, 0.4, 0.85); // flat oval, long axis outward
-        petal.rotateY(-pa);
-        petal.translate(fx + Math.cos(pa) * 0.14, groundY + h + 0.02, fz + Math.sin(pa) * 0.14);
-        put(petal, hex, 0.95 + rand() * 0.1);
-      }
-      const heart = new THREE.SphereGeometry(0.075, 6, 5); // the golden centre
-      heart.scale(1, 0.65, 1);
-      heart.translate(fx, groundY + h + 0.05, fz);
-      put(heart, 0xf2c14e, 1.05);
-    }
-  },
+  // (Flowers graduated from procedural builds to Kenney Nature-Kit GLBs —
+  // three procedural passes read as lollipops/sticks/splats. Kit stamps go
+  // through the 'kit' clutter kind in buildScenery, not this table.)
   // seashell: a squashed half-dome, tipped a touch
   shell: (ctx, x, z, tints) => {
     const { rand, put, pick, groundY } = ctx;
@@ -1903,7 +1872,9 @@ export function buildScenery(R, track, theme) {
   const treeSrc = new Map(); // model name -> parts[]
   let colorMat = null;
   const modelNames = [...new Set([...sc.trees.map((e) => e.model),
-                                  ...(sc.bush ? [sc.bush.model] : [])])];
+                                  ...(sc.bush ? [sc.bush.model] : []),
+                                  // the clutter pass's kit stamps (flowers) share the extraction
+                                  ...((sc.clutter && sc.clutter.kinds) || []).flatMap((e) => e.models || [])])];
   for (const name of modelNames) {
     const root = R.protos.get(name);
     if (!root) continue;
@@ -2099,6 +2070,45 @@ export function buildScenery(R, track, theme) {
         const r = rand2();
         let acc = 0, entry = cc.kinds[cc.kinds.length - 1];
         for (const e of cc.kinds) { acc += e.w; if (r < acc) { entry = e; break; } }
+        if (entry.kind === 'kit') {
+          // authored kit stamps (the Nature-Kit flowers): a small patch of
+          // 2-3 models, baked like the untextured scenery silhouettes —
+          // authored colours, the entry's tint map recolouring per part
+          // (teal stems → leaf green, exactly the palms' idiom)
+          const n = entry.per[0] + Math.floor(rand2() * (entry.per[1] - entry.per[0] + 1));
+          for (let i = 0; i < n; i++) {
+            const parts = treeSrc.get(entry.models[Math.floor(rand2() * entry.models.length)]);
+            const a = rand2() * Math.PI * 2, rr = rand2() * 0.9;
+            const sc2 = entry.s[0] + rand2() * entry.s[1];
+            const yaw2 = rand2() * Math.PI * 2;
+            const shade = 0.9 + rand2() * 0.2;
+            if (!parts) continue; // rand2 draws above stay stable while a model streams in
+            Q.setFromAxisAngle(UP, yaw2);
+            S.set(sc2, sc2 * (0.92 + rand2() * 0.16), sc2);
+            P.set(x + Math.cos(a) * rr, groundY, z + Math.sin(a) * rr);
+            M.compose(P, Q, S);
+            for (const part of parts) {
+              let g = part.geo.clone();
+              if (g.index) { const gg = g.toNonIndexed(); g.dispose(); g = gg; } // the clutter pool merges non-indexed prims
+              for (const nm of Object.keys(g.attributes)) if (nm !== 'position' && nm !== 'normal') g.deleteAttribute(nm);
+              if (!g.attributes.normal) g.computeVertexNormals();
+              g.applyMatrix4(part.mw).applyMatrix4(M);
+              let t = entry.tint;
+              if (t != null && typeof t === 'object') t = t[part.mat ? part.mat.color.getHexString() : ''];
+              const c = new THREE.Color();
+              if (t != null) c.set(t).convertSRGBToLinear();
+              else if (part.mat) c.copy(part.mat.color); // GLTF material colours are already linear
+              else c.set(0xffffff);
+              c.multiplyScalar(shade);
+              const nv = g.attributes.position.count;
+              const arr = new Float32Array(nv * 3);
+              for (let vi = 0; vi < nv; vi++) { arr[vi * 3] = c.r; arr[vi * 3 + 1] = c.g; arr[vi * 3 + 2] = c.b; }
+              g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+              clutterGeoms.push(g);
+            }
+          }
+          continue;
+        }
         const build = CLUTTER_BUILDERS[entry.kind];
         if (build) build(ctx, x, z, entry.tints || [0xffffff]);
       }

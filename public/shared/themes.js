@@ -161,12 +161,15 @@
 //     density: 0..1               per-side spawn chance at each corridor candidate
 //     clutter: (optional)         small ground detail scattered DENSER and CLOSER to
 //              the road than the props above — the near-field pass the chase cam
-//              actually sees. { kinds: [{ kind, w, tints }], density }; kinds are
-//              procedural (render/track.js CLUTTER_BUILDERS): 'flower' | 'shell' |
-//              'starfish' | 'driftwood' | 'drift' (snow heap) | 'scrub' |
-//              'pebbles' | 'brick' (studded toy brick) | 'marble' | 'domino'.
-//              Placement draws from its OWN seeded stream, so adding or tuning
-//              clutter NEVER reshuffles the tree/rock scatter.
+//              actually sees. { kinds: [{ kind, w, … }], density }; kinds are
+//              procedural (render/track.js CLUTTER_BUILDERS, entry carries
+//              `tints`): 'shell' | 'starfish' | 'driftwood' | 'drift' (snow
+//              heap) | 'scrub' | 'pebbles' | 'brick' (studded toy brick) |
+//              'marble' | 'domino' — OR authored kit stamps: kind 'kit' with
+//              { models: [names], s: [base, spread], per: [min, max], tint? }
+//              (2-3 GLBs per patch; the grass flowers). Placement draws from
+//              its OWN seeded stream, so adding or tuning clutter NEVER
+//              reshuffles the tree/rock scatter.
 
 // Green-parkland scenery, shared by every biome that keeps the grass world (grass +
 // sunset — golden light over the SAME trees is the sunset look). Every value is the
@@ -181,11 +184,18 @@ const GRASS_SCENERY = {
   rocks:   [0xc6cbd6, 0xb4bac8, 0x9aa1b4], // pillar-concrete family
   rockS:   [0.3, 0.45],
   density: 0.62,
-  // Near-field pass (own rand stream — the scatter above is untouched): wildflower
-  // patches on the verge. Soft meadow colours, no chrome-yellow neon — poppy red,
-  // daisy cream, cornflower, and a warm gold.
+  // Near-field pass (own rand stream — the scatter above is untouched):
+  // wildflower patches on the verge, straight from Kenney's Nature Kit (three
+  // procedural attempts all read wrong — authored models match the rest of
+  // the vegetation). Blooms keep their authored red/purple/yellow; the tint
+  // map recolours the kit's teal stems to leaf green, like the palms.
   clutter: {
-    kinds: [{ kind: 'flower', w: 1, tints: [0xe4604a, 0xf5f0e2, 0x6f8fd8, 0xe8b84a] }],
+    kinds: [{ kind: 'kit', w: 1,
+              models: ['flower-red-a', 'flower-red-b', 'flower-red-c',
+                       'flower-purple-a', 'flower-purple-b', 'flower-purple-c',
+                       'flower-yellow-a', 'flower-yellow-b', 'flower-yellow-c'],
+              s: [2.0, 1.2], per: [2, 3],
+              tint: { '73eddd': 0x4e8a44 } }],
     density: 0.3,
   },
 };
@@ -474,12 +484,14 @@ export const THEMES = {
   },
 };
 
-// Union of every GLB the biome scenery palettes reference. The display preloads this
+// Union of every GLB the biome scenery palettes reference (trees, bush donors,
+// and the clutter pass's kit stamps — the flowers). The display preloads this
 // whole set once (SceneRenderer.load), so switching cups/biomes in the lobby never
 // waits on a model fetch — the per-model cost is tiny (the kit props are a few KB).
 export const SCENERY_MODELS = [...new Set(Object.values(THEMES).flatMap((t) => [
   ...t.scenery.trees.map((e) => e.model),
   ...(t.scenery.bush ? [t.scenery.bush.model] : []),
+  ...((t.scenery.clutter && t.scenery.clutter.kinds) || []).flatMap((e) => e.models || []),
 ]))];
 
 // Cup id → biome name. Cups absent here (or an undefined cup) fall back to grass, so
