@@ -79,13 +79,26 @@
     </div>
   </div>
 
+  <!-- Welcome — the title board shown at boot, over the paper diorama. The
+       room is already warming behind it (net.start() runs at boot, gated only
+       on the device chooser), so NEW GAME reveals a lobby whose QR is ready.
+       Being the session's first real click, the button also carries the
+       browser unlocks that need a user gesture: fullscreen + audio
+       (startParty in main.js). Back from the lobby returns here, ending the
+       party (see the popstate handler in main.js). -->
+  <section id="welcome">
+    <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+    <p class="welcome__tag">Race your friends — everyone steers with their phone!</p>
+    <button id="newgame-btn" class="btn btn--brand welcome__btn">NEW GAME</button>
+  </section>
+
   <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
        (wordmark masthead + QR + scan hint) on the left rail, the cup slot on
        the right rail, the seat dock bottom-centre. The chrome sits at the
        SAME positions in both lobby states: on the paper stage before the host
        picks, floating over the live 3D preview after — nothing moves between
        the two. -->
-  <section id="lobby">
+  <section id="lobby" class="hidden">
     <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
          TINY TRACK PARTY! over QR + the join URL (code highlighted in the
          accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
@@ -118,8 +131,8 @@
 
     <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
          ticket's JOIN AT already carries the call-to-action). Seeded with four
-         open-seat placeholders so the dock paints at its full footprint on the
-         first frame, before main.js runs. lobbySeats.js's renderSeats() then
+         open-seat placeholders so the dock paints at its full footprint the
+         moment the lobby is revealed. lobbySeats.js's renderSeats() then
          replaces these (always keeping >=4 seats) as players join — keep this
          markup in sync with its `seat--open` branch. -->
     <div class="lobby-foot">

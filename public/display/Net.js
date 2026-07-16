@@ -257,6 +257,11 @@ export class DisplayNet extends GameNet {
         this._forgetRoom();
         this.roomCode = null;
         this.instance = null;
+        // The 4001 bailed every phone terminally — nobody carries a seat into
+        // the fresh room (close_room sends no peer_lefts, so without this the
+        // old roster would haunt the new lobby). Cleared here, not on
+        // 'created', so a plain reconnect's regathered roster stays intact.
+        for (const p of this.flow.list()) this._expireSeat(p.peerIndex);
         this._connect();
       }
     };

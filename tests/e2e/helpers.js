@@ -33,6 +33,13 @@ async function openDisplay(page) {
   // only fires from inside the interval, not on the opening tick).
   await page.addInitScript(() => { window.__countdownSeconds = 1; });
   await page.goto('/');
+  // Click through the welcome board (its NEW GAME carries the fullscreen/audio
+  // unlocks — both harmless headless). Wait for the module first (__net is set
+  // at its tail): the button is in the static HTML, so an instant click could
+  // land before the listener attaches. The room warms behind the welcome, so
+  // the roomCode wait below is unchanged.
+  await page.waitForFunction(() => !!window.__net);
+  await page.click('#newgame-btn');
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
   await page.evaluate(() => window.__sceneReady); // evaluate awaits the returned Promise (GLB load)
   return page.evaluate(() => window.__net.roomCode);

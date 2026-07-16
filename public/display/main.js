@@ -19,8 +19,26 @@ import { CUPS } from '../shared/tracks.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
 const el = (id) => document.getElementById(id);
-const screens = { lobby: el('lobby'), race: el('race') };
-const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
+const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
+// Back stack (live play only): each forward step pushes one history entry, each
+// backward step pops one, so the browser back button walks race → lobby →
+// welcome with exactly one entry per level (the controller's SCREEN_ORDER
+// pattern; what back MEANS per screen lives in the popstate handler at the
+// bootstrap tail). Test/gallery/solo surfaces drive screens directly and get
+// no history entries (gallery lives in iframes; solo has no welcome).
+const SCREEN_ORDER = { welcome: 0, lobby: 1, race: 2 };
+let currentScreen = null;
+let suppressPopstate = false;   // the history.back() below is ours — its popstate must not act
+let popstateNavigating = false; // this show() IS a popstate retreat — don't pop again (set/cleared by the handler)
+function show(name) {
+  const prev = currentScreen;
+  currentScreen = name;
+  for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+  if (_isTestMode || _isDebugSolo) return;
+  const step = (SCREEN_ORDER[name] || 0) - (SCREEN_ORDER[prev] || 0);
+  if (step > 0) history.pushState({ screen: name }, '');
+  else if (step < 0 && prev && !popstateNavigating) { suppressPopstate = true; history.back(); }
+}
 
 // ---- tracks ----
 // Build every track once (buildTrack is pure geometry — no GLBs needed), so we
@@ -1322,6 +1340,17 @@ function returnToLobby() {
   });
 }
 
+// End the party and return to the title board (back from the lobby, or a
+// future in-UI "End party" action). closeRoom() bails every phone terminally
+// (their party-over overlay) while the display's own 4001 self-heals into a
+// FRESH room (Net.js onClose {roomClosed}, which also clears the roster) — so
+// the next NEW GAME reveals a lobby already sitting on the new room's QR.
+function endParty() {
+  returnToLobby(); // no-op from the lobby; full race teardown from anywhere else
+  net.closeRoom();
+  show('welcome');
+}
+
 // ---- pause ----
 // Any player's controller (or the on-screen pause button) can freeze the race;
 // the display is authoritative, so it owns `paused` and tells the controllers.
@@ -1406,9 +1435,11 @@ for (const ev of ['pointerdown', 'keydown']) {
 // gesture, so the window pointerdown listener above does the actual resume.
 // Hidden on gallery/test surfaces (their iframes never get gestures) and where
 // Web Audio doesn't exist (nothing to unlock).
+// The welcome board needs no hint: leaving it takes a click (NEW GAME), which
+// IS the unlocking gesture — the pill would nag about a problem already solved.
 const _audioSupported = !!(window.AudioContext || window.webkitAudioContext);
 if (!_isTestMode && _audioSupported) {
-  setInterval(() => el('sound-hint').classList.toggle('hidden', audio.ready), 500);
+  setInterval(() => el('sound-hint').classList.toggle('hidden', audio.ready || currentScreen === 'welcome'), 500);
 }
 
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
@@ -1505,11 +1536,11 @@ const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_scenario) {
   dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
-  // Gallery/test. Lobby previews ('welcome'/'lobby') keep the default diorama
-  // backdrop (no track picked, matching the real lobby); race previews reveal the
-  // 3D scene the harness renders the track + cars into.
+  // Gallery/test. DOM-only previews (welcome / lobbies / device-choice) keep the
+  // default diorama backdrop (no track picked, matching the real boards); race
+  // previews reveal the 3D scene the harness renders the track + cars into.
   const _scn = _scenario;
-  if (_scn !== 'welcome' && _scn !== 'lobby' && _scn !== 'device-choice') {
+  if (!['welcome', 'lobby', 'lobby-empty', 'device-choice'].includes(_scn)) {
     // Reveal the 3D scene: #scene ships .is-dim (opacity 0) so the lobby starts on the
     // diorama, but a track/race preview owns the screen — drop BOTH .hidden and .is-dim,
     // else the canvas renders into a fully transparent container (looks like a blank page).
@@ -1546,10 +1577,42 @@ if (_scenario) {
     debugSolo.start();
   });
 } else {
-  show('lobby');
-  renderRoster([], null); // paint the open-seat placeholders immediately, before anyone joins
+  show('welcome');
+  renderRoster([], null); // paint the open-seat placeholders now, so the lobby reveal is complete
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  startWhenDeviceChosen(); // net.start(), gated on the device chooser where it shows
+  startWhenDeviceChosen(); // net.start() warms the room BEHIND the welcome board, gated on the device chooser where it shows
+
+  // NEW GAME — reveal the (already-connecting) lobby. The session's first real
+  // click, so it carries the browser unlocks that need a user gesture: fullscreen
+  // here, and the AudioContext via the window pointerdown listener above (this
+  // same click trips it; the explicit resume() just makes the intent readable).
+  el('newgame-btn').addEventListener('click', () => {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => { /* denied/unsupported — play windowed */ });
+    }
+    audio.resume();
+    show('lobby');
+  });
+
+  // Browser back: one level up the SCREEN_ORDER stack. race → lobby is the
+  // same reset as the pause overlay's "New game"; lobby → welcome ends the
+  // party (fresh room warms behind the title board). The handler is the one
+  // popstate consumer, so it owns the two show()-coordination flags: while it
+  // runs, show()'s backward steps must not history.back() again (the browser
+  // already popped), and our own compensating back() must be swallowed.
+  window.addEventListener('popstate', (e) => {
+    if (suppressPopstate) { suppressPopstate = false; return; }
+    if (currentScreen === 'welcome') {
+      // Forward-nav (or a stale reloaded entry) landed ahead of the UI — the
+      // welcome board is the root, so swallow the entry instead of acting.
+      if (e.state && e.state.screen) { suppressPopstate = true; history.back(); }
+      return;
+    }
+    popstateNavigating = true;
+    if (currentScreen === 'race') returnToLobby();
+    else endParty();
+    popstateNavigating = false;
+  });
 }
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
 window.__series = () => series; // live CupSeries (null outside a cup) — E2E + console poking
@@ -1568,7 +1631,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby', 'track', 'features', 'countdown', 'racing', 'results', 'intermission', 'podium']
+    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'features', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

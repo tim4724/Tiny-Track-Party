@@ -8,8 +8,9 @@
 // hostVariant cards swap their `host` URL param when the host selector changes
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
 var DISPLAY_CARDS = [
-  { key: 'welcome',   title: 'Welcome (waiting)' },
-  { key: 'lobby',     title: 'Lobby',     hostVariant: true },
+  { key: 'welcome',     title: 'Welcome' },
+  { key: 'lobby-empty', title: 'Lobby (waiting)' },
+  { key: 'lobby',       title: 'Lobby',     hostVariant: true },
   { key: 'lobby',     title: 'Lobby (cup picked)',    hostVariant: true, params: { picked: 'cup',    track: 'tidepool' } },
   { key: 'lobby',     title: 'Lobby (track picked)',  hostVariant: true, params: { picked: 'track',  track: 'driftwood' } },
   { key: 'lobby',     title: 'Lobby (random picked)', hostVariant: true, params: { picked: 'random', track: 'powder' } },

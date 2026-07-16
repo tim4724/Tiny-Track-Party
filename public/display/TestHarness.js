@@ -128,7 +128,7 @@ export function runDisplayScenario(opts, ctx) {
   const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
   const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
 
-  const screens = { lobby: el('lobby'), race: el('race') };
+  const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
   window.__TEST__ = window.__TEST__ || {};
@@ -156,9 +156,10 @@ export function runDisplayScenario(opts, ctx) {
       running: () => ctx.scene.isRunning()
     };
   }
-  // DOM-only previews (welcome / lobby / device-choice) drive no 3D — the WebGL
+  // DOM-only previews (welcome / lobbies / device-choice) drive no 3D — the WebGL
   // backdrop sits dimmed behind them — so let it paint once, then idle for good.
-  if ((scenario === 'welcome' || scenario === 'lobby' || scenario === 'device-choice') && ctx.scenePromise) {
+  const DOM_ONLY = ['welcome', 'lobby', 'lobby-empty', 'device-choice'];
+  if (DOM_ONLY.includes(scenario) && ctx.scenePromise) {
     ctx.scenePromise.then(() => holdFrame(false)).catch(() => {});
   }
 
@@ -199,6 +200,15 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   if (scenario === 'welcome') {
+    // The title board at boot: just the section over the diorama (the room
+    // warms invisibly behind it in live play — nothing to fake here).
+    show('welcome');
+    return;
+  }
+
+  if (scenario === 'lobby-empty') {
+    // The lobby the instant NEW GAME reveals it, before anyone joins: open
+    // seats, empty cup slot, the room's join URL + QR.
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
@@ -211,12 +221,9 @@ export function runDisplayScenario(opts, ctx) {
     // The wrong-device fork (display URL opened on a phone). Live it's
     // media-query driven and main.js pre-dismisses it for every gallery iframe,
     // so force it on with an inline display — viewport-independent here.
-    // Behind it: the welcome lobby, exactly what boot shows while room
-    // creation is deferred on the chooser (no room yet, so no QR).
-    show('lobby');
-    renderRoster([], null);
-    el('joinurl').textContent = (location.host || 'tinytrack.party');
-    renderCupSlot(el('cup-slot'), null);
+    // Behind it: the welcome board, exactly what boot shows while room
+    // creation is deferred on the chooser.
+    show('welcome');
     el('device-choice').style.display = 'flex';
     return;
   }
