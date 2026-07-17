@@ -13,6 +13,8 @@ const OIL_RADIUS_FALLBACK = 0.7; // puddle radius when a hazard omits one (displ
 const CONE_H = 0.3;            // cone height in world units (small toy marker)
 const WETSIGN_H = 0.46;       // beach "wet floor" A-frame sign height (a touch taller than a cone)
 const CONE_KICK_R = 0.7;      // car-centre → cone distance (world units) that punts a cone
+const CONE_KICK_Y = 1.0;      // max car↔cone height gap for a kick — a car on a stacked deck
+                              // shares the cone's x/z column but must not punt it from above
 const CONE_KICK_MIN = 2.5;    // launch speed even at a crawl
 const CONE_KICK_GAIN = 6.0;   // extra launch speed at full pace (× the car's normalised speed)
 const CONE_KICK_UP = 2.6;     // upward pop on a kick
@@ -748,6 +750,7 @@ export class TrackProps {
           const dx = m.position.x - c.group.position.x, dz = m.position.z - c.group.position.z;
           const d2 = dx * dx + dz * dz;
           if (d2 >= CONE_KICK_R * CONE_KICK_R) continue;
+          if (Math.abs(m.position.y - c.group.position.y) >= CONE_KICK_Y) continue; // same deck only
           let dirx, dirz;
           if (d2 < 1e-4) { const f = c.pose.forward, fl = Math.hypot(f.x, f.z) || 1; dirx = f.x / fl; dirz = f.z / fl; }
           else { const len = Math.sqrt(d2); dirx = dx / len; dirz = dz / len; }
