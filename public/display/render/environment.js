@@ -189,10 +189,12 @@ const DEF_CLOUDS = { count: 8, opacity: 0.8, scale: 1, aspect: 0.42, tint: 0xfff
 // OUT of it as headlands/islands, and running far past the fog so it meets the sky.
 // Radial vertex-colour bands sell the read: a thin bright foam line at the shore,
 // a shallow turquoise band, then deepening blue. Always built (visible only when the
-// theme carries `water`); setTrack refits the shoreline PER TRACK — hugging just past
-// the scenery band — so the sea stays visible from the low chase cam (a fixed radius
-// would drown in the race fog on a large circuit) yet never floods the road.
-export const WATER_INNER = 135; // authored shoreline radius (exported: setTrack refits it per track)
+// theme carries `water`); fitWater() reshapes the shoreline PER TRACK — hugging just
+// past the scenery band — so the sea stays visible from the low chase cam (a fixed
+// radius would drown in the race fog on a large circuit) yet never floods the road.
+// The authored geometry below is a plain circle; every radius is rewritten by
+// fitWater, so WATER_INNER is only the baseline the band offsets are measured from.
+export const WATER_INNER = 135; // authored shoreline radius (fitWater rewrites it per track and per angle)
 export const WATER_LIFT = 0.12; // floats just above the ground plane; unnoticeable as a step
                                 // from the ≥30u any camera keeps from the shore, and enough
                                 // depth separation to never z-fight the sand below (exported:
@@ -307,6 +309,95 @@ function applyWater(water, theme) {
     for (let v = 0; v < wcol.count; v++) { wcol.setX(v, c.r); wcol.setY(v, c.g); wcol.setZ(v, c.b); }
     wcol.needsUpdate = true;
   }
+}
+
+// ── Shoreline shape (per track) ──────────────────────────────────────────────
+// The island is NOT a disc. Its outline is a per-angle radius built from two parts:
+//
+//   1. The track's own outer bound in that direction — the SUPPORT function of the
+//      centreline (max of pos·dir), i.e. the convex hull's reach at that bearing.
+//      An oval circuit gets an oval island, a long thin one a long thin island.
+//      Convex on purpose: it can never dip inside a bend and flood the road, and it
+//      stays smooth where a nearest-point-per-bin scan would come out lumpy.
+//   2. A seeded wobble — a few harmonics of the bearing, summed. Periodic in θ, so
+//      the outline closes exactly at the seam with no crease. It only ever pushes
+//      the shore OUTWARD (0..SHORE_WOBBLE past the margin), so SHORE_MARGIN stays
+//      the guaranteed clearance from the hull to the water.
+//
+// Clearance budget: props sit ~20u beyond the farthest track point, so the margin
+// clears them, and the wobble crests give the extra headland reach.
+const SHORE_MARGIN = 26;  // minimum sand between the track's hull and the foam
+const SHORE_WOBBLE = 22;  // extra reach at a wobble crest (outward only)
+const SHORE_FADE = 220;   // band offset over which the outline relaxes back to a circle
+// [harmonic, weight] — 2 and 3 give the big lobes, 5 and 7 break up the arcs. Keeping
+// the highest at 7 over ~96 segments leaves ~13 segments per crest: still smooth.
+const SHORE_HARMONICS = [[2, 1], [3, 0.72], [5, 0.44], [7, 0.26]];
+
+// Per-angle shoreline radius for one track. Returns a function of bearing (radians)
+// — landmarks (render/track.js) anchor to the same curve the mesh is built from.
+function shorelineFn(samples, trackId) {
+  let seed = 2166136261 >>> 0; // FNV-1a over the track id — same track, same island
+  for (const ch of String(trackId ?? '')) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const phases = SHORE_HARMONICS.map(() => rand() * Math.PI * 2);
+  const wsum = SHORE_HARMONICS.reduce((a, [, w]) => a + w, 0);
+  return (angle) => {
+    const cx = Math.cos(angle), cz = Math.sin(angle);
+    // Floored at 0 for the bearings a track laid out to ONE SIDE of the origin never
+    // reaches (support goes negative there) — that side just gets a plain margin-wide
+    // nub of sand. The road is safe either way: every sample p sits at |p| = p·dir(its
+    // own bearing) ≤ support(that bearing), so the shore clears it by ≥ SHORE_MARGIN
+    // along its own ray, whether or not the hull encloses the origin.
+    let support = 0;
+    for (const s of samples) support = Math.max(support, s.pos.x * cx + s.pos.z * cz);
+    let n = 0;
+    for (let i = 0; i < SHORE_HARMONICS.length; i++) {
+      const [k, w] = SHORE_HARMONICS[i];
+      n += w * Math.sin(k * angle + phases[i]);
+    }
+    return support + SHORE_MARGIN + SHORE_WOBBLE * (0.5 + 0.5 * (n / wsum)); // n/wsum ∈ [-1,1]
+  };
+}
+
+// Reshape the sea ring (and its wet-sand child) around `track`, and re-base it on the
+// track's ground height. Rewrites vertex radii rather than scaling the mesh: the shore
+// is per-angle now, so a uniform scale can't express it — and world-space band widths
+// mean the foam line reads the same on a big circuit as on a small one.
+// The outline fades back to a circle as the water deepens (SHORE_FADE): the shape is a
+// shoreline read, and out past the fog the far rings only need to reach the sky.
+export function fitWater(water, track, groundY) {
+  if (!water) return;
+  const shore = shorelineFn(track.centerline.samples, track.trackId);
+  const verts = WATER_SEG + 1;
+  const shoreR = new Float32Array(verts);
+  let outer = 0;
+  for (let si = 0; si < verts; si++) {
+    // The seam vertex (si === WATER_SEG) shares the angle of si === 0 — same radius,
+    // so the ring closes exactly.
+    shoreR[si] = shore((si % WATER_SEG) / WATER_SEG * Math.PI * 2);
+    outer = Math.max(outer, shoreR[si]);
+  }
+  const write = (geo, bands, fade) => {
+    const arr = geo.attributes.position.array;
+    for (let ri = 0; ri < bands.length; ri++) {
+      const off = bands[ri][0] - WATER_INNER; // authored band radius → offset from the shore
+      const t = fade ? Math.min(1, Math.abs(off) / SHORE_FADE) : 0; // 0 = follow the outline, 1 = circular
+      for (let si = 0; si < verts; si++) {
+        const a = (si % WATER_SEG) / WATER_SEG * Math.PI * 2;
+        const r = shoreR[si] * (1 - t) + outer * t + off;
+        const v = (ri * verts + si) * 3;
+        arr[v] = Math.cos(a) * r; arr[v + 2] = Math.sin(a) * r;
+      }
+    }
+    geo.attributes.position.needsUpdate = true;
+    geo.computeBoundingSphere(); // radii changed by hundreds of units — a stale sphere mis-culls
+  };
+  write(water.geometry, WATER_BANDS, true);
+  if (water.userData.wet) write(water.userData.wet.geometry, WET_BANDS, false); // hugs the shore all the way round
+  water.scale.set(1, 1, 1); // radii are absolute now (an older fit may have left a scale)
+  water.position.y = groundY + WATER_LIFT;
+  water.userData.shore = shore;       // landmarks anchor to the same curve
+  water.userData.fit = outer / WATER_INNER; // legacy scalar fit — the island's widest reach
 }
 
 // ── Ambient particles (theme.ambient) ────────────────────────────────────────

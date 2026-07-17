@@ -770,11 +770,12 @@ export function buildLandmarks(R, track, theme) {
 
   if (kinds.includes('sailboat')) {
     // Anchored out in the shallows, a third of the way round from the lighthouse's
-    // island so the two never share a sight-line. Radius = the per-track shoreline
-    // fit (set just above in setTrack) + a margin into open water.
-    const fit = (R._water && R._water.userData.fit) || 1;
+    // island so the two never share a sight-line. Radius = the shoreline ON THAT
+    // BEARING (fitWater fitted the curve just above in setTrack) + a margin into
+    // open water, so the boat floats off a bay as readily as off a headland.
+    const shore = R._water && R._water.userData.shore;
     const ba = (lowest ? Math.atan2(lowest.z, lowest.x) : 0) + 2.3;
-    const br = fit * WATER_INNER + 22; // shoreline + open-water margin
+    const br = (shore ? shore(ba) : ((R._water && R._water.userData.fit) || 1) * WATER_INNER) + 22;
     const bx = Math.cos(ba) * br, bz = Math.sin(ba) * br;
     const wy = gy + WATER_LIFT; // ride ON the water sheet
     const yaw = rand() * Math.PI * 2;

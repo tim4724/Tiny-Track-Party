@@ -11,7 +11,7 @@ import {
   flipWinding, bestGrid, streakBillboard, makeStreakTexture, makeStreakGeometry,
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
-import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, stepPaperPlane, WATER_LIFT, WATER_INNER } from './render/environment.js';
+import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, stepPaperPlane, fitWater } from './render/environment.js';
 import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
 import { buildFinishGate } from './render/FinishGate.js';
@@ -1164,24 +1164,18 @@ export class SceneRenderer {
     // Push the horizon-hill ring (built at radius ~150 about the world origin) out past the
     // track's farthest reach so a large circuit can't drive into the scenery. XZ only (keep
     // the squashed height + base sink); never below 1× (small tracks keep the authored ring).
-    // The sea ring and the dust banks ride the SAME factor: the shoreline stays just inside
-    // the (now pushed-out) headlands, and the dust keeps drifting among the mesas — neither
-    // may end up hanging over (or under) a big circuit.
+    // The dust banks ride the SAME factor — they keep drifting among the mesas rather
+    // than hanging over (or under) a big circuit. The sea gets its own per-angle fit
+    // below, tighter than the hills' so the headlands stay offshore.
     if (this._hills) {
       const sf = Math.max(1, (maxR + 60) / 150);
       this._hills.scale.set(sf, 1, sf);
-      if (this._water) {
-        // The sea gets its OWN fit, tighter than the hills': shoreline just past the
-        // scenery band (props reach ~20u beyond the farthest track point), so the water
-        // starts close enough to survive the race fog from the low chase cam. Floor at
-        // 0.5× so a tiny test track doesn't shrink the foam line into invisibility.
-        // Headlands intruding past the shoreline become islands — that's the look.
-        // (A tidal breathing pulse on this fit was tried and cut — not worth it.)
-        const wf = Math.max(0.5, (maxR + 30) / WATER_INNER);
-        this._water.userData.fit = wf;
-        this._water.scale.set(wf, 1, wf);
-        this._water.position.y = this.ground.position.y + WATER_LIFT; // re-base on the track's groundY
-      }
+      // The shoreline is fitted to the track's own outline (see fitWater), not scaled
+      // from a circle: it hugs just past the scenery band, so the water starts close
+      // enough to survive the race fog from the low chase cam yet never floods the
+      // road. Headlands intruding past it become islands — that's the look.
+      // (A tidal breathing pulse on this fit was tried and cut — not worth it.)
+      fitWater(this._water, track, this.ground.position.y);
       if (this._ambient) {
         this._ambient.scale.set(sf, 1, sf); // particle spread follows the hill push-out
         this._ambient.position.y = this.ground.position.y;
