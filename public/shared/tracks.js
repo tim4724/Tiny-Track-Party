@@ -326,12 +326,13 @@ const OILS = {
   // Flats only — never on a loop or the spiral, where a forced spin would be cruel.
   twister:    [ { u: 0.232, lat: 0.7 }, { u: 0.732, lat: -0.7 } ],
   // Auto-placed (scripts/track-gen.mjs placeFurniture on the composed geometry) —
-  // gentle open ground, clear of decks, spirals and the loops.
-  helix:      [ { u: 0.198, lat: 0.7 }, { u: 0.829, lat: -0.7 } ],
-  skyline:    [ { u: 0.263, lat: 0.7 }, { u: 0.463, lat: -0.7 } ],
+  // gentle open ground, clear of decks, spirals and the loops. The three tracks that
+  // carry a `startU` were re-placed against their moved line (u is measured from it).
+  helix:      [ { u: 0.198, lat: 0.7 }, { u: 0.818, lat: -0.7 } ],
+  skyline:    [ { u: 0.834, lat: 0.7 }, { u: 0.245, lat: -0.7 } ],
   coaster:    [ { u: 0.334, lat: 0.7 }, { u: 0.645, lat: -0.7 } ],
   gauntlet:   [ { u: 0.29, lat: 0.7 }, { u: 0.795, lat: -0.7 } ],
-  skysnake:   [ { u: 0.211, lat: 0.7 }, { u: 0.844, lat: -0.7 } ]
+  skysnake:   [ { u: 0.266, lat: 0.7 }, { u: 0.827, lat: -0.7 } ]
 };
 
 // Boost pads — drive-over speed strips, position-scaled for catch-up. Place on STRAIGHTS
@@ -349,11 +350,11 @@ const PADS = {
   // that used to sit before loop 1 and loop 2 are now redundant.
   twister:    [],
   // Auto-placed on the cleanest straights (the loop mouths add their own strips).
-  helix:      [ { u: 0.063, lat: 0.0 }, { u: 0.445, lat: 0.0 } ],
-  skyline:    [ { u: 0.119, lat: 0.0 }, { u: 0.6, lat: 0.0 } ],
+  helix:      [ { u: 0.063, lat: 0.0 }, { u: 0.443, lat: 0.0 } ],
+  skyline:    [ { u: 0.103, lat: 0.0 }, { u: 0.575, lat: 0.0 } ],
   coaster:    [ { u: 0.064, lat: 0.0 }, { u: 0.463, lat: 0.0 } ],
   gauntlet:   [ { u: 0.105, lat: 0.0 }, { u: 0.683, lat: 0.0 } ],
-  skysnake:   [ { u: 0.066, lat: 0.0 }, { u: 0.633, lat: 0.0 } ]
+  skysnake:   [ { u: 0.066, lat: 0.0 }, { u: 0.608, lat: 0.0 } ]
 };
 
 // Item boxes — drive-over pickups in rows ACROSS the lane. `u` = fraction of lap, `lat`
@@ -372,10 +373,10 @@ const BOXES = {
   riverside:  boxRows(0.30, 0.78),
   twister:    boxRows(0.039, 0.57), // early on the launch straight, then the far flat — grab, fly, grab again
   helix:      boxRows(0.086, 0.705),  // auto-placed: the grid run, then the south leg past the loops
-  skyline:    boxRows(0.148, 0.723),  // auto-placed: the north leg, then the flat past the toy loop
+  skyline:    boxRows(0.131, 0.695),  // auto-placed: the north leg, then the flat past the toy loop
   coaster:    boxRows(0.093, 0.492),  // auto-placed: the grid run, then the boost straight
   gauntlet:   boxRows(0.128, 0.559),  // auto-placed: the east leg, then the exit run past the plunge
-  skysnake:   boxRows(0.096, 0.715)   // auto-placed: the grid straight, then the flat past the toy loop
+  skysnake:   boxRows(0.096, 0.692)   // auto-placed: the grid straight, then the flat past the toy loop
 };
 
 // Support poles — SOLID obstacles cars collide with (unlike oils, which only spin you).
@@ -475,8 +476,16 @@ export const TRACKS = {
     name: 'Twister', difficulty: 'Expert', segments: TWISTER,
     oils: OILS.twister, pads: PADS.twister, boxes: BOXES.twister, poles: POLES.twister
   },
+  // `startU` moves the start/finish line a fraction of a lap along the ring (see
+  // TrackBuilder.finalizeTrack). The GRID sits BEHIND the line — the cars spawn at
+  // totalS -2.5…-6.5 and lap 1 opens by driving across it — and a segment walk's opening
+  // straight runs FORWARD from the origin, so without this the grid backs into whatever
+  // corner closes the lap. Each value here nudges the line ~8.5 world units up its own
+  // opening straight, which puts the whole grid on it. The generated tracks solve the same
+  // problem at bake time instead (scripts/track-gen.mjs chooseAnchor). Gauntlet needs none:
+  // its walk already opens with enough straight behind the line.
   skysnake: {
-    name: 'Skysnake', difficulty: 'Hard', segments: SKYSNAKE,
+    name: 'Skysnake', difficulty: 'Hard', segments: SKYSNAKE, startU: 0.026,
     oils: OILS.skysnake, pads: PADS.skysnake, boxes: BOXES.skysnake
   },
   gauntlet: {
@@ -489,11 +498,11 @@ export const TRACKS = {
     oils: OILS.coaster, pads: PADS.coaster, boxes: BOXES.coaster
   },
   helix: {
-    name: 'Helix', difficulty: 'Expert', segments: HELIX,
+    name: 'Helix', difficulty: 'Expert', segments: HELIX, startU: 0.020,
     oils: OILS.helix, pads: PADS.helix, boxes: BOXES.helix
   },
   skyline: {
-    name: 'Skyline', difficulty: 'Expert', segments: SKYLINE,
+    name: 'Skyline', difficulty: 'Expert', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline
   },
   // Retired — in no cup, so they don't appear in the picker; kept defined only so the
@@ -549,13 +558,20 @@ for (const c of CUPS) {
 // Stable display order for the gallery / picker — every cup's tracks, in cup order.
 export const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
 
-// Flat list — {id, name, difficulty, cup, cupName, cupDifficulty, segments, oils, pads,
-// boxes, poles} in cup order — used by main.js, the track picker, and the gallery. `difficulty`
-// is per-track data (orders the cup + feeds the tendency); the picker renders only the cup
-// tendency. The display builds each track + computes its schematic SVG, so no per-track art.
+// Flat list — {id, name, difficulty, cup, cupName, cupDifficulty, segments, waypoints,
+// startU, oils, pads, boxes, poles} in cup order — used by main.js, the track picker, and
+// the gallery. `difficulty` is per-track data (orders the cup + feeds the tendency); the
+// picker renders only the cup tendency. The display builds each track + computes its
+// schematic SVG, so no per-track art.
+//
+// This list is what main.js actually BUILDS from (buildEntry → buildTrack), so any
+// descriptor field the builder reads must be copied across or it is silently ignored in
+// the game while the unit tests — which build from TRACKS directly — still pass. `startU`
+// is one of those; `width` is deliberately absent because no descriptor sets it (the
+// shipped width games are per-SEGMENT).
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name, difficulty: TRACKS[id].difficulty,
   cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,
-  segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints,
+  segments: TRACKS[id].segments, waypoints: TRACKS[id].waypoints, startU: TRACKS[id].startU,
   oils: TRACKS[id].oils, pads: TRACKS[id].pads, boxes: TRACKS[id].boxes, poles: TRACKS[id].poles
 }));

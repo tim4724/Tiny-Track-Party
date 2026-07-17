@@ -54,9 +54,11 @@ const latX = (th) => -Math.cos(th), latZ = (th) => -Math.sin(th);
 const DEG = Math.PI / 180;
 
 // Build the track. `track` is a bare segment array OR a catalogue descriptor
-// ({ segments, width, ... }) from shared/tracks.js. `opts.startGate` (default true)
+// ({ segments, width, startU, ... }) from shared/tracks.js. `opts.startGate` (default true)
 // straddles the start/finish line with the procedural finish gantry (`startGate` on the
-// returned track — built render-side, see render/FinishGate.js).
+// returned track — built render-side, see render/FinishGate.js). `startU` (default 0, also
+// takeable from the descriptor) moves that line a fraction of a lap around the ring so the
+// grid — which sits BEHIND it — lands on a straight; see finalizeTrack.
 // Returns { version, instances, startGate, centerline, length, closed, gap, roadWidth, groundY }.
 // `instances` carries non-road scenery GLBs to place (none today); the road surface
 // itself is generated procedurally from `centerline`, as are the support pillars
@@ -65,12 +67,14 @@ export function buildTrack(track, opts = {}) {
   // Two authoring models: a closed loop of WAYPOINTS (organic, flowing — buildSplineTrack)
   // or a sequence of parametric SEGMENTS (the turtle walk below; required for loops/spirals).
   if (track && !Array.isArray(track) && Array.isArray(track.waypoints)) return buildSplineTrack(track, opts);
+  const desc = (track && !Array.isArray(track)) ? track : null;
   const { startGate = true } = opts;
-  const segments = Array.isArray(track) ? track : (track && track.segments);
+  const startU = opts.startU ?? (desc && desc.startU) ?? 0;
+  const segments = Array.isArray(track) ? track : (desc && desc.segments);
   if (!Array.isArray(segments)) {
     throw new Error('buildTrack: expected a segment array or a track descriptor with a .segments array');
   }
-  const trackWidth = (track && !Array.isArray(track) && track.width) || ROAD_WIDTH;
+  const trackWidth = (desc && desc.width) || ROAD_WIDTH;
 
   // Per-segment drivable width at local fraction f: a number (constant), an [a,b] taper,
   // or the track default. Carried per sample so the road can flare/pinch along the lap.
@@ -203,7 +207,7 @@ export function buildTrack(track, opts = {}) {
     if (seg.roll) rollAcc = (rollAcc + seg.roll * DEG) % (2 * Math.PI); // re-clock the frame for everything downstream
   }
 
-  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate });
+  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate, startU });
 }
 
 // A support post's relation to ONE centreline sample — the single source of truth for
@@ -235,7 +239,7 @@ export function postAtSample(sm, post) {
 // grass-hill berms, the start gate, and the Centerline. Fed by BOTH the segment walk
 // (buildTrack) and the waypoint sampler (buildSplineTrack): the integrated centreline points
 // (UNSCALED) plus per-sample width / bank(radians) / pillar / hill flags, and loop mouths.
-function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate = true } = {}) {
+function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntryIdx, trackWidth, { startGate = true, startU = 0 } = {}) {
   // Closure: the last emitted point duplicates the start on a closed loop — drop it so the
   // ring has no zero-length seam segment (the wrap last→first then spans one step).
   const gap = worldPts[worldPts.length - 1].distanceTo(worldPts[0]);
@@ -546,6 +550,38 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     }
   }
 
+  // ---- Move the start/finish line (opt `startU`, a fraction of the lap) ----
+  // The start is otherwise wherever the walk began — and the GRID sits BEHIND it (Game.js
+  // seeds the cars at totalS -2.5…-6.5, so lap 1 opens by driving across the line). A lap
+  // whose opening straight runs FORWARD from the origin therefore parks its grid in
+  // whatever precedes the origin, which for a closed course is a corner. Generated tracks
+  // fix this at BAKE time, choosing the anchor before the elevation solve (see
+  // scripts/track-gen.mjs chooseAnchor); a hand-authored walk has no solve to re-anchor, so
+  // it simply declares where its line goes.
+  //
+  // This must run LAST. Everything above is computed from the walk's own anchor and has to
+  // stay that way: the parallel-transport frames start at index 0 and unwind their holonomy
+  // residual as a ramp across the ring, and the pillar/hill passes march the sample array on
+  // index accumulators — rotating before any of that would re-time the twist and re-space
+  // the columns. Rotating HERE only RELABELS: every sample keeps its exact pos/tangent/up/
+  // lateral, so the road stays the same geometry down to the float, and only which point
+  // calls itself s=0 changes. pillars/hills/supportPosts are world-space and need no remap;
+  // the two arclength-carrying outputs (loopStarts, autoPoles) take the same shift as the
+  // samples. Furniture is NOT remapped — `u` is authored against the line, so a track that
+  // sets startU must re-place its oils/pads/boxes with it (placeFurniture does this).
+  let ring = samples;
+  if (startU) {
+    const target = (((startU % 1) + 1) % 1) * length;
+    let k = 0, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.abs(samples[i].s - target); if (d < bd) { bd = d; k = i; } }
+    const off = samples[k].s; // snap to the nearest sample — the ring rotates by whole samples
+    const reS = (s) => { const t = s - off; return t < 0 ? t + length : t; };
+    for (const l of loopStarts) l.s = reS(l.s);
+    for (const p of autoPoles) p.s = reS(p.s);
+    for (const sm of samples) sm.s = reS(sm.s);
+    ring = samples.slice(k).concat(samples.slice(0, k));
+  }
+
   return {
     version: CONTRACT_VERSION, // engine data-contract stamp (see engine/contract.js)
     instances,
@@ -555,7 +591,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     loopStarts,
     supportPosts,
     autoPoles,
-    centerline: new Centerline(samples, length),
+    centerline: new Centerline(ring, length),
     length, closed, gap,
     roadWidth: trackWidth * SCALE,
     groundY // grass plane just under the road
@@ -571,6 +607,9 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
 // loop), so there is no closure algebra — draw the shape you want.
 function buildSplineTrack(track, opts = {}) {
   const { startGate = true } = opts;
+  // Waypoint tracks are BAKED with their start already chosen (track-gen's chooseAnchor
+  // rotates the plan before the elevation solve), so startU is here only for completeness.
+  const startU = opts.startU ?? track.startU ?? 0;
   const pts = track.waypoints, m = pts.length;
   const trackWidth = track.width || ROAD_WIDTH;
   const at = (i) => pts[((i % m) + m) % m];
@@ -601,7 +640,7 @@ function buildSplineTrack(track, opts = {}) {
       hillFlags.push(!bridge && c.y > 0.075); // a raised, non-bridge stretch grows a grass berm; 0.075 = finalize's HILL_MIN(0.15)/SCALE(2), so the unscaled gate here matches the world-space one there
     }
   }
-  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, [], trackWidth, { startGate });
+  return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, [], trackWidth, { startGate, startU });
 }
 
 // Track definitions + the named registry live in the dependency-free catalogue

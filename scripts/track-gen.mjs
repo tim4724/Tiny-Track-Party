@@ -333,61 +333,194 @@ export function decoratePlan(wps, wpPairs, prof, seed, salt = 0) {
   return wps;
 }
 
-// Resolve a seed through the full pipeline WITHOUT rounding: plan → crossings →
-// elevation solve → decoration. Returns everything evaluateSeed/bakeSeed need.
+// Worst |heading step| per 0.1 world units — the smoothness gate the unit tests enforce,
+// measured with the same skips (vertical stunt / tilted flank / high deck / flared width).
+function worstStepOf(wps) {
+  const t = buildTrack({ waypoints: wps });
+  let prev = null, worst = 0;
+  for (let s = 0; s <= t.length; s += 0.1) {
+    const f = t.centerline.sampleAt(s);
+    if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || t.centerline.widthAt(s) > 5.4) { prev = null; continue; }
+    const hd = Math.atan2(f.tangent.x, f.tangent.z);
+    if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worst = Math.max(worst, Math.abs(d)); }
+    prev = hd;
+  }
+  return worst;
+}
+
+// Round a resolved plan to the shipping waypoint form (what tracks.js imports). y>0.05 →
+// carry an elevation; SOLVER h>0.6 → bridge (pillars, not a berm). 0.6 = half the solver's
+// crossing clearance D=1.2: above the midpoint a waypoint is the OVER strand of a crossing.
+// Decorated hills never set `bridge` — they must berm, which is exactly why the solver's h
+// is kept separate from the decorated y here.
+const roundWps = (wps, h) => wps.map((o, i) => {
+  const out = { x: +o.x.toFixed(2), z: +o.z.toFixed(2) };
+  if (o.y > 0.05) out.y = +o.y.toFixed(2);
+  if (h[i] > 0.6) out.bridge = true;
+  if (o.w != null) out.w = +o.w.toFixed(2);
+  if (o.bank) out.bank = Math.round(o.bank);
+  return out;
+});
+
+// ---- START ANCHOR ----
+// Where does a lap START? At waypoint 0 — which is wherever genPlan's turtle happened to
+// begin. Nothing ever CHOSE it, and that shows: genPlan opens with a straight running
+// FORWARD from waypoint 0, while closeCourse joins the lap's end back to it matching
+// HEADING but not CURVATURE. So the opening straight protects the launch run, and the road
+// immediately BEHIND the line — an arbitrary corner in the Hermite tail — is left to chance.
+// That is exactly where the grid sits: Game.js seeds the cars at totalS -2.5…-6.5 and lap 1
+// opens by driving ACROSS the line. Before this pass 14 of 16 seeds started mid-corner;
+// sidewinder's grid radius was 2 world units on a 5-wide road, banked and downhill.
+//
+// The rest of the pipeline ALREADY anchors to the start: solveElevation pins the seam to
+// ground (h[0]=0), decoratePlan protects it from hills/banking/width, placeFurniture claims
+// the first 5% of the lap. All of them were anchored to a spot nobody picked. So choose the
+// anchor BEFORE the solve and every one of those protections starts doing its job.
+//
+// Rotating a closed ring is the SAME CURVE: the footprint (x/z) stays bit-identical, and so
+// do the crossings (findCrossings reads x/z only). Elevation and decoration DO re-solve —
+// that's the point, they re-anchor onto the new grid.
+const rotateRing = (a, k) => a.slice(k).concat(a.slice(0, k));
+
+// The grid window, in world arclength either side of the start line. Back: the four cars sit
+// at s = -2.5 … -6.5 (Game.js `totalS: -(2.5 + row * 1.6)`), so -7 spans the whole grid.
+// Forward: the launch run they accelerate down before the first real corner.
+const GRID_BACK = 7, GRID_FWD = 12;
+// What a good grid looks like. minRadius is world units against a 5-wide road (30 = a gentle
+// drift, not a corner); grade/bank are the frame's y-components (~4.5° / ~3.5°); rise keeps
+// the grid near ground level rather than up on a bridge deck; widthTol keeps a decorated
+// flare/pinch off it.
+const GRID_GATE = { minRadius: 30, maxGrade: 0.08, maxBank: 0.06, maxRise: 1.0, widthTol: 0.25 };
+const ANCHOR_SHORTLIST = 12; // full resolves per seed — the prefilter's job is to keep this small
+
+// |curvature| at s, as a central difference of plan heading over ±h world units.
+const curvatureAt = (cl, s, h = 1.0) => {
+  const a = cl.sampleAt(s - h), b = cl.sampleAt(s + h);
+  let d = Math.atan2(b.tangent.x, b.tangent.z) - Math.atan2(a.tangent.x, a.tangent.z);
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return Math.abs(d / (2 * h));
+};
+
+// Measure the grid window of a BUILT track around arclength s0. Exported so the segment-DSL
+// tracks — which have no generator to re-anchor, and instead declare `startU` (see
+// TrackBuilder.finalizeTrack) — are judged against this same standard.
+export function measureGrid(t, s0 = 0) {
+  const cl = t.centerline;
+  let groundY = Infinity;
+  for (const sm of cl.samples) groundY = Math.min(groundY, sm.pos.y);
+  let curvature = 0, grade = 0, bank = 0, minWidth = Infinity, maxWidth = 0, rise = 0;
+  for (let d = -GRID_BACK; d <= GRID_FWD; d += 0.5) {
+    const s = s0 + d, f = cl.sampleAt(s);
+    curvature = Math.max(curvature, curvatureAt(cl, s));
+    grade = Math.max(grade, Math.abs(f.tangent.y));
+    bank = Math.max(bank, Math.abs(f.lateral.y));
+    const w = cl.widthAt(s);
+    minWidth = Math.min(minWidth, w); maxWidth = Math.max(maxWidth, w);
+    rise = Math.max(rise, f.pos.y - groundY);
+  }
+  return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank, minWidth, maxWidth, rise };
+}
+export const gridPasses = (g, roadWidth) => g.minRadius > GRID_GATE.minRadius
+  && g.grade < GRID_GATE.maxGrade && g.bank < GRID_GATE.maxBank && g.rise < GRID_GATE.maxRise
+  && Math.abs(g.maxWidth - roadWidth) < GRID_GATE.widthTol
+  && Math.abs(g.minWidth - roadWidth) < GRID_GATE.widthTol;
+// Rank: anchors that PASS first, then the straightest/flattest/levellest among them.
+const gridCost = (g, roadWidth) => (gridPasses(g, roadWidth) ? 0 : 1000)
+  + g.curvature * 200 + g.grade * 40 + g.bank * 60 + Math.max(0, g.rise - 0.6) * 3
+  + Math.abs(g.maxWidth - roadWidth) * 2;
+
+// Plan curvature at waypoint i (rad per UNSCALED unit) — x/z only. Rotation cannot change
+// it, which is what makes it a sound cheap PREFILTER: it tests the necessary condition (the
+// grid must sit on a straight run of PLAN) without paying for a solve. Grade/bank/width are
+// anchor-DEPENDENT, so the survivors still get resolved in full.
+const planCurvAt = (plan, i) => {
+  const m = plan.length, at = (j) => plan[((j % m) + m) % m];
+  const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1);
+  const v1x = p1.x - p0.x, v1z = p1.z - p0.z, v2x = p2.x - p1.x, v2z = p2.z - p1.z;
+  const turn = Math.abs(Math.atan2(v1z * v2x - v1x * v2z, v1x * v2x + v1z * v2z));
+  return turn / Math.max(0.5, (Math.hypot(v1x, v1z) + Math.hypot(v2x, v2z)) / 2);
+};
+// The waypoints inside anchor k's grid window, walked out by PLAN arclength (the window is
+// world units; the plan is unscaled, hence /SCALE). Bounded by m so a degenerate leg can't spin.
+const gridWindowIdx = (plan, k) => {
+  const m = plan.length, at = (j) => plan[((j % m) + m) % m], wrap = (j) => ((j % m) + m) % m;
+  const out = [k];
+  for (let j = k, d = 0, n = 0; d < GRID_BACK / SCALE && n < m; j--, n++) { d += Math.hypot(at(j).x - at(j - 1).x, at(j).z - at(j - 1).z); out.push(wrap(j - 1)); }
+  for (let j = k, d = 0, n = 0; d < GRID_FWD / SCALE && n < m; j++, n++) { d += Math.hypot(at(j + 1).x - at(j).x, at(j + 1).z - at(j).z); out.push(wrap(j + 1)); }
+  return out;
+};
+
+// Pick the plan waypoint the start line should sit on: shortlist by plan straightness, then
+// fully resolve each survivor and score its real, decorated grid.
+function chooseAnchor(plan, resolveAt) {
+  const ranked = [];
+  for (let k = 0; k < plan.length; k++) {
+    let worst = 0;
+    for (const i of gridWindowIdx(plan, k)) worst = Math.max(worst, planCurvAt(plan, i));
+    ranked.push({ k, worst });
+  }
+  ranked.sort((a, b) => a.worst - b.worst || a.k - b.k);
+  let best = null;
+  for (const { k } of ranked.slice(0, ANCHOR_SHORTLIST)) {
+    let g, t;
+    // solveElevation can diverge for a given anchor (a "crossing knot" it can't lift from
+    // that seam) — that anchor simply isn't available; the shortlist has plenty more.
+    try { const r = resolveAt(k); t = buildTrack({ waypoints: roundWps(r.wps, r.h) }); g = measureGrid(t); }
+    catch { continue; }
+    const cost = gridCost(g, t.roadWidth);
+    if (!best || cost < best.cost) best = { k, cost };
+  }
+  if (!best) throw new Error('no usable start anchor: every shortlisted candidate diverged');
+  return best.k;
+}
+
+// Resolve a seed through the full pipeline WITHOUT rounding: plan → crossings → start
+// anchor → elevation solve → decoration. Returns everything evaluateSeed/bakeSeed need.
 //
 // Decoration is SELF-HEALING: a bump re-times the centripetal spline around it, and an
 // unlucky roll can sharpen a marginal corner past the smoothness gate even with the
 // tight-corner exclusions. Rather than starving every track to save one unlucky seed,
 // re-roll the decoration stream (salt 1, 2, …) until the decorated track passes a quick
 // smoothness check; salt 0 first keeps existing bakes reproducible.
-export function resolveSeed(seed, profileName = 'classic') {
+//
+// `anchor: false` pins the start at waypoint 0 (the pre-2026-07-17 behaviour) — for
+// comparing against an old bake, not for shipping.
+export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {}) {
   const prof = PROFILES[profileName];
   if (!prof) throw new Error(`unknown profile "${profileName}" (have: ${Object.keys(PROFILES).join(', ')})`);
-  const plan = genPlan(seed, prof);
-  const flat = buildTrack({ waypoints: plan });
-  const wpPairs = findCrossings(flat, plan);
-  const h = solveElevation(wpPairs, plan.length);
-  const worstStepOf = (wps) => {
-    const t = buildTrack({ waypoints: wps });
-    let prev = null, worst = 0;
-    for (let s = 0; s <= t.length; s += 0.1) {
-      const f = t.centerline.sampleAt(s);
-      if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || t.centerline.widthAt(s) > 5.4) { prev = null; continue; }
-      const hd = Math.atan2(f.tangent.x, f.tangent.z);
-      if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worst = Math.max(worst, Math.abs(d)); }
-      prev = hd;
+  const plan0 = genPlan(seed, prof);
+  const flat = buildTrack({ waypoints: plan0 });
+  const pairs0 = findCrossings(flat, plan0);
+  const m = plan0.length;
+
+  // Resolve with the start line moved to plan waypoint `k`: rotate the ring, re-index the
+  // crossings, then solve + decorate exactly as before. Throws if the solve diverges here.
+  const resolveAt = (k) => {
+    const plan = k ? rotateRing(plan0, k) : plan0;
+    const sh = (i) => ((i - k) % m + m) % m;
+    const wpPairs = k ? pairs0.map(([a, b]) => { const x = sh(a), y = sh(b); return [Math.min(x, y), Math.max(x, y)]; }) : pairs0;
+    const h = solveElevation(wpPairs, m);
+    let wps = null, best = null, bestStep = Infinity;
+    for (let salt = 0; salt < 4; salt++) {
+      const cand = plan.map((p, i) => ({ x: p.x, z: p.z, y: h[i] }));
+      decoratePlan(cand, wpPairs, prof, seed, salt);
+      if (!prof.decor) { wps = cand; break; }
+      const step = worstStepOf(cand);
+      if (step < 0.078) { wps = cand; break; }          // safely under the 0.08 gate
+      if (step < bestStep) { bestStep = step; best = cand; }
     }
-    return worst;
+    if (!wps) wps = best; // all salts marginal — keep the least bad; the gates will judge it
+    return { prof, plan, flat, wpPairs, h, wps, anchor: k };
   };
-  let wps = null, best = null, bestStep = Infinity;
-  for (let salt = 0; salt < 4; salt++) {
-    const cand = plan.map((p, i) => ({ x: p.x, z: p.z, y: h[i] }));
-    decoratePlan(cand, wpPairs, prof, seed, salt);
-    if (!prof.decor) { wps = cand; break; }
-    const step = worstStepOf(cand);
-    if (step < 0.078) { wps = cand; break; }          // safely under the 0.08 gate
-    if (step < bestStep) { bestStep = step; best = cand; }
-  }
-  if (!wps) wps = best; // all salts marginal — keep the least bad; the gates will judge it
-  return { prof, plan, flat, wpPairs, h, wps };
+
+  return resolveAt(anchor ? chooseAnchor(plan0, resolveAt) : 0);
 }
 
 // Resolve a seed → rounded waypoints with baked y/bridge/w/bank (what tracks.js imports).
-export function bakeSeed(seed, profileName = 'classic') {
-  const { h, wps } = resolveSeed(seed, profileName);
-  // y>0.05 → carry an elevation; SOLVER y>0.6 → bridge (pillars, not a berm). 0.6 = half
-  // the solver's crossing clearance D=1.2: above the midpoint a waypoint is the OVER
-  // strand of a crossing. Decorated hills never set `bridge` — they must berm, and the
-  // solver heights (h) are kept separate from the decorated y for exactly this test.
-  return wps.map((o, i) => {
-    const out = { x: +o.x.toFixed(2), z: +o.z.toFixed(2) };
-    if (o.y > 0.05) out.y = +o.y.toFixed(2);
-    if (h[i] > 0.6) out.bridge = true;
-    if (o.w != null) out.w = +o.w.toFixed(2);
-    if (o.bank) out.bank = Math.round(o.bank);
-    return out;
-  });
+export function bakeSeed(seed, profileName = 'classic', opts) {
+  const { h, wps } = resolveSeed(seed, profileName, opts);
+  return roundWps(wps, h);
 }
 
 // ---- difficulty METRICS ----
