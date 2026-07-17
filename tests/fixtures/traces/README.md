@@ -46,15 +46,15 @@ the union of their coverage complete when re-recording):
 - `switchback-5bots-2laps-seed39.jsonl`: the ENDGAME fixture, a complete
   2-lap race on the shortest catalogue track (5 bots, 3600 frames, 60 s).
   Seed 39 was picked by scanning seeds for full coverage under the current
-  physics: all nine event kinds (including `lap`, `finish`, `race_over` and
-  `rocket_expire`), all four spin causes (banana, oil, rocket, monster
-  body-check), rocket flight and homing, the monster transform, lap counting
-  across the s = 0 seam, finish ranking and post-finish victory laps.
-  Deliberately longer than the starter slices; do not trim it below
-  `race_over` at frame 3519 (the last `rocket_expire`/`spin:oil` land at
-  frames 3450/3460). An engine-behaviour change usually shifts coverage:
-  after re-recording, re-check that the union still spans all nine kinds and
-  all four spin causes, and re-scan seeds if it does not.
+  physics on the reference platform: all nine event kinds (including `lap`,
+  `finish`, `race_over` and `rocket_expire`), all four spin causes (banana,
+  oil, rocket, monster body-check), rocket flight and homing, the monster
+  transform, lap counting across the s = 0 seam, finish ranking and
+  post-finish victory laps. Deliberately longer than the starter slices; do
+  not trim below frame 3456 (`race_over` at 3393, the last
+  `rocket_expire`/`spin:oil` on victory-lap traffic at 3416/3456).
+  `scripts/record-fixtures.mjs` asserts this coverage on every re-record and
+  re-scans seeds automatically if an engine change moved the race.
 
 Keep the starter slices short (a few hundred frames); the endgame fixture is
 the one deliberate exception. All sizes stay git-friendly (JSON compresses
