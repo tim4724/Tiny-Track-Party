@@ -1436,18 +1436,23 @@ export class SceneRenderer {
     const fb = new THREE.Box3().setFromObject(car);
     const footW = fb.max.x - fb.min.x, footL = fb.max.z - fb.min.z;
 
-    // BOOST circle: an additive teal disk painted on the road under the car, shown
-    // only while boosting and sized/brightened by boostMul — so the catch-up scaling
-    // (leader vs back-marker) is visible on the shared screen, not silent rubber-
-    // banding. Unlike a flat quad (which slices through the deck where the road curls
-    // up — loops, crests, bank ramps), its verts are CONFORMED to the road surface
-    // every frame in setCarPose, so the circle bends with the track. A child of the
-    // SCENE, not the car group: the conform writes world-space positions directly.
+    // BOOST circle: a teal disk painted on the road under the car, shown only while
+    // boosting and sized/brightened by boostMul — so the catch-up scaling (leader vs
+    // back-marker) is visible on the shared screen, not silent rubber-banding. Unlike
+    // a flat quad (which slices through the deck where the road curls up — loops,
+    // crests, bank ramps), its verts are CONFORMED to the road surface every frame in
+    // setCarPose, so the circle bends with the track. A child of the SCENE, not the
+    // car group: the conform writes world-space positions directly.
+    // NORMAL (alpha) blend, not additive: additive teal all but vanishes against the
+    // bright orange Playroom deck (adding blue+green to a light warm colour barely
+    // shifts it), so the disk was invisible in-race there. Alpha blend paints the teal
+    // ON the deck, so it reads on orange plastic and grey asphalt alike — matching the
+    // boost pad, which is alpha-blended teal for the same reason.
     const boostDisk = new THREE.Mesh(
       makeBoostDiskGeometry(BOOST_DISK_SEG, BOOST_DISK_RINGS),
       new THREE.MeshBasicMaterial({
         map: this._diskTex, color: 0x2bd1c4, transparent: true, opacity: 0, // teal — matches the boost pad/item
-        depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        depthWrite: false, side: THREE.DoubleSide, blending: THREE.NormalBlending,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
       })
     );
