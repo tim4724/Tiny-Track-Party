@@ -8,13 +8,12 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
-// Each cup owns a COLOUR. Every cup tile wears its own all the time — the picker is a
-// colour-coded set — and the PICKED one wears it loud: same hue, turned up. So colour
-// says which cup, and intensity says which is picked. That's the lobby's existing
-// idiom, not a new one: the car strip right above marks your pick by tinting it toward
-// your livery and dropping a hard shadow under it (.car-opt--mine). Reusing it keeps
-// the two rows speaking one language, and it needs no chrome colour of its own — a
-// green ring said "green" louder than it said "picked", and fought the cup colour
+// Each cup owns a COLOUR, and it appears only on the PICKED tile — an unpicked one is
+// plain white paper. That's the lobby's existing idiom rather than a new one: the car
+// strip right above leaves its unpicked cars white and marks your pick by tinting it
+// toward your livery with a hard shadow under it (.car-opt--mine). Reusing it verbatim
+// keeps the two rows speaking one language, and it needs no chrome colour of its own —
+// a green ring said "green" louder than it said "picked", and fought the cup colour
 // underneath it.
 //
 // These are authored, not derived. They started life pulled from each biome's first
@@ -26,18 +25,17 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 // which the theme vetoes. Clamping the pair into range took a saturation floor and a
 // lightness cap, and *still* left playroom pink and nearly on top of canyon — two
 // hacks to launder colours that were never meant for this job. So we author five
-// instead, one per cup: each is the paper-legible relative of what that biome looks
-// like, except where the theme's own chrome rules forbid it (see rooftop). Keep them
-// far apart in hue — telling one cup from another is the only job they have.
+// instead, one per cup, each the paper-legible relative of what that biome looks like:
 const CUP_COLOR = {
   beach:    '#E0C070',  // wet sand
   snow:     '#7FB2DC',  // ice blue — the biome's own white can't survive a paper mix
   backyard: '#7FBF63',  // lawn green
-  canyon:   '#C4713F',  // terracotta; kept dark + dull so it can't be read as playroom
-  // The toy box, NOT the orange plastic deck the biome is built from: pale red is
-  // pink, and pink is vetoed in chrome. Purple is sanctioned (--purple, the item
-  // colour), unclaimed by the other four, and still reads as a toy block.
-  rooftop:  '#A259E6'
+  canyon:   '#C4713F',  // terracotta: dark and dull, where playroom's orange is bright
+  // The biome's orange plastic deck. It lands near canyon's hue, which would matter if
+  // the two were ever side by side — but only the picked cup is coloured at all, so no
+  // two cup colours are ever on screen together. Brightness still separates them for
+  // the one surface that does show them in sequence (the display's cup slot).
+  rooftop:  '#F5842B'
 };
 const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;  // cup-less catalog: the old default green
 // Random belongs to no cup, so it has no colour to turn up — a warm grey stands in,
@@ -45,17 +43,16 @@ const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;  // cup-less catalog: the old def
 const NEUTRAL_COLOR = '#8C8398';
 
 // How much colour a surface wears; `pct` is how much survives a mix with white.
-// The ladder is the whole selection language, so the steps have to stay far apart:
-const IDENT_TINT = 26;  // a cup tile at rest: enough to name the cup, quiet enough to ignore
-const PANEL_TINT = 45;  // the open cup's track panel: a surface BEHIND cards, so deeper than one
-const PICK_TINT  = 72;  // the pick: the same hue turned up loud. Nothing else in the picker is
-export const FIELD_TINT = 26;  // exported: the display's cup slot paints the same minis
+const PANEL_TINT = 45;  // the open cup's track panel: a surface behind cards, so deeper than they are
+const PICK_TINT  = 72;  // the pick — the only tile that takes a fill at all
+export const FIELD_TINT = 26;  // the schematic's field. Exported: the display's cup slot paints the same minis
+
+const towardWhite = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, #fff)`;
 
 // Exported alongside schematicSvg: the display's cup slot tints its minis the same
 // way, so the two surfaces can't drift.
 export function cupTint(cupId, pct) {
-  const c = CUP_COLOR[cupId] || CUP_COLOR_FALLBACK;
-  return `color-mix(in srgb, ${c} ${pct}%, #fff)`;
+  return towardWhite(CUP_COLOR[cupId] || CUP_COLOR_FALLBACK, pct);
 }
 
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
@@ -89,12 +86,10 @@ export function schematicSvg(svg, fieldTint) {
   return el;
 }
 
-// One exact-track tile (inside an open cup's panel): schematic + name. Picked, it
-// fills with its cup's colour turned up — the same mark a picked cup tile wears, so
-// "picked" looks identical wherever it lands. At rest it stays a plain white card:
-// unlike a cup tile it doesn't need to announce its cup, because the cup-coloured
-// panel it's sitting on already did. Difficulty is never badged per track — only the
-// cup's tendency meter (cupMeter) hints at it.
+// One exact-track tile (inside an open cup's panel): schematic + name. White at rest;
+// picked, it fills with its cup's colour turned up — the same mark a picked cup tile
+// wears, so "picked" looks identical wherever it lands in the picker. Difficulty is
+// never badged per track — only the cup's tendency meter (cupMeter) hints at it.
 function trackTile(t, mine, canPick, onPick) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -133,15 +128,17 @@ function cupMeter(level) {
 // One compact mode tile (🎲 Random or a cup): name line (optional glyph), the
 // cup's tendency meter, and a small hint ("4 races" / "endless"). No track art —
 // the panel a picked cup opens below is where the tracks show.
-// `tint` is the fill, and the caller has already resolved it: the cup's colour quiet
-// at rest, loud when picked. Exactly ONE thing in the picker is ever `mine` — pick a
-// track and its cup hands the mark down to it.
-function modeTile({ label, glyph, sub, meter, mine, tint, canPick, onTap }) {
+// `pickTint` is this tile's own colour, worn ONLY when it's the pick — at rest every
+// tile is white paper. Exactly ONE thing in the picker is ever `mine`: pick a track
+// and its cup hands the mark down to it.
+function modeTile({ label, glyph, sub, meter, mine, pickTint, canPick, onTap }) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'mode-opt' + (mine ? ' mode-opt--mine' : '');
-  if (tint) btn.style.background = tint;
-  if (mine) btn.setAttribute('aria-current', 'true');
+  if (mine) {
+    btn.setAttribute('aria-current', 'true');
+    if (pickTint) btn.style.background = pickTint;
+  }
   btn.setAttribute('aria-label', label);
   btn.disabled = !canPick;
   const lab = document.createElement('span');
@@ -205,28 +202,26 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   const grid = document.createElement('div');
   grid.className = 'modepick';
 
-  const randomMine = sel.mode === 'random';
   grid.appendChild(modeTile({
     label: 'Random', glyph: '🎲', sub: 'endless',
-    // Bare paper at rest — with no cup, there's no colour to name it by. Picked, it
-    // takes the neutral grey so it still wears the same loud-fill mark as the cups.
-    mine: randomMine,
-    tint: randomMine ? `color-mix(in srgb, ${NEUTRAL_COLOR} ${PICK_TINT}%, #fff)` : null,
+    mine: sel.mode === 'random',
+    // Belonging to no cup, it has no colour of its own — a neutral grey stands in so it
+    // still wears the same fill-and-drop mark the cups do.
+    pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
     canPick,
     onTap: () => pick({ mode: 'random' })  // re-tap re-rolls — deliberately not filtered
   }));
 
   for (const g of groups) {
-    // A cup is picked only when the CUP itself is the pick. Picking one of its tracks
-    // hands the mark down to that track tile and drops this one back to its resting
-    // tint — the panel standing open below is what shows where the pick came from, so
-    // the cup neither needs nor should wear a mark of its own.
-    const mine = sel.mode === 'cup' && sel.cupId === g.id;
     grid.appendChild(modeTile({
       label: g.name, sub: `${g.items.length} races`,
       meter: g.diff != null ? cupMeter(g.diff) : null,
-      mine,
-      tint: cupTint(g.id, mine ? PICK_TINT : IDENT_TINT),
+      // Picked only when the CUP itself is the pick: picking one of its TRACKS hands
+      // the mark down to that track tile and leaves this one white. The panel standing
+      // open below is what shows where the pick came from, so the cup neither needs
+      // nor should wear a mark of its own.
+      mine: sel.mode === 'cup' && sel.cupId === g.id,
+      pickTint: cupTint(g.id, PICK_TINT),
       canPick,
       onTap: () => pick({ mode: 'cup', cupId: g.id })
     }));
@@ -237,9 +232,10 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   if (openCup) {
     const panel = document.createElement('div');
     panel.className = 'modepick__tracks';
-    // Same tint as its cup tile above: the two read as one block of that cup's colour,
-    // which is what ties the open panel back to the cup it belongs to. The track tiles
-    // sitting on it keep their own (paler) schematic fields legible.
+    // The cup's colour, and the panel is the only place it shows when the pick is one
+    // of the TRACKS (that hands the mark down, leaving the cup tile white) — so this
+    // wash is what ties the four tracks back to the cup they belong to. Pitched between
+    // the white tiles on it and the louder fill of the picked one.
     panel.style.background = cupTint(openCup.id, PANEL_TINT);
     const tgrid = document.createElement('div');
     tgrid.className = 'trackpick__grid';

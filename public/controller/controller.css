@@ -183,10 +183,10 @@ input[type=text]:disabled { opacity: 0.6; }
   gap: 0.5rem;
 }
 /* compact tiles — name + tendency meter + hint; the tracks themselves show in
-   the panel the picked cup opens below. Every tile keeps the theme's thick ink
-   outline whether picked or not (thinning it for the unpicked ones was tried: the
-   whole picker went faded next to the car strip above, which outlines all four).
-   The fill is painted inline by buildModePicker — the cup's colour, quiet here. */
+   the panel the picked cup opens below. At rest a tile is plain white paper inside a
+   thick ink outline, exactly like an unpicked car in the strip above; only the picked
+   one takes a fill (painted inline by buildModePicker). Thinning the outline on
+   unpicked tiles was tried instead — it faded the whole picker next to those cars. */
 .mode-opt {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
   cursor: pointer; padding: 0.45rem 0.4rem 0.4rem;
@@ -197,10 +197,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-opt:disabled { cursor: default; }
 /* ONE picked look across the whole picker (see .track-opt--mine), and it's the one
    the lobby already uses a row above (.car-opt--mine): the tile fills with its own
-   colour turned up and takes the hard drop. Same hue as at rest, so it reads as
-   "this cup, chosen" rather than as a different thing; no chrome colour is dragged
-   in to say "picked", which is what made the old green ring shout green and fight
-   whatever cup colour sat under it. */
+   colour and takes the hard drop. No chrome colour is dragged in to say "picked",
+   which is what made the old green ring shout green and fight the cup colour under
+   it — the fill IS the cup, so the mark and the identity are the same stroke. */
 .mode-opt--mine { box-shadow: var(--shadow-pop); }
 /* the hint is muted for scanning past on white paper; on a loud fill that muting
    turns into poor contrast, so a picked tile takes it back up */
