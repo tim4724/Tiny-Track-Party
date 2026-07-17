@@ -464,10 +464,11 @@ export class AiController {
 // cruise-brake ladder (skill 0.93–1.00) had the back half riding the brake down
 // every straight, lights on, which read as "the AI is weak". Differentiation now
 // lives where humans can see and exploit it: `caution` scales cornerBrake's margin,
-// so the lead bot (Bolt) OVERDRIVES a touch past the safe corner speed (fast, and it'll
-// scrub a curb now and then) while the tail lifts earlier and deeper into the braking
-// zones — you catch Zippy under braking, not by out-dragging a sandbagging cruiser. Each bot also wanders its lane (seeded) and
-// dodges hazards, so they no longer rail one line or feed themselves to bananas.
+// so the lead bot (Bolt) OVERDRIVES a touch past the safe corner speed (fast, and
+// it'll scrub a curb now and then) while the tail lifts earlier and deeper into the
+// braking zones — you catch Zippy under braking, not by out-dragging a sandbagging
+// cruiser. Each bot also wanders its lane (seeded) and dodges hazards, so they no
+// longer rail one line or feed themselves to bananas.
 // Bots fill from the front — a lobby missing a single player gets the strong leader.
 export const AI_PERSONALITIES = [
   { name: 'Bolt',  caution: 1.05, laneBias: -0.6 },  // OVERDRIVER — carries a touch over the safe corner speed, so it occasionally scrubs a curb but leads; the one bot a clean human must actually out-brake
