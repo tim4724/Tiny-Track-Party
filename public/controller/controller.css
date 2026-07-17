@@ -293,12 +293,14 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Couch Games shell: the launcher owns identity and shows the player's name in
    its native top-bar chip, so our own copies are duplicates — drop them (lobby
-   identity, in-race HUD, the how-to-drive demo phone). The whole lobby identity
-   row collapses (the `?` now lives in the car card, not this row); .hud-top keeps
-   its min-height so the HUD's top spacing is unchanged. */
+   identity, in-race HUD). The whole lobby identity row collapses (the `?` now lives
+   in the car card, not this row); .hud-top keeps its min-height so the HUD's top
+   spacing is unchanged. NOT the how-to-drive demo phone: its name isn't a second
+   copy of the launcher's chip, it's a PICTURE of it — the illustration is of the
+   player's phone running the app, so inside the shell it's the accurate thing to
+   draw, not a duplicate. */
 .cg-shell .lobby-me,
-.cg-shell .hud-name,
-.cg-shell .phone-name { display: none; }
+.cg-shell .hud-name { display: none; }
 
 .steer { margin-top: auto; }
 .steer__track {
@@ -498,10 +500,51 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700;
   font-size: 1.5rem; margin: 0; color: var(--ink);
 }
+/* The how-to-drive title only — bigger and centred over the demo it introduces,
+   because here the title IS the instruction. #motion-title shares .help-card h2
+   and stays a plain left-aligned alert heading. */
+.help-title { text-align: center; font-size: 1.75rem; line-height: 1.05; }
 
-/* STEER — the hero: the animated demo over a single prominent lead line, centred. */
-.help-steer { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; text-align: center; }
-.help-steer__lead { margin: 0; color: var(--ink); font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.2; }
+/* STEER — the hero: the animated demo, centred, with the title doing the talking.
+   chevron | phone | chevron. The 1fr side columns are equal, so each chevron lands
+   in the MIDDLE of the free space beside the phone at any card width — and the phone
+   stays centred even though only one chevron is ever visible. */
+.steer-stage { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; }
+
+/* Steer chevrons — drawn from two borders on a rotated box rather than set as a
+   type glyph: the font's chevron is hairline-thin at any size, and this carries the
+   theme's thick-ink weight instead. Livery-tinted to tie them to the steer fill.
+   Only the LEANING side is ever lit: both fade to nothing as the tilt crosses centre,
+   so the pair reads as "lean this way", never as a tappable left/right control. */
+.chev {
+  justify-self: center; pointer-events: none;
+  width: 22px; height: 22px;
+  border: 0 solid var(--car); border-radius: 3px;
+  transform: rotate(45deg);
+}
+.chev--l {
+  border-left-width: 7px; border-bottom-width: 7px;
+  animation: chev-fade-l 2.6s ease-in-out infinite;
+}
+.chev--r {
+  border-right-width: 7px; border-top-width: 7px;
+  animation: chev-fade-r 2.6s ease-in-out infinite;
+}
+/* Same 2.6s cycle as .phone-lean: leaning LEFT at 0/100%, centred at 25/75%,
+   leaning RIGHT at 50%. */
+@keyframes chev-fade-l {
+  0%   { opacity: 1; }
+  25%  { opacity: 0; }
+  75%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes chev-fade-r {
+  0%   { opacity: 0; }
+  25%  { opacity: 0; }
+  50%  { opacity: 1; }
+  75%  { opacity: 0; }
+  100% { opacity: 0; }
+}
 
 /* STEER demo — a stylized phone whose screen is a MINIATURE of the real driving
    HUD: a steer strip up top, the two buttons below (ITEM purple left, BRAKE red
@@ -542,12 +585,15 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 /* The "screen" — a slice of the sunny sky (page gradient), laid out like the real
    HUD: the steer strip sits directly ON TOP of the buttons, both grouped at the
-   bottom (open sky above, like the live screen). */
+   bottom (open sky above, like the live screen). The insets + gap are the real
+   screen's, scaled: the live HUD sits 12px in from a 390px-wide screen (3.1%) and
+   33px up from the bottom of an 844px-tall one (3.9%), which at this size is ~3px
+   and ~7px. */
 .phone-inner {
   position: relative;
   width: 100%; height: 100%; border-radius: 14px; overflow: hidden;
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
-  padding: 10px 8px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 11px;
+  padding: 8px 3px 7px;
   background: var(--paper);
   transform: translateZ(1px);
 }
@@ -557,13 +603,22 @@ input[type=text]:disabled { opacity: 0.6; }
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(138deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0) 44%);
 }
-/* The player's own name, top-left of the demo screen — tinted with their livery
-   (var(--car), like the live HUD name, which is also top-left) so the preview reads
-   as "your phone". margin-bottom:auto parks it at the top while the steer strip +
-   buttons stay grouped at the bottom; align-self:flex-start pins it to the left. */
+/* Island bar — the pill cut out of the top of the screen. Pure iconography: it's
+   what makes the illustration read instantly as "a phone" rather than a rounded
+   rectangle. Sized as a fraction of the frame so it holds up at the small-screen
+   frame size below. */
+.phone-island {
+  position: absolute; z-index: 2; top: 4px; left: 50%; transform: translateX(-50%);
+  width: 41%; height: 9px; border-radius: var(--r-pill);
+  background: #0E1218;
+}
+/* The player's own name, centred just under the island — livery-tinted (var(--car))
+   plain text with no chip, which is how the Couch Games launcher renders it. That
+   makes the preview read as "your phone, in the app". Taken out of the flow so the
+   steer strip + buttons stay grouped at the bottom of the screen. */
 .phone-name {
-  align-self: flex-start; margin-bottom: auto; max-width: 100%;
-  position: relative; z-index: 1;
+  position: absolute; z-index: 1; top: 26px; left: 0; right: 0;
+  padding: 0 8px; text-align: center;
   font-family: var(--font-display); font-weight: 700; font-size: 12px; line-height: 1;
   color: var(--car, var(--ink));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -571,7 +626,7 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Mini steer strip — the live HUD track scaled down: paper surface, ink outline,
    centre marker, and the same livery-colour fill sliding with the phone lean. */
 .mini-steer {
-  position: relative; height: 14px; overflow: hidden;
+  position: relative; height: 10px; overflow: hidden;   /* real strip is 44px of 844 (5.2%) */
   box-sizing: border-box;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r-pill);
 }
@@ -588,15 +643,25 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Mini buttons — scaled-down versions of the real controls: same labels, colours,
    ink border and bottom ledge, in the same left/right positions. They live inside
    the non-interactive phone illustration, so their realism teaches recognition
-   without creating another tappable-looking row in the modal itself. */
-.mini-controls { display: flex; gap: 6px; position: relative; z-index: 1; }
+   without creating another tappable-looking row in the modal itself.
+   Every proportion here is the real button's, measured and scaled to this size:
+     height  30% of the screen   (real: 254.6 of 844)
+     ledge   2.4% of the height  (real: 6 of 254.6)  — 3px read as twice too heavy
+     gap     3.3% of the screen  (real: 12.8 of 390)
+   The 2px border is the ONE thing deliberately out of scale (true scale is 0.8px,
+   which would vanish) — the card's ink language needs the outline to hold.
+   The radius then has to pay for that: what the eye reads is the PAINT corner,
+   radius minus border, and an oversized border eats it. True-scale 4px left a 2px
+   paint corner against the real button's 13px (inner/outer 0.5 vs 0.81) and looked
+   square. 6px restores a true-scale paint corner under the oversized ink. */
+.mini-controls { display: flex; gap: 3px; position: relative; z-index: 1; }
 .mini-btn {
-  flex: 1; height: 60px;
+  flex: 1; height: 57px;
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-family: var(--font-display); font-weight: 700;
   font-size: 7px; letter-spacing: 0.04em;
-  border-radius: 9px; border: 2px solid var(--ink);
-  box-shadow: 0 3px 0 var(--btn-ledge);
+  border-radius: 6px; border: 2px solid var(--ink);
+  box-shadow: 0 1.5px 0 var(--btn-ledge);
 }
 .mini-btn--item  { background: var(--item); }
 .mini-btn--brake { background: var(--danger); }
@@ -677,6 +742,11 @@ input[type=text]:disabled { opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) {
   .phone-lean { animation: none; transform: rotateX(10deg) rotateY(-26deg); }
   .mini-steer__fill { animation: none; transform: translateX(-30%); }
+  /* Freeze the chevrons into that same LEFT-leaning pose (left lit, right gone) —
+     otherwise they'd be the only thing still moving on the card. */
+  .chev { animation: none; }
+  .chev--l { opacity: 1; }
+  .chev--r { opacity: 0; }
 }
 
 /* Landscape: less vertical room, so compact the paddings and shrink the big
@@ -689,8 +759,14 @@ input[type=text]:disabled { opacity: 0.6; }
   /* Help popup compacts too — trim gaps + shrink the demo so more fits; the card
      still scrolls if it overflows a short landscape phone. */
   .help-card { gap: 0.6rem; padding: 0.9rem 1.1rem; }
-  .help-steer { gap: 0.4rem; }
+  .help-title { font-size: 1.5rem; }
   .steer-demo { padding: 0.2rem 0; }
   .phone-frame { width: 92px; height: 170px; }
-  .mini-btn { height: 50px; }
+  /* Everything inside the phone rides the shorter frame down by the same 170/208
+     factor, so the proportions above survive the shrink. The island's width and the
+     buttons' widths are already relative, so only the vertical rhythm restates. */
+  .phone-island { height: 7px; top: 3px; }
+  .phone-name { top: 21px; font-size: 11px; }
+  .mini-btn { height: 47px; }
+  .phone-inner { gap: 9px; }
 }

@@ -142,30 +142,40 @@
 
   <!-- How-to-Drive popup — frosted glass like #pause-overlay/#conn, sits ABOVE the
        lobby and BELOW #conn (z 17) so a dropped link always wins. Purely
-       INSTRUCTIONAL: tilt-to-steer (animated demo), hold-BRAKE, tap-ITEM, and the
-       keep-upright note. Auto-shows ONCE per device on first lobby entry
+       INSTRUCTIONAL: tilt-to-steer (animated demo, flanked by chevrons that light the
+       leaning side), hold-BRAKE, tap-ITEM. Auto-shows ONCE per device on first lobby entry
        (localStorage 'tinytrack_seen_help'); the "?" buttons reopen it. The motion-
        permission recovery is a SEPARATE popup (#motion-overlay). Wiring in main.js. -->
   <div id="help-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
     <div class="help-card">
-      <h2 id="help-title">How to drive</h2>
+      <!-- The instruction IS the title: steering is the one thing this card has to
+           teach, and a separate "How to drive" heading above a "Tilt to steer" lead
+           line said the same thing twice. The card still names itself to assistive
+           tech through the "?" buttons (aria-label "How to drive"). -->
+      <h2 id="help-title" class="help-title">Tilt to steer</h2>
 
       <!-- STEER — the hero, and the most important control, so it gets the space.
            A phone LEANS side to side (doodle-jump: rolled around its long axis — a
            3D rotateY, NOT a flat in-plane twist) with the steer bar sliding in
-           lockstep, so the gesture reads at a glance. The live #steer-fill in the
-           HUD looks the same, reinforcing the mapping. -->
-      <div class="help-steer">
-        <!-- The demo phone previews the REAL driving screen in miniature: the
-             player's own name top-left (tinted with their livery, like the live HUD),
-             a steer strip that fills with the lean, over the two buttons in their live
-             positions (ITEM purple LEFT, BRAKE red RIGHT). The phone leans side to side
+           lockstep and a chevron lighting the leaning side, so the gesture reads at
+           a glance. The live #steer-fill in the HUD looks the same, reinforcing the
+           mapping. -->
+      <!-- Three columns — chevron | phone | chevron — so each chevron parks in the
+           MIDDLE of the free space beside the phone at any card width. -->
+      <div class="steer-stage">
+        <span class="chev chev--l" aria-hidden="true"></span>
+        <!-- The demo phone previews the REAL driving screen in miniature: an island
+             bar and the player's own name (livery-tinted, centred beneath it, the way
+             the Couch Games launcher renders it — plain text, no chip), a steer strip
+             that fills with the lean, over the two buttons in their live positions
+             (ITEM purple LEFT, BRAKE red RIGHT). The phone leans side to side
              (doodle-jump rotateY) and the strip slides in step. #phone-name is
              filled on open (openHelp / the gallery harness). -->
         <div class="steer-demo" aria-hidden="true">
           <div class="phone-lean">
             <div class="phone-frame">
               <div class="phone-inner">
+                <span class="phone-island"></span>
                 <span id="phone-name" class="phone-name"></span>
                 <div class="mini-steer"><div class="mini-steer__fill"></div></div>
                 <div class="mini-controls">
@@ -176,7 +186,7 @@
             </div>
           </div>
         </div>
-        <p class="help-steer__lead">Tilt your phone side to side</p>
+        <span class="chev chev--r" aria-hidden="true"></span>
       </div>
 
       <!-- BRAKE + ITEM — compact labels rather than fake buttons. Colours and
