@@ -27,11 +27,15 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // direction). We subtract the track's own turn each step so NEUTRAL = straight
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
-const TURN_RATE = 0.95;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
+const TURN_RATE = 0.90;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
                           // STEER_SCRUB (scrubbing to 65% of vmax made every car ~1.5×
                           // tighter-cornering, so the fastest cars swept bends flat-out with
-                          // no washout risk). At 1.05 a low-turn car driven flat-out into a
-                          // catalogue corner washes to the curb again; a grippy one holds it.
+                          // no washout risk). Walked down 1.05 → 0.95 → 0.90 as the user kept
+                          // clearing corners flat-out: at 0.90 a low-turn car driven flat
+                          // into a catalogue corner washes to the curb (Bolt ~1.9k frames
+                          // across the catalogue, Carve 0); a grippy one holds the line.
+                          // Steering is now 25% calmer than the original — if lane changes
+                          // feel sluggish, escalate with width pinches, not further cuts.
 const STEER_EXPO = 1.25;  // default response: near-linear with a slightly softened centre (1 = linear); tuned on hardware
 // Live-tunable steering response exponent. Shared by every engine (so a value set
 // in the display debug panel survives race/lobby re-creation) and read fresh each
@@ -47,11 +51,13 @@ export function setSteerExpo(v) {
 export function getSteerExpo() { return _steerExpo; }
 const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progress)
 const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
-const WALL_SPEED_FRAC = 0.35; // curb speed cap as a fraction of the car's own top speed
+const WALL_SPEED_FRAC = 0.28; // curb speed cap as a fraction of the car's own top speed.
+                          // This IN-CONTACT cap is the whole washout bill: the post-exit rash
+                          // heals faster than the engine accelerates, so it never binds — and
+                          // a binding exit cap reads as throttle lag (user veto). Punish curbs
+                          // by deepening this, not by stretching WALL_RASH_T.
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
-const WALL_RASH_T = 0.5;  // s the curb cap takes to HEAL after the last scrape ("curb rash") —
-                          // raw contact is too brief to bill real lap time (the car bounces
-                          // off in a few frames), so washing out costs the corner exit too.
+const WALL_RASH_T = 0.5;  // s the curb cap takes to HEAL after the last scrape ("curb rash").
                           // The cap RAMPS from WALL_SPEED_FRAC back to full over this window
                           // (a flat hold felt like dead throttle: ceiling = current speed →
                           // zero accel, then a cliff release; the ramp pulls immediately,

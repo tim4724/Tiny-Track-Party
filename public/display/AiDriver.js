@@ -119,7 +119,7 @@ function avoidThreat(car, lane, game, maxLat) {
 // down the track, finds the tightest upcoming bend, and brakes so the car arrives
 // no faster than its turn rate can hold (max corner speed ≈ turn/κ). A low-handling
 // car brakes earlier + harder; a grippy one barely lifts.
-const TURN_RATE_FALLBACK = 0.95; // matches Game's base TURN_RATE (cars without a resolved .turn)
+const TURN_RATE_FALLBACK = 0.90; // matches Game's base TURN_RATE (cars without a resolved .turn)
 const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
