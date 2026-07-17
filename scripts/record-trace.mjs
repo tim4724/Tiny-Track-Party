@@ -17,12 +17,16 @@
 // Determinism: no wall clock, no Math.random. The engine's item RNG is seeded
 // via track.seed; each bot's AiController jitter stream is seeded from the
 // header; JSON key order is fixed by canonicalStringify (recursive key sort).
-// Same config in, byte-identical trace out — on the SAME JS engine. Math.sin/
-// cos/atan2/exp/pow are implementation-approximated, so a different V8 (i.e. a
-// different Node major) legitimately differs in the last bit and a trace only
-// replays exactly under the engine that recorded it. The header's `engine`
-// field records that engine ({ node, v8 }); CI pins the matching Node major
-// (.github/workflows/test.yml).
+// Same config in, byte-identical trace out — on the SAME JS engine on the
+// SAME platform. Math.sin/cos/atan2/exp/pow are implementation-approximated:
+// results differ across V8 versions AND across architectures on the same V8
+// (V8's compiled fdlibm picks up per-arch codegen differences such as FMA
+// contraction), so a trace only replays exactly under the engine+platform
+// that recorded it. The header's `engine` field records both
+// ({ node, v8, os, arch }). The committed fixtures' reference platform is
+// the CI unit job (ubuntu x64, Node major pinned in
+// .github/workflows/test.yml); record them there via the record-traces
+// workflow, not on a dev machine.
 //
 // CLI:
 //   node scripts/record-trace.mjs --track=tidepool --frames=600 [--seed=1]
@@ -149,10 +153,16 @@ export function recordTrace(config) {
   const header = {
     contractVersion: CONTRACT_VERSION,
     seed, trackId, dt, laps, roster, frames, snapshotEvery,
-    // The JS engine that recorded this trace. Bit-exact replay is only
-    // guaranteed on the same engine (transcendental Math.* results are
-    // implementation-approximated and differ across V8 versions).
-    engine: { node: process.versions.node, v8: process.versions.v8 }
+    // The JS engine AND platform that recorded this trace. Bit-exact replay
+    // is only guaranteed on the same engine on the same platform:
+    // transcendental Math.* results are implementation-approximated, differ
+    // across V8 versions, and V8's compiled fdlibm differs across
+    // architectures too (observed: identical Node 26.5.0 diverging between
+    // macOS arm64 and Linux x64).
+    engine: {
+      node: process.versions.node, v8: process.versions.v8,
+      os: process.platform, arch: process.arch
+    }
   };
 
   const track = buildRaceTrack(trackId, { laps, seed });

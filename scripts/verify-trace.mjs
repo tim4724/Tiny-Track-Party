@@ -58,18 +58,30 @@ export function firstDiff(expected, actual, path = '') {
   return null;
 }
 
-// Bit-exact replay is only guaranteed on the JS engine that recorded the
-// trace: transcendental Math.* results are implementation-approximated and
-// differ in the last bit across V8 versions (in practice, across Node
-// majors). When a divergence is reported under a different engine than the
-// header records, suspect the engine mismatch before the sim.
-function engineHint(header) {
+// Bit-exact replay is only guaranteed on the JS engine AND platform that
+// recorded the trace: transcendental Math.* results are
+// implementation-approximated, differ across V8 versions, and differ across
+// architectures on the same V8 (per-arch codegen of V8's compiled fdlibm).
+// When a divergence is reported under a different engine or platform than
+// the header records, suspect that mismatch before the sim.
+export function engineMatches(header) {
   const rec = header.engine;
-  if (!rec || rec.node === process.versions.node) return '';
-  return ` [engine mismatch: trace recorded on Node ${rec.node} (V8 ${rec.v8}), ` +
-    `replaying on Node ${process.versions.node} (V8 ${process.versions.v8}); ` +
-    `transcendental Math.* differs across V8 versions, so this divergence is ` +
-    `expected. Replay on Node ${rec.node.split('.')[0]}.x or re-record.]`;
+  if (!rec) return false; // pre-engine-stamp trace: provenance unknown
+  return rec.os === process.platform && rec.arch === process.arch &&
+    rec.node.split('.')[0] === process.versions.node.split('.')[0];
+}
+
+function engineHint(header) {
+  if (engineMatches(header)) return '';
+  const rec = header.engine;
+  const recorded = rec
+    ? `Node ${rec.node} (V8 ${rec.v8}) on ${rec.os}/${rec.arch}`
+    : 'an unknown engine (header predates the engine stamp)';
+  return ` [engine/platform mismatch: trace recorded on ${recorded}, ` +
+    `replaying on Node ${process.versions.node} (V8 ${process.versions.v8}) ` +
+    `on ${process.platform}/${process.arch}; transcendental Math.* differs ` +
+    `across V8 versions and across architectures, so this divergence is ` +
+    `expected. Replay on the recording platform or re-record there.]`;
 }
 
 // Verify a parsed trace ({ header, records }) or raw JSONL text.

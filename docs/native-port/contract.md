@@ -80,12 +80,18 @@ frame for frame. Specifically:
   arithmetic and `Math.sqrt` are exact IEEE-754 everywhere. See the
   conformance gate in [architecture.md](architecture.md).
 - The same caveat applies WITHIN JavaScript: transcendental results change
-  between V8 versions, so a trace replays bit-exactly only on the JS engine
-  that recorded it (in practice: the same Node major). Each trace header
-  records that engine (`engine: { node, v8 }`), the verifier reports an
-  engine mismatch as the first suspect when a replay diverges, and CI
-  (`.github/workflows/test.yml`) pins the Node major the committed fixtures
-  were recorded under. Bump the CI pin and re-record the fixtures together.
+  between V8 versions, and between architectures on the same V8 (per-arch
+  codegen of V8's compiled fdlibm; observed as identical Node 26.5.0
+  diverging between macOS arm64 and Linux x64). A trace therefore replays
+  bit-exactly only on the JS engine and platform that recorded it. Each
+  trace header records that provenance (`engine: { node, v8, os, arch }`)
+  and the verifier reports a mismatch as the first suspect when a replay
+  diverges. The committed fixtures' REFERENCE PLATFORM is the CI unit job
+  (ubuntu x64, Node major pinned in `.github/workflows/test.yml`): fixtures
+  are recorded there via the record-traces workflow, CI hard-fails on a
+  wrong-platform fixture, and dev machines skip the fixture replay instead
+  of reporting phantom divergence. The C++ port's conformance target is
+  likewise the fixtures as recorded on that platform.
 
 The executable form of this guarantee is the golden-trace tooling:
 `scripts/record-trace.mjs` records a seeded headless race (inputs, events,

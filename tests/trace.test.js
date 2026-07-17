@@ -103,11 +103,31 @@ test('a contract-version mismatch fails fast with a re-record message', () => {
   assert.match(r.message, /re-record/);
 });
 
-test('committed golden fixtures replay exactly (the port-conformance oracle)', () => {
+// Exactness only holds on the engine+platform that recorded a fixture (see
+// the header's `engine` field). The reference platform is the CI unit job;
+// on CI a mismatched fixture is a hard FAILURE (someone committed fixtures
+// recorded elsewhere), while on a dev machine the replay is skipped rather
+// than reporting phantom divergence. The in-process record/verify tests
+// above run everywhere regardless.
+test('committed golden fixtures replay exactly (the port-conformance oracle)', (t) => {
   const files = fs.readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.jsonl'));
   assert.ok(files.length >= 2, `expected committed trace fixtures in ${FIXTURE_DIR}, found ${files.length}`);
+  const here = `Node ${process.versions.node} on ${process.platform}/${process.arch}`;
+  let replayed = 0;
   for (const f of files) {
+    const { header } = rec.parseTrace(fs.readFileSync(path.join(FIXTURE_DIR, f), 'utf8'));
+    if (!ver.engineMatches(header)) {
+      const recorded = header.engine
+        ? `Node ${header.engine.node} on ${header.engine.os}/${header.engine.arch}`
+        : 'an unknown engine (pre-engine-stamp header)';
+      assert.ok(!process.env.CI,
+        `${f} was recorded on ${recorded} but CI runs ${here} — fixtures must be recorded on the CI platform (run the record-traces workflow, see tests/fixtures/traces/README.md)`);
+      t.diagnostic(`skipping ${f}: recorded on ${recorded}, this is ${here} (bit-exact replay is per engine+platform)`);
+      continue;
+    }
     const r = ver.verifyTraceFile(path.join(FIXTURE_DIR, f));
     assert.ok(r.ok, `${f} diverged: ${r.message} — if the engine change was intentional, re-record the fixtures (see tests/fixtures/traces/README.md)`);
+    replayed++;
   }
+  if (process.env.CI) assert.equal(replayed, files.length, 'CI must replay every committed fixture');
 });
