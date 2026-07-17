@@ -208,16 +208,17 @@ const ROCKET_HIT = 0.6;        // arclength lead (units) at which the rocket det
 const ROCKET_TARGET_MIN = 0.5; // u — a car must be at least this far ahead (≈ half a car length, halfLen 0.44) to be locked
 const ROCKET_LIFE = 10.0;      // seconds a rocket flies before it expires (a whiff) — generous so it reliably
                                // runs its target down; a target-less rocket just flies straight until this cap
-// Speed profile. The rocket accelerates out of the launcher and decelerates into its target, and it
-// PACES itself so the flight lasts about ROCKET_MIN_FLIGHT — a close shot crawls the short gap so it
-// reads on screen instead of detonating in a frame, while a distant target (which takes longer to run
-// down anyway) is chased at full cruise. Its CLOSING rate (the pace at which it eats the gap) is the
-// slowest of: the cruise cap, the min-flight pacing, and a final decel-into-impact — and it rides ON
-// TOP of the target's own speed (vWant = target.v + close), so a fleeing/boosted car can't outrun it.
-// Pacing governs SPEED, but a rocket that SPAWNS already within ROCKET_HIT of its mark (a near-level
-// target at the bunched start) has no gap to pace across — so ROCKET_MIN_LIFE is a hard floor: a rocket
-// may not detonate until it has been airborne that long, guaranteeing a brief visible flight always.
-const ROCKET_MIN_FLIGHT = 0.7;   // s the pacing aims for; a close shot is slowed to take roughly this long
+// Speed profile. The rocket accelerates out of the launcher and decelerates into its target. Its
+// CLOSING rate (the pace at which it eats the gap) is the slower of: the cruise cap, and a
+// decel-into-impact ramp that scales with the gap still to cover — and it rides ON TOP of the
+// target's own speed (vWant = target.v + close), so a fleeing/boosted car can't outrun it. The
+// decel ramp alone is what keeps a close shot readable: a short gap caps the closing rate low, so
+// the flight plays out on screen instead of detonating in a frame. (An explicit min-flight PACING
+// term used to sit in that min() — it bound at launch on every shot, then handed over to the decel
+// ramp mid-flight, and the handover read as a lurch. Removed; the decel ramp already does the job.)
+// A rocket that SPAWNS already within ROCKET_HIT of its mark (a near-level target at the bunched
+// start) has no gap to slow across at all — so ROCKET_MIN_LIFE is a hard floor: a rocket may not
+// detonate until it has been airborne that long, guaranteeing a brief visible flight always.
 const ROCKET_MIN_LIFE = 0.4;     // s a rocket MUST stay airborne before it may detonate (the no-instant-hit floor)
 const ROCKET_CRUISE = 22.0;      // u/s — max closing rate, the run-down speed for a distant target
 const ROCKET_IMPACT = 1.2;       // u/s — closing rate at the moment of contact (the slow, readable thunk-in)
@@ -1135,11 +1136,9 @@ export class Game {
       if (t && !t.finished) {
         const fwd = wrapS(t.totalS - r.s, L);               // physical forward gap rocket→target (lap-wrapped)
         const reach = Math.max(0, fwd - ROCKET_HIT);        // arclength still to cover before it detonates
-        // Closing rate = slowest of: cruise (far run-down), the min-flight pace (don't arrive early), and
-        // the decel-into-impact ramp (slow, readable contact). On top of the target's own speed → always closes.
-        const timeLeft = ROCKET_MIN_FLIGHT - r.life;
-        const pace = timeLeft > 1e-3 ? reach / timeLeft : Infinity;
-        const close = Math.min(ROCKET_CRUISE, pace, ROCKET_IMPACT + reach * ROCKET_APPROACH_K);
+        // Closing rate = slower of: cruise (far run-down) and the decel-into-impact ramp (slow,
+        // readable contact). On top of the target's own speed → always closes.
+        const close = Math.min(ROCKET_CRUISE, ROCKET_IMPACT + reach * ROCKET_APPROACH_K);
         const vWant = Math.max(0, t.v) + close;
         const accel = vWant > r.v ? ROCKET_ACCEL : ROCKET_DECEL; // ramp up on the launch, down into the target
         r.v += Math.max(-accel * dt, Math.min(accel * dt, vWant - r.v));
