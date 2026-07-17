@@ -223,7 +223,7 @@ function nearestBehind(car, game) {
 
 // Forward arclength to the car PHYSICALLY just ahead on the track — asked of the engine
 // itself (Game.nextCarAhead) so the bot evaluates exactly the car a fired rocket would
-// lock: one implementation, no drift. null when nothing live is ahead → a rocket whiffs.
+// lock: one implementation, no drift. null when nothing is ahead at all → a rocket whiffs.
 function gapToCarAhead(car, game) {
   if (!game || !game.nextCarAhead) return null;
   const o = game.nextCarAhead(car);

@@ -1737,6 +1737,40 @@ test('a car closer than ROCKET_TARGET_MIN is skipped — no locking an overlappi
   assert.equal(game.rockets[0].targetId, 'far', 'the overlapping car is skipped; the next car ahead is locked');
 });
 
+test('a FINISHED car on its victory lap is still a rocket target (not flown through)', () => {
+  // A finished car keeps driving a victory lap, and it already spins out on oil and bananas — so
+  // exempting it from the rocket alone made the rocket fly THROUGH a car on screen to reach a live
+  // one behind it. It is the next car ahead, so it is the car that gets locked and hit.
+  const game = new Game(['fire', 'done', 'live'], mkTrack(3), {});
+  const fire = game.cars.get('fire'), done = game.cars.get('done'), live = game.cars.get('live');
+  Object.assign(fire, { totalS: 10, lat: 0, v: 3, item: 'rocket', pickupAge: 99 });
+  Object.assign(done, { totalS: 14, lat: 0, v: 3 }); // physically next ahead...
+  Object.assign(live, { totalS: 20, lat: 0, v: 3 }); // ...with a live car further on
+  game.forceFinish('done'); // crosses the line before the shot
+  assert.equal(done.finished, true, 'the mark really is finished');
+  assert.equal(game.nextCarAhead(fire).id, 'done', 'the finished car is the car physically ahead');
+  game.processInput('fire', { u: 1 }); game.update(16);
+  assert.equal(game.rockets[0].targetId, 'done', 'it locks the finished car, not the live one beyond it');
+  for (let i = 0; i < 300 && done.spinT === 0; i++) { game.processInput('fire', {}); game.update(16); }
+  assert.ok(done.spinT > 0, 'and spins it out, exactly as oil and bananas already do');
+  assert.equal(live.spinT, 0, 'the live car beyond it is untouched');
+});
+
+test('a target that FINISHES mid-flight keeps the lock (no sail-off whiff)', () => {
+  // Regression: the lock used to drop the moment the target crossed the line, sending the rocket
+  // off to expire ~0.4 laps downtrack where no camera is pointing. It stays locked and lands.
+  const game = new Game(['fire', 'tgt'], mkTrack(3), {});
+  const fire = game.cars.get('fire'), tgt = game.cars.get('tgt');
+  Object.assign(fire, { totalS: 10, lat: 0, v: 3, item: 'rocket', pickupAge: 99 });
+  Object.assign(tgt, { totalS: 24, lat: 0, v: 3 }); // far enough to still be in flight when it finishes
+  game.processInput('fire', { u: 1 }); game.update(16);
+  assert.equal(game.rockets[0].targetId, 'tgt', 'locked while the target is live');
+  game.forceFinish('tgt'); // crosses the line mid-flight
+  for (let i = 0; i < 300 && tgt.spinT === 0; i++) { game.processInput('fire', {}); game.update(16); }
+  assert.equal(game.rockets.length, 0, 'the rocket is consumed on impact, not left to expire');
+  assert.ok(tgt.spinT > 0, 'the in-flight rocket still runs its now-finished target down');
+});
+
 test('a rocket with no live car ahead whiffs — and self-destructs with a rocket_expire event', () => {
   const events = [];
   const game = new Game(['solo'], mkTrack(3), { onEvent: (e) => events.push(e) }); // nobody else → nothing to lock

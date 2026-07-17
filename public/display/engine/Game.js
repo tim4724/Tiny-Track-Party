@@ -202,7 +202,9 @@ const BANANA_OWNER_IMMUNE = 5.0; // seconds the dropper is immune to their OWN b
 // onto the target's lane, and spins it out on contact (reusing the oil/banana spin). It launches just
 // ahead of the firer and only ever heads forward, so it can't hit its own firer. A car closer than
 // ROCKET_TARGET_MIN (an overlapping/alongside car) isn't a valid lock — the rocket takes the next one
-// ahead, or whiffs (flies straight and expires) when nothing live is in front. Numbers tune in playtest.
+// ahead, or whiffs (flies straight and expires) when nothing is in front at all. A car that has
+// FINISHED is still a target (it's driving its victory lap); only a car that has left stops being one.
+// Numbers tune in playtest.
 const ROCKET_HOME = 8.0;       // lateral homing rate toward the target's lane (per second; exp-approach)
 const ROCKET_HIT = 0.6;        // arclength lead (units) at which the rocket detonates on its target
 const ROCKET_TARGET_MIN = 0.5; // u — a car must be at least this far ahead (≈ half a car length, halfLen 0.44) to be locked
@@ -1105,15 +1107,19 @@ export class Game {
   // The car PHYSICALLY just ahead of `c` on the track: the smallest forward arclength gap, wrapped
   // round the lap (so it's true track position, NOT race standings — a car you're lapping, physically
   // in front but a lap down, is a valid target; one a lap ahead of you but physically behind is not).
-  // Live cars only (finished cars are coasting ghosts, excluded). Cars closer than ROCKET_TARGET_MIN
-  // are skipped (you don't lock a car you're overlapping). Returns null when nothing live is ahead.
+  // A FINISHED car counts: it's still out there driving its victory lap, so skipping it would fly the
+  // rocket straight THROUGH a car on screen to reach a live one behind — and finished cars already
+  // spin out on oil and bananas (see the victory-lap note in update()), so exempting them from the
+  // rocket alone was the odd one out. Hitting one is purely cosmetic: its result is locked in and it
+  // is a collision ghost, so a spun winner can't block the pack. Cars closer than ROCKET_TARGET_MIN
+  // are skipped (you don't lock a car you're overlapping). Returns null when nothing is ahead at all.
   // Public read: AiDriver asks this for its fire decision, so the bot evaluates exactly the car a
   // fired rocket would lock — one implementation, no drift.
   nextCarAhead(c) {
     const L = this.length;
     let best = null, bestGap = Infinity;
     for (const o of this.cars.values()) {
-      if (o === c || o.finished) continue;
+      if (o === c) continue;
       const fwd = wrapS(o.totalS - c.totalS, L); // forward distance along the track, 0..L (lap-agnostic)
       if (fwd >= ROCKET_TARGET_MIN && fwd < bestGap) { bestGap = fwd; best = o; }
     }
@@ -1124,7 +1130,8 @@ export class Game {
   // lateral offset onto the target's lane; on contact (arclength lead ≤ ROCKET_HIT) it spins them out
   // and is consumed. Its SPEED is not constant: it accelerates out of the launcher and decelerates in,
   // with a closing rate eased by distance (fast far, slow near) so a point-blank shot still plays out
-  // on screen. A rocket whose target has finished or left drops its lock and flies straight; any rocket
+  // on screen. A rocket whose target has LEFT the race drops its lock and flies straight (a finished
+  // target keeps its lock — it's still driving a victory lap); any rocket
   // that outlives ROCKET_LIFE self-destructs where it is (emits rocket_expire → the renderer detonates
   // it). Runs BEFORE the car loop so a hit lands on the target's own frame this tick. Deterministic (no RNG).
   _stepRockets(dt) {
@@ -1132,8 +1139,11 @@ export class Game {
     const L = this.length;
     for (const r of this.rockets) {
       r.life += dt;
+      // A target that FINISHES mid-flight keeps its lock: it's still driving its victory lap, and
+      // dropping the lock there sent the rocket sailing off to a whiff nobody sees (the expire lands
+      // ~0.4 laps downtrack). Only a target that has LEFT the race entirely drops to the straight-fly.
       const t = r.targetId != null ? this.cars.get(r.targetId) : null;
-      if (t && !t.finished) {
+      if (t) {
         const fwd = wrapS(t.totalS - r.s, L);               // physical forward gap rocket→target (lap-wrapped)
         const reach = Math.max(0, fwd - ROCKET_HIT);        // arclength still to cover before it detonates
         // Closing rate = slower of: cruise (far run-down) and the decel-into-impact ramp (slow,
