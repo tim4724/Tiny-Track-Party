@@ -419,7 +419,8 @@ scene.onFrame = (dt) => {
   if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
-  // they just don't move until GO. session.update() is a no-op until racing.
+  // they just don't move until GO. session.update() advances the countdown
+  // beats (this loop is the session's only clock); physics start at GO.
   driveBots();
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);

@@ -315,181 +315,195 @@ test('forceRemoveCar ends the race when the last unfinished car leaves (fires on
   assert.ok(ended && ended.results[0].playerId === 'p1', 'the final board carries the finished winner');
 });
 
-// ---- RaceSession countdown timer (the 1 Hz beat that gates the live race) ------
-// Pure timer logic (setInterval / setTimeout / performance.now, no DOM or net), so
-// node:test's mock timers drive it deterministically — no real wall-clock waiting.
+// ---- RaceSession countdown (the 1 Hz beat that gates the live race) ------------
+// RaceSession owns no timers and reads no clock: update(dtMs) is its only time
+// source (the render loop is the host clock). So these tests just feed dt. No
+// mock timers, no Date/performance shims, and a native port fed the same dt
+// sequence must reproduce the same beats.
 // This is the contract the E2E __countdownSeconds hook leans on (floor is 1, not 0).
 
-test('startCountdown counts down to GO and flips racing exactly on the 0 beat', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+test('startCountdown counts down to GO and flips racing exactly on the 0 beat', () => {
   const ticks = []; let starts = 0;
   const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
     onCountdownTick: (n) => ticks.push(n),
     onRaceStart: () => { starts++; },
   });
   session.startCountdown(3);
-  assert.deepEqual(ticks, [3], 'the opening beat shows the full count');
+  assert.deepEqual(ticks, [3], 'the opening beat shows the full count, synchronously');
   assert.equal(session.racing, false, 'not racing during the count');
-  t.mock.timers.tick(1000); // 2
-  t.mock.timers.tick(1000); // 1
+  session.update(1000); // 2
+  session.update(1000); // 1
   assert.equal(session.racing, false, 'still counting at 1');
   assert.equal(starts, 0, 'onRaceStart has not fired before GO');
-  t.mock.timers.tick(1000); // 0 (GO!)
+  session.update(1000); // 0 (GO!)
   assert.deepEqual(ticks, [3, 2, 1, 0], 'counts 3, 2, 1, then GO');
   assert.equal(session.racing, true, 'racing flips on the GO beat');
   assert.equal(starts, 1, 'onRaceStart fires once, on GO');
-  t.mock.timers.tick(1000); // -1 (clear the banner, stop the interval)
+  session.update(1000); // -1 (clear the banner, wind the countdown down)
   assert.equal(ticks[ticks.length - 1], -1, 'a final -1 beat clears the banner');
-  assert.equal(session._countdownTimer, null, 'the interval is cleared after GO');
+  assert.equal(session._countdownN, null, 'the countdown state is wound down after the clear beat');
 });
 
-test('startCountdown(1) reaches GO in one beat; startCountdown(0) never starts the race', (t) => {
+test('one oversized dt cannot skip beats: every beat down to the clear fires in order', () => {
+  // The beat emitter is a whole-beats loop over accumulated ms, so a stalled
+  // frame (or a test feeding one big dt) still lands 2, 1, 0, -1 one by one.
+  const ticks = []; let starts = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onCountdownTick: (n) => ticks.push(n),
+    onRaceStart: () => { starts++; },
+  });
+  session.startCountdown(3);
+  session.update(5000); // crosses the 2, 1, 0 (GO!) and -1 beats in one gulp
+  assert.deepEqual(ticks, [3, 2, 1, 0, -1], 'all beats land, in order, from a single large dt');
+  assert.equal(session.racing, true, 'the large dt still starts the race');
+  assert.equal(starts, 1, 'GO fires exactly once');
+});
+
+test('startCountdown(1) reaches GO in one beat; startCountdown(0) never starts the race', () => {
   // Floor check for the E2E __countdownSeconds hook: 1 is the shortest count that
   // still flips racing. 0 fires only the opening tick (no racing) then a -1 clear,
-  // so it would deadlock the race — the hook must never use it.
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  // so it would deadlock the race; the hook must never use it.
   const one = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {});
   one.startCountdown(1);
   assert.equal(one.racing, false, 'not racing on the opening 1 beat');
-  t.mock.timers.tick(1000);
+  one.update(1000);
   assert.equal(one.racing, true, 'one beat later it is GO');
 
   const zero = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {});
   zero.startCountdown(0);
-  t.mock.timers.tick(1000);
-  t.mock.timers.tick(1000);
-  assert.equal(zero.racing, false, 'startCountdown(0) never flips racing — the deadlock the hook avoids');
+  zero.update(1000);
+  zero.update(1000);
+  assert.equal(zero.racing, false, 'startCountdown(0) never flips racing (the deadlock the hook avoids)');
 });
 
-test('pausing the countdown freezes the beats; resume picks up where it left off', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+test('pausing the countdown freezes the beats; resume picks up where it left off', () => {
   const ticks = [];
   const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
     onCountdownTick: (n) => ticks.push(n),
   });
   session.startCountdown(3); // [3]
-  t.mock.timers.tick(1000);  // [3, 2]
+  session.update(1000);      // [3, 2]
+  session.update(400);       // 400 ms into the "2" beat, then freeze
   session.pause();
-  assert.equal(session._countdownTimer, null, 'the beat timer stops while paused');
-  t.mock.timers.tick(5000);  // time passes, but no beats while paused
+  session.update(5000);      // dt offered while paused is dropped, not banked
   assert.deepEqual(ticks, [3, 2], 'no beats land during a pause');
-  session.resume();          // re-arms from the banked count (2)
-  assert.equal(ticks[ticks.length - 1], 2, 'resume re-shows the banked count');
-  t.mock.timers.tick(1000);  // 1
-  t.mock.timers.tick(1000);  // 0 (GO!)
+  session.resume();
+  assert.equal(ticks[ticks.length - 1], 2, 'resume re-shows the held count');
+  session.update(600);       // completes the interrupted beat: 400 + 600 = 1000
+  assert.equal(ticks[ticks.length - 1], 1, 'the beat fraction survives the pause (400 + 600 = one beat)');
+  session.update(1000);      // 0 (GO!)
   assert.equal(session.racing, true, 'the resumed countdown still reaches GO');
 });
 
 // ---- RaceSession in-race pause/resume + the MAX_RACE_MS timeout failsafe -------
-// The banking above is for the COUNTDOWN; the higher-risk path is the in-race
-// failsafe. pause() banks the remaining timeout budget (deadline − now) and
-// resume() re-arms it, so however long the pause, the race finishes only after
-// its full RACING time. That banking reads performance.now(), so drive both the
-// timers AND performance.now() off one mocked clock (Date) — tick() then advances
-// race time deterministically. mkTrack/Game are wall-clock-free, so mocking Date
-// can't perturb the sim. MAX_RACE_MS is 180_000.
-function withMockClock(t, fn) {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: 0 });
-  const realPerf = globalThis.performance;
-  globalThis.performance = { now: () => Date.now() }; // track the mocked clock in lockstep
-  try { fn(); } finally { globalThis.performance = realPerf; }
-}
+// The failsafe is an accumulator (_raceMs) over the SAME injected dt stream as
+// physics: update() drops dt while paused, so pause banking needs no clock at
+// all. However long the pause, the race finishes only after its full RACING
+// time. MAX_RACE_MS is 180_000. Big test dts are safe: Game.update clamps each
+// physics step to 50 ms internally, so one huge dt bills the full racing time
+// while stepping the sim gently.
 
-test('an in-race pause banks the timeout budget so a long pause never ends the race early', (t) => {
-  withMockClock(t, () => {
-    let ended = 0;
-    const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), { onRaceEnd: () => { ended++; } });
-    session.startCountdown(1);
-    t.mock.timers.tick(1000);    // GO! at t=1000 → racing; race timer armed for t=181000
-    assert.equal(session.racing, true);
-    t.mock.timers.tick(1000);    // t=2000: the −1 beat clears the countdown interval
-    t.mock.timers.tick(48000);   // t=50000: ~49s of racing elapsed
-    session.pause();
-    assert.equal(session._raceRemainMs, 131000, 'pause banks the remaining timeout budget (181000 − 50000)');
-    t.mock.timers.tick(600000);  // a 10-minute pause — no armed race timer, so nothing fires
-    assert.equal(ended, 0, 'the race does not end while paused, however long the pause');
-    session.resume();            // re-arms _armRaceTimer(131000) at t=650000 → deadline t=781000
-    assert.equal(session._raceRemainMs, null, 'the banked budget is consumed on resume');
-    t.mock.timers.tick(130999);  // t=780999 — still short of the re-armed deadline
-    assert.equal(ended, 0, 'the failsafe waits out the FULL banked budget after resume');
-    t.mock.timers.tick(2);       // t=781001 — deadline crossed
-    assert.equal(ended, 1, 'the timeout finishes the race once, after the banked racing time');
-    assert.equal(session.racing, false, 'racing clears when the failsafe fires');
+test('the race-timeout failsafe finishes the race after exactly MAX_RACE_MS of racing time', () => {
+  let ended = 0; let results = null;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onRaceEnd: (r) => { ended++; results = r; },
   });
+  session.startCountdown(1);
+  session.update(1000);   // GO! (the failsafe arms at 0 ms of racing time)
+  assert.equal(session.racing, true);
+  session.update(179999); // 179999 ms of racing: a hair before the ceiling
+  assert.equal(ended, 0, 'still running just before the deadline');
+  session.update(1);      // 180000 ms: ceiling reached
+  assert.equal(ended, 1, 'the failsafe ends the race exactly once');
+  assert.ok(results != null, 'onRaceEnd carries the results payload');
+  assert.equal(session.racing, false, 'racing clears when the failsafe fires');
 });
 
-test('the race-timeout failsafe finishes the race after MAX_RACE_MS', (t) => {
-  withMockClock(t, () => {
-    let ended = 0; let results = null;
-    const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
-      onRaceEnd: (r) => { ended++; results = r; },
-    });
-    session.startCountdown(1);
-    t.mock.timers.tick(1000);    // GO at t=1000 → deadline t=181000
-    t.mock.timers.tick(179999);  // t=180999 — a hair before the deadline
-    assert.equal(ended, 0, 'still running just before the deadline');
-    t.mock.timers.tick(2);       // t=181001 — deadline crossed
-    assert.equal(ended, 1, 'the failsafe ends the race exactly once');
-    assert.ok(results != null, 'onRaceEnd carries the results payload');
-    assert.equal(session.racing, false);
-  });
+test('an in-race pause banks the timeout budget so a long pause never ends the race early', () => {
+  let ended = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), { onRaceEnd: () => { ended++; } });
+  session.startCountdown(1);
+  session.update(1000);      // GO!
+  assert.equal(session.racing, true);
+  session.update(49000);     // 49 s of racing gone; 131 s of budget left
+  assert.equal(session._raceMs, 49000, 'racing time accumulates from GO');
+  session.pause();
+  for (let i = 0; i < 60; i++) session.update(10000); // a 10-minute pause: every offered dt is dropped
+  assert.equal(ended, 0, 'the race does not end while paused, however long the pause');
+  assert.equal(session._raceMs, 49000, 'paused time does not bill the timeout budget');
+  session.resume();
+  session.update(130999);    // 179999 total racing ms: still short of the ceiling
+  assert.equal(ended, 0, 'the failsafe waits out the FULL banked budget after resume');
+  session.update(1);         // 180000: ceiling crossed
+  assert.equal(ended, 1, 'the timeout finishes the race once, after the banked racing time');
+  assert.equal(session.racing, false, 'racing clears when the failsafe fires');
 });
 
-test('pausing on the GO! beat resumes by clearing the banner and re-arming the race timer', (t) => {
-  withMockClock(t, () => {
-    const ticks = []; let ended = 0;
-    const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
-      onCountdownTick: (n) => ticks.push(n),
-      onRaceEnd: () => { ended++; },
-    });
-    session.startCountdown(1);   // ticks: [1]
-    t.mock.timers.tick(1000);    // GO! → ticks [1, 0]; racing, _countdownN===0, interval still live
-    assert.equal(session._countdownN, 0, 'paused exactly on the GO beat');
-    session.pause();             // freezes BEFORE the lingering −1 clear beat
-    assert.equal(session._countdownTimer, null, 'the −1 beat is suspended by the pause');
-    t.mock.timers.tick(5000);    // time passes; no beats while paused
-    assert.deepEqual(ticks, [1, 0], 'no banner-clear beat lands during the pause');
-    session.resume();
-    assert.equal(ticks[ticks.length - 1], -1, 'resume clears the lingering GO banner with a −1 beat');
-    assert.equal(session._countdownN, null, 'the countdown is fully wound down after resume');
-    assert.equal(session.racing, true, 'still racing after the GO-beat resume');
-    t.mock.timers.tick(180000);  // the re-armed failsafe still reaches the flag
-    assert.equal(ended, 1, 'the re-armed timeout still finishes the race');
+test('pausing on the GO! beat resumes by clearing the banner; the failsafe still fires', () => {
+  const ticks = []; let ended = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onCountdownTick: (n) => ticks.push(n),
+    onRaceEnd: () => { ended++; },
   });
+  session.startCountdown(1);   // ticks: [1]
+  session.update(1000);        // GO! → ticks [1, 0]; racing; the -1 clear beat is still pending
+  assert.equal(session._countdownN, 0, 'paused exactly on the GO beat');
+  session.pause();             // freezes BEFORE the lingering -1 clear beat
+  session.update(5000);        // dt offered while paused; no beats land
+  assert.deepEqual(ticks, [1, 0], 'no banner-clear beat lands during the pause');
+  session.resume();
+  assert.equal(ticks[ticks.length - 1], -1, 'resume clears the lingering GO banner with a -1 beat');
+  assert.equal(session._countdownN, null, 'the countdown is fully wound down after resume');
+  assert.equal(session.racing, true, 'still racing after the GO-beat resume');
+  session.update(180000);      // the failsafe still reaches the flag on racing time
+  assert.equal(ended, 1, 'the timeout still finishes the race');
 });
 
-test('pause/resume are idempotent and a paused update() does not advance the engine', (t) => {
-  withMockClock(t, () => {
-    let ended = 0;
-    const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), { onRaceEnd: () => { ended++; } });
-    session.startCountdown(1);
-    t.mock.timers.tick(1000);    // GO
-    t.mock.timers.tick(1000);    // clear the −1 beat
-    t.mock.timers.tick(40000);   // t=42000
-    session.pause();
-    const banked = session._raceRemainMs; // 181000 − 42000 = 139000
-    t.mock.timers.tick(10000);   // t=52000, but a redundant pause must NOT re-bank
-    session.pause();
-    assert.equal(session._raceRemainMs, banked, 'a redundant pause does not re-bank against a later clock');
+test('pause/resume are idempotent and a paused update() does not advance the engine', () => {
+  let ended = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), { onRaceEnd: () => { ended++; } });
+  session.startCountdown(1);
+  session.update(1000);       // GO!
+  session.update(42000);      // 42 s of racing (the -1 clear beat rides along)
+  session.pause();
+  session.pause();            // a redundant pause is a no-op
+  assert.equal(session.paused, true);
+  assert.equal(session._raceMs, 42000, 'a redundant pause changes nothing');
 
-    // update() while paused is frozen — the engine must not step (finish times can't tick).
-    let steps = 0;
-    const realUpdate = session.engine.update.bind(session.engine);
-    session.engine.update = (dt) => { steps++; return realUpdate(dt); };
-    session.update(16);
-    assert.equal(steps, 0, 'update() is a no-op while paused');
-    session.engine.update = realUpdate;
+  // update() while paused is frozen: the engine must not step (finish times can't tick).
+  let steps = 0;
+  const realUpdate = session.engine.update.bind(session.engine);
+  session.engine.update = (dt) => { steps++; return realUpdate(dt); };
+  session.update(16);
+  assert.equal(steps, 0, 'update() is a no-op while paused');
+  session.engine.update = realUpdate;
 
-    session.resume();            // re-arms at t=52000 → deadline t=191000
-    session.resume();            // resume when not paused is a no-op (no double-arm)
-    t.mock.timers.tick(banked + 1); // t=191001 — cross the (single) re-armed deadline
-    assert.equal(ended, 1, 'the failsafe fired exactly once');
+  session.resume();
+  session.resume();           // resume when not paused is a no-op
+  assert.equal(session.paused, false);
+  session.update(137999);     // 179999 total racing ms
+  assert.equal(ended, 0, 'the budget is not exhausted yet');
+  session.update(1);          // 180000: ceiling crossed
+  assert.equal(ended, 1, 'the failsafe fired exactly once');
 
-    // After the race has ended, pause/resume are inert.
-    session.pause(); session.resume();
-    assert.equal(session.paused, false, 'pause after the race ended is a no-op');
-    assert.equal(ended, 1, 'no extra race-end fires from post-finish pause/resume');
+  // After the race has ended, pause/resume are inert.
+  session.pause(); session.resume();
+  assert.equal(session.paused, false, 'pause after the race ended is a no-op');
+  assert.equal(ended, 1, 'no extra race-end fires from post-finish pause/resume');
+});
+
+test('dispose() winds the session down without firing callbacks', () => {
+  const ticks = []; let ended = 0;
+  const session = new RaceSession([{ peerIndex: 'p1' }], mkTrack(1), {
+    onCountdownTick: (n) => ticks.push(n),
+    onRaceEnd: () => { ended++; },
   });
+  session.startCountdown(3);  // ticks: [3]
+  session.dispose();
+  session.update(10000);      // dt after dispose is dropped entirely
+  assert.deepEqual(ticks, [3], 'no beats land after dispose');
+  assert.equal(session.racing, false, 'a disposed session never starts racing');
+  assert.equal(ended, 0, 'dispose does not fire onRaceEnd');
 });
 
 test('ranking orders by progress', () => {
