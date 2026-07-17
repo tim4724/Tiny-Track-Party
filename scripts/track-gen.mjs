@@ -389,9 +389,47 @@ const GRID_BACK = 7, GRID_FWD = 12;
 // What a good grid looks like. minRadius is world units against a 5-wide road (30 = a gentle
 // drift, not a corner); grade/bank are the frame's y-components (~4.5° / ~3.5°); rise keeps
 // the grid near ground level rather than up on a bridge deck; widthTol keeps a decorated
-// flare/pinch off it.
-const GRID_GATE = { minRadius: 30, maxGrade: 0.08, maxBank: 0.06, maxRise: 1.0, widthTol: 0.25 };
-const ANCHOR_SHORTLIST = 12; // full resolves per seed — the prefilter's job is to keep this small
+// flare/pinch off it; headroom keeps the finish gantry out of a deck overhead (below).
+const GRID_GATE = { minRadius: 30, maxGrade: 0.08, maxBank: 0.06, maxRise: 1.0, widthTol: 0.25, minHeadroom: 3.1 };
+const ANCHOR_SHORTLIST = 16; // full resolves per seed — the prefilter's job is to keep this small
+
+// ---- GANTRY HEADROOM ----
+// Mirrors render/FinishGate.js (which imports THREE, so it can't be imported here — keep
+// these in sync; the "gantry clears any deck over the line" test guards the pair).
+// The gantry is a GATE, not a point: two pylons straddling the road at ±halfSpan, a banner
+// across the top, the whole thing rising GANTRY_TOP above the road surface. So clearance
+// must be tested against its full lateral SPAN — a deck that misses the centreline entirely
+// can still be speared by a pylon (avalanche did exactly that: its deck passes 4.6 out,
+// clear of the road, straight through where the right-hand pylon stands).
+//
+// This gate exists because the other grid criteria actively select FOR the danger: the
+// under-strand of a crossing is flat, level, ground-height and straight — precisely what a
+// good grid looks like — so an anchor search left to the criteria above will happily park
+// the line under a bridge.
+const GANTRY_TOP = 2.8;     // FinishGate CLEAR (2.0) + BANNER_H (0.8) — pylon/banner top
+const GANTRY_REACH = 1.15;  // FinishGate kerbW + KERB_CLEAR + 2×PYLON_R, plus slack for a
+                            // themed kerb (theme.road.kerbW overrides the 0.22 default)
+
+// The lowest road strand crossing over the gantry's footprint at arclength s0 (Infinity =
+// clear sky). Distances are to the gantry's lateral segment, not to a point.
+function gantryHeadroom(t, s0 = 0) {
+  const cl = t.centerline, L = t.length, f = cl.sampleAt(s0);
+  const half = t.roadWidth / 2 + GANTRY_REACH;
+  const ll = Math.hypot(f.lateral.x, f.lateral.z) || 1;
+  const ux = f.lateral.x / ll, uz = f.lateral.z / ll;
+  let lowest = Infinity;
+  for (const sm of cl.samples) {
+    const arc = Math.min(Math.abs(sm.s - s0), L - Math.abs(sm.s - s0));
+    if (arc < 6) continue;                       // our own road either side of the line
+    const dy = sm.pos.y - f.pos.y;
+    if (dy <= 0.3) continue;                     // not above us
+    const dx = sm.pos.x - f.pos.x, dz = sm.pos.z - f.pos.z;
+    const along = Math.max(-half, Math.min(half, dx * ux + dz * uz)); // clamp onto the span
+    if (Math.hypot(dx - along * ux, dz - along * uz) > sm.width / 2) continue; // slab misses it
+    lowest = Math.min(lowest, dy);
+  }
+  return lowest;
+}
 
 // |curvature| at s, as a central difference of plan heading over ±h world units.
 const curvatureAt = (cl, s, h = 1.0) => {
@@ -419,14 +457,19 @@ export function measureGrid(t, s0 = 0) {
     minWidth = Math.min(minWidth, w); maxWidth = Math.max(maxWidth, w);
     rise = Math.max(rise, f.pos.y - groundY);
   }
-  return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank, minWidth, maxWidth, rise };
+  return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank,
+    minWidth, maxWidth, rise, headroom: gantryHeadroom(t, s0) };
 }
 export const gridPasses = (g, roadWidth) => g.minRadius > GRID_GATE.minRadius
   && g.grade < GRID_GATE.maxGrade && g.bank < GRID_GATE.maxBank && g.rise < GRID_GATE.maxRise
   && Math.abs(g.maxWidth - roadWidth) < GRID_GATE.widthTol
-  && Math.abs(g.minWidth - roadWidth) < GRID_GATE.widthTol;
-// Rank: anchors that PASS first, then the straightest/flattest/levellest among them.
+  && Math.abs(g.minWidth - roadWidth) < GRID_GATE.widthTol
+  && g.headroom > GRID_GATE.minHeadroom;
+// Rank: anchors that PASS first, then the straightest/flattest/levellest among them. A deck
+// over the line is disqualifying rather than merely costly — no solved crossing ever clears
+// GANTRY_TOP (D=1.2 plan = 2.4 world), so "a bit of headroom" is never good enough.
 const gridCost = (g, roadWidth) => (gridPasses(g, roadWidth) ? 0 : 1000)
+  + (g.headroom > GRID_GATE.minHeadroom ? 0 : 1000)
   + g.curvature * 200 + g.grade * 40 + g.bank * 60 + Math.max(0, g.rise - 0.6) * 3
   + Math.abs(g.maxWidth - roadWidth) * 2;
 

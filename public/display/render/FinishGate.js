@@ -27,6 +27,11 @@ const ROWS = 2;            // chequer rows — big bold checks, not confetti
 const BANNER_H = 0.8;      // banner face height
 const BANNER_D = 0.12;     // banner thickness along travel
 const CLEAR = 2.0;         // banner underside above the road — cars & cameras pass under
+// CLEAR + BANNER_H is how much sky the gantry needs over the start line, and its span
+// (halfSpan below) how much width. Both are mirrored as GANTRY_TOP / GANTRY_REACH in
+// scripts/track-gen.mjs, which uses them to keep a start line out from under a bridge deck
+// — raise this and a track whose line sits under a crossing starts clipping. The "clear sky
+// over the gantry" test in tests/track.test.js guards the pair.
 const FOOT_R = 0.55;       // flag-stand foot radius (grounds the post on lawn or skirt)
 const FOOT_H = 0.24;       // foot height above the lawn
 const RING_H = 0.42;       // striped-pylon ring height (lighthouse bands)

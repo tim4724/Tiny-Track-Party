@@ -228,6 +228,35 @@ test('every named track closes and includes a start gate', () => {
   }
 });
 
+// The GRID sits BEHIND the line (Game.js seeds the cars at totalS -2.5…-6.5 and lap 1 opens
+// by driving across it), so the start line's surroundings are what every race opens on. It
+// is not chosen by hand: the generated tracks pick their anchor before the elevation solve
+// (scripts/track-gen.mjs chooseAnchor), the segment-DSL ones declare `startU`. This pins the
+// result for everything that SHIPS — a re-bake, a new seed or a retuned profile that parks a
+// grid back in a corner fails here.
+//
+// Headroom is the subtle one and the reason this is a test rather than an assumption: the
+// other criteria (flat, level, ground-height, straight) are an exact description of the
+// UNDER-STRAND of a crossing, so an anchor search left to them will happily park the line
+// under a bridge — and the finish gantry, a ~2.8-unit gate spanning the road, spears it. No
+// solved crossing ever clears that (the solver's D=1.2 plan = 2.4 world).
+//
+// Measured with the generator's OWN gate, imported rather than re-implemented: a hand-synced
+// copy is exactly how the "invisible pole" bug slipped its regression test (see postAtSample).
+test('every shipped track starts on a clean grid, with clear sky over the gantry', async () => {
+  const { measureGrid, gridPasses } = await import('../scripts/track-gen.mjs');
+  for (const t of TRACK_LIST) {
+    const built = buildTrack(t);
+    const g = measureGrid(built);
+    const say = `${t.id}: minR=${g.minRadius === Infinity ? 'inf' : g.minRadius.toFixed(0)}`
+      + ` grade=${g.grade.toFixed(2)} bank=${g.bank.toFixed(2)} rise=${g.rise.toFixed(2)}`
+      + ` width=${g.minWidth.toFixed(1)}-${g.maxWidth.toFixed(1)}`
+      + ` headroom=${g.headroom === Infinity ? 'clear' : g.headroom.toFixed(2)}`;
+    assert.ok(g.headroom > 3.1, `${say} — a deck passes over the finish line; the gantry is 2.8 tall and would clip it`);
+    assert.ok(gridPasses(g, built.roadWidth), `${say} — grid is not straight/flat/level/full-width enough`);
+  }
+});
+
 test('buildTrack reports a loop mouth (arclength + width) for every loop segment', () => {
   // The display auto-places a full-width launch strip at each loop mouth (main.js reads
   // these), so every `loop` segment must surface exactly one entry, in-range and sized.
