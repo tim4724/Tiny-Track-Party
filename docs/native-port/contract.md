@@ -98,13 +98,18 @@ The executable form of this guarantee is the golden-trace tooling:
 FNV-1a hash of the canonical-JSON snapshot every frame, full snapshots on a
 cadence), `scripts/verify-trace.mjs` replays the recorded inputs through the
 engine and demands EXACT float equality, and `tests/trace.test.js` replays
-every committed fixture on `npm test`. The C++ port passes conformance when it
-verifies every committed fixture. The fixture set must keep covering the whole
-event vocabulary and the endgame path, not just early-race physics; the
-per-fixture coverage inventory lives in `tests/fixtures/traces/README.md`
-(currently: two starter slices plus a full switchback race that exercises all
-nine event kinds, all four spin causes, rocket flight, the monster transform,
-lap counting across the s = 0 seam, finish ranking and race_over).
+every committed fixture on `npm test`. The committed-fixture gate is
+currently DISARMED (the fixture directory is empty) because the JS engine is
+still being tuned and every intentional behaviour change forced a CI
+re-record round-trip; the in-process record/verify tests keep the tooling
+honest meanwhile. Re-arm it when C++ conformance work starts (see
+`tests/fixtures/traces/README.md`). The C++ port passes conformance when it
+verifies every committed fixture at that point. The fixture set must cover
+the whole event vocabulary and the endgame path, not just early-race
+physics; `scripts/record-fixtures.mjs` defines the set and asserts that
+coverage (two starter slices plus a full switchback race exercising all nine
+event kinds, all four spin causes, rocket flight, the monster transform, lap
+counting across the s = 0 seam, finish ranking and race_over).
 
 ## Input: the CONTROL message
 
