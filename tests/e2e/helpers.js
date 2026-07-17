@@ -67,9 +67,14 @@ async function joinController(browser, roomCode, name) {
 
 // Ready up every non-host phone, then the host presses "Start race" (the
 // button enables itself once everyone else is ready — Playwright's click
-// auto-waits on that).
+// auto-waits on that). Ready SURVIVES race → lobby and the button is a
+// toggle, so only tap phones that aren't already ready — a blind click on a
+// still-ready returning racer would un-ready them and deadlock the start.
 async function startRace(host, others) {
-  for (const p of others) await p.click('#ready-btn');
+  for (const p of others) {
+    const btn = p.locator('#ready-btn');
+    if (!(await btn.evaluate((b) => b.classList.contains('is-pressed')))) await btn.click();
+  }
   await host.click('#ready-btn');
 }
 

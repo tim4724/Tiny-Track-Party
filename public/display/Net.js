@@ -141,14 +141,23 @@ export class DisplayNet extends GameNet {
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     this.flow.on('rosterchange', () => this._announce());
-    this.flow.on('hostchange', () => this._announce());
-    // Ready flags are lobby-only: wipe them whenever the room lands back in the
-    // lobby, so the next race needs a fresh round of "I'm ready" taps (stale
-    // flags would leave the host's "Start race" pre-armed for the new race).
-    // Then republish the snapshot: the retained copy carries roomState, and a
-    // replay to a (re)joining phone must never hand it a stale phase. When
-    // _clearReady already announced (flags were wiped), that publish carried
-    // the new state — skip the duplicate.
+    this.flow.on('hostchange', ({ hostPeerIndex }) => {
+      // A promoted host has no ready toggle (their footer button is "Start
+      // race"), so a ready flag left over from before the promotion could
+      // never be cleared — and it would keep their car pick locked (SET_CAR
+      // refuses ready seats). Drop it on promotion.
+      const h = this.flow.get(hostPeerIndex);
+      if (h) h.ready = false;
+      this._announce();
+    });
+    // Republish the snapshot on every phase flip: the retained copy carries
+    // roomState, and a replay to a (re)joining phone must never hand it a
+    // stale phase. Ready flags deliberately SURVIVE the race → lobby round
+    // trip: the same crew usually races again, so returning racers land back
+    // in the lobby still ready (the host's "Start race" is pre-armed) instead
+    // of re-tapping "I'm ready" every race. SET_READY is a toggle, and a
+    // ready seat's car pick is locked (SET_CAR below) — anyone who wants to
+    // switch cars un-readies first, so a ready flag always means "ready".
     this.flow.on('statechange', ({ to }) => {
       // Race start: re-stamp every CONNECTED seat's liveness so silence accumulated in
       // the lobby (where expiredPeers is gated off) isn't charged against the first
@@ -162,8 +171,7 @@ export class DisplayNet extends GameNet {
         const now = Date.now();
         for (const p of this.flow.list()) if (p.connected) this.flow.onSeen(p.peerIndex, now);
       }
-      const announced = to === ROOM_STATE.LOBBY && this._clearReady();
-      if (!announced) this._publishLobby();
+      this._publishLobby();
     });
   }
 
@@ -208,15 +216,6 @@ export class DisplayNet extends GameNet {
       colorIndex: p.colorIndex, carIndex: p.carIndex, connected: p.connected,
       ready: !!p.ready
     }));
-  }
-  // Drop every player's ready flag (entering the lobby). Announce only if
-  // something actually changed, so the first lobby entry stays quiet. Returns
-  // whether it announced, so the statechange handler can skip its own publish.
-  _clearReady() {
-    let changed = false;
-    for (const p of this.flow.list()) { if (p.ready) { p.ready = false; changed = true; } }
-    if (changed) this._announce();
-    return changed;
   }
   _usedColors() {
     const s = new Set();
@@ -363,10 +362,12 @@ export class DisplayNet extends GameNet {
         // chosen model at race start. Allowed in the lobby, and mid-race for
         // players with no car on track (late joiners wait in THEIR lobby while
         // a race runs — their pick must stick for the next race). Racers stay
-        // locked to their car until the room is back in the lobby.
+        // locked to their car until the room is back in the lobby. A READY
+        // seat is locked too: ready survives race → lobby, so the pick behind
+        // a standing ready flag must not shift — un-ready (SET_READY) first.
         const p = this.flow.get(from);
         const idx = data.carIndex;
-        if (p && (this.roomState === ROOM_STATE.LOBBY || !this.inRace(from))
+        if (p && !p.ready && (this.roomState === ROOM_STATE.LOBBY || !this.inRace(from))
           && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
           p.carIndex = idx;
           this._announce();

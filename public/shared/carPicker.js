@@ -60,8 +60,10 @@ function statBarsNode(carIndex) {
 
 // Render the picker into the given elements. heroEl gets the big selected-car
 // preview + stats; stripEl gets the tap-to-pick thumbnails. Tapping a strip tile
-// calls onPick(i). Either element may be omitted.
-export function buildCarPicker({ heroEl, stripEl, selected, onPick }) {
+// calls onPick(i). Either element may be omitted. `canPick: false` renders the
+// strip read-only (tiles disabled) — a READY player's car is locked until they
+// un-ready, mirroring the trackPicker's gate.
+export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = true }) {
   const count = MODELS.length || 4;
   const sel = Math.max(0, Math.min(selected | 0, count - 1));
 
@@ -83,10 +85,11 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick }) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
+      btn.disabled = !canPick;
       if (mine) btn.setAttribute('aria-current', 'true');
       btn.setAttribute('aria-label', carName(i));
       btn.appendChild(carThumbNode(MODELS[i], { spin: false })); // strip tiles are stills (cheap; hero draws the eye)
-      if (onPick) btn.addEventListener('click', () => onPick(i));
+      if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
       stripEl.appendChild(btn);
     }
   }

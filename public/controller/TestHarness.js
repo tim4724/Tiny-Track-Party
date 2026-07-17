@@ -42,10 +42,14 @@ export function runControllerScenario(opts) {
 
   // Car picker — the real shared layout (hero preview + stats + tap strip). Taps
   // re-render so the gallery shows the selection updating the big preview live.
-  function renderCarPicker(selected) {
+  // The selection is remembered so the ready toggle (below) can re-render the
+  // strip locked/unlocked without losing the picked car.
+  let carSel = color;
+  function renderCarPicker(selected = carSel, canPick = true) {
+    carSel = selected;
     buildCarPicker({
       heroEl: el('car-hero'), stripEl: el('carpick'),
-      selected, onPick: (i) => renderCarPicker(i)
+      selected: carSel, canPick, onPick: (i) => renderCarPicker(i, canPick)
     });
   }
 
@@ -65,11 +69,15 @@ export function runControllerScenario(opts) {
 
   // Lobby footer — the SAME renderer as main.js (renderReadyFoot), fed fake
   // roster data. For a non-host, tapping toggles the ready state so the gallery
-  // shows the held-down "Ready ✓" + waiting note live; the host's "Start race"
-  // button just renders (no race to start here).
+  // shows the held-down "Ready ✓" + waiting note live — and re-renders the car
+  // picker locked while ready (mirrors main.js renderLobby); the host's "Start
+  // race" button just renders (no race to start here).
   function renderReadyPreview(amHost, amReady, host, others) {
     renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, canStart: true, host, others });
-    if (!amHost) el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others);
+    if (!amHost) {
+      renderCarPicker(carSel, !amReady);
+      el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others);
+    }
   }
 
   // Results board — mirrors main.js renderResults + renderResultFoot. `over=false`

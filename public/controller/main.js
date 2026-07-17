@@ -256,8 +256,6 @@ function handleMessage(data) {
       hideConn();   // a WELCOME means we're back in (covers the display returning after display_gone)
       myColorIndex = data.colorIndex;
       if (data.carIndex != null) myCarIndex = data.carIndex;
-      maybeRestoreCar();   // override the slot default with this phone's saved pick
-      applyLivery();
       roster = data.players || [];
       hostPeerIndex = data.hostPeerIndex;
       amHost = net.isHost(data.hostPeerIndex);
@@ -267,6 +265,12 @@ function handleMessage(data) {
       const me = roster.find((p) => p.peerIndex === net.peerIndex);
       if (me && me.name) myName = me.name;
       amReady = !!(me && me.ready);
+      // Override the slot default with this phone's saved pick — but not on a
+      // seat that's already READY (ready survives race → lobby): its car is
+      // locked, the display would refuse the SET_CAR, and the silent refusal
+      // would leave our optimistic myCarIndex desynced from the record.
+      if (!amReady) maybeRestoreCar();
+      applyLivery();
       // Mid-race WELCOME: inRace says whether a car of ours is on track. false
       // = brand-new late joiner → wait in the lobby for the next race. An older
       // display omits the flag — treat that as in-race (the old rejoin path).
@@ -496,13 +500,16 @@ function applyLivery() {
 // render — a plain <img>, no WebGL on the phone — its name, and handling stat
 // bars) above a compact strip of every model as a small still. Tapping a strip
 // tile picks it; the hero (preview + stats) updates to match. Car and colour are
-// independent and duplicates are fine, so there's no locking; the livery shows as
-// the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
-// display's record. Layout lives in shared/carPicker.js (shared with the gallery).
+// independent and duplicates are fine, so no tile is ever claimed; the livery
+// shows as the selection ring. A tap is optimistic — the next LOBBY_UPDATE echoes back the
+// display's record. While READY the picker is locked (ready survives race →
+// lobby, so the pick behind a standing ready flag must not shift) — toggling
+// "I'm ready" off unlocks it. Layout lives in shared/carPicker.js (shared with
+// the gallery).
 function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
-  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar });
+  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
   if (waitingForNextRace) {
@@ -595,7 +602,7 @@ function chooseMode(pick) {
 }
 
 function chooseCar(i) {
-  if (i === myCarIndex) return;
+  if (amReady || i === myCarIndex) return; // ready = car locked (tiles are disabled; belt-and-braces)
   myCarIndex = i;       // optimistic; LOBBY_UPDATE is the source of truth
   saveCarIndex(i);      // remember it so the next join restores this car
   renderLobby();        // move the highlight now

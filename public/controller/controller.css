@@ -154,7 +154,10 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.car-opt:active { transform: translateY(2px); }
+.car-opt:active:not(:disabled) { transform: translateY(2px); }
+/* locked strip (player is READY): the pick stands, the alternatives recede */
+.car-opt:disabled { cursor: default; }
+.car-opt:disabled:not(.car-opt--mine) { opacity: 0.45; }
 /* selected strip tile: tinted toward YOUR livery with the hard drop (the hero
    shows which it is; the pale-blue highlight didn't fit the warm palette) */
 .car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); box-shadow: var(--shadow-pop); }

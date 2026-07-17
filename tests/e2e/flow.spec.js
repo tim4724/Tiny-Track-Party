@@ -11,6 +11,15 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await expect(page.locator('#players')).toContainText('Alice');
   await expect(page.locator('#players')).toContainText('Bob');
 
+  // Bob readies up: his car pick locks (strip tiles disabled) until he
+  // un-readies — the ready button is a toggle.
+  await bob.click('#ready-btn');
+  await expect(bob.locator('#ready-btn')).toHaveClass(/is-pressed/);
+  await expect(bob.locator('.car-opt').first()).toBeDisabled();
+  await bob.click('#ready-btn');
+  await expect(bob.locator('#ready-btn')).not.toHaveClass(/is-pressed/);
+  await expect(bob.locator('.car-opt').first()).toBeEnabled();
+
   await startRace(alice, [bob]);
 
   // Display flips to the race, phones get the drive HUD, countdown reaches GO.
@@ -33,4 +42,10 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // The race was actually torn down, not just visually hidden: the display disposed
   // its session (timers + scene cars), so __session() is null back in the lobby.
   await page.waitForFunction(() => window.__session() === null);
+
+  // Ready survives the round trip: Bob is still ready (car pick still locked),
+  // so the host's "Start race" is immediately armed for the next race.
+  await expect(bob.locator('#ready-btn')).toHaveClass(/is-pressed/);
+  await expect(bob.locator('.car-opt').first()).toBeDisabled();
+  await expect(alice.locator('#ready-btn')).toBeEnabled();
 });
