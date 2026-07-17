@@ -15,14 +15,20 @@
 //   node scripts/audit-tracks.mjs
 import { buildTrack } from './track-gen.mjs';
 
+// Audit BOTH catalogues: the shipped tracks (tracks.js) and the dev/retired surfaces
+// (devTracks.js). The retired circuits are kept for exactly this kind of geometry check —
+// the invisible-pole bug this script exists to catch was found on one of them — so
+// iterating the shipped list alone would drop them silently.
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
+const ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
 const { postAtSample } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
 
 const KERB = 0.22 + 0.2;   // kerb width + height margin around the drivable deck
 const LEVEL = 0.6;         // |Δy| below this = same level (deck 0.34 + kerb 0.2 + slack)
 
 let issues = 0;
-for (const [name, def] of Object.entries(TRACKS)) {
+for (const [name, def] of Object.entries(ALL_TRACKS)) {
   const t = buildTrack(def);
   const ss = t.centerline.samples, n = ss.length, L = t.length;
   const rows = [];

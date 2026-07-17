@@ -64,8 +64,13 @@ for (const arg of args) {
         }
         cards.push(svgFor(buildTrack(design.segs), `stunt ${item}`, note));
       } else if (kind === 'catalog') {
+        // Both catalogues: the shipped tracks and the dev/retired surfaces (devTracks.js) —
+        // the `catalog:twister` example above is a retired one.
         const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
-        const t = buildTrack(TRACKS[item]);
+        const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
+        const def = TRACKS[item] || DEV_TRACKS[item];
+        if (!def) throw new Error(`unknown catalog track "${item}"`);
+        const t = buildTrack(def);
         cards.push(svgFor(t, item, `len ${Math.round(t.length)}`));
       } else {
         const wp = bakeSeed(+item, kind);

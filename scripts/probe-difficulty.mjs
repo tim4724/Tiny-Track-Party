@@ -6,10 +6,14 @@
 // lands in its cup's band. Usage: node scripts/probe-difficulty.mjs
 import { measureTrack, aiProbe, buildTrack } from './track-gen.mjs';
 
+// Both catalogues. The reference tracks this exists to calibrate against — meadow,
+// switchback, twister — are all RETIRED from the cups and live in devTracks.js, so reading
+// the shipped list alone would drop precisely the anchors the bands are pinned to.
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
 
 console.log('track        diff     len  lap(s) brake  minR hairp  dens  rec  minW maxW climb');
-for (const [id, def] of Object.entries(TRACKS)) {
+for (const [id, def] of Object.entries({ ...TRACKS, ...DEV_TRACKS })) {
   const t = buildTrack(def);
   const m = measureTrack(t);
   const ai = await aiProbe(def);

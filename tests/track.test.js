@@ -5,12 +5,20 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, TRACKS, TRACK_LIST, trackSchematic, TRACK_SCHEMATICS, postAtSample;
+let buildTrack, TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS, postAtSample;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
   TRACKS = mod.TRACKS;
   TRACK_LIST = mod.TRACK_LIST;
+  DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
+  // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev and
+  // RETIRED surfaces (devTracks.js). The union is the point, not a convenience — the retired
+  // circuits are kept precisely so these suites keep running against them (Twister is the
+  // stunt-geometry coverage; Coaster and Riverside the only `bump`), so iterating TRACKS
+  // alone would quietly drop exactly what they're for. Suites about what SHIPS (schematics,
+  // the grid rule) iterate TRACK_LIST instead.
+  ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
   postAtSample = mod.postAtSample;
   trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
   TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
@@ -220,7 +228,7 @@ test('grand tour centerline never steps backward (continuous through the loop)',
 });
 
 test('every named track closes and includes a start gate', () => {
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
     assert.ok(t.closed, `track "${name}" should close (gap=${t.gap.toFixed(3)})`);
     // The gate itself is built render-side (render/FinishGate.js) from this flag.
@@ -260,7 +268,7 @@ test('every shipped track starts on a clean grid, with clear sky over the gantry
 test('buildTrack reports a loop mouth (arclength + width) for every loop segment', () => {
   // The display auto-places a full-width launch strip at each loop mouth (main.js reads
   // these), so every `loop` segment must surface exactly one entry, in-range and sized.
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
     const nLoops = (def.segments || []).filter((s) => s.kind === 'loop').length;
     assert.ok(Array.isArray(t.loopStarts), `track "${name}" should report loopStarts`);
@@ -277,7 +285,7 @@ test('a loop-free track reports no loop mouths', () => {
 });
 
 test('every named track has a display name and a geometry source', () => {
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     assert.ok(typeof def.name === 'string' && def.name.length, `track "${name}" missing name`);
     const seg = Array.isArray(def.segments) && def.segments.length;
     const wp = Array.isArray(def.waypoints) && def.waypoints.length;
@@ -310,7 +318,7 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
 // flagging an intentional weave (steady tight corner ≈ 0.023 rad/0.1u, chicane
 // transitions peak ≈ 0.056, all well under the 0.08 bound).
 test('every named track has a clean centerline (no backstep, no stubs, no sharp joints)', () => {
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const cl = buildTrack(def).centerline;
     const pts = cl.samples.map((p) => p.pos);
     const n = pts.length;
@@ -379,7 +387,7 @@ test('banking: corners lean INTO the turn and stay upright', () => {
 });
 
 test('variable width: a flared track widens past the default and eases back', () => {
-  const t = buildTrack(TRACKS.crossover); // its spine is flared via flare(6, 3.4)
+  const t = buildTrack(DEV_TRACKS.crossover); // its spine is flared via flare(6, 3.4)
   let maxW = 0, minW = Infinity;
   for (let s = 0; s < t.length; s += 0.5) {
     const w = t.centerline.widthAt(s);
@@ -390,8 +398,8 @@ test('variable width: a flared track widens past the default and eases back', ()
 });
 
 test('buildTrack accepts a bare segment array and a descriptor alike', () => {
-  const fromArray = buildTrack(TRACKS.switchback.segments);
-  const fromDef = buildTrack(TRACKS.switchback);
+  const fromArray = buildTrack(DEV_TRACKS.switchback.segments);
+  const fromDef = buildTrack(DEV_TRACKS.switchback);
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
   assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.segments array/);
 });
@@ -413,7 +421,7 @@ test('an unknown segment kind throws a clear error', () => {
 // transported holonomy. ----
 
 test('twister closes and the loops genuinely invert the frame', () => {
-  const t = buildTrack(TRACKS.twister);
+  const t = buildTrack(DEV_TRACKS.twister);
   assert.ok(t.closed, `twister should close (gap=${t.gap.toFixed(3)})`);
   let maxY = -Infinity, inverted = 0;
   for (const sm of t.centerline.samples) {
@@ -425,7 +433,7 @@ test('twister closes and the loops genuinely invert the frame', () => {
 });
 
 test('twister stunts carry the road sideways and over the top, edges clear of the grass', () => {
-  const t = buildTrack(TRACKS.twister);
+  const t = buildTrack(DEV_TRACKS.twister);
   const ss = t.centerline.samples;
   // The loops/spiral/roll all put the deck sideways somewhere; assert sideways
   // decks exist at all, and separately that the tilted loops crest at 2·radius
@@ -459,7 +467,7 @@ test('twister deck twist rate stays shallow everywhere (no helicoid corkscrews)'
   // the barrel-roll bridge was removed; the 0.21 bound still guards the bad-old
   // corkscrew while leaving room to restore the barrel roll (~0.18 peak, flush
   // within ~10° across a wheelbase with the pose conforming).
-  const t = buildTrack(TRACKS.twister);
+  const t = buildTrack(DEV_TRACKS.twister);
   const ss = t.centerline.samples;
   let worst = 0, at = 0;
   for (let i = 1; i < ss.length; i++) {
@@ -475,7 +483,7 @@ test('twister deck twist rate stays shallow everywhere (no helicoid corkscrews)'
 });
 
 test('twister frames stay orthonormal and resolve upright at the seam', () => {
-  const t = buildTrack(TRACKS.twister);
+  const t = buildTrack(DEV_TRACKS.twister);
   let worstDot = 0, worstLen = 0;
   for (const sm of t.centerline.samples) {
     worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
@@ -493,7 +501,7 @@ test('twister frames stay orthonormal and resolve upright at the seam', () => {
 });
 
 test('twister spiral bridges over its own entrance with real clearance', () => {
-  const t = buildTrack(TRACKS.twister);
+  const t = buildTrack(DEV_TRACKS.twister);
   // The spiral's elevated final quarter crosses directly over its own entrance.
   // Find sample pairs sharing a plan footprint but far apart along the lap — there
   // must be a genuinely stacked stretch, and it must clear like a (tall) bridge.
@@ -575,7 +583,7 @@ const assertPolesReconstruct = (t, name) => {
 };
 
 test('support posts are clearly out of the corridor or visibly in it with a collision pole', () => {
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
     const ss = t.centerline.samples;
     for (const post of postsOf(t)) {
@@ -607,8 +615,8 @@ test('support posts are clearly out of the corridor or visibly in it with a coll
 // on-road obstruction and planted an invisible mid-lane pole. Neither track has any
 // corridor-blocking post, so neither may emit collision poles at all.
 test('no phantom poles under a strand climbing over its own supports', () => {
-  for (const name of ['sidewinder', 'crossover']) {
-    const t = buildTrack(TRACKS[name]);
+  for (const name of ['sidewinder', 'crossover']) { // one shipped, one retired — hence ALL_TRACKS
+    const t = buildTrack(ALL_TRACKS[name]);
     assert.equal(t.autoPoles.length, 0,
       `track "${name}": expected zero autoPoles (its pillars all stand under their own deck), got ${t.autoPoles.length}`);
   }
@@ -657,7 +665,7 @@ test('a pillar standing in a corridor emits its collision pole at the visible co
 // thread-the-ring clearance.
 test('no two same-level upright strands overlap road surfaces', () => {
   const KERB = 0.42, LEVEL = 0.6;
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
     const ss = t.centerline.samples, N = ss.length, L = t.length;
     for (let i = 0; i < N; i += 2) {
@@ -682,7 +690,7 @@ test('no two same-level upright strands overlap road surfaces', () => {
 // that sank an early double-bridge "pretzel": two strands grazed at ground level,
 // 0.09 apart.) Bridged crossings sit ~2.0 apart; flat tracks keep strands ≥5 apart.
 test('no track has overlapping strands (every crossing is bridged)', () => {
-  for (const [name, def] of Object.entries(TRACKS)) {
+  for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
     const Sm = t.centerline.samples, N = Sm.length, L = t.length;
     let min3d = Infinity, atZ = 0;
@@ -703,7 +711,7 @@ test('no track has overlapping strands (every crossing is bridged)', () => {
 // bridges (pillars) and loops/banked stunts must NOT be mistaken for hills (a berm there
 // would put a grass mound under a stunt or bury the road a bridge flies over). ----
 test('grass hills berm raised non-pillared road, never bridges or loops', () => {
-  const hillsOf = (name) => buildTrack(TRACKS[name]).hills;
+  const hillsOf = (name) => buildTrack(DEV_TRACKS[name]).hills;
   assert.ok(hillsOf('switchback').length > 0, 'switchback hills should berm');
   assert.ok(hillsOf('riverside').length > 0, 'riverside hills should berm');
   assert.equal(hillsOf('twister').length, 0, 'twister: all raised road is bridge/loop/spiral — no berms');
@@ -725,7 +733,7 @@ test('seeded Backyard tracks produce both bridge pillars and grass berms', () =>
 });
 
 test('hill berms feather to the lawn at both ends and rise under the road between', () => {
-  const t = buildTrack(TRACKS.riverside);
+  const t = buildTrack(DEV_TRACKS.riverside);
   const gy = t.groundY;
   assert.ok(t.hills.length > 0);
   for (const rings of t.hills) {
