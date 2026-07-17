@@ -9,6 +9,14 @@ name: Record golden-trace fixtures
 
 on:
   workflow_dispatch:
+  # workflow_dispatch only resolves once this file is on the default branch,
+  # and a change to the recording tooling is exactly when a re-record is
+  # wanted anyway — so also run when the tooling itself changes.
+  push:
+    paths:
+      - '.github/workflows/record-traces.yml'
+      - 'scripts/record-fixtures.mjs'
+      - 'scripts/record-trace.mjs'
 
 jobs:
   record:
