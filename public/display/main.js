@@ -359,7 +359,7 @@ function buildDemoField(humans) {
   for (const s of cpuSeats(field)) {
     field.push({ id: 'demo-cpu-' + s.n, colorIndex: s.colorIndex, carIndex: s.carIndex, stats: s.stats });
   }
-  // Persona (skill + lane) by final grid index so they spread across the WHOLE field;
+  // Persona (caution + lane) by final grid index so they spread across the WHOLE field;
   // each CPU also takes THAT persona's name, so its plate matches how it drives.
   // Humans keep their own name but still drive on a persona — no phones steer here.
   field.forEach((p, i) => {

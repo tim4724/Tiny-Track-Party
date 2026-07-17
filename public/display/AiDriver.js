@@ -119,11 +119,11 @@ function avoidThreat(car, lane, game, maxLat) {
 // down the track, finds the tightest upcoming bend, and brakes so the car arrives
 // no faster than its turn rate can hold (max corner speed ≈ turn/κ). A low-handling
 // car brakes earlier + harder; a grippy one barely lifts.
-const TURN_RATE_FALLBACK = 1.2; // matches Game's base TURN_RATE (cars without a resolved .turn)
+const TURN_RATE_FALLBACK = 0.90; // matches Game's base TURN_RATE (cars without a resolved .turn)
 const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
-const CORNER_MARGIN = 0.95;     // target as a fraction of the max holdable corner speed. Was 0.86, but bots never once touched a curb across the whole catalogue at that value (or even at 1.0) — the 7.5u lookahead keeps them on a smoothed line, so the feared apex-cut washout doesn't happen. 0.95 recovers the speed they were needlessly braking away while banking a hair of safety for items/contact noise.
+const CORNER_MARGIN = 1.0;      // target as a fraction of the max holdable corner speed. Was 0.86, then 0.95 — needlessly slow: the 7.5u lookahead keeps bots on a smoothed line, so the feared apex-cut washout doesn't happen. Persona spread now lives in `caution` (a per-bot multiplier on this), so the base stays at the true limit and only the tail bots bank safety. A catalogue sim shows brief curb scrub only on the 3 hardest circuits (cloverleaf/crag/sidewinder, ~0-0.6s per bot per race, no spins) — and it does NOT shrink at 0.98 (it just redistributes between bots): it's weave/track-shape noise, not margin overshoot, so don't chase it by lowering this.
 const BRAKE_DECEL_REF = 4.0;    // assumed braking deceleration (u/s², a touch under the engine's BRAKE_DECEL 4.5 → brake just early enough, not late)
 
 // Local track curvature (rad per world unit) at arclength s — the turn between two
@@ -141,13 +141,14 @@ function curvatureAt(centerline, s, step = 0.6) {
 // the speed its curvature can hold (vSafe ≈ turn/κ) and the deceleration needed to bleed
 // to it over the remaining distance d (v²−vSafe²)/2d; brake = that as a fraction of the
 // car's braking power. A far corner needs almost nothing now; a near one needs a lot.
-// `turn` overrides car.turn (the per-car yaw rate). Shared with the engine's victory lap.
-export function cornerBrake(car, centerline, { turn } = {}) {
+// `turn` overrides car.turn (the per-car yaw rate); `caution` scales the margin (a bot
+// persona's corner bravery — see AI_PERSONALITIES). Shared with the engine's victory lap.
+export function cornerBrake(car, centerline, { turn, caution = 1 } = {}) {
   if (!car || !centerline) return 0;
   const yaw = turn || car.turn || TURN_RATE_FALLBACK;
   // Grippy cars can chase the apex aggressively; a low-grip car (low yaw) overshoots the
   // pure-pursuit cut and washes onto the curb, so give it a more conservative margin.
-  const margin = CORNER_MARGIN * clamp(yaw / TURN_RATE_FALLBACK, 0.88, 1.0); // floor raised from 0.78: the low-handling cars were the most over-braked yet still never washed out
+  const margin = CORNER_MARGIN * caution * clamp(yaw / TURN_RATE_FALLBACK, 0.88, 1.0); // floor raised from 0.78: the low-handling cars were the most over-braked yet still never washed out
   const v = car.v;
   let brake = 0;
   for (let d = BRAKE_LOOK_NEAR; d <= BRAKE_LOOK_FAR; d += BRAKE_LOOK_STEP) {
@@ -180,15 +181,18 @@ export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GA
   return clamp(-err * gain, -1, 1);
 }
 
-// A bot personality. `skill` is the fraction of top speed it cruises at: it holds
-// the brake at (1 - skill) on the straights, so a lower-skill bot is catchable.
-// On top of that the bot brakes for corners it can't hold (cornerBrake), so a
-// low-handling car (e.g. a Truck bot) visibly slows for bends while a grippy one
-// rails them — the same trade a human feels. `laneBias` holds the bot a fixed
-// offset off the centerline so the field fans across the road, not nose-to-tail.
+// A bot personality. Every bot runs FLAT-OUT on the straights — its car's top speed
+// is its top speed (a bot dragging the brake down a straight read as "the AI is
+// weak"). Personality lives in the corners instead: `caution` scales the corner-brake
+// margin, so a brave bot (1.0) carries the full speed its handling can hold while a
+// cautious one lifts a touch earlier and deeper — catchable where it's honest, in the
+// braking zones. On top of that cornerBrake itself is per-car: a low-handling car
+// (e.g. a Truck bot) visibly slows for bends while a grippy one rails them — the same
+// trade a human feels. `laneBias` holds the bot a fixed offset off the centerline so
+// the field fans across the road, not nose-to-tail.
 export class AiController {
-  constructor({ skill = 0.9, lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0, seed = 1 } = {}) {
-    this.skill = clamp(skill, 0, 1);
+  constructor({ caution = 1, lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0, seed = 1 } = {}) {
+    this.caution = clamp(caution, 0.5, 1);
     this.lookahead = lookahead;
     this.gain = gain;
     this.laneBias = laneBias;
@@ -232,7 +236,7 @@ export class AiController {
       const curbRoom = clamp((maxLat - Math.abs(car.lat)) / WANDER_CURB, 0, 1);
       s = clamp(s + this._weave * STEER_WANDER * room * curbRoom, -1, 1);
     }
-    const corner = cornerBrake(car, centerline);
+    const corner = cornerBrake(car, centerline, { caution: this.caution });
     // Held-item firing. A bot reads the race before it spends an item instead of dumping
     // it the instant the roulette stops — so it no longer looks like it fires on pickup.
     // A fresh pickup restarts the hold and rolls a seeded minimum (so the field fires on
@@ -251,7 +255,7 @@ export class AiController {
     if (item && this._heldFrames >= this._holdMin && this._wantsToUse(item, car, game, corner)) {
       this._useSeq = (this._useSeq + 1) & 255;
     }
-    return { s, b: Math.max(1 - this.skill, corner), u: this._useSeq };
+    return { s, b: corner, u: this._useSeq };
   }
 
   // Is NOW a good moment to fire the held item? Called once the per-pickup minimum hold
@@ -271,20 +275,19 @@ export class AiController {
   }
 }
 
-// Bot field, strongest first. Tuned for the OVAL (maxLat ~1.5): a spread of
-// cruise speeds and held lanes so the AI feels like distinct racers. The lead bot
-// (Bolt) runs flat-out on the straights (skill 1.0) so a human can't out-drag it
-// for free; the field steps down from there but stays a genuine challenge. The
-// ladder is deliberately SHALLOW (1.00 → 0.93, a 7% cruise spread): the old wider
-// step (down to 0.86) left the back half sandbagging the straights — feathering the
-// brake every frame — which read as "the AI is too easy" because the trailing bots
-// were ~14% slower than the leader on every straight. Now even the tail bot pushes.
-// Each bot also wanders its lane (seeded) and dodges hazards, so they no longer rail
-// one line or feed themselves to bananas. Bots fill from the front — a lobby missing
-// a single player gets the strong leader.
+// Bot field, strongest first: a spread of corner bravery and held lanes so the AI
+// feels like distinct racers. EVERY bot runs flat-out on the straights — the old
+// cruise-brake ladder (skill 0.93–1.00) had the back half riding the brake down
+// every straight, lights on, which read as "the AI is weak". Differentiation now
+// lives where humans can see and exploit it: `caution` scales cornerBrake's margin,
+// so the lead bot (Bolt) corners at the true limit of its car while the tail lifts
+// earlier and deeper into the braking zones — you catch Zippy under braking, not by
+// out-dragging a sandbagging cruiser. Each bot also wanders its lane (seeded) and
+// dodges hazards, so they no longer rail one line or feed themselves to bananas.
+// Bots fill from the front — a lobby missing a single player gets the strong leader.
 export const AI_PERSONALITIES = [
-  { name: 'Bolt',  skill: 1.00, laneBias: -0.6 },
-  { name: 'Pixel', skill: 0.97, laneBias:  0.6 },
-  { name: 'Rusty', skill: 0.95, laneBias: -0.25 },
-  { name: 'Zippy', skill: 0.93, laneBias:  0.25 },
+  { name: 'Bolt',  caution: 1.00, laneBias: -0.6 },
+  { name: 'Pixel', caution: 0.97, laneBias:  0.6 },
+  { name: 'Rusty', caution: 0.94, laneBias: -0.25 },
+  { name: 'Zippy', caution: 0.91, laneBias:  0.25 },
 ];

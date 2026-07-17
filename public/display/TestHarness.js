@@ -323,7 +323,7 @@ export function runDisplayScenario(opts, ctx) {
         engine.update(dt * 1000);
         const snap = engine.getSnapshot();
         for (const c of snap.cars) {
-          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput });
+          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, brake: c.brake });
         }
         scene.syncProps(snap); // reconcile item boxes/bananas + draw the ?bbox car collision outlines
         if (minimap) minimap.update(snap.cars);
@@ -558,7 +558,7 @@ export function runDisplayScenario(opts, ctx) {
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
         scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul });
+        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
       if (kind === 'rocket') driveGalleryRocketAudio(); // sustained jet per in-flight rocket

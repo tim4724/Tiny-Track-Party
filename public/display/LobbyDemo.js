@@ -39,7 +39,7 @@ export class LobbyDemo {
     this._buildEngine();
     field.forEach((p, i) => {
       this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex });
-      // Each car drives on an AI persona (skill/laneBias) even when it's a human's
+      // Each car drives on an AI persona (caution/laneBias) even when it's a human's
       // livery — there are no phones steering in the lobby. Distinct seeds → distinct weave.
       this.bots.set(p.id, new AiController({ ...(p.persona || {}), seed: (DEMO_SEED + i * 2 + 1) >>> 0 }));
     });

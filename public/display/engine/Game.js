@@ -27,7 +27,15 @@ const BRAKE_DECEL = 4.5;  // units/s^2 braking → ~2s from top speed (VMAX) to 
 // direction). We subtract the track's own turn each step so NEUTRAL = straight
 // in the world — you must steer through curves (no autosteer). Heading is
 // clamped so the car can never point backward → u-turn is impossible.
-const TURN_RATE = 1.2;    // rad/s at full tilt — calm
+const TURN_RATE = 0.90;   // rad/s at full tilt — calm. Was 1.2: lowered to partially offset
+                          // STEER_SCRUB (scrubbing to 65% of vmax made every car ~1.5×
+                          // tighter-cornering, so the fastest cars swept bends flat-out with
+                          // no washout risk). Walked down 1.05 → 0.95 → 0.90 as the user kept
+                          // clearing corners flat-out: at 0.90 a low-turn car driven flat
+                          // into a catalogue corner washes to the curb (Bolt ~1.9k frames
+                          // across the catalogue, Carve 0); a grippy one holds the line.
+                          // Steering is now 25% calmer than the original — if lane changes
+                          // feel sluggish, escalate with width pinches, not further cuts.
 const STEER_EXPO = 1.25;  // default response: near-linear with a slightly softened centre (1 = linear); tuned on hardware
 // Live-tunable steering response exponent. Shared by every engine (so a value set
 // in the display debug panel survives race/lobby re-creation) and read fresh each
@@ -43,18 +51,39 @@ export function setSteerExpo(v) {
 export function getSteerExpo() { return _steerExpo; }
 const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progress)
 const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
-const WALL_SPEED_FRAC = 0.5; // curb speed cap as a fraction of the car's own top speed
+const WALL_SPEED_FRAC = 0.28; // curb speed cap as a fraction of the car's own top speed.
+                          // This IN-CONTACT cap is the whole washout bill: the post-exit rash
+                          // heals faster than the engine accelerates, so it never binds — and
+                          // a binding exit cap reads as throttle lag (user veto). Punish curbs
+                          // by deepening this, not by stretching WALL_RASH_T.
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
+const WALL_RASH_T = 0.5;  // s the curb cap takes to HEAL after the last scrape ("curb rash").
+                          // The cap RAMPS from WALL_SPEED_FRAC back to full over this window
+                          // (a flat hold felt like dead throttle: ceiling = current speed →
+                          // zero accel, then a cliff release; the ramp pulls immediately,
+                          // weakly at first). Boost overrides it, like brake + scrub.
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 
-// ---- Cornering (understeer, not auto-slowdown) ----
+// ---- Cornering (understeer + steer scrub) ----
 // The "Handling" stat IS the car's turn rate (c.turn). The sim does NOT brake for
 // you: carry too much speed into a bend and a low-handling car simply can't yaw
 // fast enough to hold the line (it needs κ·v rad/s, but maxes out at c.turn·
 // authority) — so it washes wide (understeer) into the curb, which slows it. You
 // have to brake yourself. A grippy car (high c.turn) holds a much tighter, faster
-// line. That's the whole point of the stat: corners are where weight/handling bite.
+// line. On top of that, WORKING THE WHEEL COSTS SPEED (STEER_SCRUB): the speed
+// ceiling drops with steering input (quadratic, so lane corrections are ~free but
+// full lock bites). Because a grippy car needs LESS input for the same curve
+// (input ≈ κ·v / (c.turn·authority)), the same bend scrubs it far less — handling
+// now bills on every corner, not only the ones tight enough to force a brake.
+// Boost overrides scrub like it overrides brake (pads before loops stay a
+// guarantee). That's the whole point of the stat: corners are where handling bites.
 // (AI + victory-lap cars brake for corners on their own — see AiDriver.cornerBrake.)
+const STEER_SCRUB = 0.28; // speed-ceiling fraction shed at FULL LOCK (quadratic in steer input).
+                          // Was 0.35 — that much auto-slow settled full-lock speed close to the
+                          // holdable corner speed, so the fast cars swept tight bends hands-off
+                          // ("the scrub brakes for you"). 0.28 keeps the speed-cost feel but stays
+                          // fast enough into tight corners that a low-turn car must BRAKE or wash
+                          // out (flat-out washouts roughly double); the curb rash makes that bill.
 
 // ---- Car-car collisions ----
 // Cars are glued to the centerline ribbon, so two nearby cars live in a locally
@@ -344,6 +373,7 @@ export class Game {
         brake: 0,        // 0..1 analog brake (swipe distance)
         spin: 0,         // cosmetic spin-out angle (rad) — renderer whirls the body by this
         spinT: 0,        // seconds left in the current spin-out (0 = in control)
+        wallRashT: 0,    // seconds the curb-scrape speed cap lingers (see WALL_RASH_T)
         oilIn: new Set(),// puddle indices the car currently overlaps (rising-edge trigger)
         oilCd: new Map(),// puddle index → elapsed time its next spin re-arms (see OIL_REARM)
         padIn: new Set(),// pad indices currently overlapped (rising-edge boost)
@@ -523,9 +553,31 @@ export class Game {
       // to clear it — you can't accidentally (or deliberately) brake the boost off.
       // Brake control returns the instant the multiplier bleeds back to 1.
       const brakeEff = boosting ? 0 : c.brake;
+      // STEERING input (shaped): also feeds the corner scrub below, so it's computed
+      // ahead of the longitudinal step.
+      const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
+      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
+      // CORNER SCRUB: steering drops the speed ceiling (see the Cornering block up top).
+      // Quadratic → small corrections/weave are ~free, committed cornering bites; a
+      // grippy car needs less input for the same bend, so it sheds less. Boost overrides
+      // it exactly like the brake (a pad before a loop still guarantees the speed).
+      const scrubEff = boosting ? 0 : STEER_SCRUB * steerIn * steerIn;
       // A monster rides slightly higher top speed (stacks over any boost it grabs).
       const vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
-      const targetV = vmaxEff * c.boostMul * (1 - brakeEff);
+      let targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
+      // Curb rash: a recent scrape holds the ceiling down for a beat, so a washout
+      // costs the corner EXIT too, not just the frames of contact. The cap heals
+      // linearly from WALL_SPEED_FRAC back to full over WALL_RASH_T — the car pulls
+      // again the moment it leaves the curb, just weakly at first (a flat cap read
+      // as dead throttle). A live boost overrides it (same rule as brake + scrub);
+      // the timer still burns down.
+      if (c.wallRashT > 0) {
+        c.wallRashT -= dt;
+        if (!boosting) {
+          const heal = 1 - Math.max(0, c.wallRashT) / WALL_RASH_T; // 0 at scrape → 1 healed
+          targetV = Math.min(targetV, c.vmax * (WALL_SPEED_FRAC + (1 - WALL_SPEED_FRAC) * heal));
+        }
+      }
       if (spinning) c.v *= Math.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
@@ -536,8 +588,6 @@ export class Game {
       // wide → understeer. authority ramps steering in with speed; non-linear so
       // small tilts barely steer.
       const authority = 0.4 + 0.6 * Math.min(1, c.v / (c.vmax * 0.5));
-      const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
-      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
       // Steered heading (relative to the road) for THIS step. It feeds the world facing
       // vector below and is then re-derived from the projection, so c.heading isn't
       // mutated until the end — the final c.heading is `fwd` re-expressed vs the new tangent.
@@ -674,6 +724,7 @@ export class Game {
     if (c.lat > lim || c.lat < -lim) {
       c.lat = c.lat > 0 ? lim : -lim;
       c.onWall = true;
+      c.wallRashT = WALL_RASH_T; // scrape → the cap lingers past contact (see WALL_RASH_T)
       if (c.v > cap) c.v = Math.max(cap, c.v - WALL_DECEL * dt);
     }
   }
