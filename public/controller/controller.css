@@ -183,7 +183,10 @@ input[type=text]:disabled { opacity: 0.6; }
   gap: 0.5rem;
 }
 /* compact tiles — name + tendency meter + hint; the tracks themselves show in
-   the panel the picked cup opens below */
+   the panel the picked cup opens below. Every tile keeps the theme's thick ink
+   outline whether picked or not (thinning it for the unpicked ones was tried: the
+   whole picker went faded next to the car strip above, which outlines all four).
+   The fill is painted inline by buildModePicker — the cup's colour, quiet here. */
 .mode-opt {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
   cursor: pointer; padding: 0.45rem 0.4rem 0.4rem;
@@ -192,13 +195,16 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-opt:active:not(:disabled) { transform: translateY(2px); }
 .mode-opt:disabled { cursor: default; }
-/* ONE selected look across the whole picker (see .track-opt--mine): a green ring
-   + the hard drop. Green is the pick colour and only ever the ring, which leaves
-   the tile's fill free to carry the cup's biome colour (set inline by
-   buildModePicker, matching the track panel below). A picked mode used to fill
-   solid green, which both fought the biome tint and made "picked cup" look
-   nothing like "picked track". */
-.mode-opt--mine { border-color: var(--green); box-shadow: var(--shadow-pop); }
+/* ONE picked look across the whole picker (see .track-opt--mine), and it's the one
+   the lobby already uses a row above (.car-opt--mine): the tile fills with its own
+   colour turned up and takes the hard drop. Same hue as at rest, so it reads as
+   "this cup, chosen" rather than as a different thing; no chrome colour is dragged
+   in to say "picked", which is what made the old green ring shout green and fight
+   whatever cup colour sat under it. */
+.mode-opt--mine { box-shadow: var(--shadow-pop); }
+/* the hint is muted for scanning past on white paper; on a loud fill that muting
+   turns into poor contrast, so a picked tile takes it back up */
+.mode-opt--mine .mode-opt__sub { color: var(--ink-2); }
 .mode-opt__name {
   font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
   color: var(--ink); max-width: 100%;
@@ -206,13 +212,14 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-opt__sub { font-weight: 800; font-size: 0.62rem; color: var(--ink-3); }
 /* the open cup's exact-pick panel — an inset under the mode tiles. One compact
-   4-across row so the lobby stays a single screen. The background is painted
-   inline in the cup's biome colour (buildModePicker); the ink hairline keeps the
-   panel's edge readable on the pale biomes (sand, powder) where tint alone is
-   too quiet against the paper. */
+   4-across row so the lobby stays a single screen. The background is painted inline
+   in its cup's colour (buildModePicker), deeper than the cup tiles so it reads as a
+   surface BEHIND cards; that colour is the whole point of the panel, since it's what
+   ties these four tracks back to the cup they came from. No outline: it's a surface,
+   not a sticker, and at PANEL_TINT the colour draws its own edge against the paper
+   (the hairline this used to carry was a crutch from when the tint was far fainter). */
 .modepick__tracks {
   padding: 0.45rem;
-  border: 2px solid color-mix(in srgb, var(--ink), transparent 78%);
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
@@ -236,12 +243,16 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
   cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
-  transition: transform 0.08s, box-shadow 0.08s, border-color 0.08s;
+  transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
 .track-opt:active:not(:disabled) { transform: translateY(2px); }
 .track-opt:disabled { cursor: default; }
-/* selected tile — the same green ring + hard drop the mode tiles use */
-.track-opt--mine { border-color: var(--green); box-shadow: var(--shadow-pop); }
+/* picked tile — the identical fill-and-drop a picked cup wears, so "picked" looks
+   the same wherever it lands in the picker. The fill (its cup's colour, loud) is
+   painted inline by trackTile; here it also darkens the name to full ink, since the
+   tile is no longer white paper under the text. */
+.track-opt--mine { box-shadow: var(--shadow-pop); }
+.track-opt--mine .track-opt__name { color: var(--ink); }
 .track-opt__name {
   font-weight: 800; font-size: 0.74rem; color: var(--ink-2);
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

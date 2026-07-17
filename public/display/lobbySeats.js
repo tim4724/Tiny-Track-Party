@@ -4,7 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
-import { schematicSvg, biomeTint } from '../shared/trackPicker.js';
+import { schematicSvg, cupTint, FIELD_TINT } from '../shared/trackPicker.js';
 
 const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 
@@ -84,7 +84,7 @@ export function renderCupSlot(slotEl, state) {
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
   mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
-  const tint = state.cupId ? biomeTint(state.cupId, 26) : undefined;
+  const tint = state.cupId ? cupTint(state.cupId, FIELD_TINT) : undefined;
   for (const m of maps) {
     const tile = document.createElement('div');
     tile.className = 'cup-maps__tile';
