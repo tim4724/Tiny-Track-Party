@@ -274,17 +274,19 @@ function avoidThreat(car, laneFor, game, maxLat, prevDodge = null) {
   return best.lat >= 0 ? -m : m;                             // both rails blocked: hug the rail away from the hazard
 }
 
-// ---- corner-anticipation braking ----
-// The engine no longer auto-slows for corners (low-handling cars understeer wide
-// instead), so a bot that just steers would plow into the curb. cornerBrake looks
-// down the track, finds the tightest upcoming bend, and brakes so the car arrives
-// no faster than its turn rate can hold (max corner speed ≈ turn/κ). A low-handling
-// car brakes earlier + harder; a grippy one barely lifts.
+// ---- corner-anticipation braking (a SAFETY NET, not the racing style) ----
+// cornerBrake looks down the track, finds the tightest upcoming bend, and brakes so
+// the car arrives no faster than its turn rate can hold (max corner speed ≈ turn/κ).
+// But in this grip-free model the corners self-regulate — steer-scrub bleeds speed and
+// the curb clamps a wide car back on track — so the authored catalogue is drivable
+// flat-out (a no-brake time-trial laps it FASTER; see CORNER_MARGIN). So the margin is
+// set high enough that this only fires on a genuinely tight bend (boost-into-hairpin),
+// keeping a floor without paying the flat-out line's speed away on every gentle corner.
 const TURN_RATE_FALLBACK = 0.90; // matches Game's base TURN_RATE (cars without a resolved .turn)
 const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
-const CORNER_MARGIN = 1.0;      // target as a fraction of the max holdable corner speed. Was 0.86, then 0.95 — needlessly slow: the 7.5u lookahead keeps bots on a smoothed line, so the feared apex-cut washout doesn't happen. Persona spread now lives in `caution` (a per-bot multiplier on this), so the base stays at the true limit and only the tail bots bank safety. A catalogue sim shows brief curb scrub only on the 3 hardest circuits (cloverleaf/crag/sidewinder, ~0-0.6s per bot per race, no spins) — and it does NOT shrink at 0.98 (it just redistributes between bots): it's weave/track-shape noise, not margin overshoot, so don't chase it by lowering this.
+const CORNER_MARGIN = 1.25;     // target as a fraction of the max holdable corner speed. This is now a SAFETY NET, not the racing style. The driving model is grip-free: STEER_SCRUB already bleeds speed when you steer hard ("the scrub brakes for you") and the curb CLAMPS a wide car back on track, so corners self-regulate — a solo time-trial that never brakes laps the whole catalogue 1.3–2.9% FASTER than the braking bot (every shipped car, 18–20/20 tracks) with ~0% curb scrub and zero spins. Braking for these authored corners was pure lost time, so the field-sim mean drops ~1.4% here vs 1.0 and the shipped fleet (turn ≥0.95) now essentially drives the fast flat-out line. Raised 1.0 → 1.25, the KNEE: at 1.3 the "cornerBrake rescues a low-handling (turn 0.55) car" engine test starts failing (the net stops catching a car that truly can't hold the bend), so 1.25 is as flat-out as we go while the safety net still provably works for a genuinely undriveable corner (e.g. a boost pad firing into a hairpin). The per-bot `caution` still multiplies this, so the tightest bends keep a braking-zone spread. (History: was 0.86 → 0.95 → 1.0, each "still needlessly slow"; the real answer was that braking itself was the handicap.)
 const BRAKE_DECEL_REF = 4.5;    // assumed braking deceleration (u/s²) — now EXACTLY the engine's BRAKE_DECEL 4.5, so bots plan to the brakes they actually have. Was 4.0 (a ~12% early-brake handicap), then 4.4 (a last ~2% sliver "for discretisation slack" — but the 1u scan step biases the found corner NEARER, if anything late, so the sliver was just cushion; removed). Catalogue sim shows no new spins at 4.5
 
 // Local track curvature (rad per world unit) at arclength s — the turn between two
