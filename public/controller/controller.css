@@ -192,25 +192,27 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-opt:active:not(:disabled) { transform: translateY(2px); }
 .mode-opt:disabled { cursor: default; }
-/* picked mode — the chip goes GREEN (white text + pips) with the hard drop */
-.mode-opt--mine { background: var(--green); box-shadow: var(--shadow-pop); }
-.mode-opt--mine .mode-opt__name, .mode-opt--mine .mode-opt__sub { color: #fff; }
-.mode-opt--mine .trackpick__cup-meter > i { border-color: #fff; }
-.mode-opt--mine .trackpick__cup-meter > i.is-on { background: #fff; border-color: #fff; }
-/* a cup whose panel is open for an exact pick: held-open look (a light green
-   wash — green = the pick colour), the ring lives on the track tile below */
-.mode-opt--open { background: color-mix(in srgb, var(--green) 14%, #fff); }
+/* ONE selected look across the whole picker (see .track-opt--mine): a green ring
+   + the hard drop. Green is the pick colour and only ever the ring, which leaves
+   the tile's fill free to carry the cup's biome colour (set inline by
+   buildModePicker, matching the track panel below). A picked mode used to fill
+   solid green, which both fought the biome tint and made "picked cup" look
+   nothing like "picked track". */
+.mode-opt--mine { border-color: var(--green); box-shadow: var(--shadow-pop); }
 .mode-opt__name {
   font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
   color: var(--ink); max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mode-opt__sub { font-weight: 800; font-size: 0.62rem; color: var(--ink-3); }
-/* the open cup's exact-pick panel — a soft inset under the mode tiles. One
-   compact 4-across row so the lobby stays a single screen. */
+/* the open cup's exact-pick panel — an inset under the mode tiles. One compact
+   4-across row so the lobby stays a single screen. The background is painted
+   inline in the cup's biome colour (buildModePicker); the ink hairline keeps the
+   panel's edge readable on the pale biomes (sand, powder) where tint alone is
+   too quiet against the paper. */
 .modepick__tracks {
   padding: 0.45rem;
-  background: color-mix(in srgb, var(--brand), #fff 84%);
+  border: 2px solid color-mix(in srgb, var(--ink), transparent 78%);
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
@@ -238,8 +240,8 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .track-opt:active:not(:disabled) { transform: translateY(2px); }
 .track-opt:disabled { cursor: default; }
-/* selected tile — border in the brand colour (the track isn't livery-coloured) */
-.track-opt--mine { border-color: var(--brand); box-shadow: var(--shadow-pop); }
+/* selected tile — the same green ring + hard drop the mode tiles use */
+.track-opt--mine { border-color: var(--green); box-shadow: var(--shadow-pop); }
 .track-opt__name {
   font-weight: 800; font-size: 0.74rem; color: var(--ink-2);
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
