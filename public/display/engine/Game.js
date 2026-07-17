@@ -49,10 +49,13 @@ const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progres
 const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
 const WALL_SPEED_FRAC = 0.35; // curb speed cap as a fraction of the car's own top speed
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
-const WALL_RASH_T = 0.5;  // s the curb cap LINGERS after the last scrape ("curb rash") — raw
+const WALL_RASH_T = 0.25; // s the curb cap LINGERS after the last scrape ("curb rash") — raw
                           // contact is too brief to bill real lap time (the car bounces off
                           // in a few frames), so washing out costs a beat of capped ceiling
-                          // on the exit too. Boost overrides it, like brake + scrub.
+                          // on the exit too. Boost overrides it, like brake + scrub. 0.5 felt
+                          // like dead throttle after the scrape (ceiling = current speed →
+                          // zero accel, then a cliff release); 0.25 keeps the exit tax short
+                          // enough to read as impact, not input lag.
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 
 // ---- Cornering (understeer + steer scrub) ----
