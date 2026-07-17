@@ -14,6 +14,11 @@
 // browser and the Node tests.
 import { pursue, cornerBrake } from '../AiDriver.js';
 import { mulberry32, wrapDelta, wrapS } from './util.js';
+// Data-contract stamp for the native-port conformance harness: getSnapshot()
+// and buildTrack() output both carry it (re-exported here so consumers can
+// treat Game.js as "the engine" without knowing the module layout).
+import { CONTRACT_VERSION } from './contract.js';
+export { CONTRACT_VERSION };
 
 // Base handling numbers — the "Racer" benchmark. Per-car stats (see DEFAULT_STATS
 // and the `stats` constructor arg) scale these so each model feels distinct while
@@ -1308,7 +1313,16 @@ export class Game {
       cars.push({
         // v (raw speed) + lat (lateral offset) are the engine's physics observables —
         // the in-game display only needs normalized spd, but the unit tests assert on them.
-        id: c.id, pose: c.pose, lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd normalized 0..1 (per-car top speed)
+        // pose is copied out as PLAIN data ({x,y,z} literals, no vector class): the
+        // snapshot is the port-conformance contract, so it must be pure JSON — and
+        // handing out the internal pose by reference let renderers alias engine state.
+        id: c.id,
+        pose: {
+          pos: { x: c.pose.pos.x, y: c.pose.pos.y, z: c.pose.pos.z },
+          forward: { x: c.pose.forward.x, y: c.pose.forward.y, z: c.pose.forward.z },
+          up: { x: c.pose.up.x, y: c.pose.up.y, z: c.pose.up.z }
+        },
+        lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd normalized 0..1 (per-car top speed)
         lap: Math.min(this.totalLaps, Math.max(1, c.lap + (c.totalS >= 0 ? 1 : 0))), // 1-based display lap (grid sits at s<0 — still "lap 1")
         totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually
@@ -1334,6 +1348,7 @@ export class Game {
     // Static boxes (available = off cooldown) + live dropped bananas, for the renderer
     // to show/hide box meshes and reconcile banana meshes by id.
     return {
+      version: CONTRACT_VERSION, // engine data-contract stamp (see ./contract.js)
       cars, elapsed: this.elapsed,
       boxes: this.boxes.map((b) => b.cooldown <= 0),
       bananas: this.bananas.filter((b) => this.elapsed >= (b.liveAt || 0))

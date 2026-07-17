@@ -17,7 +17,8 @@
 // The frame's `up` is parallel-transported (rotation-minimizing) so it stays perpendicular
 // through hills, and the start/finish twist (holonomy) is unwound so `up` doesn't jump
 // at the seam. (Banking + variable width layer onto this in later passes.)
-import * as THREE from 'three';
+import { Vec3 } from './engine/Vec3.js';
+import { CONTRACT_VERSION } from './engine/contract.js';
 import { Centerline } from './Centerline.js';
 // Track DEFINITIONS (the catalogue) live in a dependency-free data module so the
 // gallery + tests can read them without pulling in Three.js. We re-export the few
@@ -41,7 +42,9 @@ const smoothstep = (t) => t * t * (3 - 2 * t); // C1 ends — used for the chica
 const BANK_RAMP = 0.35;
 const bankWindow = (f) => f < BANK_RAMP ? smootherstep(f / BANK_RAMP)
   : f > 1 - BANK_RAMP ? smootherstep((1 - f) / BANK_RAMP) : 1;
-const v = (x, y, z) => new THREE.Vector3(x, y, z);
+// Every vector on the build path is minted here: the sim's own Vec3 (bit-identical
+// to THREE.Vector3 — see engine/Vec3.js), so the whole data path is three-free.
+const v = (x, y, z) => new Vec3(x, y, z);
 
 // Plan-frame basis at heading θ: travel direction and lateral-LEFT direction (the
 // inward normal of a left turn). d = dL/dθ, so rotating L by φ gives L(θ+φ) — which is
@@ -54,7 +57,7 @@ const DEG = Math.PI / 180;
 // ({ segments, width, ... }) from shared/tracks.js. `opts.startGate` (default true)
 // straddles the start/finish line with the procedural finish gantry (`startGate` on the
 // returned track — built render-side, see render/FinishGate.js).
-// Returns { instances, startGate, centerline, length, closed, gap, roadWidth, groundY }.
+// Returns { version, instances, startGate, centerline, length, closed, gap, roadWidth, groundY }.
 // `instances` carries non-road scenery GLBs to place (none today); the road surface
 // itself is generated procedurally from `centerline`, as are the support pillars
 // (`pillars`: vertical columns under any `pillars`-flagged bridge/ramp).
@@ -544,6 +547,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   }
 
   return {
+    version: CONTRACT_VERSION, // engine data-contract stamp (see engine/contract.js)
     instances,
     startGate, // straddle s=0 with the finish gantry (built render-side — see render/FinishGate.js)
     pillars,

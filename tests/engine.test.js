@@ -7,13 +7,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, Game, TUNING, AiController, RaceSession;
+let buildTrack, Game, TUNING, CONTRACT_VERSION, AiController, RaceSession, Vec3;
 test.before(async () => {
   const tb = await import('../public/display/TrackBuilder.js');
   buildTrack = tb.buildTrack;
-  ({ Game, TUNING } = await import('../public/display/engine/Game.js'));
+  ({ Game, TUNING, CONTRACT_VERSION } = await import('../public/display/engine/Game.js'));
   AiController = (await import('../public/display/AiDriver.js')).AiController;
   RaceSession = (await import('../public/display/RaceSession.js')).RaceSession;
+  Vec3 = (await import('../public/display/engine/Vec3.js')).Vec3;
 });
 
 // A compact closed oval (sides 4/2/4/2, large sweeping corners) used as the
@@ -42,12 +43,15 @@ function mkTrack(laps = 1) { const t = buildTrack(TEST_OVAL); t.totalLaps = laps
 const wrap = (ds, len) => ds - Math.round(ds / len) * len;
 
 // Pure-pursuit steer: aim at a point a few units ahead on the centerline.
+// The snapshot pose is PLAIN data (no vector methods — that's the contract),
+// so lift `forward` into a Vec3 to do the cross/dot geometry on it.
 function followSteer(game, track, id) {
   const c = game.cars.get(id);
   const snap = game.getSnapshot().cars.find((x) => x.id === id);
   const look = track.centerline.sampleAt(c.totalS + 3).pos;
   const d = look.clone().sub(snap.pose.pos).normalize();
-  const err = Math.atan2(snap.pose.forward.clone().cross(d).dot(snap.pose.up), snap.pose.forward.dot(d));
+  const fwd = new Vec3(snap.pose.forward.x, snap.pose.forward.y, snap.pose.forward.z);
+  const err = Math.atan2(fwd.clone().cross(d).dot(snap.pose.up), fwd.dot(d));
   // negated to match the engine's STEER_SIGN (tilt direction) convention
   return Math.max(-1, Math.min(1, -err * 3));
 }
@@ -61,11 +65,12 @@ function drive(game, track, id, seconds, brake = 0, dt = 16) {
 test('cars auto-accelerate forward and progress', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
-  const before = game.getSnapshot().cars[0].pose.pos.clone();
+  const before = game.getSnapshot().cars[0].pose.pos; // plain data, fresh per snapshot — no aliasing
   drive(game, track, 'p1', 2);
   const snap = game.getSnapshot().cars[0];
   assert.ok(snap.v > 5, `should be moving (v=${snap.v.toFixed(1)})`);
-  assert.ok(snap.pose.pos.distanceTo(before) > 3, 'car should have moved along track');
+  const moved = new Vec3(snap.pose.pos.x, snap.pose.pos.y, snap.pose.pos.z).distanceTo(before);
+  assert.ok(moved > 3, 'car should have moved along track');
 });
 
 test('braking slows the car', () => {
@@ -1855,4 +1860,31 @@ test('the monster transform lapses on its timer with a monster_end event + snaps
   assert.equal(c.monsterT, 0, 'the transform has lapsed');
   assert.ok(events.some((e) => e.type === 'monster_end' && e.id === 'p1'), 'a monster_end event fires when it lapses');
   assert.equal(game.getSnapshot().cars[0].monster, false, 'the snapshot flag clears');
+});
+
+// ---- native-port data contract ----
+// The snapshot is the conformance surface the future C++ engine will be tested
+// against, so it must be PURE JSON data: plain objects and primitives only, no
+// class instances (poses included), no NaN/Infinity/undefined — a JSON
+// round-trip must reproduce it exactly. Run mid-race with live steering so the
+// poses are non-trivial (off-axis forward/up, moving cars, a dropped prop
+// would survive too).
+test('mid-race snapshot is plain data — JSON round-trip preserves it exactly', () => {
+  const track = mkTrack(3);
+  assert.equal(track.version, CONTRACT_VERSION, 'buildTrack output carries the contract version');
+  const game = new Game(['p1', 'p2'], track, {});
+  for (let i = 0; i < 400; i++) { // ~6.4s: both cars up to speed, into the first corner
+    game.processInput('p1', { s: followSteer(game, track, 'p1'), b: 0 });
+    game.processInput('p2', { s: followSteer(game, track, 'p2'), b: i % 50 < 8 ? 0.5 : 0 });
+    game.update(16);
+  }
+  const snap = game.getSnapshot();
+  assert.equal(snap.version, CONTRACT_VERSION, 'snapshot carries the contract version');
+  const p = snap.cars[0].pose;
+  assert.ok(snap.cars[0].v > 3 && (Math.abs(p.forward.x) > 1e-6 || Math.abs(p.forward.z - 1) > 1e-6),
+    'poses are non-trivial mid-race (the round-trip must exercise real floats)');
+  assert.equal(Object.getPrototypeOf(p.pos), Object.prototype, 'pose vectors are plain objects, not class instances');
+  // deepStrictEqual also compares prototypes, so any class instance anywhere in
+  // the snapshot (or any NaN/Infinity/undefined, which JSON mangles) fails here.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(snap)), snap, 'snapshot survives a JSON round-trip unchanged');
 });

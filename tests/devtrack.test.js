@@ -7,11 +7,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, Game, DEV_TRACKS;
+let buildTrack, Game, DEV_TRACKS, Vec3;
 test.before(async () => {
   buildTrack = (await import('../public/display/TrackBuilder.js')).buildTrack;
   ({ Game } = await import('../public/display/engine/Game.js'));
   ({ DEV_TRACKS } = await import('../public/shared/devTracks.js'));
+  Vec3 = (await import('../public/display/engine/Vec3.js')).Vec3;
 });
 
 // Resolve the authored furniture exactly like the display's buildEntry
@@ -36,7 +37,9 @@ function followSteer(game, track, id, latTarget = 0) {
   const frame = track.centerline.sampleAt(c.totalS + 3);
   const look = frame.pos.clone().addScaledVector(frame.lateral, latTarget);
   const d = look.sub(snap.pose.pos).normalize();
-  const err = Math.atan2(snap.pose.forward.clone().cross(d).dot(snap.pose.up), snap.pose.forward.dot(d));
+  // The snapshot pose is plain data (no vector methods) — lift forward into a Vec3.
+  const fwd = new Vec3(snap.pose.forward.x, snap.pose.forward.y, snap.pose.forward.z);
+  const err = Math.atan2(fwd.clone().cross(d).dot(snap.pose.up), fwd.dot(d));
   return Math.max(-1, Math.min(1, -err * 3));
 }
 
