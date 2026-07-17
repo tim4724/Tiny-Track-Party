@@ -285,7 +285,7 @@ const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
 const CORNER_MARGIN = 1.0;      // target as a fraction of the max holdable corner speed. Was 0.86, then 0.95 — needlessly slow: the 7.5u lookahead keeps bots on a smoothed line, so the feared apex-cut washout doesn't happen. Persona spread now lives in `caution` (a per-bot multiplier on this), so the base stays at the true limit and only the tail bots bank safety. A catalogue sim shows brief curb scrub only on the 3 hardest circuits (cloverleaf/crag/sidewinder, ~0-0.6s per bot per race, no spins) — and it does NOT shrink at 0.98 (it just redistributes between bots): it's weave/track-shape noise, not margin overshoot, so don't chase it by lowering this.
-const BRAKE_DECEL_REF = 4.4;    // assumed braking deceleration (u/s², a hair under the engine's BRAKE_DECEL 4.5). Was 4.0 — a ~12% systematic early-brake handicap on every bot; the sliver kept is the discretisation slack (1u scan step), not a safety cushion
+const BRAKE_DECEL_REF = 4.5;    // assumed braking deceleration (u/s²) — now EXACTLY the engine's BRAKE_DECEL 4.5, so bots plan to the brakes they actually have. Was 4.0 (a ~12% early-brake handicap), then 4.4 (a last ~2% sliver "for discretisation slack" — but the 1u scan step biases the found corner NEARER, if anything late, so the sliver was just cushion; removed). Catalogue sim shows no new spins at 4.5
 
 // Local track curvature (rad per world unit) at arclength s — the turn between two
 // nearby centerline tangents, via the same cross/dot trick the steering uses (so
@@ -347,16 +347,17 @@ export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GA
 // A bot personality. Every bot runs FLAT-OUT on the straights — its car's top speed
 // is its top speed (a bot dragging the brake down a straight read as "the AI is
 // weak"). Personality lives in the corners instead: `caution` scales the corner-brake
-// margin, so a brave bot (1.0) carries the full speed its handling can hold while a
-// cautious one lifts a touch earlier and deeper — catchable where it's honest, in the
-// braking zones. On top of that cornerBrake itself is per-car: a low-handling car
+// margin, so a brave bot (≥1.0) carries the full speed its handling can hold — or a
+// hair MORE if it overdrives (caution > 1, targeting above the safe corner speed) —
+// while a cautious one lifts a touch earlier and deeper — catchable where it's honest,
+// in the braking zones. On top of that cornerBrake itself is per-car: a low-handling car
 // (e.g. a Truck bot) visibly slows for bends while a grippy one rails them — the same
 // trade a human feels. `laneBias` fans the bot off the track's racing line where
 // there's room (straights), so the field spreads instead of running nose-to-tail —
 // while everyone still funnels through the same apexes.
 export class AiController {
   constructor({ caution = 1, lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0, seed = 1 } = {}) {
-    this.caution = clamp(caution, 0.5, 1);
+    this.caution = clamp(caution, 0.5, 1.1); // >1 lets a bot OVERDRIVE (target above the safe corner speed — a fast, slightly ragged leader); the yaw factor in cornerBrake still reins in low-grip cars
     this.lookahead = lookahead;
     this.gain = gain;
     this.laneBias = laneBias;
@@ -461,14 +462,14 @@ export class AiController {
 // cruise-brake ladder (skill 0.93–1.00) had the back half riding the brake down
 // every straight, lights on, which read as "the AI is weak". Differentiation now
 // lives where humans can see and exploit it: `caution` scales cornerBrake's margin,
-// so the lead bot (Bolt) corners at the true limit of its car while the tail lifts
-// earlier and deeper into the braking zones — you catch Zippy under braking, not by
-// out-dragging a sandbagging cruiser. Each bot also wanders its lane (seeded) and
+// so the lead bot (Bolt) OVERDRIVES a touch past the safe corner speed (fast, and it'll
+// scrub a curb now and then) while the tail lifts earlier and deeper into the braking
+// zones — you catch Zippy under braking, not by out-dragging a sandbagging cruiser. Each bot also wanders its lane (seeded) and
 // dodges hazards, so they no longer rail one line or feed themselves to bananas.
 // Bots fill from the front — a lobby missing a single player gets the strong leader.
 export const AI_PERSONALITIES = [
-  { name: 'Bolt',  caution: 1.00, laneBias: -0.6 },
-  { name: 'Pixel', caution: 0.97, laneBias:  0.6 },
-  { name: 'Rusty', caution: 0.94, laneBias: -0.25 },
-  { name: 'Zippy', caution: 0.91, laneBias:  0.25 },
+  { name: 'Bolt',  caution: 1.05, laneBias: -0.6 },  // OVERDRIVER — carries a touch over the safe corner speed, so it occasionally scrubs a curb but leads; the one bot a clean human must actually out-brake
+  { name: 'Pixel', caution: 1.00, laneBias:  0.6 },  // corners at the true limit of its car
+  { name: 'Rusty', caution: 0.97, laneBias: -0.25 },
+  { name: 'Zippy', caution: 0.94, laneBias:  0.25 }, // the tail still lifts earliest/deepest — but the whole field moved up from the old 1.00/0.97/0.94/0.91
 ];
