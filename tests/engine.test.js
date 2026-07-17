@@ -613,6 +613,36 @@ test('handling = cornering: turn sets corner speed (steer scrub) and how wide yo
   assert.ok(sled.hitWall, 'a really low-grip car at full speed still washes into the curb');
 });
 
+test('the racing line stays inside the road, never worsens a corner, and cuts real apexes', async () => {
+  // The precomputed bot line (AiDriver.racingLineFor) carries three promises:
+  // it fits inside the corridor everywhere (with the curb + pursuit-cut reserve),
+  // its curvature never exceeds the centerline's own peak anywhere (the corner
+  // audit reverts regions the shortest-path solve made WORSE, e.g. long sweepers —
+  // TEST_OVAL's 180° arcs are exactly that, so it correctly gets NO line), and on
+  // SHORT corners it actually uses lateral room — otherwise it's not a racing
+  // line, just the centerline with extra steps. An octagon's 45° flicks are the
+  // short-corner case where the cut genuinely pays.
+  const { racingLineFor } = await import('../public/display/AiDriver.js');
+  const OCTAGON = { id: 'test-octagon', name: 'Test Octagon', laps: 1,
+    segments: Array.from({ length: 8 }, () => [straight(8), arc(3, Math.PI / 4)]).flat() };
+  const track = buildTrack(OCTAGON);
+  const line = racingLineFor(track.centerline);
+  const maxLat = track.roadWidth / 2 - 0.3; // engine LAT_MARGIN
+  let usedLat = 0, kLineMax = 0, kCenterMax = 0;
+  for (let s = 0; s < line.length; s += 0.5) {
+    const lane = line.laneAt(s);
+    assert.ok(Math.abs(lane) < maxLat, `line inside the curbs at s=${s} (${lane.toFixed(2)} vs ±${maxLat.toFixed(2)})`);
+    usedLat = Math.max(usedLat, Math.abs(lane));
+    kLineMax = Math.max(kLineMax, line.curvAt(s));
+    // centerline yaw curvature, same probe cornerBrake used before the line existed
+    const a = track.centerline.sampleAt(s), b = track.centerline.sampleAt(s + 0.6);
+    const cross = a.tangent.clone().cross(b.tangent).dot(b.up);
+    kCenterMax = Math.max(kCenterMax, Math.abs(Math.atan2(cross, a.tangent.dot(b.tangent))) / 0.6);
+  }
+  assert.ok(usedLat > 0.3, `the line cuts apexes with real lateral room (used ${usedLat.toFixed(2)})`);
+  assert.ok(kLineMax <= kCenterMax * 1.05, `line peak curvature no worse than the centerline's (${kLineMax.toFixed(3)} vs ${kCenterMax.toFixed(3)})`);
+});
+
 test('cornerBrake lifts a low-handling bot for corners, cutting its curb time vs full throttle', () => {
   // Same very-low-handling car (0.55 — low enough that the steer scrub alone can't
   // save it, but not so hopeless that even a braked line drifts wide), driven

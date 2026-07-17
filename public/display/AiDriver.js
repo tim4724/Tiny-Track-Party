@@ -51,6 +51,160 @@ const BANANA_AVOID_R = 0.5; // mirrors the engine's BANANA_RADIUS (bananas carry
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
+// ---- racing line ----
+// Bots used to drive the CENTERLINE (plus a fixed lane bias) — no apex cutting, so
+// their corner radius was the centerline's and a human who straightened the corner
+// out-cornered them everywhere. Each track now gets a precomputed line: lateral
+// offsets e(s) relaxed (Gauss–Seidel) toward e'' = κ within the road corridor —
+// "straighten every bend as much as the road allows", with out-wide entry, inside
+// apex, wide exit emerging on their own. The clamp makes this SHORTEST-PATH inside
+// each corner, which genuinely straightens short corners and chicanes but hugs long
+// sweepers on a TIGHTER radius than the centerline — so after solving, every corner
+// is audited: where the line failed to reduce peak curvature, that region falls back
+// to the centerline and the line is re-relaxed for a smooth rejoin. The result is
+// geometry, computed once per centerline (WeakMap cache, shared by the whole bot
+// field) and deterministic, so seeded replays are untouched. cornerBrake then reads
+// the LINE's curvature, not the centerline's: the straighter path honestly raises
+// vSafe, so the gain shows up in the braking numbers too, not just the steering.
+const RL_STEP = 1.25;      // arclength between line samples (world units)
+const RL_ITERS = 800;      // Gauss–Seidel sweeps — corner-sized features settle in O(width²) ≈ a few hundred
+const RL_LAT_MARGIN = 0.3; // mirrors the engine's LAT_MARGIN (curb clamp inset)
+const RL_EDGE = 0.5;       // extra buffer inside the physics curb — pursuit lag + weave must never put the apex ON the rail
+const RL_FALLBACK_HALF = 1.5; // half-width when the track carries none (mirrors drive()'s maxLat fallback)
+const RL_MIN_ROOM = 0.45;  // corridors with less usable room than this get no line at all (centerline)
+const RL_CORNER_K = 0.02;  // |κ| above this is "a corner" for the audit's region split
+const RL_PAYOFF = 0.95;    // keep a region's line only if it cut peak curvature to ≤ this × the centerline's
+const FAN_MIN_ROOM = 0.7;  // lane width always granted to the persona fan-out (covers the ±0.6 biases the old fixed-lane bots ran safely)
+
+class RacingLine {
+  constructor(centerline) {
+    const L = centerline.length;
+    const n = Math.max(16, Math.round(L / RL_STEP));
+    const h = L / n;
+    const frames = [];
+    for (let i = 0; i < n; i++) frames.push(centerline.sampleAt(i * h));
+    // Signed yaw curvature of the centerline (rad/u, + = left — same convention as
+    // pursue's heading error). Projecting the tangent swing onto `up` keeps only the
+    // component a LATERAL offset can straighten: a vertical loop's pitch curvature
+    // projects to ~0, so the relaxation correctly leaves loops alone.
+    const kappa = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = frames[(i - 1 + n) % n].tangent, b = frames[(i + 1) % n].tangent;
+      const cross = a.clone().cross(b).dot(frames[i].up);
+      const dot = clamp(a.dot(b), -1, 1);
+      kappa[i] = Math.atan2(cross, dot) / (2 * h);
+    }
+    // Corridor the line may use, given the curvature it will actually carry. Beyond
+    // the physics curb inset, each sample reserves the PURSUIT CUT: a pure-pursuit
+    // follower tracks inside its target path by up to the lookahead chord's sagitta
+    // (≈ κ·look²/8), so a target line touching the curb would put the CAR past it —
+    // driving the centerline this slack was free road, which is also why the old
+    // bots never ground the rail. The width isn't wasted: the car still runs deeper
+    // than the line it chases — it's billed to the path driven, not the one aimed at.
+    const boundFor = (kAbs, i) => {
+      const f = frames[i];
+      const half = (f.width != null && !Number.isNaN(f.width)) ? f.width / 2 : RL_FALLBACK_HALF;
+      const cut = Math.min(1.1, kAbs * LOOKAHEAD * LOOKAHEAD / 8);
+      const b = half - RL_LAT_MARGIN - RL_EDGE - cut;
+      // A corridor too narrow to pay for a lane swing (tapered ramps, tight stunt
+      // sections) gets NO line: any offset there is pure added curvature — wiggle,
+      // not apex — and cornerBrake would slow for it. Pin to the centerline instead.
+      return b < RL_MIN_ROOM ? 0 : b;
+    };
+    // Relax e'' = κ, clamped to the corridor. + lateral = right, so a left bend
+    // (κ > 0) pulls e negative (inside-left) at the apex while the straights either
+    // side pull it back — the clamp is what turns "straight line" into "racing line".
+    const e = new Float64Array(n);
+    const relax = (bound, iters) => {
+      for (let it = 0; it < iters; it++) {
+        for (let i = 0; i < n; i++) {
+          const want = (e[(i - 1 + n) % n] + e[(i + 1) % n]) / 2 - kappa[i] * h * h / 2;
+          e[i] = clamp(want, -bound[i], bound[i]);
+        }
+      }
+    };
+    // YAW curvature of the CURRENT line, measured from its actual points — projected
+    // onto `up` exactly like curvatureAt, so crests, ramps and loop pitch don't read
+    // as "corner" (a loop must be taken flat-out, and its launch pad boost kept).
+    const measure = () => {
+      const pts = frames.map((f, i) => f.pos.clone().addScaledVector(f.lateral, e[i]));
+      const out = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const v1 = pts[i].clone().sub(pts[(i - 1 + n) % n]);
+        const v2 = pts[(i + 1) % n].clone().sub(pts[i]);
+        const l1 = v1.length(), l2 = v2.length();
+        if (l1 < 1e-6 || l2 < 1e-6) { out[i] = 0; continue; }
+        const dot = v1.dot(v2);                       // before cross() — cross MUTATES v1
+        const cross = v1.cross(v2).dot(frames[i].up);
+        out[i] = Math.abs(Math.atan2(cross / (l1 * l2), clamp(dot / (l1 * l2), -1, 1))) / ((l1 + l2) / 2);
+      }
+      return out;
+    };
+
+    const bound = new Float64Array(n);
+    for (let i = 0; i < n; i++) bound[i] = boundFor(Math.abs(kappa[i]), i);
+    relax(bound, RL_ITERS);
+    let kLine = measure();
+
+    // Audit each corner: did the line actually straighten it? Split the lap into
+    // corner regions (runs of |κ| above threshold, padded so entry/exit swings and
+    // any curvature the line moved onto the approach are billed to their corner),
+    // and compare peak curvatures. A region the line made no better — long sweepers,
+    // where inside-hugging means a TIGHTER radius, more brake and more steer scrub —
+    // reverts to the centerline. The reserve is also re-sized with the curvature the
+    // LINE carries (entry bends before the centerline does, and ground the rail when
+    // the reserve was sized off centerline κ alone). One re-relax smooths the seams.
+    const PAD = Math.max(2, Math.round(4 / h));
+    let i0 = 0;
+    while (i0 < n && Math.abs(kappa[i0]) > RL_CORNER_K) i0++; // start the scan on a straight (a corner may straddle the seam)
+    if (i0 < n) {
+      for (let i = i0; i < i0 + n; i++) {
+        if (Math.abs(kappa[i % n]) <= RL_CORNER_K) continue;
+        let j = i; // [i, j] = this corner's run
+        while (j + 1 < i0 + n && Math.abs(kappa[(j + 1) % n]) > RL_CORNER_K) j++;
+        let kcMax = 0, klMax = 0;
+        for (let m = i - PAD; m <= j + PAD; m++) {
+          kcMax = Math.max(kcMax, Math.abs(kappa[((m % n) + n) % n]));
+          klMax = Math.max(klMax, kLine[((m % n) + n) % n]);
+        }
+        if (klMax > kcMax * RL_PAYOFF) {
+          for (let m = i - PAD; m <= j + PAD; m++) bound[((m % n) + n) % n] = 0;
+        }
+        i = j;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if (bound[i] > 0) bound[i] = boundFor(Math.max(Math.abs(kappa[i]), kLine[i]), i);
+      e[i] = clamp(e[i], -bound[i], bound[i]);
+    }
+    relax(bound, RL_ITERS / 2);
+    kLine = measure();
+
+    // Lightly smooth what cornerBrake reads, so sampling noise doesn't flicker the brake.
+    const k = new Float64Array(n);
+    for (let i = 0; i < n; i++) k[i] = (kLine[(i - 1 + n) % n] + 2 * kLine[i] + kLine[(i + 1) % n]) / 4;
+    this.length = L; this.n = n; this.h = h;
+    this.e = e; this.k = k; this.bound = bound;
+  }
+  _at(arr, s) {
+    const L = this.length;
+    s = ((s % L) + L) % L;
+    const x = s / this.h, i = Math.floor(x) % this.n, f = x - Math.floor(x);
+    return arr[i] * (1 - f) + arr[(i + 1) % this.n] * f;
+  }
+  laneAt(s) { return this._at(this.e, s); }   // line's lateral offset (world units, + = right)
+  curvAt(s) { return this._at(this.k, s); }   // the line's own 3D curvature (rad/u)
+  roomAt(s) { return this._at(this.bound, s); } // corridor half-width the line was solved in
+}
+
+// One line per track, shared by every bot on it (pure geometry — no per-bot state).
+const _racingLines = new WeakMap();
+export function racingLineFor(centerline) {
+  let line = _racingLines.get(centerline);
+  if (!line) { line = new RacingLine(centerline); _racingLines.set(centerline, line); }
+  return line;
+}
+
 // ---- race-context reads for item timing ----
 // Nearest live rival physically behind on the ribbon (wrapped to the nearest lap copy),
 // in world units — the car most likely to drive over a banana we drop. Infinity when the
@@ -78,16 +232,23 @@ function gapToCarAhead(car, game) {
 
 // Find the nearest hazard sitting on the bot's intended line and pick a lane past it.
 // `game` exposes hazards (oil: {s,lat,radius}) + bananas ({s,lat,owner}) in centerline
-// space; we aim for the side with the most corridor room. Returns the dodge lane (world
-// units off the centerline) for the caller to steer to, or null when the path is clear.
-function avoidThreat(car, lane, game, maxLat) {
+// space; we aim for the side with the most corridor room. `laneFor(s)` is the bot's
+// intended lane AT an arclength (the racing line sweeps across the road, so "is this
+// on our path" must be asked where the hazard sits, not where the car is now).
+// `prevDodge` is last frame's dodge lane: while a dodge is in progress the side
+// tie-break anchors on it, so the choice is STICKY — the racing line drifts the
+// intended lane during the approach, and re-deciding each frame against that moving
+// reference flipped a committed dodge mid-approach into the hazard.
+// Returns the dodge lane (world units off the centerline), or null when clear.
+function avoidThreat(car, laneFor, game, maxLat, prevDodge = null) {
   if (!game || !game.length) return null;
   const L = game.length;
+  const lane = prevDodge != null ? prevDodge : laneFor(car.totalS); // side tie-breaks anchor here
   let best = null, bestDs = Infinity;
   const consider = (h, radius) => {
     const ds = wrapDelta(h.s - car.totalS, L);               // wrap to the nearest copy
     if (ds < EVADE_NEAR || ds > EVADE_FAR) return;           // behind/abreast, or too far to matter yet
-    if (Math.abs(lane - h.lat) > radius + EVADE_CLEAR) return; // off to the side — not on our line
+    if (Math.abs(laneFor(h.s) - h.lat) > radius + EVADE_CLEAR) return; // off to the side — not on our line
     if (ds < bestDs) { bestDs = ds; best = { lat: h.lat, r: radius }; }
   };
   for (const h of (game.hazards || [])) consider(h, h.radius);
@@ -124,7 +285,7 @@ const BRAKE_LOOK_NEAR = 1.5;    // start scanning this far ahead (world units)
 const BRAKE_LOOK_FAR = 22.0;    // ...to here — must cover the braking distance even from boost speed
 const BRAKE_LOOK_STEP = 1.0;
 const CORNER_MARGIN = 1.0;      // target as a fraction of the max holdable corner speed. Was 0.86, then 0.95 — needlessly slow: the 7.5u lookahead keeps bots on a smoothed line, so the feared apex-cut washout doesn't happen. Persona spread now lives in `caution` (a per-bot multiplier on this), so the base stays at the true limit and only the tail bots bank safety. A catalogue sim shows brief curb scrub only on the 3 hardest circuits (cloverleaf/crag/sidewinder, ~0-0.6s per bot per race, no spins) — and it does NOT shrink at 0.98 (it just redistributes between bots): it's weave/track-shape noise, not margin overshoot, so don't chase it by lowering this.
-const BRAKE_DECEL_REF = 4.0;    // assumed braking deceleration (u/s², a touch under the engine's BRAKE_DECEL 4.5 → brake just early enough, not late)
+const BRAKE_DECEL_REF = 4.4;    // assumed braking deceleration (u/s², a hair under the engine's BRAKE_DECEL 4.5). Was 4.0 — a ~12% systematic early-brake handicap on every bot; the sliver kept is the discretisation slack (1u scan step), not a safety cushion
 
 // Local track curvature (rad per world unit) at arclength s — the turn between two
 // nearby centerline tangents, via the same cross/dot trick the steering uses (so
@@ -142,8 +303,10 @@ function curvatureAt(centerline, s, step = 0.6) {
 // to it over the remaining distance d (v²−vSafe²)/2d; brake = that as a fraction of the
 // car's braking power. A far corner needs almost nothing now; a near one needs a lot.
 // `turn` overrides car.turn (the per-car yaw rate); `caution` scales the margin (a bot
-// persona's corner bravery — see AI_PERSONALITIES). Shared with the engine's victory lap.
-export function cornerBrake(car, centerline, { turn, caution = 1 } = {}) {
+// persona's corner bravery — see AI_PERSONALITIES); `line` (a RacingLine) rates bends
+// by the curvature of the path the bot ACTUALLY steers, which its apex cut has made
+// straighter than the centerline — omit it (victory lap) to rate the centerline.
+export function cornerBrake(car, centerline, { turn, caution = 1, line = null } = {}) {
   if (!car || !centerline) return 0;
   const yaw = turn || car.turn || TURN_RATE_FALLBACK;
   // Grippy cars can chase the apex aggressively; a low-grip car (low yaw) overshoots the
@@ -152,7 +315,7 @@ export function cornerBrake(car, centerline, { turn, caution = 1 } = {}) {
   const v = car.v;
   let brake = 0;
   for (let d = BRAKE_LOOK_NEAR; d <= BRAKE_LOOK_FAR; d += BRAKE_LOOK_STEP) {
-    const k = curvatureAt(centerline, car.totalS + d);
+    const k = line ? line.curvAt(car.totalS + d) : curvatureAt(centerline, car.totalS + d);
     if (k <= 1e-3) continue;
     const vSafe = (margin * yaw) / k;
     if (v <= vSafe) continue;
@@ -188,8 +351,9 @@ export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GA
 // cautious one lifts a touch earlier and deeper — catchable where it's honest, in the
 // braking zones. On top of that cornerBrake itself is per-car: a low-handling car
 // (e.g. a Truck bot) visibly slows for bends while a grippy one rails them — the same
-// trade a human feels. `laneBias` holds the bot a fixed offset off the centerline so
-// the field fans across the road, not nose-to-tail.
+// trade a human feels. `laneBias` fans the bot off the track's racing line where
+// there's room (straights), so the field spreads instead of running nose-to-tail —
+// while everyone still funnels through the same apexes.
 export class AiController {
   constructor({ caution = 1, lookahead = LOOKAHEAD, gain = STEER_GAIN, laneBias = 0, seed = 1 } = {}) {
     this.caution = clamp(caution, 0.5, 1);
@@ -204,6 +368,7 @@ export class AiController {
     this._lastItem = null;  // item held last frame (detects a fresh pickup → restart the hold)
     this._heldFrames = 0;   // frames the current item has been held
     this._holdMin = 0;      // this pickup's seeded minimum hold (frames) before firing is considered
+    this._dodgeLane = null; // dodge lane held last frame — keeps an in-progress dodge on one side
   }
   // {s, b, u} ready to hand straight to engine.processInput(id, ...). `u` is a
   // wrapping use-counter (same protocol as the phone's ACTION button): a bot HOLDS a
@@ -221,9 +386,25 @@ export class AiController {
     this._weave += (this._weaveTarget - this._weave) * WEAVE_EASE;
 
     const maxLat = (game && game.maxLat) || 1.5;
-    let lane = clamp(this.laneBias, -(maxLat - 0.1), maxLat - 0.1);
+    // Intended lane at an arclength: the track's racing line plus this bot's fan-out
+    // bias, faded as the line spends the corridor — the field spreads on straights
+    // and converges to the one true apex (where bias would mean the curb).
+    const line = racingLineFor(centerline);
+    const laneFor = (sAbs) => {
+      const e = line.laneAt(sAbs);
+      const room = line.roomAt(sAbs);
+      const fade = room > 0.05 ? clamp(1 - Math.abs(e) / room, 0, 1) : 1;
+      // Clamp the TARGET to the solved corridor: bound already reserves the pursuit
+      // cut, and a bias pushed past it would grind the car on the rail mid-corner.
+      // Where the line ceded a region back to the centerline (room 0, e 0) the old
+      // fixed-bias fan was always safe, so never pinch below that width.
+      const lim = Math.min(Math.max(room, FAN_MIN_ROOM), maxLat - 0.1);
+      return clamp(e + this.laneBias * fade, -lim, lim);
+    };
+    let lane = laneFor(car.totalS + this.lookahead); // where pursue's target sits
     let look = this.lookahead;
-    const dodge = avoidThreat(car, lane, game, maxLat); // a hazard on our line overrides the wander
+    const dodge = avoidThreat(car, laneFor, game, maxLat, this._dodgeLane); // a hazard on our line overrides the wander
+    this._dodgeLane = dodge;
     if (dodge != null) { lane = dodge; look = EVADE_LOOK; } // cut hard toward the gap, sharp + early
 
     let s = pursue(car, centerline, { lookahead: look, gain: this.gain, laneBias: lane });
@@ -236,7 +417,7 @@ export class AiController {
       const curbRoom = clamp((maxLat - Math.abs(car.lat)) / WANDER_CURB, 0, 1);
       s = clamp(s + this._weave * STEER_WANDER * room * curbRoom, -1, 1);
     }
-    const corner = cornerBrake(car, centerline, { caution: this.caution });
+    const corner = cornerBrake(car, centerline, { caution: this.caution, line });
     // Held-item firing. A bot reads the race before it spends an item instead of dumping
     // it the instant the roulette stops — so it no longer looks like it fires on pickup.
     // A fresh pickup restarts the hold and rolls a seeded minimum (so the field fires on
