@@ -252,7 +252,11 @@ export const THEMES = {
     // feature keeps the coast from reading as bare desert dunes.
     hills:  [0xe6d29a, 0xefe2b3, 0x9fc48e],
     hillShape: 'island', // sparse offshore chain — the sea must show BETWEEN the hills
-    water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8, wet: 0x8f7c58 },
+    // `wet` is the damp-sand tint. It must be the SAND's own hue taken darker and
+    // MORE saturated — water deepens sand's colour. The old grey-tan (0x8f7c58)
+    // dropped the sand's saturation instead, and the swash band read as a dusty
+    // olive stripe laid on the beach rather than as wet sand.
+    water:  { foam: 0xf2fbf5, shallow: 0x62d3c8, deep: 0x2596c8, wet: 0x7d5f34 },
     fogTune: 1.3, // clear seaside air: push the chase-cam fog out so the water reads from track level
     // Sun-bleached coastal asphalt — the CANONICAL circuit road (white lines, dash,
     // the classic coral-red/white kerbs, which already read seaside), just lighter

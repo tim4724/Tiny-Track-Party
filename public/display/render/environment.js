@@ -199,17 +199,42 @@ export const WATER_LIFT = 0.12; // floats just above the ground plane; unnoticea
                                 // from the ≥30u any camera keeps from the shore, and enough
                                 // depth separation to never z-fight the sand below (exported:
                                 // setTrack re-bases the sheet when a track moves groundY)
-// Band radii paired with a colour parameter: 0..1 lerps foam→shallow, 1..2
-// shallow→deep. The last ring just extends the deep colour out under the fog.
+// Band radii paired with a colour parameter and an alpha: colour 0..1 lerps
+// foam→shallow, 1..2 shallow→deep. The last ring just extends the deep colour out
+// under the fog. A band pair at nearly the same radius = a HARD edge; a wide gap =
+// a gradient. Both are used deliberately below.
+//
+// Two things drive this table:
+//
+//   Alpha — water thins to nothing where it meets sand, so the SHEET'S OWN EDGE IS
+//   FULLY TRANSPARENT: no hard sand/water boundary gives the polygon away, and the
+//   surf fades in over ~1u of wet sand. A thin sand-through-water strip follows,
+//   then it goes opaque as the water deepens.
+//
+//   Crispness — from the race camera the whole sea compresses into a ~60px strip, so
+//   a band that dissolves over 5+ units becomes a soft wash: the shore read as a
+//   pale glow, the one blurry thing in a frame of flat toy colour. The surf is FLAT
+//   colour between two tight rings, and it meets the shallows in 0.4u — a crisp line
+//   at any distance. Only the shallow→deep gradient is allowed to be gradual: that
+//   one is depth falling away, and it reads as sea rather than blur.
 const WATER_BANDS = [
-  [WATER_INNER,        0], // shoreline — pure foam
-  [WATER_INNER + 3,    0], // foam line (thin, bright)
-  [WATER_INNER + 8,    1], // foam dissolves into the shallows fast
-  [WATER_INNER + 60,   1.55],
-  [WATER_INNER + 180,  2], // fully deep
-  [2600,               2],
+  [WATER_INNER,        0,    0   ], // sheet edge — invisible; wet sand shows through untouched
+  [WATER_INNER + 1.2,  0,    0.9 ], // surf fades in fast (~1u of wet sand under a thin film)
+  [WATER_INNER + 4.0,  0,    0.92], // flat bright crest — same colour + alpha as above = no gradient
+  [WATER_INNER + 4.4,  0.8,  0.88], // hard edge: foam gives way to water in 0.4u
+  [WATER_INNER + 9,    0.9,  0.86], // the shallowest water — sand still reads through it, but only
+                                    // just: warm sand under turquoise turns it green fast, and too
+                                    // much of that reads as pond, not sea
+  [WATER_INNER + 20,   1,    0.95],
+  [WATER_INNER + 60,   1.55, 1   ], // opaque from here out
+  [WATER_INNER + 180,  2,    1   ], // fully deep
+  [2600,               2,    1   ],
 ];
-const WATER_SEG = 96; // ring segments — the shoreline circle reads smooth at any radius
+// Ring segments. Fine enough that the SURF LINE keeps its crinkle (SHORE_CRINKLE) at
+// the ~4u scale a track-level camera sees it at — 96 segments spread over a big island
+// put ~13u between vertices and drew the waterline as a ruler edge. ~2.3k verts total
+// across the bands: nothing next to the road.
+const WATER_SEG = 288;
 
 function buildWaterGeometry() {
   const rings = WATER_BANDS.length, verts = WATER_SEG + 1;
@@ -236,7 +261,7 @@ function buildWaterGeometry() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rings * verts * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rings * verts * 4), 4)); // itemSize 4 → vertex alpha (the shore fade)
   geo.setIndex(idx);
   return geo;
 }
@@ -246,10 +271,20 @@ function buildWaterGeometry() {
 // foam. Built as a CHILD of the water mesh, so it rides the per-track shoreline
 // fit for free. RGBA vertex colours; unlit (it's a darkening glaze over the lit,
 // textured sand, like a shadow).
+// It carries the transition on the SAND side, and the old numbers were too timid to
+// see from a track-level camera (a 7u strip at 0.22 over bright sand): the beach ran
+// dry-bright straight into the foam. Wider, and damp enough to read — the swash zone
+// a real tide leaves behind. It runs OUT past the sheet edge too (which is
+// transparent now), so the sand under the surf is wet, not dry sand seen through
+// water.
 const WET_BANDS = [ // [radius, alpha]
-  [WATER_INNER - 7, 0],
-  [WATER_INNER - 2.5, 0.22],
-  [WATER_INNER + 0.6, 0.34], // tucks just under the foam edge
+  [WATER_INNER - 13, 0],
+  [WATER_INNER - 8.5, 0.10],
+  [WATER_INNER - 8.0, 0.24], // tide line — the damp edge the last wave left, a real beach's
+                             // most legible line after the surf itself (and the swash factor
+                             // waves it in and out along the shore, so it's no drawn circle)
+  [WATER_INNER - 2, 0.42],
+  [WATER_INNER + 2.5, 0.5], // darkest right where the surf runs up, under the foam line
 ];
 
 function buildWetGeometry() {
@@ -293,12 +328,12 @@ function applyWater(water, theme) {
   const verts = WATER_SEG + 1;
   const c = new THREE.Color();
   for (let ri = 0; ri < WATER_BANDS.length; ri++) {
-    const t = WATER_BANDS[ri][1];
+    const t = WATER_BANDS[ri][1], alpha = WATER_BANDS[ri][2];
     if (t <= 1) c.copy(foam).lerp(shallow, t);
     else c.copy(shallow).lerp(deep, t - 1);
     for (let si = 0; si < verts; si++) {
-      const v = (ri * verts + si) * 3;
-      arr[v] = c.r; arr[v + 1] = c.g; arr[v + 2] = c.b;
+      const v = (ri * verts + si) * 4;
+      arr[v] = c.r; arr[v + 1] = c.g; arr[v + 2] = c.b; arr[v + 3] = alpha;
     }
   }
   colAttr.needsUpdate = true;
@@ -328,35 +363,59 @@ function applyWater(water, theme) {
 // clears them, and the wobble crests give the extra headland reach.
 const SHORE_MARGIN = 26;  // minimum sand between the track's hull and the foam
 const SHORE_WOBBLE = 22;  // extra reach at a wobble crest (outward only)
+const SHORE_CRINKLE = 2.6; // fine in-and-out of the waterline itself (±, eats into the margin)
 const SHORE_FADE = 220;   // band offset over which the outline relaxes back to a circle
-// [harmonic, weight] — 2 and 3 give the big lobes, 5 and 7 break up the arcs. Keeping
-// the highest at 7 over ~96 segments leaves ~13 segments per crest: still smooth.
+// [harmonic, weight] — 2 and 3 give the big lobes, 5 and 7 break up the arcs.
 const SHORE_HARMONICS = [[2, 1], [3, 0.72], [5, 0.44], [7, 0.26]];
+// The lobes above shape the ISLAND; these shape the WATERLINE — the metre-scale
+// in-and-out you actually see standing on the beach, which the lobes are far too
+// broad to give. Without it the surf line is a drawn arc. Mean-zero (it wanders both
+// ways about the lobe outline), and topping out at 29 leaves ~10 segments per crest
+// at WATER_SEG 288: still a curve, never a zigzag.
+const SHORE_CRINKLE_HARMONICS = [[11, 1], [17, 0.62], [29, 0.34]];
+// Surf width along the beach. Real swash runs further up in one stretch than the next;
+// a constant-width foam ring is the giveaway that it's a drawn band. Scales the surf
+// bands' offsets per bearing, so the foam is thin here and broad there.
+const SWASH_HARMONICS = [[3, 1], [7, 0.55], [13, 0.3]];
+const SWASH_RANGE = 0.62;  // ±62% on the surf band widths
+const SWASH_ZONE = 20;     // band offset by which the swash variation has faded out
 
-// Per-angle shoreline radius for one track. Returns a function of bearing (radians)
-// — landmarks (render/track.js) anchor to the same curve the mesh is built from.
+// Sum a [harmonic, weight] set at `angle` into [-1, 1].
+function harmonicSum(harmonics, phases, angle) {
+  let n = 0, wsum = 0;
+  for (let i = 0; i < harmonics.length; i++) {
+    const [k, w] = harmonics[i];
+    n += w * Math.sin(k * angle + phases[i]);
+    wsum += w;
+  }
+  return n / wsum;
+}
+
+// Per-angle shoreline for one track: { shore, swash }. `shore` is the radius of the
+// water sheet's edge at a bearing — landmarks (render/track.js) anchor to the same
+// curve the mesh is built from. `swash` scales the surf band widths at that bearing.
 function shorelineFn(samples, trackId) {
   let seed = 2166136261 >>> 0; // FNV-1a over the track id — same track, same island
   for (const ch of String(trackId ?? '')) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   const phases = SHORE_HARMONICS.map(() => rand() * Math.PI * 2);
-  const wsum = SHORE_HARMONICS.reduce((a, [, w]) => a + w, 0);
-  return (angle) => {
+  const crinklePhases = SHORE_CRINKLE_HARMONICS.map(() => rand() * Math.PI * 2);
+  const swashPhases = SWASH_HARMONICS.map(() => rand() * Math.PI * 2);
+  const shore = (angle) => {
     const cx = Math.cos(angle), cz = Math.sin(angle);
     // Floored at 0 for the bearings a track laid out to ONE SIDE of the origin never
     // reaches (support goes negative there) — that side just gets a plain margin-wide
     // nub of sand. The road is safe either way: every sample p sits at |p| = p·dir(its
     // own bearing) ≤ support(that bearing), so the shore clears it by ≥ SHORE_MARGIN
-    // along its own ray, whether or not the hull encloses the origin.
+    // (less SHORE_CRINKLE) along its own ray, whether or not the hull encloses the origin.
     let support = 0;
     for (const s of samples) support = Math.max(support, s.pos.x * cx + s.pos.z * cz);
-    let n = 0;
-    for (let i = 0; i < SHORE_HARMONICS.length; i++) {
-      const [k, w] = SHORE_HARMONICS[i];
-      n += w * Math.sin(k * angle + phases[i]);
-    }
-    return support + SHORE_MARGIN + SHORE_WOBBLE * (0.5 + 0.5 * (n / wsum)); // n/wsum ∈ [-1,1]
+    const lobes = harmonicSum(SHORE_HARMONICS, phases, angle);
+    const crinkle = harmonicSum(SHORE_CRINKLE_HARMONICS, crinklePhases, angle);
+    return support + SHORE_MARGIN + SHORE_WOBBLE * (0.5 + 0.5 * lobes) + SHORE_CRINKLE * crinkle;
   };
+  const swash = (angle) => 1 + SWASH_RANGE * harmonicSum(SWASH_HARMONICS, swashPhases, angle);
+  return { shore, swash };
 }
 
 // Reshape the sea ring (and its wet-sand child) around `track`, and re-base it on the
@@ -367,14 +426,16 @@ function shorelineFn(samples, trackId) {
 // shoreline read, and out past the fog the far rings only need to reach the sky.
 export function fitWater(water, track, groundY) {
   if (!water) return;
-  const shore = shorelineFn(track.centerline.samples, track.trackId);
+  const { shore, swash } = shorelineFn(track.centerline.samples, track.trackId);
   const verts = WATER_SEG + 1;
-  const shoreR = new Float32Array(verts);
+  const shoreR = new Float32Array(verts), swashF = new Float32Array(verts);
   let outer = 0;
   for (let si = 0; si < verts; si++) {
     // The seam vertex (si === WATER_SEG) shares the angle of si === 0 — same radius,
     // so the ring closes exactly.
-    shoreR[si] = shore((si % WATER_SEG) / WATER_SEG * Math.PI * 2);
+    const a = (si % WATER_SEG) / WATER_SEG * Math.PI * 2;
+    shoreR[si] = shore(a);
+    swashF[si] = swash(a);
     outer = Math.max(outer, shoreR[si]);
   }
   const write = (geo, bands, fade) => {
@@ -382,9 +443,12 @@ export function fitWater(water, track, groundY) {
     for (let ri = 0; ri < bands.length; ri++) {
       const off = bands[ri][0] - WATER_INNER; // authored band radius → offset from the shore
       const t = fade ? Math.min(1, Math.abs(off) / SHORE_FADE) : 0; // 0 = follow the outline, 1 = circular
+      // Surf bands ride the swash (their width varies along the beach); by SWASH_ZONE
+      // the sea is just sea and the bands go back to their authored widths.
+      const sw = Math.max(0, 1 - Math.abs(off) / SWASH_ZONE);
       for (let si = 0; si < verts; si++) {
         const a = (si % WATER_SEG) / WATER_SEG * Math.PI * 2;
-        const r = shoreR[si] * (1 - t) + outer * t + off;
+        const r = shoreR[si] * (1 - t) + outer * t + off * (1 + (swashF[si] - 1) * sw);
         const v = (ri * verts + si) * 3;
         arr[v] = Math.cos(a) * r; arr[v + 2] = Math.sin(a) * r;
       }
@@ -771,11 +835,15 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
   // ground — the flat sheet takes the biome's light tint, and vertex colours carry
   // the shore-to-deep gradient. Distance fog dissolves it into the sky as usual.
   // The wet-sand band rides along as a child (it fits + breathes with the shoreline).
+  // Transparent: the vertex alpha thins the sheet to nothing at the shore (see
+  // WATER_BANDS), so the sand reads through the shallows and the sheet has no visible
+  // edge. depthWrite stays ON — the sheet is flat and never overlaps itself, and the
+  // sailboat/headlands need to depth-test against it.
   let water;
   {
     water = new THREE.Mesh(
       buildWaterGeometry(),
-      new THREE.MeshLambertMaterial({ vertexColors: true })
+      new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true })
     );
     water.position.y = -1.0 + WATER_LIFT; // follows the ground plane; setTrack re-bases on groundY moves
     const wet = new THREE.Mesh(
@@ -783,6 +851,14 @@ export function buildEnvironment(scene, theme = THEMES.grass) {
       new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false })
     );
     wet.position.y = -0.05; // just below the water sheet, still clear of the sand below
+    // Order within the transparent pass, which the two sheets now belong to. Both
+    // share a centre, so three's back-to-front sort can't separate them: pin it.
+    // NEGATIVE, so the sea draws FIRST — before the gulls, kites and clouds, which
+    // are depthWrite:false sprites at the default order. An opaque sea used to be
+    // drawn in the opaque pass (i.e. before all of them) for free; a transparent one
+    // ordered after them would paint straight over any flier crossing the water.
+    wet.renderOrder = -3;   // damp sand, under everything
+    water.renderOrder = -2; // sea blended over it, still behind every flier
     water.add(wet);
     water.userData.wet = wet;
     applyWater(water, theme);
