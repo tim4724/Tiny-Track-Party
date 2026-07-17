@@ -1285,17 +1285,13 @@ export class SceneRenderer {
     const texel = Math.max(sc.right - sc.left, sc.top - sc.bottom) / k.shadow.mapSize.x;
     k.shadow.normalBias = Math.max(0.06, 2.5 * texel);
 
-    // Hazard decals conform to the road AT BUILD TIME (they're static): hand props
-    // the same normal-cast raycast the boost disk uses per frame, so a puddle's
-    // vertices bend over crests/banks instead of a flat disc clipping the deck.
-    // Runs after the _collideGrid build above — the cast needs it. Build-time only,
-    // so the shared-scratch discipline of the frame loop doesn't apply; `out` copies
-    // the shared hit before the next cast.
-    this.props.setTrack(track, theme, (pt, up, out) => {
-      this._diskOrigin.copy(pt).addScaledVector(up, BOOST_RAY_UP);
-      const hit = this._roadHitAlong(this._diskOrigin, up, pt);
-      return hit ? out.copy(hit) : null;
-    });
+    // Road decals (oil/water/ice slicks, boost pads, box contact shadows) are cut
+    // straight out of the road ribbon's own triangles AT BUILD TIME — hand props the
+    // deck chunk meshes (render/RoadDecal.clipRoadDecal). A clipped decal shares the
+    // road's exact surface, so it can't be poked through on a crest/bank the way a
+    // separate conformed sheet could. They're static, so the clip bakes once here.
+    const deck = this.trackGroup.children.filter((m) => m.userData.roadDeck);
+    this.props.setTrack(track, theme, deck);
     // Bake the sun shadow ONCE for this static track. The track geometry above is the
     // only shadow caster (cars/boxes/bananas/cones cast no real shadow — they carry
     // ground blobs instead), and both it and the light are fixed, so one render here is

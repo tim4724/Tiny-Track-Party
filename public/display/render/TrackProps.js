@@ -4,6 +4,7 @@
 // engine stays authoritative — everything here is render-side juice.
 import * as THREE from 'three';
 import { makePadTexture, makePadStripTexture, makeBlobShadowTexture, makeWetSignTexture } from './textures.js';
+import { clipRoadDecal } from './RoadDecal.js';
 
 // Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
 // a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
@@ -84,10 +85,11 @@ export class TrackProps {
     this._bbox = bbox;        // ?bbox=1 debug-outline flag
     this._padTex = makePadTexture();
     this._padStripTex = makePadStripTexture(); // full-width rectangular launch strip (loop mouths)
-    // Shared (renderer-lifetime) bits for the item-box contact shadows: one circle
-    // geometry + one tinted soft-blob material reused by every box on every track.
-    // Boxes only toggle their shadow mesh's `.visible`, so the material never needs
-    // per-box cloning — nothing here is disposed on a track change.
+    // Shared (renderer-lifetime) soft-blob shadow bits. The flat CircleGeometry is used
+    // by the DYNAMIC props (bananas, monster) whose shadow must follow them per frame —
+    // those stay a flat blob with a small lift. The STATIC item-box shadow instead cuts
+    // its own geometry from the road ribbon (owned), but shares this material. Neither
+    // the geo nor the material is per-instance; boxes only toggle their `.visible`.
     this._boxShadowGeo = new THREE.CircleGeometry(BOX_SHADOW_R, 24);
     this._boxShadowMat = new THREE.MeshBasicMaterial({
       map: makeBlobShadowTexture(), color: BOX_SHADOW_COLOR,
@@ -145,57 +147,53 @@ export class TrackProps {
   // Rebuild everything for a new track layout. `theme` is the resolved cup biome
   // (see SceneRenderer.setTrack) — hazards read it so the beach cup's slicks
   // render as water puddles ringed with wet-floor signs instead of oil + cones.
-  // `conform` is the renderer's road-snap raycast ((pt, up, out) → out on the deck,
-  // or null off-track); the slick decals bake it into their geometry at build.
-  setTrack(track, theme, conform) {
-    this._buildHazards(track, theme, conform);
+  // `deck` is the road ribbon's chunk meshes: every flat decal (slick, pad, box
+  // shadow) is cut out of them (render/RoadDecal.clipRoadDecal) so it shares the
+  // road's exact surface and can't be poked through on a crest/bank.
+  setTrack(track, theme, deck) {
+    this._deck = deck || [];
+    this._buildHazards(track, theme);
     this._buildProps(track);
     this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in sync)
   }
 
-  // Road-conformed disc (r0 = 0) or annulus (r0 > 0) for the slick decals, built in
-  // WORLD space. A flat CircleGeometry is tangent to the road only at its centre, so
-  // on any crest/dip/bank the deck rose through it (clipping) — and the old fix, a
-  // 0.02 lift, read as hovering from the low chase cam. Instead lay the vertices out
-  // on the tangent plane and drop EACH one onto the deck along the sample's up — the
-  // boost disk's per-frame conform (SceneRenderer._roadHitAlong), but done ONCE here:
-  // hazards are static, so the bent sheet bakes into the geometry for free. The
-  // basis is right = lateral, fwd = up × right (right-handed, so triangles wound
-  // CCW seen from +up face the sky); a vertex past the road edge keeps its tangent-
-  // plane position (conform → null), matching the flat disc's old edge behaviour.
-  _conformedSheet(centre, right, up, r0, r1, segs, bands, conform) {
-    const fwd = new THREE.Vector3().crossVectors(up, right).normalize();
-    const pt = new THREE.Vector3(), out = new THREE.Vector3();
-    const disc = r0 === 0;                     // disc: centre vertex + fan; annulus: bands only
-    const loops = [];                          // radii of the vertex loops, inner → outer
-    for (let k = disc ? 1 : 0; k <= bands; k++) loops.push(r0 + (r1 - r0) * (k / bands));
-    const verts = [];                          // flat xyz, loop-major; index 0 = centre when disc
-    const snap = () => {
-      if (!conform || !conform(pt, up, out)) out.copy(pt);
-      verts.push(out.x, out.y, out.z);
-    };
-    if (disc) { pt.copy(centre); snap(); }
-    for (const r of loops) {
-      for (let i = 0; i < segs; i++) {
-        const a = (i / segs) * Math.PI * 2;
-        pt.copy(centre).addScaledVector(right, Math.cos(a) * r).addScaledVector(fwd, Math.sin(a) * r);
-        snap();
-      }
-    }
-    const idx = [];
-    const base = disc ? 1 : 0;                 // first loop's start index
-    if (disc) for (let i = 0; i < segs; i++) idx.push(0, base + i, base + (i + 1) % segs);
-    for (let k = 0; k < loops.length - 1; k++) {
-      const lo = base + k * segs, hi = lo + segs;
-      for (let i = 0; i < segs; i++) {
-        const j = (i + 1) % segs;
-        idx.push(lo + i, hi + i, hi + j, lo + i, hi + j, lo + j);
+  // A road-clipped decal geometry (WORLD space, identity transform) for a footprint
+  // laid flat on the road, centred at `centre` with the road basis (right = lateral,
+  // fwd = travel, up = road normal) — its triangles are the road ribbon's own, clipped
+  // to `region`, so it's exactly coplanar with the deck (no conform, no lift, no
+  // poke-through). `region` is a RoadDecal shape ({kind:'circle'|'rect'|'annulus'}).
+  // Falls back to a flat tangent-plane sheet when the footprint misses the deck (off
+  // track, or a headless test with no ribbon) so callers always get a mesh.
+  _roadDecalGeo(centre, right, fwd, up, region) {
+    const clipped = this._deck.length && clipRoadDecal(this._deck, { centre, right, fwd, up }, region);
+    return clipped || this._flatSheet(centre, right, fwd, up, region);
+  }
+
+  // Fallback flat decal: a tangent-plane disc/rect/annulus at the sample, used only
+  // when there's no ribbon to clip (off-road edge, or a Node test). Built in WORLD
+  // space (identity transform), triangles wound CCW seen from +up so they face the sky.
+  _flatSheet(centre, right, fwd, up, region) {
+    const verts = [], SEG = 36;
+    const push = (l, ff) => { const p = centre.clone().addScaledVector(right, l).addScaledVector(fwd, ff); verts.push(p.x, p.y, p.z); };
+    if (region.kind === 'rect') {
+      const w = region.halfW, L = region.halfL;
+      push(-w, -L); push(w, -L); push(w, L);  push(-w, -L); push(w, L); push(-w, L);
+    } else {
+      const r0 = region.kind === 'annulus' ? region.r0 : 0, r1 = region.kind === 'annulus' ? region.r1 : region.r;
+      for (let i = 0; i < SEG; i++) {
+        const a0 = (i / SEG) * Math.PI * 2, a1 = ((i + 1) / SEG) * Math.PI * 2;
+        const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+        if (r0 === 0) { push(0, 0); push(c0 * r1, s0 * r1); push(c1 * r1, s1 * r1); }
+        else {
+          push(c0 * r0, s0 * r0); push(c0 * r1, s0 * r1); push(c1 * r1, s1 * r1);
+          push(c0 * r0, s0 * r0); push(c1 * r1, s1 * r1); push(c1 * r0, s1 * r0);
+        }
       }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    g.setIndex(idx);
     g.computeVertexNormals();
+    g.computeBoundingSphere();
     return g;
   }
 
@@ -223,30 +221,31 @@ export class TrackProps {
     const Y = new THREE.Vector3(0, 1, 0);
     for (const p of (track.pads || [])) {
       // A pad is a glowing chevron DISC by default, or a full-width rectangular launch
-      // STRIP (`shape: 'strip'`, auto-placed at a loop mouth) — a plane spanning the lane.
-      let geom, tex;
+      // STRIP (`shape: 'strip'`, auto-placed at a loop mouth) — spanning the lane. Both
+      // are cut out of the road ribbon (_roadDecalGeo) so the chevrons ride the deck
+      // exactly, u across the lane and v along travel (matching CircleGeometry/Plane UV).
+      let region, tex;
       if (p.shape === 'strip') {
-        geom = new THREE.PlaneGeometry(p.halfWidth * 2, p.halfLen * 2); // X=width, Y=along travel
+        region = { kind: 'rect', halfW: p.halfWidth, halfL: p.halfLen };
         tex = this._padStripTex;
         this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, shape: 'strip', halfLen: p.halfLen, halfWidth: p.halfWidth });
       } else {
         const radius = p.radius || 0.65;
-        geom = new THREE.CircleGeometry(radius, 18);
+        region = { kind: 'circle', r: radius };
         tex = this._padTex;
         this._dbgStatic.push({ kind: 'pad', s: p.s, lat: p.lat || 0, radius });
       }
       const f = cl.sampleAt(p.s);
       const up = f.up.clone().normalize();
-      const face = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+      const right = f.lateral.clone().normalize();
+      const fwd = f.tangent.clone().normalize();
+      const centre = f.pos.clone().addScaledVector(f.lateral, p.lat);
+      const face = new THREE.Mesh(this._roadDecalGeo(centre, right, fwd, up, region), new THREE.MeshBasicMaterial({
         map: tex, transparent: true, opacity: 0.95, depthWrite: false,
         polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
       }));
       face.userData.owned = true; // owns its geometry+material (dispose on rebuild)
-      face.position.copy(f.pos).addScaledVector(f.lateral, p.lat); // FLUSH on the road (no lift); polygonOffset+depthWrite:false stop z-fighting — a physical lift reads as hovering from the low chase cam
-      // basis (lateral=X, tangent=Y, up=Z) lays the face in the road plane with its
-      // texture +Y (chevrons) pointing along travel.
-      face.quaternion.setFromRotationMatrix(
-        new THREE.Matrix4().makeBasis(f.lateral.clone().normalize(), f.tangent.clone().normalize(), up));
+      face.matrixAutoUpdate = false; // clipped verts are baked in world space (identity transform)
       face.renderOrder = -1;
       this.hazardGroup.add(face);
     }
@@ -285,13 +284,17 @@ export class TrackProps {
         for (const cm of cloned) mats.push(cm);
       });
       this.hazardGroup.add(mesh);
-      // Static contact shadow: a soft blob laid flat on the road DIRECTLY under the
-      // box's hover point (f.pos + lat, before BOX_FLOAT lifts the box). Shares the
-      // renderer-lifetime geo+material; only its `.visible` toggles (see sync), so
-      // it's free per frame. CircleGeometry faces +Z → rotate Z to the road normal.
-      const shadow = new THREE.Mesh(this._boxShadowGeo, this._boxShadowMat);
-      shadow.position.copy(f.pos).addScaledVector(f.lateral, b.lat).addScaledVector(up, 0.02);
-      shadow.quaternion.setFromUnitVectors(this._zAxis, up);
+      // Static contact shadow: a soft blob DIRECTLY under the box's hover point (f.pos
+      // + lat, before BOX_FLOAT lifts the box), cut out of the road ribbon so it lies
+      // exactly on the deck (no lift). Its geometry is per-box (owned — disposed on
+      // rebuild); the soft-blob material is renderer-lifetime and shared. Only `.visible`
+      // toggles per frame (see sync), so it stays cheap.
+      const right = f.lateral.clone().normalize();
+      const fwd = f.tangent.clone().normalize();
+      const centre = f.pos.clone().addScaledVector(f.lateral, b.lat);
+      const shadow = new THREE.Mesh(this._roadDecalGeo(centre, right, fwd, up, { kind: 'circle', r: BOX_SHADOW_R }), this._boxShadowMat);
+      shadow.userData.ownedGeo = true; // dispose the clipped geometry on rebuild, but NOT the shared material
+      shadow.matrixAutoUpdate = false; // clipped verts baked in world space (identity transform)
       shadow.renderOrder = -1; // paint with the road decals, beneath the box
       this.hazardGroup.add(shadow);
       // spin/bob/collect state (see _stepBoxes). homeY is the rest height, phase
@@ -469,11 +472,14 @@ export class TrackProps {
   // with an `ice` palette (the snow cup) gets a glassy frozen SHEET with a frost rim
   // but keeps the standard cones (the sign swap is beach-only vocabulary). The
   // spin-out mechanic (engine-side) is identical in all three — a slick road slides.
-  // `conform` (from SceneRenderer via setTrack) bakes every disc/rim vertex onto the
-  // road deck so the sheets bend over crests/banks instead of clipping.
-  _buildHazards(track, theme, conform) {
+  // Every disc/rim is cut out of the road ribbon (this._deck via _roadDecalGeo) so it
+  // shares the deck's exact surface — it bends over crests/banks with the road and can
+  // never be poked through, no conform sheet or lift needed.
+  _buildHazards(track, theme) {
     this.hazardGroup.traverse((m) => {
-      if (m.isMesh && m.userData.owned) { m.geometry.dispose(); m.material.dispose(); }
+      if (!m.isMesh) return;
+      if (m.userData.owned) { m.geometry.dispose(); m.material.dispose(); } // owns both
+      else if (m.userData.ownedGeo) m.geometry.dispose(); // owns geometry only (box shadow; shared material)
     });
     this.hazardGroup.clear();
     this._cones = [];
@@ -498,13 +504,13 @@ export class TrackProps {
       const radius = h.radius || OIL_RADIUS_FALLBACK;
       const f = cl.sampleAt(h.s);
       const up = f.up.clone().normalize();
+      const right = f.lateral.clone().normalize();
+      const fwd = f.tangent.clone().normalize();
       const centre = f.pos.clone().addScaledVector(f.lateral, h.lat || 0);
-      // slick disc — laid FLUSH on the road (no vertical lift, which reads as hovering
-      // from the low chase cam) and pulled forward in depth by polygonOffset so it never
-      // z-fights the road tiles (same trick as the skid decals; renderOrder stacks the
-      // coplanar disc/foam layers). The geometry is road-CONFORMED (_conformedSheet):
-      // each vertex baked onto the deck, so the sheet bends over crests/banks instead
-      // of a flat disc clipping through them.
+      // slick disc — its triangles are the road ribbon's own (clipped to the disc
+      // footprint by _roadDecalGeo), so it's exactly coplanar with the deck: no lift,
+      // no conform, and polygonOffset alone wins the coplanar depth tie from every
+      // angle (renderOrder stacks the disc/foam layers; both under the cars' skids).
       const discMat = water
         // A turquoise WATER puddle: the beach's shallow-sea tint, translucent so the
         // road grain shows through (it's a wet sheet, not a hole). Lighter and more
@@ -530,9 +536,7 @@ export class TrackProps {
             transparent: true, opacity: 0.7, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
           });
-      // 3 radial bands × 36 segments (~110 verts) bend cleanly over any crest a
-      // puddle-sized patch can span; built in world space (identity transform).
-      const disc = new THREE.Mesh(this._conformedSheet(centre, f.lateral, up, 0, radius, 36, 3, conform), discMat);
+      const disc = new THREE.Mesh(this._roadDecalGeo(centre, right, fwd, up, { kind: 'circle', r: radius }), discMat);
       disc.userData.owned = true; // disc owns its geometry+material (dispose on rebuild)
       disc.matrixAutoUpdate = false; // vertices are baked in world space
       disc.receiveShadow = true;
@@ -540,10 +544,10 @@ export class TrackProps {
       this.hazardGroup.add(disc);
       // a rim ring so the slick reads as a feature with an edge, not just a tinted
       // patch: foam shore on the water puddle, rime frost on the ice sheet. Same
-      // flush, road-conformed treatment as the disc, drawn on top.
+      // road-clipped treatment as the disc (an annulus footprint), drawn on top.
       if (water || ice) {
         const rim = new THREE.Mesh(
-          this._conformedSheet(centre, f.lateral, up, radius * 0.82, radius, 40, 1, conform),
+          this._roadDecalGeo(centre, right, fwd, up, { kind: 'annulus', r0: radius * 0.82, r1: radius }),
           new THREE.MeshBasicMaterial({
             color: water ? water.foam : ice.frost, transparent: true, opacity: 0.5, depthWrite: false,
             polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3

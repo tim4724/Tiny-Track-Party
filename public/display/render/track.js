@@ -388,6 +388,7 @@ export function buildRibbonRoad(R, track, collide, theme) {
     const mesh = new THREE.Mesh(g, mat);
     mesh.matrixAutoUpdate = false; // positions are already baked in world space
     mesh.receiveShadow = true;
+    mesh.userData.roadDeck = true; // road-clipped decals (oil/pads/shadows) cut their footprint out of these chunks (render/RoadDecal.js)
     // Cast shadow ONLY from elevated chunks (bridge/ramp/loop decks). The shadow camera
     // frames the whole track, so it can't cull the road; a ground-level chunk only casts
     // onto grass, which opts out of receiving (env.js), so its shadow is invisible — skip
