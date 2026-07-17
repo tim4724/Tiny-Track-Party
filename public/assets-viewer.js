@@ -99,7 +99,7 @@ function stubRenderer() {
     trackGroup: new THREE.Group(),
     _mergedGeoms: [], _mergedMats: [], _trackAnims: [],
     _hills: { userData: { anchors: [{ x: 30, z: -20, top: 2.5 }] }, scale: { x: 1 } },
-    _water: { userData: { fit: 0.2 } },
+    _water: { userData: { shore: () => 27 } }, // same contract as fitWater's: shore radius by bearing
   };
 }
 

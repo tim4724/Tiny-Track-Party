@@ -196,9 +196,9 @@ const DEF_CLOUDS = { count: 8, opacity: 0.8, scale: 1, aspect: 0.42, tint: 0xfff
 // fitWater, so WATER_INNER is only the baseline the band offsets are measured from.
 export const WATER_INNER = 135; // authored shoreline radius (fitWater rewrites it per track and per angle)
 export const WATER_LIFT = 0.12; // floats just above the ground plane; unnoticeable as a step
-                                // from the ≥30u any camera keeps from the shore, and enough
-                                // depth separation to never z-fight the sand below (exported:
-                                // setTrack re-bases the sheet when a track moves groundY)
+                                // from the ~25u any camera keeps from the shore (SHORE_MARGIN),
+                                // and enough depth separation to never z-fight the sand below
+                                // (exported: setTrack re-bases the sheet when a track moves groundY)
 // Band radii paired with a colour parameter and an alpha: colour 0..1 lerps
 // foam→shallow, 1..2 shallow→deep. The last ring just extends the deep colour out
 // under the fog. A band pair at nearly the same radius = a HARD edge; a wide gap =
@@ -347,20 +347,26 @@ function applyWater(water, theme) {
 }
 
 // ── Shoreline shape (per track) ──────────────────────────────────────────────
-// The island is NOT a disc. Its outline is a per-angle radius built from two parts:
+// The island is NOT a disc. Its outline is a per-angle radius summed from three
+// terms, each answering a different scale:
 //
 //   1. The track's own outer bound in that direction — the SUPPORT function of the
 //      centreline (max of pos·dir), i.e. the convex hull's reach at that bearing.
 //      An oval circuit gets an oval island, a long thin one a long thin island.
 //      Convex on purpose: it can never dip inside a bend and flood the road, and it
 //      stays smooth where a nearest-point-per-bin scan would come out lumpy.
-//   2. A seeded wobble — a few harmonics of the bearing, summed. Periodic in θ, so
-//      the outline closes exactly at the seam with no crease. It only ever pushes
-//      the shore OUTWARD (0..SHORE_WOBBLE past the margin), so SHORE_MARGIN stays
-//      the guaranteed clearance from the hull to the water.
+//   2. SHORE_WOBBLE — the island-scale lobes, outward only (0..SHORE_WOBBLE past
+//      the margin), so they can only ever add sand.
+//   3. SHORE_CRINKLE — the waterline's own fine in-and-out, mean-zero: it wanders
+//      BOTH ways about the lobe outline, and the inward half is the only term that
+//      spends clearance.
 //
-// Clearance budget: props sit ~20u beyond the farthest track point, so the margin
-// clears them, and the wobble crests give the extra headland reach.
+// All three are periodic in θ, so the outline closes at the seam with no crease.
+//
+// Clearance budget: props sit ~20u beyond the farthest track point. The guaranteed
+// sand between hull and water is SHORE_MARGIN less the crinkle's inward reach
+// (26 - 2.6 ≈ 23u along a bearing; measured nearest-point clearance across the beach
+// cup runs 28-40u), so the props still clear, and the lobe crests add the headlands.
 const SHORE_MARGIN = 26;  // minimum sand between the track's hull and the foam
 const SHORE_WOBBLE = 22;  // extra reach at a wobble crest (outward only)
 const SHORE_CRINKLE = 2.6; // fine in-and-out of the waterline itself (±, eats into the margin)
@@ -428,12 +434,16 @@ export function fitWater(water, track, groundY) {
   if (!water) return;
   const { shore, swash } = shorelineFn(track.centerline.samples, track.trackId);
   const verts = WATER_SEG + 1;
+  // Per-SEGMENT, so every band reuses them: bearing, its sin/cos, the shore radius
+  // there and the local surf width.
+  const cosA = new Float32Array(verts), sinA = new Float32Array(verts);
   const shoreR = new Float32Array(verts), swashF = new Float32Array(verts);
   let outer = 0;
   for (let si = 0; si < verts; si++) {
     // The seam vertex (si === WATER_SEG) shares the angle of si === 0 — same radius,
     // so the ring closes exactly.
     const a = (si % WATER_SEG) / WATER_SEG * Math.PI * 2;
+    cosA[si] = Math.cos(a); sinA[si] = Math.sin(a);
     shoreR[si] = shore(a);
     swashF[si] = swash(a);
     outer = Math.max(outer, shoreR[si]);
@@ -447,10 +457,9 @@ export function fitWater(water, track, groundY) {
       // the sea is just sea and the bands go back to their authored widths.
       const sw = Math.max(0, 1 - Math.abs(off) / SWASH_ZONE);
       for (let si = 0; si < verts; si++) {
-        const a = (si % WATER_SEG) / WATER_SEG * Math.PI * 2;
         const r = shoreR[si] * (1 - t) + outer * t + off * (1 + (swashF[si] - 1) * sw);
         const v = (ri * verts + si) * 3;
-        arr[v] = Math.cos(a) * r; arr[v + 2] = Math.sin(a) * r;
+        arr[v] = cosA[si] * r; arr[v + 2] = sinA[si] * r;
       }
     }
     geo.attributes.position.needsUpdate = true;
@@ -460,8 +469,7 @@ export function fitWater(water, track, groundY) {
   if (water.userData.wet) write(water.userData.wet.geometry, WET_BANDS, false); // hugs the shore all the way round
   water.scale.set(1, 1, 1); // radii are absolute now (an older fit may have left a scale)
   water.position.y = groundY + WATER_LIFT;
-  water.userData.shore = shore;       // landmarks anchor to the same curve
-  water.userData.fit = outer / WATER_INNER; // legacy scalar fit — the island's widest reach
+  water.userData.shore = shore; // landmarks (render/track.js) anchor to the same curve
 }
 
 // ── Ambient particles (theme.ambient) ────────────────────────────────────────

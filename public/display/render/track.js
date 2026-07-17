@@ -4,7 +4,7 @@
 // disposables in R._mergedGeoms/R._mergedMats (freed on the next setTrack).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GROUND_SIZE, WATER_INNER, WATER_LIFT } from './environment.js';
+import { GROUND_SIZE, WATER_LIFT } from './environment.js';
 import { makeCloudTexture, flipWinding } from './textures.js';
 
 // Chimney-smoke sprite texture (the cabin landmark) — one shared soft puff,
@@ -773,9 +773,8 @@ export function buildLandmarks(R, track, theme) {
     // island so the two never share a sight-line. Radius = the shoreline ON THAT
     // BEARING (fitWater fitted the curve just above in setTrack) + a margin into
     // open water, so the boat floats off a bay as readily as off a headland.
-    const shore = R._water && R._water.userData.shore;
     const ba = (lowest ? Math.atan2(lowest.z, lowest.x) : 0) + 2.3;
-    const br = (shore ? shore(ba) : ((R._water && R._water.userData.fit) || 1) * WATER_INNER) + 22;
+    const br = R._water.userData.shore(ba) + 22; // shoreline there + open-water margin
     const bx = Math.cos(ba) * br, bz = Math.sin(ba) * br;
     const wy = gy + WATER_LIFT; // ride ON the water sheet
     const yaw = rand() * Math.PI * 2;
