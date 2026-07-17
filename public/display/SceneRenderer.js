@@ -36,7 +36,10 @@ const WHEEL_TURN_MAX = 0.5;   // max front-wheel turn (rad) at full steer
 // braking, squat under throttle. Suspension responding to the road is contact
 // evidence; a body rigid against the world reads as suspended above it. The
 // dive is deliberately stronger than the squat (real suspension is too, and the
-// brake dip is the beat the player should FEEL on a tap).
+// brake dip is the beat the player should FEEL on a tap). The dive is gated on
+// the car's REAL brake input (see setCarPose): steer scrub / curb rash / boost
+// bleed decelerate at the same rate, and diving on turn-in reads as phantom
+// braking — the dive is the BRAKE's cue, matching the brake-bite skids.
 const PITCH_DIVE_MAX = 0.08;  // nose-down (rad) at full braking — starting value
 const PITCH_SQUAT_MAX = 0.03; // nose-up (rad) at full throttle — subtle
 const PITCH_ACCEL_NORM = 0.8; // |d(spd)/dt| mapping to full pitch ≈ engine full throttle (ACCEL/VMAX)
@@ -1984,7 +1987,11 @@ export class SceneRenderer {
     c.prevSpd = spd;
     const pitchAmt = Math.max(-1, Math.min(1, dspd / PITCH_ACCEL_NORM)); // <0 braking, >0 throttle
     c.accelNorm = pitchAmt > 0 ? pitchAmt : 0; // forward bite — the launch-scratch skids read this
-    const pitchTarget = -pitchAmt * (pitchAmt < 0 ? PITCH_DIVE_MAX : PITCH_SQUAT_MAX);
+    // The nose dive is gated on REAL brake input: steer scrub, curb rash and boost
+    // bleed-off decelerate at the same rate as the brake, and a dive on turn-in reads
+    // as phantom braking. Ramp saturates at 1/3 pedal so firm braking always dives full.
+    const diveGate = Math.min(1, c.brakeAmt * 3);
+    const pitchTarget = -pitchAmt * (pitchAmt < 0 ? PITCH_DIVE_MAX * diveGate : PITCH_SQUAT_MAX);
     c.pitch += (pitchTarget - c.pitch) * (1 - Math.exp(-PITCH_RATE * this._frameDt));
     c.body.rotateX(c.pitch * c.pitchSign);
     // Load shift: the harder the body pitches (dive/squat), the closer the chassis
