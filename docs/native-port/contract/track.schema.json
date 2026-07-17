@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/track.schema.json",
+  "title": "Built track",
+  "description": "The object returned by TrackBuilder.buildTrack() (public/display/TrackBuilder.js), from either a segment-DSL list or a {waypoints} spline descriptor (both share the same finalize step). All coordinates are world units, right-handed, +Y up. The centerline is a live class instance whose DATA shape is described here (see the `centerline` property); the host later AUGMENTS this object with game-side fields (cup, trackId, hazards, pads, boxes, poles, bananas, totalLaps, seed) that are a separate layer documented in docs/native-port/contract.md.",
+  "type": "object",
+  "required": [
+    "version", "instances", "startGate", "pillars", "hills", "loopStarts",
+    "supportPosts", "autoPoles", "centerline", "length", "closed", "gap",
+    "roadWidth", "groundY"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "CONTRACT_VERSION stamp (public/display/engine/contract.js)."
+    },
+    "instances": {
+      "type": "array",
+      "description": "Reserved for non-road scenery GLB placements. Always [] today (the road is a procedural ribbon)."
+    },
+    "startGate": {
+      "type": "boolean",
+      "description": "Tell the renderer to build the procedural finish gantry straddling s = 0. A flag, not geometry."
+    },
+    "pillars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["x", "z", "baseY", "topY", "radius"],
+        "additionalProperties": false,
+        "properties": {
+          "x": { "type": "number" },
+          "z": { "type": "number" },
+          "baseY": { "type": "number", "description": "Column base, sunk slightly below the grass plane." },
+          "topY": { "type": "number", "description": "Column top, tucked just under the deck." },
+          "radius": { "type": "number" }
+        }
+      },
+      "description": "Vertical support columns under raised bridge/ramp (pillars: true) samples, spaced ~3.2 world units. Rendered as simple cylinders."
+    },
+    "hills": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/hillRing" },
+        "description": "One berm run: a list of lofted cross-section rings, feathered to lawn level one ring past each end."
+      },
+      "description": "Grass berm runs under raised, non-pillared road. The renderer stitches each run's rings into a grass surface."
+    },
+    "loopStarts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["s", "width"],
+        "additionalProperties": false,
+        "properties": {
+          "s": { "type": "number", "minimum": 0, "description": "Arclength of the loop MOUTH (the flat sample before the climb). World units." },
+          "width": { "type": "number", "description": "Local road width at the mouth. World units." }
+        }
+      },
+      "description": "Vertical-loop mouths. The host auto-places a full-width launch strip (a 'strip' pad) at each so a loop is always entered on boost."
+    },
+    "supportPosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["x", "z", "radius", "baseY", "contact"],
+        "additionalProperties": false,
+        "properties": {
+          "x": { "type": "number" },
+          "z": { "type": "number" },
+          "radius": { "type": "number" },
+          "baseY": { "type": "number", "description": "Grass plane elevation." },
+          "contact": {
+            "type": "object",
+            "required": ["pos", "up"],
+            "additionalProperties": false,
+            "properties": {
+              "pos": { "$ref": "#/$defs/vec3" },
+              "up": { "$ref": "#/$defs/vec3" }
+            },
+            "description": "The flank road sample (plain objects) whose underside plane the renderer clips the shaft top to."
+          }
+        }
+      },
+      "description": "Loop-brace shafts: one vertical post per lower-outer flank of each 360-degree loop. Shafts that cannot clear every drivable corridor are dropped."
+    },
+    "autoPoles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["s", "lat", "radius", "ghost"],
+        "additionalProperties": false,
+        "properties": {
+          "s": { "type": "number", "minimum": 0, "description": "Arclength of the crossing's closest-abeam sample. World units." },
+          "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel." },
+          "radius": { "type": "number" },
+          "ghost": { "const": true, "description": "The renderer must NOT draw this pole: the pillar/shaft it proxies is already the visual." }
+        }
+      },
+      "description": "Engine collision poles for any pillar/support shaft standing >= 0.25 deep in a drivable corridor, one per contiguous road crossing. The host concatenates these into the augmented track's `poles` for the engine and AI."
+    },
+    "centerline": {
+      "type": "object",
+      "required": ["samples", "length"],
+      "properties": {
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/centerlineSample" },
+          "description": "Closed polyline of oriented frames, uniform ~0.5 world-unit arclength spacing, parallel-transported with banking applied and seam holonomy unwound."
+        },
+        "length": { "type": "number", "description": "Same value as the track's top-level `length`." }
+      },
+      "description": "A Centerline class instance (public/display/Centerline.js); this schema describes its serializable DATA (in the live object the vectors are Vec3 instances). A port must also reproduce its methods, pinned numerically by the golden traces: sampleAt(s) (fresh frame {pos, tangent, up, lateral, width}; s wraps mod length; non-uniform Catmull-Rom position with the spline's own derivative as tangent; up lerped + renormalized; lateral = tangent x up), projectNear(point, sHint, maxStep) (Newton projection onto the local strand returning {s, lat, frame} with s accumulated and NOT wrapped, hard-clamped to sHint +- maxStep), and widthAt(s)."
+    },
+    "length": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Total closed-lap arclength, world units, including the last-to-first wrap span. Shipped tracks: ~350-480."
+    },
+    "closed": {
+      "type": "boolean",
+      "description": "The segment walk returned to the start (unscaled end gap < 0.5). Spline tracks close by construction."
+    },
+    "gap": {
+      "type": "number",
+      "minimum": 0,
+      "description": "UNSCALED distance from the last emitted point to the start, measured before scaling. The closure check's raw input."
+    },
+    "roadWidth": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The track's DEFAULT drivable width, world units (unscaled width x SCALE = 2; standard 5.0). Per-sample width may flare/pinch; the engine seeds its lateral clamp from this but the live curb clamp uses the per-sample width."
+    },
+    "groundY": {
+      "type": "number",
+      "description": "Grass plane elevation: just under the lowest road EDGE (min(minY - 0.3, minEdgeY - 0.12)), so banked kerbs cannot clip the lawn."
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      },
+      "description": "3D vector. Plain {x, y, z} data shape; Vec3 instances in the live object."
+    },
+    "centerlineSample": {
+      "type": "object",
+      "required": ["pos", "tangent", "up", "lateral", "s", "width", "pillars", "hillable"],
+      "properties": {
+        "pos": { "$ref": "#/$defs/vec3", "description": "World position on the centerline." },
+        "tangent": { "$ref": "#/$defs/vec3", "description": "Unit travel direction." },
+        "up": { "$ref": "#/$defs/vec3", "description": "Unit road normal (banking applied)." },
+        "lateral": { "$ref": "#/$defs/vec3", "description": "Unit lateral = tangent x up; points to the driver's RIGHT." },
+        "s": { "type": "number", "minimum": 0, "description": "Cumulative arclength from the start line (samples[0].s = 0). World units." },
+        "width": { "type": "number", "description": "Local drivable width, world units (can differ from the track default)." },
+        "pillars": { "type": "boolean", "description": "This sample belongs to a bridge/ramp stretch that grows support pillars." },
+        "hillable": { "type": "boolean", "description": "This sample may grow a grass berm beneath it (open-ground rise, not a stunt/bridge)." }
+      }
+    },
+    "hillRing": {
+      "type": "object",
+      "required": ["cx", "cz", "lx", "lz", "halfW", "topL", "topR"],
+      "additionalProperties": false,
+      "properties": {
+        "cx": { "type": "number", "description": "Ring center, plan x." },
+        "cz": { "type": "number", "description": "Ring center, plan z." },
+        "lx": { "type": "number", "description": "Unit plan-lateral direction, x component." },
+        "lz": { "type": "number", "description": "Unit plan-lateral direction, z component." },
+        "halfW": { "type": "number", "description": "Berm top half-width (road width / 2 + 0.25)." },
+        "topL": { "type": "number", "description": "Left top-corner height, following the road's bank, clamped to groundY." },
+        "topR": { "type": "number", "description": "Right top-corner height, following the road's bank, clamped to groundY." }
+      },
+      "description": "One lofted berm cross-section: left foot -> left top -> right top -> right foot, feet at groundY."
+    }
+  }
+}

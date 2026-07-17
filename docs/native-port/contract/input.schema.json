@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/input.schema.json",
+  "title": "Control input",
+  "description": "The per-frame driving input consumed by Game.processInput(id, msg). On the wire it is the CONTROL message {type:'control', s, b, u} (public/shared/protocol.js), sent at ~25 Hz by the phone controller, AI bots, and the trace tooling; the engine sees the {s, b, u} triple. Every field is level-coded (an absolute value a later frame supersedes), which makes delivery over a lossy-but-ordered channel safe: a dropped frame just re-delivers the same values ~40 ms later. Each field is applied independently and only when present with the right type, so partial messages are valid; production senders always include all three. Inputs are rejected wholesale for unknown or finished cars. See docs/native-port/contract.md.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "s": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "Steer, clamped by the receiver to [-1, 1]. Raw input sign: the engine applies STEER_SIGN = -1 internally so the snapshot's `steer` field is turn-aligned while `steerInput` echoes this raw value."
+    },
+    "b": {
+      "type": ["number", "boolean"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Brake, analog, clamped by the receiver to [0, 1]. A boolean is accepted as a legacy form (mapped to 1/0). The shipped phone controller only sends 0 or 1; AI bots use the full analog range."
+    },
+    "u": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Use-counter, 0-255, wrapping via (x + 1) & 255 on each ACTION press EDGE. Fire semantics: the engine latches a use request on ANY CHANGE from the last value seen for that car (not increment-by-one), so the 255 -> 0 wrap fires normally. The counter is re-carried in EVERY frame, so a dropped frame cannot lose a press (the next frame re-delivers the changed value); k presses between two delivered frames collapse into at most ONE fire. The latched request is consumed on the first frame where the car holds an item, is not spinning, and the item has aged past the 0.9 s roulette-reveal gate; latched with no item it clears harmlessly. Both sides reset to 0 per race (engine seeds useSeq 0; the controller resets when driving stops)."
+    }
+  }
+}

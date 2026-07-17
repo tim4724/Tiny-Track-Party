@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/events.schema.json",
+  "title": "Game race event",
+  "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly nine kinds. See docs/native-port/contract.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/spin" },
+    { "$ref": "#/$defs/monster_end" },
+    { "$ref": "#/$defs/finish" },
+    { "$ref": "#/$defs/race_over" },
+    { "$ref": "#/$defs/lap" },
+    { "$ref": "#/$defs/pad" },
+    { "$ref": "#/$defs/pickup" },
+    { "$ref": "#/$defs/item_use" },
+    { "$ref": "#/$defs/rocket_expire" }
+  ],
+  "$defs": {
+    "carId": {
+      "type": ["number", "string"],
+      "description": "Car id: peerIndex (number) in live games; strings for bots/tests/traces."
+    },
+    "item": {
+      "type": "string",
+      "enum": ["boost", "banana", "rocket", "monster"]
+    },
+    "spin": {
+      "type": "object",
+      "required": ["type", "id", "cause"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "spin" },
+        "id": { "$ref": "#/$defs/carId" },
+        "cause": {
+          "type": "string",
+          "enum": ["banana", "oil", "rocket", "monster"],
+          "description": "What spun the car out: a dropped banana, an oil slick, a rocket hit, or a monster-truck body check."
+        }
+      },
+      "description": "A car spins out (steering dies, speed bleeds, held item drops)."
+    },
+    "monster_end": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "monster_end" },
+        "id": { "$ref": "#/$defs/carId" }
+      },
+      "description": "The monster-truck transform timer lapses; the car morphs back."
+    },
+    "finish": {
+      "type": "object",
+      "required": ["type", "id", "rank", "time"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "finish" },
+        "id": { "$ref": "#/$defs/carId" },
+        "rank": { "type": "integer", "minimum": 1, "description": "1-based finish order (length of the finished list at crossing time)." },
+        "time": { "type": "number", "minimum": 0, "description": "Finish time: elapsed seconds of simulated race time at the crossing." }
+      },
+      "description": "A car crosses the line on its final lap. NOT emitted by the forceFinish staging hook (silent by design)."
+    },
+    "race_over": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "race_over" }
+      },
+      "description": "The last car finishes. Currently no production consumer (RaceSession polls the raceOver getter); kept in the contract."
+    },
+    "lap": {
+      "type": "object",
+      "required": ["type", "id", "lap"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "lap" },
+        "id": { "$ref": "#/$defs/carId" },
+        "lap": { "type": "integer", "minimum": 1, "description": "COMPLETED-lap count (not the 1-based display lap). The first crossing from the s < 0 starting grid emits nothing." }
+      },
+      "description": "A non-final start/finish line crossing."
+    },
+    "pad": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "pad" },
+        "id": { "$ref": "#/$defs/carId" }
+      },
+      "description": "A boost pad (or loop launch strip) crossed. No production consumer (boost FX are state-driven off boostMul); kept in the contract."
+    },
+    "pickup": {
+      "type": "object",
+      "required": ["type", "id", "item", "finished"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "pickup" },
+        "id": { "$ref": "#/$defs/carId" },
+        "item": { "$ref": "#/$defs/item", "description": "The item now held. For a finished car with a full slot this is the HELD item (the box pops but does not reroll)." },
+        "finished": { "type": "boolean", "description": "The collecting car had already finished." }
+      },
+      "description": "An item box collected."
+    },
+    "item_use": {
+      "type": "object",
+      "required": ["type", "id", "item"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "item_use" },
+        "id": { "$ref": "#/$defs/carId" },
+        "item": { "$ref": "#/$defs/item", "description": "The slot being fired. Emitted BEFORE the effect is applied." }
+      },
+      "description": "A held item is fired (player ACTION press or the useItem staging hook)."
+    },
+    "rocket_expire": {
+      "type": "object",
+      "required": ["type", "id", "s", "lat"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "rocket_expire" },
+        "id": { "type": "integer", "description": "The ROCKET's id (snapshot rockets[].id namespace), NOT a car id." },
+        "s": { "type": "number", "minimum": 0, "description": "Arclength of the fizzle, wrapped to [0, track length). World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset of the fizzle; positive = right of travel. World units." }
+      },
+      "description": "A rocket self-destructs without hitting anything."
+    }
+  }
+}
