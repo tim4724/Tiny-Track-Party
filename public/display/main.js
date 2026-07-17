@@ -419,7 +419,8 @@ scene.onFrame = (dt) => {
   if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
-  // they just don't move until GO. session.update() is a no-op until racing.
+  // they just don't move until GO. session.update() advances the countdown
+  // beats (this loop is the session's only clock); physics start at GO.
   driveBots();
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
@@ -430,7 +431,7 @@ scene.onFrame = (dt) => {
     // A dropped racer's ghost can never cross the line — forfeit any such car now
     // that every connected human is home, so the burst (and the race) ends
     // promptly instead of running to the guard cap on a car that can't finish.
-    for (const id of [...session.engine.cars.keys()]) {
+    for (const id of session.carIds()) { // fresh array — safe while forfeitCar removes cars
       if (!aiBots.has(id) && net.flow.isDisconnected(id)) forfeitCar(id);
     }
     if (!session.racing) return; // forfeiting the last unfinished car already ended the race
@@ -526,7 +527,7 @@ const net = new DisplayNet({
   // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
   // phone drops back into the race); one without is a late joiner (the phone
   // waits in its lobby — they get a car when the next race builds its field).
-  inRace: (peerIndex) => !!(session && session.engine.cars.has(peerIndex)),
+  inRace: (peerIndex) => !!(session && session.hasCar(peerIndex)),
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
   isPaused: () => paused,
@@ -587,7 +588,7 @@ function refreshAutoPause() {
   if (!session || raceEnded) return;
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   let connected = 0, inGrace = 0;
-  for (const id of session.engine.cars.keys()) {
+  for (const id of session.carIds()) {
     if (aiBots.has(id)) continue;                 // CPU racer
     if (net.flow.isDisconnected(id)) inGrace++;   // seat held, QR showing
     else if (net.flow.has(id)) connected++;       // human at the wheel
@@ -752,11 +753,9 @@ function buildField(humans) {
 // CONTROL would. Runs every frame (a no-op during the countdown, when update() is).
 function driveBots() {
   if (!aiBots.size) return;
-  for (const [id, bot] of aiBots) {
-    const car = session.engine.cars.get(id);
-    if (!car || car.finished) continue;
-    session.processInput(id, bot.drive(car, track.centerline, session.engine));
-  }
+  // driveBot steps the controller INSIDE the sim boundary (the live car + engine
+  // never cross out here) and skips finished/removed cars itself.
+  for (const [id, bot] of aiBots) session.driveBot(id, bot);
 }
 
 // ---- race lifecycle ----
@@ -822,6 +821,7 @@ function launchRace(players) {
 
   session = new RaceSession(field, track, {
     onRaceEvent,
+    forceItem: _qForceItem || null, // ?item=<id>: every box rolls this (debug hook)
     onCountdownTick(n) {
       // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
       // over the next beat via .is-go). n < 0: banner gone.
@@ -855,7 +855,10 @@ function launchRace(players) {
     },
     onRaceEnd: endRace,
   });
-  if (_qForceItem) session.engine.forceItem = _qForceItem; // ?item=<id>: every box rolls this
+  // Debug escape hatch (free-cam inspection recipe, manual console poking). The
+  // ONE sanctioned session.engine reach outside the sim path — everything else
+  // goes through the session query API (tests/portable-purity.test.js allowlists
+  // exactly this line).
   window.__engine = session.engine;
 
   // Place cars at their grid poses immediately, and paint each cell's HUD
@@ -909,7 +912,7 @@ function clearSeriesTimers() {
 // replaces the old binary "is this CPU car on a human's camera?" visibility gate
 // and generalises what used to be the rocket's private distance falloff.
 //
-// Distance is true 3D proximity (Vector3.distanceTo): a car physically near a
+// Distance is true 3D proximity (straight-line world distance): a car physically near a
 // human is loud even when far apart in race position — an overpass, a crossing, a
 // doubled-back straight — which reads on screen as "it's right there". Cheap: ≤4
 // humans × a handful of sources per frame. Starting values — tune by ear in ?solo=1.
@@ -925,11 +928,11 @@ const AUD_CUT = 64;     // past here: out of the scene → silent (FLOOR tapers 
 function nearestHumanDist(p) {
   if (!session) return Infinity;
   let best = Infinity;
-  for (const [hid, h] of session.engine.cars) {
-    if (aiBots.has(hid)) continue;
-    const hp = h.pose && h.pose.pos;
+  for (const id of session.carIds()) {
+    if (aiBots.has(id)) continue;
+    const hp = session.carWorldPos(id); // plain {x,y,z}, null while a car has no pose
     if (!hp) continue;
-    const d = hp.distanceTo(p);
+    const d = Math.hypot(hp.x - p.x, hp.y - p.y, hp.z - p.z);
     if (d < best) best = d;
   }
   return best;
@@ -952,16 +955,14 @@ function audibility(p) {
 // idless/global events (no positioned source) play at the world-cue ceiling.
 function eventGain(e) {
   if (e == null || e.id == null) return AUD_PEAK;
-  const c = session && session.engine.cars.get(e.id);
-  return audibility(c && c.pose && c.pose.pos);
+  return audibility(session ? session.carWorldPos(e.id) : null); // null (car gone/no pose) → ceiling
 }
 
 // A rocket lives in the engine's (arclength, lat) space — rebuild its world point
 // the same way the engine poses cars (centreline sample + lateral offset) so the
 // flight is measured in the SAME 3D metric as its target-car impact below.
 function rocketWorldPos(r) {
-  const f = session.engine.centerline.sampleAt(r.s); // r.s is wrapped to [0, length); sampleAt wraps anyway
-  return f.pos.clone().addScaledVector(f.lateral, r.lat);
+  return session.trackPoint(r.s, r.lat); // r.s is wrapped to [0, length); trackPoint wraps anyway
 }
 // Rocket flight: a sustained jet per in-flight rocket, held the whole air time, its
 // level set by the SAME audibility curve as every other world cue (so the jet and
@@ -980,10 +981,9 @@ function driveRocketAudio(snap) {
 // payoff floor so an audible jet always lands an audible boom. Returns 0 only when
 // the impact is out of every human's earshot.
 function rocketImpactLevel(targetId) {
-  const t = session && session.engine.cars.get(targetId);
-  if (!t) return 1;                    // target already gone (rare) — just play it
+  if (!session || !session.hasCar(targetId)) return 1; // target already gone (rare) — just play it
   if (!aiBots.has(targetId)) return 1; // a human got hit → full
-  const a = audibility(t.pose && t.pose.pos);
+  const a = audibility(session.carWorldPos(targetId));
   return a > 0 ? Math.max(0.45, a) : 0; // audible whenever the flight was, with a clear payoff floor
 }
 
@@ -1066,11 +1066,11 @@ function onRaceEvent(e) {
 function humansAllDone() {
   if (!session) return false;
   let humans = 0;
-  for (const [id, c] of session.engine.cars) {
+  for (const id of session.carIds()) {
     if (aiBots.has(id)) continue;               // a CPU racer
     if (net.flow.isDisconnected(id)) continue;  // a dropped racer's ghost — doesn't hold up the flag
     humans++;
-    if (!c.finished) return false;              // a connected human still on track
+    if (!session.carFinished(id)) return false; // a connected human still on track
   }
   return humans > 0;
 }

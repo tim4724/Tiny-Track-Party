@@ -56,14 +56,14 @@ export class LobbyDemo {
   // model at creation) and re-pose it at its current spot so it keeps driving from
   // where it was — no re-grid. Used when a player changes their lobby car pick.
   swapCar(id, { colorIndex, carIndex, name, stats }) {
-    if (!this.engine || !this.engine.cars.has(id)) return;
+    if (!this.engine || !this.engine.hasCar(id)) return;
     this.engine.setCarStats(id, stats);
     const rec = this.field.find((p) => p.id === id); // keep our field record current for a later full rebuild
     if (rec) { rec.colorIndex = colorIndex; rec.carIndex = carIndex; rec.name = name; rec.stats = stats; }
     this.scene.removeCar(id);
     this.scene.addCar(id, colorIndex, name, { cell: false, carIndex });
-    const car = this.engine.cars.get(id);
-    if (car && car.pose) this.scene.setCarPose(id, car.pose.pos, car.pose.forward, car.pose.up); // place at its current pose so it doesn't pop to the grid for a frame
+    const c = this.engine.getSnapshot().cars.find((x) => x.id === id);
+    if (c && c.pose) this.scene.setCarPose(id, c.pose.pos, c.pose.forward, c.pose.up); // place at its current pose so it doesn't pop to the grid for a frame
   }
 
   _placeGrid() {
@@ -76,10 +76,8 @@ export class LobbyDemo {
   // until start() has run, so the display can call it unconditionally each frame.
   step(dt) {
     if (!this.active || !this.engine) return;
-    const cl = this.track.centerline;
-    for (const c of this.engine.cars.values()) {
-      if (!c.finished && c.pose) this.engine.processInput(c.id, this.bots.get(c.id).drive(c, cl, this.engine));
-    }
+    // driveBot steps each controller inside the sim boundary (skips finished cars).
+    for (const [id, bot] of this.bots) this.engine.driveBot(id, bot);
     this.engine.update(dt * 1000);
     const snap = this.engine.getSnapshot();
     for (const c of snap.cars) {

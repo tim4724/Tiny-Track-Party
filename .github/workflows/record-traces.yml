@@ -1,0 +1,40 @@
+name: Record golden-trace fixtures
+
+# Records tests/fixtures/traces/ on the REFERENCE PLATFORM (this runner is
+# the same environment as the unit job in test.yml). Traces are bit-exact
+# only per engine+platform, so committed fixtures must be recorded here, not
+# on a dev machine. Download the artifact, commit it, and if the endgame
+# seed changed (see the job log), update scripts/record-fixtures.mjs and
+# tests/fixtures/traces/README.md in the same commit.
+
+on:
+  workflow_dispatch:
+  # workflow_dispatch only resolves once this file is on the default branch,
+  # and a change to the recording tooling is exactly when a re-record is
+  # wanted anyway — so also run when the tooling itself changes.
+  push:
+    paths:
+      - '.github/workflows/record-traces.yml'
+      - 'scripts/record-fixtures.mjs'
+      - 'scripts/record-trace.mjs'
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          # Keep in sync with test.yml (the fixture pin).
+          node-version: 26
+          cache: 'npm'
+      - run: npm ci
+      - run: node scripts/record-fixtures.mjs
+      - name: Fixtures replay on this platform
+        run: npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trace-fixtures
+          path: tests/fixtures/traces/*.jsonl
+          retention-days: 7

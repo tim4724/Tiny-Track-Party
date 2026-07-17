@@ -10,18 +10,16 @@ const { test, expect, openDisplay, joinController, startRace, waitForRacing, vis
 
 const BEACH = ['tidepool', 'cove', 'driftwood', 'riptide']; // CUPS order (race 1..4)
 
-// Mark every human car finished with a synthetic time; the engine's next frame
-// does the rest (rank → fast-forward → endRace).
+// Mark every human car finished with a synthetic time (the sanctioned
+// forceFinish staging hook); the engine's next frame does the rest
+// (fast-forward → endRace).
 const finishHumans = (display) => display.evaluate(() => {
-  const engine = window.__session().engine;
+  const session = window.__session();
   let t = 20;
-  for (const [id, car] of engine.cars) {
+  for (const id of session.carIds()) {
     if (String(id).startsWith('ai-')) continue;
-    car.finished = true;
-    car.finishTime = (t += 5.3);
-    if (!engine.finishedOrder.includes(id)) engine.finishedOrder.push(id);
+    session.forceFinish(id, (t += 5.3));
   }
-  engine._rank();
 });
 
 const inResults = (display, timeout = 30000) =>
@@ -169,7 +167,7 @@ test('a mid-cup joiner is seated into the next series race and scores from there
   await alice.click('#newgame-btn');
   await waitForRacing(page);
   expect(await page.evaluate(() =>
-    [...window.__session().engine.cars.keys()].filter((k) => !String(k).startsWith('ai-')).length)).toBe(2);
+    window.__session().carIds().filter((k) => !String(k).startsWith('ai-')).length)).toBe(2);
   await expect(carol.locator(visible('#game'))).toBeVisible();
 
   // She scores from race 2 on: the next board carries a points row for her.

@@ -23,14 +23,15 @@ const test = base.test.extend({
 // Open the display, wait for its room + the 3D scene (startRace gates on
 // sceneReady, so tests must not press Start before the GLBs are in).
 async function openDisplay(page) {
-  // Collapse the 3 s race countdown to a single 1 Hz beat under automation
-  // (mirrors __abandonGraceMs). The countdown→GO→racing path still runs end to
-  // end, it just resolves in ~1 s instead of ~3 s. The point is less the wall
-  // clock — per-test time is dominated by the 3D scene boot, not the countdown —
-  // than shrinking the 1 Hz setInterval surface that software-GL render stalls
-  // starve (the flaky-countdown failure mode). 1 is the floor: 0 never flips
-  // racing (see RaceSession.startCountdown — racing flips on the n=0 beat, which
-  // only fires from inside the interval, not on the opening tick).
+  // Collapse the 3 s race countdown to a single beat under automation (mirrors
+  // __abandonGraceMs). The countdown→GO→racing path still runs end to end, it
+  // just resolves in ~1 s instead of ~3 s. Per-test time is dominated by the 3D
+  // scene boot, not the countdown, so this is about surface, not wall clock.
+  // The beats ride the render loop's dt (session.update), so a software-GL
+  // render stall delays a beat but can never drop it: the whole-beats loop
+  // catches up on the next frame. 1 is the floor: 0 never flips racing (see
+  // RaceSession._stepCountdown: racing flips on the n=0 beat, which only fires
+  // from update(dtMs), not on startCountdown's opening tick).
   await page.addInitScript(() => { window.__countdownSeconds = 1; });
   await page.goto('/');
   // Click through the welcome board (its NEW GAME carries the fullscreen/audio

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/snapshot.schema.json",
+  "title": "Game snapshot",
+  "description": "The plain-data tree returned by Game.getSnapshot() (public/display/engine/Game.js). Fresh objects per call, JSON-serializable throughout, no live references into the engine. All positions/lengths are world units (VMAX = 9 units/s, lap ~350-480 units); all times are seconds of simulated race time. Coordinates are right-handed, +Y up (three.js convention). See docs/native-port/contract.md.",
+  "type": "object",
+  "required": ["version", "cars", "elapsed", "boxes", "bananas", "rockets"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "CONTRACT_VERSION stamp (public/display/engine/contract.js). Bump on any shape/unit change."
+    },
+    "elapsed": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Seconds of simulated race time. 0 at construction; advances only when the host calls update(dtMs). No consumer today; kept in the contract."
+    },
+    "cars": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/carSnap" },
+      "description": "One entry per live car. Order = car insertion order (the starting grid at construction), NOT rank order. rekeyCar (device reconnect) re-inserts the car at the TAIL of the order (Map delete + set), so the order is not stable across reconnects. Forfeited (removed) cars are absent."
+    },
+    "boxes": {
+      "type": "array",
+      "items": { "type": "boolean" },
+      "description": "Index-aligned with the track's authored item-box list. true = box available (respawn cooldown expired)."
+    },
+    "bananas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "s", "lat", "radius"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "description": "Monotonically increasing banana id. Its own namespace (not car ids, not rocket ids)." },
+          "s": { "type": "number", "minimum": 0, "description": "Arclength position, wrapped to [0, track length) at drop time. World units." },
+          "lat": { "type": "number", "description": "Signed lateral offset from the centerline; positive = right of travel. World units." },
+          "radius": { "type": "number", "description": "Trigger radius, world units. Currently always the constant 0.5 (BANANA_RADIUS)." }
+        }
+      },
+      "description": "Dropped bananas currently live (elapsed >= liveAt). Renderers reconcile meshes by id."
+    },
+    "rockets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "s", "lat", "owner"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "description": "Monotonically increasing rocket id. Its own namespace, and the id carried by the rocket_expire event." },
+          "s": { "type": "number", "minimum": 0, "description": "Arclength position, wrapped to [0, track length) at snapshot time. World units." },
+          "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel. World units." },
+          "owner": { "type": ["number", "string"], "description": "Firing car's id (per-cell FX gating). No consumer today; kept in the contract." }
+        }
+      },
+      "description": "Live homing rockets. Facing/bank derive from the centerline tangent at s."
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      },
+      "description": "Plain {x, y, z} literal. Right-handed, +Y up, world units."
+    },
+    "carSnap": {
+      "type": "object",
+      "required": [
+        "id", "pose", "lat", "v", "spd", "lap", "totalLaps", "position", "of",
+        "finished", "finishTime", "steer", "steerInput", "brake", "onWall",
+        "spin", "item", "boostActive", "boostMul", "tCatch", "monster",
+        "totalS", "heading", "halfLen", "halfWid"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": ["number", "string"], "description": "Car id: peerIndex (number) in live games; strings like 'cpu-bolt' for bots/tests/traces." },
+        "pose": {
+          "type": "object",
+          "required": ["pos", "forward", "up"],
+          "additionalProperties": false,
+          "properties": {
+            "pos": { "$ref": "#/$defs/vec3", "description": "World position (centerline point + lateral * lat, on the road surface)." },
+            "forward": { "$ref": "#/$defs/vec3", "description": "Unit facing vector (heading yaw + axle-chord pitch applied)." },
+            "up": { "$ref": "#/$defs/vec3", "description": "Unit local surface normal at the car's (s, lat)." }
+          },
+          "description": "Plain-data copy of the car's world pose. No vector class, no live reference."
+        },
+        "lat": { "type": "number", "description": "Signed lateral offset from the centerline, world units; positive = right of travel. Clamped inside the local curbs (per-sample width / 2 - 0.3)." },
+        "v": { "type": "number", "minimum": 0, "description": "Raw speed, world units/s. Can exceed vmax while boosted/monster." },
+        "spd": { "type": "number", "minimum": 0, "description": "v / vmax (per-car base top speed). EXCEEDS 1 under boost/monster: pad ceiling x1.60, item boost x1.5, monster x1.25, stacking to ~2.0." },
+        "lap": { "type": "integer", "minimum": 1, "description": "1-based DISPLAY lap, clamped to [1, totalLaps]. Grid cars (totalS < 0) show 1." },
+        "totalLaps": { "type": "integer", "minimum": 1, "description": "Race length in laps (default 3)." },
+        "position": { "type": "integer", "minimum": 1, "description": "Live race rank, 1..N. Finished cars first by finish time, then live race order." },
+        "of": { "type": "integer", "minimum": 1, "description": "Field size (number of live cars). No consumer today; kept in the contract." },
+        "finished": { "type": "boolean" },
+        "finishTime": { "type": ["number", "null"], "description": "Seconds (= elapsed at the line crossing); null until finished." },
+        "steer": { "type": "number", "minimum": -1, "maximum": 1, "description": "TURN-ALIGNED steer: sign matches the actual turn direction (STEER_SIGN x raw input), so renderers need not know the sign convention." },
+        "steerInput": { "type": "number", "minimum": -1, "maximum": 1, "description": "RAW controller steer input (drives the on-screen steer bar). The steer/steerInput asymmetry is deliberate." },
+        "brake": { "type": "number", "minimum": 0, "maximum": 1, "description": "Analog brake." },
+        "onWall": { "type": "boolean", "description": "Touching a curb this frame." },
+        "spin": { "type": "number", "minimum": 0, "description": "Cosmetic spin-out whirl angle, radians; 0 when in control. A single spin sweeps 0 to 4*pi (SPIN_TURNS = 2 whole turns), but a second oil/banana entered mid-spin re-arms the timer while keeping the angle continuous, so chained hazards grow it past 4*pi with NO ceiling. Do not clamp to 4*pi." },
+        "item": {
+          "oneOf": [
+            { "type": "string", "enum": ["boost", "banana", "rocket", "monster"] },
+            { "type": "null" }
+          ],
+          "description": "Held item, or null."
+        },
+        "boostActive": { "type": "boolean", "description": "boostMul > 1.001. No consumer today (renderers read boostMul); kept in the contract." },
+        "boostMul": { "type": "number", "minimum": 1, "maximum": 1.6, "description": "Current speed-ceiling multiplier (pad max 1.60, item boost 1.5)." },
+        "tCatch": { "type": "number", "minimum": 0, "maximum": 1, "description": "Smoothed catch-up factor (0 = on the leader, 1 = adrift at the back). Scales item durations. Engine/tests only; kept in the contract." },
+        "monster": { "type": "boolean", "description": "Currently transformed into the monster truck; renderer morphs the model." },
+        "totalS": { "type": "number", "description": "CUMULATIVE arclength, world units. Negative on the starting grid (spawn behind the line); grows monotonically across laps, never wrapped." },
+        "heading": { "type": "number", "minimum": -1.25, "maximum": 1.25, "description": "Car yaw relative to the track tangent, radians, clamped to +-1.25 (no u-turns)." },
+        "halfLen": { "type": "number", "description": "Collision half-length, world units; x1.3 while monster. Debug bbox overlay only." },
+        "halfWid": { "type": "number", "description": "Collision half-width, world units; x1.3 while monster. Debug bbox overlay only." }
+      }
+    }
+  }
+}

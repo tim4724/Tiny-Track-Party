@@ -25,7 +25,7 @@ const FAKE_POINTS = [10, 15, 6, 3, 2, 1, 0, 0];
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
 const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost', null];
-const giveItems = (engine) => { for (const c of engine.cars.values()) c.item = PREVIEW_ITEMS[c.id] || null; };
+const giveItems = (engine) => { for (const id of engine.carIds()) engine.giveItem(id, PREVIEW_ITEMS[id] || null); };
 
 const el = (id) => document.getElementById(id);
 
@@ -317,9 +317,9 @@ export function runDisplayScenario(opts, ctx) {
 
       const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
       scene.onFrame = (dt) => {
-        for (const c of engine.cars.values()) {
-          if (!c.finished && c.pose) engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline, engine)); // pass the game so preview bots dodge hazards/poles too
-        }
+        // driveBot hands the live car + engine to the bot INSIDE the sim boundary
+        // (so preview bots dodge hazards/poles too) and skips finished cars.
+        for (const [id, bot] of bots) engine.driveBot(id, bot);
         engine.update(dt * 1000);
         const snap = engine.getSnapshot();
         for (const c of snap.cars) {
@@ -388,11 +388,11 @@ export function runDisplayScenario(opts, ctx) {
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
       scene.addCar(0, 0, 'Boost!', { cell: false }); // cell:false → the overview camera frames the cluster
 
-      const car = engine.cars.get(0);
-      Object.assign(car, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (won't tick — frozen)
-      engine.bananas.push({ id: 1, s: at(8), lat: -0.5, owner: 'none' });
-      engine.rockets.push({ id: 1, s: at(4.2), lat: 0.7, owner: 'none' }); // a homing rocket mid-flight in the lineup
-      engine._recomputePoses();
+      // Stage the lineup through the Game staging hooks, the contract surface.
+      // No raw pokes at engine internals; the purity test scans for those.
+      engine.stageCar(0, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (frozen engine, never ticks down)
+      engine.stageBanana(at(8), -0.5);
+      engine.stageRocket(at(4.2), 0.7); // a homing rocket mid-flight in the lineup
 
       const snap = engine.getSnapshot();
       const c0 = snap.cars[0];
@@ -471,10 +471,10 @@ export function runDisplayScenario(opts, ctx) {
         } }
       : { onEvent() {} };
     let galleryRocketIds = new Set();
-    function driveGalleryRocketAudio() {
+    function driveGalleryRocketAudio(snap) {
       if (!sfx) return;
       const seen = new Set();
-      for (const r of engine.rockets) { seen.add(r.id); sfx.rocketFlight(r.id, 1); } // demo: full level (no human-distance to scale by)
+      for (const r of (snap.rockets || [])) { seen.add(r.id); sfx.rocketFlight(r.id, 1); } // demo: full level (no human-distance to scale by)
       for (const id of galleryRocketIds) if (!seen.has(id)) sfx.rocketFlight(id, 0);
       galleryRocketIds = seen;
     }
@@ -499,10 +499,8 @@ export function runDisplayScenario(opts, ctx) {
     // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
     const bots = new Map(ids.map((i) => [i, new AiController({ ...AI_PERSONALITIES[i % AI_PERSONALITIES.length], seed: i + 1 })]));
     function autosteer() {
-      for (const c of engine.cars.values()) {
-        if (c.finished || !c.pose) continue;
-        engine.processInput(c.id, bots.get(c.id).drive(c, track.centerline, engine));
-      }
+      // driveBot steps each controller inside the sim boundary (skips finished cars).
+      for (const [id, bot] of bots) engine.driveBot(id, bot);
     }
 
     // 'rocket' demo: every ~1.3s hand the LAST-place car a homing rocket and fire it at the
@@ -513,13 +511,14 @@ export function runDisplayScenario(opts, ctx) {
       rocketCd -= dt;
       if (rocketCd > 0) return;
       rocketCd = 1.3;
-      const liveCars = [...engine.cars.values()].filter((c) => !c.finished);
+      const snap = engine.getSnapshot();
+      const liveCars = snap.cars.filter((c) => !c.finished);
       if (liveCars.length < 2) return;
       liveCars.sort((a, b) => a.totalS - b.totalS);
       const firer = liveCars[0];
-      if (engine.rockets.some((r) => r.owner === firer.id)) return; // one already in flight from this car
-      firer.item = 'rocket';
-      engine._useItem(firer); // locks the car ahead + spawns the rocket (+events → impact burst)
+      if (snap.rockets.some((r) => r.owner === firer.id)) return; // one already in flight from this car
+      engine.giveItem(firer.id, 'rocket');
+      engine.useItem(firer.id); // locks the car ahead + spawns the rocket (+events → impact burst)
     }
 
     // 'monster' demo: transform a car into a monster truck, then a short gap after it lapses
@@ -529,11 +528,12 @@ export function runDisplayScenario(opts, ctx) {
     // SMALLEST gap to the car directly ahead so the heavier, faster monster runs it down fast.
     let monsterCd = 0.8; // first transform shortly after the start
     function transformFromBack(dt) {
-      if ([...engine.cars.values()].some((c) => c.monsterT > 0)) return; // one transform at a time
+      const snap = engine.getSnapshot();
+      if (snap.cars.some((c) => c.monster)) return; // one transform at a time
       monsterCd -= dt;
       if (monsterCd > 0) return;
       monsterCd = 1.6; // gap before the next transform once this one lapses
-      const liveCars = [...engine.cars.values()].filter((c) => !c.finished);
+      const liveCars = snap.cars.filter((c) => !c.finished);
       if (liveCars.length < 2) return;
       let firer = null, best = Infinity;
       for (const c of liveCars) {
@@ -542,9 +542,8 @@ export function runDisplayScenario(opts, ctx) {
         if (gapAhead < best) { best = gapAhead; firer = c; }
       }
       if (!firer) firer = liveCars.sort((a, b) => a.totalS - b.totalS)[0];
-      firer.item = 'monster';
-      firer.tCatch = 1;       // the full-length transform, for a good showcase
-      engine._useItem(firer); // flips monsterT on → snapshot.monster → setCarMonster morphs it
+      engine.giveItem(firer.id, 'monster', { tCatch: 1 }); // tCatch 1 = the full-length transform, for a good showcase
+      engine.useItem(firer.id); // flips monsterT on → snapshot.monster → setCarMonster morphs it
     }
 
     let lastHud = 0;
@@ -561,7 +560,7 @@ export function runDisplayScenario(opts, ctx) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
-      if (kind === 'rocket') driveGalleryRocketAudio(); // sustained jet per in-flight rocket
+      if (kind === 'rocket') driveGalleryRocketAudio(snap); // sustained jet per in-flight rocket
       // Monster demo (standalone tab only): voice the transformed car's deep big-truck
       // engine growl, silent otherwise — so the gallery hears the sound change too.
       if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, true);
@@ -624,13 +623,7 @@ export function runDisplayScenario(opts, ctx) {
       // (place + time); every other cell keeps its live lap/place HUD.
       for (let t = 0; t < 160; t++) { autosteer(); engine.update(33); }
       const leadId = engine.getSnapshot().cars.reduce((a, b) => (a.position <= b.position ? a : b)).id;
-      const lead = engine.cars.get(leadId);
-      if (lead) {
-        lead.finished = true;
-        lead.finishTime = FAKE_TIMES[0];
-        if (!engine.finishedOrder.includes(leadId)) engine.finishedOrder.push(leadId);
-        engine._rank(); // promote the finisher to P1; the rest keep racing for position
-      }
+      engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
       giveItems(engine); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
       for (const c of engine.getSnapshot().cars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });

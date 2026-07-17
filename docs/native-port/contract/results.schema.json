@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/results.schema.json",
+  "title": "Race results",
+  "description": "The object returned by Game.getResults() (public/display/engine/Game.js). All plain data, fresh objects. Rows are sorted by race order: finished cars first by finish time, then live cars by race position. Removed (forfeited) cars are absent entirely. Consumed by the standings/results boards and Grand Prix points. See docs/native-port/contract.md.",
+  "type": "object",
+  "required": ["elapsed", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "elapsed": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Seconds of simulated race time, same clock as snapshot.elapsed. No consumer today; kept in the contract."
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["playerId", "rank", "finished", "time"],
+        "additionalProperties": false,
+        "properties": {
+          "playerId": { "type": ["number", "string"], "description": "Car id (peerIndex, or strings like 'ai-N'/'cpu-x' for bots)." },
+          "rank": { "type": "integer", "minimum": 1, "description": "1-based and dense: equals index + 1 in this sorted array. Indexes Grand Prix POINTS_BY_RANK." },
+          "finished": { "type": "boolean", "description": "false = DNF or still racing when the failsafe timeout ended the race." },
+          "time": { "type": ["number", "null"], "description": "Finish time in seconds of simulated race time, or null when not finished." }
+        }
+      }
+    }
+  }
+}
