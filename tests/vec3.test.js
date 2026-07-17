@@ -9,6 +9,8 @@
 // fix Vec3's operation order, do not loosen the test.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 let Vec3, THREE, mulberry32;
 test.before(async () => {
@@ -102,6 +104,19 @@ test('Vec3 matches THREE.Vector3 bit-for-bit on the whole implemented surface', 
       sameVec(va, ta, tag('chained must not mutate the source'));
     }
   }
+});
+
+// The parity gate compares against the NPM three (a caret range in
+// package.json), but the class certifies bit-identity with the VENDORED
+// r184 the renderer ships. Pin the two together: if an `npm update` moves
+// the npm copy to another revision, fail here instead of silently
+// certifying parity against math the game does not ship.
+test('npm three reference is the same revision as vendor/three', () => {
+  const vendored = fs.readFileSync(path.join(__dirname, '..', 'vendor', 'three', 'three.core.js'), 'utf8')
+    .match(/REVISION = '(\d+)'/);
+  assert.ok(vendored, 'vendor/three/three.core.js declares REVISION');
+  assert.equal(THREE.REVISION, vendored[1],
+    `npm three r${THREE.REVISION} drifted from vendored r${vendored[1]}; re-pin package.json so this gate certifies the shipped math`);
 });
 
 test('Vec3 edge cases: defaults, zero-length normalize guard, interop flag', () => {

@@ -85,11 +85,27 @@ export function verifyTrace(trace) {
     { onEvent: (e) => pending.push(e) }
   );
 
+  // JSON object keys are ALWAYS strings, but roster ids keep their real JSON
+  // types (numeric peerIndex in live-shaped rosters). Map each per-frame input
+  // key back to the declared roster id, or processInput would silently miss
+  // the cars Map (keyed by the original id) and every input would be dropped.
+  // recordTrace guarantees the String() forms are unique.
+  const idByKey = new Map(header.roster.map((r) => [String(r.id), r.id]));
+
   for (const rec of records) {
     // Replay exactly what the recorder applied. Ids are unique per frame, so
     // application order across cars cannot matter (processInput only writes
     // that car's own input latch).
-    for (const [id, msg] of Object.entries(rec.inputs || {})) game.processInput(id, msg);
+    for (const [key, msg] of Object.entries(rec.inputs || {})) {
+      const id = idByKey.get(key);
+      if (id === undefined) {
+        return {
+          ok: false, frame: rec.frame, path: `inputs.${key}`, expected: undefined, actual: msg,
+          message: `frame ${rec.frame}: input for '${key}', which is not in the header roster (corrupted trace)`
+        };
+      }
+      game.processInput(id, msg);
+    }
     game.update(header.dt);
     const events = pending.splice(0);
     const snapshot = game.getSnapshot();

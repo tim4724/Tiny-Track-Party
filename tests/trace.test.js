@@ -74,6 +74,27 @@ test('corrupting a hash-only frame reports that exact frame', () => {
   assert.match(r.message, /hash diverged/);
 });
 
+// Live lobbies key cars by NUMERIC peerIndex. JSONL stringifies the per-frame
+// input keys, so the verifier must map them back to the roster's real id types
+// or every input silently misses the cars Map and replay diverges with a bogus
+// engine-divergence report (the exact regression this pins).
+test('numeric car ids (live-shaped rosters) record and verify clean', () => {
+  const cfg = {
+    trackId: 'tidepool', frames: 90, seed: 5, laps: 3, snapshotEvery: 30,
+    bots: [{ id: 2, skill: 0.9, laneBias: 0.15, aiSeed: 11 }],
+    humans: [{ id: 3, script: (f) => ({ s: Math.sin(f / 25) * 0.6, b: f % 60 < 8 ? 1 : 0, u: 0 }) }]
+  };
+  const r = ver.verifyTrace(rec.recordTrace(cfg).text);
+  assert.deepEqual(r, { ok: true, frames: 90 });
+});
+
+test('ids that collide once stringified are rejected at record time', () => {
+  assert.throws(() => rec.recordTrace({
+    trackId: 'tidepool', frames: 1,
+    humans: [{ id: 3, script: () => null }, { id: '3', script: () => null }]
+  }), /unique/);
+});
+
 test('a contract-version mismatch fails fast with a re-record message', () => {
   const { header, records } = rec.parseTrace(rec.recordTrace(smallConfig()).text);
   header.contractVersion = 999;

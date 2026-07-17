@@ -1966,4 +1966,23 @@ test('boundary query API returns plain data; staging hooks stage without private
   assert.equal(done.position, 1, 'the finisher ranks P1');
   assert.equal(game.forceFinish('p2', 50), false, 'already finished → no-op');
   assert.equal(game.raceOver, false, 'p1 still racing keeps the race open');
+
+  // stageCar: whitelisted kinematic/boost write with an immediate pose refresh
+  // (the gallery's frozen mechanics showcase stages a mid-boost car this way).
+  assert.equal(game.stageCar('p1', { totalS: 7.5, lat: 0.8, v: 9, boostMul: 1.6, boostT: 9 }), true);
+  const staged = game.getSnapshot().cars.find((c) => c.id === 'p1');
+  assert.equal(staged.totalS, 7.5);
+  assert.equal(staged.boostMul, 1.6);
+  assert.deepStrictEqual(staged.pose.pos, game.trackPoint(7.5, 0.8), 'stageCar refreshed the pose at the staged (s, lat)');
+  assert.equal(game.stageCar('ghost', { v: 9 }), false);
+
+  // stageBanana/stageRocket: live props by (s, lat), no raw array pushes.
+  const bid = game.stageBanana(4, -0.5);
+  const ban = game.getSnapshot().bananas.find((b) => b.id === bid);
+  assert.ok(ban, 'staged banana is live in the snapshot');
+  assert.deepEqual({ s: ban.s, lat: ban.lat }, { s: 4, lat: -0.5 });
+  const rid = game.stageRocket(5, 0.7);
+  const rock = game.getSnapshot().rockets.find((r) => r.id === rid);
+  assert.ok(rock, 'staged rocket is live in the snapshot');
+  assert.equal(rock.owner, 'staged', 'default owner sits outside real id namespaces');
 });

@@ -7,7 +7,8 @@
 //   new Game(playerIds, { centerline, length, roadWidth, totalLaps }, { onEvent, forceItem })
 //   update(dtMs) / processInput(id, {s,b,u}) / getSnapshot() / getResults() / raceOver
 //   queries (plain data): carIds / hasCar / carFinished / carWorldPos / trackPoint / driveBot
-//   staging hooks (demos + conformance tests): giveItem / useItem / forceFinish
+//   staging hooks (demos + conformance tests): giveItem / useItem / forceFinish /
+//     stageCar / stageBanana / stageRocket
 // Everything outside the sim path consumes the engine through that surface only —
 // never this.cars/this.centerline directly (tests/portable-purity.test.js enforces
 // the seam). setCarStats/removeCar/rekeyCar round out the lifecycle surface.
@@ -565,6 +566,37 @@ export class Game {
     if (!this.finishedOrder.includes(id)) this.finishedOrder.push(id);
     this._rank();
     return true;
+  }
+
+  // Place a car directly: write whitelisted kinematic/boost fields and refresh
+  // poses so the change is visible without an update() tick (the gallery's
+  // frozen mechanics showcase poses a mid-boost car this way). Numbers only.
+  stageCar(id, fields = {}) {
+    const c = this.cars.get(id);
+    if (!c) return false;
+    for (const k of ['totalS', 'lat', 'v', 'boostMul', 'boostT']) {
+      if (typeof fields[k] === 'number') c[k] = fields[k];
+    }
+    this._recomputePoses();
+    return true;
+  }
+
+  // Spawn a live ownerless banana at (s, lat): the same shape a player drop
+  // produces, armed for everyone at once. Returns the banana id (the
+  // snapshot's mesh-reconciliation key).
+  stageBanana(s, lat = 0) {
+    const b = { id: ++this._bananaSeq, s: wrapS(s, this.length), lat, owner: null, armAt: 0 };
+    this.bananas.push(b);
+    return b.id;
+  }
+
+  // Spawn a live target-less rocket at (s, lat): it flies forward from v0 and
+  // self-destructs as a whiff, like a shot with no car ahead. owner defaults
+  // to a string outside every real id namespace. Returns the rocket id.
+  stageRocket(s, lat = 0, { v = 0, owner = 'staged' } = {}) {
+    const r = { id: ++this._rocketSeq, s, lat, owner, targetId: null, life: 0, v };
+    this.rockets.push(r);
+    return r.id;
   }
 
   update(dtMs) {
@@ -1416,7 +1448,7 @@ export class Game {
           forward: { x: c.pose.forward.x, y: c.pose.forward.y, z: c.pose.forward.z },
           up: { x: c.pose.up.x, y: c.pose.up.y, z: c.pose.up.z }
         },
-        lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd normalized 0..1 (per-car top speed)
+        lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd = v / per-car BASE top speed; EXCEEDS 1 under boost/monster (up to ~2.0)
         lap: Math.min(this.totalLaps, Math.max(1, c.lap + (c.totalS >= 0 ? 1 : 0))), // 1-based display lap (grid sits at s<0 — still "lap 1")
         totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually

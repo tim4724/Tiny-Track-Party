@@ -19,7 +19,7 @@
     "cars": {
       "type": "array",
       "items": { "$ref": "#/$defs/carSnap" },
-      "description": "One entry per live car. Order = car insertion order (the starting grid), NOT rank order. Forfeited (removed) cars are absent."
+      "description": "One entry per live car. Order = car insertion order (the starting grid at construction), NOT rank order. rekeyCar (device reconnect) re-inserts the car at the TAIL of the order (Map delete + set), so the order is not stable across reconnects. Forfeited (removed) cars are absent."
     },
     "boxes": {
       "type": "array",
@@ -104,7 +104,7 @@
         "steerInput": { "type": "number", "minimum": -1, "maximum": 1, "description": "RAW controller steer input (drives the on-screen steer bar). The steer/steerInput asymmetry is deliberate." },
         "brake": { "type": "number", "minimum": 0, "maximum": 1, "description": "Analog brake." },
         "onWall": { "type": "boolean", "description": "Touching a curb this frame." },
-        "spin": { "type": "number", "minimum": 0, "description": "Cosmetic spin-out whirl angle, radians, 0 to 4*pi (SPIN_TURNS = 2 whole turns); 0 when in control." },
+        "spin": { "type": "number", "minimum": 0, "description": "Cosmetic spin-out whirl angle, radians; 0 when in control. A single spin sweeps 0 to 4*pi (SPIN_TURNS = 2 whole turns), but a second oil/banana entered mid-spin re-arms the timer while keeping the angle continuous, so chained hazards grow it past 4*pi with NO ceiling. Do not clamp to 4*pi." },
         "item": {
           "oneOf": [
             { "type": "string", "enum": ["boost", "banana", "rocket", "monster"] },

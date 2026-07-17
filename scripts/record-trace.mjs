@@ -133,7 +133,13 @@ export function recordTrace(config) {
     }))
   ];
   const ids = roster.map((r) => r.id);
-  if (new Set(ids).size !== ids.length) throw new Error('recordTrace: duplicate car ids in roster');
+  // Uniqueness is checked on the String() forms: JSONL stores per-frame inputs
+  // as object keys (always strings), and the verifier maps those keys back to
+  // roster ids, so ids that collide once stringified (3 vs '3') could not
+  // replay faithfully. This also catches plain duplicates.
+  if (new Set(ids.map(String)).size !== ids.length) {
+    throw new Error('recordTrace: car ids must be unique when compared as strings (JSONL input keys are strings)');
+  }
 
   const header = {
     contractVersion: CONTRACT_VERSION,

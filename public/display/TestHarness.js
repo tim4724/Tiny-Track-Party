@@ -388,11 +388,11 @@ export function runDisplayScenario(opts, ctx) {
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
       scene.addCar(0, 0, 'Boost!', { cell: false }); // cell:false → the overview camera frames the cluster
 
-      const car = engine.cars.get(0);
-      Object.assign(car, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (won't tick — frozen)
-      engine.bananas.push({ id: 1, s: at(8), lat: -0.5, owner: 'none' });
-      engine.rockets.push({ id: 1, s: at(4.2), lat: 0.7, owner: 'none' }); // a homing rocket mid-flight in the lineup
-      engine._recomputePoses();
+      // Stage the lineup through the Game staging hooks, the contract surface.
+      // No raw pokes at engine internals; the purity test scans for those.
+      engine.stageCar(0, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (frozen engine, never ticks down)
+      engine.stageBanana(at(8), -0.5);
+      engine.stageRocket(at(4.2), 0.7); // a homing rocket mid-flight in the lineup
 
       const snap = engine.getSnapshot();
       const c0 = snap.cars[0];

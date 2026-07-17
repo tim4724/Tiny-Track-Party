@@ -107,7 +107,19 @@ Each gate must pass before the next stage starts:
    upstreamable or maintainably carried.
 3. **C++ core conformance.** The C++ engine replays every committed golden
    trace with exact agreement at the pinned contract version, on all target
-   compilers/platforms.
+   compilers/platforms. Exact agreement is only achievable with vendored math:
+   the JS engine's byte path leans on `Math.sin/cos` (Vec3.applyAxisAngle,
+   TrackBuilder arcs), `Math.atan2` (heading, pose twist), `Math.exp` (spin
+   drag), `Math.pow` (steer expo) and `Math.hypot` (TrackBuilder), none of
+   which are correctly rounded or specified beyond roughly 1 ulp. V8 ships its own fdlibm port whose last-bit
+   results differ from glibc, MSVC CRT and Apple libm, so a C++ core that
+   links system libm WILL fail hash comparison on some frame regardless of
+   correctness. The port must vendor transcendental routines that reproduce
+   V8's results bit for bit (start from V8's fdlibm port in
+   `src/base/ieee754.cc`; core-math is the fallback source). Plain arithmetic
+   and `Math.sqrt` are exact IEEE-754 everywhere and need no special handling.
+   A conformance failure should be suspected as a libm mismatch FIRST, an
+   engine bug second.
 4. **Renderer bring-up.** Filament scene construction from the track contract
    (ribbon, props, cars, the four archetypes), then shells, then native
    networking.

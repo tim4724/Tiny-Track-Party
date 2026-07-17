@@ -72,6 +72,13 @@ frame for frame. Specifically:
   (`public/display/engine/Vec3.js`), whose method bodies are copied verbatim
   from three.js r184 so operation order (and therefore float rounding) is
   pinned.
+- Cross-LANGUAGE bit-exactness additionally requires matching transcendental
+  results. `Math.sin/cos/atan2/exp/pow/hypot` sit on the byte path and are
+  implementation-approximated (V8 ships its own fdlibm port; platform libm
+  and the MSVC CRT differ in the last bit), so the C++ port must vendor math
+  routines that reproduce V8's results rather than link system libm. Plain
+  arithmetic and `Math.sqrt` are exact IEEE-754 everywhere. See the
+  conformance gate in [architecture.md](architecture.md).
 
 The executable form of this guarantee is the golden-trace tooling:
 `scripts/record-trace.mjs` records a seeded headless race (inputs, events,
@@ -79,7 +86,12 @@ FNV-1a hash of the canonical-JSON snapshot every frame, full snapshots on a
 cadence), `scripts/verify-trace.mjs` replays the recorded inputs through the
 engine and demands EXACT float equality, and `tests/trace.test.js` replays
 every committed fixture on `npm test`. The C++ port passes conformance when it
-verifies the same fixtures.
+verifies every committed fixture. The fixture set must keep covering the whole
+event vocabulary and the endgame path, not just early-race physics; the
+per-fixture coverage inventory lives in `tests/fixtures/traces/README.md`
+(currently: two starter slices plus a full switchback race that exercises all
+nine event kinds, all four spin causes, rocket flight, the monster transform,
+lap counting across the s = 0 seam, finish ranking and race_over).
 
 ## Input: the CONTROL message
 
@@ -127,7 +139,7 @@ Top level:
 |---|---|---|
 | `version` | integer | `CONTRACT_VERSION` stamp |
 | `elapsed` | number | seconds of simulated race time; 0 at construction; does not advance while the host withholds update() |
-| `cars` | CarSnap[] | order = car insertion order (the starting grid), NOT rank order |
+| `cars` | CarSnap[] | order = car insertion order (the starting grid at construction), NOT rank order. `rekeyCar` re-inserts the car at the TAIL of the order (Map delete + set), so after a device reconnect the array order differs from the grid |
 | `boxes` | boolean[] | index-aligned with the track's authored `boxes` list; true = available (respawn cooldown expired) |
 | `bananas` | object[] | `{id, s, lat, radius}`; only bananas currently live |
 | `rockets` | object[] | `{id, s, lat, owner}`; live homing rockets |
@@ -158,7 +170,7 @@ Per-car `CarSnap`:
 | `steerInput` | number | [-1, 1] | RAW controller input (drives the on-screen steer bar). The steer/steerInput asymmetry is deliberate |
 | `brake` | number | [0, 1] | analog |
 | `onWall` | boolean | | touching a curb this frame |
-| `spin` | number | radians, 0 to 4 pi | cosmetic spin-out whirl angle; 0 when in control |
+| `spin` | number | radians, >= 0, UNBOUNDED | cosmetic spin-out whirl angle; 0 when in control. A single spin sweeps 0 to 4 pi (SPIN_TURNS = 2 over SPIN_TIME = 1 s), but a SECOND oil/banana entered mid-spin re-arms the timer while keeping the angle continuous, so chained hazards grow it past 4 pi with no ceiling. Do not clamp or size anything to 4 pi |
 | `item` | string or null | | one of `boost`, `banana`, `rocket`, `monster` |
 | `boostActive` | boolean | | `boostMul > 1.001`. No consumer today (renderers read boostMul); kept |
 | `boostMul` | number | [1, 1.6] | current speed-ceiling multiplier |
@@ -295,10 +307,14 @@ seam. A port must expose the same surface:
 - `driveBot(id, controller)`: steps one AI controller INSIDE the boundary
   (the controller sees the live car and engine; callers only pass ids).
 - Mutations: `processInput(id, {s, b, u})`, `removeCar(id)` (forfeit),
-  `rekeyCar(oldId, newId)` (device reconnect), `setCarStats(id, stats)`.
+  `rekeyCar(oldId, newId)` (device reconnect; moves the car to the tail of
+  the snapshot `cars` order, see above), `setCarStats(id, stats)`.
 - Staging hooks (demos and conformance tests, not live gameplay):
   `giveItem(id, item, {tCatch})`, `useItem(id)`, `forceFinish(id, time)`
-  (silent: no `finish` event).
+  (silent: no `finish` event), `stageCar(id, {totalS, lat, v, boostMul,
+  boostT})` (direct kinematic/boost write + pose refresh), `stageBanana(s,
+  lat)` (live ownerless banana), `stageRocket(s, lat, {v, owner})` (live
+  target-less rocket that whiffs at end of run).
 
 ## Known dead-but-kept fields
 

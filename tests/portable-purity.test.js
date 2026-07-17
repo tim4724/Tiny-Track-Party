@@ -27,7 +27,12 @@ const FILES = [
   path.join(DISPLAY_DIR, 'TrackBuilder.js'),
   path.join(DISPLAY_DIR, 'RaceSession.js'),
   path.join(ROOT, 'partyplug/RoomFlow.js'),
-  path.join(DISPLAY_DIR, 'GrandPrix.js') // cup scoring: outside engine/, same purity promise
+  path.join(DISPLAY_DIR, 'GrandPrix.js'), // cup scoring: outside engine/, same purity promise
+  // Transitive DATA imports of the sim path: TrackBuilder pulls the track
+  // catalogue, so a stray Math.random()/Date.now() in a track helper would
+  // silently break golden-trace reproducibility. Same scan, same bans.
+  path.join(ROOT, 'public/shared/tracks.js'),
+  path.join(ROOT, 'public/shared/genTracks.js')
 ];
 
 // API-shaped patterns (call sites / property reads, not bare words). Scanned on
@@ -47,7 +52,10 @@ const BANNED = [
   ['fetch(', /\bfetch\s*\(/],
   // The sim path must not lean on the vendored renderer math either — its vector
   // type is engine/Vec3.js, so the same sources compile against the native port.
+  // The vendor-relative specifier is banned too: importing vendor/three directly
+  // would load fine in browser AND Node, so nothing else would catch it.
   ["import from 'three'", /from\s*['"]three['"]|import\s*\(\s*['"]three['"]\s*\)/],
+  ['vendor/three import', /vendor\/three/],
   ['THREE', /\bTHREE\b/],
   // Cheap extra host-API bans (none are load-bearing today; fail fast if one appears).
   ['navigator', /\bnavigator\b/],
@@ -84,7 +92,7 @@ function stripComments(src) {
 }
 
 test('sim-path modules and RoomFlow stay clock-free, three-free and host-agnostic', () => {
-  assert.ok(FILES.length >= 9, `expected sim-path files + RoomFlow + GrandPrix, found ${FILES.length} (moved?)`);
+  assert.ok(FILES.length >= 11, `expected sim-path files + RoomFlow + GrandPrix + shared track data, found ${FILES.length} (moved?)`);
   const violations = [];
   for (const file of FILES) {
     const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n');
@@ -95,6 +103,25 @@ test('sim-path modules and RoomFlow stay clock-free, three-free and host-agnosti
     });
   }
   assert.deepEqual(violations, [], 'purity violations (inject time/RNG from the host instead):\n  ' + violations.join('\n  '));
+});
+
+// The scan is only airtight if FILES covers the sim path's whole module graph:
+// a new `import './helper.js'` in a scanned file would otherwise open an
+// unscanned side door (exactly how shared/tracks.js slipped out before).
+// Every static relative import of a scanned file must itself be scanned.
+test('the sim path\'s import closure stays inside the scanned file set', () => {
+  const scanned = new Set(FILES.map((f) => fs.realpathSync(f)));
+  const escapes = [];
+  for (const file of FILES) {
+    const src = stripComments(fs.readFileSync(file, 'utf8'));
+    for (const m of src.matchAll(/(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g)) {
+      const target = fs.realpathSync(path.resolve(path.dirname(file), m[1]));
+      if (!scanned.has(target)) {
+        escapes.push(`${path.relative(ROOT, file)} imports ${path.relative(ROOT, target)} (unscanned)`);
+      }
+    }
+  }
+  assert.deepEqual(escapes, [], 'sim-path imports outside the purity scan (add them to FILES):\n  ' + escapes.join('\n  '));
 });
 
 // ---- sim-boundary seam scan ----
@@ -109,17 +136,22 @@ test('sim-path modules and RoomFlow stay clock-free, three-free and host-agnosti
 // (RaceSession IS the boundary; the engine/ dir is the engine).
 const SIM_PATH_NAMES = new Set(['engine', 'Centerline.js', 'AiDriver.js', 'TrackBuilder.js', 'RaceSession.js']);
 
-// Members reachable through a held engine reference (`<expr>.engine.<member>`):
-// the Game contract surface, exactly as documented in Game.js's header.
+// Members reachable through a held engine reference (`<expr>.engine.<member>`
+// or a bare local bound to `new Game(...)`): the Game contract surface,
+// exactly as documented in Game.js's header.
 const ENGINE_CONTRACT = new Set([
   'update', 'processInput', 'getSnapshot', 'getResults', 'raceOver',
   'setCarStats', 'removeCar', 'rekeyCar',
   'carIds', 'hasCar', 'carFinished', 'carWorldPos', 'trackPoint', 'driveBot',
-  'giveItem', 'useItem', 'forceFinish'
+  'giveItem', 'useItem', 'forceFinish', 'stageCar', 'stageBanana', 'stageRocket'
 ]);
 
-// The ONE sanctioned raw-engine reach: main.js's debug escape hatch (free-cam
-// inspection / console poking). Everything programmatic uses the query API.
+// The ONE sanctioned raw-engine REACH: main.js's debug escape hatch (free-cam
+// inspection / console poking). TestHarness's `window.__engine = engine`
+// console hatches are plain assignments with no member reach, so they pass
+// the member scans below without an allowlist. Known limits, accepted as
+// cheap grep-based enforcement: an ALIAS (`const g = this.engine`) or a reach
+// via `window.__engine.<member>` would evade the scan; no such code exists today.
 const DEBUG_HATCH = /^\s*window\.__engine = session\.engine;/;
 
 function displayFiles(dir) {
@@ -139,7 +171,16 @@ test('display code consumes the engine only through the session/Game contract su
   const violations = [];
   for (const file of files) {
     const rel = path.relative(ROOT, file);
-    const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n');
+    const src = stripComments(fs.readFileSync(file, 'utf8'));
+    // Bare locals holding a Game instance (`const engine = new Game(...)`, and
+    // reassignments): their member reaches are held to the same contract as
+    // `.engine.<member>` chains, since demo surfaces hold engines as plain locals.
+    const engineNames = new Set();
+    for (const m of src.matchAll(/\b([$\w]+)\s*=\s*new\s+Game\s*\(/g)) engineNames.add(m[1]);
+    const bareRe = engineNames.size
+      ? new RegExp(`(?<![.\\w$])(${[...engineNames].join('|')})\\.([$\\w]+)`, 'g')
+      : null;
+    const lines = src.split('\n');
     lines.forEach((line, i) => {
       if (DEBUG_HATCH.test(line)) return;
       if (/\bsession\.engine\b/.test(line)) {
@@ -148,6 +189,11 @@ test('display code consumes the engine only through the session/Game contract su
       }
       for (const m of line.matchAll(/\.engine\.([$\w]+)/g)) {
         if (!ENGINE_CONTRACT.has(m[1])) violations.push(`${rel}:${i + 1} reaches .engine.${m[1]} (off the Game contract surface)`);
+      }
+      if (bareRe) {
+        for (const m of line.matchAll(bareRe)) {
+          if (!ENGINE_CONTRACT.has(m[2])) violations.push(`${rel}:${i + 1} reaches ${m[1]}.${m[2]} (off the Game contract surface)`);
+        }
       }
     });
   }
