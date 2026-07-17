@@ -78,7 +78,7 @@ export class DebugSolo {
   // Called from the render loop (main.js onFrame), right where driveBots() feeds
   // the AI — applies this frame's keyboard state to the local car.
   drive(session) {
-    if (!session || !session.engine.cars.has(SOLO_ID)) return;
+    if (!session || !session.hasCar(SOLO_ID)) return;
     session.processInput(SOLO_ID, this._input());
   }
 

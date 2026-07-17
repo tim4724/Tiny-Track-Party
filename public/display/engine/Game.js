@@ -4,8 +4,13 @@
 // Loops/hills "just work" because the car follows the ribbon's pos/tangent/up.
 //
 // Contract (mirrors the HexStacker engine seams):
-//   new Game(playerIds, { centerline, length, roadWidth, totalLaps }, { onEvent })
-//   update(dtMs) / processInput(id, {s,b,u}) / getSnapshot() / getResults()
+//   new Game(playerIds, { centerline, length, roadWidth, totalLaps }, { onEvent, forceItem })
+//   update(dtMs) / processInput(id, {s,b,u}) / getSnapshot() / getResults() / raceOver
+//   queries (plain data): carIds / hasCar / carFinished / carWorldPos / trackPoint / driveBot
+//   staging hooks (demos + conformance tests): giveItem / useItem / forceFinish
+// Everything outside the sim path consumes the engine through that surface only —
+// never this.cars/this.centerline directly (tests/portable-purity.test.js enforces
+// the seam). setCarStats/removeCar/rekeyCar round out the lifecycle surface.
 
 // Finished cars take a victory lap on autopilot (see update()). We reuse the same
 // pure-pursuit steer as the AI fill so a finished car drives the racing line
@@ -314,6 +319,9 @@ export class Game {
     this.totalLaps = track.totalLaps || 3;
     this.maxLat = Math.max(0.1, (track.roadWidth || 1) / 2 - LAT_MARGIN);
     this.onEvent = callbacks.onEvent || (() => {});
+    // DEBUG (?item=<id>): every box rolls this item — see _roll. A constructor
+    // option so the display never pokes engine fields to arm it.
+    this.forceItem = callbacks.forceItem || null;
     this.elapsed = 0;
     this.finishedOrder = []; // ids in finish order
     this.cars = new Map();
@@ -470,6 +478,92 @@ export class Game {
     // lock (else _stepRockets can't find the old id → drops it → whiffs), and one OWNED by
     // it keeps its owner so it still can't self-hit.
     for (const r of this.rockets) { if (r.owner === oldId) r.owner = newId; if (r.targetId === oldId) r.targetId = newId; }
+    return true;
+  }
+
+  // ---- boundary query API ----
+  // Everything OUTSIDE the sim path (main.js via RaceSession, LobbyDemo,
+  // TestHarness, the E2E specs) reads the engine through these plus
+  // getSnapshot()/getResults()/raceOver — never through this.cars or
+  // this.centerline directly. Each returns PLAIN data (fresh arrays, {x,y,z}
+  // literals): no live engine state escapes the boundary, which keeps this
+  // exact surface portable to the native engine.
+
+  // Fresh array of live car ids — safe to iterate while cars are being removed.
+  carIds() { return [...this.cars.keys()]; }
+
+  hasCar(id) { return this.cars.has(id); }
+
+  // true/false for a live car; null when the car doesn't exist (left/never raced).
+  carFinished(id) {
+    const c = this.cars.get(id);
+    return c ? c.finished : null;
+  }
+
+  // A car's world position as a plain {x,y,z}; null for an unknown car or one
+  // with no pose yet. The audio distance model keys every world cue off this.
+  carWorldPos(id) {
+    const c = this.cars.get(id);
+    const p = c && c.pose && c.pose.pos;
+    return p ? { x: p.x, y: p.y, z: p.z } : null;
+  }
+
+  // (arclength, lateral) → world point as a plain {x,y,z} — the same frame math
+  // that poses cars, for consumers placing FX/audio at track coordinates (the
+  // rocket jet/boom). s wraps mod track length, like every engine arclength.
+  trackPoint(s, lat = 0) {
+    const f = this.centerline.sampleAt(s); // fresh frame — safe to consume in place
+    const p = f.pos.addScaledVector(f.lateral, lat);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+
+  // Step one AI controller for its car: hand the LIVE car + engine to
+  // controller.drive() INSIDE the boundary and apply the returned {s,b,u}.
+  // AiDriver is sim-path, so its mutable-state coupling (car pose/speed/item,
+  // game.cars/hazards/poles/nextCarAhead) stays within the seam; callers
+  // (driveBots, the lobby demo, gallery previews) only ever pass ids.
+  driveBot(id, controller) {
+    const c = this.cars.get(id);
+    if (!c || c.finished || !c.pose) return false;
+    this.processInput(id, controller.drive(c, this.centerline, this));
+    return true;
+  }
+
+  // ---- sanctioned staging hooks (demos + conformance tests) ----
+  // The gallery TestHarness and the E2E specs stage race states (hand a car an
+  // item, fire it, force a finish). They must not poke private car state — the
+  // native port won't expose it — so these are the supported ways in. Not used
+  // by live gameplay.
+
+  // Put `item` in a car's hands (null clears the slot), immediately usable.
+  // opts.tCatch pins the catch-up factor that scales item DURATIONS (_useItem).
+  giveItem(id, item, opts = {}) {
+    const c = this.cars.get(id);
+    if (!c) return false;
+    c.item = item || null;
+    c.pickupAge = 999; // usable at once — skips the roulette-reveal gate
+    if (typeof opts.tCatch === 'number') c.tCatch = opts.tCatch;
+    return true;
+  }
+
+  // Fire a car's held item now (the same code path as a player's ACTION press,
+  // minus the input latch and readiness gates). No-op without a held item.
+  useItem(id) {
+    const c = this.cars.get(id);
+    if (!c || !c.item) return false;
+    this._useItem(c);
+    return true;
+  }
+
+  // Mark a car finished with a synthetic time, SILENTLY (no 'finish' event —
+  // staging, not a real crossing). Ranks recompute so the board is coherent.
+  forceFinish(id, finishTime) {
+    const c = this.cars.get(id);
+    if (!c || c.finished) return false;
+    c.finished = true;
+    c.finishTime = finishTime != null ? finishTime : this.elapsed;
+    if (!this.finishedOrder.includes(id)) this.finishedOrder.push(id);
+    this._rank();
     return true;
   }
 

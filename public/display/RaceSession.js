@@ -17,6 +17,7 @@ export class RaceSession {
     // the engine reads {id, stats}. Stats-less entries fall back to the benchmark.
     this.engine = new Game(players.map((p) => ({ id: p.peerIndex, stats: p.stats })), track, {
       onEvent: opts.onRaceEvent || (() => {}),
+      forceItem: opts.forceItem || null, // DEBUG ?item=<id>: every box rolls this item
     });
     this.racing = false;
 
@@ -144,6 +145,19 @@ export class RaceSession {
 
   getSnapshot() { return this.engine.getSnapshot(); }
   getResults()  { return this.engine.getResults(); }
+
+  // ---- engine query passthroughs ----
+  // The session is the ONLY handle the display keeps on the engine: everything
+  // main.js needs to read comes through these (plain data — fresh arrays and
+  // {x,y,z} literals), so no engine internals leak past the sim boundary. See
+  // Game.js's contract header; tests/portable-purity.test.js enforces the seam.
+  carIds()                 { return this.engine.carIds(); }
+  hasCar(id)               { return this.engine.hasCar(id); }
+  carFinished(id)          { return this.engine.carFinished(id); }
+  carWorldPos(id)          { return this.engine.carWorldPos(id); }
+  trackPoint(s, lat)       { return this.engine.trackPoint(s, lat); }
+  driveBot(id, controller) { return this.engine.driveBot(id, controller); }
+  forceFinish(id, time)    { return this.engine.forceFinish(id, time); }
 
   // Wind down without firing callbacks (used on lobby reset, not race end).
   dispose() {

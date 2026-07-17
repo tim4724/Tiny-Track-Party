@@ -1902,3 +1902,68 @@ test('mid-race snapshot is plain data — JSON round-trip preserves it exactly',
   // the snapshot (or any NaN/Infinity/undefined, which JSON mangles) fails here.
   assert.deepStrictEqual(JSON.parse(JSON.stringify(snap)), snap, 'snapshot survives a JSON round-trip unchanged');
 });
+
+// The boundary query API — how everything outside the sim path reads the engine
+// (main.js via RaceSession's passthroughs, LobbyDemo/TestHarness on their demo
+// engines, the E2E specs). Everything must come back as PLAIN data: fresh
+// arrays, {x,y,z} literals, never live engine references.
+test('boundary query API returns plain data; staging hooks stage without private pokes', () => {
+  const track = mkTrack(3);
+  const game = new Game(['p1', 'p2'], track, {});
+  for (let i = 0; i < 100; i++) {
+    game.processInput('p1', { s: followSteer(game, track, 'p1') });
+    game.processInput('p2', { s: followSteer(game, track, 'p2') });
+    game.update(16);
+  }
+
+  // carIds: fresh array (caller mutation can't reach the engine), hasCar/carFinished.
+  const ids = game.carIds();
+  assert.deepEqual(ids, ['p1', 'p2']);
+  ids.length = 0;
+  assert.deepEqual(game.carIds(), ['p1', 'p2'], 'carIds hands out a fresh array each call');
+  assert.equal(game.hasCar('p1'), true);
+  assert.equal(game.hasCar('ghost'), false);
+  assert.equal(game.carFinished('p1'), false);
+  assert.equal(game.carFinished('ghost'), null);
+
+  // carWorldPos: plain {x,y,z} matching the snapshot pose, null for unknown ids.
+  const wp = game.carWorldPos('p1');
+  assert.equal(Object.getPrototypeOf(wp), Object.prototype, 'carWorldPos is a plain object');
+  const snapPos = game.getSnapshot().cars.find((c) => c.id === 'p1').pose.pos;
+  assert.deepStrictEqual(wp, snapPos, 'carWorldPos agrees with the snapshot pose');
+  assert.equal(game.carWorldPos('ghost'), null);
+
+  // trackPoint: the same centreline+lateral math that poses cars, as plain data.
+  const tp = game.trackPoint(7.5, 0.8);
+  assert.equal(Object.getPrototypeOf(tp), Object.prototype, 'trackPoint is a plain object');
+  const f = track.centerline.sampleAt(7.5);
+  const want = f.pos.clone().addScaledVector(f.lateral, 0.8);
+  assert.deepStrictEqual(tp, { x: want.x, y: want.y, z: want.z }, 'trackPoint matches the frame math');
+
+  // driveBot: applies the controller's {s,b,u} inside the boundary.
+  assert.equal(game.driveBot('p1', { drive: () => ({ s: 1, b: 0.5, u: 0 }) }), true);
+  const driven = game.getSnapshot().cars.find((c) => c.id === 'p1');
+  assert.equal(driven.steerInput, 1, 'driveBot applied the steer');
+  assert.equal(driven.brake, 0.5, 'driveBot applied the brake');
+  assert.equal(game.driveBot('ghost', { drive: () => ({ s: 1 }) }), false);
+
+  // giveItem/useItem: hand a rocket over and fire it — no private car pokes needed.
+  assert.equal(game.giveItem('p2', 'rocket'), true);
+  assert.equal(game.getSnapshot().cars.find((c) => c.id === 'p2').item, 'rocket');
+  assert.equal(game.useItem('p2'), true);
+  assert.equal(game.getSnapshot().rockets.length, 1, 'useItem fired the rocket');
+  assert.equal(game.getSnapshot().rockets[0].owner, 'p2');
+  assert.equal(game.useItem('p2'), false, 'slot is empty after firing');
+  assert.equal(game.giveItem('p1', 'boost'), true);
+  assert.equal(game.giveItem('p1', null), true, 'giveItem(null) clears the slot');
+  assert.equal(game.useItem('p1'), false);
+
+  // forceFinish: silent synthetic finish, ranked; the race stays open for the rest.
+  assert.equal(game.forceFinish('p2', 42), true);
+  assert.equal(game.carFinished('p2'), true);
+  const done = game.getSnapshot().cars.find((c) => c.id === 'p2');
+  assert.equal(done.finishTime, 42);
+  assert.equal(done.position, 1, 'the finisher ranks P1');
+  assert.equal(game.forceFinish('p2', 50), false, 'already finished → no-op');
+  assert.equal(game.raceOver, false, 'p1 still racing keeps the race open');
+});
