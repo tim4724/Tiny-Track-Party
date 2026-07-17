@@ -585,21 +585,34 @@ html.cam-free #race { pointer-events: none; }
   to   { transform: scale(1);   opacity: 1; }
 }
 
-/* ---- Pause ---- */
-/* Pause button — pinned top-right over the scene during the countdown + race.
-   .icon-btn (theme.css) gives it the toy-button look; we only place it here.
-   It shares the top-right corner with each cell's place/lap readout, so it
-   auto-fades after a few seconds idle (main.js toggles .is-idle); any pointer
-   move / tap / key brings it back. The opacity transition is added to the
-   .icon-btn set so hover/press feedback still animates. */
-#pause-btn {
+/* ---- Corner buttons ---- */
+/* The top-right row over the scene: fullscreen (always) + pause (races only,
+   .hidden off-race). .icon-btn (theme.css) gives them the toy-button look; we
+   only place them here. The row shares the top-right corner with each cell's
+   place/lap readout, so it auto-fades once the race chrome goes idle (see
+   html.chrome-idle below). The fade is the ROW's transition, which leaves each
+   button's own .icon-btn hover/press transitions untouched. */
+#corner-btns {
   position: fixed; z-index: 12;
   top: calc(1.1rem + env(safe-area-inset-top));
   right: calc(1.1rem + env(safe-area-inset-right));
-  width: 3.4rem; height: 3.4rem;
-  transition: opacity 0.4s ease, transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  display: flex; gap: 0.6rem;
+  transition: opacity 0.4s ease;
 }
-#pause-btn.is-idle { opacity: 0; pointer-events: none; }
+#corner-btns .icon-btn { width: 3.4rem; height: 3.4rem; }
+
+/* Idle race chrome — main.js sets html.chrome-idle after a few seconds without
+   a pointer move / tap / key press, and ONLY while a race is running (never on
+   the welcome board, the lobby, the results, or behind the pause overlay, where
+   a vanished cursor would strand a mouse user mid-click). The corner row fades
+   off the place/lap readout, and the mouse pointer goes with it: this is a TV
+   surface, and an arrow parked over the track is nothing but litter. Any input
+   brings both straight back.
+   `html.chrome-idle *` (0,1,1) is deliberately more specific than the .btn /
+   .icon-btn / .music-credit `cursor: pointer` rules (0,1,0), so hovering one of
+   those can't resurrect the arrow regardless of stylesheet order. */
+html.chrome-idle, html.chrome-idle * { cursor: none; }
+html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 
 /* Pause overlay — same bright frosted glass as the results screen, sits above
    the (frozen) race with a floating card of choices. */

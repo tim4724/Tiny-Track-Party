@@ -150,9 +150,27 @@
     </div>
   </section>
 
+  <!-- Corner buttons — pinned top-right over every screen, outside the sections
+       so the fullscreen toggle survives welcome → lobby → race. Fullscreen sits
+       LEFT of pause; pause joins the row only during a race (main.js toggles its
+       .hidden). Both fade together while the race chrome is idle (see
+       display.css) so they stop covering each cell's place/lap readout. -->
+  <div id="corner-btns">
+    <button id="fullscreen-btn" class="icon-btn" aria-label="Enter fullscreen" aria-pressed="false">
+      <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
+           corners pointing out = enter, pointing in = exit. -->
+      <svg class="fs-glyph fs-glyph--enter" viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M7.5 2.5H2.5V7.5M12.5 2.5H17.5V7.5M17.5 12.5V17.5H12.5M7.5 17.5H2.5V12.5" />
+      </svg>
+      <svg class="fs-glyph fs-glyph--exit" viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M2.5 7.5H7.5V2.5M17.5 7.5H12.5V2.5M12.5 17.5V12.5H17.5M2.5 12.5H7.5V17.5" />
+      </svg>
+    </button>
+    <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
+  </div>
+
   <!-- Race: overlays over the persistent #scene backdrop -->
   <section id="race" class="hidden">
-    <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
     <!-- Now-playing credit (bottom-left): the current track + artist, linking to
          its source. Doubles as the CC-BY attribution for the music. main.js fills
          the label/href and toggles .hidden with the music lifecycle. -->

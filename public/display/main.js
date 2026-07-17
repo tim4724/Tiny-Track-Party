@@ -810,7 +810,7 @@ function launchRace(players) {
   raceEnded = false;             // un-freeze the scene for the new race
   setPauseOverlay(false);
   el('pause-btn').classList.remove('hidden'); // pausable from the countdown on
-  revealPauseBtn();                           // show it, then auto-fade until activity
+  revealRaceChrome();                         // buttons + cursor up, then auto-fade until activity
 
   // (re)build scene cars. AI cars get no split-screen cell (cell:false) — they're
   // opponents in the shared world, not players watching the screen.
@@ -1169,7 +1169,7 @@ function endRace(results) {
   autoPaused = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
-  stopPauseAutoHide();
+  holdRaceChrome();
   broadcastStandings(true);                    // final board → phones show the full results overlay
   showResults(results);
   clearTimeout(endTimer);
@@ -1334,7 +1334,7 @@ function returnToLobby() {
   raceEnded = false;
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
-  stopPauseAutoHide();
+  holdRaceChrome();
   if (session) { session.dispose(); session = null; }
   aiBots = new Map(); currentField = [];
   net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
@@ -1378,6 +1378,7 @@ function pauseRace() {
   syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_PAUSED });
   setPauseOverlay(true);
+  holdRaceChrome(); // the overlay is a mouse target — cursor + buttons stay put while it's up
 }
 
 function resumeRace() {
@@ -1386,6 +1387,7 @@ function resumeRace() {
   syncSessionFrozen();
   net.broadcast({ type: MSG.GAME_RESUMED });
   setPauseOverlay(false);
+  revealRaceChrome(); // racing again — re-arm the fade (this click already hid the overlay)
 }
 
 // The sim is frozen while EITHER pause is set (manual overlay pause OR the
@@ -1423,22 +1425,34 @@ function setPauseOverlay(on) {
   el('pause-overlay').classList.toggle('hidden', !on);
 }
 
-// ---- pause button auto-hide ----
-// The on-screen pause button lives in the top-right corner, sharing it with each
-// cell's place/lap readout. Fade it out after a spell of pointer inactivity so it
-// stops covering that text; any mouse move / tap / key press reveals it again.
-const PAUSE_IDLE_MS = 2500;     // starting value — long enough to aim + click after moving
-let pauseIdleTimer = 0;
-function revealPauseBtn() {
-  const btn = el('pause-btn');
-  if (btn.classList.contains('hidden')) return; // not in a race — nothing to reveal
-  btn.classList.remove('is-idle');
-  clearTimeout(pauseIdleTimer);
-  pauseIdleTimer = setTimeout(() => btn.classList.add('is-idle'), PAUSE_IDLE_MS);
+// ---- race chrome auto-hide ----
+// A running race hides its own furniture after a spell of pointer inactivity:
+// the corner buttons (which share the top-right with each cell's place/lap
+// readout) fade, and the mouse pointer goes with them — this is a TV surface,
+// so a parked arrow is litter on the track. One class on <html> drives both
+// (display.css), and any mouse move / tap / key press brings them back.
+//
+// Armed ONLY while a race is actually running, since a vanished cursor is a
+// trap wherever there's something to click: the welcome board, the lobby and
+// the results screen never arm it (the pause button is .hidden there — the
+// same signal), and pauseRace/resumeRace disarm and re-arm it around the pause
+// overlay, whose buttons are the one thing a mouse user MUST be able to hit.
+const CHROME_IDLE_MS = 2500;    // starting value — long enough to aim + click after moving
+let chromeIdleTimer = 0;
+function revealRaceChrome() {
+  // Gated on what's actually ON SCREEN, not on `paused`: the pause button is
+  // .hidden off-race, and a visible overlay means a modal wants the mouse —
+  // true for a real pause AND for the test harness's `paused` preview, which
+  // dresses the overlay without touching the pause state.
+  if (el('pause-btn').classList.contains('hidden')) return;
+  if (!el('pause-overlay').classList.contains('hidden')) return;
+  document.documentElement.classList.remove('chrome-idle');
+  clearTimeout(chromeIdleTimer);
+  chromeIdleTimer = setTimeout(() => document.documentElement.classList.add('chrome-idle'), CHROME_IDLE_MS);
 }
-function stopPauseAutoHide() { clearTimeout(pauseIdleTimer); el('pause-btn').classList.remove('is-idle'); }
+function holdRaceChrome() { clearTimeout(chromeIdleTimer); document.documentElement.classList.remove('chrome-idle'); }
 for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
-  window.addEventListener(ev, revealPauseBtn, { passive: true });
+  window.addEventListener(ev, revealRaceChrome, { passive: true });
 }
 // Unlock audio on the first real gesture (pointermove is not a user activation,
 // so it can't resume a suspended AudioContext — only clicks/keys count).
@@ -1457,6 +1471,34 @@ const _audioSupported = !!(window.AudioContext || window.webkitAudioContext);
 if (!_isTestMode && _audioSupported) {
   setInterval(() => el('sound-hint').classList.toggle('hidden', audio.ready || currentScreen === 'welcome'), 500);
 }
+
+// ---- fullscreen ----
+// The big screen wants the whole screen: NEW GAME claims it on the session's
+// first click (see the bootstrap tail), and this toggle is the way back out —
+// and, more usefully, back IN, since entering needs a user gesture and Esc / a
+// tab switch can drop it mid-party with no other way to recover. The button
+// mirrors the DOCUMENT's state rather than its own clicks: the browser also
+// changes it behind our back (Esc, and a denied request never happens at all).
+// Hidden where it can't work: fullscreenEnabled is false both with no API at all
+// and inside an iframe that wasn't granted the permission (the gallery's preview
+// cards), so it covers both without a test-surface special case.
+const _fullscreenSupported = !!document.fullscreenEnabled;
+el('fullscreen-btn').classList.toggle('hidden', !_fullscreenSupported);
+function enterFullscreen() {
+  if (!_fullscreenSupported || document.fullscreenElement) return;
+  document.documentElement.requestFullscreen().catch(() => { /* denied/unsupported — play windowed */ });
+}
+function syncFullscreenBtn() {
+  const on = !!document.fullscreenElement;
+  el('fullscreen-btn').setAttribute('aria-pressed', on ? 'true' : 'false');
+  el('fullscreen-btn').setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+}
+el('fullscreen-btn').addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else enterFullscreen();
+});
+document.addEventListener('fullscreenchange', syncFullscreenBtn);
+syncFullscreenBtn(); // a crash-recovery reload can boot already fullscreen
 
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
@@ -1603,9 +1645,7 @@ if (_scenario) {
   // here, and the AudioContext via the window pointerdown listener above (this
   // same click trips it; the explicit resume() just makes the intent readable).
   el('newgame-btn').addEventListener('click', () => {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => { /* denied/unsupported — play windowed */ });
-    }
+    enterFullscreen();
     audio.resume();
     show('lobby');
     updateBackdrop(); // a pick made while on the title board reveals its preview now

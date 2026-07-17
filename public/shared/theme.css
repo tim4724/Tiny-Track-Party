@@ -191,6 +191,16 @@ body {
   content: ''; width: 4px; height: 16px; border-radius: 2px; background: currentColor;
 }
 
+/* Fullscreen glyph — four warm-ink corner brackets, drawn in the same weight as
+   the pause bars. The button carries both (enter/exit) and shows one, picked by
+   aria-pressed so the visual and the a11y state can never drift apart. */
+.fs-glyph {
+  width: 20px; height: 20px;
+  fill: none; stroke: currentColor; stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+[aria-pressed="false"] .fs-glyph--exit, [aria-pressed="true"] .fs-glyph--enter { display: none; }
+
 /* Chip — a small white sticker token with a colour dot (player in a roster). */
 .chip {
   display: inline-flex;
