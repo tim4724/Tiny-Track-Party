@@ -355,9 +355,7 @@ export const TRACKS = {
   skyline: {
     name: 'Skyline', difficulty: 'Expert', segments: SKYLINE, startU: 0.024,
     oils: OILS.skyline, pads: PADS.skyline, boxes: BOXES.skyline
-  },
-  // Retired — in no cup, so they don't appear in the picker; kept defined only so the
-  // geometry regression tests keep exercising the segment-DSL builders they use.
+  }
 };
 
 // Cups — curated, ordered sets of tracks (a "grand prix" grouping). Each cup lists its

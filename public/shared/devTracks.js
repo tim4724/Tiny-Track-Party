@@ -20,7 +20,7 @@
 // that doesn't ship. (Nothing here needs `startU` — the grid-on-a-straight rule is enforced
 // over TRACK_LIST, and these are in no cup.)
 import { DSL, boxRows } from './tracks.js';
-const { L, W, RS, RL, straight, arc, loop, run, chicane, halfHill, fullHill, flare } = DSL;
+const { L, RS, RL, straight, arc, loop, run, chicane, halfHill, fullHill, flare } = DSL;
 
 // ---- RETIRED circuits — segment geometry (moved verbatim from shared/tracks.js) ----
 

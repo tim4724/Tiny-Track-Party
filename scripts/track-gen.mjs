@@ -386,29 +386,29 @@ const rotateRing = (a, k) => a.slice(k).concat(a.slice(0, k));
 // at s = -2.5 … -6.5 (Game.js `totalS: -(2.5 + row * 1.6)`), so -7 spans the whole grid.
 // Forward: the launch run they accelerate down before the first real corner.
 const GRID_BACK = 7, GRID_FWD = 12;
-// What a good grid looks like. minRadius is world units against a 5-wide road (30 = a gentle
-// drift, not a corner); grade/bank are the frame's y-components (~4.5° / ~3.5°); rise keeps
-// the grid near ground level rather than up on a bridge deck; widthTol keeps a decorated
-// flare/pinch off it; headroom keeps the finish gantry out of a deck overhead (below).
-const GRID_GATE = { minRadius: 30, maxGrade: 0.08, maxBank: 0.06, maxRise: 1.0, widthTol: 0.25, minHeadroom: 3.1 };
-const ANCHOR_SHORTLIST = 16; // full resolves per seed — the prefilter's job is to keep this small
 
-// ---- GANTRY HEADROOM ----
+// ---- GANTRY dimensions ----
 // Mirrors render/FinishGate.js (which imports THREE, so it can't be imported here — keep
-// these in sync; the "gantry clears any deck over the line" test guards the pair).
-// The gantry is a GATE, not a point: two pylons straddling the road at ±halfSpan, a banner
-// across the top, the whole thing rising GANTRY_TOP above the road surface. So clearance
-// must be tested against its full lateral SPAN — a deck that misses the centreline entirely
-// can still be speared by a pylon (avalanche did exactly that: its deck passes 4.6 out,
-// clear of the road, straight through where the right-hand pylon stands).
-//
-// This gate exists because the other grid criteria actively select FOR the danger: the
-// under-strand of a crossing is flat, level, ground-height and straight — precisely what a
-// good grid looks like — so an anchor search left to the criteria above will happily park
-// the line under a bridge.
+// these in sync; the "gantry clears any deck over the line" test guards the pair, and
+// FinishGate carries a back-reference). The gantry is a GATE, not a point: two pylons
+// straddling the road at ±(roadWidth/2 + REACH), a banner across the top, the whole thing
+// rising GANTRY_TOP above the road surface — so its clearance is tested against that full
+// lateral SPAN (a deck that misses the centreline entirely can still be speared by a pylon,
+// as avalanche's did: it passes 4.6 out, clear of the road, through the right-hand pylon).
 const GANTRY_TOP = 2.8;     // FinishGate CLEAR (2.0) + BANNER_H (0.8) — pylon/banner top
 const GANTRY_REACH = 1.15;  // FinishGate kerbW + KERB_CLEAR + 2×PYLON_R, plus slack for a
                             // themed kerb (theme.road.kerbW overrides the 0.22 default)
+
+// What a good grid looks like. minRadius is world units against a 5-wide road (30 = a gentle
+// drift, not a corner); grade/bank are the frame's y-components (~4.5° / ~3.5°); rise keeps
+// the grid near ground level rather than up on a bridge deck; widthTol keeps a decorated
+// flare/pinch off it; minHeadroom keeps the finish gantry out of a deck overhead — the
+// gantry top plus a little slack. This gate exists because the other criteria actively
+// select FOR the danger: the under-strand of a crossing is flat, level, ground-height and
+// straight, precisely what a good grid looks like, so a search blind to headroom will
+// happily park the line under a bridge.
+const GRID_GATE = { minRadius: 30, maxGrade: 0.08, maxBank: 0.06, maxRise: 1.0, widthTol: 0.25, minHeadroom: GANTRY_TOP + 0.3 };
+const ANCHOR_SHORTLIST = 16; // full resolves per seed — the prefilter's job is to keep this small
 
 // The lowest road strand crossing over the gantry's footprint at arclength s0 (Infinity =
 // clear sky). Distances are to the gantry's lateral segment, not to a point.
@@ -673,7 +673,9 @@ export async function aiProbe(def, { laps = 3 } = {}) {
 export async function evaluateSeed(seed, profileName = 'classic', { probe = true } = {}) {
   const G = PROFILES[profileName].gates;
   let r, baked, t;
-  try { r = resolveSeed(seed, profileName); baked = bakeSeed(seed, profileName); t = buildTrack({ waypoints: baked }); }
+  // Round r itself rather than re-running bakeSeed → resolveSeed: the anchor search now costs
+  // a full resolve per shortlisted candidate, and a scan calls this for hundreds of seeds.
+  try { r = resolveSeed(seed, profileName); baked = roundWps(r.wps, r.h); t = buildTrack({ waypoints: baked }); }
   catch (e) { return { seed, pass: false, fails: ['pipeline'], reason: e.message }; }
   const L = t.length, crossings = r.wpPairs.length;
   // smoothness: worst |heading step| per 0.1 world units, same skips as the unit test
