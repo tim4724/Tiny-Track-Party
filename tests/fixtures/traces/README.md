@@ -10,6 +10,14 @@ If that test fails after an engine change, the behaviour change is real. If it
 was intentional, re-record the fixtures with the exact commands below and
 commit them with the engine change. Never loosen the comparison.
 
+Traces replay bit-exactly only on the JS engine that recorded them: V8's
+transcendental `Math.*` results differ in the last bit across versions, so a
+different Node major legitimately diverges. Each header records its engine
+(`engine: { node, v8 }`), the verifier names an engine mismatch in its
+divergence report, and CI (`.github/workflows/test.yml`) pins the matching
+Node major. Record fixtures under that same Node major; if you bump the CI
+pin, re-record all fixtures in the same commit.
+
 ```
 node scripts/record-trace.mjs --track=tidepool --frames=600 --bots=4 --seed=42 --snapshot-every=100 --out=tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
 node scripts/record-trace.mjs --track=helix --frames=500 --bots=3 --humans=1 --seed=7 --snapshot-every=100 --out=tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl

@@ -17,7 +17,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Pinned to the Node major the golden-trace fixtures were recorded
+          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
+          # differ in the last bit across majors, and the trace oracle is
+          # bit-exact. Bump this together with a fixture re-record.
+          node-version: 26
           cache: 'npm'
       - run: npm ci
       # Gates on errors only; no-unused-vars / style rules are warnings and
@@ -31,7 +35,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Pinned to the Node major the golden-trace fixtures were recorded
+          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
+          # differ in the last bit across majors, and the trace oracle is
+          # bit-exact. Bump this together with a fixture re-record.
+          node-version: 26
           cache: 'npm'
       - run: npm ci
       - run: npm test
@@ -47,7 +55,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Pinned to the Node major the golden-trace fixtures were recorded
+          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
+          # differ in the last bit across majors, and the trace oracle is
+          # bit-exact. Bump this together with a fixture re-record.
+          node-version: 26
           cache: 'npm'
       - run: npm ci
       - name: Run E2E tests

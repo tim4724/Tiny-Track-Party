@@ -79,6 +79,13 @@ frame for frame. Specifically:
   routines that reproduce V8's results rather than link system libm. Plain
   arithmetic and `Math.sqrt` are exact IEEE-754 everywhere. See the
   conformance gate in [architecture.md](architecture.md).
+- The same caveat applies WITHIN JavaScript: transcendental results change
+  between V8 versions, so a trace replays bit-exactly only on the JS engine
+  that recorded it (in practice: the same Node major). Each trace header
+  records that engine (`engine: { node, v8 }`), the verifier reports an
+  engine mismatch as the first suspect when a replay diverges, and CI
+  (`.github/workflows/test.yml`) pins the Node major the committed fixtures
+  were recorded under. Bump the CI pin and re-record the fixtures together.
 
 The executable form of this guarantee is the golden-trace tooling:
 `scripts/record-trace.mjs` records a seeded headless race (inputs, events,

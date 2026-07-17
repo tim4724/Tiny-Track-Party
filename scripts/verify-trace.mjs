@@ -58,6 +58,20 @@ export function firstDiff(expected, actual, path = '') {
   return null;
 }
 
+// Bit-exact replay is only guaranteed on the JS engine that recorded the
+// trace: transcendental Math.* results are implementation-approximated and
+// differ in the last bit across V8 versions (in practice, across Node
+// majors). When a divergence is reported under a different engine than the
+// header records, suspect the engine mismatch before the sim.
+function engineHint(header) {
+  const rec = header.engine;
+  if (!rec || rec.node === process.versions.node) return '';
+  return ` [engine mismatch: trace recorded on Node ${rec.node} (V8 ${rec.v8}), ` +
+    `replaying on Node ${process.versions.node} (V8 ${process.versions.v8}); ` +
+    `transcendental Math.* differs across V8 versions, so this divergence is ` +
+    `expected. Replay on Node ${rec.node.split('.')[0]}.x or re-record.]`;
+}
+
 // Verify a parsed trace ({ header, records }) or raw JSONL text.
 export function verifyTrace(trace) {
   const { header, records } = typeof trace === 'string' ? parseTrace(trace) : trace;
@@ -115,7 +129,7 @@ export function verifyTrace(trace) {
       if (d) {
         return {
           ok: false, frame: rec.frame, path: d.path, expected: d.expected, actual: d.actual,
-          message: `frame ${rec.frame}: ${d.path} diverged (recorded ${JSON.stringify(d.expected)}, replay ${JSON.stringify(d.actual)})`
+          message: `frame ${rec.frame}: ${d.path} diverged (recorded ${JSON.stringify(d.expected)}, replay ${JSON.stringify(d.actual)})` + engineHint(header)
         };
       }
     }
@@ -123,7 +137,7 @@ export function verifyTrace(trace) {
     if (de) {
       return {
         ok: false, frame: rec.frame, path: de.path, expected: de.expected, actual: de.actual,
-        message: `frame ${rec.frame}: ${de.path} diverged (recorded ${JSON.stringify(de.expected)}, replay ${JSON.stringify(de.actual)})`
+        message: `frame ${rec.frame}: ${de.path} diverged (recorded ${JSON.stringify(de.expected)}, replay ${JSON.stringify(de.actual)})` + engineHint(header)
       };
     }
     const hash = fnv1a(canonicalStringify(snapshot));
@@ -131,7 +145,7 @@ export function verifyTrace(trace) {
       return {
         ok: false, frame: rec.frame, path: null, expected: rec.hash, actual: hash,
         message: `frame ${rec.frame}: snapshot hash diverged (recorded ${rec.hash}, replay ${hash}); ` +
-          `no full snapshot stored this frame — nearest field-level diff is at the next stored snapshot (every ${header.snapshotEvery} frames)`
+          `no full snapshot stored this frame — nearest field-level diff is at the next stored snapshot (every ${header.snapshotEvery} frames)` + engineHint(header)
       };
     }
   }

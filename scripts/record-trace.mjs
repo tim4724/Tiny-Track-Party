@@ -4,7 +4,7 @@
 // public/display/engine/Game.js) and writes a JSONL trace:
 //
 //   line 1   header  { contractVersion, seed, trackId, dt, laps, roster,
-//                      frames, snapshotEvery }
+//                      frames, snapshotEvery, engine }
 //   line 2+  frame   { frame, inputs, events, hash [, snapshot] }
 //
 // Every frame carries an FNV-1a hash of the canonical-JSON snapshot, so a
@@ -17,7 +17,12 @@
 // Determinism: no wall clock, no Math.random. The engine's item RNG is seeded
 // via track.seed; each bot's AiController jitter stream is seeded from the
 // header; JSON key order is fixed by canonicalStringify (recursive key sort).
-// Same config in, byte-identical trace out.
+// Same config in, byte-identical trace out — on the SAME JS engine. Math.sin/
+// cos/atan2/exp/pow are implementation-approximated, so a different V8 (i.e. a
+// different Node major) legitimately differs in the last bit and a trace only
+// replays exactly under the engine that recorded it. The header's `engine`
+// field records that engine ({ node, v8 }); CI pins the matching Node major
+// (.github/workflows/test.yml).
 //
 // CLI:
 //   node scripts/record-trace.mjs --track=tidepool --frames=600 [--seed=1]
@@ -143,7 +148,11 @@ export function recordTrace(config) {
 
   const header = {
     contractVersion: CONTRACT_VERSION,
-    seed, trackId, dt, laps, roster, frames, snapshotEvery
+    seed, trackId, dt, laps, roster, frames, snapshotEvery,
+    // The JS engine that recorded this trace. Bit-exact replay is only
+    // guaranteed on the same engine (transcendental Math.* results are
+    // implementation-approximated and differ across V8 versions).
+    engine: { node: process.versions.node, v8: process.versions.v8 }
   };
 
   const track = buildRaceTrack(trackId, { laps, seed });
