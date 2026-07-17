@@ -49,13 +49,13 @@ const MAX_HEADING = 1.25; // ~72° clamp (no u-turn; always some forward progres
 const STEER_SIGN = -1;    // tilt-to-steer direction (negated: tilt right → go right)
 const WALL_SPEED_FRAC = 0.35; // curb speed cap as a fraction of the car's own top speed
 const WALL_DECEL = 20.0;  // how fast you bleed down to the curb cap
-const WALL_RASH_T = 0.25; // s the curb cap LINGERS after the last scrape ("curb rash") — raw
-                          // contact is too brief to bill real lap time (the car bounces off
-                          // in a few frames), so washing out costs a beat of capped ceiling
-                          // on the exit too. Boost overrides it, like brake + scrub. 0.5 felt
-                          // like dead throttle after the scrape (ceiling = current speed →
-                          // zero accel, then a cliff release); 0.25 keeps the exit tax short
-                          // enough to read as impact, not input lag.
+const WALL_RASH_T = 0.5;  // s the curb cap takes to HEAL after the last scrape ("curb rash") —
+                          // raw contact is too brief to bill real lap time (the car bounces
+                          // off in a few frames), so washing out costs the corner exit too.
+                          // The cap RAMPS from WALL_SPEED_FRAC back to full over this window
+                          // (a flat hold felt like dead throttle: ceiling = current speed →
+                          // zero accel, then a cliff release; the ramp pulls immediately,
+                          // weakly at first). Boost overrides it, like brake + scrub.
 const LAT_MARGIN = 0.3;   // keep the car body inside the curbs
 
 // ---- Cornering (understeer + steer scrub) ----
@@ -559,12 +559,18 @@ export class Game {
       // A monster rides slightly higher top speed (stacks over any boost it grabs).
       const vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
       let targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);
-      // Curb rash: a recent scrape keeps the ceiling at the curb cap for a beat, so a
-      // washout costs the corner EXIT too, not just the frames of contact. A live boost
-      // overrides it (same rule as brake + scrub); the timer still burns down.
+      // Curb rash: a recent scrape holds the ceiling down for a beat, so a washout
+      // costs the corner EXIT too, not just the frames of contact. The cap heals
+      // linearly from WALL_SPEED_FRAC back to full over WALL_RASH_T — the car pulls
+      // again the moment it leaves the curb, just weakly at first (a flat cap read
+      // as dead throttle). A live boost overrides it (same rule as brake + scrub);
+      // the timer still burns down.
       if (c.wallRashT > 0) {
         c.wallRashT -= dt;
-        if (!boosting) targetV = Math.min(targetV, c.vmax * WALL_SPEED_FRAC);
+        if (!boosting) {
+          const heal = 1 - Math.max(0, c.wallRashT) / WALL_RASH_T; // 0 at scrape → 1 healed
+          targetV = Math.min(targetV, c.vmax * (WALL_SPEED_FRAC + (1 - WALL_SPEED_FRAC) * heal));
+        }
       }
       if (spinning) c.v *= Math.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
