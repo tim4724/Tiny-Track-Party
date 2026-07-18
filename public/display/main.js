@@ -909,10 +909,9 @@ function advanceSeriesRace() {
   if (net.roomState !== ROOM_STATE.RESULTS || !series || series.finished || !sceneReady) return;
   clearTimeout(endTimer);          // endRace armed the 60s back-to-lobby failsafe — it must not yank race N+1
   clearSeriesTimers();
-  // Who was waiting out the last race, BEFORE the field rebuild seats them.
-  // Their phones sit on "you're in the next race!" and only a fresh WELCOME
-  // (inRace now true) flips them to the wheel — GAME_END never comes mid-cup.
-  const joiners = lateJoiners();
+  // Phones that sat out the last race on "you're in the next race!" flip to the
+  // wheel off the snapshot: launchRace's COUNTDOWN transition republishes it with
+  // their inRace now true (GAME_END never comes mid-cup, so this is their signal).
   const players = net.flow.list().filter((p) => p.connected);
   if (!players.length) { returnToLobby(); return; } // everyone left mid-intermission
   series.advance();
