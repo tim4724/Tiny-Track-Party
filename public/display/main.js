@@ -830,7 +830,6 @@ function launchRace(players) {
   currentField = field;
   _lastItem.clear(); // fresh race — first frame resends every phone's (empty) ITEM
 
-  net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
   show('race');
   el('results').classList.add('hidden');
   paused = false;
@@ -887,6 +886,15 @@ function launchRace(players) {
   // goes through the session query API (tests/portable-purity.test.js allowlists
   // exactly this line).
   window.__engine = session.engine;
+
+  // Flip to COUNTDOWN only now that the session exists: the statechange
+  // republishes the snapshot, and each player's inRace is read from
+  // session.hasCar(). Transitioning BEFORE the session was built published a
+  // snapshot with the OLD (or null) session — every racer's inRace came out
+  // false, so phones briefly showed "you're in the next race" until the GO beat
+  // (PLAYING) republished with the live session. No frame/await runs between
+  // here and now, so this is the first snapshot any phone sees for the race.
+  net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
 
   // Place cars at their grid poses immediately, and paint each cell's HUD
   // (place badge + LAP pill) right away so the chrome sits at its final size
