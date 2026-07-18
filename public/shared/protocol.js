@@ -29,8 +29,16 @@ var STUN_URL = 'stun:stun.couch-games.com:3478';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.
+//
+// The controller is a dumb renderer: it holds NO game state or content of its own.
+// Almost everything display→controller is the retained room SNAPSHOT (LOBBY_UPDATE
+// over set_state) — replayed on every (re)join and pushed on every change, so a
+// reconnecting phone recovers its whole state (screen, roster, selection, results,
+// AND the chooser content: cars/tracks/colors) from the replay alone, with no
+// per-phone WELCOME to miss. Only two things stay transient messages: COUNTDOWN
+// (a momentary haptic cue) and ITEM (per-owner, changes too often for the blob).
 var MSG = {
-  // Controller -> Display
+  // Controller -> Display (intents)
   HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
   CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, ~25Hz, fastlane
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
@@ -39,29 +47,25 @@ var MSG = {
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
-  SELECT_TRACK: 'select_track', // {trackId} — legacy exact pick; handled as SELECT_MODE {mode:'track'} (kept for deploy-skew phones)
   SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), or random (ENDLESS run of drawn tracks; re-tap re-rolls the preview)
   SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
-  // Display -> specific controller
-  WELCOME: 'welcome',           // {peerIndex, roomState, inRace, paused, players, tracks, mode, cupId, trackId} on join — inRace:false = race running but joiner has no car (waits in lobby)
-  LOBBY_UPDATE: 'lobby_update', // roster/host/color snapshot (+ mode/cupId/trackId; each player carries a `ready` flag). trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Rides the relay's RETAINED HOST STATE (set_state), not a fanout: pushed live on change, replayed to each (re)joiner right after `joined`
-  PLAYER_STATE: 'player_state', // {item} — lights the controller's ITEM button (the phone shows no place/lap; standings live on the display)
+  // Display -> all controllers: the retained room snapshot (relay set_state)
+  LOBBY_UPDATE: 'lobby_update', // THE room snapshot. { roomState, hostPeerIndex, paused, mode, cupId, trackId,
+                                //   players:[{peerIndex,name,colorIndex,carIndex,connected,ready,inRace}],
+                                //   standings:{over,order:[…],series?}|null (playing/results),
+                                //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only) }.
+                                //   trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Pushed live
+                                //   on change, replayed to each (re)joiner right after `joined`. Car images load by id from the web host.
+
+  // Display -> specific controller (transient — not room state)
+  ITEM: 'item',                 // {item} — lights the controller's ITEM button; sent on change + once on (re)connect (held-item is per-owner, so it stays OFF the shared room snapshot)
   PONG: 'pong',
 
-  // Display -> all controllers (broadcast)
-  COUNTDOWN: 'countdown',       // {n} 3..2..1..GO
-  GAME_START: 'game_start',
-  STANDINGS: 'standings',       // {over, hostPeerIndex, total, order:[{playerId,name,colorIndex,ai,finished,time}]}
-                                // pushed as each car finishes (over=false) + at race end (over=true) — drives the phone results overlay.
-                                // During a series (cup or endless random): + series {cupId,cupName,endless,raceIndex,raceCount|null,
-                                // nextTrackId,nextTrackName,final,autoAdvanceMs}, rows carry points (running total; over=true also
-                                // gained), and over=true boards come in CUP-standings order
-  GAME_END: 'game_end',         // {results} — sent on return-to-lobby; controllers go back to the lobby
-  GAME_PAUSED: 'game_paused',   // race frozen — controllers show the pause overlay
-  GAME_RESUMED: 'game_resumed'  // race resumed — controllers hide the pause overlay
+  // Display -> all controllers (transient broadcast)
+  COUNTDOWN: 'countdown'        // {n} 3..2..1..GO — the haptic tick (the snapshot's roomState owns the actual screen)
 };
 
 // Message types that ride the low-latency WebRTC fastlane (unreliable, unordered,

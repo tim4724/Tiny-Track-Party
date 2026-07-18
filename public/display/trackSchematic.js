@@ -50,3 +50,18 @@ export function trackSchematic(track) {
     proj: { minX: z0(+minX.toFixed(2)), minZ: z0(+minZ.toFixed(2)), scale: z0(+scale.toFixed(4)), offX: z0(+offX.toFixed(2)), offZ: z0(+offZ.toFixed(2)) }
   };
 }
+
+// Decimate a schematic's path to at most `maxPts` points (dropping `proj`), for
+// the phone's picker thumbnail. A full-detail loop is hundreds of points (~9 KiB);
+// a ~60–100 px picker tile reads fine at ~24, which is what lets the whole reduced
+// catalog ride the relay's retained room snapshot (set_state, 16 KiB) instead of a
+// 183 KiB WELCOME. Returns just { viewBox, d, start } — the shape the <svg> needs.
+export function reduceSchematic(s, maxPts = 24) {
+  if (!s || !s.d) return s ? { viewBox: s.viewBox, d: s.d || '', start: s.start || null } : s;
+  const pts = s.d.replace(/^M/, '').replace(/ Z$/, '').split(' L');
+  if (pts.length <= maxPts) return { viewBox: s.viewBox, d: s.d, start: s.start };
+  const step = pts.length / maxPts;
+  const out = [];
+  for (let i = 0; i < maxPts; i++) out.push(pts[Math.floor(i * step)].trim());
+  return { viewBox: s.viewBox, d: 'M' + out[0] + out.slice(1).map((p) => ' L' + p).join('') + ' Z', start: s.start };
+}

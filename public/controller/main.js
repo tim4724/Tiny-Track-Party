@@ -1,6 +1,8 @@
-// Controller entry — name → lobby → drive. Tilt steering + brake streamed as
-// CONTROL to the display; PLAYER_STATE just lights the ITEM button (place/lap and
-// the rest of the race HUD live on the big screen).
+// Controller entry — name → lobby → drive. A dumb renderer: it holds no game
+// content, driving every screen off the display's retained room snapshot
+// (LOBBY_UPDATE / set_state). Tilt steering + brake stream as CONTROL to the
+// display; ITEM lights the USE button (place/lap + the race HUD live on the big
+// screen). Car images load by id from the web host.
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
@@ -8,7 +10,7 @@ import { buildModePicker } from '../shared/trackPicker.js';
 import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
-const { MSG, CAR_COLORS, ROOM_STATE } = window;
+const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
 // Sanitize a display name to the wire limit (trim + ≤16 chars). One source of
@@ -103,7 +105,14 @@ let myName = '';           // this player's name, shown at the top of the lobby
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
-let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] from the display (WELCOME)
+// Chooser content, driven entirely off the relay room snapshot (set_state) — the
+// phone bundles none of it, so it can't diverge from a differently-versioned
+// display. tracks ride the snapshot in the lobby only; cars + the livery palette
+// always. Car images load by id from the web host (carThumbs.js).
+let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] — snapshot.tracks (lobby only)
+let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
+let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
+const liveryOf = (i) => colorPalette[i] || '#888';
 let selectedMode = null;   // current pick {mode:'track'|'cup'|'random', trackId?, cupId?} (host-controlled, echoed to all)
 let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
@@ -252,142 +261,95 @@ function modeFrom(data) {
 
 function handleMessage(data) {
   switch (data.type) {
-    case MSG.WELCOME: {
-      hideConn();   // a WELCOME means we're back in (covers the display returning after display_gone)
-      myColorIndex = data.colorIndex;
-      if (data.carIndex != null) myCarIndex = data.carIndex;
-      roster = data.players || [];
-      hostPeerIndex = data.hostPeerIndex;
-      amHost = net.isHost(data.hostPeerIndex);
-      if (data.tracks) trackCatalog = data.tracks;       // catalog ships once, on join
-      displayMode = modeFrom(data);                      // what the display has on record
-      if (displayMode) selectedMode = displayMode;
-      const me = roster.find((p) => p.peerIndex === net.peerIndex);
-      if (me && me.name) myName = me.name;
-      amReady = !!(me && me.ready);
-      // Override the slot default with this phone's saved pick — but not on a
-      // seat that's already READY (ready survives race → lobby): its car is
-      // locked, the display would refuse the SET_CAR, and the silent refusal
-      // would leave our optimistic myCarIndex desynced from the record.
-      if (!amReady) maybeRestoreCar();
-      applyLivery();
-      // Mid-race WELCOME: inRace says whether a car of ours is on track. false
-      // = brand-new late joiner → wait in the lobby for the next race. An older
-      // display omits the flag — treat that as in-race (the old rejoin path).
-      const midRace = data.roomState === ROOM_STATE.COUNTDOWN || data.roomState === ROOM_STATE.PLAYING;
-      waitingForNextRace = midRace && data.inRace === false;
-      renderLobby();
-      // Land on the screen matching the live room state. Normally that's the
-      // lobby, but a player who rejoins mid-race (reconnected, or scanned the
-      // reconnect QR) must drop straight back into the race instead of stalling
-      // on the name screen — their car is still on track waiting for input.
-      if (midRace && !waitingForNextRace) {
-        inResults = false;
-        show('game');
-        el('drive-hud').classList.remove('hidden');
-        el('pause-btn').classList.remove('hidden');
-        el('help-btn-game').classList.remove('hidden'); // re-check controls mid-race
-        setPauseOverlay(!!data.paused); // re-raise a pause we missed while away
-        setHeldItem(null);   // PLAYER_STATE relights the USE button if we're holding something
-        startDriving();      // resume streaming tilt to our still-racing car
-      } else {
-        // Lobby, results, or waiting on the next race. May be reached FROM the
-        // game screen (the display reloaded into a fresh lobby mid-race), so
-        // shut the drive surface down like GAME_END does.
-        stopDriving();
-        setPauseOverlay(false);
-        el('pause-btn').classList.add('hidden');
-        el('help-btn-game').classList.add('hidden');
-        show('lobby');
-        onEnterLobby();  // first lobby entry → teach controls (or surface blocked motion)
-      }
+    // The retained room snapshot (set_state) is the single source of truth:
+    // identity, roster, selection, chooser content, and which screen we belong
+    // on. Replayed on every (re)join and pushed on every change, so a reconnecting
+    // phone recovers its whole state here — no unicast WELCOME round-trip to miss.
+    case MSG.LOBBY_UPDATE:
+      syncRoom(data);
       break;
-    }
-    case MSG.LOBBY_UPDATE: {
-      roster = data.players || [];
-      hostPeerIndex = data.hostPeerIndex;
-      amHost = net.isHost(data.hostPeerIndex);
-      displayMode = modeFrom(data);                    // what the display has on record
-      if (displayMode) selectedMode = displayMode;     // host's pick, echoed to all
-      // The display is authoritative — adopt the colour + car it has on record
-      // for us (colour is auto-assigned; car confirms our pick).
-      const me = (data.players || []).find((p) => p.peerIndex === net.peerIndex);
-      if (me) {
-        myColorIndex = me.colorIndex;
-        if (me.carIndex != null) myCarIndex = me.carIndex;
-        if (me.name) myName = me.name;
-        amReady = !!me.ready;
-        applyLivery();
-      }
-      renderLobby();
-      // Host duty can move while the results board is up (the host left) — the
-      // footer's "New game" button must follow it or nobody can start the next
-      // game from a phone until the display's failsafe kicks in.
-      if (inResults && lastStandings) renderResultFoot(lastStandings);
-      break;
-    }
+    // Transient haptic tick (3..2..1..GO). The snapshot owns the screen; this is
+    // just the buzz plus a fresh-race USE reset.
     case MSG.COUNTDOWN:
-      if (waitingForNextRace) break;   // the running race isn't ours — keep the waiting lobby
-      inResults = false;               // a fresh race clears any leftover results overlay
-      show('game');
-      el('drive-hud').classList.remove('hidden'); // full HUD up front — the countdown lives on the display
-      if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]); // haptic tick on counts, stronger on GO
-      setPauseOverlay(false);          // a fresh countdown clears any stale pause UI
-      el('pause-btn').classList.remove('hidden');
-      el('help-btn-game').classList.remove('hidden');
-      setHeldItem(null);               // USE off at the line (no PLAYER_STATE yet during countdown)
-      startDriving();                  // stream tilt during the countdown (display reacts)
+      if (waitingForNextRace || inResults) break;
+      if (data.n >= 0) buzz(data.n > 0 ? 20 : [0, 90]);
+      setHeldItem(null);               // USE off at the line — ITEM relights it once boxes roll
       break;
-    case MSG.GAME_START:
-      // Fires on the "GO!" beat. The HUD is already up from COUNTDOWN; this just
-      // covers a player who joined too late to get the countdown messages.
-      if (waitingForNextRace) break;   // no car of ours in this race
-      show('game');
-      el('drive-hud').classList.remove('hidden');
-      el('pause-btn').classList.remove('hidden');
-      el('help-btn-game').classList.remove('hidden');
-      setHeldItem(null);
-      startDriving();
+    // Held item → lights the USE button. Per-owner, so it rides its own message
+    // (on change + once on reconnect), never the shared room snapshot.
+    case MSG.ITEM:
+      if (inResults) break;
+      setHeldItem(data.item);
       break;
-    case MSG.PLAYER_STATE:
-      if (inResults) break;            // finished → results overlay owns the screen now
-      setHeldItem(data.item);          // lights the ITEM button (identity shows on the display)
-      break;
-    case MSG.STANDINGS: {
-      // Live finish board. Refresh who's host (may have shifted if someone left)
-      // and render; flip to the overlay once the race is over (everyone, incl.
-      // DNF) or as soon as MY car crosses the line — I'm on autopilot now.
-      // Waiting on the next race: mid-race boards aren't ours, but the FINAL
-      // board is — it lists us as "Next race", so join everyone on the results.
-      if (waitingForNextRace && !data.over) break;
-      lastStandings = data;
-      hostPeerIndex = data.hostPeerIndex;
-      amHost = net.isHost(data.hostPeerIndex);
-      renderResults(data);
-      const mine = (data.order || []).find((o) => o.playerId === net.peerIndex);
-      if (data.over || (mine && mine.finished)) showResultsScreen();
-      break;
-    }
-    case MSG.GAME_PAUSED:
-      if (inResults || waitingForNextRace) break; // not in this race — no pause overlay
-      stopBrakeRumble();               // the overlay covers BRAKE — don't hum through the pause
-      setPauseOverlay(true);
-      break;
-    case MSG.GAME_RESUMED:
-      if (inResults || waitingForNextRace) break;
-      setPauseOverlay(false);
-      break;
-    case MSG.GAME_END:
-      inResults = false;
-      waitingForNextRace = false;      // back in the lobby — we're in the next race for real
-      lastStandings = null;
-      stopDriving();
-      setPauseOverlay(false);
-      el('pause-btn').classList.add('hidden');
-      el('help-btn-game').classList.add('hidden');
-      renderLobby();                   // restore the ready footer the waiting note replaced
-      show('lobby');
-      break;
+  }
+}
+
+// Land this phone on the screen the snapshot describes, and adopt its identity /
+// roster / chooser content. Idempotent by design: it runs on every replay and
+// every push, so each branch must be a safe no-op when we're already there.
+function syncRoom(data) {
+  hideConn();   // the snapshot reached us ⇒ the relay link + the display are alive
+
+  // Chooser content, display-authoritative. tracks ride the snapshot in the lobby
+  // only, so keep the last set for the picker; cars + palette come on every push.
+  if (data.cars) carCatalog = data.cars;
+  if (data.colors) colorPalette = data.colors;
+  if (data.tracks) trackCatalog = data.tracks;
+
+  roster = data.players || [];
+  hostPeerIndex = data.hostPeerIndex;
+  amHost = net.isHost(hostPeerIndex);
+  displayMode = modeFrom(data);
+  if (displayMode) selectedMode = displayMode;
+
+  const me = roster.find((p) => p.peerIndex === net.peerIndex);
+  // The first replay after `joined` can arrive before our HELLO is seated — wait
+  // for the push that includes us instead of routing off a roster we're not in.
+  if (!me) return;
+  myColorIndex = me.colorIndex;
+  if (me.carIndex != null) myCarIndex = me.carIndex;
+  if (me.name) myName = me.name;
+  amReady = !!me.ready;
+  applyLivery();
+  if (!amReady) maybeRestoreCar(); // ready = car locked; don't fight the display's record
+
+  const rs = data.roomState;
+  const midRace = rs === ROOM_STATE.COUNTDOWN || rs === ROOM_STATE.PLAYING;
+  waitingForNextRace = midRace && me.inRace === false;
+  const board = data.standings;
+  if (board) lastStandings = board;
+  // My car is home (finished, or the race is over) → the results board owns my
+  // screen even while others are still out.
+  const mineDone = board && (board.over || (board.order || []).some((o) => o.playerId === net.peerIndex && o.finished));
+
+  if (rs === ROOM_STATE.RESULTS || (midRace && !waitingForNextRace && mineDone)) {
+    if (board) { renderResults(board); showResultsScreen(); }
+  } else if (midRace && !waitingForNextRace) {
+    // Drop into the live race (or the countdown — tilt streams so the display reacts).
+    inResults = false;
+    show('game');
+    el('drive-hud').classList.remove('hidden');
+    el('pause-btn').classList.remove('hidden');
+    el('help-btn-game').classList.remove('hidden');
+    setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
+    if (data.paused) stopBrakeRumble();
+    startDriving();                  // resume/continue streaming tilt to our car
+  } else if (waitingForNextRace && board && board.over) {
+    // Late joiner and the FINAL board is up — it lists us as "Next race", so join
+    // everyone on the results screen.
+    renderResults(board); showResultsScreen();
+  } else {
+    // Lobby proper, or waiting on the next race. May be reached FROM the game
+    // screen (display reloaded mid-race), so shut the drive surface down.
+    if (rs === ROOM_STATE.LOBBY) { waitingForNextRace = false; inResults = false; lastStandings = null; }
+    const entering = currentScreen !== 'lobby';
+    stopDriving();
+    setPauseOverlay(false);
+    el('pause-btn').classList.add('hidden');
+    el('help-btn-game').classList.add('hidden');
+    renderLobby();
+    show('lobby');
+    if (entering) onEnterLobby(); // teach controls / surface blocked motion once, on entry
   }
 }
 
@@ -424,7 +386,7 @@ function renderResults(data) {
     else if (!o.finished) li.classList.add('is-racing');
     const dot = document.createElement('span');
     dot.className = 'res-dot';
-    dot.style.background = CAR_COLORS[o.colorIndex] || '#888';
+    dot.style.background = liveryOf(o.colorIndex);
     const name = document.createElement('span');
     name.className = 'res-name';
     name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
@@ -477,13 +439,13 @@ function renderResultFoot(data) {
       wait.textContent = `Next race starting soon: ${s.nextTrackName || '…'}`;
     } else {
       const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
-      renderWaitNote(wait, { name: host && host.name, color: host && CAR_COLORS[host.colorIndex] }, ' to start a new game…');
+      renderWaitNote(wait, { name: host && host.name, color: host && liveryOf(host.colorIndex) }, ' to start a new game…');
     }
   }
 }
 
 function applyLivery() {
-  const c = CAR_COLORS[myColorIndex] || '#888';
+  const c = liveryOf(myColorIndex);
   document.documentElement.style.setProperty('--car', c);
   // Retint the launcher's accent chrome (name chip, spinner, rename sheet) to
   // match this player's livery — a live §4 hint. Mutating the meta's content is
@@ -509,7 +471,7 @@ function applyLivery() {
 function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
-  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady });
+  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
   if (waitingForNextRace) {
@@ -527,10 +489,10 @@ function renderLobby() {
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
     canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
-    host: hostP && { name: hostP.name, color: CAR_COLORS[hostP.colorIndex] },
+    host: hostP && { name: hostP.name, color: liveryOf(hostP.colorIndex) },
     others: roster   // every non-host racer but me (for the host that's everyone else)
       .filter((p) => p.peerIndex !== net.peerIndex && p.peerIndex !== hostPeerIndex && p.connected !== false)
-      .map((p) => ({ name: p.name, color: CAR_COLORS[p.colorIndex], ready: !!p.ready }))
+      .map((p) => ({ name: p.name, color: liveryOf(p.colorIndex), ready: !!p.ready }))
   });
 }
 
@@ -616,8 +578,8 @@ function chooseCar(i) {
 // saved index is out of range, or it already matches what the display gave us.
 function maybeRestoreCar() {
   const stored = storedCarIndex();
-  const count = (window.CAR_MODELS || []).length;
-  if (stored == null || stored < 0 || stored >= count || stored === myCarIndex) return;
+  const count = carCatalog.length; // display-authoritative roster (from the snapshot)
+  if (!count || stored == null || stored < 0 || stored >= count || stored === myCarIndex) return;
   myCarIndex = stored;
   net.send(MSG.SET_CAR, { carIndex: stored });
 }
