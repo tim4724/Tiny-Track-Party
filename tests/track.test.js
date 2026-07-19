@@ -313,10 +313,12 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
 
 // The room snapshot ships each track as packSchematic(...) — an RDP-simplified,
 // uint8-packed base64 path — and the phone unpackSchematic()s it back into the
-// { viewBox, d, start } the picker renders. Guard the codec's three promises:
-// it round-trips to a valid path, it actually SIMPLIFIES (few points, so the whole
-// catalog fits the relay's 16 KiB set_state), and it stays FAITHFUL (no point of
-// the full-res loop strays far from the drawn polyline — corners aren't clipped).
+// { viewBox, d, start } the picker renders (a smoothed spline through the packed
+// points). Guard the codec's promises against the PACKED BYTES directly (so the
+// checks don't depend on the rendered path's spline form): it decodes to a valid
+// closed path, it actually SIMPLIFIES (few points → the catalog fits the relay's
+// 16 KiB set_state), and it stays FAITHFUL (no full-res point strays far from the
+// kept polyline — corners aren't clipped).
 test('packSchematic round-trips, simplifies, and preserves the silhouette', () => {
   // perpendicular distance from p to segment a-b
   const perp = (p, a, b) => {
@@ -326,18 +328,24 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
     return Math.hypot(p[0] - (a[0] + u * dx), p[1] - (a[1] + u * dy));
   };
   const pointsOf = (d) => d.replace(/^M/, '').replace(/ Z$/, '').split(' L').map((s) => s.trim().split(' ').map(Number));
+  // Decode a packed base64 string straight to its [x,y] points — format-agnostic.
+  const packedPoints = (b64) => {
+    const bin = atob(b64), pts = [];
+    for (let i = 0; i < bin.length; i += 2) pts.push([bin.charCodeAt(i), bin.charCodeAt(i + 1)]);
+    return pts;
+  };
 
   let totalBytes = 0, worst = 0;
   for (const t of TRACK_LIST) {
     const full = trackSchematic(buildTrack(t));
     const packed = packSchematic(full);
     const back = unpackSchematic(packed);
+    const pts = packedPoints(packed);
     totalBytes += packed.length;
 
-    // 1. round-trips to a renderable path in the 256 space, start = first point.
+    // 1. round-trips to a renderable closed path in the 256 space; start = first point.
     assert.equal(back.viewBox, '0 0 256 256', `${t.id}: viewBox`);
-    assert.match(back.d, /^M[\d ]+( L[\d ]+)+ Z$/, `${t.id}: valid closed path`);
-    const pts = pointsOf(back.d);
+    assert.match(back.d, /^M[\d. ]+( [CL][\d. ]+)+ Z$/, `${t.id}: valid closed path`);
     assert.deepEqual(back.start, { x: pts[0][0], y: pts[0][1] }, `${t.id}: start is the first point`);
     for (const [x, y] of pts) {
       assert.ok(x >= 0 && x <= 255 && y >= 0 && y <= 255, `${t.id}: point in the byte range`);
@@ -348,10 +356,10 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
     assert.ok(pts.length < 100 && pts.length < fullPts.length / 3,
       `${t.id}: expected an aggressive reduction, got ${pts.length} of ${fullPts.length}`);
 
-    // 3. stays faithful: every full-res point is near the simplified polyline.
+    // 3. stays faithful: every full-res point is near the kept polyline.
     for (const p of fullPts) {
       let best = Infinity;
-      for (let i = 0; i < pts.length - 1; i++) best = Math.min(best, perp(p, pts[i], pts[i + 1]));
+      for (let i = 0; i < pts.length; i++) best = Math.min(best, perp(p, pts[i], pts[(i + 1) % pts.length]));
       worst = Math.max(worst, best);
     }
   }
