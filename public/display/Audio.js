@@ -59,6 +59,9 @@ export const RACE_MUSIC = {
   playroom: [
     song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194, -11.9),
     song('bit_shift.mp3', 'Bit Shift', 192, -13.3),
+    song('chipper_doodle_v2.mp3', 'Chipper Doodle v2', 172, -12.2),
+    song('voice_over_under.mp3', 'Voice Over Under', 197, -15.4),
+    song('delightful_d.mp3', 'Delightful D', 184, -10.3),
   ],
   snow: [
     song('wallpaper.mp3', 'Wallpaper', 220, -11.2),
@@ -70,15 +73,15 @@ export const RACE_MUSIC = {
   grass: [
     song('happy_bee.mp3', 'Happy Bee', 302, -9.1),
     song('hyperfun.mp3', 'Hyperfun', 233, -19.1),
-    song('flying_kerfuffle.mp3', 'Flying Kerfuffle', 250, -9.4),
+    song('feelin_good.mp3', 'Feelin Good', 225, -18.0),
+    song('vivacity.mp3', 'Vivacity', 232, -12.8),
+    song('happy_happy_game_show.mp3', 'Happy Happy Game Show', 158, -9.7),
   ],
   canyon: [
     song('still_pickin.mp3', 'Still Pickin', 298, -13.9),
     song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181, -16.7),
     song('surf_shimmy.mp3', 'Surf Shimmy', 123, -13.4),
     song('bama_country.mp3', 'Bama Country', 212, -18.2),
-    song('guts_and_bourbon.mp3', 'Guts and Bourbon', 209, -8.7),
-    song('neo_western.mp3', 'Neo Western', 146, -15.7),
   ],
   // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
   // the neutral ex-global track rather than silence. Exported for the music

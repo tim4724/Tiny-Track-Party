@@ -16,9 +16,11 @@ the live map, so it can't drift; tests/credits.test.js guards completeness):
   "Beachfront Celebration", "Island Meet and Greet", "Paradise Found",
   "Tiki Bar Mixer", "Arroz Con Pollo", "Itty Bitty 8 Bit", "Bit Shift",
   "Wallpaper", "New Friendly", "Glitter Blast", "Cloud Dancer",
-  "Digital Lemonade", "Happy Bee", "Hyperfun", "Flying Kerfuffle",
+  "Digital Lemonade", "Happy Bee", "Hyperfun", "Feelin Good", "Vivacity",
+  "Happy Happy Game Show",
+  "Chipper Doodle v2", "Voice Over Under", "Delightful D",
   "Still Pickin", "Desert of Lost Souls",
-  "Surf Shimmy", "Bama Country", "Guts and Bourbon", "Neo Western"
+  "Surf Shimmy", "Bama Country"
   by Kevin MacLeod (incompetech.com)
   Licensed under Creative Commons: By Attribution 4.0
   https://creativecommons.org/licenses/by/4.0/
@@ -33,6 +35,9 @@ picks randomly from its biome's pool, never repeating the previous song):
   arroz_con_pollo.mp3         Beach     "Arroz Con Pollo"
   itty_bitty_8_bit.mp3        Playroom  "Itty Bitty 8 Bit"
   bit_shift.mp3               Playroom  "Bit Shift"
+  chipper_doodle_v2.mp3       Playroom  "Chipper Doodle v2"
+  voice_over_under.mp3        Playroom  "Voice Over Under"
+  delightful_d.mp3            Playroom  "Delightful D"
   wallpaper.mp3               Snow      "Wallpaper"
   new_friendly.mp3            Snow      "New Friendly"
   glitter_blast.mp3           Snow      "Glitter Blast"
@@ -40,12 +45,12 @@ picks randomly from its biome's pool, never repeating the previous song):
   digital_lemonade.mp3        Snow      "Digital Lemonade"
   happy_bee.mp3               Backyard  "Happy Bee"
   hyperfun.mp3                Backyard  "Hyperfun"
-  flying_kerfuffle.mp3        Backyard  "Flying Kerfuffle"
+  feelin_good.mp3             Backyard  "Feelin Good"
+  vivacity.mp3                Backyard  "Vivacity"
+  happy_happy_game_show.mp3   Backyard  "Happy Happy Game Show"
   still_pickin.mp3            Canyon    "Still Pickin"
   desert_of_lost_souls.mp3    Canyon    "Desert of Lost Souls"
   surf_shimmy.mp3             Canyon    "Surf Shimmy"
   bama_country.mp3            Canyon    "Bama Country"
-  guts_and_bourbon.mp3        Canyon    "Guts and Bourbon"
-  neo_western.mp3             Canyon    "Neo Western"
 
 No changes were made to any track (looped only).

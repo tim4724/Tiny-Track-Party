@@ -44,6 +44,28 @@ downloaded from incompetech.com; the manifest's `biome` field carries the target
   [CC-BY 4.0] grass    — Fuzzball Parade / Flying Kerfuffle / Raving Energy (faster) / Le Grand Chase
   [CC-BY 4.0] snow     — Digital Lemonade / Pookatori and Friends / Balloon Game / Cloud Dancer
 
+Round 4 candidates (2026-07-17) — more Backyard + Playroom, Kevin MacLeod
+CC-BY 4.0, downloaded from incompetech.com; `biome` field carries the target:
+  [CC-BY 4.0] grass    — Life of Riley / Fiddles McGinty / Feelin Good
+                         / Kings of Tara / Montauk Point / Porch Swing Days - faster
+  [CC-BY 4.0] playroom — Chipper Doodle v2 / Takeover of the 8-bit Synths
+                         / Reformat / Newer Wave / Show Your Moves / Merry Go
+
+Round 5 candidates (2026-07-17) — still more Backyard + Playroom, Kevin MacLeod
+CC-BY 4.0, downloaded from incompetech.com; `biome` field carries the target:
+  [CC-BY 4.0] grass    — Monster Promenade / Malt Shop Bop / Comin Round the
+                         Mountain / Galway / Vivacity
+  [CC-BY 4.0] playroom — Bleeping Demo / Voice Over Under / Mighty Like Us
+                         / Kawai Kitsune / Delightful D
+
+Antti Luode — Creative Commons Attribution 3.0 (CC-BY 3.0). A fairground / 8-bit
+Playroom candidate (the "Jahrmarkt Musik" request) from a second artist;
+downloaded from Wikimedia Commons, which documents the licence:
+  https://commons.wikimedia.org/wiki/File:8_Bit_Circus_(Antti_Luode).mp3
+  Required credit line if shipped, e.g.:
+  "8 Bit Circus by Antti Luode | Licensed under CC BY 3.0"
+  [CC-BY 3.0] playroom — 8 Bit Circus
+
 Komiku (chezmonplaisir.bandcamp.com) — CC0 1.0 Universal (public domain, no
 attribution required). Downloaded from archive.org:
   https://archive.org/details/Komikuitstimeforadventure
@@ -53,3 +75,44 @@ attribution required). Downloaded from archive.org:
   [CC0] beach    — Pirates libertaires / Surfing
   [CC0] snow     — La montagne
   [CC0] playroom — Jenifer The Game
+
+Round 7 candidates (2026-07-18) — high-tempo replacements after the Round 6
+Komiku batch was judged too slow; all Kevin MacLeod CC-BY 4.0, downloaded from
+incompetech.com. Picked by the catalogue's bpm/feel metadata (128–239 bpm,
+bouncy/driving/uplifting); `biome` field carries the target:
+  [CC-BY 4.0] grass    — Happy Happy Game Show / Off to Osaka
+  [CC-BY 4.0] playroom — Cyborg Ninja / Neon Laser Horizon
+                         / Cruising for Goblins / Cipher
+  [CC-BY 4.0] beach    — Meatball Parade / Sergio's Magic Dustbin
+
+Round 8 candidates (2026-07-18) — a big upbeat wave with a funfair sub-theme
+(ragtime / oompah / polka / carousel), all Kevin MacLeod CC-BY 4.0, downloaded
+from incompetech.com; picked by the catalogue's bpm/feel metadata. All measured
+promotion-safe (LUFS above the -19.2 target). `biome` field carries the target:
+  [CC-BY 4.0] funfair  — The Entertainer / Maple Leaf Rag (playroom)
+                         / Meanwhile in Bavaria / Ultra Polka (playroom)
+                         / Bushwick Tarantella / Four Beers' Polka (grass)
+  [CC-BY 4.0] playroom — Captain Scurvy / Outfoxing the Fox / Presenterator
+  [CC-BY 4.0] grass    — Upbeat Forever / Boogie Party / Minstrel Guild
+  [CC-BY 4.0] beach    — Surf Inspector / Freddy's Menagerie / Sock Hop
+  [CC-BY 4.0] snow     — Nothing Broken / Divertimento K131 / Nouvelle Noel
+  [CC-BY 4.0] canyon   — Tafi Maradi
+
+Round 9 candidates (2026-07-18) — OTHER artists / OTHER sources, tempo-verified
+with librosa BPM (slow picks dropped, unlike the earlier Komiku batch):
+
+Juhani Junkala — CC0 1.0 Universal (public domain, no attribution required).
+Seamless action-chiptune game loops; downloaded from archive.org:
+  https://archive.org/details/JuhaniJunkalafiveactionchiptunes
+  https://archive.org/details/JuhaniJunkala-ChiptuneAdventures
+  [CC0] playroom — Boss Fight / Level 1 / Level 2 / Level 3
+
+rolemusic — Creative Commons Attribution 4.0 (CC-BY 4.0). Melodic 8-bit /
+chiptune-rock; downloaded from archive.org (licence in item metadata):
+  https://archive.org/details/TheBlackDot
+  https://archive.org/details/rolemusic_singles
+  Required credit line if shipped, e.g.:
+  "<Track> by rolemusic | Licensed under CC BY 4.0"
+  [CC-BY 4.0] playroom — The White Frame / The White Kitty / Neoishiki
+                         / A Ninja Among Oscillators
+  [CC-BY 4.0] grass    — The Lucky Bench / Gringo Steele Rocks the 40

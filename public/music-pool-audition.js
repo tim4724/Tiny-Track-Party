@@ -124,11 +124,14 @@ async function build() {
     sub.className = 'src';
     // Biome-targeted candidates lead with their target (manifest `biome`) —
     // it's also folded into the searchable name, so typing "canyon" groups them.
+    // `added` is an ISO timestamp (date + optional Thh:mm); show it as
+    // "date hh:mm" so same-day rounds are legible under the Added sort.
+    const added = entry.added ? ` · added ${entry.added.replace('T', ' ')}` : '';
     const by = (entry.biome ? `→ ${entry.biome} · ` : '') + (entry.composer ? `${entry.composer} · ` : '');
     if (entry.source) {
-      sub.innerHTML = `${by}<a href="${entry.source}" target="_blank" rel="noopener">${file} ↗</a>`;
+      sub.innerHTML = `${by}<a href="${entry.source}" target="_blank" rel="noopener">${file} ↗</a>${added}`;
     } else {
-      sub.textContent = `${by}${file}`;
+      sub.textContent = `${by}${file}${added}`;
     }
     nameCell.appendChild(sub);
 
@@ -178,7 +181,10 @@ async function build() {
     row.append(star, nameCell, badge, btns, transport);
     grid.appendChild(row);
     const dur = Number.isFinite(entry.duration) && entry.duration > 0 ? entry.duration : 0;
-    rows.push({ row, file, name: `${entry.title} ${entry.composer} ${entry.biome || ''} ${file}`.toLowerCase(), cls, dur, picked, fav: () => favs.has(file), seek, time });
+    // `addedDate` (manifest ISO date) drives the "Added" sort; a missing date
+    // sorts as oldest ('' < any real date) so undated legacy rows sink under new.
+    const addedDate = typeof entry.added === 'string' ? entry.added : '';
+    rows.push({ row, file, name: `${entry.title} ${entry.composer} ${entry.biome || ''} ${file}`.toLowerCase(), cls, dur, added: addedDate, picked, fav: () => favs.has(file), seek, time });
   }
   applySort();
   applyFilter();
@@ -234,6 +240,11 @@ function applySort() {
       if (!a.dur !== !b.dur) return a.dur ? -1 : 1; // 0-duration rows last
       return (a.dur - b.dur) * dir;
     });
+  } else if (mode === 'added-asc' || mode === 'added-desc') {
+    // ISO dates compare lexicographically; sort is stable so same-date rows keep
+    // manifest order. '' (undated legacy) sorts as oldest either direction.
+    const dir = mode === 'added-desc' ? -1 : 1;
+    order = [...rows].sort((a, b) => (a.added < b.added ? -1 : a.added > b.added ? 1 : 0) * dir);
   }
   for (const r of order) grid.appendChild(r.row);
 }
