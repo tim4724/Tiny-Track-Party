@@ -51,12 +51,18 @@ export function trackSchematic(track) {
   };
 }
 
+// Point budget for a schematic that rides the room snapshot. The whole 20-track
+// catalog at this resolution is ~8 KiB, which is what lets it ride the relay's
+// retained set_state (16 KiB) instead of a 183 KiB per-phone WELCOME. This is the
+// ONE source of the number: the display reduces to it (main.js) and the gallery
+// preview must reduce to it too, or the gallery would flatter what a phone sees.
+export const SNAPSHOT_TRACK_PTS = 24;
+
 // Decimate a schematic's path to at most `maxPts` points (dropping `proj`), for
 // the phone's picker thumbnail. A full-detail loop is hundreds of points (~9 KiB);
-// a ~60–100 px picker tile reads fine at ~24, which is what lets the whole reduced
-// catalog ride the relay's retained room snapshot (set_state, 16 KiB) instead of a
-// 183 KiB WELCOME. Returns just { viewBox, d, start } — the shape the <svg> needs.
-export function reduceSchematic(s, maxPts = 24) {
+// a ~60–100 px picker tile reads fine at ~24. Returns just { viewBox, d, start }
+// — the shape the <svg> needs.
+export function reduceSchematic(s, maxPts = SNAPSHOT_TRACK_PTS) {
   if (!s || !s.d) return s ? { viewBox: s.viewBox, d: s.d || '', start: s.start || null } : s;
   const pts = s.d.replace(/^M/, '').replace(/ Z$/, '').split(' L');
   if (pts.length <= maxPts) return { viewBox: s.viewBox, d: s.d, start: s.start };

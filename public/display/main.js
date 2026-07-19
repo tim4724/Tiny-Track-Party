@@ -112,7 +112,7 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 //                  livery dots always match the car the display paints.
 const trackChooser = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: reduceSchematic(trackSchematic(built.get(t.id)), 24)
+  svg: reduceSchematic(trackSchematic(built.get(t.id))) // to SNAPSHOT_TRACK_PTS — same as the gallery preview
 }));
 const carChooser = CAR_MODELS.map((id, i) => {
   const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};
