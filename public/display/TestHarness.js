@@ -72,10 +72,10 @@ function buildMinimap(parent, track, colors) {
         let dot = dots.get(c.id);
         if (!dot) {
           dot = document.createElementNS(NS, 'circle');
-          dot.setAttribute('r', '3.4');
+          dot.setAttribute('r', '8.7');       // schematic viewBox is 0 0 256 256 (see trackSchematic VIEW)
           dot.setAttribute('fill', colors[c.id % colors.length]);
           dot.setAttribute('stroke', '#171a21');
-          dot.setAttribute('stroke-width', '1.2');
+          dot.setAttribute('stroke-width', '3');
           svg.appendChild(dot);
           dots.set(c.id, dot);
         }

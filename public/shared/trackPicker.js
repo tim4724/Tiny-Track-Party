@@ -61,7 +61,7 @@ export function cupTint(cupId, pct) {
 // Exported: the display's lobby cup slot renders the same minis (renderCupSlot).
 export function schematicSvg(svg, fieldTint) {
   const el = document.createElementNS(SVGNS, 'svg');
-  el.setAttribute('viewBox', svg.viewBox || '0 0 100 100');
+  el.setAttribute('viewBox', svg.viewBox || '0 0 256 256');
   el.setAttribute('class', 'track-map');
   el.setAttribute('aria-hidden', 'true');
   if (fieldTint) el.style.background = fieldTint;
@@ -78,7 +78,7 @@ export function schematicSvg(svg, fieldTint) {
       const dot = document.createElementNS(SVGNS, 'circle');
       dot.setAttribute('cx', svg.start.x);
       dot.setAttribute('cy', svg.start.y);
-      dot.setAttribute('r', '5');
+      dot.setAttribute('r', '13'); // ~2.56× the old r=5 for the 0 0 256 256 viewBox
       dot.setAttribute('class', 'track-map__start');
       el.appendChild(dot);
     }

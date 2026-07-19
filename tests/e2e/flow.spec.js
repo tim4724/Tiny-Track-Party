@@ -20,6 +20,16 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await expect(bob.locator('#ready-btn')).not.toHaveClass(/is-pressed/);
   await expect(bob.locator('.car-opt').first()).toBeEnabled();
 
+  // Record every retained-state snapshot the display publishes from here on, in
+  // order, and note who's seated — so we can prove the race's FIRST snapshot
+  // already marks them as racing (regression guard below).
+  await page.evaluate(() => {
+    window.__snaps = [];
+    const p = window.__net.party, orig = p.setState.bind(p);
+    p.setState = (payload) => { window.__snaps.push(JSON.parse(JSON.stringify(payload))); return orig(payload); };
+  });
+  const seated = await page.evaluate(() => window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+
   await startRace(alice, [bob]);
 
   // Display flips to the race, phones get the drive HUD, countdown reaches GO.
@@ -27,6 +37,26 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await alice.waitForSelector(visible('#game'));
   await bob.waitForSelector(visible('#game'));
   await waitForRacing(page);
+
+  // The COUNTDOWN snapshot must ALREADY list every seated player inRace. The bug:
+  // the display flipped to COUNTDOWN before the race session existed, so inRace
+  // (read from session.hasCar) came out false for everyone and phones flashed the
+  // "you're in the next race" waiting screen for the whole countdown. A #game wait
+  // can't catch that — it just resolves late, at GO. So assert on the wire: no
+  // mid-race snapshot may show a seated racer as inRace:false.
+  const midRace = await page.evaluate((seated) => {
+    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
+    const offenders = mid.flatMap((s) => (s.players || [])
+      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
+      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
+    // The very first mid-race snapshot IS the countdown one — prove it exists and
+    // already marks everyone in, so the assertion can't pass vacuously.
+    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
+      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
+    return { offenders, firstCountdownOk };
+  }, seated);
+  expect(midRace.offenders).toEqual([]);
+  expect(midRace.firstCountdownOk).toBe(true);
 
   // Any phone can pause; the overlay raises on every screen.
   await bob.click('#pause-btn');

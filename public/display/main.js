@@ -6,7 +6,7 @@ import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
-import { trackSchematic } from './trackSchematic.js';
+import { trackSchematic, packSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -101,6 +101,24 @@ const trackCatalog = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
   svg: trackSchematic(built.get(t.id))
 }));
+
+// The controller is a dumb renderer driven entirely off the relay's retained room
+// snapshot (set_state) — so all the chooser CONTENT it needs travels the wire, not
+// a bundled copy that could diverge from a differently-versioned (native) display.
+// These are the slim, display-authoritative payloads that ride the snapshot:
+//   trackChooser — reduced schematics (~24 pts) so the whole catalog fits 16 KiB,
+//   carChooser   — car id/name/handling stats (images load by id from the web host),
+//   colorPalette — the livery hex palette (colorIndex → colour), so the phone's
+//                  livery dots always match the car the display paints.
+const trackChooser = TRACK_LIST.map((t) => ({
+  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+  svg: packSchematic(trackSchematic(built.get(t.id))) // RDP-simplified, uint8-packed base64 (see trackSchematic codec)
+}));
+const carChooser = CAR_MODELS.map((id, i) => {
+  const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};
+  return { id, name: (window.CAR_NAMES && window.CAR_NAMES[i]) || id, stats: { accel: s.accel, vmax: s.vmax, turn: s.turn, mass: s.mass } };
+});
+const colorPalette = CAR_COLORS.slice();
 
 // No track is selected at first: the lobby shows the plain diorama and the host's
 // "Start race" stays disabled until they pick one. ?track=<id> preselects (dev /
@@ -405,6 +423,10 @@ let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
 let autoPaused = false;    // race frozen because no connected human holds a car (silent; see refreshAutoPause)
 let lastPlayerState = 0;
+// Last held item pushed to each car's phone (peerIndex -> item|null), so ITEM is
+// sent only when it changes. Cleared per race (launchRace); a reconnect forces a
+// resend via onPlayerWelcomed.
+const _lastItem = new Map();
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
@@ -490,12 +512,12 @@ scene.onFrame = (dt) => {
     for (const c of snap.cars) {
       scene.setCarHud(c.id, c); // the TV's own HUD still shows place/lap from the car directly
       if (aiBots.has(c.id)) continue; // no phone behind an AI car
-      // The phone HUD shows no place/lap (standings live on the TV) and reads only the
-      // held item — so PLAYER_STATE now carries just that. Still sent periodically (not
-      // only on change) so a (re)joiner mid-race gets their ITEM button relit. A finished
-      // car keeps an item internally (victory-lap box pops, see Game._enterBox) but can't
-      // use it, so report an empty slot — the USE button stays dark on the results overlay.
-      net.sendTo(c.id, { type: MSG.PLAYER_STATE, item: c.finished ? null : c.item });
+      // Held item lights the phone's USE button (all other race state — place/lap,
+      // standings — lives on the TV or the room snapshot). It's per-owner, so it
+      // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes
+      // from onPlayerWelcomed). A finished car can't use its item, so report empty.
+      const item = c.finished ? null : c.item;
+      if (_lastItem.get(c.id) !== item) { _lastItem.set(c.id, item); net.sendTo(c.id, { type: MSG.ITEM, item }); }
     }
   }
 };
@@ -507,6 +529,8 @@ const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
   trackCatalog,
+  // Slim, display-authoritative chooser content for the retained room snapshot.
+  carChooser, trackChooser, colorPalette,
   defaultTrackId: selectedTrackId,
   drawRandomTrack: () => randomBag.draw(),
   // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
@@ -531,14 +555,16 @@ const net = new DisplayNet({
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
   isPaused: () => paused,
-  // Standings are broadcast-only, so a (re)joiner missed every board pushed
-  // while they were away. Catch them up: mid-race the live order (a rejoiner
-  // whose car already finished flips straight to the results overlay), during
-  // results the final board (instead of stranding them on the lobby screen).
+  // A (re)joining phone recovers all room/results state from the snapshot replay,
+  // but its held item is per-owner and rides ITEM (sent only on change) — so
+  // relight it here, once, or a reconnecting driver's USE button stays dark until
+  // their next pickup. No-op for a seat with no live car (lobby / late joiner).
   onPlayerWelcomed: (peerIndex) => {
-    if (!session) return;
-    if (net.roomState === ROOM_STATE.PLAYING) net.sendTo(peerIndex, standingsPayload(session.getResults(), false));
-    else if (net.roomState === ROOM_STATE.RESULTS) net.sendTo(peerIndex, standingsPayload(session.getResults(), true));
+    if (!session || !session.hasCar(peerIndex)) return;
+    const c = session.getSnapshot().cars.find((x) => x.id === peerIndex);
+    const item = c && !c.finished ? c.item : null;
+    _lastItem.set(peerIndex, item);
+    net.sendTo(peerIndex, { type: MSG.ITEM, item });
   },
   onControllerMessage: (from, data) => {
     if (data.type === MSG.CONTROL && session) session.processInput(from, data);
@@ -560,6 +586,7 @@ function forfeitCar(peerIndex) {
   if (!session || !session.forceRemoveCar(peerIndex)) return;
   scene.removeCar(peerIndex);
   audio.stopCarVoices(peerIndex); // its id leaves the loop — no zero-level update will come
+  net.syncState(); // inRace(peerIndex) just flipped false with no roster event — republish
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 
@@ -601,10 +628,10 @@ function refreshAutoPause() {
 net.flow.on('rosterchange', refreshAutoPause);
 
 // Escape hatch on top of the auto-pause: every racer is gone (only QR seats
-// left) while late joiners sit waiting in their lobby. Don't hold the newcomers
-// hostage for the full RECONNECT_GRACE_MS — give the dropped party a short
-// window to scan back in, then return to the lobby so the next race seats the
-// people who are actually here. The timer is disarmed the moment any racer
+// left) while late joiners sit waiting in their lobby. Dropped seats are held for
+// the whole race, so without this the newcomers would wait out the entire (frozen)
+// race — give the dropped party a short window to scan back in, then return to the
+// lobby so the next race seats the people who are actually here. The timer is disarmed the moment any racer
 // reconnects or the last waiting late joiner leaves (both fire rosterchange).
 const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000; // __abandonGraceMs: E2E hook to shorten the wait
 let abandonTimer = null;
@@ -801,8 +828,8 @@ function launchRace(players) {
   // Top the grid up to a full field with AI; keep the roster for the results screen.
   const field = buildField(players);
   currentField = field;
+  _lastItem.clear(); // fresh race — first frame resends every phone's (empty) ITEM
 
-  net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
   show('race');
   el('results').classList.add('hidden');
   paused = false;
@@ -845,8 +872,7 @@ function launchRace(players) {
       // up (it clears on the next tick). Fail-safe note: RaceSession enforces
       // MAX_RACE_MS internally so AFK/DNF cars can't hang the room forever. A
       // clean 3-lap is ~50-80 s.
-      net.flow.transitionTo(ROOM_STATE.PLAYING);
-      net.broadcast({ type: MSG.GAME_START });
+      net.flow.transitionTo(ROOM_STATE.PLAYING); // roomState=playing in the snapshot lands phones on the drive screen
       // Background song for the whole race, picked from the biome's pool. The
       // ?biome inspector override steers the music too, so an override race
       // sounds like it looks.
@@ -860,6 +886,15 @@ function launchRace(players) {
   // goes through the session query API (tests/portable-purity.test.js allowlists
   // exactly this line).
   window.__engine = session.engine;
+
+  // Flip to COUNTDOWN only now that the session exists: the statechange
+  // republishes the snapshot, and each player's inRace is read from
+  // session.hasCar(). Transitioning BEFORE the session was built published a
+  // snapshot with the OLD (or null) session — every racer's inRace came out
+  // false, so phones briefly showed "you're in the next race" until the GO beat
+  // (PLAYING) republished with the live session. No frame/await runs between
+  // here and now, so this is the first snapshot any phone sees for the race.
+  net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
 
   // Place cars at their grid poses immediately, and paint each cell's HUD
   // (place badge + LAP pill) right away so the chrome sits at its final size
@@ -882,10 +917,9 @@ function advanceSeriesRace() {
   if (net.roomState !== ROOM_STATE.RESULTS || !series || series.finished || !sceneReady) return;
   clearTimeout(endTimer);          // endRace armed the 60s back-to-lobby failsafe — it must not yank race N+1
   clearSeriesTimers();
-  // Who was waiting out the last race, BEFORE the field rebuild seats them.
-  // Their phones sit on "you're in the next race!" and only a fresh WELCOME
-  // (inRace now true) flips them to the wheel — GAME_END never comes mid-cup.
-  const joiners = lateJoiners();
+  // Phones that sat out the last race on "you're in the next race!" flip to the
+  // wheel off the snapshot: launchRace's COUNTDOWN transition republishes it with
+  // their inRace now true (GAME_END never comes mid-cup, so this is their signal).
   const players = net.flow.list().filter((p) => p.connected);
   if (!players.length) { returnToLobby(); return; } // everyone left mid-intermission
   series.advance();
@@ -894,8 +928,7 @@ function advanceSeriesRace() {
   // a chained start has no lobby step, so place the new circuit explicitly —
   // the results overlay covers the pop.
   scene.setTrack(track, { debug: _showCenterline });
-  launchRace(players);
-  for (const p of joiners) net.resendWelcome(p.peerIndex);
+  launchRace(players); // COUNTDOWN statechange republishes the snapshot (joiners now inRace) — no re-welcome
 }
 
 function clearSeriesTimers() {
@@ -1114,7 +1147,6 @@ function standingsPayload(results, over) {
     order.push({ playerId: p.peerIndex, name: p.name, colorIndex: p.colorIndex, joining: true });
   }
   return {
-    type: MSG.STANDINGS,
     over: !!over,
     hostPeerIndex: net.flow.host,
     ...(series ? { series: seriesInfo() } : {}),
@@ -1149,7 +1181,9 @@ function lateJoiners() {
   return net.flow.list().filter((p) => !!p.connected && !byId.has(p.peerIndex));
 }
 function broadcastStandings(over) {
-  if (session) net.broadcast(standingsPayload(session.getResults(), over));
+  if (!session) return;
+  const board = standingsPayload(session.getResults(), over);
+  net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
 }
 
 // The host ends the results screen with "New game" (RETURN_TO_LOBBY); this is
@@ -1323,6 +1357,11 @@ function returnToLobby() {
     const cup = CUPS.find((c) => c.id === net.cupId);
     if (cup && net.trackId !== cup.tracks[0]) { net.setTrack(cup.tracks[0]); trackSwapped = true; }
   }
+  // Tear the session down BEFORE the flow flips to LOBBY: that transition sweeps
+  // held disconnected seats (Net._freeDisconnectedSeats → playerleave), and with
+  // the session already gone forfeitCar no-ops instead of racing an endRace on
+  // the way out.
+  if (session) { session.dispose(); session = null; }
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
@@ -1335,9 +1374,8 @@ function returnToLobby() {
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   holdRaceChrome();
-  if (session) { session.dispose(); session = null; }
   aiBots = new Map(); currentField = [];
-  net.broadcast({ type: MSG.GAME_END, results: [] }); // controllers return to lobby
+  // controllers return to the lobby off the snapshot (roomState=lobby)
   show('lobby');
   // Crossfade from the frozen finish frame back to the attract demo (through the diorama):
   // drop the race cars + restart the demo under cover so the reset doesn't pop on screen.
@@ -1376,7 +1414,7 @@ function pauseRace() {
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   paused = true;
   syncSessionFrozen();
-  net.broadcast({ type: MSG.GAME_PAUSED });
+  net.syncState();  // paused is snapshot state — the republish is what tells the phones
   setPauseOverlay(true);
   holdRaceChrome(); // the overlay is a mouse target — cursor + buttons stay put while it's up
 }
@@ -1385,7 +1423,7 @@ function resumeRace() {
   if (!paused || !session) return;
   paused = false;
   syncSessionFrozen();
-  net.broadcast({ type: MSG.GAME_RESUMED });
+  net.syncState();  // paused cleared — the republish is what tells the phones
   setPauseOverlay(false);
   revealRaceChrome(); // racing again — re-arm the fade (this click already hid the overlay)
 }

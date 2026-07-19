@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
 let buildTrack, TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS, postAtSample;
+let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
   const mod = await import('../public/display/TrackBuilder.js');
   buildTrack = mod.buildTrack;
@@ -20,7 +21,11 @@ test.before(async () => {
   // the grid rule) iterate TRACK_LIST instead.
   ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
   postAtSample = mod.postAtSample;
-  trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
+  const schem = await import('../public/display/trackSchematic.js');
+  trackSchematic = schem.trackSchematic;
+  packSchematic = schem.packSchematic;
+  unpackSchematic = schem.unpackSchematic;
+  SCHEMATIC_EPS = schem.SCHEMATIC_EPS;
   TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
 });
 
@@ -304,6 +309,64 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
     assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t)),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
+});
+
+// The room snapshot ships each track as packSchematic(...) — an RDP-simplified,
+// uint8-packed base64 path — and the phone unpackSchematic()s it back into the
+// { viewBox, d, start } the picker renders (a smoothed spline through the packed
+// points). Guard the codec's promises against the PACKED BYTES directly (so the
+// checks don't depend on the rendered path's spline form): it decodes to a valid
+// closed path, it actually SIMPLIFIES (few points → the catalog fits the relay's
+// 16 KiB set_state), and it stays FAITHFUL (no full-res point strays far from the
+// kept polyline — corners aren't clipped).
+test('packSchematic round-trips, simplifies, and preserves the silhouette', () => {
+  // perpendicular distance from p to segment a-b
+  const perp = (p, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    if (!L2) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+    const u = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2;
+    return Math.hypot(p[0] - (a[0] + u * dx), p[1] - (a[1] + u * dy));
+  };
+  const pointsOf = (d) => d.replace(/^M/, '').replace(/ Z$/, '').split(' L').map((s) => s.trim().split(' ').map(Number));
+  // Decode a packed base64 string straight to its [x,y] points — format-agnostic.
+  const packedPoints = (b64) => {
+    const bin = atob(b64), pts = [];
+    for (let i = 0; i < bin.length; i += 2) pts.push([bin.charCodeAt(i), bin.charCodeAt(i + 1)]);
+    return pts;
+  };
+
+  let totalBytes = 0, worst = 0;
+  for (const t of TRACK_LIST) {
+    const full = trackSchematic(buildTrack(t));
+    const packed = packSchematic(full);
+    const back = unpackSchematic(packed);
+    const pts = packedPoints(packed);
+    totalBytes += packed.length;
+
+    // 1. round-trips to a renderable closed polyline in the 256 space; start = first point.
+    assert.equal(back.viewBox, '0 0 256 256', `${t.id}: viewBox`);
+    assert.match(back.d, /^M[\d ]+( L[\d ]+)+ Z$/, `${t.id}: valid closed path`);
+    assert.deepEqual(back.start, { x: pts[0][0], y: pts[0][1] }, `${t.id}: start is the first point`);
+    for (const [x, y] of pts) {
+      assert.ok(x >= 0 && x <= 255 && y >= 0 && y <= 255, `${t.id}: point in the byte range`);
+    }
+
+    // 2. simplifies hard: a full loop is hundreds of points; RDP keeps a small fraction.
+    const fullPts = pointsOf(full.d);
+    assert.ok(pts.length < 150 && pts.length < fullPts.length / 4,
+      `${t.id}: expected an aggressive reduction, got ${pts.length} of ${fullPts.length}`);
+
+    // 3. stays faithful: every full-res point is near the kept polyline.
+    for (const p of fullPts) {
+      let best = Infinity;
+      for (let i = 0; i < pts.length; i++) best = Math.min(best, perp(p, pts[i], pts[(i + 1) % pts.length]));
+      worst = Math.max(worst, best);
+    }
+  }
+  // eps + ½-unit quantization → worst deviation stays ~1 px on a 256-wide map.
+  assert.ok(worst <= SCHEMATIC_EPS + 1, `worst-case deviation ${worst.toFixed(2)} px is too high`);
+  // The whole catalog's packed paths must leave room under the 16 KiB set_state cap.
+  assert.ok(totalBytes < 8 * 1024, `packed catalog ${(totalBytes / 1024).toFixed(1)} KiB is too large`);
 });
 
 // The detailed quality suite (above) runs on the oval; re-check the things most

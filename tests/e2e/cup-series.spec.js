@@ -162,13 +162,37 @@ test('a mid-cup joiner is seated into the next series race and scores from there
   await expect(page.locator('#results-list')).toContainText('Carol');
   await expect(page.locator('#results-list')).toContainText('Next race');
 
-  // The chained start seats her — no GAME_END mid-cup, so the fresh WELCOME is
-  // what flips her phone from the waiting lobby to the wheel.
+  // The chained start seats her: with no GAME_END mid-cup, the race-2 COUNTDOWN
+  // snapshot (roomState + inRace) is what flips her phone from the waiting lobby
+  // to the wheel. Record from the chain onward and note who's seated, so we can
+  // prove that first snapshot already marks BOTH racers in (same guard as
+  // flow.spec.js, on the series-advance path: launchRace must build the race-2
+  // session BEFORE flipping to COUNTDOWN, or Carol flashes "next race" through
+  // the whole countdown and only lands on the wheel at GO).
+  await page.evaluate(() => {
+    window.__snaps = [];
+    const p = window.__net.party, orig = p.setState.bind(p);
+    p.setState = (payload) => { window.__snaps.push(JSON.parse(JSON.stringify(payload))); return orig(payload); };
+  });
+  const seated = await page.evaluate(() => window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+
   await alice.click('#newgame-btn');
   await waitForRacing(page);
   expect(await page.evaluate(() =>
     window.__session().carIds().filter((k) => !String(k).startsWith('ai-')).length)).toBe(2);
   await expect(carol.locator(visible('#game'))).toBeVisible();
+
+  const midRace = await page.evaluate((seated) => {
+    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
+    const offenders = mid.flatMap((s) => (s.players || [])
+      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
+      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
+    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
+      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
+    return { offenders, firstCountdownOk };
+  }, seated);
+  expect(midRace.offenders).toEqual([]);
+  expect(midRace.firstCountdownOk).toBe(true);
 
   // She scores from race 2 on: the next board carries a points row for her.
   await finishHumans(page);
