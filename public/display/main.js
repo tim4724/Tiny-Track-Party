@@ -6,7 +6,7 @@ import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
 import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
-import { trackSchematic, reduceSchematic } from './trackSchematic.js';
+import { trackSchematic, packSchematic } from './trackSchematic.js';
 import { RaceSession } from './RaceSession.js';
 import { AiController, AI_PERSONALITIES } from './AiDriver.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -112,7 +112,7 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 //                  livery dots always match the car the display paints.
 const trackChooser = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: reduceSchematic(trackSchematic(built.get(t.id))) // to SNAPSHOT_TRACK_PTS — same as the gallery preview
+  svg: packSchematic(trackSchematic(built.get(t.id))) // RDP-simplified, uint8-packed base64 (see trackSchematic codec)
 }));
 const carChooser = CAR_MODELS.map((id, i) => {
   const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};

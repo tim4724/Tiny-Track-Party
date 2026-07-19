@@ -247,9 +247,11 @@ body {
    with the toy road ribbon. Shared by the phone's track picker and the
    display's lobby cup slot; the container sizes it. */
 .track-map { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: var(--r-sm); background: color-mix(in srgb, var(--brand), #fff 78%); }
-.track-map__casing { fill: none; stroke: #fff; stroke-width: 9; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 5.5; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 1.5; }
+/* stroke-widths are in viewBox units; the schematic viewBox is 0 0 256 256 (see
+   trackSchematic VIEW) so these are ~2.56× their old 0-100 values. */
+.track-map__casing { fill: none; stroke: #fff; stroke-width: 23; stroke-linejoin: round; stroke-linecap: round; }
+.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 14; stroke-linejoin: round; stroke-linecap: round; }
+.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 4; }
 
 /* Dot — a livery colour swatch; set its background inline from CAR_COLORS. */
 .dot {

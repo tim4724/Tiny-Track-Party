@@ -7,6 +7,7 @@ import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
+import { unpackSchematic } from '../display/trackSchematic.js';
 import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 
@@ -294,7 +295,9 @@ function syncRoom(data) {
   // only, so keep the last set for the picker; cars + palette come on every push.
   if (data.cars) carCatalog = data.cars;
   if (data.colors) colorPalette = data.colors;
-  if (data.tracks) trackCatalog = data.tracks;
+  // Each track's svg rides the snapshot as a packed base64 string (RDP + uint8);
+  // decode it back to the { viewBox, d, start } the picker renders.
+  if (data.tracks) trackCatalog = data.tracks.map((t) => ({ ...t, svg: unpackSchematic(t.svg) }));
 
   roster = data.players || [];
   hostPeerIndex = data.hostPeerIndex;
