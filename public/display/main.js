@@ -628,10 +628,10 @@ function refreshAutoPause() {
 net.flow.on('rosterchange', refreshAutoPause);
 
 // Escape hatch on top of the auto-pause: every racer is gone (only QR seats
-// left) while late joiners sit waiting in their lobby. Don't hold the newcomers
-// hostage for the full RECONNECT_GRACE_MS — give the dropped party a short
-// window to scan back in, then return to the lobby so the next race seats the
-// people who are actually here. The timer is disarmed the moment any racer
+// left) while late joiners sit waiting in their lobby. Dropped seats are held for
+// the whole race, so without this the newcomers would wait out the entire (frozen)
+// race — give the dropped party a short window to scan back in, then return to the
+// lobby so the next race seats the people who are actually here. The timer is disarmed the moment any racer
 // reconnects or the last waiting late joiner leaves (both fire rosterchange).
 const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000; // __abandonGraceMs: E2E hook to shorten the wait
 let abandonTimer = null;
