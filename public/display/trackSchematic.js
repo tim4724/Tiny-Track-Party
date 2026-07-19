@@ -70,8 +70,15 @@ export function trackSchematic(track) {
 //   3. base64 so it rides the JSON set_state blob.
 // The viewBox is the constant `0 0 VIEW VIEW` and `start` is just the first point,
 // so neither is transmitted; unpackSchematic rebuilds both. Whole 20-track catalog
-// lands ~2.6 KiB with sub-pixel corner fidelity (vs ~8 KiB / clipped at 24 points).
-export const SCHEMATIC_EPS = 0.75; // max chord deviation kept, in viewBox units (≈ px at a 256-wide render)
+// lands ~3.9 KiB (snapshot ~6.4 KiB, ~40% of the cap) — faithful to the full-res
+// map (vs ~8 KiB / clipped at the old 24 uniform points).
+//
+// eps is tuned for FIDELITY, not just size: it's the max deviation (viewBox units ≈
+// px at a 256-wide render) a kept point may sit from the true curve. Lower = more
+// points = closer to the original. We have the byte budget, so this sits low enough
+// (~74 pts/track avg) that straight segments reproduce the real shape — smoothing is
+// deliberately NOT applied (see unpackSchematic for why it distorts more than it helps).
+export const SCHEMATIC_EPS = 0.35;
 const VBOX = `0 0 ${VIEW} ${VIEW}`;
 
 function pathPoints(d) {
@@ -119,33 +126,23 @@ export function packSchematic(s, eps = SCHEMATIC_EPS) {
   return toB64(buf);
 }
 
-// Smooth CLOSED SVG path (Catmull-Rom → cubic Bézier) through pts=[[x,y],…]. The
-// packed map is sparse (RDP kept ~50 points), so joining them with straight lines
-// facets the curves; a spline THROUGH the same points renders smooth at zero extra
-// wire cost — the corners RDP kept still anchor the shape, we just curve between
-// them. Uniform Catmull-Rom, tension 1/6; the loop wraps (cyclic) so the closing
-// segment is smooth too. Control-point coords rounded to 0.1 (DOM string only).
-function smoothClosedPath(pts) {
-  const n = pts.length;
-  if (n < 3) return n ? 'M' + pts.map((p) => p.join(' ')).join(' L') + ' Z' : '';
-  const P = (i) => pts[(i % n + n) % n];
-  const r = (v) => Math.round(v * 10) / 10;
-  let d = 'M' + P(0)[0] + ' ' + P(0)[1];
-  for (let i = 0; i < n; i++) {
-    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ' C' + r(c1x) + ' ' + r(c1y) + ' ' + r(c2x) + ' ' + r(c2y) + ' ' + p2[0] + ' ' + p2[1];
-  }
-  return d + ' Z';
-}
-
 // Decode packSchematic → { viewBox, d, start }: exactly the shape schematicSvg
 // renders (so the picker is unchanged — decoding is a pure transport concern).
-// `d` is a smoothed spline through the packed points (see smoothClosedPath).
+// Straight segments between the kept points — NO spline. The full-res source is
+// itself a dense polyline, so at SCHEMATIC_EPS's resolution the kept points already
+// trace the true shape (sharp corners stay sharp, curves read smooth under the
+// round line-join). A Catmull-Rom/fillet spline was tried and reverted: RDP spaces
+// points too unevenly for a spline (it bowed straights) and any spline IMPOSES a
+// rounded look the original doesn't have — more points reproduces it, smoothing
+// distorts it.
 export function unpackSchematic(b64) {
   if (!b64) return { viewBox: VBOX, d: '', start: null };
-  const b = fromB64(b64), n = b.length >> 1, pts = [];
-  for (let i = 0; i < n; i++) pts.push([b[i * 2], b[i * 2 + 1]]);
-  return { viewBox: VBOX, d: smoothClosedPath(pts), start: pts.length ? { x: pts[0][0], y: pts[0][1] } : null };
+  const b = fromB64(b64), n = b.length >> 1;
+  let d = '', sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) {
+    const x = b[i * 2], y = b[i * 2 + 1];
+    if (i === 0) { sx = x; sy = y; }
+    d += (i === 0 ? 'M' : ' L') + x + ' ' + y;
+  }
+  return { viewBox: VBOX, d: d + ' Z', start: { x: sx, y: sy } };
 }

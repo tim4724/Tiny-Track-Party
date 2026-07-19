@@ -343,17 +343,17 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
     const pts = packedPoints(packed);
     totalBytes += packed.length;
 
-    // 1. round-trips to a renderable closed path in the 256 space; start = first point.
+    // 1. round-trips to a renderable closed polyline in the 256 space; start = first point.
     assert.equal(back.viewBox, '0 0 256 256', `${t.id}: viewBox`);
-    assert.match(back.d, /^M[\d. ]+( [CL][\d. ]+)+ Z$/, `${t.id}: valid closed path`);
+    assert.match(back.d, /^M[\d ]+( L[\d ]+)+ Z$/, `${t.id}: valid closed path`);
     assert.deepEqual(back.start, { x: pts[0][0], y: pts[0][1] }, `${t.id}: start is the first point`);
     for (const [x, y] of pts) {
       assert.ok(x >= 0 && x <= 255 && y >= 0 && y <= 255, `${t.id}: point in the byte range`);
     }
 
-    // 2. simplifies hard: a full loop is hundreds of points; RDP keeps well under 100.
+    // 2. simplifies hard: a full loop is hundreds of points; RDP keeps a small fraction.
     const fullPts = pointsOf(full.d);
-    assert.ok(pts.length < 100 && pts.length < fullPts.length / 3,
+    assert.ok(pts.length < 150 && pts.length < fullPts.length / 4,
       `${t.id}: expected an aggressive reduction, got ${pts.length} of ${fullPts.length}`);
 
     // 3. stays faithful: every full-res point is near the kept polyline.
