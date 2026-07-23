@@ -80,6 +80,16 @@
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon
+//   boost: (optional)                   the biome's speed-accent hex (default teal
+//                                       DEFAULT_BOOST) — the ONE identity colour every
+//                                       boost surface derives from (pad disc + launch
+//                                       strip, the under-car aura, the wind streaks, the
+//                                       HUD item chip), via boostShades(). Chosen to POP
+//                                       against that biome's DECK, not to match its
+//                                       scenery (turquoise dies on the warm playroom/
+//                                       canyon decks — see the additive-aura fix); the
+//                                       cream pad chevrons stay constant across biomes as
+//                                       the "this is boost" tell
 //   ambient: (optional)                 { kind, count ≤1400, size?, tint?, opacity?,
 //                                       fall?, wind?, bob?, band? } — one Points cloud
 //                                       of ambient particles over the play field; the
@@ -203,6 +213,7 @@ export const THEMES = {
   grass: {
     sky:    { zenith: 0x59a7e8, horizon: 0x8ecae6, below: 0xc8e9f2 },
     fog:    0x8ecae6,
+    boost:  0x22c9b6, // the classic teal — the canonical backyard accent (= DEFAULT_BOOST)
     hemi:   { sky: 0xffffff, ground: 0x9aa68f, intensity: 2.2 },
     key:    { color: 0xfff1d0, intensity: 1.4 },
     ground: { kind: 'lawn' },
@@ -225,6 +236,7 @@ export const THEMES = {
   sunset: {
     sky:    { zenith: 0x5e74c0, horizon: 0xffb878, below: 0xffd9a8 },
     fog:    0xffb878,
+    boost:  0x4f7ce6, // deep sky blue — reads against the golden-grass deck (teal turns muddy in the warm key)
     hemi:   { sky: 0xffd0a0, ground: 0x8c7a66, intensity: 2.0 },
     key:    { color: 0xffa850, intensity: 1.55 },
     ground: { kind: 'lawn' },
@@ -245,6 +257,7 @@ export const THEMES = {
   beach: {
     sky:    { zenith: 0x37b4e6, horizon: 0xbfe7ec, below: 0xcdeef0 }, // below-horizon haze aqua, not sand — it now sits over water
     fog:    0xbfe7ec,
+    boost:  0x1fc0c9, // bright aqua — the one biome where the accent is meant to echo the scenery (the sea)
     hemi:   { sky: 0xffffff, ground: 0xd2bd8a, intensity: 2.35 },
     key:    { color: 0xfff0cf, intensity: 1.55 },
     ground: { kind: 'sand' },
@@ -306,6 +319,7 @@ export const THEMES = {
   canyon: {
     sky:    { zenith: 0x4292d4, horizon: 0xe8c8a2, below: 0xf4e3c6 },
     fog:    0xe8c8a2,
+    boost:  0x7a4fd0, // violet — high contrast on warm red-rock, where teal/aqua washes out in the sand-fog
     hemi:   { sky: 0xffeedd, ground: 0xb9825e, intensity: 2.15 },
     key:    { color: 0xffdca6, intensity: 1.6 },
     ground: { kind: 'redrock' },
@@ -365,6 +379,7 @@ export const THEMES = {
   snow: {
     sky:    { zenith: 0x6f9fd4, horizon: 0xdfe9f2, below: 0xf3f8fc },
     fog:    0xdfe9f2,
+    boost:  0x2f7de0, // strong blue — dark-on-white reads on the pale snow deck (ski-gate blue, echoes the kerbs/gantry)
     hemi:   { sky: 0xedf3fc, ground: 0xb2bdcc, intensity: 2.25 },
     key:    { color: 0xf4f8ff, intensity: 1.45 },
     ground: { kind: 'snow' },
@@ -429,6 +444,7 @@ export const THEMES = {
   playroom: {
     sky:    { zenith: 0x8cbcea, horizon: 0xf3e3c3, below: 0xfaf0da }, // pale nursery-blue wall up top, warm window-glow at the skirting
     fog:    0xf3e3c3,
+    boost:  0x39c24a, // green — complementary pop on the orange deck (teal went invisible here), clear of the blue rails
     hemi:   { sky: 0xfff2dc, ground: 0xa88860, intensity: 2.2 },     // warm room light, wood-floor bounce
     key:    { color: 0xffeac2, intensity: 1.5 },                     // low afternoon sun through the window
     ground: { kind: 'wood' },
@@ -523,3 +539,42 @@ export function themeByName(name) {
 
 // Biome names, for the debug panel's biome-override dropdown (kept in sync with THEMES).
 export const BIOME_NAMES = Object.keys(THEMES);
+
+// ── Boost accent ───────────────────────────────────────────────────────────
+// The classic turquoise, used by any biome that omits `boost` (and as the
+// pre-theming identity — the look before boost went per-biome).
+export const DEFAULT_BOOST = 0x22c9b6;
+
+// Format a 0xRRGGBB number as a '#rrggbb' string, for canvas fills / SVG strokes
+// (the boostShades consumers that draw to a 2D context rather than a THREE material).
+export const cssHex = (h) => '#' + (h & 0xffffff).toString(16).padStart(6, '0');
+
+// Mix a 0xRRGGBB toward white (t > 0) or black (t < 0) by |t| ∈ 0..1. Pure number
+// math (no THREE) so this module still loads in Node / the gallery.
+function mixHex(hex, t) {
+  const to = t >= 0 ? 255 : 0, a = t < 0 ? -t : t;
+  const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
+  const m = (c) => Math.round(c + (to - c) * a);
+  return (m(r) << 16) | (m(g) << 8) | m(b);
+}
+
+// Derive every boost SURFACE's colour from one identity hex, so the pad, the launch
+// strip, the under-car aura, the wind streaks and the HUD chip read as one accent per
+// biome. Returns numeric hexes (consumers format: css string for canvas/SVG, setHex
+// for THREE materials). Keep the recipe here so all surfaces stay in lockstep.
+export function boostShades(hex) {
+  const base = (hex == null) ? DEFAULT_BOOST : hex;
+  return {
+    base,
+    light:  mixHex(base, 0.55),   // pad-disc bright core (radial-gradient centre)
+    dark:   mixHex(base, -0.42),  // pad-disc rim (radial-gradient edge)
+    strip:  mixHex(base, -0.12),  // flat launch-strip body (no gradient — reads as paint)
+    disk:   mixHex(base, 0.15),   // under-car aura tint (over the falloff map) — the SATURATED
+                                  // accent with only a small lift for glow. It reads as the true
+                                  // biome hue because the falloff is now mostly-solid (see
+                                  // makeBoostDiskTexture) and drawn at high opacity, so the deck
+                                  // barely shows through — no muddy warm-deck blend, no white-out.
+    streak: mixHex(base, 0.86),   // near-white wind streak with the accent's cast
+    icon:   mixHex(base, -0.2),   // HUD item-chip stroke — darkened for contrast on paper
+  };
+}

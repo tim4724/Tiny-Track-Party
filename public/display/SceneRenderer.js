@@ -12,7 +12,7 @@ import {
   makeBoostDiskTexture, makeBoostDiskGeometry, makeUnderShadowTexture, makePlate, PLATE_Y, PLATE_Y_FRAC
 } from './render/textures.js';
 import { buildEnvironment, applyEnvTheme, applyAmbient, stepAmbient, stepKites, stepBalloon, stepPaperPlane, fitWater } from './render/environment.js';
-import { THEMES, themeForCup, SCENERY_MODELS } from '../shared/themes.js';
+import { THEMES, themeForCup, SCENERY_MODELS, boostShades, cssHex } from '../shared/themes.js';
 import { buildRibbonRoad, buildPillars, buildHills, buildPoles, buildLoopPoles, buildScenery, buildLandmarks } from './render/track.js';
 import { buildFinishGate } from './render/FinishGate.js';
 import { SkidMarks, SKID_WIDTH } from './render/SkidMarks.js';
@@ -71,6 +71,8 @@ const WHEEL_SPIN_SCALE = 0.4;  // visual roll as a fraction of literal ω=v/r (1
 // purpose: the baseline stays clean (cap what strobes, exaggerate what
 // communicates). Starting values.
 const STREAK_N = 4;           // streaks per car
+// Streak/disk hues are the BIOME's boost accent now (this._boostShades, re-derived in
+// _applyTheme); this default is the pre-theme teal, used before any track is set.
 const STREAK_COLOR = 0xdffcf8;// near-white with a teal cast (ties to the boost identity)
 const STREAK_FRONT = 0.7, STREAK_BACK = -2.4; // travel span in car-local Z (world units)
 const STREAK_OPACITY = 0.15;  // peak opacity at max boost — a whisper of airflow, not lasers
@@ -193,8 +195,14 @@ const RIDE_DAMP = 18;
 // 2D render of the actual Kenney item-banana GLB, baked offline like the car
 // picker thumbs (scripts/capture-item-icon.js → assets/toycar/thumbs/).
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
+// The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated in
+// _applyTheme, default teal for the pre-theme look). Takes a '#rrggbb' stroke string.
+// Two forward chevrons, apex-up (= travel), stacked and CENTRED on the 24×24 box:
+// each chevron is 6 tall, apexes 7 apart, so the pair spans y5.5..18.5 (centre 12)
+// with a 1u gap between the upper arms and the lower apex — even, not overlapping.
+const boostIconSvg = (stroke) => `<svg viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,11.5 12,5.5 19,11.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>`;
 const ITEM_ICONS = {
-  boost: '<svg viewBox="0 0 24 24" fill="none" stroke="#12a99a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,13.5 12,7.5 19,13.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>',
+  boost: boostIconSvg('#12a99a'),
   banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">',
   // Toy rocket: cream body (red outline), blue porthole, red fins, orange flame — the
   // 2D echo of the in-race procedural model (matched to the same toy palette). Inline
@@ -563,6 +571,11 @@ export class SceneRenderer {
     const baseTheme = THEMES.grass;
     this._theme = baseTheme;
     this._themeFog = baseTheme.fog;
+    // Boost accent shades for the current biome (pad textures live in TrackProps; the
+    // renderer owns the per-car aura disk + wind streaks + the HUD chip). Re-derived on
+    // every biome change in _applyTheme; cars built before the first track use this.
+    this._boostShades = boostShades(baseTheme.boost);
+    this._applyBoostShades(); // paint the streak template + HUD chip (no cars yet)
     // Inspector override (set by main.js from ?biome=<name>): when non-null, every track
     // renders in this biome regardless of its cup. Null in normal play → cup decides.
     this.biomeOverride = null;
@@ -995,7 +1008,24 @@ export class SceneRenderer {
     this._raceFog.far = RACE_FOG_FAR * tune;
     if (this._overviewFog) this._overviewFog.color.set(theme.fog);
     if (this._bbFog) this._bbFog.color.set(theme.fog);
+    // Boost accent → the renderer-owned boost surfaces (pad faces are TrackProps').
+    this._boostShades = boostShades(theme.boost);
+    this._applyBoostShades();
     this._theme = theme;
+  }
+
+  // Push the current biome's boost accent (this._boostShades) onto every renderer-owned
+  // boost surface: the shared wind-streak template (so future clones inherit it) and all
+  // live cars' streak clones + aura disks, plus the HUD item chip's SVG. Idempotent —
+  // called at boot and whenever the biome changes.
+  _applyBoostShades() {
+    const sh = this._boostShades;
+    if (this._streakMat) this._streakMat.color.setHex(sh.streak);
+    for (const c of this.cars.values()) {
+      if (c.boostDisk) c.boostDisk.material.color.setHex(sh.disk);
+      if (c.streaks) for (const st of c.streaks) st.mesh.material.color.setHex(sh.streak);
+    }
+    ITEM_ICONS.boost = boostIconSvg(cssHex(sh.icon));
   }
 
   // Free the previous track's MERGED geometries/materials (each setTrack makes
@@ -1443,15 +1473,16 @@ export class SceneRenderer {
     // crests, bank ramps), its verts are CONFORMED to the road surface every frame in
     // setCarPose, so the circle bends with the track. A child of the SCENE, not the
     // car group: the conform writes world-space positions directly.
-    // NORMAL (alpha) blend, not additive: additive teal all but vanishes against the
-    // bright orange Playroom deck (adding blue+green to a light warm colour barely
-    // shifts it), so the disk was invisible in-race there. Alpha blend paints the teal
-    // ON the deck, so it reads on orange plastic and grey asphalt alike — matching the
-    // boost pad, which is alpha-blended teal for the same reason.
+    // NORMAL (alpha) blend, not additive: an additive cool accent all but vanishes
+    // against a bright warm deck (adding blue+green to a light warm colour barely shifts
+    // it), so the disk was invisible in-race on the orange Playroom deck. Alpha blend
+    // paints the accent ON the deck, so it reads on orange plastic and grey asphalt alike
+    // — matching the boost pad, which is alpha-blended for the same reason. (The accent
+    // itself is now per-biome — green on Playroom, blue on Snow — see themes.boost.)
     const boostDisk = new THREE.Mesh(
       makeBoostDiskGeometry(BOOST_DISK_SEG, BOOST_DISK_RINGS),
       new THREE.MeshBasicMaterial({
-        map: this._diskTex, color: 0x2bd1c4, transparent: true, opacity: 0, // teal — matches the boost pad/item
+        map: this._diskTex, color: this._boostShades.disk, transparent: true, opacity: 0, // biome boost accent — matches the pad/item
         depthWrite: false, side: THREE.DoubleSide, blending: THREE.NormalBlending,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
       })
@@ -2023,10 +2054,17 @@ export class SceneRenderer {
     if (disk) {
       if (boostMul > 1.001) {
         const k = boostMul - 1;            // ~0.25 (leader floor) … 0.60 (last)
-        const pulse = 0.62 + 0.38 * Math.sin(this._last * 0.011); // ~1.8 Hz (rAF clock)
+        const pulse = 0.9 + 0.1 * Math.sin(this._last * 0.011);   // ~1.8 Hz (rAF clock); shallow
+                                        // breathe only — opacity stays NEAR-OPAQUE so the disc looks the
+                                        // same on any deck (the deck is ~15% of each pixel, not a co-author)
         disk.visible = true;
-        disk.material.opacity = Math.min(0.42, 0.18 + k * 0.5) * pulse;
-        const sc = (1.25 + k * 2.0) * (0.96 + 0.06 * pulse);       // size breathes with the pulse
+        disk.material.opacity = Math.min(0.85, 0.7 + k * 0.3) * pulse; // near-opaque: alpha-blending lets
+                                        // the deck brightness set the disc's contrast, so a translucent
+                                        // disc reads bold on dark decks (snow "huge") and washes out on
+                                        // bright ones (orange "whitish"). At ~0.85 the deck barely shows,
+                                        // so it's the true biome colour, same size, on every deck.
+        const sc = (1.25 + k * 1.4) * (0.94 + 0.08 * pulse);      // size breathes with the pulse (base back
+                                                                   // to a snug pool around the car — no deck-driven "huge")
         const outerR = (c.footW + c.footL) * 0.5 * sc * 0.5;       // disk radius from the footprint
         // Two in-surface axes (both ⟂ the surface normal u): right from the car basis,
         // and the car forward projected back into the surface plane.

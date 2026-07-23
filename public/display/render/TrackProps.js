@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { makePadTexture, makePadStripTexture, makeBlobShadowTexture, makeWetSignTexture } from './textures.js';
 import { clipRoadDecal } from './RoadDecal.js';
+import { DEFAULT_BOOST } from '../../shared/themes.js';
 
 // Oil-slick warning cones. They're cosmetic (the sim drives straight through), so
 // a car that gets close PUNTS them: the cone arcs up, tumbles, bounces with
@@ -83,8 +84,11 @@ export class TrackProps {
   constructor(scene, protos, bbox) {
     this.protos = protos;     // shared GLB prototype cache (filled by SceneRenderer.load)
     this._bbox = bbox;        // ?bbox=1 debug-outline flag
-    this._padTex = makePadTexture();
-    this._padStripTex = makePadStripTexture(); // full-width rectangular launch strip (loop mouths)
+    // Pad face textures carry the biome's boost accent — (re)built lazily in setTrack
+    // when the accent changes (guarded by _boostColor). Null until the first track.
+    this._padTex = null;
+    this._padStripTex = null; // full-width rectangular launch strip (loop mouths)
+    this._boostColor = undefined; // last accent the pad textures were baked for
     // Shared (renderer-lifetime) soft-blob shadow bits. The flat CircleGeometry is used
     // by the DYNAMIC props (bananas, monster) whose shadow must follow them per frame —
     // those stay a flat blob with a small lift. The STATIC item-box shadow instead cuts
@@ -152,6 +156,17 @@ export class TrackProps {
   // road's exact surface and can't be poked through on a crest/bank.
   setTrack(track, theme, deck) {
     this._deck = deck || [];
+    // Re-bake the pad faces if this biome's boost accent differs from the last (the
+    // grass fallback and same-biome switches cost nothing). The pad meshes are rebuilt
+    // every setTrack (_buildProps) and just read the current textures.
+    const boost = (theme && theme.boost != null) ? theme.boost : DEFAULT_BOOST;
+    if (boost !== this._boostColor) {
+      if (this._padTex) this._padTex.dispose();
+      if (this._padStripTex) this._padStripTex.dispose();
+      this._padTex = makePadTexture(boost);
+      this._padStripTex = makePadStripTexture(boost);
+      this._boostColor = boost;
+    }
     this._buildHazards(track, theme);
     this._buildProps(track);
     this._drawDebug({}); // static-prop bbox rings (cars/bananas added per-frame in sync)

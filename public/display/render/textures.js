@@ -2,6 +2,7 @@
 // builder shared by the display renderer (see SceneRenderer.js for how each is
 // used in the scene). Pure functions — no renderer state.
 import * as THREE from 'three';
+import { boostShades, cssHex } from '../../shared/themes.js';
 
 // Reverse a BufferGeometry's triangle winding in place. Used when baking MIRRORED
 // track tiles: a mirror placement has a negative-determinant matrix, so applyMatrix4
@@ -122,8 +123,13 @@ function makeBoostDiskTexture() {
   cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, w, 0); // u: 0 = centre, 1 = rim
+  // Mostly SOLID with only a thin feathered rim. A long feather leaves most of the
+  // disk at low alpha, and low-alpha accent over a bright warm deck (orange Playroom)
+  // blends to a muddy yellow — the visible ring around the car is exactly that feather.
+  // Holding alpha ≥0.94 out to 0.72 radius keeps the ring that peeks past the car
+  // high-alpha, so it reads as the true accent hue on any deck.
   g.addColorStop(0.0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.55, 'rgba(255,255,255,0.6)');
+  g.addColorStop(0.72, 'rgba(255,255,255,0.94)');
   g.addColorStop(1.0, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
@@ -529,17 +535,21 @@ function makeWetSignTexture() {
   return tex;
 }
 
-// Boost-pad face: a glowing teal disc with gold forward chevrons. Drawn opaque
+// Boost-pad face: a glowing disc with cream forward chevrons in the biome's boost
+// accent (`boost` hex → boostShades; light core → base → dark rim). Drawn opaque
 // (the CircleGeometry masks it to a disc) so it reads as a bright speed strip on
 // the road. The chevron apexes point toward canvas-top → texture v=1 → the pad's
 // +tangent axis (see _buildProps' basis), i.e. the direction of travel.
-function makePadTexture() {
+function makePadTexture(boost) {
+  const sh = boostShades(boost);
   const s = 64;
+  const S = 4;                 // supersample → smooth chevron strokes (64px alone is pixely on-deck)
   const cv = document.createElement('canvas');
-  cv.width = cv.height = s;
+  cv.width = cv.height = s * S;
   const ctx = cv.getContext('2d');
+  ctx.scale(S, S);             // draw in logical s×s coordinates, rendered at S× resolution
   const g = ctx.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2);
-  g.addColorStop(0, '#7dffe8'); g.addColorStop(0.7, '#22c9b6'); g.addColorStop(1, '#0e8f82');
+  g.addColorStop(0, cssHex(sh.light)); g.addColorStop(0.7, cssHex(sh.base)); g.addColorStop(1, cssHex(sh.dark));
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#fff4cc'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -553,22 +563,24 @@ function makePadTexture() {
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;          // keep chevrons crisp at the grazing chase-cam angle
   return tex;
 }
 
 // Boost-pad face for the FULL-WIDTH LAUNCH STRIP at a loop mouth (the rectangular
-// sibling of makePadTexture). FLAT matte teal — deliberately NO gradient/glow: a
-// centre-bright gradient fakes a 3D sheen so the wide strip reads as a slab of light
-// hovering over the asphalt rather than paint ON it. A grid of flat cream forward
-// chevrons tiles the width so it reads as a launch arrow, not one stretched disc.
-// Mapped onto a PlaneGeometry whose local +Y (texture v=1, canvas-top) is the pad's
-// +tangent → the chevron apexes point along travel, same convention as the disc.
-function makePadStripTexture() {
+// sibling of makePadTexture). FLAT matte accent (the biome's boost hex, `strip`
+// shade) — deliberately NO gradient/glow: a centre-bright gradient fakes a 3D sheen
+// so the wide strip reads as a slab of light hovering over the asphalt rather than
+// paint ON it. A grid of flat cream forward chevrons tiles the width so it reads as a
+// launch arrow, not one stretched disc. Mapped onto a PlaneGeometry whose local +Y
+// (texture v=1, canvas-top) is the pad's +tangent → the chevron apexes point along
+// travel, same convention as the disc.
+function makePadStripTexture(boost) {
   const w = 320, h = 128;
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#1fb6a6'; ctx.fillRect(0, 0, w, h);  // flat body — reads as paint
+  ctx.fillStyle = cssHex(boostShades(boost).strip); ctx.fillRect(0, 0, w, h);  // flat body — reads as paint
   ctx.strokeStyle = '#fdf3cf'; ctx.lineWidth = 9; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   // Chevrons in a cols×rows grid across the WIDTH (apex toward canvas-top = travel).
   const cols = 5, rows = 2, cw = w / cols, gap = 26, chev = 22, half = cw * 0.32;
