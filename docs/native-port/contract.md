@@ -78,7 +78,7 @@ frame for frame. Specifically:
   and the MSVC CRT differ in the last bit), so the C++ port must vendor math
   routines that reproduce V8's results rather than link system libm. Plain
   arithmetic and `Math.sqrt` are exact IEEE-754 everywhere. See the
-  conformance gate in [architecture.md](architecture.md).
+  conformance track in [plan.md](plan.md).
 - The same caveat applies WITHIN JavaScript: transcendental results change
   between V8 versions, and between architectures on the same V8 (per-arch
   codegen of V8's compiled fdlibm; observed as identical Node 26.5.0
