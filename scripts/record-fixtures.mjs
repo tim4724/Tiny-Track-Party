@@ -21,22 +21,31 @@ import { recordTrace, makeBots, scriptedHuman } from './record-trace.mjs';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtures', 'traces');
 
-const NEED_KINDS = ['spin', 'monster_end', 'finish', 'race_over', 'lap', 'pad', 'pickup', 'item_use', 'rocket_expire'];
+const NEED_KINDS = ['spin', 'monster_end', 'finish', 'lap', 'pickup', 'item_use', 'rocket_expire'];
 const NEED_CAUSES = ['banana', 'oil', 'rocket', 'monster'];
+const ENDGAME_FIELD = 5; // bots in the endgame race — all must finish inside the budget
 const ENDGAME_SEED = 39;
 const ENDGAME_SCAN_LIMIT = 500;
 
 function endgameConfig(seed) {
-  return { trackId: 'switchback', frames: 3600, seed, laps: 2, snapshotEvery: 400, bots: makeBots(5, seed) };
+  // Skysnake: the shortest shipped lap (~42 s), so a 2-lap race with full furniture
+  // chaos fits the frame budget. (The old anchor, retired dev-track Switchback, is gone.)
+  // The staged target-less rocket whiffs at end of run → guaranteed rocket_expire
+  // (bot rockets always connect on the shipped tracks, so no seed covers it naturally).
+  return {
+    trackId: 'skysnake', frames: 6600, seed, laps: 2, snapshotEvery: 400,
+    bots: makeBots(ENDGAME_FIELD, seed),
+    stage: [{ kind: 'rocket', s: 5, lat: 0 }]
+  };
 }
 
 function coverage(records) {
   const kinds = new Set(), causes = new Set();
-  let raceOver = null;
+  let finishes = 0, raceOver = null; // race over = the LAST car's finish (no race_over event in the contract)
   for (const r of records) for (const e of (r.events || [])) {
     kinds.add(e.type);
     if (e.type === 'spin') causes.add(e.cause);
-    if (e.type === 'race_over') raceOver = r.frame;
+    if (e.type === 'finish' && ++finishes >= ENDGAME_FIELD) raceOver = r.frame;
   }
   return { kinds, causes, raceOver };
 }
@@ -46,7 +55,7 @@ function missing(c) {
     ...NEED_KINDS.filter((k) => !c.kinds.has(k)).map((k) => `event:${k}`),
     ...NEED_CAUSES.filter((x) => !c.causes.has(x)).map((x) => `spin:${x}`),
   ];
-  if (c.raceOver === null) out.push('race_over within the frame budget');
+  if (c.raceOver === null) out.push('all finishes within the frame budget');
   return out;
 }
 
@@ -80,10 +89,10 @@ if (miss.length) {
   console.log(`seed ${seed} covers fully; update ENDGAME_SEED in scripts/record-fixtures.mjs and the README fixture list`);
 }
 for (const f of fs.readdirSync(DIR)) {
-  if (/^switchback-.*\.jsonl$/.test(f)) fs.unlinkSync(path.join(DIR, f));
+  if (/^skysnake-5bots-.*\.jsonl$/.test(f)) fs.unlinkSync(path.join(DIR, f));
 }
-write(`switchback-5bots-2laps-seed${seed}.jsonl`, out);
+write(`skysnake-5bots-2laps-seed${seed}.jsonl`, out);
 
 const c = coverage(out.records);
-console.log(`endgame coverage: kinds [${[...c.kinds].sort().join(', ')}], spin causes [${[...c.causes].sort().join(', ')}], race_over at frame ${c.raceOver}`);
+console.log(`endgame coverage: kinds [${[...c.kinds].sort().join(', ')}], spin causes [${[...c.causes].sort().join(', ')}], last finish at frame ${c.raceOver}`);
 console.log(`recorded on Node ${process.versions.node} (V8 ${process.versions.v8}) ${process.platform}/${process.arch}`);

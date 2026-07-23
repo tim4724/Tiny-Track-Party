@@ -1,14 +1,12 @@
 // Difficulty report card for every CATALOGUE track: the geometric metrics (measureTrack)
 // plus the headless AI lap probe (aiProbe) from the generator pipeline, run on the shipped
-// geometry. Two jobs: calibrate the per-profile difficulty bands in track-gen.mjs against
-// known reference tracks (meadow is the canonical Easy, switchback the canonical Hard,
-// twister the stunt ceiling), and sanity-check that a newly registered track actually
-// lands in its cup's band. Usage: node scripts/probe-difficulty.mjs
+// geometry. Job: sanity-check that a newly registered track actually lands in its cup's
+// band (the per-profile bands in track-gen.mjs were originally calibrated against the
+// since-deleted reference tracks — the probe numbers survive as comments there).
+// Usage: node scripts/probe-difficulty.mjs
 import { measureTrack, aiProbe, buildTrack } from './track-gen.mjs';
 
-// Both catalogues. The reference tracks this exists to calibrate against — meadow,
-// switchback, twister — are all RETIRED from the cups and live in devTracks.js, so reading
-// the shipped list alone would drop precisely the anchors the bands are pinned to.
+// Both catalogues (devTracks.js adds the Gym).
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
 const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
 

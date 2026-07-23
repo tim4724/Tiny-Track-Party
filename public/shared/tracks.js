@@ -33,82 +33,38 @@ const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
 //                                parallel, heading unchanged; upside down only at
 //                                the top instant. The tilt couples ~75° of frame
 //                                holonomy per loop — cancel it with a matching
-//                                `roll` (probe it; see Twister) or the stretch
-//                                after the loop rides visibly rolled.
-// opts (any segment): rise (Δelevation over the segment, eased), bump (net-flat hump
-//   amplitude), bank (peak roll°, eased — corners only in practice), roll (heartline
-//   twist about the centerline, eased over the segment and CUMULATIVE downstream —
-//   small rolls trim the geometric holonomy of climbing/tilted elements like the
-//   spiral and the drift loops; a full roll: 360 corkscrews the road around a
-//   straight line and self-cancels, e.g. a barrel roll),
-//   width (number or [start,end] taper, overriding the track default), lateral
-//   (straight-only net cross-shift, an S — a chicane is curve+curveR), pillars (stand
-//   support columns from the grass up to a raised deck — flag the ramp + bridge run
-//   of an overpass).
+//                                `roll` (probe it) or the stretch after the loop
+//                                rides visibly rolled.
+// opts (any segment): rise (Δelevation over the segment, eased), bank (peak roll°,
+//   eased — corners only in practice), roll (heartline twist about the centerline,
+//   eased over the segment and CUMULATIVE downstream — small rolls trim the geometric
+//   holonomy of climbing/tilted elements like the spiral and the drift loops; a full
+//   roll: 360 corkscrews the road around a straight line and self-cancels, e.g. a
+//   barrel roll), width (number or [start,end] taper, overriding the track default),
+//   pillars (stand support columns from the grass up to a raised deck — flag the
+//   ramp + bridge run of an overpass).
 //
 // ── HOW A TRACK CLOSES ───────────────────────────────────────────────────────
-// The builder walks the segments and auto-closes the loop (gap < 0.5). A straight
-// advances `length` along travel; an arc also turns the heading. Three proven recipes,
-// each worked in devTracks.js (the retired circuits are the reference implementations —
-// they're kept partly for this):
-//  1. OVAL/RECTANGLE (Switchback): four identical 90° corners of the SAME hand
-//     (4×90° = a full turn) with matched OPPOSITE sides → closes for any side length.
-//  2. FIGURE-8 (Crossover): three right + three left corners net 0° and cross once;
-//     a rise…fall pair on one strand lifts it into a bridge OVER the crossing (same
-//     plan footprint, so closure is unchanged).
-//  3. L-SHAPE (Riverside): five left + one right corner net a full turn but trace a
-//     re-entrant outline; side lengths tuned so it closes.
-// NET-NEUTRAL building blocks (each advances one `L`, so any can stand in for a
-// straight on a side): plain straight; a chicane (lateral −2 then +2); a bump
-// (net-flat); a rise…fall pair (net-flat climb then descent).
+// The builder walks the segments and auto-closes the loop (gap < 0.5): headings must
+// net a whole number of turns and the plan must return to the origin — the shipped
+// stunt tracks below get their leg lengths from scripts/compose-stunt.mjs's closure
+// solver rather than by hand. Rise…fall pairs are net-flat, so elevation closes by
+// construction.
 //
-// This module holds the tracks that SHIP — everything reachable from CUPS, i.e. the phone
-// picker. Dev surfaces and the circuits retired from the cups live in devTracks.js and
-// author with the same DSL (exported below); the geometry suites run against both.
+// This module holds the tracks that SHIP — everything reachable from CUPS, i.e. the
+// phone picker. Dev surfaces (the Gym) live in devTracks.js.
 
-const L = 4.0;        // base straight advance (unscaled)
-const W = 2.5;        // default drivable width (unscaled; ×SCALE → 5.0 world)
-const RS = 2.185;     // tight (small) corner radius
 const RL = 4.185;     // sweeping (large) corner radius
-// Some legs use L ± 0.37: a 90° arc of these radii advances slightly more/less along each
-// plan axis than a plain `L` straight, so the figure-8 (Crossover) and L-shaped (Riverside)
-// loops — both in devTracks.js — need a small leg nudge to close (gap ≈ 0). Values found
-// empirically and guarded by the "every named track closes" test, which iterates BOTH
-// catalogues — re-tune if a radius or layout changes.
 
 const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
 const arc = (radius, angle, opts = {}) => ({ kind: 'arc', radius, angle, ...opts });
 const loop = (radius, opts = {}) => ({ kind: 'loop', radius, ...opts });
-const run = (n, opts) => Array.from({ length: n }, () => straight(L, opts)); // n plain straights
-// Net-0 S. The lateral shift is kept SMALL on purpose: at neutral the understeer model
-// holds a world heading and washes the car sideways by ≈ the shift's full width, so a big
-// shift slides the car curb-to-curb (a left-right lurch you must fight). At ~0.8 the
-// neutral drift stays ~1.7 (well inside the 2.2 curb limit) — a gentle S you flow through
-// with light steering, not a jink that throws you at the kerb.
-const chicane = () => [straight(L, { lateral: -0.8 }), straight(L, { lateral: 0.8 })];
-const halfHill = () => [straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 })];  // net-flat
-const fullHill = () => [straight(L, { rise: 1.0 }), straight(L, { rise: -1.0 })];  // net-flat
-// A run of n straights whose width bulges to `peak` in the middle and eases back to the
-// default at both ends (each straight tapers between adjacent sine-curve samples, so the
-// width is continuous across the whole run — no step at any joint). Width never changes
-// the path, so closure is unaffected.
-const flare = (n, peak) => {
-  const wOf = (f) => W + (peak - W) * Math.sin(Math.PI * f);
-  return Array.from({ length: n }, (_, i) => straight(L, { width: [wOf(i / n), wOf((i + 1) / n)] }));
-};
 
-// The segment vocabulary, exported as one object so the OTHER segment-DSL catalogue
-// (devTracks.js — dev surfaces and the retired tracks the geometry suites still run
-// against) authors with the same primitives instead of a drifting copy. The DSL is
-// documented above, and stays here with its documentation; only the track DATA is split
-// by whether it ships. Everything a track needs to describe itself belongs in here.
-export const DSL = { L, W, RS, RL, straight, arc, loop, run, chicane, halfHill, fullHill, flare };
-
-// ---- Helix (Expert): the double-spiral skyway. Climb Twister's 450° spiral to a long
+// ---- Helix (Expert): the double-spiral skyway. Climb a 450° spiral to a long
 // pillared bridge riding the east side at height, then corkscrew back to earth through
 // a SAME-hand descending spiral; the south leg home threads an S-pair of tilted toy
 // loops. Same-hand spirals wind the lap to a net -1080° (3 full turns — the plan is
-// still a simple rounded rectangle, like Twister's -720 double wind). Composed by
+// still a simple rounded rectangle). Composed by
 // scripts/compose-stunt.mjs: the grid/top-leg lengths are its closure solve, each
 // stunt's `roll` its probe-measured holonomy trim (spiral-down needs ~none — the
 // descent's twist self-cancels against the same-hand climb already trimmed upstream).
@@ -247,8 +203,7 @@ const PADS = {
 // bridge decks and loops (pickups are safe, so a low deck is otherwise fine).
 const BOX_LANES = [-1.05, -0.35, 0.35, 1.05];
 const boxRow = (u) => BOX_LANES.map((lat) => ({ u, lat }));
-// Exported alongside DSL so devTracks.js lays its rows across the same lanes.
-export const boxRows = (...us) => us.flatMap(boxRow);
+const boxRows = (...us) => us.flatMap(boxRow);
 const BOXES = {
   helix:      boxRows(0.086, 0.705),  // auto-placed: the grid run, then the south leg past the loops
   skyline:    boxRows(0.131, 0.695),  // auto-placed: the north leg, then the flat past the toy loop
@@ -370,7 +325,7 @@ export const CUPS = [
   { id: 'snow',     name: 'Snow Cup',     tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings + climb (snow biome)
   { id: 'backyard', name: 'Backyard Cup', tracks: ['ribbon', 'pretzel', 'tangle', 'cloverleaf'] }, // middle: seeded multi-crossing circuits (grass biome)
   { id: 'canyon',   name: 'Canyon Cup',   tracks: ['wash', 'gulch', 'crag', 'sidewinder'] },   // hard: hairpins + stacked crossings (canyon biome)
-  // crazy: stunts (playroom biome — orange plastic track); crossover/coaster/twister retired.
+  // crazy: stunts (playroom biome — orange plastic track).
   // id stays 'rooftop' (wired into CUP_BIOME/selections); only the display name moved.
   { id: 'rooftop',  name: 'Playroom Cup', tracks: ['skysnake', 'skyline', 'helix', 'gauntlet'] }
 ];
@@ -393,7 +348,7 @@ for (const c of CUPS) {
 }
 
 // Stable display order for the gallery / picker — every cup's tracks, in cup order.
-export const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
+const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
 
 // Flat list — {id, name, difficulty, cup, cupName, cupDifficulty, segments, waypoints,
 // startU, oils, pads, boxes, poles} in cup order — used by main.js, the track picker, and

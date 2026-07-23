@@ -26,7 +26,7 @@
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
-import { buildRaceTrack, canonicalStringify, fnv1a, parseTrace } from './record-trace.mjs';
+import { applyStage, buildRaceTrack, canonicalStringify, fnv1a, parseTrace } from './record-trace.mjs';
 
 // First differing field path between two plain-JSON values, or null if equal.
 // Objects walk in sorted key order (canonical order, matching the trace
@@ -110,6 +110,7 @@ export function verifyTrace(trace) {
     track,
     { onEvent: (e) => pending.push(e) }
   );
+  applyStage(game, header.stage);
 
   // JSON object keys are ALWAYS strings, but roster ids keep their real JSON
   // types (numeric peerIndex in live-shaped rosters). Map each per-frame input

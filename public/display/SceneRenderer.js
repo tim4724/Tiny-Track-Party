@@ -1074,7 +1074,7 @@ export class SceneRenderer {
     // today — the finish gantry is procedural too, see render/FinishGate.js); the
     // grid/framing/shadow afterwards run on `collide.children` + centreline samples
     // regardless.
-    buildRibbonRoad(this, track, collide, theme); // road palette (asphalt/kerbs/planks) is the biome's
+    buildRibbonRoad(this, track, collide, theme); // road palette (asphalt/kerbs) is the biome's
     for (const inst of track.instances) {
       const proto = this.protos.get(inst.glb);
       if (!proto) continue;

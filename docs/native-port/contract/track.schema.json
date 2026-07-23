@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "version": {
-      "const": 1,
+      "const": 2,
       "description": "CONTRACT_VERSION stamp (public/display/engine/contract.js)."
     },
     "instances": {

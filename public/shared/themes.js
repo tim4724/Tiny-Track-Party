@@ -66,17 +66,7 @@
 //     edgeLines: false drops the painted side lines; their strips (plus the kerb gap)
 //                read as `shoulder` instead — desert roads aren't crisply lined
 //     shoulder:  dusty edge tint for the dropped-lines case (defaults to asphalt)
-//     skirt:     deck side/belly colour (defaults to asphalt — timber for a boardwalk)
-//     planks:    { period, tones: [...], seam } repaints the deck as boardwalk
-//                planks (no shipped theme uses this today — beach tried and retired
-//                it; kept for the planned wooden Tabletop biome). A full-width
-//                plank every `period` along the lap, `seam` =
-//                the groove band between planks (it also interrupts the painted
-//                lines/dash — paint sits ON the boards), and the rings beside a
-//                seam get a bevel highlight/shade so each plank reads as a
-//                chamfered 3D piece. Keep `tones` at whisper contrast: the seams
-//                are the wood cue; visible tone steps read as painted patchwork.
-//                The dash keeps its speedometer job in every variant.
+//     skirt:     deck side/belly colour (defaults to asphalt)
 //   structure: (optional)               support pillars/poles/loop-shaft tint (default
 //                                       0x9aa1b4 toy concrete) — timber piles under a
 //                                       beach overpass, red-rock columns in the canyon

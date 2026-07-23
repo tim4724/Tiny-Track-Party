@@ -76,7 +76,7 @@ export function solveClosureAuto(segs, { minLen = 3 } = {}) {
   let cand = segs.map((s, i) => i).filter((i) => segs[i]._leg);
   if (cand.length < 2) cand = segs.map((s, i) => i).filter((i) => {
     const s = segs[i];
-    return s.kind === 'straight' && !s.rise && !s.roll && !s.lateral && !s.bump;
+    return s.kind === 'straight' && !s.rise && !s.roll;
   });
   let best = null;
   for (let a = 0; a < cand.length; a++) for (let b = a + 1; b < cand.length; b++) {
@@ -270,32 +270,6 @@ export function designSkyline() {
   return { name: 'skyline', segs };
 }
 
-// COASTER — the airtime one, and the cup's no-tilt on-ramp: a CAMELBACK RUN of three
-// shrinking humps (each a net-flat `bump` the pack crests light), a toy loop, then one
-// big summit hill up-and-over. No banking anywhere, no inversion beyond the loop.
-export function designCoaster() {
-  const segs = [
-    ...run(6),                                                        // grid, north-bound (θ=0)
-    arc(RL, -90),                                                     // NE corner (θ=-90)
-    straight(9, { bump: 0.8 }),                                       // CAMELBACK RUN — three shrinking humps
-    straight(9, { bump: 0.6 }),
-    straight(9, { bump: 0.45 }),
-    straight(10, { _leg: true }),                                     // breather
-    arc(RL, -90),                                                     // (θ=-180)
-    straight(16, { _leg: true }),                                     // boost — straight into
-    loop(2.2, { drift: 3, _sweep: true }),                            // TOY LOOP
-    straight(6),                                                      // beat
-    arc(RL, -90),                                                     // (θ=-270)
-    straight(8),
-    straight(9, { rise: 1.8 }),                                       // THE SUMMIT — a grass mountain up...
-    straight(9, { rise: -1.8 }),                                      // ...and over, blind exit
-    straight(6, { lateral: -0.8 }), straight(6, { lateral: 0.8 }),    // soft chicane on the run home
-    straight(6, { _leg: true }),
-    arc(RL, -90)                                                      // SW corner into the grid (θ=-360)
-  ];
-  return { name: 'coaster', segs };
-}
-
 // GAUNTLET — thread the needle: the lap fires straight THROUGH the ring of its own toy
 // loop. A pillared ramp climbs to the ring's measured centre height, crests dead-centre
 // in the opening (the hole faces ±lateral, so the ramp runs perpendicular to the loop's
@@ -375,13 +349,9 @@ export function designSkysnake() {
 // pasting fresh numbers over the shipped ones. grade().sameLevelGap flags the deck-
 // overlap class at composition time.
 export const DESIGNS = {
-  helix: designHelix, skyline: designSkyline, coaster: designCoaster,
+  helix: designHelix, skyline: designSkyline,
   gauntlet: designGauntlet, skysnake: designSkysnake
 };
-// Audition pool (gallery-tracks candidates). Empty since the 2026-07-04 round settled
-// the Rooftop roster; rejected designs (skyfall/bigdipper/orbit/boomerang/tower/
-// leapfrog/halo/slingshot) live in git history.
-export const CANDIDATE_DESIGNS = {};
 
 // Solve + trim one design in place; returns the report pieces. Sweep/leg markers are
 // derived from the segment flags (hand-counted indices kept going stale) and stripped

@@ -15,10 +15,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-let rec, ver; // record-trace.mjs / verify-trace.mjs module namespaces
+let rec, ver, CONTRACT_VERSION; // record-trace.mjs / verify-trace.mjs module namespaces
 test.before(async () => {
   rec = await import('../scripts/record-trace.mjs');
   ver = await import('../scripts/verify-trace.mjs');
+  ({ CONTRACT_VERSION } = await import('../public/display/engine/contract.js'));
 });
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'traces');
@@ -39,7 +40,7 @@ test('recording the same config twice is byte-identical', () => {
   assert.equal(a.text, b.text, 'same config must produce the same trace bytes');
   // and the bytes are real: header first, one line per frame, hash on every frame
   const { header, records } = rec.parseTrace(a.text);
-  assert.equal(header.contractVersion, 1);
+  assert.equal(header.contractVersion, CONTRACT_VERSION);
   assert.equal(header.trackId, 'tidepool');
   assert.equal(records.length, header.frames);
   for (const r of records) assert.match(r.hash, /^[0-9a-f]{8}$/);

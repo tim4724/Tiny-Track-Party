@@ -84,8 +84,9 @@ export const PROFILES = {
     decor: { hills: [1, 2], hillAmp: [0.5, 0.9], hillHW: [3, 4], hops: [2, 4], hopAmp: [0.12, 0.3],
       bank: 8, bankRun: 4, maxBanked: 1, flares: 2, flareW: [3.1, 3.4], pinches: 1, pinchW: 2.35 },
     oilCount: 1,
-    // Calibrated against the catalogue (probe-difficulty.mjs): meadow — the canonical
-    // Easy — measures brake 0.04, minR 6.8, dens 0.041; bowtie (Medium) brake 0.01.
+    // Calibrated against the catalogue (probe-difficulty.mjs) when the reference tracks
+    // still existed: meadow — the then-canonical Easy, since deleted — measured brake
+    // 0.04, minR 6.8, dens 0.041; bowtie (Medium) brake 0.01.
     gates: { len: [340, 400], crossings: [0, 1], minRadius: [5.0, 99], hairpins: [0, 0],
       cornerDensity: [0, 0.055], brakeFrac: [0, 0.10] }
   },
@@ -120,7 +121,7 @@ export const PROFILES = {
     decor: { hills: [2, 3], hillAmp: [0.8, 1.6], hillHW: [2, 3], hops: [1, 3], hopAmp: [0.15, 0.4],
       bank: 8, bankRun: 5, maxBanked: 1, flares: 1, flareW: [3.0, 3.3], pinches: 2, pinchW: 2.15 },
     oilCount: 2,
-    // Calibration: switchback (the canonical Hard) probes brake 0.66 — but its lap is
+    // Calibration: switchback (the then-canonical Hard, since deleted) probed brake 0.66 — but its lap is
     // 25s of wall-to-wall corners; at Backyard lap length (~50s) even a 3-hairpin
     // track dilutes to ~0.14, while bowtie (Medium) sits at 0.01 and the easy band
     // tops out at 0.10. So ≥0.10 + ≥1 hairpin (which already forces a tight-corner

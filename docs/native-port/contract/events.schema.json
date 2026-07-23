@@ -2,14 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tinytrack.couch-games.com/contract/events.schema.json",
   "title": "Game race event",
-  "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly nine kinds. See docs/native-port/contract.md.",
+  "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly seven kinds. See docs/native-port/contract.md.",
   "oneOf": [
     { "$ref": "#/$defs/spin" },
     { "$ref": "#/$defs/monster_end" },
     { "$ref": "#/$defs/finish" },
-    { "$ref": "#/$defs/race_over" },
     { "$ref": "#/$defs/lap" },
-    { "$ref": "#/$defs/pad" },
     { "$ref": "#/$defs/pickup" },
     { "$ref": "#/$defs/item_use" },
     { "$ref": "#/$defs/rocket_expire" }
@@ -58,16 +56,7 @@
         "rank": { "type": "integer", "minimum": 1, "description": "1-based finish order (length of the finished list at crossing time)." },
         "time": { "type": "number", "minimum": 0, "description": "Finish time: elapsed seconds of simulated race time at the crossing." }
       },
-      "description": "A car crosses the line on its final lap. NOT emitted by the forceFinish staging hook (silent by design)."
-    },
-    "race_over": {
-      "type": "object",
-      "required": ["type"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "const": "race_over" }
-      },
-      "description": "The last car finishes. Currently no production consumer (RaceSession polls the raceOver getter); kept in the contract."
+      "description": "A car crosses the line on its final lap. The race is over when the LAST car's finish arrives. NOT emitted by the forceFinish staging hook (silent by design)."
     },
     "lap": {
       "type": "object",
@@ -79,16 +68,6 @@
         "lap": { "type": "integer", "minimum": 1, "description": "COMPLETED-lap count (not the 1-based display lap). The first crossing from the s < 0 starting grid emits nothing." }
       },
       "description": "A non-final start/finish line crossing."
-    },
-    "pad": {
-      "type": "object",
-      "required": ["type", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "const": "pad" },
-        "id": { "$ref": "#/$defs/carId" }
-      },
-      "description": "A boost pad (or loop launch strip) crossed. No production consumer (boost FX are state-driven off boostMul); kept in the contract."
     },
     "pickup": {
       "type": "object",

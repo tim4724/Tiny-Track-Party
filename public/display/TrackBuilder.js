@@ -3,10 +3,9 @@
 // (see SceneRenderer._buildRibbonRoad). There are no road meshes here — only geometry.
 //
 // A track is authored as a sequence of segments (see ../shared/tracks.js):
-//   straight(length, opts)         — a run, optionally with a lateral S-shift (chicane),
-//                                    an elevation `rise`, a net-flat `bump`, or a `roll`
-//                                    (heartline corkscrew: the frame twists about the
-//                                    straight centerline, ±360° = one full barrel roll).
+//   straight(length, opts)         — a run, optionally with an elevation `rise` or a
+//                                    `roll` (heartline corkscrew: the frame twists about
+//                                    the straight centerline, ±360° = one full barrel roll).
 //   arc(radius, angleDeg, opts)    — a turn; angle>0 = LEFT, <0 = RIGHT; optional `rise`.
 //   loop(radius, opts)             — a vertical loop: a 180° HALF-loop by default (exits at
 //                                    ±2·radius heading the opposite way, frame flipped), or
@@ -35,7 +34,7 @@ const DS = 0.25;           // centerline sample step (unscaled) — uniform arcl
 // SMOOTHERSTEP (Perlin): zero FIRST and SECOND derivative at the ends, so a grade eases
 // its pitch on/off smoothly (a plain ramp snaps to full pitch the instant it starts).
 const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
-const smoothstep = (t) => t * t * (3 - 2 * t); // C1 ends — used for the chicane lateral shift
+const smoothstep = (t) => t * t * (3 - 2 * t); // C1 ends — used for the tilted loop's drift
 // Bank easing across a segment: 0 at both ends, full in the middle (ease in over the
 // first BANK_RAMP, hold, ease out) — so a banked corner leans in/out smoothly and is
 // flat where it meets a straight.
@@ -116,31 +115,26 @@ export function buildTrack(track, opts = {}) {
   const widths = [trackWidth];               // per-sample drivable width (unscaled), parallel to worldPts
   const banks = [0];                          // per-sample bank roll (radians), parallel to worldPts
   const pillarFlags = [false];                // per-sample: emitted by a `pillars` (raised bridge/ramp) segment
-  const hillFlags = [false];                  // per-sample: a non-pillared straight rise/bump → can carry a grass hill
+  const hillFlags = [false];                  // per-sample: a non-pillared straight rise → can carry a grass hill
   const loopEntryIdx = [];                    // worldPts index of each loop's MOUTH (the flat sample just before it climbs)
 
   for (const seg of segments) {
     if (seg.kind === 'straight') {
-      const len = seg.length, lat = seg.lateral || 0, rise = seg.rise || 0, bump = seg.bump || 0;
+      const len = seg.length, rise = seg.rise || 0;
       const N = Math.max(1, Math.round(len / DS));
-      const dx = dirX(theta), dz = dirZ(theta), lx = latX(theta), lz = latZ(theta);
+      const dx = dirX(theta), dz = dirZ(theta);
       const x0 = X, z0 = Z, y0 = elev;
       for (let i = 1; i <= N; i++) {
-        // Lateral shift eases with SMOOTHstep, not smootherstep: smootherstep zeroes the
-        // 2nd derivative at both ends, so at a chicane's interior joint the turn-rate dwells
-        // to ~0 (a hitch felt as a left-right "shift" mid-S). smoothstep carries a continuous
-        // non-zero curvature through that joint, and its gentler peak slope (1.5 vs 1.875)
-        // softens the swing. (rise/bump below stay smootherstep — grades want the C2 ends.)
-        const f = i / N, off = lat * smoothstep(f);
+        const f = i / N;
         worldPts.push(v(
-          x0 + dx * len * f + lx * off,
-          y0 + rise * smootherstep(f) + bump * (1 - Math.cos(2 * Math.PI * f)) / 2,
-          z0 + dz * len * f + lz * off
+          x0 + dx * len * f,
+          y0 + rise * smootherstep(f), // smootherstep — grades want the C2 ends
+          z0 + dz * len * f
         ));
         widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
-        hillFlags.push(!seg.pillars && (!!seg.rise || !!seg.bump)); // open-ground grade → a grass hill
+        hillFlags.push(!seg.pillars && !!seg.rise); // open-ground grade → a grass hill
       }
-      X = x0 + dx * len + lx * lat; Z = z0 + dz * len + lz * lat; elev = y0 + rise;
+      X = x0 + dx * len; Z = z0 + dz * len; elev = y0 + rise;
     } else if (seg.kind === 'arc') {
       const R = seg.radius, ang = (seg.angle || 0) * DEG, rise = seg.rise || 0;
       const sgn = Math.sign(ang) || 1, A = Math.abs(ang);
@@ -517,7 +511,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   // intrusion that reaches here is ≥ POST_DEEP at its deepest — a visible obstacle;
   // runs whose deepest intrusion stays under 0.25 are skipped (a kerb-grazer's collision
   // disc would outweigh what's visible). Each contiguous abeam run is ONE road-crossing
-  // of the post: emit ONE engine pole (same (s, lat) collision the authored Twister pole
+  // of the post: emit ONE engine pole (the same (s, lat) collision an authored pole
   // uses) at the run's closest-abeam sample — that (s, lat) reconstructs to the visible
   // column's own footprint, so the bonk always has a post to look at. `ghost: true`
   // tells the renderer it's already drawn as pillar/shaft, so buildPoles must not draw
@@ -641,6 +635,57 @@ function buildSplineTrack(track, opts = {}) {
     }
   }
   return finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, [], trackWidth, { startGate, startU });
+}
+
+// ---- Furniture resolve: descriptor (fraction-of-lap u) → built track (arclength s) ----
+// The SINGLE source for the augmentation layer every race host applies on top of
+// buildTrack (the live display, the trace recorder, the unit tests): oils→hazards,
+// pads (+ the auto loop-mouth launch strips), item boxes, poles (+ builder autoPoles),
+// authored bananas. Default radii live HERE, nowhere else. Triggers are
+// point-car-vs-circle (Game._inZone) — deliberately simple and identical for every
+// car — so a radius means "prop size + the car reach folded in".
+const LOOP_PAD_LEN = 2.2;      // launch strip length (world units along travel)
+const OIL_RADIUS_FRAC = 0.2;   // slick radius = 20% of road width (diameter 40% — dodgeable on any track)
+const PAD_RADIUS_FRAC = 0.18;  // boost disc = ~18% of road width (the painted disc)
+// Item boxes: ~9% of road width (0.45 on the standard 5-wide road) ≈ the box mesh
+// (±0.15) + car half-width (0.26) + a whisker of forgiveness — "visually touching,
+// slightly generous". Was 0.18 (0.9): that made a 4-lane row an unbroken wall-to-wall
+// tripwire and collected boxes half a lane away. Still comfortably over one frame of
+// travel at boosted top speed (~0.24 @60fps), so a fast car can't tunnel through.
+const BOX_RADIUS_FRAC = 0.09;
+const POLE_RADIUS = 0.45;      // authored support-pole default (world units)
+
+export function resolveFurniture(b, def) {
+  const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
+  // Oil slicks — read by the engine (spin-out detection) and the renderer (puddle +
+  // cones; `cones` is renderer-only and ignored by the engine).
+  b.hazards = (def.oils || []).map((o) => ({
+    s: u2s(o.u), lat: o.lat || 0,
+    radius: o.radius != null ? o.radius : b.roadWidth * OIL_RADIUS_FRAC,
+    cones: o.cones
+  }));
+  b.pads = (def.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * PAD_RADIUS_FRAC }));
+  // Every looping gets a full-width RECTANGULAR launch strip at its mouth, so a loop is
+  // always entered on boost. The strip sits flat on the approach with its leading edge at
+  // the loop entry (centre = entry − halfLen). Position-scaled like any pad (the engine
+  // reads `shape: 'strip'` → a longitudinal band across the lane).
+  for (const ls of (b.loopStarts || [])) {
+    b.pads.push({
+      s: (((ls.s - LOOP_PAD_LEN / 2) % b.length) + b.length) % b.length,
+      lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
+    });
+  }
+  b.boxes = (def.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * BOX_RADIUS_FRAC }));
+  // Support poles: SOLID obstacles — read by the engine (car push-out), the AI (dodge
+  // like an oil), and the renderer (the post mesh). The builder's autoPoles ride along:
+  // collision proxies for pillars/loop shafts that stand in a drivable corridor
+  // (ghost — already drawn as the support itself).
+  b.poles = (def.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : POLE_RADIUS }))
+    .concat(b.autoPoles || []);
+  // Authored bananas (dev tracks only — see shared/devTracks.js): the engine seeds
+  // them live at race start and respawns them after each hit.
+  b.bananas = (def.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
+  return b;
 }
 
 // Track definitions + the named registry live in the dependency-free catalogue

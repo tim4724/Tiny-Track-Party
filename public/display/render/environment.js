@@ -194,7 +194,7 @@ const DEF_CLOUDS = { count: 8, opacity: 0.8, scale: 1, aspect: 0.42, tint: 0xfff
 // radius would drown in the race fog on a large circuit) yet never floods the road.
 // The authored geometry below is a plain circle; every radius is rewritten by
 // fitWater, so WATER_INNER is only the baseline the band offsets are measured from.
-export const WATER_INNER = 135; // authored shoreline radius (fitWater rewrites it per track and per angle)
+const WATER_INNER = 135; // authored shoreline radius (fitWater rewrites it per track and per angle)
 export const WATER_LIFT = 0.12; // floats just above the ground plane; unnoticeable as a step
                                 // from the ~25u any camera keeps from the shore (SHORE_MARGIN),
                                 // and enough depth separation to never z-fight the sand below
@@ -483,8 +483,8 @@ export function fitWater(water, track, groundY) {
 //   mote   — near-still golden dust hanging in a sunbeam (playroom)
 //   sand   — fast low streaks of wind-blown grit (canyon)
 //   pollen — light seeds drifting on a breeze (grass parkland)
-export const AMB_R = 170; // authored spread — matches the hill ring's reach (exported: the step wraps against it)
-export const AMB_H = 34;  // full wrap height (kinds take a `band` fraction of it)
+const AMB_R = 170; // authored spread — matches the hill ring's reach (the step wraps against it)
+const AMB_H = 34;  // full wrap height (kinds take a `band` fraction of it)
 
 // Per-kind motion/appearance presets. `fall` scales the per-particle sink speed
 // (1 = the snow fall), `wind` is the eastward drift u/s, `bob` a vertical

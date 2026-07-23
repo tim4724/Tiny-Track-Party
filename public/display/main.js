@@ -2,8 +2,7 @@
 // engine, the countdown→race→results flow, and per-player PLAYER_STATE.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { SceneRenderer } from './SceneRenderer.js';
-import { buildTrack, TRACK_LIST } from './TrackBuilder.js';
-import { CANDIDATE_TRACKS } from '../shared/candidateTracks.js';
+import { buildTrack, resolveFurniture, TRACK_LIST } from './TrackBuilder.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic, packSchematic } from './trackSchematic.js';
@@ -52,48 +51,10 @@ function buildEntry(t) {
   b.trackId = t.id;          // registry id, for per-track theme patches (ambientByTrack).
                              // NOT `id` — buildScenery/buildLandmarks seed their rand
                              // streams from track.id, and reseeding reshuffles every scatter.
-  // Resolve the authored oil slicks once: fraction-of-lap (u) → arclength (s),
-  // now that the built geometry knows the lap length. Read by the engine (spin-out
-  // detection) and the renderer (drawing the puddle + cones), both off track.hazards.
-  b.hazards = (t.oils || []).map((o) => ({
-    s: (((o.u % 1) + 1) % 1) * b.length, lat: o.lat || 0,
-    // diameter capped at 40% of the drivable track width (radius = 20%) unless the
-    // slick names its own radius — keeps a puddle dodgeable on any track.
-    radius: o.radius != null ? o.radius : b.roadWidth * 0.2,
-    cones: o.cones
-  }));
-  // Boost pads + item boxes: same u→s resolve. Triggers are point-car-vs-circle
-  // (Game._inZone) — deliberately simple and identical for every car — so a radius
-  // means "prop size + the car reach folded in". Pads keep ~18% of road width (the
-  // painted disc). Read by the engine (detection) + renderer (meshes).
-  const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
-  b.pads = (t.pads || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.18 }));
-  // Every looping gets a full-width RECTANGULAR launch strip at its mouth, so a loop is
-  // always entered on boost. The strip sits flat on the approach with its leading edge at
-  // the loop entry (centre = entry − halfLen). Position-scaled like any pad (the engine
-  // reads `shape: 'strip'` → a longitudinal band across the lane).
-  const LOOP_PAD_LEN = 2.2; // world units along travel
-  for (const ls of (b.loopStarts || [])) {
-    b.pads.push({
-      s: (((ls.s - LOOP_PAD_LEN / 2) % b.length) + b.length) % b.length,
-      lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
-    });
-  }
-  // Item boxes: ~9% of road width (0.45 on the standard 5-wide road) ≈ the box mesh
-  // (±0.15) + car half-width (0.26) + a whisker of forgiveness — "visually touching,
-  // slightly generous". Was 0.18 (0.9): that made a 4-lane row an unbroken wall-to-wall
-  // tripwire and collected boxes half a lane away. Still comfortably over one frame of
-  // travel at boosted top speed (~0.24 @60fps), so a fast car can't tunnel through.
-  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : b.roadWidth * 0.09 }));
-  // Support poles: same u→s resolve. SOLID obstacles (engine collision) — read by the
-  // engine (car push-out), the AI (dodge it like an oil), and the renderer (the post mesh).
-  // The builder's autoPoles ride along: collision proxies for pillars/loop shafts that
-  // stand in a drivable corridor (ghost — already drawn as the support itself).
-  b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }))
-    .concat(b.autoPoles || []);
-  // Authored bananas (dev tracks only — see shared/devTracks.js): same u→s resolve.
-  // The engine seeds them live at race start and respawns them after each hit.
-  b.bananas = (t.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
+  // Resolve the authored furniture once (fraction-of-lap u → arclength s, default
+  // radii), via the shared single-source resolver — the trace recorder and the unit
+  // tests run the SAME code, so the game and the conformance oracle can't drift.
+  resolveFurniture(b, t);
   return b;
 }
 const built = new Map(TRACK_LIST.map((t) => [t.id, buildEntry(t)]));
@@ -141,15 +102,13 @@ const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.le
 // (?bots=0 = race alone) instead of topping up to FIELD_SIZE.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
-// AUDITION CANDIDATES (gallery-tracks sections): an unknown ?track= id is looked up in
-// the candidate catalogue and built like any track — but only the ONE requested id, and
-// only in a ?scenario= test surface: a LIVE lobby preselecting a candidate would offer
-// phones a track their picker catalog doesn't contain. Candidates live outside
-// TRACKS/CUPS until one is promoted (scripts/gen-candidates.mjs).
-// DEV_TRACKS (shared/devTracks.js) ride the same rule, additionally reachable in
-// ?solo (they're keyboard test ranges — e.g. the 'gym' collision track).
+// DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
+// catalogue and built like any track — but only the ONE requested id, and only in a
+// ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
+// collision track): a LIVE lobby preselecting one would offer phones a track their
+// picker catalog doesn't contain.
 if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
-  const _devDef = CANDIDATE_TRACKS[_qTrack] || DEV_TRACKS[_qTrack];
+  const _devDef = DEV_TRACKS[_qTrack];
   if (_devDef) built.set(_qTrack, buildEntry({ id: _qTrack, ..._devDef }));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
@@ -169,7 +128,6 @@ if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
 scene.showDividers = _trackParams.get('dividers') !== '0';
-if (_isTestMode) window.__scene = scene; // test surfaces: let the inspector/automation drive the camera
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;
@@ -399,7 +357,6 @@ function demoSig(field, trackId) {
 // resume() rides the window gesture listeners below; until someone touches the
 // display every cue no-ops silently.
 const audio = new RaceAudio();
-window.__audio = audio; // debug hook (alongside __engine/__track) — tune music/SFX by ear in ?solo
 
 // Now-playing credit chip (bottom-left): the current song + artist, linking to
 // its source — and the on-screen CC-BY attribution. Filled from whichever song
@@ -1709,8 +1666,17 @@ if (_scenario) {
     popstateNavigating = false;
   });
 }
+// ---- The window.__* automation surface (E2E + console debugging) ----
+// The ONE sanctioned reach into this module's internals: the E2E suite drives the
+// real display flow through these globals, and ?solo/console poking reads them (e.g.
+// tune music by ear via __audio). Everything is assigned HERE, in one block, so the
+// surface is auditable at a glance — with four exceptions that track runtime state
+// where it changes: __engine (per-race, in startRace), __track (re-pointed in
+// selectTrack), __debugSolo (lazy ?solo loader), __deviceChoicePending (boot flow).
+// E2E may also SET timing overrides read elsewhere: __countdownSeconds,
+// __intermissionMs, __abandonGraceMs.
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
-window.__series = () => series; // live CupSeries (null outside a cup) — E2E + console poking
+window.__series = () => series; // live CupSeries (null outside a cup)
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
 

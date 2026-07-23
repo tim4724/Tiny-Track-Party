@@ -29,17 +29,16 @@ const STRUCTURE = (theme) => (theme && theme.structure) || 0x9aa1b4;
 // LOOK comes from the biome's optional `road` palette (shared/themes.js): every
 // default below is the verbatim pre-theming literal, so a theme without `road`
 // (grass, sunset) builds byte-identical buffers. The palette recolours (asphalt/
-// lines/dash/kerb/skirt), reshapes the kerb (kerbW/kerbH — snowbanks), drops the
-// edge lines for a dusty shoulder (canyon), or repaints the whole deck as boardwalk
-// planks (unused today — kept for the planned wooden Tabletop biome) — all vertex
-// paint on the same sweep, no new geometry or textures.
+// lines/dash/kerb/skirt), reshapes the kerb (kerbW/kerbH — snowbanks), or drops the
+// edge lines for a dusty shoulder (canyon) — all vertex paint on the same sweep,
+// no new geometry or textures.
 export function buildRibbonRoad(R, track, collide, theme) {
   const cl = track.centerline;
   if (!cl || !cl.samples.length) return;
   const rd = (theme && theme.road) || {};
 
   // Drivable width is per-sample (centerline.width / roadWidth) — the road can flare
-  // and pinch along the lap, and the physics curb corridor follows it (Game.maxLatAt).
+  // and pinch along the lap, and the physics curb corridor follows it (Game._curbLimit).
   // `defHalf` is the fallback half-width; the kerb/line cross-section is fixed.
   const defHalf = (track.roadWidth || 5) / 2;
   const halfAt = (i) => (frames[i].width != null ? frames[i].width : track.roadWidth || 5) / 2;
@@ -97,22 +96,6 @@ export function buildRibbonRoad(R, track, collide, theme) {
   const SKIRT = c(rd.skirt ?? rd.asphalt ?? 0x5a6078);// deck sides + belly
   const SHOULDER = c(rd.shoulder ?? rd.asphalt ?? 0x5a6078); // edge band when edgeLines is off
   const edgeLines = rd.edgeLines !== false;
-
-  // Boardwalk planks (rd.planks): repaint the deck as full-width planks. A plank is
-  // ringsPerPlank rings; its FIRST ring paints the seam groove (one ring ≈ 0.2-0.3u —
-  // chunky toy scale, streaming past at ~6 planks/s at top speed, the same readable
-  // cadence as the centre dash), and the rings beside a seam get a bevel highlight/
-  // shade (see the sweep) so each plank reads as a chamfered 3D piece. Tones cycle
-  // per plank at WHISPER contrast — the regular seams are the "wood" cue; visible
-  // tone steps were tried twice (full-width bands, then a per-board checkerboard)
-  // and both read as painted patchwork, not timber. Keep it clean.
-  const planks = rd.planks || null;
-  let ringsPerPlank = 0, plankTones = null, plankSeam = null;
-  if (planks) {
-    ringsPerPlank = Math.max(2, Math.round(planks.period / (cl.length / N)));
-    plankTones = planks.tones.map(c);
-    plankSeam = c(planks.seam);
-  }
 
   // Cross-section anatomy, left → right: asphalt is flat (y=0) across the drivable width;
   // inside each kerb sits a small asphalt `gap`, then a thin painted white line, then the
@@ -255,12 +238,10 @@ export function buildRibbonRoad(R, track, collide, theme) {
   // Per-strip colour push: the two triangles below are wound ia,ib,nb / ia,nb,na, so
   // the 6 verts map to profile points [a,b,b,a,b,a]. Each gets its base colour times
   // its own AO, so the darkening varies ACROSS the strip (a gradient) — that's what
-  // gives the kerb face and road edge their baked-in contact shadow. `mul` is a
-  // whole-strip shade on top (the plank bevel); 1 everywhere planks are off, and
-  // x·1 is exact in IEEE, so non-plank themes stay byte-identical.
+  // gives the kerb face and road edge their baked-in contact shadow.
   const VSEQ = ['a', 'b', 'b', 'a', 'b', 'a'];
-  const pushStripCol = (cbase, st, mul = 1) => {
-    for (let v = 0; v < 6; v++) { const f = ao[st[VSEQ[v]]] * mul; col[cc++] = cbase[0] * f; col[cc++] = cbase[1] * f; col[cc++] = cbase[2] * f; }
+  const pushStripCol = (cbase, st) => {
+    for (let v = 0; v < 6; v++) { const f = ao[st[VSEQ[v]]]; col[cc++] = cbase[0] * f; col[cc++] = cbase[1] * f; col[cc++] = cbase[2] * f; }
   };
 
   // Kerb stripes: band by arclength measured ALONG EACH KERB EDGE, not the
@@ -345,17 +326,6 @@ export function buildRibbonRoad(R, track, collide, theme) {
     const ni = (i + 1) % N;
     const colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
     const bare = bareAsphalt(i);
-    // Ring colour precedence: bare (launch-strip zone — clean deck, no seams or
-    // bevels, so the pad reads as paint on a smooth patch) > plank seam (the groove
-    // interrupts painted lines/dash — paint sits ON the boards) > the strip's own
-    // paint > board cell / asphalt.
-    const ppos = planks ? i % ringsPerPlank : -1; // ring's position inside its plank
-    const seam = planks !== null && !bare && ppos === 0;
-    // Plank bevel: the ring after a seam catches the sun, the ring before the next
-    // seam falls into shade — each plank reads as a chamfered 3D piece, not a stripe.
-    const bevel = (!planks || bare || seam) ? 1 : ppos === 1 ? 1.08 : ppos === ringsPerPlank - 1 ? 0.9 : 1;
-    // Deck colour: the plank's (whisper-contrast) tone, or plain asphalt.
-    const deckCol = planks ? plankTones[Math.floor(i / ringsPerPlank) % plankTones.length] : ASPHALT;
     for (let s = 0; s < S; s++) {
       const st = STRIPS[s];
       emitPt(i, st.a); emitPt(i, st.b); emitPt(ni, st.b);  // tri 1: ia, ib, nb
@@ -363,18 +333,16 @@ export function buildRibbonRoad(R, track, collide, theme) {
       emitN(i, s); emitN(i, s); emitN(ni, s);              // each vert takes ITS ring's
       emitN(i, s); emitN(ni, s); emitN(ni, s);             // strip normal → smooth sweep
       const k = st.kind;
-      let cb, mul = 1;
+      let cb;
       if (k === 'kerb') cb = st.side === 'R' ? colR : colL;
       else if (k === 'skirt') cb = SKIRT;
-      else if (bare) cb = deckCol;                 // smooth clean deck under a launch strip
-      else if (seam) cb = plankSeam;               // full-width groove between planks
-      else if (k === 'dash') { cb = dashOn(i) ? DASH : deckCol; mul = bevel; }
-      else if (k === 'line') { cb = edgeLines ? LINE : SHOULDER; mul = bevel; }
-      // Kerb gap: shoulder-tinted only when the edge lines are off (canyon's dusty
-      // edge); under planks it's deck — boardwalk planks run rail to rail.
-      else if (k === 'gap') { cb = (planks || edgeLines) ? deckCol : SHOULDER; mul = bevel; }
-      else { cb = deckCol; mul = bevel; }          // 'road' — plank / plain asphalt
-      pushStripCol(cb, st, mul);
+      else if (bare) cb = ASPHALT;                 // launch-strip zone — clean deck, no dash/lines
+      else if (k === 'dash') cb = dashOn(i) ? DASH : ASPHALT;
+      else if (k === 'line') cb = edgeLines ? LINE : SHOULDER;
+      // Kerb gap: shoulder-tinted only when the edge lines are off (canyon's dusty edge).
+      else if (k === 'gap') cb = edgeLines ? ASPHALT : SHOULDER;
+      else cb = ASPHALT;                           // 'road' — plain asphalt
+      pushStripCol(cb, st);
     }
   }
   const CHUNK_RINGS = 160; // keep chunk count (hence drawn-when-visible draw calls) low; STRIDE = floats/ring

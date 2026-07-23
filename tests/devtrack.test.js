@@ -7,24 +7,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let buildTrack, Game, DEV_TRACKS, Vec3;
+let buildTrack, resolveFurniture, Game, DEV_TRACKS, Vec3;
 test.before(async () => {
-  buildTrack = (await import('../public/display/TrackBuilder.js')).buildTrack;
+  ({ buildTrack, resolveFurniture } = await import('../public/display/TrackBuilder.js'));
   ({ Game } = await import('../public/display/engine/Game.js'));
   ({ DEV_TRACKS } = await import('../public/shared/devTracks.js'));
   Vec3 = (await import('../public/display/engine/Vec3.js')).Vec3;
 });
 
-// Resolve the authored furniture exactly like the display's buildEntry
+// Resolve the authored furniture via the SAME shared resolver the display uses
 // (fraction-of-lap u → arclength s; default radii from the road width).
 function buildGym() {
-  const t = DEV_TRACKS.gym;
-  const b = buildTrack(t);
-  const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
-  b.hazards = (t.oils || []).map((o) => ({ s: u2s(o.u), lat: o.lat || 0, radius: b.roadWidth * 0.2 }));
-  b.boxes = (t.boxes || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: b.roadWidth * 0.09 }));
-  b.poles = (t.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: 0.45 }));
-  b.bananas = (t.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
+  const b = resolveFurniture(buildTrack(DEV_TRACKS.gym), DEV_TRACKS.gym);
   b.totalLaps = 9;
   return b;
 }

@@ -156,10 +156,6 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (urlPath === '/health') { sendJson(res, 200, { status: 'ok' }); return; }
-  if (urlPath === '/api/version') {
-    sendJson(res, 200, { version: APP_VERSION, env: APP_ENV, isProduction: IS_PROD, commit: getShortSha(GIT_SHA) });
-    return;
-  }
   if (urlPath === '/api/baseurl') {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
     return;

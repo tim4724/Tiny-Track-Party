@@ -22,7 +22,7 @@ the committed trace fixtures.
 
 ## Contract version
 
-`CONTRACT_VERSION = 1`, exported from `public/display/engine/contract.js` and
+`CONTRACT_VERSION = 2`, exported from `public/display/engine/contract.js` and
 re-exported by `Game.js`. It is stamped as `version` on both `getSnapshot()`
 and `buildTrack()` output, recorded in every golden-trace header
 (`contractVersion`), and pinned by `const` in the snapshot and track schemas.
@@ -107,9 +107,9 @@ honest meanwhile. Re-arm it when C++ conformance work starts (see
 verifies every committed fixture at that point. The fixture set must cover
 the whole event vocabulary and the endgame path, not just early-race
 physics; `scripts/record-fixtures.mjs` defines the set and asserts that
-coverage (two starter slices plus a full switchback race exercising all nine
+coverage (two starter slices plus a full skysnake race exercising all seven
 event kinds, all four spin causes, rocket flight, the monster transform, lap
-counting across the s = 0 seam, finish ranking and race_over).
+counting across the s = 0 seam, and every car finishing inside the budget).
 
 ## Input: the CONTROL message
 
@@ -156,18 +156,15 @@ Top level:
 | field | type | meaning |
 |---|---|---|
 | `version` | integer | `CONTRACT_VERSION` stamp |
-| `elapsed` | number | seconds of simulated race time; 0 at construction; does not advance while the host withholds update() |
 | `cars` | CarSnap[] | order = car insertion order (the starting grid at construction), NOT rank order. `rekeyCar` re-inserts the car at the TAIL of the order (Map delete + set), so after a device reconnect the array order differs from the grid |
 | `boxes` | boolean[] | index-aligned with the track's authored `boxes` list; true = available (respawn cooldown expired) |
 | `bananas` | object[] | `{id, s, lat, radius}`; only bananas currently live |
-| `rockets` | object[] | `{id, s, lat, owner}`; live homing rockets |
+| `rockets` | object[] | `{id, s, lat}`; live homing rockets |
 
 Prop notes: `bananas[].id` and `rockets[].id` are monotonically increasing
 integers in two SEPARATE id namespaces (and separate from car ids).
 `bananas[].s` is wrapped to [0, length) at drop time; `rockets[].s` is wrapped
 at snapshot time. `bananas[].radius` is currently always the constant 0.5.
-`rockets[].owner` is the firing car's id (exposed for per-cell FX gating; no
-consumer reads it today).
 
 Per-car `CarSnap`:
 
@@ -176,23 +173,19 @@ Per-car `CarSnap`:
 | `id` | number or string | | peerIndex (number) in live games; strings like `'cpu-bolt'` in bots/tests/traces |
 | `pose` | object | world units | `{pos, forward, up}`, each a plain `{x, y, z}`; `forward`/`up` are unit vectors |
 | `lat` | number | world units | signed lateral offset from the centerline (positive = right of travel), clamped inside the local curbs |
-| `v` | number | world units/s | raw speed, 0 to ~vmax x boost ceiling |
-| `spd` | number | ratio | `v / vmax` (per-car base top speed). EXCEEDS 1 under boost/monster: pad boost ceiling x1.60, item boost x1.5, monster x1.25, stacking to ~2.0. Do not assume [0, 1] |
+| `spd` | number | ratio | raw speed / vmax (per-car base top speed). EXCEEDS 1 under boost/monster: pad boost ceiling x1.60, item boost x1.5, monster x1.25, stacking to ~2.0. Do not assume [0, 1] |
 | `lap` | integer | 1 to totalLaps | 1-based DISPLAY lap, clamped; grid cars (totalS < 0) show 1 |
 | `totalLaps` | integer | | race length (default 3) |
 | `position` | integer | 1 to N | live race rank; finished cars first by finish time |
-| `of` | integer | | field size. No consumer today; kept in the contract |
 | `finished` | boolean | | |
-| `finishTime` | number or null | seconds | `elapsed` at the line crossing; null until finished |
+| `finishTime` | number or null | seconds | simulated race time at the line crossing; null until finished |
 | `steer` | number | [-1, 1] | TURN-ALIGNED steer: sign matches the actual turn direction (`STEER_SIGN x` raw input), so renderers need not know the sign convention |
 | `steerInput` | number | [-1, 1] | RAW controller input (drives the on-screen steer bar). The steer/steerInput asymmetry is deliberate |
 | `brake` | number | [0, 1] | analog |
 | `onWall` | boolean | | touching a curb this frame |
 | `spin` | number | radians, >= 0, UNBOUNDED | cosmetic spin-out whirl angle; 0 when in control. A single spin sweeps 0 to 4 pi (SPIN_TURNS = 2 over SPIN_TIME = 1 s), but a SECOND oil/banana entered mid-spin re-arms the timer while keeping the angle continuous, so chained hazards grow it past 4 pi with no ceiling. Do not clamp or size anything to 4 pi |
 | `item` | string or null | | one of `boost`, `banana`, `rocket`, `monster` |
-| `boostActive` | boolean | | `boostMul > 1.001`. No consumer today (renderers read boostMul); kept |
 | `boostMul` | number | [1, 1.6] | current speed-ceiling multiplier |
-| `tCatch` | number | [0, 1] | smoothed catch-up factor (0 = leading). No consumer outside the engine/tests; kept |
 | `monster` | boolean | | transformed into the monster truck; renderer morphs the model |
 | `totalS` | number | world units | CUMULATIVE arclength; negative on the starting grid; grows monotonically across laps, never wrapped |
 | `heading` | number | radians, [-1.25, 1.25] | car yaw relative to the track tangent (clamped, no u-turns) |
@@ -204,16 +197,14 @@ Per-car `CarSnap`:
 Schema: [events.schema.json](contract/events.schema.json). Events are
 synchronous calls from inside `Game.update()`; all payloads are plain data.
 `id` is the car id in every event except `rocket_expire`, where it is the
-ROCKET's id. Exactly nine kinds:
+ROCKET's id. Exactly seven kinds:
 
 | type | payload | when |
 |---|---|---|
 | `spin` | `{id, cause}` | car spins out; `cause` is `banana`, `oil`, `rocket`, or `monster` (body-checked by a monster truck) |
 | `monster_end` | `{id}` | monster transform timer lapses |
-| `finish` | `{id, rank, time}` | car crosses the line on its final lap; `rank` = 1-based finish order, `time` = seconds |
-| `race_over` | `{}` | the last car finishes. Currently no production consumer (RaceSession polls the `raceOver` getter instead); kept in the contract |
+| `finish` | `{id, rank, time}` | car crosses the line on its final lap; `rank` = 1-based finish order, `time` = seconds. The race is over when the LAST car's finish arrives (hosts may also poll RaceSession's `raceOver` getter) |
 | `lap` | `{id, lap}` | non-final line crossing; `lap` = completed-lap count (NOT the display lap). The first crossing from the s < 0 grid emits nothing |
-| `pad` | `{id}` | boost pad crossed. No production consumer (boost FX are state-driven); kept |
 | `pickup` | `{id, item, finished}` | item box collected; on a finished car with a full slot, `item` is the HELD item (no reroll) and `finished` is true |
 | `item_use` | `{id, item}` | fired BEFORE the effect applies; `item` is the slot being fired |
 | `rocket_expire` | `{id, s, lat}` | rocket self-destructs without a hit; `id` = rocket id, `s` wrapped to [0, length) |
@@ -224,7 +215,6 @@ Schema: [results.schema.json](contract/results.schema.json).
 
 ```
 {
-  elapsed: number,        // seconds, same clock as snapshot.elapsed (no consumer today; kept)
   results: [
     { playerId,           // car id
       rank,               // 1-based, dense (index + 1 in this sorted array)
@@ -334,10 +324,10 @@ seam. A port must expose the same surface:
   lat)` (live ownerless banana), `stageRocket(s, lat, {v, owner})` (live
   target-less rocket that whiffs at end of run).
 
-## Known dead-but-kept fields
+## Removed dead fields
 
-Verified to have zero consumers in the repo today, kept in the contract
-deliberately (cheap to emit, useful to ports and tooling): `cars[].of`,
-`cars[].boostActive`, `cars[].tCatch` (engine/tests only), `elapsed` on both
-snapshot and results, `rockets[].owner`, and the `race_over` event. Removing
-any of them is a contract version bump like any other change.
+The 2026-07 pre-port cleanup removed the zero-consumer surface this contract
+used to carry: `cars[].v`, `cars[].of`, `cars[].boostActive`, `cars[].tCatch`,
+`elapsed` on both snapshot and results, `rockets[].owner`, and the `race_over`
+and `pad` events. They live in git history; re-adding one is a contract
+version bump like any other change.

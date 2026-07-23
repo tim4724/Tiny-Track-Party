@@ -183,7 +183,7 @@ const ITEM_USE_READY = 0.9;    // starting value — bump if the reveal grows
 const BOOST_ACCEL = 22.0;      // ramp toward the boosted ceiling (u/s²) — snappy
 const BOOST_FADE = 0.5;        // after the hold, ease the multiplier back to 1 at this rate (×/s) → a gentle taper, not a snap
 const PAD_RADIUS = 0.65;       // fallback pad radius (the display sizes it per track)
-const BOX_RADIUS = 0.45;       // fallback item-box radius (mirrors the display default, roadWidth * 0.09)
+const BOX_RADIUS = 0.45;       // fallback item-box radius for hand-authored test tracks (real tracks carry per-box radii from TrackBuilder.resolveFurniture)
 const BOX_RESPAWN = 4.0;       // seconds an item box stays empty after a pickup
 const LAUNCH_GATE = 1.5;       // no pickups until the grid unbunches (kills launch grief)
 const BANANA_RADIUS = 0.5;     // dropped-banana trigger radius
@@ -782,9 +782,6 @@ export class Game {
           c.item = null; c.wantUse = false; // drop any held item so the controller's USE button goes dark
           this.finishedOrder.push(c.id);
           this.onEvent({ type: 'finish', id: c.id, rank: this.finishedOrder.length, time: c.finishTime });
-          if (this.finishedOrder.length >= this.cars.size) {
-            this.onEvent({ type: 'race_over' });
-          }
         } else {
           this.onEvent({ type: 'lap', id: c.id, lap: c.lap });
         }
@@ -805,11 +802,6 @@ export class Game {
   // back to the scalar maxLat when width is unknown. (maxLat itself still seeds spawn lanes.)
   _curbLimit(width) {
     return (width != null && !Number.isNaN(width)) ? Math.max(0.1, width / 2 - LAT_MARGIN) : this.maxLat;
-  }
-  // Per-arclength version — constructs spline frames via sampleAt, so do NOT call it in hot
-  // paths: update() caches c.curbLim from the sampleAt it already does each tick.
-  maxLatAt(s) {
-    return this._curbLimit(this.centerline.widthAt ? this.centerline.widthAt(s) : null);
   }
 
   // The body's yaw for COLLISION SHAPES: steering heading plus the cosmetic spin-out
@@ -948,7 +940,6 @@ export class Game {
     const mul = PAD_BOOST_MIN + (PAD_BOOST_MAX - PAD_BOOST_MIN) * c.tRaw;
     c.boostMul = Math.max(c.boostMul, mul);
     c.boostT = Math.max(c.boostT, BOOST_DURATION);
-    this.onEvent({ type: 'pad', id: c.id });
   }
 
   // Rising-edge overlap of an item BOX. A box on cooldown is inert. A LIVE car always
@@ -1442,8 +1433,6 @@ export class Game {
     for (const c of this.cars.values()) {
       const fpMul = this._footprintMul(c); // debug-overlay extents match the collision footprint
       cars.push({
-        // v (raw speed) + lat (lateral offset) are the engine's physics observables —
-        // the in-game display only needs normalized spd, but the unit tests assert on them.
         // pose is copied out as PLAIN data ({x,y,z} literals, no vector class): the
         // snapshot is the port-conformance contract, so it must be pure JSON — and
         // handing out the internal pose by reference let renderers alias engine state.
@@ -1453,9 +1442,9 @@ export class Game {
           forward: { x: c.pose.forward.x, y: c.pose.forward.y, z: c.pose.forward.z },
           up: { x: c.pose.up.x, y: c.pose.up.y, z: c.pose.up.z }
         },
-        lat: c.lat, v: c.v, spd: c.v / c.vmax, // spd = v / per-car BASE top speed; EXCEEDS 1 under boost/monster (up to ~2.0)
+        lat: c.lat, spd: c.v / c.vmax, // spd = v / per-car BASE top speed; EXCEEDS 1 under boost/monster (up to ~2.0)
         lap: Math.min(this.totalLaps, Math.max(1, c.lap + (c.totalS >= 0 ? 1 : 0))), // 1-based display lap (grid sits at s<0 — still "lap 1")
-        totalLaps: this.totalLaps, position: c.rank, of: this.cars.size,
+        totalLaps: this.totalLaps, position: c.rank,
         // steer is reported TURN-ALIGNED: its sign matches the way the car actually
         // turns (= STEER_SIGN * raw input), so the renderer's front wheels + body
         // lean line up with the turn without the renderer needing to know STEER_SIGN.
@@ -1463,9 +1452,9 @@ export class Game {
         // drives the on-screen steer indicator.
         finished: c.finished, finishTime: c.finishTime, steer: STEER_SIGN * c.steer, steerInput: c.steer, brake: c.brake, onWall: !!c.onWall,
         spin: c.spin, // cosmetic spin-out angle (rad) for the renderer to whirl the body
-        // catch-up + item observables: boostActive/boostMul drive the boost FX (intensity
-        // telegraphs the position-scaled size); item is the held pickup (HUD + controller).
-        item: c.item, boostActive: c.boostMul > 1.001, boostMul: c.boostMul, tCatch: c.tCatch,
+        // item observables: boostMul drives the boost FX (intensity telegraphs the
+        // position-scaled size); item is the held pickup (HUD + controller).
+        item: c.item, boostMul: c.boostMul,
         monster: c.monsterT > 0, // car is currently a monster truck — renderer morphs the model; HUD/cam may react
 
         // collision footprint + arclength — only used by the renderer's debug bbox overlay.
@@ -1480,15 +1469,15 @@ export class Game {
     // to show/hide box meshes and reconcile banana meshes by id.
     return {
       version: CONTRACT_VERSION, // engine data-contract stamp (see ./contract.js)
-      cars, elapsed: this.elapsed,
+      cars,
       boxes: this.boxes.map((b) => b.cooldown <= 0),
       bananas: this.bananas.filter((b) => this.elapsed >= (b.liveAt || 0))
         .map((b) => ({ id: b.id, s: b.s, lat: b.lat, radius: BANANA_RADIUS })),
       // Live homing rockets: cumulative arclength wrapped to [0, length) so the renderer
       // can place them by (s, lat) like every other prop (it derives the facing/bank from
-      // the centreline tangent at s). owner is exposed for any per-cell FX gating.
+      // the centreline tangent at s).
       rockets: this.rockets.map((r) => ({
-        id: r.id, s: wrapS(r.s, this.length), lat: r.lat, owner: r.owner
+        id: r.id, s: wrapS(r.s, this.length), lat: r.lat
       }))
     };
   }
@@ -1496,7 +1485,6 @@ export class Game {
   getResults() {
     const ranked = [...this.cars.values()].sort(byRaceOrder);
     return {
-      elapsed: this.elapsed,
       results: ranked.map((c, i) => ({
         playerId: c.id, rank: i + 1, finished: c.finished,
         time: c.finishTime

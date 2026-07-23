@@ -13,12 +13,9 @@ test.before(async () => {
   TRACKS = mod.TRACKS;
   TRACK_LIST = mod.TRACK_LIST;
   DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
-  // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev and
-  // RETIRED surfaces (devTracks.js). The union is the point, not a convenience — the retired
-  // circuits are kept precisely so these suites keep running against them (Twister is the
-  // stunt-geometry coverage; Coaster and Riverside the only `bump`), so iterating TRACKS
-  // alone would quietly drop exactly what they're for. Suites about what SHIPS (schematics,
-  // the grid rule) iterate TRACK_LIST instead.
+  // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev
+  // surfaces (devTracks.js — the Gym). Suites about what SHIPS (schematics, the grid
+  // rule) iterate TRACK_LIST instead.
   ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
   postAtSample = mod.postAtSample;
   const schem = await import('../public/display/trackSchematic.js');
@@ -48,15 +45,15 @@ const OVAL = [
   ...run(12), arc(RL, 90), ...run(5), arc(RL, 90),
   ...run(12), arc(RL, 90), ...run(5), arc(RL, 90)
 ];
-// GRAND_TOUR: a flat-closing 9/7/9/7 rectangle that is hills/bumps end-to-end (the
-// elevation / orthonormal-frame / seam-holonomy checks). Net-flat (each rise paired).
+// GRAND_TOUR: a flat-closing 9/7/9/7 rectangle that is hills end-to-end (the
+// elevation / orthonormal-frame / seam-holonomy / berm checks). Net-flat (each rise paired).
 const GRAND_TOUR = [
-  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
   straight(L), straight(L), arc(RL, 90),
-  straight(L), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), arc(RL, 90),
-  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
+  straight(L), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L), straight(L), arc(RL, 90),
+  straight(L), straight(L, { rise: 1 }), straight(L, { rise: -1 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }),
   straight(L), straight(L), arc(RL, 90),
-  straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { bump: 0.5 }), straight(L, { bump: -0.5 }), straight(L), straight(L), straight(L), arc(RL, 90)
+  straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L, { rise: 0.5 }), straight(L, { rise: -0.5 }), straight(L), straight(L), straight(L), arc(RL, 90)
 ];
 
 test('oval closes into a loop', () => {
@@ -375,11 +372,11 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
 // tangent, or a too-sharp joint — across every named track.
 //
 // NB: the oval-only "curvature never abruptly reverses" check is deliberately NOT
-// generalised here. A chicane (curve→curveR) is an S-bend: its curvature reverses
-// sign by design, so slalom/switchback/riverside legitimately "flip". The bounded
-// per-unit tangent step below is shape-agnostic — it catches a sharp joint without
-// flagging an intentional weave (steady tight corner ≈ 0.023 rad/0.1u, chicane
-// transitions peak ≈ 0.056, all well under the 0.08 bound).
+// generalised here. An S-bend's curvature reverses sign by design (the generated
+// tracks weave), so those legitimately "flip". The bounded per-unit tangent step
+// below is shape-agnostic — it catches a sharp joint without flagging an
+// intentional weave (steady tight corner ≈ 0.023 rad/0.1u, S-transitions peak
+// ≈ 0.056, all well under the 0.08 bound).
 test('every named track has a clean centerline (no backstep, no stubs, no sharp joints)', () => {
   for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const cl = buildTrack(def).centerline;
@@ -401,8 +398,8 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
     // where it is level (its eased entry/exit transitions). Skip near-vertical,
     // well-banked, high-altitude and flared-stunt samples and re-seed — every
     // ground-level near-flat default-width stretch (including hills/bridges, which
-    // top out at 2.0) is still covered. (Flares on plain straights — Crossover,
-    // Switchback — are also skipped; their heading is trivially constant anyway.)
+    // top out at 2.0) is still covered. (Flared plain straights are also skipped;
+    // their heading is trivially constant anyway.)
     const STEP = 0.1;
     let prev = null, worstStep = 0;
     for (let s = 0; s <= cl.length; s += STEP) {
@@ -450,7 +447,18 @@ test('banking: corners lean INTO the turn and stay upright', () => {
 });
 
 test('variable width: a flared track widens past the default and eases back', () => {
-  const t = buildTrack(DEV_TRACKS.crossover); // its spine is flared via flare(6, 3.4)
+  // A local fixture: OVAL's long side bulges to 3.4 via [start,end] width tapers (the
+  // same per-segment machinery Gauntlet's narrowing ramp uses), easing back to the
+  // default at both ends. Width never changes the path, so closure is unaffected.
+  const FLARED = [
+    ...run(4),
+    straight(L, { width: [2.5, 3.05] }), straight(L, { width: [3.05, 3.4] }),
+    straight(L, { width: [3.4, 3.05] }), straight(L, { width: [3.05, 2.5] }),
+    ...run(4), arc(RL, 90), ...run(5), arc(RL, 90),
+    ...run(12), arc(RL, 90), ...run(5), arc(RL, 90)
+  ];
+  const t = buildTrack(FLARED);
+  assert.ok(t.closed, `flared oval should close (gap=${t.gap.toFixed(3)})`);
   let maxW = 0, minW = Infinity;
   for (let s = 0; s < t.length; s += 0.5) {
     const w = t.centerline.widthAt(s);
@@ -461,8 +469,8 @@ test('variable width: a flared track widens past the default and eases back', ()
 });
 
 test('buildTrack accepts a bare segment array and a descriptor alike', () => {
-  const fromArray = buildTrack(DEV_TRACKS.switchback.segments);
-  const fromDef = buildTrack(DEV_TRACKS.switchback);
+  const fromArray = buildTrack(OVAL);
+  const fromDef = buildTrack({ name: 'Oval', segments: OVAL });
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
   assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.segments array/);
 });
@@ -476,16 +484,15 @@ test('an unknown segment kind throws a clear error', () => {
   assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
 });
 
-// ---- Twister: the stunt track (the segments that go 3D) — a raised bridge, the
-// 450° climbing spiral, and two tilted toy loops. The loops/spiral roll the car via
-// the centerline curving through space. (The bridge once corkscrewed the ribbon — a
-// `roll: 360` barrel roll — removed for motion sickness; the engine handled it fine.)
-// Each geometric element carries a probe-measured `roll` trim cancelling its
-// transported holonomy. ----
+// ---- Helix: the stunt-geometry reference (the segments that go 3D) — two 450°
+// climbing/descending spirals, a pillared skyway, and an S-pair of tilted toy loops.
+// The loops/spirals roll the car via the centerline curving through space; each
+// geometric element carries a probe-measured `roll` trim cancelling its transported
+// holonomy (see scripts/compose-stunt.mjs). ----
 
-test('twister closes and the loops genuinely invert the frame', () => {
-  const t = buildTrack(DEV_TRACKS.twister);
-  assert.ok(t.closed, `twister should close (gap=${t.gap.toFixed(3)})`);
+test('helix closes and the loops genuinely invert the frame', () => {
+  const t = buildTrack(TRACKS.helix);
+  assert.ok(t.closed, `helix should close (gap=${t.gap.toFixed(3)})`);
   let maxY = -Infinity, inverted = 0;
   for (const sm of t.centerline.samples) {
     maxY = Math.max(maxY, sm.pos.y);
@@ -495,8 +502,8 @@ test('twister closes and the loops genuinely invert the frame', () => {
   assert.ok(inverted > 0, 'no inverted frames found — the loop is not looping');
 });
 
-test('twister stunts carry the road sideways and over the top, edges clear of the grass', () => {
-  const t = buildTrack(DEV_TRACKS.twister);
+test('helix stunts carry the road sideways and over the top, edges clear of the grass', () => {
+  const t = buildTrack(TRACKS.helix);
   const ss = t.centerline.samples;
   // The loops/spiral/roll all put the deck sideways somewhere; assert sideways
   // decks exist at all, and separately that the tilted loops crest at 2·radius
@@ -521,50 +528,53 @@ test('twister stunts carry the road sideways and over the top, edges clear of th
   }
 });
 
-test('twister deck twist rate stays shallow everywhere (no helicoid corkscrews)', () => {
-  // The signature regression test: the original heartline corkscrew twisted the
-  // ribbon at ~0.31 rad/world — a rigid car could only chord it (≈36° of misfit
-  // across a wheelbase, the "flat car floats on the screwed road" bug), and that
-  // predated the engine's local-surface pose (cars now tilt to the helicoid under
-  // them). The shipped track now peaks at ~0.085 (the loop/spiral roll trims) since
-  // the barrel-roll bridge was removed; the 0.21 bound still guards the bad-old
-  // corkscrew while leaving room to restore the barrel roll (~0.18 peak, flush
-  // within ~10° across a wheelbase with the pose conforming).
-  const t = buildTrack(DEV_TRACKS.twister);
-  const ss = t.centerline.samples;
-  let worst = 0, at = 0;
-  for (let i = 1; i < ss.length; i++) {
-    const a = ss[i - 1], b = ss[i], ds = b.s - a.s;
-    if (ds <= 1e-6) continue;
-    const tg = a.tangent;
-    const ua = a.up.clone().addScaledVector(tg, -a.up.dot(tg)).normalize();
-    const ub = b.up.clone().addScaledVector(tg, -b.up.dot(tg)).normalize();
-    const ang = Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub)));
-    if (ang / ds > worst) { worst = ang / ds; at = a.s; }
+test('stunt deck twist rate stays shallow everywhere (no helicoid corkscrews)', () => {
+  // The signature regression test: an early heartline corkscrew twisted the ribbon
+  // at ~0.31 rad/world — a rigid car could only chord it (≈36° of misfit across a
+  // wheelbase, the "flat car floats on the screwed road" bug), and that predated
+  // the engine's local-surface pose (cars now tilt to the helicoid under them).
+  // Skyline's Immelmann skyway (`roll: 180` eased over the span) is the hottest
+  // shipped case at ~0.17 rad/world; the 0.21 bound guards the bad-old corkscrew
+  // while leaving it room. Check every shipped segment-DSL stunt track.
+  for (const id of ['skysnake', 'skyline', 'helix', 'gauntlet']) {
+    const t = buildTrack(TRACKS[id]);
+    const ss = t.centerline.samples;
+    let worst = 0, at = 0;
+    for (let i = 1; i < ss.length; i++) {
+      const a = ss[i - 1], b = ss[i], ds = b.s - a.s;
+      if (ds <= 1e-6) continue;
+      const tg = a.tangent;
+      const ua = a.up.clone().addScaledVector(tg, -a.up.dot(tg)).normalize();
+      const ub = b.up.clone().addScaledVector(tg, -b.up.dot(tg)).normalize();
+      const ang = Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub)));
+      if (ang / ds > worst) { worst = ang / ds; at = a.s; }
+    }
+    assert.ok(worst < 0.21, `${id}: deck twists at ${worst.toFixed(3)} rad/world near s=${at.toFixed(1)} — helicoid territory (bound 0.21)`);
   }
-  assert.ok(worst < 0.21, `deck twists at ${worst.toFixed(3)} rad/world near s=${at.toFixed(1)} — helicoid territory (bound 0.21)`);
 });
 
-test('twister frames stay orthonormal and resolve upright at the seam', () => {
-  const t = buildTrack(DEV_TRACKS.twister);
-  let worstDot = 0, worstLen = 0;
-  for (const sm of t.centerline.samples) {
-    worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
-    worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+test('stunt frames stay orthonormal and resolve upright at the seam', () => {
+  // Every element's transported holonomy (tilted loops, the climbing spirals, the
+  // Immelmann) must be cancelled by its own roll trim: if the lap's twist didn't net
+  // out, the seam unwind would smear the residual around the whole track and tilt
+  // the grid straight.
+  for (const id of ['skysnake', 'skyline', 'helix', 'gauntlet']) {
+    const t = buildTrack(TRACKS[id]);
+    let worstDot = 0, worstLen = 0;
+    for (const sm of t.centerline.samples) {
+      worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
+      worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+    }
+    assert.ok(worstDot < 1e-3, `${id}: up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
+    assert.ok(worstLen < 1e-3, `${id}: up not unit length (worst=${worstLen.toFixed(4)})`);
+    const ss = t.centerline.samples;
+    assert.ok(ss[0].up.y > 0.95, `${id}: seam up should be ~vertical (got ${ss[0].up.y.toFixed(2)})`);
+    assert.ok(ss[ss.length - 1].up.dot(ss[0].up) > 0.9, `${id}: up twists across the seam`);
   }
-  assert.ok(worstDot < 1e-3, `up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
-  assert.ok(worstLen < 1e-3, `up not unit length (worst=${worstLen.toFixed(4)})`);
-  // Every element's transported holonomy (tilted loops ±75.5°, the climbing spiral
-  // ~35°) must be cancelled by its own roll trim: if the lap's twist didn't net out,
-  // the seam unwind would smear the residual around the whole track and tilt the
-  // grid straight.
-  const ss = t.centerline.samples;
-  assert.ok(ss[0].up.y > 0.95, `seam up should be ~vertical (got ${ss[0].up.y.toFixed(2)})`);
-  assert.ok(ss[ss.length - 1].up.dot(ss[0].up) > 0.9, 'up twists across the seam');
 });
 
-test('twister spiral bridges over its own entrance with real clearance', () => {
-  const t = buildTrack(DEV_TRACKS.twister);
+test('helix spiral bridges over its own entrance with real clearance', () => {
+  const t = buildTrack(TRACKS.helix);
   // The spiral's elevated final quarter crosses directly over its own entrance.
   // Find sample pairs sharing a plan footprint but far apart along the lap — there
   // must be a genuinely stacked stretch, and it must clear like a (tall) bridge.
@@ -589,9 +599,9 @@ test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface
   // A twisted road is a helicoid: away from the centreline the surface normal
   // pitches by atan(lat·twistRate) off the frame up. The engine's pose.up must be
   // that LOCAL normal, or a curb-running car visibly floats off / digs into the
-  // twisting road (oriented to the centre frame alone it was ~50° off). No shipped
-  // track sustains a heartline roll any more (Twister's stunts are geometric), so
-  // exercise the engine against a private rolled fixture.
+  // twisting road (oriented to the centre frame alone it was ~50° off). Skyline's
+  // Immelmann is the only shipped sustained roll, so exercise the engine against a
+  // private rolled fixture with the full 360° corkscrew.
   const { Game } = await import('../public/display/engine/Game.js');
   const ROLLED = [
     ...run(4), arc(RL, 90), ...run(2), arc(RL, 90),
@@ -671,18 +681,16 @@ test('support posts are clearly out of the corridor or visibly in it with a coll
   }
 });
 
-// THE PHANTOM-POLE REGRESSION. Sidewinder (live, Canyon Cup) and retired Crossover each
-// shipped one collision pole with no post at its world position: a pillar under the
-// strand's own rising/falling deck, whose ground-level approach re-entered the pillar's
-// height band 2+ units down the road — the radial intrusion measure read that as a deep
-// on-road obstruction and planted an invisible mid-lane pole. Neither track has any
-// corridor-blocking post, so neither may emit collision poles at all.
+// THE PHANTOM-POLE REGRESSION. Sidewinder (live, Canyon Cup) shipped one collision pole
+// with no post at its world position: a pillar under the strand's own rising/falling
+// deck, whose ground-level approach re-entered the pillar's height band 2+ units down
+// the road — the radial intrusion measure read that as a deep on-road obstruction and
+// planted an invisible mid-lane pole. The track has no corridor-blocking post, so it
+// may not emit collision poles at all.
 test('no phantom poles under a strand climbing over its own supports', () => {
-  for (const name of ['sidewinder', 'crossover']) { // one shipped, one retired — hence ALL_TRACKS
-    const t = buildTrack(ALL_TRACKS[name]);
-    assert.equal(t.autoPoles.length, 0,
-      `track "${name}": expected zero autoPoles (its pillars all stand under their own deck), got ${t.autoPoles.length}`);
-  }
+  const t = buildTrack(TRACKS.sidewinder);
+  assert.equal(t.autoPoles.length, 0,
+    `sidewinder: expected zero autoPoles (its pillars all stand under their own deck), got ${t.autoPoles.length}`);
 });
 
 // DEEP-INTRUDER FIXTURE. No shipped track keeps a post inside a corridor (placement's
@@ -746,7 +754,7 @@ test('no two same-level upright strands overlap road surfaces', () => {
   }
 });
 
-// COLLISION SAFETY. A self-crossing track (e.g. Crossover) is only valid if the
+// COLLISION SAFETY. A self-crossing track (e.g. Pretzel) is only valid if the
 // strands that meet in plan are far apart in HEIGHT — a bridge. Any two bits of
 // road that are close in 3D but distant along the lap means cars from two places
 // share the same space: a crash/merge, not a crossing. (This is exactly the bug
@@ -774,11 +782,12 @@ test('no track has overlapping strands (every crossing is bridged)', () => {
 // bridges (pillars) and loops/banked stunts must NOT be mistaken for hills (a berm there
 // would put a grass mound under a stunt or bury the road a bridge flies over). ----
 test('grass hills berm raised non-pillared road, never bridges or loops', () => {
-  const hillsOf = (name) => buildTrack(DEV_TRACKS[name]).hills;
-  assert.ok(hillsOf('switchback').length > 0, 'switchback hills should berm');
-  assert.ok(hillsOf('riverside').length > 0, 'riverside hills should berm');
-  assert.equal(hillsOf('twister').length, 0, 'twister: all raised road is bridge/loop/spiral — no berms');
-  assert.equal(hillsOf('crossover').length, 0, 'crossover: its only rise is a pillared bridge — no berms');
+  // Positive: GRAND_TOUR's open-ground rises must loft berms. Negative: the stunt
+  // tracks' raised road is all pillared bridge/loop/spiral — a berm there would put
+  // a grass mound under a stunt.
+  assert.ok(buildTrack(GRAND_TOUR).hills.length > 0, 'grand tour open-ground hills should berm');
+  assert.equal(buildTrack(TRACKS.helix).hills.length, 0, 'helix: all raised road is bridge/loop/spiral — no berms');
+  assert.equal(buildTrack(TRACKS.gauntlet).hills.length, 0, 'gauntlet: all raised road is pillared — no berms');
 });
 
 // The seeded Backyard tracks are waypoint/spline tracks: every one mixes flown-over
@@ -796,7 +805,7 @@ test('seeded Backyard tracks produce both bridge pillars and grass berms', () =>
 });
 
 test('hill berms feather to the lawn at both ends and rise under the road between', () => {
-  const t = buildTrack(DEV_TRACKS.riverside);
+  const t = buildTrack(GRAND_TOUR);
   const gy = t.groundY;
   assert.ok(t.hills.length > 0);
   for (const rings of t.hills) {

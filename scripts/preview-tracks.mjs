@@ -3,7 +3,7 @@
 // seeds (the 3D gallery stays the final judge; this is for shape triage and collision
 // debugging: strands colour by height, so an unbridged graze or a floating knot pops).
 //
-//   node scripts/preview-tracks.mjs easy:14,15,19 hard:18,62 stunt:helix,skyline catalog:twister
+//   node scripts/preview-tracks.mjs easy:14,15,19 hard:18,62 stunt:helix,skyline catalog:gym
 //   node scripts/preview-tracks.mjs easy:14 --out /tmp/preview.html
 //
 // Sources: <profile>:<seeds> bakes seeds through that generator profile; stunt:<names>
@@ -11,7 +11,7 @@
 // is exactly what you want to see); catalog:<ids> reads shipped tracks.
 import fs from 'fs';
 import { bakeSeed, buildTrack } from './track-gen.mjs';
-import { DESIGNS, CANDIDATE_DESIGNS, compose } from './compose-stunt.mjs';
+import { DESIGNS, compose } from './compose-stunt.mjs';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const outIdx = process.argv.indexOf('--out');
@@ -53,7 +53,7 @@ for (const arg of args) {
   for (const item of (list || '').split(',').filter(Boolean)) {
     try {
       if (kind === 'stunt') {
-        const design = (DESIGNS[item] || CANDIDATE_DESIGNS[item])();
+        const design = DESIGNS[item]();
         let note;
         try {
           const r = await compose(design);
@@ -64,8 +64,7 @@ for (const arg of args) {
         }
         cards.push(svgFor(buildTrack(design.segs), `stunt ${item}`, note));
       } else if (kind === 'catalog') {
-        // Both catalogues: the shipped tracks and the dev/retired surfaces (devTracks.js) —
-        // the `catalog:twister` example above is a retired one.
+        // Both catalogues: the shipped tracks and the dev surfaces (devTracks.js — e.g. gym).
         const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
         const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
         const def = TRACKS[item] || DEV_TRACKS[item];

@@ -68,7 +68,8 @@ test('cars auto-accelerate forward and progress', () => {
   const before = game.getSnapshot().cars[0].pose.pos; // plain data, fresh per snapshot — no aliasing
   drive(game, track, 'p1', 2);
   const snap = game.getSnapshot().cars[0];
-  assert.ok(snap.v > 5, `should be moving (v=${snap.v.toFixed(1)})`);
+  const v = game.cars.get('p1').v;
+  assert.ok(v > 5, `should be moving (v=${v.toFixed(1)})`);
   const moved = new Vec3(snap.pose.pos.x, snap.pose.pos.y, snap.pose.pos.z).distanceTo(before);
   assert.ok(moved > 3, 'car should have moved along track');
 });
@@ -77,9 +78,9 @@ test('braking slows the car', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
   drive(game, track, 'p1', 3);
-  const fast = game.getSnapshot().cars[0].v;
+  const fast = game.cars.get('p1').v;
   drive(game, track, 'p1', 1.5, 1);
-  const slow = game.getSnapshot().cars[0].v;
+  const slow = game.cars.get('p1').v;
   assert.ok(slow < fast, `brake should reduce speed (${fast.toFixed(1)} -> ${slow.toFixed(1)})`);
 });
 
@@ -87,13 +88,13 @@ test('analog brake settles at a proportional cruise speed', () => {
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
   drive(game, track, 'p1', 4);
-  const top = game.getSnapshot().cars[0].v;
+  const top = game.cars.get('p1').v;
   drive(game, track, 'p1', 3, 0.5);
-  const half = game.getSnapshot().cars[0].v;
+  const half = game.cars.get('p1').v;
   assert.ok(half > 1, `50% brake should NOT fully stop (v=${half.toFixed(1)})`);
   assert.ok(half < top * 0.8, `50% brake should clearly slow it (${top.toFixed(1)} -> ${half.toFixed(1)})`);
   drive(game, track, 'p1', 3, 1);
-  assert.ok(game.getSnapshot().cars[0].v < 0.5, 'full brake should stop the car');
+  assert.ok(game.cars.get('p1').v < 0.5, 'full brake should stop the car');
 });
 
 // ---- solid support poles (spiral) ----
@@ -109,7 +110,7 @@ test('driving head-on into a pole bleeds most speed but never freezes you', () =
   for (let i = 0; i < 400; i++) {
     game.processInput('p1', { s: followSteer(game, track, 'p1'), b: 0 }); // tracks the centre line → head-on
     game.update(16);
-    const c = game.getSnapshot().cars[0];
+    const c = game.cars.get('p1');
     if (c.totalS > 6 && c.totalS < 11) cruise = Math.max(cruise, c.v);          // speed before the pole
     if (Math.abs(wrap(c.totalS - 14, track.length)) < 1.5) dipAtPole = Math.min(dipAtPole, c.v);
   }
@@ -179,7 +180,7 @@ test('hard steering reaches the curb but never gets stuck and cannot u-turn', ()
   const track = mkTrack(3);
   const game = new Game(['p1'], track, {});
   for (let i = 0; i < 130; i++) { game.processInput('p1', { s: 1 }); game.update(16); }
-  const car = game.getSnapshot().cars[0];
+  const car = game.cars.get('p1');
   // The curb clamp pins the car's BODY edge at the curb, not its centre: a hard-steered car
   // carries a big yaw, so its oriented footprint reaches further across and the centre sits
   // back by that extra reach (it no longer pokes the body through the curb). So check the car
@@ -560,7 +561,7 @@ function topSpeed(stats, secs = 6) {
   for (let i = 0; i < (secs * 1000) / 16; i++) {
     game.processInput('x', { s: followSteer(game, track, 'x'), b: 0 });
     game.update(16);
-    mx = Math.max(mx, game.getSnapshot().cars[0].v);
+    mx = Math.max(mx, game.cars.get('x').v);
   }
   return mx;
 }
@@ -578,7 +579,7 @@ test('accel stat scales how fast a car gets up to speed', () => {
     const track = mkTrack(3);
     const game = new Game([{ id: 'x', stats }], track, {});
     drive(game, track, 'x', 0.5); // short burst, before either nears top speed
-    return game.getSnapshot().cars[0].v;
+    return game.cars.get('x').v;
   };
   const quick = speedAfter({ accel: 2.0 });
   const sluggish = speedAfter({ accel: 0.5 });
@@ -744,7 +745,7 @@ test('a stats-less (plain id) car keeps the benchmark feel', () => {
   const t1 = mkTrack(3), g1 = new Game(['x'], t1, {});
   const t2 = mkTrack(3), g2 = new Game([{ id: 'x', stats: { accel: 1, vmax: 1, turn: 1, mass: 1 } }], t2, {});
   drive(g1, t1, 'x', 3); drive(g2, t2, 'x', 3);
-  const v1 = g1.getSnapshot().cars[0].v, v2 = g2.getSnapshot().cars[0].v;
+  const v1 = g1.cars.get('x').v, v2 = g2.cars.get('x').v;
   assert.ok(Math.abs(v1 - v2) < 1e-6, `default == explicit-1.0 (${v1} vs ${v2})`);
 });
 
@@ -1394,10 +1395,10 @@ test('item moments emit events: pickup, item_use, pad, spin', () => {
   const use = events.find((e) => e.type === 'item_use');
   assert.ok(use && use.id === 'p1' && use.item === 'boost', 'firing the item emits item_use');
 
-  // boost pad (rising edge)
+  // boost pad (rising edge) — no event; the boost is observable as state (boostMul)
   Object.assign(car, { totalS: 20, lat: 0, v: 0, boostT: 0, boostMul: 1 });
   game.processInput('p1', { b: 1 }); game.update(16);
-  assert.ok(events.some((e) => e.type === 'pad' && e.id === 'p1'), 'crossing a pad emits pad');
+  assert.ok(car.boostMul > 1.001, 'crossing a pad arms the boost (state-driven, no event)');
 
   // banana hit → spin (a live banana owned by someone else)
   game.bananas.push({ id: 99, s: car.totalS % game.length, lat: car.lat, owner: 'someone-else' });
@@ -1959,7 +1960,7 @@ test('mid-race snapshot is plain data — JSON round-trip preserves it exactly',
   const snap = game.getSnapshot();
   assert.equal(snap.version, CONTRACT_VERSION, 'snapshot carries the contract version');
   const p = snap.cars[0].pose;
-  assert.ok(snap.cars[0].v > 3 && (Math.abs(p.forward.x) > 1e-6 || Math.abs(p.forward.z - 1) > 1e-6),
+  assert.ok(game.cars.get('p1').v > 3 && (Math.abs(p.forward.x) > 1e-6 || Math.abs(p.forward.z - 1) > 1e-6),
     'poses are non-trivial mid-race (the round-trip must exercise real floats)');
   assert.equal(Object.getPrototypeOf(p.pos), Object.prototype, 'pose vectors are plain objects, not class instances');
   // deepStrictEqual also compares prototypes, so any class instance anywhere in
@@ -2016,7 +2017,7 @@ test('boundary query API returns plain data; staging hooks stage without private
   assert.equal(game.getSnapshot().cars.find((c) => c.id === 'p2').item, 'rocket');
   assert.equal(game.useItem('p2'), true);
   assert.equal(game.getSnapshot().rockets.length, 1, 'useItem fired the rocket');
-  assert.equal(game.getSnapshot().rockets[0].owner, 'p2');
+  assert.equal(game.rockets[0].owner, 'p2');
   assert.equal(game.useItem('p2'), false, 'slot is empty after firing');
   assert.equal(game.giveItem('p1', 'boost'), true);
   assert.equal(game.giveItem('p1', null), true, 'giveItem(null) clears the slot');
@@ -2048,5 +2049,5 @@ test('boundary query API returns plain data; staging hooks stage without private
   const rid = game.stageRocket(5, 0.7);
   const rock = game.getSnapshot().rockets.find((r) => r.id === rid);
   assert.ok(rock, 'staged rocket is live in the snapshot');
-  assert.equal(rock.owner, 'staged', 'default owner sits outside real id namespaces');
+  assert.equal(game.rockets.find((r) => r.id === rid).owner, 'staged', 'default owner sits outside real id namespaces');
 });

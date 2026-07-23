@@ -15,10 +15,8 @@
 //   node scripts/audit-tracks.mjs
 import { buildTrack } from './track-gen.mjs';
 
-// Audit BOTH catalogues: the shipped tracks (tracks.js) and the dev/retired surfaces
-// (devTracks.js). The retired circuits are kept for exactly this kind of geometry check —
-// the invisible-pole bug this script exists to catch was found on one of them — so
-// iterating the shipped list alone would drop them silently.
+// Audit BOTH catalogues: the shipped tracks (tracks.js) and the dev surfaces
+// (devTracks.js — the Gym).
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
 const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
 const ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };

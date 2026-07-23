@@ -1,14 +1,11 @@
-// Track gallery — one SECTION per cup: the shipped tracks first, then the audition
-// CANDIDATES baked by scripts/gen-candidates.mjs (8 per section), each card an iframe
-// loading the real display in track-preview mode (/?scenario=track&track=<id>): the
-// whole layout under a slowly orbiting overview camera with a small AI field driving
-// it (+ the live minimap). This is the selection surface — pick winners here, promote
-// them via gen-tracks.mjs / tracks.js, re-bake, and drop them from the candidates.
+// Track gallery — one SECTION per cup, each card an iframe loading the real display
+// in track-preview mode (/?scenario=track&track=<id>): the whole layout under a
+// slowly orbiting overview camera with a small AI field driving it (+ the live
+// minimap).
 //
 // This is an ES module (so it can import the track catalogue directly) but it
 // still leans on the classic-script `window.Gallery` loaded just before it.
 import { TRACKS, CUPS } from '/shared/tracks.js';
-import { CANDIDATE_TRACKS } from '/shared/candidateTracks.js';
 
 const Gallery = window.Gallery;
 const state = Gallery.loadState();
@@ -65,9 +62,6 @@ function render() {
     strip.className = 'scenario-strip';
     strip.style.setProperty('--row-cols', state.trackCardsPerRow);
     for (const id of cup.tracks) if (TRACKS[id]) addCard(strip, id, TRACKS[id].name, '· shipped');
-    for (const [id, def] of Object.entries(CANDIDATE_TRACKS)) {
-      if (def.cup === cup.id) addCard(strip, id, def.name, '· candidate');
-    }
     host.appendChild(strip);
   }
   lazyIo = Gallery.lazyMount(allCards);

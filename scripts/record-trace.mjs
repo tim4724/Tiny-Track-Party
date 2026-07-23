@@ -39,7 +39,7 @@
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildTrack, TRACKS } from '../public/display/TrackBuilder.js';
+import { buildTrack, resolveFurniture, TRACKS } from '../public/display/TrackBuilder.js';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
 import { AiController, AI_PERSONALITIES } from '../public/display/AiDriver.js';
 
@@ -68,12 +68,9 @@ export function fnv1a(str) {
 }
 
 // ---- track construction ----
-// Build a catalogue track the way the display races it: buildTrack geometry
-// plus the furniture resolve (fraction-of-lap u -> arclength s) mirrored from
-// display/main.js buildEntry — oils→hazards, pads (+ the auto loop-mouth
-// launch strips), boxes, poles (+ builder autoPoles), authored bananas.
-// Renderer-only fields (cones, cup theme) are left off: the engine never
-// reads them, and the trace covers the ENGINE contract only.
+// Build a catalogue track the way the display races it: buildTrack geometry plus
+// the SHARED furniture resolve (TrackBuilder.resolveFurniture — the same code
+// display/main.js buildEntry runs, so the game and this oracle can't drift).
 export function buildRaceTrack(trackId, { laps = 3, seed = 1 } = {}) {
   const def = TRACKS[trackId];
   if (!def) throw new Error(`unknown trackId '${trackId}' (known: ${Object.keys(TRACKS).join(', ')})`);
@@ -81,30 +78,18 @@ export function buildRaceTrack(trackId, { laps = 3, seed = 1 } = {}) {
   b.trackId = trackId;
   b.totalLaps = laps;
   b.seed = seed >>> 0; // the engine's item-roll RNG seed (Game reads track.seed)
-  const u2s = (u) => (((u % 1) + 1) % 1) * b.length;
-  b.hazards = (def.oils || []).map((o) => ({
-    s: u2s(o.u), lat: o.lat || 0,
-    radius: o.radius != null ? o.radius : b.roadWidth * 0.2
-  }));
-  b.pads = (def.pads || []).map((p) => ({
-    s: u2s(p.u), lat: p.lat || 0,
-    radius: p.radius != null ? p.radius : b.roadWidth * 0.18
-  }));
-  const LOOP_PAD_LEN = 2.2; // world units along travel (mirrors main.js)
-  for (const ls of (b.loopStarts || [])) {
-    b.pads.push({
-      s: (((ls.s - LOOP_PAD_LEN / 2) % b.length) + b.length) % b.length,
-      lat: 0, shape: 'strip', halfLen: LOOP_PAD_LEN / 2, halfWidth: ls.width / 2
-    });
-  }
-  b.boxes = (def.boxes || []).map((p) => ({
-    s: u2s(p.u), lat: p.lat || 0,
-    radius: p.radius != null ? p.radius : b.roadWidth * 0.09
-  }));
-  b.poles = (def.poles || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0, radius: p.radius != null ? p.radius : 0.45 }))
-    .concat(b.autoPoles || []);
-  b.bananas = (def.bananas || []).map((p) => ({ s: u2s(p.u), lat: p.lat || 0 }));
+  resolveFurniture(b, def);
   return b;
+}
+
+// Apply a header `stage` list to a freshly built Game — shared by record + verify
+// so a staged prop is part of the replayable config, not a side effect.
+export function applyStage(game, stage) {
+  for (const st of (stage || [])) {
+    if (st.kind === 'rocket') game.stageRocket(st.s, st.lat, st.opts || {});
+    else if (st.kind === 'banana') game.stageBanana(st.s, st.lat);
+    else throw new Error(`unknown stage kind '${st.kind}'`);
+  }
 }
 
 // ---- recording ----
@@ -121,7 +106,7 @@ export function recordTrace(config) {
   const {
     trackId, frames,
     seed = 1, laps = 3, dt = TRACE_DT_MS, snapshotEvery = 60,
-    bots = [], humans = []
+    bots = [], humans = [], stage = []
   } = config;
   if (!trackId || !Number.isInteger(frames) || frames <= 0) {
     throw new Error('recordTrace: config needs a trackId and a positive integer frames');
@@ -153,6 +138,11 @@ export function recordTrace(config) {
   const header = {
     contractVersion: CONTRACT_VERSION,
     seed, trackId, dt, laps, roster, frames, snapshotEvery,
+    // Optional pre-race staging, applied right after Game construction (and by the
+    // verifier, identically): deterministic props the race dynamics alone can't
+    // guarantee — e.g. a target-less rocket staged ahead of the grid whiffs at end
+    // of run, covering rocket_expire on tracks where bot rockets always connect.
+    ...(stage.length ? { stage } : {}),
     // The JS engine AND platform that recorded this trace. Bit-exact replay
     // is only guaranteed on the same engine on the same platform:
     // transcendental Math.* results are implementation-approximated, differ
@@ -172,6 +162,7 @@ export function recordTrace(config) {
     track,
     { onEvent: (e) => pending.push(e) }
   );
+  applyStage(game, stage);
 
   // One AiController per bot, seeded from the header — plus a capture wrapper
   // so the input driveBot applies lands in the frame record verbatim.

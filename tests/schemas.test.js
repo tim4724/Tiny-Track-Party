@@ -80,7 +80,7 @@ test('event vocabulary in the schema matches every onEvent emit site in Game.js'
   const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'display', 'engine', 'Game.js'), 'utf8');
   const emitted = new Set();
   for (const m of src.matchAll(/this\.onEvent\(\{\s*type:\s*'([a-z_]+)'/g)) emitted.add(m[1]);
-  assert.ok(emitted.size >= 9, 'found the emit sites (regex still matches the source)');
+  assert.ok(emitted.size >= 7, 'found the emit sites (regex still matches the source)');
 
   const schemaTypes = new Set();
   for (const ref of schema.oneOf) {
