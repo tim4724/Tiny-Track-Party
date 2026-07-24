@@ -60,22 +60,34 @@ decision before anything else proceeds.
 5. **Device fixture hosts** keep running the growing fixture set on both
    floor devices throughout — regressions surface per-step.
 
-## Track S — sim conformance
+## Track S — sim conformance — **COMPLETE 2026-07-24** (PRs #24–#29 + M4)
 
-1. **Repair the oracle first.** Pin an exact Node/V8 build for fixture
-   recording; add AI-live traces (AiDriver re-run, not replayed) and
-   RaceSession-driven traces; cover mutation APIs, variable dt and the
-   endgame; schema the augmented track object; write the C++ FP profile
-   (double authoritative, FMA/contraction off, JS `%`/rounding/signed-zero
-   semantics, a `JSON.stringify`-matching serializer, the vendored V8
-   fdlibm revision named).
-2. **Port `libttp-track`** with a standalone sampler corpus (wrap seams,
-   negative s, degenerate tangents, `projectNear` clamp ties) so track-math
-   mismatches isolate before whole-race failures.
-3. **Re-arm the committed fixtures and port `libttp-sim`** to exact
-   agreement on every trace. If last-bit matching proves disproportionate
-   on some target, the fallback — exact discrete state plus bounded
-   numeric tolerances — is decided deliberately, not discovered mid-port.
+Executed as milestones M0–M4; the original steps below, with outcomes:
+
+0. *(Better than planned)* Instead of pinning a Node/V8 build, V8's math was
+   taken OFF the byte path: one vendored fdlibm source
+   (`native/vendor/fdlibm/`) is compiled to WASM for the JS engine
+   (`engine/math.js`) and natively for C++ — traces became engine- and
+   platform-independent, the gate re-armed, fixtures recordable anywhere.
+1. **Oracle repaired** — AI-live, RaceSession-driven (countdown ticks,
+   racing flip, raceEnd), variable-dt and mutation-API trace kinds;
+   augmented-track schema + export; [fp-profile.md](fp-profile.md); all
+   validated by adversarial oracle-mutation matrices (which also found and
+   closed a countdown beat-drift blind spot; persona cautions wired in).
+2. **`libttp-track` ported** — sampler corpus (642 adversarial cases) plus
+   an all-20-tracks buildTrack corpus (hexJSON section hashes, decoration
+   keys included); bit-exact.
+3. **`libttp-sim` ported, fixtures armed** — Game/AiDriver/RaceSession/
+   GrandPrix + the headless replay CLI: every committed fixture replays to
+   exact agreement. The serializer question resolved: double-conversion's
+   `EcmaScriptConverter` IS `JSON.stringify` (52k-case corpus). Last-bit
+   matching held everywhere; the tolerance fallback was never needed —
+   mutation probes reproduce the JS engine's exact failure hashes.
+4. **Platform matrix** — ctest 12/12 on: macOS arm64, linux x64 (CI, every
+   PR), emscripten/WASM under Node, and the Apple TV simulator
+   (`simctl spawn`, all corpora + all replays). Android NDK arm64
+   cross-compiles in CI; on-device replay is scripted-manual until an
+   emulator job earns its keep. `native.yml` runs all legs per PR.
 
 ## Integration
 

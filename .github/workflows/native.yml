@@ -1,22 +1,23 @@
 name: Native conformance
 
 # The C++ side of the conformance scheme (Track S). Runs whenever the native
-# tree, the vendored math, or a shared fixture changes: build with strict FP
-# flags and replay the shared corpus/fixtures bit-for-bit. ubuntu-clang and
-# macos-arm64 together close the cross-compiler loop with the emscripten WASM
-# build that generated the fixtures.
+# tree or a shared fixture changes: build with strict FP flags and replay the
+# shared corpora/fixtures bit-for-bit on every leg of the platform matrix —
+# desktop clang (linux x64 + macOS arm64), emscripten/WASM under Node, the
+# tvOS simulator, and an Android NDK cross-compile. Acceptance for Track S
+# M4: every fixture byte-exact on every runnable target.
 
 on:
   pull_request:
     paths:
       - 'native/**'
-      - 'tests/fixtures/math-corpus.jsonl'
+      - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
   push:
     branches: [main]
     paths:
       - 'native/**'
-      - 'tests/fixtures/math-corpus.jsonl'
+      - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
 
 jobs:
@@ -39,3 +40,63 @@ jobs:
         run: cmake --build native/build/ci --parallel
       - name: Corpus + conformance tests
         run: ctest --test-dir native/build/ci --output-on-failure
+
+  wasm:
+    # The web leg: the same suite compiled with emscripten runs under Node
+    # (NODERAWFS reads the fixtures straight off the checkout). This is the
+    # engine build the shipped game will eventually load.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.10   # any recent emsdk; wasm f64 semantics are version-independent
+      - name: Configure (emscripten)
+        run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
+      - name: Build
+        run: cmake --build native/build/wasm --parallel
+      - name: Corpus + conformance tests (Node)
+        run: ctest --test-dir native/build/wasm --output-on-failure
+
+  tvos-sim:
+    # The Apple TV leg: cross-compile for the tvOS simulator and spawn every
+    # check + every fixture replay on a booted Apple TV 4K simulator.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure (tvOS simulator, arm64)
+        run: cmake -S native -B native/build/tvos-sim -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator -DCMAKE_OSX_ARCHITECTURES=arm64
+      - name: Build
+        run: cmake --build native/build/tvos-sim --parallel
+      - name: Boot Apple TV simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for k,v in d.items() if 'tvOS' in k for dev in v))")
+          xcrun simctl boot "$UDID" || true
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+      - name: Conformance on the simulator
+        run: |
+          R="$PWD/native/build/tvos-sim"
+          set -e
+          xcrun simctl spawn "$UDID" "$R/mathlib_corpus_check.app/mathlib_corpus_check" "$PWD/tests/fixtures/math-corpus.jsonl"
+          xcrun simctl spawn "$UDID" "$R/sampler_check.app/sampler_check" "$PWD/tests/fixtures/track-sampler-corpus.jsonl"
+          xcrun simctl spawn "$UDID" "$R/trackbuilder_check.app/trackbuilder_check" "$PWD/tests/fixtures/trackbuilder-corpus.jsonl"
+          xcrun simctl spawn "$UDID" "$R/serializer_check.app/serializer_check" "$PWD/tests/fixtures/json-number-corpus.jsonl"
+          for f in tests/fixtures/traces/*.jsonl; do
+            xcrun simctl spawn "$UDID" "$R/replay_cli.app/replay_cli" "$PWD/$f"
+          done
+
+  android-ndk:
+    # The Android TV leg: NDK arm64-v8a cross-compile with the same strict FP
+    # flags. Compile-only on CI (no emulator here); on-device replay runs via
+    # adb are scripted-manual until an emulator job earns its keep — the wasm
+    # + tvOS legs already run the fixtures on non-desktop targets every PR.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure (NDK, arm64-v8a)
+        run: cmake -S native -B native/build/android -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24
+      - name: Build
+        run: cmake --build native/build/android --parallel

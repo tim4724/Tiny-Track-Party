@@ -20,6 +20,19 @@ target_compile_options(ttp_strict_fp INTERFACE
   -fno-fast-math
 )
 
+# Emscripten leg (Track S M4): the same check binaries and replay CLI compile
+# to WASM and run under Node — `emcmake cmake ... -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)`
+# lets ctest run them transparently. NODERAWFS reads the fixture files straight
+# from the host filesystem; wasm f64 needs no FP flags but they stay for
+# uniformity.
+if(EMSCRIPTEN)
+  target_link_options(ttp_strict_fp INTERFACE
+    -sNODERAWFS=1
+    -sALLOW_MEMORY_GROWTH=1
+    -sEXIT_RUNTIME=1
+  )
+endif()
+
 # ---- Vendored fdlibm, native build ------------------------------------------
 # Same sources the JS engine ships as WASM (public/display/engine/math.js —
 # see vendor/fdlibm/VENDOR.md). Entry points are renamed ttp_fd_* via -D so
