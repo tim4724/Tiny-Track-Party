@@ -1,0 +1,488 @@
+// ttp_runtime.cc — the C ABI implementation (see ttp_runtime.h).
+//
+// Each handle owns a RuntimeSession: the built track, the added players, and
+// either a RaceSession (countdown mode) or a bare Game (countdown < 0, the
+// input-replay / golden-trace equivalent). The session's onEvent/onCountdown/
+// onRaceEnd callbacks funnel into one ordered event queue that ttp_events_json
+// drains. Bots are driven inside ttp_update, mirroring the live render loop.
+
+#include "ttp_runtime.h"
+
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "generated/track_defs.h"
+#include "ttp/ai_driver.h"
+#include "ttp/canonical.h"
+#include "ttp/centerline.h"
+#include "ttp/game.h"
+#include "ttp/race_session.h"
+#include "ttp/trackbuilder.h"
+
+using namespace ttp;
+
+static const int CONTRACT_VERSION = 2;
+static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
+
+// ---------------------------------------------------------------------------
+// JSON-scalar id + flat stats parsing.
+// ---------------------------------------------------------------------------
+static Id parseId(const char* json) {
+  if (!json) return Id::None();
+  const char* p = json;
+  while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+  if (*p == '"') {
+    std::string s;
+    p++;
+    while (*p && *p != '"') {
+      if (*p == '\\') {
+        p++;
+        switch (*p) {
+          case 'n': s += '\n'; break;
+          case 't': s += '\t'; break;
+          case 'r': s += '\r'; break;
+          case 'b': s += '\b'; break;
+          case 'f': s += '\f'; break;
+          case '"': s += '"'; break;
+          case '\\': s += '\\'; break;
+          case '/': s += '/'; break;
+          case 'u': {
+            int v = 0;
+            for (int i = 0; i < 4 && p[1]; i++) {
+              char hc = *++p;
+              v <<= 4;
+              if (hc >= '0' && hc <= '9') v |= hc - '0';
+              else if (hc >= 'a' && hc <= 'f') v |= hc - 'a' + 10;
+              else if (hc >= 'A' && hc <= 'F') v |= hc - 'A' + 10;
+            }
+            s += (char)v;
+            break;
+          }
+          default: s += *p;
+        }
+        if (*p) p++;
+      } else {
+        s += *p++;
+      }
+    }
+    return Id::Str(s);
+  }
+  if (*p == 'n') return Id::None();  // null
+  return Id::Num(std::strtod(p, nullptr));
+}
+
+// Flat numeric stats object. Keys are distinct tokens, values are numbers, so a
+// keyed scan is sufficient (the adapter emits exactly this shape).
+static void statField(const char* json, const char* key, double& dst) {
+  std::string pat = std::string("\"") + key + "\"";
+  const char* q = std::strstr(json, pat.c_str());
+  if (!q) return;
+  q += pat.size();
+  while (*q == ' ' || *q == '\t' || *q == ':') q++;
+  dst = std::strtod(q, nullptr);
+}
+static Stats parseStats(const char* json) {
+  Stats st;
+  if (!json) return st;
+  statField(json, "accel", st.accel);
+  statField(json, "vmax", st.vmax);
+  statField(json, "turn", st.turn);
+  statField(json, "mass", st.mass);
+  statField(json, "halfLen", st.halfLen);
+  statField(json, "halfWid", st.halfWid);
+  return st;
+}
+
+// ---------------------------------------------------------------------------
+// buildRaceTrack twin (crib of replay_cli.cc): TrackDef -> Centerline + GameTrack.
+// ---------------------------------------------------------------------------
+static const TrackDef* findTrackDef(const std::string& id) {
+  for (int i = 0; i < TTP_TRACK_COUNT; i++)
+    if (id == TTP_TRACKS[i].id) return &TTP_TRACKS[i];
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Per-handle session.
+// ---------------------------------------------------------------------------
+struct BotEntry {
+  Id id;
+  bool hasStats = false;
+  Stats stats;
+  double caution = 1, laneBias = 0;
+  uint32_t aiSeed = 0;
+  std::unique_ptr<AiController> ai;  // built at start
+};
+
+struct RuntimeSession {
+  std::unique_ptr<Centerline> centerline;
+  GameTrack track;
+  std::string forceItem;
+  std::vector<PlayerDesc> humans;  // add order
+  std::vector<BotEntry> bots;      // add order
+
+  bool started = false;  // startCountdown fired (or bare mode running)
+  bool built = false;    // session objects constructed (may precede started)
+  bool bare = false;
+  bool racingBare = false;
+  bool pausedBare = false;
+
+  std::unique_ptr<Game> game;            // bare-mode owner
+  std::unique_ptr<RaceSession> session;  // countdown-mode owner
+  Game* eng = nullptr;
+
+  std::vector<Value> outQueue;
+  std::string scratch;
+
+  // Drive every bot's controller (a no-op for finished/removed cars). Add order.
+  void driveBots() {
+    for (auto& b : bots)
+      if (b.ai) eng->driveBot(b.id, *b.ai, nullptr);
+  }
+};
+
+static std::map<int, std::unique_ptr<RuntimeSession>> g_sessions;
+static int g_next = 1;
+
+static RuntimeSession* get(int h) {
+  auto it = g_sessions.find(h);
+  return it == g_sessions.end() ? nullptr : it->second.get();
+}
+
+static bool buildTrack(RuntimeSession& rs, const std::string& trackId, int laps, uint32_t seed) {
+  const TrackDef* def = findTrackDef(trackId);
+  if (!def) return false;
+  RaceTrack rt = build_race_track(*def, laps, seed);
+  std::vector<Sample> samples;
+  samples.reserve(rt.samples.size());
+  for (const OutSample& s : rt.samples) {
+    Sample cs;
+    cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
+    cs.width = s.width; cs.s = s.s;
+    samples.push_back(cs);
+  }
+  rs.centerline = std::make_unique<Centerline>(std::move(samples), rt.length);
+  GameTrack& g = rs.track;
+  g.centerline = rs.centerline.get();
+  g.length = rt.length;
+  g.totalLaps = laps;
+  g.roadWidth = rt.roadWidth;
+  g.seed = seed;
+  for (const Hazard& h : rt.hazards) g.hazards.push_back(Zone{h.s, h.lat, h.radius});
+  for (const Pad& p : rt.pads)
+    g.pads.push_back(PadRt{p.s, p.lat, p.strip, p.radius, p.halfLen, p.halfWidth});
+  for (const Box& b : rt.boxes) g.boxes.push_back(BoxRt{b.s, b.lat, b.radius, 0, 0});
+  for (const ttp::Pole& p : rt.poles) g.poles.push_back(PoleRt{p.s, p.lat, p.radius});
+  for (const Banana& b : rt.bananas)
+    g.bananas.push_back(BananaRt{0, b.s, b.lat, Id::None(), 0, true, 0, false});
+  return true;
+}
+
+// A shared "no session" string result for calls on a bad/unstarted handle.
+static const char* NULL_JSON = "null";
+static const char* EMPTY_ARR = "[]";
+
+// ---------------------------------------------------------------------------
+// ABI.
+// ---------------------------------------------------------------------------
+extern "C" {
+
+int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* forceItemOrNull) {
+  if (!trackId) return 0;
+  auto rs = std::make_unique<RuntimeSession>();
+  if (!buildTrack(*rs, trackId, laps, seed)) return 0;
+  rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
+  int h = g_next++;
+  g_sessions[h] = std::move(rs);
+  return h;
+}
+
+void ttp_add_human(int h, const char* idJson, const char* statsJsonOrNull) {
+  RuntimeSession* rs = get(h);
+  if (!rs || rs->started || rs->built) return;
+  PlayerDesc p;
+  p.id = parseId(idJson);
+  if (statsJsonOrNull) { p.hasStats = true; p.stats = parseStats(statsJsonOrNull); }
+  rs->humans.push_back(p);
+}
+
+void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
+                 uint32_t aiSeed, const char* statsJsonOrNull) {
+  RuntimeSession* rs = get(h);
+  if (!rs || rs->started || rs->built) return;
+  BotEntry b;
+  b.id = parseId(idJson);
+  b.caution = caution;
+  b.laneBias = laneBias;
+  b.aiSeed = aiSeed;
+  if (statsJsonOrNull) { b.hasStats = true; b.stats = parseStats(statsJsonOrNull); }
+  rs->bots.push_back(std::move(b));
+}
+
+// Construct the RaceSession + bot controllers WITHOUT firing the countdown.
+// Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
+// started handle: the JS RaceSession builds its Game in the constructor, so
+// the display reads grid-pose snapshots BEFORE startCountdown — the ABI must
+// answer those (main.js launchRace paints the grid, then starts the count).
+static void buildSession(RuntimeSession* rs) {
+  if (rs->built || rs->bare) return;
+  rs->built = true;
+
+  // Grid order: humans first, then bots, both in add order.
+  std::vector<PlayerDesc> players = rs->humans;
+  for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+
+  RuntimeSession* self = rs;
+  auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
+  auto onTick = [self](int n) {
+      Value c = Value::Obj();
+      c.set("type", Value::Str("_countdown"));
+      c.set("n", Value::Num((double)n));
+      self->outQueue.push_back(std::move(c));
+      if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
+        Value s = Value::Obj();
+        s.set("type", Value::Str("_raceStart"));
+        self->outQueue.push_back(std::move(s));
+      }
+    };
+    auto onEnd = [self](const Value& r) {
+      Value e = Value::Obj();
+      e.set("type", Value::Str("_raceEnd"));
+      e.set("results", r);  // the getResults() object the adapter hands to onRaceEnd
+      self->outQueue.push_back(std::move(e));
+    };
+  rs->session = std::make_unique<RaceSession>(players, rs->track, onEvent, onEnd, onTick,
+                                              rs->forceItem);
+  rs->eng = &rs->session->engine();
+
+  // Build the bot controllers now that the field (and its cars) exist.
+  for (auto& b : rs->bots)
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+}
+
+void ttp_session_start(int h, int countdownSeconds) {
+  RuntimeSession* rs = get(h);
+  if (!rs || rs->started) return;
+
+  if (countdownSeconds < 0) {
+    // Bare-Game mode (conformance replay): racing from frame 0, no countdown/
+    // session beats. Incompatible with a lazily built session.
+    if (rs->built) return;
+    rs->started = true;
+    rs->bare = true;
+    rs->racingBare = true;
+    std::vector<PlayerDesc> players = rs->humans;
+    for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+    RuntimeSession* self = rs;
+    auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
+    rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
+    rs->eng = rs->game.get();
+    for (auto& b : rs->bots)
+      b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+    return;
+  }
+
+  buildSession(rs);
+  rs->started = true;
+  rs->session->startCountdown(countdownSeconds);
+}
+
+void ttp_update(int h, double dtMs) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->started) return;
+  if (rs->bare) {
+    if (rs->pausedBare) return;
+    if (rs->racingBare) {
+      rs->driveBots();
+      rs->eng->update(dtMs);
+    }
+  } else {
+    if (rs->session->paused()) return;
+    if (rs->session->racing()) rs->driveBots();  // drive-then-update, only while racing
+    rs->session->update(dtMs);
+  }
+}
+
+void ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return;
+  if (!rs->eng) buildSession(rs);
+  if (!rs->eng) return;
+  Input in;
+  if (mask & 1) { in.hasS = true; in.s = s; }
+  if (mask & 2) { in.hasB = true; in.b = b; }
+  if (mask & 4) { in.hasU = true; in.u = u; }
+  rs->eng->processInput(parseId(idJson), in);
+}
+
+const char* ttp_snapshot_json(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return NULL_JSON;
+  if (!rs->eng) buildSession(rs);
+  if (!rs->eng) return NULL_JSON;
+  rs->scratch = canonical_stringify(rs->eng->getSnapshot());
+  return rs->scratch.c_str();
+}
+
+const char* ttp_results_json(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return NULL_JSON;
+  if (!rs->eng) buildSession(rs);
+  if (!rs->eng) return NULL_JSON;
+  rs->scratch = canonical_stringify(rs->eng->getResults());
+  return rs->scratch.c_str();
+}
+
+const char* ttp_events_json(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return EMPTY_ARR;
+  Value arr = Value::Arr();
+  for (auto& e : rs->outQueue) arr.push(std::move(e));
+  rs->outQueue.clear();
+  rs->scratch = canonical_stringify(arr);
+  return rs->scratch.c_str();
+}
+
+int ttp_has_car(int h, const char* idJson) {
+  RuntimeSession* rs = get(h);
+  if (rs && !rs->eng) buildSession(rs);
+  return rs && rs->eng && rs->eng->hasCar(parseId(idJson)) ? 1 : 0;
+}
+
+int ttp_car_finished(int h, const char* idJson) {
+  RuntimeSession* rs = get(h);
+  if (rs && !rs->eng) buildSession(rs);
+  if (!rs || !rs->eng) return -1;
+  bool out = false;
+  if (!rs->eng->carFinished(parseId(idJson), out)) return -1;
+  return out ? 1 : 0;
+}
+
+const char* ttp_car_ids_json(int h) {
+  RuntimeSession* rs = get(h);
+  if (rs && !rs->eng) buildSession(rs);
+  if (!rs || !rs->eng) return EMPTY_ARR;
+  Value arr = Value::Arr();
+  for (const auto& c : rs->eng->cars()) arr.push(c->id.toValue());
+  rs->scratch = canonical_stringify(arr);
+  return rs->scratch.c_str();
+}
+
+int ttp_car_world_pos(int h, const char* idJson, double* out3) {
+  RuntimeSession* rs = get(h);
+  if (rs && !rs->eng) buildSession(rs);
+  if (!rs || !rs->eng || !out3) return 0;
+  Id id = parseId(idJson);
+  for (const auto& c : rs->eng->cars()) {
+    if (c->id == id) {
+      out3[0] = c->pose.pos.x;
+      out3[1] = c->pose.pos.y;
+      out3[2] = c->pose.pos.z;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int ttp_track_point(int h, double s, double lat, double* out3) {
+  RuntimeSession* rs = get(h);
+  if (rs && !rs->eng) buildSession(rs);
+  if (!rs || !rs->eng || !out3) return 0;
+  Frame f = rs->eng->centerline()->sampleAt(s);  // fresh frame
+  f.pos.addScaledVector(f.lateral, lat);
+  out3[0] = f.pos.x;
+  out3[1] = f.pos.y;
+  out3[2] = f.pos.z;
+  return 1;
+}
+
+int ttp_force_remove_car(int h, const char* idJson) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->eng) return 0;
+  Id id = parseId(idJson);
+  if (rs->session) return rs->session->forceRemoveCar(id) ? 1 : 0;
+  return rs->eng->removeCar(id) ? 1 : 0;
+}
+
+int ttp_rekey_car(int h, const char* oldJson, const char* newJson) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->eng) return 0;
+  return rs->eng->rekeyCar(parseId(oldJson), parseId(newJson)) ? 1 : 0;
+}
+
+void ttp_force_finish(int h, const char* idJson, double time) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->eng) return;
+  rs->eng->forceFinish(parseId(idJson), true, time);
+}
+
+void ttp_fast_forward(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->eng) return;
+  if (rs->session) {
+    RuntimeSession* self = rs;
+    rs->session->fastForwardToEnd([self]() { self->driveBots(); });
+  } else if (rs->racingBare && !rs->pausedBare) {
+    long guard = 0;
+    while (!rs->eng->raceOver() && guard++ < 100000) {
+      rs->driveBots();
+      rs->eng->update(1000.0 / 30.0);
+    }
+  }
+}
+
+void ttp_pause(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return;
+  if (rs->session) rs->session->pause();
+  else rs->pausedBare = true;
+}
+
+void ttp_resume(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return;
+  if (rs->session) rs->session->resume();
+  else rs->pausedBare = false;
+}
+
+int ttp_racing(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->started) return 0;
+  if (rs->session) return rs->session->racing() ? 1 : 0;
+  return rs->racingBare ? 1 : 0;
+}
+
+int ttp_paused(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return 0;
+  if (rs->session) return rs->session->paused() ? 1 : 0;
+  return rs->pausedBare ? 1 : 0;
+}
+
+void ttp_dispose(int h) {
+  auto it = g_sessions.find(h);
+  if (it == g_sessions.end()) return;
+  if (it->second->session) it->second->session->dispose();
+  g_sessions.erase(it);
+}
+
+void ttp_set_steer_expo(double v) { setSteerExpo(v); }
+double ttp_get_steer_expo(void) { return getSteerExpo(); }
+
+const char* ttp_version(void) {
+  static std::string v;
+  if (v.empty()) {
+    Value o = Value::Obj();
+    o.set("contractVersion", Value::Num((double)CONTRACT_VERSION));
+    o.set("mathlib", Value::Str(MATHLIB));
+    v = canonical_stringify(o);
+  }
+  return v.c_str();
+}
+
+}  // extern "C"

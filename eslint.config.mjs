@@ -45,6 +45,8 @@ export default [
       '.claude/**',
       '.playwright-mcp/**',
       'test-results/**',
+      'native/**',                        // C++ tree; build dirs emit emscripten glue JS
+      'public/display/engine/native/**',  // generated wasm module artifacts (ttp_sim.mjs)
       'artwork/**',
     ],
   },

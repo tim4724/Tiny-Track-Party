@@ -23,15 +23,21 @@ target_compile_options(ttp_strict_fp INTERFACE
 # Emscripten leg (Track S M4): the same check binaries and replay CLI compile
 # to WASM and run under Node — `emcmake cmake ... -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)`
 # lets ctest run them transparently. NODERAWFS reads the fixture files straight
-# from the host filesystem; wasm f64 needs no FP flags but they stay for
-# uniformity.
-if(EMSCRIPTEN)
-  target_link_options(ttp_strict_fp INTERFACE
-    -sNODERAWFS=1
-    -sALLOW_MEMORY_GROWTH=1
-    -sEXIT_RUNTIME=1
-  )
-endif()
+# from the host filesystem; EXIT_RUNTIME lets ctest observe the exit code.
+#
+# These link options belong on the ctest EXECUTABLES ONLY, applied through
+# ttp_emscripten_cli() below — NOT on the ttp_strict_fp INTERFACE, whose flags
+# leak to every consumer including the browser module ttp_sim_web (which must
+# have neither NODERAWFS nor EXIT_RUNTIME). wasm f64 needs no FP flags.
+function(ttp_emscripten_cli target)
+  if(EMSCRIPTEN)
+    target_link_options(${target} PRIVATE
+      -sNODERAWFS=1
+      -sALLOW_MEMORY_GROWTH=1
+      -sEXIT_RUNTIME=1
+    )
+  endif()
+endfunction()
 
 # ---- Vendored fdlibm, native build ------------------------------------------
 # Same sources the JS engine ships as WASM (public/display/engine/math.js —
@@ -77,6 +83,7 @@ target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp)
 enable_testing()
 add_executable(mathlib_corpus_check mathlib/corpus_check.cc)
 target_link_libraries(mathlib_corpus_check PRIVATE ttp_mathlib ttp_strict_fp)
+ttp_emscripten_cli(mathlib_corpus_check)
 add_test(NAME mathlib_corpus
   COMMAND mathlib_corpus_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/math-corpus.jsonl
 )
@@ -88,6 +95,7 @@ add_test(NAME mathlib_corpus
 # divergence before whole-race trace replay.
 add_executable(sampler_check tracktest/sampler_check.cc)
 target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp)
+ttp_emscripten_cli(sampler_check)
 add_test(NAME track_sampler
   COMMAND sampler_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/track-sampler-corpus.jsonl
 )
@@ -101,6 +109,7 @@ add_test(NAME track_sampler
 add_executable(trackbuilder_check tracktest/trackbuilder_check.cc)
 target_include_directories(trackbuilder_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
 target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_strict_fp)
+ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
 )
@@ -138,6 +147,7 @@ target_link_libraries(libttp_sim PUBLIC libttp_track ttp_double_conversion ttp_s
 # ECMA-262 Number::toString. Phase A gate: green before the sim replay work.
 add_executable(serializer_check simtest/serializer_check.cc)
 target_link_libraries(serializer_check PRIVATE libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(serializer_check)
 add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
@@ -148,6 +158,7 @@ add_test(NAME serializer
 # ops), and demands exact per-frame event/snapshot/hash agreement.
 add_executable(replay_cli replay/replay_cli.cc)
 target_link_libraries(replay_cli PRIVATE libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(replay_cli)
 foreach(fx
   helix-3bots-1human-500f-seed7
   helix-session-jitter-3bots-1human-800f-seed7
@@ -160,3 +171,29 @@ foreach(fx
   add_test(NAME replay_${fx}
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
 endforeach()
+
+# ---- Browser module: the runtime C ABI (ttp_runtime.h) ----------------------
+# Emscripten-only. Wraps libttp-sim behind the one extern "C" ABI and emits an
+# ES6 module (ttp_sim.mjs + ttp_sim.wasm) the display's ?sim=native adapter
+# loads. Lean by design: -O2, no assertions, and NEITHER NODERAWFS NOR
+# EXIT_RUNTIME (which the CLI helper adds and a browser module must not carry) —
+# this is why those options were lifted off the ttp_strict_fp interface above.
+# The artifacts are copied into public/display/engine/native/ (checked in, like
+# engine/math.js) by native/scripts/build-sim-web.sh.
+if(EMSCRIPTEN)
+  add_executable(ttp_sim_web runtime/ttp_runtime.cc)
+  target_include_directories(ttp_sim_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+  target_link_libraries(ttp_sim_web PRIVATE libttp_sim ttp_strict_fp)
+  set_target_properties(ttp_sim_web PROPERTIES OUTPUT_NAME "ttp_sim" SUFFIX ".mjs")
+  target_link_options(ttp_sim_web PRIVATE
+    -O2
+    --no-entry
+    -sMODULARIZE=1
+    -sEXPORT_ES6=1
+    -sENVIRONMENT=web,node
+    -sALLOW_MEMORY_GROWTH=1
+    -sASSERTIONS=0
+    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_malloc,_free"
+    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64"
+  )
+endif()

@@ -53,6 +53,8 @@ const RELAY_URL_OVERRIDE = String(process.env.RELAY_URL || '').trim();
 const MIME_TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
+  '.mjs': 'text/javascript',       // engine/native/ttp_sim.mjs (ES module, strict MIME)
+  '.wasm': 'application/wasm',     // ttp_sim.wasm — instantiateStreaming requires this type
   '.css': 'text/css',
   '.json': 'application/json',
   '.png': 'image/png',

@@ -56,4 +56,48 @@ void RaceSession::finish() {
   if (onRaceEnd_) onRaceEnd_(engine_->getResults());
 }
 
+// ---- live-play lifecycle (RaceSession.js) -----------------------------------
+
+void RaceSession::pause() {
+  if (paused_ || ended_) return;
+  paused_ = true;
+}
+
+void RaceSession::resume() {
+  if (!paused_ || ended_) return;
+  paused_ = false;
+  if (!racing_ && !countdownNull_) {
+    if (onCountdownTick_) onCountdownTick_(countdownN_);       // re-show the held count
+  } else if (racing_ && !countdownNull_ && countdownN_ == 0) {
+    countdownNull_ = true;
+    countdownMsNull_ = true;
+    if (onCountdownTick_) onCountdownTick_(-1);                // clear the GO! banner now
+  }
+}
+
+void RaceSession::fastForwardToEnd(const std::function<void()>& stepBots, double dtMs) {
+  if (!racing_ || paused_ || ended_) return;
+  long guard = 0;
+  while (!engine_->raceOver() && raceMs_ < MAX_RACE_MS && guard++ < 100000) {
+    if (stepBots) stepBots();
+    engine_->update(dtMs);
+    raceMs_ += dtMs;
+  }
+  finish();
+}
+
+bool RaceSession::forceRemoveCar(const Id& id) {
+  bool removed = engine_->removeCar(id);
+  if (removed && racing_ && engine_->raceOver()) finish();
+  return removed;
+}
+
+void RaceSession::dispose() {
+  countdownNull_ = true;
+  countdownMsNull_ = true;
+  ended_ = true;
+  racing_ = false;
+  paused_ = false;
+}
+
 }  // namespace ttp
