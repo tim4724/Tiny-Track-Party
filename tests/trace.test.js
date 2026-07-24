@@ -105,6 +105,86 @@ test('a contract-version mismatch fails fast with a re-record message', () => {
   assert.match(r.message, /re-record/);
 });
 
+// ---- the Milestone-1 trace kinds (oracle expansion) ----
+
+test('ai-live trace round-trips: the verifier re-runs the AI and matches every output', () => {
+  const { text } = rec.recordTrace({ ...smallConfig(), aiLive: true });
+  const r = ver.verifyTrace(text);
+  assert.equal(r.ok, true, r.message);
+  assert.match(text.split('\n')[0], /"aiLive":true/);
+});
+
+test('ai-live divergence localises to the exact frame, bot and field', () => {
+  const { header, records } = rec.parseTrace(rec.recordTrace({ ...smallConfig(), aiLive: true }).text);
+  // Tamper with one recorded bot steer mid-trace: the re-run AI now disagrees
+  // with the recording — the definition of an AI port divergence.
+  const f = 90, botKey = 'cpu-bolt';
+  assert.ok(records[f].inputs[botKey], 'expected a recorded input for the tampered bot');
+  records[f].inputs[botKey].s += 1e-13;
+  const r = ver.verifyTrace({ header, records });
+  assert.equal(r.ok, false);
+  assert.equal(r.frame, f);
+  assert.equal(r.path, `inputs.${botKey}.s`);
+  assert.match(r.message, /AI-LIVE/);
+});
+
+test('session trace round-trips: countdown, variable dt, racing flip, early raceEnd stop', () => {
+  const config = {
+    trackId: 'tidepool', frames: 600, seed: 11, laps: 1, snapshotEvery: 60,
+    bots: rec.makeBots(2, 11), humans: [rec.scriptedHuman(0)],
+    session: true, countdown: 2,
+    dtJitter: { amp: 6, spikeEvery: 97, spikeScale: 4, jseed: 5 },
+    // End the race deterministically mid-budget so raceEnd + the early stop are
+    // both exercised without simulating full laps.
+    schedule: [
+      { frame: 300, op: 'forceFinish', id: 'human-1', time: 30000 },
+      { frame: 300, op: 'forceFinish', id: 'cpu-bolt', time: 31000 },
+      { frame: 300, op: 'forceFinish', id: 'cpu-pixel', time: 32000 }
+    ]
+  };
+  const { header, records, text } = rec.recordTrace(config);
+  assert.equal(header.driver, 'session');
+  assert.ok(header.frames < 600, 'race end must stop the trace early');
+  assert.equal(records.length, header.frames);
+  const flips = records.filter((r) => r.racing !== undefined);
+  assert.deepEqual(flips.map((r) => r.racing), [true, false],
+    'two racing flips: GO, then the end-of-race stop on the raceEnd frame');
+  const last = records[records.length - 1];
+  assert.equal(flips[1], last, 'the false flip rides the raceEnd frame');
+  assert.ok(last.raceEnd, 'last frame carries the raceEnd results');
+  assert.ok(last.snapshot, 'early stop still stores a final full snapshot');
+  const r = ver.verifyTrace(text);
+  assert.equal(r.ok, true, r.message);
+  // Determinism across re-records, same as the base kind.
+  assert.equal(rec.recordTrace(config).text, text, 'session trace must be byte-reproducible');
+});
+
+test('schedule ops round-trip and actually mutate the race', () => {
+  const config = {
+    ...smallConfig(), frames: 220,
+    schedule: [
+      { frame: 40, op: 'giveItem', id: 'cpu-bolt', item: 'rocket' },
+      { frame: 45, op: 'useItem', id: 'cpu-bolt' },
+      { frame: 80, op: 'setCarStats', id: 'cpu-pixel', stats: { vmax: 1.06, turn: 0.92 } },
+      { frame: 120, op: 'rekeyCar', id: 'human-1', newId: 'human-9' },
+      { frame: 160, op: 'removeCar', id: 'cpu-pixel' }
+    ]
+  };
+  const { header, records, text } = rec.recordTrace(config);
+  const r = ver.verifyTrace(text);
+  assert.equal(r.ok, true, r.message);
+  const last = records[records.length - 1].snapshot;
+  const ids = last.cars.map((c) => String(c.id));
+  assert.ok(!ids.includes('cpu-pixel'), 'removed car must be gone from the final snapshot');
+  assert.ok(ids.includes('human-9') && !ids.includes('human-1'), 'rekeyed car must carry its new id');
+  assert.ok(records.some((x) => (x.events || []).some((e) => e.type === 'item_use')), 'useItem must emit item_use');
+  assert.match(text.split('\n')[0], /"schedule":\[/);
+  // Post-rekey human inputs must be recorded under the LIVE id or replay would
+  // silently drop them.
+  assert.ok(records[150].inputs['human-9'] && !records[150].inputs['human-1'], 'inputs re-keyed with the car');
+  assert.equal(header.frames, 220);
+});
+
 // Traces are engine- and platform-independent (transcendentals go through
 // engine/math.js, fdlibm WASM), so every committed fixture replays EVERYWHERE
 // — dev machines and CI alike, no skips. The one provenance that must match

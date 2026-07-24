@@ -73,6 +73,60 @@ write('tidepool-4bots-600f-seed42.jsonl',
 write('helix-3bots-1human-500f-seed7.jsonl',
   recordTrace({ trackId: 'helix', frames: 500, seed: 7, laps: 3, snapshotEvery: 100, bots: makeBots(3, 7), humans: [scriptedHuman(0)] }));
 
+// ---- Milestone-1 oracle-expansion kinds (see record-trace.mjs header) ----
+
+// AI-LIVE: the verifier (and later the C++ replay CLI) re-runs the AI every
+// frame and must reproduce each recorded control bit-for-bit. Twin of the
+// tidepool starter so a divergence isolates to the AI, not new race dynamics.
+write('tidepool-ailive-4bots-600f-seed42.jsonl',
+  recordTrace({ trackId: 'tidepool', frames: 600, seed: 42, laps: 3, snapshotEvery: 100, bots: makeBots(4, 42), aiLive: true }));
+
+// SESSION + VARIABLE DT: RaceSession-driven (countdown beats under jittered
+// frame times, racing flip on GO) with a render-hitch spike every 97 frames.
+write('helix-session-jitter-3bots-1human-800f-seed7.jsonl',
+  recordTrace({
+    trackId: 'helix', frames: 800, seed: 7, laps: 3, snapshotEvery: 100,
+    bots: makeBots(3, 7), humans: [scriptedHuman(0)],
+    session: true, countdown: 3,
+    dtJitter: { amp: 6, spikeEvery: 97, spikeScale: 4, jseed: 7 }
+  }));
+
+// MUTATION SCHEDULE: every mid-race lifecycle/staging op the display can call,
+// in one trace — the C++ port's API-surface conformance fixture.
+const scheduled = recordTrace({
+  trackId: 'tidepool', frames: 700, seed: 42, laps: 3, snapshotEvery: 100,
+  bots: makeBots(5, 42), humans: [scriptedHuman(0)],
+  schedule: [
+    { frame: 60, op: 'giveItem', id: 'cpu-bolt', item: 'rocket' },
+    { frame: 65, op: 'useItem', id: 'cpu-bolt' },
+    { frame: 150, op: 'setCarStats', id: 'cpu-pixel', stats: { vmax: 1.06, turn: 0.92 } },
+    { frame: 240, op: 'rekeyCar', id: 'human-1', newId: 'human-R' },
+    { frame: 330, op: 'removeCar', id: 'cpu-rusty' },
+    { frame: 420, op: 'forceFinish', id: 'cpu-pixel', time: 7000 }
+  ]
+});
+{
+  // Assert every op left its mark — a schedule that silently no-ops (typo'd
+  // id, renamed API) must fail HERE, not ship as vacuous coverage.
+  const last = scheduled.records[scheduled.records.length - 1].snapshot;
+  const ids = last.cars.map((c) => String(c.id));
+  const assert = (cond, msg) => { if (!cond) throw new Error(`schedule fixture lost coverage: ${msg}`); };
+  assert(!ids.includes('cpu-rusty'), 'removeCar had no effect');
+  assert(ids.includes('human-R') && !ids.includes('human-1'), 'rekeyCar had no effect');
+  assert(scheduled.records.some((r) => (r.events || []).some((e) => e.type === 'item_use')), 'useItem emitted no item_use');
+  assert(last.cars.find((c) => String(c.id) === 'cpu-pixel')?.finished, 'forceFinish had no effect');
+}
+write('tidepool-schedule-5bots-1human-700f-seed42.jsonl', scheduled);
+
+// SESSION + AI-LIVE combined: both new verify paths in one medium slice.
+write('tidepool-session-ailive-4bots-900f-seed13.jsonl',
+  recordTrace({
+    trackId: 'tidepool', frames: 900, seed: 13, laps: 3, snapshotEvery: 100,
+    bots: makeBots(4, 13),
+    session: true, countdown: 2, aiLive: true,
+    dtJitter: { amp: 4, jseed: 13 }
+  }));
+
 // Endgame fixture: a complete race covering the full event vocabulary.
 let seed = ENDGAME_SEED;
 let out = recordTrace(endgameConfig(seed));

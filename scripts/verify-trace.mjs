@@ -26,8 +26,13 @@
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
+import { RaceSession } from '../public/display/RaceSession.js';
+import { AiController } from '../public/display/AiDriver.js';
 import { MATHLIB } from '../public/display/engine/math.js';
-import { applyStage, buildRaceTrack, canonicalStringify, fnv1a, parseTrace } from './record-trace.mjs';
+import {
+  applyStage, applyScheduleOps, buildRaceTrack, canonicalStringify, fnv1a,
+  makeDtStream, parseTrace
+} from './record-trace.mjs';
 
 // First differing field path between two plain-JSON values, or null if equal.
 // Objects walk in sorted key order (canonical order, matching the trace
@@ -96,25 +101,67 @@ export function verifyTrace(trace) {
 
   const track = buildRaceTrack(header.trackId, { laps: header.laps, seed: header.seed });
   const pending = [];
-  const game = new Game(
-    header.roster.map((r) => (r.stats ? { id: r.id, stats: r.stats } : r.id)),
-    track,
-    { onEvent: (e) => pending.push(e) }
-  );
-  applyStage(game, header.stage);
+  const isSession = header.driver === 'session';
+  let raceEndResults;
+  let session = null;
+  let game;
+  if (isSession) {
+    session = new RaceSession(
+      header.roster.map((r) => ({ peerIndex: r.id, stats: r.stats })),
+      track,
+      { onRaceEvent: (e) => pending.push(e), onRaceEnd: (r) => { raceEndResults = r; } }
+    );
+    game = session.engine;
+    applyStage(game, header.stage);
+    session.startCountdown(header.countdown);
+  } else {
+    game = new Game(
+      header.roster.map((r) => (r.stats ? { id: r.id, stats: r.stats } : r.id)),
+      track,
+      { onEvent: (e) => pending.push(e) }
+    );
+    applyStage(game, header.stage);
+  }
+
+  // AI-LIVE traces: the recorded bot inputs are not just replayed — each bot's
+  // AiController is reconstructed from the roster and re-run every frame, and
+  // its output must MATCH the recorded input bit-for-bit before it is applied.
+  // A diverging AI port therefore localises to the exact frame and bot, before
+  // it ever moves a car.
+  const aiLive = !!header.aiLive;
+  const controllers = aiLive
+    ? header.roster.filter((r) => r.kind === 'bot').map((r) => ({
+        id: r.id,
+        ai: new AiController({ skill: r.skill, laneBias: r.laneBias, seed: r.aiSeed })
+      }))
+    : [];
+  const botKeys = new Set(header.roster.filter((r) => r.kind === 'bot').map((r) => String(r.id)));
 
   // JSON object keys are ALWAYS strings, but roster ids keep their real JSON
   // types (numeric peerIndex in live-shaped rosters). Map each per-frame input
   // key back to the declared roster id, or processInput would silently miss
   // the cars Map (keyed by the original id) and every input would be dropped.
-  // recordTrace guarantees the String() forms are unique.
+  // recordTrace guarantees the String() forms are unique. A scheduled rekey
+  // re-maps on the same frame boundary the recorder did.
   const idByKey = new Map(header.roster.map((r) => [String(r.id), r.id]));
 
+  const dtFor = makeDtStream(header);
+  let lastRacing = false;
+
   for (const rec of records) {
-    // Replay exactly what the recorder applied. Ids are unique per frame, so
-    // application order across cars cannot matter (processInput only writes
-    // that car's own input latch).
+    applyScheduleOps(game, header.schedule, rec.frame, (oldId, newId) => {
+      idByKey.delete(String(oldId));
+      idByKey.set(String(newId), newId);
+      if (botKeys.delete(String(oldId))) botKeys.add(String(newId));
+      for (const c of controllers) if (String(c.id) === String(oldId)) c.id = newId;
+    });
+
+    // Replay exactly what the recorder applied: humans (and, in input-replay
+    // traces, bots) from the recorded inputs; ids are unique per frame and
+    // input latches are car-local, so application order across cars cannot
+    // matter. In ai-live traces bot inputs come from the re-run AI below.
     for (const [key, msg] of Object.entries(rec.inputs || {})) {
+      if (aiLive && botKeys.has(key)) continue;
       const id = idByKey.get(key);
       if (id === undefined) {
         return {
@@ -122,9 +169,60 @@ export function verifyTrace(trace) {
           message: `frame ${rec.frame}: input for '${key}', which is not in the header roster (corrupted trace)`
         };
       }
-      game.processInput(id, msg);
+      if (session) session.processInput(id, msg); else game.processInput(id, msg);
     }
-    game.update(header.dt);
+    if (aiLive && (!session || session.racing)) {
+      for (const c of controllers) {
+        let derived;
+        const capture = { drive: (car, centerline, g) => {
+          const m = c.ai.drive(car, centerline, g);
+          derived = { s: m.s, b: m.b, u: m.u };
+          return m;
+        } };
+        game.driveBot(c.id, capture);
+        const recorded = (rec.inputs || {})[String(c.id)];
+        const d = firstDiff(recorded, derived, `inputs.${String(c.id)}`);
+        if (d) {
+          return {
+            ok: false, frame: rec.frame, path: d.path, expected: d.expected, actual: d.actual,
+            message: `frame ${rec.frame}: AI-LIVE divergence for bot '${String(c.id)}': ` +
+              `${d.path} (recorded ${JSON.stringify(d.expected)}, re-run AI produced ${JSON.stringify(d.actual)})` + mathHint(header)
+          };
+        }
+      }
+    }
+
+    const dtF = dtFor(rec.frame);
+    if (session) session.update(dtF); else game.update(dtF);
+
+    if (session) {
+      // The session's own beats are part of the contract: racing flips and the
+      // end-of-race results must land on the recorded frames, exactly.
+      const expectedRacing = rec.racing;
+      if (session.racing !== lastRacing) {
+        if (expectedRacing !== session.racing) {
+          return {
+            ok: false, frame: rec.frame, path: 'racing', expected: expectedRacing, actual: session.racing,
+            message: `frame ${rec.frame}: session.racing flipped to ${session.racing} but the trace ${expectedRacing === undefined ? 'records no flip' : `records ${expectedRacing}`}`
+          };
+        }
+        lastRacing = session.racing;
+      } else if (expectedRacing !== undefined) {
+        return {
+          ok: false, frame: rec.frame, path: 'racing', expected: expectedRacing, actual: lastRacing,
+          message: `frame ${rec.frame}: trace records a racing flip to ${expectedRacing} that did not happen on replay`
+        };
+      }
+      const gotEnd = raceEndResults; raceEndResults = undefined;
+      const de = firstDiff(rec.raceEnd, gotEnd, 'raceEnd');
+      if (de) {
+        return {
+          ok: false, frame: rec.frame, path: de.path, expected: de.expected, actual: de.actual,
+          message: `frame ${rec.frame}: raceEnd diverged (recorded ${JSON.stringify(de.expected)}, replay ${JSON.stringify(de.actual)})` + mathHint(header)
+        };
+      }
+    }
+
     const events = pending.splice(0);
     const snapshot = game.getSnapshot();
 

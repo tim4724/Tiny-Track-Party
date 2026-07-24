@@ -53,3 +53,15 @@ version. Rebuilding the WASM mathlib (new emsdk / flags) that changes
 - `skysnake-5bots-2laps-seed39.jsonl` — full race to all-finished (endgame
   event coverage: finish, item_use, lap, monster_end, pickup, rocket_expire,
   spin; spin causes banana, monster, oil, rocket)
+
+Milestone-1 oracle-expansion kinds (see `scripts/record-trace.mjs` header):
+
+- `tidepool-ailive-4bots-600f-seed42.jsonl` — AI-LIVE: verify re-runs each
+  bot's AiController and matches every control bit-for-bit
+- `helix-session-jitter-3bots-1human-800f-seed7.jsonl` — RaceSession-driven
+  with variable dt (seeded jitter + hitch spikes), countdown + racing flip
+- `tidepool-schedule-5bots-1human-700f-seed42.jsonl` — every mid-race
+  mutation op (giveItem/useItem/setCarStats/rekeyCar/removeCar/forceFinish),
+  each asserted to have taken effect at record time
+- `tidepool-session-ailive-4bots-900f-seed13.jsonl` — session + AI-LIVE
+  combined under jittered dt

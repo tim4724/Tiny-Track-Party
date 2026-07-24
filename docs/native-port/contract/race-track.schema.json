@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinytrack.couch-games.com/contract/race-track.schema.json",
+  "title": "Augmented race track",
+  "description": "The RACE-READY track object the sim actually consumes: a TrackBuilder.buildTrack() output (schema'd by track.schema.json) AUGMENTED with the host's game-side layer — resolved furniture (hazards, pads, boxes, poles, bananas), identity (cup, trackId), and per-race inputs (totalLaps, seed). The host assembles it in two equivalent places: public/display/main.js buildEntry (cup + trackId, then TrackBuilder.resolveFurniture) with the race then stamping totalLaps + seed, and scripts/record-trace.mjs buildRaceTrack (trackId + totalLaps + seed, then resolveFurniture) for golden traces. The engine (public/display/engine/Game.js) reads exactly `centerline`, `length`, `roadWidth`, `totalLaps`, `hazards`, `pads`, `boxes`, `poles`, `bananas`, `seed`; `cup`/`trackId` are identity for theming (renderer-side). scripts/export-track-data.mjs dumps this object as canonical JSON — the byte-for-byte fixture the C++ TrackBuilder + furniture-resolve port diffs against. All coordinates are world units, right-handed, +Y up. Furniture arclengths `s` are resolved from authored fraction-of-lap positions (u in [0, 1)) against the built `length`, so they lie in [0, length). The built-track geometry fields below reference track.schema.json rather than re-describing it; the AUGMENTATION fields are defined in full here.",
+  "type": "object",
+  "required": [
+    "version", "instances", "startGate", "pillars", "hills", "loopStarts",
+    "supportPosts", "autoPoles", "centerline", "length", "closed", "gap",
+    "roadWidth", "groundY",
+    "cup", "trackId", "totalLaps", "seed",
+    "hazards", "pads", "boxes", "poles", "bananas"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 2,
+      "description": "CONTRACT_VERSION stamp (public/display/engine/contract.js). Inherited from buildTrack(); the augmentation never restamps it."
+    },
+
+    "instances":    { "$ref": "track.schema.json#/properties/instances" },
+    "startGate":    { "$ref": "track.schema.json#/properties/startGate" },
+    "pillars":      { "$ref": "track.schema.json#/properties/pillars" },
+    "hills":        { "$ref": "track.schema.json#/properties/hills" },
+    "loopStarts":   { "$ref": "track.schema.json#/properties/loopStarts" },
+    "supportPosts": { "$ref": "track.schema.json#/properties/supportPosts" },
+    "autoPoles":    { "$ref": "track.schema.json#/properties/autoPoles" },
+    "centerline":   { "$ref": "track.schema.json#/properties/centerline" },
+    "length":       { "$ref": "track.schema.json#/properties/length" },
+    "closed":       { "$ref": "track.schema.json#/properties/closed" },
+    "gap":          { "$ref": "track.schema.json#/properties/gap" },
+    "roadWidth":    { "$ref": "track.schema.json#/properties/roadWidth" },
+    "groundY":      { "$ref": "track.schema.json#/properties/groundY" },
+
+    "cup": {
+      "type": "string",
+      "description": "Cup id the track belongs to (e.g. 'beach', 'rooftop'). Identity for renderer biome theming; the sim does not read it. Set by buildEntry from the catalogue; buildRaceTrack omits it, so a trace-built track has no `cup` — this schema requires it because the export mirrors the full game-side object main.js hands the engine."
+    },
+    "trackId": {
+      "type": "string",
+      "description": "Registry id (e.g. 'skysnake'). Identity for per-track theme patches and, crucially, the deterministic scatter RNG seed (buildScenery/buildLandmarks seed their rand streams from it). NOT `track.id`. Stamped in every golden-trace header; the sim itself does not read it."
+    },
+    "totalLaps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Race length in laps (default 3). A per-race input, not a builder output; the engine reads it for lap counting and the finish line."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295,
+      "description": "Per-race 32-bit seed the HOST draws (Math.random in main.js at race start; fixed by the export/recorder for determinism). The engine's item-roll RNG consumes mulberry32(seed); each AI bot derives its own stream from it. The one machine-varying field in a live race — the export pins it (default 1) so fixtures are byte-stable."
+    },
+
+    "hazards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/hazard" },
+      "description": "Oil slicks, resolved from the descriptor's `oils`. Read by the engine (spin-out detection) and the renderer (puddle + cones). Empty on tracks without oils."
+    },
+    "pads": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pad" },
+      "description": "Boost pads: authored disc pads (from the descriptor's `pads`) PLUS one auto strip pad per loopStarts entry (a full-width launch band at each vertical-loop mouth, so a loop is always entered on boost). Two shapes — disc and strip."
+    },
+    "boxes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/box" },
+      "description": "Item boxes, resolved from the descriptor's `boxes`. The snapshot's `boxes` boolean[] is index-aligned with this list (true = available)."
+    },
+    "poles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pole" },
+      "description": "Solid collision poles: authored poles (from the descriptor's `poles`) CONCATENATED with the builder's autoPoles (ghost collision proxies for pillars/loop shafts standing in a drivable corridor). Read by the engine (push-out), the AI (dodge), and — for non-ghost poles — the renderer. Empty on every shipped track today."
+    },
+    "bananas": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/banana" },
+      "description": "Pre-seeded bananas, resolved from the descriptor's `bananas`. Dev tracks only (shared/devTracks.js); the engine seeds them live at race start and respawns them after each hit. Empty on every shipped track."
+    }
+  },
+  "$defs": {
+    "hazard": {
+      "type": "object",
+      "required": ["s", "lat", "radius"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Resolved arclength in [0, length). World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset from the centerline; positive = right of travel." },
+        "radius": { "type": "number", "exclusiveMinimum": 0, "description": "Spin-out trigger radius. World units. Defaults to roadWidth x 0.2 when the descriptor omits it." },
+        "cones": { "description": "RENDERER-ONLY cone layout carried through verbatim; the engine ignores it. Optional (absent on most oils); shape is renderer policy, not part of the sim contract." }
+      }
+    },
+    "pad": {
+      "oneOf": [{ "$ref": "#/$defs/padDisc" }, { "$ref": "#/$defs/padStrip" }],
+      "description": "A boost pad in one of two shapes: a radial disc (authored) or a longitudinal strip (auto loop-launch). The engine dispatches on the presence of `shape: 'strip'`."
+    },
+    "padDisc": {
+      "type": "object",
+      "required": ["s", "lat", "radius"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Resolved arclength in [0, length). World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel." },
+        "radius": { "type": "number", "exclusiveMinimum": 0, "description": "Boost trigger radius. World units. Defaults to roadWidth x 0.18 when the descriptor omits it." }
+      }
+    },
+    "padStrip": {
+      "type": "object",
+      "required": ["s", "lat", "shape", "halfLen", "halfWidth"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Arclength of the strip CENTRE (loop entry minus halfLen), wrapped to [0, length). World units." },
+        "lat": { "type": "number", "description": "Always 0 (centred on the lane)." },
+        "shape": { "const": "strip", "description": "Marks a longitudinal band the engine treats as a rectangle across the lane, not a disc." },
+        "halfLen": { "type": "number", "exclusiveMinimum": 0, "description": "Half the along-track length of the strip. World units." },
+        "halfWidth": { "type": "number", "exclusiveMinimum": 0, "description": "Half the across-track width of the strip (loop mouth width / 2). World units." }
+      }
+    },
+    "box": {
+      "type": "object",
+      "required": ["s", "lat", "radius"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Resolved arclength in [0, length). World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel." },
+        "radius": { "type": "number", "exclusiveMinimum": 0, "description": "Pickup trigger radius. World units. Defaults to roadWidth x 0.09 when the descriptor omits it (kept small so a boosted car cannot tunnel through)." }
+      }
+    },
+    "pole": {
+      "type": "object",
+      "required": ["s", "lat", "radius"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Resolved arclength in [0, length) for authored poles; autoPoles carry the crossing's closest-abeam sample arclength. World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel." },
+        "radius": { "type": "number", "exclusiveMinimum": 0, "description": "Collision radius. World units. Authored poles default to 0.45." },
+        "ghost": { "const": true, "description": "Present and true ONLY on poles merged in from autoPoles: the renderer must not draw them (the pillar/shaft they proxy is already the visual). Absent on authored poles." }
+      }
+    },
+    "banana": {
+      "type": "object",
+      "required": ["s", "lat"],
+      "additionalProperties": false,
+      "properties": {
+        "s": { "type": "number", "minimum": 0, "description": "Resolved arclength in [0, length). World units." },
+        "lat": { "type": "number", "description": "Signed lateral offset; positive = right of travel." }
+      }
+    }
+  }
+}
