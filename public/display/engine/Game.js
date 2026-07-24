@@ -20,6 +20,7 @@
 // browser and the Node tests.
 import { pursue, cornerBrake } from '../AiDriver.js';
 import { mulberry32, wrapDelta, wrapS } from './util.js';
+import * as dmath from './math.js';
 // Data-contract stamp for the native-port conformance harness: getSnapshot()
 // and buildTrack() output both carry it (re-exported here so consumers can
 // treat Game.js as "the engine" without knowing the module layout).
@@ -690,7 +691,7 @@ export class Game {
       // STEERING input (shaped): also feeds the corner scrub below, so it's computed
       // ahead of the longitudinal step.
       const steerEff = spinning ? 0 : c.steer; // a spinning car can't steer
-      const steerIn = Math.sign(steerEff) * Math.pow(Math.abs(steerEff), _steerExpo);
+      const steerIn = Math.sign(steerEff) * dmath.pow(Math.abs(steerEff), _steerExpo);
       // CORNER SCRUB: steering drops the speed ceiling (see the Cornering block up top).
       // Quadratic → small corrections/weave are ~free, committed cornering bites; a
       // grippy car needs less input for the same bend, so it sheds less. Boost overrides
@@ -712,7 +713,7 @@ export class Game {
           targetV = Math.min(targetV, c.vmax * (WALL_SPEED_FRAC + (1 - WALL_SPEED_FRAC) * heal));
         }
       }
-      if (spinning) c.v *= Math.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
+      if (spinning) c.v *= dmath.exp(-SPIN_DRAG_RATE * dt); // proportional bleed: harder hit the faster you're going
       else if (c.v < targetV) c.v = Math.min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
       else c.v = Math.max(targetV, c.v - BRAKE_DECEL * dt);
 
@@ -743,7 +744,7 @@ export class Game {
         .addScaledVector(f0.lateral, c.lat)        // where the car is now
         .addScaledVector(fwd, c.v * dt)            // drive forward in the world
         .addScaledVector(f0.lateral, c.vlat * dt); // + a decaying sideways knock (bumps)
-      c.vlat *= Math.exp(-KNOCK_DAMP * dt);
+      c.vlat *= dmath.exp(-KNOCK_DAMP * dt);
       // maxStep = the physical per-frame reach: v·dt is the centreline advance; the +0.5
       // covers the extra arclength a laterally-offset car traces on the OUTSIDE of a corner
       // (outer factor peaks ~1.3 at full width; measured worst-case reach ≈0.94 ≪ the ≈1.4
@@ -758,7 +759,7 @@ export class Game {
       // Re-express the (translation-invariant) world heading relative to the NEW tangent,
       // so NEUTRAL keeps a fixed world heading exactly — this replaces the old per-step
       // "subtract the road's turn". Then clamp so the car can never point backward.
-      c.heading = Math.atan2(
+      c.heading = dmath.atan2(
         hit.frame.tangent.clone().cross(fwd).dot(hit.frame.up),
         hit.frame.tangent.dot(fwd)
       );
@@ -825,7 +826,7 @@ export class Game {
     const fp = this._footprintMul(c);
     const hl = c.halfLen * fp, hw = c.halfWid * fp;
     const yaw = this._colYaw(c);
-    const ch = Math.abs(Math.cos(yaw)), sh = Math.abs(Math.sin(yaw));
+    const ch = Math.abs(dmath.cos(yaw)), sh = Math.abs(dmath.sin(yaw));
     return { along: hl * ch + hw * sh, side: hl * sh + hw * ch, restSide: hw };
   }
 
@@ -917,7 +918,7 @@ export class Game {
     }
     if (!n) return;
     const denom = Math.max(lead - tail, SPREAD_REF_FRAC * this.length);
-    const k = 1 - Math.exp(-dt / T_TAU);
+    const k = 1 - dmath.exp(-dt / T_TAU);
     for (const c of this.cars.values()) {
       if (c.finished) { c.tRaw = 0; c.tCatch = 0; continue; }
       let raw = (lead - c.totalS) / denom;
@@ -1218,7 +1219,7 @@ export class Game {
     // Post centre in the body frame: axes u = (cosθ, -sinθ) forward, w = (sinθ, cosθ)
     // side (the same (s, lat) convention as the car's velocity components).
     const yaw = this._colYaw(c);
-    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const cy = dmath.cos(yaw), sy = dmath.sin(yaw);
     const lx = -ds * cy + dl * sy;                      // (post − car) · u
     const ly = -ds * sy - dl * cy;                      // (post − car) · w
     // Closest point on the box to the post centre → contact when it's inside the disc.
@@ -1247,8 +1248,8 @@ export class Game {
     c.lat += nL * pen;
     // Scrub the speed going INTO the post. Car velocity in (s, lat): forward speed along the
     // tangent (≈+s) plus lateral drift. Remove the inward normal component → head-on kills pace.
-    const vS = c.v * Math.cos(c.heading);
-    const vL = -c.v * Math.sin(c.heading) + (c.vlat || 0);
+    const vS = c.v * dmath.cos(c.heading);
+    const vL = -c.v * dmath.sin(c.heading) + (c.vlat || 0);
     const vn = vS * nS + vL * nL;                       // <0 ⇒ driving into the post
     // Only when you're driving INTO it: shed the into-post speed (head-on → near zero), but floor
     // it so the post bumps you to a crawl rather than freezing you. A glancing touch that isn't
@@ -1315,8 +1316,8 @@ export class Game {
     const { nS, nL, pen } = hit;
     a.totalS -= nS * pen * aShare; a.lat -= nL * pen * aShare;
     b.totalS += nS * pen * bShare; b.lat += nL * pen * bShare;
-    const vSa = a.v * Math.cos(a.heading), vLa = -a.v * Math.sin(a.heading) + (a.vlat || 0);
-    const vSb = b.v * Math.cos(b.heading), vLb = -b.v * Math.sin(b.heading) + (b.vlat || 0);
+    const vSa = a.v * dmath.cos(a.heading), vLa = -a.v * dmath.sin(a.heading) + (a.vlat || 0);
+    const vSb = b.v * dmath.cos(b.heading), vLb = -b.v * dmath.sin(b.heading) + (b.vlat || 0);
     const vrel = (vSb - vSa) * nS + (vLb - vLa) * nL; // closing speed along the normal (<0 ⇒ converging)
     if (vrel < 0) {
       const j = -(1 + RESTITUTION) * vrel / invSum; // impulse magnitude (>0)
@@ -1337,7 +1338,7 @@ export class Game {
     const hla = a.halfLen * ma, hwa = a.halfWid * ma;
     const hlb = b.halfLen * mb, hwb = b.halfWid * mb;
     const ya = this._colYaw(a), yb = this._colYaw(b);
-    const ca = Math.cos(ya), sa = Math.sin(ya), cb = Math.cos(yb), sb = Math.sin(yb);
+    const ca = dmath.cos(ya), sa = dmath.sin(ya), cb = dmath.cos(yb), sb = dmath.sin(yb);
     // Body axes in the (s, lat) plane — forward u = (cosθ, -sinθ) matches the velocity
     // convention (vS = v·cosθ, vL = -v·sinθ), side w = u rotated +90°.
     const uaS = ca, uaL = -sa, waS = sa, waL = ca;
@@ -1370,7 +1371,7 @@ export class Game {
   // no reverse: a shove past standstill parks the car (v floors at 0) and the
   // leftover backward s-velocity is dropped, matching the old rear-end clamp.
   _applyImpulse(c, dS, dL) {
-    const ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+    const ch = dmath.cos(c.heading), sh = dmath.sin(c.heading);
     const wS = c.v * ch + dS;
     const wL = -c.v * sh + (c.vlat || 0) + dL;
     const v = Math.max(0, wS / ch);
@@ -1401,7 +1402,7 @@ export class Game {
       if (c.lat > 0.05 || c.lat < -0.05) {
         const f2 = this.centerline.sampleAt(c.totalS + TWIST_PROBE);
         // twist of `up` about the tangent across the probe step (rad/world-unit)
-        const tau = Math.atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / TWIST_PROBE;
+        const tau = dmath.atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / TWIST_PROBE;
         if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, c.lat * tau).normalize();
       }
       const forward = f.tangent.clone().applyAxisAngle(f.up, c.heading); // car faces its heading (yaw about the FRAME up)

@@ -19,3 +19,4 @@ public/assets/audio/_music-pool/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+native/build/

@@ -7,6 +7,13 @@
 // three-free, which is the point. Every assertion is exact (Object.is via
 // assert.strictEqual), never approximate: if a rounding difference shows up,
 // fix Vec3's operation order, do not loosen the test.
+//
+// The sim computes transcendentals through engine/math.js (fdlibm WASM), not
+// V8's Math — so for the comparison to stay bit-exact, THREE must too: Math.sin
+// and Math.cos are patched to the fdlibm versions for this test process (each
+// test file runs in its own process; applyAxisAngle is the only surface here
+// that reaches them). What this gate pins is OPERATION ORDER — the
+// transcendentals themselves are pinned by tests/mathlib.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -15,6 +22,9 @@ const path = require('node:path');
 let Vec3, THREE, mulberry32;
 test.before(async () => {
   ({ Vec3 } = await import('../public/display/engine/Vec3.js'));
+  const dmath = await import('../public/display/engine/math.js');
+  Math.sin = dmath.sin;
+  Math.cos = dmath.cos;
   THREE = await import('three');
   ({ mulberry32 } = await import('../public/display/engine/util.js'));
 });

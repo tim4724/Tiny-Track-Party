@@ -1,13 +1,14 @@
 // Records the committed golden-trace fixture set (tests/fixtures/traces/).
 //
-// Run this ON THE REFERENCE PLATFORM: the CI unit-job environment (ubuntu
-// x64, Node major pinned in .github/workflows/test.yml). Traces are bit-exact
-// only per engine+platform, so fixtures recorded on a dev machine will not
-// replay on CI. The record-traces workflow (workflow_dispatch) wraps this
-// script and uploads the result as an artifact; commit that.
+// Run this on ANY machine: the sim's transcendentals go through
+// engine/math.js (fdlibm WASM), so traces are engine- and platform-
+// independent — fixtures recorded on a dev laptop replay bit-exactly on CI
+// and vice versa. Each header stamps the mathlib build; re-record whenever
+// that stamp changes. The record-traces workflow (workflow_dispatch) still
+// wraps this script on CI as an independent cross-platform re-record check.
 //
 // The endgame fixture must cover the whole event vocabulary. This script
-// tries ENDGAME_SEED first and, if an engine or platform change moved the
+// tries ENDGAME_SEED first and, if an engine change moved the
 // race enough to lose coverage, scans seeds for the first fully-covering one
 // and records that instead (the filename carries the seed). When the seed
 // changes, update ENDGAME_SEED here and the fixture list in

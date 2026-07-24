@@ -72,37 +72,34 @@ frame for frame. Specifically:
   (`public/display/engine/Vec3.js`), whose method bodies are copied verbatim
   from three.js r184 so operation order (and therefore float rounding) is
   pinned.
-- Cross-LANGUAGE bit-exactness additionally requires matching transcendental
-  results. `Math.sin/cos/atan2/exp/pow/hypot` sit on the byte path and are
-  implementation-approximated (V8 ships its own fdlibm port; platform libm
-  and the MSVC CRT differ in the last bit), so the C++ port must vendor math
-  routines that reproduce V8's results rather than link system libm. Plain
-  arithmetic and `Math.sqrt` are exact IEEE-754 everywhere. See the
-  conformance track in [plan.md](plan.md).
-- The same caveat applies WITHIN JavaScript: transcendental results change
-  between V8 versions, and between architectures on the same V8 (per-arch
-  codegen of V8's compiled fdlibm; observed as identical Node 26.5.0
-  diverging between macOS arm64 and Linux x64). A trace therefore replays
-  bit-exactly only on the JS engine and platform that recorded it. Each
-  trace header records that provenance (`engine: { node, v8, os, arch }`)
-  and the verifier reports a mismatch as the first suspect when a replay
-  diverges. The committed fixtures' REFERENCE PLATFORM is the CI unit job
-  (ubuntu x64, Node major pinned in `.github/workflows/test.yml`): fixtures
-  are recorded there via the record-traces workflow, CI hard-fails on a
-  wrong-platform fixture, and dev machines skip the fixture replay instead
-  of reporting phantom divergence. The C++ port's conformance target is
-  likewise the fixtures as recorded on that platform.
+- Transcendentals (`sin/cos/atan2/exp/pow/hypot`) sit on the byte path and
+  are implementation-approximated, so the sim does NOT call V8's `Math.*`
+  for them: it calls `engine/math.js`, fdlibm (FreeBSD msun via openlibm,
+  `native/vendor/fdlibm/`) compiled to an embedded WASM module. WASM f64
+  arithmetic is fully deterministic, so results are bit-identical on every
+  JS engine, every platform, and every browser. The C++ port links the SAME
+  vendored sources natively (strict FP flags: double-only,
+  `-ffp-contract=off`, no fast-math); bit-equality between the two builds is
+  pinned by the shared corpus `tests/fixtures/math-corpus.jsonl`
+  (`tests/mathlib.test.js` on the JS side, its twin in `native/` on the C++
+  side). Plain arithmetic and `Math.sqrt` are exact IEEE-754 everywhere and
+  stay on native `Math`.
+- Traces are therefore engine- and platform-independent: record fixtures on
+  any machine, replay them anywhere. The one provenance that must match is
+  the mathlib build stamped in each trace header (`math`); the `engine`
+  stamp (`{ node, v8, os, arch }`) is informational. A fixture with a
+  different (or missing) mathlib stamp is stale — the verifier and the
+  fixture gate say so explicitly instead of reporting phantom divergence.
 
 The executable form of this guarantee is the golden-trace tooling:
 `scripts/record-trace.mjs` records a seeded headless race (inputs, events,
 FNV-1a hash of the canonical-JSON snapshot every frame, full snapshots on a
 cadence), `scripts/verify-trace.mjs` replays the recorded inputs through the
 engine and demands EXACT float equality, and `tests/trace.test.js` replays
-every committed fixture on `npm test`. The committed-fixture gate is
-currently DISARMED (the fixture directory is empty) because the JS engine is
-still being tuned and every intentional behaviour change forced a CI
-re-record round-trip; the in-process record/verify tests keep the tooling
-honest meanwhile. Re-arm it when C++ conformance work starts (see
+every committed fixture on `npm test`. The committed-fixture gate is ARMED
+(since the mathlib swap, Milestone 0 of Track S): fixtures are committed and
+replay everywhere; re-recording after an intentional behaviour change is one
+local command (`node scripts/record-fixtures.mjs`, see
 `tests/fixtures/traces/README.md`). The C++ port passes conformance when it
 verifies every committed fixture at that point. The fixture set must cover
 the whole event vocabulary and the endgame path, not just early-race

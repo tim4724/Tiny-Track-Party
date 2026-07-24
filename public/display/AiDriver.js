@@ -9,6 +9,7 @@
 // car POSES — the THREE.Vector3s the engine already placed on car.pose — so it
 // imports no THREE and always reads the same frame the engine produced.
 import { mulberry32, wrapDelta, wrapS } from './engine/util.js';
+import * as dmath from './engine/math.js';
 
 const LOOKAHEAD = 7.5;   // world units down the centerline a bot aims at
 const STEER_GAIN = 1.8;  // steer per radian of heading error (proportional)
@@ -92,7 +93,7 @@ class RacingLine {
       const a = frames[(i - 1 + n) % n].tangent, b = frames[(i + 1) % n].tangent;
       const cross = a.clone().cross(b).dot(frames[i].up);
       const dot = clamp(a.dot(b), -1, 1);
-      kappa[i] = Math.atan2(cross, dot) / (2 * h);
+      kappa[i] = dmath.atan2(cross, dot) / (2 * h);
     }
     // Corridor the line may use, given the curvature it will actually carry. Beyond
     // the physics curb inset, each sample reserves the PURSUIT CUT: a pure-pursuit
@@ -136,7 +137,7 @@ class RacingLine {
         if (l1 < 1e-6 || l2 < 1e-6) { out[i] = 0; continue; }
         const dot = v1.dot(v2);                       // before cross() — cross MUTATES v1
         const cross = v1.cross(v2).dot(frames[i].up);
-        out[i] = Math.abs(Math.atan2(cross / (l1 * l2), clamp(dot / (l1 * l2), -1, 1))) / ((l1 + l2) / 2);
+        out[i] = Math.abs(dmath.atan2(cross / (l1 * l2), clamp(dot / (l1 * l2), -1, 1))) / ((l1 + l2) / 2);
       }
       return out;
     };
@@ -296,7 +297,7 @@ function curvatureAt(centerline, s, step = 0.6) {
   const a = centerline.sampleAt(s), b = centerline.sampleAt(s + step);
   const cross = a.tangent.clone().cross(b.tangent).dot(b.up);
   const dot = a.tangent.dot(b.tangent);
-  return Math.abs(Math.atan2(cross, dot)) / step;
+  return Math.abs(dmath.atan2(cross, dot)) / step;
 }
 
 // Brake (0..1) for upcoming bends — but DISTANCE-AWARE, so the car carries full speed
@@ -340,7 +341,7 @@ export function pursue(car, centerline, { lookahead = LOOKAHEAD, gain = STEER_GA
   to.normalize();
   const cross = fwd.clone().cross(to).dot(up);
   const dot = clamp(fwd.dot(to), -1, 1);
-  const err = Math.atan2(cross, dot); // + = target is to the car's left
+  const err = dmath.atan2(cross, dot); // + = target is to the car's left
   // The engine yaws the car by STEER_SIGN(-1)·f(steer), so a NEGATIVE steer turns
   // toward a LEFT target — hence the leading minus.
   return clamp(-err * gain, -1, 1);

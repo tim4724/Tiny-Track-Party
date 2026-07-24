@@ -17,6 +17,7 @@
 // through hills, and the start/finish twist (holonomy) is unwound so `up` doesn't jump
 // at the seam. (Banking + variable width layer onto this in later passes.)
 import { Vec3 } from './engine/Vec3.js';
+import * as dmath from './engine/math.js';
 import { CONTRACT_VERSION } from './engine/contract.js';
 import { Centerline } from './Centerline.js';
 // Track DEFINITIONS (the catalogue) live in a dependency-free data module so the
@@ -48,8 +49,8 @@ const v = (x, y, z) => new Vec3(x, y, z);
 // Plan-frame basis at heading θ: travel direction and lateral-LEFT direction (the
 // inward normal of a left turn). d = dL/dθ, so rotating L by φ gives L(θ+φ) — which is
 // what makes the closed-form arc below exact.
-const dirX = (th) => -Math.sin(th), dirZ = (th) => Math.cos(th);
-const latX = (th) => -Math.cos(th), latZ = (th) => -Math.sin(th);
+const dirX = (th) => -dmath.sin(th), dirZ = (th) => dmath.cos(th);
+const latX = (th) => -dmath.cos(th), latZ = (th) => -dmath.sin(th);
 const DEG = Math.PI / 180;
 
 // Build the track. `track` is a bare segment array OR a catalogue descriptor
@@ -177,8 +178,8 @@ export function buildTrack(track, opts = {}) {
         const N = Math.max(16, Math.round(2 * Math.PI * r / DS));
         for (let i = 1; i <= N; i++) {
           const f = i / N, phi = 2 * Math.PI * f, off = drift * smoothstep(f);
-          const fwd = r * Math.sin(phi);
-          worldPts.push(v(x0 + dx * fwd + lx * off, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd + lz * off));
+          const fwd = r * dmath.sin(phi);
+          worldPts.push(v(x0 + dx * fwd + lx * off, y0 + vert * r * (1 - dmath.cos(phi)), z0 + dz * fwd + lz * off));
           widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
           hillFlags.push(false); // a loop is a stunt, never a hill
         }
@@ -187,8 +188,8 @@ export function buildTrack(track, opts = {}) {
         const N = Math.max(8, Math.round(Math.PI * r / DS));
         for (let i = 1; i <= N; i++) {
           const f = i / N, phi = Math.PI * f;
-          const fwd = r * Math.sin(phi); // along-travel excursion; back to 0 at the apex
-          worldPts.push(v(x0 + dx * fwd, y0 + vert * r * (1 - Math.cos(phi)), z0 + dz * fwd));
+          const fwd = r * dmath.sin(phi); // along-travel excursion; back to 0 at the apex
+          worldPts.push(v(x0 + dx * fwd, y0 + vert * r * (1 - dmath.cos(phi)), z0 + dz * fwd));
           widths.push(segWidth(seg, f)); banks.push(segTwist(seg, f)); pillarFlags.push(!!seg.pillars);
           hillFlags.push(false); // a loop is a stunt, never a hill
         }
@@ -221,10 +222,10 @@ export function postAtSample(sm, post) {
   if (sm.up.y < 0.9) return null;                                        // tilted stunt flank — not a corridor
   if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) return null; // column doesn't cross this road
   const dx = post.x - sm.pos.x, dz = post.z - sm.pos.z;
-  const tl = Math.hypot(sm.tangent.x, sm.tangent.z) || 1;
+  const tl = dmath.hypot(sm.tangent.x, sm.tangent.z) || 1;
   const tan = (dx * sm.tangent.x + dz * sm.tangent.z) / tl;
   if (Math.abs(tan) > post.radius + 0.35) return null;                   // not abeam — no say
-  const ll = Math.hypot(sm.lateral.x, sm.lateral.z) || 1;
+  const ll = dmath.hypot(sm.lateral.x, sm.lateral.z) || 1;
   const lat = (dx * sm.lateral.x + dz * sm.lateral.z) / ll;
   return { lat, tan, intrusion: sm.width / 2 + post.radius - Math.abs(lat) };
 }
@@ -279,7 +280,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
     const sin = axis.length();
     if (sin > 1e-8) {
       axis.multiplyScalar(1 / sin);
-      up.applyAxisAngle(axis, Math.atan2(sin, Math.max(-1, Math.min(1, t0.dot(t1)))));
+      up.applyAxisAngle(axis, dmath.atan2(sin, Math.max(-1, Math.min(1, t0.dot(t1)))));
     }
     up.addScaledVector(t1, -up.dot(t1)).normalize();
     ups.push(up.clone());
@@ -293,7 +294,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   for (let i = 0; i < n; i++) if (banks[i]) ups[i].applyAxisAngle(tangents[i], banks[i]);
   // Unwind the residual twist (frame holonomy) evenly so `up` doesn't jump at the seam.
   const t0 = tangents[0];
-  const resid = Math.atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
+  const resid = dmath.atan2(ups[n - 1].clone().cross(ups[0]).dot(t0), ups[n - 1].dot(ups[0]));
   for (let i = 0; i < n; i++) {
     up.copy(ups[i]).applyAxisAngle(tangents[i], resid * (i / n));
     ups[i].copy(up);
@@ -431,7 +432,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
       for (let k = lo; k <= hi; k++) {
         const s = samples[k];
         let lx = s.lateral.x, lz = s.lateral.z;
-        const ll = Math.hypot(lx, lz);
+        const ll = dmath.hypot(lx, lz);
         if (ll < 1e-6) { lx = 1; lz = 0; } else { lx /= ll; lz /= ll; }
         const feather = (k < a || k > b);
         const halfW = s.width / 2 + EDGE;
@@ -485,7 +486,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
         if (!best) continue;
         const c = best.s;
         let ox = c.pos.x - cx, oz = c.pos.z - cz;
-        const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+        const ol = dmath.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
         // The default offset leaves the shaft grazing the ring's own mouth corridor by
         // ~0.2 — the invisible-pole sliver. Step it outward until it clears every
         // corridor by POST_CLEAR (the diagonal top-clip keeps it flush against the

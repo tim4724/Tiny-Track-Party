@@ -7,6 +7,8 @@
 // exact operation order (float rounding differs if you reassociate). Only the
 // method surface the sim actually uses is implemented — nothing speculative.
 // Mutating methods return `this` for chaining, exactly like THREE.
+import * as dmath from './math.js';
+
 export class Vec3 {
   constructor(x = 0, y = 0, z = 0) {
     this.x = x;
@@ -91,9 +93,9 @@ export class Vec3 {
   // inlined here (NOT the Rodrigues formula — its float rounding differs).
   applyAxisAngle(axis, angle) {
     // Quaternion.setFromAxisAngle (assumes a normalized axis)
-    const halfAngle = angle / 2, s = Math.sin(halfAngle);
+    const halfAngle = angle / 2, s = dmath.sin(halfAngle);
     const qx = axis.x * s, qy = axis.y * s, qz = axis.z * s;
-    const qw = Math.cos(halfAngle);
+    const qw = dmath.cos(halfAngle);
     // Vector3.applyQuaternion (quaternion assumed unit length)
     const vx = this.x, vy = this.y, vz = this.z;
     // t = 2 * cross( q.xyz, v );
