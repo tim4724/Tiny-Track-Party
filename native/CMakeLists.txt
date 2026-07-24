@@ -52,6 +52,7 @@ target_link_libraries(ttp_mathlib PUBLIC ttp_strict_fp)
 add_library(libttp_track STATIC
   libttp-track/ttp/util.cc
   libttp-track/ttp/centerline.cc
+  libttp-track/ttp/trackbuilder.cc
 )
 target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
 target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp)
@@ -76,4 +77,17 @@ add_executable(sampler_check tracktest/sampler_check.cc)
 target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp)
 add_test(NAME track_sampler
   COMMAND sampler_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/track-sampler-corpus.jsonl
+)
+
+# ---- Conformance: the full TrackBuilder corpus ------------------------------
+# Rebuilds all 20 shipped tracks from generated/track_defs.h through the native
+# TrackBuilder port and diffs the augmented race-track object (geometry +
+# resolved furniture) against tests/fixtures/trackbuilder-corpus.jsonl
+# (scripts/gen-trackbuilder-corpus.mjs) — bit-exact per top-level key, per
+# 64-sample chunk, and per furniture array.
+add_executable(trackbuilder_check tracktest/trackbuilder_check.cc)
+target_include_directories(trackbuilder_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
+target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_strict_fp)
+add_test(NAME trackbuilder
+  COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
 )
