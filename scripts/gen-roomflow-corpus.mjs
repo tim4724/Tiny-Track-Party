@@ -182,6 +182,28 @@ scenarios.push({
 });
 
 scenarios.push({
+  // The exact-at-timeout boundary, probed IN A RACE STATE: isExpired uses
+  // strict `>` (diff == timeoutMs is still alive), and the only prior probe
+  // at the boundary sat in LOBBY where expiredPeers short-circuits — a
+  // `>`→`>=` mutation survived the corpus (found by the C++ port's author).
+  name: 'liveness-exact-boundary-in-race',
+  liveness: { timeoutMs: 3000, graceMs: 0 },
+  ops: [
+    { op: 'add', p: 0, fields: fieldsFor(0) },
+    { op: 'add', p: 1, fields: fieldsFor(1) },
+    { op: 'transition', to: 'countdown' },
+    { op: 'transition', to: 'playing' },
+    { op: 'seen', p: 0, t: 1000 }, { op: 'seen', p: 1, t: 2000 },
+    { op: 'isExpired', p: 0, t: 3999 },   // diff 2999 < timeout: alive
+    { op: 'isExpired', p: 0, t: 4000 },   // diff EXACTLY timeout: alive (strict >)
+    { op: 'isExpired', p: 0, t: 4001 },   // diff 3001: expired
+    { op: 'expiredPeers', t: 4000 },      // boundary via the sweep too: only sub-boundary peers stay
+    { op: 'expiredPeers', t: 5000 },      // p0 over (4000ms), p1 exactly at (3000ms): only p0
+    { op: 'expiredPeers', t: 5001 }       // both over
+  ]
+});
+
+scenarios.push({
   name: 'rekey-through-disconnect-and-order',
   liveness: { timeoutMs: 3000, graceMs: 0 },
   ops: [

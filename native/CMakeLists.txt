@@ -172,6 +172,32 @@ foreach(fx
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
 endforeach()
 
+# ---- libttp-party: the room-semantics port ----------------------------------
+# The C++ twin of partyplug/RoomFlow.js — the sans-IO room state machine (roster
+# identity/join order, presence, host election, liveness predicates). A discrete
+# state machine: no FP subtleties, but ORDER and IDENTITY semantics are load-
+# bearing. Depends only on ttp::Value (canonical.h, header-only); a local PeerId
+# mirrors libttp-sim's Id JSON-scalar identity without coupling to the game header.
+add_library(libttp_party STATIC
+  libttp-party/ttp/room_flow.cc
+)
+target_include_directories(libttp_party PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-sim)  # ttp/canonical.h (Value struct)
+target_link_libraries(libttp_party PUBLIC ttp_strict_fp)
+
+# ---- Conformance: the RoomFlow behavioural corpus ---------------------------
+# Replays tests/fixtures/roomflow-corpus.jsonl (scripts/gen-roomflow-corpus.mjs)
+# against the port: per scripted op, reproduces ret + emitted events (order +
+# detail) + a public-surface digest, compared as canonical JSON (canonical_stringify
+# from libttp_sim). 34 scripts, every step exact.
+add_executable(roomflow_check partytest/roomflow_check.cc)
+target_link_libraries(roomflow_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(roomflow_check)
+add_test(NAME roomflow
+  COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
+)
+
 # ---- Browser module: the runtime C ABI (ttp_runtime.h) ----------------------
 # Emscripten-only. Wraps libttp-sim behind the one extern "C" ABI and emits an
 # ES6 module (ttp_sim.mjs + ttp_sim.wasm) the display's ?sim=native adapter
