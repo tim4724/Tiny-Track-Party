@@ -126,6 +126,13 @@ struct PlayerDesc { Id id; bool hasStats = false; Stats stats; };
 
 class AiController;  // ai_driver.h
 
+// Live-tunable steering-response exponent — the C++ twin of Game.js
+// setSteerExpo/getSteerExpo. Module-global (shared by every Game like the JS
+// _steerExpo) and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
+// and ignores non-finite input, matching the JS `Number.isFinite` guard.
+void setSteerExpo(double v);
+double getSteerExpo();
+
 class Game {
  public:
   Game(const std::vector<PlayerDesc>& players, const GameTrack& track,

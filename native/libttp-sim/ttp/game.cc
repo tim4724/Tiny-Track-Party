@@ -73,6 +73,11 @@ static const double INF = std::numeric_limits<double>::infinity();
 
 static double g_steerExpo = STEER_EXPO;  // setSteerExpo/getSteerExpo — traces never move it
 
+void setSteerExpo(double v) {
+  if (std::isfinite(v)) g_steerExpo = js_max(0.5, js_min(3.0, v));  // Game.js: clamp [0.5,3]
+}
+double getSteerExpo() { return g_steerExpo; }
+
 static const char* ITEM_IDS[4] = {"boost", "banana", "rocket", "monster"};
 static const int ITEM_PLACE_TABLE[8][4] = {
     {20, 80, 0, 0}, {25, 55, 20, 0}, {30, 30, 40, 0}, {30, 30, 30, 10},

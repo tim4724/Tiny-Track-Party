@@ -1,8 +1,13 @@
 // RaceSession — the C++ twin of public/display/RaceSession.js: countdown beats,
 // the racing flip, and the race-timeout failsafe wrapped around a Game. Owns no
 // clock; time is injected through update(dtMs). Clock-free / RNG-injected exactly
-// like the JS module. Only the surface the golden-trace session driver exercises
-// is ported (startCountdown / update / processInput / racing / results).
+// like the JS module.
+//
+// The golden-trace session driver only exercises startCountdown / update /
+// processInput / racing / results; the rest of the surface (pause / resume /
+// fastForwardToEnd / forceRemoveCar / rekeyCar / getResults / getSnapshot /
+// dispose) is the live-play lifecycle the native runtime ABI wraps for the
+// browser adapter — a faithful port of the same-named RaceSession.js methods.
 #pragma once
 
 #include <functional>
@@ -26,7 +31,20 @@ class RaceSession {
   void update(double dtMs);
   void processInput(const Id& id, const Input& msg) { engine_->processInput(id, msg); }
 
+  // Live-play lifecycle (RaceSession.js). pause()/resume() freeze injected time;
+  // resume replays the held countdown banner. fastForwardToEnd steps the sim to
+  // the flag in one burst, feeding the bots each step via `stepBots`.
+  void pause();
+  void resume();
+  void fastForwardToEnd(const std::function<void()>& stepBots, double dtMs = 1000.0 / 30.0);
+  bool forceRemoveCar(const Id& id);
+  bool rekeyCar(const Id& oldId, const Id& newId) { return engine_->rekeyCar(oldId, newId); }
+  Value getResults() { return engine_->getResults(); }
+  Value getSnapshot() { return engine_->getSnapshot(); }
+  void dispose();
+
   bool racing() const { return racing_; }
+  bool paused() const { return paused_; }
   Game& engine() { return *engine_; }
 
  private:

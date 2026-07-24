@@ -102,6 +102,18 @@ const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.le
 // (?bots=0 = race alone) instead of topping up to FIELD_SIZE.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
+// ?sim=native — PORT: back races with the native C++ sim (WASM) through
+// NativeRaceSession instead of the JS engine. Opt-in while the native stack
+// proves itself; the module preloads at boot, and a race that starts before
+// it resolves falls back to the JS sim (loud in the console). Bit-parity
+// between the two sims is the conformance suite's guarantee (native/).
+const _qSimNative = _trackParams.get('sim') === 'native';
+let _nativeSim = null; // module namespace once init() resolves
+if (_qSimNative) {
+  import('./NativeRaceSession.js')
+    .then(async (m) => { await m.init(); _nativeSim = m; })
+    .catch((e) => console.warn('[sim=native] load failed; racing on the JS sim:', e));
+}
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
 // catalogue and built like any track — but only the ONE requested id, and only in a
 // ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
@@ -388,6 +400,7 @@ const _lastItem = new Map();
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
 let aiBots = new Map();
+let nativeBotSpecs = []; // ?sim=native: persona specs for in-wasm bots (see buildField)
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
@@ -722,13 +735,21 @@ function buildField(humans) {
     carIndex: p.carIndex, stats: carStats(p.carIndex), ai: false
   }));
   aiBots = new Map();
+  nativeBotSpecs = [];
   for (const s of cpuSeats(field)) {
     const peerIndex = AI_PREFIX + s.n;
     field.push({ peerIndex, name: s.persona.name, colorIndex: s.colorIndex, carIndex: s.carIndex, stats: s.stats, ai: true });
     // Seed each bot's wander from the race seed + its NUMERIC index (s.n, not the
     // 'ai-N' id string — number+string coerces to NaN>>>0 = 0, which had been
     // handing every bot the same stream): distinct per bot, fresh per race.
-    aiBots.set(peerIndex, new AiController({ ...s.persona, seed: ((track.seed || 1) + s.n) >>> 0 }));
+    const seed = ((track.seed || 1) + s.n) >>> 0;
+    if (_nativeSim) {
+      // Native sim: bots live INSIDE the wasm (stepped by ttp_update in this
+      // loop's exact order); record the persona spec instead of a controller.
+      nativeBotSpecs.push({ peerIndex, caution: s.persona.caution, laneBias: s.persona.laneBias, seed });
+    } else {
+      aiBots.set(peerIndex, new AiController({ ...s.persona, seed }));
+    }
   }
   return field;
 }
@@ -803,9 +824,14 @@ function launchRace(players) {
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
   scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
 
-  session = new RaceSession(field, track, {
+  // ?sim=native: same construction shape, native implementation. Fall back
+  // loudly if the wasm module hasn't finished loading (boot races only).
+  if (_qSimNative && !_nativeSim) console.warn('[sim=native] module not ready; this race runs on the JS sim');
+  const SessionImpl = _nativeSim ? _nativeSim.NativeRaceSession : RaceSession;
+  session = new SessionImpl(field, track, {
     onRaceEvent,
     forceItem: _qForceItem || null, // ?item=<id>: every box rolls this (debug hook)
+    ...(_nativeSim ? { bots: nativeBotSpecs } : {}),
     onCountdownTick(n) {
       // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
       // over the next beat via .is-go). n < 0: banner gone.
@@ -1706,7 +1732,8 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   // higher = gentler near centre, sharper toward full lock. The engine reads it
   // fresh each step, so it affects every car in the running race instantly.
   { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
-    min: 0.6, max: 3, step: 0.05, value: steerDefault, live: setSteerExpo,
+    min: 0.6, max: 3, step: 0.05, value: steerDefault,
+    live: (x) => { setSteerExpo(x); _nativeSim?.setNativeSteerExpo(x); },
     format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
   // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) for slow-mo inspection — no
   // reload. 1 = normal; drag down to watch fast action (e.g. a rocket strike) play out frame by frame.
