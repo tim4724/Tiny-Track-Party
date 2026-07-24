@@ -1,0 +1,77 @@
+// GrandPrix — the C++ twin of public/display/GrandPrix.js: the pure scoring core
+// behind the Cup / Random picks. Clock-free and RNG-injected exactly like the JS
+// module (all identity/meta enters through apply_race; randomness through the
+// injected rng in ShuffleBag). Off the golden-trace conformance path (no fixture
+// exercises it), but ported for parity; a faithful transliteration.
+#pragma once
+
+#include <cstddef>
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "ttp/game.h"  // Id
+
+namespace ttp {
+
+// Points by finish rank (1st..4th). DNF earns nothing.
+extern const int POINTS_BY_RANK[4];
+
+// Endless track draw with no repeats until every id is seen (Fisher-Yates, no
+// boundary repeat). rng() -> [0,1) is injected.
+class ShuffleBag {
+ public:
+  ShuffleBag(std::vector<std::string> ids, std::function<double()> rng);
+  std::string draw();
+
+ private:
+  void refill();
+  std::vector<std::string> all_;
+  std::vector<std::string> bag_;
+  bool hasLast_ = false;
+  std::string last_;
+  std::function<double()> rng_;
+};
+
+struct GpResult { Id playerId; int rank; bool finished; };
+struct GpFieldEntry { Id peerIndex; std::string name; int colorIndex; bool ai; };
+struct GpStanding {
+  Id playerId; std::string name; int colorIndex; bool ai;
+  int points; int gained; bool lastRankNull; int lastRank;
+};
+struct GpCup { std::string id, name; std::vector<std::string> tracks; };
+
+class CupSeries {
+ public:
+  CupSeries(const GpCup& cup, std::function<std::string()> drawNext = nullptr);
+
+  bool endless() const { return (bool)drawNext_; }
+  int raceCount() const { return (int)cup_.tracks.size(); }
+  std::string currentTrackId() const { return cup_.tracks[raceIndex_]; }
+  bool finished() const { return done_; }
+
+  void applyRace(const std::vector<GpResult>& results, const std::vector<GpFieldEntry>& field);
+  void advance();
+  std::vector<GpStanding> standings() const;
+  void rekey(const Id& oldId, const Id& newId);
+
+ private:
+  struct Meta {
+    std::string name; int colorIndex = 0; bool ai = false;
+    int points = 0; int gained = 0;
+    bool lastRankNull = true; int lastRank = 0;
+    int lastRaceIndex = -1;
+  };
+  Meta* findMeta(const Id& id);
+  const Meta* findMeta(const Id& id) const;
+
+  GpCup cup_;
+  std::function<std::string()> drawNext_;
+  int raceIndex_ = 0;
+  int lastApplied_ = -1;
+  bool done_ = false;
+  std::vector<std::pair<Id, Meta>> meta_;  // insertion order = first-seen order
+};
+
+}  // namespace ttp

@@ -258,10 +258,19 @@ The trace bytes are the conformance surface, so the C++ serializer must emit
 - **Shortest round-trip formatting.** `JSON.stringify` prints a number as the
   shortest decimal string that round-trips to the same binary64 (ECMA-262
   Number::toString, Ryū/Grisu class). The C++ serializer MUST match this
-  exactly — plan to vendor **google/double-conversion** (`ToShortest`).
-  `printf("%.17g")` / `%g` will NOT match. Integer-valued doubles print with no
-  decimal point or exponent (`3`, not `3.0`); exponent form only outside
-  `[1e-6, 1e21)`, matching ECMA's thresholds.
+  exactly — `printf("%.17g")` / `%g` will NOT match. Integer-valued doubles
+  print with no decimal point or exponent (`3`, not `3.0`); exponent form
+  only outside `[1e-6, 1e21)`, matching ECMA's thresholds. **RESOLVED (M3):**
+  vendored google/double-conversion's
+  `DoubleToStringConverter::EcmaScriptConverter().ToShortest()` reproduces
+  `JSON.stringify(number)` byte-exactly for all finite doubles — proven by
+  `tests/fixtures/json-number-corpus.jsonl` (52,357 cases incl. every double
+  in the committed traces); no hand-rolled formatting needed
+  (`native/libttp-sim/ttp/jsonnum.cc`, gated by `serializer_check`).
+- **Array sorts must be STABLE.** V8's `Array.prototype.sort` is stable
+  (spec-required); any ported comparator (e.g. Game's race-order sort) must
+  use `std::stable_sort` — `std::sort` may permute equal-keyed cars and
+  diverge the snapshot.
 - **`JSON.stringify(-0) === "0"`.** The sign of −0 is erased at the
   serialization boundary. The verifier's comparator relies on this: `firstDiff`
   compares with `===`/`!==`, and `0 === -0` in JS, so ±0 never false-alarms
