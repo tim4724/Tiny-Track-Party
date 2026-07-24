@@ -91,3 +91,59 @@ target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_strict_fp)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
 )
+
+# ---- Vendored google/double-conversion (v3.3.1) -----------------------------
+# ECMA-262 Number::toString (shortest round-tripping decimal) for the trace
+# serializer — printf can't match JSON.stringify (fp-profile §3.6). Only the
+# library source subdir is vendored (see vendor/double-conversion/VENDOR.md);
+# built here under the same strict-FP flags as the rest of the tree.
+file(GLOB TTP_DC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion/double-conversion/*.cc)
+add_library(ttp_double_conversion STATIC ${TTP_DC_SOURCES})
+target_include_directories(ttp_double_conversion PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion)
+target_link_libraries(ttp_double_conversion PUBLIC ttp_strict_fp)
+
+# ---- libttp-sim: the sim-core port ------------------------------------------
+# The C++ twin of public/display/engine/Game.js + AiDriver.js + RaceSession.js +
+# GrandPrix.js plus the trace serializer (jsonnum/canonical). Reuses libttp-track
+# (Vec3/Centerline/util/jsmath) wholesale; all under strict FP (fp-profile.md).
+add_library(libttp_sim STATIC
+  libttp-sim/ttp/jsonnum.cc
+  libttp-sim/ttp/canonical.cc
+  libttp-sim/ttp/ai_driver.cc
+  libttp-sim/ttp/game.cc
+  libttp-sim/ttp/race_session.cc
+  libttp-sim/ttp/grand_prix.cc
+)
+target_include_directories(libttp_sim PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-sim
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
+target_link_libraries(libttp_sim PUBLIC libttp_track ttp_double_conversion ttp_strict_fp)
+
+# ---- Conformance: the JSON number corpus (serializer gate) -------------------
+# Replays tests/fixtures/json-number-corpus.jsonl (52,357 cases) — byte-exact
+# ECMA-262 Number::toString. Phase A gate: green before the sim replay work.
+add_executable(serializer_check simtest/serializer_check.cc)
+target_link_libraries(serializer_check PRIVATE libttp_sim ttp_strict_fp)
+add_test(NAME serializer
+  COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
+)
+
+# ---- Conformance: the golden-trace replay CLI -------------------------------
+# Reproduces scripts/verify-trace.mjs against libttp-sim: rebuilds the race,
+# replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
+# ops), and demands exact per-frame event/snapshot/hash agreement.
+add_executable(replay_cli replay/replay_cli.cc)
+target_link_libraries(replay_cli PRIVATE libttp_sim ttp_strict_fp)
+foreach(fx
+  helix-3bots-1human-500f-seed7
+  helix-session-jitter-3bots-1human-800f-seed7
+  skysnake-5bots-2laps-seed39
+  tidepool-4bots-600f-seed42
+  tidepool-ailive-4bots-600f-seed42
+  tidepool-schedule-5bots-1human-700f-seed42
+  tidepool-session-ailive-4bots-900f-seed13
+  tidepool-session-beats-3bots-450f-seed21)
+  add_test(NAME replay_${fx}
+    COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
+endforeach()

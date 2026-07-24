@@ -1,0 +1,59 @@
+#include "ttp/race_session.h"
+
+namespace ttp {
+
+static const double MAX_RACE_MS = 180000;
+
+RaceSession::RaceSession(const std::vector<PlayerDesc>& players, const GameTrack& track,
+                         std::function<void(const Event&)> onRaceEvent,
+                         std::function<void(const Value&)> onRaceEnd,
+                         std::function<void(int)> onCountdownTick,
+                         std::string forceItem)
+    : onCountdownTick_(std::move(onCountdownTick)),
+      onRaceEnd_(std::move(onRaceEnd)) {
+  engine_ = std::make_unique<Game>(players, track, std::move(onRaceEvent), std::move(forceItem));
+}
+
+void RaceSession::startCountdown(int seconds) {
+  countdownN_ = seconds; countdownNull_ = false;
+  countdownMs_ = 0; countdownMsNull_ = false;
+  if (onCountdownTick_) onCountdownTick_(countdownN_);
+}
+
+void RaceSession::stepCountdown(double dtMs) {
+  if (countdownMsNull_) return;
+  countdownMs_ += dtMs;
+  while (countdownMs_ >= 1000) {
+    countdownMs_ -= 1000;
+    countdownN_ -= 1;
+    if (onCountdownTick_) onCountdownTick_(countdownN_);  // 2, 1, 0 (GO!), then -1 (clear)
+    if (countdownN_ == 0) {
+      racing_ = true;
+      onRaceStart();
+      raceMs_ = 0;
+    } else if (countdownN_ < 0) {
+      countdownNull_ = true;
+      countdownMsNull_ = true;
+      return;
+    }
+  }
+}
+
+void RaceSession::update(double dtMs) {
+  if (paused_ || ended_) return;
+  bool wasRacing = racing_;
+  stepCountdown(dtMs);
+  if (!wasRacing) return;
+  engine_->update(dtMs);
+  raceMs_ += dtMs;
+  if (engine_->raceOver() || raceMs_ >= MAX_RACE_MS) finish();
+}
+
+void RaceSession::finish() {
+  if (ended_) return;
+  ended_ = true;
+  racing_ = false;
+  if (onRaceEnd_) onRaceEnd_(engine_->getResults());
+}
+
+}  // namespace ttp
