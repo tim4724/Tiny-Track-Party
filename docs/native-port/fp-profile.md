@@ -215,13 +215,33 @@ inventory: `Game.js:60,382,430,431,607,713,717,725,1005,1023,1040,1059,1070,1139
 `AiDriver.js:53,83,158,168,169,178,262,326,405`. `Math.sign`: `Game.js:694`,
 `TrackBuilder.js:93,141`.
 
-### 3.5 `Math.trunc` / `Math.floor` / `Math.ceil` on negatives
+### 3.5 `Math.trunc` / `Math.floor` / `Math.ceil` / `Math.abs` on negatives
 
 `Math.floor`/`Math.ceil` match `std::floor`/`std::ceil` exactly, including on
 negatives (`floor(-2.5) == -3`). No special handling needed; just do not
 substitute truncation for floor. `Math.trunc` has **no** sim-path call site.
 `Math.ceil`: `TrackBuilder.js:617`. `Math.floor`: `Game.js:381,776,777`,
 `AiDriver.js:193,388,438`, `GrandPrix.js:24` (all non-negative or exact).
+`Math.abs` = `std::fabs` exactly (sign-bit clear, NaN payload preserved);
+ubiquitous (44 sim-path sites incl. the `projectNear` break test,
+`Centerline.js:126`) and safe — listed here only for inventory completeness.
+
+### 3.5b Numeric falsy guards — `x || eps`
+
+JS code guards degenerate denominators with logical OR: `(sC - sA) || 1e-6`
+(`Centerline.js:75,79,80`), `this.length() || 1` (`Vec3.js:66` normalize).
+JS falsiness on numbers triggers for `+0`, `-0` AND NaN. The faithful C++
+transliteration is
+
+```cpp
+inline double or_else(double x, double eps) { return x != 0.0 ? x : eps; }
+```
+
+which catches both zeros (`-0.0 == 0.0`) — exactly the JS behaviour for the
+values that occur (NaN never reaches these sites on the byte path; `x != x`
+would extend the guard if it ever could). Do NOT write `x == 0.0 ? eps : x`
+with a preceding fabs, and do not "fix" the sign of a −0 denominator — the
+JS takes the eps branch there and so must the port.
 
 ### 3.6 Number coercions on the trace path — JSON, shortest-form, signed zero
 
