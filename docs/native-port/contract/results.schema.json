@@ -4,46 +4,20 @@
   "title": "Race results",
   "description": "The object returned by Game.getResults() (public/display/engine/Game.js). All plain data, fresh objects. Rows are sorted by race order: finished cars first by finish time, then live cars by race position. Removed (forfeited) cars are absent entirely. Consumed by the standings/results boards and Grand Prix points. See docs/native-port/contract.md.",
   "type": "object",
-  "required": [
-    "results"
-  ],
+  "required": ["results"],
   "additionalProperties": false,
   "properties": {
     "results": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": [
-          "playerId",
-          "rank",
-          "finished",
-          "time"
-        ],
+        "required": ["playerId", "rank", "finished", "time"],
         "additionalProperties": false,
         "properties": {
-          "playerId": {
-            "type": [
-              "number",
-              "string"
-            ],
-            "description": "Car id (peerIndex, or strings like 'ai-N'/'cpu-x' for bots)."
-          },
-          "rank": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "1-based and dense: equals index + 1 in this sorted array. Indexes Grand Prix POINTS_BY_RANK."
-          },
-          "finished": {
-            "type": "boolean",
-            "description": "false = DNF or still racing when the failsafe timeout ended the race."
-          },
-          "time": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "description": "Finish time in seconds of simulated race time, or null when not finished."
-          }
+          "playerId": { "type": ["number", "string"], "description": "Car id (peerIndex, or strings like 'ai-N'/'cpu-x' for bots)." },
+          "rank": { "type": "integer", "minimum": 1, "description": "1-based and dense: equals index + 1 in this sorted array. Indexes Grand Prix POINTS_BY_RANK." },
+          "finished": { "type": "boolean", "description": "false = DNF or still racing when the failsafe timeout ended the race." },
+          "time": { "type": ["number", "null"], "description": "Finish time in seconds of simulated race time, or null when not finished." }
         }
       }
     }

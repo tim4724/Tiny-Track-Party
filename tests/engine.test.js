@@ -1373,7 +1373,7 @@ test('a box grab rolls on PLACE, ignoring the distance gap (last-but-close still
   assert.ok(lastMonsters > 1500, `last place rolls plenty of monsters even when close (~50%, ${lastMonsters}/4000)`);
 });
 
-test('item moments emit events: pickup, item_use, pad, spin', () => {
+test('item moments emit events: pickup, item_use, spin', () => {
   const track = mkTrack(3);
   track.boxes = [{ s: 8, lat: 0, radius: 1.0 }];
   track.pads = [{ s: 20, lat: 0, radius: 1.0 }];
