@@ -47,8 +47,10 @@ viewer (the renderer dev harness).
 
 - **Contract-first.** All data crossing the sim boundary is the versioned
   plain-data contract (contract.md); anything not in it does not exist for
-  renderers or shells. Still missing: a schema for the augmented track
-  object (builder output + hazards/pads/boxes/poles + identity).
+  renderers or shells. The augmented track object (builder output +
+  hazards/pads/boxes/poles + identity) is schema'd by
+  `contract/race-track.schema.json` and dumped as canonical-JSON fixtures by
+  `scripts/export-track-data.mjs`.
 - **One public C ABI.** `ttp_runtime.h` — lifecycle, input injection, and
   one outbound event queue — is the only boundary a non-C++ caller crosses
   in production; Swift, Kotlin and JS shells are three thin wrappers over
@@ -91,8 +93,9 @@ viewer (the renderer dev harness).
 - **Frozen sun shadow.** Filament has no `shadowMap.autoUpdate = false`;
   bake-once needs a custom design and must never re-render per view.
 - **No built-in Lambert** — the cheap-matte look is a custom material.
-- **Bit-exact conformance** needs vendored V8 fdlibm, a written FP profile
-  (double, FMA off, JS `%`/rounding semantics, matching serializer) and an
+- **Bit-exact conformance** needs vendored V8 fdlibm, the written FP profile
+  ([fp-profile.md](fp-profile.md): double, FMA off, JS `%`/rounding semantics,
+  matching serializer) and an
   exactly pinned Node/V8 oracle. Today's traces exercise neither AiDriver
   (inputs are recorded) nor RaceSession (replay constructs `Game`) — both
   need new trace kinds before the port starts.

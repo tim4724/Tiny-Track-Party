@@ -4,8 +4,23 @@
 // public/display/engine/Game.js) and writes a JSONL trace:
 //
 //   line 1   header  { contractVersion, seed, trackId, dt, laps, roster,
-//                      frames, snapshotEvery, math }
-//   line 2+  frame   { frame, inputs, events, hash [, snapshot] }
+//                      frames, snapshotEvery, math
+//                      [, stage] [, driver:'session', countdown] [, aiLive]
+//                      [, dtJitter] [, schedule] }
+//   line 2+  frame   { frame, inputs, events, hash
+//                      [, snapshot] [, racing] [, raceEnd] }
+//
+// Trace kinds (all orthogonal, all in one recorder):
+//   ai-live    header.aiLive: recording is unchanged, but the VERIFIER re-runs
+//              each bot's AiController and asserts its outputs equal the
+//              recorded inputs — the AI is under conformance test, not just
+//              the physics.
+//   session    header.driver='session': driven through RaceSession (countdown
+//              beats, racing flip, raceEnd results, early stop on race end).
+//   variable dt  header.dtJitter: per-frame dt derived from a seeded stream
+//              (makeDtStream) — same bytes on record and verify.
+//   mutations  header.schedule: mid-race lifecycle/staging ops
+//              (applyScheduleOps) fired on exact frames by both sides.
 //
 // Every frame carries an FNV-1a hash of the canonical-JSON snapshot, so a
 // diverging port localises to the exact frame; the FULL snapshot is embedded
@@ -38,7 +53,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildTrack, resolveFurniture, TRACKS } from '../public/display/TrackBuilder.js';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
+import { RaceSession } from '../public/display/RaceSession.js';
 import { AiController, AI_PERSONALITIES } from '../public/display/AiDriver.js';
+import { mulberry32 } from '../public/display/engine/util.js';
 import { MATHLIB, sin as dmathSin } from '../public/display/engine/math.js';
 
 // Fixed physics tick: the display's 60 Hz frame budget in ms. Stored in the
@@ -90,12 +107,72 @@ export function applyStage(game, stage) {
   }
 }
 
+// Per-frame dt from the header — THE definition of a variable-dt trace, shared
+// by record and verify (and reimplemented by the C++ replay CLI). Without
+// `dtJitter` every frame is the fixed header dt. With it, dt wobbles around the
+// base via a dedicated mulberry32 stream (drawn once per frame, in frame order —
+// callers must consume frames sequentially from 0), plus an optional periodic
+// spike that models a render hitch. All doubles, all deterministic.
+export function makeDtStream(header) {
+  const j = header.dtJitter;
+  if (!j) return () => header.dt;
+  const rand = mulberry32(((j.jseed ?? 1) >>> 0) || 1);
+  return (frame) => {
+    let dt = header.dt + (rand() * 2 - 1) * j.amp;
+    if (j.spikeEvery && frame > 0 && frame % j.spikeEvery === 0) dt *= (j.spikeScale ?? 4);
+    return dt;
+  };
+}
+
+// Apply the header `schedule`'s ops for one frame — the mid-race mutation API
+// surface (lifecycle + staging hooks the display calls on live races). Shared
+// by record + verify; ops fire BEFORE that frame's inputs, in array order.
+// Ops reference ids as they are AT THAT FRAME (i.e. post any earlier rekey).
+// `onRekey` lets the caller re-map its own id bookkeeping (input keys,
+// controllers) the moment the engine moves the car.
+export function applyScheduleOps(engine, schedule, frame, onRekey) {
+  for (const op of schedule || []) {
+    if (op.frame !== frame) continue;
+    switch (op.op) {
+      case 'removeCar': engine.removeCar(op.id); break;
+      case 'rekeyCar':
+        engine.rekeyCar(op.id, op.newId);
+        if (onRekey) onRekey(op.id, op.newId);
+        break;
+      case 'setCarStats': engine.setCarStats(op.id, op.stats); break;
+      case 'giveItem': engine.giveItem(op.id, op.item, op.opts || {}); break;
+      case 'useItem': engine.useItem(op.id); break;
+      case 'forceFinish': engine.forceFinish(op.id, op.time); break;
+      default: throw new Error(`unknown schedule op '${op.op}'`);
+    }
+  }
+}
+
 // ---- recording ----
 // config: {
-//   trackId, frames,                       required
+//   trackId, frames,                       required (frames = the BUDGET; a
+//                                          session trace may stop early on race
+//                                          end — header.frames is what was
+//                                          actually recorded)
 //   seed = 1, laps = 3, dt = TRACE_DT_MS, snapshotEvery = 60,
 //   bots = [{ id, skill, laneBias, aiSeed?, stats? }],
-//   humans = [{ id, script(frame) -> {s,b,u} | null, stats? }]
+//   humans = [{ id, script(frame) -> {s,b,u} | null, stats? }],
+//   stage = [],                            pre-race staged props (applyStage)
+//   session = false,                       drive through RaceSession (countdown,
+//                                          racing flip, raceEnd results) instead
+//                                          of the bare Game
+//   countdown = 3,                         session only: startCountdown seconds
+//   aiLive = false,                        mark the trace for AI-LIVE verify:
+//                                          recording is identical (bot outputs
+//                                          are still recorded), but the verifier
+//                                          re-runs each bot's AiController and
+//                                          asserts its outputs match the recorded
+//                                          inputs before applying them — so the
+//                                          AI itself is under conformance test
+//   dtJitter = null,                       { amp, spikeEvery?, spikeScale?, jseed? }
+//                                          variable per-frame dt (makeDtStream)
+//   schedule = []                          [{ frame, op, ...args }] mid-race
+//                                          mutation ops (applyScheduleOps)
 // }
 // Human scripts must be pure functions of the frame index (no clock, no
 // randomness): their OUTPUT is recorded, so verify replays them exactly.
@@ -104,7 +181,9 @@ export function recordTrace(config) {
   const {
     trackId, frames,
     seed = 1, laps = 3, dt = TRACE_DT_MS, snapshotEvery = 60,
-    bots = [], humans = [], stage = []
+    bots = [], humans = [], stage = [],
+    session: useSession = false, countdown = 3, aiLive = false,
+    dtJitter = null, schedule = []
   } = config;
   if (!trackId || !Number.isInteger(frames) || frames <= 0) {
     throw new Error('recordTrace: config needs a trackId and a positive integer frames');
@@ -133,14 +212,21 @@ export function recordTrace(config) {
     throw new Error('recordTrace: car ids must be unique when compared as strings (JSONL input keys are strings)');
   }
 
+  // Header base — `frames` is stamped AFTER the loop (a session trace stops on
+  // race end, so what was recorded is what the header promises).
   const header = {
     contractVersion: CONTRACT_VERSION,
-    seed, trackId, dt, laps, roster, frames, snapshotEvery,
+    seed, trackId, dt, laps, roster, snapshotEvery,
     // Optional pre-race staging, applied right after Game construction (and by the
     // verifier, identically): deterministic props the race dynamics alone can't
     // guarantee — e.g. a target-less rocket staged ahead of the grid whiffs at end
     // of run, covering rocket_expire on tracks where bot rockets always connect.
     ...(stage.length ? { stage } : {}),
+    // Trace-kind flags (absent = the original bare-Game input-replay trace):
+    ...(useSession ? { driver: 'session', countdown } : {}),
+    ...(aiLive ? { aiLive: true } : {}),
+    ...(dtJitter ? { dtJitter } : {}),
+    ...(schedule.length ? { schedule } : {}),
     // The deterministic mathlib build this trace was recorded with — the ONE
     // provenance bit-exact replay depends on (transcendentals go through
     // engine/math.js, fdlibm WASM). Deliberately no engine/platform stamp:
@@ -152,23 +238,60 @@ export function recordTrace(config) {
 
   const track = buildRaceTrack(trackId, { laps, seed });
   const pending = [];
-  const game = new Game(
-    roster.map((r) => (r.stats ? { id: r.id, stats: r.stats } : r.id)),
-    track,
-    { onEvent: (e) => pending.push(e) }
-  );
-  applyStage(game, stage);
+  let raceEndResults; // session only: captured the frame onRaceEnd fires
+  const ticks = [];   // session only: countdown beats fired since the last frame
+  let session = null;
+  let game;
+  if (useSession) {
+    // The same construction path the display uses (players carry peerIndex +
+    // stats; stats-less entries fall back to the benchmark inside Game).
+    // Countdown ticks are recorded per frame (the opening beat fired by
+    // startCountdown lands on frame 0): beat TIMING is contract surface for
+    // the C++ RaceSession port, and without it a beat-length drift smaller
+    // than the frame quantum is invisible (found by oracle mutation testing).
+    session = new RaceSession(
+      roster.map((r) => ({ peerIndex: r.id, stats: r.stats })),
+      track,
+      {
+        onRaceEvent: (e) => pending.push(e),
+        onRaceEnd: (r) => { raceEndResults = r; },
+        onCountdownTick: (n) => ticks.push(n)
+      }
+    );
+    game = session.engine;
+    applyStage(game, stage);
+    session.startCountdown(countdown);
+  } else {
+    game = new Game(
+      roster.map((r) => (r.stats ? { id: r.id, stats: r.stats } : r.id)),
+      track,
+      { onEvent: (e) => pending.push(e) }
+    );
+    applyStage(game, stage);
+  }
 
   // One AiController per bot, seeded from the header — plus a capture wrapper
-  // so the input driveBot applies lands in the frame record verbatim.
+  // so the input driveBot applies lands in the frame record verbatim. In a
+  // session trace bots only drive while racing (mirrors the live render loop,
+  // which starts driving on the GO beat).
   const controllers = roster.filter((r) => r.kind === 'bot').map((r) => {
     const ai = new AiController({ skill: r.skill, laneBias: r.laneBias, seed: r.aiSeed });
     return { id: r.id, ai };
   });
   const scripts = humans.map((h) => ({ id: h.id, script: h.script }));
 
+  const dtFor = makeDtStream({ dt, dtJitter });
   const records = [];
+  let lastRacing = false;
   for (let frame = 0; frame < frames; frame++) {
+    // Mutation ops fire before the frame's inputs; a rekey re-keys the bot's
+    // controller and the humans' script binding so later inputs land (and are
+    // recorded) under the live id.
+    applyScheduleOps(game, schedule, frame, (oldId, newId) => {
+      for (const c of controllers) if (String(c.id) === String(oldId)) c.id = newId;
+      for (const h of scripts) if (String(h.id) === String(oldId)) h.id = newId;
+    });
+
     const inputs = {};
     for (const h of scripts) {
       const m = h.script ? h.script(frame) : null;
@@ -178,25 +301,47 @@ export function recordTrace(config) {
       if (typeof m.b === 'number' || typeof m.b === 'boolean') msg.b = m.b;
       if (typeof m.u === 'number') msg.u = m.u;
       inputs[h.id] = msg;
-      game.processInput(h.id, msg);
+      if (session) session.processInput(h.id, msg); else game.processInput(h.id, msg);
     }
-    for (const c of controllers) {
-      const capture = { drive: (car, centerline, g) => {
-        const m = c.ai.drive(car, centerline, g);
-        inputs[c.id] = { s: m.s, b: m.b, u: m.u };
-        return m;
-      } };
-      game.driveBot(c.id, capture); // false (finished/poseless) → no input recorded
+    if (!session || session.racing) {
+      for (const c of controllers) {
+        const capture = { drive: (car, centerline, g) => {
+          const m = c.ai.drive(car, centerline, g);
+          inputs[c.id] = { s: m.s, b: m.b, u: m.u };
+          return m;
+        } };
+        game.driveBot(c.id, capture); // false (finished/poseless) → no input recorded
+      }
     }
-    game.update(dt);
+
+    const dtF = dtFor(frame);
+    if (session) session.update(dtF); else game.update(dtF);
+
     const events = pending.splice(0);
     const snapshot = game.getSnapshot();
     const rec = { frame, inputs, events, hash: fnv1a(canonicalStringify(snapshot)) };
     if ((snapshotEvery > 0 && frame % snapshotEvery === 0) || frame === frames - 1) {
       rec.snapshot = snapshot;
     }
+    if (session) {
+      // Record the session's own observable beats so the C++ RaceSession port
+      // is conformance-tested too: countdown ticks (with their exact frames),
+      // the racing flip (countdown → GO under variable dt) and the
+      // end-of-race results object.
+      if (ticks.length) rec.countdown = ticks.splice(0);
+      if (session.racing !== lastRacing) { rec.racing = session.racing; lastRacing = session.racing; }
+      if (raceEndResults !== undefined) { rec.raceEnd = raceEndResults; raceEndResults = undefined; }
+    }
     records.push(rec);
+    if (session && rec.raceEnd !== undefined) break; // race over: the trace is complete
   }
+  // The last recorded frame always carries a full snapshot (an early session
+  // stop lands between snapshot cadences).
+  if (records.length && records[records.length - 1].snapshot === undefined) {
+    const last = records[records.length - 1];
+    last.snapshot = game.getSnapshot();
+  }
+  header.frames = records.length;
 
   const text = [header, ...records].map(canonicalStringify).join('\n') + '\n';
   return { header, records, text };
@@ -257,10 +402,15 @@ function parseArgs(argv) {
 function main() {
   const a = parseArgs(process.argv.slice(2));
   if (!a.track || !a.frames) {
-    console.error('usage: node scripts/record-trace.mjs --track=<id> --frames=<n> [--seed=1] [--bots=4] [--humans=0] [--laps=3] [--snapshot-every=60] [--out=file]');
+    console.error('usage: node scripts/record-trace.mjs --track=<id> --frames=<n> [--seed=1] [--bots=4] [--humans=0] [--laps=3] [--snapshot-every=60] [--session] [--countdown=3] [--ai-live] [--jitter=amp[:spikeEvery:spikeScale:jseed]] [--out=file]');
     process.exit(2);
   }
   const seed = Number(a.seed ?? 1);
+  let dtJitter = null;
+  if (a.jitter) {
+    const [amp, spikeEvery, spikeScale, jseed] = String(a.jitter).split(':').map(Number);
+    dtJitter = { amp, ...(spikeEvery ? { spikeEvery } : {}), ...(spikeScale ? { spikeScale } : {}), ...(jseed ? { jseed } : {}) };
+  }
   const config = {
     trackId: a.track,
     frames: Number(a.frames),
@@ -268,7 +418,11 @@ function main() {
     laps: Number(a.laps ?? 3),
     snapshotEvery: Number(a['snapshot-every'] ?? 60),
     bots: makeBots(Number(a.bots ?? 4), seed),
-    humans: Array.from({ length: Number(a.humans ?? 0) }, (_, i) => scriptedHuman(i))
+    humans: Array.from({ length: Number(a.humans ?? 0) }, (_, i) => scriptedHuman(i)),
+    session: !!a.session,
+    countdown: Number(a.countdown ?? 3),
+    aiLive: !!a['ai-live'],
+    dtJitter
   };
   const { text, records } = recordTrace(config);
   if (a.out) {

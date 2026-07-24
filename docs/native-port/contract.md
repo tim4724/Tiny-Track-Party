@@ -83,7 +83,10 @@ frame for frame. Specifically:
   pinned by the shared corpus `tests/fixtures/math-corpus.jsonl`
   (`tests/mathlib.test.js` on the JS side, its twin in `native/` on the C++
   side). Plain arithmetic and `Math.sqrt` are exact IEEE-754 everywhere and
-  stay on native `Math`.
+  stay on native `Math`. The exhaustive FP + JS-semantics rules the C++ build
+  must follow (double-only, `-ffp-contract=off`, `Math.round`/`%`/signed-zero/
+  `mulberry32` semantics, the `JSON.stringify`-matching serializer) are in
+  [fp-profile.md](fp-profile.md).
 - Traces are therefore engine- and platform-independent: record fixtures on
   any machine, replay them anywhere. The one provenance that must match is
   the mathlib build stamped in each trace header (`math`); headers carry
@@ -296,6 +299,30 @@ The engine reads exactly this augmented object: `centerline`, `length`,
 `roadWidth`, `totalLaps`, `hazards`, `pads`, `boxes`, `poles`, `bananas`,
 `seed`. The golden-trace recorder (`scripts/record-trace.mjs
 buildRaceTrack()`) mirrors this resolve so traces exercise the same layer.
+
+### Schema and export
+
+The whole augmented object has its own schema,
+[race-track.schema.json](contract/race-track.schema.json): it carries the
+built-track fields by `$ref` into `track.schema.json` and defines the
+augmentation (identity, per-race inputs, and the resolved furniture `$defs` —
+`hazard`, the `pad` disc/strip `oneOf`, `box`, `pole`, `banana`) in full,
+`const`-pinned to `CONTRACT_VERSION`. `tests/schemas.test.js` enforces it the
+same way as the others: top-level field vocabulary against a live augmented
+track (a private descriptor exercising every furniture kind, plus a shipped
+stunt track for the strip launch pad), plus a check that each built-field
+`$ref` resolves into `track.schema.json`.
+
+`scripts/export-track-data.mjs` dumps that object as canonical JSON — the
+byte-for-byte fixture the C++ `TrackBuilder` + `resolveFurniture` port diffs
+against. It reruns byte-identically (`buildTrack`/`resolveFurniture` are pure;
+the machine-varying `seed` and `totalLaps` are pinned, default 1 and 3,
+overridable with `--seed`/`--laps`), projects the live `Centerline` instance to
+its serializable `{samples, length}`, and reuses `canonicalStringify`'s
+recursive-sort semantics (reimplemented locally, not imported, so the exporter
+and the recorder stay uncoupled). `--out=<dir>` writes one `<trackId>.json` per
+shipped track; `--track=<id>` limits to one; without `--out` it prints to
+stdout.
 
 ## Boundary query API
 

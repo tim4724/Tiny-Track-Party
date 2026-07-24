@@ -15,13 +15,14 @@ const SCHEMA_FILES = [
   'events.schema.json',
   'input.schema.json',
   'track.schema.json',
+  'race-track.schema.json',
   'results.schema.json'
 ];
 const loadSchema = (name) => JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, name), 'utf8'));
 
-let buildTrack, Game, CONTRACT_VERSION;
+let buildTrack, resolveFurniture, TRACK_LIST, Game, CONTRACT_VERSION;
 test.before(async () => {
-  ({ buildTrack } = await import('../public/display/TrackBuilder.js'));
+  ({ buildTrack, resolveFurniture, TRACK_LIST } = await import('../public/display/TrackBuilder.js'));
   ({ Game, CONTRACT_VERSION } = await import('../public/display/engine/Game.js'));
 });
 
@@ -111,6 +112,76 @@ test('track schema matches a live buildTrack() output', () => {
 
   const sampleProps = schema.$defs.centerlineSample.properties;
   assert.deepEqual(keysOf(track.centerline.samples[0]), keysOf(sampleProps), 'centerline sample fields');
+});
+
+// The augmented (race-ready) track object the sim actually consumes: buildTrack()
+// geometry + the host's game-side layer (resolved furniture + identity + per-race
+// inputs), the same assembly scripts/export-track-data.mjs dumps. Its built-track
+// fields are $ref'd to track.schema.json (checked here to point at real properties);
+// the augmentation fields are defined in race-track.schema.json in full.
+test('race-track schema matches a live augmented track', () => {
+  const schema = loadSchema('race-track.schema.json');
+  const trackSchema = loadSchema('track.schema.json');
+
+  // A private descriptor (like TEST_OVAL) carrying every authored furniture kind, so
+  // the resolve produces non-empty hazards (one with renderer-only `cones`), disc
+  // pads, boxes, authored poles and bananas — no catalogue dependency.
+  const def = {
+    segments: TEST_OVAL,
+    oils: [{ u: 0.10, lat: 0.7, cones: [[0, 0]] }, { u: 0.55, lat: -0.5, radius: 1.2 }],
+    pads: [{ u: 0.25, lat: 0.3 }, { u: 0.80, lat: 0, radius: 0.9 }],
+    boxes: [{ u: 0.30, lat: 0.4 }, { u: 0.35, lat: -0.4 }],
+    poles: [{ u: 0.50, lat: 1.0, radius: 0.6 }],
+    bananas: [{ u: 0.70, lat: 0.2 }]
+  };
+  const track = buildTrack(def);
+  track.cup = 'beach';         // renderer identity, as buildEntry sets it
+  track.trackId = 'test-oval';
+  resolveFurniture(track, def);
+  track.totalLaps = 3;         // per-race inputs the race stamps on
+  track.seed = 1;
+
+  assert.equal(track.version, CONTRACT_VERSION, 'augmented track carries the code contract version');
+  assert.equal(schema.properties.version.const, CONTRACT_VERSION, 'schema pins the same contract version');
+  assert.deepEqual(keysOf(track), keysOf(schema.properties), 'augmented fields == schema properties');
+  assert.deepEqual(keysOf(schema.properties), [...schema.required].sort(), 'all augmented fields required');
+
+  // Every built-track field is carried by $ref into track.schema.json; each ref must
+  // resolve to a real property there (an honest cross-file link, not a dangling one).
+  for (const [k, v] of Object.entries(schema.properties)) {
+    if (!v.$ref) continue;
+    const m = /^track\.schema\.json#\/properties\/(.+)$/.exec(v.$ref);
+    assert.ok(m, `${k}: $ref points into track.schema.json properties`);
+    assert.ok(trackSchema.properties[m[1]], `${k}: $ref target track.properties.${m[1]} exists`);
+  }
+
+  // Furniture field vocabularies: every live item's keys sit inside the matching $def
+  // and carry its required keys. Pads are a disc/strip oneOf.
+  const within = (item, d, label) => {
+    const allowed = keysOf(d.properties);
+    for (const key of Object.keys(item)) assert.ok(allowed.includes(key), `${label}: key '${key}' is in the schema vocab`);
+    for (const r of d.required) assert.ok(r in item, `${label}: required key '${r}' present`);
+  };
+  const matches = (item, d) =>
+    Object.keys(item).every((key) => keysOf(d.properties).includes(key)) && d.required.every((r) => r in item);
+
+  assert.ok(track.hazards.length && track.boxes.length && track.poles.length && track.bananas.length, 'furniture arrays populated');
+  for (const h of track.hazards) within(h, schema.$defs.hazard, 'hazard');
+  for (const b of track.boxes) within(b, schema.$defs.box, 'box');
+  for (const p of track.poles) within(p, schema.$defs.pole, 'pole');
+  for (const b of track.bananas) within(b, schema.$defs.banana, 'banana');
+  for (const p of track.pads) {
+    assert.ok(matches(p, schema.$defs.padDisc) || matches(p, schema.$defs.padStrip), 'pad matches the disc or strip $def');
+  }
+
+  // The strip pad (auto loop-launch) has no analogue on the private oval; cover it on
+  // a shipped stunt track, which builds a loop -> a `shape: 'strip'` pad.
+  const stunt = TRACK_LIST.find((t) => t.id === 'skysnake');
+  const st = buildTrack(stunt);
+  resolveFurniture(st, stunt);
+  const strips = st.pads.filter((p) => p.shape === 'strip');
+  assert.ok(strips.length >= 1, 'skysnake resolves at least one strip launch pad');
+  for (const p of strips) within(p, schema.$defs.padStrip, 'padStrip');
 });
 
 test('results schema matches a live getResults()', () => {
