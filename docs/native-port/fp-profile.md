@@ -229,7 +229,11 @@ ubiquitous (44 sim-path sites incl. the `projectNear` break test,
 ### 3.5b Numeric falsy guards — `x || eps`
 
 JS code guards degenerate denominators with logical OR: `(sC - sA) || 1e-6`
-(`Centerline.js:75,79,80`), `this.length() || 1` (`Vec3.js:66` normalize).
+(`Centerline.js:75,79,80`), `this.length() || 1` (`Vec3.js:66` normalize),
+`dmath.hypot(...) || 1` (`TrackBuilder.js:225,228,435,489`). Related trap:
+`Math.sign(ang) || 1` and `Math.sign(ang || 1)` BOTH appear in TrackBuilder
+(arc walk vs segBank) and coincide only for nonzero angles — port them as
+the distinct expressions they are.
 JS falsiness on numbers triggers for `+0`, `-0` AND NaN. The faithful C++
 transliteration is
 
@@ -267,6 +271,16 @@ The trace bytes are the conformance surface, so the C++ serializer must emit
   bit-compare doubles at the trace boundary — that would flag a benign ±0. A
   −0 only matters when it changes a *serialized value* or a *branch*, never on
   its own.
+- **The two conformance surfaces treat ±0 OPPOSITELY.** The hex corpora
+  (`math-corpus`, `track-sampler-corpus`, `trackbuilder-corpus`) compare raw
+  bit patterns, so there −0 MUST be reproduced exactly (e.g. tidepool
+  `samples[0].lateral.y` is −0 and the trackbuilder corpus pins it) — those
+  gates directly validate `js_min`/`js_max`/`js_sign` ±0 handling. The
+  decimal-JSON trace surface erases it. Know which surface you are debugging.
+- **FP-accumulated loops are not integer-stepped.** e.g. TrackBuilder's
+  supportPosts offsets: `for (off = 0.45; off <= 0.45 + 0.61; off += 0.15)` —
+  the loop bound test runs on accumulated doubles; port with identical double
+  additions, never `for (int k...)` reconstruction.
 
 ### 3.7 `mulberry32` — the exact uint32 recipe
 
