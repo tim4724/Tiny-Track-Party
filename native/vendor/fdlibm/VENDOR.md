@@ -7,7 +7,14 @@
   (V8's Math.* forked the same lineage), but already made standalone — raw
   msun's `math_private.h` drags in FreeBSD kernel headers that would need
   hand-surgery we'd then own.
-- **Local modifications**: none. Files are byte-identical to upstream.
+- **Local modifications**: the `openlibm_weak_reference(...)` /
+  `openlibm_strong_reference(...)` long-double alias lines are deleted from
+  the `.c` files (11 lines total). They alias `sinl/ldexpl/...` to the double
+  functions — symbols nothing here references — and the ELF attribute-alias
+  form they expand to breaks under our `ttp_fd_*` symbol renames on linux
+  clang (macOS's asm form merely tolerated it). Function bodies are
+  untouched; the regenerated WASM was verified result-identical against the
+  pre-change corpus (4317/4317) and all trace fixtures before shipping.
 - **License**: see LICENSE.md (MIT + Sun/fdlibm notice).
 
 ## What this is for
@@ -36,5 +43,11 @@ IEEE `sqrt`. Exact ops (`abs/min/max/floor/round/imul/%`) stay on native
 Sources (`src/`): s_sin.c s_cos.c k_sin.c k_cos.c e_rem_pio2.c k_rem_pio2.c
 e_atan2.c s_atan.c e_exp.c e_pow.c e_hypot.c e_sqrt.c s_fabs.c s_floor.c
 s_scalbn.c s_copysign.c + private headers (cdefs-compat.h, math_private.h,
-math_private_openbsd.h, types-compat.h, fpmath.h).
+math_private_openbsd.h, types-compat.h, fpmath.h, aarch64_fpmath.h,
+amd64_fpmath.h — the per-arch long-double layout headers fpmath.h selects;
+irrelevant to our double-only surface but required to compile natively).
 Headers (`include/`): openlibm_math.h openlibm_complex.h openlibm_defs.h.
+
+Native builds (native/CMakeLists.txt) rename the entry points to `ttp_fd_*`
+via `-Dsin=ttp_fd_sin ...` so the static lib never collides with system libm;
+the WASM build keeps the plain names (they become the module's exports).

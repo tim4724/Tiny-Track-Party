@@ -189,7 +189,6 @@ __ieee754_sqrt(double x)
 }
 
 #if (LDBL_MANT_DIG == 53)
-openlibm_weak_reference(sqrt, sqrtl);
 #endif
 
 /*

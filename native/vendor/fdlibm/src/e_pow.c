@@ -313,5 +313,4 @@ __ieee754_pow(double x, double y)
 }
 
 #if (LDBL_MANT_DIG == 53)
-openlibm_weak_reference(pow, powl);
 #endif

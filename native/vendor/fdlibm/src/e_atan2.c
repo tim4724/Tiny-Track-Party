@@ -125,5 +125,4 @@ __ieee754_atan2(double y, double x)
 }
 
 #if LDBL_MANT_DIG == 53
-openlibm_weak_reference(atan2, atan2l);
 #endif
