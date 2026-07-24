@@ -44,6 +44,18 @@ endforeach()
 target_compile_options(ttp_mathlib PRIVATE -Wno-macro-redefined)
 target_link_libraries(ttp_mathlib PUBLIC ttp_strict_fp)
 
+# ---- libttp-track: the sampler math (util, Vec3, Centerline) -----------------
+# The C++ twin of public/display/engine/{util,Vec3}.js + public/display/
+# Centerline.js — a bit-exact transliteration (fp-profile.md). Links the
+# vendored fdlibm because Vec3::applyAxisAngle routes sin/cos through it, exactly
+# as the JS side routes through math.js.
+add_library(libttp_track STATIC
+  libttp-track/ttp/util.cc
+  libttp-track/ttp/centerline.cc
+)
+target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
+target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp)
+
 # ---- Conformance: the shared math corpus ------------------------------------
 # Replays tests/fixtures/math-corpus.jsonl (generated from the WASM build by
 # scripts/gen-math-corpus.mjs) against THIS native build. Both passing is what
@@ -53,4 +65,15 @@ add_executable(mathlib_corpus_check mathlib/corpus_check.cc)
 target_link_libraries(mathlib_corpus_check PRIVATE ttp_mathlib ttp_strict_fp)
 add_test(NAME mathlib_corpus
   COMMAND mathlib_corpus_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/math-corpus.jsonl
+)
+
+# ---- Conformance: the track sampler corpus ----------------------------------
+# Replays tests/fixtures/track-sampler-corpus.jsonl (scripts/
+# gen-track-sampler-corpus.mjs) against libttp-track's Centerline — sampleAt,
+# widthAt, projectNear — demanding identical bit patterns. Isolates track-math
+# divergence before whole-race trace replay.
+add_executable(sampler_check tracktest/sampler_check.cc)
+target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp)
+add_test(NAME track_sampler
+  COMMAND sampler_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/track-sampler-corpus.jsonl
 )
