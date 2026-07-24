@@ -26,6 +26,7 @@
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
+import { MATHLIB } from '../public/display/engine/math.js';
 import { applyStage, buildRaceTrack, canonicalStringify, fnv1a, parseTrace } from './record-trace.mjs';
 
 // First differing field path between two plain-JSON values, or null if equal.
@@ -58,30 +59,20 @@ export function firstDiff(expected, actual, path = '') {
   return null;
 }
 
-// Bit-exact replay is only guaranteed on the JS engine AND platform that
-// recorded the trace: transcendental Math.* results are
-// implementation-approximated, differ across V8 versions, and differ across
-// architectures on the same V8 (per-arch codegen of V8's compiled fdlibm).
-// When a divergence is reported under a different engine or platform than
-// the header records, suspect that mismatch before the sim.
-export function engineMatches(header) {
-  const rec = header.engine;
-  if (!rec) return false; // pre-engine-stamp trace: provenance unknown
-  return rec.os === process.platform && rec.arch === process.arch &&
-    rec.node.split('.')[0] === process.versions.node.split('.')[0];
+// Traces are engine- and platform-independent: the sim's transcendentals go
+// through engine/math.js (fdlibm WASM), not V8's Math.*. The ONE provenance
+// replay depends on is the mathlib build stamped in the header — a trace
+// recorded with a different (or no) mathlib stamp predates the current build
+// and must be re-recorded, not chased as a sim bug.
+export function mathMatches(header) {
+  return header.math === MATHLIB;
 }
 
-function engineHint(header) {
-  if (engineMatches(header)) return '';
-  const rec = header.engine;
-  const recorded = rec
-    ? `Node ${rec.node} (V8 ${rec.v8}) on ${rec.os}/${rec.arch}`
-    : 'an unknown engine (header predates the engine stamp)';
-  return ` [engine/platform mismatch: trace recorded on ${recorded}, ` +
-    `replaying on Node ${process.versions.node} (V8 ${process.versions.v8}) ` +
-    `on ${process.platform}/${process.arch}; transcendental Math.* differs ` +
-    `across V8 versions and across architectures, so this divergence is ` +
-    `expected. Replay on the recording platform or re-record there.]`;
+function mathHint(header) {
+  if (mathMatches(header)) return '';
+  return ` [mathlib mismatch: trace recorded with ${header.math ?? 'V8 Math.* (pre-mathlib header)'}, ` +
+    `replaying with ${MATHLIB}; transcendental results differ between mathlib builds, ` +
+    `so this divergence is expected — re-record the trace.]`;
 }
 
 // Verify a parsed trace ({ header, records }) or raw JSONL text.
@@ -142,7 +133,7 @@ export function verifyTrace(trace) {
       if (d) {
         return {
           ok: false, frame: rec.frame, path: d.path, expected: d.expected, actual: d.actual,
-          message: `frame ${rec.frame}: ${d.path} diverged (recorded ${JSON.stringify(d.expected)}, replay ${JSON.stringify(d.actual)})` + engineHint(header)
+          message: `frame ${rec.frame}: ${d.path} diverged (recorded ${JSON.stringify(d.expected)}, replay ${JSON.stringify(d.actual)})` + mathHint(header)
         };
       }
     }
@@ -150,7 +141,7 @@ export function verifyTrace(trace) {
     if (de) {
       return {
         ok: false, frame: rec.frame, path: de.path, expected: de.expected, actual: de.actual,
-        message: `frame ${rec.frame}: ${de.path} diverged (recorded ${JSON.stringify(de.expected)}, replay ${JSON.stringify(de.actual)})` + engineHint(header)
+        message: `frame ${rec.frame}: ${de.path} diverged (recorded ${JSON.stringify(de.expected)}, replay ${JSON.stringify(de.actual)})` + mathHint(header)
       };
     }
     const hash = fnv1a(canonicalStringify(snapshot));
@@ -158,7 +149,7 @@ export function verifyTrace(trace) {
       return {
         ok: false, frame: rec.frame, path: null, expected: rec.hash, actual: hash,
         message: `frame ${rec.frame}: snapshot hash diverged (recorded ${rec.hash}, replay ${hash}); ` +
-          `no full snapshot stored this frame — nearest field-level diff is at the next stored snapshot (every ${header.snapshotEvery} frames)` + engineHint(header)
+          `no full snapshot stored this frame — nearest field-level diff is at the next stored snapshot (every ${header.snapshotEvery} frames)` + mathHint(header)
       };
     }
   }

@@ -124,10 +124,13 @@ function isRoomCode(urlPath) {
 // 'self'. The ONE relaxation the no-build stack needs: the inline <script
 // type="importmap"> is itself a script, so it must carry a per-response nonce.
 // STUN (fastlane iceServers) is UDP and not governed by connect-src.
+// 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval): the sim's
+// deterministic mathlib (engine/math.js) instantiates an embedded fdlibm
+// WASM module.
 function cspHeader(nonce, frameAncestors) {
   return [
     "default-src 'self'",
-    "script-src 'self' 'nonce-" + nonce + "'",
+    "script-src 'self' 'wasm-unsafe-eval' 'nonce-" + nonce + "'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     // RELAY_URL (env) widens connect-src to exactly the configured relay —

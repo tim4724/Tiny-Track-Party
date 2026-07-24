@@ -17,10 +17,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          # Pinned to the Node major the golden-trace fixtures were recorded
-          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
-          # differ in the last bit across majors, and the trace oracle is
-          # bit-exact. Bump this together with a fixture re-record.
+          # Plain reproducibility pin. Golden traces no longer depend on the
+          # Node major: sim transcendentals go through engine/math.js
+          # (fdlibm WASM), so fixtures replay bit-exactly on any Node/arch.
           node-version: 26
           cache: 'npm'
       - run: npm ci
@@ -35,10 +34,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          # Pinned to the Node major the golden-trace fixtures were recorded
-          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
-          # differ in the last bit across majors, and the trace oracle is
-          # bit-exact. Bump this together with a fixture re-record.
+          # Plain reproducibility pin. Golden traces no longer depend on the
+          # Node major: sim transcendentals go through engine/math.js
+          # (fdlibm WASM), so fixtures replay bit-exactly on any Node/arch.
           node-version: 26
           cache: 'npm'
       - run: npm ci
@@ -55,10 +53,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          # Pinned to the Node major the golden-trace fixtures were recorded
-          # under (tests/fixtures/traces/) — V8's Math.* transcendentals
-          # differ in the last bit across majors, and the trace oracle is
-          # bit-exact. Bump this together with a fixture re-record.
+          # Plain reproducibility pin. Golden traces no longer depend on the
+          # Node major: sim transcendentals go through engine/math.js
+          # (fdlibm WASM), so fixtures replay bit-exactly on any Node/arch.
           node-version: 26
           cache: 'npm'
       - run: npm ci

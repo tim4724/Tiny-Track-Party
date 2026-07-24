@@ -1,11 +1,12 @@
 name: Record golden-trace fixtures
 
-# Records tests/fixtures/traces/ on the REFERENCE PLATFORM (this runner is
-# the same environment as the unit job in test.yml). Traces are bit-exact
-# only per engine+platform, so committed fixtures must be recorded here, not
-# on a dev machine. Download the artifact, commit it, and if the endgame
-# seed changed (see the job log), update scripts/record-fixtures.mjs and
-# tests/fixtures/traces/README.md in the same commit.
+# Cross-platform re-record check: traces are platform-independent (sim
+# transcendentals go through engine/math.js, fdlibm WASM), so re-recording
+# the fixture set HERE (ubuntu x64) must reproduce the committed fixtures
+# (recorded on any dev machine) byte for byte — the diff step is the proof.
+# If it fails, either determinism regressed (investigate before anything
+# else) or the committed fixtures are stale (re-record locally and commit).
+# The artifact remains available as a convenience.
 
 on:
   workflow_dispatch:
@@ -26,11 +27,14 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          # Keep in sync with test.yml (the fixture pin).
+          # Keep in sync with test.yml (plain reproducibility pin; traces
+          # no longer depend on the Node major).
           node-version: 26
           cache: 'npm'
       - run: npm ci
       - run: node scripts/record-fixtures.mjs
+      - name: Re-record is byte-identical to the committed fixtures (platform independence)
+        run: git diff --exit-code --stat tests/fixtures/traces
       - name: Fixtures replay on this platform
         run: npm test
       - uses: actions/upload-artifact@v4

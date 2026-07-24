@@ -15,11 +15,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-let rec, ver, CONTRACT_VERSION; // record-trace.mjs / verify-trace.mjs module namespaces
+let rec, ver, CONTRACT_VERSION, MATHLIB; // record-trace.mjs / verify-trace.mjs module namespaces
 test.before(async () => {
   rec = await import('../scripts/record-trace.mjs');
   ver = await import('../scripts/verify-trace.mjs');
   ({ CONTRACT_VERSION } = await import('../public/display/engine/contract.js'));
+  ({ MATHLIB } = await import('../public/display/engine/math.js'));
 });
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'traces');
@@ -104,42 +105,29 @@ test('a contract-version mismatch fails fast with a re-record message', () => {
   assert.match(r.message, /re-record/);
 });
 
-// Exactness only holds on the engine+platform that recorded a fixture (see
-// the header's `engine` field). The reference platform is the CI unit job;
-// on CI a mismatched fixture is a hard FAILURE (someone committed fixtures
-// recorded elsewhere), while on a dev machine the replay is skipped rather
-// than reporting phantom divergence. The in-process record/verify tests
-// above run everywhere regardless.
+// Traces are engine- and platform-independent (transcendentals go through
+// engine/math.js, fdlibm WASM), so every committed fixture replays EVERYWHERE
+// — dev machines and CI alike, no skips. The one provenance that must match
+// is the mathlib build stamped in each header: a fixture recorded with a
+// different mathlib is stale by definition and fails with a re-record
+// message instead of being chased as phantom sim divergence.
 //
-// DISARMED while no second engine exists: an empty fixture dir passes. Every
-// intentional physics/stats/track change would otherwise cost a CI re-record
-// round-trip, and pre-port the oracle only distinguishes intentional from
-// accidental behaviour change — a job the tooling still does on demand
-// (record locally before a refactor, replay after; same platform, no commit
-// needed). Re-arm before C++ conformance work: run the record-traces
-// workflow and commit the artifact (tests/fixtures/traces/README.md).
+// ARMED since the mathlib swap (Milestone 0 of the C++ port): fixtures are
+// committed and their exact replay gates every change. If this test fails
+// after an engine change, the behaviour change is real — re-record via
+// `node scripts/record-fixtures.mjs` (any machine) IF it was intentional,
+// never loosen the comparison.
 test('committed golden fixtures replay exactly (the port-conformance oracle)', (t) => {
   const files = fs.readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.jsonl'));
   if (files.length === 0) {
-    t.diagnostic('oracle disarmed: no committed fixtures; re-arm via the record-traces workflow before C++ conformance work');
+    t.diagnostic('oracle disarmed: no committed fixtures; record and commit via scripts/record-fixtures.mjs');
     return;
   }
-  const here = `Node ${process.versions.node} on ${process.platform}/${process.arch}`;
-  let replayed = 0;
   for (const f of files) {
     const { header } = rec.parseTrace(fs.readFileSync(path.join(FIXTURE_DIR, f), 'utf8'));
-    if (!ver.engineMatches(header)) {
-      const recorded = header.engine
-        ? `Node ${header.engine.node} on ${header.engine.os}/${header.engine.arch}`
-        : 'an unknown engine (pre-engine-stamp header)';
-      assert.ok(!process.env.CI,
-        `${f} was recorded on ${recorded} but CI runs ${here} — fixtures must be recorded on the CI platform (run the record-traces workflow, see tests/fixtures/traces/README.md)`);
-      t.diagnostic(`skipping ${f}: recorded on ${recorded}, this is ${here} (bit-exact replay is per engine+platform)`);
-      continue;
-    }
+    assert.ok(ver.mathMatches(header),
+      `${f} was recorded with ${header.math ?? 'V8 Math.* (pre-mathlib header)'} but the engine ships ${MATHLIB} — re-record the fixtures (node scripts/record-fixtures.mjs)`);
     const r = ver.verifyTraceFile(path.join(FIXTURE_DIR, f));
     assert.ok(r.ok, `${f} diverged: ${r.message} — if the engine change was intentional, re-record the fixtures (see tests/fixtures/traces/README.md)`);
-    replayed++;
   }
-  if (process.env.CI) assert.equal(replayed, files.length, 'CI must replay every committed fixture');
 });
