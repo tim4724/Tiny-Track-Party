@@ -329,7 +329,7 @@ static bool buildRaceTrack(const std::string& trackId, int laps, uint32_t seed, 
 // ---------------------------------------------------------------------------
 // Replay.
 // ---------------------------------------------------------------------------
-struct RosterEntry { Id id; std::string kind; double laneBias = 0; uint32_t aiSeed = 0; bool hasStats = false; Stats stats; };
+struct RosterEntry { Id id; std::string kind; double caution = 1; double laneBias = 0; uint32_t aiSeed = 0; bool hasStats = false; Stats stats; };
 
 static void fail(const std::string& file, int frame, const std::string& path,
                  const std::string& expected, const std::string& actual, const std::string& msg) {
@@ -395,6 +395,7 @@ int main(int argc, char** argv) {
     RosterEntry e;
     e.id = idFromJV(*r.get("id"));
     e.kind = r.get("kind")->str;
+    if (const JV* x = r.get("caution")) e.caution = x->num;
     if (const JV* x = r.get("laneBias")) e.laneBias = x->num;
     if (const JV* x = r.get("aiSeed")) e.aiSeed = (uint32_t)x->num;
     if (const JV* x = r.get("stats")) { e.hasStats = true; e.stats = statsFromJV(*x); }
@@ -452,7 +453,7 @@ int main(int argc, char** argv) {
   std::vector<std::string> botKeys;
   if (aiLive) {
     for (const RosterEntry& r : roster) if (r.kind == "bot") {
-      controllers.push_back(Ctrl{r.id, std::make_unique<AiController>(1.0, LOOKAHEAD, STEER_GAIN, r.laneBias, r.aiSeed)});
+      controllers.push_back(Ctrl{r.id, std::make_unique<AiController>(r.caution, LOOKAHEAD, STEER_GAIN, r.laneBias, r.aiSeed)});
     }
   }
   for (const RosterEntry& r : roster) if (r.kind == "bot") botKeys.push_back(r.id.key());

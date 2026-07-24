@@ -137,7 +137,7 @@ export function verifyTrace(trace) {
   const controllers = aiLive
     ? header.roster.filter((r) => r.kind === 'bot').map((r) => ({
         id: r.id,
-        ai: new AiController({ skill: r.skill, laneBias: r.laneBias, seed: r.aiSeed })
+        ai: new AiController({ caution: r.caution, laneBias: r.laneBias, seed: r.aiSeed })
       }))
     : [];
   const botKeys = new Set(header.roster.filter((r) => r.kind === 'bot').map((r) => String(r.id)));

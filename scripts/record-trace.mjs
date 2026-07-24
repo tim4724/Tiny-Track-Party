@@ -155,7 +155,7 @@ export function applyScheduleOps(engine, schedule, frame, onRekey) {
 //                                          end — header.frames is what was
 //                                          actually recorded)
 //   seed = 1, laps = 3, dt = TRACE_DT_MS, snapshotEvery = 60,
-//   bots = [{ id, skill, laneBias, aiSeed?, stats? }],
+//   bots = [{ id, caution, laneBias, aiSeed?, stats? }],
 //   humans = [{ id, script(frame) -> {s,b,u} | null, stats? }],
 //   stage = [],                            pre-race staged props (applyStage)
 //   session = false,                       drive through RaceSession (countdown,
@@ -197,7 +197,7 @@ export function recordTrace(config) {
     ...humans.map((h) => ({ id: h.id, kind: 'human', ...(h.stats ? { stats: h.stats } : {}) })),
     ...bots.map((b, i) => ({
       id: b.id, kind: 'bot',
-      skill: b.skill != null ? b.skill : 0.9,
+      caution: b.caution != null ? b.caution : 1,
       laneBias: b.laneBias || 0,
       aiSeed: (b.aiSeed != null ? b.aiSeed : (seed * 31 + i + 1)) >>> 0,
       ...(b.stats ? { stats: b.stats } : {})
@@ -275,7 +275,7 @@ export function recordTrace(config) {
   // session trace bots only drive while racing (mirrors the live render loop,
   // which starts driving on the GO beat).
   const controllers = roster.filter((r) => r.kind === 'bot').map((r) => {
-    const ai = new AiController({ skill: r.skill, laneBias: r.laneBias, seed: r.aiSeed });
+    const ai = new AiController({ caution: r.caution, laneBias: r.laneBias, seed: r.aiSeed });
     return { id: r.id, ai };
   });
   const scripts = humans.map((h) => ({ id: h.id, script: h.script }));
@@ -363,7 +363,7 @@ export function makeBots(n, seed = 1) {
   return Array.from({ length: n }, (_, i) => {
     const p = AI_PERSONALITIES[i % AI_PERSONALITIES.length];
     const suffix = i >= AI_PERSONALITIES.length ? `-${Math.floor(i / AI_PERSONALITIES.length) + 1}` : '';
-    return { id: `cpu-${p.name.toLowerCase()}${suffix}`, skill: p.skill, laneBias: p.laneBias, aiSeed: (seed * 31 + i + 1) >>> 0 };
+    return { id: `cpu-${p.name.toLowerCase()}${suffix}`, caution: p.caution, laneBias: p.laneBias, aiSeed: (seed * 31 + i + 1) >>> 0 };
   });
 }
 
