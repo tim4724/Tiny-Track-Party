@@ -62,10 +62,10 @@ for (const f of fs.readdirSync(TRACE_DIR).filter((f) => f.endsWith('.jsonl'))) {
 [0, -0, 1, -1, 0.5, 0.1, 2 / 3,
   Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 2, 2 ** 53, 2 ** 53 + 2,
   Number.MAX_VALUE, Number.MIN_VALUE, 5e-324, 2.225073858507201e-308,
-  9007199254740993, 4.35, 1.005, 765.4321e-24, 5.960464477539063e-8,
+  9007199254740992, 4.35, 1.005, 765.4321e-24, 5.960464477539063e-8,
   1e21, nextAfter(1e21, -1), nextAfter(1e21, 1),
   1e-6, nextAfter(1e-6, -1), nextAfter(1e-6, 1),
-  1e-7, 0.000001, 0.0000001, 123456789012345678901, 1e300, -1e300,
+  1e-7, 0.000001, 0.0000001, 1.2345678901234568e20, 1e300, -1e300,
   16.667, 16.667 / 1000, 0.05, 1 / 3, 1 / 7].forEach(add);
 
 // 3. Seeded random sweep: full exponent range + integer-valued + small-frac.
