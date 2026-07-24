@@ -36,5 +36,11 @@ IEEE `sqrt`. Exact ops (`abs/min/max/floor/round/imul/%`) stay on native
 Sources (`src/`): s_sin.c s_cos.c k_sin.c k_cos.c e_rem_pio2.c k_rem_pio2.c
 e_atan2.c s_atan.c e_exp.c e_pow.c e_hypot.c e_sqrt.c s_fabs.c s_floor.c
 s_scalbn.c s_copysign.c + private headers (cdefs-compat.h, math_private.h,
-math_private_openbsd.h, types-compat.h, fpmath.h).
+math_private_openbsd.h, types-compat.h, fpmath.h, aarch64_fpmath.h,
+amd64_fpmath.h — the per-arch long-double layout headers fpmath.h selects;
+irrelevant to our double-only surface but required to compile natively).
 Headers (`include/`): openlibm_math.h openlibm_complex.h openlibm_defs.h.
+
+Native builds (native/CMakeLists.txt) rename the entry points to `ttp_fd_*`
+via `-Dsin=ttp_fd_sin ...` so the static lib never collides with system libm;
+the WASM build keeps the plain names (they become the module's exports).

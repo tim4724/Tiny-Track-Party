@@ -1,0 +1,41 @@
+name: Native conformance
+
+# The C++ side of the conformance scheme (Track S). Runs whenever the native
+# tree, the vendored math, or a shared fixture changes: build with strict FP
+# flags and replay the shared corpus/fixtures bit-for-bit. ubuntu-clang and
+# macos-arm64 together close the cross-compiler loop with the emscripten WASM
+# build that generated the fixtures.
+
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'tests/fixtures/math-corpus.jsonl'
+      - '.github/workflows/native.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'tests/fixtures/math-corpus.jsonl'
+      - '.github/workflows/native.yml'
+
+jobs:
+  conformance:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest   # x86-64, clang (match clang flag semantics everywhere)
+          - os: macos-latest    # arm64, Apple clang (the -ffp-contract=fast default risk)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure (clang, strict FP)
+        run: cmake -S native -B native/build/ci -DCMAKE_BUILD_TYPE=Release
+        env:
+          CC: clang
+          CXX: clang++
+      - name: Build
+        run: cmake --build native/build/ci --parallel
+      - name: Corpus + conformance tests
+        run: ctest --test-dir native/build/ci --output-on-failure
