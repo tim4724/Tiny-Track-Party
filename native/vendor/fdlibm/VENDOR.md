@@ -7,7 +7,14 @@
   (V8's Math.* forked the same lineage), but already made standalone — raw
   msun's `math_private.h` drags in FreeBSD kernel headers that would need
   hand-surgery we'd then own.
-- **Local modifications**: none. Files are byte-identical to upstream.
+- **Local modifications**: the `openlibm_weak_reference(...)` /
+  `openlibm_strong_reference(...)` long-double alias lines are deleted from
+  the `.c` files (11 lines total). They alias `sinl/ldexpl/...` to the double
+  functions — symbols nothing here references — and the ELF attribute-alias
+  form they expand to breaks under our `ttp_fd_*` symbol renames on linux
+  clang (macOS's asm form merely tolerated it). Function bodies are
+  untouched; the regenerated WASM was verified result-identical against the
+  pre-change corpus (4317/4317) and all trace fixtures before shipping.
 - **License**: see LICENSE.md (MIT + Sun/fdlibm notice).
 
 ## What this is for

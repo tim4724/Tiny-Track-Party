@@ -74,5 +74,4 @@ floor(double x)
 }
 
 #if LDBL_MANT_DIG == 53
-openlibm_weak_reference(floor, floorl);
 #endif
