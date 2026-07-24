@@ -152,6 +152,13 @@ test('session trace round-trips: countdown, variable dt, racing flip, early race
   const last = records[records.length - 1];
   assert.equal(flips[1], last, 'the false flip rides the raceEnd frame');
   assert.ok(last.raceEnd, 'last frame carries the raceEnd results');
+  // Countdown beats are recorded with their frames: opening beat on frame 0,
+  // then one beat per accumulated 1000 ms down to 0 (GO) and the -1 clear.
+  const ticked = records.flatMap((r) => r.countdown || []);
+  assert.deepEqual(ticked, [2, 1, 0, -1], 'full tick ladder recorded');
+  assert.deepEqual(records[0].countdown, [2], 'opening beat rides frame 0');
+  const goFrame = records.find((r) => (r.countdown || []).includes(0));
+  assert.equal(goFrame.racing, true, 'GO tick and racing flip share a frame');
   assert.ok(last.snapshot, 'early stop still stores a final full snapshot');
   const r = ver.verifyTrace(text);
   assert.equal(r.ok, true, r.message);

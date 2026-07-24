@@ -103,13 +103,18 @@ export function verifyTrace(trace) {
   const pending = [];
   const isSession = header.driver === 'session';
   let raceEndResults;
+  const ticks = [];
   let session = null;
   let game;
   if (isSession) {
     session = new RaceSession(
       header.roster.map((r) => ({ peerIndex: r.id, stats: r.stats })),
       track,
-      { onRaceEvent: (e) => pending.push(e), onRaceEnd: (r) => { raceEndResults = r; } }
+      {
+        onRaceEvent: (e) => pending.push(e),
+        onRaceEnd: (r) => { raceEndResults = r; },
+        onCountdownTick: (n) => ticks.push(n)
+      }
     );
     game = session.engine;
     applyStage(game, header.stage);
@@ -196,8 +201,19 @@ export function verifyTrace(trace) {
     if (session) session.update(dtF); else game.update(dtF);
 
     if (session) {
-      // The session's own beats are part of the contract: racing flips and the
-      // end-of-race results must land on the recorded frames, exactly.
+      // The session's own beats are part of the contract: countdown ticks,
+      // racing flips and the end-of-race results must land on the recorded
+      // frames, exactly. Tick values AND their frames are compared — beat
+      // timing drifts smaller than the frame quantum are visible on
+      // beat-aligned fixtures (dt dividing the beat length exactly).
+      const gotTicks = ticks.splice(0);
+      const dt2 = firstDiff(rec.countdown, gotTicks.length ? gotTicks : undefined, 'countdown');
+      if (dt2) {
+        return {
+          ok: false, frame: rec.frame, path: dt2.path, expected: dt2.expected, actual: dt2.actual,
+          message: `frame ${rec.frame}: countdown ticks diverged (recorded ${JSON.stringify(rec.countdown)}, replay ${JSON.stringify(gotTicks)})`
+        };
+      }
       const expectedRacing = rec.racing;
       if (session.racing !== lastRacing) {
         if (expectedRacing !== session.racing) {

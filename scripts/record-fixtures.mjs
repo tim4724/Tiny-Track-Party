@@ -118,6 +118,18 @@ const scheduled = recordTrace({
 }
 write('tidepool-schedule-5bots-1human-700f-seed42.jsonl', scheduled);
 
+// SESSION, BEAT-ALIGNED: dt = 10 ms exactly, so countdown beats (1000 ms)
+// land precisely on frame boundaries — ANY drift in the beat length moves a
+// recorded tick to a different frame. Added after oracle mutation testing
+// showed a 1 ms beat drift slipping past the jittered session fixtures
+// (their dt streams cross both thresholds inside one frame).
+write('tidepool-session-beats-3bots-450f-seed21.jsonl',
+  recordTrace({
+    trackId: 'tidepool', frames: 450, seed: 21, laps: 3, snapshotEvery: 100,
+    bots: makeBots(3, 21), dt: 10,
+    session: true, countdown: 3
+  }));
+
 // SESSION + AI-LIVE combined: both new verify paths in one medium slice.
 write('tidepool-session-ailive-4bots-900f-seed13.jsonl',
   recordTrace({

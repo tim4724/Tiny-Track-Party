@@ -239,15 +239,24 @@ export function recordTrace(config) {
   const track = buildRaceTrack(trackId, { laps, seed });
   const pending = [];
   let raceEndResults; // session only: captured the frame onRaceEnd fires
+  const ticks = [];   // session only: countdown beats fired since the last frame
   let session = null;
   let game;
   if (useSession) {
     // The same construction path the display uses (players carry peerIndex +
     // stats; stats-less entries fall back to the benchmark inside Game).
+    // Countdown ticks are recorded per frame (the opening beat fired by
+    // startCountdown lands on frame 0): beat TIMING is contract surface for
+    // the C++ RaceSession port, and without it a beat-length drift smaller
+    // than the frame quantum is invisible (found by oracle mutation testing).
     session = new RaceSession(
       roster.map((r) => ({ peerIndex: r.id, stats: r.stats })),
       track,
-      { onRaceEvent: (e) => pending.push(e), onRaceEnd: (r) => { raceEndResults = r; } }
+      {
+        onRaceEvent: (e) => pending.push(e),
+        onRaceEnd: (r) => { raceEndResults = r; },
+        onCountdownTick: (n) => ticks.push(n)
+      }
     );
     game = session.engine;
     applyStage(game, stage);
@@ -316,8 +325,10 @@ export function recordTrace(config) {
     }
     if (session) {
       // Record the session's own observable beats so the C++ RaceSession port
-      // is conformance-tested too: the racing flip (countdown → GO under
-      // variable dt) and the end-of-race results object.
+      // is conformance-tested too: countdown ticks (with their exact frames),
+      // the racing flip (countdown → GO under variable dt) and the
+      // end-of-race results object.
+      if (ticks.length) rec.countdown = ticks.splice(0);
       if (session.racing !== lastRacing) { rec.racing = session.racing; lastRacing = session.racing; }
       if (raceEndResults !== undefined) { rec.raceEnd = raceEndResults; raceEndResults = undefined; }
     }
