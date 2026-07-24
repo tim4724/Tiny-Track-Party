@@ -86,10 +86,11 @@ frame for frame. Specifically:
   stay on native `Math`.
 - Traces are therefore engine- and platform-independent: record fixtures on
   any machine, replay them anywhere. The one provenance that must match is
-  the mathlib build stamped in each trace header (`math`); the `engine`
-  stamp (`{ node, v8, os, arch }`) is informational. A fixture with a
-  different (or missing) mathlib stamp is stale — the verifier and the
-  fixture gate say so explicitly instead of reporting phantom divergence.
+  the mathlib build stamped in each trace header (`math`); headers carry
+  nothing machine-varying, so a re-record is byte-identical everywhere
+  (`record-traces.yml` enforces this on CI). A fixture with a different (or
+  missing) mathlib stamp is stale — the verifier and the fixture gate say so
+  explicitly instead of reporting phantom divergence.
 
 The executable form of this guarantee is the golden-trace tooling:
 `scripts/record-trace.mjs` records a seeded headless race (inputs, events,

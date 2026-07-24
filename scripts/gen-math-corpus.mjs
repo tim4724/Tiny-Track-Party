@@ -77,12 +77,21 @@ function* domainCases(fn) {
       yield* SPECIALS; yield* nearPiHalves; yield* hugeArgs;
       yield 1e-8; yield 0.1; yield 0.7853981633974483; // pi/4
       break;
-    case 'exp':
+    case 'exp': {
       yield* SPECIALS;
-      yield 709.782712893384; yield nextAfter(709.782712893384, 1); // overflow knee
-      yield -745.1332191019412; yield -708.3964185322641;           // underflow knees
+      // Bit-exact fdlibm thresholds, each with both ulp neighbours: o_threshold
+      // (largest finite result) and u_threshold (exp = smallest subnormal;
+      // note the nearest decimal literal -745.1332191019412 is 1 ulp BELOW it
+      // and lands in the underflow-to-zero branch instead).
+      const oThresh = fromBits(0x40862E42, 0xFEFA39EF);
+      const uThresh = fromBits(0xC0874910, 0xD52D3051);
+      for (const knee of [oThresh, uThresh]) {
+        yield knee; yield nextAfter(knee, 1); yield nextAfter(knee, -1);
+      }
+      yield -708.3964185322641; // subnormal-result band
       yield 0.6931471805599453; yield 1e-10; yield -1e-10;
       break;
+    }
     default:
       yield* SPECIALS;
   }

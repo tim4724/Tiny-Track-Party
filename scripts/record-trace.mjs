@@ -4,7 +4,7 @@
 // public/display/engine/Game.js) and writes a JSONL trace:
 //
 //   line 1   header  { contractVersion, seed, trackId, dt, laps, roster,
-//                      frames, snapshotEvery, engine }
+//                      frames, snapshotEvery, math }
 //   line 2+  frame   { frame, inputs, events, hash [, snapshot] }
 //
 // Every frame carries an FNV-1a hash of the canonical-JSON snapshot, so a
@@ -21,8 +21,8 @@
 // platform: the sim's transcendentals go through engine/math.js (fdlibm
 // compiled to WASM, deterministic f64), not V8's Math.*, so traces are
 // engine- and platform-independent. The header stamps the mathlib build
-// (`math`) — the one provenance that MUST match at replay — plus the
-// recording engine ({ node, v8, os, arch }) as informational provenance.
+// (`math`) — the one provenance that MUST match at replay — and nothing
+// machine-varying, so re-records are byte-identical on every machine.
 // Record fixtures anywhere, including dev machines.
 //
 // CLI:
@@ -39,7 +39,7 @@ import path from 'node:path';
 import { buildTrack, resolveFurniture, TRACKS } from '../public/display/TrackBuilder.js';
 import { Game, CONTRACT_VERSION } from '../public/display/engine/Game.js';
 import { AiController, AI_PERSONALITIES } from '../public/display/AiDriver.js';
-import { MATHLIB } from '../public/display/engine/math.js';
+import { MATHLIB, sin as dmathSin } from '../public/display/engine/math.js';
 
 // Fixed physics tick: the display's 60 Hz frame budget in ms. Stored in the
 // header and re-used verbatim by the verifier, never recomputed.
@@ -141,16 +141,13 @@ export function recordTrace(config) {
     // guarantee — e.g. a target-less rocket staged ahead of the grid whiffs at end
     // of run, covering rocket_expire on tracks where bot rockets always connect.
     ...(stage.length ? { stage } : {}),
-    // The deterministic mathlib build this trace was recorded with — the one
-    // provenance bit-exact replay depends on. The engine/platform stamp below
-    // is informational only: transcendentals go through engine/math.js
-    // (fdlibm WASM), so traces replay bit-exactly on any engine/platform with
-    // the same mathlib.
-    math: MATHLIB,
-    engine: {
-      node: process.versions.node, v8: process.versions.v8,
-      os: process.platform, arch: process.arch
-    }
+    // The deterministic mathlib build this trace was recorded with — the ONE
+    // provenance bit-exact replay depends on (transcendentals go through
+    // engine/math.js, fdlibm WASM). Deliberately no engine/platform stamp:
+    // nothing machine-varying belongs in the file, so a re-record is
+    // byte-identical on every machine (record-traces.yml enforces exactly
+    // that on CI).
+    math: MATHLIB
   };
 
   const track = buildRaceTrack(trackId, { laps, seed });
@@ -234,8 +231,12 @@ export function scriptedHuman(index = 0) {
   const phase = index * 17;
   return {
     id: `human-${index + 1}`,
+    // dmath sin, NOT Math.sin: the script itself must be platform-independent
+    // or the recorded INPUT bytes differ per machine (replay would still pass —
+    // inputs are replayed, not regenerated — but re-records would not be
+    // byte-identical across platforms, which record-traces.yml enforces).
     script: (frame) => ({
-      s: Math.sin((frame + phase) / 40) * 0.6,
+      s: dmathSin((frame + phase) / 40) * 0.6,
       b: (frame + phase) % 240 < 25 ? 1 : 0,
       u: Math.floor(frame / 300) & 255
     })

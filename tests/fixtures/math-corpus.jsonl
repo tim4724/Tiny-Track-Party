@@ -1,4 +1,4 @@
-{"mathlib":"fdlibm-openlibm-0.8.7","cases":4314,"format":"hex64 big-endian; nan = canonical NaN class"}
+{"mathlib":"fdlibm-openlibm-0.8.7","cases":4317,"format":"hex64 big-endian; nan = canonical NaN class"}
 {"f":"sin","i":["0000000000000000"],"o":"0000000000000000"}
 {"f":"sin","i":["8000000000000000"],"o":"8000000000000000"}
 {"f":"sin","i":["3ff0000000000000"],"o":"3feaed548f090cee"}
@@ -2024,6 +2024,9 @@
 {"f":"exp","i":["3fefffffffffffff"],"o":"4005bf0a8b145769"}
 {"f":"exp","i":["40862e42fefa39ef"],"o":"7fefffffffffff2a"}
 {"f":"exp","i":["40862e42fefa39f0"],"o":"7ff0000000000000"}
+{"f":"exp","i":["40862e42fefa39ee"],"o":"7feffffffffffb2a"}
+{"f":"exp","i":["c0874910d52d3051"],"o":"0000000000000001"}
+{"f":"exp","i":["c0874910d52d3050"],"o":"0000000000000001"}
 {"f":"exp","i":["c0874910d52d3052"],"o":"0000000000000000"}
 {"f":"exp","i":["c086232bdd7abcd2"],"o":"001000000000007c"}
 {"f":"exp","i":["3fe62e42fefa39ef"],"o":"4000000000000000"}

@@ -15,8 +15,9 @@ on a macOS arm64 laptop replays bit-exactly on ubuntu x64 CI and,
 eventually, against the native C++ engine linking the same vendored math.
 
 The one provenance that must match is the mathlib build stamped in each
-header (`math`); the `engine` stamp is informational. Fixtures with a stale
-mathlib stamp fail the gate with a re-record message.
+header (`math`); headers deliberately carry nothing machine-varying, so a
+re-record is byte-identical on every machine. Fixtures with a stale mathlib
+stamp fail the gate with a re-record message.
 
 ## Re-recording (after an intentional engine change)
 
