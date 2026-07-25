@@ -150,6 +150,60 @@ const scene = new SceneRenderer(el('scene'), CAR_COLORS);
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+
+// ?renderer=filament — draw with libttp-renderer (the native Filament port)
+// instead of three.js. SceneRenderer keeps the world: poses, chase cameras,
+// cell layout, props. The HUD is DOM either way, which is the whole reason the
+// HUD lives in the shell. Boot is async and the module is ~2 MB, so the scene
+// stays on three until it lands, then swaps at the next setTrack.
+let _nativeView = null;
+const _nativeAssets = { };
+if (_trackParams.get('renderer') === 'filament') {
+  (async () => {
+    try {
+      const { FilamentView, assetCache } = await import('./render/FilamentView.js');
+      const cv = document.createElement('canvas');
+      cv.id = 'scene-native';
+      cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+      // FIRST child, where three's canvas sits: the HUD overlays (.race-labels,
+      // the fps meter) are later siblings and have to paint over it.
+      el('scene').insertBefore(cv, el('scene').firstChild);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.round(el('scene').clientWidth * dpr);
+      cv.height = Math.round(el('scene').clientHeight * dpr);
+      _nativeView = await FilamentView.create(cv);
+      Object.assign(_nativeAssets, assetCache());
+      scene.renderer.domElement.style.display = 'none'; // three keeps simulating, stops drawing
+      scene.onTrackBuilt = (t) => _applyNativeTrack(t); // every track change rebuilds the native scene
+      window.addEventListener('resize', () => _nativeView.resize(
+          Math.round(el('scene').clientWidth * dpr), Math.round(el('scene').clientHeight * dpr)));
+      if (scene._track) await _applyNativeTrack(scene._track);
+    } catch (e) {
+      console.warn('[renderer=filament] falling back to three.js', e);
+      _nativeView = null;
+    }
+  })();
+}
+
+// Build (or rebuild) the native scene for a track. Every race start goes through
+// here, since the renderer tears its scene down and rebuilds per track.
+async function _applyNativeTrack(track) {
+  if (!_nativeView || !track) return;
+  const { trackPayload } = await import('./render/trackPayload.js');
+  // Roster in CELL order — the renderer's car slots line up with the cells the
+  // views arrive in, and the plate/livery come off the same entry.
+  const roster = [...scene.cars.entries()].map(([id, c], i) => ({
+    id, name: (c.label && c.label.textContent) || '', carIndex: c.carIndex ?? 0,
+    color: CAR_COLORS[i % CAR_COLORS.length],
+  }));
+  try {
+    await _nativeView.setTrack(trackPayload(scene, track, roster), _nativeAssets);
+    scene.nativeView = _nativeView;
+  } catch (e) {
+    console.warn('[renderer=filament] scene build failed, staying on three.js', e);
+    scene.nativeView = null;
+  }
+}
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
 scene.showDividers = _trackParams.get('dividers') !== '0';
@@ -839,6 +893,9 @@ function launchRace(players) {
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
   scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
+  // The native renderer builds its scene per race too (its roster comes from the
+  // payload), so rebuild it here — after the cars are placed, before the lights.
+  if (_nativeView) _applyNativeTrack(track);
 
   // Same construction shape the JS engine had, native implementation. Fails
   // loudly if the wasm module hasn't finished loading (boot races only).

@@ -508,7 +508,11 @@ export class SceneRenderer {
   clearSkids() { this.skids.clear(); }
 
   // Per-frame prop reconcile from the engine snapshot (item boxes, bananas, ?bbox).
-  syncProps(snap) { this.props.sync(snap); }
+  syncProps(snap) {
+    // Stash it for the native renderer: syncProps is called once a frame on
+    // every path (the live game and the harness scenarios), so this is the one
+    // place that always sees the frame's state.
+    this._nativeSnap = snap; this.props.sync(snap); }
 
   // Spawn a rocket-impact burst at a car (the detonation point). Driven from the engine's
   // rocket spin event; no-op if the car has no render mesh (e.g. just removed).
@@ -1040,6 +1044,8 @@ export class SceneRenderer {
   }
 
   setTrack(track, { debug = false } = {}) {
+    this._track = track; // the last built track (the native renderer rebuilds from it)
+    queueMicrotask(() => { if (this.onTrackBuilt) this.onTrackBuilt(track); });
     this._disposeTrack();
     this.trackGroup.clear();
     this.clearSkids(); // marks/patina are world-space — they belong to the old track
@@ -2407,11 +2413,16 @@ export class SceneRenderer {
       // blocks the chase view — no need to hide your own car's plate)
       // render this cell into its sub-rectangle of the target (re-apply via
       // setRenderTarget so the new viewport/scissor take effect)
-      rt.viewport.set(xDB, yBottomDB, cwDB, chDB);
-      rt.scissor.set(xDB, yBottomDB, cwDB, chDB);
-      rt.scissorTest = true;
-      r.setRenderTarget(rt);
-      r.render(this.scene, c.cam);
+      // The native renderer draws the same cells from the same cameras, so
+      // three's own pass is skipped — everything above (poses, chase update,
+      // projection) still runs, because that IS the frame state it consumes.
+      if (!this.nativeView) {
+        rt.viewport.set(xDB, yBottomDB, cwDB, chDB);
+        rt.scissor.set(xDB, yBottomDB, cwDB, chDB);
+        rt.scissorTest = true;
+        r.setRenderTarget(rt);
+        r.render(this.scene, c.cam);
+      }
 
       // position the DOM label at the cell's top-left (CSS px). Guarded like the
       // steer/finish overlays below: carded cars always have a label, but keep all
@@ -2469,7 +2480,32 @@ export class SceneRenderer {
       }
     });
 
-    this._present();
+    if (this.nativeView) this._submitNative(dt, ids, cwDB, chDB);
+    else this._present();
     this._scheduleNext();
+  }
+
+  // Hand this frame to the native renderer (?renderer=filament). Reads the state
+  // the loop above has already computed — no second pass over the scene.
+  _submitNative(dt, ids, cwDB, chDB) {
+    const snap = this._nativeSnap;
+    if (!snap) return;
+    const cars = [], views = [];
+    const fog = this.scene.fog;
+    for (const id of ids) {
+      const c = this.cars.get(id);
+      const sc = snap.cars.find((s) => s.id === id);
+      if (!c || !c.pose || !sc) continue;
+      cars.push({ pose: c.pose, spd: c.spd || 0, steer: sc.steer || 0, brake: sc.brake,
+                  boostMul: sc.boostMul || 1, monster: sc.monster, spin: sc.spin || 0,
+                  onWall: sc.onWall });
+      c.cam.updateWorldMatrix(true, false);
+      views.push({ world: c.cam.matrixWorld.elements, fov: c.cam.fov, aspect: cwDB / chDB,
+                   near: c.cam.near, far: c.cam.far,
+                   fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 });
+    }
+    this.nativeView.submit(dt, cars, views,
+        (snap.boxes || []).map((b) => (typeof b === 'object' ? b.available : b)),
+        snap.bananas || [], snap.rockets || []);
   }
 }
