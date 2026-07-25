@@ -2,7 +2,11 @@ node_modules/
 .playwright-mcp/
 test-results/
 # Native wasm renderer build output (scripts/build-wasm.sh) + its CMake dir.
-public/native/
+# public/native/ is NOT ignored: the renderer's wasm artifacts are CHECKED IN,
+# like the sim's (public/display/engine/native/). Building them needs the
+# Filament fork, which CI does not carry — so the preview deploy can only serve
+# what the repo holds. Rebuild with scripts/build-wasm.sh and commit the result
+# whenever the renderer changes.
 native/web/build/
 *.log
 .DS_Store

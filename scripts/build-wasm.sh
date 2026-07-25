@@ -11,6 +11,11 @@
 #                     .filamat blobs are MATERIAL_VERSION-locked to the tree)
 #
 # Env: FILAMENT_SRC (fork checkout), EMSDK_DIR, TTP_WASM_DEBUG=1 for a debug build.
+#
+# The artifacts land in public/native/ and are CHECKED IN, like the sim's under
+# public/display/engine/native/: building them needs the Filament fork, which CI
+# does not carry, so the preview deploy can only serve what the repo holds.
+# Rebuild and commit whenever the renderer changes.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
