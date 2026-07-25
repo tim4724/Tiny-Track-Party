@@ -174,10 +174,20 @@ if (_trackParams.get('renderer') === 'filament') {
       _nativeView = await FilamentView.create(cv);
       Object.assign(_nativeAssets, assetCache());
       scene.renderer.domElement.style.display = 'none'; // three keeps simulating, stops drawing
-      scene.onTrackBuilt = (t) => _applyNativeTrack(t); // every track change rebuilds the native scene
+      scene.onTrackBuilt = (t) => _applyNativeTrack(t, true); // every track change rebuilds the native scene
+      // The renderer bakes a car's model + livery into its slot at scene build,
+      // so any change to the field needs a rebuild: the lobby's attract race
+      // starts its cars a tick AFTER the track lands, phones join and leave
+      // mid-lobby, and the race grid then replaces the whole demo field.
+      scene.onCarsChanged = () => {
+        if (_nativeRebuildQueued) return;
+        _nativeRebuildQueued = true;
+        // A microtask, so a whole grid's worth of addCar calls costs one rebuild.
+        queueMicrotask(() => { _nativeRebuildQueued = false; _applyNativeTrack(scene._track); });
+      };
       window.addEventListener('resize', () => _nativeView.resize(
           Math.round(el('scene').clientWidth * dpr), Math.round(el('scene').clientHeight * dpr)));
-      if (scene._track) await _applyNativeTrack(scene._track);
+      if (scene._track) await _applyNativeTrack(scene._track, true);
     } catch (e) {
       console.warn('[renderer=filament] falling back to three.js', e);
       _nativeView = null;
@@ -187,7 +197,13 @@ if (_trackParams.get('renderer') === 'filament') {
 
 // Build (or rebuild) the native scene for a track. Every race start goes through
 // here, since the renderer tears its scene down and rebuilds per track.
-async function _applyNativeTrack(track) {
+// `force` is the track itself changing; without it a rebuild is skipped when
+// the roster comes out identical (onCarsChanged fires on every seat edit, and
+// most of them are no-ops from the renderer's point of view).
+let _nativeRebuildQueued = false;
+let _nativeRoster = null;
+let _nativeBuilding = null;
+async function _applyNativeTrack(track, force) {
   if (!_nativeView || !track) return;
   const { trackPayload } = await import('./render/trackPayload.js');
   // Roster in CELL order — the renderer's car slots line up with the cells the
@@ -196,13 +212,24 @@ async function _applyNativeTrack(track) {
     id, name: (c.label && c.label.textContent) || '', carIndex: c.carIndex ?? 0,
     color: CAR_COLORS[i % CAR_COLORS.length],
   }));
-  try {
-    await _nativeView.setTrack(trackPayload(scene, track, roster), _nativeAssets);
-    scene.nativeView = _nativeView;
-  } catch (e) {
-    console.warn('[renderer=filament] scene build failed, staying on three.js', e);
-    scene.nativeView = null;
-  }
+  const sig = JSON.stringify(roster);
+  if (!force && sig === _nativeRoster) return;
+  _nativeRoster = sig;
+  // Serialised: setTrack awaits a pile of asset fetches, and two of them
+  // interleaved would provide one track's bytes into the other's build.
+  const prev = _nativeBuilding;
+  _nativeBuilding = (async () => {
+    await prev;
+    try {
+      await _nativeView.setTrack(trackPayload(scene, track, roster), _nativeAssets);
+      scene.nativeView = _nativeView;
+    } catch (e) {
+      console.warn('[renderer=filament] scene build failed, staying on three.js', e);
+      _nativeRoster = null; // let the next change retry
+      scene.nativeView = null;
+    }
+  })();
+  return _nativeBuilding;
 }
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).

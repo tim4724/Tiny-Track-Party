@@ -128,7 +128,9 @@ void ttp_release_scene(TtpRuntime* rt);
 
 /* Returns 1 when the frame rendered; 0 when the renderer skipped it
  * (beginFrame backpressure) and the surface still holds the PREVIOUS frame —
- * capture paths must resubmit until it returns 1 or the readback is stale. */
+ * capture paths must resubmit until it returns 1 or the readback is stale.
+ * On the web the frame skipper is bypassed (requestAnimationFrame already
+ * paces us; see render()), so this always returns 1 there. */
 int ttp_submit_frame(TtpRuntime* rt, const TtpFrameInput* input);
 
 void ttp_destroy(TtpRuntime* rt);

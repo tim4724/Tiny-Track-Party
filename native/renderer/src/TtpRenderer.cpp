@@ -381,14 +381,20 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
     const bool lit = !m.normals.empty() && mLitMaterial != nullptr;
+    const bool uv = !m.uvs.empty();
+    const uint8_t uvSlot = lit ? 2 : 1;
     VertexBuffer::Builder vbb;
     vbb.vertexCount((uint32_t) m.verts.size())
-            .bufferCount(lit ? 2 : 1)
+            .bufferCount((uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
                     VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
             .normalized(VertexAttribute::COLOR);
+    if (uv) {
+        vbb.attribute(VertexAttribute::UV0, uvSlot,
+                VertexBuffer::AttributeType::FLOAT2, 0, sizeof(math::float2));
+    }
     if (lit) {
         // Lit shading needs the TANGENTS frame; derive qtangents from the
         // builder-supplied normals (arbitrary tangent — no normal maps here).
@@ -398,6 +404,11 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     m.vb = vbb.build(*mEngine);
     m.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
             m.verts.data(), m.verts.size() * sizeof(Vertex), nullptr));
+    if (uv) {
+        m.uvs.resize(m.verts.size(), math::float2{ 0, 0 });
+        m.vb->setBufferAt(*mEngine, uvSlot, VertexBuffer::BufferDescriptor(
+                m.uvs.data(), m.uvs.size() * sizeof(math::float2), nullptr));
+    }
     if (lit) {
         m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
         m.quats.resize(m.verts.size());
@@ -456,6 +467,7 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     m.idx = {};
     m.normals = {};
     m.quats = {};
+    m.uvs = {};
     m.local = {};
 }
 
@@ -3078,13 +3090,15 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     }
 
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's
-    // 74747 stream as tiny tinted diamonds, drifted per frame by the kind's
+    // 74747 stream as tiny tinted sprites, drifted per frame by the kind's
     // motion preset (flake / mote / sand / pollen — all resolved into the
     // payload by the harness).
-    if (mBlendMaterial && tb.ambKind != 0 && tb.ambCount > 0) {
+    if (mPointMaterial && tb.ambKind != 0 && tb.ambCount > 0) {
         const int AMB_COUNT = (int) std::min(tb.ambCount, 2400u);
         constexpr float AMB_R = 170.0f, AMB_H = 34.0f;
-        mAmbSize = tb.ambSize * 0.5f; // diamond half-extent ≈ the Points sprite size
+        // Half the JS Points sprite size — the material pushes each corner out
+        // by this along the camera axes, so the quad spans the full `size`.
+        mAmbSize = tb.ambSize * 0.5f;
         mAmbFall = tb.ambFall;
         mAmbWind = tb.ambWind;
         mAmbBob = tb.ambBob;
@@ -3103,14 +3117,21 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
             mAmbSpeed[i] = 1.1f + (float) arnd() * 1.4f;
         }
         const uint32_t tint = packLinear(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
-        mPollen.verts.resize(AMB_COUNT * 6, { 0, -1000, 0, tint });
-        mPollen.idx.resize(AMB_COUNT * 24);
-        static const uint32_t OCT[24] = { 0,2,4, 2,1,4, 1,3,4, 3,0,4,
-                                          2,0,5, 1,2,5, 3,1,5, 0,3,5 };
+        // Four vertices per particle, all carrying the SAME world centre: the
+        // corner in uv0 is what vpoint.mat spreads along the camera's right/up,
+        // so the sprite faces every cell's camera and comes out round.
+        mPollen.verts.resize(AMB_COUNT * 4, { 0, -1000, 0, tint });
+        mPollen.uvs.resize(AMB_COUNT * 4);
+        mPollen.idx.resize(AMB_COUNT * 6);
+        static const math::float2 CORNER[4] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
+        static const uint32_t QUAD[6] = { 0, 1, 2, 0, 2, 3 };
         for (int i = 0; i < AMB_COUNT; i++) {
-            for (int k = 0; k < 24; k++) mPollen.idx[i * 24 + k] = i * 6 + OCT[k];
+            for (int k = 0; k < 4; k++) mPollen.uvs[i * 4 + k] = CORNER[k];
+            for (int k = 0; k < 6; k++) mPollen.idx[i * 6 + k] = i * 4 + QUAD[k];
         }
-        if (!buildMesh(mPollen, true, mBlendMaterial->getDefaultInstance())) return false;
+        mPollenMat = sceneInstance(mPointMaterial);
+        mPollenMat->setParameter("halfSize", mAmbSize); // re-fitted per frame, below
+        if (!buildMesh(mPollen, true, mPollenMat)) return false;
     }
 
     // Impact bursts, the JS spec: a THIN shockwave ring (0.25→2.0 world over
@@ -4674,6 +4695,12 @@ bool TtpRenderer::buildScene() {
                 .package(vlit->second.data(), vlit->second.size())
                 .build(*mEngine);
     }
+    const auto vpoint = mAssets.find("vpoint.filamat");
+    if (!mPointMaterial && vpoint != mAssets.end()) {
+        mPointMaterial = Material::Builder()
+                .package(vpoint->second.data(), vpoint->second.size())
+                .build(*mEngine);
+    }
     const auto track = mAssets.find("track.bin");
     if (track == mAssets.end()) return false; // no scene without a track payload
     mHasTrack = true;
@@ -5314,7 +5341,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     if (!mPollen.entity.isNull() && !mAmbBase.empty()) {
         const float FALL = mAmbFall, WIND = mAmbWind, BOB = mAmbBob;
         constexpr float AMB_R = 170.0f;
-        const float BAND_H = mAmbBandH, SZ = mAmbSize;
+        const float BAND_H = mAmbBandH;
         for (size_t i = 0; i < mAmbBase.size(); i++) {
             const float t = mTime;
             float x = mAmbBase[i].x + WIND * t;
@@ -5323,12 +5350,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     + std::sin(t * 0.7f + i) * BOB * 0.3f;
             y = std::fmod(std::fmod(y, BAND_H) + BAND_H, BAND_H) + 0.5f;
             const float z = mAmbBase[i].z;
-            Vertex* v = &mPollen.verts[i * 6];
-            const float3 c = { x, y, z };
-            const float3 pts[6] = { { c.x - SZ, c.y, c.z }, { c.x + SZ, c.y, c.z },
-                                    { c.x, c.y, c.z - SZ }, { c.x, c.y, c.z + SZ },
-                                    { c.x, c.y + SZ, c.z }, { c.x, c.y - SZ, c.z } };
-            for (int k = 0; k < 6; k++) { v[k].px = pts[k].x; v[k].py = pts[k].y; v[k].pz = pts[k].z; }
+            // All four corners get the centre; the material spreads them.
+            Vertex* v = &mPollen.verts[i * 4];
+            for (int k = 0; k < 4; k++) { v[k].px = x; v[k].py = y; v[k].pz = z; }
         }
         mPollen.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                 mPollen.verts.data(), mPollen.verts.size() * sizeof(Vertex), nullptr));
@@ -5657,7 +5681,41 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
     }
 
-    if (!mRenderer->beginFrame(mSwapChain)) return false; // legit frame skip — canvas is STALE
+    // Ambient sprite size. THREE.Points are sized in SCREEN space — its shader
+    // is `gl_PointSize = size * (canvasHeight/2) / distance` — so a particle's
+    // world extent works out to `size × rows × tan(fov/2)`, where `rows` is the
+    // split-screen row count. That layout term is an accident of three using the
+    // WHOLE canvas height while rendering into a cell, and it means the same
+    // theme draws snow twice as big in a 4-player race as in a 1-player one.
+    // Matching it is the parity goal, so we fit the same number each frame; if
+    // the three side ever loses the quirk, this collapses to a constant.
+    if (mPollenMat) {
+        const uint32_t vc = input.viewCount;
+        const uint32_t rows = vc ? (vc + (uint32_t) std::ceil(std::sqrt((double) vc)) - 1)
+                        / (uint32_t) std::ceil(std::sqrt((double) vc))
+                : 1u;
+        const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
+        mPollenMat->setParameter("halfSize",
+                mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
+    }
+
+    // Frame pacing. beginFrame() drops a frame when the GPU is behind — it waits
+    // on a fence from two frames ago, and on WEB that fence signals late enough
+    // that it dropped ~38% of frames on an idle GPU. The cost is a stale canvas
+    // while the page keeps ticking at full rate: the visible framerate falls but
+    // the rAF-counting fps meter still reads 60, which is exactly what a stutter
+    // with no explanation looks like. In a browser the pacing is already done
+    // for us — rAF fires on the compositor's schedule and stops firing when we
+    // can't keep up — so we take the choice the API offers: "when beginFrame()
+    // returns false, the caller has the choice to either skip the frame ... or
+    // proceed as though true was returned" (Renderer.h). Native shells keep the
+    // skipper; they have a real display pipeline behind them and no rAF.
+    const bool pace = mRenderer->beginFrame(mSwapChain);
+#if defined(__EMSCRIPTEN__)
+    (void) pace;
+#else
+    if (!pace) return false; // legit frame skip — canvas is STALE
+#endif
 
     const TtpViewInput* views = ttp_frame_views(&input);
     if (input.viewCount == 0) {
@@ -5955,6 +6013,7 @@ void TtpRenderer::releaseScene() {
     mKites.clear();
     mSmoke.clear();
     mShadowSpots.clear();
+    mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
     mAmbBase.clear();
     mAmbSpeed.clear();
     mWheelTrails.clear();
@@ -5980,6 +6039,7 @@ TtpRenderer::~TtpRenderer() {
     if (!mEngine) return;
     releaseScene();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
+    if (mPointMaterial) mEngine->destroy(mPointMaterial);
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);

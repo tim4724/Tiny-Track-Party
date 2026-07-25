@@ -1626,6 +1626,10 @@ export class SceneRenderer {
     // Place the plate (applies a per-model PLATE_Y override if one is set).
     this._positionPlate(c, PLATE_Y[carIndex] != null ? PLATE_Y[carIndex] : anchor.y);
     if (cell && !this._order.includes(id)) this._order.push(id);
+    // The native renderer bakes model + livery into a car slot at scene build,
+    // so it has to know the field changed (?renderer=filament only — nothing
+    // listens otherwise).
+    if (this.onCarsChanged) this.onCarsChanged();
   }
 
   // Set a car's plate height to `y` (world units on the rear face). The plate is
@@ -1810,6 +1814,7 @@ export class SceneRenderer {
     if (c.reconnectEl && c.reconnectEl.parentNode) c.reconnectEl.parentNode.removeChild(c.reconnectEl);
     this.cars.delete(id);
     this._order = this._order.filter((x) => x !== id);
+    if (this.onCarsChanged) this.onCarsChanged();
   }
 
   // Re-key a car's render entry from one id to another (a dropped player
@@ -2378,10 +2383,13 @@ export class SceneRenderer {
         }
         this.overview.lookAt(this._ovTarget || new THREE.Vector3());
       }
-      r.render(this.scene, this.overview);
+      // The native renderer takes the same single camera (its no-cell layout is
+      // one full-surface view) — this is the lobby's attract race, so the cars
+      // ride along in scene-map order, which is the order the roster was baked in.
+      if (this.nativeView) this._submitNative(dt, [...this.cars.keys()], W, H, this.overview);
+      else { r.render(this.scene, this.overview); this._present(); }
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; if (c.reconnectEl) c.reconnectEl.style.display = 'none'; }
       this._hideDividers();
-      this._present();
       this._scheduleNext();
       return;
     }
@@ -2487,25 +2495,36 @@ export class SceneRenderer {
 
   // Hand this frame to the native renderer (?renderer=filament). Reads the state
   // the loop above has already computed — no second pass over the scene.
-  _submitNative(dt, ids, cwDB, chDB) {
+  // `oneCam` is the lobby/gallery case: one camera over the whole surface with
+  // the cars still submitted (the attract race), instead of a cell per car.
+  _submitNative(dt, ids, cwDB, chDB, oneCam) {
     const snap = this._nativeSnap;
-    if (!snap) return;
     const cars = [], views = [];
     const fog = this.scene.fog;
     for (const id of ids) {
       const c = this.cars.get(id);
-      const sc = snap.cars.find((s) => s.id === id);
-      if (!c || !c.pose || !sc) continue;
-      cars.push({ pose: c.pose, spd: c.spd || 0, steer: sc.steer || 0, brake: sc.brake,
-                  boostMul: sc.boostMul || 1, monster: sc.monster, spin: sc.spin || 0,
-                  onWall: sc.onWall });
+      const sc = snap && snap.cars.find((s) => s.id === id);
+      // A car with no snapshot entry yet still has to hold its slot, or every
+      // car behind it in the roster would be drawn wearing the wrong model.
+      if (!c || !c.pose) continue;
+      cars.push({ pose: c.pose, spd: c.spd || 0, steer: (sc && sc.steer) || 0,
+                  brake: !!(sc && sc.brake), boostMul: (sc && sc.boostMul) || 1,
+                  monster: !!(sc && sc.monster), spin: (sc && sc.spin) || 0,
+                  onWall: !!(sc && sc.onWall) });
+      if (oneCam) continue;
       c.cam.updateWorldMatrix(true, false);
       views.push({ world: c.cam.matrixWorld.elements, fov: c.cam.fov, aspect: cwDB / chDB,
                    near: c.cam.near, far: c.cam.far,
                    fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 });
     }
+    if (oneCam) {
+      oneCam.updateWorldMatrix(true, false);
+      views.push({ world: oneCam.matrixWorld.elements, fov: oneCam.fov, aspect: cwDB / chDB,
+                   near: oneCam.near, far: oneCam.far,
+                   fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 });
+    }
     this.nativeView.submit(dt, cars, views,
-        (snap.boxes || []).map((b) => (typeof b === 'object' ? b.available : b)),
-        snap.bananas || [], snap.rockets || []);
+        ((snap && snap.boxes) || []).map((b) => (typeof b === 'object' ? b.available : b)),
+        (snap && snap.bananas) || [], (snap && snap.rockets) || []);
   }
 }

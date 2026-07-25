@@ -92,6 +92,10 @@ private:
         // qtangents in a second buffer slot). Empty = unlit vcolor.
         std::vector<filament::math::float3> normals;
         std::vector<filament::math::quatf> quats; // derived; alive for upload
+        // Optional UV0, in its own buffer slot. Only the sprite cloud carries
+        // one (the corner offset its material billboards by) — every other mesh
+        // is position + colour, so UVs stay out of the shared vertex.
+        std::vector<filament::math::float2> uvs;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -210,6 +214,10 @@ private:
 
     // Translucent bits (vblend material, vertex alpha): per-car ground blobs.
     filament::Material* mBlendMaterial = nullptr;
+    // Round camera-facing sprites (vpoint): the ambient-particle cloud. The
+    // billboard + the radial falloff both live in the shader — see vpoint.mat.
+    filament::Material* mPointMaterial = nullptr;
+    filament::MaterialInstance* mPollenMat = nullptr; // owns the sprite's halfSize
     std::vector<Mesh> mCarBlobs;
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1
