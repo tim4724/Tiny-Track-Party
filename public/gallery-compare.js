@@ -22,7 +22,9 @@ let marshalUs = 0, marshals = 0;
 // the payload the wasm module meshes from in the same step.
 {
   const q = new URLSearchParams(location.search);
-  const p = new URLSearchParams({ scenario: 'fixture', track: q.get('track') || 'gate0', dpr: '1' });
+  // A SHIPPED track by default: the sim is the C++ one now, and its registry
+  // carries only the shipped set (the gate0/gym dev tracks have no native sim).
+  const p = new URLSearchParams({ scenario: 'fixture', track: q.get('track') || 'ribbon', dpr: '1' });
   if (q.get('biome')) p.set('biome', q.get('biome'));
   frame.src = `/?${p}`;
 }

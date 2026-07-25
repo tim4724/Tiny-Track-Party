@@ -18,7 +18,7 @@ scripts/build-wasm.sh             # Native Filament renderer → public/native/ 
 ```
 
 Native-port judging surface: `/gallery-compare.html` runs ONE JS sim
-(`?scenario=fixture&track=gate0`, deterministic: pinned seed, awaitable
+(`?scenario=fixture`, deterministic: pinned seed, awaitable
 `__fixture.step()`) and feeds it to BOTH renderers — Three.js in an iframe and
 the Filament wasm module via `FrameInput` (`native/include/ttp_runtime.h`).
 Wipe/onion/diff modes judge parity.

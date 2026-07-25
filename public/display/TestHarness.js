@@ -563,6 +563,7 @@ export function runDisplayScenario(opts, ctx) {
     // wall dt (0 = re-present without advancing the sim).
     let _stepMs = null;
     let _stepResolve = null;
+    let _fixFrames = 0; // engine ticks since the last reset — the compare page's scrub index
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
@@ -603,6 +604,7 @@ export function runDisplayScenario(opts, ctx) {
         // else (bots, item pickups, the roulette) runs inside the wasm sim.
         const stepped = _stepMs != null;
         engine.update(stepped ? _stepMs : dt * 1000);
+        if (!stepped || _stepMs > 0) _fixFrames++;
         _stepMs = null;
         // Resolve the awaited step only on the frame that CONSUMED it — step()
         // calls that outpace rAF would otherwise silently coalesce.
@@ -652,7 +654,8 @@ export function runDisplayScenario(opts, ctx) {
         step: (ms = 1000 / 60) => new Promise((resolve) => { _stepMs = ms; _stepResolve = resolve; scene.start(); scene.pauseAfterFrame(); }),
         // Full deterministic restart: a fresh session on the same pinned seed, so
         // the bots and the item roulette rewind with the sim.
-        reset: () => { engine = newSession(); window.__engine = engine; _fixEvents.length = 0; placeGrid(); },
+        reset: () => { engine = newSession(); window.__engine = engine; _fixFrames = 0; _fixEvents.length = 0; placeGrid(); },
+        frame: () => _fixFrames,
         getSnapshot: () => engine.getSnapshot(),
         drainEvents: () => _fixEvents.splice(0),
         // One-time scene-build payload (contract track + identity + roster).
