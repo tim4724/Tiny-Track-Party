@@ -20,6 +20,12 @@ on:
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
 
+# NOTE: this workflow absorbed the old record-traces.yml. Its job — re-record the
+# golden fixtures on a DIFFERENT machine and prove byte equality — is now the
+# record_* ctest entries, which run wherever ctest runs (ubuntu, macOS, wasm/Node)
+# instead of on one ubuntu runner, and use the C++ recorder rather than the
+# retired JS one.
+
 jobs:
   conformance:
     strategy:

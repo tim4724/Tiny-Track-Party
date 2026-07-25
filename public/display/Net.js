@@ -3,7 +3,8 @@
 // Game logic/rendering live elsewhere; this module is transport + lobby only.
 //
 // Reads partyplug + protocol globals set by the classic <script> tags that load
-// before this module (PartyConnection, RoomFlow, MSG, RELAY_URL, MAX_PLAYERS).
+// before this module (PartyConnection, MSG, RELAY_URL, MAX_PLAYERS). The room
+// state machine is NOT a global any more: it arrives as opts.RoomFlowImpl.
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 import { GameNet } from '../shared/GameNet.js';
 
@@ -131,9 +132,9 @@ export class DisplayNet extends GameNet {
     this.cupId = null;
     this.drawRandomTrack = opts.drawRandomTrack || null;
 
-    // The room state machine. Defaults to the kit's RoomFlow; ?party=native
-    // injects NativeRoomFlow (same surface, C++ decisions) via opts.RoomFlowImpl.
-    // Held for the static lowestFreeSlot too, so both come from one implementation.
+    // The room state machine — NativeRoomFlow (C++ decisions, kit surface),
+    // injected so this module stays transport-focused. Held for the static
+    // lowestFreeSlot too, so both come from one implementation.
     // Required: the room state machine is native (NativeRoomFlow) and there is no
     // JS RoomFlow left to fall back to, so a missing impl is a wiring bug, not a
     // mode. Fail at construction rather than at the first roster change.

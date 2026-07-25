@@ -15,7 +15,7 @@ import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
 import { CUPS } from '../shared/tracks.js';
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
 const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
 // Back stack (live play only): each forward step pushes one history entry, each
@@ -339,7 +339,7 @@ function cpuSeats(humans) {
   // ?bots=<n> caps the AI fill (debug); default tops the grid up to FIELD_SIZE.
   const fill = _qBots != null ? Math.min(FIELD_SIZE, humans.length + _qBots) : FIELD_SIZE;
   for (let n = 0; humans.length + seats.length < fill; n++) {
-    const colorIndex = RoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
+    const colorIndex = _room.NativeRoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
     used.add(colorIndex);
     const carIndex = colorIndex % CAR_MODELS.length;
     seats.push({ n, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length], colorIndex, carIndex, stats: carStats(carIndex) });
@@ -516,8 +516,8 @@ scene.onFrame = (dt) => {
 const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
-  // ?party=native: the room state machine runs on the C++ party layer. Absent,
-  // DisplayNet uses the JS kit's RoomFlow exactly as before.
+  // The room state machine, relay framing and fastlane netcode all run on the
+  // C++ party layer; DisplayNet has no JS fallback to choose from.
   ...(_nativeParty || {}),
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
