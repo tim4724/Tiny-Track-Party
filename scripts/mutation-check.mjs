@@ -31,7 +31,7 @@
 // Usage: node scripts/mutation-check.mjs [--only=<substring>] [--list] [--build-dir=<d>]
 //        npm run mutation-check
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

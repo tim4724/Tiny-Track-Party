@@ -12,16 +12,19 @@
 // dropped null, an id parsed as the wrong JSON type) live exactly here and are
 // invisible to a check that talks to Game directly.
 //
-// Three parts:
-//   1. TRACE THROUGH THE ABI — replays a golden trace via ttp_process_input /
+// Four parts:
+//   1. TRACE THROUGH THE ABI — replays golden traces via ttp_process_input /
 //      ttp_update and demands the recorded per-frame hash + events back out of
-//      ttp_snapshot_json / ttp_events_json. Same fixture and recipe as the Node
+//      ttp_snapshot_json / ttp_events_json. Same fixtures and recipe as the Node
 //      test, but it now runs on every platform leg (linux/macOS/wasm/tvOS).
 //   2. CUP SERIES THROUGH THE ABI — replays grandprix-corpus.jsonl through
 //      ttp_gp_*, so the JS-recorded scoring oracle also covers the marshalled
 //      path (standings JSON, the ""-means-null next track, JSON-scalar ids).
-//   3. BOUNDARY + MUTATION EXPORTS — the rest of the surface, each asserted
-//      against its documented contract in ttp_runtime.h.
+//   3. BOUNDARY + MUTATION EXPORTS — the rest of ttp_runtime.h, each asserted
+//      against its documented contract.
+//   4. THE PARTY ABI (ttp_party.h) — the room corpus and the framing corpus
+//      through the C boundary, plus a fastlane plumbing pass. Same gap one file
+//      over: ttp_party.cc was emscripten-only too.
 //
 // Part 3 is a behavioural gate, not conformance evidence: no JS twin of the glue
 // survives to record an oracle from, so the assertions encode what the header
@@ -471,6 +474,11 @@ bool roomCorpusThroughAbi(const std::string& path) {
     check(v.has("contractVersion"), "ttp_party_version carries contractVersion");
   }
 
+  // Error paths first: no handle required, and a room getter must still answer.
+  check(ttp_room_state(0) != nullptr, "ttp_room_state on handle 0 returns a string, not null");
+  check(ttp_room_size(0) == 0, "ttp_room_size on handle 0 is 0");
+  check(std::strcmp(ttp_room_list_json(0), "[]") == 0, "ttp_room_list_json on handle 0 is []");
+
   int scripts = 0, steps = 0, slotCases = 0, bad = 0;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
@@ -767,7 +775,6 @@ void fastlaneThroughAbi() {
   Value bogus = parseOrNull(ttp_link_stats_json(0), "link_stats(0)");
   check(bogus.type == Value::OBJ || bogus.type == Value::NUL,
         "ttp_link_stats_json on handle 0 returns JSON rather than garbage");
-  check(ttp_room_state(0) != nullptr, "ttp_room_state on handle 0 returns a string, not null");
 }
 
 }  // namespace

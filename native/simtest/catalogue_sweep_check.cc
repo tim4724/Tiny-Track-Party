@@ -36,7 +36,6 @@
 //        catalogue_sweep_check --record --out=<f>
 
 #include <cstdio>
-#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -67,7 +66,7 @@ const int LAPS = 3;
 // The trace personas, so the sweep exercises the same AI differentiation the
 // golden traces do (caution x laneBias is what separates the bots).
 struct Persona { const char* id; double caution, laneBias; uint32_t aiSeed; };
-const Persona PERSONAS[4] = {
+const Persona PERSONAS[] = {
     {"cpu-bolt", 1.05, -0.6, 218u},
     {"cpu-pixel", 1.0, 0.6, 219u},
     {"cpu-rusty", 0.97, -0.25, 220u},
@@ -76,6 +75,8 @@ const Persona PERSONAS[4] = {
 
 // A per-track seed that is a pure function of the id, so the corpus never depends
 // on catalogue ORDER (adding a track must not renumber everyone else's race).
+constexpr size_t BOTS = sizeof(PERSONAS) / sizeof(PERSONAS[0]);
+
 uint32_t seedFor(const std::string& id) {
   uint32_t h = 2166136261u;
   for (char ch : id) { h ^= (unsigned char)ch; h *= 16777619u; }
@@ -93,14 +94,14 @@ Value raceDigest(const std::string& trackId, std::string& err) {
 
   Game game(players, bt.game, [](const Event&) {});
   std::vector<AiController> ais;
-  ais.reserve(4);
+  ais.reserve(BOTS);
   for (const Persona& p : PERSONAS) {
     ais.emplace_back(p.caution, LOOKAHEAD, STEER_GAIN, p.laneBias, p.aiSeed);
   }
 
   Value hashes = Value::Arr();
   for (int f = 1; f <= FRAMES; f++) {
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < BOTS; i++) {
       Input in;
       game.driveBot(Id::Str(PERSONAS[i].id), ais[i], &in);
     }

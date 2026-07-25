@@ -79,12 +79,25 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   TrackBuilder agrees), which is why `Game::collidePole` is covered by
   `hazard_check` constructing the situation directly rather than by a trace.
 - The C ABI (`runtime/`) is NOT on the replay path — `replay_cli` calls C++ objects
-  directly. `abi_check` covers the marshalling layer the browser actually talks to:
-  two traces through `ttp_process_input`/`ttp_update`, the cup corpus through
-  `ttp_gp_*`, and the boundary/mutation exports against their header contracts. It
-  recompiles `runtime/*.cc` rather than linking a lib, so the shipped wasm's
-  `EMSCRIPTEN_KEEPALIVE` export list is untouched. `runtime/ttp_party.cc` is still
-  covered only by `tests/party-abi.test.js` in Node.
+  directly. `abi_check` covers the marshalling layer the browser actually talks to,
+  BOTH ABIs: two traces through `ttp_process_input`/`ttp_update`, the cup corpus
+  through `ttp_gp_*`, the room and framing corpora through `ttp_room_*`/
+  `ttp_framing_*`, a fastlane plumbing pass, and every boundary/mutation export
+  against its header contract. It recompiles `runtime/*.cc` rather than linking a
+  lib, so the shipped wasm's `EMSCRIPTEN_KEEPALIVE` export list is untouched.
+  `tests/party-abi.test.js` still covers the same ground in Node against the SHIPPED
+  wasm, which is the only place that artifact is exercised.
+- Two checks audit the SUITE, not the code, and run weekly + on demand
+  (`.github/workflows/test-the-tests.yml`), never on PRs: `npm run mutation-check`
+  breaks the engine 21 ways and requires the matching ctest to go red for each (two
+  gates were found blind this way), and `npm run revive:js-oracle` restores the
+  retired JS sim from git and re-records all 8 golden traces byte-identically. While
+  the latter passes, parity evidence is renewable; when it starts failing, decide
+  consciously whether to repair the twin or accept that the traces are frozen.
+- Our own C/C++ carries `-Wall -Wextra` via the `ttp_warnings` interface;
+  the vendored fdlibm/double-conversion deliberately do NOT (they are taken whole
+  from upstream). Not `-Werror` — a newer compiler's new diagnostic must not block a
+  build.
 - `public/display/engine/native/ttp_runtime.{mjs,wasm}` are CHECKED IN and are
   what the browser actually runs. After touching `native/`, run
   `native/scripts/build-runtime-web.sh` and commit the artifacts —
