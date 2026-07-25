@@ -10,6 +10,7 @@
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
 #include <filament/RenderableManager.h>
+#include <filament/RenderTarget.h>
 #include <filament/Renderer.h>
 #include <filament/Scene.h>
 #include <filament/Skybox.h>
@@ -434,8 +435,21 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     m.ib->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
             m.idx.data(), m.idx.size() * sizeof(uint32_t), nullptr));
     m.entity = utils::EntityManager::get().create();
+    // Real bounds. Frustum culling is off everywhere (below), so for years this
+    // was a ±1000 stand-in — harmless until the sun started casting: Filament
+    // sizes the shadow frustum from the CASTERS' bounds, and a 2 km cube of
+    // "road" stretched a 2048² map over the whole world, which quantises every
+    // shadow edge into nothing. Meshes whose verts are rewritten per frame (the
+    // conformed decals) keep whatever their template spanned; none of them cast.
+    float3 bbLo{ 1e30f }, bbHi{ -1e30f };
+    for (const Vertex& v : m.verts) {
+        bbLo = min(bbLo, float3{ v.px, v.py, v.pz });
+        bbHi = max(bbHi, float3{ v.px, v.py, v.pz });
+    }
+    const float3 bbC = (bbLo + bbHi) * 0.5f;
+    const float3 bbE = max((bbHi - bbLo) * 0.5f, float3{ 1e-3f });
     RenderableManager::Builder(1)
-            .boundingBox({{ -1000, -1000, -1000 }, { 1000, 1000, 1000 }})
+            .boundingBox({ bbC, bbE })
             // Blend-pass draw order (default 4). The flat road decals stack in
             // a fixed order — skids under the ground shadow, both under the
             // boost aura — instead of by an arbitrary depth sort.
@@ -1132,6 +1146,72 @@ Texture* TtpRenderer::buildShadowMask() {
             px->data(), px->size(), Texture::Format::RGBA, Texture::Type::UBYTE,
             [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, px));
     tex->generateMipmaps(*mEngine);
+    return tex;
+}
+
+// The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
+// puts an orthographic camera over the model, renders a flat white mask on
+// transparent, and reads it back for the blur; the same picture here comes from
+// an offscreen RenderTarget rendered with renderStandaloneView (there is no
+// readback on this side, so the blur moved into vdecal.mat instead).
+//
+// The framing is the JS's: footprint × SHADOW_OVERSCAN, so the silhouette lands
+// at footprint scale inside a quad with room for the penumbra tail. The camera
+// looks UP from under the model rather than down on it: the outline is the same
+// either way, and this is the handedness that makes the blob mesh's own UVs
+// (u across → car right, v along → car forward) land unmirrored.
+//
+// Alpha is the coverage channel — opaque glTF materials write 1.0 there and the
+// clear leaves 0 — which is why the bake needs no lights and doesn't care that
+// an unlit car in an empty scene renders black.
+Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
+        const float3& bbMin, const float3& bbMax) {
+    if (!asset || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
+    constexpr int TW = 128;
+    const float hw = (bbMax.x - bbMin.x) * 0.5f * 1.45f;
+    const float hl = (bbMax.z - bbMin.z) * 0.5f * 1.45f;
+    if (hw <= 0 || hl <= 0) return nullptr;
+    const int TH = std::max(16, (int) std::lround(TW * (hl / hw)));
+    Texture* tex = Texture::Builder()
+            .width((uint32_t) TW).height((uint32_t) TH).levels(1)
+            .format(Texture::InternalFormat::RGBA8)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            .build(*mEngine);
+    if (!tex) return nullptr;
+    RenderTarget* rt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, tex)
+            .build(*mEngine);
+    Scene* scene = mEngine->createScene();
+    utils::Entity camEnt = utils::EntityManager::get().create();
+    Camera* cam = mEngine->createCamera(camEnt);
+    View* view = mEngine->createView();
+    const float cx = (bbMin.x + bbMax.x) * 0.5f, cz = (bbMin.z + bbMax.z) * 0.5f;
+    const float h = (bbMax.y - bbMin.y) + 2.0f;
+    scene->addEntities(asset->getEntities(), asset->getEntityCount());
+    cam->setProjection(Camera::Projection::ORTHO, -hw, hw, -hl, hl, 0.01, h);
+    cam->lookAt({ cx, bbMin.y - 1.0f, cz }, { cx, bbMax.y, cz }, { 0, 0, -1 });
+    view->setScene(scene);
+    view->setCamera(cam);
+    view->setViewport({ 0, 0, (uint32_t) TW, (uint32_t) TH });
+    view->setRenderTarget(rt);
+    view->setPostProcessingEnabled(false); // tone mapping would eat the alpha
+    view->setShadowingEnabled(false);
+    view->setBlendMode(View::BlendMode::TRANSLUCENT); // OPAQUE forces alpha to 1
+    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+    Renderer::ClearOptions co{};
+    co.clearColor = { 0, 0, 0, 0 };
+    co.clear = true;
+    mRenderer->setClearOptions(co);
+    mRenderer->renderStandaloneView(view);
+    mRenderer->setClearOptions(prev);
+    for (size_t i = 0; i < asset->getEntityCount(); i++) {
+        scene->remove(asset->getEntities()[i]);
+    }
+    mEngine->destroy(view);
+    mEngine->destroy(rt);
+    mEngine->destroyCameraComponent(camEnt);
+    utils::EntityManager::get().destroy(camEnt);
+    mEngine->destroy(scene);
     return tex;
 }
 
@@ -2825,176 +2905,25 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // verts occluded from the sun by ELEVATED road geometry (loop/bridge decks) or
 // the gantry. Grid-pruned ray/triangle tests keep the bake to a few ms; the
 // road VB re-uploads once with the darkened colours.
-void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
-    if (mRoad.verts.empty() || !mRoad.vb) return;
-    // A race start rebuilds the circuit the lobby was ALREADY previewing — only
-    // the roster changed — and this bake is a second of that rebuild. Since its
-    // only inputs are the road/gantry geometry and the (fixed) sun, key a cache
-    // on the geometry itself: same road, same answer, no work. That is what
-    // stops the scene visibly re-forming a beat into the countdown.
-    uint64_t key = 1469598103934665603ull ^ (uint64_t) mGantry.verts.size();
-    for (const Vertex& v : mRoad.verts) {
-        uint32_t bits;
-        std::memcpy(&bits, &v.px, 4); key = (key ^ bits) * 1099511628211ull;
-        std::memcpy(&bits, &v.py, 4); key = (key ^ bits) * 1099511628211ull;
-        std::memcpy(&bits, &v.pz, 4); key = (key ^ bits) * 1099511628211ull;
-    }
-    if (key == mBakeKey && mBakeColors.size() == mRoad.verts.size()) {
-        for (size_t i = 0; i < mRoad.verts.size(); i++) mRoad.verts[i].abgr = mBakeColors[i];
-        mRoad.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                mRoad.verts.data(), mRoad.verts.size() * sizeof(Vertex), nullptr));
-        return;
-    }
-    // Toward the light: the JS key sits at (2, 12, 1.5) looking at the origin,
-    // so the sun travels along −that and shadows are cast along +that. This
-    // used to be a stale hand-typed vector with BOTH horizontal signs flipped,
-    // which threw every baked shadow to the wrong side — most visible on the
-    // loop, where the wrong half of the deck came out shaded.
-    const float3 toSun = normalize(float3{ 2.0f, 12.0f, 1.5f });
-    struct Tri { float3 a, b, c; float minY; };
-    std::vector<Tri> occ;
-    const auto collect = [&](const Mesh& m, float minHeight) {
-        for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
-            const auto va = m.verts[m.idx[i]], vb = m.verts[m.idx[i + 1]], vc = m.verts[m.idx[i + 2]];
-            const float3 a{ va.px, va.py, va.pz }, b{ vb.px, vb.py, vb.pz }, c{ vc.px, vc.py, vc.pz };
-            const float y = std::min(a.y, std::min(b.y, c.y));
-            if (y > tb.groundY + minHeight) occ.push_back({ a, b, c, y });
-        }
-    };
-    collect(mRoad, 1.6f);   // elevated decks only (loop/bridge)
-    collect(mGantry, -10);  // the whole gantry casts
-    if (occ.empty()) return;
+// Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,
+// glTF: both), so every renderable that matters says so explicitly — see the
+// caster/receiver note in buildTrackScene for who is in which set.
+void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
+    if (m.entity.isNull()) return;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri = rcm.getInstance(m.entity);
+    if (!ri) return;
+    rcm.setCastShadows(ri, cast);
+    rcm.setReceiveShadows(ri, receive);
+}
 
-    // 2D XZ grid over occluders (bbox expanded along the sun slant).
-    float minX = 1e9f, minZ = 1e9f, maxX = -1e9f, maxZ = -1e9f;
-    for (const Tri& t : occ) {
-        for (const float3& p : { t.a, t.b, t.c }) {
-            const float slant = (p.y - tb.groundY) / toSun.y;
-            const float sx = p.x - toSun.x * slant, sz = p.z - toSun.z * slant;
-            minX = std::min({ minX, p.x, sx }); maxX = std::max({ maxX, p.x, sx });
-            minZ = std::min({ minZ, p.z, sz }); maxZ = std::max({ maxZ, p.z, sz });
-        }
-    }
-    const float CELL = 4.0f;
-    const int gw = std::max(1, (int) ((maxX - minX) / CELL) + 1);
-    const int gh = std::max(1, (int) ((maxZ - minZ) / CELL) + 1);
-    std::vector<std::vector<uint32_t>> grid((size_t) gw * gh);
-    const auto cellOf = [&](float x, float z) {
-        const int cx = std::max(0, std::min(gw - 1, (int) ((x - minX) / CELL)));
-        const int cz = std::max(0, std::min(gh - 1, (int) ((z - minZ) / CELL)));
-        return (size_t) cz * gw + cx;
-    };
-    // Per-cell ceiling: the highest occluder foot in the cell. A vertex under
-    // nothing tall rejects on one compare instead of walking the cell's whole
-    // triangle list — and on a stunt track that list is thousands long.
-    std::vector<float> cellTop((size_t) gw * gh, -1e9f);
-    for (uint32_t t = 0; t < occ.size(); t++) {
-        float txn = 1e9f, tzn = 1e9f, txm = -1e9f, tzm = -1e9f;
-        for (const float3& p : { occ[t].a, occ[t].b, occ[t].c }) {
-            const float slant = (p.y - tb.groundY) / toSun.y;
-            txn = std::min({ txn, p.x, p.x - toSun.x * slant });
-            txm = std::max({ txm, p.x, p.x - toSun.x * slant });
-            tzn = std::min({ tzn, p.z, p.z - toSun.z * slant });
-            tzm = std::max({ tzm, p.z, p.z - toSun.z * slant });
-        }
-        for (float x = txn; x <= txm + CELL; x += CELL)
-            for (float z = tzn; z <= tzm + CELL; z += CELL) {
-                const size_t ci = cellOf(x, z);
-                grid[ci].push_back(t);
-                cellTop[ci] = std::max(cellTop[ci], occ[t].minY);
-            }
-    }
-    // How far above a receiver an occluder must sit before it casts at all.
-    // This is the port's stand-in for three's normalBias, which scales with the
-    // shadow texel and swallows anything close above — that is WHY three shows
-    // no shadow at a loop mouth (the arch is a couple of units over its own
-    // entry road) while an overpass deck four or more up still casts a sharp
-    // one. A flat 0.8 let the loops cast; raising it lets the blur stay tight
-    // for the shadows that survive, instead of softening everything to hide
-    // the ones that should never have been drawn.
-    constexpr float CLEARANCE = 2.5f;
-    const auto occluded = [&](const float3& p) {
-        const size_t ci = cellOf(p.x, p.z);
-        if (cellTop[ci] < p.y + CLEARANCE) return false; // nothing above → no walk
-        for (const uint32_t ti : grid[ci]) {
-            const Tri& t = occ[ti];
-            if (t.minY < p.y + CLEARANCE) continue; // see CLEARANCE
-            // Möller–Trumbore, ray p + s·toSun
-            const float3 e1 = t.b - t.a, e2 = t.c - t.a;
-            const float3 pv = cross(toSun, e2);
-            const float det = dot(e1, pv);
-            if (std::fabs(det) < 1e-8f) continue;
-            const float inv = 1.0f / det;
-            const float3 tv = p - t.a;
-            const float u = dot(tv, pv) * inv;
-            if (u < 0 || u > 1) continue;
-            const float3 qv = cross(tv, e1);
-            const float v = dot(toSun, qv) * inv;
-            if (v < 0 || u + v > 1) continue;
-            if (dot(e2, qv) * inv > 0.1f) return true;
-        }
-        return false;
-    };
-    // Three's version of this is a 2048² shadow map sampled per PIXEL through a
-    // PCF kernel: its edges are soft, and a fitted normalBias means an occluder
-    // sitting close above its receiver casts nothing at all. A per-vertex
-    // BOOLEAN is the opposite — one hard in/out per vertex, stretched flat
-    // across the triangle between — which is why a loop came out wearing
-    // straight-edged wedges that look nothing like a loop's shadow. So sample a
-    // small disc (the PCF footprint) and shade by the fraction in shadow.
-    constexpr int PCF_N = 4;
-    // Three's kernel, honestly measured: PCFShadowMap over a 2048² map fitted to
-    // the track bbox is ~1 texel, i.e. ~0.06 u on a 130-u circuit. 0.55 was the
-    // radius I first guessed and it is nearly TEN TIMES that — it killed the
-    // straight-edged wedges but left every shadow vague. Road vertices sit
-    // ~0.24 u apart, which is the floor on how sharp a per-vertex bake can be,
-    // so this sits just under one spacing: as crisp as the mesh allows without
-    // snapping back to one hard in/out per vertex.
-    constexpr float PCF_R = 0.18f;
-    const auto coverage = [&](const float3& p) {
-        float hit = occluded(p) ? 1.0f : 0.0f;
-        for (int k = 0; k < PCF_N; k++) {
-            const float a = ((float) k + 0.5f) / PCF_N * 2.0f * (float) M_PI;
-            if (occluded({ p.x + std::cos(a) * PCF_R, p.y, p.z + std::sin(a) * PCF_R })) {
-                hit += 1.0f;
-            }
-        }
-        return hit / (float) (PCF_N + 1);
-    };
-    // The ribbon is a triangle SOUP — every interior vertex is emitted once per
-    // triangle that touches it, so ~5 of every 6 of those 172k vertices repeat a
-    // position already solved. Memoise on the quantised position (1/512 u, well
-    // under the ring step) and the sampling collapses to the unique ones.
-    std::unordered_map<uint64_t, float> memo;
-    memo.reserve(mRoad.verts.size() / 4);
-    const auto covKey = [](const float3& p) {
-        const auto q = [](float v) { return (uint64_t) (int64_t) std::lround(v * 512.0f) & 0x1fffffull; };
-        return q(p.x) | (q(p.y) << 21) | (q(p.z) << 42);
-    };
-    const float SHADE = 0.62f;
-    bool touched = false;
-    for (Vertex& v : mRoad.verts) {
-        const float3 p{ v.px, v.py, v.pz };
-        const uint64_t key = covKey(p);
-        const auto it = memo.find(key);
-        const float cov = it != memo.end() ? it->second : (memo[key] = coverage(p));
-        if (cov <= 0) continue;
-        const float shade = 1.0f - (1.0f - SHADE) * cov;
-        const uint32_t c = v.abgr;
-        v.abgr = (c & 0xff000000u)
-                | ((uint32_t) (((c >> 16) & 0xff) * shade) << 16)
-                | ((uint32_t) (((c >> 8) & 0xff) * shade) << 8)
-                | (uint32_t) ((c & 0xff) * shade);
-        touched = true;
-    }
-    // Cache the RESULT, not just the shaded verts — the road's paint is baked
-    // into the same colour column, so this is the whole answer for this circuit.
-    mBakeKey = key;
-    mBakeColors.resize(mRoad.verts.size());
-    for (size_t i = 0; i < mRoad.verts.size(); i++) mBakeColors[i] = mRoad.verts[i].abgr;
-    if (touched) {
-        mRoad.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                mRoad.verts.data(), mRoad.verts.size() * sizeof(Vertex), nullptr));
+void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool receive) {
+    auto& rcm = mEngine->getRenderableManager();
+    for (size_t i = 0; i < n; i++) {
+        const auto ri = rcm.getInstance(e[i]);
+        if (!ri) continue;
+        rcm.setCastShadows(ri, cast);
+        rcm.setReceiveShadows(ri, receive);
     }
 }
 
@@ -3225,11 +3154,27 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // (key 1.4 / hemi 2.2), so a biome's own intensities ride in as a RATIO on
     // those calibration points rather than as absolute numbers.
     mSun = utils::EntityManager::get().create();
+    // Shadow rig, matched to environment.js: a 2048² PCF map, and a normal-space
+    // bias of a couple of texels to kill acne on the curving deck (three refits
+    // its own to max(0.06, 2.5 texels) for the same reason). One cascade and
+    // `stable` on: the chase camera moves every frame, and without the texel
+    // snap a stationary shadow edge crawls. shadowFar caps the fitted box so the
+    // texel density stays near three's whole-track fit instead of stretching to
+    // the fog distance — beyond it there is nothing but ground, which does not
+    // receive.
+    LightManager::ShadowOptions so{};
+    so.mapSize = 2048;
+    so.shadowCascades = 1;
+    so.constantBias = 0.001f;
+    so.normalBias = 2.0f;
+    so.shadowFar = 120.0f;
+    so.stable = true;
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
             .color(srgbToLinear(tb.keyCol))
             .intensity(48000.0f * (tb.keyIntensity / 1.4f))
             .direction(normalize(float3{ -2.0f, -12.0f, -1.5f }))
-            .castShadows(false)
+            .castShadows(true)
+            .shadowOptions(so)
             .build(*mEngine, mSun);
     mScene->addEntity(mSun);
     {
@@ -3769,13 +3714,26 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                                                   : sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f); // never z-fight the deck it hugs
             if (mDecalMaterial) {
-                if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
-                if (mShadowMaskTex) {
-                    TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+                // The car's own outline when we could bake it; the generic
+                // rounded-rect only when a car has no GLB (box marker).
+                Texture* mask = (mCarSilhouettes.size() > c) ? mCarSilhouettes[c] : nullptr;
+                bool baked = mask != nullptr;
+                if (!mask) {
+                    if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
+                    mask = mShadowMaskTex;
+                }
+                if (mask) {
+                    TextureSampler smp(baked ? TextureSampler::MinFilter::LINEAR
+                                             : TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
                             TextureSampler::MagFilter::LINEAR);
                     smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
                     smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-                    mi->setParameter("albedo", mShadowMaskTex, smp);
+                    mi->setParameter("albedo", mask, smp);
+                    // The silhouette comes out of the render target hard-edged;
+                    // the pre-blurred fallback mask must NOT be blurred twice.
+                    const float bw = baked ? 1.5f / (float) mask->getWidth() : 0.0f;
+                    const float bh = baked ? 1.5f / (float) mask->getHeight() : 0.0f;
+                    mi->setParameter("blur", math::float2{ bw, bh });
                 }
             } else {
                 m.uvs.clear(); // vblend has no uv0 attribute
@@ -4027,7 +3985,29 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     }
 
     buildGantry(tb);
-    bakeRoadShadows(tb); // AFTER the gantry — it's a caster
+    // Sun shadows: who casts, who catches. AFTER the gantry — it's a caster.
+    //
+    // This used to be a CPU bake that ray-traced the sun per road vertex and
+    // multiplied the result into the vertex colours. It could never be right:
+    // the road's rings sit ~0.24 u apart, so a Gouraud-stretched occlusion term
+    // cannot resolve an edge that a 2048² map resolves at ~0.05 u, and every
+    // attempt to hide that (a fat PCF disc) just traded wedges for mush. The JS
+    // does not bake vertices at all — it renders a REAL shadow map once and
+    // freezes it. Filament has no freeze, so the map re-renders per view per
+    // frame; the scene behind it is static, so the picture is identical and the
+    // only cost is one depth pass of the track (measured below the noise floor
+    // against the 130 ms the bake charged at every scene build).
+    //
+    // Caster/receiver sets are three's, verbatim: the fixed track geometry
+    // casts, the road and its structures catch, and NOTHING else does — cars,
+    // props and scenery carry their own ground blobs (setShadows(false) on
+    // every glTF asset, since gltfio opts renderables IN by default), and the
+    // grass deliberately opts out so an elevated car's blob can't detach onto
+    // it far below the deck.
+    setMeshShadows(mRoad, true, true);
+    setMeshShadows(mGantry, true, true);
+    setMeshShadows(mStructures, true, true);
+    setMeshShadows(mBerms, true, true);
 
     // Clouds (environment.js): 8 puffs, deterministic index math. The JS
     // sprites are fog:false and drift ACROSS the field in authored space;
@@ -4160,6 +4140,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         }
         ga->releaseSourceData();
         mScene->addEntities(ga->getEntities(), ga->getEntityCount());
+        setShadows(ga->getEntities(), ga->getEntityCount(), false, false);
         auto& tcmG = mEngine->getTransformManager();
         tcmG.setTransform(tcmG.getInstance(ga->getRoot()),
                 mat4f::translation(float3{ 0, -1000, 0 }));
@@ -4239,6 +4220,9 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     }
     asset->releaseSourceData();
     mScene->addEntities(asset->getEntities(), asset->getEntityCount());
+    // Cars neither cast nor catch the sun shadow (they carry a ground blob) —
+    // gltfio opts renderables in by default, the JS opts them out.
+    setShadows(asset->getEntities(), asset->getEntityCount(), false, false);
     mCarAssets[index] = asset;
 
     // Wheel handles for the per-frame steer/roll cosmetics. Original local
@@ -4324,6 +4308,9 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.footL = bb.max.z - bb.min.z;
         w.bbMin = bb.min;
         w.bbMax = bb.max;
+        // Ground-shadow silhouette, off THIS model, while it still sits at rest.
+        if (mCarSilhouettes.size() <= index) mCarSilhouettes.resize(index + 1, nullptr);
+        mCarSilhouettes[index] = bakeSilhouette(asset, bb.min, bb.max);
     }
     // Tyre-contact width for the skid ribbons: min(0.24, max(0.06,
     // min(wheelBox.x, wheelBox.z))) — SceneRenderer addCar's measurement.
@@ -4361,6 +4348,9 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     asset->releaseSourceData();
     for (auto* inst : out) {
         mScene->addEntities(inst->getEntities(), inst->getEntityCount());
+        // Props and scenery are not shadow casters in the JS either (each
+        // floating prop carries its own baked contact blob instead).
+        setShadows(inst->getEntities(), inst->getEntityCount(), false, false);
     }
     return asset;
 }
@@ -5270,15 +5260,27 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             static const mat4f FLIP = mat4f::rotation(M_PI, float3{ 0, 1, 0 });
             // Spin-out whirl (oil, lightning): the JS yaws the whole model by
             // c.spin on top of its base yaw (car.rotation.y = baseYaw + spin).
-            mat4f pose = (c.spin != 0)
+            const mat4f base = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
                     : m * FLIP;
             // Body lean + weight transfer — SceneRenderer setCarPose verbatim:
             // lean target steer × LEAN_MAX (0.05), smoothed 0.2/frame; pitch
             // from d(spd)/dt of the NORMALIZED spd over PITCH_ACCEL_NORM 0.8,
             // dive gated on real brake (×3, saturates at 1/3 pedal), damped at
-            // PITCH_RATE 6/s. Applied to the whole asset for now (JS leans the
-            // body only — wheels reparented flat).
+            // PITCH_RATE 6/s.
+            //
+            // The BODY leans, the wheels do NOT: a car banking into a corner
+            // rolls on its springs while its tyres stay planted. The JS gets
+            // that by reparenting the four wheel nodes (and any exposed axle
+            // rod) off the body onto the car group before rolling the body.
+            // Here the whole asset hangs off one root transform, so instead
+            // the root carries the lean and each wheel's local transform
+            // cancels it back out (`bodyRot` below) — the wheel nodes are
+            // direct children of the body node with an IDENTITY local frame in
+            // every kit GLB, so the plain inverse is the right cancel. Leaning
+            // the wheels too was the "whole car tilts on steering" tell.
+            mat4f bodyRot{};    // R: the lean/dive the body wears
+            mat4f popScale{};   // S: monster morph spring (uniform, commutes)
             if (mCarWheels.size() > i) {
                 CarWheels& w = mCarWheels[i];
                 w.lean += (c.steer * 0.05f - w.lean) * 0.2f;
@@ -5291,8 +5293,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         * (pitchAmt < 0 ? 0.08f * diveGate : 0.03f);
                 w.pitch += (pitchTarget - w.pitch)
                         * (1.0f - std::exp(-6.0f * input.dt));
-                pose = pose * mat4f::rotation(w.pitch * w.pitchSign, float3{ 1, 0, 0 })
-                            * mat4f::rotation(w.lean, float3{ 0, 0, 1 });
+                bodyRot = mat4f::rotation(w.pitch * w.pitchSign, float3{ 1, 0, 0 })
+                        * mat4f::rotation(w.lean, float3{ 0, 0, 1 });
                 // Morph pop (MonsterRig): on a monster edge the WHOLE rig
                 // (chassis + grafted body — this pose feeds both) springs
                 // 0.5→1 over POP_TIME 0.34 s with the 1.70158 ease-out-back
@@ -5307,9 +5309,14 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     const float u = t - 1.0f;
                     const float k = 1.70158f;
                     const float s = 0.5f + 0.5f * (1.0f + u * u * ((k + 1) * u + k));
-                    pose = pose * mat4f::scaling(float3{ s });
+                    popScale = mat4f::scaling(float3{ s });
                 }
             }
+            // Flat = road-aligned, no lean (the monster chassis and its tyres
+            // ride this); pose = the leaning body the car model wears.
+            const mat4f flat = base * popScale;
+            mat4f pose = base * bodyRot * popScale;
+            const mat4f bodyRotInv = inverse(bodyRot);
             // Monster occlusion fade — SceneRenderer's _monsterBlocksView rule
             // verbatim: in front of the camera, nearer than that cell's own
             // car, and within MONSTER_BLOCK_DIST (3.0) of it. The JS ghosts it
@@ -5340,9 +5347,14 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // the player's own car body — WHEELS STRIPPED — seats the cab slot,
             // bottom-aligned to the slot floor plus MOUNT_LIFT. (The old code
             // lifted the whole car, own wheels and all, by a flat 0.42.)
-            const mat4f rigPose = pose;
+            //
+            // The rig rides FLAT: the JS grafts the body in as a child node and
+            // leans only that, so the truck's own chassis and fat tyres stay
+            // planted. The graft's lean therefore composes AFTER the mount —
+            // it pivots about the cab slot, not about the car's road origin.
+            const mat4f rigPose = flat;
             if (isMonster) {
-                pose = pose * mat4f::translation(mCarWheels[i].monsterMount);
+                pose = flat * mat4f::translation(mCarWheels[i].monsterMount) * bodyRot;
             } else if (c.monster > 0.5f && (mMonsterInstances.size() <= i || !mMonsterInstances[i])) {
                 pose = pose * mat4f::scaling(float3{ 1.45f, 1.35f, 1.45f }); // no GLB fallback
             }
@@ -5417,7 +5429,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     if (e.isNull()) return;
                     mat4f local = isMonster ? mat4f::scaling(float3{ 1e-4f }) : r;
                     local[3] = float4{ t, 1 };
-                    tcm.setTransform(tcm.getInstance(e), local);
+                    // …and undo the body's lean/dive: the root above carries it,
+                    // but tyres stay planted on the road (see `bodyRot`).
+                    tcm.setTransform(tcm.getInstance(e), bodyRotInv * local);
                 };
                 spin(w.fl, w.flT, steerRoll);
                 spin(w.fr, w.frT, steerRoll);
@@ -6397,6 +6411,9 @@ void TtpRenderer::releaseScene() {
         a = nullptr;
     };
     for (auto*& a : mCarAssets) dropAsset(a);
+    // Baked per-car silhouettes die with the roster that produced them.
+    for (Texture*& t : mCarSilhouettes) { if (t) mEngine->destroy(t); t = nullptr; }
+    mCarSilhouettes.clear();
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     dropAsset(mBoxAsset);

@@ -122,11 +122,6 @@ private:
     std::vector<utils::Entity> mCellCameraEntities;
 
     Mesh mRoad;
-    // Baked road shading, cached across releaseScene(): the bake is the most
-    // expensive thing in a scene build and its only inputs are the road/gantry
-    // geometry, which a race start does NOT change (only the roster does).
-    uint64_t mBakeKey = 0;
-    std::vector<uint32_t> mBakeColors;
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS
     // keeps per-tile collision clones out of the scene graph and raycasts them;
     // our ribbon is one soup, so the grid buckets triangles instead).
@@ -144,6 +139,9 @@ private:
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
     filament::Texture* buildShadowMask();
+    // Top-down alpha coverage of a loaded car, at the blob quad's exact framing.
+    filament::Texture* bakeSilhouette(filament::gltfio::FilamentAsset* asset,
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
     // Split-screen column count for n cells — SceneRenderer's bestGrid, so the
     // 3D cells land where the DOM HUD puts its labels.
     uint32_t bestGridCols(uint32_t n) const;
@@ -245,6 +243,9 @@ private:
     // whose penumbra is far too tight to carry in vertex alpha.
     filament::Material* mDecalMaterial = nullptr;
     filament::Texture* mShadowMaskTex = nullptr;
+    // Per-car ground-shadow silhouette, rendered top-down off the real model
+    // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
+    std::vector<filament::Texture*> mCarSilhouettes;
     std::vector<Mesh> mCarBlobs;
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1
@@ -435,7 +436,8 @@ private:
     void buildLandmarks(const TrackBin& tb);
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
-    void bakeRoadShadows(const TrackBin& tb);
+    void setMeshShadows(Mesh& m, bool cast, bool receive);
+    void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
     // Drop a flat car-local decal (boost aura, ground blob) onto the deck:
     // every template vertex is re-expressed as (arclength, lateral) about the
     // car's foot and re-placed by frameAt, so the sheet BENDS over crests,

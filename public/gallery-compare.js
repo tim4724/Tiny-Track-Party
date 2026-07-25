@@ -26,6 +26,10 @@ let marshalUs = 0, marshals = 0;
   // carries only the shipped set (the gate0/gym dev tracks have no native sim).
   const p = new URLSearchParams({ scenario: 'fixture', track: q.get('track') || 'ribbon', dpr: '1' });
   if (q.get('biome')) p.set('biome', q.get('biome'));
+  // ?item=<id> rides through to the display's debug hook, so every box in the
+  // fixture rolls the same item: the only practical way to get a monster truck
+  // (or a rocket, or a shield) in front of both renderers at a known frame.
+  if (q.get('item')) p.set('item', q.get('item'));
   frame.src = `/?${p}`;
 }
 
@@ -207,6 +211,14 @@ function applyMode() {
   rescale();
 }
 $('mode').addEventListener('change', applyMode);
+// Camera mode. The chase grid is what the game shows, but four car close-ups
+// hide almost everything a renderer port gets wrong at track scale (cast
+// shadows, ground blending, scenery placement) — the overview is one static
+// wide shot of the whole circuit, fed to BOTH renderers from the same camera.
+$('cam').addEventListener('change', async () => {
+  fixture.setCamera($('cam').value);
+  if (!playing) await fixture.step(0); // re-present the three side on the new camera
+});
 $('wipe').addEventListener('input', () => { if ($('mode').value === 'wipe') ttpCanvas.style.clipPath = `inset(0 0 0 ${$('wipe').value}%)`; });
 
 // Capture a synchronized pair at the CURRENT (paused) frame: the presented

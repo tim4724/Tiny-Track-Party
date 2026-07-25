@@ -251,6 +251,12 @@ export class SceneRenderer {
     // Lobby orbit (set true by the display in the lobby). Start at the same iso
     // bearing the static overview used so the first frame matches.
     this.orbit = false;
+    // Judging aid (renderer compare only): force the single whole-track overview
+    // camera even with a full grid of cars racing. Four chase cells are the worst
+    // possible frame to compare a track's SHADOWS in — each one is a close-up of
+    // a car — so the compare harness flips this to put both renderers on one wide
+    // static camera without touching the sim.
+    this.soloCam = false;
     this._orbitAngle = Math.atan2(0.9, 0.35);
     // User-driven overview camera (OrbitControls), lazily wired by
     // enableUserCamera() for the standalone track preview. Null in the live game
@@ -2344,7 +2350,7 @@ export class SceneRenderer {
     // them each frame was pure waste; this drops the whole-track shadow pass — the
     // biggest per-frame GPU cost on weak hardware — to a single render at track load.
 
-    const ids = this._order.filter((id) => this.cars.has(id));
+    const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     // Pick the fog profile for this frame by camera mode: the overview turntable (no cells)
     // frames the whole track and wants the pushed-out overview fog; the race chase cams
     // want the tight race fog. Reassign only on an actual change so the material program

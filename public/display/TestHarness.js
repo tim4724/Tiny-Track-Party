@@ -552,7 +552,13 @@ export function runDisplayScenario(opts, ctx) {
     // item is guaranteed by FORCING THE ROULETTE instead — every box on the track rolls
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
-    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
+    // The fixture (renderer compare) takes it from ?item= for the same reason:
+    // it's the only way to put a specific item's visuals in front of both
+    // renderers at a known frame.
+    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind
+      : (kind === 'fixture'
+        ? (new URLSearchParams(location.search).get('item') || null)
+        : null);
     const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem });
     let engine = newSession();
     window.__engine = engine;
@@ -660,9 +666,43 @@ export function runDisplayScenario(opts, ctx) {
         getTrackData: () => trackPayload(scene, track,
             ids.map((i) => ({ id: i, name: FAKE_NAMES[i], carIndex: i,
                               color: COLORS[i % COLORS.length] }))),
+        // Camera mode. 'cells' = the per-car chase grid the game runs; 'overview'
+        // = one static whole-track shot on BOTH sides, which is the only framing
+        // that shows a track's cast shadows, its silhouette against the ground
+        // and its scenery all at once. The sim is untouched either way.
+        // opts.pos/opts.target ([x, y, z]) park the overview anywhere — the way
+        // to put both renderers nose-to-nose on ONE feature (a loop's cast
+        // shadow, a gantry, a shoreline) instead of the whole-circuit default.
+        setCamera: (mode, opts = {}) => {
+          scene.soloCam = (mode === 'overview');
+          // No turntable: a compare shot has to be reproducible, and the orbit
+          // rewrites the camera position every frame (which silently ate the
+          // first pos I parked here).
+          if (scene.soloCam) { scene.orbit = false; scene.bboxOrbit = false; }
+          if (opts.pos) {
+            scene._ovPos.set(...opts.pos);
+            scene.overview.position.set(...opts.pos);
+            // The overview ships with near = 4 (it only ever framed whole
+            // tracks); a parked compare camera wants to sit a metre off a car,
+            // and at near = 4 the car is simply clipped away.
+            scene.overview.near = opts.near == null ? 0.1 : opts.near;
+            scene.overview.updateProjectionMatrix();
+          }
+          if (opts.target) {
+            if (!scene._ovTarget) scene._ovTarget = scene._ovPos.clone();
+            scene._ovTarget.set(...opts.target);
+          }
+        },
         // Per-cell chase cameras (world matrix + projection params) — the runtime
         // owns cameras (architecture.md), so views ride FrameInput to the renderer.
-        getViews: () => ids.map((id) => {
+        getViews: () => (scene.soloCam ? (() => {
+          const cam = scene.overview;
+          cam.updateWorldMatrix(true, false);
+          const fog = scene.scene.fog;
+          return [{ id: 0, world: [...cam.matrixWorld.elements],
+                    fov: cam.fov, near: cam.near, far: cam.far, aspect: cam.aspect,
+                    fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 }];
+        })() : ids.map((id) => {
           const c = scene.cars.get(id);
           if (!c || !c.cam) return null;
           c.cam.updateWorldMatrix(true, false);
@@ -673,7 +713,7 @@ export function runDisplayScenario(opts, ctx) {
           return { id, world: [...c.cam.matrixWorld.elements],
                    fov: c.cam.fov, near: c.cam.near, far: c.cam.far, aspect: c.cam.aspect,
                    fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 };
-        }).filter(Boolean),
+        }).filter(Boolean)),
         // Pixels of the presented Three.js frame (post-present same-task readback;
         // when idle, re-present WITHOUT advancing the sim via a 0 ms step).
         capture: () => new Promise((resolve) => {
