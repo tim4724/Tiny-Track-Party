@@ -7,3 +7,9 @@ node_modules
 tests
 scripts
 test-results
+# Audition candidate dumps (see .gitignore). Gone from git, but a checkout that
+# ran an audition round locally would otherwise drag hundreds of MB back into
+# the build context and the image.
+public/assets/audio/_music-pool
+public/assets/audio/_stk-audition
+public/assets/audio/_engine-audition

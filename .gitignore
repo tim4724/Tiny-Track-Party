@@ -3,13 +3,15 @@ node_modules/
 test-results/
 *.log
 .DS_Store
-# Audition candidate dumps. The CURATED state of each dir is committed
-# deliberately (force-added) so the audition galleries work from any checkout;
-# the ignore keeps future bulk pulls from sneaking in without an explicit
-# `git add -f`. Per-dir licences live next to the files.
-#   _stk-audition/    STK SFX (mixed CC-BY-SA/GPL/CC0)   → /sfx-audition.html
-#   _engine-audition/ OpenGameArt engine clips (mostly CC0) → /engine-audition.html
-#   _music-pool/      race-music candidates (all CC-BY 4.0) → /music-pool-audition.html
+# Audition candidate dumps — 760 MB of rejected sound candidates that were
+# force-added once and then shipped in the Docker image for months:
+#   _stk-audition/    STK SFX (mixed CC-BY-SA/GPL/CC0)
+#   _engine-audition/ OpenGameArt engine clips (mostly CC0)
+#   _music-pool/      race-music candidates (all CC-BY 4.0)
+# They now live ONLY on the `audio-auditions` branch, which also carries the
+# galleries that browse them (/sfx-audition.html and friends) and
+# scripts/build-music-pool.mjs. Do NOT `git add -f` them back onto main: branch
+# from audio-auditions for the next round, then ship only the promoted files.
 public/assets/audio/_stk-audition/
 public/assets/audio/_engine-audition/
 public/assets/audio/_music-pool/

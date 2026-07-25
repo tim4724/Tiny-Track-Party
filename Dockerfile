@@ -9,6 +9,13 @@ FROM node:20-alpine
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D nodejs
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
+# Assets (~170 MB, nearly all race soundtrack) get their OWN layer, ABOVE the
+# code copies. Folded into COPY public/ they shared one layer, so a one-line .js
+# edit changed its digest and every preview deploy re-pulled the soundtrack.
+# Split out, the digest is stable and the node reuses it across commits and
+# namespaces. COPY public/ below re-copies these paths, but byte-identical files
+# diff to nothing, so that layer stays ~2.4 MB. Don't merge these two back.
+COPY public/assets/ ./public/assets/
 COPY package.json ./
 COPY server/ ./server/
 COPY public/ ./public/
