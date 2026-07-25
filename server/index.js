@@ -54,7 +54,9 @@ const MIME_TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
   '.mjs': 'text/javascript',       // engine/native/ttp_runtime.mjs (ES module, strict MIME)
-  '.wasm': 'application/wasm',     // ttp_runtime.wasm — instantiateStreaming requires this type
+  // ttp_runtime.wasm (the sim) + native/ttp.wasm (the renderer) — the correct
+  // MIME is what enables WebAssembly.instantiateStreaming.
+  '.wasm': 'application/wasm',
   '.css': 'text/css',
   '.json': 'application/json',
   '.png': 'image/png',
@@ -74,9 +76,7 @@ const MIME_TYPES = {
   '.wav': 'audio/wav',
   '.flac': 'audio/flac',
   '.mp3': 'audio/mpeg',
-  // Native renderer module (scripts/build-wasm.sh → public/native/); the
-  // correct MIME enables WebAssembly.instantiateStreaming.
-  '.wasm': 'application/wasm',
+  // Native renderer materials (scripts/build-wasm.sh → public/native/).
   '.filamat': 'application/octet-stream'
 };
 
