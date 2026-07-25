@@ -131,7 +131,11 @@ export class DisplayNet extends GameNet {
     this.cupId = null;
     this.drawRandomTrack = opts.drawRandomTrack || null;
 
-    this.flow = new RoomFlow({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
+    // The room state machine. Defaults to the kit's RoomFlow; ?party=native
+    // injects NativeRoomFlow (same surface, C++ decisions) via opts.RoomFlowImpl.
+    // Held for the static lowestFreeSlot too, so both come from one implementation.
+    this._RoomFlowImpl = opts.RoomFlowImpl || RoomFlow;
+    this.flow = new this._RoomFlowImpl({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
     this.roomCode = null;
     this.instance = null;
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
@@ -457,7 +461,7 @@ export class DisplayNet extends GameNet {
   _addPeer(peerIndex) {
     if (!this.flow.has(peerIndex)) {
       if (this.flow.size >= MAX_PLAYERS) return;
-      const colorIndex = RoomFlow.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
+      const colorIndex = this._RoomFlowImpl.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
       // Default the car model to the livery slot so everyone starts on a distinct
       // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
       this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex, ready: false });

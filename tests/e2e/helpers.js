@@ -33,13 +33,30 @@ async function openDisplay(page) {
   // RaceSession._stepCountdown: racing flips on the n=0 beat, which only fires
   // from update(dtMs), not on startCountdown's opening tick).
   await page.addInitScript(() => { window.__countdownSeconds = 1; });
-  await page.goto('/');
+  // Optional display query flags for the whole suite, e.g.
+  //   TTP_DISPLAY_FLAGS=party=native npm run test:e2e
+  // runs every spec with the room state machine on the C++ party layer (add
+  // sim=native to also race on the native engine). Unset — the default, and what
+  // CI runs — this is plain '/' and the JS kit. The few specs that navigate
+  // themselves (device-chooser, couchgames-shell, welcome) are shell tests and
+  // stay on the default path.
+  const flags = process.env.TTP_DISPLAY_FLAGS || '';
+  await page.goto(flags ? `/?${flags}` : '/');
   // Click through the welcome board (its NEW GAME carries the fullscreen/audio
   // unlocks — both harmless headless). Wait for the module first (__net is set
   // at its tail): the button is in the static HTML, so an instant click could
   // land before the listener attaches. The room warms behind the welcome, so
   // the roomCode wait below is unchanged.
   await page.waitForFunction(() => !!window.__net);
+  // Guard against a SILENT FALLBACK: a native flag that failed to load would
+  // leave every spec passing on the JS kit and read as native coverage. Fail loud
+  // instead — this is what makes a green TTP_DISPLAY_FLAGS run mean something.
+  if (flags.includes('party=native')) {
+    const impl = await page.evaluate(() => window.__net?.flow?.constructor?.name);
+    if (impl !== 'NativeRoomFlow') {
+      throw new Error(`TTP_DISPLAY_FLAGS requested party=native but the room flow is ${impl}`);
+    }
+  }
   await page.click('#newgame-btn');
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });
   await page.evaluate(() => window.__sceneReady); // evaluate awaits the returned Promise (GLB load)

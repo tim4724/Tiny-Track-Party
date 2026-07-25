@@ -63,6 +63,13 @@ struct Player {
   Value toValue() const;
 };
 
+// RoomFlow.lowestFreeSlot — the lowest free DENSE slot in [0, max), or -1 when
+// all are taken. Callers pass slot values (colour/seat indices), never peer
+// indices, so sparse transport ids can't become colour ids. `used` membership is
+// JS Set semantics (SameValueZero); non-integer or out-of-range entries simply
+// never match a probed slot. Static on the JS class, free function here.
+int lowest_free_slot(const std::vector<double>& used, int max);
+
 class RoomFlow {
  public:
   enum class State { LOBBY, COUNTDOWN, PLAYING, RESULTS };
@@ -121,6 +128,14 @@ class RoomFlow {
   int connectedCount() const;
   Value listValue() const;           // roster sorted by joinedAt, as a Value::Arr
   bool has(const PeerId& peerIndex) const { return find(peerIndex) != nullptr; }
+
+  // Write one opaque game field onto a live record. The JS kit hands out MUTABLE
+  // player records and the game writes fields straight onto them (`flow.get(p)
+  // .ready = true`) — this is that write, for hosts that can't share the object.
+  // Emits nothing, exactly like the property assignment it replaces. Kit-owned
+  // keys (peerIndex/joinedAt/connected) are refused, as they are on addPlayer.
+  // Returns false for an unknown peer or a kit key.
+  bool setField(const PeerId& peerIndex, const std::string& key, Value v);
   bool isDisconnected(const PeerId& peerIndex) const { return discHas(peerIndex); }
   const Player* get(const PeerId& peerIndex) const { return find(peerIndex); }
 

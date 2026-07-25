@@ -114,6 +114,24 @@ if (_qSimNative) {
     .then(async (m) => { await m.init(); _nativeSim = m; })
     .catch((e) => console.warn('[sim=native] load failed; racing on the JS sim:', e));
 }
+// ?party=native — PORT: run the ROOM state machine (roster identity/join order,
+// presence, host election, liveness) on the native C++ party layer through
+// NativeRoomFlow instead of partyplug/RoomFlow.js. Transport stays JS: the
+// WebSocket and RTCPeerConnection are the browser's, and this only moves the
+// DECISIONS. Unlike ?sim=native the module cannot load lazily — DisplayNet builds
+// its RoomFlow in the constructor — so this awaits at boot (top-level await, only
+// when the flag is set) and falls back loudly to the JS kit if it fails.
+const _qPartyNative = _trackParams.get('party') === 'native';
+let _nativeParty = null; // module namespace once init() resolves
+if (_qPartyNative) {
+  try {
+    const m = await import('./NativeRoomFlow.js');
+    await m.init();
+    _nativeParty = m;
+  } catch (e) {
+    console.warn('[party=native] load failed; running the JS room flow:', e);
+  }
+}
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
 // catalogue and built like any track — but only the ONE requested id, and only in a
 // ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
@@ -498,6 +516,9 @@ scene.onFrame = (dt) => {
 const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
+  // ?party=native: the room state machine runs on the C++ party layer. Absent,
+  // DisplayNet uses the JS kit's RoomFlow exactly as before.
+  ...(_nativeParty ? { RoomFlowImpl: _nativeParty.NativeRoomFlow } : {}),
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
