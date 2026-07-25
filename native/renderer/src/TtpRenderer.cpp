@@ -13,6 +13,8 @@
 #include <filament/Renderer.h>
 #include <filament/Scene.h>
 #include <filament/Skybox.h>
+#include <filament/Texture.h>
+#include <filament/TextureSampler.h>
 #include <filament/SwapChain.h>
 #include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
@@ -37,6 +39,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <string>
 
 using namespace filament;
@@ -55,7 +58,7 @@ namespace {
 //   u32 boxCount, f32 boxes[2·boxCount] (s, lat),
 //   u32 padCount, per pad { u32 kind (0 disc, 1 strip), f32 s, lat, p0, p1 },
 //   then per sample 11×f32: pos.xyz, lateral.xyz, up.xyz, width, s.
-constexpr uint32_t TRACK_BIN_VERSION = 14;
+constexpr uint32_t TRACK_BIN_VERSION = 15;
 constexpr uint32_t SAMPLE_F32 = 11;
 
 // Lawn base — makeLawnTexture's flat ground colour (#6aa84f); the stripe/grain
@@ -175,7 +178,7 @@ struct TtpRenderer::TrackBin {
     std::vector<TreeEntry> scTrees;
     bool scHasBush = false;
     struct { uint32_t model; float s0, s1, sink; } scBush{};
-    uint32_t scRocks[3] = { 0xaaaaaa, 0xb4a898, 0x9aa2a4 };
+    std::vector<uint32_t> scRocks{ 0xaaaaaa, 0xb4a898, 0x9aa2a4 };
     float scRockS[2] = { 0.3f, 0.45f };
     uint32_t scModelCount = 0;
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
@@ -544,8 +547,11 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
         out.scBush = { rdU32(off), rdF32(off + 4), rdF32(off + 8), rdF32(off + 12) };
         off += 16;
     }
-    if (bin.size() < off + 24) return false;
-    for (uint32_t i = 0; i < 3; i++, off += 4) out.scRocks[i] = rdU32(off);
+    if (bin.size() < off + 4) return false;
+    const uint32_t rockCount = rdU32(off); off += 4;
+    if (bin.size() < off + rockCount * 4 + 12) return false;
+    out.scRocks.resize(rockCount);
+    for (uint32_t i = 0; i < rockCount; i++, off += 4) out.scRocks[i] = rdU32(off);
     out.scRockS[0] = rdF32(off); off += 4;
     out.scRockS[1] = rdF32(off); off += 4;
     out.scModelCount = rdU32(off); off += 4;
@@ -874,6 +880,126 @@ float3 TtpRenderer::groundColorAt(float x) const {
     return mGroundBands.back().col;
 }
 
+// The biome's floor canvas, ported from textures.js pixel for pixel: N vertical
+// bands of a per-kind luminance/hue wobble over a base colour, then the kind's
+// speckle pass (2×2 stamps alpha-blended over the bands). The wood adds the
+// pieces the band approximation could never carry — a dark seam stroked between
+// planks, staggered END joints across each board, and knots.
+//
+// 256², sRGB, repeat-wrapped, mipmapped: three tiles the same 256² canvas at
+// 33.3 world-u, so the texel density and tiling cadence match.
+Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
+    constexpr int S = 256;
+    std::vector<uint8_t> px((size_t) S * S * 4, 255);
+    const auto at = [&](int x, int y) { return &px[((size_t) y * S + x) * 4]; };
+    // Canvas fillRect with a solid colour.
+    const auto band = [&](int x0, int w, const int rgb[3]) {
+        for (int x = x0; x < std::min(S, x0 + w); x++) {
+            if (x < 0) continue;
+            for (int y = 0; y < S; y++) {
+                uint8_t* p = at(x, y);
+                p[0] = (uint8_t) rgb[0]; p[1] = (uint8_t) rgb[1]; p[2] = (uint8_t) rgb[2];
+            }
+        }
+    };
+    // Canvas source-over of a solid colour at `a`, over a w×h rect.
+    const auto blend = [&](int x0, int y0, int w, int h, int r, int g, int b, float a) {
+        for (int y = y0; y < y0 + h; y++)
+            for (int x = x0; x < x0 + w; x++) {
+                uint8_t* p = at(((x % S) + S) % S, ((y % S) + S) % S);
+                p[0] = (uint8_t) std::lround(p[0] * (1 - a) + r * a);
+                p[1] = (uint8_t) std::lround(p[1] * (1 - a) + g * a);
+                p[2] = (uint8_t) std::lround(p[2] * (1 - a) + b * a);
+            }
+    };
+    // The shared band sweep: `n` columns of base × per-index factors.
+    const auto sweep = [&](int n, const int base[3], const std::function<void(int, float*)>& fac) {
+        for (int i = 0; i < n; i++) {
+            float f[3];
+            fac(i, f);
+            const int rgb[3] = { (int) std::lround(base[0] * f[0]),
+                                 (int) std::lround(base[1] * f[1]),
+                                 (int) std::lround(base[2] * f[2]) };
+            band((int) std::floor((float) i * S / n), (int) std::ceil((float) S / n), rgb);
+        }
+    };
+    // Speckle: `n` 2×2 stamps on the shared (i*53, i*97) lattice.
+    const auto speckle = [&](int n, int r, int g, int b, float a0, float step) {
+        for (int i = 0; i < n; i++) {
+            blend((i * 53) % S, (i * 97) % S, 2, 2, r, g, b, a0 + (i % 3) * step);
+        }
+    };
+    switch (kind) {
+        case 1: { // sand — gentle wind ripples, then darker grit
+            const int base[3] = { 222, 200, 150 };
+            sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.03f : 0.975f; });
+            speckle(140, 150, 120, 80, 0.05f, 0.03f);
+            break;
+        }
+        case 2: { // redrock — sediment strata (a hue wobble), then iron flecks
+            const int base[3] = { 211, 150, 113 };
+            sweep(8, base, [](int i, float* f) {
+                const bool rust = i % 2;
+                f[0] = rust ? 1.008f : 0.997f;
+                f[1] = rust ? 0.972f : 1.024f;
+                f[2] = rust ? 0.958f : 1.036f;
+            });
+            speckle(120, 120, 62, 38, 0.06f, 0.03f);
+            break;
+        }
+        case 3: { // snow — whisper-contrast drift banding, then ice flecks
+            const int base[3] = { 237, 242, 247 };
+            sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.012f : 0.988f; });
+            speckle(90, 168, 184, 204, 0.05f, 0.025f);
+            break;
+        }
+        case 4: { // wood — planks: per-board tone, seams, end joints, knots
+            constexpr int BOARDS = 8;
+            const int base[3] = { 201, 156, 104 };
+            const float bw = (float) S / BOARDS;
+            sweep(BOARDS, base, [](int i, float* f) {
+                f[0] = f[1] = f[2] = 0.96f + ((i * 37) % 5) * 0.02f;
+            });
+            // Board seams: a 2px dark line stroked between planks…
+            for (int i = 1; i < BOARDS; i++) {
+                blend((int) std::floor(i * bw) - 1, 0, 2, S, 96, 66, 40, 0.55f);
+            }
+            // …and staggered end joints, offset per board so they never align.
+            for (int i = 0; i < BOARDS; i++) {
+                blend((int) std::floor(i * bw), (i * 149 + 40) % S,
+                        (int) std::ceil(bw), 2, 96, 66, 40, 0.55f);
+            }
+            speckle(60, 110, 74, 44, 0.08f, 0.04f);
+            break;
+        }
+        default: { // lawn — mowing stripes
+            const int base[3] = { 106, 168, 79 };
+            sweep(8, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.04f : 0.965f; });
+            break;
+        }
+    }
+    Texture* tex = Texture::Builder()
+            .width(S).height(S).levels(9) // 256² down to 1×1
+            .format(Texture::InternalFormat::SRGB8_A8)
+            .sampler(Texture::Sampler::SAMPLER_2D)
+            // GEN_MIPMAPPABLE is not in DEFAULT, and generateMipmaps() asserts
+            // on it. Mips are not optional here: this is a 33-u tile stretched
+            // to the horizon, so the minified stripes alias into a shimmer.
+            .usage(Texture::Usage::DEFAULT | Texture::Usage::GEN_MIPMAPPABLE)
+            .build(*mEngine);
+    if (!tex) return nullptr;
+    // The upload is asynchronous, so the pixels have to outlive this call.
+    // Hand them to the heap FIRST and read data() off that — passing px.data()
+    // in the same argument list as std::move(px) would be a race on unspecified
+    // evaluation order (the windmill bug, again).
+    auto* owned = new std::vector<uint8_t>(std::move(px));
+    tex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+            owned->data(), owned->size(), Texture::Format::RGBA, Texture::Type::UBYTE,
+            [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, owned));
+    tex->generateMipmaps(*mEngine);
+    return tex;
+}
+
 // ── Ground-conform probe ─────────────────────────────────────────────────────
 // SceneRenderer keeps per-tile collision clones OUT of the scene graph and
 // raycasts them straight down under each axle (_roadHitY). Our ribbon is one
@@ -1142,7 +1268,12 @@ void TtpRenderer::accumulateNormals(Mesh& m) {
 // the stream but not applied — instances share materials); boulders are a
 // merged vertex-tinted icosahedron mesh.
 void TtpRenderer::buildScenery(const TrackBin& tb) {
-    if (tb.scTrees.empty() || tb.scDensity <= 0) return;
+    // NOT gated on having trees. The playroom is an indoor floor with none at
+    // all (mix.tree = 0, so every roll lands on the "boulder" channel, which is
+    // what its scattered toy bits ARE) — bailing here dropped that whole pass
+    // and left the floor bare. The JS bails inside placeTree instead, and only
+    // for a roll that actually wants a tree.
+    if (tb.scDensity <= 0) return;
     uint32_t seed = tb.scSeed1;
     const auto rnd = [&]() {
         seed = seed * 1664525u + 1013904223u;
@@ -1167,6 +1298,9 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         uint32_t model = 0;
         float s = forceS;
         if (forceModel < 0) {
+            // No tree palette (the playroom): bail BEFORE drawing, exactly where
+            // the JS does, so the shared rand stream stays in step.
+            if (tb.scTrees.empty()) return;
             const double r = rnd();
             double acc = 0;
             model = tb.scTrees.back().model;
@@ -1214,7 +1348,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             } else {
                 Boulder b;
                 b.rr = tb.scRockS[0] + (float) rnd() * tb.scRockS[1];
-                b.grey = tb.scRocks[(size_t) std::floor(rnd() * 3)];
+                b.grey = tb.scRocks[(size_t) std::floor(rnd() * tb.scRocks.size())];
                 b.shade = 0.92f + (float) rnd() * 0.16f;
                 b.sy = 0.55f + (float) rnd() * 0.3f;
                 b.yaw = (float) rnd() * 2.0f * (float) M_PI;
@@ -1890,7 +2024,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     }
 
     if (has(3)) { // hoodoo — a balanced-rock family trackside (canyon)
-        const uint32_t* rocks = tb.scRocks;
+        const uint32_t* rocks = tb.scRocks.data();
         const auto hoodoo = [&](float hx, float hz, float T) {
             const float radii[4] = { 0.20f * T, 0.15f * T, 0.115f * T, 0.095f * T };
             const float hts[3] = { 0.30f * T, 0.24f * T, 0.19f * T };
@@ -2760,29 +2894,35 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                 }
                 break;
         }
+        // The bands stay — the berms sample them by world x (groundColorAt),
+        // which is how the JS shares one texture between floor and kerb. The
+        // FLOOR itself is now the real texture: one quad, UVs in tiles, so the
+        // wood's plank seams and end joints survive (bands can only vary in x).
         const float G = 400.0f, TILE = kGroundTile;
-        // Start on a tile boundary at or before -G so the cadence is the JS's.
-        const int firstTile = (int) std::floor(-G / TILE);
-        const int lastTile = (int) std::ceil(G / TILE);
-        for (int t = firstTile; t < lastTile; t++) {
-            float cursor = t * TILE;
-            for (const GroundBand& b : bands) {
-                const float x0 = cursor, x1 = cursor + b.w * TILE;
-                cursor = x1;
-                if (x1 <= -G || x0 >= G) continue;
-                const uint32_t c = packLinear(b.col, 1.0f);
-                const uint32_t base = (uint32_t) mGround.verts.size();
-                const float cx0 = std::max(-G, x0), cx1 = std::min(G, x1);
-                mGround.verts.push_back({ cx0, groundY, -G, c });
-                mGround.verts.push_back({ cx1, groundY, -G, c });
-                mGround.verts.push_back({ cx0, groundY, G, c });
-                mGround.verts.push_back({ cx1, groundY, G, c });
-                mGround.idx.insert(mGround.idx.end(),
-                        { base, base + 2, base + 1, base + 1, base + 2, base + 3 });
-            }
-        }
+        const uint32_t white = packLinear(float3{ 1, 1, 1 }, 1.0f);
+        mGround.verts.push_back({ -G, groundY, -G, white });
+        mGround.verts.push_back({ G, groundY, -G, white });
+        mGround.verts.push_back({ -G, groundY, G, white });
+        mGround.verts.push_back({ G, groundY, G, white });
+        mGround.uvs = { { -G / TILE, -G / TILE }, { G / TILE, -G / TILE },
+                        { -G / TILE, G / TILE }, { G / TILE, G / TILE } };
+        mGround.idx = { 0, 2, 1, 1, 2, 3 };
         mGround.normals.assign(mGround.verts.size(), float3{ 0, 1, 0 });
-        if (!buildMesh(mGround)) return false;
+        if (mGroundMaterial) {
+            mGroundTex = buildGroundTexture(tb.groundKind);
+            MaterialInstance* gmi = sceneInstance(mGroundMaterial);
+            if (mGroundTex) {
+                TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+                        TextureSampler::MagFilter::LINEAR);
+                smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+                smp.setWrapModeT(TextureSampler::WrapMode::REPEAT);
+                smp.setAnisotropy(4.0f); // three sets the same on every ground texture
+                gmi->setParameter("albedo", mGroundTex, smp);
+            }
+            if (!buildMesh(mGround, true, gmi)) return false;
+        } else if (!buildMesh(mGround)) {
+            return false;
+        }
     }
 
     // Sky dome (environment.js paintSky): vertex gradient zenith→horizon→below,
@@ -4789,6 +4929,12 @@ bool TtpRenderer::buildScene() {
                 .package(vlit->second.data(), vlit->second.size())
                 .build(*mEngine);
     }
+    const auto vground = mAssets.find("vground.filamat");
+    if (!mGroundMaterial && vground != mAssets.end()) {
+        mGroundMaterial = Material::Builder()
+                .package(vground->second.data(), vground->second.size())
+                .build(*mEngine);
+    }
     const auto vpoint = mAssets.find("vpoint.filamat");
     if (!mPointMaterial && vpoint != mAssets.end()) {
         mPointMaterial = Material::Builder()
@@ -6131,6 +6277,7 @@ void TtpRenderer::releaseScene() {
     mSmoke.clear();
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
+    if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     mAmbBase.clear();
     mAmbSpeed.clear();
     mWheelTrails.clear();
@@ -6159,6 +6306,7 @@ TtpRenderer::~TtpRenderer() {
     releaseScene();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
+    if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);

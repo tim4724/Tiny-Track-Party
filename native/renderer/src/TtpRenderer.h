@@ -34,6 +34,7 @@ class View;
 class Scene;
 class Camera;
 class Skybox;
+class Texture;
 class Material;
 class VertexBuffer;
 class IndexBuffer;
@@ -134,6 +135,9 @@ private:
     std::vector<GroundBand> mGroundBands;
     static constexpr float kGroundTile = 600.0f / 18.0f;
     filament::math::float3 groundColorAt(float x) const;
+    // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
+    // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
+    filament::Texture* buildGroundTexture(uint32_t kind);
     Mesh mSky;   // vertex-gradient dome at SKY_R (past the fog cutoff)
     Mesh mHills; // horizon dome ring
     // Per-feature anchors {x, z, top} in AUTHORED coords — the offshore
@@ -218,6 +222,10 @@ private:
     // billboard + the radial falloff both live in the shader — see vpoint.mat.
     filament::Material* mPointMaterial = nullptr;
     filament::MaterialInstance* mPollenMat = nullptr; // owns the sprite's halfSize
+    // Textured ground (vground): the biome's floor canvas, generated as pixels
+    // to match the JS canvas texture rather than approximated with bands.
+    filament::Material* mGroundMaterial = nullptr;
+    filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
     std::vector<Mesh> mCarBlobs;
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1

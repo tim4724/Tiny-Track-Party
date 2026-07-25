@@ -88,8 +88,13 @@ export function buildTrackBin(td) {
                                 ...(sc.bush ? [sc.bush.model] : [])])];
   const scTrees = (sc.trees || []).map((e) => [scModels.indexOf(e.model), e.w, e.s[0], e.s[1]]);
   const scBush = sc.bush ? [scModels.indexOf(sc.bush.model), sc.bush.s[0], sc.bush.s[1], sc.bush.sink || 0] : null;
-  const scRocks = (sc.rocks || [0xaaaaaa, 0xb4a898, 0x9aa2a4]).slice(0, 3);
-  const scBytes = 4 * 2 + 4 * 3 + 4 + scTrees.length * 16 + 4 + (scBush ? 16 : 0) + 3 * 4 + 2 * 4 + 4;
+  // Every authored rock colour, not a fixed three: the playroom's toy-bit
+  // palette has four, and truncating dropped the green one entirely (the
+  // scatter picks by index over the FULL list, so a short list also skews
+  // every other colour's share).
+  const scRocks = sc.rocks || [0xaaaaaa, 0xb4a898, 0x9aa2a4];
+  const scBytes = 4 * 2 + 4 * 3 + 4 + scTrees.length * 16 + 4 + (scBush ? 16 : 0)
+      + 4 + scRocks.length * 4 + 2 * 4 + 4;
   // Landmark kinds (fixed enum shared with the C++ port) + their stream seed.
   // Enum shared with the C++ port. The C++ dispatches in buildLandmarks' SOURCE
   // order (not id order) — several kinds share one rand stream, so the draw
@@ -217,7 +222,7 @@ export function buildTrackBin(td) {
   let o = 0;
   const u32 = (v) => { dv.setUint32(o, v, true); o += 4; };
   const f32 = (v) => { dv.setFloat32(o, v, true); o += 4; };
-  u32(14);                                        // TRACK_BIN_VERSION
+  u32(15);                                        // TRACK_BIN_VERSION
   u32(ss.length);
   f32(td.track.roadWidth);
   f32(td.track.groundY ?? 0);
@@ -261,6 +266,7 @@ export function buildTrackBin(td) {
   for (const [m, w, s0, s1] of scTrees) { u32(m); f32(w); f32(s0); f32(s1); }
   u32(scBush ? 1 : 0);
   if (scBush) { u32(scBush[0]); f32(scBush[1]); f32(scBush[2]); f32(scBush[3]); }
+  u32(scRocks.length);
   for (const r of scRocks) u32(num(r, 0xaaaaaa));
   f32((sc.rockS || [0.3, 0.45])[0]);
   f32((sc.rockS || [0.3, 0.45])[1]);

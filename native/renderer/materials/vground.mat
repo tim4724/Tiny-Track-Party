@@ -1,0 +1,36 @@
+// Textured matte ground — the biome's floor canvas.
+//
+// The JS ground is a plane wearing a tiled 256² canvas texture (lawn mowing
+// stripes, sand grit, red-rock strata, snow drift, wood planks) on a Lambert
+// material with a white tint: the texture carries ALL of the colour. The port
+// approximated it with vertical vertex-colour bands, which is right for a
+// stripe pattern and wrong for anything with structure in both axes — the
+// playroom's wood floor lost its plank seams, end joints and knots and read as
+// flat diagonal banding.
+//
+// So: same texture, generated pixel-for-pixel in C++ and sampled here. Lit,
+// fully rough and non-metallic, matching vlit (the cheap-matte family).
+// flipUV is off so the C++ UVs (world XZ / tile) map straight through.
+material {
+    name : TtpVground,
+    requires : [
+        uv0
+    ],
+    shadingModel : lit,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : albedo }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = texture(materialParams_albedo, getUV0());
+        material.roughness = 1.0;
+        material.metallic = 0.0;
+        material.reflectance = 0.0;
+    }
+}
