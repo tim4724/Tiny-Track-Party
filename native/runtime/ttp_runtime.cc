@@ -21,6 +21,7 @@
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
+#include "ttp/race_track.h"
 #include "ttp/json_parse.h"
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
@@ -156,32 +157,16 @@ static RuntimeSession* get(int h) {
   return it == g_sessions.end() ? nullptr : it->second.get();
 }
 
+// Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
+// and the probes cannot drift apart. The session owns the centerline the
+// GameTrack points at, so the built pair is moved onto it wholesale.
 static bool buildTrack(RuntimeSession& rs, const std::string& trackId, int laps, uint32_t seed) {
-  const TrackDef* def = findTrackDef(trackId);
-  if (!def) return false;
-  RaceTrack rt = build_race_track(*def, laps, seed);
-  std::vector<Sample> samples;
-  samples.reserve(rt.samples.size());
-  for (const OutSample& s : rt.samples) {
-    Sample cs;
-    cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
-    cs.width = s.width; cs.s = s.s;
-    samples.push_back(cs);
-  }
-  rs.centerline = std::make_unique<Centerline>(std::move(samples), rt.length);
-  GameTrack& g = rs.track;
-  g.centerline = rs.centerline.get();
-  g.length = rt.length;
-  g.totalLaps = laps;
-  g.roadWidth = rt.roadWidth;
-  g.seed = seed;
-  for (const Hazard& h : rt.hazards) g.hazards.push_back(Zone{h.s, h.lat, h.radius});
-  for (const Pad& p : rt.pads)
-    g.pads.push_back(PadRt{p.s, p.lat, p.strip, p.radius, p.halfLen, p.halfWidth});
-  for (const Box& b : rt.boxes) g.boxes.push_back(BoxRt{b.s, b.lat, b.radius, 0, 0});
-  for (const ttp::Pole& p : rt.poles) g.poles.push_back(PoleRt{p.s, p.lat, p.radius});
-  for (const Banana& b : rt.bananas)
-    g.bananas.push_back(BananaRt{0, b.s, b.lat, Id::None(), 0, true, 0, false});
+  BuiltRaceTrack bt;
+  std::string err;
+  if (!build_race_track_by_id(trackId, laps, seed, bt, err)) return false;
+  rs.centerline = std::move(bt.centerline);
+  rs.track = std::move(bt.game);
+  rs.track.centerline = rs.centerline.get();   // re-point after the move
   return true;
 }
 

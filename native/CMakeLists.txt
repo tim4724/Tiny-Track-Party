@@ -184,6 +184,15 @@ foreach(fx
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 endforeach()
 
+
+# ---- Balance probes: the car/track tuning instruments -----------------------
+# The C++ twin of scripts/probe-{laptime,car-matrix,packed-races}.js. Tuning
+# tools, not conformance gates (no ctest entry — they PRINT numbers a human
+# reads), and the last load-bearing reason the JS engine had to stay runnable in
+# Node. Links libttp_party only for ttp::protocol's CAR_STATS/CAR_NAMES.
+add_executable(probe_cli probe/probe_cli.cc)
+target_link_libraries(probe_cli PRIVATE libttp_sim libttp_party ttp_strict_fp)
+
 # ---- libttp-party: the room-semantics + wire-framing port -------------------
 # The C++ twin of the partyplug transport layer: RoomFlow.js (sans-IO room state
 # machine — roster identity/join order, presence, host election, liveness
