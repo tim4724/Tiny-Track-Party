@@ -49,15 +49,33 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `PartyFastlane.js`, which SURVIVE: the native fastlane SUBCLASSES the kit class
   to inherit its WebRTC handshake, and the controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (24 tests on linux/macOS/wasm/tvOS). They are
-  permanent cross-implementation evidence recorded against the JS engine while it
-  existed — never re-record them from C++, which would only prove C++ matches
-  itself. New traces come from `native/build/replay_cli --record <header> --out=f`
-  (the `record_*` ctests hold it byte-identical to the committed fixtures).
-  `scripts/gen-*-corpus.mjs` are the oracle generators; `gen-roomflow-corpus.mjs`
-  is FROZEN (its JS twin is gone) and documents the room contract as 36 scenarios.
-- Balance/tuning: `npm run probe:cars` / `probe:laptime` build and run
-  `native/build/probe_cli` (modes laptime|matrix|packed). The old JS probes drove
+  replayed by `native/` ctest (26 tests, the SAME 26 on every leg —
+  linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
+  drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
+  `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
+  They are permanent cross-implementation evidence recorded against the JS engine
+  while it existed — never re-record them from C++, which would only prove C++
+  matches itself. New traces come from `native/build/replay_cli --record <header>
+  --out=f` (the `record_*` ctests hold it byte-identical to the committed
+  fixtures). `scripts/gen-*-corpus.mjs` are the oracle generators;
+  `gen-roomflow-corpus.mjs` is FROZEN (its JS twin is gone) and documents the room
+  contract as 36 scenarios.
+- Traces are ONE RACE PER PROCESS, so they cannot see state that leaks from one
+  race into the next (a racing-line cache keyed by a recycled `Centerline*` made
+  bots drive the previous track's line — invisible to all 8 fixtures). Two gates
+  cover that blind spot: `race_isolation` forces the address collision with
+  placement new, and `replay_sequence` replays every trace in one process. When
+  adding cross-race state, own it per `Game`.
+- `public/display/engine/native/ttp_runtime.{mjs,wasm}` are CHECKED IN and are
+  what the browser actually runs. After touching `native/`, run
+  `native/scripts/build-runtime-web.sh` and commit the artifacts —
+  `tests/native-artifact.test.js` compares BUILD_STAMP.json's source hash and
+  fails when they drift (comment-only edits under `native/` count). The wasm
+  exports come from `TTP_ABI` (EMSCRIPTEN_KEEPALIVE) on each declaration in
+  `ttp_runtime.h`/`ttp_party.h`; there is no export list to maintain.
+- Balance/tuning: `npm run probe:cars` / `probe:laptime` / `probe:difficulty` build
+  and run `native/build/probe_cli` (modes laptime|matrix|packed;
+  `laptime --json` feeds `scripts/probe-difficulty.mjs`, the per-track report card). The old JS probes drove
   the AI with no game context and unseeded items, so their numbers were wrong —
   do not compare against pre-2026-07-25 readings.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).
