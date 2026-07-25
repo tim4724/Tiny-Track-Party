@@ -31,6 +31,21 @@
 #ifndef TTP_PARTY_H
 #define TTP_PARTY_H
 
+
+// ---- ABI export marking ------------------------------------------------------
+// Every entry point below is tagged TTP_ABI. Under emscripten that is
+// EMSCRIPTEN_KEEPALIVE, which exports the symbol from the wasm module; the
+// declaration IS the export list, so there is no second list to forget. (It used
+// to be ~100 names on one -sEXPORTED_FUNCTIONS line in native/CMakeLists.txt,
+// where a missed name failed only in the browser, at the cwrap call.) On the
+// native/tvOS/Android legs it expands to nothing.
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#define TTP_ABI EMSCRIPTEN_KEEPALIVE
+#else
+#define TTP_ABI
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,61 +58,61 @@ extern "C" {
 //                   "graceMs": N,
 //                   "useEnabledProvider": bool } }
 // nullptr / "null" / "{}" gives the defaults (no master provider, no liveness).
-int ttp_room_create(const char* configJson);
-void ttp_room_dispose(int h);
-void ttp_room_reset(int h);
+TTP_ABI int ttp_room_create(const char* configJson);
+TTP_ABI void ttp_room_dispose(int h);
+TTP_ABI void ttp_room_reset(int h);
 
 // ---- roster -----------------------------------------------------------------
 
 // addPlayer: returns the resulting player record as canonical JSON (the kit-owned
 // keys peerIndex/joinedAt/connected plus the caller's fields), or "null".
-const char* ttp_room_add_player(int h, const char* peerIdJson, const char* fieldsJsonOrNull);
-void ttp_room_remove_player(int h, const char* peerIdJson);
-int ttp_room_rekey(int h, const char* oldIdJson, const char* newIdJson);  // 1 on success
+TTP_ABI const char* ttp_room_add_player(int h, const char* peerIdJson, const char* fieldsJsonOrNull);
+TTP_ABI void ttp_room_remove_player(int h, const char* peerIdJson);
+TTP_ABI int ttp_room_rekey(int h, const char* oldIdJson, const char* newIdJson);  // 1 on success
 // Write one opaque game field onto a live record — the ABI equivalent of the JS
 // kit's mutable-record write (`flow.get(p).ready = true`). Emits nothing, like
 // the assignment it replaces; kit-owned keys are refused. 1 on success.
-int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const char* valueJson);
-void ttp_room_mark_disconnected(int h, const char* peerIdJson);
-void ttp_room_mark_reconnected(int h, const char* peerIdJson);
+TTP_ABI int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const char* valueJson);
+TTP_ABI void ttp_room_mark_disconnected(int h, const char* peerIdJson);
+TTP_ABI void ttp_room_mark_reconnected(int h, const char* peerIdJson);
 // clearDisconnected(nowMs). hasNow=0 means the JS call with no argument.
-void ttp_room_clear_disconnected(int h, int hasNow, double nowMs);
+TTP_ABI void ttp_room_clear_disconnected(int h, int hasNow, double nowMs);
 
 // ---- lifecycle / state ------------------------------------------------------
 
-int ttp_room_transition_to(int h, const char* stateName);  // 1 if accepted
-const char* ttp_room_state(int h);                         // "lobby"|"countdown"|"playing"|"results"
+TTP_ABI int ttp_room_transition_to(int h, const char* stateName);  // 1 if accepted
+TTP_ABI const char* ttp_room_state(int h);                         // "lobby"|"countdown"|"playing"|"results"
 // setActiveOrder(peerIndices): peerIdsJson is a JSON array of peer-id scalars.
-void ttp_room_set_active_order(int h, const char* peerIdsJson);
+TTP_ABI void ttp_room_set_active_order(int h, const char* peerIdsJson);
 
 // ---- liveness (pure predicates; never mutate, never emit) -------------------
 
-void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs);
-int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs);
-const char* ttp_room_expired_peers_json(int h, double nowMs);  // JSON array of peer ids
-int ttp_room_all_participants_disconnected(int h);
-int ttp_room_has_late_joiners(int h);
-int ttp_room_grace_tick(int h, double nowMs);
+TTP_ABI void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs);
+TTP_ABI int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs);
+TTP_ABI const char* ttp_room_expired_peers_json(int h, double nowMs);  // JSON array of peer ids
+TTP_ABI int ttp_room_all_participants_disconnected(int h);
+TTP_ABI int ttp_room_has_late_joiners(int h);
+TTP_ABI int ttp_room_grace_tick(int h, double nowMs);
 
 // ---- provider setters -------------------------------------------------------
 
-void ttp_room_set_master(int h, const char* peerIdJson);
-void ttp_room_set_liveness_enabled(int h, int enabled);
+TTP_ABI void ttp_room_set_master(int h, const char* peerIdJson);
+TTP_ABI void ttp_room_set_liveness_enabled(int h, int enabled);
 
 // ---- read accessors ---------------------------------------------------------
 
-const char* ttp_room_host_json(int h);   // effective host (getter fallback chain)
-int ttp_room_is_host(int h, const char* peerIdJson);
-int ttp_room_size(int h);
-int ttp_room_connected_count(int h);
-const char* ttp_room_list_json(int h);   // roster sorted by joinedAt
-int ttp_room_has(int h, const char* peerIdJson);
-int ttp_room_is_disconnected(int h, const char* peerIdJson);
-const char* ttp_room_get_json(int h, const char* peerIdJson);  // one record, or "null"
+TTP_ABI const char* ttp_room_host_json(int h);   // effective host (getter fallback chain)
+TTP_ABI int ttp_room_is_host(int h, const char* peerIdJson);
+TTP_ABI int ttp_room_size(int h);
+TTP_ABI int ttp_room_connected_count(int h);
+TTP_ABI const char* ttp_room_list_json(int h);   // roster sorted by joinedAt
+TTP_ABI int ttp_room_has(int h, const char* peerIdJson);
+TTP_ABI int ttp_room_is_disconnected(int h, const char* peerIdJson);
+TTP_ABI const char* ttp_room_get_json(int h, const char* peerIdJson);  // one record, or "null"
 
 // Drain the emitted-event queue as a JSON array [{"type":...,"detail":{...}}, ...]
 // in emission order, then empty it.
-const char* ttp_room_events_json(int h);
+TTP_ABI const char* ttp_room_events_json(int h);
 
 // =============================================================================
 // RELAY FRAMING (ttp::framing — the pure surface of PartyConnection.js)
@@ -107,30 +122,30 @@ const char* ttp_room_events_json(int h);
 // answer "what bytes?" and "what does this mean?".
 
 // Outbound encoders -> the JSON text to hand to ws.send() verbatim.
-const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull);
-const char* ttp_framing_encode_join(const char* clientId, const char* room);
-const char* ttp_framing_encode_send_to(const char* toJson, const char* dataJson);
-const char* ttp_framing_encode_broadcast(const char* dataJson);
-const char* ttp_framing_encode_set_state(const char* dataJson);
-const char* ttp_framing_encode_close_room(void);
+TTP_ABI const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull);
+TTP_ABI const char* ttp_framing_encode_join(const char* clientId, const char* room);
+TTP_ABI const char* ttp_framing_encode_send_to(const char* toJson, const char* dataJson);
+TTP_ABI const char* ttp_framing_encode_broadcast(const char* dataJson);
+TTP_ABI const char* ttp_framing_encode_set_state(const char* dataJson);
+TTP_ABI const char* ttp_framing_encode_close_room(void);
 
 // Inbound routing. Takes the RAW socket text (the host need not parse it) and
 // returns {"route":"message"|"state"|"protocol", plus "from"/"data"/"type"/"msg"}.
 // route "none" means the text was not a JSON object (the host drops it).
-const char* ttp_framing_classify(const char* frameText);
+TTP_ABI const char* ttp_framing_classify(const char* frameText);
 
 // Close-code decision -> {"stopReconnect":bool,"closeAttempt":N,"closeMax":N,
 // "meta":{...}|null,"willReconnect":bool}. hasCode=0 models a close event with
 // no code at all.
-const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBefore,
+TTP_ABI const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBefore,
                                       double maxAttempts, int shouldReconnectBefore);
 
 // Reconnect backoff for attempt N, in ms.
-double ttp_framing_backoff_ms(double attempt);
+TTP_ABI double ttp_framing_backoff_ms(double attempt);
 
 // base + '/' + enc(room) + '?instance=' + enc(instance); base unchanged when
 // instance is empty (the JS early return).
-const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance);
+TTP_ABI const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance);
 
 // =============================================================================
 // FASTLANE NETCODE (ttp::fastlane::Link — one handle per peer link)
@@ -146,29 +161,29 @@ const char* ttp_framing_pin_url(const char* base, const char* room, const char* 
 //    "rtt":N|null,           // an RTT sample to report (already srtt/2)
 //    "dropped":bool}         // enqueue only: true == JS 'dropped'
 
-int ttp_link_create(void);
-void ttp_link_dispose(int h);
+TTP_ABI int ttp_link_create(void);
+TTP_ABI void ttp_link_dispose(int h);
 // Mirror the channel's readyState: a closed channel makes writes no-ops that do
 // NOT count toward stats.out (matching JS's swallowed send() throw).
-void ttp_link_set_channel_open(int h, int open);
+TTP_ABI void ttp_link_set_channel_open(int h, int open);
 
-const char* ttp_link_enqueue(int h, const char* evJson, double nowMs);
-const char* ttp_link_send_tick(int h, double nowMs);
-const char* ttp_link_idle(int h, double nowMs);
+TTP_ABI const char* ttp_link_enqueue(int h, const char* evJson, double nowMs);
+TTP_ABI const char* ttp_link_send_tick(int h, double nowMs);
+TTP_ABI const char* ttp_link_idle(int h, double nowMs);
 // packetText is the RAW channel text; non-object input is ignored.
-const char* ttp_link_inbound(int h, const char* packetText, double nowMs);
+TTP_ABI const char* ttp_link_inbound(int h, const char* packetText, double nowMs);
 
 // {"out":N,"received":N,"lastPsSeen":N} — the per-link packet counters.
-const char* ttp_link_stats_json(int h);
+TTP_ABI const char* ttp_link_stats_json(int h);
 
 // ---- statics ----------------------------------------------------------------
 
 // RoomFlow.lowestFreeSlot(used, max): lowest free dense slot in [0,max), or -1.
 // usedJson is a JSON array of slot values (never peer indices).
-int ttp_room_lowest_free_slot(const char* usedJson, int max);
+TTP_ABI int ttp_room_lowest_free_slot(const char* usedJson, int max);
 
 // {"contractVersion":N,"layer":"party"} — the adapter's sanity check.
-const char* ttp_party_version(void);
+TTP_ABI const char* ttp_party_version(void);
 
 #ifdef __cplusplus
 }

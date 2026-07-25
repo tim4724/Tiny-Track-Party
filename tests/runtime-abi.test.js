@@ -23,10 +23,14 @@ const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
 const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
 const FIXTURE = path.join(ROOT, 'tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl');
 
-const artifactsPresent = fs.existsSync(MJS) && fs.existsSync(WASM);
-const skip = artifactsPresent
-  ? false
-  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
+// The artifacts are CHECKED IN and the game is native-only, so a missing module
+// is a broken checkout, not an unbuilt optional extra. This used to skip; skipping
+// meant the one suite that exercises the SHIPPED engine could quietly not run.
+for (const f of [MJS, WASM]) {
+  if (!fs.existsSync(f)) {
+    throw new Error(`${path.relative(ROOT, f)} missing — run native/scripts/build-runtime-web.sh`);
+  }
+}
 
 // FNV-1a over UTF-8 bytes, lowercase 8-hex — identical to record-trace.mjs.
 function fnv1a(str) {
@@ -36,7 +40,7 @@ function fnv1a(str) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-test('runtime ABI replays the tidepool input fixture bit-for-bit', { skip }, async () => {
+test('runtime ABI replays the tidepool input fixture bit-for-bit', async () => {
   const factory = (await import(pathToFileURL(MJS).href)).default;
   const Module = await factory();
   const cw = (name, ret, args) => Module.cwrap(name, ret, args);
