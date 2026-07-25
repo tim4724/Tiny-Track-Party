@@ -17,10 +17,11 @@ before any bulk porting. Develop on desktop (macOS Metal), then run on:
 The scene: a representative track piece (curve, bank, crest, width change,
 loop mouth with decals across the seam), four cars (two GLBs, one monster
 morph), one of every material family, a skid ribbon, boost and additive
-FX, the frozen shadow baked once plus blob shadows, 2×2 split-screen with
-per-view billboards, and HUD including one lobby-style panel (QR, names,
-list) — driven as a scripted loop through the real interfaces, which are
-frozen against it: `ttp_runtime.h`, `FrameInput`, the fixture format.
+FX, the frozen shadow baked once plus blob shadows, and 2×2 split-screen
+with per-view billboards — driven as a scripted loop through the real
+interfaces, which are frozen against it: `ttp_runtime.h`, `FrameInput`,
+the fixture format. (No HUD: it moved to the shells' native UI, so the
+gate covers the 3D only — see architecture.md.)
 
 Measure per platform: CPU/GPU frame time (one view and four), JS→WASM
 marshal cost, memory and growth, load time, lifecycle robustness

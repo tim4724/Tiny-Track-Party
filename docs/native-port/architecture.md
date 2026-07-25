@@ -35,7 +35,7 @@ drivers. The web game keeps shipping throughout.
 |---|---|---|
 | Track math (`libttp-track`) | C++ | Canonical track data, sampling/frames, wrap rules, projection. Deterministic, purity-scanned. |
 | Sim core (`libttp-sim`) | C++ | Physics, AI, items, ranking, race lifecycle (incl. RaceSession). Deps: track + vendored math only. |
-| Renderer (`libttp-renderer`) | C++ | Filament scene build, all meshing over libttp-track, material families, FX, in-scene HUD. |
+| Renderer (`libttp-renderer`) | C++ | Filament scene build, all meshing over libttp-track, material families, FX. World-anchored overlays only; no screen-space UI. |
 | Runtime (`libttp-runtime`) | C++ | Game loop, session/GP state machine, camera state + cell layout, audio logic, UI model, protocol wiring. |
 | Protocol (`libttp-party`) | C++, sans-IO | Relay framing, room semantics/liveness, fastlane state. Sockets/RTC injected. |
 | Socket/RTC driver | per-platform | Browser APIs on web (JS, permanent); native WS + webrtc SDK on the TVs. |
@@ -72,10 +72,22 @@ viewer (the renderer dev harness).
   allowlist mapping onto them. New variant in a family = renderer work; new
   family or render pass = architecture change. The real inventory comes
   from auditing the shipping renderer, not from this list.
-- **HUD in-renderer.** Everything with the Sticker Bash look is drawn by
-  the renderer (concrete game-state structs in, no UI toolkit); shells draw
-  only OS-forced surfaces. Validated early on a lobby-class panel (QR,
-  names, lists) — the race HUD is the easy case. Fallback: platform UI.
+- **HUD in the SHELL, in platform-native UI** (reversed 2026-07-25 — the
+  original decision was in-renderer with platform UI as the fallback). The
+  split is anchored vs screen-space, not 2D vs 3D: the renderer draws what
+  lives in the world or depth-tests (rear name plates, boost aura, skids,
+  the gantry banner); everything in screen space (place card, lap pill,
+  item slot, name chip, countdown, results, lobby) is DOM/CSS on web,
+  Compose on Android TV, SwiftUI on tvOS. The Sticker Bash look IS a UI
+  toolkit problem — variable-font text shaping, rounded rects, hard offset
+  shadows, layout, transitions — and Filament is not one; the in-renderer
+  stub got as far as a 5×7 pixel font before that became obvious. The HUD
+  is chrome over the 3D view, never frame-locked to it, so compositing a
+  native layer over the GL/Metal surface costs nothing that matters. The
+  contract is per-frame HUD state per player plus the cell viewport rects,
+  which the runtime already computes. Cost accepted: three implementations
+  of the sticker look; mitigate by shipping the design tokens as DATA so
+  all three consume the same table the CSS does.
 - **Fastlane is an enhancement.** CONTROL falls back to the relay by design
   (shipping behaviour), so the TVs may launch relay-only. Phones stay on
   the JS controller forever, so a cross-language wire-compat suite (C++
@@ -89,9 +101,16 @@ viewer (the renderer dev harness).
 
 ## Known hard parts
 
-- **The custom WASM link doesn't exist.** `build.sh -p wasm` ships a
-  JS-binding bundle, not linkable libraries — our emscripten target
-  (renderer + Filament libs + canvas glue, threading decided) is new work.
+- **The custom WASM link** ~~doesn't exist~~ — RESOLVED 2026-07-24, and the
+  original claim overstated the gap: `build.sh -p wasm` builds the full static
+  lib set under emscripten with working (un-guarded) install rules; the new
+  work was only our app target, canvas glue and a `ninja install`
+  (`scripts/build-wasm.sh`, `native/web/`). Single-threaded is Filament's
+  shipped web configuration (no COOP/COEP needed). M0 baselines (spinning
+  triangle on the since-retired `/native-m0.html`, M4 Max, emscripten 6.0.4,
+  fork + `-Wno-unused-template` patch): payload 1.20 MB wasm + 61 KB glue,
+  ~137 µs/frame `ttp_submit_frame` (marshal + single-threaded render call),
+  28.5 MB wasm heap, display-limited 120 fps, destroy/recreate clean.
 - **Frozen sun shadow.** Filament has no `shadowMap.autoUpdate = false`;
   bake-once needs a custom design and must never re-render per view.
 - **No built-in Lambert** — the cheap-matte look is a custom material.

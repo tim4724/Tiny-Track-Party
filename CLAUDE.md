@@ -12,7 +12,16 @@ npm run test:e2e                  # Playwright E2E (real pages + hermetic relay 
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 npm start                         # Run the server (node server/index.js)
 npm run dev                       # Run with --watch (auto-restart)
+scripts/build-wasm.sh             # Native Filament renderer → public/native/ (needs the
+                                  # Filament fork at ~/Projects/filament + emsdk; both
+                                  # auto-built/installed on first run)
 ```
+
+Native-port judging surface: `/gallery-compare.html` runs ONE JS sim
+(`?scenario=fixture&track=gate0`, deterministic: pinned seed, awaitable
+`__fixture.step()`) and feeds it to BOTH renderers — Three.js in an iframe and
+the Filament wasm module via `FrameInput` (`native/include/ttp_runtime.h`).
+Wipe/onion/diff modes judge parity.
 
 E2E (`tests/e2e/`) drives real display + controller pages against a local
 Party-Server stub (`tests/e2e/relay-server.js`) via the server's `RELAY_URL`
