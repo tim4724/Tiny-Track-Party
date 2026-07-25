@@ -85,6 +85,10 @@ private:
         filament::VertexBuffer* vb = nullptr;
         filament::IndexBuffer* ib = nullptr;
         utils::Entity entity;
+        // Extra renderables over RANGES of the same buffers (chunked meshes —
+        // the road). One renderable spanning a whole circuit can never be
+        // frustum-culled; a chain of them culls down to what's on screen.
+        std::vector<utils::Entity> chunks;
         // CPU copies stay alive for the whole run — BufferDescriptors carry no
         // release callback, so the GPU upload may read them at any flush.
         std::vector<Vertex> verts;
@@ -407,7 +411,11 @@ private:
     filament::MaterialInstance* sceneInstance(filament::Material* m);
     bool buildMesh(Mesh& m, bool addToScene = true,
             filament::MaterialInstance* materialInstance = nullptr,
-            uint8_t priority = 4); // blend-pass order; see the Builder call
+            uint8_t priority = 4, // blend-pass order; see the Builder call
+            // Split into renderables of at most this many triangles, each with
+            // its own bounds and frustum culling ON. 0 = one renderable, no
+            // culling (the default every dynamic mesh wants).
+            uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
     bool buildTrackScene(const std::vector<uint8_t>& bin);
     bool parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out);
@@ -437,6 +445,11 @@ private:
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
     void setMeshShadows(Mesh& m, bool cast, bool receive);
+    // Frustum culling, off by default (buildMesh): a mesh whose vertices are
+    // rewritten in WORLD space every frame — the conformed decals, the skid
+    // ribbons, the billboards — outlives its build-time bounds, so only meshes
+    // that stay put (or move by transform) may opt in.
+    void setMeshCulling(Mesh& m, bool enable);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
     // Drop a flat car-local decal (boost aura, ground blob) onto the deck:
     // every template vertex is re-expressed as (arclength, lateral) about the

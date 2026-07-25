@@ -382,7 +382,7 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
 }
 
 bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
-        MaterialInstance* materialInstance, uint8_t priority) {
+        MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
     const bool lit = !m.normals.empty() && mLitMaterial != nullptr;
@@ -434,36 +434,50 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
             .build(*mEngine);
     m.ib->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
             m.idx.data(), m.idx.size() * sizeof(uint32_t), nullptr));
-    m.entity = utils::EntityManager::get().create();
-    // Real bounds. Frustum culling is off everywhere (below), so for years this
-    // was a ±1000 stand-in — harmless until the sun started casting: Filament
-    // sizes the shadow frustum from the CASTERS' bounds, and a 2 km cube of
-    // "road" stretched a 2048² map over the whole world, which quantises every
-    // shadow edge into nothing. Meshes whose verts are rewritten per frame (the
-    // conformed decals) keep whatever their template spanned; none of them cast.
-    float3 bbLo{ 1e30f }, bbHi{ -1e30f };
-    for (const Vertex& v : m.verts) {
-        bbLo = min(bbLo, float3{ v.px, v.py, v.pz });
-        bbHi = max(bbHi, float3{ v.px, v.py, v.pz });
+    // Real bounds, per renderable. These were a ±1000 stand-in for years —
+    // harmless while nothing used them, fatal once the sun started casting
+    // (Filament sizes the shadow frustum from the CASTERS' bounds, and a 2 km
+    // cube of "road" stretched a 2048² map over the whole world) and useless
+    // for culling. Meshes whose verts are rewritten in world space every frame
+    // keep whatever their template spanned, which is exactly why culling is
+    // opt-in: they must never be culled on a stale box.
+    const auto boundsOf = [&](size_t idx0, size_t idxN) {
+        float3 lo{ 1e30f }, hi{ -1e30f };
+        for (size_t k = idx0; k < idx0 + idxN; k++) {
+            const Vertex& v = m.verts[m.idx[k]];
+            lo = min(lo, float3{ v.px, v.py, v.pz });
+            hi = max(hi, float3{ v.px, v.py, v.pz });
+        }
+        return filament::Box{ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) };
+    };
+    MaterialInstance* const mi = materialInstance ? materialInstance
+            : lit ? mLitMaterial->getDefaultInstance()
+                  : mMaterial->getDefaultInstance();
+    const size_t triCount = m.idx.size() / 3;
+    // One renderable, or a chain of them over ranges of the SAME buffers. The
+    // road is the reason: a whole circuit in one draw is a whole circuit's
+    // worth of vertices every frame, in every split-screen cell, however little
+    // of it is on screen. Three chunks its ribbon for the same reason.
+    const size_t perChunk = chunkTris ? std::min<size_t>(chunkTris, triCount) : triCount;
+    for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
+        const size_t n = std::min(perChunk, triCount - t0);
+        utils::Entity e = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox(boundsOf(t0 * 3, n * 3))
+                // Blend-pass draw order (default 4). The flat road decals stack
+                // in a fixed order — skids under the ground shadow, both under
+                // the boost aura — instead of by an arbitrary depth sort.
+                .priority(priority)
+                .material(0, mi)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        m.vb, m.ib, t0 * 3, n * 3)
+                .culling(chunkTris != 0)
+                .receiveShadows(false)
+                .castShadows(false)
+                .build(*mEngine, e);
+        if (t0 == 0) m.entity = e; else m.chunks.push_back(e);
+        if (addToScene) mScene->addEntity(e);
     }
-    const float3 bbC = (bbLo + bbHi) * 0.5f;
-    const float3 bbE = max((bbHi - bbLo) * 0.5f, float3{ 1e-3f });
-    RenderableManager::Builder(1)
-            .boundingBox({ bbC, bbE })
-            // Blend-pass draw order (default 4). The flat road decals stack in
-            // a fixed order — skids under the ground shadow, both under the
-            // boost aura — instead of by an arbitrary depth sort.
-            .priority(priority)
-            .material(0, materialInstance ? materialInstance
-                    : lit ? mLitMaterial->getDefaultInstance()
-                          : mMaterial->getDefaultInstance())
-            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                    m.vb, m.ib, 0, m.idx.size())
-            .culling(false)
-            .receiveShadows(false)
-            .castShadows(false)
-            .build(*mEngine, m.entity);
-    if (addToScene) mScene->addEntity(m.entity);
     return true;
 }
 
@@ -473,6 +487,12 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
 // rebuilt over stale vectors comes out with its previous contents still in it
 // (doubled geometry AND a leak, ~14 MB a race).
 void TtpRenderer::destroyMesh(Mesh& m) {
+    for (utils::Entity e : m.chunks) {
+        mScene->remove(e);
+        mEngine->destroy(e);
+        utils::EntityManager::get().destroy(e);
+    }
+    m.chunks.clear();
     if (!m.entity.isNull()) {
         mScene->remove(m.entity);
         mEngine->destroy(m.entity);
@@ -878,7 +898,12 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     }
     mRoad.idx.resize(mRoad.verts.size());
     for (uint32_t i = 0; i < mRoad.idx.size(); i++) mRoad.idx[i] = i;
-    return buildMesh(mRoad);
+    // Chunked: ~2.5k triangles a piece, each with its own bounds, so a chase
+    // camera pays for the stretch of circuit it can actually see instead of all
+    // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
+    // at 160 rings for exactly this.) The CPU-side soup in mRoad.verts is
+    // untouched: the ground-conform probes still read the whole ribbon.
+    return buildMesh(mRoad, true, nullptr, 4, 2500);
 }
 
 // Colour of the ground sheet at world x — the band the tiled canvas would put
@@ -2056,7 +2081,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     }
     if (!mClutter.verts.empty()) {
         accumulateNormals(mClutter);
-        buildMesh(mClutter);
+        buildMesh(mClutter, true, nullptr, 4, 2000);
     }
 }
 
@@ -2910,11 +2935,19 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // caster/receiver note in buildTrackScene for who is in which set.
 void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (m.entity.isNull()) return;
+    setShadows(&m.entity, 1, cast, receive);
+    if (!m.chunks.empty()) setShadows(m.chunks.data(), m.chunks.size(), cast, receive);
+}
+
+void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
+    if (m.entity.isNull()) return;
     auto& rcm = mEngine->getRenderableManager();
-    const auto ri = rcm.getInstance(m.entity);
-    if (!ri) return;
-    rcm.setCastShadows(ri, cast);
-    rcm.setReceiveShadows(ri, receive);
+    const auto set = [&](utils::Entity e) {
+        const auto ri = rcm.getInstance(e);
+        if (ri) rcm.setCulling(ri, enable);
+    };
+    set(m.entity);
+    for (utils::Entity e : m.chunks) set(e);
 }
 
 void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool receive) {
@@ -4008,6 +4041,18 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     setMeshShadows(mGantry, true, true);
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
+
+    // Frustum culling for the static furniture. Everything here is either
+    // fixed in world space or moved by a transform (which Filament applies to
+    // the bounds), so a build-time box stays honest — unlike the decals and
+    // ribbons, whose vertices are rewritten in world space per frame and which
+    // therefore stay opted out. Off-screen scenery was being drawn in full, in
+    // every cell: a 4-way split paid for the whole circuit four times.
+    for (Mesh* m : { &mStructures, &mBerms, &mGantry, &mBoulders, &mLandmarks,
+                     &mClutter, &mPropShadows, &mPads, &mOils, &mWater, &mWet,
+                     &mBalloon, &mWindmill, &mTrain, &mTrainKey }) {
+        setMeshCulling(*m, true);
+    }
 
     // Clouds (environment.js): 8 puffs, deterministic index math. The JS
     // sprites are fog:false and drift ACROSS the field in authored space;
@@ -5169,6 +5214,14 @@ void TtpRenderer::ensureCells(uint32_t count) {
         // with post off, sunlit surfaces come out ~black. (The M0 triangle view
         // keeps post off; it's unlit.)
         v->setPostProcessingEnabled(true);
+        // The post chain's offscreen buffer is RGBA16F by default: 8 bytes a
+        // pixel, written by every shaded fragment and read back by the tonemap
+        // pass. At a Retina split-screen that bandwidth is free money — the
+        // scene is flat toy colour with no bloom and no HDR highlights, so the
+        // 11:11:10 float buffer holds it with no visible banding.
+        View::RenderQuality rq{};
+        rq.hdrColorBuffer = View::QualityLevel::MEDIUM;
+        v->setRenderQuality(rq);
         v->setColorGrading(mColorGrading);
         // Single-pass FXAA, always on — the display folds exactly this into
         // its present shader (MSAA stays off there too).
