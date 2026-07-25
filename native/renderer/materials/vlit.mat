@@ -1,0 +1,19 @@
+material {
+    name : TtpVlit,
+    requires : [
+        color
+    ],
+    shadingModel : lit,
+    culling : none,
+    doubleSided : true
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor();
+        material.roughness = 1.0;
+        material.metallic = 0.0;
+        material.reflectance = 0.0;
+    }
+}

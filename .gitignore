@@ -1,6 +1,9 @@
 node_modules/
 .playwright-mcp/
 test-results/
+# Native wasm renderer build output (scripts/build-wasm.sh) + its CMake dir.
+public/native/
+native/web/build/
 *.log
 .DS_Store
 # Audition candidate dumps — 760 MB of rejected sound candidates that were

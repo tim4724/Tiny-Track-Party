@@ -11,6 +11,17 @@ FP rules: [docs/native-port/fp-profile.md](../docs/native-port/fp-profile.md).
 ## Layout
 
 ```
+include/        ttp_runtime.h — the ONE C ABI every shell drives (create/resize/
+                provide_asset/build_scene/submit_frame/destroy + FrameInput).
+renderer/       libttp-renderer: platform-free Filament renderer (no platform or
+                emscripten includes). Ships identically on web/tvOS/Android.
+                Built + judged against Three.js in /gallery-compare.html.
+web/            wasm shell: WebGL2 context bind + ABI impl + CMake link against
+                the fork's emscripten SDK. Built by scripts/build-wasm.sh →
+                public/native/ (gitignored). Filament fork: ~/Projects/filament,
+                branch tvos-v1.74.0 (carries the tvOS port + newer-clang fixes).
+                NOT built by native/CMakeLists.txt — it configures standalone
+                (emcmake) because it needs the Filament SDK.
 libttp-track/   Vec3, Centerline, TrackBuilder, JS-parity math shims.
                 generated/track_defs.h carries the 20 shipped layouts.
 libttp-sim/     Game (physics/items/ranking), AiDriver, RaceSession, GrandPrix.

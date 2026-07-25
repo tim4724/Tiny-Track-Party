@@ -73,7 +73,11 @@ const MIME_TYPES = {
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
   '.flac': 'audio/flac',
-  '.mp3': 'audio/mpeg'
+  '.mp3': 'audio/mpeg',
+  // Native renderer module (scripts/build-wasm.sh → public/native/); the
+  // correct MIME enables WebAssembly.instantiateStreaming.
+  '.wasm': 'application/wasm',
+  '.filamat': 'application/octet-stream'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -128,7 +132,8 @@ function isRoomCode(urlPath) {
 // STUN (fastlane iceServers) is UDP and not governed by connect-src.
 // 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval): the sim's
 // deterministic mathlib (engine/math.js) instantiates an embedded fdlibm
-// WASM module.
+// WASM module, and the native Filament renderer module under /native/
+// compiles the same way.
 function cspHeader(nonce, frameAncestors) {
   return [
     "default-src 'self'",
