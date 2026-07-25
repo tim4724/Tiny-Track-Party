@@ -35,6 +35,7 @@ class Scene;
 class Camera;
 class Skybox;
 class Texture;
+class RenderTarget;
 class Material;
 class VertexBuffer;
 class IndexBuffer;
@@ -129,6 +130,29 @@ private:
     std::vector<filament::View*> mCellViews;
     std::vector<filament::Camera*> mCellCameras;
     std::vector<utils::Entity> mCellCameraEntities;
+
+    // The scene buffer every cell draws into, and the one full-screen pass that
+    // grades + antialiases it onto the canvas. Filament's own post chain is two
+    // passes PER VIEW on this backend and can't fuse them without framebuffer
+    // fetch (see vpresent.mat), so we run it ourselves: N cells into one target,
+    // then one present. Recreated by resize(); torn down with the engine, not
+    // with the scene (they are canvas-scope, not track-scope).
+    filament::Texture* mSceneColor = nullptr;
+    filament::Texture* mSceneDepth = nullptr;
+    filament::RenderTarget* mSceneRT = nullptr;
+    filament::Material* mPresentMaterial = nullptr;
+    filament::MaterialInstance* mPresentInstance = nullptr;
+    filament::View* mPresentView = nullptr;
+    filament::Scene* mPresentScene = nullptr;
+    filament::Camera* mPresentCamera = nullptr;
+    utils::Entity mPresentCameraEntity;
+    utils::Entity mPresentQuad;
+    filament::VertexBuffer* mPresentVB = nullptr;
+    filament::IndexBuffer* mPresentIB = nullptr;
+    // Size the scene buffer to the canvas (no-op when it already fits), and
+    // stand up the present view on first use. Both no-op without vpresent.
+    void ensureSceneTarget();
+    void destroySceneTarget();
 
     Mesh mRoad;
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS

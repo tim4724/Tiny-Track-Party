@@ -358,6 +358,14 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     if (!mEngine) return false;
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
+    // Clear the colour buffer at the start of a frame. It costs nothing (a load
+    // action) and it defines the slivers no cell viewport covers: cell width is
+    // floor(canvas/cols), so up to cols-1 columns belong to no view at all, and
+    // the present pass reads them.
+    Renderer::ClearOptions clear{};
+    clear.clear = true;
+    clear.clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+    mRenderer->setClearOptions(clear);
     mScene = mEngine->createScene();
     mView = mEngine->createView();
     mCameraEntity = utils::EntityManager::get().create();
@@ -374,6 +382,10 @@ void TtpRenderer::resize(uint32_t width, uint32_t height) {
     mHeight = height;
     mView->setViewport({ 0, 0, width, height });
     updateCamera();
+    // Called between frames, which is the only safe place to swap the scene
+    // buffer: render() must never find a size mismatch, so rebuild it here.
+    destroySceneTarget();
+    ensureSceneTarget();
 }
 
 void TtpRenderer::updateCamera() {
@@ -3646,7 +3658,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         }
         MaterialInstance* mi = sceneInstance(mBlendMaterial);
         mi->setPolygonOffset(-2.0f, -2.0f); // JS decal pull: never z-fight the road
-        buildMesh(mSkids, true, mi, 2);
+        // Chunked, because the pool is drawn whether or not it holds anything:
+        // 4096 slots is 16k triangles submitted in EVERY cell, every frame, and
+        // a fresh track has none of them alive. Chunks that hold only parked
+        // slots (y = -1000) fall outside every frustum and cull away; the ones
+        // that hold real marks are a stretch of track, so a cell only pays for
+        // the rubber it can actually see. refreshBounds re-fits them per frame.
+        buildMesh(mSkids, true, mi, 2, 1024);
         mWheelTrails.assign(carCount * 4, {});
         mSkidLife.assign(SKID_POOL, 0.0f);
         mSkidPeak.assign(SKID_POOL, 0.0f);
@@ -5381,6 +5399,13 @@ bool TtpRenderer::buildScene() {
                 .package(vpoint->second.data(), vpoint->second.size())
                 .build(*mEngine);
     }
+    const auto vpresent = mAssets.find("vpresent.filamat");
+    if (!mPresentMaterial && vpresent != mAssets.end()) {
+        mPresentMaterial = Material::Builder()
+                .package(vpresent->second.data(), vpresent->second.size())
+                .build(*mEngine);
+    }
+    ensureSceneTarget(); // between frames — the material only lands now
     const auto track = mAssets.find("track.bin");
     if (track == mAssets.end()) return false; // no scene without a track payload
     mHasTrack = true;
@@ -5413,41 +5438,135 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     return fog;
 }
 
-void TtpRenderer::ensureCells(uint32_t count) {
-    if (!mColorGrading) {
-        // Linear tonemap + sRGB encode + the display's present-shader grade
-        // (DEF_EXPOSURE 1.1 brightness) — the exact output pipeline Three.js
-        // runs. Filament's default ACES would shift every colour the parity
-        // diff judges. exposure() is in stops: 2^0.1375 ≈ 1.1.
-        mToneMapper = new LinearToneMapper();
-        mColorGrading = ColorGrading::Builder()
-                .toneMapper(mToneMapper)
-                .exposure(0.1375f)
+// The scene buffer (canvas-sized RGBA8 + depth) all the cells draw into, plus
+// the one-triangle view that grades it onto the canvas. Creation only — the
+// teardown half lives in resize(), because freeing a target the views still
+// point at has to happen BETWEEN frames: doing it inside beginFrame/endFrame
+// (which is where render() would notice a size change) aborts the module.
+// Without vpresent.filamat this does nothing and the cells fall back to
+// Filament's own post chain — an old asset set still renders, just slower.
+void TtpRenderer::ensureSceneTarget() {
+    if (!mPresentMaterial || !mWidth || !mHeight || mSceneRT) return;
+    // R11F_G11F_B10F, LINEAR: four bytes a pixel, same as the RGBA8 three uses
+    // here, but floating point. Three can afford 8 bits because its banding is
+    // its OWN shading quantised; ours would be a DIFFERENT shading quantised,
+    // and a linear 8-bit step becomes a whole visible sRGB step once the
+    // present pass expands the darks — the parity diff rose measurably (4.0 →
+    // 4.5 mean |Δ| over the frame catalogue) purely from that. The float buffer
+    // is what Filament's own post chain used before we took it over, and it
+    // costs nothing extra to keep. No alpha channel: the view is OPAQUE and the
+    // present ignores it (blending reads source alpha, not destination).
+    mSceneColor = Texture::Builder()
+            .width(mWidth).height(mHeight).levels(1)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            .format(Texture::InternalFormat::R11F_G11F_B10F)
+            .build(*mEngine);
+    mSceneDepth = Texture::Builder()
+            .width(mWidth).height(mHeight).levels(1)
+            .usage(Texture::Usage::DEPTH_ATTACHMENT)
+            .format(Texture::InternalFormat::DEPTH32F)
+            .build(*mEngine);
+    mSceneRT = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, mSceneColor)
+            .texture(RenderTarget::AttachmentPoint::DEPTH, mSceneDepth)
+            .build(*mEngine);
+
+    if (!mPresentInstance) {
+        mPresentInstance = mPresentMaterial->createInstance();
+        mPresentInstance->setParameter("exposure", 1.1f); // SceneRenderer DEF_EXPOSURE
+        // The fullscreen triangle, in clip space (vertexDomain:device), exactly
+        // as Filament builds its own: one triangle, no camera, no transform.
+        static const math::float4 verts[3] = {
+            { -1.0f, -1.0f, 1.0f, 1.0f },
+            {  3.0f, -1.0f, 1.0f, 1.0f },
+            { -1.0f,  3.0f, 1.0f, 1.0f },
+        };
+        static const uint16_t indices[3] = { 0, 1, 2 };
+        mPresentVB = VertexBuffer::Builder()
+                .vertexCount(3).bufferCount(1)
+                .attribute(VertexAttribute::POSITION, 0,
+                        VertexBuffer::AttributeType::FLOAT4, 0, sizeof(math::float4))
                 .build(*mEngine);
+        mPresentVB->setBufferAt(*mEngine, 0,
+                VertexBuffer::BufferDescriptor(verts, sizeof(verts), nullptr));
+        mPresentIB = IndexBuffer::Builder()
+                .indexCount(3).bufferType(IndexBuffer::IndexType::USHORT)
+                .build(*mEngine);
+        mPresentIB->setBuffer(*mEngine,
+                IndexBuffer::BufferDescriptor(indices, sizeof(indices), nullptr));
+        mPresentQuad = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                .material(0, mPresentInstance)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mPresentVB, mPresentIB, 0, 3)
+                .culling(false)          // clip-space verts: the box means nothing
+                .castShadows(false).receiveShadows(false)
+                .build(*mEngine, mPresentQuad);
+        mPresentScene = mEngine->createScene();
+        mPresentScene->addEntity(mPresentQuad);
+        mPresentCameraEntity = utils::EntityManager::get().create();
+        mPresentCamera = mEngine->createCamera(mPresentCameraEntity);
+        mPresentCamera->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
+        mPresentView = mEngine->createView();
+        mPresentView->setScene(mPresentScene);
+        mPresentView->setCamera(mPresentCamera);
+        mPresentView->setPostProcessingEnabled(false); // we ARE the post chain
+        mPresentView->setShadowingEnabled(false);
+        mPresentView->setFrustumCullingEnabled(false);
     }
+    TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+    sampler.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    sampler.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mPresentInstance->setParameter("scene", mSceneColor, sampler);
+    mPresentInstance->setParameter("texel",
+            math::float2{ 1.0f / (float) mWidth, 1.0f / (float) mHeight });
+    mPresentView->setViewport({ 0, 0, mWidth, mHeight });
+}
+
+// Between frames only (resize / teardown): the views and the present instance
+// still reference these, so drop those references and let the driver drain
+// before freeing.
+void TtpRenderer::destroySceneTarget() {
+    if (!mSceneRT) return;
+    for (View* v : mCellViews) v->setRenderTarget(nullptr);
+    mEngine->flushAndWait();
+    mEngine->destroy(mSceneRT); mSceneRT = nullptr;
+    mEngine->destroy(mSceneColor); mSceneColor = nullptr;
+    mEngine->destroy(mSceneDepth); mSceneDepth = nullptr;
+}
+
+void TtpRenderer::ensureCells(uint32_t count) {
     while (mCellViews.size() < count) {
         View* v = mEngine->createView();
         utils::Entity camEnt = utils::EntityManager::get().create();
         Camera* cam = mEngine->createCamera(camEnt);
         v->setCamera(cam);
         v->setScene(mScene);
-        // Post-processing stays ON for the race cells: Filament's lit pipeline
-        // writes pre-exposed luminance that the tonemap pass maps back to LDR —
-        // with post off, sunlit surfaces come out ~black. (The M0 triangle view
-        // keeps post off; it's unlit.)
-        v->setPostProcessingEnabled(true);
-        // The post chain's offscreen buffer is RGBA16F by default: 8 bytes a
-        // pixel, written by every shaded fragment and read back by the tonemap
-        // pass. At a Retina split-screen that bandwidth is free money — the
-        // scene is flat toy colour with no bloom and no HDR highlights, so the
-        // 11:11:10 float buffer holds it with no visible banding.
-        View::RenderQuality rq{};
-        rq.hdrColorBuffer = View::QualityLevel::MEDIUM;
-        v->setRenderQuality(rq);
-        v->setColorGrading(mColorGrading);
-        // Single-pass FXAA, always on — the display folds exactly this into
-        // its present shader (MSAA stays off there too).
-        v->setAntiAliasing(View::AntiAliasing::FXAA);
+        if (mPresentMaterial) {
+            // Post OFF: the cells write plain linear colour into the shared
+            // scene buffer and vpresent grades + antialiases the lot in ONE
+            // pass, instead of two per cell (see vpresent.mat). Nothing is lost
+            // doing it ourselves — every material here is unlit and writes its
+            // own final colour, so Filament's tonemap had nothing to undo.
+            v->setPostProcessingEnabled(false);
+        } else {
+            // No vpresent.filamat provided: fall back to Filament's chain, with
+            // the linear tonemap + 1.1 exposure grade three's present applies.
+            if (!mColorGrading) {
+                mToneMapper = new LinearToneMapper();
+                mColorGrading = ColorGrading::Builder()
+                        .toneMapper(mToneMapper)
+                        .exposure(0.1375f) // stops: 2^0.1375 ≈ 1.1
+                        .build(*mEngine);
+            }
+            v->setPostProcessingEnabled(true);
+            View::RenderQuality rq{};
+            rq.hdrColorBuffer = View::QualityLevel::MEDIUM;
+            v->setRenderQuality(rq);
+            v->setColorGrading(mColorGrading);
+            v->setAntiAliasing(View::AntiAliasing::FXAA);
+        }
         mCellViews.push_back(v);
         mCellCameras.push_back(cam);
         mCellCameraEntities.push_back(camEnt);
@@ -6461,6 +6580,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
+        ensureSceneTarget();
         ensureCells(input.viewCount);
         const uint32_t cols = bestGridCols(input.viewCount);
         const uint32_t rows = (input.viewCount + cols - 1) / cols;
@@ -6469,6 +6589,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const uint32_t col = i % cols, row = i / cols;
             View* v = mCellViews[i];
             Camera* cam = mCellCameras[i];
+            // Every cell into the one scene buffer, each in its own sub-rect.
+            // Filament drops the colour clear after the first view of a frame
+            // (depth still clears per view), so the cells accumulate instead of
+            // wiping each other — the same thing three does with one target and
+            // per-cell viewport + scissor.
+            v->setRenderTarget(mSceneRT);
             v->setViewport({ (int32_t) (col * cw),
                     (int32_t) (mHeight - (row + 1) * ch), cw, ch });
             mat4f world;
@@ -6617,6 +6743,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             }
             mRenderer->render(v);
         }
+        // One pass for the whole canvas: grade, sRGB, FXAA, done.
+        if (mSceneRT) mRenderer->render(mPresentView);
     }
     mRenderer->endFrame();
     return true;
@@ -6797,6 +6925,21 @@ TtpRenderer::~TtpRenderer() {
     if (mMatProvider) { mMatProvider->destroyMaterials(); delete mMatProvider; }
     if (mColorGrading) mEngine->destroy(mColorGrading);
     delete mToneMapper;
+    destroySceneTarget();
+    if (mPresentView) mEngine->destroy(mPresentView);
+    if (mPresentScene) mEngine->destroy(mPresentScene);
+    if (mPresentCamera) {
+        mEngine->destroyCameraComponent(mPresentCameraEntity);
+        utils::EntityManager::get().destroy(mPresentCameraEntity);
+    }
+    if (mPresentQuad) {
+        mEngine->destroy(mPresentQuad);
+        utils::EntityManager::get().destroy(mPresentQuad);
+    }
+    if (mPresentVB) mEngine->destroy(mPresentVB);
+    if (mPresentIB) mEngine->destroy(mPresentIB);
+    if (mPresentInstance) mEngine->destroy(mPresentInstance);
+    if (mPresentMaterial) mEngine->destroy(mPresentMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {

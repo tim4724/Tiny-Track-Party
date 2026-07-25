@@ -1,0 +1,98 @@
+// The present pass: scene buffer → graded, antialiased pixels on the canvas.
+//
+// WHY WE OWN THIS. Filament's post-processing chain costs TWO full-screen
+// passes on this backend: colour grading (tonemap + exposure + sRGB) and then
+// FXAA. It can fuse the grading one into the colour pass as a subpass, but only
+// where the driver exposes framebuffer fetch — which WebGL does not, so the web
+// build always pays both. Measured on an M1 Max at 1400x900, one camera: the
+// scene pass costs 1.13 ms and the two post passes 0.81 + 0.95 ms. A
+// full-screen pass here is ~0.8 ms whatever it does, so the pass COUNT is the
+// budget, and the count is what we can change: three.js folds grade + FXAA into
+// one shader and pays 0.77 ms once. This material is that shader, ported, so we
+// pay it once too. It matters most in split-screen, where the chain was per
+// VIEW: four players meant eight post passes over the canvas area, and now
+// means one.
+//
+// It is a straight port of SceneRenderer's _matPresent (grade → sRGB → FXAA on
+// the graded values), which also removes a parity variable: the diff was
+// judging three's FXAA against Filament's, two different filters over two
+// slightly different tonemaps. Same filter now, same order, same constants.
+//
+// vertexDomain:device — the three vertices ARE the clip-space fullscreen
+// triangle, no camera transform. The colour goes in `emissive` (with w=0, which
+// opts out of the exposure attenuation in addEmissive) because an unlit
+// material's baseColor is zeroed outright when the view has a directional
+// light: see the same dance in vlit.mat.
+material {
+    name : TtpVpresent,
+    parameters : [
+        { type : sampler2d, name : scene, precision : medium },
+        { type : float,     name : exposure },
+        // 1 / drawing-buffer px — FXAA steps in real texels, like three's
+        { type : float2,    name : texel, precision : high }
+    ],
+    variables : [ uv ],
+    vertexDomain : device,
+    shadingModel : unlit,
+    culling : none,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // clip xy [-1,1] → uv [0,1], through the backend's render-target
+        // convention (identity on GL, flipped on Metal/Vulkan).
+        material.uv.xy = uvToRenderTargetUV(getPosition().xy * 0.5 + 0.5);
+    }
+}
+
+fragment {
+    vec3 toSRGB(vec3 c) {
+        c = max(c, 0.0);
+        return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+    }
+
+    // The displayed colour at a uv: exposure + linear→sRGB, clamped. FXAA blends
+    // these, so every tap is the real on-panel colour (correct sRGB, not an approx).
+    vec3 graded(highp vec2 uv) {
+        return clamp(toSRGB(texture(materialParams_scene, uv).rgb * materialParams.exposure),
+                0.0, 1.0);
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        // Compact FXAA (Timothy Lottes' console variant). Detects the local edge
+        // from a 5-tap luma cross, then blends along it; falls back to the
+        // unfiltered centre on flat areas, so interiors stay sharp and only
+        // contrast edges soften.
+        const float SPAN_MAX = 8.0, REDUCE_MUL = 1.0 / 8.0, REDUCE_MIN = 1.0 / 128.0;
+        const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+
+        highp vec2 uv = variable_uv.xy;
+        highp vec2 texel = materialParams.texel;
+        vec3 mC = graded(uv);
+        vec3 nw = graded(uv + vec2(-1.0, -1.0) * texel);
+        vec3 ne = graded(uv + vec2( 1.0, -1.0) * texel);
+        vec3 sw = graded(uv + vec2(-1.0,  1.0) * texel);
+        vec3 se = graded(uv + vec2( 1.0,  1.0) * texel);
+        float lM = dot(mC, LUMA);
+        float lNW = dot(nw, LUMA), lNE = dot(ne, LUMA), lSW = dot(sw, LUMA), lSE = dot(se, LUMA);
+        float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+        float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+
+        vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+        float reduce = max((lNW + lNE + lSW + lSE) * 0.25 * REDUCE_MUL, REDUCE_MIN);
+        float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+        dir = clamp(dir * rcp, -SPAN_MAX, SPAN_MAX) * texel;
+
+        vec3 rgbA = 0.5 * (graded(uv + dir * (1.0 / 3.0 - 0.5)) + graded(uv + dir * (2.0 / 3.0 - 0.5)));
+        vec3 rgbB = rgbA * 0.5 + 0.25 * (graded(uv + dir * -0.5) + graded(uv + dir * 0.5));
+        float lB = dot(rgbB, LUMA);
+        // rgbB samples the wider span; if it overshoots the local luma range it
+        // has strayed off the edge, so use the safer narrow blend rgbA.
+        material.emissive = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 0.0);
+    }
+}
