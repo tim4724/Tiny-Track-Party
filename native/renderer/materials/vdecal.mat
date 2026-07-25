@@ -1,0 +1,34 @@
+// Textured translucent decal — the conformed sheets that hug the road.
+//
+// Same blend rules as vblend (premultiplied alpha, no depth write, polygon
+// offset from the caller), but the SHAPE comes from a texture instead of from
+// the mesh's own vertex alpha. The car's ground shadow needs that: the JS bakes
+// a top-down silhouette and blurs it by three pixels of a 128-wide map — a
+// deliberately TIGHT penumbra — and a per-vertex falloff on a 10×14 grid can't
+// resolve an edge that sharp, so the port's blob came out soft and vague.
+//
+// Vertex colour still multiplies through: the per-car opacity animates with
+// body pitch (the load cue), and the conform rewrites it every frame.
+material {
+    name : TtpVdecal,
+    requires : [
+        color,
+        uv0
+    ],
+    shadingModel : unlit,
+    culling : none,
+    blending : transparent,
+    depthWrite : false,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : albedo }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor() * texture(materialParams_albedo, getUV0());
+        material.baseColor.rgb *= material.baseColor.a; // premultiplied, as vblend
+    }
+}

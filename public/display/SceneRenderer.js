@@ -1622,7 +1622,10 @@ export class SceneRenderer {
       wheelbase, skidWidth, wheelRadius, pitchSign, plate, chase, cam: chase.camera, boostDisk, aoMat, ao,
       streakGroup, streaks, footW, footL,
       carIndex, colorIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
-      label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, lean: 0,
+      // `name` is kept alongside the label element because the label only
+      // exists for carded (cell) cars — the AI field has none, and the native
+      // renderer needs every car's name to letter its rear plate.
+      name, label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, lean: 0,
       wheelRoll: 0, pitch: 0, prevSpd: 0, lastPos: null, // wheel-roll + weight-transfer state (setCarPose)
       reconnecting: false, reconnectEl: null, // dropped-player reconnect card (centred in this cell, like finishEl)
       rideOff: null // damped ride-height offset from the centreline (setCarPose)

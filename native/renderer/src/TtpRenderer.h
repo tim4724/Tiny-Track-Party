@@ -122,6 +122,11 @@ private:
     std::vector<utils::Entity> mCellCameraEntities;
 
     Mesh mRoad;
+    // Baked road shading, cached across releaseScene(): the bake is the most
+    // expensive thing in a scene build and its only inputs are the road/gantry
+    // geometry, which a race start does NOT change (only the roster does).
+    uint64_t mBakeKey = 0;
+    std::vector<uint32_t> mBakeColors;
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS
     // keeps per-tile collision clones out of the scene graph and raycasts them;
     // our ribbon is one soup, so the grid buckets triangles instead).
@@ -138,9 +143,15 @@ private:
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
+    filament::Texture* buildShadowMask();
     // Split-screen column count for n cells — SceneRenderer's bestGrid, so the
     // 3D cells land where the DOM HUD puts its labels.
     uint32_t bestGridCols(uint32_t n) const;
+    // MonsterRig's gunmetal frame: repaint the chassis primitive only, since
+    // the whole truck shares one material and the tyres must keep their colour.
+    void recolourMonsterChassis(filament::gltfio::FilamentAsset* asset,
+            const std::vector<filament::gltfio::FilamentInstance*>& instances,
+            const filament::math::float4& rgba);
     Mesh mSky;   // vertex-gradient dome at SKY_R (past the fog cutoff)
     Mesh mHills; // horizon dome ring
     // Per-feature anchors {x, z, top} in AUTHORED coords — the offshore
@@ -229,6 +240,11 @@ private:
     // to match the JS canvas texture rather than approximated with bands.
     filament::Material* mGroundMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
+    filament::Texture* mWhiteTex = nullptr;  // 1×1, neutralises a glTF base-colour map
+    // Textured translucent decals (vdecal): the car's conformed ground shadow,
+    // whose penumbra is far too tight to carry in vertex alpha.
+    filament::Material* mDecalMaterial = nullptr;
+    filament::Texture* mShadowMaskTex = nullptr;
     std::vector<Mesh> mCarBlobs;
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1

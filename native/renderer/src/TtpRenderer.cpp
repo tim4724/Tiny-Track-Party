@@ -1021,6 +1021,120 @@ uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
     return best;
 }
 
+// Repaint the monster truck's CHASSIS (only) to one flat neutral, per instance.
+//
+// Every mesh in vehicle-monster-truck.glb shares a single `colormap` material,
+// so there is no material-level handle on "the frame" — setting the base factor
+// on the asset's instances repaints the tyres with it. The JS answer is to clone
+// the material for the chassis mesh and null its map; the Filament equivalent is
+// a per-PRIMITIVE instance on the chassis renderable, with the palette atlas
+// swapped for a white 1×1 so the flat colour is the whole result.
+void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
+        const std::vector<gltfio::FilamentInstance*>& instances, const math::float4& rgba) {
+    if (!asset) return;
+    if (!mWhiteTex) {
+        static const uint8_t WHITE[4] = { 255, 255, 255, 255 };
+        mWhiteTex = Texture::Builder()
+                .width(1).height(1).levels(1)
+                .format(Texture::InternalFormat::SRGB8_A8)
+                .sampler(Texture::Sampler::SAMPLER_2D)
+                .build(*mEngine);
+        if (mWhiteTex) {
+            mWhiteTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+                    WHITE, sizeof(WHITE), Texture::Format::RGBA, Texture::Type::UBYTE));
+        }
+    }
+    auto& rcm = mEngine->getRenderableManager();
+    const TextureSampler smp(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
+    for (gltfio::FilamentInstance* inst : instances) {
+        if (!inst) continue;
+        const utils::Entity* ents = inst->getEntities();
+        for (size_t k = 0; k < inst->getEntityCount(); k++) {
+            const char* nm = asset->getName(ents[k]);
+            if (!nm || std::strcmp(nm, "chassis") != 0) continue;
+            const auto ri = rcm.getInstance(ents[k]);
+            if (!ri) continue;
+            for (size_t p = 0, n = rcm.getPrimitiveCount(ri); p < n; p++) {
+                MaterialInstance* src = rcm.getMaterialInstanceAt(ri, p);
+                if (!src) continue;
+                MaterialInstance* own = MaterialInstance::duplicate(src, "monster-chassis");
+                if (!own) continue;
+                if (own->getMaterial()->hasParameter("baseColorFactor")) {
+                    own->setParameter("baseColorFactor", rgba);
+                }
+                if (mWhiteTex && own->getMaterial()->hasParameter("baseColorMap")) {
+                    own->setParameter("baseColorMap", mWhiteTex, smp);
+                }
+                mSceneMatInstances.push_back(own); // released with the scene
+                rcm.setMaterialInstanceAt(ri, p, own);
+            }
+        }
+    }
+}
+
+// The car's ground-shadow mask: a superellipse footprint with the JS bake's
+// penumbra, at a resolution that can actually hold it.
+//
+// SceneRenderer renders each car model top-down into a 128-wide target and
+// blurs the result by round(128 × 0.022) ≈ 3 px — "a crisp shadow edge near the
+// loop's hard cast shadow, not a wide soft ring", as the source puts it. That
+// is ~5% of the half-width, so the shape has to come from a texture; a vertex
+// falloff on the conform grid could only ever be a smudge.
+//
+// The one thing this does NOT reproduce is the outline: three's is the model's
+// real silhouette (cabin narrow, wheels poking out), ours a superellipse fitted
+// to the same footprint. Same size, same softness, rounder corners.
+Texture* TtpRenderer::buildShadowMask() {
+    constexpr int TW = 128, TH = 160; // ~ the footprint's 1:1.25 aspect
+    std::vector<float> a((size_t) TW * TH, 0.0f);
+    // Footprint occupies 1/1.45 of the quad (SHADOW_OVERSCAN), leaving the rest
+    // as room for the blur tail — exactly how the JS frames its bake.
+    const float hw = (TW * 0.5f) / 1.45f, hl = (TH * 0.5f) / 1.45f;
+    for (int y = 0; y < TH; y++) {
+        for (int x = 0; x < TW; x++) {
+            const float dx = std::fabs(x + 0.5f - TW * 0.5f) / hw;
+            const float dz = std::fabs(y + 0.5f - TH * 0.5f) / hl;
+            const float q = std::cbrt(dx * dx * dx + dz * dz * dz); // 1 at the edge
+            a[(size_t) y * TW + x] = q <= 1.0f ? 1.0f : 0.0f;
+        }
+    }
+    // Separable box blur ×3 ≈ the canvas filter's Gaussian, at the same radius.
+    const int R = std::max(2, (int) std::lround(TW * 0.022f));
+    std::vector<float> tmp(a.size());
+    const auto pass = [&](std::vector<float>& src, std::vector<float>& dst, bool horiz) {
+        for (int y = 0; y < TH; y++)
+            for (int x = 0; x < TW; x++) {
+                float s = 0; int n = 0;
+                for (int k = -R; k <= R; k++) {
+                    const int px = horiz ? x + k : x, py = horiz ? y : y + k;
+                    if (px < 0 || px >= TW || py < 0 || py >= TH) { n++; continue; } // outside = 0
+                    s += src[(size_t) py * TW + px];
+                    n++;
+                }
+                dst[(size_t) y * TW + x] = s / (float) n;
+            }
+    };
+    for (int i = 0; i < 3; i++) { pass(a, tmp, true); pass(tmp, a, false); }
+    // White RGB so blurring the edge fades ALPHA only — a dark fringe otherwise
+    // (the JS forces the same).
+    auto* px = new std::vector<uint8_t>((size_t) TW * TH * 4, 255);
+    for (size_t i = 0; i < a.size(); i++) {
+        (*px)[i * 4 + 3] = (uint8_t) std::lround(std::min(1.0f, std::max(0.0f, a[i])) * 255.0f);
+    }
+    Texture* tex = Texture::Builder()
+            .width(TW).height(TH).levels(8)
+            .format(Texture::InternalFormat::SRGB8_A8)
+            .sampler(Texture::Sampler::SAMPLER_2D)
+            .usage(Texture::Usage::DEFAULT | Texture::Usage::GEN_MIPMAPPABLE)
+            .build(*mEngine);
+    if (!tex) { delete px; return nullptr; }
+    tex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+            px->data(), px->size(), Texture::Format::RGBA, Texture::Type::UBYTE,
+            [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, px));
+    tex->generateMipmaps(*mEngine);
+    return tex;
+}
+
 // ── Ground-conform probe ─────────────────────────────────────────────────────
 // SceneRenderer keeps per-tile collision clones OUT of the scene graph and
 // raycasts them straight down under each axle (_roadHitY). Our ribbon is one
@@ -2713,6 +2827,24 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // road VB re-uploads once with the darkened colours.
 void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
     if (mRoad.verts.empty() || !mRoad.vb) return;
+    // A race start rebuilds the circuit the lobby was ALREADY previewing — only
+    // the roster changed — and this bake is a second of that rebuild. Since its
+    // only inputs are the road/gantry geometry and the (fixed) sun, key a cache
+    // on the geometry itself: same road, same answer, no work. That is what
+    // stops the scene visibly re-forming a beat into the countdown.
+    uint64_t key = 1469598103934665603ull ^ (uint64_t) mGantry.verts.size();
+    for (const Vertex& v : mRoad.verts) {
+        uint32_t bits;
+        std::memcpy(&bits, &v.px, 4); key = (key ^ bits) * 1099511628211ull;
+        std::memcpy(&bits, &v.py, 4); key = (key ^ bits) * 1099511628211ull;
+        std::memcpy(&bits, &v.pz, 4); key = (key ^ bits) * 1099511628211ull;
+    }
+    if (key == mBakeKey && mBakeColors.size() == mRoad.verts.size()) {
+        for (size_t i = 0; i < mRoad.verts.size(); i++) mRoad.verts[i].abgr = mBakeColors[i];
+        mRoad.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                mRoad.verts.data(), mRoad.verts.size() * sizeof(Vertex), nullptr));
+        return;
+    }
     // Toward the light: the JS key sits at (2, 12, 1.5) looking at the origin,
     // so the sun travels along −that and shadows are cast along +that. This
     // used to be a stale hand-typed vector with BOTH horizontal signs flipped,
@@ -2772,12 +2904,21 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
                 cellTop[ci] = std::max(cellTop[ci], occ[t].minY);
             }
     }
+    // How far above a receiver an occluder must sit before it casts at all.
+    // This is the port's stand-in for three's normalBias, which scales with the
+    // shadow texel and swallows anything close above — that is WHY three shows
+    // no shadow at a loop mouth (the arch is a couple of units over its own
+    // entry road) while an overpass deck four or more up still casts a sharp
+    // one. A flat 0.8 let the loops cast; raising it lets the blur stay tight
+    // for the shadows that survive, instead of softening everything to hide
+    // the ones that should never have been drawn.
+    constexpr float CLEARANCE = 2.5f;
     const auto occluded = [&](const float3& p) {
         const size_t ci = cellOf(p.x, p.z);
-        if (cellTop[ci] < p.y + 0.8f) return false; // nothing above → no walk
+        if (cellTop[ci] < p.y + CLEARANCE) return false; // nothing above → no walk
         for (const uint32_t ti : grid[ci]) {
             const Tri& t = occ[ti];
-            if (t.minY < p.y + 0.8f) continue; // only decks well above this vert
+            if (t.minY < p.y + CLEARANCE) continue; // see CLEARANCE
             // Möller–Trumbore, ray p + s·toSun
             const float3 e1 = t.b - t.a, e2 = t.c - t.a;
             const float3 pv = cross(toSun, e2);
@@ -2802,7 +2943,14 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
     // straight-edged wedges that look nothing like a loop's shadow. So sample a
     // small disc (the PCF footprint) and shade by the fraction in shadow.
     constexpr int PCF_N = 4;
-    constexpr float PCF_R = 0.55f; // ≈ three's kernel over a whole-track map
+    // Three's kernel, honestly measured: PCFShadowMap over a 2048² map fitted to
+    // the track bbox is ~1 texel, i.e. ~0.06 u on a 130-u circuit. 0.55 was the
+    // radius I first guessed and it is nearly TEN TIMES that — it killed the
+    // straight-edged wedges but left every shadow vague. Road vertices sit
+    // ~0.24 u apart, which is the floor on how sharp a per-vertex bake can be,
+    // so this sits just under one spacing: as crisp as the mesh allows without
+    // snapping back to one hard in/out per vertex.
+    constexpr float PCF_R = 0.18f;
     const auto coverage = [&](const float3& p) {
         float hit = occluded(p) ? 1.0f : 0.0f;
         for (int k = 0; k < PCF_N; k++) {
@@ -2839,6 +2987,11 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
                 | (uint32_t) ((c & 0xff) * shade);
         touched = true;
     }
+    // Cache the RESULT, not just the shaded verts — the road's paint is baked
+    // into the same colour column, so this is the whole answer for this circuit.
+    mBakeKey = key;
+    mBakeColors.resize(mRoad.verts.size());
+    for (size_t i = 0; i < mRoad.verts.size(); i++) mBakeColors[i] = mRoad.verts[i].abgr;
     if (touched) {
         mRoad.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                 mRoad.verts.data(), mRoad.verts.size() * sizeof(Vertex), nullptr));
@@ -3231,14 +3384,12 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
             if (!inst) continue;
             tcmG.setTransform(tcmG.getInstance(inst->getRoot()),
                     mat4f::translation(float3{ 0, -1000, 0 }));
-            MaterialInstance* const* mats = inst->getMaterialInstances();
-            for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
-                if (mats[mi]->getMaterial()->hasParameter("baseColorFactor")) {
-                    mats[mi]->setParameter("baseColorFactor",
-                            math::float4{ 0.42f, 0.44f, 0.50f, 0.5f });
-                }
-            }
         }
+        // The ghost GLB already carries alpha 0.5 on its material (ghostGlb
+        // patches the JSON), so it only needs the same chassis-only recolour —
+        // its tyres keep their colour at half opacity, like the JS clone does.
+        recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
+                math::float4{ 0.42f, 0.44f, 0.50f, 0.5f });
     }
     if (mMonsterAsset) {
         const filament::Aabb mbb = mMonsterAsset->getBoundingBox();
@@ -3297,18 +3448,16 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                 }
             }
         }
-        // Neutral gunmetal frame (MonsterRig's recolour): pull the chassis
-        // texture toward one dark neutral via the ubershader base factor.
-        for (auto* inst : mMonsterInstances) {
-            if (!inst) continue;
-            MaterialInstance* const* mats = inst->getMaterialInstances();
-            for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
-                if (mats[mi]->getMaterial()->hasParameter("baseColorFactor")) {
-                    mats[mi]->setParameter("baseColorFactor",
-                            math::float4{ 0.42f, 0.44f, 0.50f, 1.0f });
-                }
-            }
-        }
+        // Neutral gunmetal frame (MonsterRig's recolour) — CHASSIS ONLY. The
+        // whole truck shares one `colormap` material, so recolouring every
+        // instance flattened the TYRES to the same grey too: with no tread or
+        // hub shading left on them, the wheels look painted on and their
+        // rotation is invisible. The JS clones the material for the chassis
+        // mesh alone and drops its map, so do the same here — a per-primitive
+        // instance on that renderable, with the atlas neutralised by a white
+        // 1×1 so the flat colour is all that's left.
+        recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
+                math::float4{ 0.42f, 0.44f, 0.50f, 1.0f });
     }
     buildPadsMesh(tb);
     buildWater(tb);
@@ -3594,25 +3743,19 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
             const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
             const float fl = (mCarWheels.size() > c) ? mCarWheels[c].footL : 2.0f;
             const float W = fw * 1.45f, L = fl * 1.45f;   // SHADOW_OVERSCAN quad
-            // The JS shadow is the car's BAKED top-down silhouette — a body
-            // outline, not its bounding box. A rounded rect at the full
-            // footprint reads as a big rectangle parked under the car; a
-            // superellipse (n = 3) tucks the corners in like a real one, and a
-            // wide feather stands in for the bake's blur.
-            const float hw = fw * 0.46f, hl = fl * 0.46f;
-            const float feather = 0.28f;                  // in normalised radius
+            // The SHAPE now lives in a texture (buildShadowMask), because the JS
+            // silhouette's penumbra is three pixels of a 128-wide bake — about
+            // 5% of the half-width — and a falloff evaluated on a 10×14 grid
+            // can't hold an edge that tight. It just made the blob vague. The
+            // grid stays: it exists so the sheet can CONFORM to a curving deck.
             constexpr int GW = 10, GL = 14;               // grid segments
             for (int j = 0; j <= GL; j++) {
                 for (int i = 0; i <= GW; i++) {
                     const float x = ((float) i / GW - 0.5f) * W;
                     const float z = ((float) j / GL - 0.5f) * L;
-                    const float ax = std::fabs(x) / hw, az = std::fabs(z) / hl;
-                    const float q = std::cbrt(ax * ax * ax + az * az * az); // 1 at the edge
-                    float t = std::min(1.0f, std::max(0.0f, (1.0f + feather - q) / feather));
-                    t = t * t * (3.0f - 2.0f * t);
-                    const float a = 0.55f * t;
-                    m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, a) });
-                    m.local.push_back({ x, z, (uint8_t) std::lround(a * 255.0f) });
+                    m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, 0.55f) });
+                    m.uvs.push_back({ (float) i / GW, (float) j / GL });
+                    m.local.push_back({ x, z, (uint8_t) std::lround(0.55f * 255.0f) });
                 }
             }
             for (int j = 0; j < GL; j++) {
@@ -3622,8 +3765,21 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                     m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
                 }
             }
-            MaterialInstance* mi = sceneInstance(mBlendMaterial);
+            MaterialInstance* mi = mDecalMaterial ? sceneInstance(mDecalMaterial)
+                                                  : sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f); // never z-fight the deck it hugs
+            if (mDecalMaterial) {
+                if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
+                if (mShadowMaskTex) {
+                    TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+                            TextureSampler::MagFilter::LINEAR);
+                    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+                    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+                    mi->setParameter("albedo", mShadowMaskTex, smp);
+                }
+            } else {
+                m.uvs.clear(); // vblend has no uv0 attribute
+            }
             if (!buildMesh(m, true, mi, 3)) return false;
         }
         // Rear name plates (makePlate): a livery rounded-rect sticker with a
@@ -4954,6 +5110,12 @@ bool TtpRenderer::buildScene() {
     if (!mGroundMaterial && vground != mAssets.end()) {
         mGroundMaterial = Material::Builder()
                 .package(vground->second.data(), vground->second.size())
+                .build(*mEngine);
+    }
+    const auto vdecal = mAssets.find("vdecal.filamat");
+    if (!mDecalMaterial && vdecal != mAssets.end()) {
+        mDecalMaterial = Material::Builder()
+                .package(vdecal->second.data(), vdecal->second.size())
                 .build(*mEngine);
     }
     const auto vpoint = mAssets.find("vpoint.filamat");
@@ -6328,6 +6490,9 @@ TtpRenderer::~TtpRenderer() {
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
+    if (mWhiteTex) mEngine->destroy(mWhiteTex);
+    if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
+    if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);

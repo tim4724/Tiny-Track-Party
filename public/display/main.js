@@ -205,7 +205,7 @@ async function _applyNativeTrack(track, force) {
   // lowest free ones, which is not their position in this list.
   const roster = scene.nativeCarOrder().all.map((id) => {
     const c = scene.cars.get(id);
-    return { id, name: (c.label && c.label.textContent) || '', carIndex: c.carIndex ?? 0,
+    return { id, name: c.name || '', carIndex: c.carIndex ?? 0,
              color: CAR_COLORS[(c.colorIndex ?? 0) % CAR_COLORS.length] };
   });
   const sig = JSON.stringify(roster);
