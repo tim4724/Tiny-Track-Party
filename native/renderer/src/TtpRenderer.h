@@ -138,6 +138,9 @@ private:
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
+    // Split-screen column count for n cells — SceneRenderer's bestGrid, so the
+    // 3D cells land where the DOM HUD puts its labels.
+    uint32_t bestGridCols(uint32_t n) const;
     Mesh mSky;   // vertex-gradient dome at SKY_R (past the fog cutoff)
     Mesh mHills; // horizon dome ring
     // Per-feature anchors {x, z, top} in AUTHORED coords — the offshore

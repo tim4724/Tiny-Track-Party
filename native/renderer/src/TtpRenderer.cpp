@@ -40,6 +40,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <string>
 
 using namespace filament;
@@ -998,6 +999,26 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
             [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, owned));
     tex->generateMipmaps(*mEngine);
     return tex;
+}
+
+// Split-screen column count — SceneRenderer's bestGrid, verbatim: score every
+// column count by how far the resulting cell is from square, plus a real
+// penalty per wasted cell, and take the cheapest. `ceil(sqrt(n))` is NOT the
+// same function: on a 16:9 screen it lays 3 players out 2×2 where the display
+// lays them 3×1, so the 3D cells and the DOM HUD (which uses the JS answer to
+// place every label, place card and steer bar) disagreed about where a cell is.
+uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
+    if (n == 0) return 1;
+    const float W = (float) mWidth, H = (float) mHeight;
+    uint32_t best = 1;
+    float bestCost = std::numeric_limits<float>::infinity();
+    for (uint32_t cols = 1; cols <= n; cols++) {
+        const uint32_t rows = (n + cols - 1) / cols;
+        const float cellAspect = (W / cols) / (H / rows);
+        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f;
+        if (cost < bestCost) { bestCost = cost; best = cols; }
+    }
+    return best;
 }
 
 // ── Ground-conform probe ─────────────────────────────────────────────────────
@@ -5987,7 +6008,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
         ensureCells(input.viewCount);
-        const uint32_t cols = (uint32_t) std::ceil(std::sqrt((double) input.viewCount));
+        const uint32_t cols = bestGridCols(input.viewCount);
         const uint32_t rows = (input.viewCount + cols - 1) / cols;
         const uint32_t cw = mWidth / cols, ch = mHeight / rows;
         for (uint32_t i = 0; i < input.viewCount; i++) {
