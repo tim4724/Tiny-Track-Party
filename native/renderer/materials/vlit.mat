@@ -1,19 +1,99 @@
+// The cheap matte family: Lambert, which is what the JS actually uses.
+//
+// This was Filament's full PBR `lit` model with roughness 1 / reflectance 0 —
+// correct-looking, and three times the per-pixel cost of the MeshLambertMaterial
+// it was standing in for. Every lit surface in the scene (road, hills,
+// structures, berms, scenery) runs through here, so that was most of the screen
+// paying for a specular lobe and an IBL reflection a matte toy world never
+// shows.
+//
+// So: unlit, with the diffuse terms written out by hand. They are Filament's
+// OWN expressions, not an approximation of them —
+//   ambient  = Irradiance_SphericalHarmonics(n) * iblLuminance   (light_indirect)
+//   sun      = lightColorIntensity.rgb * .w * NoL * Fd_Lambert() (shading_model_standard)
+// — read from the same frameUniforms the lit path reads, both already
+// pre-exposed. Nothing is recalibrated; the only thing dropped is the specular,
+// which moved the parity diff toward three rather than away from it.
+//
+// The sun's shadow comes from the map TtpRenderer bakes once per track (see
+// bakeShadowMap). Unlit materials get no shadowing from the engine, and we did
+// not want the engine's anyway: it re-renders the same static depth pass in
+// every split-screen cell, every frame, where the JS renders one and freezes it.
 material {
     name : TtpVlit,
     requires : [
-        color
+        color,
+        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        tangents
     ],
-    shadingModel : lit,
+    shadingModel : unlit,
     culling : none,
-    doubleSided : true
+    doubleSided : true,
+    parameters : [
+        // The frozen sun map and what puts a world position in its [0,1] space.
+        // shadowTexel is 0 when a track baked no map, which reads as "lit".
+        { type : sampler2d, name : shadowMap, precision : high },
+        { type : mat4, name : shadowFromWorld, precision : high },
+        { type : float, name : shadowTexel }
+    ]
 }
 
 fragment {
+    // 2×2 PCF over the baked map, offset along the normal by a couple of texels
+    // — the same acne guard three refits to its own texel size (normalBias).
+    // The map is a plain depth texture sampled as colour, so the compare is
+    // ours to make.
+    //
+    // `wp` MUST be getUserWorldPosition(), not getWorldPosition(): Filament
+    // renders camera-relative, so the latter is offset by the camera and the
+    // lookup would slide across the map as the chase cam moves. The symptom is
+    // a road uniformly in shadow, which reads as "the compare is inverted" and
+    // is not.
+    float sunVisibility(highp vec3 wp, highp vec3 n) {
+        if (materialParams.shadowTexel <= 0.0) return 1.0;
+        highp vec4 sp = materialParams.shadowFromWorld
+                * vec4(wp + n * (materialParams.shadowTexel * 4.0), 1.0);
+        highp vec3 uv = sp.xyz / sp.w;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
+                || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
+        // Reversed-Z: the map holds 1 at the light and 0 at its far plane, so a
+        // stored depth GREATER than ours is a caster in front of us.
+        highp float bias = 0.004;
+        highp float step = 1.0 / 2048.0;
+        float lit = 0.0;
+        for (int j = 0; j < 2; j++) {
+            for (int i = 0; i < 2; i++) {
+                highp vec2 o = (vec2(float(i), float(j)) - 0.5) * step;
+                lit += (texture(materialParams_shadowMap, uv.xy + o).r > uv.z + bias) ? 0.0 : 1.0;
+            }
+        }
+        return lit * 0.25;
+    }
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = getColor();
-        material.roughness = 1.0;
-        material.metallic = 0.0;
-        material.reflectance = 0.0;
+        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
+        // former so nothing else in the pipeline touches it.
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        highp vec3 n = getWorldGeometricNormalVector();
+        vec3 base = getColor().rgb;
+
+        // Ambient: the 2-band SH the C++ builds from theme.hemi, evaluated
+        // exactly as Irradiance_SphericalHarmonics does (Fd_Lambert is already
+        // baked into the SH coefficients, hence no 1/PI here).
+        vec3 ambient = max(frameUniforms.iblSH[0]
+                + frameUniforms.iblSH[1] * n.y
+                + frameUniforms.iblSH[2] * n.z
+                + frameUniforms.iblSH[3] * n.x, vec3(0.0)) * frameUniforms.iblLuminance;
+
+        // lightDirection is the surface→light vector; .w carries the exposure.
+        float NoL = saturate(dot(n, frameUniforms.lightDirection));
+        float visibility = sunVisibility(getUserWorldPosition(), n);
+        vec3 sun = frameUniforms.lightColorIntensity.rgb
+                * (frameUniforms.lightColorIntensity.w * NoL * visibility * (1.0 / PI));
+
+        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
+        material.emissive = vec4(base * (ambient + sun), 0.0);
     }
 }

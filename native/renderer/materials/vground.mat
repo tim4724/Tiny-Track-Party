@@ -8,15 +8,23 @@
 // playroom's wood floor lost its plank seams, end joints and knots and read as
 // flat diagonal banding.
 //
-// So: same texture, generated pixel-for-pixel in C++ and sampled here. Lit,
-// fully rough and non-metallic, matching vlit (the cheap-matte family).
-// flipUV is off so the C++ UVs (world XZ / tile) map straight through.
+// So: same texture, generated pixel-for-pixel in C++ and sampled here, on the
+// same hand-written Lambert as vlit (see that file for why the lighting is
+// spelled out instead of using Filament's `lit` model). flipUV is off so the
+// C++ UVs (world XZ / tile) map straight through.
+//
+// No shadow term, deliberately: environment.js turns the ground's receiveShadow
+// OFF so an elevated car's blob can't detach onto the grass far below its deck,
+// and the same reasoning covers the track's own cast shadow. The road, the
+// structures and the berms catch it; the lawn does not.
 material {
     name : TtpVground,
     requires : [
-        uv0
+        uv0,
+        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        tangents
     ],
-    shadingModel : lit,
+    shadingModel : unlit,
     culling : none,
     doubleSided : true,
     flipUV : false,
@@ -28,9 +36,20 @@ material {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = texture(materialParams_albedo, getUV0());
-        material.roughness = 1.0;
-        material.metallic = 0.0;
-        material.reflectance = 0.0;
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        highp vec3 n = getWorldGeometricNormalVector();
+        vec3 base = texture(materialParams_albedo, getUV0()).rgb;
+
+        vec3 ambient = max(frameUniforms.iblSH[0]
+                + frameUniforms.iblSH[1] * n.y
+                + frameUniforms.iblSH[2] * n.z
+                + frameUniforms.iblSH[3] * n.x, vec3(0.0)) * frameUniforms.iblLuminance;
+
+        float NoL = saturate(dot(n, frameUniforms.lightDirection));
+        vec3 sun = frameUniforms.lightColorIntensity.rgb
+                * (frameUniforms.lightColorIntensity.w * NoL * (1.0 / PI));
+
+        material.emissive = vec4(base * (ambient + sun), 0.0);
     }
 }

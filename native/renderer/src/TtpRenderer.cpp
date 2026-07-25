@@ -903,7 +903,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
     // at 160 rings for exactly this.) The CPU-side soup in mRoad.verts is
     // untouched: the ground-conform probes still read the whole ribbon.
-    return buildMesh(mRoad, true, nullptr, 4, 2500);
+    return buildMesh(mRoad, true, litShadowInstance(), 4, 2500);
 }
 
 // Colour of the ground sheet at world x — the band the tiled canvas would put
@@ -2930,6 +2930,134 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // verts occluded from the sun by ELEVATED road geometry (loop/bridge decks) or
 // the gantry. Grid-pruned ray/triangle tests keep the bake to a few ms; the
 // road VB re-uploads once with the darkened colours.
+// ── The frozen sun shadow map ────────────────────────────────────────────────
+// Filament renders a shadow map per VIEW per frame. That is the right default
+// for a scene with a moving sun, and exactly wrong here: nothing that casts
+// ever moves, and a 4-way split-screen re-renders the identical 2048² depth
+// pass four times a frame (measured at 1.29 ms per extra cell — the single
+// biggest cost in split-screen). The JS renders one map in setTrack, freezes it
+// with `shadowMap.autoUpdate = false`, and reuses it for every cell.
+//
+// So we render our own, once, at scene build: an ortho camera down the sun's
+// axis fitted to the track, a depth-only render target, and a layer-filtered
+// view so only the casters land in it. The lit materials sample it themselves
+// (bindShadowMap hands them the texture and the matrix); Filament's own shadow
+// machinery is off entirely, which also drops the per-fragment cascade logic.
+//
+// Caster set and fit are three's: the fixed track geometry, framed to the road
+// bbox grown by the tallest structure, at the same 2048² and the same
+// ~2.5-texel normal bias.
+void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
+    if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    if (mRoad.verts.empty() || !mRenderer) return;
+    constexpr uint32_t SM = 2048;
+    // Fit: the road's own bounds, padded for the structures under it and the
+    // gantry over it. A tight box is the whole point — texel size is what the
+    // shadow's edge resolves to (three refits its ortho box per track for the
+    // same reason).
+    float3 lo{ 1e30f }, hi{ -1e30f };
+    for (const Vertex& v : mRoad.verts) {
+        lo = min(lo, float3{ v.px, v.py, v.pz });
+        hi = max(hi, float3{ v.px, v.py, v.pz });
+    }
+    lo -= float3{ 4.0f, 8.0f, 4.0f };
+    hi += float3{ 4.0f, 8.0f, 4.0f };
+    const float3 centre = (lo + hi) * 0.5f;
+    const float3 toSun = normalize(float3{ 2.0f, 12.0f, 1.5f }); // theme.key, as the JS places it
+    // Radius of the bounding sphere: an ortho box that covers it holds the
+    // whole track from any light angle, and never depends on the camera.
+    const float radius = length(hi - lo) * 0.5f;
+    mShadowTexel = 2.0f * radius / (float) SM;
+
+    mShadowMap = Texture::Builder()
+            .width(SM).height(SM).levels(1)
+            .format(Texture::InternalFormat::DEPTH24)
+            .usage(Texture::Usage::DEPTH_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            .build(*mEngine);
+    if (!mShadowMap) return;
+    RenderTarget* rt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::DEPTH, mShadowMap)
+            .build(*mEngine);
+    utils::Entity camEnt = utils::EntityManager::get().create();
+    Camera* cam = mEngine->createCamera(camEnt);
+    View* view = mEngine->createView();
+    cam->setProjection(Camera::Projection::ORTHO,
+            -radius, radius, -radius, radius, 0.0, 2.0 * radius * 2.0);
+    cam->lookAt(centre + toSun * (radius * 2.0f), centre, float3{ 0, 0, 1 });
+    view->setScene(mScene);
+    view->setCamera(cam);
+    view->setViewport({ 0, 0, SM, SM });
+    view->setRenderTarget(rt);
+    view->setPostProcessingEnabled(false);
+    view->setShadowingEnabled(false);
+    view->setVisibleLayers(0x02, 0x02); // casters only (setMeshShadows marks them)
+    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+    Renderer::ClearOptions co{};
+    co.clear = true;
+    mRenderer->setClearOptions(co);
+    mRenderer->renderStandaloneView(view);
+    mRenderer->setClearOptions(prev);
+
+    // World → shadow texture space. Read the matrices BEFORE the camera is
+    // destroyed — doing it after is a use-after-free that shows up as a wasm
+    // out-of-bounds trap three call frames deep, with nothing pointing back
+    // here.
+    //
+    // Only x and y need the clip [-1,1] → texture [0,1] half-scale.
+    // getProjectionMatrix() hands back Filament's VIRTUAL clip space, not GL's:
+    // "GL to inverted DX convention" (Camera.cpp), so z already arrives in
+    // [0,1] — and REVERSED, near = 1. Remapping it as well put every depth in
+    // [0.5, 1] and inverted the compare, which shaded the entire road.
+    const mat4f lightViewProj{ cam->getProjectionMatrix() * cam->getViewMatrix() };
+    const mat4f bias{ float4{ 0.5f, 0, 0, 0 }, float4{ 0, 0.5f, 0, 0 },
+                      float4{ 0, 0, 1, 0 }, float4{ 0.5f, 0.5f, 0, 1 } };
+    mShadowFromWorld = bias * lightViewProj;
+
+    mEngine->destroy(view);
+    mEngine->destroy(rt);
+    mEngine->destroyCameraComponent(camEnt);
+    utils::EntityManager::get().destroy(camEnt);
+}
+
+// The shared receiver instance, created on first use so the road (built before
+// the bake) can already reference it; bindShadowMap fills it in afterwards.
+MaterialInstance* TtpRenderer::litShadowInstance() {
+    if (!mLitShadowInst && mLitMaterial) {
+        mLitShadowInst = sceneInstance(mLitMaterial);
+        mLitShadowInst->setParameter("shadowTexel", 0.0f);
+    }
+    return mLitShadowInst;
+}
+
+void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
+    if (!mi) return;
+    // A sampler must be bound even when a track baked no map (Filament draws
+    // with every sampler resolved), so keep the 1×1 white around for it.
+    if (!mShadowMap && !mWhiteTex) {
+        static const uint8_t WHITE[4] = { 255, 255, 255, 255 };
+        mWhiteTex = Texture::Builder()
+                .width(1).height(1).levels(1)
+                .format(Texture::InternalFormat::SRGB8_A8)
+                .sampler(Texture::Sampler::SAMPLER_2D)
+                .build(*mEngine);
+        if (mWhiteTex) {
+            mWhiteTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+                    WHITE, sizeof(WHITE), Texture::Format::RGBA, Texture::Type::UBYTE));
+        }
+    }
+    Texture* tex = mShadowMap ? mShadowMap : mWhiteTex;
+    if (!tex) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("shadowMap", tex, smp);
+    mi->setParameter("shadowFromWorld", mShadowFromWorld);
+
+    // Sampling step + the normal offset that keeps a curving deck from
+    // shadowing itself (three refits the same guard to its texel size).
+    mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+}
+
 // Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,
 // glTF: both), so every renderable that matters says so explicitly — see the
 // caster/receiver note in buildTrackScene for who is in which set.
@@ -2937,6 +3065,25 @@ void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (m.entity.isNull()) return;
     setShadows(&m.entity, 1, cast, receive);
     if (!m.chunks.empty()) setShadows(m.chunks.data(), m.chunks.size(), cast, receive);
+}
+
+// Per-chunk casting, by height. Three casts from ELEVATED road chunks only:
+// "a ground-level chunk only casts onto grass, which opts out of receiving, so
+// its shadow is invisible — skip it for free" (render/track.js). Skipping it is
+// not just free here, it is necessary — a flat road that casts paints a hard
+// edge onto the berms beside it that the JS never draws.
+void TtpRenderer::setMeshShadowsAbove(Mesh& m, float minY) {
+    if (m.entity.isNull()) return;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto mark = [&](utils::Entity e) {
+        const auto ri = rcm.getInstance(e);
+        if (!ri) return;
+        const filament::Box bx = rcm.getAxisAlignedBoundingBox(ri);
+        const bool cast = (bx.center.y + bx.halfExtent.y) > minY;
+        setShadows(&e, 1, cast, true);
+    };
+    mark(m.entity);
+    for (utils::Entity e : m.chunks) mark(e);
 }
 
 void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
@@ -2955,6 +3102,11 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     for (size_t i = 0; i < n; i++) {
         const auto ri = rcm.getInstance(e[i]);
         if (!ri) continue;
+        // Layer bit 1 IS the caster set: it is what bakeShadowMap's view filters
+        // on. Bit 0 (every renderable's default) stays set, so the main views
+        // are unaffected. The engine's own flags follow along for the day
+        // Filament's shadows come back for something dynamic.
+        rcm.setLayerMask(ri, 0x02, cast ? 0x02 : 0x00);
         rcm.setCastShadows(ri, cast);
         rcm.setReceiveShadows(ri, receive);
     }
@@ -3187,27 +3339,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // (key 1.4 / hemi 2.2), so a biome's own intensities ride in as a RATIO on
     // those calibration points rather than as absolute numbers.
     mSun = utils::EntityManager::get().create();
-    // Shadow rig, matched to environment.js: a 2048² PCF map, and a normal-space
-    // bias of a couple of texels to kill acne on the curving deck (three refits
-    // its own to max(0.06, 2.5 texels) for the same reason). One cascade and
-    // `stable` on: the chase camera moves every frame, and without the texel
-    // snap a stationary shadow edge crawls. shadowFar caps the fitted box so the
-    // texel density stays near three's whole-track fit instead of stretching to
-    // the fog distance — beyond it there is nothing but ground, which does not
-    // receive.
-    LightManager::ShadowOptions so{};
-    so.mapSize = 2048;
-    so.shadowCascades = 1;
-    so.constantBias = 0.001f;
-    so.normalBias = 2.0f;
-    so.shadowFar = 120.0f;
-    so.stable = true;
+    // No engine shadows: the map is baked once by bakeShadowMap and sampled by
+    // the lit materials themselves. Leaving Filament's on would re-render the
+    // same static depth pass per view per frame.
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
             .color(srgbToLinear(tb.keyCol))
             .intensity(48000.0f * (tb.keyIntensity / 1.4f))
             .direction(normalize(float3{ -2.0f, -12.0f, -1.5f }))
-            .castShadows(true)
-            .shadowOptions(so)
+            .castShadows(false)
             .build(*mEngine, mSun);
     mScene->addEntity(mSun);
     {
@@ -4037,7 +4176,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // every glTF asset, since gltfio opts renderables IN by default), and the
     // grass deliberately opts out so an elevated car's blob can't detach onto
     // it far below the deck.
-    setMeshShadows(mRoad, true, true);
+    // maxY > 0.8 in the JS, whose ground plane sits at −1.
+    setMeshShadowsAbove(mRoad, tb.groundY + 1.8f);
     setMeshShadows(mGantry, true, true);
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
@@ -4053,6 +4193,20 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                      &mBalloon, &mWindmill, &mTrain, &mTrainKey }) {
         setMeshCulling(*m, true);
     }
+
+    // The sun's map, rendered once now that every caster exists, and handed to
+    // the materials that sample it.
+    bakeShadowMap(tb);
+    bindShadowMap(litShadowInstance());
+    // Every other vlit instance still needs its sampler resolved, but with
+    // shadowTexel 0 so the lookup is skipped entirely.
+    Texture* const map = mShadowMap;
+    mShadowMap = nullptr;
+    bindShadowMap(mLitMaterial ? mLitMaterial->getDefaultInstance() : nullptr);
+    for (MaterialInstance* mi : mSceneMatInstances) {
+        if (mi != mLitShadowInst && mi->getMaterial() == mLitMaterial) bindShadowMap(mi);
+    }
+    mShadowMap = map;
 
     // Clouds (environment.js): 8 puffs, deterministic index math. The JS
     // sprites are fog:false and drift ACROSS the field in authored space;
@@ -4902,7 +5056,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     if (!mStructures.verts.empty()) {
         accumulateNormals(mStructures);
-        if (!buildMesh(mStructures)) return;
+        if (!buildMesh(mStructures, true, litShadowInstance())) return;
     }
 
     // Berms: consecutive cross-section rings stitched into a grass surface that
@@ -4940,7 +5094,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     if (!mBerms.verts.empty()) {
         accumulateNormals(mBerms);
-        buildMesh(mBerms);
+        buildMesh(mBerms, true, litShadowInstance());
     }
 }
 
@@ -6477,6 +6631,8 @@ void TtpRenderer::releaseScene() {
     if (mResourceLoader) mResourceLoader->evictResourceData(); // decoded glTF source cache
     for (auto* mi : mSceneMatInstances) mEngine->destroy(mi);
     mSceneMatInstances.clear();
+    mLitShadowInst = nullptr; // was one of those — never dangle into the next build
+    if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     mPadMat = nullptr;
     for (utils::Entity e : { mSun, mFill }) {
         if (!e.isNull()) {
@@ -6562,6 +6718,7 @@ TtpRenderer::~TtpRenderer() {
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
+    if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
     delete mResourceLoader;
     delete mStbProvider;

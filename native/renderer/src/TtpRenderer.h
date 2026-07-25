@@ -118,6 +118,11 @@ private:
     filament::Skybox* mSkybox = nullptr;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
+    // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
+    // is the road, the structures and the berms and nothing else — the lawn,
+    // the hills and the scenery opt out — so the receivers get this instance and
+    // everyone else keeps the default (whose shadowTexel is 0 = always lit).
+    filament::MaterialInstance* mLitShadowInst = nullptr;
     utils::Entity mCameraEntity;
 
     // Split-screen cells, grown on demand to FrameInput.viewCount.
@@ -247,6 +252,11 @@ private:
     // whose penumbra is far too tight to carry in vertex alpha.
     filament::Material* mDecalMaterial = nullptr;
     filament::Texture* mShadowMaskTex = nullptr;
+    // The frozen sun shadow map and the matrix that puts a world position in
+    // its [0,1] texture space (see bakeShadowMap).
+    filament::Texture* mShadowMap = nullptr;
+    filament::math::mat4f mShadowFromWorld;
+    float mShadowTexel = 0.05f; // world units per shadow texel, for the bias
     // Per-car ground-shadow silhouette, rendered top-down off the real model
     // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
     std::vector<filament::Texture*> mCarSilhouettes;
@@ -445,6 +455,15 @@ private:
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
     void setMeshShadows(Mesh& m, bool cast, bool receive);
+    void setMeshShadowsAbove(Mesh& m, float minY);
+    // Render the static track's depth from the sun ONCE, into a texture the lit
+    // materials sample for themselves. Filament re-renders its own shadow map
+    // per VIEW per frame, which a 4-way split pays for four times over; the JS
+    // renders one and freezes it (SceneRenderer.setTrack), and so do we.
+    void bakeShadowMap(const TrackBin& tb);
+    // Hand the baked map + its world→light matrix to a material instance.
+    void bindShadowMap(filament::MaterialInstance* mi);
+    filament::MaterialInstance* litShadowInstance();
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
     // rewritten in WORLD space every frame — the conformed decals, the skid
     // ribbons, the billboards — outlives its build-time bounds, so only meshes
