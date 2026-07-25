@@ -50,23 +50,54 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `PartyFastlane.js`, which SURVIVE: the native fastlane SUBCLASSES the kit class
   to inherit its WebRTC handshake, and the controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (26 tests, the SAME 26 on every leg —
+  replayed by `native/` ctest (32 tests, the SAME 32 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
   They are permanent cross-implementation evidence recorded against the JS engine
   while it existed — never re-record them from C++, which would only prove C++
-  matches itself. New traces come from `native/build/replay_cli --record <header>
-  --out=f` (the `record_*` ctests hold it byte-identical to the committed
-  fixtures). `scripts/gen-*-corpus.mjs` are the oracle generators;
-  `gen-roomflow-corpus.mjs` is FROZEN (its JS twin is gone) and documents the room
-  contract as 36 scenarios.
+  matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators;
+  `gen-roomflow-corpus.mjs` (36 room scenarios) and `gen-grandprix-corpus.mjs`
+  (12 cup scripts + 5 shuffle-bag cases) are FROZEN — their JS twins are gone, and
+  each header names the `git show` that restores one if the oracle must be
+  re-derived.
+- TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
+  (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
+  C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`)
+  is regression evidence only: it proves the sim still does what it did, never that
+  the port was right. Both re-record via a `record_*` ctest holding byte identity.
+  See `tests/fixtures/traces/README.md`.
 - Traces are ONE RACE PER PROCESS, so they cannot see state that leaks from one
   race into the next (a racing-line cache keyed by a recycled `Centerline*` made
-  bots drive the previous track's line — invisible to all 8 fixtures). Two gates
+  bots drive the previous track's line — invisible to all 8 fixtures). Three gates
   cover that blind spot: `race_isolation` forces the address collision with
-  placement new, and `replay_sequence` replays every trace in one process. When
-  adding cross-race state, own it per `Game`.
+  placement new, `catalogue_sweep` races all 20 tracks and then re-races them in
+  REVERSE order demanding identical digests, and `replay_sequence` replays every
+  trace in one process. When adding cross-race state, own it per `Game`.
+- Traces also only ever race CATALOGUE tracks, so anything no shipped layout
+  contains is unreachable by any fixture: no track builds with a pole (the JS
+  TrackBuilder agrees), which is why `Game::collidePole` is covered by
+  `hazard_check` constructing the situation directly rather than by a trace.
+- The C ABI (`runtime/`) is NOT on the replay path — `replay_cli` calls C++ objects
+  directly. `abi_check` covers the marshalling layer the browser actually talks to,
+  BOTH ABIs: two traces through `ttp_process_input`/`ttp_update`, the cup corpus
+  through `ttp_gp_*`, the room and framing corpora through `ttp_room_*`/
+  `ttp_framing_*`, a fastlane plumbing pass, and every boundary/mutation export
+  against its header contract. It recompiles `runtime/*.cc` rather than linking a
+  lib, so the shipped wasm's `EMSCRIPTEN_KEEPALIVE` export list is untouched.
+  `tests/party-abi.test.js` still covers the same ground in Node against the SHIPPED
+  wasm, which is the only place that artifact is exercised.
+- Two checks audit the SUITE, not the code, and run weekly + on demand
+  (`.github/workflows/test-the-tests.yml`), never on PRs: `npm run mutation-check`
+  breaks the engine 21 ways and requires the matching ctest to go red for each (two
+  gates were found blind this way), and `npm run revive:js-oracle` restores the
+  retired JS sim from git and re-records all 8 golden traces byte-identically. While
+  the latter passes, parity evidence is renewable; when it starts failing, decide
+  consciously whether to repair the twin or accept that the traces are frozen.
+- Our own C/C++ carries `-Wall -Wextra` via the `ttp_warnings` interface;
+  the vendored fdlibm/double-conversion deliberately do NOT (they are taken whole
+  from upstream). Not `-Werror` — a newer compiler's new diagnostic must not block a
+  build.
 - `public/display/engine/native/ttp_runtime.{mjs,wasm}` are CHECKED IN and are
   what the browser actually runs. After touching `native/`, run
   `native/scripts/build-runtime-web.sh` and commit the artifacts —
@@ -78,5 +109,8 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   and run `native/build/probe_cli` (modes laptime|matrix|packed;
   `laptime --json` feeds `scripts/probe-difficulty.mjs`, the per-track report card). The old JS probes drove
   the AI with no game context and unseeded items, so their numbers were wrong —
-  do not compare against pre-2026-07-25 readings.
+  do not compare against pre-2026-07-25 readings. The probe is a tuning instrument,
+  not a gate, but the `probe_smoke` ctest keeps it from rotting (a row per catalogue
+  track, every lap time plausible) — it is what surfaced the racing-line bug, as lap
+  times that moved between identical sweeps.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

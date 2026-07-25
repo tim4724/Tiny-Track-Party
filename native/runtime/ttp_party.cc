@@ -348,7 +348,11 @@ const char* ttp_framing_classify(const char* frameText) {
   Value frame = frameText && *frameText ? json::parse(frameText, &ok) : Value::Null();
   Value out = Value::Obj();
   if (!ok || frame.type != Value::OBJ) {
-    // Not a JSON object: JS bails out of onmessage entirely (bad JSON is dropped).
+    // Not a JSON object — malformed text, or valid JSON that is a scalar or array.
+    // Both are dropped. The kit only agrees with this since the typeof guard in
+    // PartyConnection.js's onmessage: before it, `null` threw a TypeError out of the
+    // handler and `7`/`"x"`/`[1,2]` reached onProtocol with an undefined type. The
+    // raw-text cases in framing-corpus.jsonl pin the agreed behaviour.
     out.set("route", Value::Str("none"));
     return put(g_bufClassify, out);
   }

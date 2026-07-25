@@ -66,8 +66,7 @@ class AiController {
   double weave_ = 0, weaveTarget_ = 0;
   double weaveT_ = 0;
   int useSeq_ = 0;
-  std::string lastItem_;  // "" = null
-  bool hasLastItem_ = false;
+  std::string lastItem_;  // "" = null (no separate has-flag: "" IS the null)
   int heldFrames_ = 0;
   int holdMin_ = 0;
   bool dodgeSet_ = false;  // _dodgeLane != null

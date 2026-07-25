@@ -47,14 +47,34 @@ async function openDisplay(page) {
   // at its tail): the button is in the static HTML, so an instant click could
   // land before the listener attaches. The room warms behind the welcome, so
   // the roomCode wait below is unchanged.
-  await page.waitForFunction(() => !!window.__net);
   // The native stack is the only engine now, so this is an UNCONDITIONAL guard:
   // if a JS twin ever creeps back in (or the wasm silently fails to load), every
   // spec would still pass while testing something we no longer ship. Fail loud.
-  const impls = await page.evaluate(() => ({
-    flow: window.__net?.flow?.constructor?.name,
-    conn: window.__net?.party?.constructor?.name
+  //
+  // Wait for BOTH halves to exist before sampling. `window.__net` and `__net.flow`
+  // are there as soon as main.js publishes them, but `__net.party` is built inside
+  // DisplayNet._connect(), which start() only reaches AFTER awaiting
+  // _fetchBaseUrl() — a real network round-trip — and start() is not awaited. So
+  // "__net exists" was never the condition this guard needed: it sampled mid-flight
+  // and read conn === undefined, which JSON.stringify then dropped, producing the
+  // baffling `got {"flow":"NativeRoomFlow"}`. That was the single biggest source of
+  // e2e flake (3 of 4 flaky specs in one clean run).
+  const nativeParty = () => {
+    const n = window.__net;
+    return !!(n && n.flow && n.party);
+  };
+  const snapshot = () => page.evaluate(() => ({
+    flow: window.__net?.flow?.constructor?.name ?? null,
+    conn: window.__net?.party?.constructor?.name ?? null
   }));
+  try {
+    await page.waitForFunction(nativeParty, null, { timeout: 15000 });
+  } catch {
+    throw new Error(`the native party layer never came up, got ${JSON.stringify(await snapshot())}`);
+  }
+  // Still asserted rather than merely awaited: a JS twin WOULD satisfy the wait
+  // above, and must fail here instead of quietly being tested.
+  const impls = await snapshot();
   if (impls.flow !== 'NativeRoomFlow' || impls.conn !== 'NativePartyConnection') {
     throw new Error(`expected the native party layer, got ${JSON.stringify(impls)}`);
   }

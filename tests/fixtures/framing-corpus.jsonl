@@ -17,6 +17,12 @@
 {"expect":{"msg":{"message":"Room not found","type":"error"},"route":"protocol","type":"error"},"op":"classify","wire":{"message":"Room not found","type":"error"}}
 {"expect":{"msg":{"foo":1,"type":"weird_unknown_type"},"route":"protocol","type":"weird_unknown_type"},"op":"classify","wire":{"foo":1,"type":"weird_unknown_type"}}
 {"expect":{"msg":{"noType":true},"route":"protocol","type":null},"op":"classify","wire":{"noType":true}}
+{"expect":{"route":"none"},"op":"classify","raw":"not json at all"}
+{"expect":{"route":"none"},"op":"classify","raw":""}
+{"expect":{"route":"none"},"op":"classify","raw":"[1,2,3]"}
+{"expect":{"route":"none"},"op":"classify","raw":"\"a string\""}
+{"expect":{"route":"none"},"op":"classify","raw":"null"}
+{"expect":{"route":"none"},"op":"classify","raw":"7"}
 {"attemptBefore":0,"code":4000,"expect":{"closeAttempt":0,"closeMax":0,"meta":{"replaced":true},"stopReconnect":true,"willReconnect":false},"hasCode":true,"maxAttempts":5,"op":"close","shouldReconnectBefore":true}
 {"attemptBefore":0,"code":4001,"expect":{"closeAttempt":0,"closeMax":0,"meta":{"roomClosed":true},"stopReconnect":true,"willReconnect":false},"hasCode":true,"maxAttempts":5,"op":"close","shouldReconnectBefore":true}
 {"attemptBefore":0,"code":1006,"expect":{"closeAttempt":1,"closeMax":5,"meta":null,"stopReconnect":false,"willReconnect":true},"hasCode":true,"maxAttempts":5,"op":"close","shouldReconnectBefore":true}

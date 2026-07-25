@@ -48,6 +48,7 @@ void CupSeries::applyRace(const std::vector<GpResult>& results, const std::vecto
     Meta* m = findMeta(res.playerId);
     if (!m) {
       Meta nm;
+      nm.seatNull = (seat == nullptr);
       if (seat) { nm.name = seat->name; nm.colorIndex = seat->colorIndex; nm.ai = seat->ai; }
       meta_.emplace_back(res.playerId, nm);
       m = &meta_.back().second;
@@ -73,7 +74,8 @@ std::vector<GpStanding> CupSeries::standings() const {
   std::vector<GpStanding> rows;
   for (const auto& kv : meta_) {
     const Meta& m = kv.second;
-    rows.push_back({kv.first, m.name, m.colorIndex, m.ai, m.points, m.gained, m.lastRankNull, m.lastRank});
+    rows.push_back({kv.first, m.name, m.colorIndex, m.ai, m.points, m.gained,
+                    m.lastRankNull, m.lastRank, m.seatNull});
   }
   const double INF = std::numeric_limits<double>::infinity();
   auto latest = [&](const Id& id) -> double {

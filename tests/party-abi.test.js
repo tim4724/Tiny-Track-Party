@@ -231,7 +231,13 @@ test('party ABI reproduces the relay-framing corpus', async () => {
       assert.ok(same(JSON.parse(got), r.expect), `${label}: ${got}`);
     } else if (r.op === 'classify') {
       // The ABI takes the raw text the socket delivered, exactly as the adapter does.
-      const got = JSON.parse(f.classify(JSON.stringify(r.wire)));
+      // `raw` cases ARE that text (non-JSON, or JSON that is not an object); `wire`
+      // cases are recorded as a frame object and stringified here. Reading r.wire
+      // unconditionally made the raw cases pass for the wrong reason:
+      // JSON.stringify(undefined) is undefined, which marshals to an empty frame,
+      // which classifies as route "none" — the very answer being asserted.
+      const text = 'raw' in r ? r.raw : JSON.stringify(r.wire);
+      const got = JSON.parse(f.classify(text));
       assert.equal(got.route, r.expect.route, `${label}: route`);
       for (const k of ['from', 'data', 'type', 'msg']) {
         if (k in r.expect) assert.ok(same(got[k], r.expect[k]), `${label}: ${k}`);
