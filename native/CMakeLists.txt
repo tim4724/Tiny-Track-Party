@@ -184,6 +184,7 @@ add_library(libttp_party STATIC
   libttp-party/ttp/room_flow.cc
   libttp-party/ttp/protocol.cc
   libttp-party/ttp/relay_framing.cc
+  libttp-party/ttp/fastlane.cc
 )
 target_include_directories(libttp_party PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party
@@ -220,6 +221,19 @@ target_link_libraries(framing_check PRIVATE libttp_party libttp_sim ttp_strict_f
 ttp_emscripten_cli(framing_check)
 add_test(NAME framing
   COMMAND framing_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
+)
+
+# ---- Conformance: the fastlane netcode core ---------------------------------
+# Replays fastlane-corpus.jsonl (scripted links recorded off the real
+# PartyFastlane with a controlled clock + fake DataChannel) against
+# ttp::fastlane::Link: per op the enqueue return, the packet written, the events
+# applied, the RTT sample, and the full link-state digest. The srtt EWMA is real
+# FP, so ttp_strict_fp (-ffp-contract=off) is load-bearing here.
+add_executable(fastlane_check partytest/fastlane_check.cc)
+target_link_libraries(fastlane_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(fastlane_check)
+add_test(NAME fastlane
+  COMMAND fastlane_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/fastlane-corpus.jsonl
 )
 
 # ---- Browser module: the runtime C ABI (ttp_runtime.h) ----------------------
