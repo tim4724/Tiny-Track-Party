@@ -172,14 +172,18 @@ foreach(fx
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
 endforeach()
 
-# ---- libttp-party: the room-semantics port ----------------------------------
-# The C++ twin of partyplug/RoomFlow.js — the sans-IO room state machine (roster
-# identity/join order, presence, host election, liveness predicates). A discrete
-# state machine: no FP subtleties, but ORDER and IDENTITY semantics are load-
-# bearing. Depends only on ttp::Value (canonical.h, header-only); a local PeerId
-# mirrors libttp-sim's Id JSON-scalar identity without coupling to the game header.
+# ---- libttp-party: the room-semantics + wire-framing port -------------------
+# The C++ twin of the partyplug transport layer: RoomFlow.js (sans-IO room state
+# machine — roster identity/join order, presence, host election, liveness
+# predicates; ORDER and IDENTITY semantics load-bearing) plus the pure surface of
+# PartyConnection.js (relay_framing: outbound encoders, inbound routing, close-
+# code semantics, backoff, sharded URL) and protocol.js (the shared wire
+# vocabulary + car constants). Depends only on ttp::Value (canonical.h,
+# header-only); a local PeerId mirrors libttp-sim's Id JSON-scalar identity.
 add_library(libttp_party STATIC
   libttp-party/ttp/room_flow.cc
+  libttp-party/ttp/protocol.cc
+  libttp-party/ttp/relay_framing.cc
 )
 target_include_directories(libttp_party PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party
@@ -196,6 +200,26 @@ target_link_libraries(roomflow_check PRIVATE libttp_party libttp_sim ttp_strict_
 ttp_emscripten_cli(roomflow_check)
 add_test(NAME roomflow
   COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
+)
+
+# ---- Conformance: the protocol vocabulary + relay framing --------------------
+# protocol_check replays protocol-corpus.jsonl (constants manifest + carStats
+# table); framing_check replays framing-corpus.jsonl (encode/classify/close/
+# backoff/pin), recorded by driving the real PartyConnection. Both compare via
+# the shared structural diff in partytest/json_check.h. libttp_sim supplies
+# canonical_stringify + js_number_to_string for the expected side.
+add_executable(protocol_check partytest/protocol_check.cc)
+target_link_libraries(protocol_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(protocol_check)
+add_test(NAME protocol
+  COMMAND protocol_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/protocol-corpus.jsonl
+)
+
+add_executable(framing_check partytest/framing_check.cc)
+target_link_libraries(framing_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(framing_check)
+add_test(NAME framing
+  COMMAND framing_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
 )
 
 # ---- Browser module: the runtime C ABI (ttp_runtime.h) ----------------------
