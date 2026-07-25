@@ -9,11 +9,11 @@
 #include <fstream>
 #include <string>
 
-#include "json_check.h"
+#include "corpus_diff.h"
 #include "ttp/relay_framing.h"
 
 using namespace ttp;
-using namespace ttp::jsoncheck;
+using namespace ttp::corpus;
 
 static Value classifyToValue(const framing::Inbound& in) {
   Value o = Value::Obj();
@@ -54,31 +54,31 @@ int main(int argc, char** argv) {
   int cases = 0, passed = 0, spew = 0;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JV root;
-    if (!parseLine(line, root)) { std::fprintf(stderr, "parse error on op line\n"); return 2; }
-    const std::string& op = root.get("op")->str;
-    const JV* expect = root.get("expect");
+    Value root;
+    if (!read_line(line, root)) { std::fprintf(stderr, "parse error on op line\n"); return 2; }
+    const std::string& op = root.find("op")->str;
+    const Value* expect = root.find("expect");
 
     Value got;
     std::string label = op;
 
     if (op == "encode") {
-      const std::string& kind = root.get("kind")->str;
+      const std::string& kind = root.find("kind")->str;
       label = "encode:" + kind;
       if (kind == "create") {
         std::string url;
         bool hasUrl = root.has("url");
-        if (hasUrl) url = root.get("url")->str;
-        got = framing::encode_create(root.get("clientId")->str, root.get("maxClients")->num,
+        if (hasUrl) url = root.find("url")->str;
+        got = framing::encode_create(root.find("clientId")->str, root.find("maxClients")->num,
                                      hasUrl ? &url : nullptr);
       } else if (kind == "join") {
-        got = framing::encode_join(root.get("clientId")->str, root.get("room")->str);
+        got = framing::encode_join(root.find("clientId")->str, root.find("room")->str);
       } else if (kind == "sendTo") {
-        got = framing::encode_send_to(jvToValue(*root.get("to")), jvToValue(*root.get("data")));
+        got = framing::encode_send_to(*root.find("to"), *root.find("data"));
       } else if (kind == "broadcast") {
-        got = framing::encode_broadcast(jvToValue(*root.get("data")));
+        got = framing::encode_broadcast(*root.find("data"));
       } else if (kind == "setState") {
-        got = framing::encode_set_state(jvToValue(*root.get("data")));
+        got = framing::encode_set_state(*root.find("data"));
       } else if (kind == "closeRoom") {
         got = framing::encode_close_room();
       } else {
@@ -86,26 +86,26 @@ int main(int argc, char** argv) {
         return 2;
       }
     } else if (op == "classify") {
-      got = classifyToValue(framing::classify_inbound(jvToValue(*root.get("wire"))));
+      got = classifyToValue(framing::classify_inbound(*root.find("wire")));
     } else if (op == "close") {
-      const JV* codeJV = root.get("code");
+      const Value* codeV = root.find("code");
       got = closeToValue(framing::close_outcome(
-          root.get("hasCode")->b, codeJV && codeJV->t == JV::NUM ? codeJV->num : 0.0,
-          root.get("attemptBefore")->num, root.get("maxAttempts")->num,
-          root.get("shouldReconnectBefore")->b));
+          root.find("hasCode")->b, codeV && codeV->type == Value::NUM ? codeV->num : 0.0,
+          root.find("attemptBefore")->num, root.find("maxAttempts")->num,
+          root.find("shouldReconnectBefore")->b));
     } else if (op == "backoff") {
-      got = Value::Num(framing::backoff_delay_ms(root.get("attempt")->num));
+      got = Value::Num(framing::backoff_delay_ms(root.find("attempt")->num));
     } else if (op == "pin") {
-      const JV* instJV = root.get("instance");
-      std::string inst = (instJV && instJV->t == JV::STR) ? instJV->str : "";
-      got = Value::Str(framing::pin_instance_url(root.get("base")->str, root.get("room")->str, inst));
+      const Value* instV = root.find("instance");
+      std::string inst = (instV && instV->type == Value::STR) ? instV->str : "";
+      got = Value::Str(framing::pin_instance_url(root.find("base")->str, root.find("room")->str, inst));
     } else {
       std::fprintf(stderr, "unknown op '%s'\n", op.c_str());
       return 2;
     }
 
     cases++;
-    Diff d = diffVal(*expect, got, label);
+    Diff d = diff_val(*expect, got, label);
     if (d.differ) {
       if (spew++ < 20) {
         std::fprintf(stderr, "FAIL %s  path %s\n  expected %s\n  actual   %s\n",

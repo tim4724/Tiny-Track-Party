@@ -6,9 +6,10 @@
 // the canonical snapshot every frame, plus the session's countdown/racing/raceEnd
 // beats. First divergence -> prints frame/path/expected/actual and exits 1.
 //
-// JSON numbers are parsed with strtod and then SELF-VALIDATED: each is reformatted
-// with js_number_to_string and compared to the source token, proving correctly-
-// rounded parsing per value rather than assuming it (aborts loudly on any miss).
+// Corpus reading and the structural first-diff are the shared testsupport/
+// corpus_diff.h (one parser and one comparator for every check in this tree). It
+// reads in STRICT_NUMBERS mode, so every JSON number token must reformat to
+// itself: correctly-rounded strtod is proven per value, not assumed.
 
 #include <algorithm>
 #include <cctype>
@@ -23,10 +24,11 @@
 #include <utility>
 #include <vector>
 
+#include "corpus_diff.h"
 #include "generated/track_defs.h"
-#include "ttp/dmath.h"
 #include "ttp/ai_driver.h"
 #include "ttp/canonical.h"
+#include "ttp/dmath.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
 #include "ttp/race_track.h"
@@ -35,274 +37,46 @@
 #include "ttp/trackbuilder.h"
 
 using namespace ttp;
+using namespace ttp::corpus;
 
 static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 static const int CONTRACT_VERSION = 2;
 
 // ---------------------------------------------------------------------------
-// Minimal JSON reader with per-number self-validation.
+// Trace-value builders (Id / Input / Stats from a corpus Value).
 // ---------------------------------------------------------------------------
-struct JV {
-  enum T { OBJ, ARR, STR, NUM, BOOL, NUL } t = NUL;
-  std::vector<std::pair<std::string, JV>> obj;
-  std::vector<JV> arr;
-  std::string str;
-  double num = 0;
-  bool b = false;
-  const JV* get(const char* key) const {
-    for (auto& kv : obj) if (kv.first == key) return &kv.second;
-    return nullptr;
-  }
-  bool has(const char* key) const { return get(key) != nullptr; }
-};
-
-struct JParse {
-  const std::string& s;
-  size_t p = 0;
-  bool ok = true;
-  std::string err;
-  explicit JParse(const std::string& src) : s(src) {}
-  void ws() { while (p < s.size() && (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r')) p++; }
-  bool str(std::string& out) {
-    if (s[p] != '"') return false;
-    p++;
-    out.clear();
-    while (p < s.size()) {
-      char c = s[p++];
-      if (c == '"') return true;
-      if (c == '\\') {
-        char e = s[p++];
-        switch (e) {
-          case '"': out += '"'; break;
-          case '\\': out += '\\'; break;
-          case '/': out += '/'; break;
-          case 'b': out += '\b'; break;
-          case 'f': out += '\f'; break;
-          case 'n': out += '\n'; break;
-          case 'r': out += '\r'; break;
-          case 't': out += '\t'; break;
-          case 'u': {
-            int v = 0;
-            for (int i = 0; i < 4; i++) {
-              char h = s[p++]; v <<= 4;
-              if (h >= '0' && h <= '9') v |= h - '0';
-              else if (h >= 'a' && h <= 'f') v |= h - 'a' + 10;
-              else if (h >= 'A' && h <= 'F') v |= h - 'A' + 10;
-            }
-            out += (char)v;
-            break;
-          }
-          default: out += e;
-        }
-      } else out += c;
-    }
-    return false;
-  }
-  bool value(JV& v) {
-    ws();
-    if (p >= s.size()) return false;
-    char c = s[p];
-    if (c == '{') {
-      v.t = JV::OBJ; p++; ws();
-      if (s[p] == '}') { p++; return true; }
-      while (true) {
-        ws();
-        std::string key;
-        if (!str(key)) return false;
-        ws();
-        if (s[p] != ':') return false;
-        p++;
-        JV child;
-        if (!value(child)) return false;
-        v.obj.emplace_back(std::move(key), std::move(child));
-        ws();
-        if (s[p] == ',') { p++; continue; }
-        if (s[p] == '}') { p++; return true; }
-        return false;
-      }
-    }
-    if (c == '[') {
-      v.t = JV::ARR; p++; ws();
-      if (s[p] == ']') { p++; return true; }
-      while (true) {
-        JV child;
-        if (!value(child)) return false;
-        v.arr.push_back(std::move(child));
-        ws();
-        if (s[p] == ',') { p++; continue; }
-        if (s[p] == ']') { p++; return true; }
-        return false;
-      }
-    }
-    if (c == '"') { v.t = JV::STR; return str(v.str); }
-    if (c == 't') { v.t = JV::BOOL; v.b = true; p += 4; return true; }
-    if (c == 'f') { v.t = JV::BOOL; v.b = false; p += 5; return true; }
-    if (c == 'n') { v.t = JV::NUL; p += 4; return true; }
-    // number
-    v.t = JV::NUM;
-    size_t start = p;
-    while (p < s.size() && (std::isdigit((unsigned char)s[p]) || s[p] == '-' || s[p] == '+' ||
-                            s[p] == '.' || s[p] == 'e' || s[p] == 'E')) p++;
-    std::string tok = s.substr(start, p - start);
-    v.num = std::strtod(tok.c_str(), nullptr);
-    // SELF-VALIDATE: correctly-rounded strtod is proven, not assumed, per value.
-    std::string round = js_number_to_string(v.num);
-    if (round != tok) {
-      ok = false;
-      err = "number round-trip mismatch: token '" + tok + "' reformats to '" + round + "'";
-      return false;
-    }
-    return true;
-  }
-};
-
-static bool parseLine(const std::string& line, JV& out, std::string& err) {
-  JParse jp(line);
-  if (!jp.value(out) || !jp.ok) { err = jp.ok ? "parse error" : jp.err; return false; }
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Canonical stringify of a parsed JV (recorded side), for diff messages.
-// ---------------------------------------------------------------------------
-static std::string canonJV(const JV& v) {
-  switch (v.t) {
-    case JV::NUL: return "null";
-    case JV::BOOL: return v.b ? "true" : "false";
-    case JV::NUM: return js_number_to_string(v.num);
-    case JV::STR: return json_quote(v.str);
-    case JV::ARR: {
-      std::string o = "[";
-      for (size_t i = 0; i < v.arr.size(); i++) { if (i) o += ","; o += canonJV(v.arr[i]); }
-      return o + "]";
-    }
-    case JV::OBJ: {
-      std::vector<const std::pair<std::string, JV>*> kept;
-      for (auto& kv : v.obj) kept.push_back(&kv);
-      std::sort(kept.begin(), kept.end(), [](auto* a, auto* b) { return a->first < b->first; });
-      std::string o = "{";
-      for (size_t i = 0; i < kept.size(); i++) {
-        if (i) o += ",";
-        o += json_quote(kept[i]->first) + ":" + canonJV(kept[i]->second);
-      }
-      return o + "}";
-    }
-  }
-  return "null";
-}
-
-// ---------------------------------------------------------------------------
-// Structural diff: recorded JV (expected) vs engine Value (actual). Returns the
-// first divergent path in canonical (sorted-key) order, mirroring verify-trace's
-// firstDiff. Numbers compare by their js_number_to_string form (so ±0 and
-// shortest-form match). Empty path string in `differ==false` means equal.
-// ---------------------------------------------------------------------------
-struct Diff { bool differ = false; std::string path, expected, actual; };
-
-static std::string valType(const Value& v) {
-  switch (v.type) { case Value::NUL: case Value::UNDEF: return "null";
-    case Value::BOOL: return "bool"; case Value::NUM: return "num";
-    case Value::STR: return "str"; case Value::ARR: return "arr"; case Value::OBJ: return "obj"; }
-  return "?";
-}
-static std::string jvType(const JV& v) {
-  switch (v.t) { case JV::NUL: return "null"; case JV::BOOL: return "bool";
-    case JV::NUM: return "num"; case JV::STR: return "str"; case JV::ARR: return "arr"; case JV::OBJ: return "obj"; }
-  return "?";
-}
-
-static Diff diffVal(const JV& e, const Value& a, const std::string& path);
-
-static Diff leafMismatch(const JV& e, const Value& a, const std::string& path) {
-  return {true, path, canonJV(e), canonical_stringify(a)};
-}
-
-static Diff diffVal(const JV& e, const Value& a, const std::string& path) {
-  std::string te = jvType(e), ta = valType(a);
-  if (te != ta) return leafMismatch(e, a, path);
-  if (te == "num") {
-    if (js_number_to_string(e.num) != js_number_to_string(a.num)) return leafMismatch(e, a, path);
-    return {};
-  }
-  if (te == "bool") { if (e.b != a.b) return leafMismatch(e, a, path); return {}; }
-  if (te == "str") { if (e.str != a.str) return leafMismatch(e, a, path); return {}; }
-  if (te == "null") return {};
-  if (te == "arr") {
-    size_t n = std::min(e.arr.size(), a.arr.size());
-    for (size_t i = 0; i < n; i++) {
-      Diff d = diffVal(e.arr[i], a.arr[i], path + "[" + std::to_string(i) + "]");
-      if (d.differ) return d;
-    }
-    if (e.arr.size() != a.arr.size())
-      return {true, path + ".length", std::to_string(e.arr.size()), std::to_string(a.arr.size())};
-    return {};
-  }
-  // object: union of keys, sorted
-  std::vector<std::string> keys;
-  for (auto& kv : e.obj) keys.push_back(kv.first);
-  for (auto& kv : a.obj) if (kv.second.type != Value::UNDEF) {
-    bool seen = false; for (auto& k : keys) if (k == kv.first) { seen = true; break; }
-    if (!seen) keys.push_back(kv.first);
-  }
-  std::sort(keys.begin(), keys.end());
-  for (const std::string& k : keys) {
-    const JV* ec = e.get(k.c_str());
-    const Value* ac = nullptr;
-    for (auto& kv : a.obj) if (kv.first == k && kv.second.type != Value::UNDEF) { ac = &kv.second; break; }
-    std::string cp = path.empty() ? k : path + "." + k;
-    if (!ec) return {true, cp, "<absent>", ac ? canonical_stringify(*ac) : "<absent>"};
-    if (!ac) return {true, cp, canonJV(*ec), "<absent>"};
-    Diff d = diffVal(*ec, *ac, cp);
-    if (d.differ) return d;
-  }
-  return {};
-}
-
-// ---------------------------------------------------------------------------
-// Trace-value builders (Id / Input / Stats from JV).
-// ---------------------------------------------------------------------------
-static Id idFromJV(const JV& v) {
-  if (v.t == JV::STR) return Id::Str(v.str);
-  if (v.t == JV::NUM) return Id::Num(v.num);
+static Id idFrom(const Value& v) {
+  if (v.type == Value::STR) return Id::Str(v.str);
+  if (v.type == Value::NUM) return Id::Num(v.num);
   return Id::None();
 }
-static Input inputFromJV(const JV& v) {
+static Input inputFrom(const Value& v) {
   Input in;
-  if (const JV* s = v.get("s")) { if (s->t == JV::NUM) { in.hasS = true; in.s = s->num; } }
-  if (const JV* b = v.get("b")) {
-    if (b->t == JV::NUM) { in.hasB = true; in.b = b->num; }
-    else if (b->t == JV::BOOL) { in.hasB = true; in.b = b->b ? 1 : 0; }
+  if (const Value* s = v.find("s")) { if (s->type == Value::NUM) { in.hasS = true; in.s = s->num; } }
+  if (const Value* b = v.find("b")) {
+    if (b->type == Value::NUM) { in.hasB = true; in.b = b->num; }
+    else if (b->type == Value::BOOL) { in.hasB = true; in.b = b->b ? 1 : 0; }
   }
-  if (const JV* u = v.get("u")) { if (u->t == JV::NUM) { in.hasU = true; in.u = u->num; } }
+  if (const Value* u = v.find("u")) { if (u->type == Value::NUM) { in.hasU = true; in.u = u->num; } }
   return in;
 }
-static Stats statsFromJV(const JV& v) {
+static Stats statsFrom(const Value& v) {
   Stats st;
-  if (const JV* x = v.get("accel")) st.accel = x->num;
-  if (const JV* x = v.get("vmax")) st.vmax = x->num;
-  if (const JV* x = v.get("turn")) st.turn = x->num;
-  if (const JV* x = v.get("mass")) st.mass = x->num;
-  if (const JV* x = v.get("halfLen")) st.halfLen = x->num;
-  if (const JV* x = v.get("halfWid")) st.halfWid = x->num;
+  if (const Value* x = v.find("accel")) st.accel = x->num;
+  if (const Value* x = v.find("vmax")) st.vmax = x->num;
+  if (const Value* x = v.find("turn")) st.turn = x->num;
+  if (const Value* x = v.find("mass")) st.mass = x->num;
+  if (const Value* x = v.find("halfLen")) st.halfLen = x->num;
+  if (const Value* x = v.find("halfWid")) st.halfWid = x->num;
   return st;
 }
 
 // ---------------------------------------------------------------------------
 // RECORD MODE support.
 // ---------------------------------------------------------------------------
-// JV -> Value, so the input header can be re-emitted VERBATIM (every field
-// survives, including any this CLI doesn't model) with only `frames` restamped.
-static Value jvToValue(const JV& v) {
-  switch (v.t) {
-    case JV::NUL: return Value::Null();
-    case JV::BOOL: return Value::Bool(v.b);
-    case JV::NUM: return Value::Num(v.num);
-    case JV::STR: return Value::Str(v.str);
-    case JV::ARR: { Value o = Value::Arr(); for (const JV& e : v.arr) o.push(jvToValue(e)); return o; }
-    case JV::OBJ: { Value o = Value::Obj(); for (const auto& kv : v.obj) o.set(kv.first, jvToValue(kv.second)); return o; }
-  }
-  return Value::Null();
-}
+// The parsed header is already a ttp::Value, so record mode re-emits it VERBATIM
+// (every field survives, including any this CLI doesn't model) with only `frames`
+// restamped.
 
 // The C++ twin of record-trace.mjs's scriptedHuman. A trace header stores a
 // human's id but NOT its script, so the script is recovered BY CONVENTION from
@@ -374,41 +148,41 @@ int main(int argc, char** argv) {
 
   std::string headerLine;
   if (!std::getline(in, headerLine)) { std::fprintf(stderr, "empty trace\n"); return 2; }
-  JV header; std::string perr;
-  if (!parseLine(headerLine, header, perr)) { std::fprintf(stderr, "header parse: %s\n", perr.c_str()); return 2; }
+  Value header; std::string perr;
+  if (!read_line(headerLine, header, &perr)) { std::fprintf(stderr, "header parse: %s\n", perr.c_str()); return 2; }
 
   // provenance
-  const JV* cv = header.get("contractVersion");
+  const Value* cv = header.find("contractVersion");
   if (!cv || (int)cv->num != CONTRACT_VERSION) {
     std::fprintf(stderr, "FAIL %s: contractVersion %g != %d\n", file.c_str(), cv ? cv->num : -1.0, CONTRACT_VERSION);
     return 1;
   }
-  const JV* math = header.get("math");
+  const Value* math = header.find("math");
   if (!math || math->str != MATHLIB) {
     std::fprintf(stderr, "FAIL %s: mathlib stamp '%s' != '%s' (re-record)\n",
                  file.c_str(), math ? math->str.c_str() : "<none>", MATHLIB);
     return 1;
   }
 
-  int frames = (int)header.get("frames")->num;
-  std::string trackId = header.get("trackId")->str;
-  int laps = (int)header.get("laps")->num;
-  uint32_t seed = (uint32_t)header.get("seed")->num;
-  double dt = header.get("dt")->num;
-  bool isSession = header.has("driver") && header.get("driver")->str == "session";
-  bool aiLive = header.has("aiLive") && header.get("aiLive")->b;
-  int countdown = header.has("countdown") ? (int)header.get("countdown")->num : 3;
-  int snapshotEvery = header.has("snapshotEvery") ? (int)header.get("snapshotEvery")->num : 60;
+  int frames = (int)header.find("frames")->num;
+  std::string trackId = header.find("trackId")->str;
+  int laps = (int)header.find("laps")->num;
+  uint32_t seed = (uint32_t)header.find("seed")->num;
+  double dt = header.find("dt")->num;
+  bool isSession = header.has("driver") && header.find("driver")->str == "session";
+  bool aiLive = header.has("aiLive") && header.find("aiLive")->b;
+  int countdown = header.has("countdown") ? (int)header.find("countdown")->num : 3;
+  int snapshotEvery = header.has("snapshotEvery") ? (int)header.find("snapshotEvery")->num : 60;
 
   // dt stream (makeDtStream)
-  const JV* jj = header.get("dtJitter");
+  const Value* jj = header.find("dtJitter");
   bool jitter = jj != nullptr;
   double jAmp = 0, jSpikeScale = 4; int jSpikeEvery = 0; uint32_t jSeed = 1;
   if (jitter) {
-    if (const JV* x = jj->get("amp")) jAmp = x->num;
-    if (const JV* x = jj->get("spikeEvery")) jSpikeEvery = (int)x->num;
-    if (const JV* x = jj->get("spikeScale")) jSpikeScale = x->num;
-    if (const JV* x = jj->get("jseed")) jSeed = (uint32_t)x->num;
+    if (const Value* x = jj->find("amp")) jAmp = x->num;
+    if (const Value* x = jj->find("spikeEvery")) jSpikeEvery = (int)x->num;
+    if (const Value* x = jj->find("spikeScale")) jSpikeScale = x->num;
+    if (const Value* x = jj->find("jseed")) jSeed = (uint32_t)x->num;
   }
   Mulberry32 dtRng(jSeed ? jSeed : 1u);
   auto dtFor = [&](int frame) -> double {
@@ -420,14 +194,14 @@ int main(int argc, char** argv) {
 
   // roster
   std::vector<RosterEntry> roster;
-  for (const JV& r : header.get("roster")->arr) {
+  for (const Value& r : header.find("roster")->arr) {
     RosterEntry e;
-    e.id = idFromJV(*r.get("id"));
-    e.kind = r.get("kind")->str;
-    if (const JV* x = r.get("caution")) e.caution = x->num;
-    if (const JV* x = r.get("laneBias")) e.laneBias = x->num;
-    if (const JV* x = r.get("aiSeed")) e.aiSeed = (uint32_t)x->num;
-    if (const JV* x = r.get("stats")) { e.hasStats = true; e.stats = statsFromJV(*x); }
+    e.id = idFrom(*r.find("id"));
+    e.kind = r.find("kind")->str;
+    if (const Value* x = r.find("caution")) e.caution = x->num;
+    if (const Value* x = r.find("laneBias")) e.laneBias = x->num;
+    if (const Value* x = r.find("aiSeed")) e.aiSeed = (uint32_t)x->num;
+    if (const Value* x = r.find("stats")) { e.hasStats = true; e.stats = statsFrom(*x); }
     roster.push_back(e);
   }
 
@@ -458,15 +232,15 @@ int main(int argc, char** argv) {
   }
 
   // applyStage
-  if (const JV* stage = header.get("stage")) {
-    for (const JV& st : stage->arr) {
-      std::string kind = st.get("kind")->str;
-      double s = st.get("s")->num, lat = st.has("lat") ? st.get("lat")->num : 0;
+  if (const Value* stage = header.find("stage")) {
+    for (const Value& st : stage->arr) {
+      std::string kind = st.find("kind")->str;
+      double s = st.find("s")->num, lat = st.has("lat") ? st.find("lat")->num : 0;
       if (kind == "rocket") {
         double v = 0; Id owner = Id::Str("staged");
-        if (const JV* o = st.get("opts")) {
-          if (const JV* x = o->get("v")) v = x->num;
-          if (const JV* x = o->get("owner")) owner = idFromJV(*x);
+        if (const Value* o = st.find("opts")) {
+          if (const Value* x = o->find("v")) v = x->num;
+          if (const Value* x = o->find("owner")) owner = idFrom(*x);
         }
         eng->stageRocket(s, lat, v, owner);
       } else if (kind == "banana") {
@@ -495,7 +269,7 @@ int main(int argc, char** argv) {
     return false;
   };
 
-  const JV* schedule = header.get("schedule");
+  const Value* schedule = header.find("schedule");
 
   bool lastRacing = false;
 
@@ -538,26 +312,26 @@ int main(int argc, char** argv) {
       // schedule ops run before inputs, with the same rekey bookkeeping the
       // verifier does (controllers follow the car to its new id).
       if (schedule) {
-        for (const JV& op : schedule->arr) {
-          if ((int)op.get("frame")->num != frame) continue;
-          std::string o = op.get("op")->str;
-          Id id = idFromJV(*op.get("id"));
+        for (const Value& op : schedule->arr) {
+          if ((int)op.find("frame")->num != frame) continue;
+          std::string o = op.find("op")->str;
+          Id id = idFrom(*op.find("id"));
           if (o == "removeCar") eng->removeCar(id);
           else if (o == "rekeyCar") {
-            Id newId = idFromJV(*op.get("newId"));
+            Id newId = idFrom(*op.find("newId"));
             eng->rekeyCar(id, newId);
             std::string ok = id.key();
             for (auto& c : recBots) if (c.id.key() == ok) c.id = newId;
             for (auto& h : humans) if (h.id.key() == ok) h.id = newId;
-          } else if (o == "setCarStats") eng->setCarStats(id, statsFromJV(*op.get("stats")));
+          } else if (o == "setCarStats") eng->setCarStats(id, statsFrom(*op.find("stats")));
           else if (o == "giveItem") {
-            std::string item = op.get("item")->str;
+            std::string item = op.find("item")->str;
             bool hasT = false; double t = 0;
-            if (const JV* opts = op.get("opts")) if (const JV* x = opts->get("tCatch")) { hasT = true; t = x->num; }
+            if (const Value* opts = op.find("opts")) if (const Value* x = opts->find("tCatch")) { hasT = true; t = x->num; }
             eng->giveItem(id, item, hasT, t);
           } else if (o == "useItem") eng->useItem(id);
           else if (o == "forceFinish") {
-            bool hasT = op.has("time"); double t = hasT ? op.get("time")->num : 0;
+            bool hasT = op.has("time"); double t = hasT ? op.find("time")->num : 0;
             eng->forceFinish(id, hasT, t);
           } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return 1; }
         }
@@ -628,7 +402,7 @@ int main(int argc, char** argv) {
     // NOTE: Value::set APPENDS (canonical_stringify sorts, so insertion order is
     // normally irrelevant) — so an existing key must be dropped first or it is
     // emitted twice.
-    Value hdr = jvToValue(header);
+    Value hdr = header;
     hdr.obj.erase(std::remove_if(hdr.obj.begin(), hdr.obj.end(),
                                  [](const std::pair<std::string, Value>& kv) { return kv.first == "frames"; }),
                   hdr.obj.end());
@@ -654,20 +428,20 @@ int main(int argc, char** argv) {
   std::string line;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JV rec;
-    if (!parseLine(line, rec, perr)) { std::fprintf(stderr, "FAIL %s: record parse: %s\n", file.c_str(), perr.c_str()); return 1; }
+    Value rec;
+    if (!read_line(line, rec, &perr)) { std::fprintf(stderr, "FAIL %s: record parse: %s\n", file.c_str(), perr.c_str()); return 1; }
     recCount++;
-    int frame = (int)rec.get("frame")->num;
+    int frame = (int)rec.find("frame")->num;
 
     // schedule ops (before inputs), with id-remap bookkeeping
     if (schedule) {
-      for (const JV& op : schedule->arr) {
-        if ((int)op.get("frame")->num != frame) continue;
-        std::string o = op.get("op")->str;
-        Id id = idFromJV(*op.get("id"));
+      for (const Value& op : schedule->arr) {
+        if ((int)op.find("frame")->num != frame) continue;
+        std::string o = op.find("op")->str;
+        Id id = idFrom(*op.find("id"));
         if (o == "removeCar") eng->removeCar(id);
         else if (o == "rekeyCar") {
-          Id newId = idFromJV(*op.get("newId"));
+          Id newId = idFrom(*op.find("newId"));
           eng->rekeyCar(id, newId);
           // remap idByKey / botKeys / controllers, exactly as verify-trace's onRekey:
           // DELETE the old key, SET the new key -> newId (not just rename the key,
@@ -679,22 +453,22 @@ int main(int argc, char** argv) {
           idByKey.emplace_back(nk, newId);
           for (auto& bk : botKeys) if (bk == ok) bk = nk;
           for (auto& c : controllers) if (c.id.key() == ok) c.id = newId;
-        } else if (o == "setCarStats") { eng->setCarStats(id, statsFromJV(*op.get("stats"))); }
+        } else if (o == "setCarStats") { eng->setCarStats(id, statsFrom(*op.find("stats"))); }
         else if (o == "giveItem") {
-          std::string item = op.get("item")->str;
+          std::string item = op.find("item")->str;
           bool hasT = false; double t = 0;
-          if (const JV* opts = op.get("opts")) if (const JV* x = opts->get("tCatch")) { hasT = true; t = x->num; }
+          if (const Value* opts = op.find("opts")) if (const Value* x = opts->find("tCatch")) { hasT = true; t = x->num; }
           eng->giveItem(id, item, hasT, t);
         } else if (o == "useItem") eng->useItem(id);
         else if (o == "forceFinish") {
-          bool hasT = op.has("time"); double t = hasT ? op.get("time")->num : 0;
+          bool hasT = op.has("time"); double t = hasT ? op.find("time")->num : 0;
           eng->forceFinish(id, hasT, t);
         } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return 1; }
       }
     }
 
     // recorded inputs
-    const JV* inputs = rec.get("inputs");
+    const Value* inputs = rec.find("inputs");
     if (inputs) {
       for (const auto& kv : inputs->obj) {
         const std::string& key = kv.first;
@@ -704,7 +478,7 @@ int main(int argc, char** argv) {
           fail(file, frame, "inputs." + key, "<roster>", "<absent>", "input for id not in roster (corrupt trace)");
           return 1;
         }
-        Input msg = inputFromJV(kv.second);
+        Input msg = inputFrom(kv.second);
         if (session) session->processInput(id, msg); else eng->processInput(id, msg);
       }
     }
@@ -715,7 +489,7 @@ int main(int argc, char** argv) {
         Input derived;
         bool applied = eng->driveBot(c.id, *c.ai, &derived);
         // recorded input for this bot
-        const JV* recorded = inputs ? inputs->get(c.id.key().c_str()) : nullptr;
+        const Value* recorded = inputs ? inputs->find(c.id.key()) : nullptr;
         if (applied) {
           Value dv = Value::Obj();
           dv.set("s", Value::Num(derived.s));
@@ -725,7 +499,7 @@ int main(int argc, char** argv) {
             fail(file, frame, "inputs." + c.id.key(), "<absent>", canonical_stringify(dv), "AI-LIVE: bot drove but trace has no input");
             return 1;
           }
-          Diff d = diffVal(*recorded, dv, "inputs." + c.id.key());
+          Diff d = diff_val(*recorded, dv, "inputs." + c.id.key());
           if (d.differ) { fail(file, frame, d.path, d.expected, d.actual, "AI-LIVE divergence for bot " + c.id.key()); return 1; }
         }
       }
@@ -738,18 +512,18 @@ int main(int argc, char** argv) {
     if (session) {
       // countdown
       std::vector<int> got = ticks; ticks.clear();
-      const JV* recCd = rec.get("countdown");
+      const Value* recCd = rec.find("countdown");
       if (!got.empty()) {
         Value gv = Value::Arr(); for (int n : got) gv.push(Value::Num(n));
         if (!recCd) { fail(file, frame, "countdown", "<absent>", canonical_stringify(gv), "countdown ticks fired but trace records none"); return 1; }
-        Diff d = diffVal(*recCd, gv, "countdown");
+        Diff d = diff_val(*recCd, gv, "countdown");
         if (d.differ) { fail(file, frame, d.path, d.expected, d.actual, "countdown diverged"); return 1; }
       } else if (recCd) {
-        fail(file, frame, "countdown", canonJV(*recCd), "<absent>", "trace records countdown ticks that did not fire");
+        fail(file, frame, "countdown", canonical_stringify(*recCd), "<absent>", "trace records countdown ticks that did not fire");
         return 1;
       }
       // racing flip
-      const JV* recRacing = rec.get("racing");
+      const Value* recRacing = rec.find("racing");
       bool nowRacing = session->racing();
       if (nowRacing != lastRacing) {
         bool exp = recRacing && recRacing->b;
@@ -764,14 +538,14 @@ int main(int argc, char** argv) {
         return 1;
       }
       // raceEnd
-      const JV* recEnd = rec.get("raceEnd");
+      const Value* recEnd = rec.find("raceEnd");
       if (haveRaceEnd) {
         if (!recEnd) { fail(file, frame, "raceEnd", "<absent>", canonical_stringify(raceEndResults), "race ended but trace records no raceEnd"); return 1; }
-        Diff d = diffVal(*recEnd, raceEndResults, "raceEnd");
+        Diff d = diff_val(*recEnd, raceEndResults, "raceEnd");
         if (d.differ) { fail(file, frame, d.path, d.expected, d.actual, "raceEnd diverged"); return 1; }
         haveRaceEnd = false;
       } else if (recEnd) {
-        fail(file, frame, "raceEnd", canonJV(*recEnd), "<absent>", "trace records raceEnd that did not happen");
+        fail(file, frame, "raceEnd", canonical_stringify(*recEnd), "<absent>", "trace records raceEnd that did not happen");
         return 1;
       }
     }
@@ -780,22 +554,22 @@ int main(int argc, char** argv) {
     Value events = Value::Arr();
     for (const Event& e : pending) events.push(e.toValue());
     pending.clear();
-    const JV* recEvents = rec.get("events");
-    JV emptyArr; emptyArr.t = JV::ARR;
-    const JV& re = recEvents ? *recEvents : emptyArr;
-    { Diff d = diffVal(re, events, "events");
+    const Value* recEvents = rec.find("events");
+    Value emptyArr = Value::Arr();
+    const Value& re = recEvents ? *recEvents : emptyArr;
+    { Diff d = diff_val(re, events, "events");
       if (d.differ) { fail(file, frame, d.path, d.expected, d.actual, "events diverged"); return 1; } }
 
     // snapshot
     Value snapshot = eng->getSnapshot();
-    if (const JV* recSnap = rec.get("snapshot")) {
-      Diff d = diffVal(*recSnap, snapshot, "snapshot");
+    if (const Value* recSnap = rec.find("snapshot")) {
+      Diff d = diff_val(*recSnap, snapshot, "snapshot");
       if (d.differ) { fail(file, frame, d.path, d.expected, d.actual, "snapshot diverged"); return 1; }
     }
 
     // hash (every frame)
     std::string hash = fnv1a_hex(canonical_stringify(snapshot));
-    const JV* recHash = rec.get("hash");
+    const Value* recHash = rec.find("hash");
     if (!recHash || recHash->str != hash) {
       fail(file, frame, "", recHash ? recHash->str : "<absent>", hash,
            "snapshot hash diverged (no full snapshot this frame — next stored snapshot localizes)");

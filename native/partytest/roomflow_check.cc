@@ -18,20 +18,20 @@
 #include <utility>
 #include <vector>
 
-#include "json_check.h"   // JV/JParse reader, canonJV, structural diffVal
+#include "corpus_diff.h"   // read_line + the shared structural diff_val
 #include "ttp/canonical.h"
 #include "ttp/jsonnum.h"
 #include "ttp/room_flow.h"
 
 using namespace ttp;
-using namespace ttp::jsoncheck;
+using namespace ttp::corpus;
 
 // ---------------------------------------------------------------------------
-// JV -> port types.
+// Corpus Value -> port types.
 // ---------------------------------------------------------------------------
-static PeerId peerFromJV(const JV& v) {
-  if (v.t == JV::NUM) return PeerId::Num(v.num);
-  if (v.t == JV::STR) return PeerId::Str(v.str);
+static PeerId peerFrom(const Value& v) {
+  if (v.type == Value::NUM) return PeerId::Num(v.num);
+  if (v.type == Value::STR) return PeerId::Str(v.str);
   return PeerId::None();
 }
 
@@ -92,15 +92,15 @@ int main(int argc, char** argv) {
   std::string line;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JV root;
-    if (!parseLine(line, root)) { std::fprintf(stderr, "parse error on script line\n"); return 2; }
+    Value root;
+    if (!read_line(line, root)) { std::fprintf(stderr, "parse error on script line\n"); return 2; }
 
     // lowestFreeSlot cases are their own line kind (no RoomFlow instance).
-    if (const JV* sc = root.get("slotCase")) {
+    if (const Value* sc = root.find("slotCase")) {
       std::vector<double> used;
-      if (const JV* u = sc->get("used")) for (const JV& e : u->arr) used.push_back(e.num);
-      const int max = static_cast<int>(sc->get("max")->num);
-      const int want = static_cast<int>(sc->get("expect")->num);
+      if (const Value* u = sc->find("used")) for (const Value& e : u->arr) used.push_back(e.num);
+      const int max = static_cast<int>(sc->find("max")->num);
+      const int want = static_cast<int>(sc->find("expect")->num);
       const int got = lowest_free_slot(used, max);
       slotCases++;
       if (got == want) {
@@ -112,20 +112,20 @@ int main(int argc, char** argv) {
     }
 
     scripts++;
-    std::string name = root.get("name")->str;
+    std::string name = root.find("name")->str;
 
     // ---- build the RoomFlow from config -------------------------------------
-    const JV* cfgJV = root.get("config");
+    const Value* cfgV = root.find("config");
     RoomFlow::Config cfg;
-    cfg.hasMasterProvider = cfgJV->get("useMasterProvider")->b;
-    const JV* masterJV = cfgJV->get("master");
-    cfg.master = masterJV ? peerFromJV(*masterJV) : PeerId::None();
-    const JV* livJV = cfgJV->get("liveness");
-    if (livJV && livJV->t == JV::OBJ) {
+    cfg.hasMasterProvider = cfgV->find("useMasterProvider")->b;
+    const Value* masterV = cfgV->find("master");
+    cfg.master = masterV ? peerFrom(*masterV) : PeerId::None();
+    const Value* livV = cfgV->find("liveness");
+    if (livV && livV->type == Value::OBJ) {
       cfg.hasLiveness = true;
-      if (const JV* x = livJV->get("timeoutMs")) cfg.timeoutMs = x->num;
-      if (const JV* x = livJV->get("graceMs")) cfg.graceMs = x->num;
-      if (const JV* x = livJV->get("useEnabledProvider")) cfg.hasEnabledProvider = x->b;
+      if (const Value* x = livV->find("timeoutMs")) cfg.timeoutMs = x->num;
+      if (const Value* x = livV->find("graceMs")) cfg.graceMs = x->num;
+      if (const Value* x = livV->find("useEnabledProvider")) cfg.hasEnabledProvider = x->b;
     }
 
     std::vector<std::pair<std::string, Value>> captured;
@@ -135,67 +135,67 @@ int main(int argc, char** argv) {
 
     PeerSet peers;
     bool scriptOk = true;
-    const JV* steps = root.get("steps");
+    const Value* steps = root.find("steps");
     for (size_t si = 0; si < steps->arr.size(); si++) {
-      const JV& step = steps->arr[si];
-      const JV& op = *step.get("op");
-      const std::string& opName = op.get("op")->str;
+      const Value& step = steps->arr[si];
+      const Value& op = *step.find("op");
+      const std::string& opName = op.find("op")->str;
       // accumulate peer ids for the digest (before applying, as the generator does)
       for (const char* k : {"p", "oldId", "newId"})
-        if (const JV* x = op.get(k)) peers.add(peerFromJV(*x));
+        if (const Value* x = op.find(k)) peers.add(peerFrom(*x));
 
       captured.clear();
       Value ret = Value::Null();
 
       if (opName == "add") {
         std::vector<std::pair<std::string, Value>> fields;
-        if (const JV* f = op.get("fields"))
-          for (auto& kv : f->obj) fields.emplace_back(kv.first, jvToValue(kv.second));
-        const Player* p = flow.addPlayer(peerFromJV(*op.get("p")), fields);
+        if (const Value* f = op.find("fields"))
+          for (auto& kv : f->obj) fields.emplace_back(kv.first, (kv.second));
+        const Player* p = flow.addPlayer(peerFrom(*op.find("p")), fields);
         ret = p->toValue();
       } else if (opName == "remove") {
-        flow.removePlayer(peerFromJV(*op.get("p")));
+        flow.removePlayer(peerFrom(*op.find("p")));
       } else if (opName == "rekey") {
-        ret = Value::Bool(flow.rekey(peerFromJV(*op.get("oldId")), peerFromJV(*op.get("newId"))));
+        ret = Value::Bool(flow.rekey(peerFrom(*op.find("oldId")), peerFrom(*op.find("newId"))));
       } else if (opName == "markDisc") {
-        flow.markDisconnected(peerFromJV(*op.get("p")));
+        flow.markDisconnected(peerFrom(*op.find("p")));
       } else if (opName == "markReconn") {
-        flow.markReconnected(peerFromJV(*op.get("p")));
+        flow.markReconnected(peerFrom(*op.find("p")));
       } else if (opName == "clearDisc") {
-        const JV* t = op.get("t");
+        const Value* t = op.find("t");
         flow.clearDisconnected(t != nullptr, t ? t->num : 0);
       } else if (opName == "transition") {
-        ret = Value::Bool(flow.transitionTo(op.get("to")->str));
+        ret = Value::Bool(flow.transitionTo(op.find("to")->str));
       } else if (opName == "endGame") {
         ret = Value::Bool(flow.endGame());
       } else if (opName == "returnToLobby") {
         ret = Value::Bool(flow.returnToLobby());
       } else if (opName == "setOrder") {
         std::vector<PeerId> ord;
-        if (const JV* o = op.get("order")) for (auto& e : o->arr) ord.push_back(peerFromJV(e));
+        if (const Value* o = op.find("order")) for (auto& e : o->arr) ord.push_back(peerFrom(e));
         flow.setActiveOrder(ord);
       } else if (opName == "seen") {
-        flow.onSeen(peerFromJV(*op.get("p")), op.get("t")->num);
+        flow.onSeen(peerFrom(*op.find("p")), op.find("t")->num);
       } else if (opName == "isExpired") {
-        ret = Value::Bool(flow.isExpired(peerFromJV(*op.get("p")), op.get("t")->num));
+        ret = Value::Bool(flow.isExpired(peerFrom(*op.find("p")), op.find("t")->num));
       } else if (opName == "expiredPeers") {
         Value a = Value::Arr();
-        for (const PeerId& p : flow.expiredPeers(op.get("t")->num)) a.push(p.toValue());
+        for (const PeerId& p : flow.expiredPeers(op.find("t")->num)) a.push(p.toValue());
         ret = std::move(a);
       } else if (opName == "graceTick") {
-        ret = Value::Bool(flow.graceTick(op.get("t")->num));
+        ret = Value::Bool(flow.graceTick(op.find("t")->num));
       } else if (opName == "setMaster") {
-        flow.setMasterValue(peerFromJV(*op.get("v")));
+        flow.setMasterValue(peerFrom(*op.find("v")));
       } else if (opName == "setLivenessEnabled") {
-        flow.setLivenessEnabled(op.get("v")->b);
+        flow.setLivenessEnabled(op.find("v")->b);
       } else if (opName == "setField") {
         // The live-record write the display does directly on the kit's mutable
         // record; behind an ABI it is a setter. Emits nothing, kit keys refused.
-        const std::string& key = op.get("key")->str;
-        Value v = jvToValue(*op.get("value"));
-        const bool ok = flow.setField(peerFromJV(*op.get("p")), key, v);
+        const std::string& key = op.find("key")->str;
+        Value v = *op.find("value");
+        const bool ok = flow.setField(peerFrom(*op.find("p")), key, v);
         if (ok) {
-          const Player* p2 = flow.get(peerFromJV(*op.get("p")));
+          const Player* p2 = flow.get(peerFrom(*op.find("p")));
           ret = Value::Null();
           if (p2) for (const auto& kv : p2->fields) if (kv.first == key) ret = kv.second;
         } else {
@@ -219,15 +219,15 @@ int main(int argc, char** argv) {
       Value digest = buildDigest(flow, peers);
 
       // compare the three pieces; first divergence localizes and fails the step
-      struct Piece { const char* label; const JV* exp; const Value* act; };
-      const JV* expEvents = step.get("events");
-      const JV* expDigest = step.get("digest");
-      const JV* expRet = step.get("ret");
+      struct Piece { const char* label; const Value* exp; const Value* act; };
+      const Value* expEvents = step.find("events");
+      const Value* expDigest = step.find("digest");
+      const Value* expRet = step.find("ret");
       Piece pieces[3] = {
         {"ret", expRet, &ret}, {"events", expEvents, &events}, {"digest", expDigest, &digest}};
       for (const Piece& pc : pieces) {
         if (!pc.exp) continue;
-        Diff d = diffVal(*pc.exp, *pc.act, pc.label);
+        Diff d = diff_val(*pc.exp, *pc.act, pc.label);
         if (d.differ) {
           scriptOk = false;
           if (spew++ < 20) {
