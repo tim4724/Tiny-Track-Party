@@ -75,6 +75,13 @@ class PartyConnection {
       if (this.ws !== ws) return; // stale
       var msg;
       try { msg = JSON.parse(event.data); } catch (_) { return; }
+      // A frame that PARSES but is not an object is still not a relay frame. The
+      // catch above only covers malformed JSON, so before this guard `null` threw
+      // a TypeError straight out of onmessage, and `7` / `"x"` / `[1,2]` fell
+      // through to onProtocol with an undefined type — a scalar treated as
+      // protocol traffic. Drop them, which is also what the native ABI's
+      // ttp_framing_classify already did (route "none").
+      if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
 
       if (msg.type === 'message') {
         if (this.onMessage) this.onMessage(msg.from, msg.data);

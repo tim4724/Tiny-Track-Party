@@ -1,0 +1,60 @@
+# The two checks that audit the SUITE rather than the code. Both are slow, both need
+# the full git history, and neither belongs on a PR — they answer questions that only
+# go stale over weeks:
+#
+#   mutation-check   Can the conformance gates still fail? Breaks the engine 18 ways
+#                    and requires the matching ctest to go red for each. Two gates in
+#                    this tree were already found blind this way.
+#   revive-js-oracle Can the retired JS engine still be revived and still re-record
+#                    the golden traces byte-for-byte? While it can, parity evidence is
+#                    renewable; the day it cannot, every future sim change permanently
+#                    burns the only proof the C++ port matches the JS original.
+#
+# Weekly, plus on demand. A failure here is never a broken build — it is a broken
+# ability to detect broken builds, which is worth a human deciding what to do about.
+name: test the tests
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'   # Mondays, 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'mutation-check --only=<substring> (blank runs all 18)'
+        required: false
+        default: ''
+
+concurrency:
+  group: test-the-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+      - name: Break the engine on purpose, 18 ways
+        run: node scripts/mutation-check.mjs ${{ inputs.only && format('--only={0}', inputs.only) || '' }}
+      - name: The tree must be pristine afterwards
+        # The script restores in a finally and rebuilds to prove it, but a harness that
+        # vandalises the tree has to be held to this from the outside too.
+        run: git diff --exit-code
+
+  revive-js-oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # the retirement commit is the point; a shallow clone cannot find it
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+      - name: Revive the retired JS sim and re-record every golden trace
+        run: node scripts/revive-js-oracle.mjs
+      - name: The tree must be pristine afterwards
+        run: git diff --exit-code

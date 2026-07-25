@@ -37,6 +37,7 @@
 
 #include "corpus_diff.h"  // read_line + diff_val
 #include "ttp/canonical.h"
+#include "ttp_party.h"
 #include "ttp_runtime.h"
 
 using namespace ttp;
@@ -422,11 +423,359 @@ void boundaryExports() {
   ttp_dispose(h);
 }
 
+// ---------------------------------------------------------------------------
+// Part 4: the PARTY ABI (ttp_party.h) — the room state machine, the relay framing
+// and the fastlane netcode, all as C entry points.
+//
+// Same gap as the runtime ABI had, one file over: ttp_party.cc was compiled by the
+// emscripten target alone, so ctest never saw its 58 exports. tests/party-abi.test.js
+// covers them in Node against the shipped wasm, which is real coverage of the wasm the
+// browser loads — but it leaves the desktop and tvOS legs blind, and those legs are
+// exactly where a native shell would consume this ABI.
+//
+// The room replay below is a port of that Node test's corpus walk. Both replaying the
+// SAME roomflow-corpus is the point: the JS-recorded oracle now reaches the C boundary
+// on every platform rather than on one.
+// ---------------------------------------------------------------------------
+
+// A peer id crosses the ABI as a JSON scalar — `3` and `"3"` are different peers.
+std::string idJson(const Value* v) {
+  if (!v || v->type == Value::UNDEF) return "null";
+  return canonical_stringify(*v);
+}
+
+Value parseOrNull(const char* text, const char* what) {
+  Value v;
+  std::string err;
+  if (!read_line(text ? text : "null", v, &err)) {
+    fail(std::string(what) + ": invalid JSON from the ABI (" + err + ")");
+    return Value::Null();
+  }
+  return v;
+}
+
+bool roomCorpusThroughAbi(const std::string& path) {
+  std::ifstream in(path);
+  if (!in) { fail("cannot open room corpus " + path); return false; }
+
+  std::string line;
+  if (!std::getline(in, line)) { fail("empty room corpus"); return false; }
+  Value header;
+  std::string err;
+  if (!read_line(line, header, &err)) { fail("room corpus header: " + err); return false; }
+
+  {
+    Value v = parseOrNull(ttp_party_version(), "ttp_party_version");
+    const Value* layer = v.find("layer");
+    check(layer && layer->str == "party", "ttp_party_version reports the party layer");
+    check(v.has("contractVersion"), "ttp_party_version carries contractVersion");
+  }
+
+  int scripts = 0, steps = 0, slotCases = 0, bad = 0;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    Value rec;
+    if (!read_line(line, rec, &err)) { fail("room corpus: " + err); return false; }
+
+    // lowestFreeSlot lines are a static helper with no handle.
+    if (const Value* sc = rec.find("slotCase")) {
+      const std::string used = canonical_stringify(*sc->find("used"));
+      const int max = (int)sc->find("max")->num;
+      const int want = (int)sc->find("expect")->num;
+      if (ttp_room_lowest_free_slot(used.c_str(), max) != want) {
+        bad++;
+        fail("ttp_room_lowest_free_slot(" + used + ", " + std::to_string(max) + ") != " +
+             std::to_string(want));
+      }
+      slotCases++;
+      continue;
+    }
+
+    // Rebuild the room from the recorded config, mirroring the JS side: `master`
+    // present at all means a masterProvider exists; `liveness` absent disables it.
+    const Value* cfg = rec.find("config");
+    Value abiCfg = Value::Obj();
+    if (cfg) {
+      const Value* ump = cfg->find("useMasterProvider");
+      if (ump && ump->b) {
+        const Value* m = cfg->find("master");
+        abiCfg.set("master", m ? *m : Value::Null());
+      }
+      if (const Value* lv = cfg->find("liveness")) abiCfg.set("liveness", *lv);
+    }
+    const int h = ttp_room_create(canonical_stringify(abiCfg).c_str());
+    if (h <= 0) { fail("ttp_room_create returned " + std::to_string(h)); return false; }
+    scripts++;
+    const std::string name = rec.find("name") ? rec.find("name")->str : "?";
+
+    int si = 0;
+    for (const Value& step : rec.find("steps")->arr) {
+      const Value* op = step.find("op");
+      const std::string kind = op->find("op")->str;
+      const std::string p = idJson(op->find("p"));
+      Value ret;  // UNDEF unless this op returns something the corpus recorded
+
+      if (kind == "add") {
+        const Value* f = op->find("fields");
+        Value fields = f ? *f : Value::Obj();
+        ret = parseOrNull(ttp_room_add_player(h, p.c_str(),
+                                              canonical_stringify(fields).c_str()), "add_player");
+      } else if (kind == "remove") {
+        ttp_room_remove_player(h, p.c_str());
+      } else if (kind == "rekey") {
+        ret = Value::Bool(ttp_room_rekey(h, idJson(op->find("oldId")).c_str(),
+                                         idJson(op->find("newId")).c_str()) == 1);
+      } else if (kind == "markDisc") {
+        ttp_room_mark_disconnected(h, p.c_str());
+      } else if (kind == "markReconn") {
+        ttp_room_mark_reconnected(h, p.c_str());
+      } else if (kind == "clearDisc") {
+        const Value* t = op->find("t");
+        ttp_room_clear_disconnected(h, t ? 1 : 0, t ? t->num : 0.0);
+      } else if (kind == "transition") {
+        ret = Value::Bool(ttp_room_transition_to(h, op->find("to")->str.c_str()) == 1);
+      } else if (kind == "endGame") {
+        ret = Value::Bool(ttp_room_transition_to(h, "results") == 1);
+      } else if (kind == "returnToLobby") {
+        ret = Value::Bool(ttp_room_transition_to(h, "lobby") == 1);
+      } else if (kind == "setOrder") {
+        const Value* o = op->find("order");
+        Value order = o ? *o : Value::Arr();
+        ttp_room_set_active_order(h, canonical_stringify(order).c_str());
+      } else if (kind == "seen") {
+        ttp_room_on_seen(h, p.c_str(), op->find("t")->num);
+      } else if (kind == "isExpired") {
+        ret = Value::Bool(ttp_room_is_expired(h, p.c_str(), op->find("t")->num) == 1);
+      } else if (kind == "expiredPeers") {
+        ret = parseOrNull(ttp_room_expired_peers_json(h, op->find("t")->num), "expired_peers");
+      } else if (kind == "graceTick") {
+        ret = Value::Bool(ttp_room_grace_tick(h, op->find("t")->num) == 1);
+      } else if (kind == "setMaster") {
+        ttp_room_set_master(h, idJson(op->find("v")).c_str());
+      } else if (kind == "setLivenessEnabled") {
+        const Value* v = op->find("v");
+        ttp_room_set_liveness_enabled(h, (v && v->b) ? 1 : 0);
+      } else if (kind == "reset") {
+        ttp_room_reset(h);
+      } else if (kind == "setField") {
+        const Value* val = op->find("value");
+        const std::string key = op->find("key")->str;
+        const bool applied = ttp_room_set_field(h, p.c_str(), key.c_str(),
+                                                idJson(val).c_str()) == 1;
+        if (applied) {
+          Value back = parseOrNull(ttp_room_get_json(h, p.c_str()), "get_json");
+          const Value* got = back.type == Value::OBJ ? back.find(key) : nullptr;
+          ret = got ? *got : Value::Null();
+        } else {
+          ret = Value::Null();
+        }
+      } else {
+        fail(name + " step " + std::to_string(si) + ": unknown op '" + kind + "'");
+        return false;
+      }
+
+      // Events emitted during THIS op, in order — the queue drains per op, so
+      // ordering across the boundary is asserted, not just membership.
+      Value events = parseOrNull(ttp_room_events_json(h), "events_json");
+      if (const Value* want = step.find("events")) {
+        const Diff d = diff_val(*want, events, "events");
+        if (d.differ) {
+          bad++;
+          fail(name + " step " + std::to_string(si) + " (" + kind + ") events at " + d.path +
+               ": recorded " + d.expected + ", actual " + d.actual);
+        }
+      }
+      if (const Value* want = step.find("ret")) {
+        const Diff d = diff_val(*want, ret, "ret");
+        if (d.differ) {
+          bad++;
+          fail(name + " step " + std::to_string(si) + " (" + kind + ") ret at " + d.path +
+               ": recorded " + d.expected + ", actual " + d.actual);
+        }
+      }
+
+      if (const Value* d0 = step.find("digest")) {
+        Value got = Value::Obj();
+        got.set("state", Value::Str(ttp_room_state(h)));
+        got.set("host", parseOrNull(ttp_room_host_json(h), "host_json"));
+        got.set("size", Value::Num((double)ttp_room_size(h)));
+        got.set("connectedCount", Value::Num((double)ttp_room_connected_count(h)));
+        got.set("list", parseOrNull(ttp_room_list_json(h), "list_json"));
+        got.set("allDisconnected", Value::Bool(ttp_room_all_participants_disconnected(h) != 0));
+        got.set("hasLateJoiners", Value::Bool(ttp_room_has_late_joiners(h) != 0));
+        Value pp = Value::Arr();
+        if (const Value* recorded = d0->find("perPeer")) {
+          for (const Value& e : recorded->arr) {
+            const std::string pj = idJson(e.find("p"));
+            Value o = Value::Obj();
+            o.set("p", e.find("p") ? *e.find("p") : Value::Null());
+            o.set("has", Value::Bool(ttp_room_has(h, pj.c_str()) != 0));
+            o.set("isHost", Value::Bool(ttp_room_is_host(h, pj.c_str()) != 0));
+            o.set("disc", Value::Bool(ttp_room_is_disconnected(h, pj.c_str()) != 0));
+            pp.push(std::move(o));
+          }
+        }
+        got.set("perPeer", std::move(pp));
+
+        const Diff d = diff_val(*d0, got, "digest");
+        if (d.differ) {
+          bad++;
+          fail(name + " step " + std::to_string(si) + " (" + kind + ") digest at " + d.path +
+               ": recorded " + d.expected + ", actual " + d.actual);
+        }
+      }
+      steps++;
+      si++;
+    }
+    ttp_room_dispose(h);
+  }
+
+  const Value* wantScripts = header.find("scripts");
+  const Value* wantSlots = header.find("slotCases");
+  check(!wantScripts || scripts == (int)wantScripts->num, "every corpus script replayed");
+  check(!wantSlots || slotCases == (int)wantSlots->num, "every lowestFreeSlot case replayed");
+  std::printf("  room corpus through the party ABI: %d scripts / %d steps / %d slot cases\n",
+              scripts, steps, slotCases);
+  return bad == 0;
+}
+
+bool framingCorpusThroughAbi(const std::string& path) {
+  std::ifstream in(path);
+  if (!in) { fail("cannot open framing corpus " + path); return false; }
+  std::string line;
+  if (!std::getline(in, line)) { fail("empty framing corpus"); return false; }
+
+  int cases = 0, bad = 0;
+  std::string err;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    Value rec;
+    if (!read_line(line, rec, &err)) { fail("framing corpus: " + err); return false; }
+    const std::string op = rec.find("op") ? rec.find("op")->str : "";
+    const Value* expect = rec.find("expect");
+    if (!expect) continue;
+
+    Value got;
+    if (op == "encode") {
+      const std::string kind = rec.find("kind")->str;
+      if (kind == "create") {
+        const Value* url = rec.find("url");
+        const std::string u = url ? url->str : std::string();
+        got = parseOrNull(ttp_framing_encode_create(rec.find("clientId")->str.c_str(),
+                                                    rec.find("maxClients")->num,
+                                                    url ? u.c_str() : nullptr), "encode_create");
+      } else if (kind == "join") {
+        got = parseOrNull(ttp_framing_encode_join(rec.find("clientId")->str.c_str(),
+                                                  rec.find("room")->str.c_str()), "encode_join");
+      } else if (kind == "sendTo") {
+        got = parseOrNull(ttp_framing_encode_send_to(idJson(rec.find("to")).c_str(),
+                                                     canonical_stringify(*rec.find("data")).c_str()),
+                          "encode_send_to");
+      } else if (kind == "broadcast") {
+        got = parseOrNull(ttp_framing_encode_broadcast(
+                              canonical_stringify(*rec.find("data")).c_str()), "encode_broadcast");
+      } else if (kind == "setState") {
+        got = parseOrNull(ttp_framing_encode_set_state(
+                              canonical_stringify(*rec.find("data")).c_str()), "encode_set_state");
+      } else if (kind == "closeRoom") {
+        got = parseOrNull(ttp_framing_encode_close_room(), "encode_close_room");
+      } else {
+        fail("unknown framing encode kind '" + kind + "'");
+        return false;
+      }
+    } else if (op == "classify") {
+      // Deliberately hands the ABI RAW socket text, which is its contract: the host
+      // does not parse frames.
+      const Value* wire = rec.find("wire");
+      const Value* raw = rec.find("raw");
+      const std::string text = raw ? raw->str : canonical_stringify(*wire);
+      got = parseOrNull(ttp_framing_classify(text.c_str()), "classify");
+    } else if (op == "close") {
+      const Value* code = rec.find("code");
+      const Value* hasCode = rec.find("hasCode");
+      const Value* recon = rec.find("shouldReconnectBefore");
+      got = parseOrNull(ttp_framing_close_outcome(hasCode && hasCode->b ? 1 : 0,
+                                                  code ? code->num : 0,
+                                                  rec.find("attemptBefore")->num,
+                                                  rec.find("maxAttempts")->num,
+                                                  (recon && recon->b) ? 1 : 0), "close_outcome");
+    } else if (op == "backoff") {
+      got = Value::Num(ttp_framing_backoff_ms(rec.find("attempt")->num));
+    } else if (op == "pin") {
+      got = Value::Str(ttp_framing_pin_url(rec.find("base")->str.c_str(),
+                                           rec.find("room")->str.c_str(),
+                                           rec.find("instance")->str.c_str()));
+    } else {
+      continue;
+    }
+
+    const Diff d = diff_val(*expect, got, op);
+    if (d.differ) {
+      bad++;
+      fail("framing " + op + " at " + d.path + ": recorded " + d.expected + ", actual " + d.actual);
+    }
+    cases++;
+  }
+  std::printf("  framing corpus through the party ABI: %d cases\n", cases);
+  return bad == 0;
+}
+
+// The fastlane's LOGIC is already pinned bit-exactly by fastlane_check against the
+// same corpus; what is unproven here is the marshalling — handles, JSON in and out,
+// raw packet text. So this is a shape-and-plumbing pass, not a second oracle.
+void fastlaneThroughAbi() {
+  const int a = ttp_link_create();
+  check(a > 0, "ttp_link_create returns a handle");
+  ttp_link_set_channel_open(a, 1);
+
+  Value out = parseOrNull(ttp_link_enqueue(a, "{\"a\":1}", 0.0), "link_enqueue");
+  check(out.has("sent") && out.has("applied") && out.has("dropped"),
+        "an enqueue outcome carries sent/applied/dropped");
+  const Value* pkt = out.find("packet");
+  check(pkt && pkt->type == Value::OBJ, "an open channel produces a packet to write");
+
+  // Feed that packet back into a SECOND link: the events must surface on the far
+  // side, which is the whole job of the wire format.
+  const int b = ttp_link_create();
+  ttp_link_set_channel_open(b, 1);
+  const std::string wire = canonical_stringify(*pkt);
+  Value in = parseOrNull(ttp_link_inbound(b, wire.c_str(), 1.0), "link_inbound");
+  const Value* applied = in.find("applied");
+  check(applied && applied->arr.size() == 1, "the peer applies the one event that was sent");
+  if (applied && !applied->arr.empty()) {
+    const Value* av = applied->arr[0].find("a");
+    check(av && av->num == 1, "the applied event is the payload that was enqueued");
+  }
+
+  // A closed channel must not write, and must not count a write.
+  ttp_link_set_channel_open(a, 0);
+  Value closed = parseOrNull(ttp_link_enqueue(a, "{\"b\":2}", 2.0), "link_enqueue closed");
+  const Value* sent = closed.find("sent");
+  check(sent && !sent->b, "a closed channel does not write");
+
+  Value stats = parseOrNull(ttp_link_stats_json(a), "link_stats");
+  check(stats.type == Value::OBJ && !stats.obj.empty(), "ttp_link_stats_json returns a stats object");
+
+  // Idle and tick are host-scheduled; here they only have to marshal cleanly.
+  parseOrNull(ttp_link_send_tick(a, 3.0), "link_send_tick");
+  parseOrNull(ttp_link_idle(a, 4.0), "link_idle");
+
+  ttp_link_dispose(a);
+  ttp_link_dispose(b);
+
+  // Error paths need no handle.
+  Value bogus = parseOrNull(ttp_link_stats_json(0), "link_stats(0)");
+  check(bogus.type == Value::OBJ || bogus.type == Value::NUL,
+        "ttp_link_stats_json on handle 0 returns JSON rather than garbage");
+  check(ttp_room_state(0) != nullptr, "ttp_room_state on handle 0 returns a string, not null");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 3) {
-    std::fprintf(stderr, "usage: abi_check <grandprix-corpus.jsonl> <trace.jsonl>...\n");
+  if (argc < 5) {
+    std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
+                         "<framing-corpus> <trace.jsonl>...\n");
     return 2;
   }
   std::printf("abi check:\n");
@@ -434,9 +783,12 @@ int main(int argc, char** argv) {
   // marshalling its recorded inputs contain: tidepool's four bots never brake, so
   // on that fixture alone ttp_process_input's brake bit could be deleted outright
   // and every frame would still hash correctly. helix carries 402 braking inputs.
-  for (int i = 2; i < argc; i++) traceThroughAbi(argv[i]);
+  for (int i = 4; i < argc; i++) traceThroughAbi(argv[i]);
   gpThroughAbi(argv[1]);
   boundaryExports();
+  roomCorpusThroughAbi(argv[2]);
+  framingCorpusThroughAbi(argv[3]);
+  fastlaneThroughAbi();
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

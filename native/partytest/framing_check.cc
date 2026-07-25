@@ -86,6 +86,11 @@ int main(int argc, char** argv) {
         return 2;
       }
     } else if (op == "classify") {
+      // `raw` cases carry SOCKET TEXT, not a parsed frame, and belong to the ABI:
+      // classify_inbound takes an already-parsed Value and its Route enum has no
+      // "none", because this library never sees text. Whoever owns the socket owns
+      // the is-this-even-JSON question — see ttp_framing_classify and abi_check.
+      if (root.has("raw")) continue;
       got = classifyToValue(framing::classify_inbound(*root.find("wire")));
     } else if (op == "close") {
       const Value* codeV = root.find("code");

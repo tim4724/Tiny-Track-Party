@@ -14,6 +14,9 @@
 //   line 2+ one op each (inputs carried so the C++ check drives the port itself):
 //     {op:'encode',   kind, ...inputs, expect:<sent object>}
 //     {op:'classify', wire, expect:{route, ...payload}}
+//     {op:'classify', raw,  expect:{route, ...payload}}   — RAW socket text; ABI-only
+//                     (the C++ library takes a parsed frame, so only the ABI can
+//                      classify text as route 'none' — see classifyRawCase)
 //     {op:'close',    code, hasCode, attemptBefore, maxAttempts, shouldReconnectBefore,
 //                     expect:{stopReconnect, closeAttempt, closeMax, meta, willReconnect}}
 //     {op:'backoff',  attempt, expect:<delay ms>}
@@ -102,6 +105,32 @@ classifyCase({ type: 'peer_left', index: 1 });
 classifyCase({ type: 'error', message: 'Room not found' });
 classifyCase({ type: 'weird_unknown_type', foo: 1 });    // -> protocol, type carried
 classifyCase({ noType: true });                          // no .type -> protocol, type null
+
+// RAW-TEXT frames: what the socket can actually deliver that is not a JSON object.
+// These carry `raw` instead of `wire`, and they are consumed by the ABI check ALONE.
+// That is a layering fact, not an omission: ttp::framing::classify_inbound takes an
+// already-PARSED value and its Route enum has no "none", because the C++ library
+// never sees text. Deciding that a frame is not JSON at all belongs to whoever holds
+// the socket — in our case ttp_framing_classify — so this is the only oracle that can
+// pin it. Recorded off the real PartyConnection's onmessage, JSON.parse and all.
+function classifyRawCase(raw) {
+  const pc = new PartyConnection('wss://relay.example.com', { clientId: 'cid-1' });
+  let captured = { route: 'none' };
+  pc.onMessage = (from, data) => { captured = { route: 'message', from, data }; };
+  pc.onState = (data) => { captured = { route: 'state', data }; };
+  pc.onProtocol = (type, msg) => { captured = { route: 'protocol', type: type === undefined ? null : type, msg }; };
+  pc.connect();
+  const ws = MockWebSocket._instances[MockWebSocket._instances.length - 1];
+  ws.onmessage({ data: raw });
+  lines.push(canonicalStringify({ op: 'classify', raw, expect: captured }));
+}
+
+classifyRawCase('not json at all');   // parse throws -> dropped
+classifyRawCase('');                  // empty frame
+classifyRawCase('[1,2,3]');           // valid JSON, not an object
+classifyRawCase('"a string"');        // valid JSON scalar
+classifyRawCase('null');              // valid JSON null
+classifyRawCase('7');                 // valid JSON number
 
 // ---- close-code semantics ----------------------------------------------------
 // Drive ws.onclose; capture onClose(attempt,max,meta), whether reconnect is
