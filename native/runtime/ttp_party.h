@@ -99,6 +99,68 @@ const char* ttp_room_get_json(int h, const char* peerIdJson);  // one record, or
 // in emission order, then empty it.
 const char* ttp_room_events_json(int h);
 
+// =============================================================================
+// RELAY FRAMING (ttp::framing — the pure surface of PartyConnection.js)
+// =============================================================================
+// Stateless: no handles. Each returns into its OWN static scratch buffer, valid
+// until the next call to THAT function. The host still owns the socket; these
+// answer "what bytes?" and "what does this mean?".
+
+// Outbound encoders -> the JSON text to hand to ws.send() verbatim.
+const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull);
+const char* ttp_framing_encode_join(const char* clientId, const char* room);
+const char* ttp_framing_encode_send_to(const char* toJson, const char* dataJson);
+const char* ttp_framing_encode_broadcast(const char* dataJson);
+const char* ttp_framing_encode_set_state(const char* dataJson);
+const char* ttp_framing_encode_close_room(void);
+
+// Inbound routing. Takes the RAW socket text (the host need not parse it) and
+// returns {"route":"message"|"state"|"protocol", plus "from"/"data"/"type"/"msg"}.
+// route "none" means the text was not a JSON object (the host drops it).
+const char* ttp_framing_classify(const char* frameText);
+
+// Close-code decision -> {"stopReconnect":bool,"closeAttempt":N,"closeMax":N,
+// "meta":{...}|null,"willReconnect":bool}. hasCode=0 models a close event with
+// no code at all.
+const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBefore,
+                                      double maxAttempts, int shouldReconnectBefore);
+
+// Reconnect backoff for attempt N, in ms.
+double ttp_framing_backoff_ms(double attempt);
+
+// base + '/' + enc(room) + '?instance=' + enc(instance); base unchanged when
+// instance is empty (the JS early return).
+const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance);
+
+// =============================================================================
+// FASTLANE NETCODE (ttp::fastlane::Link — one handle per peer link)
+// =============================================================================
+// The reliability layer over the DataChannel: resend ring + TTL, implicit
+// per-event seq, cumulative ack, receive dedup, RTT EWMA, packet classifier.
+// The WebRTC handshake and all timer SCHEDULING stay with the host.
+//
+// Every op returns an outcome as canonical JSON:
+//   {"sent":bool,            // a packet should be written to the channel
+//    "packet":{...}|null,    // that packet (write it verbatim)
+//    "applied":[ev,...],     // inbound events to surface, in apply order
+//    "rtt":N|null,           // an RTT sample to report (already srtt/2)
+//    "dropped":bool}         // enqueue only: true == JS 'dropped'
+
+int ttp_link_create(void);
+void ttp_link_dispose(int h);
+// Mirror the channel's readyState: a closed channel makes writes no-ops that do
+// NOT count toward stats.out (matching JS's swallowed send() throw).
+void ttp_link_set_channel_open(int h, int open);
+
+const char* ttp_link_enqueue(int h, const char* evJson, double nowMs);
+const char* ttp_link_send_tick(int h, double nowMs);
+const char* ttp_link_idle(int h, double nowMs);
+// packetText is the RAW channel text; non-object input is ignored.
+const char* ttp_link_inbound(int h, const char* packetText, double nowMs);
+
+// {"out":N,"received":N,"lastPsSeen":N} — the per-link packet counters.
+const char* ttp_link_stats_json(int h);
+
 // ---- statics ----------------------------------------------------------------
 
 // RoomFlow.lowestFreeSlot(used, max): lowest free dense slot in [0,max), or -1.

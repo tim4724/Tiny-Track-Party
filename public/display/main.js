@@ -114,22 +114,35 @@ if (_qSimNative) {
     .then(async (m) => { await m.init(); _nativeSim = m; })
     .catch((e) => console.warn('[sim=native] load failed; racing on the JS sim:', e));
 }
-// ?party=native — PORT: run the ROOM state machine (roster identity/join order,
-// presence, host election, liveness) on the native C++ party layer through
-// NativeRoomFlow instead of partyplug/RoomFlow.js. Transport stays JS: the
-// WebSocket and RTCPeerConnection are the browser's, and this only moves the
-// DECISIONS. Unlike ?sim=native the module cannot load lazily — DisplayNet builds
-// its RoomFlow in the constructor — so this awaits at boot (top-level await, only
-// when the flag is set) and falls back loudly to the JS kit if it fails.
+// ?party=native — PORT: run the whole party layer's DECISIONS on the native C++
+// side instead of partyplug's JS:
+//   room state machine  (roster/join order, presence, host election, liveness)
+//   relay framing        (what to send, what a frame means, close codes, backoff)
+//   fastlane netcode     (ring + TTL, seq, acks, dedup, RTT)
+// Transport stays JS by design — the WebSocket and RTCPeerConnection are the
+// browser's and always will be, so only decisions move. Unlike ?sim=native these
+// cannot load lazily (DisplayNet builds its RoomFlow and connection in the
+// constructor), so this awaits at boot behind the flag and falls back loudly.
 const _qPartyNative = _trackParams.get('party') === 'native';
 let _nativeParty = null; // module namespace once init() resolves
 if (_qPartyNative) {
   try {
-    const m = await import('./NativeRoomFlow.js');
-    await m.init();
-    _nativeParty = m;
+    const [room, conn, lane] = await Promise.all([
+      import('./NativeRoomFlow.js'),
+      import('./NativePartyConnection.js'),
+      import('./NativePartyFastlane.js')
+    ]);
+    // One shared wasm module backs all three (nativeRuntime.js memoizes it).
+    await Promise.all([room.init(), conn.init(), lane.init()]);
+    _nativeParty = {
+      RoomFlowImpl: room.NativeRoomFlow,
+      PartyConnectionImpl: conn.NativePartyConnection,
+      // The fastlane subclasses the kit's class, which is a classic-script
+      // global, so the subclass is built here rather than at module scope.
+      FastlaneImpl: lane.makeNativePartyFastlane(window.PartyFastlane)
+    };
   } catch (e) {
-    console.warn('[party=native] load failed; running the JS room flow:', e);
+    console.warn('[party=native] load failed; running the JS party layer:', e);
   }
 }
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
@@ -518,7 +531,7 @@ let currentJoinUrl = '';   // full join link (same string the QR encodes); set o
 const net = new DisplayNet({
   // ?party=native: the room state machine runs on the C++ party layer. Absent,
   // DisplayNet uses the JS kit's RoomFlow exactly as before.
-  ...(_nativeParty ? { RoomFlowImpl: _nativeParty.NativeRoomFlow } : {}),
+  ...(_nativeParty || {}),
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,

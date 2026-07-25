@@ -135,6 +135,10 @@ export class DisplayNet extends GameNet {
     // injects NativeRoomFlow (same surface, C++ decisions) via opts.RoomFlowImpl.
     // Held for the static lowestFreeSlot too, so both come from one implementation.
     this._RoomFlowImpl = opts.RoomFlowImpl || RoomFlow;
+    // Same injection for the relay connection and the fastlane netcode: absent,
+    // both are the kit's classes (see GameNet._initFastlane for the latter).
+    this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
+    if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
     this.flow = new this._RoomFlowImpl({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
     this.roomCode = null;
     this.instance = null;
@@ -249,7 +253,7 @@ export class DisplayNet extends GameNet {
       : RELAY_URL;
     // Per-session secret (genDisplayClientId) keyed to slot 0 → reconnect/reload
     // lands back on slot 0, while an outsider with only the room code can't forge it.
-    this.party = new PartyConnection(url, { clientId: this.clientId });
+    this.party = new this._PartyConnectionImpl(url, { clientId: this.clientId });
 
     this.party.onOpen = () => {
       if (this.roomCode) this.party.join(this.roomCode);

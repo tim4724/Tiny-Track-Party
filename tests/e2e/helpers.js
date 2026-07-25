@@ -52,9 +52,13 @@ async function openDisplay(page) {
   // leave every spec passing on the JS kit and read as native coverage. Fail loud
   // instead — this is what makes a green TTP_DISPLAY_FLAGS run mean something.
   if (flags.includes('party=native')) {
-    const impl = await page.evaluate(() => window.__net?.flow?.constructor?.name);
-    if (impl !== 'NativeRoomFlow') {
-      throw new Error(`TTP_DISPLAY_FLAGS requested party=native but the room flow is ${impl}`);
+    const impls = await page.evaluate(() => ({
+      flow: window.__net?.flow?.constructor?.name,
+      conn: window.__net?.party?.constructor?.name,
+      lane: window.__net?.fastlane?.constructor?.name   // null until a peer joins
+    }));
+    if (impls.flow !== 'NativeRoomFlow' || impls.conn !== 'NativePartyConnection') {
+      throw new Error(`TTP_DISPLAY_FLAGS requested party=native but got ${JSON.stringify(impls)}`);
     }
   }
   await page.click('#newgame-btn');
