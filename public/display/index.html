@@ -37,8 +37,11 @@
   <!-- Transport + shared contract: classic scripts set window globals BEFORE
        the deferred module entry runs. -->
   <script src="/shared/protocol.js?v=__APP_V__"></script>
+  <!-- PartyConnection + PartyFastlane survive the native port: they own the
+       WebSocket and the WebRTC handshake (which wasm cannot), and the native
+       fastlane SUBCLASSES PartyFastlane to inherit that handshake. RoomFlow.js is
+       gone — the room state machine is C++ now (NativeRoomFlow). -->
   <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
-  <script src="/partyplug/RoomFlow.js?v=__APP_V__"></script>
   <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
 </head>
 <body>

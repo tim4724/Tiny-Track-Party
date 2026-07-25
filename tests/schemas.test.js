@@ -4,12 +4,27 @@
 // snapshot/results/built track) plus the committed golden-trace fixtures. No
 // full JSON Schema validator (deliberately no dependency); what we pin is the
 // FIELD VOCABULARY and the version stamps, which is where schema drift starts.
+//
+// "Live engine" now means the NATIVE sim through its C ABI (the wasm build of
+// native/libttp-sim, loaded exactly as tests/runtime-abi.test.js does). Two
+// consequences:
+//   - the sim-side fixtures are a CATALOGUE track, not a private oval: the ABI
+//     builds tracks by id from a code-generated catalogue (track_defs.h), so an
+//     ad-hoc segment descriptor cannot cross it. Track-BUILDER schemas below
+//     still use a private fixture (TrackBuilder.js is JS and stays);
+//   - the event vocabulary is read out of the C++ source (native/libttp-sim/
+//     ttp/game.cc), which is now the only place events are emitted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-const SCHEMA_DIR = path.join(__dirname, '..', 'docs', 'native-port', 'contract');
+const ROOT = path.join(__dirname, '..');
+const SCHEMA_DIR = path.join(ROOT, 'docs', 'native-port', 'contract');
+const GAME_CC = path.join(ROOT, 'native/libttp-sim/ttp/game.cc');
+const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
+const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
 const SCHEMA_FILES = [
   'snapshot.schema.json',
   'events.schema.json',
@@ -20,14 +35,75 @@ const SCHEMA_FILES = [
 ];
 const loadSchema = (name) => JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, name), 'utf8'));
 
-let buildTrack, resolveFurniture, TRACK_LIST, Game, CONTRACT_VERSION;
+const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
+  ? false
+  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
+
+let buildTrack, resolveFurniture, TRACK_LIST, CONTRACT_VERSION;
 test.before(async () => {
   ({ buildTrack, resolveFurniture, TRACK_LIST } = await import('../public/display/TrackBuilder.js'));
-  ({ Game, CONTRACT_VERSION } = await import('../public/display/engine/Game.js'));
+  ({ CONTRACT_VERSION } = await import('../public/display/engine/contract.js'));
 });
 
-// Compact closed oval, same shape the engine tests use (private fixture, not a
-// catalogue track).
+// The runtime C ABI (tests/runtime-abi.test.js conventions: ids cross as JSON
+// scalars, null stats = the benchmark car, ttp_session_start(h, -1) = no
+// countdown / racing from frame 0). Loaded once, lazily.
+let _abi = null;
+async function abi() {
+  if (_abi) return _abi;
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const Module = await factory();
+  const cw = (name, ret, args) => Module.cwrap(name, ret, args);
+  _abi = {
+    begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+    addHuman: cw('ttp_add_human', 'void', ['number', 'string', 'string']),
+    addBot: cw('ttp_add_bot', 'void', ['number', 'string', 'number', 'number', 'number', 'string']),
+    start: cw('ttp_session_start', 'void', ['number', 'number']),
+    update: cw('ttp_update', 'void', ['number', 'number']),
+    input: cw('ttp_process_input', 'void',
+      ['number', 'string', 'number', 'number', 'number', 'number']),
+    snapshot: cw('ttp_snapshot_json', 'string', ['number']),
+    results: cw('ttp_results_json', 'string', ['number']),
+    forceFinish: cw('ttp_force_finish', 'void', ['number', 'string', 'number']),
+    dispose: cw('ttp_dispose', 'void', ['number']),
+  };
+  return _abi;
+}
+
+// A live mixed-roster race: two humans (numeric ids) + two persona bots (string
+// ids), so the snapshot covers BOTH id types the schema allows. Items and hazards
+// are live and unforced, so a long-enough run also produces dropped bananas and
+// rockets in flight — the arrays the old JS fixture never populated. Returns the
+// first frame plus the first frame each of those arrays is non-empty (keeping all
+// 3000 would be pointless megabytes).
+const SIM_TRACK = 'tidepool';
+async function liveRace(frames) {
+  const a = await abi();
+  const h = a.begin(SIM_TRACK, 42, 3, null);
+  assert.ok(h > 0, `ttp_session_begin('${SIM_TRACK}') returned a handle`);
+  a.addHuman(h, '1', null);
+  a.addHuman(h, '2', null);
+  a.addBot(h, '"cpu-bolt"', 1.05, -0.6, 1, null);
+  a.addBot(h, '"cpu-pixel"', 1.0, 0.6, 1, null);
+  a.start(h, -1);
+  const out = { first: null, bananas: null, rockets: null };
+  for (let i = 0; i < frames; i++) {
+    a.input(h, '1', 1 | 2 | 4, 0.05, 0, i % 256);
+    a.input(h, '2', 1 | 2, -0.05, 0, 0);
+    a.update(h, 1000 / 60);
+    const snap = JSON.parse(a.snapshot(h));
+    if (!out.first) out.first = snap;
+    for (const key of ['bananas', 'rockets']) if (!out[key] && snap[key].length) out[key] = snap;
+  }
+  a.dispose(h);
+  return out;
+}
+
+const keysOf = (o) => Object.keys(o).sort();
+
+// Compact closed oval for the TRACK-BUILDER schemas (private fixture, not a
+// catalogue track, so the shipped track list and these invariants evolve
+// independently).
 const L = 4.0, RL = 4.185;
 const straight = (length) => ({ kind: 'straight', length });
 const arc = (radius, angle) => ({ kind: 'arc', radius, angle });
@@ -37,8 +113,6 @@ const TEST_OVAL = [
   ...run(4), arc(RL, 90), ...run(2), arc(RL, 90)
 ];
 
-const keysOf = (o) => Object.keys(o).sort();
-
 test('every contract schema file parses as JSON', () => {
   for (const f of SCHEMA_FILES) {
     const s = loadSchema(f); // throws on bad JSON
@@ -47,19 +121,13 @@ test('every contract schema file parses as JSON', () => {
   }
 });
 
-test('snapshot schema matches a live getSnapshot()', () => {
+test('snapshot schema matches a live ttp_snapshot_json()', { skip }, async () => {
   const schema = loadSchema('snapshot.schema.json');
-  const track = buildTrack(TEST_OVAL);
-  track.totalLaps = 3;
-  track.boxes = [{ s: 5, lat: 0, radius: 0.5 }];
-  track.seed = 42;
-  const game = new Game([{ id: 1 }, { id: 2 }], track, {});
-  for (let i = 0; i < 30; i++) {
-    game.processInput(1, { s: 0.3, b: 0.1, u: 0 });
-    game.update(16);
-  }
-  const snap = game.getSnapshot();
+  // Long enough for items to roll, be used, and land: a dropped banana and a
+  // rocket in flight both appear inside three laps of tidepool.
+  const live = await liveRace(3000);
 
+  const snap = live.first;
   assert.equal(snap.version, CONTRACT_VERSION, 'live snapshot carries the code contract version');
   assert.equal(schema.properties.version.const, CONTRACT_VERSION, 'schema pins the same contract version');
   assert.deepEqual(keysOf(snap), keysOf(schema.properties), 'top-level snapshot fields == schema properties');
@@ -74,13 +142,35 @@ test('snapshot schema matches a live getSnapshot()', () => {
     }
   }
   assert.deepEqual(keysOf(carProps), [...schema.$defs.carSnap.required].sort(), 'all car fields required');
+  // Both id types the schema allows really occur (numeric humans, string bots).
+  const idTypes = new Set(snap.cars.map((c) => typeof c.id));
+  assert.deepEqual([...idTypes].sort(), ['number', 'string'], 'roster covers numeric and string car ids');
+
+  // The furniture arrays: the JS fixture never populated these, so their field
+  // vocabularies were unpinned against live output. Pin them on the first frame
+  // each is non-empty.
+  for (const key of ['bananas', 'rockets']) {
+    const s = live[key];
+    assert.ok(s, `the race produced at least one live ${key.slice(0, -1)}`);
+    const itemProps = schema.properties[key].items.properties;
+    for (const it of s[key]) {
+      assert.deepEqual(keysOf(it), keysOf(itemProps), `${key} item fields == schema properties`);
+    }
+    assert.deepEqual(keysOf(itemProps), [...schema.properties[key].items.required].sort(),
+      `all ${key} item fields required`);
+  }
+  // boxes is a bare boolean array, index-aligned with the track's authored boxes.
+  assert.ok(snap.boxes.length > 0 && snap.boxes.every((b) => typeof b === 'boolean'),
+    'boxes is a non-empty boolean array');
 });
 
-test('event vocabulary in the schema matches every onEvent emit site in Game.js', () => {
+test('event vocabulary in the schema matches every emit site in game.cc', () => {
   const schema = loadSchema('events.schema.json');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'display', 'engine', 'Game.js'), 'utf8');
+  const src = fs.readFileSync(GAME_CC, 'utf8');
+  // The C++ engine builds an Event POD and hands it to emit(): every site is a
+  // literal `e.type = "<kind>"`.
   const emitted = new Set();
-  for (const m of src.matchAll(/this\.onEvent\(\{\s*type:\s*'([a-z_]+)'/g)) emitted.add(m[1]);
+  for (const m of src.matchAll(/\be\.type = "([a-z_]+)"/g)) emitted.add(m[1]);
   assert.ok(emitted.size >= 7, 'found the emit sites (regex still matches the source)');
 
   const schemaTypes = new Set();
@@ -90,9 +180,13 @@ test('event vocabulary in the schema matches every onEvent emit site in Game.js'
   }
   assert.deepEqual([...schemaTypes].sort(), [...emitted].sort(), 'schema kinds == emitted kinds');
 
-  // The spin causes: the banana/oil ternary emit plus every _spinOut(car, 'x') call.
-  const causes = new Set(['banana', 'oil']);
-  for (const m of src.matchAll(/_spinOut\(\w+, '([a-z_]+)'\)/g)) causes.add(m[1]);
+  // The spin causes: every spinOut(car, "x") call, plus the hazard emit that sets
+  // e.cause inline (the banana/oil ternary) rather than going through spinOut.
+  const causes = new Set();
+  for (const m of src.matchAll(/\bspinOut\([^,)]+, "([a-z_]+)"\)/g)) causes.add(m[1]);
+  for (const m of src.matchAll(/\be\.cause = [^;]+;/g)) {
+    for (const q of m[0].matchAll(/"([a-z_]+)"/g)) causes.add(q[1]);
+  }
   assert.deepEqual([...schema.$defs.spin.properties.cause.enum].sort(), [...causes].sort(), 'spin causes');
 });
 
@@ -184,16 +278,23 @@ test('race-track schema matches a live augmented track', () => {
   for (const p of strips) within(p, schema.$defs.padStrip, 'padStrip');
 });
 
-test('results schema matches a live getResults()', () => {
+test('results schema matches a live ttp_results_json()', { skip }, async () => {
   const schema = loadSchema('results.schema.json');
-  const track = buildTrack(TEST_OVAL);
-  track.totalLaps = 1;
-  const game = new Game([{ id: 1 }, { id: 2 }], track, {});
-  game.forceFinish(1, 12.5);
-  const res = game.getResults();
+  const a = await abi();
+  const h = a.begin(SIM_TRACK, 42, 1, null);
+  assert.ok(h > 0, `ttp_session_begin('${SIM_TRACK}') returned a handle`);
+  a.addHuman(h, '1', null);
+  a.addBot(h, '"cpu-bolt"', 1.05, -0.6, 1, null);
+  a.start(h, -1);
+  a.forceFinish(h, '1', 12.5); // one finisher, one still racing — both row shapes
+  const res = JSON.parse(a.results(h));
+  a.dispose(h);
+
   assert.deepEqual(keysOf(res), keysOf(schema.properties), 'top-level results fields');
   const rowProps = schema.properties.results.items.properties;
+  assert.equal(res.results.length, 2, 'a row per car');
   for (const row of res.results) assert.deepEqual(keysOf(row), keysOf(rowProps), 'result row fields');
+  assert.deepEqual(res.results.map((r) => r.finished), [true, false], 'the forced finisher ranks first');
 });
 
 test('committed trace fixtures agree with the snapshot schema', (t) => {
@@ -201,8 +302,8 @@ test('committed trace fixtures agree with the snapshot schema', (t) => {
   const dir = path.join(__dirname, 'fixtures', 'traces');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
   if (files.length === 0) {
-    // Oracle disarmed (see tests/trace.test.js); the live-snapshot checks
-    // above still pin the schema against the engine.
+    // Oracle disarmed (see tests/trace.test.js); the live-snapshot check
+    // above still pins the schema against the engine.
     t.diagnostic('no committed trace fixtures (oracle disarmed)');
     return;
   }

@@ -1,3 +1,11 @@
+> **Note (native port):** `RoomFlow.js` was REMOVED from this fork — Tiny Track
+> Party runs the room state machine as C++/WASM (`native/libttp-party`, adapter
+> `public/display/NativeRoomFlow.js`), with the 36-scenario behavioural corpus in
+> `tests/fixtures/roomflow-corpus.jsonl` as its frozen oracle. `PartyConnection.js`
+> and `PartyFastlane.js` REMAIN: they own the WebSocket and the WebRTC handshake,
+> which wasm cannot, and the native fastlane subclasses `PartyFastlane` to inherit
+> that handshake. Upstream (HexStacker-Party) still has the JS RoomFlow.
+
 # PartyPlug
 
 Reusable framework for "shared screen + phones as controllers" party games: one

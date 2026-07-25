@@ -7,7 +7,7 @@
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 import { GameNet } from '../shared/GameNet.js';
 
-const { PartyConnection, RoomFlow, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS } = window;
+const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS } = window;
 
 const enc = encodeURIComponent;
 
@@ -134,9 +134,15 @@ export class DisplayNet extends GameNet {
     // The room state machine. Defaults to the kit's RoomFlow; ?party=native
     // injects NativeRoomFlow (same surface, C++ decisions) via opts.RoomFlowImpl.
     // Held for the static lowestFreeSlot too, so both come from one implementation.
-    this._RoomFlowImpl = opts.RoomFlowImpl || RoomFlow;
+    // Required: the room state machine is native (NativeRoomFlow) and there is no
+    // JS RoomFlow left to fall back to, so a missing impl is a wiring bug, not a
+    // mode. Fail at construction rather than at the first roster change.
+    if (!opts.RoomFlowImpl) throw new Error('DisplayNet: opts.RoomFlowImpl is required');
+    this._RoomFlowImpl = opts.RoomFlowImpl;
     // Same injection for the relay connection and the fastlane netcode: absent,
     // both are the kit's classes (see GameNet._initFastlane for the latter).
+    // PartyConnection (the JS socket owner) survives, but the native adapter is
+    // what the display uses; keep the kit class as the documented default.
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
     this.flow = new this._RoomFlowImpl({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });

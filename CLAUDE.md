@@ -35,15 +35,29 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - PartyPlug (`partyplug/`) is the reusable party-game framework (transport layer) shared across games, served under `/partyplug/`.
 - 3D assets are the Kenney Toy Car Kit under `public/assets/toycar/` — the `toycar` path names the asset pack, not the game.
 - UI is the "Sticker Bash" theme: die-cut stickers on the TV glass — flat colour on warm paper, thick warm-ink (`#2A2735`, never `#000`) outlines, hard zero-blur offset shadows, slight rotations. Chrome colours are red/green/blue/purple ONLY (yellow/amber + pink are vetoed in chrome — liveries only; celebration is RED). Design tokens + reusable bits (`.card .btn .chip .pill .field`, the `.wordmark` badge, the `.scene` paper stage) live in `public/shared/theme.css`, `<link>`ed by both display and controller before their page CSS. Build new UI from those tokens/classes — page CSS owns layout, the theme owns colour/type/surface. Never outline/toon-shade anything inside the 3D scene; paper backgrounds only on full-screen boards (chrome floats bare over the live 3D view). Fonts (Fredoka, Nunito) are self-hosted variable woff2 under `public/assets/fonts/` (SIL OFL) so the CSP keeps `font-src 'self'`.
-- Native port: `?native` is the ONE switch that runs every ported layer on the C++
-  engine (sim + the cup-series layer + the party layer's decisions: room state,
-  relay framing, fastlane netcode). Rendering, the HUD and the transport I/O
-  (WebSocket / RTCPeerConnection) stay JS by design. Per-layer flags
-  (`?sim=native`, `?series=native`, `?party=native`) exist to isolate which layer
-  a divergence came from. The whole E2E suite can run natively with
-  `TTP_DISPLAY_FLAGS=native npx playwright test`, and `openDisplay` fails loudly
-  if a native flag silently fell back, so a green native run means something.
-  `native/replay/replay_cli --record <fixture> --out=<f>` re-records a golden
-  trace from C++; the `record_*` ctest entries demand byte equality with the
-  committed fixtures, which is what lets fixture recording move off JS.
+- The engine is NATIVE. The sim, the cup-series layer, and the party layer's
+  decisions (room state, relay framing, fastlane netcode) all run as C++ compiled
+  to WASM (`native/`, loaded via `public/display/engine/native/ttp_runtime.mjs`
+  through the adapters `Native{RaceSession,CupSeries,RoomFlow,PartyConnection,
+  PartyFastlane}.js`). There is NO JS engine and NO fallback: `main.js` awaits the
+  wasm at boot and a load failure is fatal. The JS twins were deleted once every
+  layer was conformance-proven; git history has them.
+- Still JS BY DESIGN: rendering (`SceneRenderer.js`), the HUD/screens (`main.js`),
+  track geometry for the renderer (`TrackBuilder.js` + `Centerline.js`), audio, the
+  whole controller page, and the transport I/O — the WebSocket and
+  `RTCPeerConnection` live in `partyplug/PartyConnection.js` and
+  `PartyFastlane.js`, which SURVIVE: the native fastlane SUBCLASSES the kit class
+  to inherit its WebRTC handshake, and the controller uses both directly.
+- Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
+  replayed by `native/` ctest (24 tests on linux/macOS/wasm/tvOS). They are
+  permanent cross-implementation evidence recorded against the JS engine while it
+  existed — never re-record them from C++, which would only prove C++ matches
+  itself. New traces come from `native/build/replay_cli --record <header> --out=f`
+  (the `record_*` ctests hold it byte-identical to the committed fixtures).
+  `scripts/gen-*-corpus.mjs` are the oracle generators; `gen-roomflow-corpus.mjs`
+  is FROZEN (its JS twin is gone) and documents the room contract as 36 scenarios.
+- Balance/tuning: `npm run probe:cars` / `probe:laptime` build and run
+  `native/build/probe_cli` (modes laptime|matrix|packed). The old JS probes drove
+  the AI with no game context and unseeded items, so their numbers were wrong —
+  do not compare against pre-2026-07-25 readings.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

@@ -1,19 +1,26 @@
 // LobbyDemo — attract-mode race that plays under the orbiting lobby preview once a
-// track is picked. It reuses the real Game engine and the pure-pursuit AI (AiDriver)
-// to drive every car on autopilot, showing the liveries/models the players have
-// CURRENTLY picked topped up to a full grid with CPU racers. Cars are added
-// cell:false so the renderer keeps its single orbiting overview camera (no
-// split-screen) and frames the whole track; the loop re-grids and laps forever.
+// track is picked. It runs the real sim (NativeRaceSession → the C++ engine in WASM) in
+// BARE mode — racing from frame 0, no countdown, no session lifecycle — with every car
+// driven by an in-wasm AI bot, showing the liveries/models the players have CURRENTLY
+// picked topped up to a full grid with CPU racers. Cars are added cell:false so the
+// renderer keeps its single orbiting overview camera (no split-screen) and frames the
+// whole track; the loop re-grids and laps forever.
 //
-// This is lobby eye-candy only — no net, no HUD, no results. The real race
-// (RaceSession) takes over the scene the instant the host starts it. The field +
-// per-frame stepping mirror display/main.js's driveBots so the cars drive, dodge
-// hazards, and contest items exactly as they will in the race.
-import { Game } from './engine/Game.js';
-import { AiController } from './AiDriver.js';
+// This is lobby eye-candy only — no net, no HUD, no results. The real race takes over
+// the scene the instant the host starts it. The field + per-frame stepping mirror
+// display/main.js's race loop so the cars drive, dodge hazards, and contest items
+// exactly as they will in the race.
+import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js';
 
 const DEMO_SEED = 0x5eed; // base for the bots' wander streams — lobby determinism doesn't
                           // matter, this just keeps each bot's weave distinct.
+
+// The native sim is initialised once at boot by main.js (top-level await), so this is
+// already resolved by the time a lobby demo can start. We hold our own handle on it so a
+// surface that pulls LobbyDemo in on its own still gets a working demo, and so a failed
+// init is reported rather than silently rendering an empty track.
+let simReady = null;
+const ensureSim = () => (simReady = simReady || initNativeSim());
 
 export class LobbyDemo {
   constructor(scene) {
@@ -21,10 +28,10 @@ export class LobbyDemo {
     this.track = null;
     this.field = [];        // [{ id, colorIndex, carIndex, name, stats, persona }]
     this.engine = null;
-    this.bots = new Map();  // car id -> AiController
     this._ids = [];         // scene car ids we own, so stop() removes exactly ours
     this.sig = null;        // caller-supplied field/track signature (skip no-op rebuilds)
     this.active = false;
+    this._epoch = 0;        // bumped by every start/stop, so a pending build can tell it's stale
   }
 
   // (Re)build the demo for `track` with `field`. Tears down any previous run first,
@@ -36,29 +43,47 @@ export class LobbyDemo {
     this.field = field;
     this.sig = sig;
     this._ids = field.map((p) => p.id);
-    this._buildEngine();
-    field.forEach((p, i) => {
-      this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex });
-      // Each car drives on an AI persona (caution/laneBias) even when it's a human's
-      // livery — there are no phones steering in the lobby. Distinct seeds → distinct weave.
-      this.bots.set(p.id, new AiController({ ...(p.persona || {}), seed: (DEMO_SEED + i * 2 + 1) >>> 0 }));
-    });
-    this._placeGrid();
-    this.active = true;
+    const epoch = ++this._epoch;
+    // Deferred by a microtask (the sim promise is already resolved) so the demo can't
+    // race the module load. stop()/start() bump the epoch, cancelling a stale build.
+    ensureSim().then(() => {
+      if (epoch !== this._epoch) return;
+      this.engine = this._buildEngine();
+      for (const p of field) this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex });
+      this._placeGrid();
+      this.active = true;
+    }).catch((e) => console.warn('[LobbyDemo] native sim unavailable — no attract race', e));
   }
 
+  // Every car drives on an AI persona (caution/laneBias) even when it's a human's
+  // livery — there are no phones steering in the lobby. The bots live inside the wasm,
+  // so the personas go in at construction; distinct seeds → distinct weave.
   _buildEngine() {
-    this.engine = new Game(this.field.map((p) => ({ id: p.id, stats: p.stats })), this.track, { onEvent() {} });
+    const players = this.field.map((p) => ({ peerIndex: p.id, stats: p.stats }));
+    const bots = this.field.map((p, i) => {
+      const persona = p.persona || {};
+      return {
+        peerIndex: p.id,
+        caution: persona.caution != null ? persona.caution : 1,
+        laneBias: persona.laneBias != null ? persona.laneBias : 0,
+        seed: (DEMO_SEED + i * 2 + 1) >>> 0
+      };
+    });
+    const engine = new NativeRaceSession(players, this.track, { bots });
+    engine.startBare(); // attract mode: already racing, no countdown to sit through
+    return engine;
   }
 
-  // Swap one car's model/livery WITHOUT restarting the demo race: re-resolve its
-  // engine handling in place, then rebuild just its scene mesh (addCar bakes the
-  // model at creation) and re-pose it at its current spot so it keeps driving from
-  // where it was — no re-grid. Used when a player changes their lobby car pick.
+  // Swap one car's model/livery WITHOUT restarting the demo race: rebuild just its scene
+  // mesh (addCar bakes the model at creation) and re-pose it at its current spot so it
+  // keeps driving from where it was — no re-grid. Used when a player changes their lobby
+  // car pick. The new handling stats only land on the next full rebuild (join/leave/track
+  // switch): the native ABI has no re-stat hook, and re-seating the car in a fresh
+  // session would pop the whole field back to the grid, which is the visible cost the
+  // attract loop is avoiding. Handling differences are invisible in eye-candy anyway.
   swapCar(id, { colorIndex, carIndex, name, stats }) {
     if (!this.engine || !this.engine.hasCar(id)) return;
-    this.engine.setCarStats(id, stats);
-    const rec = this.field.find((p) => p.id === id); // keep our field record current for a later full rebuild
+    const rec = this.field.find((p) => p.id === id); // keep our field record current for that later rebuild
     if (rec) { rec.colorIndex = colorIndex; rec.carIndex = carIndex; rec.name = name; rec.stats = stats; }
     this.scene.removeCar(id);
     this.scene.addCar(id, colorIndex, name, { cell: false, carIndex });
@@ -76,22 +101,28 @@ export class LobbyDemo {
   // until start() has run, so the display can call it unconditionally each frame.
   step(dt) {
     if (!this.active || !this.engine) return;
-    // driveBot steps each controller inside the sim boundary (skips finished cars).
-    for (const [id, bot] of this.bots) this.engine.driveBot(id, bot);
-    this.engine.update(dt * 1000);
+    this.engine.update(dt * 1000); // the bots are stepped inside ttp_update, in the live loop's order
     const snap = this.engine.getSnapshot();
     for (const c of snap.cars) {
       if (c.pose) this.scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
     }
     this.scene.syncProps(snap); // item boxes pop + dropped bananas, same as a live race
-    if (this.engine.raceOver) { this._buildEngine(); this._placeGrid(); } // endless: re-grid + lap again
+    // Endless: once every car is home, re-grid and lap again. Bare mode has no session
+    // layer to fire a raceEnd, so this is the engine's own `raceOver` rule
+    // (finishedOrder >= cars) read off the snapshot. dispose() frees the wasm session —
+    // a JS Game was just garbage, a native handle is not.
+    if (snap.cars.length > 0 && snap.cars.every((c) => c.finished)) {
+      this.engine.dispose();
+      this.engine = this._buildEngine();
+      this._placeGrid();
+    }
   }
 
   stop() {
     this.active = false;
+    this._epoch++; // cancels a start still waiting on the sim module
     for (const id of this._ids) this.scene.removeCar(id);
     this._ids = [];
-    this.bots.clear();
-    this.engine = null;
+    if (this.engine) { this.engine.dispose(); this.engine = null; }
   }
 }
