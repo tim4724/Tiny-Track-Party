@@ -166,6 +166,16 @@ export class FilamentView {
     for (const r of rockets) { F[o++] = r.s; F[o++] = r.lat || 0; }
     m._ttp_submit_frame(this.rt, this._ptr);
   }
+
+  // Re-present the LAST submitted frame, unchanged (dt 0, so nothing steps).
+  // The buffer still holds it, so this costs one draw and no marshalling. Used
+  // by SceneRenderer.snapshot(): a canvas readback only sees pixels while the
+  // frame is still in the drawing buffer, i.e. in the task that drew it.
+  repaint() {
+    if (!this._built || !this._ptr) return false;
+    new Float32Array(this.mod.HEAPU8.buffer, this._ptr, 2)[1] = 0; // dt
+    return !!this.mod._ttp_submit_frame(this.rt, this._ptr);
+  }
 }
 
 // A 50%-alpha clone of a GLB, for the monster's occlusion fade. GLB layout:

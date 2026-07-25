@@ -3042,6 +3042,57 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
             mMonsterFootW = mbb.max.x - mbb.min.x;
             mMonsterFootL = mbb.max.z - mbb.min.z;
         }
+        // The rig's wheels, per instance — these are what turn while the
+        // monster is up (the car's own are scaled to nothing). Rest
+        // translations are kept so the roll spins each tyre IN PLACE, and the
+        // roll axis sign is measured off a rear wheel exactly as the car's is.
+        auto& tcmW = mEngine->getTransformManager();
+        auto& rcmW = mEngine->getRenderableManager();
+        mMonsterWheels.assign(mMonsterInstances.size(), {});
+        for (size_t i = 0; i < mMonsterInstances.size(); i++) {
+            gltfio::FilamentInstance* inst = mMonsterInstances[i];
+            if (!inst) continue;
+            MonsterWheels& mw = mMonsterWheels[i];
+            const utils::Entity* ents = inst->getEntities();
+            for (size_t k = 0; k < inst->getEntityCount(); k++) {
+                const char* nm = mMonsterAsset->getName(ents[k]);
+                if (!nm) continue;
+                utils::Entity* slot = nullptr;
+                float3* rest = nullptr;
+                if (!std::strcmp(nm, "wheel-fl")) { slot = &mw.fl; rest = &mw.flT; }
+                else if (!std::strcmp(nm, "wheel-fr")) { slot = &mw.fr; rest = &mw.frT; }
+                else if (!std::strcmp(nm, "wheel-bl")) { slot = &mw.bl; rest = &mw.blT; }
+                else if (!std::strcmp(nm, "wheel-br")) { slot = &mw.br; rest = &mw.brT; }
+                if (!slot) continue;
+                *slot = ents[k];
+                *rest = tcmW.getTransform(tcmW.getInstance(ents[k]))[3].xyz;
+            }
+            if (!mw.bl.isNull()) {
+                const mat4f local = tcmW.getTransform(tcmW.getInstance(mw.bl));
+                const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
+                mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
+            }
+            // Fat monster tyre: roll rate is travel/radius, so the big wheels
+            // have to turn SLOWER than the car's for the same ground speed.
+            if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
+                const auto ri = rcmW.getInstance(mw.bl);
+                if (ri) {
+                    const filament::Box bx = rcmW.getAxisAlignedBoundingBox(ri);
+                    const mat4f wm = tcmW.getWorldTransform(tcmW.getInstance(mw.bl));
+                    float lo = 1e9f, hi = -1e9f;
+                    for (int sx = -1; sx <= 1; sx += 2)
+                        for (int sy = -1; sy <= 1; sy += 2)
+                            for (int sz = -1; sz <= 1; sz += 2) {
+                                const float3 corner = bx.center + bx.halfExtent
+                                        * float3{ (float) sx, (float) sy, (float) sz };
+                                const float y = (wm * float4{ corner, 1 }).y;
+                                lo = std::min(lo, y);
+                                hi = std::max(hi, y);
+                            }
+                    mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
+                }
+            }
+        }
         // Neutral gunmetal frame (MonsterRig's recolour): pull the chassis
         // texture toward one dark neutral via the ubershader base factor.
         for (auto* inst : mMonsterInstances) {
@@ -4969,8 +5020,13 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 w.lastPos = posW;
                 w.hasLastPos = true;
                 w.lastDs = ds; // the boost streaks cycle at this real travel speed
+                // While the monster is up its own fat tyres are the ones on the
+                // ground, so the roll accumulates at THEIR radius (the JS swaps
+                // c.wheelRadius to the rig's for the same reason).
+                const float radius = (isMonster && mMonsterWheelRadius > 0)
+                        ? mMonsterWheelRadius : WHEEL_RADIUS;
                 if (std::fabs(ds) < ROLL_SEG_MAX) {
-                    w.roll += (ds / WHEEL_RADIUS) * WHEEL_SPIN_SCALE;
+                    w.roll += (ds / radius) * WHEEL_SPIN_SCALE;
                     w.roll = std::fmod(std::fmod(w.roll + (float) M_PI, 2.0f * (float) M_PI)
                             + 2.0f * (float) M_PI, 2.0f * (float) M_PI) - (float) M_PI;
                 }
@@ -4996,6 +5052,24 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 spin(w.bl, w.blT, rollM);
                 spin(w.br, w.brT, rollM);
                 if (!w.axle.isNull()) spin(w.axle, w.axleT, mat4f{});
+                // …and the rig's own wheels, which are the ones actually
+                // touching the road while the monster is up. Same roll clock,
+                // this rig's axis sign, and nothing to collapse.
+                if (isMonster && mMonsterWheels.size() > i) {
+                    const MonsterWheels& mw = mMonsterWheels[i];
+                    const mat4f mRoll = mat4f::rotation(w.roll * mw.rollSign, float3{ 1, 0, 0 });
+                    const mat4f mSteer = mat4f::rotation(yaw, float3{ 0, 1, 0 }) * mRoll;
+                    const auto turn = [&](utils::Entity e, const float3& t, const mat4f& r) {
+                        if (e.isNull()) return;
+                        mat4f local = r;
+                        local[3] = float4{ t, 1 };
+                        tcm.setTransform(tcm.getInstance(e), local);
+                    };
+                    turn(mw.fl, mw.flT, mSteer);
+                    turn(mw.fr, mw.frT, mSteer);
+                    turn(mw.bl, mw.blT, mRoll);
+                    turn(mw.br, mw.brT, mRoll);
+                }
             }
         } else if (!mCars[i].entity.isNull()) {
             tcm.setTransform(tcm.getInstance(mCars[i].entity), m);
@@ -6032,6 +6106,8 @@ void TtpRenderer::releaseScene() {
     mTime = 0;
     mLastCar0 = {};
     mMonsterFootW = mMonsterFootL = 0;
+    mMonsterWheels.clear();
+    mMonsterWheelRadius = 0;
     mBoxScale = 1.0f;
 }
 

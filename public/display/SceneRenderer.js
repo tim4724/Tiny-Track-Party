@@ -830,8 +830,13 @@ export class SceneRenderer {
   // Returns null if there's nothing to capture yet (caller falls back to the diorama reveal).
   snapshot() {
     if (!this.renderer || !this._rtScene) return null;
-    this._present();
-    const src = this.renderer.domElement;
+    // Grab whichever canvas is actually drawing. Either way the frame has to be
+    // (re)presented in THIS task: a WebGL drawing buffer is cleared the moment
+    // the browser composites, so a readback of an idle canvas comes back black —
+    // which is exactly what the lobby crossfade dipped through.
+    let src;
+    if (this.nativeView) { this.nativeView.repaint(); src = this.nativeView.canvas; }
+    else { this._present(); src = this.renderer.domElement; }
     if (!src.width || !src.height) return null;
     const c = document.createElement('canvas');
     c.width = src.width; c.height = src.height;
@@ -1616,7 +1621,7 @@ export class SceneRenderer {
       frontWheels, backWheels, allWheels: [...backWheels, ...frontWheels],
       wheelbase, skidWidth, wheelRadius, pitchSign, plate, chase, cam: chase.camera, boostDisk, aoMat, ao,
       streakGroup, streaks, footW, footL,
-      carIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
+      carIndex, colorIndex, anchorZ: anchor.z, plateY: anchor.y, baseYaw: car.rotation.y,
       label, steerBar, steerFill, finishEl, placeEl, finished: false, pose: null, lean: 0,
       wheelRoll: 0, pitch: 0, prevSpd: 0, lastPos: null, // wheel-roll + weight-transfer state (setCarPose)
       reconnecting: false, reconnectEl: null, // dropped-player reconnect card (centred in this cell, like finishEl)
@@ -2386,7 +2391,7 @@ export class SceneRenderer {
       // The native renderer takes the same single camera (its no-cell layout is
       // one full-surface view) — this is the lobby's attract race, so the cars
       // ride along in scene-map order, which is the order the roster was baked in.
-      if (this.nativeView) this._submitNative(dt, [...this.cars.keys()], W, H, this.overview);
+      if (this.nativeView) this._submitNative(dt, W, H, this.overview);
       else { r.render(this.scene, this.overview); this._present(); }
       for (const c of this.cars.values()) { if (c.label) c.label.style.display = 'none'; if (c.steerBar) c.steerBar.style.display = 'none'; if (c.finishEl) c.finishEl.style.display = 'none'; if (c.placeEl) c.placeEl.style.display = 'none'; if (c.reconnectEl) c.reconnectEl.style.display = 'none'; }
       this._hideDividers();
@@ -2488,20 +2493,34 @@ export class SceneRenderer {
       }
     });
 
-    if (this.nativeView) this._submitNative(dt, ids, cwDB, chDB);
+    if (this.nativeView) this._submitNative(dt, cwDB, chDB);
     else this._present();
     this._scheduleNext();
   }
 
+  // The order the native renderer sees the field in: cars that own a cell
+  // first, in cell order, then everything else. That prefix is what makes
+  // `view i belongs to car i` true on the C++ side (the per-cell monster fade
+  // relies on it), and the tail is what keeps the AI field — added cell:false,
+  // so it never appears in `_order` — posed at all instead of stacked at the
+  // origin. Both the build-time roster and the per-frame submit read this, so a
+  // car's slot always carries its own model and livery.
+  nativeCarOrder() {
+    const cells = this._order.filter((id) => this.cars.has(id));
+    const seen = new Set(cells);
+    return { cells, all: [...cells, ...[...this.cars.keys()].filter((id) => !seen.has(id))] };
+  }
+
   // Hand this frame to the native renderer (?renderer=filament). Reads the state
   // the loop above has already computed — no second pass over the scene.
-  // `oneCam` is the lobby/gallery case: one camera over the whole surface with
-  // the cars still submitted (the attract race), instead of a cell per car.
-  _submitNative(dt, ids, cwDB, chDB, oneCam) {
+  // `oneCam` is the lobby/gallery case: one camera over the whole surface,
+  // instead of a cell per car (the attract race's cars have no cells at all).
+  _submitNative(dt, cwDB, chDB, oneCam) {
     const snap = this._nativeSnap;
     const cars = [], views = [];
     const fog = this.scene.fog;
-    for (const id of ids) {
+    const order = this.nativeCarOrder();
+    for (const id of order.all) {
       const c = this.cars.get(id);
       const sc = snap && snap.cars.find((s) => s.id === id);
       // A car with no snapshot entry yet still has to hold its slot, or every
@@ -2511,7 +2530,7 @@ export class SceneRenderer {
                   brake: !!(sc && sc.brake), boostMul: (sc && sc.boostMul) || 1,
                   monster: !!(sc && sc.monster), spin: (sc && sc.spin) || 0,
                   onWall: !!(sc && sc.onWall) });
-      if (oneCam) continue;
+      if (oneCam || !order.cells.includes(id)) continue;
       c.cam.updateWorldMatrix(true, false);
       views.push({ world: c.cam.matrixWorld.elements, fov: c.cam.fov, aspect: cwDB / chDB,
                    near: c.cam.near, far: c.cam.far,

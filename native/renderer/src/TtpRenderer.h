@@ -317,6 +317,18 @@ private:
     std::vector<filament::gltfio::FilamentInstance*> mMonsterInstances;
     filament::gltfio::FilamentAsset* mMonsterGhostAsset = nullptr; // 50%-alpha fade variant
     std::vector<filament::gltfio::FilamentInstance*> mMonsterGhostInstances;
+    // The RIG's own wheels, per instance. While the monster is up the car's
+    // wheels are collapsed and these are the ones on the ground, so they take
+    // over the roll/steer cosmetics (the JS swaps c.frontWheels/backWheels to
+    // the rig's handles for exactly this). Named lookups are per INSTANCE —
+    // getEntitiesByName spans the whole pool.
+    struct MonsterWheels {
+        utils::Entity fl, fr, bl, br;
+        filament::math::float3 flT, frT, blT, brT; // rest local translations
+        float rollSign = -1;
+    };
+    std::vector<MonsterWheels> mMonsterWheels;
+    float mMonsterWheelRadius = 0; // measured off a rear tyre (JS: bbox.y / 2)
     std::vector<Mesh> mRockets;      // in-flight toy rockets (pool of 4)
     std::vector<Mesh> mRocketFlames; // per-rocket blend tail flames
     // Impact bursts: expanding rings where a rocket vanished (hit or whiff).

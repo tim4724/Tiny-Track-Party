@@ -174,20 +174,15 @@ if (_trackParams.get('renderer') === 'filament') {
       _nativeView = await FilamentView.create(cv);
       Object.assign(_nativeAssets, assetCache());
       scene.renderer.domElement.style.display = 'none'; // three keeps simulating, stops drawing
-      scene.onTrackBuilt = (t) => _applyNativeTrack(t, true); // every track change rebuilds the native scene
+      scene.onTrackBuilt = () => _nativeRebuild(true); // every track change rebuilds the native scene
       // The renderer bakes a car's model + livery into its slot at scene build,
       // so any change to the field needs a rebuild: the lobby's attract race
       // starts its cars a tick AFTER the track lands, phones join and leave
       // mid-lobby, and the race grid then replaces the whole demo field.
-      scene.onCarsChanged = () => {
-        if (_nativeRebuildQueued) return;
-        _nativeRebuildQueued = true;
-        // A microtask, so a whole grid's worth of addCar calls costs one rebuild.
-        queueMicrotask(() => { _nativeRebuildQueued = false; _applyNativeTrack(scene._track); });
-      };
+      scene.onCarsChanged = () => _nativeRebuild();
       window.addEventListener('resize', () => _nativeView.resize(
           Math.round(el('scene').clientWidth * dpr), Math.round(el('scene').clientHeight * dpr)));
-      if (scene._track) await _applyNativeTrack(scene._track, true);
+      if (scene._track) await _nativeRebuild(true);
     } catch (e) {
       console.warn('[renderer=filament] falling back to three.js', e);
       _nativeView = null;
@@ -200,36 +195,55 @@ if (_trackParams.get('renderer') === 'filament') {
 // `force` is the track itself changing; without it a rebuild is skipped when
 // the roster comes out identical (onCarsChanged fires on every seat edit, and
 // most of them are no-ops from the renderer's point of view).
-let _nativeRebuildQueued = false;
 let _nativeRoster = null;
-let _nativeBuilding = null;
 async function _applyNativeTrack(track, force) {
   if (!_nativeView || !track) return;
   const { trackPayload } = await import('./render/trackPayload.js');
-  // Roster in CELL order — the renderer's car slots line up with the cells the
-  // views arrive in, and the plate/livery come off the same entry.
-  const roster = [...scene.cars.entries()].map(([id, c], i) => ({
-    id, name: (c.label && c.label.textContent) || '', carIndex: c.carIndex ?? 0,
-    color: CAR_COLORS[i % CAR_COLORS.length],
-  }));
+  // Cell cars first, then the AI field (scene.nativeCarOrder) — the same order
+  // the frame submit uses, so a slot's model and livery belong to the car whose
+  // pose lands in it. Livery is the car's OWN colorIndex: the AI seats take the
+  // lowest free ones, which is not their position in this list.
+  const roster = scene.nativeCarOrder().all.map((id) => {
+    const c = scene.cars.get(id);
+    return { id, name: (c.label && c.label.textContent) || '', carIndex: c.carIndex ?? 0,
+             color: CAR_COLORS[(c.colorIndex ?? 0) % CAR_COLORS.length] };
+  });
   const sig = JSON.stringify(roster);
   if (!force && sig === _nativeRoster) return;
   _nativeRoster = sig;
-  // Serialised: setTrack awaits a pile of asset fetches, and two of them
-  // interleaved would provide one track's bytes into the other's build.
-  const prev = _nativeBuilding;
-  _nativeBuilding = (async () => {
-    await prev;
-    try {
-      await _nativeView.setTrack(trackPayload(scene, track, roster), _nativeAssets);
-      scene.nativeView = _nativeView;
-    } catch (e) {
-      console.warn('[renderer=filament] scene build failed, staying on three.js', e);
-      _nativeRoster = null; // let the next change retry
-      scene.nativeView = null;
-    }
-  })();
-  return _nativeBuilding;
+  try {
+    await _nativeView.setTrack(trackPayload(scene, track, roster), _nativeAssets);
+    scene.nativeView = _nativeView;
+  } catch (e) {
+    console.warn('[renderer=filament] scene build failed, staying on three.js', e);
+    _nativeRoster = null; // let the next change retry
+    scene.nativeView = null;
+  }
+}
+
+// The one rebuild queue. Every trigger (a track built, the field changing) marks
+// the scene dirty and gets back a promise that settles when the renderer has
+// caught up — which is what the lobby crossfade holds its still for, since a
+// native rebuild is asynchronous where three's setTrack is not. A burst of
+// addCar calls collapses into one rebuild, and a trigger that lands mid-build
+// is picked up by the loop rather than dropped.
+let _nativeDirty = false, _nativeForce = false, _nativePending = null;
+function _nativeRebuild(force) {
+  if (!_nativeView) return Promise.resolve();
+  _nativeDirty = true;
+  _nativeForce = _nativeForce || !!force;
+  if (!_nativePending) {
+    _nativePending = (async () => {
+      await Promise.resolve(); // let the rest of this task's triggers pile in
+      while (_nativeDirty) {
+        _nativeDirty = false;
+        const f = _nativeForce; _nativeForce = false;
+        await _applyNativeTrack(scene._track, f);
+      }
+      _nativePending = null;
+    })();
+  }
+  return _nativePending;
 }
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
@@ -266,6 +280,11 @@ function selectTrack(id) {
     fadeBackdrop(() => {
       scene.setTrack(track, { debug: _showCenterline });
       refreshLobbyDemo();
+      // The native rebuild is ASYNC (asset provisioning + buildScene) where
+      // three's setTrack is not, so hand the crossfade something to wait on —
+      // otherwise the still dissolves off a canvas that still holds the old
+      // circuit, and the new one pops in a beat later.
+      return _nativeRebuild();
     });
   } else {
     updateBackdrop();
@@ -348,16 +367,29 @@ function fadeBackdrop(mid) {
   // Until the rebuild swaps it, the live layer is still the OUTGOING track — same as the
   // still on top, so the early fade shows no change. mid() reads the latest pick, and a fast
   // re-pick supersedes this whole chain via fadeGen.
+  const dissolve = () => {
+    if (gen !== fadeGen) return;
+    still.classList.add('is-fading');            // hand the dissolve to the compositor
+    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
+  };
+  // The native renderer's swap finishes LATER than the frame that starts it
+  // (asset provisioning + buildScene), so its still has to stay opaque until
+  // mid()'s promise resolves — dissolving on schedule would just uncover the
+  // OLD circuit and let the new one pop in. three's setTrack is synchronous and
+  // keeps the head start: an opacity transition animates on the compositor, so
+  // starting it before the main thread blocks is what stops the preview looking
+  // like it froze.
+  const asyncSwap = !!scene.nativeView;
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (gen !== fadeGen) return;                 // superseded by a newer pick
-    still.classList.add('is-fading');            // hand the dissolve to the compositor…
-    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
+    if (!asyncSwap) dissolve();
     requestAnimationFrame(() => {                // …then rebuild a frame later, hidden behind it
       if (gen !== fadeGen) return;               // a newer pick (or leaving the lobby) cancelled us
       if (!(sceneReady && net.roomState === ROOM_STATE.LOBBY)) { // race started under us → drop the still
         clearTimeout(snapTimer); still.remove(); return;
       }
-      mid();
+      const pending = mid();
+      if (asyncSwap) Promise.resolve(pending).then(dissolve, dissolve);
     });
   }));
 }
@@ -922,7 +954,7 @@ function launchRace(players) {
   scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
   // The native renderer builds its scene per race too (its roster comes from the
   // payload), so rebuild it here — after the cars are placed, before the lights.
-  if (_nativeView) _applyNativeTrack(track);
+  if (_nativeView) _nativeRebuild(true);
 
   // Same construction shape the JS engine had, native implementation. Fails
   // loudly if the wasm module hasn't finished loading (boot races only).
