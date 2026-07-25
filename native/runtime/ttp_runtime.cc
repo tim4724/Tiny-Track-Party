@@ -102,15 +102,6 @@ static Stats parseStats(const char* json) {
 }
 
 // ---------------------------------------------------------------------------
-// buildRaceTrack twin (crib of replay_cli.cc): TrackDef -> Centerline + GameTrack.
-// ---------------------------------------------------------------------------
-static const TrackDef* findTrackDef(const std::string& id) {
-  for (int i = 0; i < TTP_TRACK_COUNT; i++)
-    if (id == TTP_TRACKS[i].id) return &TTP_TRACKS[i];
-  return nullptr;
-}
-
-// ---------------------------------------------------------------------------
 // Per-handle session.
 // ---------------------------------------------------------------------------
 struct BotEntry {

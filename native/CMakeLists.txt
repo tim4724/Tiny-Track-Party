@@ -20,6 +20,24 @@ target_compile_options(ttp_strict_fp INTERFACE
   -fno-fast-math
 )
 
+# ---- Warnings, on OUR code only ---------------------------------------------
+# Deliberately NOT on ttp_strict_fp, which the vendored fdlibm and
+# double-conversion also link: those are taken whole from upstream and must never
+# be edited to satisfy our warning taste (see their VENDOR notes).
+#
+# This exists because two pieces of dead code — an AiController field never read
+# and a track-def lookup duplicating race_track.h's — sat in the tree unnoticed
+# through the whole port. Nothing built with -Wall, so nothing said so. Enabling
+# it here means the next one shows up in the first local build rather than in a
+# one-off audit. Not -Werror: a newer compiler inventing a warning should not
+# stop a contributor from building, and CI can add -Werror explicitly if wanted.
+add_library(ttp_warnings INTERFACE)
+target_compile_options(ttp_warnings INTERFACE
+  -Wall
+  -Wextra
+  -Wno-unused-parameter   # ABI stubs and callback signatures keep unused params by contract
+)
+
 # Emscripten leg (Track S M4): the same check binaries and replay CLI compile
 # to WASM and run under Node — `emcmake cmake ... -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)`
 # lets ctest run them transparently. NODERAWFS reads the fixture files straight
@@ -86,7 +104,7 @@ add_library(libttp_json STATIC
   libttp-json/ttp/canonical.cc
 )
 target_include_directories(libttp_json PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-json)
-target_link_libraries(libttp_json PUBLIC ttp_double_conversion ttp_strict_fp)
+target_link_libraries(libttp_json PUBLIC ttp_double_conversion ttp_strict_fp ttp_warnings)
 
 # ---- Shared conformance-check machinery -------------------------------------
 # testsupport/corpus_diff.h: ONE corpus reader (ttp/json_parse.h) and ONE
@@ -108,7 +126,7 @@ add_library(libttp_track STATIC
   libttp-track/ttp/trackbuilder.cc
 )
 target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp)
+target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the shared math corpus ------------------------------------
 # Replays tests/fixtures/math-corpus.jsonl (generated from the WASM build by
@@ -116,7 +134,7 @@ target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp)
 # makes golden traces valid conformance targets for the C++ engine.
 enable_testing()
 add_executable(mathlib_corpus_check mathlib/corpus_check.cc)
-target_link_libraries(mathlib_corpus_check PRIVATE ttp_mathlib ttp_strict_fp)
+target_link_libraries(mathlib_corpus_check PRIVATE ttp_mathlib ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(mathlib_corpus_check)
 add_test(NAME mathlib_corpus
   COMMAND mathlib_corpus_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/math-corpus.jsonl
@@ -128,7 +146,7 @@ add_test(NAME mathlib_corpus
 # widthAt, projectNear — demanding identical bit patterns. Isolates track-math
 # divergence before whole-race trace replay.
 add_executable(sampler_check tracktest/sampler_check.cc)
-target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp)
+target_link_libraries(sampler_check PRIVATE libttp_track ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(sampler_check)
 add_test(NAME track_sampler
   COMMAND sampler_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/track-sampler-corpus.jsonl
@@ -142,7 +160,7 @@ add_test(NAME track_sampler
 # 64-sample chunk, and per furniture array.
 add_executable(trackbuilder_check tracktest/trackbuilder_check.cc)
 target_include_directories(trackbuilder_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_testsupport ttp_strict_fp)
+target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
@@ -161,13 +179,13 @@ add_library(libttp_sim STATIC
 target_include_directories(libttp_sim PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-sim
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(libttp_sim PUBLIC libttp_track libttp_json ttp_strict_fp)
+target_link_libraries(libttp_sim PUBLIC libttp_track libttp_json ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the JSON number corpus (serializer gate) -------------------
 # Replays tests/fixtures/json-number-corpus.jsonl (52,357 cases) — byte-exact
 # ECMA-262 Number::toString. Phase A gate: green before the sim replay work.
 add_executable(serializer_check simtest/serializer_check.cc)
-target_link_libraries(serializer_check PRIVATE libttp_json ttp_strict_fp)
+target_link_libraries(serializer_check PRIVATE libttp_json ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(serializer_check)
 add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
@@ -179,7 +197,7 @@ add_test(NAME serializer
 # golden trace reaches it (traces are ONE race) and the e2e cup spec only proves a
 # series chains, never a points value. This is its first oracle.
 add_executable(grandprix_check simtest/grandprix_check.cc)
-target_link_libraries(grandprix_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
+target_link_libraries(grandprix_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(grandprix_check)
 add_test(NAME grandprix
   COMMAND grandprix_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
@@ -192,7 +210,7 @@ add_test(NAME grandprix
 # the file header for the bug it pins (a process-global cache keyed by a recycled
 # pointer, invisible to one-race-per-process traces).
 add_executable(race_isolation_check simtest/race_isolation_check.cc)
-target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp)
+target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(race_isolation_check)
 add_test(NAME race_isolation COMMAND race_isolation_check)
 
@@ -206,7 +224,7 @@ add_test(NAME race_isolation COMMAND race_isolation_check)
 # answers "did the sim change", which is why it re-records like a golden trace, with
 # a byte-identity gate on the recording path.
 add_executable(catalogue_sweep_check simtest/catalogue_sweep_check.cc)
-target_link_libraries(catalogue_sweep_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
+target_link_libraries(catalogue_sweep_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(catalogue_sweep_check)
 add_test(NAME catalogue_sweep
   COMMAND catalogue_sweep_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/catalogue-sweep-corpus.jsonl
@@ -227,7 +245,7 @@ add_test(NAME record_catalogue_sweep
 # agrees), so a catalogue-racing fixture physically cannot reach the pole collision,
 # and stageBanana is a trace-staging hook no fixture stages. See the file header.
 add_executable(hazard_check simtest/hazard_check.cc)
-target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp)
+target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
@@ -236,7 +254,7 @@ add_test(NAME hazards COMMAND hazard_check)
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
 # ops), and demands exact per-frame event/snapshot/hash agreement.
 add_executable(replay_cli replay/replay_cli.cc)
-target_link_libraries(replay_cli PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
+target_link_libraries(replay_cli PRIVATE libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(replay_cli)
 # --record is a DROP-IN for scripts/record-trace.mjs: re-recording a committed
 # fixture from C++ must reproduce it BYTE FOR BYTE. That equality is the gate
@@ -278,7 +296,7 @@ add_test(NAME replay_sequence COMMAND replay_cli ${TTP_ALL_TRACES})
 # reads), and the last load-bearing reason the JS engine had to stay runnable in
 # Node. Links libttp_party only for ttp::protocol's CAR_STATS/CAR_NAMES.
 add_executable(probe_cli probe/probe_cli.cc)
-target_link_libraries(probe_cli PRIVATE libttp_sim libttp_party ttp_strict_fp)
+target_link_libraries(probe_cli PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(probe_cli)
 
 # The probe IS a tuning tool, not a conformance gate — but it was also the only
@@ -316,7 +334,7 @@ add_library(libttp_party STATIC
   libttp-party/ttp/fastlane.cc
 )
 target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party)
-target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp)
+target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the RoomFlow behavioural corpus ---------------------------
 # Replays tests/fixtures/roomflow-corpus.jsonl (scripts/gen-roomflow-corpus.mjs)
@@ -324,7 +342,7 @@ target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp)
 # detail) + a public-surface digest, compared as canonical JSON. 36 scripts (plus
 # 13 lowestFreeSlot cases), every step exact.
 add_executable(roomflow_check partytest/roomflow_check.cc)
-target_link_libraries(roomflow_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
+target_link_libraries(roomflow_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(roomflow_check)
 add_test(NAME roomflow
   COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
@@ -337,14 +355,14 @@ add_test(NAME roomflow
 # the shared structural diff in testsupport/corpus_diff.h (libttp_json supplies
 # canonical_stringify + js_number_to_string for the expected side).
 add_executable(protocol_check partytest/protocol_check.cc)
-target_link_libraries(protocol_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
+target_link_libraries(protocol_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(protocol_check)
 add_test(NAME protocol
   COMMAND protocol_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/protocol-corpus.jsonl
 )
 
 add_executable(framing_check partytest/framing_check.cc)
-target_link_libraries(framing_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
+target_link_libraries(framing_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(framing_check)
 add_test(NAME framing
   COMMAND framing_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
@@ -357,7 +375,7 @@ add_test(NAME framing
 # applied, the RTT sample, and the full link-state digest. The srtt EWMA is real
 # FP, so ttp_strict_fp (-ffp-contract=off) is load-bearing here.
 add_executable(fastlane_check partytest/fastlane_check.cc)
-target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
+target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(fastlane_check)
 add_test(NAME fastlane
   COMMAND fastlane_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/fastlane-corpus.jsonl
@@ -378,7 +396,7 @@ add_test(NAME fastlane
 # artifact the browser runs bit-for-bit untouched.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-target_link_libraries(abi_check PRIVATE libttp_sim libttp_party ttp_testsupport ttp_strict_fp)
+target_link_libraries(abi_check PRIVATE libttp_sim libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(abi_check)
 # Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
 # test uses, and helix adds 402 braking inputs — without it ttp_process_input's
