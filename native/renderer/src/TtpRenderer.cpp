@@ -480,7 +480,14 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
                 .material(0, mi)
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         m.vb, m.ib, t0 * 3, n * 3)
-                .culling(chunkTris != 0)
+                // Frustum culling for everything. The bounds are real now, and
+                // the few meshes that rewrite their vertices in world space
+                // every frame (the conformed decals, the skid pool, the ambient
+                // band) refresh theirs in the same breath — see refreshBounds.
+                // Pointing the camera at empty sky used to still cost 69 draw
+                // calls; per-draw GPU cost is ~18 µs, so that was over a
+                // millisecond of drawing nothing.
+                .culling(true)
                 .receiveShadows(false)
                 .castShadows(false)
                 .build(*mEngine, e);
@@ -3095,6 +3102,34 @@ void TtpRenderer::setMeshShadowsAbove(Mesh& m, float minY) {
     for (utils::Entity e : m.chunks) mark(e);
 }
 
+// Re-derive a mesh's bounds from its CPU vertices. Cheap (these pools are
+// thousands of verts, not the road's hundred thousand) and the price of letting
+// a mesh whose geometry moves every frame still be frustum-culled.
+void TtpRenderer::refreshBounds(Mesh& m) {
+    if (m.entity.isNull() || m.verts.empty()) return;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto range = [&](utils::Entity e, size_t i0, size_t n) {
+        const auto ri = rcm.getInstance(e);
+        if (!ri) return;
+        float3 lo{ 1e30f }, hi{ -1e30f };
+        for (size_t k = i0; k < i0 + n && k < m.idx.size(); k++) {
+            const Vertex& v = m.verts[m.idx[k]];
+            lo = min(lo, float3{ v.px, v.py, v.pz });
+            hi = max(hi, float3{ v.px, v.py, v.pz });
+        }
+        if (hi.x < lo.x) return;
+        rcm.setAxisAlignedBoundingBox(ri,
+                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
+    };
+    if (m.chunks.empty()) {
+        range(m.entity, 0, m.idx.size());
+    } else {
+        const size_t per = m.idx.size() / (m.chunks.size() + 1);
+        range(m.entity, 0, per);
+        for (size_t c = 0; c < m.chunks.size(); c++) range(m.chunks[c], (c + 1) * per, per);
+    }
+}
+
 void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
     if (m.entity.isNull()) return;
     auto& rcm = mEngine->getRenderableManager();
@@ -4623,6 +4658,7 @@ void TtpRenderer::conformDecal(Mesh& mesh, const mat4f& basis, float sx, float s
     }
     mesh.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
             mesh.verts.data(), mesh.verts.size() * sizeof(Vertex), nullptr));
+    refreshBounds(mesh); // the sheet just moved; its box has to follow
     // The verts are world-space now — clear any parking transform.
     auto& tcm = mEngine->getTransformManager();
     tcm.setTransform(tcm.getInstance(mesh.entity), mat4f{});
@@ -6055,6 +6091,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
         mPollen.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                 mPollen.verts.data(), mPollen.verts.size() * sizeof(Vertex), nullptr));
+        refreshBounds(mPollen);
     }
 
     // Furniture reconcile: boxes hide when collected (respawn = state flips
@@ -6188,6 +6225,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     for (auto& v : mSkids.verts) { v.py = -1000; v.abgr &= 0x00ffffffu; }
                     mSkids.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                             mSkids.verts.data(), mSkids.verts.size() * sizeof(Vertex), nullptr));
+                    refreshBounds(mSkids);
                 }
             }
             mLastCar0 = c0;
@@ -6377,6 +6415,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         if (dirty) {
             mSkids.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                     mSkids.verts.data(), mSkids.verts.size() * sizeof(Vertex), nullptr));
+            refreshBounds(mSkids);
         }
     }
 

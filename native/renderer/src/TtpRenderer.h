@@ -469,6 +469,7 @@ private:
     // ribbons, the billboards — outlives its build-time bounds, so only meshes
     // that stay put (or move by transform) may opt in.
     void setMeshCulling(Mesh& m, bool enable);
+    void refreshBounds(Mesh& m);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
     // Drop a flat car-local decal (boost aura, ground blob) onto the deck:
     // every template vertex is re-expressed as (arclength, lateral) about the
