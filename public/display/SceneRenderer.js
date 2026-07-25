@@ -2220,6 +2220,10 @@ export class SceneRenderer {
   // Tail of every _loop iteration: idle if asked (after this frame's present), else
   // queue the next frame.
   _scheduleNext() {
+    // Post-present hook (the drawing buffer still holds this frame's pixels, so a
+    // same-task canvas readback here works without preserveDrawingBuffer). Used by
+    // the fixture harness's captureFrame (native-renderer compare gallery).
+    if (this.onAfterFrame) this.onAfterFrame();
     if (this._idleAfterFrame) { this._idleAfterFrame = false; this._running = false; return; }
     requestAnimationFrame((tt) => this._loop(tt));
   }
@@ -2229,7 +2233,14 @@ export class SceneRenderer {
     const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
     // One global dt drives EVERYTHING downstream (sim, props, skids, clouds, camera damping), so the
     // DEBUG slow-mo scale here slows the whole scene uniformly. rawMs stays real → the FPS meter is honest.
-    const dt = Math.min(rawMs / 1000, 0.05) * this._timeScale;
+    // Clamped at BOTH ends. start() stamps _last from performance.now(), but the
+    // rAF callback that follows carries the frame's vsync timestamp, which can
+    // sit a fraction of a millisecond EARLIER — so rawMs goes negative. It only
+    // shows up when start() is called in a tight loop (fixture mode's step()),
+    // and a negative dt runs the camera/ride damping backwards: the smoothing
+    // term inverts and the chase camera walks away from the car, doubling its
+    // distance every few frames until the whole scene is off-screen.
+    const dt = Math.min(Math.max(rawMs, 0) / 1000, 0.05) * this._timeScale;
     this._last = t;
     this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
     if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas
