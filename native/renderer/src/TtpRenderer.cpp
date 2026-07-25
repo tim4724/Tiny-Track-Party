@@ -2597,6 +2597,10 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
         const int cz = std::max(0, std::min(gh - 1, (int) ((z - minZ) / CELL)));
         return (size_t) cz * gw + cx;
     };
+    // Per-cell ceiling: the highest occluder foot in the cell. A vertex under
+    // nothing tall rejects on one compare instead of walking the cell's whole
+    // triangle list — and on a stunt track that list is thousands long.
+    std::vector<float> cellTop((size_t) gw * gh, -1e9f);
     for (uint32_t t = 0; t < occ.size(); t++) {
         float txn = 1e9f, tzn = 1e9f, txm = -1e9f, tzm = -1e9f;
         for (const float3& p : { occ[t].a, occ[t].b, occ[t].c }) {
@@ -2607,11 +2611,16 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
             tzm = std::max({ tzm, p.z, p.z - toSun.z * slant });
         }
         for (float x = txn; x <= txm + CELL; x += CELL)
-            for (float z = tzn; z <= tzm + CELL; z += CELL)
-                grid[cellOf(x, z)].push_back(t);
+            for (float z = tzn; z <= tzm + CELL; z += CELL) {
+                const size_t ci = cellOf(x, z);
+                grid[ci].push_back(t);
+                cellTop[ci] = std::max(cellTop[ci], occ[t].minY);
+            }
     }
     const auto occluded = [&](const float3& p) {
-        for (const uint32_t ti : grid[cellOf(p.x, p.z)]) {
+        const size_t ci = cellOf(p.x, p.z);
+        if (cellTop[ci] < p.y + 0.8f) return false; // nothing above → no walk
+        for (const uint32_t ti : grid[ci]) {
             const Tri& t = occ[ti];
             if (t.minY < p.y + 0.8f) continue; // only decks well above this vert
             // Möller–Trumbore, ray p + s·toSun
@@ -2630,15 +2639,49 @@ void TtpRenderer::bakeRoadShadows(const TrackBin& tb) {
         }
         return false;
     };
+    // Three's version of this is a 2048² shadow map sampled per PIXEL through a
+    // PCF kernel: its edges are soft, and a fitted normalBias means an occluder
+    // sitting close above its receiver casts nothing at all. A per-vertex
+    // BOOLEAN is the opposite — one hard in/out per vertex, stretched flat
+    // across the triangle between — which is why a loop came out wearing
+    // straight-edged wedges that look nothing like a loop's shadow. So sample a
+    // small disc (the PCF footprint) and shade by the fraction in shadow.
+    constexpr int PCF_N = 4;
+    constexpr float PCF_R = 0.55f; // ≈ three's kernel over a whole-track map
+    const auto coverage = [&](const float3& p) {
+        float hit = occluded(p) ? 1.0f : 0.0f;
+        for (int k = 0; k < PCF_N; k++) {
+            const float a = ((float) k + 0.5f) / PCF_N * 2.0f * (float) M_PI;
+            if (occluded({ p.x + std::cos(a) * PCF_R, p.y, p.z + std::sin(a) * PCF_R })) {
+                hit += 1.0f;
+            }
+        }
+        return hit / (float) (PCF_N + 1);
+    };
+    // The ribbon is a triangle SOUP — every interior vertex is emitted once per
+    // triangle that touches it, so ~5 of every 6 of those 172k vertices repeat a
+    // position already solved. Memoise on the quantised position (1/512 u, well
+    // under the ring step) and the sampling collapses to the unique ones.
+    std::unordered_map<uint64_t, float> memo;
+    memo.reserve(mRoad.verts.size() / 4);
+    const auto covKey = [](const float3& p) {
+        const auto q = [](float v) { return (uint64_t) (int64_t) std::lround(v * 512.0f) & 0x1fffffull; };
+        return q(p.x) | (q(p.y) << 21) | (q(p.z) << 42);
+    };
     const float SHADE = 0.62f;
     bool touched = false;
     for (Vertex& v : mRoad.verts) {
-        if (!occluded({ v.px, v.py, v.pz })) continue;
+        const float3 p{ v.px, v.py, v.pz };
+        const uint64_t key = covKey(p);
+        const auto it = memo.find(key);
+        const float cov = it != memo.end() ? it->second : (memo[key] = coverage(p));
+        if (cov <= 0) continue;
+        const float shade = 1.0f - (1.0f - SHADE) * cov;
         const uint32_t c = v.abgr;
         v.abgr = (c & 0xff000000u)
-                | ((uint32_t) (((c >> 16) & 0xff) * SHADE) << 16)
-                | ((uint32_t) (((c >> 8) & 0xff) * SHADE) << 8)
-                | (uint32_t) ((c & 0xff) * SHADE);
+                | ((uint32_t) (((c >> 16) & 0xff) * shade) << 16)
+                | ((uint32_t) (((c >> 8) & 0xff) * shade) << 8)
+                | (uint32_t) ((c & 0xff) * shade);
         touched = true;
     }
     if (touched) {
