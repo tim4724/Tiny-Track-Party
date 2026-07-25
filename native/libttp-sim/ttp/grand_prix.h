@@ -49,6 +49,12 @@ class CupSeries {
   bool endless() const { return (bool)drawNext_; }
   int raceCount() const { return (int)cup_.tracks.size(); }
   std::string currentTrackId() const { return cup_.tracks[raceIndex_]; }
+  int raceIndex() const { return raceIndex_; }
+  // "" stands for JS null (no next race queued).
+  std::string nextTrackId() const {
+    return raceIndex_ + 1 < raceCount() ? cup_.tracks[raceIndex_ + 1] : std::string();
+  }
+  const GpCup& cup() const { return cup_; }
   bool finished() const { return done_; }
 
   void applyRace(const std::vector<GpResult>& results, const std::vector<GpFieldEntry>& field);

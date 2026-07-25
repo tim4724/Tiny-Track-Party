@@ -35,4 +35,15 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - PartyPlug (`partyplug/`) is the reusable party-game framework (transport layer) shared across games, served under `/partyplug/`.
 - 3D assets are the Kenney Toy Car Kit under `public/assets/toycar/` — the `toycar` path names the asset pack, not the game.
 - UI is the "Sticker Bash" theme: die-cut stickers on the TV glass — flat colour on warm paper, thick warm-ink (`#2A2735`, never `#000`) outlines, hard zero-blur offset shadows, slight rotations. Chrome colours are red/green/blue/purple ONLY (yellow/amber + pink are vetoed in chrome — liveries only; celebration is RED). Design tokens + reusable bits (`.card .btn .chip .pill .field`, the `.wordmark` badge, the `.scene` paper stage) live in `public/shared/theme.css`, `<link>`ed by both display and controller before their page CSS. Build new UI from those tokens/classes — page CSS owns layout, the theme owns colour/type/surface. Never outline/toon-shade anything inside the 3D scene; paper backgrounds only on full-screen boards (chrome floats bare over the live 3D view). Fonts (Fredoka, Nunito) are self-hosted variable woff2 under `public/assets/fonts/` (SIL OFL) so the CSP keeps `font-src 'self'`.
+- Native port: `?native` is the ONE switch that runs every ported layer on the C++
+  engine (sim + the cup-series layer + the party layer's decisions: room state,
+  relay framing, fastlane netcode). Rendering, the HUD and the transport I/O
+  (WebSocket / RTCPeerConnection) stay JS by design. Per-layer flags
+  (`?sim=native`, `?series=native`, `?party=native`) exist to isolate which layer
+  a divergence came from. The whole E2E suite can run natively with
+  `TTP_DISPLAY_FLAGS=native npx playwright test`, and `openDisplay` fails loudly
+  if a native flag silently fell back, so a green native run means something.
+  `native/replay/replay_cli --record <fixture> --out=<f>` re-records a golden
+  trace from C++; the `record_*` ctest entries demand byte equality with the
+  committed fixtures, which is what lets fixture recording move off JS.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

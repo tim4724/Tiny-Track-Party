@@ -21,6 +21,8 @@
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
+#include "ttp/json_parse.h"
+#include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
 
@@ -473,6 +475,163 @@ void ttp_dispose(int h) {
 
 void ttp_set_steer_expo(double v) { setSteerExpo(v); }
 double ttp_get_steer_expo(void) { return getSteerExpo(); }
+
+
+// =============================================================================
+// Grand Prix / cup series.
+// =============================================================================
+namespace {
+struct GpHandle {
+  // The host's offered draw for this apply_race; CupSeries pulls it through the
+  // drawNext callback only if the rules call for a draw.
+  std::string pendingDraw;
+  bool endless = false;
+  std::unique_ptr<CupSeries> series;
+  std::string scratch;
+};
+std::map<int, std::unique_ptr<GpHandle>> g_gps;
+int g_nextGp = 1;
+GpHandle* gp(int h) {
+  auto it = g_gps.find(h);
+  return it == g_gps.end() ? nullptr : it->second.get();
+}
+Id gpIdFrom(const Value& v) {
+  if (v.type == Value::NUM) return Id::Num(v.num);
+  if (v.type == Value::STR) return Id::Str(v.str);
+  return Id::None();
+}
+const Value* gpField(const Value& o, const char* k) {
+  if (o.type != Value::OBJ) return nullptr;
+  for (const auto& kv : o.obj) if (kv.first == k) return &kv.second;
+  return nullptr;
+}
+}  // namespace
+
+int ttp_gp_create(const char* cupJson, int endless) {
+  bool ok = false;
+  Value c = cupJson && *cupJson ? json::parse(cupJson, &ok) : Value::Null();
+  if (!ok || c.type != Value::OBJ) return 0;
+  GpCup cup;
+  if (const Value* x = gpField(c, "id")) cup.id = x->str;
+  if (const Value* x = gpField(c, "name")) cup.name = x->str;
+  if (const Value* x = gpField(c, "tracks")) {
+    if (x->type != Value::ARR) return 0;
+    for (const Value& t : x->arr) cup.tracks.push_back(t.str);
+  }
+  if (cup.tracks.empty()) return 0;
+
+  auto gh = std::make_unique<GpHandle>();
+  GpHandle* raw = gh.get();
+  raw->endless = endless != 0;
+  if (raw->endless) {
+    gh->series = std::make_unique<CupSeries>(cup, [raw]() { return raw->pendingDraw; });
+  } else {
+    gh->series = std::make_unique<CupSeries>(cup);
+  }
+  const int h = g_nextGp++;
+  g_gps[h] = std::move(gh);
+  return h;
+}
+
+void ttp_gp_dispose(int h) { g_gps.erase(h); }
+
+int ttp_gp_endless(int h) { GpHandle* g = gp(h); return (g && g->series->endless()) ? 1 : 0; }
+int ttp_gp_race_count(int h) { GpHandle* g = gp(h); return g ? g->series->raceCount() : 0; }
+int ttp_gp_race_index(int h) { GpHandle* g = gp(h); return g ? g->series->raceIndex() : 0; }
+int ttp_gp_finished(int h) { GpHandle* g = gp(h); return (g && g->series->finished()) ? 1 : 0; }
+
+const char* ttp_gp_current_track(int h) {
+  GpHandle* g = gp(h);
+  if (!g) return "";
+  g->scratch = g->series->currentTrackId();
+  return g->scratch.c_str();
+}
+
+const char* ttp_gp_next_track(int h) {
+  GpHandle* g = gp(h);
+  if (!g) return "";
+  g->scratch = g->series->nextTrackId();   // "" == JS null
+  return g->scratch.c_str();
+}
+
+const char* ttp_gp_cup_json(int h) {
+  GpHandle* g = gp(h);
+  if (!g) return "null";
+  const GpCup& c = g->series->cup();
+  Value o = Value::Obj();
+  o.set("id", Value::Str(c.id));
+  o.set("name", Value::Str(c.name));
+  Value tr = Value::Arr();
+  for (const std::string& t : c.tracks) tr.push(Value::Str(t));
+  o.set("tracks", std::move(tr));
+  g->scratch = canonical_stringify(o);
+  return g->scratch.c_str();
+}
+
+void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
+                       const char* drawnTrackIdOrNull) {
+  GpHandle* g = gp(h);
+  if (!g) return;
+  g->pendingDraw = drawnTrackIdOrNull ? drawnTrackIdOrNull : "";
+
+  std::vector<GpResult> results;
+  bool ok = false;
+  Value r = resultsJson && *resultsJson ? json::parse(resultsJson, &ok) : Value::Null();
+  if (ok && r.type == Value::ARR) {
+    for (const Value& e : r.arr) {
+      GpResult gr{Id::None(), 0, false};
+      if (const Value* x = gpField(e, "playerId")) gr.playerId = gpIdFrom(*x);
+      if (const Value* x = gpField(e, "rank")) gr.rank = (int)x->num;
+      if (const Value* x = gpField(e, "finished")) gr.finished = x->b;
+      results.push_back(gr);
+    }
+  }
+
+  std::vector<GpFieldEntry> field;
+  ok = false;
+  Value f = fieldJson && *fieldJson ? json::parse(fieldJson, &ok) : Value::Null();
+  if (ok && f.type == Value::ARR) {
+    for (const Value& e : f.arr) {
+      GpFieldEntry fe{Id::None(), "", 0, false};
+      if (const Value* x = gpField(e, "peerIndex")) fe.peerIndex = gpIdFrom(*x);
+      if (const Value* x = gpField(e, "name")) fe.name = x->str;
+      if (const Value* x = gpField(e, "colorIndex")) fe.colorIndex = (int)x->num;
+      if (const Value* x = gpField(e, "ai")) fe.ai = x->b;
+      field.push_back(fe);
+    }
+  }
+  g->series->applyRace(results, field);
+}
+
+void ttp_gp_advance(int h) { GpHandle* g = gp(h); if (g) g->series->advance(); }
+
+const char* ttp_gp_standings_json(int h) {
+  GpHandle* g = gp(h);
+  if (!g) return "[]";
+  Value arr = Value::Arr();
+  for (const GpStanding& st : g->series->standings()) {
+    Value o = Value::Obj();
+    o.set("playerId", st.playerId.toValue());
+    o.set("name", Value::Str(st.name));
+    o.set("colorIndex", Value::Num(st.colorIndex));
+    o.set("ai", Value::Bool(st.ai));
+    o.set("points", Value::Num(st.points));
+    o.set("gained", Value::Num(st.gained));
+    o.set("lastRank", st.lastRankNull ? Value::Null() : Value::Num(st.lastRank));
+    arr.push(std::move(o));
+  }
+  g->scratch = canonical_stringify(arr);
+  return g->scratch.c_str();
+}
+
+void ttp_gp_rekey(int h, const char* oldIdJson, const char* newIdJson) {
+  GpHandle* g = gp(h);
+  if (!g) return;
+  bool ok1 = false, ok2 = false;
+  Value a = json::parse(oldIdJson, &ok1), b = json::parse(newIdJson, &ok2);
+  if (!ok1 || !ok2) return;
+  g->series->rekey(gpIdFrom(a), gpIdFrom(b));
+}
 
 const char* ttp_version(void) {
   static std::string v;
