@@ -31,7 +31,9 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildTrack, resolveFurniture, TRACK_LIST } from '../public/display/TrackBuilder.js';
-import { CONTRACT_VERSION } from '../public/display/engine/Game.js';
+// CONTRACT_VERSION lives in contract.js; sourcing it from Game.js pulled the whole
+// engine into an authoring tool that never simulates anything.
+import { CONTRACT_VERSION } from '../public/display/engine/contract.js';
 
 // The shipped catalogue in stable cup order (main.js builds from exactly this list).
 export const SHIPPED_TRACKS = TRACK_LIST;

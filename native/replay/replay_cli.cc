@@ -29,6 +29,7 @@
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
+#include "ttp/race_track.h"
 #include "ttp/jsonnum.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
@@ -287,50 +288,6 @@ static Stats statsFromJV(const JV& v) {
 }
 
 // ---------------------------------------------------------------------------
-// buildRaceTrack twin: native TrackBuilder -> Centerline + GameTrack.
-// ---------------------------------------------------------------------------
-struct BuiltTrack {
-  std::unique_ptr<Centerline> centerline;
-  GameTrack game;
-};
-
-static const TrackDef* findTrackDef(const std::string& id) {
-  for (int i = 0; i < TTP_TRACK_COUNT; i++)
-    if (id == TTP_TRACKS[i].id) return &TTP_TRACKS[i];
-  return nullptr;
-}
-
-static bool buildRaceTrack(const std::string& trackId, int laps, uint32_t seed, BuiltTrack& out, std::string& err) {
-  const TrackDef* def = findTrackDef(trackId);
-  if (!def) { err = "unknown trackId '" + trackId + "'"; return false; }
-  RaceTrack rt = build_race_track(*def, laps, seed);
-  std::vector<Sample> samples;
-  samples.reserve(rt.samples.size());
-  for (const OutSample& s : rt.samples) {
-    Sample cs; cs.pos = s.pos; cs.tangent = s.tangent; cs.up = s.up; cs.lateral = s.lateral;
-    cs.width = s.width; cs.s = s.s;
-    samples.push_back(cs);
-  }
-  out.centerline = std::make_unique<Centerline>(std::move(samples), rt.length);
-  GameTrack& g = out.game;
-  g.centerline = out.centerline.get();
-  g.length = rt.length;
-  g.totalLaps = laps;
-  g.roadWidth = rt.roadWidth;
-  g.seed = seed;
-  for (const Hazard& h : rt.hazards) g.hazards.push_back(Zone{h.s, h.lat, h.radius});
-  for (const Pad& p : rt.pads)
-    g.pads.push_back(PadRt{p.s, p.lat, p.strip, p.radius, p.halfLen, p.halfWidth});
-  for (const Box& b : rt.boxes) g.boxes.push_back(BoxRt{b.s, b.lat, b.radius, 0, 0});
-  for (const ttp::Pole& p : rt.poles) g.poles.push_back(PoleRt{p.s, p.lat, p.radius});
-  for (const Banana& b : rt.bananas) g.bananas.push_back(BananaRt{0, b.s, b.lat, Id::None(), 0, true, 0, false});
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Replay.
-
-// ---------------------------------------------------------------------------
 // RECORD MODE support.
 // ---------------------------------------------------------------------------
 // JV -> Value, so the input header can be re-emitted VERBATIM (every field
@@ -474,8 +431,8 @@ int main(int argc, char** argv) {
     roster.push_back(e);
   }
 
-  BuiltTrack track; std::string terr;
-  if (!buildRaceTrack(trackId, laps, seed, track, terr)) { std::fprintf(stderr, "FAIL %s: %s\n", file.c_str(), terr.c_str()); return 1; }
+  BuiltRaceTrack track; std::string terr;
+  if (!build_race_track_by_id(trackId, laps, seed, track, terr)) { std::fprintf(stderr, "FAIL %s: %s\n", file.c_str(), terr.c_str()); return 1; }
 
   // players (roster order) — {id, stats}
   std::vector<PlayerDesc> players;
