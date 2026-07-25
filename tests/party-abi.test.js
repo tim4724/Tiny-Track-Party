@@ -176,3 +176,126 @@ test('party ABI replays the RoomFlow corpus through the C boundary', { skip }, a
   assert.equal(slotCases, header.slotCases, 'every lowestFreeSlot case replayed');
   console.info(`[party-abi] ${scripts} scripts / ${steps} steps / ${slotCases} slot cases through the ABI`);
 });
+
+// ---------------------------------------------------------------------------
+// Relay framing through the ABI. Replays tests/fixtures/framing-corpus.jsonl —
+// the same oracle native/partytest/framing_check.cc uses — but crossing the C
+// boundary: string marshalling, the per-entry-point scratch buffers, and
+// classify taking RAW socket text instead of a parsed object.
+// ---------------------------------------------------------------------------
+test('party ABI reproduces the relay-framing corpus', { skip }, async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const cw = (n, ret, args) => M.cwrap(n, ret, args);
+  const f = {
+    create: cw('ttp_framing_encode_create', 'string', ['string', 'number', 'string']),
+    join: cw('ttp_framing_encode_join', 'string', ['string', 'string']),
+    sendTo: cw('ttp_framing_encode_send_to', 'string', ['string', 'string']),
+    broadcast: cw('ttp_framing_encode_broadcast', 'string', ['string']),
+    setState: cw('ttp_framing_encode_set_state', 'string', ['string']),
+    closeRoom: cw('ttp_framing_encode_close_room', 'string', []),
+    classify: cw('ttp_framing_classify', 'string', ['string']),
+    closeOutcome: cw('ttp_framing_close_outcome', 'string', ['number', 'number', 'number', 'number', 'number']),
+    backoff: cw('ttp_framing_backoff_ms', 'number', ['number']),
+    pinUrl: cw('ttp_framing_pin_url', 'string', ['string', 'string', 'string'])
+  };
+
+  const lines = fs.readFileSync(path.join(ROOT, 'tests/fixtures/framing-corpus.jsonl'), 'utf8')
+    .trim().split('\n').slice(1);
+  let n = 0;
+  for (const line of lines) {
+    const r = JSON.parse(line);
+    const label = `${r.op}${r.kind ? ':' + r.kind : ''}`;
+    if (r.op === 'encode') {
+      let got;
+      if (r.kind === 'create') got = f.create(r.clientId, r.maxClients, r.url ?? null);
+      else if (r.kind === 'join') got = f.join(r.clientId, r.room);
+      else if (r.kind === 'sendTo') got = f.sendTo(JSON.stringify(r.to), JSON.stringify(r.data));
+      else if (r.kind === 'broadcast') got = f.broadcast(JSON.stringify(r.data));
+      else if (r.kind === 'setState') got = f.setState(JSON.stringify(r.data));
+      else if (r.kind === 'closeRoom') got = f.closeRoom();
+      else throw new Error('unknown encode kind ' + r.kind);
+      assert.ok(same(JSON.parse(got), r.expect), `${label}: ${got}`);
+    } else if (r.op === 'classify') {
+      // The ABI takes the raw text the socket delivered, exactly as the adapter does.
+      const got = JSON.parse(f.classify(JSON.stringify(r.wire)));
+      assert.equal(got.route, r.expect.route, `${label}: route`);
+      for (const k of ['from', 'data', 'type', 'msg']) {
+        if (k in r.expect) assert.ok(same(got[k], r.expect[k]), `${label}: ${k}`);
+      }
+    } else if (r.op === 'close') {
+      const got = JSON.parse(f.closeOutcome(
+        r.hasCode ? 1 : 0, r.code ?? 0, r.attemptBefore, r.maxAttempts, r.shouldReconnectBefore ? 1 : 0));
+      assert.ok(same(got, r.expect), `${label}: ${JSON.stringify(got)}`);
+    } else if (r.op === 'backoff') {
+      assert.equal(f.backoff(r.attempt), r.expect, `${label}(${r.attempt})`);
+    } else if (r.op === 'pin') {
+      assert.equal(f.pinUrl(r.base, r.room, r.instance ?? ''), r.expect, `${label}(${r.room})`);
+    } else {
+      throw new Error('unknown op ' + r.op);
+    }
+    n++;
+  }
+  console.info(`[party-abi] ${n} framing cases through the ABI`);
+});
+
+// ---------------------------------------------------------------------------
+// Fastlane netcode through the ABI. Replays tests/fixtures/fastlane-corpus.jsonl.
+// The ABI deliberately exposes no ring/seq internals (fastlane_check covers those
+// against the C++ objects), so this compares the OBSERVABLE contract: the enqueue
+// return, the packet to write, the events to apply, the RTT sample, and the stats
+// counters. Ring state still shows through indirectly, since each packet's ps/h
+// reflect it.
+// ---------------------------------------------------------------------------
+test('party ABI reproduces the fastlane netcode corpus', { skip }, async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const cw = (n, ret, args) => M.cwrap(n, ret, args);
+  const L = {
+    create: cw('ttp_link_create', 'number', []),
+    dispose: cw('ttp_link_dispose', null, ['number']),
+    setOpen: cw('ttp_link_set_channel_open', null, ['number', 'number']),
+    enqueue: cw('ttp_link_enqueue', 'string', ['number', 'string', 'number']),
+    sendTick: cw('ttp_link_send_tick', 'string', ['number', 'number']),
+    idle: cw('ttp_link_idle', 'string', ['number', 'number']),
+    inbound: cw('ttp_link_inbound', 'string', ['number', 'string', 'number']),
+    stats: cw('ttp_link_stats_json', 'string', ['number'])
+  };
+
+  const lines = fs.readFileSync(path.join(ROOT, 'tests/fixtures/fastlane-corpus.jsonl'), 'utf8')
+    .trim().split('\n');
+  let scripts = 0, steps = 0;
+  for (const line of lines.slice(1)) {
+    const rec = JSON.parse(line);
+    const h = L.create();
+    assert.ok(h > 0, 'ttp_link_create returned a handle');
+    scripts++;
+    for (const [si, step] of rec.steps.entries()) {
+      const op = step.op;
+      let oc = null;
+      if (op.op === 'enqueue') oc = JSON.parse(L.enqueue(h, JSON.stringify(op.ev), op.t));
+      else if (op.op === 'sendTick') oc = JSON.parse(L.sendTick(h, op.t));
+      else if (op.op === 'idle') oc = JSON.parse(L.idle(h, op.t));
+      else if (op.op === 'recv') oc = JSON.parse(L.inbound(h, JSON.stringify(op.packet), op.t));
+      else if (op.op === 'closeChannel') L.setOpen(h, 0);
+      else throw new Error('unknown op ' + op.op);
+
+      const where = `${rec.name} step ${si} (${op.op})`;
+      if (oc) {
+        assert.ok(same(oc.packet, step.sent), `${where}: packet\n  want ${JSON.stringify(step.sent)}\n  got  ${JSON.stringify(oc.packet)}`);
+        assert.ok(same(oc.applied, step.applied), `${where}: applied`);
+        assert.ok(same(oc.rtt, step.rtt), `${where}: rtt`);
+        if (op.op === 'enqueue') {
+          assert.equal(oc.dropped ? 'dropped' : 'p2p', step.ret, `${where}: enqueue return`);
+        }
+      }
+      const st = JSON.parse(L.stats(h));
+      assert.equal(st.out, step.digest.out, `${where}: stats.out`);
+      assert.equal(st.received, step.digest.received, `${where}: stats.received`);
+      assert.equal(st.lastPsSeen, step.digest.lastPsSeen, `${where}: stats.lastPsSeen`);
+      steps++;
+    }
+    L.dispose(h);
+  }
+  console.info(`[party-abi] ${scripts} fastlane scripts / ${steps} steps through the ABI`);
+});

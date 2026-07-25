@@ -15,6 +15,8 @@
 
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
+#include "ttp/fastlane.h"
+#include "ttp/relay_framing.h"
 #include "ttp/room_flow.h"
 
 using namespace ttp;
@@ -288,6 +290,186 @@ const char* ttp_room_events_json(int h) {
   }
   rh->events.clear();
   return ret(rh, std::move(arr));
+}
+
+// =============================================================================
+// RELAY FRAMING — stateless; each entry point owns its scratch buffer.
+// =============================================================================
+namespace {
+// One buffer per entry point (not one shared buffer) so a host that holds two
+// results at once — e.g. encoding while inspecting a classify — can't have the
+// first clobbered by the second.
+std::string g_bufCreate, g_bufJoin, g_bufSendTo, g_bufBroadcast, g_bufSetState,
+    g_bufCloseRoom, g_bufClassify, g_bufCloseOutcome, g_bufPinUrl;
+
+const char* put(std::string& buf, const Value& v) {
+  buf = canonical_stringify(v);
+  return buf.c_str();
+}
+Value parseOr(const char* json, Value fallback) {
+  if (!json || !*json) return fallback;
+  bool ok = false;
+  Value v = json::parse(json, &ok);
+  return ok ? v : fallback;
+}
+}  // namespace
+
+const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull) {
+  std::string url;
+  const bool hasUrl = urlOrNull && *urlOrNull;
+  if (hasUrl) url = urlOrNull;
+  return put(g_bufCreate,
+             framing::encode_create(clientId ? clientId : "", maxClients, hasUrl ? &url : nullptr));
+}
+
+const char* ttp_framing_encode_join(const char* clientId, const char* room) {
+  return put(g_bufJoin, framing::encode_join(clientId ? clientId : "", room ? room : ""));
+}
+
+const char* ttp_framing_encode_send_to(const char* toJson, const char* dataJson) {
+  return put(g_bufSendTo,
+             framing::encode_send_to(parseOr(toJson, Value::Null()), parseOr(dataJson, Value::Null())));
+}
+
+const char* ttp_framing_encode_broadcast(const char* dataJson) {
+  return put(g_bufBroadcast, framing::encode_broadcast(parseOr(dataJson, Value::Null())));
+}
+
+const char* ttp_framing_encode_set_state(const char* dataJson) {
+  return put(g_bufSetState, framing::encode_set_state(parseOr(dataJson, Value::Null())));
+}
+
+const char* ttp_framing_encode_close_room(void) {
+  return put(g_bufCloseRoom, framing::encode_close_room());
+}
+
+const char* ttp_framing_classify(const char* frameText) {
+  bool ok = false;
+  Value frame = frameText && *frameText ? json::parse(frameText, &ok) : Value::Null();
+  Value out = Value::Obj();
+  if (!ok || frame.type != Value::OBJ) {
+    // Not a JSON object: JS bails out of onmessage entirely (bad JSON is dropped).
+    out.set("route", Value::Str("none"));
+    return put(g_bufClassify, out);
+  }
+  framing::Inbound in = framing::classify_inbound(frame);
+  if (in.route == framing::Inbound::MESSAGE) {
+    out.set("route", Value::Str("message"));
+    out.set("from", in.from);
+    out.set("data", in.data);
+  } else if (in.route == framing::Inbound::STATE) {
+    out.set("route", Value::Str("state"));
+    out.set("data", in.data);
+  } else {
+    out.set("route", Value::Str("protocol"));
+    out.set("type", in.type);
+    out.set("msg", in.msg);
+  }
+  return put(g_bufClassify, out);
+}
+
+const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBefore,
+                                      double maxAttempts, int shouldReconnectBefore) {
+  framing::CloseOutcome c = framing::close_outcome(hasCode != 0, code, attemptBefore, maxAttempts,
+                                                   shouldReconnectBefore != 0);
+  Value o = Value::Obj();
+  o.set("stopReconnect", Value::Bool(c.stopReconnect));
+  o.set("closeAttempt", Value::Num(c.closeAttempt));
+  o.set("closeMax", Value::Num(c.closeMax));
+  o.set("meta", c.meta);
+  o.set("willReconnect", Value::Bool(c.willReconnect));
+  return put(g_bufCloseOutcome, o);
+}
+
+double ttp_framing_backoff_ms(double attempt) { return framing::backoff_delay_ms(attempt); }
+
+const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance) {
+  g_bufPinUrl = framing::pin_instance_url(base ? base : "", room ? room : "",
+                                          instance ? instance : "");
+  return g_bufPinUrl.c_str();
+}
+
+// =============================================================================
+// FASTLANE NETCODE — one handle per peer link.
+// =============================================================================
+namespace {
+struct LinkHandle {
+  fastlane::Link link;
+  std::string scratch;
+};
+std::map<int, std::unique_ptr<LinkHandle>> g_links;
+int g_nextLink = 1;
+
+LinkHandle* linkOf(int h) {
+  auto it = g_links.find(h);
+  return it == g_links.end() ? nullptr : it->second.get();
+}
+
+const char* outcomeJson(LinkHandle* lh, const fastlane::Outcome& oc) {
+  Value o = Value::Obj();
+  o.set("sent", Value::Bool(oc.sent));
+  o.set("packet", oc.sent ? oc.packet : Value::Null());
+  Value applied = Value::Arr();
+  for (const Value& ev : oc.applied) applied.push(ev);
+  o.set("applied", std::move(applied));
+  o.set("rtt", oc.hasRtt ? Value::Num(oc.rtt) : Value::Null());
+  o.set("dropped", Value::Bool(oc.dropped));
+  lh->scratch = canonical_stringify(o);
+  return lh->scratch.c_str();
+}
+const char* EMPTY_OUTCOME = "{\"applied\":[],\"dropped\":false,\"packet\":null,\"rtt\":null,\"sent\":false}";
+}  // namespace
+
+int ttp_link_create(void) {
+  const int h = g_nextLink++;
+  g_links[h] = std::make_unique<LinkHandle>();
+  return h;
+}
+
+void ttp_link_dispose(int h) { g_links.erase(h); }
+
+void ttp_link_set_channel_open(int h, int open) {
+  LinkHandle* lh = linkOf(h);
+  if (lh) lh->link.setChannelOpen(open != 0);
+}
+
+const char* ttp_link_enqueue(int h, const char* evJson, double nowMs) {
+  LinkHandle* lh = linkOf(h);
+  if (!lh) return EMPTY_OUTCOME;
+  return outcomeJson(lh, lh->link.enqueue(parseOr(evJson, Value::Null()), nowMs));
+}
+
+const char* ttp_link_send_tick(int h, double nowMs) {
+  LinkHandle* lh = linkOf(h);
+  if (!lh) return EMPTY_OUTCOME;
+  return outcomeJson(lh, lh->link.sendDataPacket(nowMs));
+}
+
+const char* ttp_link_idle(int h, double nowMs) {
+  LinkHandle* lh = linkOf(h);
+  if (!lh) return EMPTY_OUTCOME;
+  return outcomeJson(lh, lh->link.sendIdleHeartbeat(nowMs));
+}
+
+const char* ttp_link_inbound(int h, const char* packetText, double nowMs) {
+  LinkHandle* lh = linkOf(h);
+  if (!lh) return EMPTY_OUTCOME;
+  bool ok = false;
+  Value pkt = packetText && *packetText ? json::parse(packetText, &ok) : Value::Null();
+  if (!ok) pkt = Value::Null();  // non-object: Link ignores it (and counts nothing)
+  return outcomeJson(lh, lh->link.handleInbound(pkt, nowMs));
+}
+
+const char* ttp_link_stats_json(int h) {
+  LinkHandle* lh = linkOf(h);
+  if (!lh) return "null";
+  const fastlane::Stats& s = lh->link.stats();
+  Value o = Value::Obj();
+  o.set("out", Value::Num(s.out));
+  o.set("received", Value::Num(s.received));
+  o.set("lastPsSeen", Value::Num(s.lastPsSeen));
+  lh->scratch = canonical_stringify(o);
+  return lh->scratch.c_str();
 }
 
 // ---- statics ----------------------------------------------------------------
