@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny Track Party — renderer compare</title>
+<style>
+  /* Dev harness (native-port judging surface), deliberately outside the theme. */
+  :root { --ink: #ddd; --dim: #888; --accent: #9c9; }
+  body { margin: 0; background: #16141f; color: var(--ink); font: 14px/1.5 monospace; }
+  header { display: flex; gap: 16px; align-items: baseline; padding: 10px 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  header nav a { color: var(--dim); margin-right: 10px; }
+  #controls { display: flex; gap: 8px; align-items: center; padding: 0 16px 10px; flex-wrap: wrap; }
+  #controls button, #controls select { font: inherit; padding: 2px 10px; }
+  #controls input[type=range] { width: 160px; }
+  #stats { color: var(--accent); padding: 0 16px 8px; white-space: pre-wrap; }
+  #row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 16px 16px; }
+  #row.is-overlay { grid-template-columns: 1fr; max-width: 1100px; }
+  .pane { position: relative; }
+  .pane .tag { position: absolute; top: 6px; left: 8px; z-index: 3; color: #fff;
+               background: rgba(0,0,0,.55); padding: 1px 8px; border-radius: 4px; font-size: 12px; }
+  /* Both surfaces render 1280×720 logically and scale to the pane width. */
+  .frame-wrap { position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; background: #000; }
+  .frame-wrap > iframe, .frame-wrap > canvas {
+    position: absolute; top: 0; left: 0; width: 1280px; height: 720px;
+    border: 0; transform-origin: top left; pointer-events: none;
+  }
+  /* Overlay modes stack the native canvas (and diff) over the iframe pane. */
+  #row.is-overlay #pane-right { position: absolute; inset: 0; }
+  #row.is-overlay .pane-host { position: relative; }
+  #diff-canvas { display: none; position: absolute; top: 0; left: 0; width: 1280px; height: 720px;
+                 transform-origin: top left; z-index: 2; pointer-events: none; }
+  #status { color: #c99; padding: 0 16px 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>renderer compare — Three.js vs native Filament</h1>
+  <nav>
+    <a href="/gallery.html">display gallery</a>
+    <a href="/gallery-tracks.html">tracks</a>
+  </nav>
+</header>
+<div id="controls">
+  <button id="play">❚❚ pause</button>
+  <button id="step1">step 1</button>
+  <button id="step10">step 10</button>
+  <button id="reset">reset</button>
+  <span id="frame-no">frame 0</span>
+  <select id="mode">
+    <option value="side">side by side</option>
+    <option value="wipe">wipe</option>
+    <option value="onion">onion skin</option>
+    <option value="diff">diff</option>
+  </select>
+  <input id="wipe" type="range" min="0" max="100" value="50">
+  <button id="diff-now">diff now</button>
+  <button id="catalogue">frame catalogue</button>
+</div>
+<div id="stats">booting…</div>
+<div id="status"></div>
+<div id="row">
+  <div class="pane pane-host" id="pane-left">
+    <span class="tag">Three.js (shipping)</span>
+    <div class="frame-wrap">
+      <!-- src is set by gallery-compare.js: ?track= and ?biome= pass through from
+           this page's own query string, so any biome can be judged here. -->
+      <iframe id="fixture-frame" title="Three.js fixture"></iframe>
+      <canvas id="diff-canvas" width="1280" height="720"></canvas>
+    </div>
+  </div>
+  <div class="pane" id="pane-right">
+    <span class="tag">Filament wasm (native)</span>
+    <div class="frame-wrap"><canvas id="ttp-canvas" width="1280" height="720"></canvas></div>
+  </div>
+</div>
+<div id="catalogue-strip" style="padding: 0 16px 24px; display: grid; gap: 10px;"></div>
+<script type="module" src="/gallery-compare.js"></script>
+</body>
+</html>

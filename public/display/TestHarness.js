@@ -15,6 +15,10 @@ import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
 import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
+import { PLATE_Y } from './render/textures.js';
+// Biome defaults, so getTrackData can hand the native renderer a RESOLVED theme
+// (one source of truth for what a theme's omitted fields mean).
+import { AMB_KINDS, DEF_BIRDS, DEF_CLOUDS, DEF_PLANE } from './render/environment.js';
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
@@ -504,7 +508,22 @@ export function runDisplayScenario(opts, ctx) {
     const sfx = (!inIframe && window.__audio) ? window.__audio : null;
     // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
     // held for the whole air time — not a one-shot. Only the impact is event-driven here.
-    const onRaceEvent = kind === 'rocket'
+    // Fixture mode (the native-renderer compare harness): pin the race seed
+    // BEFORE the session builds, so every replay of the fixture rolls the same
+    // items and the same bot wander. Engine events buffer for the parent page to
+    // drain per tick — they ride FrameInput to the second renderer.
+    const _fixEvents = [];
+    if (kind === 'fixture') track.seed = 0x6a7e00;
+
+    const onRaceEvent = kind === 'fixture'
+      ? (ev) => {
+          _fixEvents.push(ev);
+          // Drive the scene FX too (the 'rocket' scenario's wiring, sans audio)
+          // — the compare gallery judges impacts on BOTH renderers.
+          if (ev.type === 'spin' && ev.cause === 'rocket') scene.rocketImpact(ev.id);
+          else if (ev.type === 'rocket_expire') scene.rocketExpire(ev.s, ev.lat);
+        }
+      : kind === 'rocket'
       ? (ev) => {
           if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
           else if (ev.type === 'rocket_expire') { scene.rocketExpire(ev.s, ev.lat); if (sfx) sfx.rocketHit(); } // whiff self-destruct
@@ -540,6 +559,10 @@ export function runDisplayScenario(opts, ctx) {
     const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem });
     let engine = newSession();
     window.__engine = engine;
+    // Fixture tick control: a queued manual step (ms) overrides the next frame's
+    // wall dt (0 = re-present without advancing the sim).
+    let _stepMs = null;
+    let _stepResolve = null;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
@@ -551,7 +574,7 @@ export function runDisplayScenario(opts, ctx) {
     };
     placeGrid();
 
-    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
+    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster' || kind === 'fixture';
 
     // The forced item (above) is then SPENT from out here rather than on the bot's own
     // 1.5–4s hold, so the preview loops its showcase (rocket flight + impact burst; the
@@ -574,7 +597,17 @@ export function runDisplayScenario(opts, ctx) {
 
     let lastHud = 0;
     scene.onFrame = (dt) => {
-      if (live) engine.update(dt * 1000); // bots + item pickups run inside the wasm
+      if (live) {
+        // Fixture mode is driven by the parent page: step(ms) supplies the dt so
+        // a replay is frame-exact, where free-running rAF is not. Everything
+        // else (bots, item pickups, the roulette) runs inside the wasm sim.
+        const stepped = _stepMs != null;
+        engine.update(stepped ? _stepMs : dt * 1000);
+        _stepMs = null;
+        // Resolve the awaited step only on the frame that CONSUMED it — step()
+        // calls that outpace rAF would otherwise silently coalesce.
+        if (stepped && _stepResolve) { const r = _stepResolve; _stepResolve = null; r(); }
+      }
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
         scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
@@ -602,6 +635,111 @@ export function runDisplayScenario(opts, ctx) {
         }
       }
     };
+
+    // ---- fixture mode: the native-renderer compare harness ----
+    // Same-origin hooks for /gallery-compare.html: deterministic tick control plus
+    // the contract-shaped scene data a SECOND renderer needs — snapshot + events
+    // per frame, built track + roster once, per-cell chase cameras — so the parent
+    // feeds the identical sim state to the Filament wasm module. One sim, two
+    // renderers: parity diffs are pure renderer diffs.
+    if (kind === 'fixture') {
+      window.__fixture = {
+        // ▶/❚❚ over the scene loop; step(ms) advances the sim EXACTLY ms (then
+        // re-idles), so scrubbing is a fixed-dt resim from any pause point.
+        play: () => scene.start(),
+        pause: () => scene.pauseAfterFrame(),
+        isRunning: () => scene.isRunning(),
+        step: (ms = 1000 / 60) => new Promise((resolve) => { _stepMs = ms; _stepResolve = resolve; scene.start(); scene.pauseAfterFrame(); }),
+        // Full deterministic restart: a fresh session on the same pinned seed, so
+        // the bots and the item roulette rewind with the sim.
+        reset: () => { engine = newSession(); window.__engine = engine; _fixEvents.length = 0; placeGrid(); },
+        getSnapshot: () => engine.getSnapshot(),
+        drainEvents: () => _fixEvents.splice(0),
+        // One-time scene-build payload (contract track + identity + roster).
+        // JSON round-trip drops the centerline's methods — plain data crosses.
+        getTrackData: () => JSON.parse(JSON.stringify({
+          trackId: track.trackId, cup: track.cup, seed: track.seed,
+          // Resolved theme slices the second renderer needs (palette truth stays JS-side).
+          road: (scene._theme && scene._theme.road) || null,
+          sky: (scene._theme && scene._theme.sky) || null,
+          fog: (scene._theme && scene._theme.fog) ?? null,
+          hills: (scene._theme && scene._theme.hills) || null,
+          hillShape: (scene._theme && scene._theme.hillShape) || 'dome',
+          // Everything else the biome dresses: ground kind, the light rig, the
+          // sky/air/water furniture and the accent colours. Sent resolved (the
+          // per-track ambient patch is already folded in) so the C++ side never
+          // has to know a theme's defaulting rules.
+          ground: (scene._theme && scene._theme.ground) || null,
+          key: (scene._theme && scene._theme.key) || null,
+          hemi: (scene._theme && scene._theme.hemi) || null,
+          clouds: { ...DEF_CLOUDS, ...((scene._theme && scene._theme.clouds) || {}) },
+          fogTune: (scene._theme && scene._theme.fogTune) ?? null,
+          water: (scene._theme && scene._theme.water) || null,
+          haze: (scene._theme && scene._theme.haze) || null,
+          ambient: (() => {
+            const t = scene._theme;
+            if (!t || !t.ambient) return null;
+            const patch = t.ambientByTrack && t.ambientByTrack[track.trackId];
+            return { ...(AMB_KINDS[t.ambient.kind] || AMB_KINDS.flake),
+                     ...t.ambient, ...(patch || {}) };
+          })(),
+          birds: (scene._theme && scene._theme.birds)
+            ? { ...DEF_BIRDS, ...scene._theme.birds } : null,
+          kites: (scene._theme && scene._theme.kites) || null,
+          paperPlane: (scene._theme && scene._theme.paperPlane)
+            ? { ...DEF_PLANE, ...scene._theme.paperPlane } : null,
+          balloon: (scene._theme && scene._theme.balloon) || null,
+          ice: (scene._theme && scene._theme.ice) || null,
+          gate: (scene._theme && scene._theme.gate) ?? null,
+          gantry: (scene._theme && scene._theme.gantry) || null,
+          boost: (scene._theme && scene._theme.boost) ?? null,
+          // Support-structure tint (bridge pillars, corridor poles, loop shafts).
+          structure: (scene._theme && scene._theme.structure) ?? null,
+          scenery: (scene._theme && scene._theme.scenery) || null,
+          // buildScenery's two stream seeds, computed HERE where the exact
+          // idStr inputs live — the C++ scatter replays the identical streams.
+          landmark: (scene._theme && scene._theme.landmark) || null,
+          scenerySeeds: (() => {
+            const idStr = String(track.id || track.name || '') + Math.round(track.centerline.length * 100);
+            let s1 = 2166136261, s2 = 5381, s3 = 51966; // scatter, clutter, landmarks
+            for (let i = 0; i < idStr.length; i++) {
+              s1 = ((s1 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+              s2 = ((s2 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+              s3 = ((s3 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
+            }
+            return [s1, s2, s3];
+          })(),
+          roster: ids.map((i) => ({
+            id: i, name: FAKE_NAMES[i], carIndex: i, color: COLORS[i % COLORS.length],
+            // Hand-tuned rear-panel height for this model (SceneRenderer applies
+            // the same override); the native renderer can't raycast the proto.
+            plateY: PLATE_Y[i % PLATE_Y.length] ?? null,
+            model: (window.CAR_MODELS || [])[i % (window.CAR_MODELS || [1]).length] || null
+          })),
+          track
+        })),
+        // Per-cell chase cameras (world matrix + projection params) — the runtime
+        // owns cameras (architecture.md), so views ride FrameInput to the renderer.
+        getViews: () => ids.map((id) => {
+          const c = scene.cars.get(id);
+          if (!c || !c.cam) return null;
+          c.cam.updateWorldMatrix(true, false);
+          // The fog belongs to the VIEW, not the scene: the race cells, the
+          // lobby orbit and the overview each run their own ramp (and the
+          // gallery runs none), so it rides out with the camera.
+          const fog = scene.scene.fog;
+          return { id, world: [...c.cam.matrixWorld.elements],
+                   fov: c.cam.fov, near: c.cam.near, far: c.cam.far, aspect: c.cam.aspect,
+                   fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 };
+        }).filter(Boolean),
+        // Pixels of the presented Three.js frame (post-present same-task readback;
+        // when idle, re-present WITHOUT advancing the sim via a 0 ms step).
+        capture: () => new Promise((resolve) => {
+          scene.onAfterFrame = () => { scene.onAfterFrame = null; resolve(scene.renderer.domElement.toDataURL('image/png')); };
+          if (!scene.isRunning()) { _stepMs = 0; scene.start(); scene.pauseAfterFrame(); }
+        })
+      };
+    }
 
     if (kind === 'countdown') {
       // HUD shows lap 1 while the lights count down.
