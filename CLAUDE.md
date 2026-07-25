@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test                          # Unit tests (node:test) — engine, track, partyplug
-node --test tests/engine.test.js  # A single unit test
+npm test                          # Unit tests (node:test) — track, ABI, partyplug
+node --test tests/track.test.js   # A single unit test
+ctest --test-dir native/build     # Native conformance (configure/build native/ first)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 npm start                         # Run the server (node server/index.js)
@@ -23,8 +24,8 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 
 ## Key Rules
 
-- The sim is display-authoritative: the car simulation (`public/display/engine/Game.js`) runs in the browser, not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
-- Browser code is ES modules. The engine (`engine/Game.js`, `TrackBuilder.js`) is imported directly by Node tests via dynamic `import()` — keep it dependency-free so it loads in both browser and Node.
+- The sim is display-authoritative: the car simulation runs in the browser (as wasm — see the NATIVE rule below), not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
+- Browser code is ES modules. The survivors Node tests import directly via dynamic `import()` (`TrackBuilder.js`, `Centerline.js`, `engine/Vec3.js`, `engine/math.js`) must stay dependency-free so they load in both browser and Node.
 - Three.js is vendored under `vendor/three/` and served via the `/vendor/` route; the display imports it through an inline importmap (the one script that needs a CSP nonce).
 - CSP headers in `server/index.js` — update when adding external resources.
 - Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals).
