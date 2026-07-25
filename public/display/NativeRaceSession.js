@@ -1,6 +1,6 @@
 // NativeRaceSession — RaceSession's exact surface, backed by the NATIVE C++
 // sim compiled to WASM (native/runtime/ttp_runtime.h via engine/native/
-// ttp_sim.mjs). Behind ?sim=native only: main.js dynamic-imports this module
+// ttp_runtime.mjs). Behind ?sim=native only: main.js dynamic-imports this module
 // and awaits init() before any race, then constructs it exactly where it
 // would construct RaceSession. The default path never loads the module.
 //
@@ -18,14 +18,17 @@
 //   (the ABI's begin/add/start split); every pre-start passthrough answers
 //   from the roster.
 
+import { loadNativeRuntime } from './nativeRuntime.js';
+
 let M = null;            // the instantiated emscripten module (shared)
 let fn = null;           // cwrap'd ABI
 let vecPtr = 0;          // persistent 3-double out-buffer for pos queries
 
 export async function init() {
   if (M) return;
-  const { default: createModule } = await import('./engine/native/ttp_sim.mjs');
-  M = await createModule();
+  // Shared loader: ?sim=native and ?party=native must not instantiate the module
+  // twice (one wasm heap for both ABIs).
+  M = await loadNativeRuntime();
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     version: c('ttp_version', 'string', []),

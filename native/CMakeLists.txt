@@ -27,7 +27,7 @@ target_compile_options(ttp_strict_fp INTERFACE
 #
 # These link options belong on the ctest EXECUTABLES ONLY, applied through
 # ttp_emscripten_cli() below — NOT on the ttp_strict_fp INTERFACE, whose flags
-# leak to every consumer including the browser module ttp_sim_web (which must
+# leak to every consumer including the browser module ttp_runtime_web (which must
 # have neither NODERAWFS nor EXIT_RUNTIME). wasm f64 needs no FP flags.
 function(ttp_emscripten_cli target)
   if(EMSCRIPTEN)
@@ -236,20 +236,22 @@ add_test(NAME fastlane
   COMMAND fastlane_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/fastlane-corpus.jsonl
 )
 
-# ---- Browser module: the runtime C ABI (ttp_runtime.h) ----------------------
-# Emscripten-only. Wraps libttp-sim behind the one extern "C" ABI and emits an
-# ES6 module (ttp_sim.mjs + ttp_sim.wasm) the display's ?sim=native adapter
-# loads. Lean by design: -O2, no assertions, and NEITHER NODERAWFS NOR
-# EXIT_RUNTIME (which the CLI helper adds and a browser module must not carry) —
-# this is why those options were lifted off the ttp_strict_fp interface above.
-# The artifacts are copied into public/display/engine/native/ (checked in, like
-# engine/math.js) by native/scripts/build-sim-web.sh.
+# ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
+# Emscripten-only. Wraps libttp-sim AND libttp-party behind their two extern "C"
+# ABIs and emits one ES6 module (ttp_runtime.mjs + .wasm) that the display's
+# ?sim=native and ?party=native adapters share — one instantiation, one copy of
+# double-conversion, and the shape libttp-runtime takes on the shells. Lean by
+# design: -O2, no assertions, and NEITHER NODERAWFS NOR EXIT_RUNTIME (which the
+# CLI helper adds and a browser module must not carry) — this is why those
+# options were lifted off the ttp_strict_fp interface above. The artifacts are
+# copied into public/display/engine/native/ (checked in, like engine/math.js) by
+# native/scripts/build-runtime-web.sh.
 if(EMSCRIPTEN)
-  add_executable(ttp_sim_web runtime/ttp_runtime.cc)
-  target_include_directories(ttp_sim_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-  target_link_libraries(ttp_sim_web PRIVATE libttp_sim ttp_strict_fp)
-  set_target_properties(ttp_sim_web PROPERTIES OUTPUT_NAME "ttp_sim" SUFFIX ".mjs")
-  target_link_options(ttp_sim_web PRIVATE
+  add_executable(ttp_runtime_web runtime/ttp_runtime.cc runtime/ttp_party.cc)
+  target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+  target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp)
+  set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
+  target_link_options(ttp_runtime_web PRIVATE
     -O2
     --no-entry
     -sMODULARIZE=1
@@ -257,7 +259,7 @@ if(EMSCRIPTEN)
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
     -sASSERTIONS=0
-    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_malloc,_free"
+    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_ttp_room_create,_ttp_room_dispose,_ttp_room_reset,_ttp_room_add_player,_ttp_room_remove_player,_ttp_room_rekey,_ttp_room_set_field,_ttp_room_mark_disconnected,_ttp_room_mark_reconnected,_ttp_room_clear_disconnected,_ttp_room_transition_to,_ttp_room_state,_ttp_room_set_active_order,_ttp_room_on_seen,_ttp_room_is_expired,_ttp_room_expired_peers_json,_ttp_room_all_participants_disconnected,_ttp_room_has_late_joiners,_ttp_room_grace_tick,_ttp_room_set_master,_ttp_room_set_liveness_enabled,_ttp_room_host_json,_ttp_room_is_host,_ttp_room_size,_ttp_room_connected_count,_ttp_room_list_json,_ttp_room_has,_ttp_room_is_disconnected,_ttp_room_get_json,_ttp_room_events_json,_ttp_room_lowest_free_slot,_ttp_party_version,_malloc,_free"
     "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64"
   )
 endif()

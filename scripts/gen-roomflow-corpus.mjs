@@ -272,6 +272,33 @@ const lines = scripts.map((s) => canonicalStringify({
   steps: runScript(s)
 }));
 
-const header = JSON.stringify({ scripts: scripts.length, events: EVENTS });
+// RoomFlow.lowestFreeSlot — the static dense-slot allocator the display uses for
+// livery colours (display/Net.js). Recorded as its own line kind ({slotCase:...})
+// since it takes no RoomFlow instance. Covers: empty, partial, full, gaps,
+// out-of-order, duplicates, out-of-range and non-integer entries (which can never
+// match a probed slot), max<=0, and a Set vs array argument (JS accepts both).
+const SLOT_CASES = [
+  { used: [], max: 4 },
+  { used: [0], max: 4 },
+  { used: [0, 1, 2, 3], max: 4 },          // full -> -1
+  { used: [0, 1, 3], max: 4 },             // gap at 2
+  { used: [3, 1, 0], max: 4 },             // out of order -> 2
+  { used: [0, 0, 1, 1], max: 4 },          // duplicates
+  { used: [7, 9], max: 4 },                // out of range -> 0
+  { used: [0.5, 1.5], max: 4 },            // non-integers never match
+  { used: [-0], max: 4 },                  // -0 matches slot 0 (SameValueZero)
+  { used: [0, 1, 2, 3], max: 8 },          // beyond the taken block -> 4
+  { used: [], max: 0 },                    // empty range -> -1
+  { used: [0], max: 1 },                   // single slot taken -> -1
+  { used: new Set([0, 2]), max: 4 },       // Set argument
+];
+for (const c of SLOT_CASES) {
+  const usedArr = c.used instanceof Set ? [...c.used] : c.used;
+  lines.push(canonicalStringify({
+    slotCase: { used: usedArr, max: c.max, expect: RoomFlow.lowestFreeSlot(c.used, c.max) },
+  }));
+}
+
+const header = JSON.stringify({ scripts: scripts.length, events: EVENTS, slotCases: SLOT_CASES.length });
 fs.writeFileSync(OUT, header + '\n' + lines.join('\n') + '\n');
 console.log(`${OUT}: ${scripts.length} scripts, ${lines.reduce((a, l) => a + l.length, 0)} bytes of steps`);

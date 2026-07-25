@@ -14,6 +14,32 @@ Value Player::toValue() const {
   return o;
 }
 
+// ---- static helper ----------------------------------------------------------
+int lowest_free_slot(const std::vector<double>& used, int max) {
+  for (int i = 0; i < max; i++) {
+    bool taken = false;
+    // JS Set.has uses SameValueZero; slots are non-negative integers, so a plain
+    // == comparison matches (and -0 == 0 agrees with SameValueZero here).
+    for (double u : used) {
+      if (u == static_cast<double>(i)) { taken = true; break; }
+    }
+    if (!taken) return i;
+  }
+  return -1;
+}
+
+// ---- live-record field write (see header) ------------------------------------
+bool RoomFlow::setField(const PeerId& peerIndex, const std::string& key, Value v) {
+  if (isKitKey(key)) return false;
+  Player* p = find(peerIndex);
+  if (!p) return false;
+  for (auto& kv : p->fields) {
+    if (kv.first == key) { kv.second = std::move(v); return true; }
+  }
+  p->fields.emplace_back(key, std::move(v));  // new field, appended
+  return true;
+}
+
 // ---- valid transitions ------------------------------------------------------
 // LOBBY -> [COUNTDOWN]; COUNTDOWN -> [PLAYING, LOBBY];
 // PLAYING -> [RESULTS, LOBBY]; RESULTS -> [COUNTDOWN, LOBBY].

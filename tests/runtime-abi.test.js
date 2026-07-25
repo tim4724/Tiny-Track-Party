@@ -1,7 +1,7 @@
 'use strict';
 // Runtime C ABI conformance gate. Loads the browser wasm module
-// (public/display/engine/native/ttp_sim.mjs, built by native/scripts/
-// build-sim-web.sh) in Node and replays the committed INPUT-REPLAY fixture
+// (public/display/engine/native/ttp_runtime.mjs, built by native/scripts/
+// build-runtime-web.sh) in Node and replays the committed INPUT-REPLAY fixture
 // tidepool-4bots-600f-seed42.jsonl THROUGH THE ABI, demanding bit-for-bit
 // agreement every frame:
 //   fnv1a(ttp_snapshot_json) === recorded hash   (canonical serializer end-to-end)
@@ -19,14 +19,14 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const ROOT = path.join(__dirname, '..');
-const MJS = path.join(ROOT, 'public/display/engine/native/ttp_sim.mjs');
-const WASM = path.join(ROOT, 'public/display/engine/native/ttp_sim.wasm');
+const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
+const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
 const FIXTURE = path.join(ROOT, 'tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl');
 
 const artifactsPresent = fs.existsSync(MJS) && fs.existsSync(WASM);
 const skip = artifactsPresent
   ? false
-  : 'ttp_sim.mjs/.wasm not built — run native/scripts/build-sim-web.sh';
+  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
 // FNV-1a over UTF-8 bytes, lowercase 8-hex — identical to record-trace.mjs.
 function fnv1a(str) {
