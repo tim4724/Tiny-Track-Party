@@ -346,6 +346,15 @@ TtpRenderer::TtpRenderer() = default;
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         uint32_t width, uint32_t height) {
     mEngine = Engine::create(backend);
+    if (mEngine) {
+        // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
+        // cones — and each instance was its own draw call. Filament can merge
+        // identical primitives that share a MaterialInstance into one instanced
+        // draw; three gets the same effect by merging its scenery into a single
+        // mesh, which is most of why it issues 42 draws a frame where we issue
+        // 111.
+        mEngine->setAutomaticInstancingEnabled(true);
+    }
     if (!mEngine) return false;
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
@@ -4550,6 +4559,29 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         // Props and scenery are not shadow casters in the JS either (each
         // floating prop carries its own baked contact blob instead).
         setShadows(inst->getEntities(), inst->getEntityCount(), false, false);
+    }
+    // Point every instance at instance 0's materials. gltfio hands each
+    // FilamentInstance its own MaterialInstance so they can be tinted apart —
+    // we tint per MODEL, never per instance — and that alone stops Filament's
+    // automatic instancing from batching them, since it needs identical
+    // geometry AND the same MaterialInstance. Fifty trees were fifty draw
+    // calls; three merges its scenery into one mesh for the same reason.
+    auto& rcm = mEngine->getRenderableManager();
+    if (out.size() > 1 && out[0]) {
+        const size_t nEnt = out[0]->getEntityCount();
+        for (size_t i = 1; i < out.size(); i++) {
+            if (!out[i] || out[i]->getEntityCount() != nEnt) continue;
+            for (size_t e = 0; e < nEnt; e++) {
+                const auto ri0 = rcm.getInstance(out[0]->getEntities()[e]);
+                const auto ri = rcm.getInstance(out[i]->getEntities()[e]);
+                if (!ri0 || !ri) continue;
+                const size_t prims = std::min(rcm.getPrimitiveCount(ri),
+                        rcm.getPrimitiveCount(ri0));
+                for (size_t p = 0; p < prims; p++) {
+                    rcm.setMaterialInstanceAt(ri, p, rcm.getMaterialInstanceAt(ri0, p));
+                }
+            }
+        }
     }
     return asset;
 }
