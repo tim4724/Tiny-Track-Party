@@ -3,7 +3,15 @@
 # tests in native/CMakeLists.txt); needs -DCLI -DFIXTURE -DOUT.
 get_filename_component(_outDir "${OUT}" DIRECTORY)
 file(MAKE_DIRECTORY "${_outDir}")
-execute_process(COMMAND "${CLI}" --record "${FIXTURE}" "--out=${OUT}" RESULT_VARIABLE _rc)
+# Under a cross build (emscripten) the CLI is a .js that needs its emulator —
+# add_test() would supply it automatically, but a cmake -P script must do so
+# itself, so EMULATOR is threaded through. It may be a list (e.g. "node;--flag").
+set(_cmd)
+if(EMULATOR)
+  list(APPEND _cmd ${EMULATOR})
+endif()
+list(APPEND _cmd "${CLI}" --record "${FIXTURE}" "--out=${OUT}")
+execute_process(COMMAND ${_cmd} RESULT_VARIABLE _rc)
 if(NOT _rc EQUAL 0)
   message(FATAL_ERROR "--record failed (exit ${_rc}) for ${FIXTURE}")
 endif()

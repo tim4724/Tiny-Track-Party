@@ -178,6 +178,7 @@ foreach(fx
   add_test(NAME record_${fx}
     COMMAND ${CMAKE_COMMAND}
       -DCLI=$<TARGET_FILE:replay_cli>
+      "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
       -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl
       -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/${fx}.jsonl
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
