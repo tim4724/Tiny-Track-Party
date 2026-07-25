@@ -593,8 +593,13 @@ const char* ttp_gp_standings_json(int h) {
   for (const GpStanding& st : g->series->standings()) {
     Value o = Value::Obj();
     o.set("playerId", st.playerId.toValue());
-    o.set("name", Value::Str(st.name));
-    o.set("colorIndex", Value::Num(st.colorIndex));
+    // An unseated row's name/colorIndex are JS undefined, i.e. ABSENT keys —
+    // Value's default UNDEF is dropped by canonical_stringify, so leaving them
+    // unset is exactly what the JS twin serialized.
+    if (!st.seatNull) {
+      o.set("name", Value::Str(st.name));
+      o.set("colorIndex", Value::Num(st.colorIndex));
+    }
     o.set("ai", Value::Bool(st.ai));
     o.set("points", Value::Num(st.points));
     o.set("gained", Value::Num(st.gained));

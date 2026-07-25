@@ -173,6 +173,18 @@ add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
 
+# ---- Conformance: the cup-series scoring corpus ------------------------------
+# Replays tests/fixtures/grandprix-corpus.jsonl against CupSeries + ShuffleBag.
+# The cup layer was ported for parity and then never replayed by anything — no
+# golden trace reaches it (traces are ONE race) and the e2e cup spec only proves a
+# series chains, never a points value. This is its first oracle.
+add_executable(grandprix_check simtest/grandprix_check.cc)
+target_link_libraries(grandprix_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
+ttp_emscripten_cli(grandprix_check)
+add_test(NAME grandprix
+  COMMAND grandprix_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
+)
+
 # ---- Conformance: cross-race isolation --------------------------------------
 # A Game must derive its AI racing line from its own centerline even when a
 # previous race's centerline had the same address. Forces the collision with
@@ -183,6 +195,41 @@ add_executable(race_isolation_check simtest/race_isolation_check.cc)
 target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp)
 ttp_emscripten_cli(race_isolation_check)
 add_test(NAME race_isolation COMMAND race_isolation_check)
+
+# ---- Regression: the whole catalogue raced -----------------------------------
+# The golden traces race 3 of the 20 shipped tracks; the other 17 were proven as
+# GEOMETRY only. This races every one and pins checkpoint hashes + end state, then
+# races the catalogue again in REVERSE order and demands identical digests — 40
+# races in one process is the widest cheap net for state that outlives a Game.
+#
+# C++-authored evidence, NOT a parity oracle (the JS engine was already gone). It
+# answers "did the sim change", which is why it re-records like a golden trace, with
+# a byte-identity gate on the recording path.
+add_executable(catalogue_sweep_check simtest/catalogue_sweep_check.cc)
+target_link_libraries(catalogue_sweep_check PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
+ttp_emscripten_cli(catalogue_sweep_check)
+add_test(NAME catalogue_sweep
+  COMMAND catalogue_sweep_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/catalogue-sweep-corpus.jsonl
+)
+add_test(NAME record_catalogue_sweep
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:catalogue_sweep_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/catalogue-sweep-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/catalogue-sweep-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+# (record_roundtrip.cmake invokes "<cli> --record <fixture> --out=<f>"; the sweep
+# regenerates from the catalogue, so it accepts and ignores that positional.)
+
+# ---- Behaviour: hazard responses no fixture can reach -----------------------
+# collidePole and stageBanana had never executed in EITHER suite. Not an oversight
+# in the fixtures: no shipped track builds with a single pole (the JS TrackBuilder
+# agrees), so a catalogue-racing fixture physically cannot reach the pole collision,
+# and stageBanana is a trace-staging hook no fixture stages. See the file header.
+add_executable(hazard_check simtest/hazard_check.cc)
+target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(hazard_check)
+add_test(NAME hazards COMMAND hazard_check)
 
 # ---- Conformance: the golden-trace replay CLI -------------------------------
 # Reproduces scripts/verify-trace.mjs against libttp-sim: rebuilds the race,
@@ -232,6 +279,26 @@ add_test(NAME replay_sequence COMMAND replay_cli ${TTP_ALL_TRACES})
 # Node. Links libttp_party only for ttp::protocol's CAR_STATS/CAR_NAMES.
 add_executable(probe_cli probe/probe_cli.cc)
 target_link_libraries(probe_cli PRIVATE libttp_sim libttp_party ttp_strict_fp)
+ttp_emscripten_cli(probe_cli)
+
+# The probe IS a tuning tool, not a conformance gate — but it was also the only
+# thing in the tree with zero coverage and no CI leg, which for the instrument that
+# FOUND the racing-line bug is the wrong way round. This asserts the instrument
+# still works: one row per catalogue track, every lap time plausible. 0.8s.
+# TTP_TRACK_COUNT is compiled in, so the expected row count comes from the same
+# generated catalogue rather than a number maintained by hand here.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track/generated/track_defs.h
+  _ttp_track_count_line REGEX "TTP_TRACK_COUNT *=")
+string(REGEX MATCH "[0-9]+" TTP_TRACK_COUNT "${_ttp_track_count_line}")
+if(NOT TTP_TRACK_COUNT)
+  message(FATAL_ERROR "could not read TTP_TRACK_COUNT from generated/track_defs.h")
+endif()
+add_test(NAME probe_smoke
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:probe_cli>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DTRACKS=${TTP_TRACK_COUNT}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/probe_smoke.cmake)
 
 # ---- libttp-party: the room-semantics + wire-framing port -------------------
 # The C++ twin of the partyplug transport layer: RoomFlow.js (sans-IO room state
@@ -294,6 +361,36 @@ target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_st
 ttp_emscripten_cli(fastlane_check)
 add_test(NAME fastlane
   COMMAND fastlane_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/fastlane-corpus.jsonl
+)
+
+# ---- Conformance: the C ABI itself ------------------------------------------
+# The glue in runtime/ used to be compiled by the emscripten browser module ALONE,
+# so ctest never saw a line of it and 21 of its 58 exports were exercised by
+# nothing on any platform. This check drives the exported C surface directly:
+# a golden trace through ttp_process_input/ttp_update, the cup-series corpus
+# through ttp_gp_*, and the boundary/mutation exports against their header
+# contracts.
+#
+# It COMPILES THE SOURCES AGAIN rather than linking a shared static library. That
+# is deliberate: the shipped wasm's export list is EMSCRIPTEN_KEEPALIVE on each
+# declaration, and moving those definitions into a static archive risks the linker
+# dropping unreferenced objects. Recompiling two files costs nothing and leaves the
+# artifact the browser runs bit-for-bit untouched.
+add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc)
+target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+target_link_libraries(abi_check PRIVATE libttp_sim libttp_party ttp_testsupport ttp_strict_fp)
+ttp_emscripten_cli(abi_check)
+# Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
+# test uses, and helix adds 402 braking inputs — without it ttp_process_input's
+# brake bit is never marshalled and could be deleted with every frame still green
+# (found by mutation-testing this check). The session/ai-live/schedule traces are
+# NOT replayable here: their recording used engine calls (giveItem, setCarStats,
+# stageRocket) that the C ABI deliberately does not export.
+add_test(NAME abi
+  COMMAND abi_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
 )
 
 # ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------

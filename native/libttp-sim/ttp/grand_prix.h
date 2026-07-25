@@ -39,6 +39,10 @@ struct GpFieldEntry { Id peerIndex; std::string name; int colorIndex; bool ai; }
 struct GpStanding {
   Id playerId; std::string name; int colorIndex; bool ai;
   int points; int gained; bool lastRankNull; int lastRank;
+  // No field entry named this player when their row was created (JS:
+  // `seats.get(id) || {}`), so name/colorIndex are JS `undefined` rather than
+  // ""/0 and must serialize as ABSENT keys. Same idiom as lastRankNull.
+  bool seatNull;
 };
 struct GpCup { std::string id, name; std::vector<std::string> tracks; };
 
@@ -68,6 +72,9 @@ class CupSeries {
     int points = 0; int gained = 0;
     bool lastRankNull = true; int lastRank = 0;
     int lastRaceIndex = -1;
+    // Set once, at row creation, exactly like name/colorIndex/ai in the JS twin:
+    // a later race that does name the seat does NOT backfill it.
+    bool seatNull = true;
   };
   Meta* findMeta(const Id& id);
   const Meta* findMeta(const Id& id) const;
