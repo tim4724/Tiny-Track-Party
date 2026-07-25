@@ -48,18 +48,15 @@ async function openDisplay(page) {
   // land before the listener attaches. The room warms behind the welcome, so
   // the roomCode wait below is unchanged.
   await page.waitForFunction(() => !!window.__net);
-  // Guard against a SILENT FALLBACK: a native flag that failed to load would
-  // leave every spec passing on the JS kit and read as native coverage. Fail loud
-  // instead — this is what makes a green TTP_DISPLAY_FLAGS run mean something.
-  if (flags.includes('party=native') || /(^|&)native(=|$|&)/.test(flags)) {
-    const impls = await page.evaluate(() => ({
-      flow: window.__net?.flow?.constructor?.name,
-      conn: window.__net?.party?.constructor?.name,
-      lane: window.__net?.fastlane?.constructor?.name   // null until a peer joins
-    }));
-    if (impls.flow !== 'NativeRoomFlow' || impls.conn !== 'NativePartyConnection') {
-      throw new Error(`TTP_DISPLAY_FLAGS requested party=native but got ${JSON.stringify(impls)}`);
-    }
+  // The native stack is the only engine now, so this is an UNCONDITIONAL guard:
+  // if a JS twin ever creeps back in (or the wasm silently fails to load), every
+  // spec would still pass while testing something we no longer ship. Fail loud.
+  const impls = await page.evaluate(() => ({
+    flow: window.__net?.flow?.constructor?.name,
+    conn: window.__net?.party?.constructor?.name
+  }));
+  if (impls.flow !== 'NativeRoomFlow' || impls.conn !== 'NativePartyConnection') {
+    throw new Error(`expected the native party layer, got ${JSON.stringify(impls)}`);
   }
   await page.click('#newgame-btn');
   await page.waitForFunction(() => window.__net && window.__net.roomCode, null, { timeout: 20000 });

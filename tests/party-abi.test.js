@@ -56,6 +56,7 @@ test('party ABI replays the RoomFlow corpus through the C boundary', { skip }, a
     addPlayer: cw('ttp_room_add_player', 'string', ['number', 'string', 'string']),
     removePlayer: cw('ttp_room_remove_player', null, ['number', 'string']),
     rekey: cw('ttp_room_rekey', 'number', ['number', 'string', 'string']),
+    setField: cw('ttp_room_set_field', 'number', ['number', 'string', 'string', 'string']),
     markDisc: cw('ttp_room_mark_disconnected', null, ['number', 'string']),
     markReconn: cw('ttp_room_mark_reconnected', null, ['number', 'string']),
     clearDisc: cw('ttp_room_clear_disconnected', null, ['number', 'number', 'number']),
@@ -135,6 +136,13 @@ test('party ABI replays the RoomFlow corpus through the C boundary', { skip }, a
         case 'setMaster': abi.setMaster(h, idJson(op.v)); break;
         case 'setLivenessEnabled': abi.setLivenessEnabled(h, op.v ? 1 : 0); break;
         case 'reset': abi.reset(h); break;
+        case 'setField': {
+          // The display's direct live-record write, as an ABI call.
+          const applied = abi.setField(h, idJson(op.p), op.key, JSON.stringify(op.value ?? null)) === 1;
+          const rec = applied ? JSON.parse(abi.get(h, idJson(op.p))) : null;
+          ret = rec ? (rec[op.key] ?? null) : null;
+          break;
+        }
         default: throw new Error(`unknown op ${op.op}`);
       }
 

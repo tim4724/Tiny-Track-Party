@@ -1,4 +1,16 @@
-# Golden trace fixtures
+# Golden traces — FROZEN cross-implementation evidence
+
+These are recorded runs of the **retired JS engine** (`public/display/engine/Game.js`,
+deleted when the sim went native — see git history). That is exactly why they are
+valuable and why they must **never be re-recorded from C++**: they are the only
+artifacts that prove the C++ engine reproduces the JS engine bit for bit. A trace
+re-recorded from C++ would only prove C++ matches itself.
+
+Replayed by `native/build/replay_cli <trace>` (the `replay_*` ctest entries) on
+linux, macOS, wasm/Node and the tvOS simulator. `native/build/replay_cli --record
+<trace> --out=<f>` reproduces each one BYTE-IDENTICALLY (the `record_*` ctest
+entries hold that), which is what allows new fixtures to be authored natively now
+that the JS recorder is gone: write a header JSON and record from it.
 
 Recorded runs of the JS engine (`public/display/engine/Game.js`), the
 conformance oracle for the native C++ port. Format and tooling live in

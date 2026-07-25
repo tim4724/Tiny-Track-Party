@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildRaceTrack, fnv1a } from './record-trace.mjs';
+import { buildRaceTrack, fnv1a } from './oracle-lib.mjs';
 import { TRACKS } from '../public/display/TrackBuilder.js';
 import { MATHLIB } from '../public/display/engine/math.js';
 

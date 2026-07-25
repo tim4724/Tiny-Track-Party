@@ -1,97 +1,183 @@
 'use strict';
-// The dev-only Gym collision-test track (shared/devTracks.js) + the debug hooks
-// it leans on: forceItem (?item=<id> — every box roll returns that item) and
-// authored, respawning bananas (track.bananas → seeded live, box-style cooldown
-// after a hit). A pure-pursuit car drives the centreline through each cluster
-// and must trip every trigger type in authored order.
+// The item/hazard TRIGGER mechanics and the debug hooks the dev collision range
+// leans on, exercised against the native sim through its C ABI (the wasm build of
+// native/libttp-sim, loaded exactly as tests/runtime-abi.test.js does).
+//
+// WHAT MOVED, AND WHAT IS NO LONGER COVERED. This suite used to drive a pure-
+// pursuit car around the dev-only Gym track (shared/devTracks.js) and poke the
+// engine's internals directly. Neither is possible on the native engine:
+//
+//   * ttp_session_begin takes a CATALOGUE TRACK ID. The native track defs are
+//     code-generated from the shipped TRACKS only (scripts/gen-track-defs-
+//     header.mjs -> native/libttp-track/generated/track_defs.h), so DEV_TRACKS is
+//     not in the catalogue and ttp_session_begin('gym') returns 0. That also means
+//     ?solo&track=gym cannot race on the native engine at all — the Gym range is
+//     dead until its descriptor is carried into the codegen.
+//   * The ABI exposes no car teleport and no trigger poll, so a check cannot park
+//     a car at a chosen (s, lat) and fire one trigger in isolation.
+//
+// So the portable half (the ?item= force hook, the monster transform, box respawn
+// cooldowns, and oil/banana spin-outs) is re-expressed below as REAL races on
+// catalogue tracks, and the two Gym-specific checks are left explicitly skipped
+// rather than quietly dropped. See the comments on each skipped test.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-let buildTrack, resolveFurniture, Game, DEV_TRACKS, Vec3;
-test.before(async () => {
-  ({ buildTrack, resolveFurniture } = await import('../public/display/TrackBuilder.js'));
-  ({ Game } = await import('../public/display/engine/Game.js'));
-  ({ DEV_TRACKS } = await import('../public/shared/devTracks.js'));
-  Vec3 = (await import('../public/display/engine/Vec3.js')).Vec3;
-});
+const ROOT = path.join(__dirname, '..');
+const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
+const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
 
-// Resolve the authored furniture via the SAME shared resolver the display uses
-// (fraction-of-lap u → arclength s; default radii from the road width).
-function buildGym() {
-  const b = resolveFurniture(buildTrack(DEV_TRACKS.gym), DEV_TRACKS.gym);
-  b.totalLaps = 9;
-  return b;
+const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
+  ? false
+  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
+
+// [car id, caution, laneBias] — the four AI_PERSONALITIES knob pairs from
+// native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
+const PERSONAS = [
+  ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],
+  ['cpu-rusty', 0.97, -0.25], ['cpu-zippy', 0.94, 0.25]
+];
+const DT = 1000 / 60;
+
+let _abi = null;
+async function abi() {
+  if (_abi) return _abi;
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const Module = await factory();
+  const cw = (name, ret, args) => Module.cwrap(name, ret, args);
+  _abi = {
+    begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+    addBot: cw('ttp_add_bot', 'void', ['number', 'string', 'number', 'number', 'number', 'string']),
+    start: cw('ttp_session_start', 'void', ['number', 'number']),
+    update: cw('ttp_update', 'void', ['number', 'number']),
+    snapshot: cw('ttp_snapshot_json', 'string', ['number']),
+    events: cw('ttp_events_json', 'string', ['number']),
+    dispose: cw('ttp_dispose', 'void', ['number']),
+  };
+  return _abi;
 }
 
-// Pure pursuit with a lane offset: aim at the centreline point ahead, shifted
-// `latTarget` along the track's lateral vector — how a human holds a lane.
-function followSteer(game, track, id, latTarget = 0) {
-  const c = game.cars.get(id);
-  const snap = game.getSnapshot().cars.find((x) => x.id === id);
-  const frame = track.centerline.sampleAt(c.totalS + 3);
-  const look = frame.pos.clone().addScaledVector(frame.lateral, latTarget);
-  const d = look.sub(snap.pose.pos).normalize();
-  // The snapshot pose is plain data (no vector methods) — lift forward into a Vec3.
-  const fwd = new Vec3(snap.pose.forward.x, snap.pose.forward.y, snap.pose.forward.z);
-  const err = Math.atan2(fwd.clone().cross(d).dot(snap.pose.up), fwd.dot(d));
-  return Math.max(-1, Math.min(1, -err * 3));
-}
-
-test('gym: a centreline lap trips box → oil → banana, forceItem rolls monster, bananas respawn', () => {
-  const track = buildGym();
-  const game = new Game(['p1'], track, {});
-  game.forceItem = 'monster';
+// A full four-bot race, collecting the engine's race events and a per-frame digest
+// of the item/hazard state. `forceItem` is the ?item= debug hook: non-null makes
+// every box roll that item.
+async function race(trackId, forceItem, frames = 3000) {
+  const a = await abi();
+  const h = a.begin(trackId, 42, 3, forceItem);
+  assert.ok(h > 0, `ttp_session_begin('${trackId}') returned a handle`);
+  for (const [id, caution, laneBias] of PERSONAS) a.addBot(h, JSON.stringify(id), caution, laneBias, 1, null);
+  a.start(h, -1); // no countdown: racing from frame 0
   const events = [];
-  game.onEvent = (ev) => events.push(ev);
-
-  const c = game.cars.get('p1');
-  const seeded = game.bananas.length;
-  assert.equal(seeded, 3, 'authored bananas are seeded live at race start');
-
-  // One full lap on the centreline (~232 units): pure pursuit hugs lat 0, so the
-  // ±1.0 pole gate is threaded and the lat-0 props all trip — except the
-  // dead-centre pole (s≈52), which the lane plan dodges like a player would.
-  const laneAt = (s) => (s > 45 && s < 60 ? 0.9 : 0);
-  let bananaHitAt = null;
-  for (let i = 0; i < 4000 && c.lap < 1; i++) {
-    game.processInput('p1', { s: followSteer(game, track, 'p1', laneAt(c.totalS % track.length)), b: 0 });
-    game.update(16);
-    if (bananaHitAt === null && events.some((e) => e.type === 'spin' && e.cause === 'banana')) {
-      bananaHitAt = game.elapsed;
-      assert.equal(game.bananas.length, seeded, 'a hit authored banana rearms instead of despawning');
-      const hidden = game.getSnapshot().bananas.length;
-      assert.equal(hidden, seeded - 1, 'a rearming banana is hidden from the snapshot while it cools down');
+  const boxState = { everTaken: false, rearmed: false };
+  const monster = { seen: false, halfLen: 0, halfWid: 0, baseHalfLen: 0, baseHalfWid: 0 };
+  let maxBananas = 0;
+  for (let i = 0; i < frames; i++) {
+    a.update(h, DT);
+    // Session beats are reconstructed with an underscore prefix; only race events
+    // are the engine's own vocabulary.
+    for (const e of JSON.parse(a.events(h))) if (!String(e.type).startsWith('_')) events.push(e);
+    const snap = JSON.parse(a.snapshot(h));
+    if (snap.boxes.some((b) => !b)) boxState.everTaken = true;
+    if (boxState.everTaken && snap.boxes.every((b) => b)) boxState.rearmed = true;
+    maxBananas = Math.max(maxBananas, snap.bananas.length);
+    for (const c of snap.cars) {
+      if (c.monster) {
+        monster.seen = true;
+        monster.halfLen = c.halfLen;
+        monster.halfWid = c.halfWid;
+      } else if (!monster.baseHalfLen) {
+        monster.baseHalfLen = c.halfLen;
+        monster.baseHalfWid = c.halfWid;
+      }
     }
   }
-  assert.ok(c.lap >= 1, 'completed the lap on pure pursuit');
+  a.dispose(h);
+  return { events, boxState, monster, maxBananas };
+}
 
-  const pickups = events.filter((e) => e.type === 'pickup');
-  assert.ok(pickups.length >= 1, 'drove over the centreline item box');
-  assert.ok(pickups.every((p) => p.item === 'monster'), 'forceItem makes every roll a monster');
-  assert.ok(events.some((e) => e.type === 'spin' && e.cause === 'oil'), 'centre oil puddle spun the car');
-  assert.ok(bananaHitAt !== null, 'centre banana spun the car');
-  assert.equal(game.getSnapshot().bananas.length, seeded, 'the crushed banana respawned after its cooldown');
+const typesOf = (events) => new Set(events.map((e) => e.type));
+const pickupItems = (events) => new Set(events.filter((e) => e.type === 'pickup').map((e) => e.item));
+const spinCauses = (events) => new Set(events.filter((e) => e.type === 'spin').map((e) => e.cause));
+
+test('?item= forces every box roll, and is really overriding the roll table', { skip }, async () => {
+  // Unforced, the roll table is weighted and situational: `monster` is the deep-
+  // back-field catch-up item, so a clean four-bot race never rolls one. Forcing it
+  // is therefore a visible change, not a coincidence — which is what makes this a
+  // test of the hook rather than of the table.
+  const free = pickupItems((await race('tidepool', null)).events);
+  assert.ok(free.size >= 2, 'the unforced roll table yields more than one item');
+  assert.ok(!free.has('monster'), 'sanity: monster does not roll naturally in a clean race');
+
+  for (const item of ['boost', 'banana', 'rocket', 'monster']) {
+    const forced = await race('tidepool', item, 1500);
+    const items = pickupItems(forced.events);
+    assert.ok(items.size >= 1, `?item=${item}: cars still picked boxes up`);
+    assert.deepEqual([...items], [item], `?item=${item} makes every roll a ${item}`);
+  }
 });
 
-test('gym: box pickup is point-based with the tuned 0.45 radius — same reach for every car', () => {
-  const track = buildGym();
-  const game = new Game(['p1'], track, {});
-  game.forceItem = 'monster';
-  const c = game.cars.get('p1');
-  const box = game.boxes[0]; // the isolated centreline box, radius 0.45
-  // Park the car's CENTRE at a lateral offset from the box and poll the trigger
-  // directly; reset the latches + cooldown between probes.
-  const grab = (lat) => {
-    c.totalS = box.s; c.lat = lat; c.heading = 0; c.spin = 0;
-    c.item = null; c.boxIn.clear(); c.rowIn.clear(); box.cooldown = 0;
-    game._enterBox(c);
-    return c.item;
-  };
-  assert.ok(Math.abs(box.radius - 0.45) < 1e-9, 'sanity: 9% of the 5-wide road');
-  assert.equal(grab(0.40), 'monster', 'centre inside the tuned radius — grab');
-  assert.equal(grab(0.50), null, 'centre outside — no grab');
-  // The car is a point BY DESIGN: reach is identical for every footprint, so a
-  // monster truck grabs exactly what a normal car grabs — no footprint creep.
-  c.monsterT = 5;
-  assert.equal(grab(0.50), null, 'monster reach is unchanged (point test ignores footprint)');
+test('a forced monster transforms the car, grows its footprint x1.3, and times out', { skip }, async () => {
+  const r = await race('tidepool', 'monster');
+  assert.ok(typesOf(r.events).has('pickup'), 'drove over an item box');
+  assert.ok(r.monster.seen, 'the forced monster item actually transformed a car');
+  assert.ok(r.monster.baseHalfLen > 0, 'sanity: saw an untransformed car to compare against');
+  // MONSTER_FOOTPRINT: the collision box grows 1.3x while transformed (the body
+  // checks other cars), and the snapshot carries the multiplied figure.
+  assert.ok(Math.abs(r.monster.halfLen / r.monster.baseHalfLen - 1.3) < 1e-9,
+    `monster halfLen should be 1.3x (${r.monster.halfLen} vs ${r.monster.baseHalfLen})`);
+  assert.ok(Math.abs(r.monster.halfWid / r.monster.baseHalfWid - 1.3) < 1e-9,
+    `monster halfWid should be 1.3x (${r.monster.halfWid} vs ${r.monster.baseHalfWid})`);
+  assert.ok(typesOf(r.events).has('monster_end'), 'the transform expires and fires monster_end');
 });
+
+test('item boxes go dark on pickup and rearm after their cooldown', { skip }, async () => {
+  const r = await race('tidepool', 'boost');
+  assert.ok(r.boxState.everTaken, 'a picked box reads false in the snapshot (index-aligned with the authored list)');
+  assert.ok(r.boxState.rearmed, 'every box is back to true once its respawn cooldown expires');
+});
+
+test('a dropped banana is a live trigger: it spins the car that hits it', { skip }, async () => {
+  // The Gym used AUTHORED bananas seeded at race start; catalogue tracks have none,
+  // so the equivalent here is the dropped kind, forced onto every roll.
+  const r = await race('tidepool', 'banana');
+  assert.ok(r.maxBananas >= 1, 'a used banana appears in the snapshot as a live hazard');
+  assert.ok(spinCauses(r.events).has('banana'), 'a car that hit the banana spun out');
+});
+
+test('oil puddles spin cars on the tracks that carry them', { skip }, async () => {
+  // Skysnake's oils sit where the racing line has to cross them; tidepool's do not
+  // reliably catch a clean field, so the hazard check rides skysnake.
+  const r = await race('skysnake', 'monster');
+  assert.ok(spinCauses(r.events).has('oil'), 'a car crossed an oil slick and spun out');
+});
+
+// ---------------------------------------------------------------------------
+// NOT COVERED ANY MORE. Both of these need something the C ABI does not offer;
+// they are skipped rather than deleted so the gap stays visible in the test
+// output. Neither is a false alarm — the behaviour is still real, just untested.
+// ---------------------------------------------------------------------------
+
+// The Gym range itself: a pure-pursuit lap of DEV_TRACKS.gym tripping
+// box -> oil -> banana in AUTHORED ORDER, with the Gym's respawning authored
+// bananas — a hit banana rearms instead of despawning (the live list keeps its
+// length), is hidden from the snapshot while it cools down, and reappears after
+// the cooldown.
+// BLOCKED ON: `gym` is not in the native track catalogue (ttp_session_begin('gym')
+// returns 0). Unblocked by carrying DEV_TRACKS through
+// scripts/gen-track-defs-header.mjs, which would also make ?solo&track=gym work
+// again on the native engine.
+test('gym: authored trigger order + respawning authored bananas',
+  { skip: 'gym is not in the native track catalogue (ttp_session_begin("gym") === 0)' }, () => {});
+
+// Box pickup is a POINT test with the tuned 0.45 radius (9% of the 5-wide road):
+// a car centre at lat 0.40 grabs, at 0.50 does not, and a monster truck's larger
+// footprint does NOT extend its reach (the trigger ignores the body box, so every
+// car has identical reach — no footprint creep).
+// BLOCKED ON: the ABI has no car teleport and no single-trigger poll, so the probe
+// cannot park a car at a chosen (s, lat) and fire one box test in isolation.
+// Unblocked by a debug ABI entry point that sets a car's (s, lat, heading) and one
+// that evaluates the box trigger.
+test('box pickup is point-based with the tuned 0.45 radius — same reach for every car',
+  { skip: 'needs an ABI car-teleport + single-trigger poll (neither exists in ttp_runtime.h)' }, () => {});

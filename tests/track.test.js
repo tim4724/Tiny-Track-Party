@@ -3,6 +3,37 @@
 // seamless loop, and the centerline must be a sane, monotonic ribbon.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+// The one suite here that needs a car DRIVING on the geometry (the helicoid pose
+// check) runs on the native sim through its C ABI — the wasm build of
+// native/libttp-sim, loaded exactly as tests/runtime-abi.test.js does.
+const NATIVE_MJS = path.join(__dirname, '..', 'public/display/engine/native/ttp_runtime.mjs');
+const NATIVE_WASM = path.join(__dirname, '..', 'public/display/engine/native/ttp_runtime.wasm');
+const NATIVE_SKIP = fs.existsSync(NATIVE_MJS) && fs.existsSync(NATIVE_WASM)
+  ? false
+  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
+// [car id, caution, laneBias] — the four AI_PERSONALITIES knob pairs from
+// native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
+const NATIVE_PERSONAS = [
+  ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],
+  ['cpu-rusty', 0.97, -0.25], ['cpu-zippy', 0.94, 0.25]
+];
+async function loadNativeAbi() {
+  const factory = (await import(pathToFileURL(NATIVE_MJS).href)).default;
+  const Module = await factory();
+  const cw = (name, ret, args) => Module.cwrap(name, ret, args);
+  return {
+    begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+    addBot: cw('ttp_add_bot', 'void', ['number', 'string', 'number', 'number', 'number', 'string']),
+    start: cw('ttp_session_start', 'void', ['number', 'number']),
+    update: cw('ttp_update', 'void', ['number', 'number']),
+    snapshot: cw('ttp_snapshot_json', 'string', ['number']),
+    dispose: cw('ttp_dispose', 'void', ['number']),
+  };
+}
 
 // TrackBuilder is an ES module importing 'three'; load it dynamically.
 let buildTrack, TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS, postAtSample;
@@ -595,35 +626,71 @@ test('helix spiral bridges over its own entrance with real clearance', () => {
   assert.ok(minGap > 3.0, `the crossing should clear the road below like a bridge (min gap=${minGap.toFixed(2)})`);
 });
 
-test('an off-centre car mid-corkscrew sits flush on the local (helicoid) surface', async () => {
+test('an off-centre car on a twisting road sits flush on the local (helicoid) surface', { skip: NATIVE_SKIP }, async () => {
   // A twisted road is a helicoid: away from the centreline the surface normal
   // pitches by atan(lat·twistRate) off the frame up. The engine's pose.up must be
   // that LOCAL normal, or a curb-running car visibly floats off / digs into the
-  // twisting road (oriented to the centre frame alone it was ~50° off). Skyline's
-  // Immelmann is the only shipped sustained roll, so exercise the engine against a
-  // private rolled fixture with the full 360° corkscrew.
-  const { Game } = await import('../public/display/engine/Game.js');
-  const ROLLED = [
-    ...run(4), arc(RL, 90), ...run(2), arc(RL, 90),
-    straight(2), straight(12, { roll: 360 }), straight(2), arc(RL, 90), ...run(2), arc(RL, 90)
-  ];
-  const t = buildTrack(ROLLED, { startGate: false });
-  const cl = t.centerline;
-  // find a mid-roll sample: road sideways (|up.y| small) on a near-level path
-  const mid = cl.samples.find((sm) => Math.abs(sm.up.y) < 0.1 && Math.abs(sm.tangent.y) < 0.35);
-  assert.ok(mid, 'no mid-corkscrew sample found');
-  const game = new Game(['p1'], { centerline: cl, length: t.length, roadWidth: t.roadWidth });
-  const car = game.cars.get('p1');
-  car.totalS = mid.s; car.lat = 1.5;
-  game._recomputePoses();
-  // numeric local surface normal at (s, lat): finite-difference the swept surface
-  // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction
-  const d = 0.4, l = 1.5;
-  const at = (s) => { const f = cl.sampleAt(s); return f.pos.clone().addScaledVector(f.lateral, l); };
-  const alongS = at(mid.s + d).sub(at(mid.s - d));
-  const normal = cl.sampleAt(mid.s).lateral.clone().cross(alongS).normalize();
-  const dot = Math.abs(normal.dot(car.pose.up));
-  assert.ok(dot > 0.98, `pose.up should match the local surface normal (|dot|=${dot.toFixed(3)} ≈ ${(Math.acos(Math.min(1, dot)) * 180 / Math.PI).toFixed(1)}° off)`);
+  // twisting road (oriented to the centre frame alone it was ~50° off on the
+  // 360°-roll fixture this check was written against).
+  //
+  // The sim is native now and its C ABI builds tracks by CATALOGUE ID (the defs
+  // are code-generated from TRACKS), so an ad-hoc rolled fixture can no longer be
+  // handed to the engine. Instead the check rides a REAL race: four persona bots
+  // on every shipped track that twists, sampled every frame. That trades the
+  // fixture's extreme 360°/12u twist for the catalogue's gentler rolls, so the
+  // separation is smaller — which is why the test also PROVES its own teeth by
+  // measuring what a centre-frame `up` would have got wrong.
+  const abi = await loadNativeAbi();
+  const deg = (d) => Math.acos(Math.min(1, Math.abs(d))) * 180 / Math.PI;
+  const dot3 = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+
+  // Every shipped track with a rolled/banked strand (the stunt cup); the flat
+  // cups have twist rates too low to say anything.
+  for (const id of ['skyline', 'skysnake', 'helix', 'gauntlet']) {
+    const t = buildTrack(TRACKS[id]);
+    const cl = t.centerline;
+    // numeric local surface normal at (s, lat): finite-difference the swept surface
+    // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction
+    const localNormal = (s, lat, d = 0.4) => {
+      const at = (ss) => { const f = cl.sampleAt(ss); return f.pos.clone().addScaledVector(f.lateral, lat); };
+      const alongS = at(s + d).sub(at(s - d));
+      return cl.sampleAt(s).lateral.clone().cross(alongS).normalize();
+    };
+
+    const h = abi.begin(id, 7, 3, null);
+    assert.ok(h > 0, `ttp_session_begin('${id}') returned a handle`);
+    for (const [carId, caution, laneBias] of NATIVE_PERSONAS) abi.addBot(h, JSON.stringify(carId), caution, laneBias, 1, null);
+    abi.start(h, -1); // no countdown: racing from frame 0
+    // Every frame, for every car: the angle from pose.up to the LOCAL normal, and
+    // the angle to the CENTRE-frame up (what a lat-blind engine would produce).
+    let maxLat = 0, worst = { local: 0, where: null }, peak = { naive: 0, local: 0, where: null };
+    for (let i = 0; i < 3000; i++) {
+      abi.update(h, 1000 / 60);
+      for (const c of JSON.parse(abi.snapshot(h)).cars) {
+        if (c.totalS < 0) continue; // still on the grid, behind the line
+        const s = ((c.totalS % t.length) + t.length) % t.length;
+        maxLat = Math.max(maxLat, Math.abs(c.lat));
+        const local = deg(dot3(localNormal(s, c.lat), c.pose.up));
+        const naive = deg(dot3(cl.sampleAt(s).up, c.pose.up));
+        const where = `s=${s.toFixed(1)} lat=${c.lat.toFixed(2)}`;
+        if (local > worst.local) worst = { local, where };
+        if (naive > peak.naive) peak = { naive, local, where };
+      }
+    }
+    abi.dispose(h);
+
+    assert.ok(maxLat > 1.5, `${id}: the field never ran off-centre enough to test (max |lat|=${maxLat.toFixed(2)})`);
+    assert.ok(worst.local < 1.5,
+      `${id}: pose.up should be the local surface normal everywhere (worst ${worst.local.toFixed(2)}° off at ${worst.where})`);
+    // Teeth. At the most twisted sample the field reached, pose.up must be an order
+    // of magnitude closer to the local normal than to the centre-frame up — so the
+    // sub-degree agreement above really is the lat-dependent correction being
+    // measured, not a coincidence on a road that never twists.
+    assert.ok(peak.naive > 3.0,
+      `${id}: no sample twisted enough to discriminate (peak centre-frame error only ${peak.naive.toFixed(2)}° at ${peak.where})`);
+    assert.ok(peak.naive > 8 * peak.local,
+      `${id}: at ${peak.where} pose.up is ${peak.local.toFixed(2)}° off the local normal vs ${peak.naive.toFixed(2)}° off the centre frame — not clearly the local one`);
+  }
 });
 
 // SUPPORT-POST COLLISION + THE SLIVER BAN. Bridge pillars and loop-support shafts are

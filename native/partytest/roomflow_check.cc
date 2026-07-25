@@ -188,6 +188,19 @@ int main(int argc, char** argv) {
         flow.setMasterValue(peerFromJV(*op.get("v")));
       } else if (opName == "setLivenessEnabled") {
         flow.setLivenessEnabled(op.get("v")->b);
+      } else if (opName == "setField") {
+        // The live-record write the display does directly on the kit's mutable
+        // record; behind an ABI it is a setter. Emits nothing, kit keys refused.
+        const std::string& key = op.get("key")->str;
+        Value v = jvToValue(*op.get("value"));
+        const bool ok = flow.setField(peerFromJV(*op.get("p")), key, v);
+        if (ok) {
+          const Player* p2 = flow.get(peerFromJV(*op.get("p")));
+          ret = Value::Null();
+          if (p2) for (const auto& kv : p2->fields) if (kv.first == key) ret = kv.second;
+        } else {
+          ret = Value::Null();   // unknown peer (or a kit key) -> JS records null
+        }
       } else if (opName == "reset") {
         flow.reset();
       } else {

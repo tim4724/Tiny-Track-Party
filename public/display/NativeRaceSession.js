@@ -67,6 +67,9 @@ export async function init() {
 // setter (harmless); under the flag it also calls this one so the native sim
 // tracks the same setting.
 export function setNativeSteerExpo(x) { if (fn) fn.setSteerExpo(x); }
+// The engine-global steer curve now lives in the wasm, so the debug panel reads
+// its default from there instead of from a JS module constant.
+export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
 
 const idJson = (id) => JSON.stringify(id);
 const vec = () => ({ x: M.HEAPF64[vecPtr >> 3], y: M.HEAPF64[(vecPtr >> 3) + 1], z: M.HEAPF64[(vecPtr >> 3) + 2] });
@@ -103,6 +106,16 @@ export class NativeRaceSession {
   startCountdown(seconds) {
     fn.start(this.h, seconds);
     this._drain(); // the opening beat fires synchronously, exactly like RaceSession
+  }
+
+  // Bare mode: racing from frame 0 with no countdown — the equivalent of
+  // constructing a JS Game directly and stepping it. Preview surfaces (gallery
+  // scenarios, the lobby demo) want exactly that: a world that is already moving,
+  // with no lobby lifecycle around it.
+  startBare() {
+    fn.start(this.h, -1);
+    this._racingCache = true;
+    this._drain();
   }
 
   update(dtMs) {

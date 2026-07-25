@@ -30,7 +30,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildRaceTrack } from './record-trace.mjs';
+import { buildRaceTrack } from './oracle-lib.mjs';
 import { mulberry32 } from '../public/display/engine/util.js';
 import { MATHLIB } from '../public/display/engine/math.js';
 

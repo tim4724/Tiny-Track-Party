@@ -6,17 +6,16 @@ import { buildTrack, resolveFurniture, TRACK_LIST } from './TrackBuilder.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
 import { trackSchematic, packSchematic } from './trackSchematic.js';
-import { RaceSession } from './RaceSession.js';
-import { AiController, AI_PERSONALITIES } from './AiDriver.js';
+import { AI_PERSONALITIES } from './aiPersonas.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
-import { setSteerExpo, getSteerExpo, ITEM_IDS } from './engine/Game.js';
-import { CupSeries, makeShuffleBag } from './GrandPrix.js';
+import { ITEM_IDS } from './engine/contract.js';
+import { makeShuffleBag } from './shuffleBag.js';
 import { CUPS } from '../shared/tracks.js';
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats, RoomFlow } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
 const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
 // Back stack (live play only): each forward step pushes one history entry, each
@@ -102,65 +101,32 @@ const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.le
 // (?bots=0 = race alone) instead of topping up to FIELD_SIZE.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
-// ?sim=native — PORT: back races with the native C++ sim (WASM) through
-// NativeRaceSession instead of the JS engine. Opt-in while the native stack
-// proves itself; the module preloads at boot, and a race that starts before
-// it resolves falls back to the JS sim (loud in the console). Bit-parity
-// between the two sims is the conformance suite's guarantee (native/).
-// ?native — THE umbrella switch: run every ported layer on C++ (sim engine, the
-// series layer above it, and the party layer's decisions). Rendering, the HUD and
-// the transport I/O (WebSocket / RTCPeerConnection) stay JS by design — wasm
-// cannot own a socket or a canvas without proxying through JS anyway.
-// The per-layer flags (?sim=native, ?party=native) still work, for isolating
-// which layer a divergence came from.
-const _qNative = _trackParams.has('native') && _trackParams.get('native') !== '0';
-const _qSimNative = _qNative || _trackParams.get('sim') === 'native';
-let _nativeSim = null; // module namespace once init() resolves
-if (_qSimNative) {
-  import('./NativeRaceSession.js')
-    .then(async (m) => { await m.init(); _nativeSim = m; })
-    .catch((e) => console.warn('[sim=native] load failed; racing on the JS sim:', e));
-}
-// The series layer (points/standings/chaining) has its own flag so a divergence
-// can be isolated to it; ?native turns it on with everything else.
-const _qSeriesNative = _qNative || _trackParams.get('series') === 'native';
-let _nativeSeries = null;
-if (_qSeriesNative) {
-  import('./NativeCupSeries.js')
-    .then(async (m) => { await m.init(); _nativeSeries = m; })
-    .catch((e) => console.warn('[series=native] load failed; using the JS series:', e));
-}
-// ?party=native — PORT: run the whole party layer's DECISIONS on the native C++
-// side instead of partyplug's JS:
-//   room state machine  (roster/join order, presence, host election, liveness)
-//   relay framing        (what to send, what a frame means, close codes, backoff)
-//   fastlane netcode     (ring + TTL, seq, acks, dedup, RTT)
-// Transport stays JS by design — the WebSocket and RTCPeerConnection are the
-// browser's and always will be, so only decisions move. Unlike ?sim=native these
-// cannot load lazily (DisplayNet builds its RoomFlow and connection in the
-// constructor), so this awaits at boot behind the flag and falls back loudly.
-const _qPartyNative = _qNative || _trackParams.get('party') === 'native';
-let _nativeParty = null; // module namespace once init() resolves
-if (_qPartyNative) {
-  try {
-    const [room, conn, lane] = await Promise.all([
-      import('./NativeRoomFlow.js'),
-      import('./NativePartyConnection.js'),
-      import('./NativePartyFastlane.js')
-    ]);
-    // One shared wasm module backs all three (nativeRuntime.js memoizes it).
-    await Promise.all([room.init(), conn.init(), lane.init()]);
-    _nativeParty = {
-      RoomFlowImpl: room.NativeRoomFlow,
-      PartyConnectionImpl: conn.NativePartyConnection,
-      // The fastlane subclasses the kit's class, which is a classic-script
-      // global, so the subclass is built here rather than at module scope.
-      FastlaneImpl: lane.makeNativePartyFastlane(window.PartyFastlane)
-    };
-  } catch (e) {
-    console.warn('[party=native] load failed; running the JS party layer:', e);
-  }
-}
+// ---- the native engine ------------------------------------------------------
+// The C++ stack is the ONLY engine: the sim, the cup-series layer above it, and
+// the party layer's decisions (room state, relay framing, fastlane netcode). The
+// JS twins were retired once every layer was conformance-proven and the whole E2E
+// suite ran green on them. Awaited at boot, and a failure is FATAL rather than a
+// silent downgrade — there is nothing left to fall back to.
+// Still JS by design: rendering, HUD, and the transport I/O (WebSocket /
+// RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
+const _nativeSim = await import('./NativeRaceSession.js');
+const _nativeSeries = await import('./NativeCupSeries.js');
+await Promise.all([_nativeSim.init(), _nativeSeries.init()]);
+
+const [_room, _conn, _lane] = await Promise.all([
+  import('./NativeRoomFlow.js'),
+  import('./NativePartyConnection.js'),
+  import('./NativePartyFastlane.js')
+]);
+// One shared wasm module backs all of these (nativeRuntime.js memoizes it).
+await Promise.all([_room.init(), _conn.init(), _lane.init()]);
+const _nativeParty = {
+  RoomFlowImpl: _room.NativeRoomFlow,
+  PartyConnectionImpl: _conn.NativePartyConnection,
+  // The fastlane subclasses the kit's class (which keeps the WebRTC handshake and
+  // is a classic-script global), so the subclass is built here, not at module scope.
+  FastlaneImpl: _lane.makeNativePartyFastlane(window.PartyFastlane)
+};
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
 // catalogue and built like any track — but only the ONE requested id, and only in a
 // ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
@@ -373,7 +339,7 @@ function cpuSeats(humans) {
   // ?bots=<n> caps the AI fill (debug); default tops the grid up to FIELD_SIZE.
   const fill = _qBots != null ? Math.min(FIELD_SIZE, humans.length + _qBots) : FIELD_SIZE;
   for (let n = 0; humans.length + seats.length < fill; n++) {
-    const colorIndex = RoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
+    const colorIndex = _room.NativeRoomFlow.lowestFreeSlot(used, CAR_COLORS.length);
     used.add(colorIndex);
     const carIndex = colorIndex % CAR_MODELS.length;
     seats.push({ n, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length], colorIndex, carIndex, stats: carStats(carIndex) });
@@ -446,13 +412,11 @@ const _lastItem = new Map();
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
-let aiBots = new Map();
-// Which cars are CPU racers. MUST NOT be derived from aiBots: under ?sim=native
-// the bots live inside the wasm and aiBots stays EMPTY, so every aiBots.has(id)
-// used as an "is this an AI?" test silently answered "no" for every bot (which is
-// how ?sim=native shipped mis-classifying CPU cars as humans — it broke the
-// finish check, so cups never reached the podium, and it also mis-aimed audio,
-// item feedback and phone fan-out). The FIELD knows, whichever sim is running.
+// Which cars are CPU racers. Sourced from the FIELD, never from "do I hold a
+// controller for it" — bots drive inside the wasm and hold no JS object at all, so
+// a controller-derived test would answer "not an AI" for every bot (that bug broke
+// the finish check, and with it cups reaching the podium, plus audio/item/cell
+// targeting — see git history for aiBots).
 let aiCarIds = new Set();
 const isAiCar = (id) => aiCarIds.has(id);
 let nativeBotSpecs = []; // ?sim=native: persona specs for in-wasm bots (see buildField)
@@ -468,7 +432,6 @@ scene.onFrame = (dt) => {
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() advances the countdown
   // beats (this loop is the session's only clock); physics start at GO.
-  driveBots();
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
   // Every human across the line but CPU cars still circulating? Don't make the
@@ -490,7 +453,7 @@ scene.onFrame = (dt) => {
     // race (see the onFrame guard above).
     freezeCars(session.getSnapshot());
     fastForwarding = true;
-    session.fastForwardToEnd(driveBots); // runs to raceOver, then fires endRace (sets raceEnded)
+    session.fastForwardToEnd(); // runs to raceOver, then fires endRace (sets raceEnded)
     fastForwarding = false;
     return;                               // session ended; the results overlay covers the scene
   }
@@ -553,8 +516,8 @@ scene.onFrame = (dt) => {
 const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
-  // ?party=native: the room state machine runs on the C++ party layer. Absent,
-  // DisplayNet uses the JS kit's RoomFlow exactly as before.
+  // The room state machine, relay framing and fastlane netcode all run on the
+  // C++ party layer; DisplayNet has no JS fallback to choose from.
   ...(_nativeParty || {}),
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
@@ -792,7 +755,7 @@ function buildField(humans) {
     peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex,
     carIndex: p.carIndex, stats: carStats(p.carIndex), ai: false
   }));
-  aiBots = new Map(); aiCarIds = new Set();
+  aiCarIds = new Set();
   nativeBotSpecs = [];
   for (const s of cpuSeats(field)) {
     const peerIndex = AI_PREFIX + s.n;
@@ -801,26 +764,16 @@ function buildField(humans) {
     // 'ai-N' id string — number+string coerces to NaN>>>0 = 0, which had been
     // handing every bot the same stream): distinct per bot, fresh per race.
     const seed = ((track.seed || 1) + s.n) >>> 0;
-    if (_nativeSim) {
-      // Native sim: bots live INSIDE the wasm (stepped by ttp_update in this
-      // loop's exact order); record the persona spec instead of a controller.
-      nativeBotSpecs.push({ peerIndex, caution: s.persona.caution, laneBias: s.persona.laneBias, seed });
-    } else {
-      aiBots.set(peerIndex, new AiController({ ...s.persona, seed }));
-    }
-    aiCarIds.add(peerIndex);   // sim-independent: both paths register the CPU seat
+    // Bots live INSIDE the wasm (stepped by ttp_update in this loop's exact
+    // order), so we record the persona spec rather than build a controller.
+    nativeBotSpecs.push({ peerIndex, caution: s.persona.caution, laneBias: s.persona.laneBias, seed });
+    aiCarIds.add(peerIndex);
   }
   return field;
 }
 
 // Feed each AI car its pure-pursuit input for this frame, exactly as a phone's
 // CONTROL would. Runs every frame (a no-op during the countdown, when update() is).
-function driveBots() {
-  if (!aiBots.size) return;
-  // driveBot steps the controller INSIDE the sim boundary (the live car + engine
-  // never cross out here) and skips finished/removed cars itself.
-  for (const [id, bot] of aiBots) session.driveBot(id, bot);
-}
 
 // ---- race lifecycle ----
 // START_GAME gate: the host's "Start race" button is only enabled once every
@@ -846,7 +799,7 @@ function startRace() {
   // from the bag; only a lobby return ends it. Exact picks stay single races.
   // ?native/?sim=native: the series layer runs on C++ too (the shuffle bag stays
   // JS — it is page RNG, not sim state, so the draw is offered to the port).
-  const SeriesImpl = _nativeSeries ? _nativeSeries.NativeCupSeries : CupSeries;
+  const SeriesImpl = _nativeSeries.NativeCupSeries;
   series = net.mode === 'cup' ? new SeriesImpl(CUPS.find((c) => c.id === net.cupId))
     : net.mode === 'random' ? new SeriesImpl({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
       : null;
@@ -888,12 +841,10 @@ function launchRace(players) {
 
   // ?sim=native: same construction shape, native implementation. Fall back
   // loudly if the wasm module hasn't finished loading (boot races only).
-  if (_qSimNative && !_nativeSim) console.warn('[sim=native] module not ready; this race runs on the JS sim');
-  const SessionImpl = _nativeSim ? _nativeSim.NativeRaceSession : RaceSession;
-  session = new SessionImpl(field, track, {
+  session = new _nativeSim.NativeRaceSession(field, track, {
     onRaceEvent,
     forceItem: _qForceItem || null, // ?item=<id>: every box rolls this (debug hook)
-    ...(_nativeSim ? { bots: nativeBotSpecs } : {}),
+    bots: nativeBotSpecs,
     onCountdownTick(n) {
       // n > 0: "3/2/1". n === 0: "GO!" (race starts this beat, banner fades out
       // over the next beat via .is-go). n < 0: banner gone.
@@ -1419,7 +1370,7 @@ function returnToLobby() {
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   holdRaceChrome();
-  aiBots = new Map(); aiCarIds = new Set(); currentField = [];
+  aiCarIds = new Set(); currentField = [];
   // controllers return to the lobby off the snapshot (roomState=lobby)
   show('lobby');
   // Crossfade from the frozen finish frame back to the attract demo (through the diorama):
@@ -1776,7 +1727,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   // (the panel's range field calls live() at init). Used for both the slider's
   // default and the "· default" readout marker — reading it live inside format()
   // would wrongly equal the dragged value.
-  const steerDefault = getSteerExpo();
+  const steerDefault = _nativeSim.getNativeSteerExpo();
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
@@ -1795,7 +1746,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   // fresh each step, so it affects every car in the running race instantly.
   { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
     min: 0.6, max: 3, step: 0.05, value: steerDefault,
-    live: (x) => { setSteerExpo(x); _nativeSim?.setNativeSteerExpo(x); },
+    live: (x) => _nativeSim.setNativeSteerExpo(x),
     format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
   // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) for slow-mo inspection — no
   // reload. 1 = normal; drag down to watch fast action (e.g. a rocket strike) play out frame by frame.

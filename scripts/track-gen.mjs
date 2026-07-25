@@ -630,41 +630,23 @@ export function measureTrack(t) {
 // its brake input is then PURELY corner-anticipation braking) through the real engine
 // and measure flying-lap seconds and the fraction of frames spent braking. A sweeping
 // easy track barely lifts; a technical one is on the brakes a third of the time.
-let _engineMods = null;
-async function loadEngine() {
-  if (!_engineMods) {
-    const g = await import(new URL('../public/display/engine/Game.js', import.meta.url));
-    const a = await import(new URL('../public/display/AiDriver.js', import.meta.url));
-    _engineMods = { Game: g.Game, AiController: a.AiController };
-  }
-  return _engineMods;
+// RETIRED WITH THE JS ENGINE. This probe drove a GENERATED def — a track that
+// exists only in this script's memory and not yet in the baked catalogue — so it
+// cannot simply call the native probe (native/probe/probe_cli.cc builds from
+// generated/track_defs.h by id). Reviving it needs a JSON track-def loader on the
+// C++ side (`probe_cli --track-json=<file>`), which is a small feature, not a port.
+//
+// Everything else in track-gen still works: authoring, geometry solving, closure
+// and registration are pure track math and never touched the engine. Only the
+// AUTOMATED DIFFICULTY PROFILE (flying-lap seconds + braking fraction) is gone —
+// bake the track, then run `native/build/probe_cli laptime --track=<id>`.
+export async function aiProbe() {
+  throw new Error(
+    'aiProbe was retired with the JS engine. Bake the track, then use ' +
+    '`native/build/probe_cli laptime --track=<id>`, or add --track-json to probe_cli ' +
+    'to profile an unbaked def.');
 }
-export async function aiProbe(def, { laps = 3 } = {}) {
-  const { Game, AiController } = await loadEngine();
-  const track = buildTrack(def);
-  track.poles = track.autoPoles; // corridor-blocking supports collide in the live game — probe with them
-  track.totalLaps = laps;
-  const engine = new Game([0], track, { onEvent() {} });
-  const bot = new AiController({ skill: 1.0, laneBias: 0, seed: 7 });
-  const DT = 1000 / 60;
-  let t = 0, lastLap = 0, lapStart = 0, measured = 0, braking = 0;
-  const lapTimes = [];
-  while (!engine.raceOver && t < 600) {
-    const car = engine.cars.get(0);
-    if (car && !car.finished && car.pose) {
-      const input = bot.drive(car, track.centerline, engine);
-      engine.processInput(0, input);
-      if (car.lap >= 1) { measured++; if (input.b > 0.15) braking++; } // skip the standing-start lap
-    }
-    engine.update(DT);
-    t += DT / 1000;
-    const c = engine.cars.get(0);
-    if (c && c.lap > lastLap) { lapTimes.push(t - lapStart); lapStart = t; lastLap = c.lap; }
-  }
-  const flying = lapTimes.slice(1); // drop the standing start
-  const lapSec = flying.length ? flying.reduce((a, b) => a + b, 0) / flying.length : (lapTimes[0] || 0);
-  return { lapSec: +lapSec.toFixed(1), brakeFrac: +(measured ? braking / measured : 0).toFixed(3) };
-}
+
 
 // Audition a seed WITHOUT committing it: bake it exactly as gen-tracks.mjs would, then
 // grade the SHIPPING geometry. `pass` needs both layers: the structural gates the unit

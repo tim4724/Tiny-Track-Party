@@ -26,9 +26,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { mulberry32 } from '../public/display/engine/util.js';
-import { canonicalStringify } from './record-trace.mjs';
+import { canonicalStringify } from './oracle-lib.mjs';
 
 const require = createRequire(import.meta.url);
+// FROZEN ORACLE. partyplug/RoomFlow.js was retired when the room state machine
+// moved to C++ (native/libttp-party), so this generator can no longer RUN — the
+// committed tests/fixtures/roomflow-corpus.jsonl it produced is now permanent
+// cross-implementation evidence, replayed by roomflow_check (C++ objects) and
+// tests/party-abi.test.js (through the ABI).
+//
+// It is kept because the 36 scenarios below ARE the room-semantics spec, in
+// executable form: read them to understand the contract, and extend them if you
+// ever need to re-derive the oracle. To do that, restore the JS twin first:
+//   git show <commit-before-retirement>:partyplug/RoomFlow.js > partyplug/RoomFlow.js
+// (find it with: git log --diff-filter=D -- partyplug/RoomFlow.js)
 const RoomFlow = require('../partyplug/RoomFlow.js');
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,6 +116,16 @@ function runScriptInner(script) {
       case 'setMaster': masterValue = op.v; break;
       case 'setLivenessEnabled': livenessEnabled = op.v; break;
       case 'reset': ret = proj(flow.reset()); break;
+      // The display writes game fields straight onto the LIVE record
+      // (display/Net.js: flow.get(p).ready = true). The kit hands out mutable
+      // objects, so this is a plain assignment and emits nothing; a host behind
+      // an ABI needs a setter (ttp_room_set_field) and this is its oracle.
+      case 'setField': {
+        const live = flow.get(op.p);
+        if (live) live[op.key] = op.value;
+        ret = live ? proj(live[op.key]) : null;
+        break;
+      }
       default: throw new Error(`unknown op ${op.op}`);
     }
     steps.push({ op, ret, events: captured, digest: digest() });
@@ -259,6 +280,27 @@ function randomScript(seedN) {
     ops
   };
 }
+
+// Direct live-record mutation — the display's HELLO (name), SET_CAR (carIndex),
+// SET_READY (ready) and host-promotion (ready=false) path. No scenario touched it
+// before, so the ABI setter and the adapter's write-through proxy were invisible
+// to the frozen oracle.
+scenarios.push({ name: 'live-record-mutation', ops: [
+  { op: 'add', p: 0, fields: { name: 'Player 1', colorIndex: 0, carIndex: 0, ready: false } },
+  { op: 'add', p: 1, fields: { name: 'Player 2', colorIndex: 1, carIndex: 1, ready: false } },
+  { op: 'setField', p: 0, key: 'name', value: 'Ada' },
+  { op: 'setField', p: 0, key: 'carIndex', value: 3 },
+  { op: 'setField', p: 1, key: 'ready', value: true },
+  { op: 'setField', p: 1, key: 'ready', value: false },
+  { op: 'setField', p: 0, key: 'score', value: 12 },       // a brand-new field
+  { op: 'setField', p: 9, key: 'ready', value: true },      // unknown peer -> no-op
+  { op: 'setField', p: 0, key: 'name', value: 'Zoë' },      // non-ASCII round-trip
+  { op: 'setField', p: 0, key: 'carIndex', value: 0 },      // falsy value must stick
+  { op: 'markDisc', p: 1 },
+  { op: 'setField', p: 1, key: 'ready', value: true },      // writable while disconnected
+  { op: 'rekey', oldId: 0, newId: 7 },
+  { op: 'setField', p: 7, key: 'name', value: 'AfterRekey' },
+]});
 
 const scripts = [...scenarios];
 for (let i = 1; i <= 30; i++) scripts.push(randomScript(i));

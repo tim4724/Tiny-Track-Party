@@ -4,17 +4,21 @@
 // track so we can stand up the lobby, countdown, a self-driving race preview,
 // or the results overlay from fake data.
 //
-// The race scenarios reuse the real Game engine; cars are steered by a small
-// pure-pursuit autopilot (the engine has no AI of its own) so the split-screen
-// chase cams, HUD, lean, and dust all show real motion in the preview.
-import { Game } from './engine/Game.js';
-import { AiController, AI_PERSONALITIES } from './AiDriver.js';
+// The race scenarios run the real NATIVE sim (NativeRaceSession → the C++ engine in
+// WASM) in bare mode — racing from frame 0, no countdown, no session lifecycle — with
+// every car driven by an in-wasm AI bot, so the split-screen chase cams, HUD, lean,
+// and dust all show real motion in the preview.
+import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js';
+import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
-import { POINTS_BY_RANK } from './GrandPrix.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
 import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
+
+// Cup points per finishing rank, for the intermission/podium previews. Mirrors the
+// series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
+const POINTS_BY_RANK = [9, 6, 3, 1];
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
@@ -25,7 +29,37 @@ const FAKE_POINTS = [10, 15, 6, 3, 2, 1, 0, 0];
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
 const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost', null];
-const giveItems = (engine) => { for (const id of engine.carIds()) engine.giveItem(id, PREVIEW_ITEMS[id] || null); };
+// Frozen previews only. The native sim has no giveItem staging hook, and a frozen sim
+// would never spend the item anyway — so we dress the snapshot cars on their way to
+// setCarHud (a fresh, caller-owned object per getSnapshot) instead of the sim.
+const dressItems = (cars) => { for (const c of cars) c.item = PREVIEW_ITEMS[c.id] || null; };
+
+// Every preview car is driven by the sim's own AI — there are no phones here. One
+// persona per grid slot (AI_PERSONALITIES is the table main.js hands the wasm for real
+// races), each on its own seed so the bots weave distinctly.
+const botSpecs = (ids) => ids.map((id, n) => {
+  const p = AI_PERSONALITIES[n % AI_PERSONALITIES.length];
+  return { peerIndex: id, caution: p.caution, laneBias: p.laneBias, seed: id + 1 };
+});
+
+// Bare mode has no session layer to fire a raceEnd, so the endless previews read the
+// engine's own `raceOver` rule (finishedOrder >= cars) straight off the snapshot.
+const raceOver = (snap) => snap.cars.length > 0 && snap.cars.every((c) => c.finished);
+
+// A native session in BARE mode: racing from frame 0, no countdown and no lobby
+// lifecycle, which is what every preview wants. Throws with a readable message when
+// the wasm can't build the track — dev-only tracks (?track=gym) aren't in the native
+// track registry, so a preview pointed at one has no sim to run.
+function bareSession(field, track, opts) {
+  let s;
+  try {
+    s = new NativeRaceSession(field, track, opts);
+  } catch (e) {
+    throw new Error(`native sim can't race track '${track.trackId}'`, { cause: e });
+  }
+  s.startBare();
+  return s;
+}
 
 const el = (id) => document.getElementById(id);
 
@@ -127,6 +161,12 @@ export function runDisplayScenario(opts, ctx) {
   // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
   const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
   const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
+
+  // What a sim-backed preview waits on: the GLBs + track (main.js's scenePromise) AND
+  // the native sim module. main.js already awaited init() at boot, so this resolves on
+  // the same tick as the scene in practice; awaiting it anyway keeps the harness honest
+  // if it's ever loaded on its own, and surfaces an init failure instead of a blank scene.
+  const ready = () => Promise.all([ctx.scenePromise, initNativeSim()]);
 
   const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -287,7 +327,7 @@ export function runDisplayScenario(opts, ctx) {
   if (scenario === 'track') {
     show('race');
     el('results').classList.add('hidden');
-    ctx.scenePromise.then(() => setupTrackPreview()).catch((e) => console.warn('[TestHarness] scene load failed', e));
+    ready().then(() => setupTrackPreview()).catch((e) => console.warn('[TestHarness] track preview failed to start', e));
 
     function setupTrackPreview() {
       const { scene, track } = ctx;
@@ -298,7 +338,8 @@ export function runDisplayScenario(opts, ctx) {
 
       const ids = [];
       for (let i = 0; i < players; i++) ids.push(i);
-      let engine = new Game(ids, track, { onEvent() {} });
+      const newSession = () => bareSession(ids.map((i) => ({ peerIndex: i })), track, { bots: botSpecs(ids) });
+      let engine = newSession();
       window.__engine = engine;
 
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
@@ -315,11 +356,10 @@ export function runDisplayScenario(opts, ctx) {
       };
       placeGrid();
 
-      const bots = new Map(ids.map((i) => [i, new AiController(AI_PERSONALITIES[i % AI_PERSONALITIES.length])]));
       scene.onFrame = (dt) => {
-        // driveBot hands the live car + engine to the bot INSIDE the sim boundary
-        // (so preview bots dodge hazards/poles too) and skips finished cars.
-        for (const [id, bot] of bots) engine.driveBot(id, bot);
+        // The bots live inside the wasm — ttp_update drives them (dodging hazards/poles,
+        // skipping finished cars) in the live loop's own order, so there's nothing to
+        // step out here.
         engine.update(dt * 1000);
         const snap = engine.getSnapshot();
         for (const c of snap.cars) {
@@ -327,9 +367,11 @@ export function runDisplayScenario(opts, ctx) {
         }
         scene.syncProps(snap); // reconcile item boxes/bananas + draw the ?bbox car collision outlines
         if (minimap) minimap.update(snap.cars);
-        // Endless preview: once everyone finishes, reset and lap again.
-        if (engine.raceOver) {
-          engine = new Game(ids, track, { onEvent() {} });
+        // Endless preview: once everyone finishes, reset and lap again. dispose() frees
+        // the wasm session — a JS Game was just garbage, a native handle is not.
+        if (raceOver(snap)) {
+          engine.dispose();
+          engine = newSession();
           window.__engine = engine;
           placeGrid();
         }
@@ -344,7 +386,7 @@ export function runDisplayScenario(opts, ctx) {
   // at once: a boost PAD, an item BOX, a dropped BANANA, an OIL slick (+cones), and
   // a car with an ACTIVE BOOST (gold aura). They're clustered down the longest
   // straight (overriding the track's authored positions just for this preview) so a
-  // single 3/4 camera frames them; the engine is frozen (no update) so nothing drifts.
+  // single 3/4 camera frames them; nothing is simulated, so nothing drifts.
   if (scenario === 'features') {
     show('race');
     el('results').classList.add('hidden');
@@ -383,20 +425,27 @@ export function runDisplayScenario(opts, ctx) {
       });
       scene.setTrack(featureTrack);
 
-      const engine = new Game([0], featureTrack, { onEvent() {} });
-      window.__engine = engine;
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
       scene.addCar(0, 0, 'Boost!', { cell: false }); // cell:false → the overview camera frames the cluster
 
-      // Stage the lineup through the Game staging hooks, the contract surface.
-      // No raw pokes at engine internals; the purity test scans for those.
-      engine.stageCar(0, { totalS: s0, lat: 0, v: 9, boostMul: 1.6, boostT: 9 }); // active boost (frozen engine, never ticks down)
-      engine.stageBanana(at(8), -0.5);
-      engine.stageRocket(at(4.2), 0.7); // a homing rocket mid-flight in the lineup
-
-      const snap = engine.getSnapshot();
-      const c0 = snap.cars[0];
-      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul }); // boostMul → aura
+      // Hand-staged, SIM-FREE lineup. This preview never ticks, so it needs a still
+      // world rather than an engine: the pose comes straight off the centreline (lat 0
+      // on a flat straight, so the twist/axle-pitch terms the sim adds are nil) and the
+      // props are written in the exact snapshot shape the renderer consumes. That also
+      // sheds the JS engine's demo staging hooks (stageCar/stageBanana/stageRocket),
+      // which the native ABI deliberately doesn't carry.
+      const f0 = cl.sampleAt(s0);
+      const c0 = {
+        id: 0, totalS: s0, lat: 0, heading: 0, spd: 1, boostMul: 1.6, // boostMul → the gold aura
+        pose: { pos: f0.pos.clone(), forward: f0.tangent.clone().normalize(), up: f0.up.clone().normalize() }
+      };
+      const snap = {
+        cars: [c0],
+        boxes: [true],                                 // the single box above, uncollected
+        bananas: [{ id: 1, s: at(8), lat: -0.5 }],
+        rockets: [{ id: 1, s: at(4.2), lat: 0.7 }]     // a homing rocket mid-flight in the lineup
+      };
+      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul });
       scene.syncProps(snap); // box + dropped-banana + in-flight rocket meshes
 
       // Frame the cluster from an elevated 3/4 angle, off to one side looking ACROSS it, so
@@ -432,7 +481,7 @@ export function runDisplayScenario(opts, ctx) {
   // GLBs are ready, place them at the grid, then install our own frame hook.
   show('race');
   el('results').classList.add('hidden');
-  ctx.scenePromise.then(() => setupRace(scenario)).catch((e) => console.warn('[TestHarness] scene load failed', e));
+  ready().then(() => setupRace(scenario)).catch((e) => console.warn('[TestHarness] race preview failed to start', e));
 
   function setupRace(kind) {
     const { scene, track } = ctx;
@@ -443,7 +492,7 @@ export function runDisplayScenario(opts, ctx) {
     // Give each preview car the model + stats for its slot so the gallery shows
     // the real spread of handling and the new car-car bumping, not a uniform field.
     const statsFor = window.carStats || (() => undefined);
-    const field = ids.map((i) => ({ id: i, stats: statsFor(i) }));
+    const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(i) }));
 
     // The 'rocket' scenario routes the engine's hit event to the impact burst (live
     // main.js does this in onRaceEvent; the gallery has no relay, so we wire it here).
@@ -455,21 +504,21 @@ export function runDisplayScenario(opts, ctx) {
     const sfx = (!inIframe && window.__audio) ? window.__audio : null;
     // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
     // held for the whole air time — not a one-shot. Only the impact is event-driven here.
-    const events = kind === 'rocket'
-      ? { onEvent: (ev) => {
+    const onRaceEvent = kind === 'rocket'
+      ? (ev) => {
           if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
           else if (ev.type === 'rocket_expire') { scene.rocketExpire(ev.s, ev.lat); if (sfx) sfx.rocketHit(); } // whiff self-destruct
-        } }
+        }
       : kind === 'monster'
-      ? { onEvent: (ev) => {
+      ? (ev) => {
           if (!sfx) return;
           // the morph itself is snapshot-driven in onFrame (setCarMonster); here we voice the
           // transform: inflate on use, deflate on lapse, and the comedy slip on a body-check.
           if (ev.type === 'item_use' && ev.item === 'monster') sfx.monsterInflate();
           else if (ev.type === 'monster_end') sfx.monsterDeflate();
           else if (ev.type === 'spin') sfx.spin();
-        } }
-      : { onEvent() {} };
+        }
+      : () => {};
     let galleryRocketIds = new Set();
     function driveGalleryRocketAudio(snap) {
       if (!sfx) return;
@@ -479,7 +528,17 @@ export function runDisplayScenario(opts, ctx) {
       galleryRocketIds = seen;
     }
 
-    let engine = new Game(field, track, events);
+    // Self-driving preview: every car is one of the sim's own AI racers (same personas
+    // main.js hands the wasm for the live CPU fill), so the gallery shows real bot
+    // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
+    //
+    // 'rocket'/'monster' demos: the native ABI carries no giveItem hook, so the demo
+    // item is guaranteed by FORCING THE ROULETTE instead — every box on the track rolls
+    // this one item (the same knob as the debug ?item=). Cars still have to collect it,
+    // so the first showcase shot lands a box-run into the race rather than at 0.8s.
+    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
+    const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem });
+    let engine = newSession();
     window.__engine = engine;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
@@ -494,72 +553,35 @@ export function runDisplayScenario(opts, ctx) {
 
     const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
 
-    // Self-driving preview: every car is an AI racer using the SAME pure-pursuit
-    // autopilot as the live CPU fill (AiDriver), so the gallery shows the real bot
-    // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
-    const bots = new Map(ids.map((i) => [i, new AiController({ ...AI_PERSONALITIES[i % AI_PERSONALITIES.length], seed: i + 1 })]));
-    function autosteer() {
-      // driveBot steps each controller inside the sim boundary (skips finished cars).
-      for (const [id, bot] of bots) engine.driveBot(id, bot);
-    }
-
-    // 'rocket' demo: every ~1.3s hand the LAST-place car a homing rocket and fire it at the
-    // car directly ahead, so the split-screen preview continuously shows the rocket flying +
-    // its impact burst. One in flight per car at a time, so it doesn't turn into a barrage.
-    let rocketCd = 0.8; // first strike shortly after the start
-    function fireRocketFromBack(dt) {
-      rocketCd -= dt;
-      if (rocketCd > 0) return;
-      rocketCd = 1.3;
-      const snap = engine.getSnapshot();
-      const liveCars = snap.cars.filter((c) => !c.finished);
-      if (liveCars.length < 2) return;
-      liveCars.sort((a, b) => a.totalS - b.totalS);
-      const firer = liveCars[0];
-      if (snap.rockets.some((r) => r.owner === firer.id)) return; // one already in flight from this car
-      engine.giveItem(firer.id, 'rocket');
-      engine.useItem(firer.id); // locks the car ahead + spawns the rocket (+events → impact burst)
-    }
-
-    // 'monster' demo: transform a car into a monster truck, then a short gap after it lapses
-    // before the next one — so the preview loops the burst + grow-in AND the monster ploughing
-    // through the field (the cars it touches crash out). To guarantee a body-check to show off
-    // (in real play you fire it yourself; here we stage the encounter), pick the car with the
-    // SMALLEST gap to the car directly ahead so the heavier, faster monster runs it down fast.
-    let monsterCd = 0.8; // first transform shortly after the start
-    function transformFromBack(dt) {
-      const snap = engine.getSnapshot();
-      if (snap.cars.some((c) => c.monster)) return; // one transform at a time
-      monsterCd -= dt;
-      if (monsterCd > 0) return;
-      monsterCd = 1.6; // gap before the next transform once this one lapses
-      const liveCars = snap.cars.filter((c) => !c.finished);
-      if (liveCars.length < 2) return;
-      let firer = null, best = Infinity;
-      for (const c of liveCars) {
-        let gapAhead = Infinity;
-        for (const o of liveCars) { if (o === c) continue; const g = o.totalS - c.totalS; if (g > 0 && g < gapAhead) gapAhead = g; }
-        if (gapAhead < best) { best = gapAhead; firer = c; }
-      }
-      if (!firer) firer = liveCars.sort((a, b) => a.totalS - b.totalS)[0];
-      engine.giveItem(firer.id, 'monster', { tCatch: 1 }); // tCatch 1 = the full-length transform, for a good showcase
-      engine.useItem(firer.id); // flips monsterT on → snapshot.monster → setCarMonster morphs it
+    // The forced item (above) is then SPENT from out here rather than on the bot's own
+    // 1.5–4s hold, so the preview loops its showcase (rocket flight + impact burst; the
+    // monster's grow-in and the field it ploughs through) instead of showing one event a
+    // lap. The car furthest BACK fires — the most dramatic user, and the one the catch-up
+    // items are for — on a cooldown so it doesn't become a barrage. processInput's use
+    // flag is sticky (a changed `u` arms the car there and then), which is what lets the
+    // host spend a wasm-side bot's item at all.
+    let useSeq = 0, fireCd = 0.8; // first showcase shot as soon as someone is armed
+    function spendHeldItem(snap, dt) {
+      fireCd -= dt;
+      if (fireCd > 0) return;
+      if (kind === 'monster' && snap.cars.some((c) => c.monster)) return; // one transform at a time
+      const armed = snap.cars.filter((c) => c.item && !c.finished);
+      if (!armed.length) return;
+      armed.sort((a, b) => a.totalS - b.totalS);
+      engine.processInput(armed[0].id, { u: ++useSeq });
+      fireCd = kind === 'monster' ? 1.6 : 1.3; // gap before the next one (monsters last, so give them room)
     }
 
     let lastHud = 0;
     scene.onFrame = (dt) => {
-      if (live) {
-        if (kind === 'rocket') fireRocketFromBack(dt);
-        if (kind === 'monster') transformFromBack(dt);
-        autosteer();
-        engine.update(dt * 1000);
-      }
+      if (live) engine.update(dt * 1000); // bots + item pickups run inside the wasm
       const snap = engine.getSnapshot();
       for (const c of snap.cars) {
         scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
       }
       scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
+      if (forceItem) spendHeldItem(snap, dt); // arms the next frame's use (post-snapshot)
       if (kind === 'rocket') driveGalleryRocketAudio(snap); // sustained jet per in-flight rocket
       // Monster demo (standalone tab only): voice the transformed car's deep big-truck
       // engine growl, silent otherwise — so the gallery hears the sound change too.
@@ -571,10 +593,11 @@ export function runDisplayScenario(opts, ctx) {
           for (const c of snap.cars) scene.setCarHud(c.id, c);
         }
         // Endless preview: once everyone crosses the line, reset and lap again.
-        if (engine.raceOver) {
-          engine = new Game(field, track, events);
+        // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.
+        if (raceOver(snap)) {
+          engine.dispose();
+          engine = newSession();
           window.__engine = engine;
-          rocketCd = 0.8; monsterCd = 0.8;
           placeGrid();
         }
       }
@@ -587,7 +610,7 @@ export function runDisplayScenario(opts, ctx) {
     } else if (kind === 'paused') {
       // Spin the field forward a few seconds so it reads mid-race, freeze it
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.
-      for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
+      for (let t = 0; t < 90; t++) engine.update(33);
       for (const c of engine.getSnapshot().cars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
@@ -600,9 +623,10 @@ export function runDisplayScenario(opts, ctx) {
       // reconnect QR over it for a "dropped" player. The dropped racer's car keeps
       // its split-screen cell — exactly as it does live while someone reconnects
       // (the car isn't forfeited until the grace window elapses).
-      for (let t = 0; t < 90; t++) { autosteer(); engine.update(33); }
-      giveItems(engine); // populate the cell item slots so the preview isn't all empty
-      for (const c of engine.getSnapshot().cars) {
+      for (let t = 0; t < 90; t++) engine.update(33);
+      const rcCars = engine.getSnapshot().cars;
+      dressItems(rcCars); // populate the cell item slots so the preview isn't all empty
+      for (const c of rcCars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
       }
@@ -621,11 +645,12 @@ export function runDisplayScenario(opts, ctx) {
       // the field forward so it's spread out, mark the current leader FINISHED,
       // then freeze. Their split-screen cell shows the centred FINISHED card
       // (place + time); every other cell keeps its live lap/place HUD.
-      for (let t = 0; t < 160; t++) { autosteer(); engine.update(33); }
+      for (let t = 0; t < 160; t++) engine.update(33);
       const leadId = engine.getSnapshot().cars.reduce((a, b) => (a.position <= b.position ? a : b)).id;
       engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
-      giveItems(engine); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
-      for (const c of engine.getSnapshot().cars) {
+      const fnCars = engine.getSnapshot().cars;
+      dressItems(fnCars); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
+      for (const c of fnCars) {
         if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
         scene.setCarHud(c.id, c);
       }
