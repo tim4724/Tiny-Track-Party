@@ -173,6 +173,17 @@ add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
 
+# ---- Conformance: cross-race isolation --------------------------------------
+# A Game must derive its AI racing line from its own centerline even when a
+# previous race's centerline had the same address. Forces the collision with
+# placement new, so the failure is deterministic rather than allocator luck; see
+# the file header for the bug it pins (a process-global cache keyed by a recycled
+# pointer, invisible to one-race-per-process traces).
+add_executable(race_isolation_check simtest/race_isolation_check.cc)
+target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(race_isolation_check)
+add_test(NAME race_isolation COMMAND race_isolation_check)
+
 # ---- Conformance: the golden-trace replay CLI -------------------------------
 # Reproduces scripts/verify-trace.mjs against libttp-sim: rebuilds the race,
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
@@ -195,6 +206,7 @@ foreach(fx
   tidepool-session-beats-3bots-450f-seed21)
   add_test(NAME replay_${fx}
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
+  list(APPEND TTP_ALL_TRACES ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
   # Re-record into the build tree and demand byte equality with the committed file.
   add_test(NAME record_${fx}
     COMMAND ${CMAKE_COMMAND}
@@ -205,6 +217,13 @@ foreach(fx
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 endforeach()
 
+
+# Every trace through ONE process, in order: a general cross-race leak detector.
+# Each replay is byte-exact alone, so anything that survives a Game and colours the
+# next race shows up as a divergence. It is NOT the gate for the recycled-pointer
+# bug (it cannot force the address collision — race_isolation does that); it is the
+# cheap net for the next leak of that shape.
+add_test(NAME replay_sequence COMMAND replay_cli ${TTP_ALL_TRACES})
 
 # ---- Balance probes: the car/track tuning instruments -----------------------
 # The C++ twin of scripts/probe-{laptime,car-matrix,packed-races}.js. Tuning
@@ -280,7 +299,7 @@ add_test(NAME fastlane
 # ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
 # Emscripten-only. Wraps libttp-sim AND libttp-party behind their two extern "C"
 # ABIs and emits one ES6 module (ttp_runtime.mjs + .wasm) that the display's
-# ?sim=native and ?party=native adapters share — one instantiation, one copy of
+# display's Native* adapters share — one instantiation, one copy of
 # double-conversion, and the shape libttp-runtime takes on the shells. Lean by
 # design: -O2, no assertions, and NEITHER NODERAWFS NOR EXIT_RUNTIME (which the
 # CLI helper adds and a browser module must not carry) — this is why those

@@ -26,7 +26,7 @@ let vecPtr = 0;          // persistent 3-double out-buffer for pos queries
 
 export async function init() {
   if (M) return;
-  // Shared loader: ?sim=native and ?party=native must not instantiate the module
+  // Shared loader: the sim and party adapters must not instantiate the module
   // twice (one wasm heap for both ABIs).
   M = await loadNativeRuntime();
   const c = (name, ret, args) => M.cwrap(name, ret, args);
@@ -60,7 +60,7 @@ export async function init() {
   };
   vecPtr = M._malloc(3 * 8);
   const v = JSON.parse(fn.version());
-  console.info(`[sim=native] ${JSON.stringify(v)}`);
+  console.info(`[native:sim] ${JSON.stringify(v)}`);
 }
 
 // Steer-expo mirror: main.js keeps calling the JS engine's module-level

@@ -4,7 +4,7 @@
 #
 # The artifacts are CHECKED IN (like the fdlibm blob in public/display/engine/
 # math.js): the no-build preview deploy serves them straight from the repo, and
-# the display's ?sim=native adapter + tests/runtime-abi.test.js load them.
+# the display's Native* adapters + tests/{runtime,party}-abi.test.js load them.
 #
 # Mirrors build-mathlib.sh: EMCC defaults to ~/emsdk; the strict-FP flags
 # (-ffp-contract=off / -fno-builtin, applied by CMake) are the determinism

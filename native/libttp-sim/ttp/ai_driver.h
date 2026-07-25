@@ -34,7 +34,6 @@ class RacingLine {
   std::vector<double> e_, k_, bound_;
 };
 
-RacingLine& racingLineFor(Centerline& centerline);
 
 // Shared with every construction/call site (replay CLI bot rebuild, the
 // engine's finished-car victory-lap autopilot) — single-sourced here so a

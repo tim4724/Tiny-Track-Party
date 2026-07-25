@@ -1,7 +1,7 @@
-// NativeCupSeries — GrandPrix.js's CupSeries surface, backed by the native C++
-// series layer (ttp_runtime.h's ttp_gp_* entry points). The last piece of the sim
-// stack that still ran in JS under ?sim=native: the race ABOVE a race — points,
-// standings order, cup chaining.
+// NativeCupSeries — the cup-series layer (the race ABOVE a race: points,
+// standings order, cup chaining), backed by the native C++ series port through
+// ttp_runtime.h's ttp_gp_* entry points. It reproduces the surface the deleted
+// GrandPrix.js CupSeries had, which is what main.js still drives.
 //
 // The endless-mode DRAW stays in JS on purpose. It comes from a page-RNG shuffle
 // bag (Math.random, display-side, deliberately not deterministic sim state), so
@@ -9,9 +9,10 @@
 // consumes it only when the rules call for one. The decision is native; the
 // randomness is not.
 //
-// Conformance is the differential test (tests/native-cupseries.test.js), which
-// drives this and the JS CupSeries through the same race sequence and compares
-// standings order, points, gained and lastRank after every step.
+// Conformance WAS a differential test against the JS CupSeries; that died with
+// the twin (PR #39). What remains is the C++ side's own coverage — grand_prix.cc
+// under the golden traces — plus this adapter's draw-gating being asserted where
+// it is decided, below.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 

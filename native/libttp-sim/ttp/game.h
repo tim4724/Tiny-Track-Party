@@ -125,6 +125,7 @@ struct GameTrack {
 struct PlayerDesc { Id id; bool hasStats = false; Stats stats; };
 
 class AiController;  // ai_driver.h
+class RacingLine;    // ai_driver.h
 
 // Live-tunable steering-response exponent — the C++ twin of Game.js
 // setSteerExpo/getSteerExpo. Module-global (shared by every Game like the JS
@@ -135,6 +136,21 @@ double getSteerExpo();
 
 class Game {
  public:
+  ~Game();  // out-of-line: racingLine_ points at a type this header only forward-declares
+
+  // The AI's precomputed racing line for THIS race's centerline, built on first
+  // use and shared by every bot in the race.
+  //
+  // Owned by the Game on purpose. It used to live in a function-static cache in
+  // ai_driver.cc keyed by `Centerline*` — "a WeakMap analogue", except a WeakMap
+  // keys on object identity for as long as the object lives, while a raw address
+  // gets RECYCLED. Build one race, destroy it, build another, and the new
+  // Centerline could land on the freed one's address: the bots then drove the
+  // PREVIOUS track's racing line on the current track. Only reachable when a
+  // process runs several races (a cup series, or probe_cli's catalogue sweep), so
+  // every single-race golden trace was blind to it.
+  RacingLine& racingLine();
+
   Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
        std::function<void(const Event&)> onEvent = nullptr,
        std::string forceItem = "");
@@ -230,6 +246,7 @@ class Game {
   std::vector<RocketRt> rockets_;
   long rocketSeq_ = 0;
   Mulberry32 rng_{1};
+  std::unique_ptr<RacingLine> racingLine_;
 };
 
 }  // namespace ttp

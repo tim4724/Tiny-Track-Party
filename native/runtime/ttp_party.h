@@ -3,7 +3,7 @@
 // Sibling of ttp_runtime.h (the sim ABI): a stable extern "C" surface wrapping
 // the conformance-proven C++ party layer (native/libttp-party). This first slice
 // exposes RoomFlow — the room state machine (roster identity/join order,
-// presence, host election, liveness) — which the display's ?party=native adapter
+// presence, host election, liveness) — which the display's NativeRoomFlow adapter
 // re-implements the kit's RoomFlow surface over.
 //
 // The transport stays on the host side BY DESIGN: sockets and RTCPeerConnection

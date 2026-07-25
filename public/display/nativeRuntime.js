@@ -2,10 +2,11 @@
 // (engine/native/ttp_runtime.mjs: the sim ABI ttp_runtime.h + the party ABI
 // ttp_party.h in a single module).
 //
-// Both adapters (?sim=native's NativeRaceSession, ?party=native's NativeRoomFlow)
-// go through here so a page that enables both instantiates ONE module — one wasm
-// heap, one copy of double-conversion — instead of two. Nothing loads unless a
-// native flag is set: the default path never imports this file.
+// Every adapter (NativeRaceSession, NativeCupSeries, NativeRoomFlow,
+// NativePartyConnection, NativePartyFastlane) goes through here, so the display
+// instantiates ONE module — one wasm heap, one copy of double-conversion — rather
+// than one per layer. main.js awaits this at boot and a failure is FATAL: the
+// game has no JS engine to fall back to.
 
 let modulePromise = null;
 

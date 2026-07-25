@@ -117,32 +117,9 @@ static void fail(const std::string& file, int frame, const std::string& path,
                expected.c_str(), actual.c_str(), msg.c_str());
 }
 
-int main(int argc, char** argv) {
-  // usage:
-  //   replay_cli <trace.jsonl>                       verify (default)
-  //   replay_cli --record <trace-or-header.json[l]> [--out=<file>]
-  //                                                  RE-RECORD from that file's
-  //                                                  header; writes to --out or
-  //                                                  stdout. Re-recording a
-  //                                                  committed fixture must be
-  //                                                  byte-identical to it — that
-  //                                                  equality is what makes this
-  //                                                  a drop-in replacement for
-  //                                                  scripts/record-trace.mjs.
-  bool recordMode = false;
-  std::string file, outPath;
-  for (int i = 1; i < argc; i++) {
-    std::string a = argv[i];
-    if (a == "--record") recordMode = true;
-    else if (a.compare(0, 6, "--out=") == 0) outPath = a.substr(6);
-    else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
-    else if (file.empty()) file = a;
-    else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return 2; }
-  }
-  if (file.empty()) {
-    std::fprintf(stderr, "usage: replay_cli <trace.jsonl> | replay_cli --record <trace-or-header> [--out=f]\n");
-    return 2;
-  }
+// One trace: verify (or re-record). Factored out of main so a single process can
+// run SEVERAL traces in sequence — see the sequence gate in main.
+static int runTrace(const std::string& file, bool recordMode, const std::string& outPath) {
   std::ifstream in(file);
   if (!in) { std::fprintf(stderr, "cannot open %s\n", file.c_str()); return 2; }
 
@@ -582,5 +559,49 @@ int main(int argc, char** argv) {
     return 1;
   }
   std::printf("PASS %s (%d frames, exact)\n", file.c_str(), recCount);
+  return 0;
+}
+
+int main(int argc, char** argv) {
+  // usage:
+  //   replay_cli <trace.jsonl> [<trace2.jsonl> ...]   verify each, IN ONE PROCESS
+  //   replay_cli --record <trace-or-header.json[l]> [--out=<file>]
+  //                                                  RE-RECORD from that file's
+  //                                                  header; writes to --out or
+  //                                                  stdout. Re-recording a
+  //                                                  committed fixture must be
+  //                                                  byte-identical to it — that
+  //                                                  equality is what makes this
+  //                                                  a drop-in replacement for
+  //                                                  scripts/record-trace.mjs.
+  //
+  // Several traces in one process is not a convenience: it is the CROSS-RACE
+  // ISOLATION gate. Each replay is byte-exact on its own, so any state that
+  // survives a Game and leaks into the next race makes a later trace diverge. A
+  // process-global racing-line cache keyed by a recycled Centerline* did exactly
+  // that (bots drove the previous track's line), and every one-race-per-process
+  // fixture was blind to it.
+  bool recordMode = false;
+  std::vector<std::string> files;
+  std::string outPath;
+  for (int i = 1; i < argc; i++) {
+    std::string a = argv[i];
+    if (a == "--record") recordMode = true;
+    else if (a.compare(0, 6, "--out=") == 0) outPath = a.substr(6);
+    else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    else files.push_back(a);
+  }
+  if (files.empty()) {
+    std::fprintf(stderr, "usage: replay_cli <trace.jsonl> [<trace2.jsonl> ...] | replay_cli --record <trace-or-header> [--out=f]\n");
+    return 2;
+  }
+  if (recordMode && files.size() != 1) {
+    std::fprintf(stderr, "--record takes exactly one file\n");
+    return 2;
+  }
+  for (const std::string& f : files) {
+    const int rc = runTrace(f, recordMode, outPath);
+    if (rc != 0) return rc;
+  }
   return 0;
 }

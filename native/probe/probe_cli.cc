@@ -26,6 +26,7 @@
 //   probe_cli packed             all four cars together, every grid rotation
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
+//   probe_cli laptime --json     one JSON object per track (probe-difficulty.mjs)
 //
 // Determinism: fixed 60 Hz step, AI personas taken from AiDriver.js's
 // AI_PERSONALITIES, and the same seeds the JS probes used (the JS AiController
@@ -90,8 +91,12 @@ std::string padStart(const std::string& s, size_t n) {
 
 // One solo run: drive a single car with persona 0 and collect its lap splits.
 // `laps` is the race distance; MAX_S caps a car that can never finish.
+// brakeFracOut (optional): fraction of FLYING-lap frames the AI asked for brake
+// (b > 0.15), i.e. how much of the lap this track makes a bot slow down for. The
+// standing-start lap is excluded, as in the retired JS aiProbe.
 std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats,
-                             const protocol::CarStat& cs, double maxS, uint32_t seed, double& totalOut) {
+                             const protocol::CarStat& cs, double maxS, uint32_t seed, double& totalOut,
+                             double* brakeFracOut = nullptr) {
   BuiltRaceTrack bt;
   std::string err;
   if (!build_race_track_by_id(trackId, laps, seed, bt, err)) { totalOut = 0; return {}; }
@@ -107,10 +112,15 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
 
   double t = 0, sum = 0;
   int lastLap = 0;
+  long measured = 0, braking = 0;
   std::vector<double> splits;
   while (!game.raceOver() && t < maxS) {
     Input out;
     game.driveBot(Id::Num(0), ai, &out);   // applies the control, like processInput(bot.drive(...))
+    if (!game.cars().empty() && game.cars()[0]->lap >= 1) {
+      measured++;
+      if (out.b > 0.15) braking++;
+    }
     game.update(DT_MS);
     t += DT_MS / 1000.0;
     // Game::find is private; cars() is the public roster (insertion order).
@@ -125,6 +135,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
     }
   }
   totalOut = t;
+  if (brakeFracOut) *brakeFracOut = measured ? (double)braking / (double)measured : 0.0;
   return splits;
 }
 
@@ -138,25 +149,41 @@ std::vector<std::string> trackIds(const std::string& only) {
 }
 
 // ---- laptime -----------------------------------------------------------------
-int runLaptime(const std::string& only, uint32_t seed) {
+// `json` emits one object per track instead of the human table: the difficulty
+// report card (scripts/probe-difficulty.mjs) reads it, having lost the in-process
+// aiProbe with the JS engine.
+int runLaptime(const std::string& only, uint32_t seed, bool json) {
   const int LAPS = 3;
   const double MAX_S = 600;
   for (const std::string& id : trackIds(only)) {
-    double total = 0;
+    double total = 0, brakeFrac = 0;
     protocol::CarStat none{};
-    std::vector<double> splits = soloLaps(id, LAPS, false, none, MAX_S, seed, total);
+    std::vector<double> splits = soloLaps(id, LAPS, false, none, MAX_S, seed, total, &brakeFrac);
+    // Flying laps only: the standing start is not representative pace (the matrix
+    // mode does the same, and the retired JS aiProbe did too).
     double avg = 0;
-    if (!splits.empty()) { for (double x : splits) avg += x; avg /= (double)splits.size(); }
+    if (splits.size() > 1) {
+      for (size_t i = 1; i < splits.size(); i++) avg += splits[i];
+      avg /= (double)(splits.size() - 1);
+    } else if (!splits.empty()) {
+      avg = splits[0];
+    }
     BuiltRaceTrack bt; std::string err;
     build_race_track_by_id(id, LAPS, seed, bt, err);
+    if (json) {
+      std::printf("{\"track\":\"%s\",\"length\":%s,\"lapSec\":%s,\"brakeFrac\":%s,\"laps\":%d}\n",
+                  id.c_str(), fixed(bt.game.length, 3, 0).c_str(), fixed(avg, 1, 0).c_str(),
+                  fixed(brakeFrac, 3, 0).c_str(), (int)splits.size());
+      continue;
+    }
     std::string lapList;
     for (size_t i = 0; i < splits.size(); i++) {
       if (i) lapList += ", ";
       lapList += fixed(splits[i], 1, 0);
     }
-    std::printf("%s len=%s  lap≈%ss  race(%d)≈%s  laps=[%s]\n",
+    std::printf("%s len=%s  lap≈%ss  brake=%s  race(%d)≈%s  laps=[%s]\n",
                 padEnd(id, 11).c_str(), padStart(fixed(bt.game.length, 0, 0), 3).c_str(),
-                padStart(fixed(avg, 1, 0), 5).c_str(), LAPS,
+                padStart(fixed(avg, 1, 0), 5).c_str(), fixed(brakeFrac, 2, 0).c_str(), LAPS,
                 padStart(mmss(total), 5).c_str(), lapList.c_str());
   }
   return 0;
@@ -312,17 +339,19 @@ int runPacked(const std::string& only, uint32_t seed) {
 int main(int argc, char** argv) {
   std::string mode, only;
   uint32_t seed = 1;
+  bool json = false;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a.compare(0, 8, "--track=") == 0) only = a.substr(8);
     else if (a.compare(0, 7, "--seed=") == 0) seed = (uint32_t)std::strtoul(a.substr(7).c_str(), nullptr, 10);
+    else if (a == "--json") json = true;
     else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     else if (mode.empty()) mode = a;
     else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return 2; }
   }
-  if (mode == "laptime") return runLaptime(only, seed);
+  if (mode == "laptime") return runLaptime(only, seed, json);
   if (mode == "matrix") return runMatrix(only, seed);
   if (mode == "packed") return runPacked(only, seed);
-  std::fprintf(stderr, "usage: probe_cli <laptime|matrix|packed> [--track=ID] [--seed=N]\n");
+  std::fprintf(stderr, "usage: probe_cli <laptime|matrix|packed> [--track=ID] [--seed=N] [--json]\n");
   return 2;
 }

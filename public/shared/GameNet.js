@@ -18,7 +18,7 @@ export class GameNet {
   // emitIdleHeartbeat, …) can be passed through `opts`.
   _initFastlane(selfIndex, opts = {}) {
     const { PartyFastlane, STUN_URL } = window;
-    // ?party=native injects a subclass whose NETCODE runs in wasm (the WebRTC
+    // The display injects a subclass whose NETCODE runs in wasm (the WebRTC
     // handshake is inherited from the kit). Unset, this is the kit class.
     const Impl = this.FastlaneImpl || PartyFastlane;
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
