@@ -51,7 +51,7 @@ async function openDisplay(page) {
   // Guard against a SILENT FALLBACK: a native flag that failed to load would
   // leave every spec passing on the JS kit and read as native coverage. Fail loud
   // instead — this is what makes a green TTP_DISPLAY_FLAGS run mean something.
-  if (flags.includes('party=native')) {
+  if (flags.includes('party=native') || /(^|&)native(=|$|&)/.test(flags)) {
     const impls = await page.evaluate(() => ({
       flow: window.__net?.flow?.constructor?.name,
       conn: window.__net?.party?.constructor?.name,

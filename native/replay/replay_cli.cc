@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "generated/track_defs.h"
+#include "ttp/dmath.h"
 #include "ttp/ai_driver.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
@@ -328,6 +329,53 @@ static bool buildRaceTrack(const std::string& trackId, int laps, uint32_t seed, 
 
 // ---------------------------------------------------------------------------
 // Replay.
+
+// ---------------------------------------------------------------------------
+// RECORD MODE support.
+// ---------------------------------------------------------------------------
+// JV -> Value, so the input header can be re-emitted VERBATIM (every field
+// survives, including any this CLI doesn't model) with only `frames` restamped.
+static Value jvToValue(const JV& v) {
+  switch (v.t) {
+    case JV::NUL: return Value::Null();
+    case JV::BOOL: return Value::Bool(v.b);
+    case JV::NUM: return Value::Num(v.num);
+    case JV::STR: return Value::Str(v.str);
+    case JV::ARR: { Value o = Value::Arr(); for (const JV& e : v.arr) o.push(jvToValue(e)); return o; }
+    case JV::OBJ: { Value o = Value::Obj(); for (const auto& kv : v.obj) o.set(kv.first, jvToValue(kv.second)); return o; }
+  }
+  return Value::Null();
+}
+
+// The C++ twin of record-trace.mjs's scriptedHuman. A trace header stores a
+// human's id but NOT its script, so the script is recovered BY CONVENTION from
+// the id: `human-<N>` -> index N-1 -> phase (N-1)*17, matching
+// scriptedHuman(index) which names itself `human-${index+1}`. An id that doesn't
+// match is a hard error rather than a default, so the recorder can never quietly
+// synthesize inputs that differ from what the JS recorder would have produced.
+static bool humanPhaseFor(const Id& id, int& phaseOut) {
+  const std::string k = id.key();
+  const std::string pfx = "human-";
+  if (k.compare(0, pfx.size(), pfx) != 0) return false;
+  const std::string num = k.substr(pfx.size());
+  if (num.empty()) return false;
+  int n = 0;
+  for (char c : num) { if (c < '0' || c > '9') return false; n = n * 10 + (c - '0'); }
+  if (n <= 0) return false;
+  phaseOut = (n - 1) * 17;
+  return true;
+}
+
+// s uses dmath sin (NOT the platform libm) so recorded input bytes are
+// platform-independent, exactly as the JS recorder requires.
+static Input scriptedHumanInput(int frame, int phase) {
+  Input in;
+  in.hasS = true; in.s = dmath::sin((frame + phase) / 40.0) * 0.6;
+  in.hasB = true; in.b = ((frame + phase) % 240) < 25 ? 1.0 : 0.0;
+  in.hasU = true; in.u = (double)(((int)std::floor(frame / 300.0)) & 255);
+  return in;
+}
+
 // ---------------------------------------------------------------------------
 struct RosterEntry { Id id; std::string kind; double caution = 1; double laneBias = 0; uint32_t aiSeed = 0; bool hasStats = false; Stats stats; };
 
@@ -339,8 +387,31 @@ static void fail(const std::string& file, int frame, const std::string& path,
 }
 
 int main(int argc, char** argv) {
-  if (argc != 2) { std::fprintf(stderr, "usage: replay_cli <trace.jsonl>\n"); return 2; }
-  std::string file = argv[1];
+  // usage:
+  //   replay_cli <trace.jsonl>                       verify (default)
+  //   replay_cli --record <trace-or-header.json[l]> [--out=<file>]
+  //                                                  RE-RECORD from that file's
+  //                                                  header; writes to --out or
+  //                                                  stdout. Re-recording a
+  //                                                  committed fixture must be
+  //                                                  byte-identical to it — that
+  //                                                  equality is what makes this
+  //                                                  a drop-in replacement for
+  //                                                  scripts/record-trace.mjs.
+  bool recordMode = false;
+  std::string file, outPath;
+  for (int i = 1; i < argc; i++) {
+    std::string a = argv[i];
+    if (a == "--record") recordMode = true;
+    else if (a.compare(0, 6, "--out=") == 0) outPath = a.substr(6);
+    else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    else if (file.empty()) file = a;
+    else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return 2; }
+  }
+  if (file.empty()) {
+    std::fprintf(stderr, "usage: replay_cli <trace.jsonl> | replay_cli --record <trace-or-header> [--out=f]\n");
+    return 2;
+  }
   std::ifstream in(file);
   if (!in) { std::fprintf(stderr, "cannot open %s\n", file.c_str()); return 2; }
 
@@ -370,6 +441,7 @@ int main(int argc, char** argv) {
   bool isSession = header.has("driver") && header.get("driver")->str == "session";
   bool aiLive = header.has("aiLive") && header.get("aiLive")->b;
   int countdown = header.has("countdown") ? (int)header.get("countdown")->num : 3;
+  int snapshotEvery = header.has("snapshotEvery") ? (int)header.get("snapshotEvery")->num : 60;
 
   // dt stream (makeDtStream)
   const JV* jj = header.get("dtJitter");
@@ -469,6 +541,157 @@ int main(int argc, char** argv) {
   const JV* schedule = header.get("schedule");
 
   bool lastRacing = false;
+
+  // =========================================================================
+  // RECORD MODE — generate the trace instead of checking one.
+  // =========================================================================
+  // Mirrors record-trace.mjs's loop exactly: schedule ops, then scripted human
+  // inputs, then live bot AI (only while racing), then update, then emit
+  // {frame, inputs, events, hash} (+ snapshot on the cadence, + the session
+  // beats). Every line is canonical JSON, like the JS recorder's output.
+  if (recordMode) {
+    // Scripted humans, by id convention (see humanPhaseFor).
+    struct HumanDrv { Id id; int phase; };
+    std::vector<HumanDrv> humans;
+    for (const RosterEntry& r : roster) {
+      if (r.kind != "human") continue;
+      int phase = 0;
+      if (!humanPhaseFor(r.id, phase)) {
+        std::fprintf(stderr,
+                     "FAIL %s: human id '%s' does not match the scriptedHuman convention "
+                     "(human-<N>); refusing to guess its input script\n",
+                     file.c_str(), r.id.key().c_str());
+        return 1;
+      }
+      humans.push_back(HumanDrv{r.id, phase});
+    }
+    // Bots always drive live while recording (that IS how inputs are produced);
+    // the aiLive header flag only says whether the VERIFIER re-derives them.
+    std::vector<Ctrl> recBots;
+    for (const RosterEntry& r : roster) {
+      if (r.kind == "bot") {
+        recBots.push_back(Ctrl{r.id, std::make_unique<AiController>(r.caution, LOOKAHEAD, STEER_GAIN,
+                                                                   r.laneBias, r.aiSeed)});
+      }
+    }
+
+    std::vector<std::string> outLines;
+    int written = 0;
+    for (int frame = 0; frame < frames; frame++) {
+      // schedule ops run before inputs, with the same rekey bookkeeping the
+      // verifier does (controllers follow the car to its new id).
+      if (schedule) {
+        for (const JV& op : schedule->arr) {
+          if ((int)op.get("frame")->num != frame) continue;
+          std::string o = op.get("op")->str;
+          Id id = idFromJV(*op.get("id"));
+          if (o == "removeCar") eng->removeCar(id);
+          else if (o == "rekeyCar") {
+            Id newId = idFromJV(*op.get("newId"));
+            eng->rekeyCar(id, newId);
+            std::string ok = id.key();
+            for (auto& c : recBots) if (c.id.key() == ok) c.id = newId;
+            for (auto& h : humans) if (h.id.key() == ok) h.id = newId;
+          } else if (o == "setCarStats") eng->setCarStats(id, statsFromJV(*op.get("stats")));
+          else if (o == "giveItem") {
+            std::string item = op.get("item")->str;
+            bool hasT = false; double t = 0;
+            if (const JV* opts = op.get("opts")) if (const JV* x = opts->get("tCatch")) { hasT = true; t = x->num; }
+            eng->giveItem(id, item, hasT, t);
+          } else if (o == "useItem") eng->useItem(id);
+          else if (o == "forceFinish") {
+            bool hasT = op.has("time"); double t = hasT ? op.get("time")->num : 0;
+            eng->forceFinish(id, hasT, t);
+          } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return 1; }
+        }
+      }
+
+      Value inputsV = Value::Obj();
+      for (const HumanDrv& h : humans) {
+        Input msg = scriptedHumanInput(frame, h.phase);
+        Value m = Value::Obj();
+        m.set("s", Value::Num(msg.s));
+        m.set("b", Value::Num(msg.b));
+        m.set("u", Value::Num(msg.u));
+        inputsV.set(h.id.key(), std::move(m));
+        if (session) session->processInput(h.id, msg); else eng->processInput(h.id, msg);
+      }
+      if (!session || session->racing()) {
+        for (auto& c : recBots) {
+          Input derived;
+          // driveBot APPLIES the control and reports it; a finished/poseless car
+          // returns false and contributes no input line, like the JS recorder.
+          if (eng->driveBot(c.id, *c.ai, &derived)) {
+            Value m = Value::Obj();
+            m.set("s", Value::Num(derived.s));
+            m.set("b", Value::Num(derived.b));
+            m.set("u", Value::Num(derived.u));
+            inputsV.set(c.id.key(), std::move(m));
+          }
+        }
+      }
+
+      const double dtF = dtFor(frame);
+      if (session) session->update(dtF); else eng->update(dtF);
+
+      Value eventsV = Value::Arr();
+      for (const Event& e : pending) eventsV.push(e.toValue());
+      pending.clear();
+
+      Value snapshot = eng->getSnapshot();
+      const std::string snapCanon = canonical_stringify(snapshot);
+
+      Value rec = Value::Obj();
+      rec.set("frame", Value::Num(frame));
+      rec.set("inputs", inputsV);
+      rec.set("events", std::move(eventsV));
+      rec.set("hash", Value::Str(fnv1a_hex(snapCanon)));
+      if ((snapshotEvery > 0 && frame % snapshotEvery == 0) || frame == frames - 1) {
+        rec.set("snapshot", snapshot);
+      }
+      if (session) {
+        if (!ticks.empty()) {
+          Value cd = Value::Arr();
+          for (int n : ticks) cd.push(Value::Num(n));
+          ticks.clear();
+          rec.set("countdown", std::move(cd));
+        }
+        if (session->racing() != lastRacing) {
+          lastRacing = session->racing();
+          rec.set("racing", Value::Bool(lastRacing));
+        }
+        if (haveRaceEnd) { rec.set("raceEnd", raceEndResults); }
+      }
+      outLines.push_back(canonical_stringify(rec));
+      written++;
+      if (session && haveRaceEnd) { haveRaceEnd = false; break; }  // race over: trace complete
+    }
+
+    // Header verbatim, with `frames` restamped to what was actually recorded.
+    // NOTE: Value::set APPENDS (canonical_stringify sorts, so insertion order is
+    // normally irrelevant) — so an existing key must be dropped first or it is
+    // emitted twice.
+    Value hdr = jvToValue(header);
+    hdr.obj.erase(std::remove_if(hdr.obj.begin(), hdr.obj.end(),
+                                 [](const std::pair<std::string, Value>& kv) { return kv.first == "frames"; }),
+                  hdr.obj.end());
+    hdr.set("frames", Value::Num(written));
+
+    std::string text = canonical_stringify(hdr) + "\n";
+    for (const std::string& l : outLines) { text += l; text += "\n"; }
+
+    if (outPath.empty()) {
+      std::fwrite(text.data(), 1, text.size(), stdout);
+    } else {
+      std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+      if (!out) { std::fprintf(stderr, "cannot write %s\n", outPath.c_str()); return 2; }
+      out.write(text.data(), (std::streamsize)text.size());
+      if (!out) { std::fprintf(stderr, "write failed %s\n", outPath.c_str()); return 2; }
+      std::fprintf(stderr, "recorded %d frames -> %s\n", written, outPath.c_str());
+    }
+    return 0;
+  }
+
   int recCount = 0;
 
   std::string line;

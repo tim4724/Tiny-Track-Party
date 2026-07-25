@@ -159,6 +159,10 @@ add_test(NAME serializer
 add_executable(replay_cli replay/replay_cli.cc)
 target_link_libraries(replay_cli PRIVATE libttp_sim ttp_strict_fp)
 ttp_emscripten_cli(replay_cli)
+# --record is a DROP-IN for scripts/record-trace.mjs: re-recording a committed
+# fixture from C++ must reproduce it BYTE FOR BYTE. That equality is the gate
+# that lets fixture recording move off JS (and therefore lets the JS engine be
+# frozen), so it runs per fixture on every platform leg.
 foreach(fx
   helix-3bots-1human-500f-seed7
   helix-session-jitter-3bots-1human-800f-seed7
@@ -170,6 +174,14 @@ foreach(fx
   tidepool-session-beats-3bots-450f-seed21)
   add_test(NAME replay_${fx}
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
+  # Re-record into the build tree and demand byte equality with the committed file.
+  add_test(NAME record_${fx}
+    COMMAND ${CMAKE_COMMAND}
+      -DCLI=$<TARGET_FILE:replay_cli>
+      "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+      -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl
+      -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/${fx}.jsonl
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 endforeach()
 
 # ---- libttp-party: the room-semantics + wire-framing port -------------------
@@ -259,7 +271,7 @@ if(EMSCRIPTEN)
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
     -sASSERTIONS=0
-    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_ttp_room_create,_ttp_room_dispose,_ttp_room_reset,_ttp_room_add_player,_ttp_room_remove_player,_ttp_room_rekey,_ttp_room_set_field,_ttp_room_mark_disconnected,_ttp_room_mark_reconnected,_ttp_room_clear_disconnected,_ttp_room_transition_to,_ttp_room_state,_ttp_room_set_active_order,_ttp_room_on_seen,_ttp_room_is_expired,_ttp_room_expired_peers_json,_ttp_room_all_participants_disconnected,_ttp_room_has_late_joiners,_ttp_room_grace_tick,_ttp_room_set_master,_ttp_room_set_liveness_enabled,_ttp_room_host_json,_ttp_room_is_host,_ttp_room_size,_ttp_room_connected_count,_ttp_room_list_json,_ttp_room_has,_ttp_room_is_disconnected,_ttp_room_get_json,_ttp_room_events_json,_ttp_room_lowest_free_slot,_ttp_framing_encode_create,_ttp_framing_encode_join,_ttp_framing_encode_send_to,_ttp_framing_encode_broadcast,_ttp_framing_encode_set_state,_ttp_framing_encode_close_room,_ttp_framing_classify,_ttp_framing_close_outcome,_ttp_framing_backoff_ms,_ttp_framing_pin_url,_ttp_link_create,_ttp_link_dispose,_ttp_link_set_channel_open,_ttp_link_enqueue,_ttp_link_send_tick,_ttp_link_idle,_ttp_link_inbound,_ttp_link_stats_json,_ttp_party_version,_malloc,_free"
+    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_ttp_gp_create,_ttp_gp_dispose,_ttp_gp_endless,_ttp_gp_race_count,_ttp_gp_race_index,_ttp_gp_finished,_ttp_gp_current_track,_ttp_gp_next_track,_ttp_gp_cup_json,_ttp_gp_apply_race,_ttp_gp_advance,_ttp_gp_standings_json,_ttp_gp_rekey,_ttp_room_create,_ttp_room_dispose,_ttp_room_reset,_ttp_room_add_player,_ttp_room_remove_player,_ttp_room_rekey,_ttp_room_set_field,_ttp_room_mark_disconnected,_ttp_room_mark_reconnected,_ttp_room_clear_disconnected,_ttp_room_transition_to,_ttp_room_state,_ttp_room_set_active_order,_ttp_room_on_seen,_ttp_room_is_expired,_ttp_room_expired_peers_json,_ttp_room_all_participants_disconnected,_ttp_room_has_late_joiners,_ttp_room_grace_tick,_ttp_room_set_master,_ttp_room_set_liveness_enabled,_ttp_room_host_json,_ttp_room_is_host,_ttp_room_size,_ttp_room_connected_count,_ttp_room_list_json,_ttp_room_has,_ttp_room_is_disconnected,_ttp_room_get_json,_ttp_room_events_json,_ttp_room_lowest_free_slot,_ttp_framing_encode_create,_ttp_framing_encode_join,_ttp_framing_encode_send_to,_ttp_framing_encode_broadcast,_ttp_framing_encode_set_state,_ttp_framing_encode_close_room,_ttp_framing_classify,_ttp_framing_close_outcome,_ttp_framing_backoff_ms,_ttp_framing_pin_url,_ttp_link_create,_ttp_link_dispose,_ttp_link_set_channel_open,_ttp_link_enqueue,_ttp_link_send_tick,_ttp_link_idle,_ttp_link_inbound,_ttp_link_stats_json,_ttp_party_version,_malloc,_free"
     "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64"
   )
 endif()

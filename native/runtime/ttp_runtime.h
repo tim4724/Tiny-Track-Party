@@ -107,6 +107,37 @@ void ttp_dispose(int h);
 void ttp_set_steer_expo(double v);
 double ttp_get_steer_expo(void);
 
+// ---- Grand Prix / cup series (GrandPrix.js CupSeries twin) ------------------
+// The series layer ABOVE a race: points, standings order, race chaining. Handles
+// are independent of session handles.
+//
+// The endless-mode DRAW stays with the host: it comes from a page-RNG shuffle bag
+// (display-side by design, not sim state). The host offers its next draw on every
+// apply_race; CupSeries consumes it only when the rules say to (at the last race
+// of an endless series), so the DECISION stays here while the randomness does not.
+
+// cupJson: {"id":..,"name":..,"tracks":[trackId,...]}. endless != 0 makes it an
+// endless series (drawn tracks appended) instead of a fixed cup.
+int ttp_gp_create(const char* cupJson, int endless);
+void ttp_gp_dispose(int h);
+
+int ttp_gp_endless(int h);
+int ttp_gp_race_count(int h);
+int ttp_gp_race_index(int h);
+int ttp_gp_finished(int h);
+const char* ttp_gp_current_track(int h);
+const char* ttp_gp_next_track(int h);   // "" == JS null
+const char* ttp_gp_cup_json(int h);
+
+// resultsJson: [{"playerId":<scalar>,"rank":N,"finished":bool},...] (Game results)
+// fieldJson:   [{"peerIndex":<scalar>,"name":..,"colorIndex":N,"ai":bool},...]
+// drawnTrackIdOrNull: the host's next shuffle-bag draw (endless only; may be null).
+void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
+                       const char* drawnTrackIdOrNull);
+void ttp_gp_advance(int h);
+const char* ttp_gp_standings_json(int h);
+void ttp_gp_rekey(int h, const char* oldIdJson, const char* newIdJson);
+
 // {"contractVersion":N,"mathlib":"..."} — the adapter's sanity check.
 const char* ttp_version(void);
 

@@ -107,12 +107,28 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 // proves itself; the module preloads at boot, and a race that starts before
 // it resolves falls back to the JS sim (loud in the console). Bit-parity
 // between the two sims is the conformance suite's guarantee (native/).
-const _qSimNative = _trackParams.get('sim') === 'native';
+// ?native — THE umbrella switch: run every ported layer on C++ (sim engine, the
+// series layer above it, and the party layer's decisions). Rendering, the HUD and
+// the transport I/O (WebSocket / RTCPeerConnection) stay JS by design — wasm
+// cannot own a socket or a canvas without proxying through JS anyway.
+// The per-layer flags (?sim=native, ?party=native) still work, for isolating
+// which layer a divergence came from.
+const _qNative = _trackParams.has('native') && _trackParams.get('native') !== '0';
+const _qSimNative = _qNative || _trackParams.get('sim') === 'native';
 let _nativeSim = null; // module namespace once init() resolves
 if (_qSimNative) {
   import('./NativeRaceSession.js')
     .then(async (m) => { await m.init(); _nativeSim = m; })
     .catch((e) => console.warn('[sim=native] load failed; racing on the JS sim:', e));
+}
+// The series layer (points/standings/chaining) has its own flag so a divergence
+// can be isolated to it; ?native turns it on with everything else.
+const _qSeriesNative = _qNative || _trackParams.get('series') === 'native';
+let _nativeSeries = null;
+if (_qSeriesNative) {
+  import('./NativeCupSeries.js')
+    .then(async (m) => { await m.init(); _nativeSeries = m; })
+    .catch((e) => console.warn('[series=native] load failed; using the JS series:', e));
 }
 // ?party=native — PORT: run the whole party layer's DECISIONS on the native C++
 // side instead of partyplug's JS:
@@ -123,7 +139,7 @@ if (_qSimNative) {
 // browser's and always will be, so only decisions move. Unlike ?sim=native these
 // cannot load lazily (DisplayNet builds its RoomFlow and connection in the
 // constructor), so this awaits at boot behind the flag and falls back loudly.
-const _qPartyNative = _trackParams.get('party') === 'native';
+const _qPartyNative = _qNative || _trackParams.get('party') === 'native';
 let _nativeParty = null; // module namespace once init() resolves
 if (_qPartyNative) {
   try {
@@ -431,6 +447,14 @@ const _lastItem = new Map();
 // Empty when four humans race. `currentField` is the full roster (humans + AI),
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
 let aiBots = new Map();
+// Which cars are CPU racers. MUST NOT be derived from aiBots: under ?sim=native
+// the bots live inside the wasm and aiBots stays EMPTY, so every aiBots.has(id)
+// used as an "is this an AI?" test silently answered "no" for every bot (which is
+// how ?sim=native shipped mis-classifying CPU cars as humans — it broke the
+// finish check, so cups never reached the podium, and it also mis-aimed audio,
+// item feedback and phone fan-out). The FIELD knows, whichever sim is running.
+let aiCarIds = new Set();
+const isAiCar = (id) => aiCarIds.has(id);
 let nativeBotSpecs = []; // ?sim=native: persona specs for in-wasm bots (see buildField)
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
@@ -455,7 +479,7 @@ scene.onFrame = (dt) => {
     // that every connected human is home, so the burst (and the race) ends
     // promptly instead of running to the guard cap on a car that can't finish.
     for (const id of session.carIds()) { // fresh array — safe while forfeitCar removes cars
-      if (!aiBots.has(id) && net.flow.isDisconnected(id)) forfeitCar(id);
+      if (!isAiCar(id) && net.flow.isDisconnected(id)) forfeitCar(id);
     }
     if (!session.racing) return; // forfeiting the last unfinished car already ended the race
     // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
@@ -490,7 +514,7 @@ scene.onFrame = (dt) => {
     // pressure while the car still moves. CPU cars stay silent here — they
     // corner and brake constantly, and a 7-car chorus would be noise.
     // Gate thresholds are starting values — tune by ear in ?solo=1.
-    if (!aiBots.has(c.id)) {
+    if (!isAiCar(c.id)) {
       audio.boostWind(c.id, c.boostMul);
       const fastGate = Math.max(0, Math.min(1, (c.spd - 0.45) / 0.3));
       audio.cornerSqueal(c.id, c.spin ? 0 : c.steer * c.steer * fastGate);
@@ -512,7 +536,7 @@ scene.onFrame = (dt) => {
     lastPlayerState = now;
     for (const c of snap.cars) {
       scene.setCarHud(c.id, c); // the TV's own HUD still shows place/lap from the car directly
-      if (aiBots.has(c.id)) continue; // no phone behind an AI car
+      if (isAiCar(c.id)) continue; // no phone behind an AI car
       // Held item lights the phone's USE button (all other race state — place/lap,
       // standings — lives on the TV or the room snapshot). It's per-owner, so it
       // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes
@@ -620,7 +644,7 @@ function refreshAutoPause() {
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
   let connected = 0, inGrace = 0;
   for (const id of session.carIds()) {
-    if (aiBots.has(id)) continue;                 // CPU racer
+    if (isAiCar(id)) continue;                 // CPU racer
     if (net.flow.isDisconnected(id)) inGrace++;   // seat held, QR showing
     else if (net.flow.has(id)) connected++;       // human at the wheel
   }
@@ -768,7 +792,7 @@ function buildField(humans) {
     peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex,
     carIndex: p.carIndex, stats: carStats(p.carIndex), ai: false
   }));
-  aiBots = new Map();
+  aiBots = new Map(); aiCarIds = new Set();
   nativeBotSpecs = [];
   for (const s of cpuSeats(field)) {
     const peerIndex = AI_PREFIX + s.n;
@@ -784,6 +808,7 @@ function buildField(humans) {
     } else {
       aiBots.set(peerIndex, new AiController({ ...s.persona, seed }));
     }
+    aiCarIds.add(peerIndex);   // sim-independent: both paths register the CPU seat
   }
   return field;
 }
@@ -819,8 +844,11 @@ function startRace() {
   // pick resolved trackId to its first track). Random mode: an ENDLESS series
   // seeded with the previewed draw, each intermission pulling the next track
   // from the bag; only a lobby return ends it. Exact picks stay single races.
-  series = net.mode === 'cup' ? new CupSeries(CUPS.find((c) => c.id === net.cupId))
-    : net.mode === 'random' ? new CupSeries({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
+  // ?native/?sim=native: the series layer runs on C++ too (the shuffle bag stays
+  // JS — it is page RNG, not sim state, so the draw is offered to the port).
+  const SeriesImpl = _nativeSeries ? _nativeSeries.NativeCupSeries : CupSeries;
+  series = net.mode === 'cup' ? new SeriesImpl(CUPS.find((c) => c.id === net.cupId))
+    : net.mode === 'random' ? new SeriesImpl({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
       : null;
   launchRace(players);
 }
@@ -979,7 +1007,7 @@ function nearestHumanDist(p) {
   if (!session) return Infinity;
   let best = Infinity;
   for (const id of session.carIds()) {
-    if (aiBots.has(id)) continue;
+    if (isAiCar(id)) continue;
     const hp = session.carWorldPos(id); // plain {x,y,z}, null while a car has no pose
     if (!hp) continue;
     const d = Math.hypot(hp.x - p.x, hp.y - p.y, hp.z - p.z);
@@ -1032,7 +1060,7 @@ function driveRocketAudio(snap) {
 // the impact is out of every human's earshot.
 function rocketImpactLevel(targetId) {
   if (!session || !session.hasCar(targetId)) return 1; // target already gone (rare) — just play it
-  if (!aiBots.has(targetId)) return 1; // a human got hit → full
+  if (!isAiCar(targetId)) return 1; // a human got hit → full
   const a = audibility(session.carWorldPos(targetId));
   return a > 0 ? Math.max(0.45, a) : 0; // audible whenever the flight was, with a clear payoff floor
 }
@@ -1044,7 +1072,7 @@ function rocketImpactLevel(targetId) {
 // leave a camera. HUD-narration cues stay human-only and full: the roulette
 // describes the player's item slot, and lap / finish narrate their cell's HUD.
 function audioForRaceEvent(e) {
-  const isHuman = e.id == null || !aiBots.has(e.id);
+  const isHuman = e.id == null || !isAiCar(e.id);
   const g = eventGain(e); // 1 for the player's own car / idless cues, distance-scaled for CPUs
   switch (e.type) {
     case 'pickup':
@@ -1117,7 +1145,7 @@ function humansAllDone() {
   if (!session) return false;
   let humans = 0;
   for (const id of session.carIds()) {
-    if (aiBots.has(id)) continue;               // a CPU racer
+    if (isAiCar(id)) continue;               // a CPU racer
     if (net.flow.isDisconnected(id)) continue;  // a dropped racer's ghost — doesn't hold up the flag
     humans++;
     if (!session.carFinished(id)) return false; // a connected human still on track
@@ -1391,7 +1419,7 @@ function returnToLobby() {
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   holdRaceChrome();
-  aiBots = new Map(); currentField = [];
+  aiBots = new Map(); aiCarIds = new Set(); currentField = [];
   // controllers return to the lobby off the snapshot (roomState=lobby)
   show('lobby');
   // Crossfade from the frozen finish frame back to the attract demo (through the diorama):
