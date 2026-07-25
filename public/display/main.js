@@ -419,7 +419,7 @@ const _lastItem = new Map();
 // targeting — see git history for aiBots).
 let aiCarIds = new Set();
 const isAiCar = (id) => aiCarIds.has(id);
-let nativeBotSpecs = []; // ?sim=native: persona specs for in-wasm bots (see buildField)
+let nativeBotSpecs = []; // persona specs for the in-wasm bots (see buildField)
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
@@ -797,8 +797,9 @@ function startRace() {
   // pick resolved trackId to its first track). Random mode: an ENDLESS series
   // seeded with the previewed draw, each intermission pulling the next track
   // from the bag; only a lobby return ends it. Exact picks stay single races.
-  // ?native/?sim=native: the series layer runs on C++ too (the shuffle bag stays
-  // JS — it is page RNG, not sim state, so the draw is offered to the port).
+  // The series layer runs on C++ too (the shuffle bag stays JS — it is page RNG,
+  // not sim state, so the draw is OFFERED to the port, which takes it only when
+  // the rules call for one).
   const SeriesImpl = _nativeSeries.NativeCupSeries;
   series = net.mode === 'cup' ? new SeriesImpl(CUPS.find((c) => c.id === net.cupId))
     : net.mode === 'random' ? new SeriesImpl({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
@@ -839,7 +840,7 @@ function launchRace(players) {
   scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
   scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
 
-  // ?sim=native: same construction shape, native implementation. Fall back
+  // Same construction shape the JS engine had, native implementation. Fails
   // loudly if the wasm module hasn't finished loading (boot races only).
   session = new _nativeSim.NativeRaceSession(field, track, {
     onRaceEvent,

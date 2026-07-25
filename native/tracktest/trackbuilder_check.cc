@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "corpus_diff.h"
 #include "ttp/trackbuilder.h"
 #include "ttp/vec3.h"
 #include "generated/track_defs.h"
@@ -34,6 +35,7 @@
 namespace {
 
 using ttp::RaceTrack;
+using ttp::Value;
 using ttp::Vec3;
 
 // ---- fnv1a over UTF-8 bytes, 8 lowercase hex (record-trace.mjs fnv1a) --------
@@ -200,115 +202,6 @@ std::string hexTopKey(const RaceTrack& b, const std::string& k) {
   return {};  // unknown
 }
 
-// ---- minimal JSON reader (objects/arrays/strings/numbers/bool/null) ----------
-struct JV {
-  enum T { OBJ, ARR, STR, NUM, BOOL, NUL } t = NUL;
-  std::vector<std::pair<std::string, JV>> obj;
-  std::vector<JV> arr;
-  std::string str;
-  double num = 0;
-  bool b = false;
-  const JV* get(const char* key) const {
-    for (auto& kv : obj) if (kv.first == key) return &kv.second;
-    return nullptr;
-  }
-};
-
-struct JParse {
-  const std::string& s;
-  size_t p = 0;
-  explicit JParse(const std::string& src) : s(src) {}
-  void ws() { while (p < s.size() && (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r')) p++; }
-  bool str(std::string& out) {
-    if (s[p] != '"') return false;
-    p++;
-    out.clear();
-    while (p < s.size()) {
-      char c = s[p++];
-      if (c == '"') return true;
-      if (c == '\\') {
-        char e = s[p++];
-        switch (e) {
-          case '"': out += '"'; break;
-          case '\\': out += '\\'; break;
-          case '/': out += '/'; break;
-          case 'b': out += '\b'; break;
-          case 'f': out += '\f'; break;
-          case 'n': out += '\n'; break;
-          case 'r': out += '\r'; break;
-          case 't': out += '\t'; break;
-          case 'u': {  // \uXXXX (BMP only — corpus has none, handled for safety)
-            int v = 0;
-            for (int i = 0; i < 4; i++) {
-              char h = s[p++];
-              v <<= 4;
-              if (h >= '0' && h <= '9') v |= h - '0';
-              else if (h >= 'a' && h <= 'f') v |= h - 'a' + 10;
-              else if (h >= 'A' && h <= 'F') v |= h - 'A' + 10;
-            }
-            out += (char)v;  // ASCII subset only
-            break;
-          }
-          default: out += e;
-        }
-      } else {
-        out += c;
-      }
-    }
-    return false;
-  }
-  bool value(JV& v) {
-    ws();
-    if (p >= s.size()) return false;
-    char c = s[p];
-    if (c == '{') {
-      v.t = JV::OBJ; p++;
-      ws();
-      if (s[p] == '}') { p++; return true; }
-      while (true) {
-        ws();
-        std::string key;
-        if (!str(key)) return false;
-        ws();
-        if (s[p] != ':') return false;
-        p++;
-        JV child;
-        if (!value(child)) return false;
-        v.obj.emplace_back(std::move(key), std::move(child));
-        ws();
-        if (s[p] == ',') { p++; continue; }
-        if (s[p] == '}') { p++; return true; }
-        return false;
-      }
-    }
-    if (c == '[') {
-      v.t = JV::ARR; p++;
-      ws();
-      if (s[p] == ']') { p++; return true; }
-      while (true) {
-        JV child;
-        if (!value(child)) return false;
-        v.arr.push_back(std::move(child));
-        ws();
-        if (s[p] == ',') { p++; continue; }
-        if (s[p] == ']') { p++; return true; }
-        return false;
-      }
-    }
-    if (c == '"') { v.t = JV::STR; return str(v.str); }
-    if (c == 't') { v.t = JV::BOOL; v.b = true; p += 4; return true; }
-    if (c == 'f') { v.t = JV::BOOL; v.b = false; p += 5; return true; }
-    if (c == 'n') { v.t = JV::NUL; p += 4; return true; }
-    // number
-    v.t = JV::NUM;
-    size_t start = p;
-    while (p < s.size() && (isdigit((unsigned char)s[p]) || s[p] == '-' || s[p] == '+' ||
-                            s[p] == '.' || s[p] == 'e' || s[p] == 'E')) p++;
-    v.num = std::atof(s.substr(start, p - start).c_str());
-    return true;
-  }
-};
-
 const std::set<std::string> kRequired = {
     "centerline", "length", "roadWidth", "totalLaps", "seed", "version", "trackId",
     "closed", "gap", "groundY", "loopStarts", "hazards", "pads", "boxes", "poles",
@@ -339,16 +232,18 @@ int main(int argc, char** argv) {
 
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JParse jp(line);
-    JV root;
-    if (!jp.value(root) || root.t != JV::OBJ) { std::fprintf(stderr, "bad corpus line\n"); return 2; }
+    Value root;
+    std::string perr;
+    if (!ttp::corpus::read_line(line, root, &perr) || root.type != Value::OBJ) {
+      std::fprintf(stderr, "bad corpus line: %s\n", perr.c_str()); return 2;
+    }
 
-    const JV* jTrack = root.get("track");
-    const JV* jKeys = root.get("keys");
-    const JV* jChunks = root.get("chunks");
-    const JV* jFirst = root.get("firstSamples");
-    const JV* jFurn = root.get("furniture");
-    const JV* jCount = root.get("sampleCount");
+    const Value* jTrack = root.find("track");
+    const Value* jKeys = root.find("keys");
+    const Value* jChunks = root.find("chunks");
+    const Value* jFirst = root.find("firstSamples");
+    const Value* jFurn = root.find("furniture");
+    const Value* jCount = root.find("sampleCount");
     if (!jTrack || !jKeys || !jChunks || !jFirst || !jFurn) {
       std::fprintf(stderr, "corpus line missing a field\n"); return 2;
     }
@@ -404,7 +299,7 @@ int main(int argc, char** argv) {
 
     // Furniture direct hexJSON diff (redundant with the key hashes, but localizes).
     auto furnCheck = [&](const char* name, const std::string& got) {
-      const JV* w = jFurn->get(name);
+      const Value* w = jFurn->find(name);
       if (w && w->str != got)
         std::fprintf(stderr, "MISMATCH %s furniture.%s\n      want=%s\n      got =%s\n",
                      id.c_str(), name, w->str.c_str(), got.c_str());

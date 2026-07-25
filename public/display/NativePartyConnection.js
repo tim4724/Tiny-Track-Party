@@ -12,7 +12,7 @@
 // frame here, so the classification (including "not an object, drop it") is the
 // ported code's call, not a JS paraphrase of it.
 //
-// Behind ?party=native only. Conformance is the framing corpus, replayed against
+// The only implementation. Conformance is the framing corpus, replayed against
 // the C++ objects (framing_check) and through this ABI (tests/party-abi.test.js);
 // this file's job is wiring parity with the kit's socket lifecycle.
 

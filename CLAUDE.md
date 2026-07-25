@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test                          # Unit tests (node:test) — engine, track, partyplug
-node --test tests/engine.test.js  # A single unit test
+npm test                          # Unit tests (node:test) — track, ABI, partyplug
+node --test tests/track.test.js   # A single unit test
+ctest --test-dir native/build     # Native conformance (configure/build native/ first)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 npm start                         # Run the server (node server/index.js)
@@ -23,8 +24,8 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 
 ## Key Rules
 
-- The sim is display-authoritative: the car simulation (`public/display/engine/Game.js`) runs in the browser, not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
-- Browser code is ES modules. The engine (`engine/Game.js`, `TrackBuilder.js`) is imported directly by Node tests via dynamic `import()` — keep it dependency-free so it loads in both browser and Node.
+- The sim is display-authoritative: the car simulation runs in the browser (as wasm — see the NATIVE rule below), not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
+- Browser code is ES modules. The survivors Node tests import directly via dynamic `import()` (`TrackBuilder.js`, `Centerline.js`, `engine/Vec3.js`, `engine/math.js`) must stay dependency-free so they load in both browser and Node.
 - Three.js is vendored under `vendor/three/` and served via the `/vendor/` route; the display imports it through an inline importmap (the one script that needs a CSP nonce).
 - CSP headers in `server/index.js` — update when adding external resources.
 - Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals).
@@ -49,15 +50,33 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `PartyFastlane.js`, which SURVIVE: the native fastlane SUBCLASSES the kit class
   to inherit its WebRTC handshake, and the controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (24 tests on linux/macOS/wasm/tvOS). They are
-  permanent cross-implementation evidence recorded against the JS engine while it
-  existed — never re-record them from C++, which would only prove C++ matches
-  itself. New traces come from `native/build/replay_cli --record <header> --out=f`
-  (the `record_*` ctests hold it byte-identical to the committed fixtures).
-  `scripts/gen-*-corpus.mjs` are the oracle generators; `gen-roomflow-corpus.mjs`
-  is FROZEN (its JS twin is gone) and documents the room contract as 36 scenarios.
-- Balance/tuning: `npm run probe:cars` / `probe:laptime` build and run
-  `native/build/probe_cli` (modes laptime|matrix|packed). The old JS probes drove
+  replayed by `native/` ctest (26 tests, the SAME 26 on every leg —
+  linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
+  drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
+  `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
+  They are permanent cross-implementation evidence recorded against the JS engine
+  while it existed — never re-record them from C++, which would only prove C++
+  matches itself. New traces come from `native/build/replay_cli --record <header>
+  --out=f` (the `record_*` ctests hold it byte-identical to the committed
+  fixtures). `scripts/gen-*-corpus.mjs` are the oracle generators;
+  `gen-roomflow-corpus.mjs` is FROZEN (its JS twin is gone) and documents the room
+  contract as 36 scenarios.
+- Traces are ONE RACE PER PROCESS, so they cannot see state that leaks from one
+  race into the next (a racing-line cache keyed by a recycled `Centerline*` made
+  bots drive the previous track's line — invisible to all 8 fixtures). Two gates
+  cover that blind spot: `race_isolation` forces the address collision with
+  placement new, and `replay_sequence` replays every trace in one process. When
+  adding cross-race state, own it per `Game`.
+- `public/display/engine/native/ttp_runtime.{mjs,wasm}` are CHECKED IN and are
+  what the browser actually runs. After touching `native/`, run
+  `native/scripts/build-runtime-web.sh` and commit the artifacts —
+  `tests/native-artifact.test.js` compares BUILD_STAMP.json's source hash and
+  fails when they drift (comment-only edits under `native/` count). The wasm
+  exports come from `TTP_ABI` (EMSCRIPTEN_KEEPALIVE) on each declaration in
+  `ttp_runtime.h`/`ttp_party.h`; there is no export list to maintain.
+- Balance/tuning: `npm run probe:cars` / `probe:laptime` / `probe:difficulty` build
+  and run `native/build/probe_cli` (modes laptime|matrix|packed;
+  `laptime --json` feeds `scripts/probe-difficulty.mjs`, the per-track report card). The old JS probes drove
   the AI with no game context and unseeded items, so their numbers were wrong —
   do not compare against pre-2026-07-25 readings.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

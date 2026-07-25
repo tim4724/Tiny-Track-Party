@@ -24,9 +24,14 @@ const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
 const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
 const CORPUS = path.join(ROOT, 'tests/fixtures/roomflow-corpus.jsonl');
 
-const skip = (fs.existsSync(MJS) && fs.existsSync(WASM))
-  ? false
-  : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
+// The artifacts are CHECKED IN and the game is native-only, so a missing module
+// is a broken checkout, not an unbuilt optional extra. This used to skip; skipping
+// meant the one suite that exercises the SHIPPED engine could quietly not run.
+for (const f of [MJS, WASM]) {
+  if (!fs.existsSync(f)) {
+    throw new Error(`${path.relative(ROOT, f)} missing — run native/scripts/build-runtime-web.sh`);
+  }
+}
 
 // A peer id crosses the ABI as a JSON scalar ("3" numeric, "\"a\"" string).
 const idJson = (v) => JSON.stringify(v === undefined ? null : v);
@@ -45,7 +50,7 @@ function sortKeys(v) {
 }
 const same = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 
-test('party ABI replays the RoomFlow corpus through the C boundary', { skip }, async () => {
+test('party ABI replays the RoomFlow corpus through the C boundary', async () => {
   const factory = (await import(pathToFileURL(MJS).href)).default;
   const M = await factory();
   const cw = (n, ret, args) => M.cwrap(n, ret, args);
@@ -191,7 +196,7 @@ test('party ABI replays the RoomFlow corpus through the C boundary', { skip }, a
 // boundary: string marshalling, the per-entry-point scratch buffers, and
 // classify taking RAW socket text instead of a parsed object.
 // ---------------------------------------------------------------------------
-test('party ABI reproduces the relay-framing corpus', { skip }, async () => {
+test('party ABI reproduces the relay-framing corpus', async () => {
   const factory = (await import(pathToFileURL(MJS).href)).default;
   const M = await factory();
   const cw = (n, ret, args) => M.cwrap(n, ret, args);
@@ -255,7 +260,7 @@ test('party ABI reproduces the relay-framing corpus', { skip }, async () => {
 // counters. Ring state still shows through indirectly, since each packet's ps/h
 // reflect it.
 // ---------------------------------------------------------------------------
-test('party ABI reproduces the fastlane netcode corpus', { skip }, async () => {
+test('party ABI reproduces the fastlane netcode corpus', async () => {
   const factory = (await import(pathToFileURL(MJS).href)).default;
   const M = await factory();
   const cw = (n, ret, args) => M.cwrap(n, ret, args);

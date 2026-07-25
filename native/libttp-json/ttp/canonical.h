@@ -31,6 +31,15 @@ struct Value {
   static Value Arr() { Value v; v.type = ARR; return v; }
   static Value Obj() { Value v; v.type = OBJ; return v; }
 
+  // Object member lookup; nullptr when the key is absent OR present-but-undefined
+  // (the two are indistinguishable in JS, and canonical_stringify drops both).
+  const Value* find(const std::string& key) const {
+    for (const auto& kv : obj)
+      if (kv.first == key && kv.second.type != UNDEF) return &kv.second;
+    return nullptr;
+  }
+  bool has(const std::string& key) const { return find(key) != nullptr; }
+
   // Array append.
   void push(Value x) { arr.push_back(std::move(x)); }
   // Object set (insertion order irrelevant — canonical_stringify sorts keys). A

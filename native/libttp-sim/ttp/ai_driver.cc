@@ -151,14 +151,6 @@ double RacingLine::at(const std::vector<double>& arr, double s) const {
   return arr[i] * (1 - f) + arr[(i + 1) % n_] * f;
 }
 
-// One line per centerline, built once (WeakMap analogue).
-RacingLine& racingLineFor(Centerline& centerline) {
-  static std::vector<std::pair<Centerline*, std::unique_ptr<RacingLine>>> cache;
-  for (auto& kv : cache) if (kv.first == &centerline) return *kv.second;
-  cache.emplace_back(&centerline, std::make_unique<RacingLine>(centerline));
-  return *cache.back().second;
-}
-
 // ---- race-context reads ------------------------------------------------------
 static double nearestBehind(const Car& car, Game& game) {
   double L = game.length();
@@ -273,7 +265,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   weave_ += (weaveTarget_ - weave_) * WEAVE_EASE;
 
   double maxLat = game.maxLat();
-  RacingLine& line = racingLineFor(centerline);
+  RacingLine& line = game.racingLine();
   auto laneFor = [&](double sAbs) -> double {
     double e = line.laneAt(sAbs);
     double room = line.roomAt(sAbs);

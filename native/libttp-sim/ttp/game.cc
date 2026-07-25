@@ -133,6 +133,17 @@ Car* Game::find(const Id& id) const {
 }
 
 // ---- ctor --------------------------------------------------------------------
+// Out-of-line so ~unique_ptr<RacingLine> sees the complete type (ai_driver.h).
+Game::~Game() = default;
+
+// Built on first bot drive, from THIS Game's centerline, and destroyed with the
+// Game — see the note on the declaration for the address-recycling bug this
+// ownership fixes.
+RacingLine& Game::racingLine() {
+  if (!racingLine_) racingLine_ = std::make_unique<RacingLine>(*centerline_);
+  return *racingLine_;
+}
+
 Game::Game(const std::vector<PlayerDesc>& players, const GameTrack& track,
            std::function<void(const Event&)> onEvent, std::string forceItem)
     : centerline_(track.centerline),

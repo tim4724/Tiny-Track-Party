@@ -15,12 +15,12 @@
 #include <string>
 #include <vector>
 
-#include "json_check.h"
+#include "corpus_diff.h"
 #include "ttp/fastlane.h"
 
 using namespace ttp;
 using namespace ttp::fastlane;
-using namespace ttp::jsoncheck;
+using namespace ttp::corpus;
 
 static Value digestOf(const Link& link) {
   Value d = Value::Obj();
@@ -52,18 +52,18 @@ int main(int argc, char** argv) {
 
   // ---- header: the recorded netcode constants must match the port's ----------
   {
-    JV h;
-    if (!parseLine(line, h)) { std::fprintf(stderr, "parse error on header\n"); return 2; }
+    Value h;
+    if (!read_line(line, h)) { std::fprintf(stderr, "parse error on header\n"); return 2; }
     struct K { const char* key; double ours; };
     const K keys[] = {
         {"TTL_MS", TTL_MS}, {"TICK_MS", TICK_MS}, {"IDLE_MS", IDLE_MS},
         {"WATCHDOG_MS", WATCHDOG_MS}, {"RTT_ALPHA", RTT_ALPHA},
     };
     for (const K& k : keys) {
-      const JV* v = h.get(k.key);
-      if (!v || v->t != JV::NUM || js_number_to_string(v->num) != js_number_to_string(k.ours)) {
+      const Value* v = h.find(k.key);
+      if (!v || v->type != Value::NUM || js_number_to_string(v->num) != js_number_to_string(k.ours)) {
         std::fprintf(stderr, "FAIL header %s: corpus %s, port %s\n", k.key,
-                     v ? canonJV(*v).c_str() : "<absent>", js_number_to_string(k.ours).c_str());
+                     v ? canonical_stringify(*v).c_str() : "<absent>", js_number_to_string(k.ours).c_str());
         return 1;
       }
     }
@@ -72,31 +72,31 @@ int main(int argc, char** argv) {
   int scripts = 0, scriptsPassed = 0, spew = 0;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JV root;
-    if (!parseLine(line, root)) { std::fprintf(stderr, "parse error on script line\n"); return 2; }
+    Value root;
+    if (!read_line(line, root)) { std::fprintf(stderr, "parse error on script line\n"); return 2; }
     scripts++;
-    const std::string& name = root.get("name")->str;
+    const std::string& name = root.find("name")->str;
 
     Link link;
     bool scriptOk = true;
-    const JV* steps = root.get("steps");
+    const Value* steps = root.find("steps");
     for (size_t si = 0; si < steps->arr.size(); si++) {
-      const JV& step = steps->arr[si];
-      const JV& op = *step.get("op");
-      const std::string& opName = op.get("op")->str;
-      const double t = op.get("t")->num;   // the clock for this op
+      const Value& step = steps->arr[si];
+      const Value& op = *step.find("op");
+      const std::string& opName = op.find("op")->str;
+      const double t = op.find("t")->num;   // the clock for this op
 
       Outcome oc;
       Value ret = Value::Null();
       if (opName == "enqueue") {
-        oc = link.enqueue(jvToValue(*op.get("ev")), t);
+        oc = link.enqueue(*op.find("ev"), t);
         ret = Value::Str(oc.dropped ? "dropped" : "p2p");
       } else if (opName == "sendTick") {
         oc = link.sendDataPacket(t);
       } else if (opName == "idle") {
         oc = link.sendIdleHeartbeat(t);
       } else if (opName == "recv") {
-        oc = link.handleInbound(jvToValue(*op.get("packet")), t);
+        oc = link.handleInbound(*op.find("packet"), t);
       } else if (opName == "closeChannel") {
         link.setChannelOpen(false);
       } else {
@@ -110,17 +110,17 @@ int main(int argc, char** argv) {
       Value rtt = oc.hasRtt ? Value::Num(oc.rtt) : Value::Null();
       Value digest = digestOf(link);
 
-      struct Piece { const char* label; const JV* exp; const Value* act; };
+      struct Piece { const char* label; const Value* exp; const Value* act; };
       const Piece pieces[5] = {
-          {"ret", step.get("ret"), &ret},
-          {"sent", step.get("sent"), &sent},
-          {"applied", step.get("applied"), &applied},
-          {"rtt", step.get("rtt"), &rtt},
-          {"digest", step.get("digest"), &digest},
+          {"ret", step.find("ret"), &ret},
+          {"sent", step.find("sent"), &sent},
+          {"applied", step.find("applied"), &applied},
+          {"rtt", step.find("rtt"), &rtt},
+          {"digest", step.find("digest"), &digest},
       };
       for (const Piece& pc : pieces) {
         if (!pc.exp) continue;
-        Diff d = diffVal(*pc.exp, *pc.act, pc.label);
+        Diff d = diff_val(*pc.exp, *pc.act, pc.label);
         if (d.differ) {
           scriptOk = false;
           if (spew++ < 20) {

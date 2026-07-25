@@ -64,34 +64,43 @@ jobs:
         run: cmake --build native/build/wasm --parallel
       - name: Corpus + conformance tests (Node)
         run: ctest --test-dir native/build/wasm --output-on-failure
+      - name: Build the browser runtime module
+        # ttp_runtime_web is the artifact the GAME loads, and it is the only target
+        # whose link options differ (no NODERAWFS/EXIT_RUNTIME, KEEPALIVE-driven
+        # exports). Nothing else in CI compiles it, so an ABI change that breaks
+        # only the browser module would otherwise reach main. This does NOT check
+        # the checked-in artifact is current — tests/native-artifact.test.js does
+        # that, since emcc output is not reproducible across emsdk versions.
+        run: cmake --build native/build/wasm --target ttp_runtime_web --parallel
 
   tvos-sim:
-    # The Apple TV leg: cross-compile for the tvOS simulator and spawn every
-    # check + every fixture replay on a booted Apple TV 4K simulator.
+    # The Apple TV leg: cross-compile for the tvOS simulator and run the WHOLE
+    # ctest suite on a booted Apple TV 4K, via the simctl-spawn emulator shim —
+    # the same shape as the wasm leg running under node. This job used to script
+    # `simctl spawn` per binary, which is how it drifted to 12 of 24 tests (no
+    # party corpora, no record round-trips) while the docs claimed full coverage.
+    # Booting comes FIRST because the UDID is baked in at configure time.
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Configure (tvOS simulator, arm64)
-        run: cmake -S native -B native/build/tvos-sim -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator -DCMAKE_OSX_ARCHITECTURES=arm64
-      - name: Build
-        run: cmake --build native/build/tvos-sim --parallel
       - name: Boot Apple TV simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for k,v in d.items() if 'tvOS' in k for dev in v))")
           xcrun simctl boot "$UDID" || true
           echo "UDID=$UDID" >> "$GITHUB_ENV"
-      - name: Conformance on the simulator
+      - name: Configure (tvOS simulator, arm64)
+        # MACOSX_BUNDLE=OFF so the test binaries stay plain executables that
+        # simctl spawn can launch directly.
         run: |
-          R="$PWD/native/build/tvos-sim"
-          set -e
-          xcrun simctl spawn "$UDID" "$R/mathlib_corpus_check.app/mathlib_corpus_check" "$PWD/tests/fixtures/math-corpus.jsonl"
-          xcrun simctl spawn "$UDID" "$R/sampler_check.app/sampler_check" "$PWD/tests/fixtures/track-sampler-corpus.jsonl"
-          xcrun simctl spawn "$UDID" "$R/trackbuilder_check.app/trackbuilder_check" "$PWD/tests/fixtures/trackbuilder-corpus.jsonl"
-          xcrun simctl spawn "$UDID" "$R/serializer_check.app/serializer_check" "$PWD/tests/fixtures/json-number-corpus.jsonl"
-          for f in tests/fixtures/traces/*.jsonl; do
-            xcrun simctl spawn "$UDID" "$R/replay_cli.app/replay_cli" "$PWD/$f"
-          done
+          cmake -S native -B native/build/tvos-sim -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_MACOSX_BUNDLE=OFF \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=$PWD/native/scripts/tvos-sim-spawn.sh;$UDID"
+      - name: Build
+        run: cmake --build native/build/tvos-sim --parallel
+      - name: Corpus + conformance tests (Apple TV simulator)
+        run: ctest --test-dir native/build/tvos-sim --output-on-failure
 
   android-ndk:
     # The Android TV leg: NDK arm64-v8a cross-compile with the same strict FP

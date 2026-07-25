@@ -11,6 +11,13 @@
 // NOT a validating parser for hostile input: it trusts structure it has already
 // matched (the peer here is our own adapter, and the relay's JSON is re-encoded
 // by the browser before it reaches us).
+//
+// STRICT_NUMBERS is for the conformance corpora, where the numbers ARE the
+// evidence: every token is reformatted with js_number_to_string and must equal
+// the source text, so correctly-rounded decimal->binary64 is proven per value
+// instead of assumed. Off by default — the ABI must keep accepting any JSON its
+// adapter emits (`1.0` and `1` both mean 1 there), while a corpus that only ever
+// holds JSON.stringify output can demand shortest form.
 #pragma once
 
 #include <cctype>
@@ -18,13 +25,17 @@
 #include <string>
 
 #include "ttp/canonical.h"
+#include "ttp/jsonnum.h"
 
 namespace ttp {
 namespace json {
 
+enum NumberMode { LENIENT_NUMBERS, STRICT_NUMBERS };
+
 class Parser {
  public:
-  explicit Parser(const std::string& src) : s_(src) {}
+  explicit Parser(const std::string& src, NumberMode numbers = LENIENT_NUMBERS)
+      : s_(src), strictNumbers_(numbers == STRICT_NUMBERS) {}
 
   // Parse one value. Returns false on malformed input (out is then undefined).
   bool parse(Value& out) {
@@ -33,6 +44,10 @@ class Parser {
     ws();
     return true;  // trailing bytes tolerated (one value per call site)
   }
+
+  // Why the last parse() failed, when it can be said more precisely than
+  // "malformed" (currently: a STRICT_NUMBERS round-trip miss). Empty otherwise.
+  const std::string& error() const { return err_; }
 
  private:
   void ws() {
@@ -178,12 +193,23 @@ class Parser {
       p_++;
     }
     if (!anyDigit) return false;
-    v = Value::Num(std::strtod(s_.substr(start, p_ - start).c_str(), nullptr));
+    const std::string tok = s_.substr(start, p_ - start);
+    const double d = std::strtod(tok.c_str(), nullptr);
+    if (strictNumbers_) {
+      const std::string round = js_number_to_string(d);
+      if (round != tok) {
+        err_ = "number round-trip mismatch: token '" + tok + "' reformats to '" + round + "'";
+        return false;
+      }
+    }
+    v = Value::Num(d);
     return true;
   }
 
   const std::string& s_;
   size_t p_ = 0;
+  bool strictNumbers_ = false;
+  std::string err_;
 };
 
 // Convenience: parse `text`, returning Value::Null() (and false via `ok`) on

@@ -476,20 +476,16 @@ struct GpHandle {
 };
 std::map<int, std::unique_ptr<GpHandle>> g_gps;
 int g_nextGp = 1;
-GpHandle* gp(int h) {
+static GpHandle* gp(int h) {
   auto it = g_gps.find(h);
   return it == g_gps.end() ? nullptr : it->second.get();
 }
-Id gpIdFrom(const Value& v) {
+static Id gpIdFrom(const Value& v) {
   if (v.type == Value::NUM) return Id::Num(v.num);
   if (v.type == Value::STR) return Id::Str(v.str);
   return Id::None();
 }
-const Value* gpField(const Value& o, const char* k) {
-  if (o.type != Value::OBJ) return nullptr;
-  for (const auto& kv : o.obj) if (kv.first == k) return &kv.second;
-  return nullptr;
-}
+
 }  // namespace
 
 int ttp_gp_create(const char* cupJson, int endless) {
@@ -497,9 +493,9 @@ int ttp_gp_create(const char* cupJson, int endless) {
   Value c = cupJson && *cupJson ? json::parse(cupJson, &ok) : Value::Null();
   if (!ok || c.type != Value::OBJ) return 0;
   GpCup cup;
-  if (const Value* x = gpField(c, "id")) cup.id = x->str;
-  if (const Value* x = gpField(c, "name")) cup.name = x->str;
-  if (const Value* x = gpField(c, "tracks")) {
+  if (const Value* x = c.find("id")) cup.id = x->str;
+  if (const Value* x = c.find("name")) cup.name = x->str;
+  if (const Value* x = c.find("tracks")) {
     if (x->type != Value::ARR) return 0;
     for (const Value& t : x->arr) cup.tracks.push_back(t.str);
   }
@@ -565,9 +561,9 @@ void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
   if (ok && r.type == Value::ARR) {
     for (const Value& e : r.arr) {
       GpResult gr{Id::None(), 0, false};
-      if (const Value* x = gpField(e, "playerId")) gr.playerId = gpIdFrom(*x);
-      if (const Value* x = gpField(e, "rank")) gr.rank = (int)x->num;
-      if (const Value* x = gpField(e, "finished")) gr.finished = x->b;
+      if (const Value* x = e.find("playerId")) gr.playerId = gpIdFrom(*x);
+      if (const Value* x = e.find("rank")) gr.rank = (int)x->num;
+      if (const Value* x = e.find("finished")) gr.finished = x->b;
       results.push_back(gr);
     }
   }
@@ -578,10 +574,10 @@ void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
   if (ok && f.type == Value::ARR) {
     for (const Value& e : f.arr) {
       GpFieldEntry fe{Id::None(), "", 0, false};
-      if (const Value* x = gpField(e, "peerIndex")) fe.peerIndex = gpIdFrom(*x);
-      if (const Value* x = gpField(e, "name")) fe.name = x->str;
-      if (const Value* x = gpField(e, "colorIndex")) fe.colorIndex = (int)x->num;
-      if (const Value* x = gpField(e, "ai")) fe.ai = x->b;
+      if (const Value* x = e.find("peerIndex")) fe.peerIndex = gpIdFrom(*x);
+      if (const Value* x = e.find("name")) fe.name = x->str;
+      if (const Value* x = e.find("colorIndex")) fe.colorIndex = (int)x->num;
+      if (const Value* x = e.find("ai")) fe.ai = x->b;
       field.push_back(fe);
     }
   }

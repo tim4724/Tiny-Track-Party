@@ -63,6 +63,40 @@ endforeach()
 target_compile_options(ttp_mathlib PRIVATE -Wno-macro-redefined)
 target_link_libraries(ttp_mathlib PUBLIC ttp_strict_fp)
 
+# ---- Vendored google/double-conversion (v3.3.1) -----------------------------
+# ECMA-262 Number::toString (shortest round-tripping decimal) for the trace
+# serializer — printf can't match JSON.stringify (fp-profile §3.6). Only the
+# library source subdir is vendored (see vendor/double-conversion/VENDOR.md);
+# built here under the same strict-FP flags as the rest of the tree.
+file(GLOB TTP_DC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion/double-conversion/*.cc)
+add_library(ttp_double_conversion STATIC ${TTP_DC_SOURCES})
+target_include_directories(ttp_double_conversion PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion)
+target_link_libraries(ttp_double_conversion PUBLIC ttp_strict_fp)
+
+# ---- libttp-json: the shared plain-data layer -------------------------------
+# ttp::Value (a tagged JSON tree) plus its serializer and parser: canonical
+# stringify + FNV-1a (the trace/corpus digest format), ECMA-262 Number::toString
+# via double-conversion, and text -> Value. EVERY other target depends on this
+# and nothing here depends on them, so it is its own library rather than a
+# corner of libttp-sim: the party layer, both C ABIs and every conformance check
+# need Value, and none of them should have to link a sim to get it.
+add_library(libttp_json STATIC
+  libttp-json/ttp/jsonnum.cc
+  libttp-json/ttp/canonical.cc
+)
+target_include_directories(libttp_json PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-json)
+target_link_libraries(libttp_json PUBLIC ttp_double_conversion ttp_strict_fp)
+
+# ---- Shared conformance-check machinery -------------------------------------
+# testsupport/corpus_diff.h: ONE corpus reader (ttp/json_parse.h) and ONE
+# structural comparator for every check below. It decides pass/fail for the whole
+# scheme, so it exists exactly once — three hand-copied versions had already
+# drifted before this target existed.
+add_library(ttp_testsupport INTERFACE)
+target_include_directories(ttp_testsupport INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/testsupport)
+target_link_libraries(ttp_testsupport INTERFACE libttp_json)
+
 # ---- libttp-track: the sampler math (util, Vec3, Centerline) -----------------
 # The C++ twin of public/display/engine/{util,Vec3}.js + public/display/
 # Centerline.js — a bit-exact transliteration (fp-profile.md). Links the
@@ -108,30 +142,17 @@ add_test(NAME track_sampler
 # 64-sample chunk, and per furniture array.
 add_executable(trackbuilder_check tracktest/trackbuilder_check.cc)
 target_include_directories(trackbuilder_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_strict_fp)
+target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
 )
 
-# ---- Vendored google/double-conversion (v3.3.1) -----------------------------
-# ECMA-262 Number::toString (shortest round-tripping decimal) for the trace
-# serializer — printf can't match JSON.stringify (fp-profile §3.6). Only the
-# library source subdir is vendored (see vendor/double-conversion/VENDOR.md);
-# built here under the same strict-FP flags as the rest of the tree.
-file(GLOB TTP_DC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion/double-conversion/*.cc)
-add_library(ttp_double_conversion STATIC ${TTP_DC_SOURCES})
-target_include_directories(ttp_double_conversion PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/double-conversion)
-target_link_libraries(ttp_double_conversion PUBLIC ttp_strict_fp)
-
 # ---- libttp-sim: the sim-core port ------------------------------------------
 # The C++ twin of public/display/engine/Game.js + AiDriver.js + RaceSession.js +
-# GrandPrix.js plus the trace serializer (jsonnum/canonical). Reuses libttp-track
-# (Vec3/Centerline/util/jsmath) wholesale; all under strict FP (fp-profile.md).
+# GrandPrix.js. Reuses libttp-track (Vec3/Centerline/util/jsmath) and libttp-json
+# (the snapshot/trace serializer) wholesale; all under strict FP (fp-profile.md).
 add_library(libttp_sim STATIC
-  libttp-sim/ttp/jsonnum.cc
-  libttp-sim/ttp/canonical.cc
   libttp-sim/ttp/ai_driver.cc
   libttp-sim/ttp/game.cc
   libttp-sim/ttp/race_session.cc
@@ -140,24 +161,35 @@ add_library(libttp_sim STATIC
 target_include_directories(libttp_sim PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-sim
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(libttp_sim PUBLIC libttp_track ttp_double_conversion ttp_strict_fp)
+target_link_libraries(libttp_sim PUBLIC libttp_track libttp_json ttp_strict_fp)
 
 # ---- Conformance: the JSON number corpus (serializer gate) -------------------
 # Replays tests/fixtures/json-number-corpus.jsonl (52,357 cases) — byte-exact
 # ECMA-262 Number::toString. Phase A gate: green before the sim replay work.
 add_executable(serializer_check simtest/serializer_check.cc)
-target_link_libraries(serializer_check PRIVATE libttp_sim ttp_strict_fp)
+target_link_libraries(serializer_check PRIVATE libttp_json ttp_strict_fp)
 ttp_emscripten_cli(serializer_check)
 add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
+
+# ---- Conformance: cross-race isolation --------------------------------------
+# A Game must derive its AI racing line from its own centerline even when a
+# previous race's centerline had the same address. Forces the collision with
+# placement new, so the failure is deterministic rather than allocator luck; see
+# the file header for the bug it pins (a process-global cache keyed by a recycled
+# pointer, invisible to one-race-per-process traces).
+add_executable(race_isolation_check simtest/race_isolation_check.cc)
+target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp)
+ttp_emscripten_cli(race_isolation_check)
+add_test(NAME race_isolation COMMAND race_isolation_check)
 
 # ---- Conformance: the golden-trace replay CLI -------------------------------
 # Reproduces scripts/verify-trace.mjs against libttp-sim: rebuilds the race,
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
 # ops), and demands exact per-frame event/snapshot/hash agreement.
 add_executable(replay_cli replay/replay_cli.cc)
-target_link_libraries(replay_cli PRIVATE libttp_sim ttp_strict_fp)
+target_link_libraries(replay_cli PRIVATE libttp_sim ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(replay_cli)
 # --record is a DROP-IN for scripts/record-trace.mjs: re-recording a committed
 # fixture from C++ must reproduce it BYTE FOR BYTE. That equality is the gate
@@ -174,6 +206,7 @@ foreach(fx
   tidepool-session-beats-3bots-450f-seed21)
   add_test(NAME replay_${fx}
     COMMAND replay_cli ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
+  list(APPEND TTP_ALL_TRACES ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/${fx}.jsonl)
   # Re-record into the build tree and demand byte equality with the committed file.
   add_test(NAME record_${fx}
     COMMAND ${CMAKE_COMMAND}
@@ -184,6 +217,13 @@ foreach(fx
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 endforeach()
 
+
+# Every trace through ONE process, in order: a general cross-race leak detector.
+# Each replay is byte-exact alone, so anything that survives a Game and colours the
+# next race shows up as a divergence. It is NOT the gate for the recycled-pointer
+# bug (it cannot force the address collision — race_isolation does that); it is the
+# cheap net for the next leak of that shape.
+add_test(NAME replay_sequence COMMAND replay_cli ${TTP_ALL_TRACES})
 
 # ---- Balance probes: the car/track tuning instruments -----------------------
 # The C++ twin of scripts/probe-{laptime,car-matrix,packed-races}.js. Tuning
@@ -199,26 +239,25 @@ target_link_libraries(probe_cli PRIVATE libttp_sim libttp_party ttp_strict_fp)
 # predicates; ORDER and IDENTITY semantics load-bearing) plus the pure surface of
 # PartyConnection.js (relay_framing: outbound encoders, inbound routing, close-
 # code semantics, backoff, sharded URL) and protocol.js (the shared wire
-# vocabulary + car constants). Depends only on ttp::Value (canonical.h,
-# header-only); a local PeerId mirrors libttp-sim's Id JSON-scalar identity.
+# vocabulary + car constants). Depends on libttp_json for ttp::Value and NOT on
+# the sim: a local PeerId mirrors libttp-sim's Id JSON-scalar identity rather than
+# sharing it, so the two layers stay independently portable.
 add_library(libttp_party STATIC
   libttp-party/ttp/room_flow.cc
   libttp-party/ttp/protocol.cc
   libttp-party/ttp/relay_framing.cc
   libttp-party/ttp/fastlane.cc
 )
-target_include_directories(libttp_party PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party
-  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-sim)  # ttp/canonical.h (Value struct)
-target_link_libraries(libttp_party PUBLIC ttp_strict_fp)
+target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party)
+target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp)
 
 # ---- Conformance: the RoomFlow behavioural corpus ---------------------------
 # Replays tests/fixtures/roomflow-corpus.jsonl (scripts/gen-roomflow-corpus.mjs)
 # against the port: per scripted op, reproduces ret + emitted events (order +
-# detail) + a public-surface digest, compared as canonical JSON (canonical_stringify
-# from libttp_sim). 34 scripts, every step exact.
+# detail) + a public-surface digest, compared as canonical JSON. 36 scripts (plus
+# 13 lowestFreeSlot cases), every step exact.
 add_executable(roomflow_check partytest/roomflow_check.cc)
-target_link_libraries(roomflow_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+target_link_libraries(roomflow_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(roomflow_check)
 add_test(NAME roomflow
   COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
@@ -228,17 +267,17 @@ add_test(NAME roomflow
 # protocol_check replays protocol-corpus.jsonl (constants manifest + carStats
 # table); framing_check replays framing-corpus.jsonl (encode/classify/close/
 # backoff/pin), recorded by driving the real PartyConnection. Both compare via
-# the shared structural diff in partytest/json_check.h. libttp_sim supplies
-# canonical_stringify + js_number_to_string for the expected side.
+# the shared structural diff in testsupport/corpus_diff.h (libttp_json supplies
+# canonical_stringify + js_number_to_string for the expected side).
 add_executable(protocol_check partytest/protocol_check.cc)
-target_link_libraries(protocol_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+target_link_libraries(protocol_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(protocol_check)
 add_test(NAME protocol
   COMMAND protocol_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/protocol-corpus.jsonl
 )
 
 add_executable(framing_check partytest/framing_check.cc)
-target_link_libraries(framing_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+target_link_libraries(framing_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(framing_check)
 add_test(NAME framing
   COMMAND framing_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
@@ -251,7 +290,7 @@ add_test(NAME framing
 # applied, the RTT sample, and the full link-state digest. The srtt EWMA is real
 # FP, so ttp_strict_fp (-ffp-contract=off) is load-bearing here.
 add_executable(fastlane_check partytest/fastlane_check.cc)
-target_link_libraries(fastlane_check PRIVATE libttp_party libttp_sim ttp_strict_fp)
+target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp)
 ttp_emscripten_cli(fastlane_check)
 add_test(NAME fastlane
   COMMAND fastlane_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/fastlane-corpus.jsonl
@@ -260,7 +299,7 @@ add_test(NAME fastlane
 # ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
 # Emscripten-only. Wraps libttp-sim AND libttp-party behind their two extern "C"
 # ABIs and emits one ES6 module (ttp_runtime.mjs + .wasm) that the display's
-# ?sim=native and ?party=native adapters share — one instantiation, one copy of
+# display's Native* adapters share — one instantiation, one copy of
 # double-conversion, and the shape libttp-runtime takes on the shells. Lean by
 # design: -O2, no assertions, and NEITHER NODERAWFS NOR EXIT_RUNTIME (which the
 # CLI helper adds and a browser module must not carry) — this is why those
@@ -280,7 +319,11 @@ if(EMSCRIPTEN)
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
     -sASSERTIONS=0
-    "-sEXPORTED_FUNCTIONS=_ttp_session_begin,_ttp_add_human,_ttp_add_bot,_ttp_session_start,_ttp_update,_ttp_process_input,_ttp_snapshot_json,_ttp_results_json,_ttp_events_json,_ttp_has_car,_ttp_car_finished,_ttp_car_ids_json,_ttp_car_world_pos,_ttp_track_point,_ttp_force_remove_car,_ttp_rekey_car,_ttp_force_finish,_ttp_fast_forward,_ttp_pause,_ttp_resume,_ttp_racing,_ttp_paused,_ttp_dispose,_ttp_set_steer_expo,_ttp_get_steer_expo,_ttp_version,_ttp_gp_create,_ttp_gp_dispose,_ttp_gp_endless,_ttp_gp_race_count,_ttp_gp_race_index,_ttp_gp_finished,_ttp_gp_current_track,_ttp_gp_next_track,_ttp_gp_cup_json,_ttp_gp_apply_race,_ttp_gp_advance,_ttp_gp_standings_json,_ttp_gp_rekey,_ttp_room_create,_ttp_room_dispose,_ttp_room_reset,_ttp_room_add_player,_ttp_room_remove_player,_ttp_room_rekey,_ttp_room_set_field,_ttp_room_mark_disconnected,_ttp_room_mark_reconnected,_ttp_room_clear_disconnected,_ttp_room_transition_to,_ttp_room_state,_ttp_room_set_active_order,_ttp_room_on_seen,_ttp_room_is_expired,_ttp_room_expired_peers_json,_ttp_room_all_participants_disconnected,_ttp_room_has_late_joiners,_ttp_room_grace_tick,_ttp_room_set_master,_ttp_room_set_liveness_enabled,_ttp_room_host_json,_ttp_room_is_host,_ttp_room_size,_ttp_room_connected_count,_ttp_room_list_json,_ttp_room_has,_ttp_room_is_disconnected,_ttp_room_get_json,_ttp_room_events_json,_ttp_room_lowest_free_slot,_ttp_framing_encode_create,_ttp_framing_encode_join,_ttp_framing_encode_send_to,_ttp_framing_encode_broadcast,_ttp_framing_encode_set_state,_ttp_framing_encode_close_room,_ttp_framing_classify,_ttp_framing_close_outcome,_ttp_framing_backoff_ms,_ttp_framing_pin_url,_ttp_link_create,_ttp_link_dispose,_ttp_link_set_channel_open,_ttp_link_enqueue,_ttp_link_send_tick,_ttp_link_idle,_ttp_link_inbound,_ttp_link_stats_json,_ttp_party_version,_malloc,_free"
+    # The ABI itself is exported by TTP_ABI (EMSCRIPTEN_KEEPALIVE) on every
+    # declaration in ttp_runtime.h / ttp_party.h — 89 entry points, no list to
+    # keep in sync here. malloc/free are the allocator the JS side needs for
+    # stringToUTF8 buffers and have no declaration of ours to tag.
+    "-sEXPORTED_FUNCTIONS=_malloc,_free"
     "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64"
   )
 endif()

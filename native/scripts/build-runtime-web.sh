@@ -4,7 +4,7 @@
 #
 # The artifacts are CHECKED IN (like the fdlibm blob in public/display/engine/
 # math.js): the no-build preview deploy serves them straight from the repo, and
-# the display's ?sim=native adapter + tests/runtime-abi.test.js load them.
+# the display's Native* adapters + tests/{runtime,party}-abi.test.js load them.
 #
 # Mirrors build-mathlib.sh: EMCC defaults to ~/emsdk; the strict-FP flags
 # (-ffp-contract=off / -fno-builtin, applied by CMake) are the determinism
@@ -29,5 +29,18 @@ mkdir -p "$OUTDIR"
 cp "$BUILD/ttp_runtime.mjs" "$OUTDIR/ttp_runtime.mjs"
 cp "$BUILD/ttp_runtime.wasm" "$OUTDIR/ttp_runtime.wasm"
 
+# Stamp WHICH sources these artifacts came from. tests/native-artifact.test.js
+# recomputes the hash and fails if the checked-in wasm is older than native/ —
+# the one way a native-only game can ship an engine conformance never saw.
+HASH="$(node "$ROOT/native/scripts/runtime-source-hash.mjs")"
+EMCC_VERSION="$(emcc --version | head -1)"
+cat > "$OUTDIR/BUILD_STAMP.json" <<JSON
+{
+  "sourceHash": "$HASH",
+  "emcc": "$EMCC_VERSION",
+  "note": "sourceHash covers every file feeding ttp_runtime_web (native/scripts/runtime-source-hash.mjs). Rebuild with native/scripts/build-runtime-web.sh after touching native/."
+}
+JSON
+
 echo "built ttp_runtime_web ->"
-ls -l "$OUTDIR/ttp_runtime.mjs" "$OUTDIR/ttp_runtime.wasm"
+ls -l "$OUTDIR/ttp_runtime.mjs" "$OUTDIR/ttp_runtime.wasm" "$OUTDIR/BUILD_STAMP.json"

@@ -10,11 +10,11 @@
 #include <limits>
 #include <string>
 
-#include "json_check.h"
+#include "corpus_diff.h"
 #include "ttp/protocol.h"
 
 using namespace ttp;
-using namespace ttp::jsoncheck;
+using namespace ttp::corpus;
 
 int main(int argc, char** argv) {
   if (argc != 2) { std::fprintf(stderr, "usage: protocol_check <protocol-corpus.jsonl>\n"); return 2; }
@@ -29,13 +29,13 @@ int main(int argc, char** argv) {
   // ---- constants manifest -----------------------------------------------------
   if (!std::getline(in, line)) { std::fprintf(stderr, "missing constants line\n"); return 2; }
   {
-    JV root;
-    if (!parseLine(line, root)) { std::fprintf(stderr, "parse error on constants line\n"); return 2; }
-    const JV* consts = root.get("constants");
+    Value root;
+    if (!read_line(line, root)) { std::fprintf(stderr, "parse error on constants line\n"); return 2; }
+    const Value* consts = root.find("constants");
     if (!consts) { std::fprintf(stderr, "constants line has no 'constants'\n"); return 2; }
     Value m = protocol::manifest();
     cases++;
-    Diff d = diffVal(*consts, m, "constants");
+    Diff d = diff_val(*consts, m, "constants");
     if (d.differ) {
       std::fprintf(stderr, "FAIL constants  path %s\n  expected %s\n  actual   %s\n",
                    d.path.c_str(), d.expected.c_str(), d.actual.c_str());
@@ -47,24 +47,24 @@ int main(int argc, char** argv) {
   // ---- carStats table ---------------------------------------------------------
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    JV root;
-    if (!parseLine(line, root)) { std::fprintf(stderr, "parse error on carStats line\n"); return 2; }
-    const JV* idxJV = root.get("carIndex");
-    const JV* resJV = root.get("result");
-    if (!idxJV || !resJV) { std::fprintf(stderr, "carStats line missing carIndex/result\n"); return 2; }
+    Value root;
+    if (!read_line(line, root)) { std::fprintf(stderr, "parse error on carStats line\n"); return 2; }
+    const Value* idxV = root.find("carIndex");
+    const Value* resV = root.find("result");
+    if (!idxV || !resV) { std::fprintf(stderr, "carStats line missing carIndex/result\n"); return 2; }
 
     Value idx;
-    if (idxJV->t == JV::OBJ && idxJV->has("nan")) idx = Value::Num(std::numeric_limits<double>::quiet_NaN());
-    else if (idxJV->t == JV::NUM) idx = Value::Num(idxJV->num);
+    if (idxV->type == Value::OBJ && idxV->has("nan")) idx = Value::Num(std::numeric_limits<double>::quiet_NaN());
+    else if (idxV->type == Value::NUM) idx = Value::Num(idxV->num);
     else idx = Value::Null();
 
     Value got = protocol::car_stats(idx);
     cases++;
-    Diff d = diffVal(*resJV, got, "carStats");
+    Diff d = diff_val(*resV, got, "carStats");
     if (d.differ) {
       if (spew++ < 20) {
         std::fprintf(stderr, "FAIL carStats(%s)  path %s\n  expected %s\n  actual   %s\n",
-                     canonJV(*idxJV).c_str(), d.path.c_str(), d.expected.c_str(), d.actual.c_str());
+                     canonical_stringify(*idxV).c_str(), d.path.c_str(), d.expected.c_str(), d.actual.c_str());
       }
     } else {
       passed++;

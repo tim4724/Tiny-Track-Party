@@ -4,19 +4,20 @@
   "description": "Browser-based multiplayer toy-car racing with phone tilt controllers",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
-    "probe:cars": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build native/build --target probe_cli --parallel >/dev/null && native/build/probe_cli matrix && native/build/probe_cli packed",
-    "gen:schematics": "node scripts/gen-track-schematics.js",
-    "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
     "artwork": "node scripts/capture-artwork.js",
+    "dev": "node --watch server/index.js",
+    "gen:schematics": "node scripts/gen-track-schematics.js",
     "icon:item": "node scripts/capture-item-icon.js",
-    "thumbs:car": "node scripts/capture-car-thumbs.js",
-    "test:e2e": "playwright test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "probe:laptime": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build native/build --target probe_cli --parallel >/dev/null && native/build/probe_cli laptime"
+    "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
+    "probe:cars": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build native/build --target probe_cli --parallel >/dev/null && native/build/probe_cli matrix && native/build/probe_cli packed",
+    "probe:difficulty": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build native/build --target probe_cli --parallel >/dev/null && node scripts/probe-difficulty.mjs",
+    "probe:laptime": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build native/build --target probe_cli --parallel >/dev/null && native/build/probe_cli laptime",
+    "start": "node server/index.js",
+    "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
+    "test:e2e": "playwright test",
+    "thumbs:car": "node scripts/capture-car-thumbs.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4"

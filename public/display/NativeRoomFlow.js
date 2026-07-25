@@ -1,14 +1,15 @@
-// NativeRoomFlow — partyplug/RoomFlow's exact surface, backed by the NATIVE C++
-// room state machine compiled to WASM (native/runtime/ttp_party.h via
-// engine/native/ttp_runtime.mjs). Behind ?party=native only: display/main.js
-// dynamic-imports this module and awaits init() before net.start(), then
-// DisplayNet constructs it exactly where it would construct RoomFlow.
+// NativeRoomFlow — the room state machine's ONLY implementation: the C++ port
+// (native/libttp-party) compiled to WASM, reached through native/runtime/
+// ttp_party.h via engine/native/ttp_runtime.mjs. display/main.js awaits init()
+// before net.start() and DisplayNet constructs this; there is no JS RoomFlow to
+// fall back to (PR #39 deleted it — git history has it).
 //
-// Semantic parity is the conformance suite's job (35 behavioural scripts + 13
-// lowestFreeSlot cases, replayed against the C++ objects by roomflow_check AND
-// through this very ABI by tests/party-abi.test.js). THIS file's job is wiring
-// parity: same getters-vs-methods shape, same event cadence, and — the subtle
-// one — same MUTABLE player records.
+// The surface it reproduces is partyplug/RoomFlow's, because the kit's other
+// consumers still expect that shape. Semantic parity is the conformance suite's
+// job (36 behavioural scripts + 13 lowestFreeSlot cases, replayed against the C++
+// objects by roomflow_check AND through this very ABI by tests/party-abi.test.js).
+// THIS file's job is wiring parity: same getters-vs-methods shape, same event
+// cadence, and — the subtle one — same MUTABLE player records.
 //
 // Two deliberate mechanics:
 //
@@ -69,7 +70,7 @@ export async function init() {
     lowestFreeSlot: c('ttp_room_lowest_free_slot', 'number', ['string', 'number']),
     version: c('ttp_party_version', 'string', [])
   };
-  console.info(`[party=native] ${fn.version()}`);
+  console.info(`[native:party] ${fn.version()}`);
 }
 
 // A peer index crosses the ABI as a JSON scalar (numeric 3 vs the string "3" are
