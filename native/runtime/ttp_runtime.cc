@@ -303,7 +303,7 @@ const char* ttp_snapshot_json(int h) {
   if (!rs) return NULL_JSON;
   if (!rs->eng) buildSession(rs);
   if (!rs->eng) return NULL_JSON;
-  rs->scratch = canonical_stringify(rs->eng->getSnapshot());
+  canonical_stringify_into(rs->eng->getSnapshot(), rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -312,7 +312,7 @@ const char* ttp_results_json(int h) {
   if (!rs) return NULL_JSON;
   if (!rs->eng) buildSession(rs);
   if (!rs->eng) return NULL_JSON;
-  rs->scratch = canonical_stringify(rs->eng->getResults());
+  canonical_stringify_into(rs->eng->getResults(), rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -322,7 +322,7 @@ const char* ttp_events_json(int h) {
   Value arr = Value::Arr();
   for (auto& e : rs->outQueue) arr.push(std::move(e));
   rs->outQueue.clear();
-  rs->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -347,7 +347,7 @@ const char* ttp_car_ids_json(int h) {
   if (!rs || !rs->eng) return EMPTY_ARR;
   Value arr = Value::Arr();
   for (const auto& c : rs->eng->cars()) arr.push(c->id.toValue());
-  rs->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -536,7 +536,7 @@ const char* ttp_gp_cup_json(int h) {
   Value tr = Value::Arr();
   for (const std::string& t : c.tracks) tr.push(Value::Str(t));
   o.set("tracks", std::move(tr));
-  g->scratch = canonical_stringify(o);
+  canonical_stringify_into(o, g->scratch);
   return g->scratch.c_str();
 }
 
@@ -597,7 +597,7 @@ const char* ttp_gp_standings_json(int h) {
     o.set("lastRank", st.lastRankNull ? Value::Null() : Value::Num(st.lastRank));
     arr.push(std::move(o));
   }
-  g->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, g->scratch);
   return g->scratch.c_str();
 }
 

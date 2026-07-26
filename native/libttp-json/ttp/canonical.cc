@@ -6,10 +6,13 @@
 #include "ttp/jsonnum.h"
 
 namespace ttp {
+namespace {
 
-std::string json_quote(const std::string& s) {
-  std::string o;
-  o.reserve(s.size() + 2);
+// Every node appends into ONE buffer. The obvious recursive shape — each node
+// returning its own std::string for the parent to concatenate — allocated a
+// temporary per node and copied every byte once per level of nesting; a per-frame
+// 8-car snapshot is ~330 nodes, so it dominated the render readback.
+void quote_into(const std::string& s, std::string& o) {
   o += '"';
   for (unsigned char c : s) {
     switch (c) {
@@ -31,30 +34,31 @@ std::string json_quote(const std::string& s) {
     }
   }
   o += '"';
-  return o;
 }
 
-std::string canonical_stringify(const Value& v) {
+void stringify_into(const Value& v, std::string& o) {
   switch (v.type) {
     case Value::NUL:
     case Value::UNDEF:  // only reachable as an array element; JS maps undefined -> null
-      return "null";
+      o += "null";
+      return;
     case Value::BOOL:
-      return v.b ? "true" : "false";
+      o += v.b ? "true" : "false";
+      return;
     case Value::NUM:
-      return js_number_to_string(v.num);
+      js_number_into(v.num, o);
+      return;
     case Value::STR:
-      return json_quote(v.str);
-    case Value::ARR: {
-      std::string o = "[";
+      quote_into(v.str, o);
+      return;
+    case Value::ARR:
+      o += '[';
       for (size_t i = 0; i < v.arr.size(); i++) {
-        if (i) o += ",";
-        // JS: undefined array elements serialize as null.
-        o += v.arr[i].type == Value::UNDEF ? "null" : canonical_stringify(v.arr[i]);
+        if (i) o += ',';
+        stringify_into(v.arr[i], o);  // UNDEF elements fall through to "null"
       }
-      o += "]";
-      return o;
-    }
+      o += ']';
+      return;
     case Value::OBJ: {
       // Object.keys(...).filter(v[k] !== undefined).sort()
       std::vector<const std::pair<std::string, Value>*> kept;
@@ -63,18 +67,39 @@ std::string canonical_stringify(const Value& v) {
         if (kv.second.type != Value::UNDEF) kept.push_back(&kv);
       std::sort(kept.begin(), kept.end(),
                 [](const auto* a, const auto* b) { return a->first < b->first; });
-      std::string o = "{";
+      o += '{';
       for (size_t i = 0; i < kept.size(); i++) {
-        if (i) o += ",";
-        o += json_quote(kept[i]->first);
-        o += ":";
-        o += canonical_stringify(kept[i]->second);
+        if (i) o += ',';
+        quote_into(kept[i]->first, o);
+        o += ':';
+        stringify_into(kept[i]->second, o);
       }
-      o += "}";
-      return o;
+      o += '}';
+      return;
     }
   }
-  return "null";
+  o += "null";
+}
+
+}  // namespace
+
+std::string json_quote(const std::string& s) {
+  std::string o;
+  o.reserve(s.size() + 2);
+  quote_into(s, o);
+  return o;
+}
+
+std::string canonical_stringify(const Value& v) {
+  std::string o;
+  o.reserve(4096);  // a per-frame snapshot is ~5 KB; one grow at worst
+  stringify_into(v, o);
+  return o;
+}
+
+void canonical_stringify_into(const Value& v, std::string& out) {
+  out.clear();
+  stringify_into(v, out);
 }
 
 uint32_t fnv1a(const std::string& utf8) {

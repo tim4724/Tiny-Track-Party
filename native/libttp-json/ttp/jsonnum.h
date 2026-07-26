@@ -19,4 +19,8 @@ namespace ttp {
 // not be valid JSON, surfacing the sim bug rather than being silently absorbed.
 std::string js_number_to_string(double v);
 
+// Same digits, appended to `out` — no temporary std::string per number. The
+// serializer emits one number per car field, so this is the readback hot path.
+void js_number_into(double v, std::string& out);
+
 }  // namespace ttp

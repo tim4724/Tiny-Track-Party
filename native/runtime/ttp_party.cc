@@ -52,7 +52,7 @@ PeerId peerFrom(const char* json) {
 }
 
 const char* ret(RoomHandle* rh, Value v) {
-  rh->scratch = canonical_stringify(v);
+  canonical_stringify_into(v, rh->scratch);
   return rh->scratch.c_str();
 }
 
@@ -418,7 +418,7 @@ const char* outcomeJson(LinkHandle* lh, const fastlane::Outcome& oc) {
   o.set("applied", std::move(applied));
   o.set("rtt", oc.hasRtt ? Value::Num(oc.rtt) : Value::Null());
   o.set("dropped", Value::Bool(oc.dropped));
-  lh->scratch = canonical_stringify(o);
+  canonical_stringify_into(o, lh->scratch);
   return lh->scratch.c_str();
 }
 const char* EMPTY_OUTCOME = "{\"applied\":[],\"dropped\":false,\"packet\":null,\"rtt\":null,\"sent\":false}";
@@ -472,7 +472,7 @@ const char* ttp_link_stats_json(int h) {
   o.set("out", Value::Num(s.out));
   o.set("received", Value::Num(s.received));
   o.set("lastPsSeen", Value::Num(s.lastPsSeen));
-  lh->scratch = canonical_stringify(o);
+  canonical_stringify_into(o, lh->scratch);
   return lh->scratch.c_str();
 }
 

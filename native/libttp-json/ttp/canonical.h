@@ -50,6 +50,11 @@ struct Value {
 // JSON.stringify with a recursive key sort and shortest-form numbers.
 std::string canonical_stringify(const Value& v);
 
+// Same bytes, appended into a caller-owned buffer (cleared first). The ABI's
+// per-handle scratch string reuses its capacity across frames, so the readback
+// path allocates nothing steady-state.
+void canonical_stringify_into(const Value& v, std::string& out);
+
 // JSON string escaping identical to JSON.stringify's QuoteJSONString: escapes
 // " \ and control chars (\b \t \n \f \r, else \u00XX lowercase), passes bytes
 // >= 0x20 through verbatim (no forward-slash escaping, no non-ASCII escaping).
