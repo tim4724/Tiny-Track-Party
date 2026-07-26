@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -506,6 +507,7 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         if (t0 == 0) m.entity = e; else m.chunks.push_back(e);
         if (addToScene) mScene->addEntity(e);
     }
+    m.inScene = addToScene;
     return true;
 }
 
@@ -529,6 +531,7 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     }
     if (m.vb) { mEngine->destroy(m.vb); m.vb = nullptr; }
     if (m.ib) { mEngine->destroy(m.ib); m.ib = nullptr; }
+    m.inScene = false;
     m.verts = {};
     m.idx = {};
     m.normals = {};
@@ -3167,6 +3170,46 @@ void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
     for (utils::Entity e : m.chunks) set(e);
 }
 
+// Scene membership as the on/off switch, instead of a transform that parks the
+// thing 1000 units underground.
+//
+// Parking is invisible but not free: an entity in the Scene pays a full
+// FScene::prepare slot — a double-precision world transform, a frustum test, a
+// UBO slot, a draw command and its place in the sort — and it pays it ONCE PER
+// CELL. A 4-way split has ~126 permanently-parked renderables (the four car
+// ghosts, the monster rigs and their ghosts, the banana/rocket/blob pools, the
+// impact bursts, the boost streaks and discs), so that is ~500 prepare slots a
+// frame spent on things nobody can see. FScene::prepare only walks SET bits, so
+// removing an entity costs it exactly nothing.
+//
+// Both helpers are edge-triggered — the flag is the last state pushed, so a
+// pool that stays parked for a whole race issues one remove and nothing else.
+void TtpRenderer::setMeshInScene(Mesh& m, bool on) {
+    if (m.entity.isNull() || m.inScene == on) return;
+    m.inScene = on;
+    if (on) {
+        mScene->addEntity(m.entity);
+        for (utils::Entity e : m.chunks) mScene->addEntity(e);
+    } else {
+        mScene->remove(m.entity);
+        for (utils::Entity e : m.chunks) mScene->remove(e);
+    }
+}
+
+void TtpRenderer::setInstanceInScene(gltfio::FilamentInstance* inst, uint8_t& state, bool on) {
+    if (!inst || state == (on ? 1 : 0)) return;
+    state = on ? 1 : 0;
+    if (on) mScene->addEntities(inst->getEntities(), inst->getEntityCount());
+    else mScene->removeEntities(inst->getEntities(), inst->getEntityCount());
+}
+
+void TtpRenderer::setAssetInScene(gltfio::FilamentAsset* asset, uint8_t& state, bool on) {
+    if (!asset || state == (on ? 1 : 0)) return;
+    state = on ? 1 : 0;
+    if (on) mScene->addEntities(asset->getEntities(), asset->getEntityCount());
+    else mScene->removeEntities(asset->getEntities(), asset->getEntityCount());
+}
+
 void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool receive) {
     auto& rcm = mEngine->getRenderableManager();
     for (size_t i = 0; i < n; i++) {
@@ -3440,6 +3483,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     mCars.resize(carCount);
     mCarAssets.assign(carCount, nullptr);
     mCarGhostAssets.assign(carCount, nullptr);
+    mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
     mMonsterViews.assign(carCount, {});
     for (uint32_t c = 0; c < carCount; c++) {
         const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
@@ -3548,6 +3592,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // per frame (MonsterRig's graft; gunmetal recolour is later polish).
     mMonsterAsset = loadInstancedProp("vehicle-monster-truck.glb", carCount, mMonsterInstances);
     mMonsterGhostAsset = loadInstancedProp("monster-ghost.glb", carCount, mMonsterGhostInstances);
+    // Both pools land IN the scene (loadInstancedProp adds them), so seed the
+    // membership state to "in" — the first frame takes them straight back out.
+    mMonsterIn.assign(carCount, 1);
+    mMonsterGhostIn.assign(carCount, 1);
     // MonsterRig keeps only the kit's frame: the `cab` goes (the player's body
     // takes its place) AND so does `chassis-trim` — the round shock pods over
     // the wheels plus the rear spoiler bar. Leaving the trim in made the native
@@ -5593,12 +5641,29 @@ void TtpRenderer::ensureCells(uint32_t count) {
     }
 }
 
+// Diagnostic frame profiler. std::chrono::steady_clock is what emscripten maps
+// to performance.now(); on the native shells it is the monotonic clock. A dozen
+// reads a frame is far below the noise of what it measures.
+static double ttpNowMs() {
+    using namespace std::chrono;
+    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+}
+
+const char* const* TtpRenderer::profileNames() {
+    static const char* names[] = { "cars", "world", "skids", "ambient",
+            "beginFrame", "cellSetup", "cellRender", "present", "endFrame",
+            "total", nullptr };
+    return names;
+}
+
 bool TtpRenderer::render(const TtpFrameInput& input) {
     if (input.version != TTP_FRAME_INPUT_VERSION) return false;
     // Every wall-clock cosmetic phases off the DRIVING scene's clock — an own
     // accumulated clock would drift by the boot-time difference between the
     // two renderers (the balloon hung at a different bearing).
     mTime = input.sceneT;
+    const double tFrame0 = ttpNowMs();
+    double tMark = tFrame0;
     auto& tcm = mEngine->getTransformManager();
 
     // Cars follow the contract poses: basis (right, up, forward) + pos. GLB
@@ -5776,17 +5841,32 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 pose = pose * mat4f::scaling(float3{ 1.45f, 1.35f, 1.45f }); // no GLB fallback
             }
             // Solid placement now; the per-view pass re-swaps the blocked cells.
-            if (mMonsterInstances.size() > i && mMonsterInstances[i]) {
-                tcm.setTransform(tcm.getInstance(mMonsterInstances[i]->getRoot()),
-                        isMonster ? rigPose : MPARK2);
+            //
+            // The monster rig, its ghost and the car's own ghost only exist for
+            // one item, so they live OUT of the scene until this car actually
+            // needs them (setInstanceInScene / setAssetInScene are edge
+            // triggered). Parking them underground instead cost ~78 prepare
+            // slots per cell, every frame, for a race in which nobody picks the
+            // truck up. `wantGhosts` is deliberately the whole frame's worth:
+            // the per-cell pass below decides WHICH cells see the ghost, but
+            // membership has to cover any cell that might.
+            const bool wantGhosts = isMonster && blockMask != 0;
+            if (mMonsterIn.size() > i) {
+                setInstanceInScene(mMonsterInstances.size() > i ? mMonsterInstances[i] : nullptr,
+                        mMonsterIn[i], isMonster);
             }
-            if (mMonsterGhostInstances.size() > i && mMonsterGhostInstances[i]) {
-                tcm.setTransform(tcm.getInstance(mMonsterGhostInstances[i]->getRoot()), MPARK2);
+            if (mMonsterGhostIn.size() > i) {
+                setInstanceInScene(mMonsterGhostInstances.size() > i ? mMonsterGhostInstances[i] : nullptr,
+                        mMonsterGhostIn[i], wantGhosts);
+            }
+            if (mCarGhostIn.size() > i) {
+                setAssetInScene(mCarGhostAssets.size() > i ? mCarGhostAssets[i] : nullptr,
+                        mCarGhostIn[i], wantGhosts);
+            }
+            if (isMonster && mMonsterInstances.size() > i && mMonsterInstances[i]) {
+                tcm.setTransform(tcm.getInstance(mMonsterInstances[i]->getRoot()), rigPose);
             }
             tcm.setTransform(tcm.getInstance(mCarAssets[i]->getRoot()), pose);
-            if (mCarGhostAssets.size() > i && mCarGhostAssets[i]) {
-                tcm.setTransform(tcm.getInstance(mCarGhostAssets[i]->getRoot()), MPARK2);
-            }
             if (mMonsterViews.size() > i) {
                 MonsterView& mv = mMonsterViews[i];
                 mv.on = isMonster;
@@ -5975,6 +6055,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             }
         }
     }
+    mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
 
     // Clouds drift slowly east, wrapping outside the playfield. The JS drifts
     // 0.7 u/s in AUTHORED space (r ≈ 180–294) and wraps at ±300; these clouds
@@ -6412,6 +6493,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
     }
 
+    mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];
+
     // Skid trails — SkidMarks.js layTrails + step, ported. Each marking wheel
     // grows a CONNECTED ribbon: the stamp under the wheel stretches to the
     // contact point every frame, freezes at SKID_SEG_MIN and hands its leading
@@ -6561,6 +6644,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
     }
 
+    mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
+
     // Ambient sprite size. THREE.Points are sized in SCREEN space — its shader
     // is `gl_PointSize = size * (canvasHeight/2) / distance` — so a particle's
     // world extent works out to `size × rows × tan(fov/2)`, where `rows` is the
@@ -6590,7 +6675,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // returns false, the caller has the choice to either skip the frame ... or
     // proceed as though true was returned" (Renderer.h). Native shells keep the
     // skipper; they have a real display pipeline behind them and no rAF.
+    mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
     const bool pace = mRenderer->beginFrame(mSwapChain);
+    mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)
     (void) pace;
 #else
@@ -6603,6 +6690,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
+        mProfile[kProfCellSetup] = 0; mProfile[kProfCellRender] = 0;
         ensureSceneTarget();
         ensureCells(input.viewCount);
         const uint32_t cols = bestGridCols(input.viewCount);
@@ -6764,12 +6852,17 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                           * mat4f::rotation(beta, float3{ 0, 0, 1 })
                           * mat4f::scaling(float3{ 0.07f, 1.0f, st.len }));
             }
+            mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
+            mProfile[kProfCellRender] += ttpNowMs() - tMark; tMark = ttpNowMs();
         }
         // One pass for the whole canvas: grade, sRGB, FXAA, done.
         if (mSceneRT) mRenderer->render(mPresentView);
     }
+    mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
+    mProfile[kProfEndFrame] = ttpNowMs() - tMark;
+    mProfile[kProfTotal] = ttpNowMs() - tFrame0;
     return true;
 }
 
@@ -6884,6 +6977,10 @@ void TtpRenderer::releaseScene() {
     mBoxXf.clear();
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
+    mCarGhostIn.clear();
+    mMonsterIn.clear();
+    mMonsterGhostIn.clear();
+    mBananaIn.clear();
     mConeStates.clear();
     mSignMeshes.clear();
     mCarBlobs.clear();

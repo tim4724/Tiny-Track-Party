@@ -73,6 +73,17 @@ public:
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
 
+    // Per-section wall clock of the last frame, in milliseconds. Diagnostic
+    // only — the sections are cheap (a clock read each) and the array is what
+    // ttp_profile() hands the page. Order matches kProfileNames.
+    enum ProfileSlot : uint32_t {
+        kProfCars = 0, kProfWorld, kProfSkids, kProfAmbient, kProfBeginFrame,
+        kProfCellSetup, kProfCellRender, kProfPresent, kProfEndFrame, kProfTotal,
+        kProfCount
+    };
+    const double* profile() const { return mProfile; }
+    static const char* const* profileNames();
+
 private:
     // One interleaved vertex everywhere for now: position + sRGB colour, drawn
     // by the shared unlit "vcolor" material (the cheap-matte families land with
@@ -106,6 +117,10 @@ private:
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
         std::vector<Local> local;
+        // Whether this mesh's entities are currently IN mScene. Pooled meshes
+        // (blobs, streaks, rockets, bursts) leave the scene when they go idle
+        // rather than parking underground — see setMeshInScene.
+        bool inScene = false;
     };
 
     struct TrackBin; // parsed "track.bin" payload (defined in the .cpp)
@@ -203,6 +218,9 @@ private:
     // 50%-alpha ghost variants (patched GLBs) — the monster occlusion fade
     // swaps the whole rig (chassis AND grafted body) like the JS traversal.
     std::vector<filament::gltfio::FilamentAsset*> mCarGhostAssets;
+    // Scene-membership state for the pools that spend most of a race idle
+    // (setInstanceInScene / setAssetInScene are edge-triggered on these).
+    std::vector<uint8_t> mCarGhostIn, mMonsterIn, mMonsterGhostIn, mBananaIn;
     // Wheel cosmetics (SceneRenderer setCarPose): front wheels yaw with steer
     // (±WHEEL_TURN_MAX) and all four roll at WHEEL_SPIN_SCALE × v/r.
     struct CarWheels {
@@ -431,6 +449,7 @@ private:
     filament::ToneMapper* mToneMapper = nullptr;
     filament::ColorGrading* mColorGrading = nullptr;
 
+    double mProfile[kProfCount] = {};
     uint32_t mWidth = 0;
     uint32_t mHeight = 0;
     bool mHasTrack = false;
@@ -495,6 +514,12 @@ private:
     void setMeshCulling(Mesh& m, bool enable);
     void refreshBounds(Mesh& m);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
+    // Add/remove from mScene, edge-triggered. The idiomatic way to hide
+    // something in Filament: a parked transform still costs a prepare slot per
+    // cell, scene membership costs a bitset bit. See the definitions.
+    void setMeshInScene(Mesh& m, bool on);
+    void setInstanceInScene(filament::gltfio::FilamentInstance* inst, uint8_t& state, bool on);
+    void setAssetInScene(filament::gltfio::FilamentAsset* asset, uint8_t& state, bool on);
     // Drop a flat car-local decal (boost aura, ground blob) onto the deck:
     // every template vertex is re-expressed as (arclength, lateral) about the
     // car's foot and re-placed by frameAt, so the sheet BENDS over crests,

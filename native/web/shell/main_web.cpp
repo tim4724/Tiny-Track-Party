@@ -8,6 +8,7 @@
 
 #include <emscripten/emscripten.h>
 #include <emscripten/html5_webgl.h>
+#include <string>
 
 struct TtpRuntime {
     TtpRenderer* renderer;
@@ -68,6 +69,26 @@ EMSCRIPTEN_KEEPALIVE
 int ttp_build_scene(TtpRuntime* rt) {
     if (!rt) return 1;
     return rt->renderer->buildScene() ? 0 : 1;
+}
+
+// Diagnostic: the last frame's per-section wall clock. Returns a pointer into
+// the renderer's own array (kProfCount doubles) and, via `names`, a NUL-
+// terminated list of section names as one comma-joined string.
+EMSCRIPTEN_KEEPALIVE
+const double* ttp_profile(TtpRuntime* rt) {
+    return rt ? rt->renderer->profile() : nullptr;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* ttp_profile_names() {
+    static std::string joined;
+    if (joined.empty()) {
+        for (const char* const* n = TtpRenderer::profileNames(); *n; ++n) {
+            if (!joined.empty()) joined += ',';
+            joined += *n;
+        }
+    }
+    return joined.c_str();
 }
 
 EMSCRIPTEN_KEEPALIVE

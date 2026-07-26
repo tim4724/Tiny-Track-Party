@@ -30,7 +30,14 @@ target_compile_options(ttp PRIVATE -fno-rtti -fno-exceptions)
 target_link_options(ttp PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sUSE_WEBGL2=1
-        -sFULL_ES3
+        # NOT -sFULL_ES3. It implies -sFULL_ES2 (tools/link.py), whose GLES2
+        # client-side-array emulation puts a SYNCHRONOUS
+        # getParameter(ELEMENT_ARRAY_BUFFER_BINDING) inside every
+        # glBindVertexArray, plus a per-draw scan of all 16 attribute slots.
+        # Filament binds a VAO per draw, so that was ~180 blocking round-trips
+        # to the GPU process every frame — measured as the single largest cost
+        # in the whole renderer. Filament is a WebGL2/ES3 consumer and never
+        # passes client-side arrays, so neither emulation applies to us.
         -sMIN_WEBGL_VERSION=2
         -sMAX_WEBGL_VERSION=2
         -sMODULARIZE=1
@@ -39,6 +46,8 @@ target_link_options(ttp PRIVATE
         -sENVIRONMENT=web
         -sEXPORTED_FUNCTIONS=_malloc,_free
         -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPF32,stringToNewUTF8
+        # ...and the two GLES3 entry points dropping FULL_ES3 takes away.
+        --js-library ${CMAKE_CURRENT_SOURCE_DIR}/shell/gl_map_buffer_stubs.js
         $<$<CONFIG:Debug>:-sASSERTIONS=1>
         $<$<CONFIG:Debug>:-sGL_ASSERTIONS=1>)
 set_target_properties(ttp PROPERTIES SUFFIX ".js")

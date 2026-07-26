@@ -515,6 +515,8 @@ export class SceneRenderer {
 
   // Per-frame prop reconcile from the engine snapshot (item boxes, bananas, ?bbox).
   syncProps(snap) {
+    if (this.nativeView) return; // the renderer reconciles props from FrameInput
+
     // Stash it for the native renderer: syncProps is called once a frame on
     // every path (the live game and the harness scenarios), so this is the one
     // place that always sees the frame's state.
@@ -1771,6 +1773,8 @@ export class SceneRenderer {
   // a child of the normal body, so it hides with the normal car while transformed — the
   // player's identity stays on the cell HUD.
   setCarMonster(id, on) {
+    if (this.nativeView) return; // the native renderer morphs off the snapshot's monster flag
+
     const c = this.cars.get(id);
     if (!c) return;
     const want = !!on;
@@ -1925,6 +1929,15 @@ export class SceneRenderer {
     (c.lastPos || (c.lastPos = new THREE.Vector3())).copy(pos);
     c.pose.pos.copy(pos);
     c.group.position.copy(pos);
+
+    // Under the native renderer everything below is dead weight. libttp-renderer
+    // does its own ground conform, wheel roll, body lean, blob + boost-disk
+    // conform and streak cycling from the same contract pose — running three's
+    // copy as well means every car pays for both, and three's half is never
+    // drawn. What the display still needs from here is exactly what is already
+    // set: c.pose (the chase camera and the frame submit read it) and the
+    // spd/steer/brake/spin/scrub fields the HUD reads.
+    if (this.nativeView) return;
 
     // BOOST wind streaks: while boosting, cycle each streak front→back past the
     // body at the car's REAL speed through the air (this frame's travel), so the
@@ -2253,24 +2266,9 @@ export class SceneRenderer {
     requestAnimationFrame((tt) => this._loop(tt));
   }
 
-  _loop(t) {
-    if (!this._running) return;
-    const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
-    // One global dt drives EVERYTHING downstream (sim, props, skids, clouds, camera damping), so the
-    // DEBUG slow-mo scale here slows the whole scene uniformly. rawMs stays real → the FPS meter is honest.
-    // Clamped at BOTH ends. start() stamps _last from performance.now(), but the
-    // rAF callback that follows carries the frame's vsync timestamp, which can
-    // sit a fraction of a millisecond EARLIER — so rawMs goes negative. It only
-    // shows up when start() is called in a tight loop (fixture mode's step()),
-    // and a negative dt runs the camera/ride damping backwards: the smoothing
-    // term inverts and the chase camera walks away from the car, doubling its
-    // distance every few frames until the whole scene is off-screen.
-    const dt = Math.min(Math.max(rawMs, 0) / 1000, 0.05) * this._timeScale;
-    this._last = t;
-    this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
-    if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas
-    if (this.onFrame) this.onFrame(dt);
-
+  // Three's own per-frame scene animation. Only runs when three is actually
+  // drawing — see the call site.
+  _stepThreeScene(dt) {
     // Skidmark trails: bridge each wheel's contact path into the merged decal
     // pool (cornering scuffs, curb grinds, brake streaks, launch scratches).
     this.skids.layTrails(this.cars);
@@ -2327,6 +2325,34 @@ export class SceneRenderer {
     stepAmbient(this._ambient, dt, this._birdT);
     // per-track animated set-pieces (windmill rotor, wind-up train, chimney smoke)
     for (const fn of this._trackAnims) fn(dt, this._birdT);
+  }
+
+  _loop(t) {
+    if (!this._running) return;
+    const rawMs = t - this._last;            // true rAF cadence (pre-clamp) for the FPS meter
+    // One global dt drives EVERYTHING downstream (sim, props, skids, clouds, camera damping), so the
+    // DEBUG slow-mo scale here slows the whole scene uniformly. rawMs stays real → the FPS meter is honest.
+    // Clamped at BOTH ends. start() stamps _last from performance.now(), but the
+    // rAF callback that follows carries the frame's vsync timestamp, which can
+    // sit a fraction of a millisecond EARLIER — so rawMs goes negative. It only
+    // shows up when start() is called in a tight loop (fixture mode's step()),
+    // and a negative dt runs the camera/ride damping backwards: the smoothing
+    // term inverts and the chase camera walks away from the car, doubling its
+    // distance every few frames until the whole scene is off-screen.
+    const dt = Math.min(Math.max(rawMs, 0) / 1000, 0.05) * this._timeScale;
+    this._last = t;
+    this._frameDt = dt; // exposed so setCarPose can damp frame-rate-independently
+    if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas
+    if (this.onFrame) this.onFrame(dt);
+
+    // Everything from here to the camera work is three's own scene animation —
+    // skid ribbons, kicked cones, drifting clouds and dust, birds, kites, the
+    // balloon, the paper dart, the ambient band and the per-track set-pieces.
+    // libttp-renderer animates all of it from the marshalled scene clock, so
+    // under the native renderer three would be stepping a scene nobody draws.
+    // (The camera block below is NOT optional: the chase cameras it poses are
+    // what FrameInput.views carries.)
+    if (!this.nativeView) this._stepThreeScene(dt);
 
     const W = window.innerWidth, H = window.innerHeight;
     const r = this.renderer;
@@ -2337,11 +2363,16 @@ export class SceneRenderer {
     // split-screen cells fill the target and the present is a 1:1 copy to the canvas.
     const DBW = rt.width, DBH = rt.height;
     // clear the WHOLE target first (colour + depth) so empty split-screen cells
-    // and rounding strips don't keep last frame's pixels
-    rt.scissorTest = false;
-    rt.viewport.set(0, 0, DBW, DBH);
-    r.setRenderTarget(rt);
-    r.clear();
+    // and rounding strips don't keep last frame's pixels. Skipped under the
+    // native renderer: nothing draws into _rtScene then, so this was a
+    // full-canvas colour+depth clear at 4K every frame for a target that is
+    // never sampled.
+    if (!this.nativeView) {
+      rt.scissorTest = false;
+      rt.viewport.set(0, 0, DBW, DBH);
+      r.setRenderTarget(rt);
+      r.clear();
+    }
 
     // The sun's shadow map is NOT refreshed per frame: it's BAKED ONCE per track in
     // setTrack (the only casters are the fixed track geometry — cars/props carry their
@@ -2429,7 +2460,10 @@ export class SceneRenderer {
       // Fade any monster looming in front of THIS cell's own car to 50% so it doesn't hide it
       // (per-cell — the chase cam is current after c.chase.update). A monster never fades in its
       // own cell. Usually 0 monsters, so this whole pass is a no-op.
-      for (const m of monsters) this._setMonsterOpacity(m, (m !== c && this._monsterBlocksView(m, c)) ? MONSTER_FADE_OPACITY : 1);
+      // (three-only: the native renderer runs its own per-cell block test)
+      if (!this.nativeView) {
+        for (const m of monsters) this._setMonsterOpacity(m, (m !== c && this._monsterBlocksView(m, c)) ? MONSTER_FADE_OPACITY : 1);
+      }
 
       // (the rear plate sits on the bumper, not over the track, so it never
       // blocks the chase view — no need to hide your own car's plate)
