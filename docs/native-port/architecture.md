@@ -22,10 +22,12 @@ drivers. The web game keeps shipping throughout.
   `tvos-v1.74.0`, packaged via `build.sh -p tvos`). Three.js remains the
   web default until the Filament path proves parity and performance behind
   a `?renderer=filament` flag.
-- **The JS engine stays the shipping web game and the conformance oracle**
-  (golden traces, exact replay) until cutover; then the C++ core becomes
-  the reference, new fixtures are recorded from it, and the JS engine is
-  frozen and retired from oracle duty.
+- **The sim cutover is DONE.** The C++ core is the shipping web engine and
+  there is no JS fallback. The retired JS engine's golden traces stay the
+  conformance evidence and are never re-recorded from C++ — that would only
+  prove C++ matches itself. `npm run revive:js-oracle` restores the twin from
+  git and re-records all 8 traces byte-identically; while it passes, the parity
+  evidence is renewable.
 
 ## Layers
 
@@ -93,12 +95,11 @@ viewer (the renderer dev harness).
 - **Frozen sun shadow.** Filament has no `shadowMap.autoUpdate = false`;
   bake-once needs a custom design and must never re-render per view.
 - **No built-in Lambert** — the cheap-matte look is a custom material.
-- **Bit-exact conformance** needs vendored V8 fdlibm, the written FP profile
-  ([fp-profile.md](fp-profile.md): double, FMA off, JS `%`/rounding semantics,
-  matching serializer) and an
-  exactly pinned Node/V8 oracle. Today's traces exercise neither AiDriver
-  (inputs are recorded) nor RaceSession (replay constructs `Game`) — both
-  need new trace kinds before the port starts.
+- ~~**Bit-exact conformance**~~ SOLVED. Vendoring fdlibm took V8's math off the
+  byte path entirely, so no pinned Node/V8 oracle was needed and traces record
+  anywhere. The FP profile ([fp-profile.md](fp-profile.md): double, FMA off, JS
+  `%`/rounding semantics, matching serializer) is the standing contract. The
+  AI-live and RaceSession-driven trace kinds the port needed both exist.
 - **Renderer scope** is ~8,200 lines (`SceneRenderer.js` + `render/`),
   including procedural canvas textures and nameplate text rasterization.
 - **Floor hardware**: Apple TV 4K (1st gen) — the Apple TV HD is
