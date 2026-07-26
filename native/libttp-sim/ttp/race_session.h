@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ttp/canonical.h"
@@ -57,10 +58,11 @@ class RaceSession {
   std::function<void(int)> onCountdownTick_;
   std::function<void(const Value&)> onRaceEnd_;
 
-  bool countdownNull_ = true;
-  int countdownN_ = 0;
-  bool countdownMsNull_ = true;
-  double countdownMs_ = 0;
+  // The pre-race count, present only while it is running. n is the beat last
+  // shown (3, 2, 1, 0 = GO, -1 = clear); ms is the accumulated time inside the
+  // current beat. Held across a pause so resume can re-show the banner.
+  struct Countdown { int n = 0; double ms = 0; };
+  std::optional<Countdown> countdown_;
   double raceMs_ = 0;
   bool ended_ = false;
   bool paused_ = false;

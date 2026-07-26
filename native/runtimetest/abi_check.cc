@@ -369,8 +369,38 @@ void boundaryExports() {
     }
   }
 
-  // Run the countdown out, then a few racing frames.
-  for (int i = 0; i < 200; i++) ttp_update(h, 1000.0 / 60.0);
+  // ---- pause DURING the countdown replays the held beat, and the GO! banner is
+  // cleared by the resume that follows it. This is the whole reason the session
+  // remembers the countdown as state rather than a running total, and nothing
+  // else in the suite drives it.
+  {
+    auto beats = [&]() {                     // the _countdown n's drained this call
+      Value evs; std::string err;
+      std::vector<double> out;
+      if (!read_line(ttp_events_json(h), evs, &err)) return out;
+      for (const Value& e : evs.arr) {
+        const Value* t = e.find("type");
+        const Value* n = e.find("n");
+        if (t && t->type == Value::STR && t->str == "_countdown" && n) out.push_back(n->num);
+      }
+      return out;
+    };
+    beats();                                  // discard whatever is queued
+
+    ttp_pause(h);
+    ttp_update(h, 5000.0);                    // a paused session must not tick the count
+    check(beats().empty(), "a paused countdown emits no beats");
+    ttp_resume(h);
+    const std::vector<double> replay = beats();
+    check(replay.size() == 1 && replay[0] == 3.0,
+          "resume during the countdown re-shows the held beat");
+
+    for (int i = 0; i < 300; i++) ttp_update(h, 1000.0 / 60.0);  // 5 s: past the clear
+    const std::vector<double> ran = beats();
+    std::string got;
+    for (double n : ran) got += (got.empty() ? "" : ",") + js_number_to_string(n);
+    check(got == "2,1,0,-1", "the countdown runs 2,1,0(GO),-1(clear) — got " + got);
+  }
   check(ttp_racing(h) == 1, "racing after the countdown elapses");
 
   // ---- pause freezes the sim: the snapshot must not move across an update.
