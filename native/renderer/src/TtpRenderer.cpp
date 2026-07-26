@@ -3134,7 +3134,21 @@ void TtpRenderer::refreshBounds(Mesh& m) {
                 { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
     };
     if (m.chunks.empty()) {
-        range(m.entity, 0, m.idx.size());
+        // One renderable = every vertex belongs to it, so walk `verts` directly.
+        // Going through `idx` visits each vertex once per triangle that uses it
+        // — 840 scattered loads for the car blob's 165 points — and buys nothing
+        // when there is no index range to respect. (Measured 15.6 µs vs 2.7 µs
+        // per blob in wasm, and every conformDecal ends in one of these.)
+        const auto ri = rcm.getInstance(m.entity);
+        if (!ri) return;
+        float3 lo{ 1e30f }, hi{ -1e30f };
+        for (const Vertex& v : m.verts) {
+            lo = min(lo, float3{ v.px, v.py, v.pz });
+            hi = max(hi, float3{ v.px, v.py, v.pz });
+        }
+        if (hi.x < lo.x) return;
+        rcm.setAxisAlignedBoundingBox(ri,
+                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
     } else {
         const size_t per = m.idx.size() / (m.chunks.size() + 1);
         range(m.entity, 0, per);
@@ -5543,6 +5557,12 @@ void TtpRenderer::ensureCells(uint32_t count) {
         Camera* cam = mEngine->createCamera(camEnt);
         v->setCamera(cam);
         v->setScene(mScene);
+        // Nothing in this scene casts a Filament shadow (the sun's map is baked
+        // once per track — see bakeShadowMap) and nothing refracts, but a View
+        // defaults both systems ON and re-asks every frame, per cell. Say no
+        // once instead.
+        v->setShadowingEnabled(false);
+        v->setScreenSpaceRefractionEnabled(false);
         if (mPresentMaterial) {
             // Post OFF: the cells write plain linear colour into the shared
             // scene buffer and vpresent grades + antialiases the lot in ONE
@@ -5710,7 +5730,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // ride this); pose = the leaning body the car model wears.
             const mat4f flat = base * popScale;
             mat4f pose = base * bodyRot * popScale;
-            const mat4f bodyRotInv = inverse(bodyRot);
+            // bodyRot is a product of two rotations, so its inverse is its
+            // transpose. filament's inverse() is the general pivoting
+            // Gauss-Jordan (~1.4 µs in wasm); the transpose is a few loads.
+            const mat4f bodyRotInv = transpose(bodyRot);
             // Monster occlusion fade — SceneRenderer's _monsterBlocksView rule
             // verbatim: in front of the camera, nearer than that cell's own
             // car, and within MONSTER_BLOCK_DIST (3.0) of it. The JS ghosts it
