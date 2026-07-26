@@ -233,7 +233,9 @@ function updateLatency(halfMs, viaFastlane) { applyLatencyChip(latencyEl, halfMs
 
 const tilt = new TiltInput({
   surface: el('game'),
-  onControl: (c) => net.send(MSG.CONTROL, c)
+  // sendControl (not send) — the 25 Hz stream is gated down to what the display
+  // doesn't already hold. See InputGate.js.
+  onControl: (c) => net.sendControl(c)
 });
 
 function setStatus(t) { el('name-status').textContent = t; }
@@ -945,6 +947,15 @@ if (_scenario) {
     scenario: _scenario,
     color: _int(_params.get('color'), 0)
   }));
+}
+
+// Measurement overlay for the CONTROL send gate: ?netstats=1 (optionally with
+// ?steerThresh=…). Same escape-hatch shape as ?scenario= above — opt-in via URL,
+// so it can't reach a player who joined by scanning the QR. See NetStats.js.
+if (_params.get('netstats')) {
+  const _thresh = parseFloat(_params.get('steerThresh'));
+  if (isFinite(_thresh) && _thresh >= 0) net.gate.steerThreshold = _thresh;
+  import('./NetStats.js').then(({ initNetStats }) => initNetStats(net.gate));
 }
 
 // No debug-settings wrench on the controller — it's the player-facing phone, so the

@@ -6,6 +6,7 @@
 // Reads globals from classic scripts loaded first:
 // PartyConnection, PartyFastlane, MSG, RELAY_URL, FASTLANE_TYPES.
 import { GameNet } from '../shared/GameNet.js';
+import { InputGate } from './InputGate.js';
 
 const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES } = window;
 const enc = encodeURIComponent;
@@ -63,6 +64,11 @@ export class ControllerNet extends GameNet {
     this.playerName = '';
     this._pingTimer = null;
     this._lastPong = 0;
+    // Gates the 25 Hz CONTROL stream down to what the display doesn't already
+    // hold (see InputGate). opts.gate lets tests/measurement pass a configured
+    // one; the default is the shipping policy.
+    this.gate = opts.gate || new InputGate();
+    this._srtt = 0;
   }
 
   connect(playerName) {
@@ -112,6 +118,7 @@ export class ControllerNet extends GameNet {
     this.party.onState = (data) => { if (data && data.type) this.onMessage(data); };
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
+      this.gate.reset(); // link down: what the display holds is no longer knowable
       if (meta && meta.replaced) { this.onStatus('replaced'); return; }
       // The room itself is gone (the display closed it, or the relay's hostless
       // grace expired after the big screen vanished). Terminal — a retry would
@@ -162,15 +169,56 @@ export class ControllerNet extends GameNet {
     this.party.sendTo(0, msg);
   }
 
+  // Hot-path CONTROL send. Unlike send(), this is GATED: a sample the display
+  // already holds never reaches the wire (see InputGate). Returns true when it
+  // was transmitted. `nowMs` is injectable so tests drive the clock.
+  sendControl(sample, nowMs = Date.now()) {
+    if (!this.party) return false;
+    const why = this.gate.decide(sample, nowMs, this._srtt);
+    if (!why) return false;
+    const msg = { s: sample.s, b: sample.b, u: sample.u, type: MSG.CONTROL };
+    const viaP2p = !!(this.fastlane && this.fastlane.enqueue(0, msg) === 'p2p');
+    if (!viaP2p) this.party.sendTo(0, msg);
+    this.gate.markSent(sample, nowMs);
+    // The relay path carries no acks — WS is reliable and ordered, so handing
+    // the message over IS the confirmation. Only the fastlane (unreliable,
+    // unordered) has to wait for a real one via onAcked.
+    if (!viaP2p) this.gate.markAcked(sample);
+    return true;
+  }
+
   _openFastlane() {
+    // Fresh (re)join: the display may be a brand new one with no memory of us,
+    // so nothing previously confirmed still counts.
+    this.gate.reset();
     this._initFastlane(this.peerIndex, {
       emitIdleHeartbeat: true,
+      // Latest-only: CONTROL is absolute state ({s,b,u}) resampled every 40 ms,
+      // not a stream of discrete events, so the kit's resend window can't help.
+      // The display applies inputs on arrival, straight into the sim's car
+      // fields, and only steps physics from rAF — so a recovered older event's
+      // steer/brake write is overwritten by the newer one in the same task,
+      // before any frame observes it, and `u` (a level-triggered use-counter)
+      // collapses the same way. Carrying the window would inflate every packet
+      // ~5x to restore values that provably can't change the outcome.
+      maxRing: 1,
       // Idle heartbeats keep acks flowing even with no inputs, so this fires
       // ~continuously while the P2P channel is up — smoothed half-RTT (srtt/2),
       // lower than the WS path. viaFastlane=true so the UI lights the bolt.
-      onRtt: (peerIdx, halfMs) => { if (peerIdx === 0) this.onRtt(Math.round(halfMs), true); },
+      onRtt: (peerIdx, halfMs) => {
+        if (peerIdx !== 0) return;
+        this._srtt = halfMs * 2; // halfMs is srtt/2; the gate's resend cadence wants the round trip
+        this.onRtt(Math.round(halfMs), true);
+      },
+      // The display confirmed applying this payload — the only truth about what
+      // it actually holds, and what the gate compares against.
+      onAcked: (peerIdx, ev) => { if (peerIdx === 0) this.gate.markAcked(ev); },
       onPeerClosed: () => {
         // Display-side fastlane closed (watchdog or display reconnect); retry.
+        // Its state is now unknowable, so drop the gate's confirmed value: the
+        // next sample re-establishes ground truth instead of being filtered
+        // against a belief formed before the channel died.
+        this.gate.reset();
         setTimeout(() => { if (this.fastlane && this.peerIndex != null) this.fastlane.open(0); }, 2000);
       },
     });

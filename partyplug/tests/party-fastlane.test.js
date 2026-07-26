@@ -103,6 +103,95 @@ describe('PartyFastlane / netcode', () => {
       assert.strictEqual(peer.ring.length, 3);
     });
 
+    test('maxRing caps the window, keeping only the newest events', () => {
+      const { fastlane, channel, peer, peerIdx } = makeFastlane({ options: { maxRing: 2 } });
+      fastlane.enqueue(peerIdx, { n: 1 });
+      fastlane.enqueue(peerIdx, { n: 2 });
+      fastlane.enqueue(peerIdx, { n: 3 });
+      // Oldest dropped from the tail; seq keeps advancing across the discards.
+      assert.strictEqual(peer.eventSeq, 3);
+      assert.strictEqual(peer.ring.length, 2);
+      assert.deepStrictEqual(peer.ring.map((e) => e.es), [3, 2]);
+      assert.deepStrictEqual(channel._sent[2].h, [{ n: 3 }, { n: 2 }]);
+    });
+
+    test('maxRing 1 sends latest-only', () => {
+      const { fastlane, channel, peer, peerIdx } = makeFastlane({ options: { maxRing: 1 } });
+      fastlane.enqueue(peerIdx, { n: 1 });
+      fastlane.enqueue(peerIdx, { n: 2 });
+      assert.strictEqual(peer.ring.length, 1);
+      assert.deepStrictEqual(channel._sent[1], { ps: 2, t: channel._sent[1].t, h: [{ n: 2 }] });
+    });
+
+    test('window is uncapped by default (TTL is the only bound)', () => {
+      const { fastlane } = makeFastlane();
+      assert.strictEqual(fastlane.maxRing, Infinity);
+    });
+
+    test('a capped sender still dedupes correctly on the receiver', () => {
+      // Capping leaves gaps between successive packets' es ranges (each packet
+      // carries one event, but eventSeq advances per event). The receiver only
+      // tests es > lastAppliedEs, so gaps are fine — but a dropped packet must
+      // still not resurrect an old event when a later one arrives.
+      const send = makeFastlane({ options: { maxRing: 1 } });
+      const recv = makeFastlane({ selfIndex: 1, peerIdx: 0 });
+      const applied = [];
+      recv.fastlane.onInput = (_idx, ev) => applied.push(ev);
+
+      send.fastlane.enqueue(send.peerIdx, { n: 1 });
+      send.fastlane.enqueue(send.peerIdx, { n: 2 });
+      send.fastlane.enqueue(send.peerIdx, { n: 3 });
+
+      // Deliver packets 1 and 3; packet 2 is "lost" in flight.
+      recv.fastlane._handleDataPacket(recv.peer, recv.peerIdx, send.channel._sent[0]);
+      recv.fastlane._handleDataPacket(recv.peer, recv.peerIdx, send.channel._sent[2]);
+      assert.deepStrictEqual(applied, [{ n: 1 }, { n: 3 }]);
+      assert.strictEqual(recv.peer.lastAppliedEs, 3);
+
+      // The lost packet arriving late must be discarded, not applied out of order.
+      recv.fastlane._handleDataPacket(recv.peer, recv.peerIdx, send.channel._sent[1]);
+      assert.deepStrictEqual(applied, [{ n: 1 }, { n: 3 }]);
+    });
+
+    test('onAcked reports the newest payload the peer confirmed applying', () => {
+      const acked = [];
+      const { fastlane, peer, peerIdx } = makeFastlane({
+        options: { onAcked: (idx, ev, es) => acked.push({ idx, ev, es }) },
+      });
+      fastlane.enqueue(peerIdx, { n: 1 });
+      fastlane.enqueue(peerIdx, { n: 2 });
+      fastlane.enqueue(peerIdx, { n: 3 });
+      // Cumulative ack for 2 confirms 1 and 2; report the NEWEST of them.
+      fastlane._handleAck(peer, peerIdx, { pa: 2, t: 0 });
+      assert.deepStrictEqual(acked, [{ idx: peerIdx, ev: { n: 2 }, es: 2 }]);
+    });
+
+    test('onAcked stays silent when the acked entry already expired', () => {
+      // We can't name a payload the ring no longer holds. Firing with the wrong
+      // one would be worse than silence: a gating sender would believe the peer
+      // holds a value it never got.
+      const acked = [];
+      const { fastlane, peer, peerIdx } = makeFastlane({
+        options: { onAcked: (idx, ev) => acked.push(ev) },
+      });
+      fastlane.enqueue(peerIdx, { n: 1 });
+      peer.ring.length = 0; // simulate the TTL prune beating the ack home
+      fastlane._handleAck(peer, peerIdx, { pa: 1, t: 0 });
+      assert.deepStrictEqual(acked, []);
+    });
+
+    test('a stale ack re-reports nothing', () => {
+      const acked = [];
+      const { fastlane, peer, peerIdx } = makeFastlane({
+        options: { onAcked: (idx, ev) => acked.push(ev) },
+      });
+      fastlane.enqueue(peerIdx, { n: 1 });
+      fastlane.enqueue(peerIdx, { n: 2 });
+      fastlane._handleAck(peer, peerIdx, { pa: 2, t: 0 });
+      fastlane._handleAck(peer, peerIdx, { pa: 1, t: 1 }); // late duplicate
+      assert.strictEqual(acked.length, 1);
+    });
+
     test('clears the send timer when the ring becomes empty after pruning', (t, done) => {
       const { fastlane, peer, peerIdx } = makeFastlane();
       // Enqueue with a TTL just barely in the past so the next _sendDataPacket
