@@ -3041,10 +3041,41 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     utils::Entity camEnt = utils::EntityManager::get().create();
     Camera* cam = mEngine->createCamera(camEnt);
     View* view = mEngine->createView();
+    // Aim first, THEN fit the box to what the light actually sees.
+    //
+    // The ortho used to be a square ±radius, i.e. sized to the bounding SPHERE.
+    // A track is nothing like a sphere: skysnake's footprint in the light's own
+    // axes is 58.7 x 115.4, so a 127.5 x 127.5 box spent well over half its
+    // texels on empty floor, and the shadow edge resolved to 0.062 world units
+    // when it could resolve to 0.029. Project the eight bbox corners through the
+    // real view matrix (rather than deriving the basis by hand and getting
+    // lookAt's convention wrong) and take the extents.
     cam->lookAt(centre + toSun * (radius * 2.0f), centre, float3{ 0, 0, 1 });
+    float2 vlo{ 1e30f }, vhi{ -1e30f };
+    float dNear = 1e30f, dFar = -1e30f;
+    {
+        const mat4f V{ cam->getViewMatrix() };
+        for (int c = 0; c < 8; c++) {
+            const float3 corner{ (c & 1) ? hi.x : lo.x, (c & 2) ? hi.y : lo.y,
+                                 (c & 4) ? hi.z : lo.z };
+            const float3 p = (V * float4{ corner, 1.0f }).xyz;
+            vlo = min(vlo, float2{ p.x, p.y });
+            vhi = max(vhi, float2{ p.x, p.y });
+            // View space looks down -Z, so distance from the light is -z.
+            dNear = std::min(dNear, -p.z);
+            dFar = std::max(dFar, -p.z);
+        }
+    }
+    // A texel of margin so the PCF kernel never samples off the edge.
+    const float2 margin{ (vhi.x - vlo.x) / (float) SM * 4.0f,
+                         (vhi.y - vlo.y) / (float) SM * 4.0f };
+    vlo -= margin;
+    vhi += margin;
     cam->setProjection(Camera::Projection::ORTHO,
-            -radius, radius, -radius, radius, 0.0f, 2.0f * radius * 2.0f);
-    mShadowTexel = 2.0f * radius / (float) SM;
+            vlo.x, vhi.x, vlo.y, vhi.y,
+            std::max(0.0f, dNear - 1.0f), dFar + 1.0f);
+    // The normal-offset guard wants the COARSER of the two axes.
+    mShadowTexel = std::max(vhi.x - vlo.x, vhi.y - vlo.y) / (float) SM;
     view->setScene(mScene);
     view->setCamera(cam);
     view->setViewport({ 0, 0, SM, SM });
@@ -3093,7 +3124,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // old constant 0.004 was normalised, so what it meant on the ground grew
     // with the track: a metre on a big circuit, a few centimetres on a small
     // one. The ortho depth range is the camera's far plane (near is 0).
-    mShadowDepthBias = kShadowWorldBias / (4.0f * radius);
+    mShadowDepthBias = kShadowWorldBias / std::max(1.0f, (dFar + 1.0f) - std::max(0.0f, dNear - 1.0f));
 
     mEngine->destroy(view);
     mEngine->destroy(rt);
