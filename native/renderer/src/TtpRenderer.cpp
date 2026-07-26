@@ -3143,15 +3143,30 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     cam->setProjection(Camera::Projection::ORTHO,
             vlo.x, vhi.x, vlo.y, vhi.y,
             std::max(0.0f, dNear - 1.0f), dFar + 1.0f);
-    // The normal-offset guard wants the COARSER of the two axes.
+    // The slope-scaled bias below wants the COARSER of the two axes.
     mShadowTexel = std::max(vhi.x - vlo.x, vhi.y - vlo.y) / (float) SM;
+    // Normalised depth per world unit, so a bias expressed in metres means the
+    // same thing on a small circuit and a large one.
+    mShadowDepthScale = 1.0f
+            / std::max(1.0f, (dFar + 1.0f) - std::max(0.0f, dNear - 1.0f));
     view->setScene(mScene);
     view->setCamera(cam);
     view->setViewport({ 0, 0, SM, SM });
     view->setRenderTarget(rt);
     view->setPostProcessingEnabled(false);
     view->setShadowingEnabled(false);
-    view->setVisibleLayers(0x02, 0x02); // casters only (setMeshShadows marks them)
+    // Casters only. NOTE THE 0xff: View::setVisibleLayers MERGES rather than
+    // assigns — mVisibleLayers = (mVisibleLayers & ~select) | (values & select),
+    // starting from 0x1 — so a select of 0x02 leaves bit 0 SET, and since the
+    // test is a plain AND against a layer mask that is 0x1 on every renderable
+    // by default, this pass used to render the ENTIRE SCENE into the depth map.
+    // Two things came of that: the careful caster set below (elevated road, the
+    // gantry, the structures, the berms) was decorative, and every pool that is
+    // posed per frame — the car GLBs, their ghosts, the monster rigs, the item
+    // boxes, the bananas — was still sitting at its IDENTITY transform when the
+    // bake ran, so their stacked silhouette got burnt into the map at the world
+    // origin. That is the mystery blob on the ground at (0, 0) on every track.
+    view->setVisibleLayers(0xff, 0x02);
     const Renderer::ClearOptions prev = mRenderer->getClearOptions();
     Renderer::ClearOptions co{};
     co.clear = true;
@@ -3315,6 +3330,7 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     // shadowing itself (three refits the same guard to its texel size).
     mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
     mi->setParameter("shadowK", kShadowEsmK);
+    mi->setParameter("shadowDepthScale", mShadowDepthScale);
 }
 
 // Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,

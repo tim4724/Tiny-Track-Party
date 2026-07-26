@@ -36,7 +36,9 @@ material {
         { type : mat4, name : shadowFromWorld, precision : high },
         { type : float, name : shadowTexel },
         // ESM exponent (kShadowEsmK), matching what vesm.mat baked in.
-        { type : float, name : shadowK }
+        { type : float, name : shadowK },
+        // 1 / ortho depth range: turns a world-unit bias into normalised depth.
+        { type : float, name : shadowDepthScale }
     ]
 }
 
@@ -57,7 +59,7 @@ fragment {
     // lookup would slide across the map as the chase cam moves. The symptom is
     // a road uniformly in shadow, which reads as "the compare is inverted" and
     // is not.
-    float sunVisibility(highp vec3 wp, highp vec3 n) {
+    float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
         if (materialParams.shadowTexel <= 0.0) return 1.0;
         // No normal offset: ESM's bias is inherent (equal depths give exp(0) = 1),
         // and nudging the sample along the normal would only detach the shadow
@@ -70,8 +72,31 @@ fragment {
         // penumbra is already in the texel — no PCF kernel, and the map can be
         // smaller than a filtered depth map would have to be. Equal depths give
         // exp(0) = 1, so the acne bias is inherent and needs no constant.
+        // SLOPE-SCALED BIAS. ESM's bias is only inherent for a receiver whose
+        // depth is constant across a shadow texel. A surface seen edge-on by the
+        // sun is the opposite case: skysnake's loop wall sits ~7 degrees off the
+        // light, so its own depth spreads ~0.46 world units inside ONE texel and
+        // it shadows itself in a comb of dark tongues. Scale the guard by the
+        // grazing angle so flat ground pays nothing for it.
+        float slope = clamp(sqrt(max(0.0, 1.0 - NoL * NoL)) / max(NoL, 0.12), 1.0, 12.0);
+        float biasW = materialParams.shadowTexel * 2.0 * slope; // world units
         float occ = texture(materialParams_shadowMap, uv.xy).r;
-        return clamp(exp(materialParams.shadowK * uv.z) * occ, 0.0, 1.0);
+        float vis = clamp(exp(materialParams.shadowK
+                * (uv.z + biasW * materialParams.shadowDepthScale)) * occ, 0.0, 1.0);
+        // ...and fade the whole test out as the surface turns edge-on to the
+        // sun. The bias above scales with 1/NoL, but the depth spread inside a
+        // texel goes to INFINITY at true grazing, so no finite bias closes the
+        // last few degrees. skysnake's loop is the case: a vertical tube with a
+        // RAISED KERB along each rim, lit from ~7 degrees off its own surface,
+        // so the kerb scallops the wall below it with a comb of tongues. They
+        // are arguably real, and they look like noise.
+        //
+        // A surface that edge-on receives almost no sun anyway — the term is
+        // multiplied by NoL — so a shadow there carries no information and only
+        // its artefacts show. Trust the lookup where the light actually lands
+        // (NoL 0.40 is 24 degrees above grazing; a road deck under an overpass
+        // sits at 0.98 and is untouched) and let it go where it does not.
+        return mix(1.0, vis, smoothstep(0.05, 0.40, NoL));
     }
 
     void material(inout MaterialInputs material) {
@@ -93,7 +118,7 @@ fragment {
 
         // lightDirection is the surface→light vector; .w carries the exposure.
         float NoL = saturate(dot(n, frameUniforms.lightDirection));
-        float visibility = sunVisibility(getUserWorldPosition(), n);
+        float visibility = sunVisibility(getUserWorldPosition(), n, NoL);
         vec3 sun = frameUniforms.lightColorIntensity.rgb
                 * (frameUniforms.lightColorIntensity.w * NoL * visibility * (1.0 / PI));
 

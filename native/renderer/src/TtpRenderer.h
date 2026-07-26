@@ -313,6 +313,9 @@ private:
     // just above a receiver leaks. 80 is near the f32 ceiling (exp(-88)
     // denormals) and gives a 1-2 world-unit ramp on a typical circuit.
     static constexpr float kShadowEsmK = 80.0f;
+    // Normalised shadow depth per WORLD unit (1 / the ortho depth range), so the
+    // slope-scaled bias in vlit/vground means the same distance on every track.
+    float mShadowDepthScale = 0.0f;
     // Per-car ground-shadow silhouette, rendered top-down off the real model
     // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
     std::vector<filament::Texture*> mCarSilhouettes;
