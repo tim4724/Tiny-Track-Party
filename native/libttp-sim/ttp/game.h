@@ -19,35 +19,14 @@
 
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
+#include "ttp/scalar_id.h"
 #include "ttp/util.h"
 #include "ttp/vec3.h"
 
 namespace ttp {
 
-// A car id: number (peerIndex) or string ('cpu-bolt'). NONE = null/absent (an
-// ownerless banana, a target-less rocket). key() is the String() form the trace's
-// per-frame input map and rekey bookkeeping use.
-struct Id {
-  enum Kind { NONE, NUM, STR };
-  Kind kind = NONE;
-  double num = 0.0;
-  std::string str;
-
-  static Id None() { return Id{}; }
-  static Id Num(double n) { Id i; i.kind = NUM; i.num = n; return i; }
-  static Id Str(std::string s) { Id i; i.kind = STR; i.str = std::move(s); return i; }
-
-  bool isNull() const { return kind == NONE; }
-  bool operator==(const Id& o) const {
-    if (kind != o.kind) return false;
-    if (kind == NUM) return num == o.num;
-    if (kind == STR) return str == o.str;
-    return true;  // NONE == NONE
-  }
-  bool operator!=(const Id& o) const { return !(*this == o); }
-  std::string key() const;              // String(id) — canonical for map keys
-  Value toValue() const;                // NUM -> Value::Num, STR -> Value::Str
-};
+// A car id. NONE = null/absent (an ownerless banana, a target-less rocket).
+using Id = ScalarId;
 
 struct Stats { double accel = 1, vmax = 1, turn = 1, mass = 1, halfLen = 0.44, halfWid = 0.26; };
 

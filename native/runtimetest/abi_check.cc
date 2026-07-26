@@ -310,6 +310,15 @@ void boundaryExports() {
   check(ttp_car_finished(h, "\"nobody\"") == -1, "ttp_car_finished is -1 for an unknown id");
   check(ttp_car_finished(h, "0") == 0, "ttp_car_finished is 0 for a racing car");
 
+  // A malformed id must be ABSENT, not silently car 0. Both ABIs parse the id
+  // text with the same JSON scalar parser (ttp/scalar_id.h); the sim side used
+  // to run its own strtod-based scanner, which read "" and "oops" as the number
+  // 0 and so aimed every such call at whichever car holds id 0.
+  check(ttp_has_car(h, "") == 0, "an empty id is not car 0");
+  check(ttp_has_car(h, "oops") == 0, "a non-JSON id is not car 0");
+  check(ttp_has_car(h, "null") == 0, "a null id is not car 0");
+  check(ttp_car_finished(h, "") == -1, "an empty id reads as an unknown car");
+
   {
     Value ids;
     std::string err;

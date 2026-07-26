@@ -39,18 +39,6 @@ RoomHandle* room(int h) {
   return it == g_rooms.end() ? nullptr : it->second.get();
 }
 
-// A peer id crosses as a JSON scalar: "3" is numeric, "\"abc\"" is a string,
-// "null"/nullptr is absent. Numbers and strings stay distinct keys, like JS.
-PeerId peerFrom(const char* json) {
-  if (!json || !*json) return PeerId::None();
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  if (!ok) return PeerId::None();
-  if (v.type == Value::NUM) return PeerId::Num(v.num);
-  if (v.type == Value::STR) return PeerId::Str(v.str);
-  return PeerId::None();
-}
-
 const char* ret(RoomHandle* rh, Value v) {
   canonical_stringify_into(v, rh->scratch);
   return rh->scratch.c_str();
@@ -114,18 +102,18 @@ const char* ttp_room_add_player(int h, const char* peerIdJson, const char* field
     Value f = json::parse(fieldsJsonOrNull, &ok);
     if (ok && f.type == Value::OBJ) fields = f.obj;
   }
-  const Player* p = rh->flow->addPlayer(peerFrom(peerIdJson), fields);
+  const Player* p = rh->flow->addPlayer(parse_scalar_id(peerIdJson), fields);
   return p ? ret(rh, p->toValue()) : "null";
 }
 
 void ttp_room_remove_player(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  if (rh) rh->flow->removePlayer(peerFrom(peerIdJson));
+  if (rh) rh->flow->removePlayer(parse_scalar_id(peerIdJson));
 }
 
 int ttp_room_rekey(int h, const char* oldIdJson, const char* newIdJson) {
   RoomHandle* rh = room(h);
-  return (rh && rh->flow->rekey(peerFrom(oldIdJson), peerFrom(newIdJson))) ? 1 : 0;
+  return (rh && rh->flow->rekey(parse_scalar_id(oldIdJson), parse_scalar_id(newIdJson))) ? 1 : 0;
 }
 
 int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const char* valueJson) {
@@ -134,17 +122,17 @@ int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const cha
   bool ok = false;
   Value v = json::parse(valueJson, &ok);
   if (!ok) return 0;
-  return rh->flow->setField(peerFrom(peerIdJson), key, std::move(v)) ? 1 : 0;
+  return rh->flow->setField(parse_scalar_id(peerIdJson), key, std::move(v)) ? 1 : 0;
 }
 
 void ttp_room_mark_disconnected(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  if (rh) rh->flow->markDisconnected(peerFrom(peerIdJson));
+  if (rh) rh->flow->markDisconnected(parse_scalar_id(peerIdJson));
 }
 
 void ttp_room_mark_reconnected(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  if (rh) rh->flow->markReconnected(peerFrom(peerIdJson));
+  if (rh) rh->flow->markReconnected(parse_scalar_id(peerIdJson));
 }
 
 void ttp_room_clear_disconnected(int h, int hasNow, double nowMs) {
@@ -189,12 +177,12 @@ void ttp_room_set_active_order(int h, const char* peerIdsJson) {
 
 void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs) {
   RoomHandle* rh = room(h);
-  if (rh) rh->flow->onSeen(peerFrom(peerIdJson), nowMs);
+  if (rh) rh->flow->onSeen(parse_scalar_id(peerIdJson), nowMs);
 }
 
 int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs) {
   RoomHandle* rh = room(h);
-  return (rh && rh->flow->isExpired(peerFrom(peerIdJson), nowMs)) ? 1 : 0;
+  return (rh && rh->flow->isExpired(parse_scalar_id(peerIdJson), nowMs)) ? 1 : 0;
 }
 
 const char* ttp_room_expired_peers_json(int h, double nowMs) {
@@ -224,7 +212,7 @@ int ttp_room_grace_tick(int h, double nowMs) {
 
 void ttp_room_set_master(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  if (rh) rh->flow->setMasterValue(peerFrom(peerIdJson));
+  if (rh) rh->flow->setMasterValue(parse_scalar_id(peerIdJson));
 }
 
 void ttp_room_set_liveness_enabled(int h, int enabled) {
@@ -242,7 +230,7 @@ const char* ttp_room_host_json(int h) {
 
 int ttp_room_is_host(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  return (rh && rh->flow->isHost(peerFrom(peerIdJson))) ? 1 : 0;
+  return (rh && rh->flow->isHost(parse_scalar_id(peerIdJson))) ? 1 : 0;
 }
 
 int ttp_room_size(int h) {
@@ -263,18 +251,18 @@ const char* ttp_room_list_json(int h) {
 
 int ttp_room_has(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  return (rh && rh->flow->has(peerFrom(peerIdJson))) ? 1 : 0;
+  return (rh && rh->flow->has(parse_scalar_id(peerIdJson))) ? 1 : 0;
 }
 
 int ttp_room_is_disconnected(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
-  return (rh && rh->flow->isDisconnected(peerFrom(peerIdJson))) ? 1 : 0;
+  return (rh && rh->flow->isDisconnected(parse_scalar_id(peerIdJson))) ? 1 : 0;
 }
 
 const char* ttp_room_get_json(int h, const char* peerIdJson) {
   RoomHandle* rh = room(h);
   if (!rh) return "null";
-  const Player* p = rh->flow->get(peerFrom(peerIdJson));
+  const Player* p = rh->flow->get(parse_scalar_id(peerIdJson));
   return p ? ret(rh, p->toValue()) : "null";
 }
 
