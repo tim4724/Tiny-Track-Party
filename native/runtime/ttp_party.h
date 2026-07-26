@@ -11,40 +11,14 @@
 // wasm cannot open either without proxying through JS anyway). This ABI carries
 // DECISIONS, not bytes.
 //
-// CONVENTIONS (identical to ttp_runtime.h, so the shells share one mental model)
-//  - Handles are ints > 0 (0 = failure). An unknown or disposed handle is a safe
-//    no-op: queries return 0 / "null" / an empty array.
-//  - Peer indices cross as JSON SCALARS in a C string: the token "3" is the
-//    numeric peerIndex 3, "\"abc\"" the string id abc; numbers and strings are
-//    DISTINCT keys, exactly like JS. "null" / nullptr is the absent id.
-//  - Opaque game fields (name, colorIndex, ...) cross as a JSON object and are
-//    stored verbatim; RoomFlow never reads them.
-//  - Every const char* return points into a per-handle scratch buffer valid ONLY
-//    until the next ttp_* call on that handle — copy it out at once (JS
-//    UTF8ToString does). ttp_party_version() uses its own static buffer.
-//  - Returned JSON is CANONICAL (recursively sorted keys, ECMA-262 shortest-form
-//    numbers), byte-identical to the trace serializer.
-//  - Events are not callbacks: they queue and are drained as a JSON array by
-//    ttp_room_events_json, in exact emission order. The adapter re-fires them to
-//    the kit's on(...) listeners. Drain after EVERY mutating call — intra-op
-//    order is load-bearing.
+// Conventions are the shared ABI ones — see ttp_abi.h. Here the JSON scalars are
+// peer indices, and the opaque caller data is the game fields (name, colorIndex,
+// ...) which RoomFlow stores verbatim and never reads. Events drain through
+// ttp_room_events_json; the adapter re-fires them to the kit's on(...) listeners.
 #ifndef TTP_PARTY_H
 #define TTP_PARTY_H
 
-
-// ---- ABI export marking ------------------------------------------------------
-// Every entry point below is tagged TTP_ABI. Under emscripten that is
-// EMSCRIPTEN_KEEPALIVE, which exports the symbol from the wasm module; the
-// declaration IS the export list, so there is no second list to forget. (It used
-// to be ~100 names on one -sEXPORTED_FUNCTIONS line in native/CMakeLists.txt,
-// where a missed name failed only in the browser, at the cwrap call.) On the
-// native/tvOS/Android legs it expands to nothing.
-#ifdef __EMSCRIPTEN__
-#include <emscripten/emscripten.h>
-#define TTP_ABI EMSCRIPTEN_KEEPALIVE
-#else
-#define TTP_ABI
-#endif
+#include "ttp_abi.h"
 
 #ifdef __cplusplus
 extern "C" {

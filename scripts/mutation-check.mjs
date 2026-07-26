@@ -225,6 +225,17 @@ const MUTATIONS = [
     replace: 'if (true) {',
     expect: 'abi',
   },
+  // The bots the SHIPPED game races are constructed here and driven inside
+  // ttp_update. Until the ai-live trace joined the abi check, every fixture
+  // added its cars as humans and replayed recorded inputs, so this whole
+  // construction could be wrong with all 32 tests green.
+  {
+    name: 'abi/bot-persona-lane-bias-dropped',
+    file: 'native/runtime/ttp_runtime.cc',
+    find: 'STEER_GAIN, b.laneBias,',
+    replace: 'STEER_GAIN, 0.0,',
+    expect: 'abi',
+  },
 ];
 
 // ---------------------------------------------------------------------------

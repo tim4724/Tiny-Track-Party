@@ -15,25 +15,23 @@ RaceSession::RaceSession(const std::vector<PlayerDesc>& players, const GameTrack
 }
 
 void RaceSession::startCountdown(int seconds) {
-  countdownN_ = seconds; countdownNull_ = false;
-  countdownMs_ = 0; countdownMsNull_ = false;
-  if (onCountdownTick_) onCountdownTick_(countdownN_);
+  countdown_ = Countdown{seconds, 0};
+  if (onCountdownTick_) onCountdownTick_(countdown_->n);
 }
 
 void RaceSession::stepCountdown(double dtMs) {
-  if (countdownMsNull_) return;
-  countdownMs_ += dtMs;
-  while (countdownMs_ >= 1000) {
-    countdownMs_ -= 1000;
-    countdownN_ -= 1;
-    if (onCountdownTick_) onCountdownTick_(countdownN_);  // 2, 1, 0 (GO!), then -1 (clear)
-    if (countdownN_ == 0) {
+  if (!countdown_) return;
+  countdown_->ms += dtMs;
+  while (countdown_->ms >= 1000) {
+    countdown_->ms -= 1000;
+    countdown_->n -= 1;
+    if (onCountdownTick_) onCountdownTick_(countdown_->n);  // 2, 1, 0 (GO!), then -1 (clear)
+    if (countdown_->n == 0) {
       racing_ = true;
       onRaceStart();
       raceMs_ = 0;
-    } else if (countdownN_ < 0) {
-      countdownNull_ = true;
-      countdownMsNull_ = true;
+    } else if (countdown_->n < 0) {
+      countdown_.reset();
       return;
     }
   }
@@ -66,11 +64,11 @@ void RaceSession::pause() {
 void RaceSession::resume() {
   if (!paused_ || ended_) return;
   paused_ = false;
-  if (!racing_ && !countdownNull_) {
-    if (onCountdownTick_) onCountdownTick_(countdownN_);       // re-show the held count
-  } else if (racing_ && !countdownNull_ && countdownN_ == 0) {
-    countdownNull_ = true;
-    countdownMsNull_ = true;
+  if (!countdown_) return;
+  if (!racing_) {
+    if (onCountdownTick_) onCountdownTick_(countdown_->n);     // re-show the held count
+  } else if (countdown_->n == 0) {
+    countdown_.reset();
     if (onCountdownTick_) onCountdownTick_(-1);                // clear the GO! banner now
   }
 }
@@ -93,8 +91,7 @@ bool RaceSession::forceRemoveCar(const Id& id) {
 }
 
 void RaceSession::dispose() {
-  countdownNull_ = true;
-  countdownMsNull_ = true;
+  countdown_.reset();
   ended_ = true;
   racing_ = false;
   paused_ = false;

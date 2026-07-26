@@ -212,5 +212,9 @@ pinCase(BASE, '', 'only-instance');            // empty room
   lines.push(canonicalStringify({ op: 'pin', base: BASE, room: 'X', instance: '', expect: pc.relayUrl }));
 }
 
-fs.writeFileSync(OUT, lines.join('\n') + '\n');
+// --stdout emits instead of writing, so tests/codegen-freshness.test.js can
+// re-derive this corpus and byte-compare without touching the working copy.
+const text = lines.join('\n') + '\n';
+if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
+fs.writeFileSync(OUT, text);
 console.log(`wrote ${OUT}: ${lines.length - 1} cases`);

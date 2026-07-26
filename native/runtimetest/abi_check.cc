@@ -81,17 +81,32 @@ bool traceThroughAbi(const std::string& path) {
   const int h = ttp_session_begin(trackId.c_str(), seed, laps, nullptr);
   if (h <= 0) { fail("ttp_session_begin returned " + std::to_string(h)); return false; }
 
-  // The fixture was recorded on a BARE Game, so every car is added as a human
-  // (no internal AI) and every recorded input is fed in. Keep the JSON-scalar id
-  // text per car: String(id) is the recorded input key, but `3` and `"3"` are
-  // different ids to the ABI, so the roster's own JSON form is what we replay.
+  // Cars are added as humans (the ABI is fed every recorded input) UNLESS the
+  // trace is ai-live, in which case its bots are added with ttp_add_bot and
+  // ttp_update drives them INSIDE the wasm from their persona knobs — the exact
+  // path the shipped game runs, and the only way this check exercises it.
+  const bool aiLive = header.has("aiLive") && header.find("aiLive")->b;
+
   std::vector<std::pair<std::string, std::string>> keyToIdJson;  // String(id) -> id JSON
+  std::vector<std::string> botKeys;                              // driven in-wasm, inputs skipped
   for (const Value& r : header.find("roster")->arr) {
     const Value* id = r.find("id");
     const std::string idJson = canonical_stringify(*id);
     const std::string key = id->type == Value::STR ? id->str : js_number_to_string(id->num);
     keyToIdJson.emplace_back(key, idJson);
-    ttp_add_human(h, idJson.c_str(), nullptr);
+
+    const Value* kind = r.find("kind");
+    if (aiLive && kind && kind->str == "bot") {
+      const Value* caution = r.find("caution");
+      const Value* laneBias = r.find("laneBias");
+      const Value* aiSeed = r.find("aiSeed");
+      ttp_add_bot(h, idJson.c_str(), caution ? caution->num : 1.0,
+                  laneBias ? laneBias->num : 0.0,
+                  aiSeed ? (uint32_t)aiSeed->num : 0u, nullptr);
+      botKeys.push_back(key);
+    } else {
+      ttp_add_human(h, idJson.c_str(), nullptr);
+    }
   }
   ttp_session_start(h, -1);  // no countdown: racing from frame 0, bare-Game equivalent
   check(ttp_racing(h) == 1, "ttp_racing == 1 immediately in no-countdown mode");
@@ -105,6 +120,11 @@ bool traceThroughAbi(const std::string& path) {
     if (const Value* inputs = rec.find("inputs")) {
       for (const auto& kv : inputs->obj) {
         if (kv.second.type == Value::UNDEF) continue;
+        // An in-wasm bot's recorded input is the ORACLE, not an instruction:
+        // feeding it back would prove nothing about the AI the game runs.
+        bool isBot = false;
+        for (const auto& bk : botKeys) if (bk == kv.first) { isBot = true; break; }
+        if (isBot) continue;
         const std::string* idJson = nullptr;
         for (const auto& m : keyToIdJson) if (m.first == kv.first) { idJson = &m.second; break; }
         if (!idJson) { fail("input for unknown car key " + kv.first); return false; }
@@ -310,6 +330,15 @@ void boundaryExports() {
   check(ttp_car_finished(h, "\"nobody\"") == -1, "ttp_car_finished is -1 for an unknown id");
   check(ttp_car_finished(h, "0") == 0, "ttp_car_finished is 0 for a racing car");
 
+  // A malformed id must be ABSENT, not silently car 0. Both ABIs parse the id
+  // text with the same JSON scalar parser (ttp/scalar_id.h); the sim side used
+  // to run its own strtod-based scanner, which read "" and "oops" as the number
+  // 0 and so aimed every such call at whichever car holds id 0.
+  check(ttp_has_car(h, "") == 0, "an empty id is not car 0");
+  check(ttp_has_car(h, "oops") == 0, "a non-JSON id is not car 0");
+  check(ttp_has_car(h, "null") == 0, "a null id is not car 0");
+  check(ttp_car_finished(h, "") == -1, "an empty id reads as an unknown car");
+
   {
     Value ids;
     std::string err;
@@ -360,8 +389,38 @@ void boundaryExports() {
     }
   }
 
-  // Run the countdown out, then a few racing frames.
-  for (int i = 0; i < 200; i++) ttp_update(h, 1000.0 / 60.0);
+  // ---- pause DURING the countdown replays the held beat, and the GO! banner is
+  // cleared by the resume that follows it. This is the whole reason the session
+  // remembers the countdown as state rather than a running total, and nothing
+  // else in the suite drives it.
+  {
+    auto beats = [&]() {                     // the _countdown n's drained this call
+      Value evs; std::string err;
+      std::vector<double> out;
+      if (!read_line(ttp_events_json(h), evs, &err)) return out;
+      for (const Value& e : evs.arr) {
+        const Value* t = e.find("type");
+        const Value* n = e.find("n");
+        if (t && t->type == Value::STR && t->str == "_countdown" && n) out.push_back(n->num);
+      }
+      return out;
+    };
+    beats();                                  // discard whatever is queued
+
+    ttp_pause(h);
+    ttp_update(h, 5000.0);                    // a paused session must not tick the count
+    check(beats().empty(), "a paused countdown emits no beats");
+    ttp_resume(h);
+    const std::vector<double> replay = beats();
+    check(replay.size() == 1 && replay[0] == 3.0,
+          "resume during the countdown re-shows the held beat");
+
+    for (int i = 0; i < 300; i++) ttp_update(h, 1000.0 / 60.0);  // 5 s: past the clear
+    const std::vector<double> ran = beats();
+    std::string got;
+    for (double n : ran) got += (got.empty() ? "" : ",") + js_number_to_string(n);
+    check(got == "2,1,0,-1", "the countdown runs 2,1,0(GO),-1(clear) — got " + got);
+  }
   check(ttp_racing(h) == 1, "racing after the countdown elapses");
 
   // ---- pause freezes the sim: the snapshot must not move across an update.

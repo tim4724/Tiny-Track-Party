@@ -191,6 +191,19 @@ add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
 
+# ---- Conformance: the JSON string corpus (escape gate) ----------------------
+# The number corpus above gates doubles; nothing gated STRINGS. Across all 8
+# traces and every other corpus there is not one backslash escape, so the
+# quote/backslash/\b\t\n\f\r arms and the \u00XX control arm were executed
+# nowhere — in the writer OR the parser — while the controller's free-text name
+# field reaches them in production. Replays both directions against JSON.stringify.
+add_executable(json_escape_check simtest/json_escape_check.cc)
+target_link_libraries(json_escape_check PRIVATE ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(json_escape_check)
+add_test(NAME json_escape
+  COMMAND json_escape_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-escape-corpus.jsonl
+)
+
 # ---- Conformance: the cup-series scoring corpus ------------------------------
 # Replays tests/fixtures/grandprix-corpus.jsonl against CupSeries + ShuffleBag.
 # The cup layer was ported for parity and then never replayed by anything — no
@@ -401,9 +414,12 @@ ttp_emscripten_cli(abi_check)
 # Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
 # test uses, and helix adds 402 braking inputs — without it ttp_process_input's
 # brake bit is never marshalled and could be deleted with every frame still green
-# (found by mutation-testing this check). The session/ai-live/schedule traces are
-# NOT replayable here: their recording used engine calls (giveItem, setCarStats,
-# stageRocket) that the C ABI deliberately does not export.
+# (found by mutation-testing this check). tidepool-ailive then replays the path
+# the SHIPPED game actually runs: bots added with ttp_add_bot and driven INSIDE
+# ttp_update, so the racing line, the persona knobs and the drive-then-step order
+# are pinned by a recorded hash instead of only by replay_cli calling C++ direct.
+# Only the SCHEDULE trace is unreplayable here: it scripts giveItem/useItem/
+# setCarStats, which the C ABI deliberately does not export.
 add_test(NAME abi
   COMMAND abi_check
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
@@ -411,6 +427,7 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
 )
 
 # ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
@@ -426,7 +443,7 @@ add_test(NAME abi
 if(EMSCRIPTEN)
   add_executable(ttp_runtime_web runtime/ttp_runtime.cc runtime/ttp_party.cc)
   target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-  target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp)
+  target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
   set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
   target_link_options(ttp_runtime_web PRIVATE
     -O2

@@ -8,8 +8,6 @@
 
 #include "ttp_runtime.h"
 
-#include <cstdlib>
-#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
@@ -33,71 +31,27 @@ static const int CONTRACT_VERSION = 2;
 static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 
 // ---------------------------------------------------------------------------
-// JSON-scalar id + flat stats parsing.
+// Flat stats parsing (ids parse via ttp/scalar_id.h).
 // ---------------------------------------------------------------------------
-static Id parseId(const char* json) {
-  if (!json) return Id::None();
-  const char* p = json;
-  while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-  if (*p == '"') {
-    std::string s;
-    p++;
-    while (*p && *p != '"') {
-      if (*p == '\\') {
-        p++;
-        switch (*p) {
-          case 'n': s += '\n'; break;
-          case 't': s += '\t'; break;
-          case 'r': s += '\r'; break;
-          case 'b': s += '\b'; break;
-          case 'f': s += '\f'; break;
-          case '"': s += '"'; break;
-          case '\\': s += '\\'; break;
-          case '/': s += '/'; break;
-          case 'u': {
-            int v = 0;
-            for (int i = 0; i < 4 && p[1]; i++) {
-              char hc = *++p;
-              v <<= 4;
-              if (hc >= '0' && hc <= '9') v |= hc - '0';
-              else if (hc >= 'a' && hc <= 'f') v |= hc - 'a' + 10;
-              else if (hc >= 'A' && hc <= 'F') v |= hc - 'A' + 10;
-            }
-            s += (char)v;
-            break;
-          }
-          default: s += *p;
-        }
-        if (*p) p++;
-      } else {
-        s += *p++;
-      }
-    }
-    return Id::Str(s);
-  }
-  if (*p == 'n') return Id::None();  // null
-  return Id::Num(std::strtod(p, nullptr));
-}
-
-// Flat numeric stats object. Keys are distinct tokens, values are numbers, so a
-// keyed scan is sufficient (the adapter emits exactly this shape).
-static void statField(const char* json, const char* key, double& dst) {
-  std::string pat = std::string("\"") + key + "\"";
-  const char* q = std::strstr(json, pat.c_str());
-  if (!q) return;
-  q += pat.size();
-  while (*q == ' ' || *q == '\t' || *q == ':') q++;
-  dst = std::strtod(q, nullptr);
-}
+// Flat numeric stats object; absent or non-numeric members keep the benchmark
+// default. Each key is read as a real object member, not matched as a substring
+// of the raw text.
 static Stats parseStats(const char* json) {
   Stats st;
   if (!json) return st;
-  statField(json, "accel", st.accel);
-  statField(json, "vmax", st.vmax);
-  statField(json, "turn", st.turn);
-  statField(json, "mass", st.mass);
-  statField(json, "halfLen", st.halfLen);
-  statField(json, "halfWid", st.halfWid);
+  bool ok = false;
+  Value v = json::parse(json, &ok);
+  if (!ok || v.type != Value::OBJ) return st;
+  auto num = [&v](const char* key, double& dst) {
+    const Value* f = v.find(key);
+    if (f && f->type == Value::NUM) dst = f->num;
+  };
+  num("accel", st.accel);
+  num("vmax", st.vmax);
+  num("turn", st.turn);
+  num("mass", st.mass);
+  num("halfLen", st.halfLen);
+  num("halfWid", st.halfWid);
   return st;
 }
 
@@ -184,7 +138,7 @@ void ttp_add_human(int h, const char* idJson, const char* statsJsonOrNull) {
   RuntimeSession* rs = get(h);
   if (!rs || rs->started || rs->built) return;
   PlayerDesc p;
-  p.id = parseId(idJson);
+  p.id = parse_scalar_id(idJson);
   if (statsJsonOrNull) { p.hasStats = true; p.stats = parseStats(statsJsonOrNull); }
   rs->humans.push_back(p);
 }
@@ -194,12 +148,28 @@ void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
   RuntimeSession* rs = get(h);
   if (!rs || rs->started || rs->built) return;
   BotEntry b;
-  b.id = parseId(idJson);
+  b.id = parse_scalar_id(idJson);
   b.caution = caution;
   b.laneBias = laneBias;
   b.aiSeed = aiSeed;
   if (statsJsonOrNull) { b.hasStats = true; b.stats = parseStats(statsJsonOrNull); }
   rs->bots.push_back(std::move(b));
+}
+
+// Build every bot's controller and, with them, the racing line they share. Both
+// session modes need exactly this; written out twice, a persona knob could be
+// dropped from one path with the other still covering it.
+//
+// The racing line is primed HERE rather than left to build on first use, because
+// first use is the first frame a bot drives — the GO! beat, the exact frame the
+// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
+// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
+// precomputation over a centerline that cannot change, so every trace hashes
+// identically either way.
+static void buildBots(RuntimeSession& rs) {
+  for (auto& b : rs.bots)
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  if (!rs.bots.empty()) rs.eng->racingLine();
 }
 
 // Construct the RaceSession + bot controllers WITHOUT firing the countdown.
@@ -238,9 +208,7 @@ static void buildSession(RuntimeSession* rs) {
                                               rs->forceItem);
   rs->eng = &rs->session->engine();
 
-  // Build the bot controllers now that the field (and its cars) exist.
-  for (auto& b : rs->bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  buildBots(*rs);  // the field (and its cars) exist now
 }
 
 void ttp_session_start(int h, int countdownSeconds) {
@@ -260,8 +228,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
-    for (auto& b : rs->bots)
-      b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+    buildBots(*rs);
     return;
   }
 
@@ -295,7 +262,7 @@ void ttp_process_input(int h, const char* idJson, int mask, double s, double b, 
   if (mask & 1) { in.hasS = true; in.s = s; }
   if (mask & 2) { in.hasB = true; in.b = b; }
   if (mask & 4) { in.hasU = true; in.u = u; }
-  rs->eng->processInput(parseId(idJson), in);
+  rs->eng->processInput(parse_scalar_id(idJson), in);
 }
 
 const char* ttp_snapshot_json(int h) {
@@ -303,7 +270,7 @@ const char* ttp_snapshot_json(int h) {
   if (!rs) return NULL_JSON;
   if (!rs->eng) buildSession(rs);
   if (!rs->eng) return NULL_JSON;
-  rs->scratch = canonical_stringify(rs->eng->getSnapshot());
+  canonical_stringify_into(rs->eng->getSnapshot(), rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -312,7 +279,7 @@ const char* ttp_results_json(int h) {
   if (!rs) return NULL_JSON;
   if (!rs->eng) buildSession(rs);
   if (!rs->eng) return NULL_JSON;
-  rs->scratch = canonical_stringify(rs->eng->getResults());
+  canonical_stringify_into(rs->eng->getResults(), rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -322,14 +289,14 @@ const char* ttp_events_json(int h) {
   Value arr = Value::Arr();
   for (auto& e : rs->outQueue) arr.push(std::move(e));
   rs->outQueue.clear();
-  rs->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, rs->scratch);
   return rs->scratch.c_str();
 }
 
 int ttp_has_car(int h, const char* idJson) {
   RuntimeSession* rs = get(h);
   if (rs && !rs->eng) buildSession(rs);
-  return rs && rs->eng && rs->eng->hasCar(parseId(idJson)) ? 1 : 0;
+  return rs && rs->eng && rs->eng->hasCar(parse_scalar_id(idJson)) ? 1 : 0;
 }
 
 int ttp_car_finished(int h, const char* idJson) {
@@ -337,7 +304,7 @@ int ttp_car_finished(int h, const char* idJson) {
   if (rs && !rs->eng) buildSession(rs);
   if (!rs || !rs->eng) return -1;
   bool out = false;
-  if (!rs->eng->carFinished(parseId(idJson), out)) return -1;
+  if (!rs->eng->carFinished(parse_scalar_id(idJson), out)) return -1;
   return out ? 1 : 0;
 }
 
@@ -347,7 +314,7 @@ const char* ttp_car_ids_json(int h) {
   if (!rs || !rs->eng) return EMPTY_ARR;
   Value arr = Value::Arr();
   for (const auto& c : rs->eng->cars()) arr.push(c->id.toValue());
-  rs->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -355,7 +322,7 @@ int ttp_car_world_pos(int h, const char* idJson, double* out3) {
   RuntimeSession* rs = get(h);
   if (rs && !rs->eng) buildSession(rs);
   if (!rs || !rs->eng || !out3) return 0;
-  Id id = parseId(idJson);
+  Id id = parse_scalar_id(idJson);
   for (const auto& c : rs->eng->cars()) {
     if (c->id == id) {
       out3[0] = c->pose.pos.x;
@@ -382,7 +349,7 @@ int ttp_track_point(int h, double s, double lat, double* out3) {
 int ttp_force_remove_car(int h, const char* idJson) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return 0;
-  Id id = parseId(idJson);
+  Id id = parse_scalar_id(idJson);
   if (rs->session) return rs->session->forceRemoveCar(id) ? 1 : 0;
   return rs->eng->removeCar(id) ? 1 : 0;
 }
@@ -390,13 +357,13 @@ int ttp_force_remove_car(int h, const char* idJson) {
 int ttp_rekey_car(int h, const char* oldJson, const char* newJson) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return 0;
-  return rs->eng->rekeyCar(parseId(oldJson), parseId(newJson)) ? 1 : 0;
+  return rs->eng->rekeyCar(parse_scalar_id(oldJson), parse_scalar_id(newJson)) ? 1 : 0;
 }
 
 void ttp_force_finish(int h, const char* idJson, double time) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return;
-  rs->eng->forceFinish(parseId(idJson), true, time);
+  rs->eng->forceFinish(parse_scalar_id(idJson), true, time);
 }
 
 void ttp_fast_forward(int h) {
@@ -536,7 +503,7 @@ const char* ttp_gp_cup_json(int h) {
   Value tr = Value::Arr();
   for (const std::string& t : c.tracks) tr.push(Value::Str(t));
   o.set("tracks", std::move(tr));
-  g->scratch = canonical_stringify(o);
+  canonical_stringify_into(o, g->scratch);
   return g->scratch.c_str();
 }
 
@@ -597,7 +564,7 @@ const char* ttp_gp_standings_json(int h) {
     o.set("lastRank", st.lastRankNull ? Value::Null() : Value::Num(st.lastRank));
     arr.push(std::move(o));
   }
-  g->scratch = canonical_stringify(arr);
+  canonical_stringify_into(arr, g->scratch);
   return g->scratch.c_str();
 }
 

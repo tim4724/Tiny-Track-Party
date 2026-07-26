@@ -20,37 +20,12 @@
 #include <vector>
 
 #include "ttp/canonical.h"  // ttp::Value (header-only struct; canonical_stringify not needed here)
+#include "ttp/scalar_id.h"
 
 namespace ttp {
 
-// A room peer index: a number (peerIndex) or a string. Numbers and strings are
-// distinct keys, exactly like libttp-sim's Id JSON-scalar identity. NONE models
-// JS null/undefined (no host, an unset master). Kept local to libttp-party so the
-// party layer does not couple to the game header; the semantics mirror ttp::Id.
-struct PeerId {
-  enum Kind { NONE, NUM, STR };
-  Kind kind = NONE;
-  double num = 0.0;
-  std::string str;
-
-  static PeerId None() { return PeerId{}; }
-  static PeerId Num(double n) { PeerId p; p.kind = NUM; p.num = n; return p; }
-  static PeerId Str(std::string s) { PeerId p; p.kind = STR; p.str = std::move(s); return p; }
-
-  bool isNull() const { return kind == NONE; }
-  bool operator==(const PeerId& o) const {
-    if (kind != o.kind) return false;
-    if (kind == NUM) return num == o.num;
-    if (kind == STR) return str == o.str;
-    return true;  // NONE == NONE
-  }
-  bool operator!=(const PeerId& o) const { return !(*this == o); }
-  Value toValue() const {  // NUM -> Value::Num, STR -> Value::Str, NONE -> null
-    if (kind == NUM) return Value::Num(num);
-    if (kind == STR) return Value::Str(str);
-    return Value::Null();
-  }
-};
+// A room peer index. NONE models JS null/undefined (no host, an unset master).
+using PeerId = ScalarId;
 
 // A live player record. peerIndex/joinedAt/connected are kit-owned (protected on
 // reconnect); `fields` is the opaque game data (name, colorIndex, ...) merged by

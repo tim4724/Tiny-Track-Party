@@ -83,18 +83,7 @@ static const int ITEM_PLACE_TABLE[8][4] = {
     {20, 80, 0, 0}, {25, 55, 20, 0}, {30, 30, 40, 0}, {30, 30, 30, 10},
     {30, 25, 25, 20}, {30, 25, 20, 25}, {30, 10, 20, 40}, {30, 0, 20, 50}};
 
-// ---- Id / Event serialization ------------------------------------------------
-std::string Id::key() const {
-  if (kind == STR) return str;
-  if (kind == NUM) return js_number_to_string(num);  // String(number) == Number::toString
-  return "";
-}
-Value Id::toValue() const {
-  if (kind == STR) return Value::Str(str);
-  if (kind == NUM) return Value::Num(num);
-  return Value::Null();
-}
-
+// ---- Event serialization -----------------------------------------------------
 Value Event::toValue() const {
   Value o = Value::Obj();
   o.set("type", Value::Str(type));
