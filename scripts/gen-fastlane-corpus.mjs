@@ -278,5 +278,9 @@ scripts.push({ name: 'ack-equal-pa-no-reprune', config: C, steps: [
 const constants = probeConstants();
 const lines = [canonicalStringify({ kind: 'fastlane', ...constants })];
 for (const s of scripts) lines.push(canonicalStringify(runScript(s)));
-fs.writeFileSync(OUT, lines.join('\n') + '\n');
+// --stdout emits instead of writing, so tests/codegen-freshness.test.js can
+// re-derive this corpus and byte-compare without touching the working copy.
+const text = lines.join('\n') + '\n';
+if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
+fs.writeFileSync(OUT, text);
 console.log(`wrote ${OUT}: ${scripts.length} scripts, TTL_MS=${constants.TTL_MS}`);

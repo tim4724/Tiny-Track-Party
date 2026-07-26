@@ -74,5 +74,9 @@ for (const idx of CAR_INDICES) {
   cases++;
 }
 
-fs.writeFileSync(OUT, lines.join('\n') + '\n');
+// --stdout emits instead of writing, so tests/codegen-freshness.test.js can
+// re-derive this corpus and byte-compare without touching the working copy.
+const text = lines.join('\n') + '\n';
+if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
+fs.writeFileSync(OUT, text);
 console.log(`wrote ${OUT}: 1 manifest + ${cases} carStats cases`);
