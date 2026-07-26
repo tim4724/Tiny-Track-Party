@@ -7,41 +7,15 @@
 // BROWSER: it is compiled to wasm (ttp_sim_web / build-sim-web.sh) and a JS
 // adapter re-implements the display's RaceSession surface over it.
 //
-// CONVENTIONS
-//  - Handles are ints > 0 (0 = failure). Every call except ttp_version /
-//    ttp_get/set_steer_expo takes a handle as its first argument; an unknown or
-//    disposed handle is a safe no-op (queries return 0 / "null" / empty).
-//  - Car ids cross as JSON SCALARS in a C string: the token "3" is the numeric
-//    id 3, the token "\"cpu-bolt\"" is the string id cpu-bolt. The engine's car
-//    map distinguishes numeric from string ids exactly like JS (String(3) vs
-//    'cpu-bolt'). "null" / nullptr is the absent id.
-//  - Stats/forceItem arguments are JSON (an object, or null / nullptr for the
-//    benchmark defaults).
-//  - Every const char* return points into a per-handle scratch buffer that is
-//    valid ONLY until the next ttp_* call on that handle — copy it out at once
-//    (JS UTF8ToString does). ttp_version() uses its own static buffer.
-//  - Returned JSON is CANONICAL: recursively sorted keys, ECMA-262 shortest-form
-//    numbers — byte-identical to the trace serializer, so fnv1a(ttp_snapshot_json)
-//    matches a recorded frame hash.
+// Handles, JSON-scalar ids, scratch-buffer lifetime and canonical JSON are the
+// shared ABI conventions — see ttp_abi.h. Car ids are those scalars: `3` is the
+// numeric id 3, `"cpu-bolt"` the string id, and the two are different cars.
 #ifndef TTP_RUNTIME_H
 #define TTP_RUNTIME_H
 
 #include <stdint.h>
 
-
-// ---- ABI export marking ------------------------------------------------------
-// Every entry point below is tagged TTP_ABI. Under emscripten that is
-// EMSCRIPTEN_KEEPALIVE, which exports the symbol from the wasm module; the
-// declaration IS the export list, so there is no second list to forget. (It used
-// to be ~100 names on one -sEXPORTED_FUNCTIONS line in native/CMakeLists.txt,
-// where a missed name failed only in the browser, at the cwrap call.) On the
-// native/tvOS/Android legs it expands to nothing.
-#ifdef __EMSCRIPTEN__
-#include <emscripten/emscripten.h>
-#define TTP_ABI EMSCRIPTEN_KEEPALIVE
-#else
-#define TTP_ABI
-#endif
+#include "ttp_abi.h"
 
 #ifdef __cplusplus
 extern "C" {
