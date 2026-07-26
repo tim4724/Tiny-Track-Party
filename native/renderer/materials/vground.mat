@@ -91,24 +91,30 @@ fragment {
         // many texels — and the contour is a smooth curve.
         float occ = texture(materialParams_shadowMap, uv.xy).r;
         highp float dOcc = -log(max(occ, 1e-30)) / materialParams.shadowK;
-        highp float diff = (uv.z + biasW * materialParams.shadowDepthScale) - dOcc;
-        // Two floors on the transition width. The first is the penumbra we want
-        // to see: a fixed WORLD distance, so an edge is equally soft on every
-        // track whatever the light frustum ended up sized to. The second is
-        // analytic antialiasing — fwidth(diff) is how far the comparison moves
-        // in one screen pixel, so 1.5 of those keeps the ramp a few pixels wide
-        // however close the camera gets or however steeply the occluder towers
-        // over the receiver.
+        highp float raw = uv.z - dOcc;
+        // Two floors on the transition width. The first is a fixed WORLD
+        // distance, so an edge is equally soft on every track whatever the light
+        // frustum ended up sized to. The second is analytic antialiasing —
+        // fwidth is how far the comparison moves in one screen pixel, so 1.5 of
+        // those keeps the ramp a few pixels wide however close the camera gets
+        // or however steeply the occluder towers over the receiver. (The soft
+        // edge's real WIDTH comes from the bake blur; this is the depth window
+        // that reads it out, and the two multiply.)
         highp float w = max(kPenumbraWorld * materialParams.shadowDepthScale,
-                            1.5 * fwidth(diff));
-        // The ramp hangs BELOW the comparison rather than straddling it: at
-        // diff = 0 — a surface meeting its own depth in the map — the result is
-        // exactly 1. Straddling would put every lit surface in the middle of
-        // the ramp and grey the whole world the moment the penumbra grew wider
-        // than the depth bias, which is the first thing that happens when you
-        // widen it. This way the penumbra can be as wide as it likes and eats
-        // only into the shadow's own interior.
-        float vis = smoothstep(-2.0 * w, 0.0, diff);
+                            1.5 * fwidth(raw));
+        // The depth bias has to cover the ramp's lit-side reach, not just the
+        // usual slope-scaled acne guard. A surface that meets its own depth in
+        // the map sits at raw = 0; if the bias were smaller than w it would land
+        // mid-ramp and every lit surface in the world would go half-dark — which
+        // is exactly what happens the first time you widen the penumbra.
+        //
+        // Taking the max instead of adding w to the shift keeps the ramp CENTRED
+        // on the silhouette rather than hanging below it. Hanging it below is
+        // also acne-free, but it makes the shadow recede from its own outline by
+        // the full penumbra; centring halves that, and on a track this bias is
+        // usually the slope term anyway, so it costs nothing most of the time.
+        highp float biasN = max(biasW * materialParams.shadowDepthScale, w);
+        float vis = smoothstep(-w, w, raw + biasN);
         // ...and fade the whole test out as the surface turns edge-on to the
         // sun. The bias above scales with 1/NoL, but the depth spread inside a
         // texel goes to INFINITY at true grazing, so no finite bias closes the

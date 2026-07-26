@@ -3135,9 +3135,18 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             dFar = std::max(dFar, -p.z);
         }
     }
-    // A texel of margin so the PCF kernel never samples off the edge.
-    const float2 margin{ (vhi.x - vlo.x) / (float) SM * 4.0f,
-                         (vhi.y - vlo.y) / (float) SM * 4.0f };
+    // Half-width of the shadow's soft edge, as a Gaussian sigma in WORLD units.
+    // The bake blur below is sized from it, and so is the frustum margin here,
+    // because a kernel that reaches past the map's border smears it.
+    constexpr float kPenumbraSigmaWorld = 0.55f;
+    // Margin so the bake blur never reaches off the edge of the map. Outside it
+    // CLAMP_TO_EDGE repeats the border texel, which would smear whatever the
+    // outermost row happens to hold inward by the kernel's whole reach. Four
+    // texels covers the sampling itself; 3.5 sigma covers the blur, and the blur
+    // is specified in WORLD units so that half has to be too.
+    const float2 margin{
+        std::max((vhi.x - vlo.x) / (float) SM * 4.0f, kPenumbraSigmaWorld * 3.5f),
+        std::max((vhi.y - vlo.y) / (float) SM * 4.0f, kPenumbraSigmaWorld * 3.5f) };
     vlo -= margin;
     vhi += margin;
     cam->setProjection(Camera::Projection::ORTHO,
@@ -3188,97 +3197,119 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
     bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
-        // 2048, not 1024, and this is the ONLY thing that fixes the staircase.
-        //
-        // A high occluder's edge is binary — measured at a 1.0 px 20-80%
-        // transition at every kernel width tried — because ESM's exponential
-        // saturates and pins the blur to the lit side. A binary edge stairs
-        // along whatever grid stores it, so the stair size IS the map's texel
-        // footprint on screen, and only resolution changes that. Isolating the
-        // shadow against a no-shadow build makes it plain: at 1024 the edge is
-        // visibly serrated with a 9x9 kernel AND with a 13x13 one; at 2048 both
-        // are smooth.
-        //
-        // Runtime is unaffected — one bilinear tap either way, measured at
-        // 0.00 +/- 0.05 ms across 1024/2048/4096. The cost is +12 MB persistent
-        // and a few ms of bake, once per track.
+        // Matching the depth map's own size. The blur, not the resolution, sets
+        // how soft the edge is (see vesm.mat), so this only has to be fine
+        // enough that a texel is small next to the penumbra it carries — and at
+        // 2048 over a circuit's light frustum it is, by a wide margin. Runtime
+        // is a single bilinear tap at any size, measured at 0.00 +/- 0.05 ms
+        // across 1024/2048/4096; the cost is memory and a few ms of bake.
         constexpr uint32_t ESM_SM = 2048;
+
+        // TWO PASSES, one per axis. Separating it is what makes a wide kernel
+        // affordable: sigma is what the penumbra inherits, and reaching a useful
+        // sigma with the old single-pass square would have cost (6·sigma)²
+        // taps a texel. Two 17-tap passes cost 34.
         //
-        // Resolution alone could not: the stair size is not the texel's size in
-        // the map, it is the texel's FOOTPRINT ON THE RECEIVING SURFACE. Where a
-        // surface faces the sun that footprint is small and any resolution looks
-        // fine; where it is grazing — a loop's descending half, ground far from
-        // the camera — one texel smears across many screen pixels and its blocky
-        // outline is magnified. That is why the loop's climbing half looked
-        // clean while its descent stayed stairy at every resolution tried.
-        //
-        // This is precisely the problem mipmapping exists to solve, and an ESM
-        // is safe to mip because exp(-k*d) is linear under filtering (the same
-        // property that lets vesm blur it at all). The hardware picks the level
-        // from the fragment's own derivatives, so each pixel samples a mip whose
-        // texels are about its own size — sharp head-on, averaged at grazing —
-        // and it stays ONE trilinear tap.
+        // The spacing is derived from a target penumbra in WORLD units so the
+        // shadow's edge is equally soft on the smallest circuit and the largest.
+        // mShadowTexel is world units per texel; vesm's sigma is R/3 taps.
+        const float sigmaTexels = kPenumbraSigmaWorld / std::max(1e-4f, mShadowTexel);
+        // Spacing so that (R/3) taps span sigma. Floored at half a texel — below
+        // that the taps land inside one texel and the pass does nothing — and
+        // capped so a tiny track cannot ask for a kernel wider than the margin
+        // baked into the frustum above.
+        const float spacing = std::clamp(sigmaTexels * 3.0f / 8.0f, 0.5f, 10.0f);
+
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R32F)
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                 .build(*mEngine);
-        if (esm) {
-            RenderTarget* ert = RenderTarget::Builder()
-                    .texture(RenderTarget::AttachmentPoint::COLOR, esm)
-                    .build(*mEngine);
-            MaterialInstance* emi = mEsmMaterial->createInstance();
-            TextureSampler dsmp(TextureSampler::MinFilter::NEAREST,
-                    TextureSampler::MagFilter::NEAREST);
-            dsmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-            dsmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-            emi->setParameter("depth", mShadowMap, dsmp);
-            emi->setParameter("k", kShadowEsmK);
-            emi->setParameter("texel", float2{ 1.0f / (float) SM, 1.0f / (float) SM });
-            // Blur radius in SOURCE texels, +/-4 taps. This IS the penumbra:
-            // the receiver compares in log space, so the kernel's spatial width
-            // is what the soft edge inherits (see vesm.mat).
-            emi->setParameter("radius", 2.6f);
+        // Ping target for the horizontal pass. Its own filtering matters: pass
+        // two samples it at whole-texel offsets, so NEAREST would be exact, but
+        // LINEAR costs nothing and forgives the half-texel rounding.
+        Texture* tmp = esm ? Texture::Builder()
+                .width(ESM_SM).height(ESM_SM).levels(1)
+                .format(Texture::InternalFormat::R32F)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .build(*mEngine) : nullptr;
+        if (esm && tmp) {
+            // The fullscreen triangle, its scene and its camera are the same for
+            // both passes; only the material instance and the target differ.
             utils::Entity q = utils::EntityManager::get().create();
-            RenderableManager::Builder(1)
-                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-                    .material(0, emi)
-                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                            mPresentVB, mPresentIB, 0, 3)
-                    .culling(false).castShadows(false).receiveShadows(false)
-                    .build(*mEngine, q);
             Scene* qs = mEngine->createScene();
-            qs->addEntity(q);
             utils::Entity qcamEnt = utils::EntityManager::get().create();
             Camera* qcam = mEngine->createCamera(qcamEnt);
             qcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
-            View* qv = mEngine->createView();
-            qv->setScene(qs);
-            qv->setCamera(qcam);
-            qv->setViewport({ 0, 0, ESM_SM, ESM_SM });
-            qv->setRenderTarget(ert);
-            qv->setPostProcessingEnabled(false);
-            qv->setShadowingEnabled(false);
-            qv->setFrustumCullingEnabled(false);
+
+            TextureSampler nsmp(TextureSampler::MinFilter::NEAREST,
+                    TextureSampler::MagFilter::NEAREST);
+            nsmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            nsmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            TextureSampler lsmp(TextureSampler::MinFilter::LINEAR,
+                    TextureSampler::MagFilter::LINEAR);
+            lsmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            lsmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+
+            const Renderer::ClearOptions eprev = mRenderer->getClearOptions();
             Renderer::ClearOptions eco{};
             eco.clear = true;
             eco.clearColor = { 1, 0, 0, 0 }; // exp(0) = fully lit outside the map
-            const Renderer::ClearOptions eprev = mRenderer->getClearOptions();
-            mRenderer->setClearOptions(eco);
-            mRenderer->renderStandaloneView(qv);
-            mRenderer->setClearOptions(eprev);
-            mEngine->flushAndWait(); // the depth map dies next; let the pass read it first
-            mEngine->destroy(qv);
-            mEngine->destroy(ert);
-            mEngine->destroy(qs);
-            mEngine->destroy(q);
+
+            // src, its sampler, its size, the axis, and whether src is raw depth.
+            const struct { Texture* src; bool depth; float2 dir; Texture* dst; }
+                    passes[2] = {
+                { mShadowMap, true,  { spacing, 0.0f }, tmp },
+                { tmp,        false, { 0.0f, spacing }, esm },
+            };
+            for (const auto& p : passes) {
+                MaterialInstance* emi = mEsmMaterial->createInstance();
+                emi->setParameter("src", p.src, p.depth ? nsmp : lsmp);
+                emi->setParameter("k", kShadowEsmK);
+                const float srcSize = (float) (p.depth ? SM : ESM_SM);
+                emi->setParameter("texel", float2{ 1.0f / srcSize, 1.0f / srcSize });
+                emi->setParameter("dir", p.dir);
+                emi->setParameter("fromDepth", p.depth ? 1.0f : 0.0f);
+                RenderableManager::Builder(1)
+                        .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                        .material(0, emi)
+                        .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                                mPresentVB, mPresentIB, 0, 3)
+                        .culling(false).castShadows(false).receiveShadows(false)
+                        .build(*mEngine, q);
+                qs->addEntity(q);
+                RenderTarget* ert = RenderTarget::Builder()
+                        .texture(RenderTarget::AttachmentPoint::COLOR, p.dst)
+                        .build(*mEngine);
+                View* qv = mEngine->createView();
+                qv->setScene(qs);
+                qv->setCamera(qcam);
+                qv->setViewport({ 0, 0, ESM_SM, ESM_SM });
+                qv->setRenderTarget(ert);
+                qv->setPostProcessingEnabled(false);
+                qv->setShadowingEnabled(false);
+                qv->setFrustumCullingEnabled(false);
+                mRenderer->setClearOptions(eco);
+                mRenderer->renderStandaloneView(qv);
+                mRenderer->setClearOptions(eprev);
+                // Both passes read a texture the next step destroys or writes.
+                mEngine->flushAndWait();
+                mEngine->destroy(qv);
+                mEngine->destroy(ert);
+                qs->remove(q);
+                mEngine->destroy(q); // the renderable, not the entity
+                mEngine->destroy(emi);
+            }
             utils::EntityManager::get().destroy(q);
+            mEngine->destroy(qs);
             mEngine->destroyCameraComponent(qcamEnt);
             utils::EntityManager::get().destroy(qcamEnt);
-            mEngine->destroy(emi);
-            mEngine->destroy(mShadowMap); // 2048² DEPTH24 (16 MB) -> 1024² R32F (4 MB)
+            mEngine->destroy(tmp);
+            mEngine->destroy(mShadowMap); // 2048² DEPTH24 -> 2048² R32F
             mShadowMap = esm;
             esmOk = true;
+        } else if (esm) {
+            mEngine->destroy(esm);
         }
     }
     if (!esmOk) {

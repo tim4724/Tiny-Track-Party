@@ -8,25 +8,30 @@
 // linear under filtering, so blurring it here is exactly equivalent to blurring
 // the shadow, and the runtime lookup collapses to ONE bilinear tap.
 //
-// What it costs and what it buys: this pass runs once per track over the map,
-// and in exchange the road, the structures, the berms and the whole ground
-// stop paying nine taps a fragment forever. It also means the map no longer
-// carries the edge's sharpness in its resolution — the blur does — so the map
-// can be smaller than the PCF version needed.
+// THIS KERNEL'S WIDTH IS THE PENUMBRA. The receiver inverts the exponential and
+// compares in log space (see sunVisibility), and the soft edge it produces is
+// proportional to this blur's sigma. Nothing at the receiver can manufacture
+// softness the bake did not put here, which was learnt the hard way: the map's
+// resolution, the runtime tap count and a cubic reconstruction filter were each
+// built and measured, and each left a hard edge exactly as hard. So this pass
+// is SEPARABLE and runs twice — two 17-tap passes reach a sigma a single 9x9
+// never could, for less than half the taps.
 //
 // Reversed depth. Our map holds 1 at the light and 0 at the far plane (see
 // bakeShadowMap), so an occluder IN FRONT of a receiver has the GREATER value.
 // Standard ESM assumes the opposite, so the exponent is negated: we store
-// exp(-k·d) and the receiver multiplies by exp(+k·d_receiver). Equal depths
-// give exp(0) = 1 (lit, and self-shadowing acne cannot happen — the bias is
-// inherent), an occluder in front gives exp(-k·Δ) < 1.
+// exp(-k·d) and the receiver compares against its own depth directly. Equal
+// depths give exp(0) = 1, an occluder in front gives exp(-k·Δ) < 1.
 material {
     name : TtpVesm,
     parameters : [
-        { type : sampler2d, name : depth, precision : high },
+        { type : sampler2d, name : src, precision : high },
         { type : float,     name : k },      // exponent; see kShadowEsmK
         { type : float2,    name : texel },  // 1 / source map size
-        { type : float,     name : radius }  // blur radius in SOURCE texels
+        { type : float2,    name : dir },    // blur axis, in SOURCE texels per tap
+        // 1 on the pass that reads the raw depth map, 0 on the pass that reads
+        // this material's own output (already exponential, only needs blurring).
+        { type : float,     name : fromDepth }
     ],
     variables : [ uv ],
     vertexDomain : device,
@@ -47,33 +52,31 @@ fragment {
         prepareMaterial(material);
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        // A 9x9 Gaussian, done in one pass. Separating it would be the right
-        // call in a per-frame filter; here it runs once per track, so the 81
-        // taps are far below the noise of loading a track at all, and one pass
-        // means one material and one target.
+        // One axis of a separable Gaussian, +/-8 taps. sigma is R/3 TAPS, so the
+        // kernel reaches 3 sigma — everything that matters — while sampling it
+        // about 2.7 times per sigma, dense enough that the discrete taps do not
+        // band. The two numbers only work together: widening the spacing without
+        // adding taps truncates the Gaussian into a box, and adding taps without
+        // widening just oversamples the same narrow kernel. C++ picks the
+        // spacing from a target penumbra in WORLD units (see bakeShadowMap), so
+        // the edge is equally soft on a small circuit and a large one.
         //
-        // The radius here IS the penumbra, but only because the receiver
-        // compares in log space at a modest k (see sunVisibility). It was not
-        // always: at k = 80 the contrast either side of a tall occluder's
-        // silhouette is astronomical, the gaussian mean is pinned to the lit
-        // term, and 9x9 versus 13x13 gave a bit-for-bit identical edge. If the
-        // exponent ever goes back up, widening this stops working again.
+        // Only exp(-k*d) may be averaged, never d. On the first pass the source
+        // is still raw depth, so the exponential is applied per TAP, before the
+        // weights; on the second it is already exponential and passes through.
         highp vec2 uv = variable_uv.xy;
         highp float k = materialParams.k;
+        const int R = 8;
+        highp float inv2s2 = 1.0 / (2.0 * (float(R) / 3.0) * (float(R) / 3.0));
         float sum = 0.0;
         float wsum = 0.0;
-        const int R = 4;
-        // sigma = R/2 in source texels
-        highp float inv2s2 = 1.0 / (2.0 * (float(R) * 0.5) * (float(R) * 0.5));
-        for (int j = -R; j <= R; j++) {
-            for (int i = -R; i <= R; i++) {
-                highp vec2 o = vec2(float(i), float(j))
-                        * materialParams.texel * materialParams.radius;
-                float d = texture(materialParams_depth, uv + o).r;
-                float w = exp(-(float(i * i + j * j)) * inv2s2);
-                sum += w * exp(-k * d);
-                wsum += w;
-            }
+        for (int i = -R; i <= R; i++) {
+            highp vec2 o = materialParams.dir * float(i) * materialParams.texel;
+            float s = texture(materialParams_src, uv + o).r;
+            float v = materialParams.fromDepth > 0.5 ? exp(-k * s) : s;
+            float w = exp(-(float(i * i)) * inv2s2);
+            sum += w * v;
+            wsum += w;
         }
         // The colour goes in `emissive` with w = 0, like every other material
         // here: an unlit material's baseColor is zeroed when the view carries a
