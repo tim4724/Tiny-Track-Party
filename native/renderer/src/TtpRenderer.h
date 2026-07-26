@@ -527,6 +527,10 @@ private:
     // for the same result; a single flat quad clipped through curving decks.
     void conformDecal(Mesh& mesh, const filament::math::mat4f& basis,
             float sx, float sz, float lift, float alphaScale);
+    // Same, for a caller that already knows (s, lat) — skips project()'s linear
+    // scan of the whole centreline.
+    void conformDecalAt(Mesh& mesh, const filament::math::mat4f& basis,
+            float s0, float lat0, float sx, float sz, float lift, float alphaScale);
     void buildOils(const TrackBin& tb);
     void ensureCells(uint32_t count);
 };

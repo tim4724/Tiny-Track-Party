@@ -259,14 +259,43 @@ struct TtpRenderer::TrackBin {
     // the linear lerp it replaced drifted a few cm on bends, which flipped
     // furniture clearance tests (the gnome never spawned, the doghouse landed
     // on the wrong side) and bowed every painted band between rings.
+    // Uniform arclength bins -> first sample index at or before that arclength.
+    // frameAt is the hottest function in the renderer (the conformed decals call
+    // it three times per vertex, ~500 times per car per frame) and it was
+    // binary-searching ~900 samples on every call. The knots are dense and
+    // roughly evenly spaced, so a bin lookup lands within a sample or two and the
+    // walk below finishes immediately.
+    std::vector<uint32_t> sBins;
+    static constexpr size_t kSBins = 2048;
+    void buildArclengthIndex() {
+        sBins.clear();
+        const size_t n = samples.size();
+        if (n < 2 || !(length > 0)) return;
+        sBins.assign(kSBins, 0);
+        size_t i = 0;
+        for (size_t b = 0; b < kSBins; b++) {
+            const float target = (float) b / kSBins * length;
+            while (i + 1 < n && samples[i + 1].s <= target) i++;
+            sBins[b] = (uint32_t) i;
+        }
+    }
+
     Sample frameAt(float s) const {
         const size_t n = samples.size();
         float w = std::fmod(s, length);
         if (w < 0) w += length;
         // Largest index i with samples[i].s <= w (capped at n−1) — _seg().
-        size_t lo = 0, hi = n;
-        while (lo < hi) { const size_t mid = (lo + hi) / 2; (samples[mid].s <= w) ? lo = mid + 1 : hi = mid; }
-        const size_t i = (lo == 0) ? 0 : lo - 1; // JS _seg: i stays 0 below the first knot
+        size_t i;
+        if (!sBins.empty()) {
+            size_t b = (size_t) (w / length * (float) kSBins);
+            if (b >= kSBins) b = kSBins - 1;
+            i = sBins[b];
+            while (i + 1 < n && samples[i + 1].s <= w) i++;
+        } else {
+            size_t lo = 0, hi = n;
+            while (lo < hi) { const size_t mid = (lo + hi) / 2; (samples[mid].s <= w) ? lo = mid + 1 : hi = mid; }
+            i = (lo == 0) ? 0 : lo - 1; // JS _seg: i stays 0 below the first knot
+        }
         const auto idx = [&](long k) { return (size_t) (((k % (long) n) + (long) n) % (long) n); };
         const Sample& pA = samples[idx((long) i - 1)];
         const Sample& pB = samples[i];
@@ -3228,6 +3257,7 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     TrackBin tb;
     if (!parseTrackBin(bin, tb)) return false;
+    tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     const uint32_t carCount = (uint32_t) tb.carColors.size();
     const std::vector<uint32_t>& carColors = tb.carColors;
     const float groundY = tb.groundY;
@@ -4701,11 +4731,24 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     return asset;
 }
 
+// Project the decal's origin onto the centreline, then conform. Callers that
+// already know where they are on the ribbon should use conformDecalAt directly:
+// project() is a linear scan over every centreline sample (twice, if the first
+// pass's normal test rejects everything), and the bananas, rockets and boost
+// discs all have the arclength in hand — the bananas and rockets straight from
+// FrameInput, the disc from the ground blob that was conformed six lines earlier
+// for the same car at the same pose.
 void TtpRenderer::conformDecal(Mesh& mesh, const mat4f& basis, float sx, float sz,
         float lift, float alphaScale) {
     if (!mTrack || mesh.entity.isNull() || !mesh.vb || mesh.local.empty()) return;
     float s0 = 0, lat0 = 0;
     mTrack->project(basis[3].xyz, basis[1].xyz, s0, lat0);
+    conformDecalAt(mesh, basis, s0, lat0, sx, sz, lift, alphaScale);
+}
+
+void TtpRenderer::conformDecalAt(Mesh& mesh, const mat4f& basis, float s0, float lat0,
+        float sx, float sz, float lift, float alphaScale) {
+    if (!mTrack || mesh.entity.isNull() || !mesh.vb || mesh.local.empty()) return;
     const TrackBin::Sample f0 = mTrack->frameAt(s0);
     const float3 tan0 = f0.tangent();
     const float3 rightW = basis[0].xyz, fwdW = basis[2].xyz;
@@ -5733,6 +5776,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             if (stunt > 0) carPos += up * (RIDE_HEIGHT * stunt);
         }
         carPosW[i] = carPos;
+        float carS = 0, carLat = 0;   // this car's spot on the ribbon, projected once
+        bool haveCarS = false;
         const mat4f m{ float4{ right, 0 }, float4{ up, 0 }, float4{ fwd, 0 },
                        float4{ carPos, 1 } };
         if (mCarAssets.size() > i && mCarAssets[i]) {
@@ -5974,7 +6019,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
             const float load = mCarWheels.size() > i
                     ? std::min(1.0f, std::fabs(mCarWheels[i].pitch) / 0.08f) : 0.0f;
-            conformDecal(mCarBlobs[i], bm, sx, sz, 0.02f, (0.55f + 0.08f * load) / 0.55f);
+            // One projection per car, shared with the boost disc below: both
+            // decals hang off the same origin and the same road frame.
+            mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
+            haveCarS = true;
+            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.02f,
+                    (0.55f + 0.08f * load) / 0.55f);
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
         // each streak front (0.7) → back (−2.4) past the body at the car's
@@ -6048,7 +6098,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
-                conformDecal(mBoostDisks[i], m, outerR, outerR, 0.02f,
+                if (!haveCarS) {
+                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat);
+                    haveCarS = true;
+                }
+                conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR, 0.02f,
                         std::min(0.85f, 0.7f + k * 0.3f) * pulse);
             } else {
                 tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity), PARKED);
@@ -6383,7 +6437,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 return;
             }
             const float r = 0.3f * scale;
-            conformDecal(mPropBlobs[slot], f.basis(lat), r, r, 0.02f, 1.0f);
+            // f came from frameAt(item.s), so the arclength is already exact —
+            // no need to project the resulting world point back onto the curve.
+            conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r, 0.02f, 1.0f);
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
         for (uint32_t j = 0; j < (uint32_t) mBananaInstances.size(); j++) {
