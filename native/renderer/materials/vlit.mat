@@ -80,9 +80,31 @@ fragment {
         // grazing angle so flat ground pays nothing for it.
         float slope = clamp(sqrt(max(0.0, 1.0 - NoL * NoL)) / max(NoL, 0.12), 1.0, 12.0);
         float biasW = materialParams.shadowTexel * 2.0 * slope; // world units
-        float occ = texture(materialParams_shadowMap, uv.xy).r;
-        float vis = clamp(exp(materialParams.shadowK
-                * (uv.z + biasW * materialParams.shadowDepthScale)) * occ, 0.0, 1.0);
+        // SUPERSAMPLE THE VISIBILITY OVER THE PIXEL'S FOOTPRINT.
+        //
+        // The map is MINIFIED nearly everywhere it covers — one screen pixel
+        // spans several shadow texels — so a single tap undersamples it and the
+        // edge aliases into stairs. How badly depends on the receiver's slope,
+        // its distance and where it lands in the map, which is why it varied so
+        // strongly from one part of a loop to another.
+        //
+        // Pre-filtering the map cannot fix this: exp(k*z) * occ is CLAMPED, and
+        // the clamp re-sharpens whatever the bake-time blur smoothed. That is
+        // also why widening vesm's kernel changed nothing. The function that
+        // needs filtering is the visibility itself, so evaluate it four times
+        // across the footprint and average — a rotated 2x2, which beats an axis
+        // aligned one on the near-horizontal and near-vertical edges this scene
+        // is full of.
+        highp vec2 fw = min(fwidth(uv.xy), vec2(8.0 / 2048.0)); // cap runaway slopes
+        highp float bias = materialParams.shadowK
+                * (uv.z + biasW * materialParams.shadowDepthScale);
+        highp vec2 o1 = vec2( fw.x * 0.375, fw.y * 0.125);
+        highp vec2 o2 = vec2(-fw.x * 0.125, fw.y * 0.375);
+        float vis = 0.25 * (
+                  clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy + o1).r, 0.0, 1.0)
+                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy - o1).r, 0.0, 1.0)
+                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy + o2).r, 0.0, 1.0)
+                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy - o2).r, 0.0, 1.0));
         // ...and fade the whole test out as the surface turns edge-on to the
         // sun. The bias above scales with 1/NoL, but the depth spread inside a
         // texel goes to INFINITY at true grazing, so no finite bias closes the

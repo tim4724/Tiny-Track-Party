@@ -3203,6 +3203,21 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // 0.00 +/- 0.05 ms across 1024/2048/4096. The cost is +12 MB persistent
         // and a few ms of bake, once per track.
         constexpr uint32_t ESM_SM = 2048;
+        //
+        // Resolution alone could not: the stair size is not the texel's size in
+        // the map, it is the texel's FOOTPRINT ON THE RECEIVING SURFACE. Where a
+        // surface faces the sun that footprint is small and any resolution looks
+        // fine; where it is grazing — a loop's descending half, ground far from
+        // the camera — one texel smears across many screen pixels and its blocky
+        // outline is magnified. That is why the loop's climbing half looked
+        // clean while its descent stayed stairy at every resolution tried.
+        //
+        // This is precisely the problem mipmapping exists to solve, and an ESM
+        // is safe to mip because exp(-k*d) is linear under filtering (the same
+        // property that lets vesm blur it at all). The hardware picks the level
+        // from the fragment's own derivatives, so each pixel samples a mip whose
+        // texels are about its own size — sharp head-on, averaged at grazing —
+        // and it stays ONE trilinear tap.
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R32F)
