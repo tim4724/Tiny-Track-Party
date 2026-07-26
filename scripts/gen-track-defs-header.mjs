@@ -188,6 +188,13 @@ out.push('');
 out.push('}  // namespace ttp');
 out.push('');
 
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.writeFileSync(OUT, out.join('\n'));
-console.log(`${OUT}: ${trackIds.length} tracks`);
+// --stdout writes the header to stdout instead of the tree, so a test can
+// re-derive it and byte-compare without touching the working copy.
+const text = out.join('\n');
+if (process.argv.includes('--stdout')) {
+  process.stdout.write(text);
+} else {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, text);
+  console.log(`${OUT}: ${trackIds.length} tracks`);
+}
