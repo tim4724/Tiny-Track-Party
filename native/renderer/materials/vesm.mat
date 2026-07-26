@@ -47,17 +47,23 @@ fragment {
         prepareMaterial(material);
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        // A 13x13 Gaussian, done in one pass. Separating it would be the right
-        // call in a per-frame filter; here it runs once per track, so the 169
+        // A 9x9 Gaussian, done in one pass. Separating it would be the right
+        // call in a per-frame filter; here it runs once per track, so the 81
         // taps are far below the noise of loading a track at all, and one pass
-        // means one material and one target. The kernel is this wide because
-        // ESM's exponential resists blurring at high contrast — see the note at
-        // the call site in bakeShadowMap.
+        // means one material and one target.
+        //
+        // Do not widen this hoping to soften a shadow edge: at k = 80 the
+        // contrast between exp(-k*d) either side of a high occluder's silhouette
+        // is astronomical, the gaussian mean is pinned to the lit term, and the
+        // transition stays one pixel wide however far the kernel reaches. That
+        // was measured — 9x9 and 13x13 give a bit-for-bit identical edge. What
+        // this kernel IS for is the low-occluder case, where the exponential
+        // does not saturate and the blur survives.
         highp vec2 uv = variable_uv.xy;
         highp float k = materialParams.k;
         float sum = 0.0;
         float wsum = 0.0;
-        const int R = 6;
+        const int R = 4;
         // sigma = R/2 in source texels
         highp float inv2s2 = 1.0 / (2.0 * (float(R) * 0.5) * (float(R) * 0.5));
         for (int j = -R; j <= R; j++) {

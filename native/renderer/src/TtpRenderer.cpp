@@ -3188,10 +3188,20 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
     bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
-        // 2048, not 1024. The stored gradient IS the shadow edge now, so the
-        // map's own texel grid is what a hard edge stairs along. Runtime is
-        // unaffected (one tap either way, measured), the cost is +12 MB
-        // persistent and a few ms of bake.
+        // 2048, not 1024, and this is the ONLY thing that fixes the staircase.
+        //
+        // A high occluder's edge is binary — measured at a 1.0 px 20-80%
+        // transition at every kernel width tried — because ESM's exponential
+        // saturates and pins the blur to the lit side. A binary edge stairs
+        // along whatever grid stores it, so the stair size IS the map's texel
+        // footprint on screen, and only resolution changes that. Isolating the
+        // shadow against a no-shadow build makes it plain: at 1024 the edge is
+        // visibly serrated with a 9x9 kernel AND with a 13x13 one; at 2048 both
+        // are smooth.
+        //
+        // Runtime is unaffected — one bilinear tap either way, measured at
+        // 0.00 +/- 0.05 ms across 1024/2048/4096. The cost is +12 MB persistent
+        // and a few ms of bake, once per track.
         constexpr uint32_t ESM_SM = 2048;
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
@@ -3210,15 +3220,9 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             emi->setParameter("depth", mShadowMap, dsmp);
             emi->setParameter("k", kShadowEsmK);
             emi->setParameter("texel", float2{ 1.0f / (float) SM, 1.0f / (float) SM });
-            // Blur radius in SOURCE texels. The kernel is +/-6 taps, so this
-            // scales the world-space penumbra directly. Wider than it looks it
-            // needs to be, because ESM's exponential fights the blur: for a HIGH
-            // occluder the contrast between exp(-k*d_occluder) and its lit
-            // neighbours is enormous, the gaussian mean is dominated by the lit
-            // side, and the transition collapses to a fraction of the kernel.
-            // That is why a viaduct's shadow edge was near-binary (and stairing
-            // along the map grid) while a low kerb's was soft.
-            emi->setParameter("radius", 2.0f);
+            // Blur radius in SOURCE texels, +/-4 taps. This softens the
+            // LOW-occluder case; it cannot soften a high one (see vesm.mat).
+            emi->setParameter("radius", 1.5f);
             utils::Entity q = utils::EntityManager::get().create();
             RenderableManager::Builder(1)
                     .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
