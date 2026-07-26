@@ -515,12 +515,15 @@ export class SceneRenderer {
 
   // Per-frame prop reconcile from the engine snapshot (item boxes, bananas, ?bbox).
   syncProps(snap) {
-    if (this.nativeView) return; // the renderer reconciles props from FrameInput
-
-    // Stash it for the native renderer: syncProps is called once a frame on
-    // every path (the live game and the harness scenarios), so this is the one
-    // place that always sees the frame's state.
-    this._nativeSnap = snap; this.props.sync(snap); }
+    // Stash it for the native renderer FIRST: syncProps is called once a frame
+    // on every path (the live game and the harness scenarios), so this is the
+    // one place that always sees the frame's state. _submitNative reads every
+    // per-car cosmetic off it — steer, brake, boostMul, spin, onWall — plus the
+    // item-box availability and the banana/rocket pools. Returning above this
+    // line froze the whole lot at boot.
+    this._nativeSnap = snap;
+    if (this.nativeView) return; // three's own prop meshes are not drawn
+    this.props.sync(snap); }
 
   // Spawn a rocket-impact burst at a car (the detonation point). Driven from the engine's
   // rocket spin event; no-op if the car has no render mesh (e.g. just removed).
