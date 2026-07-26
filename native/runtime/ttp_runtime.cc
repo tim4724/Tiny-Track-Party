@@ -156,15 +156,20 @@ void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
   rs->bots.push_back(std::move(b));
 }
 
-// The AI's racing line is built from the centerline on first use — which, left
-// alone, is the first frame a bot drives: the GO! beat, the exact frame the
-// player first touches the throttle. Solving it costs 4.3-5.5 ms depending on
-// track, against a 0.013 ms steady frame, so it read as a stutter on the start
-// line. Building it here instead moves it into session setup, seconds earlier
-// and off the render loop. Pure precomputation over data that cannot change, so
-// every trace hashes identically.
-static void primeRacingLine(RuntimeSession& rs) {
-  for (const auto& b : rs.bots) if (b.ai) { rs.eng->racingLine(); return; }
+// Build every bot's controller and, with them, the racing line they share. Both
+// session modes need exactly this; written out twice, a persona knob could be
+// dropped from one path with the other still covering it.
+//
+// The racing line is primed HERE rather than left to build on first use, because
+// first use is the first frame a bot drives — the GO! beat, the exact frame the
+// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
+// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
+// precomputation over a centerline that cannot change, so every trace hashes
+// identically either way.
+static void buildBots(RuntimeSession& rs) {
+  for (auto& b : rs.bots)
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  if (!rs.bots.empty()) rs.eng->racingLine();
 }
 
 // Construct the RaceSession + bot controllers WITHOUT firing the countdown.
@@ -203,10 +208,7 @@ static void buildSession(RuntimeSession* rs) {
                                               rs->forceItem);
   rs->eng = &rs->session->engine();
 
-  // Build the bot controllers now that the field (and its cars) exist.
-  for (auto& b : rs->bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
-  primeRacingLine(*rs);
+  buildBots(*rs);  // the field (and its cars) exist now
 }
 
 void ttp_session_start(int h, int countdownSeconds) {
@@ -226,9 +228,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
-    for (auto& b : rs->bots)
-      b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
-    primeRacingLine(*rs);
+    buildBots(*rs);
     return;
   }
 
