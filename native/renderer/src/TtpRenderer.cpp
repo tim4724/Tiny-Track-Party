@@ -3024,10 +3024,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     hi += float3{ 4.0f, 8.0f, 4.0f };
     const float3 centre = (lo + hi) * 0.5f;
     const float3 toSun = normalize(float3{ 2.0f, 12.0f, 1.5f }); // theme.key, as the JS places it
-    // Radius of the bounding sphere: an ortho box that covers it holds the
-    // whole track from any light angle, and never depends on the camera.
+    // Distance to stand the light off at: the bounding-sphere radius still
+    // decides that (it has to clear the geometry from any angle), but it no
+    // longer decides the ortho BOX — see below.
     const float radius = length(hi - lo) * 0.5f;
-    mShadowTexel = 2.0f * radius / (float) SM;
 
     mShadowMap = Texture::Builder()
             .width(SM).height(SM).levels(1)
@@ -3041,9 +3041,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     utils::Entity camEnt = utils::EntityManager::get().create();
     Camera* cam = mEngine->createCamera(camEnt);
     View* view = mEngine->createView();
-    cam->setProjection(Camera::Projection::ORTHO,
-            -radius, radius, -radius, radius, 0.0, 2.0 * radius * 2.0);
     cam->lookAt(centre + toSun * (radius * 2.0f), centre, float3{ 0, 0, 1 });
+    cam->setProjection(Camera::Projection::ORTHO,
+            -radius, radius, -radius, radius, 0.0f, 2.0f * radius * 2.0f);
+    mShadowTexel = 2.0f * radius / (float) SM;
     view->setScene(mScene);
     view->setCamera(cam);
     view->setViewport({ 0, 0, SM, SM });
@@ -6534,15 +6535,35 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             }
             mLastCar0 = c0;
         }
-        // A rocket that vanished this frame burst (hit or whiff self-destruct):
-        // fire an expanding ring at its last known spot.
-        if (input.rocketCount < mPrevRocketCount && !mPrevRockets.empty()) {
-            for (Burst& b : mBursts) {
-                if (b.t >= 0) continue;
-                b.pos = mPrevRockets.back();
-                b.t = 0;
-                break;
+        // Detonations, as the engine reported them this frame.
+        //
+        // This used to be INFERRED from rocketCount dropping, and the burst was
+        // pinned to the rocket's last known spot. That is exactly wrong for a
+        // HIT: the rocket detonates on a car, the car drives on, and the burst
+        // is left behind — so the victim's own chase camera, the one view
+        // guaranteed to be pointed at it, is the only view that never sees it.
+        // The events say which case it is, so the fireball can ride the car out
+        // like the JS does (TrackProps IMPACT_FOLLOW) while the shockwave ring
+        // stays put at the impact point.
+        const TtpBurstInput* bursts = ttp_frame_bursts(&input);
+        for (uint32_t bi = 0; bi < input.burstCount; bi++) {
+            Burst* slot = nullptr;
+            for (Burst& b : mBursts) { if (b.t < 0) { slot = &b; break; } }
+            if (!slot) break; // two at once is already more than reads
+            const TtpBurstInput& ev = bursts[bi];
+            if (ev.car >= 0 && (uint32_t) ev.car < nCars && (size_t) ev.car < carPosW.size()) {
+                // On the car body, like spawnImpact's carGroup.position + up·0.3.
+                const TtpCarInput& hit = cars[ev.car];
+                slot->pos = carPosW[ev.car]
+                        + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
+                slot->car = ev.car;
+            } else {
+                const TrackBin::Sample f = mTrack->frameAt(ev.s);
+                slot->pos = f.pos + f.lat * ev.lat + f.up * 0.3f;
+                slot->car = -1;
             }
+            slot->ball = slot->pos;
+            slot->t = 0;
         }
         mPrevRockets = std::move(nowRockets);
         mPrevRocketCount = input.rocketCount;
@@ -6560,13 +6581,21 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 tcm.setTransform(ballI, PARK);
                 continue;
             }
+            // The fireball chases the car it hit as that car spins away
+            // (TrackProps IMPACT_FOLLOW 10/s); the ring stays at the impact.
+            if (b.car >= 0 && (uint32_t) b.car < nCars && (size_t) b.car < carPosW.size()) {
+                const TtpCarInput& hit = cars[b.car];
+                const float3 target = carPosW[b.car]
+                        + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
+                b.ball += (target - b.ball) * std::min(1.0f, 10.0f * input.dt);
+            }
             const float k = 0.25f + (b.t / DUR) * 1.75f; // ring 0.25 → 2.0
             tcm.setTransform(ringI, mat4f::translation(b.pos) * mat4f::scaling(float3{ k, 1, k }));
             if (b.t < FLASH) {
                 // brief hold, then the fireball shrinks out (alpha is baked —
                 // scale carries the fade)
                 const float f = b.t < 0.12f ? 1.0f : 1.0f - (b.t - 0.12f) / (FLASH - 0.12f);
-                tcm.setTransform(ballI, mat4f::translation(b.pos)
+                tcm.setTransform(ballI, mat4f::translation(b.ball)
                         * mat4f::scaling(float3{ 0.62f * f }));
             } else {
                 tcm.setTransform(ballI, PARK);

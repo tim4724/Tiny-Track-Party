@@ -5,7 +5,7 @@
 // wasm module (FrameInput v1, ttp_runtime.h). Identical state by construction —
 // any visual difference is a renderer difference.
 const W = 1280, H = 720;
-const HEADER_BYTES = 36, CAR_F32 = 16, VIEW_F32 = 22;
+const HEADER_BYTES = 40, CAR_F32 = 16, VIEW_F32 = 22; // header: version, dt, 6 counts, flags, sceneT
 
 const $ = (id) => document.getElementById(id);
 const statsEl = $('stats'), statusEl = $('status'), frameNoEl = $('frame-no');
@@ -119,28 +119,41 @@ function submitFrame(dt) {
   const t0 = performance.now();
   const snap = fixture.getSnapshot();
   const views = fixture.getViews();
-  fixture.drainEvents(); // v1 carries no events yet; drain so the buffer can't grow unbounded
+  const snapIndexOf = (id) => snap.cars.findIndex((c) => c.id === id);
+  // Detonations: the fixture's own event stream, mapped to the burst channel so
+  // the compare pane shows the same explosion the game does (a hit rides the car
+  // it hit, a whiff detonates at its track point).
+  const bursts = [];
+  for (const ev of fixture.drainEvents()) {
+    if (ev.type === 'spin' && ev.cause === 'rocket') {
+      const i = snapIndexOf(ev.id);
+      if (i >= 0) bursts.push({ car: i, s: 0, lat: 0 });
+    } else if (ev.type === 'rocket_expire') {
+      bursts.push({ car: -1, s: ev.s, lat: ev.lat });
+    }
+  }
   const cars = snap.cars;
   const boxes = snap.boxes || [];
   const bananas = snap.bananas || [];
   const rockets = snap.rockets || [];
   const bytes = HEADER_BYTES + cars.length * CAR_F32 * 4 + views.length * VIEW_F32 * 4
-      + boxes.length * 4 + bananas.length * 8 + rockets.length * 8;
+      + boxes.length * 4 + bananas.length * 8 + rockets.length * 8 + bursts.length * 12;
   ensureBuffer(bytes);
   // Views detach on wasm memory growth — re-derive per frame.
   const dv = new DataView(Module.HEAPU8.buffer, fiPtr, bytes);
-  dv.setUint32(0, 8, true);            // TTP_FRAME_INPUT_VERSION
+  dv.setUint32(0, 9, true);            // TTP_FRAME_INPUT_VERSION
   dv.setFloat32(4, dt, true);
   dv.setUint32(8, cars.length, true);
   dv.setUint32(12, views.length, true);
   dv.setUint32(16, boxes.length, true);
   dv.setUint32(20, bananas.length, true);
   dv.setUint32(24, rockets.length, true);
-  dv.setUint32(28, 0, true);           // flags (reserved)
+  dv.setUint32(28, bursts.length, true);
+  dv.setUint32(32, 0, true);           // flags (reserved)
   // The JS scene's env clock (_birdT): the phase source for every wall-clock
   // cosmetic, so both panes' boxes/clouds/balloon animate in the same phase.
   const sceneWin = document.getElementById('fixture-frame')?.contentWindow;
-  dv.setFloat32(32, sceneWin?.__scene?._birdT ?? 0, true);
+  dv.setFloat32(36, sceneWin?.__scene?._birdT ?? 0, true);
   let o = HEADER_BYTES;
   const f32 = (v) => { dv.setFloat32(o, v, true); o += 4; };
   const u32 = (v) => { dv.setUint32(o, v, true); o += 4; };
@@ -160,6 +173,7 @@ function submitFrame(dt) {
   for (const b of boxes) u32(b ? 1 : 0);
   for (const b of bananas) { f32(b.s); f32(b.lat); }
   for (const r of rockets) { f32(r.s); f32(r.lat); }
+  for (const b of bursts) { dv.setInt32(o, b.car, true); o += 4; f32(b.s); f32(b.lat); }
   const rendered = Module._ttp_submit_frame(rt, fiPtr);
   marshalUs += (performance.now() - t0) * 1000;
   marshals++;

@@ -424,8 +424,10 @@ private:
     std::vector<Mesh> mRocketFlames; // per-rocket blend tail flames
     // Impact bursts: expanding rings where a rocket vanished (hit or whiff).
     struct Burst {
-        filament::math::float3 pos{};
-        float t = -1; // <0 idle; else seconds since impact
+        filament::math::float3 pos{};   // the shockwave ring's fixed impact point
+        filament::math::float3 ball{};  // the fireball, which TRAILS a hit car
+        float t = -1;                   // <0 idle; else seconds since impact
+        int32_t car = -1;               // >=0: rode this car in; the ball follows it
     };
     Burst mBursts[2];
     Mesh mBurstMeshes[2]; // shockwave rings

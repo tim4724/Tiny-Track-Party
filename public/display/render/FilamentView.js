@@ -16,7 +16,7 @@
 // and calls the renderer in C++ and nothing crosses at all. This is the shape
 // that gets there: everything below the submit() call is already the ABI.
 
-const HEADER_F32 = 9;   // version, dt, 5 counts, flags, sceneT
+const HEADER_F32 = 10;  // version, dt, 6 counts, flags, sceneT
 const CAR_F32 = 16;
 const VIEW_F32 = 22;
 
@@ -119,11 +119,11 @@ export class FilamentView {
 
   // One frame. `cars` and `views` are read straight off SceneRenderer's own
   // per-car state, so nothing is recomputed here.
-  submit(dt, cars, views, boxes, bananas, rockets) {
+  submit(dt, cars, views, boxes, bananas, rockets, bursts = []) {
     if (!this._built) return;
     const m = this.mod;
     const f32 = (HEADER_F32 + cars.length * CAR_F32 + views.length * VIEW_F32
-        + boxes.length + bananas.length * 2 + rockets.length * 2);
+        + boxes.length + bananas.length * 2 + rockets.length * 2 + bursts.length * 3);
     const bytes = f32 * 4;
     if (bytes > this._cap) {
       if (this._ptr) m._free(this._ptr);
@@ -136,15 +136,17 @@ export class FilamentView {
     const buf = m.HEAPU8.buffer; // the only heap view the module always exports
     const F = new Float32Array(buf, this._ptr, f32);
     const U = new Uint32Array(buf, this._ptr, f32);
-    U[0] = 8;                 // TTP_FRAME_INPUT_VERSION
+    const I = new Int32Array(buf, this._ptr, f32); // burst car slots are signed
+    U[0] = 9;                 // TTP_FRAME_INPUT_VERSION
     F[1] = dt;
     U[2] = cars.length;
     U[3] = views.length;
     U[4] = boxes.length;
     U[5] = bananas.length;
     U[6] = rockets.length;
-    U[7] = 0;                 // flags (reserved)
-    F[8] = this._sceneT;
+    U[7] = bursts.length;
+    U[8] = 0;                 // flags (reserved)
+    F[9] = this._sceneT;
     let o = HEADER_F32;
     for (const c of cars) {
       const p = c.pose;
@@ -164,6 +166,8 @@ export class FilamentView {
     for (const b of boxes) U[o++] = b ? 1 : 0;
     for (const b of bananas) { F[o++] = b.s; F[o++] = b.lat || 0; }
     for (const r of rockets) { F[o++] = r.s; F[o++] = r.lat || 0; }
+    // A detonation: car slot (i32, -1 = a whiff at a track point) then s, lat.
+    for (const b of bursts) { I[o++] = b.car; F[o++] = b.s || 0; F[o++] = b.lat || 0; }
     m._ttp_submit_frame(this.rt, this._ptr);
   }
 
@@ -173,7 +177,10 @@ export class FilamentView {
   // frame is still in the drawing buffer, i.e. in the task that drew it.
   repaint() {
     if (!this._built || !this._ptr) return false;
-    new Float32Array(this.mod.HEAPU8.buffer, this._ptr, 2)[1] = 0; // dt
+    // dt 0 AND no new detonations: a repaint must not re-fire last frame's.
+    const h = new Float32Array(this.mod.HEAPU8.buffer, this._ptr, HEADER_F32);
+    h[1] = 0;
+    new Uint32Array(this.mod.HEAPU8.buffer, this._ptr, HEADER_F32)[7] = 0;
     return !!this.mod._ttp_submit_frame(this.rt, this._ptr);
   }
 }

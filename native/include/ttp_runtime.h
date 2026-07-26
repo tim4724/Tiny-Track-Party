@@ -55,9 +55,25 @@ typedef struct TtpRocketInput {
     float s, lat;
 } TtpRocketInput;
 
+/* One rocket detonation, fired on the frame the engine reports it.
+ *
+ * The renderer used to INFER these from rocketCount dropping, and place the
+ * burst at the rocket's last known spot. That is wrong for the case that
+ * matters most: a rocket that HIT a car detonates ON that car, and the car
+ * keeps driving — so a burst pinned to the impact point immediately falls
+ * behind its victim's own chase camera, i.e. the one player guaranteed to be
+ * looking at it never sees it. The events carry which of the two it was:
+ *   car >= 0  — a hit on that car (index into cars[]); the fireball rides it
+ *   car <  0  — a whiff self-destruct at track position (s, lat) */
+typedef struct TtpBurstInput {
+    int32_t car;
+    float s, lat;
+} TtpBurstInput;
+
 /* Header, followed CONTIGUOUSLY by cars[carCount], views[viewCount],
  * boxStates[boxCount] (u32: 1 = available, 0 = collected; indexed like the
- * scene payload's box list), bananas[bananaCount] and rockets[rocketCount]. */
+ * scene payload's box list), bananas[bananaCount], rockets[rocketCount] and
+ * bursts[burstCount]. */
 typedef struct TtpFrameInput {
     uint32_t version;  /* TTP_FRAME_INPUT_VERSION */
     float dt;          /* seconds since previous frame */
@@ -66,6 +82,7 @@ typedef struct TtpFrameInput {
     uint32_t boxCount;
     uint32_t bananaCount;
     uint32_t rocketCount;
+    uint32_t burstCount; /* detonations fired THIS frame (usually 0) */
     uint32_t flags;    /* reserved (no flags defined) */
     float sceneT;      /* the driving renderer's scene clock (accumulated dt since
                         * its scene booted) — phase source for every wall-clock
@@ -74,7 +91,7 @@ typedef struct TtpFrameInput {
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 8u
+#define TTP_FRAME_INPUT_VERSION 9u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);
@@ -90,6 +107,9 @@ static inline const TtpBananaInput* ttp_frame_bananas(const TtpFrameInput* f) {
 }
 static inline const TtpRocketInput* ttp_frame_rockets(const TtpFrameInput* f) {
     return (const TtpRocketInput*) (ttp_frame_bananas(f) + f->bananaCount);
+}
+static inline const TtpBurstInput* ttp_frame_bursts(const TtpFrameInput* f) {
+    return (const TtpBurstInput*) (ttp_frame_rockets(f) + f->rocketCount);
 }
 
 /*

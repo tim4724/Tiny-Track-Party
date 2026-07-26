@@ -279,6 +279,12 @@ export class SceneRenderer {
     this.skids = new SkidMarks(this.scene);
     this.props = new TrackProps(this.scene, this.protos, this._bbox);
     this._fps = new FpsMeter(this.container);
+    // Rocket detonations queued for the native renderer, drained once a frame by
+    // _submitNative. Three spawns its burst straight into the scene graph; the
+    // native side needs the EVENT, because only the event says whether it was a
+    // hit (and on whom) or a whiff at a track point.
+    this._nativeBursts = [];
+    this._nativeSnap = null;
     this._groundRay = new THREE.Raycaster();
     this._groundRay.far = 14; // cast 6 above refY, reach ~8 below — never escapes the track
     this._rayFrom = new THREE.Vector3();
@@ -528,13 +534,20 @@ export class SceneRenderer {
   // Spawn a rocket-impact burst at a car (the detonation point). Driven from the engine's
   // rocket spin event; no-op if the car has no render mesh (e.g. just removed).
   rocketImpact(id) {
+    // The native renderer needs to know it was a HIT and on WHOM: it detonates
+    // on the car and lets the fireball ride it out, so the victim's own chase
+    // camera (the one view certain to be pointed at it) still sees the burst.
+    if (this.nativeView) { this._nativeBursts.push({ id }); return; }
     const c = this.cars.get(id);
     if (c && c.group) this.props.spawnImpact(c.group);
   }
 
   // Detonate a timed-out rocket where it died — same burst as a hit, but at a track point (s, lat)
   // instead of on a car. Driven from the engine's rocket_expire event (a whiff self-destructing).
-  rocketExpire(s, lat) { this.props.spawnImpactAt(s, lat); }
+  rocketExpire(s, lat) {
+    if (this.nativeView) { this._nativeBursts.push({ s, lat }); return; }
+    this.props.spawnImpactAt(s, lat);
+  }
 
   // Restore every warning cone to its home pose (new game / fresh race).
   resetCones() { this.props.resetCones(); }
@@ -2588,8 +2601,15 @@ export class SceneRenderer {
                    near: oneCam.near, far: oneCam.far,
                    fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 });
     }
+    // Detonations queued since the last frame. A hit carries a car id, which has
+    // to become the SLOT index the renderer knows that car by — the same
+    // nativeCarOrder prefix the poses above were written in.
+    const bursts = this._nativeBursts.map((b) => (b.id !== undefined
+        ? { car: order.all.indexOf(b.id), s: 0, lat: 0 }
+        : { car: -1, s: b.s, lat: b.lat }));
+    this._nativeBursts.length = 0;
     this.nativeView.submit(dt, cars, views,
         ((snap && snap.boxes) || []).map((b) => (typeof b === 'object' ? b.available : b)),
-        (snap && snap.bananas) || [], (snap && snap.rockets) || []);
+        (snap && snap.bananas) || [], (snap && snap.rockets) || [], bursts);
   }
 }
