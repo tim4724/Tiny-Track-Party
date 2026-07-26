@@ -52,13 +52,12 @@ fragment {
         // taps are far below the noise of loading a track at all, and one pass
         // means one material and one target.
         //
-        // Do not widen this hoping to soften a shadow edge: at k = 80 the
-        // contrast between exp(-k*d) either side of a high occluder's silhouette
-        // is astronomical, the gaussian mean is pinned to the lit term, and the
-        // transition stays one pixel wide however far the kernel reaches. That
-        // was measured — 9x9 and 13x13 give a bit-for-bit identical edge. What
-        // this kernel IS for is the low-occluder case, where the exponential
-        // does not saturate and the blur survives.
+        // The radius here IS the penumbra, but only because the receiver
+        // compares in log space at a modest k (see sunVisibility). It was not
+        // always: at k = 80 the contrast either side of a tall occluder's
+        // silhouette is astronomical, the gaussian mean is pinned to the lit
+        // term, and 9x9 versus 13x13 gave a bit-for-bit identical edge. If the
+        // exponent ever goes back up, widening this stops working again.
         highp vec2 uv = variable_uv.xy;
         highp float k = materialParams.k;
         float sum = 0.0;

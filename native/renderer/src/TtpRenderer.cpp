@@ -3235,9 +3235,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             emi->setParameter("depth", mShadowMap, dsmp);
             emi->setParameter("k", kShadowEsmK);
             emi->setParameter("texel", float2{ 1.0f / (float) SM, 1.0f / (float) SM });
-            // Blur radius in SOURCE texels, +/-4 taps. This softens the
-            // LOW-occluder case; it cannot soften a high one (see vesm.mat).
-            emi->setParameter("radius", 1.5f);
+            // Blur radius in SOURCE texels, +/-4 taps. This IS the penumbra:
+            // the receiver compares in log space, so the kernel's spatial width
+            // is what the soft edge inherits (see vesm.mat).
+            emi->setParameter("radius", 2.6f);
             utils::Entity q = utils::EntityManager::get().create();
             RenderableManager::Builder(1)
                     .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })

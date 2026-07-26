@@ -43,10 +43,12 @@ material {
 }
 
 fragment {
-    // 2×2 PCF over the baked map, offset along the normal by a couple of texels
-    // — the same acne guard three refits to its own texel size (normalBias).
-    // The map is a plain depth texture sampled as colour, so the compare is
-    // ours to make.
+    // Half-width of the shadow's soft edge, in world units.
+    const float kPenumbraWorld = 1.0;
+    // ONE bilinear tap into the baked, pre-blurred exponential shadow map. The
+    // penumbra comes from the bake filter (vesm.mat) and the compare below, not
+    // from taps here — the shipped path went 9 -> 4 -> 1 as each of those moved
+    // into the bake, and this is the whole runtime cost of a shadow.
     //
     // Depth is REVERSED [0,1]: 1 at the light, 0 at the far plane. The ortho
     // camera's clip z arrives in [-1,1], and bakeShadowMap's bias matrix folds
@@ -80,31 +82,45 @@ fragment {
         // grazing angle so flat ground pays nothing for it.
         float slope = clamp(sqrt(max(0.0, 1.0 - NoL * NoL)) / max(NoL, 0.12), 1.0, 12.0);
         float biasW = materialParams.shadowTexel * 2.0 * slope; // world units
-        // SUPERSAMPLE THE VISIBILITY OVER THE PIXEL'S FOOTPRINT.
+        // Recover the occluder depth in LOG space, then compare.
         //
-        // The map is MINIFIED nearly everywhere it covers — one screen pixel
-        // spans several shadow texels — so a single tap undersamples it and the
-        // edge aliases into stairs. How badly depends on the receiver's slope,
-        // its distance and where it lands in the map, which is why it varied so
-        // strongly from one part of a loop to another.
+        // The map holds a blurred exp(-k*d), and the obvious test is
+        // clamp(exp(k*z) * occ). Do not: it throws the blur away. Written out,
+        // that product crosses 0.5 where the occluder's share of the blur kernel
+        // is exp(-k*(z - d_occ)) — for a track deck under a loop, and k anywhere
+        // near 80, a number like e^-8. That is the extreme TAIL of the gaussian,
+        // where the sum is dominated by whichever single texel happens to be
+        // nearest, so the contour hugs individual texels and comes out as a
+        // staircase. It is also why nothing else moved it: map resolution, blur
+        // radius, tap count and cubic reconstruction were each measured, and
+        // each left the staircase exactly where it was. They all sharpen a
+        // contour that is in the wrong PLACE.
         //
-        // Pre-filtering the map cannot fix this: exp(k*z) * occ is CLAMPED, and
-        // the clamp re-sharpens whatever the bake-time blur smoothed. That is
-        // also why widening vesm's kernel changed nothing. The function that
-        // needs filtering is the visibility itself, so evaluate it four times
-        // across the footprint and average — a rotated 2x2, which beats an axis
-        // aligned one on the near-horizontal and near-vertical edges this scene
-        // is full of.
-        highp vec2 fw = min(fwidth(uv.xy), vec2(8.0 / 2048.0)); // cap runaway slopes
-        highp float bias = materialParams.shadowK
-                * (uv.z + biasW * materialParams.shadowDepthScale);
-        highp vec2 o1 = vec2( fw.x * 0.375, fw.y * 0.125);
-        highp vec2 o2 = vec2(-fw.x * 0.125, fw.y * 0.375);
-        float vis = 0.25 * (
-                  clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy + o1).r, 0.0, 1.0)
-                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy - o1).r, 0.0, 1.0)
-                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy + o2).r, 0.0, 1.0)
-                + clamp(exp(bias) * texture(materialParams_shadowMap, uv.xy - o2).r, 0.0, 1.0));
+        // -log(occ)/k inverts the exponential and yields the soft-min of the
+        // occluder depths under the kernel, which varies smoothly. Comparing
+        // THAT, with a modest k (see kShadowEsmK), puts the crossing where the
+        // occluder holds roughly half the kernel — its bulk, an average over
+        // many texels — and the contour is a smooth curve.
+        float occ = texture(materialParams_shadowMap, uv.xy).r;
+        highp float dOcc = -log(max(occ, 1e-30)) / materialParams.shadowK;
+        highp float diff = (uv.z + biasW * materialParams.shadowDepthScale) - dOcc;
+        // Two floors on the transition width. The first is the penumbra we want
+        // to see: a fixed WORLD distance, so an edge is equally soft on every
+        // track whatever the light frustum ended up sized to. The second is
+        // analytic antialiasing — fwidth(diff) is how far the comparison moves
+        // in one screen pixel, so 1.5 of those keeps the ramp a few pixels wide
+        // however close the camera gets or however steeply the occluder towers
+        // over the receiver.
+        highp float w = max(kPenumbraWorld * materialParams.shadowDepthScale,
+                            1.5 * fwidth(diff));
+        // The ramp hangs BELOW the comparison rather than straddling it: at
+        // diff = 0 — a surface meeting its own depth in the map — the result is
+        // exactly 1. Straddling would put every lit surface in the middle of
+        // the ramp and grey the whole world the moment the penumbra grew wider
+        // than the depth bias, which is the first thing that happens when you
+        // widen it. This way the penumbra can be as wide as it likes and eats
+        // only into the shadow's own interior.
+        float vis = smoothstep(-2.0 * w, 0.0, diff);
         // ...and fade the whole test out as the surface turns edge-on to the
         // sun. The bias above scales with 1/NoL, but the depth spread inside a
         // texel goes to INFINITY at true grazing, so no finite bias closes the

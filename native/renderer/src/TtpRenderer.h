@@ -308,11 +308,18 @@ private:
     float mShadowTexel = 0.05f; // world units per shadow texel; also the "a map
                                 // is bound" sentinel the samplers test on
     // ESM exponent, shared by the bake filter (vesm.mat) and the two materials
-    // that sample the result. The soft transition spans roughly 1/k of the map's
-    // depth range, trading contact hardness against how much light an occluder
-    // just above a receiver leaks. 80 is near the f32 ceiling (exp(-88)
-    // denormals) and gives a 1-2 world-unit ramp on a typical circuit.
-    static constexpr float kShadowEsmK = 80.0f;
+    // that sample the result. It is not a quality dial: it decides WHERE in the
+    // blur kernel the lit/shadow crossing lands. The receiver compares in log
+    // space, so the crossing sits where the occluder holds exp(-k*gap) of the
+    // kernel, gap being the normalised occluder-to-receiver depth. Small k puts
+    // that in the kernel's bulk — an average over many texels, so the contour is
+    // a smooth curve. Large k drives it into the gaussian's tail, where one
+    // texel dominates and the same contour comes out as a staircase; 80 did
+    // exactly that, and no amount of resolution, blur or filtering fixed it
+    // because the contour was in the wrong place, not badly sampled.
+    // The cost of lowering it is leak: an occluder a long way above its receiver
+    // eventually stops reaching full darkness. 8 clears every catalogue track.
+    static constexpr float kShadowEsmK = 8.0f;
     // Normalised shadow depth per WORLD unit (1 / the ortho depth range), so the
     // slope-scaled bias in vlit/vground means the same distance on every track.
     float mShadowDepthScale = 0.0f;
