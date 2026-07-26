@@ -81,17 +81,32 @@ bool traceThroughAbi(const std::string& path) {
   const int h = ttp_session_begin(trackId.c_str(), seed, laps, nullptr);
   if (h <= 0) { fail("ttp_session_begin returned " + std::to_string(h)); return false; }
 
-  // The fixture was recorded on a BARE Game, so every car is added as a human
-  // (no internal AI) and every recorded input is fed in. Keep the JSON-scalar id
-  // text per car: String(id) is the recorded input key, but `3` and `"3"` are
-  // different ids to the ABI, so the roster's own JSON form is what we replay.
+  // Cars are added as humans (the ABI is fed every recorded input) UNLESS the
+  // trace is ai-live, in which case its bots are added with ttp_add_bot and
+  // ttp_update drives them INSIDE the wasm from their persona knobs — the exact
+  // path the shipped game runs, and the only way this check exercises it.
+  const bool aiLive = header.has("aiLive") && header.find("aiLive")->b;
+
   std::vector<std::pair<std::string, std::string>> keyToIdJson;  // String(id) -> id JSON
+  std::vector<std::string> botKeys;                              // driven in-wasm, inputs skipped
   for (const Value& r : header.find("roster")->arr) {
     const Value* id = r.find("id");
     const std::string idJson = canonical_stringify(*id);
     const std::string key = id->type == Value::STR ? id->str : js_number_to_string(id->num);
     keyToIdJson.emplace_back(key, idJson);
-    ttp_add_human(h, idJson.c_str(), nullptr);
+
+    const Value* kind = r.find("kind");
+    if (aiLive && kind && kind->str == "bot") {
+      const Value* caution = r.find("caution");
+      const Value* laneBias = r.find("laneBias");
+      const Value* aiSeed = r.find("aiSeed");
+      ttp_add_bot(h, idJson.c_str(), caution ? caution->num : 1.0,
+                  laneBias ? laneBias->num : 0.0,
+                  aiSeed ? (uint32_t)aiSeed->num : 0u, nullptr);
+      botKeys.push_back(key);
+    } else {
+      ttp_add_human(h, idJson.c_str(), nullptr);
+    }
   }
   ttp_session_start(h, -1);  // no countdown: racing from frame 0, bare-Game equivalent
   check(ttp_racing(h) == 1, "ttp_racing == 1 immediately in no-countdown mode");
@@ -105,6 +120,11 @@ bool traceThroughAbi(const std::string& path) {
     if (const Value* inputs = rec.find("inputs")) {
       for (const auto& kv : inputs->obj) {
         if (kv.second.type == Value::UNDEF) continue;
+        // An in-wasm bot's recorded input is the ORACLE, not an instruction:
+        // feeding it back would prove nothing about the AI the game runs.
+        bool isBot = false;
+        for (const auto& bk : botKeys) if (bk == kv.first) { isBot = true; break; }
+        if (isBot) continue;
         const std::string* idJson = nullptr;
         for (const auto& m : keyToIdJson) if (m.first == kv.first) { idJson = &m.second; break; }
         if (!idJson) { fail("input for unknown car key " + kv.first); return false; }

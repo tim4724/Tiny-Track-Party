@@ -401,9 +401,12 @@ ttp_emscripten_cli(abi_check)
 # Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
 # test uses, and helix adds 402 braking inputs — without it ttp_process_input's
 # brake bit is never marshalled and could be deleted with every frame still green
-# (found by mutation-testing this check). The session/ai-live/schedule traces are
-# NOT replayable here: their recording used engine calls (giveItem, setCarStats,
-# stageRocket) that the C ABI deliberately does not export.
+# (found by mutation-testing this check). tidepool-ailive then replays the path
+# the SHIPPED game actually runs: bots added with ttp_add_bot and driven INSIDE
+# ttp_update, so the racing line, the persona knobs and the drive-then-step order
+# are pinned by a recorded hash instead of only by replay_cli calling C++ direct.
+# Only the SCHEDULE trace is unreplayable here: it scripts giveItem/useItem/
+# setCarStats, which the C ABI deliberately does not export.
 add_test(NAME abi
   COMMAND abi_check
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
@@ -411,6 +414,7 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
 )
 
 # ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
