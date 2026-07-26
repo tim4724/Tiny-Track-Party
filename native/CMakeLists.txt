@@ -430,7 +430,7 @@ add_test(NAME abi
 if(EMSCRIPTEN)
   add_executable(ttp_runtime_web runtime/ttp_runtime.cc runtime/ttp_party.cc)
   target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-  target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp)
+  target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
   set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
   target_link_options(ttp_runtime_web PRIVATE
     -O2

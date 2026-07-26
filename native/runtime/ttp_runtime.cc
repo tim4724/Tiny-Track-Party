@@ -156,6 +156,17 @@ void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
   rs->bots.push_back(std::move(b));
 }
 
+// The AI's racing line is built from the centerline on first use — which, left
+// alone, is the first frame a bot drives: the GO! beat, the exact frame the
+// player first touches the throttle. Solving it costs 4.3-5.5 ms depending on
+// track, against a 0.013 ms steady frame, so it read as a stutter on the start
+// line. Building it here instead moves it into session setup, seconds earlier
+// and off the render loop. Pure precomputation over data that cannot change, so
+// every trace hashes identically.
+static void primeRacingLine(RuntimeSession& rs) {
+  for (const auto& b : rs.bots) if (b.ai) { rs.eng->racingLine(); return; }
+}
+
 // Construct the RaceSession + bot controllers WITHOUT firing the countdown.
 // Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
 // started handle: the JS RaceSession builds its Game in the constructor, so
@@ -195,6 +206,7 @@ static void buildSession(RuntimeSession* rs) {
   // Build the bot controllers now that the field (and its cars) exist.
   for (auto& b : rs->bots)
     b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  primeRacingLine(*rs);
 }
 
 void ttp_session_start(int h, int countdownSeconds) {
@@ -216,6 +228,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     rs->eng = rs->game.get();
     for (auto& b : rs->bots)
       b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+    primeRacingLine(*rs);
     return;
   }
 
