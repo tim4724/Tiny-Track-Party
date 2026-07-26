@@ -92,7 +92,9 @@ std::string json_quote(const std::string& s) {
 
 std::string canonical_stringify(const Value& v) {
   std::string o;
-  o.reserve(4096);  // a per-frame snapshot is ~5 KB; one grow at worst
+  // Only containers are worth pre-sizing: a lone scalar (an id, a number) stays
+  // inside the small-string buffer and must not be charged a 4 KB allocation.
+  if (v.type == Value::ARR || v.type == Value::OBJ) o.reserve(4096);
   stringify_into(v, o);
   return o;
 }
