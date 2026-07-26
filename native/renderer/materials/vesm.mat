@@ -47,15 +47,17 @@ fragment {
         prepareMaterial(material);
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        // A 9x9 Gaussian, done in one pass. Separating it would be the right
-        // call in a per-frame filter; here it runs once per track over a
-        // 1024-ish map, so the 81 taps are far below the noise of loading a
-        // track at all, and one pass means one material and one target.
+        // A 13x13 Gaussian, done in one pass. Separating it would be the right
+        // call in a per-frame filter; here it runs once per track, so the 169
+        // taps are far below the noise of loading a track at all, and one pass
+        // means one material and one target. The kernel is this wide because
+        // ESM's exponential resists blurring at high contrast — see the note at
+        // the call site in bakeShadowMap.
         highp vec2 uv = variable_uv.xy;
         highp float k = materialParams.k;
         float sum = 0.0;
         float wsum = 0.0;
-        const int R = 4;
+        const int R = 6;
         // sigma = R/2 in source texels
         highp float inv2s2 = 1.0 / (2.0 * (float(R) * 0.5) * (float(R) * 0.5));
         for (int j = -R; j <= R; j++) {

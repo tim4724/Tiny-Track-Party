@@ -3188,7 +3188,11 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
     bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
-        constexpr uint32_t ESM_SM = 1024;
+        // 2048, not 1024. The stored gradient IS the shadow edge now, so the
+        // map's own texel grid is what a hard edge stairs along. Runtime is
+        // unaffected (one tap either way, measured), the cost is +12 MB
+        // persistent and a few ms of bake.
+        constexpr uint32_t ESM_SM = 2048;
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R32F)
@@ -3206,9 +3210,15 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             emi->setParameter("depth", mShadowMap, dsmp);
             emi->setParameter("k", kShadowEsmK);
             emi->setParameter("texel", float2{ 1.0f / (float) SM, 1.0f / (float) SM });
-            // Blur radius in SOURCE texels. The kernel is +/-4 taps, so this
-            // scales the world-space penumbra directly.
-            emi->setParameter("radius", 1.5f);
+            // Blur radius in SOURCE texels. The kernel is +/-6 taps, so this
+            // scales the world-space penumbra directly. Wider than it looks it
+            // needs to be, because ESM's exponential fights the blur: for a HIGH
+            // occluder the contrast between exp(-k*d_occluder) and its lit
+            // neighbours is enormous, the gaussian mean is dominated by the lit
+            // side, and the transition collapses to a fraction of the kernel.
+            // That is why a viaduct's shadow edge was near-binary (and stairing
+            // along the map grid) while a low kerb's was soft.
+            emi->setParameter("radius", 2.0f);
             utils::Entity q = utils::EntityManager::get().create();
             RenderableManager::Builder(1)
                     .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
