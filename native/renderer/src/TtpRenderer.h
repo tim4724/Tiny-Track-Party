@@ -524,7 +524,6 @@ private:
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
     void setMeshShadows(Mesh& m, bool cast, bool receive);
-    void setMeshShadowsAbove(Mesh& m, float minY);
     // Render the static track's depth from the sun ONCE, into a texture the lit
     // materials sample for themselves. Filament re-renders its own shadow map
     // per VIEW per frame, which a 4-way split pays for four times over; the JS

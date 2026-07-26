@@ -13,14 +13,16 @@
 // spelled out instead of using Filament's `lit` model). flipUV is off so the
 // C++ UVs (world XZ / tile) map straight through.
 //
-// The ground DOES catch the sun's baked map. The thing the original opt-out was
-// protecting against is a CAR's ground blob detaching onto the lawn far below
-// its deck — but that blob is a conformed decal (vdecal), a different mechanism
-// entirely. The baked map holds only the static casters, and only the ones high
-// enough to be worth casting: setMeshShadowsAbove keeps road below
-// groundY + 1.8 out of it, so a deck lying on the floor cannot shadow the floor
-// it is lying on. What is left is exactly what you want to see — an elevated
-// track laying its shape on the ground underneath.
+// The ground DOES catch the sun's baked map, and it also CASTS into it. The
+// thing the original opt-out was protecting against is a CAR's ground blob
+// detaching onto the lawn far below its deck — but that blob is a conformed
+// decal (vdecal), a different mechanism entirely.
+//
+// Casting looks pointless for a flat floor (it throws nothing on itself) and is
+// not: outside every caster the depth map holds its clear value, the far plane,
+// and a receiver's soft-min then compares against THAT rather than against its
+// own surface. It is the difference between a penumbra and a hard edge — see
+// buildTrackScene, where it was measured.
 material {
     name : TtpVground,
     requires : [

@@ -3403,25 +3403,6 @@ void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (!m.chunks.empty()) setShadows(m.chunks.data(), m.chunks.size(), cast, receive);
 }
 
-// Per-chunk casting, by height. Three casts from ELEVATED road chunks only:
-// "a ground-level chunk only casts onto grass, which opts out of receiving, so
-// its shadow is invisible — skip it for free" (render/track.js). Skipping it is
-// not just free here, it is necessary — a flat road that casts paints a hard
-// edge onto the berms beside it that the JS never draws.
-void TtpRenderer::setMeshShadowsAbove(Mesh& m, float minY) {
-    if (m.entity.isNull()) return;
-    auto& rcm = mEngine->getRenderableManager();
-    const auto mark = [&](utils::Entity e) {
-        const auto ri = rcm.getInstance(e);
-        if (!ri) return;
-        const filament::Box bx = rcm.getAxisAlignedBoundingBox(ri);
-        const bool cast = (bx.center.y + bx.halfExtent.y) > minY;
-        setShadows(&e, 1, cast, true);
-    };
-    mark(m.entity);
-    for (utils::Entity e : m.chunks) mark(e);
-}
-
 // Re-derive a mesh's bounds from its CPU vertices. Cheap (these pools are
 // thousands of verts, not the road's hundred thousand) and the price of letting
 // a mesh whose geometry moves every frame still be frustum-culled.
@@ -4605,8 +4586,28 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // every glTF asset, since gltfio opts renderables IN by default), and the
     // grass deliberately opts out so an elevated car's blob can't detach onto
     // it far below the deck.
-    // maxY > 0.8 in the JS, whose ground plane sits at −1.
-    setMeshShadowsAbove(mRoad, tb.groundY + 1.8f);
+    // The WHOLE road casts, not just the elevated chunks (the JS used maxY >
+    // 0.8 over a ground plane at −1, and this was that filter, verbatim).
+    //
+    // It is not really about what the road throws on the floor — a deck lying
+    // flat on the ground throws almost nothing. It is about what the map HOLDS
+    // where the road is. Outside every caster the depth map still reads its
+    // clear value, the far plane, and the receiver's soft-min then compares
+    // itself against the far plane instead of against its own surface. That
+    // pushes the lit/shadow crossing to ~94% occluder share — back into the
+    // blur kernel's tail, the same place k = 80 used to put it — so the
+    // penumbra collapses no matter how wide the kernel is. It was measured:
+    // with a ground-level deck receiving, 4x the blur sigma bought only 1.8x
+    // the edge width instead of 4x.
+    //
+    // Free in every sense that matters: bakeShadowMap fits its ortho box to
+    // mRoad's own vertices, not to the caster set, so texel density is
+    // untouched, and the road is one already-chunked mesh in a depth-only pass.
+    setMeshShadows(mRoad, true, true);
+    // ...and the floor, for exactly the same reason. Two triangles in a
+    // depth-only pass, and without them every ground receiver compares itself
+    // against the far plane and gets the collapsed penumbra described above.
+    setMeshShadows(mGround, true, true);
     setMeshShadows(mGantry, true, true);
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
