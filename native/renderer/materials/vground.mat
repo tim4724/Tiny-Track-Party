@@ -13,10 +13,14 @@
 // spelled out instead of using Filament's `lit` model). flipUV is off so the
 // C++ UVs (world XZ / tile) map straight through.
 //
-// No shadow term, deliberately: environment.js turns the ground's receiveShadow
-// OFF so an elevated car's blob can't detach onto the grass far below its deck,
-// and the same reasoning covers the track's own cast shadow. The road, the
-// structures and the berms catch it; the lawn does not.
+// The ground DOES catch the sun's baked map. The thing the original opt-out was
+// protecting against is a CAR's ground blob detaching onto the lawn far below
+// its deck — but that blob is a conformed decal (vdecal), a different mechanism
+// entirely. The baked map holds only the static casters, and only the ones high
+// enough to be worth casting: setMeshShadowsAbove keeps road below
+// groundY + 1.8 out of it, so a deck lying on the floor cannot shadow the floor
+// it is lying on. What is left is exactly what you want to see — an elevated
+// track laying its shape on the ground underneath.
 material {
     name : TtpVground,
     requires : [
@@ -29,11 +33,37 @@ material {
     doubleSided : true,
     flipUV : false,
     parameters : [
-        { type : sampler2d, name : albedo }
+        { type : sampler2d, name : albedo },
+        // The frozen sun map, shared with vlit — same space, same compare.
+        { type : sampler2d, name : shadowMap, precision : high },
+        { type : mat4, name : shadowFromWorld, precision : high },
+        { type : float, name : shadowTexel },
+        { type : float, name : shadowBias }
     ]
 }
 
 fragment {
+    // Identical to vlit's — see that file for why the depth is reversed [0,1]
+    // and why both halves of the convention were measured rather than assumed.
+    float sunVisibility(highp vec3 wp, highp vec3 n) {
+        if (materialParams.shadowTexel <= 0.0) return 1.0;
+        highp vec4 sp = materialParams.shadowFromWorld
+                * vec4(wp + n * (materialParams.shadowTexel * 4.0), 1.0);
+        highp vec3 uv = sp.xyz / sp.w;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
+                || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
+        highp float step = 1.0 / 2048.0;
+        float lit = 0.0;
+        for (int j = 0; j < 2; j++) {
+            for (int i = 0; i < 2; i++) {
+                highp vec2 o = (vec2(float(i), float(j)) - 0.5) * step;
+                float stored = texture(materialParams_shadowMap, uv.xy + o).r;
+                lit += (stored > uv.z + materialParams.shadowBias) ? 0.0 : 1.0;
+            }
+        }
+        return lit * 0.25;
+    }
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -47,8 +77,9 @@ fragment {
                 + frameUniforms.iblSH[3] * n.x, vec3(0.0)) * frameUniforms.iblLuminance;
 
         float NoL = saturate(dot(n, frameUniforms.lightDirection));
+        float visibility = sunVisibility(getUserWorldPosition(), n);
         vec3 sun = frameUniforms.lightColorIntensity.rgb
-                * (frameUniforms.lightColorIntensity.w * NoL * (1.0 / PI));
+                * (frameUniforms.lightColorIntensity.w * NoL * visibility * (1.0 / PI));
 
         material.emissive = vec4(base * (ambient + sun), 0.0);
     }

@@ -34,7 +34,10 @@ material {
         // shadowTexel is 0 when a track baked no map, which reads as "lit".
         { type : sampler2d, name : shadowMap, precision : high },
         { type : mat4, name : shadowFromWorld, precision : high },
-        { type : float, name : shadowTexel }
+        { type : float, name : shadowTexel },
+        // Depth bias in the map's own normalised units, derived per track from a
+        // fixed WORLD bias (see kShadowWorldBias).
+        { type : float, name : shadowBias }
     ]
 }
 
@@ -43,6 +46,12 @@ fragment {
     // — the same acne guard three refits to its own texel size (normalBias).
     // The map is a plain depth texture sampled as colour, so the compare is
     // ours to make.
+    //
+    // Depth is REVERSED [0,1]: 1 at the light, 0 at the far plane. The ortho
+    // camera's clip z arrives in [-1,1], and bakeShadowMap's bias matrix folds
+    // it with a NEGATIVE half-scale into that space (see the comment there —
+    // both halves of this were measured, not assumed). So a caster in front of
+    // us holds a GREATER stored depth than our own.
     //
     // `wp` MUST be getUserWorldPosition(), not getWorldPosition(): Filament
     // renders camera-relative, so the latter is offset by the camera and the
@@ -56,15 +65,13 @@ fragment {
         highp vec3 uv = sp.xyz / sp.w;
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
                 || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
-        // Reversed-Z: the map holds 1 at the light and 0 at its far plane, so a
-        // stored depth GREATER than ours is a caster in front of us.
-        highp float bias = 0.004;
         highp float step = 1.0 / 2048.0;
         float lit = 0.0;
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < 2; i++) {
                 highp vec2 o = (vec2(float(i), float(j)) - 0.5) * step;
-                lit += (texture(materialParams_shadowMap, uv.xy + o).r > uv.z + bias) ? 0.0 : 1.0;
+                float stored = texture(materialParams_shadowMap, uv.xy + o).r;
+                lit += (stored > uv.z + materialParams.shadowBias) ? 0.0 : 1.0;
             }
         }
         return lit * 0.25;

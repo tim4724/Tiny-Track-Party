@@ -3063,15 +3063,36 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // out-of-bounds trap three call frames deep, with nothing pointing back
     // here.
     //
-    // Only x and y need the clip [-1,1] → texture [0,1] half-scale.
-    // getProjectionMatrix() hands back Filament's VIRTUAL clip space, not GL's:
-    // "GL to inverted DX convention" (Camera.cpp), so z already arrives in
-    // [0,1] — and REVERSED, near = 1. Remapping it as well put every depth in
-    // [0.5, 1] and inverted the compare, which shaded the entire road.
+    // Clip → texture space. x and y are the usual half-scale; z needs a NEGATIVE
+    // one, and getting that wrong is why no track has ever had a correct baked
+    // sun shadow.
+    //
+    // Both halves of the convention were measured rather than assumed:
+    //   - getProjectionMatrix() returns clip z in [-1,1] (near = -1). Pushing
+    //     the road's eight bbox corners through it prints z/w spanning
+    //     [-0.19, +0.19] — dead centred on zero, not inside [0,1].
+    //   - the map itself holds REVERSED depth, 1 at the light. Rendering our
+    //     computed z and the stored texel into two channels and fitting one
+    //     against the other over the whole road gives stored = -0.87·ours + 0.93,
+    //     i.e. stored ≈ 1 - ours.
+    // So the row is -0.5·z + 0.5: near (-1) → 1, far (+1) → 0.
+    //
+    // The old matrix left z alone, believing it already arrived as reversed
+    // [0,1]. Half of every track then fell below zero and took sunVisibility's
+    // out-of-range early-out (fully lit, by accident), and the half above it
+    // compared a [0, 0.19] value against a [0.5, 0.6] one and came back fully
+    // shadowed. A FLAT track lands entirely on the lit side and looks correct
+    // for free, which is why this survived: only a track that climbs straddles
+    // zero, and then you get skysnake's hard-edged half-dark road.
     const mat4f lightViewProj{ cam->getProjectionMatrix() * cam->getViewMatrix() };
     const mat4f bias{ float4{ 0.5f, 0, 0, 0 }, float4{ 0, 0.5f, 0, 0 },
-                      float4{ 0, 0, 1, 0 }, float4{ 0.5f, 0.5f, 0, 1 } };
+                      float4{ 0, 0, -0.5f, 0 }, float4{ 0.5f, 0.5f, 0.5f, 1 } };
     mShadowFromWorld = bias * lightViewProj;
+    // Depth bias in WORLD units, converted to the map's normalised depth. The
+    // old constant 0.004 was normalised, so what it meant on the ground grew
+    // with the track: a metre on a big circuit, a few centimetres on a small
+    // one. The ortho depth range is the camera's far plane (near is 0).
+    mShadowDepthBias = kShadowWorldBias / (4.0f * radius);
 
     mEngine->destroy(view);
     mEngine->destroy(rt);
@@ -3116,6 +3137,7 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     // Sampling step + the normal offset that keeps a curving deck from
     // shadowing itself (three refits the same guard to its texel size).
     mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+    mi->setParameter("shadowBias", mShadowMap ? mShadowDepthBias : 0.0f);
 }
 
 // Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,
@@ -3342,6 +3364,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind);
             MaterialInstance* gmi = sceneInstance(mGroundMaterial);
+            mGroundInst = gmi; // bound to the sun map once it is baked, below
             if (mGroundTex) {
                 TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
                         TextureSampler::MagFilter::LINEAR);
@@ -4352,6 +4375,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // the materials that sample it.
     bakeShadowMap(tb);
     bindShadowMap(litShadowInstance());
+    // ...and the ground, so an elevated deck lays its shape on the floor below.
+    if (mGroundInst) bindShadowMap(mGroundInst);
     // Every other vlit instance still needs its sampler resolved, but with
     // shadowTexel 0 so the lookup is skipped entirely.
     Texture* const map = mShadowMap;
@@ -7031,6 +7056,7 @@ void TtpRenderer::releaseScene() {
     mSceneryAssets.clear();
     mSceneryInstances.clear();
     mBoxXf.clear();
+    mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
     mCarGhostIn.clear();

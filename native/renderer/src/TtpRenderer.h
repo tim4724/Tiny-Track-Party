@@ -289,6 +289,9 @@ private:
     // to match the JS canvas texture rather than approximated with bands.
     filament::Material* mGroundMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
+    // The ground's own instance, kept so the baked sun map can be bound to it
+    // after bakeShadowMap runs (it is created well before that).
+    filament::MaterialInstance* mGroundInst = nullptr;
     filament::Texture* mWhiteTex = nullptr;  // 1×1, neutralises a glTF base-colour map
     // Textured translucent decals (vdecal): the car's conformed ground shadow,
     // whose penumbra is far too tight to carry in vertex alpha.
@@ -299,6 +302,10 @@ private:
     filament::Texture* mShadowMap = nullptr;
     filament::math::mat4f mShadowFromWorld;
     float mShadowTexel = 0.05f; // world units per shadow texel, for the bias
+    // Depth bias, in the map's normalised depth. Derived per track from a fixed
+    // WORLD bias so its on-the-ground meaning does not scale with track size.
+    static constexpr float kShadowWorldBias = 0.20f; // 20 cm along the light
+    float mShadowDepthBias = 0.0f;
     // Per-car ground-shadow silhouette, rendered top-down off the real model
     // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
     std::vector<filament::Texture*> mCarSilhouettes;
