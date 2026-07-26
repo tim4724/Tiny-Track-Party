@@ -290,6 +290,8 @@ private:
     filament::Material* mGroundMaterial = nullptr;
     // Bake-time filter that turns the raw depth map into a blurred ESM.
     filament::Material* mEsmMaterial = nullptr;
+    // Bake-time gaussian over the per-car silhouette mask (vblur.mat).
+    filament::Material* mBlurMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
     // The ground's own instance, kept so the baked sun map can be bound to it
     // after bakeShadowMap runs (it is created well before that).

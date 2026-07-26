@@ -1252,7 +1252,12 @@ Texture* TtpRenderer::buildShadowMask() {
 Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
         const float3& bbMin, const float3& bbMax) {
     if (!asset || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
-    constexpr int TW = 128;
+    // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
+    // gaussian resolves its edge in about five quantised steps, and those steps
+    // are the banding in the blob's gradient. 256 plus the bake-time blur below
+    // gives the hardware something smooth to interpolate, and still only costs
+    // ~0.5 MB a car.
+    constexpr int TW = 256;
     const float hw = (bbMax.x - bbMin.x) * 0.5f * 1.45f;
     const float hl = (bbMax.z - bbMin.z) * 0.5f * 1.45f;
     if (hw <= 0 || hl <= 0) return nullptr;
@@ -1297,6 +1302,70 @@ Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
     mEngine->destroyCameraComponent(camEnt);
     utils::EntityManager::get().destroy(camEnt);
     mEngine->destroy(scene);
+
+    // Blur it ONCE, here, instead of rebuilding the penumbra with a 25-tap
+    // gaussian in every fragment of every frame (see vblur.mat).
+    if (mBlurMaterial && mPresentVB && mPresentIB) {
+        Texture* soft = Texture::Builder()
+                .width((uint32_t) TW).height((uint32_t) TH).levels(1)
+                .format(Texture::InternalFormat::RGBA8)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .build(*mEngine);
+        if (soft) {
+            RenderTarget* brt = RenderTarget::Builder()
+                    .texture(RenderTarget::AttachmentPoint::COLOR, soft)
+                    .build(*mEngine);
+            MaterialInstance* bmi = mBlurMaterial->createInstance();
+            TextureSampler ssmp(TextureSampler::MinFilter::LINEAR,
+                    TextureSampler::MagFilter::LINEAR);
+            ssmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            ssmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            bmi->setParameter("src", tex, ssmp);
+            bmi->setParameter("texel",
+                    math::float2{ 1.0f / (float) TW, 1.0f / (float) TH });
+            bmi->setParameter("radius", 0.9f); // kernel spacing in source texels
+            utils::Entity bq = utils::EntityManager::get().create();
+            RenderableManager::Builder(1)
+                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                    .material(0, bmi)
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mPresentVB, mPresentIB, 0, 3)
+                    .culling(false).castShadows(false).receiveShadows(false)
+                    .build(*mEngine, bq);
+            Scene* bs = mEngine->createScene();
+            bs->addEntity(bq);
+            utils::Entity bcamEnt = utils::EntityManager::get().create();
+            Camera* bcam = mEngine->createCamera(bcamEnt);
+            bcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
+            View* bv = mEngine->createView();
+            bv->setScene(bs);
+            bv->setCamera(bcam);
+            bv->setViewport({ 0, 0, (uint32_t) TW, (uint32_t) TH });
+            bv->setRenderTarget(brt);
+            bv->setPostProcessingEnabled(false);
+            bv->setShadowingEnabled(false);
+            bv->setFrustumCullingEnabled(false);
+            bv->setBlendMode(View::BlendMode::TRANSLUCENT); // the mask IS alpha
+            Renderer::ClearOptions bco{};
+            bco.clear = true;
+            bco.clearColor = { 0, 0, 0, 0 };
+            const Renderer::ClearOptions bprev = mRenderer->getClearOptions();
+            mRenderer->setClearOptions(bco);
+            mRenderer->renderStandaloneView(bv);
+            mRenderer->setClearOptions(bprev);
+            mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
+            mEngine->destroy(bv);
+            mEngine->destroy(brt);
+            mEngine->destroy(bs);
+            mEngine->destroy(bq);
+            utils::EntityManager::get().destroy(bq);
+            mEngine->destroyCameraComponent(bcamEnt);
+            utils::EntityManager::get().destroy(bcamEnt);
+            mEngine->destroy(bmi);
+            mEngine->destroy(tex);
+            return soft;
+        }
+    }
     return tex;
 }
 
@@ -4180,17 +4249,15 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                     mask = mShadowMaskTex;
                 }
                 if (mask) {
+                    // Both masks arrive PRE-BLURRED now — the baked silhouette
+                    // through vblur, the generic fallback by construction — so
+                    // the decal samples once and does no filtering of its own.
                     TextureSampler smp(baked ? TextureSampler::MinFilter::LINEAR
                                              : TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
                             TextureSampler::MagFilter::LINEAR);
                     smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
                     smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
                     mi->setParameter("albedo", mask, smp);
-                    // The silhouette comes out of the render target hard-edged;
-                    // the pre-blurred fallback mask must NOT be blurred twice.
-                    const float bw = baked ? 1.5f / (float) mask->getWidth() : 0.0f;
-                    const float bh = baked ? 1.5f / (float) mask->getHeight() : 0.0f;
-                    mi->setParameter("blur", math::float2{ bw, bh });
                 }
             } else {
                 m.uvs.clear(); // vblend has no uv0 attribute
@@ -5635,6 +5702,12 @@ bool TtpRenderer::buildScene() {
     if (!mPointMaterial && vpoint != mAssets.end()) {
         mPointMaterial = Material::Builder()
                 .package(vpoint->second.data(), vpoint->second.size())
+                .build(*mEngine);
+    }
+    const auto vblur = mAssets.find("vblur.filamat");
+    if (!mBlurMaterial && vblur != mAssets.end()) {
+        mBlurMaterial = Material::Builder()
+                .package(vblur->second.data(), vblur->second.size())
                 .build(*mEngine);
     }
     const auto vesm = mAssets.find("vesm.filamat");
@@ -7260,6 +7333,7 @@ TtpRenderer::~TtpRenderer() {
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
+    if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
     if (mShadowMap) mEngine->destroy(mShadowMap);

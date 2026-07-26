@@ -2,10 +2,10 @@
 //
 // Same blend rules as vblend (premultiplied alpha, no depth write, polygon
 // offset from the caller), but the SHAPE comes from a texture instead of from
-// the mesh's own vertex alpha. The car's ground shadow needs that: the JS bakes
-// a top-down silhouette and blurs it by three pixels of a 128-wide map — a
-// deliberately TIGHT penumbra — and a per-vertex falloff on a 10×14 grid can't
-// resolve an edge that sharp, so the port's blob came out soft and vague.
+// the mesh's own vertex alpha. The car's ground shadow needs that: a per-vertex
+// falloff on a 10×14 grid cannot resolve an edge this tight, so the port's blob
+// came out soft and vague. The mask arrives PRE-BLURRED (vblur.mat), so this
+// samples it once.
 //
 // Vertex colour still multiplies through: the per-car opacity animates with
 // body pitch (the load cue), and the conform rewrites it every frame.
@@ -21,32 +21,19 @@ material {
     depthWrite : false,
     flipUV : false,
     parameters : [
-        { type : sampler2d, name : albedo },
-        // One texel step of `albedo`, times the blur radius. The silhouette is
-        // rendered into an offscreen target with hard, aliased edges; the JS
-        // reads its own bake back and runs a canvas blur(3px) over it before
-        // uploading. We have no readback, so the penumbra is applied HERE, as a
-        // 5×5 gaussian at draw time. Zero = sample it sharp.
-        { type : float2, name : blur }
+        { type : sampler2d, name : albedo }
     ]
 }
 
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        // 5×5 gaussian (σ ≈ 1.5 steps) — the penumbra. Separable would need a
-        // second pass over a render target; 25 taps on a quad the size of a car
-        // is cheaper than the plumbing.
-        const float W[5] = float[5](0.0545, 0.2442, 0.4026, 0.2442, 0.0545);
-        highp vec2 uv = getUV0();
-        vec4 sum = vec4(0.0);
-        for (int j = 0; j < 5; j++) {
-            for (int i = 0; i < 5; i++) {
-                vec2 o = vec2(float(i - 2), float(j - 2)) * materialParams.blur;
-                sum += texture(materialParams_albedo, uv + o) * (W[i] * W[j]);
-            }
-        }
-        material.baseColor = getColor() * sum;
+        // ONE tap. The penumbra is baked into the mask now — the car silhouette
+        // through vblur.mat at load, the generic fallback by construction — so
+        // there is nothing left to filter here. It was 25 taps per fragment, per
+        // car, per cell, rebuilding the same static blur every frame; and doing
+        // it at draw over a 128-px source was also what made the gradient band.
+        material.baseColor = getColor() * texture(materialParams_albedo, getUV0());
         material.baseColor.rgb *= material.baseColor.a; // premultiplied, as vblend
     }
 }
