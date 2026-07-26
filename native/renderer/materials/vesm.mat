@@ -1,0 +1,76 @@
+// Bake-time filter: the sun's raw depth map -> a blurred EXPONENTIAL shadow map.
+//
+// Why this exists. The depth map is baked ONCE per track and never changes, so
+// every penumbra the runtime spends taps on is a penumbra we could have spent
+// them on at load instead. A depth map cannot be blurred (averaging depths
+// across a silhouette is meaningless), which is why softening it needed an
+// N-tap PCF in every lit fragment of every cell. An ESM can: exp(-k·d) is
+// linear under filtering, so blurring it here is exactly equivalent to blurring
+// the shadow, and the runtime lookup collapses to ONE bilinear tap.
+//
+// What it costs and what it buys: this pass runs once per track over the map,
+// and in exchange the road, the structures, the berms and the whole ground
+// stop paying nine taps a fragment forever. It also means the map no longer
+// carries the edge's sharpness in its resolution — the blur does — so the map
+// can be smaller than the PCF version needed.
+//
+// Reversed depth. Our map holds 1 at the light and 0 at the far plane (see
+// bakeShadowMap), so an occluder IN FRONT of a receiver has the GREATER value.
+// Standard ESM assumes the opposite, so the exponent is negated: we store
+// exp(-k·d) and the receiver multiplies by exp(+k·d_receiver). Equal depths
+// give exp(0) = 1 (lit, and self-shadowing acne cannot happen — the bias is
+// inherent), an occluder in front gives exp(-k·Δ) < 1.
+material {
+    name : TtpVesm,
+    parameters : [
+        { type : sampler2d, name : depth, precision : high },
+        { type : float,     name : k },      // exponent; see kShadowEsmK
+        { type : float2,    name : texel },  // 1 / source map size
+        { type : float,     name : radius }  // blur radius in SOURCE texels
+    ],
+    variables : [ uv ],
+    vertexDomain : device,
+    shadingModel : unlit,
+    culling : none,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.uv.xy = uvToRenderTargetUV(getPosition().xy * 0.5 + 0.5);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        // A 9x9 Gaussian, done in one pass. Separating it would be the right
+        // call in a per-frame filter; here it runs once per track over a
+        // 1024-ish map, so the 81 taps are far below the noise of loading a
+        // track at all, and one pass means one material and one target.
+        highp vec2 uv = variable_uv.xy;
+        highp float k = materialParams.k;
+        float sum = 0.0;
+        float wsum = 0.0;
+        const int R = 4;
+        // sigma = R/2 in source texels
+        highp float inv2s2 = 1.0 / (2.0 * (float(R) * 0.5) * (float(R) * 0.5));
+        for (int j = -R; j <= R; j++) {
+            for (int i = -R; i <= R; i++) {
+                highp vec2 o = vec2(float(i), float(j))
+                        * materialParams.texel * materialParams.radius;
+                float d = texture(materialParams_depth, uv + o).r;
+                float w = exp(-(float(i * i + j * j)) * inv2s2);
+                sum += w * exp(-k * d);
+                wsum += w;
+            }
+        }
+        // The colour goes in `emissive` with w = 0, like every other material
+        // here: an unlit material's baseColor is zeroed when the view carries a
+        // directional light, and w = 0 opts out of the exposure attenuation.
+        material.emissive = vec4(sum / wsum, 0.0, 0.0, 0.0);
+    }
+}

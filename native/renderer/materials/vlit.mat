@@ -35,9 +35,8 @@ material {
         { type : sampler2d, name : shadowMap, precision : high },
         { type : mat4, name : shadowFromWorld, precision : high },
         { type : float, name : shadowTexel },
-        // Depth bias in the map's own normalised units, derived per track from a
-        // fixed WORLD bias (see kShadowWorldBias).
-        { type : float, name : shadowBias }
+        // ESM exponent (kShadowEsmK), matching what vesm.mat baked in.
+        { type : float, name : shadowK }
     ]
 }
 
@@ -60,28 +59,19 @@ fragment {
     // is not.
     float sunVisibility(highp vec3 wp, highp vec3 n) {
         if (materialParams.shadowTexel <= 0.0) return 1.0;
-        highp vec4 sp = materialParams.shadowFromWorld
-                * vec4(wp + n * (materialParams.shadowTexel * 4.0), 1.0);
+        // No normal offset: ESM's bias is inherent (equal depths give exp(0) = 1),
+        // and nudging the sample along the normal would only detach the shadow
+        // from whatever cast it.
+        highp vec4 sp = materialParams.shadowFromWorld * vec4(wp, 1.0);
         highp vec3 uv = sp.xyz / sp.w;
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
                 || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
-        // 3x3 PCF spread over +/-1.5 texels. The old kernel was 2x2 at a HALF
-        // texel offset — all four taps landed inside a SINGLE texel, so the edge
-        // could only ever be a one-texel step, which is what read as pixely.
-        // Nine taps across three texels give it an actual gradient. Cheap: the
-        // map is baked once, and only the road, the structures, the berms and
-        // the ground sample it at all.
-        const float SPREAD = 1.5;
-        highp float step = SPREAD / 2048.0;
-        float lit = 0.0;
-        for (int j = -1; j <= 1; j++) {
-            for (int i = -1; i <= 1; i++) {
-                highp vec2 o = vec2(float(i), float(j)) * step;
-                float stored = texture(materialParams_shadowMap, uv.xy + o).r;
-                lit += (stored > uv.z + materialParams.shadowBias) ? 0.0 : 1.0;
-            }
-        }
-        return lit * (1.0 / 9.0);
+        // ONE bilinear tap. vesm.mat pre-blurred exp(-k·d) at bake time, so the
+        // penumbra is already in the texel — no PCF kernel, and the map can be
+        // smaller than a filtered depth map would have to be. Equal depths give
+        // exp(0) = 1, so the acne bias is inherent and needs no constant.
+        float occ = texture(materialParams_shadowMap, uv.xy).r;
+        return clamp(exp(materialParams.shadowK * uv.z) * occ, 0.0, 1.0);
     }
 
     void material(inout MaterialInputs material) {

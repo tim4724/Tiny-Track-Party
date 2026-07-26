@@ -3095,6 +3095,87 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // out-of-bounds trap three call frames deep, with nothing pointing back
     // here.
     //
+    // Filter the raw depth into a blurred EXPONENTIAL map, then throw the depth
+    // away. See vesm.mat: exp(-k·d) is linear under filtering, so the softness
+    // is baked in here ONCE and the runtime lookup is a single bilinear tap
+    // instead of an N-tap PCF in every lit fragment of every cell. It also
+    // means the map's resolution no longer sets the edge's softness — the blur
+    // does — so ESM_SM can be well under the depth map's own size.
+    // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
+    bool esmOk = false;
+    if (mEsmMaterial && mPresentVB && mPresentIB) {
+        constexpr uint32_t ESM_SM = 1024;
+        Texture* esm = Texture::Builder()
+                .width(ESM_SM).height(ESM_SM).levels(1)
+                .format(Texture::InternalFormat::R32F)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .build(*mEngine);
+        if (esm) {
+            RenderTarget* ert = RenderTarget::Builder()
+                    .texture(RenderTarget::AttachmentPoint::COLOR, esm)
+                    .build(*mEngine);
+            MaterialInstance* emi = mEsmMaterial->createInstance();
+            TextureSampler dsmp(TextureSampler::MinFilter::NEAREST,
+                    TextureSampler::MagFilter::NEAREST);
+            dsmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            dsmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+            emi->setParameter("depth", mShadowMap, dsmp);
+            emi->setParameter("k", kShadowEsmK);
+            emi->setParameter("texel", float2{ 1.0f / (float) SM, 1.0f / (float) SM });
+            // Blur radius in SOURCE texels. The kernel is +/-4 taps, so this
+            // scales the world-space penumbra directly.
+            emi->setParameter("radius", 1.5f);
+            utils::Entity q = utils::EntityManager::get().create();
+            RenderableManager::Builder(1)
+                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                    .material(0, emi)
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mPresentVB, mPresentIB, 0, 3)
+                    .culling(false).castShadows(false).receiveShadows(false)
+                    .build(*mEngine, q);
+            Scene* qs = mEngine->createScene();
+            qs->addEntity(q);
+            utils::Entity qcamEnt = utils::EntityManager::get().create();
+            Camera* qcam = mEngine->createCamera(qcamEnt);
+            qcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
+            View* qv = mEngine->createView();
+            qv->setScene(qs);
+            qv->setCamera(qcam);
+            qv->setViewport({ 0, 0, ESM_SM, ESM_SM });
+            qv->setRenderTarget(ert);
+            qv->setPostProcessingEnabled(false);
+            qv->setShadowingEnabled(false);
+            qv->setFrustumCullingEnabled(false);
+            Renderer::ClearOptions eco{};
+            eco.clear = true;
+            eco.clearColor = { 1, 0, 0, 0 }; // exp(0) = fully lit outside the map
+            const Renderer::ClearOptions eprev = mRenderer->getClearOptions();
+            mRenderer->setClearOptions(eco);
+            mRenderer->renderStandaloneView(qv);
+            mRenderer->setClearOptions(eprev);
+            mEngine->flushAndWait(); // the depth map dies next; let the pass read it first
+            mEngine->destroy(qv);
+            mEngine->destroy(ert);
+            mEngine->destroy(qs);
+            mEngine->destroy(q);
+            utils::EntityManager::get().destroy(q);
+            mEngine->destroyCameraComponent(qcamEnt);
+            utils::EntityManager::get().destroy(qcamEnt);
+            mEngine->destroy(emi);
+            mEngine->destroy(mShadowMap); // 2048² DEPTH24 (16 MB) -> 1024² R32F (4 MB)
+            mShadowMap = esm;
+            esmOk = true;
+        }
+    }
+    if (!esmOk) {
+        // R32F needs EXT_color_buffer_float, and vpresent has to be present for
+        // the fullscreen triangle. Without both, the raw depth map is still
+        // sitting in mShadowMap — but the samplers now do an ESM lookup, which
+        // is meaningless on depth. Drop it: bindShadowMap then binds the 1x1
+        // white stand-in with shadowTexel 0, which reads as "fully lit".
+        if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    }
+
     // Clip → texture space. x and y are the usual half-scale; z needs a NEGATIVE
     // one, and getting that wrong is why no track has ever had a correct baked
     // sun shadow.
@@ -3120,11 +3201,6 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     const mat4f bias{ float4{ 0.5f, 0, 0, 0 }, float4{ 0, 0.5f, 0, 0 },
                       float4{ 0, 0, -0.5f, 0 }, float4{ 0.5f, 0.5f, 0.5f, 1 } };
     mShadowFromWorld = bias * lightViewProj;
-    // Depth bias in WORLD units, converted to the map's normalised depth. The
-    // old constant 0.004 was normalised, so what it meant on the ground grew
-    // with the track: a metre on a big circuit, a few centimetres on a small
-    // one. The ortho depth range is the camera's far plane (near is 0).
-    mShadowDepthBias = kShadowWorldBias / std::max(1.0f, (dFar + 1.0f) - std::max(0.0f, dNear - 1.0f));
 
     mEngine->destroy(view);
     mEngine->destroy(rt);
@@ -3169,7 +3245,7 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     // Sampling step + the normal offset that keeps a curving deck from
     // shadowing itself (three refits the same guard to its texel size).
     mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
-    mi->setParameter("shadowBias", mShadowMap ? mShadowDepthBias : 0.0f);
+    mi->setParameter("shadowK", kShadowEsmK);
 }
 
 // Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,
@@ -5561,6 +5637,12 @@ bool TtpRenderer::buildScene() {
                 .package(vpoint->second.data(), vpoint->second.size())
                 .build(*mEngine);
     }
+    const auto vesm = mAssets.find("vesm.filamat");
+    if (!mEsmMaterial && vesm != mAssets.end()) {
+        mEsmMaterial = Material::Builder()
+                .package(vesm->second.data(), vesm->second.size())
+                .build(*mEngine);
+    }
     const auto vpresent = mAssets.find("vpresent.filamat");
     if (!mPresentMaterial && vpresent != mAssets.end()) {
         mPresentMaterial = Material::Builder()
@@ -7177,6 +7259,7 @@ TtpRenderer::~TtpRenderer() {
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
+    if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
     if (mShadowMap) mEngine->destroy(mShadowMap);

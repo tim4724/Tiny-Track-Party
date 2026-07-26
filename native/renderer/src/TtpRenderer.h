@@ -288,6 +288,8 @@ private:
     // Textured ground (vground): the biome's floor canvas, generated as pixels
     // to match the JS canvas texture rather than approximated with bands.
     filament::Material* mGroundMaterial = nullptr;
+    // Bake-time filter that turns the raw depth map into a blurred ESM.
+    filament::Material* mEsmMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
     // The ground's own instance, kept so the baked sun map can be bound to it
     // after bakeShadowMap runs (it is created well before that).
@@ -301,11 +303,14 @@ private:
     // its [0,1] texture space (see bakeShadowMap).
     filament::Texture* mShadowMap = nullptr;
     filament::math::mat4f mShadowFromWorld;
-    float mShadowTexel = 0.05f; // world units per shadow texel, for the bias
-    // Depth bias, in the map's normalised depth. Derived per track from a fixed
-    // WORLD bias so its on-the-ground meaning does not scale with track size.
-    static constexpr float kShadowWorldBias = 0.20f; // 20 cm along the light
-    float mShadowDepthBias = 0.0f;
+    float mShadowTexel = 0.05f; // world units per shadow texel; also the "a map
+                                // is bound" sentinel the samplers test on
+    // ESM exponent, shared by the bake filter (vesm.mat) and the two materials
+    // that sample the result. The soft transition spans roughly 1/k of the map's
+    // depth range, trading contact hardness against how much light an occluder
+    // just above a receiver leaks. 80 is near the f32 ceiling (exp(-88)
+    // denormals) and gives a 1-2 world-unit ramp on a typical circuit.
+    static constexpr float kShadowEsmK = 80.0f;
     // Per-car ground-shadow silhouette, rendered top-down off the real model
     // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
     std::vector<filament::Texture*> mCarSilhouettes;

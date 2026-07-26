@@ -42,7 +42,7 @@ export class FilamentView {
     view.rt = view.mod._ttp_create(sel, canvas.width, canvas.height);
     view.mod._free(sel);
     if (!view.rt) throw new Error('ttp_create failed');
-    for (const name of ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal', 'vpresent']) {
+    for (const name of ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal', 'vpresent', 'vesm']) {
       const res = await fetch(`/native/${name}.filamat`);
       if (res.ok) await view.provide(`${name}.filamat`, new Uint8Array(await res.arrayBuffer()));
     }
