@@ -191,6 +191,19 @@ add_test(NAME serializer
   COMMAND serializer_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-number-corpus.jsonl
 )
 
+# ---- Conformance: the JSON string corpus (escape gate) ----------------------
+# The number corpus above gates doubles; nothing gated STRINGS. Across all 8
+# traces and every other corpus there is not one backslash escape, so the
+# quote/backslash/\b\t\n\f\r arms and the \u00XX control arm were executed
+# nowhere — in the writer OR the parser — while the controller's free-text name
+# field reaches them in production. Replays both directions against JSON.stringify.
+add_executable(json_escape_check simtest/json_escape_check.cc)
+target_link_libraries(json_escape_check PRIVATE ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(json_escape_check)
+add_test(NAME json_escape
+  COMMAND json_escape_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/json-escape-corpus.jsonl
+)
+
 # ---- Conformance: the cup-series scoring corpus ------------------------------
 # Replays tests/fixtures/grandprix-corpus.jsonl against CupSeries + ShuffleBag.
 # The cup layer was ported for parity and then never replayed by anything — no

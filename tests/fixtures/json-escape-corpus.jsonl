@@ -1,0 +1,27 @@
+{"raw":"","want":"\"\""}
+{"raw":"plain","want":"\"plain\""}
+{"raw":"a\"b","want":"\"a\\\"b\""}
+{"raw":"a\\b","want":"\"a\\\\b\""}
+{"raw":"back\\\\slash","want":"\"back\\\\\\\\slash\""}
+{"raw":"\"","want":"\"\\\"\""}
+{"raw":"\\","want":"\"\\\\\""}
+{"raw":"\"\\\"","want":"\"\\\"\\\\\\\"\""}
+{"raw":"tab\there","want":"\"tab\\there\""}
+{"raw":"nl\nhere","want":"\"nl\\nhere\""}
+{"raw":"cr\rhere","want":"\"cr\\rhere\""}
+{"raw":"bs\bhere","want":"\"bs\\bhere\""}
+{"raw":"ff\fhere","want":"\"ff\\fhere\""}
+{"raw":"all\b\t\n\f\r\"\\done","want":"\"all\\b\\t\\n\\f\\r\\\"\\\\done\""}
+{"raw":"\u0000","want":"\"\\u0000\""}
+{"raw":"\u0001\u001f","want":"\"\\u0001\\u001f\""}
+{"raw":"\u001e\u001f ","want":"\"\\u001e\\u001f \""}
+{"raw":"ctrl\u0007bell","want":"\"ctrl\\u0007bell\""}
+{"raw":"ë","want":"\"ë\""}
+{"raw":"日本","want":"\"日本\""}
+{"raw":"𝄞","want":"\"𝄞\""}
+{"raw":"🏎️💨","want":"\"🏎️💨\""}
+{"raw":"Ünïcödé Räcër","want":"\"Ünïcödé Räcër\""}
+{"raw":"mixed ë \"quoted\" \n 日本 \\ 🏎️","want":"\"mixed ë \\\"quoted\\\" \\n 日本 \\\\ 🏎️\""}
+{"raw":" leading and trailing ","want":"\" leading and trailing \""}
+{"raw":"/slash/not/escaped","want":"\"/slash/not/escaped\""}
+{"raw":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","want":"\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""}
