@@ -104,7 +104,26 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   calls `sfx(audioDecide.…)`. shared-cpp-plan.md P7 ports the decisions and keeps
   the DSP baked, so `tests/fixtures/audio-corpus.jsonl` records the command stream
   NOW, while the JS that produces it exists — see the conformance rule below.
-- Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), the track
+- THE UI MODEL IS A LAYER, not a pile of render functions. The DECISIONS behind
+  the 2D screens — the seat grid (padding, the car-pick fallback), the lobby
+  readiness rule, the lobby race card, the per-player race HUD values, the
+  ITEM-on-change gate, the reconnect-card diff, the standings board + the cup
+  chip + the results overlay, the fast-forward/forfeit predicates, the
+  pause/auto-pause arbitration, and the screen enum + per-screen back EFFECT —
+  live in `public/display/uiModel.js` as pure functions of plain data. It imports
+  nothing, touches no DOM/clock/RNG/history, and is loadable in Node.
+  `main.js` and `lobbySeats.js` RENDER from it and decide nothing; the shell keeps
+  the three pieces of state the model threads (current screen, which reconnect
+  cards actually attached, what each phone was last told its item was). Strings
+  come out as KEYS plus data (`{titleKey:'cup_champs', cupName}`), never composed
+  copy — the copy tables sit in `main.js` next to the elements they fill. What is
+  deliberately NOT in it: DOM/CSS, fades, canvas sizing, rAF, fullscreen, QR
+  painting, and the back-stack TRAVERSAL (the History API wearing a C hat — see
+  the plan's non-goals). shared-cpp-plan.md P8 ports the model and P6 takes the
+  per-frame HUD block ahead of it, so `tests/fixtures/ui-corpus.jsonl` records its
+  answers NOW — same reason, and same rule, as the audio corpus above.
+- Still JS BY DESIGN: the HUD/screens RENDERING (`main.js`, `Stage.js` — the
+  decisions behind them are `uiModel.js`, above), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
   into the wasm by `gen-track-defs-header.mjs`), the audio DEVICE + DSP palette,
   the whole controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
@@ -125,17 +144,22 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `gen-math-corpus.mjs` and `gen-theme-corpus.mjs` (6 biomes x 22 tracks, plus the
   cup/track resolution, the biome-name order and every boostShades shade). Each header names the `git show` that restores its twin if
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
-  `gen-audio-corpus.mjs` is the one recorded AHEAD of its port and is therefore
-  still RENEWABLE — every input it reads is committed (the golden traces, the
-  shipped wasm, `audio/decide.js`), and `tests/audio-corpus.test.js` re-runs it
-  in-process and demands the committed bytes back. Keep that green: the day it
-  goes red because an input rotted is the day the audio oracle stops being
-  re-derivable, and P7 deletes the JS that can produce it. It replays five of the
-  eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
+  `gen-audio-corpus.mjs` and `gen-ui-corpus.mjs` are the two recorded AHEAD of
+  their port and are therefore still RENEWABLE — every input they read is
+  committed, and `tests/{audio,ui}-corpus.test.js` re-run each generator
+  in-process and demand the committed bytes back. Keep those green: the day one
+  goes red because an input rotted is the day that oracle stops being
+  re-derivable, and P7/P8 delete the JS that can produce it. The audio one reads
+  the golden traces, the shipped wasm and `audio/decide.js`; it replays five of
+  the eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
   `useItem`/`setCarStats`, which the C ABI does not export (only `replay_cli`,
   calling C++ directly, can drive them), and tidepool-ailive is the same race as
   tidepool-4bots. What those would have covered is covered by scripted cases
-  instead, which carry their own inputs and need no wasm at all.
+  instead, which carry their own inputs and need no wasm at all. The UI one reads
+  `display/uiModel.js` and NOTHING else — its scenarios carry a SYNTHETIC
+  catalogue on purpose, so a new track is never a corpus re-record; whether the
+  SHIPPED cups/tracks still flow through the model is `tests/ui-model.test.js`,
+  which is free to change with the data.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,
