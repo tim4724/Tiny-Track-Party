@@ -2,7 +2,7 @@
 
 // Mesh surgery: split the monster truck's single `body` mesh into three GLB nodes
 // so the monster-truck VARIANT can keep just the bare frame and graft a car body
-// where the cab was (see public/display/render/MonsterRig.js):
+// where the cab was (see the monster rig in native/renderer/src/TtpRenderer.cpp):
 //
 //   cab            — the painted box on top (topmost component)
 //   chassis-trim   — the four round shock PODS above the wheels + the rear SPOILER
@@ -11,7 +11,7 @@
 //
 // Like extract-rod.js the split is INDEX-ONLY: all three primitives reuse the body's
 // vertex accessors + material, so each part stays pixel-identical. The full monster
-// truck (all three nodes present) still renders exactly as authored; MonsterRig drops
+// truck (all three nodes present) still renders exactly as authored; the rig drops
 // `cab` + `chassis-trim` and keeps `chassis`.
 //
 // Component identity (from the kit mesh, body-local coords):

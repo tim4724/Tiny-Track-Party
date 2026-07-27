@@ -16,7 +16,6 @@ var DISPLAY_CARDS = [
   { key: 'lobby',       title: 'Lobby (random picked)', hostVariant: true, params: { picked: 'random', track: 'powder' } },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
-  { key: 'features',  title: 'Mechanics' },
   { key: 'rocket',    title: 'Rocket strike', animated: true },
   { key: 'monster',   title: 'Monster truck', animated: true },
   { key: 'paused',    title: 'Paused' },

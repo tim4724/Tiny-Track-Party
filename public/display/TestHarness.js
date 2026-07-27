@@ -15,7 +15,6 @@ import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { trackSchematic } from './trackSchematic.js';
 import { CUPS, TRACKS } from '../shared/tracks.js';
 import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
-import { trackPayload } from './render/trackPayload.js';
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
@@ -126,15 +125,14 @@ function buildMinimap(parent, track, colors) {
 // fly, WASD to glide, Q/E to drop/rise — so the scene can be inspected up close. In
 // the gallery grid each card is an iframe → leave the scenario's own framing alone
 // (you can't comfortably drag a thumbnail). A cross-origin frame throws on
-// window.top, so treat that as framed. Call AFTER the scenario frames its shot (it
-// reads scene._ovPos/_ovTarget). Returns true when it took over the camera.
+// window.top, so treat that as framed. Returns true when it took over the camera.
 function enableFreeCamIfStandalone(scene) {
   let inIframe = true;
   try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
   if (inIframe) return false;
   scene.setFog(false); // flying around the scene: no haze clipping the far track
   // #race is a transparent z-2 overlay over the canvas; let pointer events fall
-  // through to it so OrbitControls can listen (see .cam-free in display.css).
+  // through to it so the drag handler can listen (see .cam-free in display.css).
   document.documentElement.classList.add('cam-free');
   scene.enableUserCamera();
   showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
@@ -349,24 +347,15 @@ export function runDisplayScenario(opts, ctx) {
       ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { cell: false }));
 
       const minimap = buildMinimap(el('race'), track, COLORS);
-
-      const placeGrid = () => {
-        for (const c of engine.getSnapshot().cars) {
-          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
-        }
-      };
-      placeGrid();
+      scene.bindSession(engine.h); // the renderer draws this session's cars
 
       scene.onFrame = (dt) => {
         // The bots live inside the wasm — ttp_update drives them (dodging hazards/poles,
         // skipping finished cars) in the live loop's own order, so there's nothing to
-        // step out here.
+        // step out here, and the renderer reads their poses from the same engine.
         engine.update(dt * 1000);
+        // The minimap is the one thing here that still needs car positions in JS.
         const snap = engine.getSnapshot();
-        for (const c of snap.cars) {
-          if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, brake: c.brake });
-        }
-        scene.syncProps(snap); // reconcile item boxes/bananas + draw the ?bbox car collision outlines
         if (minimap) minimap.update(snap.cars);
         // Endless preview: once everyone finishes, reset and lap again. dispose() frees
         // the wasm session — a JS Game was just garbage, a native handle is not.
@@ -374,104 +363,10 @@ export function runDisplayScenario(opts, ctx) {
           engine.dispose();
           engine = newSession();
           window.__engine = engine;
-          placeGrid();
+          scene.bindSession(engine.h);
         }
       };
       holdFrame(true); // gallery: hold the turntable on a still frame; the card's ▶ orbits it
-    }
-    return;
-  }
-
-  // ---- mechanics showcase (gallery 'features') ----
-  // A frozen, well-framed shot that reliably shows ALL the catch-up/hazard pieces
-  // at once: a boost PAD, an item BOX, a dropped BANANA, an OIL slick (+cones), and
-  // a car with an ACTIVE BOOST (gold aura). They're clustered down the longest
-  // straight (overriding the track's authored positions just for this preview) so a
-  // single 3/4 camera frames them; nothing is simulated, so nothing drifts.
-  if (scenario === 'features') {
-    show('race');
-    el('results').classList.add('hidden');
-    ctx.scenePromise.then(() => setupFeatures()).catch((e) => console.warn('[TestHarness] scene load failed', e));
-
-    // Start arclength of the longest horizontal straight (curvature ≈ 0).
-    function longestStraight(cl, L) {
-      const head = (s) => { const f = cl.sampleAt(((s % L) + L) % L); return Math.atan2(f.tangent.x, f.tangent.z); };
-      const N = 240, ds = 1.0, TH = 0.045, flat = [];
-      for (let i = 0; i < N; i++) {
-        const s = (i / N) * L; let dh = head(s + ds) - head(s - ds);
-        while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
-        flat.push(Math.abs(dh) / (2 * ds) < TH);
-      }
-      let st = 0; while (st < N && flat[st]) st++;             // rotate to a corner so runs don't split at the seam
-      const rot = Array.from({ length: N }, (_, k) => flat[(st + k) % N]);
-      let best = { len: 0, start: 0 }, j = 0;
-      while (j < N) { if (rot[j]) { let e = j; while (e + 1 < N && rot[e + 1]) e++; if (e - j + 1 > best.len) best = { len: e - j + 1, start: (st + j) % N }; j = e + 1; } else j++; }
-      return (best.start / N) * L;
-    }
-
-    function setupFeatures() {
-      const { scene, track } = ctx;
-      scene.orbit = false;
-      scene.bboxOrbit = false; // clear the lobby attract-orbit flag main.js set at boot — else the
-                               // overview loop sweeps the WHOLE track and ignores our cluster framing
-      const cl = track.centerline, L = track.length;
-      const s0 = longestStraight(cl, L) + 3; // a few units in for runway
-      const at = (d) => ((s0 + d) % L + L) % L;
-
-      // Override the authored layout: cluster one of each down the straight.
-      const featureTrack = Object.assign({}, track, {
-        pads: [{ s: at(3), lat: 0.0, radius: 0.65 }],
-        boxes: [{ s: at(6), lat: 0.7, radius: 0.65 }],
-        hazards: [{ s: at(11), lat: 0.35, radius: 0.7 }], // oil slick (+cones)
-      });
-      scene.setTrack(featureTrack);
-
-      for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-      scene.addCar(0, 0, 'Boost!', { cell: false }); // cell:false → the overview camera frames the cluster
-
-      // Hand-staged, SIM-FREE lineup. This preview never ticks, so it needs a still
-      // world rather than an engine: the pose comes straight off the centreline (lat 0
-      // on a flat straight, so the twist/axle-pitch terms the sim adds are nil) and the
-      // props are written in the exact snapshot shape the renderer consumes. That also
-      // sheds the JS engine's demo staging hooks (stageCar/stageBanana/stageRocket),
-      // which the native ABI deliberately doesn't carry.
-      const f0 = cl.sampleAt(s0);
-      const c0 = {
-        id: 0, totalS: s0, lat: 0, heading: 0, spd: 1, boostMul: 1.6, // boostMul → the gold aura
-        pose: { pos: f0.pos.clone(), forward: f0.tangent.clone().normalize(), up: f0.up.clone().normalize() }
-      };
-      const snap = {
-        cars: [c0],
-        boxes: [true],                                 // the single box above, uncollected
-        bananas: [{ id: 1, s: at(8), lat: -0.5 }],
-        rockets: [{ id: 1, s: at(4.2), lat: 0.7 }]     // a homing rocket mid-flight in the lineup
-      };
-      scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul });
-      scene.syncProps(snap); // box + dropped-banana + in-flight rocket meshes
-
-      // Frame the cluster from an elevated 3/4 angle, off to one side looking ACROSS it, so
-      // every piece reads at once and the straight's vanishing line falls off to the side
-      // (rather than shrinking the whole lineup down a long-straight perspective).
-      const ctr = cl.sampleAt(at(4));
-      const cf = ctr.tangent.clone().normalize(), clat = ctr.lateral.clone().normalize(), cup = ctr.up.clone().normalize();
-      const pos = ctr.pos.clone().addScaledVector(cf, -4.6).addScaledVector(clat, 6.0).addScaledVector(cup, 5.0);
-      scene._ovTarget = ctr.pos.clone().addScaledVector(cf, -0.5).addScaledVector(cup, 0.2);
-      scene._ovPos = pos.clone();
-      scene.overview.position.copy(pos);
-      scene.overview.lookAt(scene._ovTarget);
-
-      // Car stays put, but re-pose it + re-sync props each frame so the boost aura keeps
-      // pulsating and the rocket keeps spinning with its flickering flame (boxes/cones
-      // idle-animate via the render loop regardless).
-      scene.onFrame = () => {
-        scene.setCarPose(0, c0.pose.pos, c0.pose.forward, c0.pose.up, { spd: 1, boostMul: c0.boostMul });
-        scene.syncProps(snap);
-      };
-
-      // Standalone (own tab): let the viewer fly around the feature cluster. In the
-      // gallery iframe this is a no-op, so the frozen 3/4 framing above is kept.
-      enableFreeCamIfStandalone(scene);
-      holdFrame(false); // gallery: a labelled showcase — one painted frame says it all
     }
     return;
   }
@@ -505,22 +400,7 @@ export function runDisplayScenario(opts, ctx) {
     const sfx = (!inIframe && window.__audio) ? window.__audio : null;
     // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
     // held for the whole air time — not a one-shot. Only the impact is event-driven here.
-    // Fixture mode (the native-renderer compare harness): pin the race seed
-    // BEFORE the session builds, so every replay of the fixture rolls the same
-    // items and the same bot wander. Engine events buffer for the parent page to
-    // drain per tick — they ride FrameInput to the second renderer.
-    const _fixEvents = [];
-    if (kind === 'fixture') track.seed = 0x6a7e00;
-
-    const onRaceEvent = kind === 'fixture'
-      ? (ev) => {
-          _fixEvents.push(ev);
-          // Drive the scene FX too (the 'rocket' scenario's wiring, sans audio)
-          // — the compare gallery judges impacts on BOTH renderers.
-          if (ev.type === 'spin' && ev.cause === 'rocket') scene.rocketImpact(ev.id);
-          else if (ev.type === 'rocket_expire') scene.rocketExpire(ev.s, ev.lat);
-        }
-      : kind === 'rocket'
+    const onRaceEvent = kind === 'rocket'
       ? (ev) => {
           if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
           else if (ev.type === 'rocket_expire') { scene.rocketExpire(ev.s, ev.lat); if (sfx) sfx.rocketHit(); } // whiff self-destruct
@@ -552,33 +432,16 @@ export function runDisplayScenario(opts, ctx) {
     // item is guaranteed by FORCING THE ROULETTE instead — every box on the track rolls
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
-    // The fixture (renderer compare) takes it from ?item= for the same reason:
-    // it's the only way to put a specific item's visuals in front of both
-    // renderers at a known frame.
-    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind
-      : (kind === 'fixture'
-        ? (new URLSearchParams(location.search).get('item') || null)
-        : null);
+    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
     const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem });
     let engine = newSession();
     window.__engine = engine;
-    // Fixture tick control: a queued manual step (ms) overrides the next frame's
-    // wall dt (0 = re-present without advancing the sim).
-    let _stepMs = null;
-    let _stepResolve = null;
-    let _fixFrames = 0; // engine ticks since the last reset — the compare page's scrub index
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
+    scene.bindSession(engine.h); // the renderer draws this session's cars
 
-    const placeGrid = () => {
-      for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
-      }
-    };
-    placeGrid();
-
-    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster' || kind === 'fixture';
+    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
 
     // The forced item (above) is then SPENT from out here rather than on the bot's own
     // 1.5–4s hold, so the preview loops its showcase (rocket flight + impact burst; the
@@ -601,127 +464,31 @@ export function runDisplayScenario(opts, ctx) {
 
     let lastHud = 0;
     scene.onFrame = (dt) => {
-      if (live) {
-        // Fixture mode is driven by the parent page: step(ms) supplies the dt so
-        // a replay is frame-exact, where free-running rAF is not. Everything
-        // else (bots, item pickups, the roulette) runs inside the wasm sim.
-        const stepped = _stepMs != null;
-        engine.update(stepped ? _stepMs : dt * 1000);
-        if (!stepped || _stepMs > 0) _fixFrames++;
-        _stepMs = null;
-        // Resolve the awaited step only on the frame that CONSUMED it — step()
-        // calls that outpace rAF would otherwise silently coalesce.
-        if (stepped && _stepResolve) { const r = _stepResolve; _stepResolve = null; r(); }
-      }
+      if (!live) return; // frozen preview: the renderer holds the field (see below)
+      // The bots, item pickups and the roulette all run inside the wasm sim, and
+      // the renderer reads the result from the same engine — so a frame is one
+      // update plus the shell's own business below.
+      engine.update(dt * 1000);
       const snap = engine.getSnapshot();
-      for (const c of snap.cars) {
-        scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (burst + grow-in)
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
-      }
-      scene.syncProps(snap); // consume/respawn item boxes + render dropped bananas
       if (forceItem) spendHeldItem(snap, dt); // arms the next frame's use (post-snapshot)
       if (kind === 'rocket') driveGalleryRocketAudio(snap); // sustained jet per in-flight rocket
       // Monster demo (standalone tab only): voice the transformed car's deep big-truck
       // engine growl, silent otherwise — so the gallery hears the sound change too.
       if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, true);
-      if (live) {
-        const now = performance.now();
-        if (now - lastHud > 160) {
-          lastHud = now;
-          for (const c of snap.cars) scene.setCarHud(c.id, c);
-        }
-        // Endless preview: once everyone crosses the line, reset and lap again.
-        // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.
-        if (raceOver(snap)) {
-          engine.dispose();
-          engine = newSession();
-          window.__engine = engine;
-          placeGrid();
-        }
+      const now = performance.now();
+      if (now - lastHud > 160) {
+        lastHud = now;
+        for (const c of snap.cars) { scene.setCarHud(c.id, c); scene.setCarSteer(c.id, c.steerInput); }
+      }
+      // Endless preview: once everyone crosses the line, reset and lap again.
+      // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.
+      if (raceOver(snap)) {
+        engine.dispose();
+        engine = newSession();
+        window.__engine = engine;
+        scene.bindSession(engine.h);
       }
     };
-
-    // ---- fixture mode: the native-renderer compare harness ----
-    // Same-origin hooks for /gallery-compare.html: deterministic tick control plus
-    // the contract-shaped scene data a SECOND renderer needs — snapshot + events
-    // per frame, built track + roster once, per-cell chase cameras — so the parent
-    // feeds the identical sim state to the Filament wasm module. One sim, two
-    // renderers: parity diffs are pure renderer diffs.
-    if (kind === 'fixture') {
-      window.__fixture = {
-        // ▶/❚❚ over the scene loop; step(ms) advances the sim EXACTLY ms (then
-        // re-idles), so scrubbing is a fixed-dt resim from any pause point.
-        play: () => scene.start(),
-        pause: () => scene.pauseAfterFrame(),
-        isRunning: () => scene.isRunning(),
-        step: (ms = 1000 / 60) => new Promise((resolve) => { _stepMs = ms; _stepResolve = resolve; scene.start(); scene.pauseAfterFrame(); }),
-        // Full deterministic restart: a fresh session on the same pinned seed, so
-        // the bots and the item roulette rewind with the sim.
-        reset: () => { engine = newSession(); window.__engine = engine; _fixFrames = 0; _fixEvents.length = 0; placeGrid(); },
-        frame: () => _fixFrames,
-        getSnapshot: () => engine.getSnapshot(),
-        drainEvents: () => _fixEvents.splice(0),
-        // One-time scene-build payload (contract track + identity + roster).
-        // JSON round-trip drops the centerline's methods — plain data crosses.
-        getTrackData: () => trackPayload(scene, track,
-            ids.map((i) => ({ id: i, name: FAKE_NAMES[i], carIndex: i,
-                              color: COLORS[i % COLORS.length] }))),
-        // Camera mode. 'cells' = the per-car chase grid the game runs; 'overview'
-        // = one static whole-track shot on BOTH sides, which is the only framing
-        // that shows a track's cast shadows, its silhouette against the ground
-        // and its scenery all at once. The sim is untouched either way.
-        // opts.pos/opts.target ([x, y, z]) park the overview anywhere — the way
-        // to put both renderers nose-to-nose on ONE feature (a loop's cast
-        // shadow, a gantry, a shoreline) instead of the whole-circuit default.
-        setCamera: (mode, opts = {}) => {
-          scene.soloCam = (mode === 'overview');
-          // No turntable: a compare shot has to be reproducible, and the orbit
-          // rewrites the camera position every frame (which silently ate the
-          // first pos I parked here).
-          if (scene.soloCam) { scene.orbit = false; scene.bboxOrbit = false; }
-          if (opts.pos) {
-            scene._ovPos.set(...opts.pos);
-            scene.overview.position.set(...opts.pos);
-            // The overview ships with near = 4 (it only ever framed whole
-            // tracks); a parked compare camera wants to sit a metre off a car,
-            // and at near = 4 the car is simply clipped away.
-            scene.overview.near = opts.near == null ? 0.1 : opts.near;
-            scene.overview.updateProjectionMatrix();
-          }
-          if (opts.target) {
-            if (!scene._ovTarget) scene._ovTarget = scene._ovPos.clone();
-            scene._ovTarget.set(...opts.target);
-          }
-        },
-        // Per-cell chase cameras (world matrix + projection params) — the runtime
-        // owns cameras (architecture.md), so views ride FrameInput to the renderer.
-        getViews: () => (scene.soloCam ? (() => {
-          const cam = scene.overview;
-          cam.updateWorldMatrix(true, false);
-          const fog = scene.scene.fog;
-          return [{ id: 0, world: [...cam.matrixWorld.elements],
-                    fov: cam.fov, near: cam.near, far: cam.far, aspect: cam.aspect,
-                    fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 }];
-        })() : ids.map((id) => {
-          const c = scene.cars.get(id);
-          if (!c || !c.cam) return null;
-          c.cam.updateWorldMatrix(true, false);
-          // The fog belongs to the VIEW, not the scene: the race cells, the
-          // lobby orbit and the overview each run their own ramp (and the
-          // gallery runs none), so it rides out with the camera.
-          const fog = scene.scene.fog;
-          return { id, world: [...c.cam.matrixWorld.elements],
-                   fov: c.cam.fov, near: c.cam.near, far: c.cam.far, aspect: c.cam.aspect,
-                   fogNear: fog ? fog.near : 0, fogFar: fog ? fog.far : 0 };
-        }).filter(Boolean)),
-        // Pixels of the presented Three.js frame (post-present same-task readback;
-        // when idle, re-present WITHOUT advancing the sim via a 0 ms step).
-        capture: () => new Promise((resolve) => {
-          scene.onAfterFrame = () => { scene.onAfterFrame = null; resolve(scene.renderer.domElement.toDataURL('image/png')); };
-          if (!scene.isRunning()) { _stepMs = 0; scene.start(); scene.pauseAfterFrame(); }
-        })
-      };
-    }
 
     if (kind === 'countdown') {
       // HUD shows lap 1 while the lights count down.
@@ -731,11 +498,8 @@ export function runDisplayScenario(opts, ctx) {
       // Spin the field forward a few seconds so it reads mid-race, freeze it
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.
       for (let t = 0; t < 90; t++) engine.update(33);
-      for (const c of engine.getSnapshot().cars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
-        scene.setCarHud(c.id, c);
-      }
-      scene.onFrame = null; // frozen: no per-frame re-pose
+      for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
+      scene.hold(true); // the renderer holds the field at rest — no wheel spin, no dust
       el('pause-btn').classList.remove('hidden');
       el('pause-overlay').classList.remove('hidden');
     } else if (kind === 'reconnect') {
@@ -746,11 +510,8 @@ export function runDisplayScenario(opts, ctx) {
       for (let t = 0; t < 90; t++) engine.update(33);
       const rcCars = engine.getSnapshot().cars;
       dressItems(rcCars); // populate the cell item slots so the preview isn't all empty
-      for (const c of rcCars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
-        scene.setCarHud(c.id, c);
-      }
-      scene.onFrame = null; // frozen: no per-frame re-pose
+      for (const c of rcCars) scene.setCarHud(c.id, c);
+      scene.hold(true);
       // Fake a dropped racer: the last filled slot is reconnecting. Its car keeps
       // its cell; the reconnect QR is centred in that cell (the renderer positions
       // it). The QR encodes the join URL with the seat's ?claim= token (no relay
@@ -770,11 +531,8 @@ export function runDisplayScenario(opts, ctx) {
       engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
       const fnCars = engine.getSnapshot().cars;
       dressItems(fnCars); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
-      for (const c of fnCars) {
-        if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, steerInput: c.steerInput });
-        scene.setCarHud(c.id, c);
-      }
-      scene.onFrame = null; // frozen
+      for (const c of fnCars) scene.setCarHud(c.id, c);
+      scene.hold(true);
     } else if (kind === 'results') {
       // Freeze the grid behind the blurred results overlay.
       const slots = buildSlots(players);

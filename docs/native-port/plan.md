@@ -49,15 +49,20 @@ decision before anything else proceeds.
 2. **Track meshing + FX** over `libttp-track`: ribbon, decals, hills,
    supports, gantry, skids, particles, environment and landmark animation
    — until every gallery scenario builds and animates.
-3. **Web integration** behind `?renderer=filament`, the JS engine feeding
-   `FrameInput` per frame. Three.js stays the default.
-4. **Parity + perf.** Commit fixtures (static scenes and recorded
-   `FrameInput` timelines, seeded from the gallery catalogue). Verify
-   cheapest-first: structural dumps (logical pose + named cosmetic offsets,
-   exact), per-platform screenshot goldens (small perceptual tolerance;
-   cross-platform diffs are diagnostic only), and human side-by-side
-   checkpoints against Three.js for the sticker look. Head-to-head perf vs
-   Three.js on low-end web hardware gates the eventual default flip.
+3. **Web integration — DONE.** Ran behind `?renderer=filament` with the sim
+   feeding `FrameInput` across the wasm boundary, then cut over: the renderer
+   links into the sim's own module, `ttp_display.cc` builds each frame from the
+   live `Game` in C++, and Three.js is deleted. Cameras and the split-screen
+   cell layout moved to the runtime with it. The judging surface used to get
+   there (`/gallery-compare.html`, one sim → two renderers) went with Three.js;
+   git history has both.
+4. **Parity + perf.** Still open as a DEVICE story: the web side is judged by
+   eye against git history now that there is nothing to diff against
+   side-by-side. Commit fixtures (static scenes and recorded `FrameInput`
+   timelines, seeded from the gallery catalogue) and verify cheapest-first:
+   structural dumps (logical pose + named cosmetic offsets, exact), then
+   per-platform screenshot goldens (small perceptual tolerance; cross-platform
+   diffs are diagnostic only).
 5. **Device fixture hosts** keep running the growing fixture set on both
    floor devices throughout — regressions surface per-step.
 

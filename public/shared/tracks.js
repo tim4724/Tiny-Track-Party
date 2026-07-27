@@ -1,6 +1,6 @@
 // Resolved waypoints for the seeded generated tracks (generated offline by
 // scripts/gen-tracks.mjs — solver-placed elevation + difficulty-profile decoration and the
-// chosen start anchor baked in; pure data, no Three.js). GEN_FURNITURE carries their
+// chosen start anchor baked in; pure data, no renderer). GEN_FURNITURE carries their
 // auto-placed oils/pads/boxes (scripts/track-gen.mjs placeFurniture), read via genFurn()
 // below — every generated track uses it, the Backyard four included (they were re-baked
 // through the decorated `mid` profile and gave up their hand-tuned furniture then). Only
@@ -12,7 +12,7 @@ import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
 // imports this module via TrackBuilder; a hard read here would deadlock that workflow).
 const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
 
-// Track catalogue — DATA ONLY, no Three.js. The single source of truth for "what
+// Track catalogue — DATA ONLY, no renderer. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
 // list of parametric SEGMENTS (the geometry). TrackBuilder integrates the segments
 // into a drivable centerline; the renderer sweeps the procedural road over it.

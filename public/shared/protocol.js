@@ -114,9 +114,9 @@ var CAR_NAMES = [
   'Dash', 'Bolt', 'Carve', 'Rumble'
 ];
 // Extra Y-rotation (radians) per model, for any model whose mesh faces the wrong
-// way after SceneRenderer's base half-turn (most Kenney vehicles face -Z, so the
+// way after the renderer's base half-turn (most Kenney vehicles face -Z, so the
 // renderer turns them to +Z). Every model currently faces correctly, so this is
-// all zeros — kept as a per-model hook. Applied in-race (SceneRenderer) and when
+// all zeros — kept as a per-model hook. Applied in-race (the renderer) and when
 // baking the car thumbnails, so the picker preview matches the racing car.
 var CAR_MODEL_YAW = [0, 0, 0, 0];
 

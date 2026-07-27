@@ -121,7 +121,7 @@ const visible = (sel) => `${sel}:not(.hidden)`;
 
 // Wait for the display to flip into the live race (session.racing). The race
 // starts on the "GO!" beat of a wall-clock countdown — but that countdown runs
-// on the display's main thread, which in headless CI renders the full Three.js
+// on the display's main thread, which in headless CI renders the full
 // scene through SwiftShader (software GL). The first race frame there can stall
 // for several seconds (lazy shader compile / first split-screen setup), and on a
 // busy box the steady frames are slow too, blocking the 1 Hz countdown setInterval

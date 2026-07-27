@@ -1,14 +1,16 @@
 /*
- * ttp_runtime.h — the single C ABI between platform shells and the native
- * runtime (docs/native-port/architecture.md). Every shell (JS/wasm, Swift,
- * Kotlin) talks to the engine+renderer exclusively through this surface.
+ * ttp_render.h — libttp-renderer's INPUT CONTRACT: the plain-data frame the
+ * renderer draws, and nothing else. This is an internal C++ header, not an ABI
+ * (docs/native-port/architecture.md: runtime/ttp_runtime.h is the one
+ * disciplined C ABI). It stays C-shaped because the tvOS and Android shells
+ * fill the same structs.
  *
- * No ABI versioning: shells and runtime always ship together (atomic deploys).
- * TtpFrameInput carries a layout version only so a stale serialized fixture is
- * detected loudly, not misread.
+ * No versioning between layers — they always ship together. TtpFrameInput
+ * carries a layout version only so a stale serialized FIXTURE is detected
+ * loudly rather than misread.
  */
-#ifndef TTP_RUNTIME_H
-#define TTP_RUNTIME_H
+#ifndef TTP_RENDER_H
+#define TTP_RENDER_H
 
 #include <stdint.h>
 
@@ -16,13 +18,11 @@
 extern "C" {
 #endif
 
-typedef struct TtpRuntime TtpRuntime; /* opaque */
-
 /*
- * One buffer pointer per frame; the runtime never reads it after the call
- * returns. The shape (single versioned plain-data blob) is frozen; the fields
- * grow with the port. v1 carries the contract car poses + the runtime-owned
- * cameras (the JS sim computes both; see gallery-compare.js for the marshaller).
+ * One frame of everything that moves. Built by the runtime (ttp_display.cc)
+ * straight off the live Game — it never leaves the process, so "plain data"
+ * here buys layout stability for the tvOS/Android shells and a serializable
+ * fixture format, not marshalling.
  */
 typedef struct TtpVec3 { float x, y, z; } TtpVec3;
 
@@ -112,51 +112,8 @@ static inline const TtpBurstInput* ttp_frame_bursts(const TtpFrameInput* f) {
     return (const TtpBurstInput*) (ttp_frame_rockets(f) + f->rocketCount);
 }
 
-/*
- * surface is platform-defined:
- *   web shell:   CSS selector of the target <canvas> (e.g. "#ttp-canvas");
- *                the shell creates + currents the WebGL2 context before the
- *                Filament engine exists.
- *   tvOS shell:  CAMetalLayer*
- *   Android:     ANativeWindow*
- * width/height are in physical pixels. Returns NULL on failure.
- */
-TtpRuntime* ttp_create(const char* surface, uint32_t width, uint32_t height);
-
-void ttp_resize(TtpRuntime* rt, uint32_t width, uint32_t height);
-
-/*
- * Hand the runtime a named asset's bytes (materials, GLBs, textures, JSON).
- * The shell owns fetching (JS fetch / file read); the runtime copies the
- * bytes before returning. Returns 0 on success.
- */
-int ttp_provide_asset(TtpRuntime* rt, const char* name,
-        const uint8_t* bytes, uint32_t len);
-
-/*
- * Build the scene once required assets have been provided.
- * M0 requires "triangle.filamat". Returns 0 on success.
- */
-int ttp_build_scene(TtpRuntime* rt);
-
-/* Tear the scene down (meshes, glTF assets, lights, sky) so ttp_build_scene can
- * run again on a freshly provided "track.bin" — every race start goes through
- * this pair, since a Grand Prix chains four tracks and even a restart wants the
- * skid ribbons, kicked cones and collected boxes back at their opening state.
- * The engine, views, materials and previously provided asset bytes survive. */
-void ttp_release_scene(TtpRuntime* rt);
-
-/* Returns 1 when the frame rendered; 0 when the renderer skipped it
- * (beginFrame backpressure) and the surface still holds the PREVIOUS frame —
- * capture paths must resubmit until it returns 1 or the readback is stale.
- * On the web the frame skipper is bypassed (requestAnimationFrame already
- * paces us; see render()), so this always returns 1 there. */
-int ttp_submit_frame(TtpRuntime* rt, const TtpFrameInput* input);
-
-void ttp_destroy(TtpRuntime* rt);
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* TTP_RUNTIME_H */
+#endif /* TTP_RENDER_H */

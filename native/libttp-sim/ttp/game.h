@@ -169,6 +169,11 @@ class Game {
   const std::vector<Zone>& hazards() const { return hazards_; }
   const std::vector<PoleRt>& poles() const { return poles_; }
   const std::vector<BananaRt>& bananas() const { return bananas_; }
+  // Read-only, for the renderer (ttp_display.cc builds its frame off these
+  // rather than off a serialized snapshot). getSnapshot() derives the same two:
+  // a box is available when its cooldown has run out, a rocket's `s` wraps.
+  const std::vector<BoxRt>& boxes() const { return boxes_; }
+  const std::vector<RocketRt>& rockets() const { return rockets_; }
   // cars in insertion order (Map iteration order).
   const std::vector<std::unique_ptr<Car>>& cars() const { return cars_; }
 

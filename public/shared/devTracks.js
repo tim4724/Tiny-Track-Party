@@ -10,7 +10,7 @@ export const DEV_TRACKS = {
   // representative of every renderer-relevant track feature — plain curve, banked
   // corner, crest, width squeeze, tilted toy loop (auto boost pad + decals across
   // its mouth seam) — plus furniture of every kind. The native renderer is judged
-  // against Three.js on THIS track in /gallery-compare.html; keep changes additive
+  // on THIS track in the gallery; keep changes additive
   // (fixtures reference it by feature position).
   //
   // Rounded rectangle, all -90 corners (helix hand). Closure: N grid 28 = S legs

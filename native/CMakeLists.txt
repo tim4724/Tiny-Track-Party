@@ -430,18 +430,49 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
 )
 
-# ---- Browser module: the native runtime (ttp_runtime.h + ttp_party.h) -------
-# Emscripten-only. Wraps libttp-sim AND libttp-party behind their two extern "C"
-# ABIs and emits one ES6 module (ttp_runtime.mjs + .wasm) that the display's
-# display's Native* adapters share — one instantiation, one copy of
-# double-conversion, and the shape libttp-runtime takes on the shells. Lean by
-# design: -O2, no assertions, and NEITHER NODERAWFS NOR EXIT_RUNTIME (which the
-# CLI helper adds and a browser module must not carry) — this is why those
-# options were lifted off the ttp_strict_fp interface above. The artifacts are
-# copied into public/display/engine/native/ (checked in, like engine/math.js) by
-# native/scripts/build-runtime-web.sh.
+# ---- libttp-renderer --------------------------------------------------------
+# The Filament renderer, platform-free (no emscripten includes): the same code
+# ships on tvOS and Android TV, where the shell hands init() a CAMetalLayer or
+# ANativeWindow instead. Built only when a Filament SDK is pointed at, which is
+# what keeps CI — which has no SDK — able to configure this tree at all.
+#
+# C++20 to match the Filament SDK build; no RTTI/exceptions, like Filament.
+# Deliberately NOT ttp_strict_fp: nothing here is conformance-bearing, and the
+# renderer wants the compiler's normal float latitude.
+if(DEFINED FILAMENT_SDK)
+  include(cmake/FilamentWasm.cmake)
+  add_library(ttp_renderer STATIC renderer/src/TtpRenderer.cpp)
+  target_include_directories(ttp_renderer PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src)
+  target_link_libraries(ttp_renderer PUBLIC filament-sdk PRIVATE ttp_warnings)
+  target_compile_options(ttp_renderer PRIVATE -fno-rtti -fno-exceptions)
+  set_target_properties(ttp_renderer PROPERTIES CXX_STANDARD 20)
+endif()
+
+# ---- Browser module: the whole game --------------------------------------
+# Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"
+# ABIs (runtime/ttp_runtime.h, runtime/ttp_party.h) AND libttp-renderer behind
+# the display surface, so the sim state the renderer draws never leaves wasm.
+# That is the whole point of merging them — the display calls ttp_display_frame
+# and C++ reads the live Game directly, where the two-module shape had to
+# serialize every car pose and camera through JS on every frame.
+#
+# Emits ttp_runtime.mjs + .wasm, copied into public/display/engine/native/
+# (checked in, like engine/math.js) by native/scripts/build-runtime-web.sh.
+# Lean by design: -O2, no assertions, and NEITHER NODERAWFS NOR EXIT_RUNTIME
+# (which the CLI helper adds and a browser module must not carry) — this is why
+# those options were lifted off the ttp_strict_fp interface above.
+#
+# WITHOUT a Filament SDK this links sim+party only. That is not a shippable
+# artifact — it is CI's browser-ABI link check (the wasm leg has no SDK), which
+# is the one build that would otherwise never compile these link options.
 if(EMSCRIPTEN)
-  add_executable(ttp_runtime_web runtime/ttp_runtime.cc runtime/ttp_party.cc)
+  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc)
+  if(TARGET ttp_renderer)
+    list(APPEND TTP_WEB_SOURCES runtime/ttp_display.cc)
+  endif()
+  add_executable(ttp_runtime_web ${TTP_WEB_SOURCES})
   target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
   target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
   set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
@@ -450,14 +481,34 @@ if(EMSCRIPTEN)
     --no-entry
     -sMODULARIZE=1
     -sEXPORT_ES6=1
+    # node too: tests/{runtime,party}-abi.test.js load this exact artifact
+    # headless. Filament only touches GL inside ttp_display_create, which needs
+    # a canvas, so a headless load never reaches a GL call.
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
     -sASSERTIONS=0
     # The ABI itself is exported by TTP_ABI (EMSCRIPTEN_KEEPALIVE) on every
-    # declaration in ttp_runtime.h / ttp_party.h — 89 entry points, no list to
-    # keep in sync here. malloc/free are the allocator the JS side needs for
-    # stringToUTF8 buffers and have no declaration of ours to tag.
+    # declaration in ttp_runtime.h / ttp_party.h — no list to keep in sync here.
+    # malloc/free are the allocator the JS side needs for stringToUTF8 buffers
+    # and have no declaration of ours to tag.
     "-sEXPORTED_FUNCTIONS=_malloc,_free"
-    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64"
+    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64,HEAPU8"
   )
+  if(TARGET ttp_renderer)
+    target_link_libraries(ttp_runtime_web PRIVATE ttp_renderer)
+    target_link_options(ttp_runtime_web PRIVATE
+      -sUSE_WEBGL2=1
+      # NOT -sFULL_ES3. It implies -sFULL_ES2 (tools/link.py), whose GLES2
+      # client-side-array emulation puts a SYNCHRONOUS
+      # getParameter(ELEMENT_ARRAY_BUFFER_BINDING) inside every
+      # glBindVertexArray, plus a per-draw scan of all 16 attribute slots.
+      # Filament binds a VAO per draw, so that was ~180 blocking round-trips to
+      # the GPU process every frame — measured as the single largest cost in the
+      # whole renderer. Filament is a WebGL2/ES3 consumer and never passes
+      # client-side arrays, so neither emulation applies to us.
+      -sMIN_WEBGL_VERSION=2
+      -sMAX_WEBGL_VERSION=2
+      # ...and the two GLES3 entry points dropping FULL_ES3 takes away.
+      --js-library ${CMAKE_CURRENT_SOURCE_DIR}/runtime/gl_map_buffer_stubs.js)
+  endif()
 endif()

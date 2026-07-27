@@ -24,7 +24,9 @@ import path from 'node:path';
 // count, so VENDOR.md and friends do not churn the hash.
 const ROOTS = [
   'native/CMakeLists.txt',
+  'native/cmake',
   'native/runtime',
+  'native/renderer',
   'native/libttp-json',
   'native/libttp-sim',
   'native/libttp-party',
@@ -34,7 +36,11 @@ const ROOTS = [
   'native/scripts/build-runtime-web.sh',
 ];
 
-const EXTS = new Set(['.c', '.cc', '.cpp', '.h', '.hh', '.hpp', '.inc', '.txt', '.cmake', '.sh']);
+// .mat and .js are in here because the artifacts include the renderer: its
+// materials compile to the .filamat blobs shipped alongside the wasm, and
+// gl_map_buffer_stubs.js is linked into the module by --js-library.
+const EXTS = new Set(['.c', '.cc', '.cpp', '.h', '.hh', '.hpp', '.inc', '.txt',
+                      '.cmake', '.sh', '.mat', '.js']);
 
 function walk(abs, rel, out) {
   const st = fs.statSync(abs);

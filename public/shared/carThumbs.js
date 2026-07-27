@@ -1,6 +1,6 @@
 // Shared car-thumbnail component. The lobby car picker (controller) and the
 // display lobby both show pre-baked renders of each Kenney car model instead of
-// running Three.js on the phone — plain image assets, so no WebGL, no importmap,
+// running a 3D renderer on the phone — plain image assets, so no WebGL,
 // and it works on every mobile browser (old ones included). Assets are generated
 // offline by rendering each GLB (front-3/4 hero + a full spin), matching the
 // in-race toy-plastic look:

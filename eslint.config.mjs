@@ -35,19 +35,17 @@ const browserGlobals = {
 
 export default [
   // ── What never gets linted ────────────────────────────────────────────────
-  // vendor/ is Three.js (third-party); worktrees/ and .claude/ hold gitignored
-  // sibling checkouts other agents work in; the rest are run/build artefacts.
+  // worktrees/ and .claude/ hold gitignored sibling checkouts other agents work
+  // in; the rest are run/build artefacts.
   {
     ignores: [
       'node_modules/**',
-      'vendor/**',
       'worktrees/**',
       '.claude/**',
       '.playwright-mcp/**',
       'test-results/**',
       'native/**',                        // C++ tree; build dirs emit emscripten glue JS
-      'public/display/engine/native/**',  // generated wasm module artifacts (ttp_runtime.mjs)
-      'public/native/**',                 // ditto for the renderer (ttp.js — emscripten glue)
+      'public/display/engine/native/**',  // generated wasm artifacts (ttp_runtime.mjs — emscripten glue)
       'artwork/**',
     ],
   },

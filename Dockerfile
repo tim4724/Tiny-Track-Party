@@ -19,11 +19,10 @@ COPY public/assets/ ./public/assets/
 COPY package.json ./
 COPY server/ ./server/
 COPY public/ ./public/
-# partyplug (transport kit) and vendor (Three.js) live OUTSIDE public/ and are
-# served via the /partyplug/ and /vendor/ route remaps in server/index.js. They
-# must be copied into the image or those routes 404.
+# partyplug (the transport kit) lives OUTSIDE public/ and is served via the
+# /partyplug/ route remap in server/index.js. It must be copied into the image
+# or that route 404s.
 COPY partyplug/ ./partyplug/
-COPY vendor/ ./vendor/
 USER nodejs
 EXPOSE 4000
 ENV NODE_ENV=production PORT=4000

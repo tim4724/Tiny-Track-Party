@@ -1,8 +1,8 @@
 // track.bin — the scene-build payload the native renderer meshes from.
 //
-// One writer, two consumers: the compare gallery (which judges the port) and the
-// display's own ?renderer=filament path. Pure data in, bytes out — no DOM, no
-// three.js — so it also runs in Node if a fixture ever needs to bake one.
+// Written once per race by the display's scene build, never per frame. Pure data
+// in, bytes out — no DOM and no renderer — so it also runs in Node if a fixture
+// ever needs to bake one.
 //
 // The layout is documented alongside the reader in TtpRenderer.cpp; the version
 // at the head of the buffer is the contract between them, and both sides move
@@ -31,7 +31,7 @@ export function resolveModelTint(td, model, bytes) {
   for (const m of json.materials || []) {
     if (typeof tint !== 'object') { out.push([m.name || '', tint]); continue; }
     // Authored colour as the six-hex-digit key the theme's map uses. The glTF
-    // factor is LINEAR; the theme keys are the sRGB hex three.js reports.
+    // factor is LINEAR; the theme keys are authored as sRGB hex.
     const f = (m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorFactor) || [1, 1, 1, 1];
     const toSrgb = (c) => Math.round(255 * (c <= 0.0031308 ? c * 12.92
       : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
@@ -239,7 +239,7 @@ export function buildTrackBin(td) {
       dv.setUint8(o, i < name.length ? name.charCodeAt(i) & 0x7f : 0); o += 1;
     }
   }
-  // Rear-plate height on this model's back panel (SceneRenderer's PLATE_Y
+  // Rear-plate height on this model's back panel (trackPayload's PLATE_Y
   // override); < 0 = fall back to the fixed fraction of the body's height.
   for (const r of roster) f32(r.plateY == null ? -1 : r.plateY);
   for (const p of pal) u32(p);                    // sRGB 0xrrggbb

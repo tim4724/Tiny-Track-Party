@@ -1,11 +1,11 @@
-// Per-cup visual BIOMES — DATA ONLY (no Three.js), so this module loads in the
+// Per-cup visual BIOMES — DATA ONLY (no renderer), so this module loads in the
 // browser display, the gallery, and Node alike (a sibling of genTracks.js/tracks.js).
 // A biome is resolved from a track's CUP id; unknown or unlisted cups fall back to
 // `grass` (the canonical "Sunny Circuit" look), so existing cups render byte-for-byte
 // identically until a cup is explicitly given its own biome.
 //
-// Each biome is a flat bag of colours/intensities consumed by render/environment.js
-// (buildEnvironment / applyEnvTheme) and SceneRenderer (fog + background colour):
+// Each biome is a flat bag of colours/intensities resolved by render/trackPayload.js
+// and consumed by the native renderer (sky, ground, lights, fog, furniture):
 //   sky:    { zenith, horizon, below }  vertex-gradient sky-dome colours (overhead →
 //                                       horizon → below-horizon haze). horizon SHOULD
 //                                       match `fog` so the ground dissolves seamlessly.
@@ -94,7 +94,7 @@
 //                                       flurry per track: a glacier is sparse, a
 //                                       whiteout track dense)
 //   landmark: (optional)                hero set-piece kind or array of kinds, placed
-//                                       by rule per track (render/track.js build-
+//                                       by rule per track (the renderer's build-
 //                                       Landmarks): 'lighthouse' (on the lowest off-
 //                                       shore island) | 'sailboat' (anchored in the
 //                                       shallows) | 'umbrella' (beach umbrella + towel
@@ -139,7 +139,7 @@
 //                                       over pylon colour) around the posts. Default
 //                                       is celebration red posts + paper domes; the
 //                                       chequer banner is always ink/paper.
-//   scenery: trackside prop palette consumed by buildScenery (render/track.js) — the
+//   scenery: trackside prop palette consumed by the renderer's scatter — the
 //            placement logic (seeded stream, corridor clearance, clustering) is shared;
 //            the palette decides WHAT gets stamped, so a desert never grows oak trees:
 //     trees:   [{ model, w, s, tint? }]  weighted GLB silhouettes; w's should sum to 1.
@@ -162,7 +162,7 @@
 //     clutter: (optional)         small ground detail scattered DENSER and CLOSER to
 //              the road than the props above — the near-field pass the chase cam
 //              actually sees. { kinds: [{ kind, w, … }], density }; kinds are
-//              procedural (render/track.js CLUTTER_BUILDERS, entry carries
+//              procedural (the renderer's clutter builders, entry carries
 //              `tints`): 'flower' (stocky daisies) | 'shell' | 'starfish' |
 //              'driftwood' | 'drift' (snow heap) | 'scrub' | 'pebbles' |
 //              'brick' (studded toy brick) | 'marble' | 'domino' —
@@ -492,7 +492,7 @@ export const THEMES = {
 
 // Union of every GLB the biome scenery palettes reference (trees, bush donors,
 // and the clutter pass's kit stamps — the flowers). The display preloads this
-// whole set once (SceneRenderer.load), so switching cups/biomes in the lobby never
+// whole set once, so switching cups/biomes in the lobby never
 // waits on a model fetch — the per-model cost is tiny (the kit props are a few KB).
 export const SCENERY_MODELS = [...new Set(Object.values(THEMES).flatMap((t) => [
   ...t.scenery.trees.map((e) => e.model),

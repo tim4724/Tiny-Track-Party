@@ -4,7 +4,7 @@
 // The Nature Kit models (palm/cactus) come out of UniGLTF with a stray
 // "tmpParent" wrapper: nodes[0] is an identity-transform parent of nodes[1],
 // but the scene lists nodes[1] as its root. That violates the glTF spec (a
-// scene root must have no parent) — three.js tolerates it, cgltf does NOT, so
+// scene root must have no parent) — some loaders tolerate it, cgltf does NOT, so
 // gltfio refuses the whole file ("Unable to parse glTF file") and the native
 // renderer silently loses those trees.
 //

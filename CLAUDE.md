@@ -12,16 +12,11 @@ npm run test:e2e                  # Playwright E2E (real pages + hermetic relay 
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 npm start                         # Run the server (node server/index.js)
 npm run dev                       # Run with --watch (auto-restart)
-scripts/build-wasm.sh             # Native Filament renderer → public/native/ (needs the
-                                  # Filament fork at ~/Projects/filament + emsdk; both
-                                  # auto-built/installed on first run)
+native/scripts/build-runtime-web.sh  # The whole engine (sim + party + Filament
+                                  # renderer) → public/display/engine/native/. Needs the
+                                  # Filament fork at ~/Projects/filament + emsdk; both are
+                                  # auto-built/installed on first run.
 ```
-
-Native-port judging surface: `/gallery-compare.html` runs ONE JS sim
-(`?scenario=fixture`, deterministic: pinned seed, awaitable
-`__fixture.step()`) and feeds it to BOTH renderers — Three.js in an iframe and
-the Filament wasm module via `FrameInput` (`native/include/ttp_runtime.h`).
-Wipe/onion/diff modes judge parity.
 
 E2E (`tests/e2e/`) drives real display + controller pages against a local
 Party-Server stub (`tests/e2e/relay-server.js`) via the server's `RELAY_URL`
@@ -35,8 +30,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 
 - The sim is display-authoritative: the car simulation runs in the browser (as wasm — see the NATIVE rule below), not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
 - Browser code is ES modules. The survivors Node tests import directly via dynamic `import()` (`TrackBuilder.js`, `Centerline.js`, `engine/Vec3.js`, `engine/math.js`) must stay dependency-free so they load in both browser and Node.
-- Three.js is vendored under `vendor/three/` and served via the `/vendor/` route; the display imports it through an inline importmap (the one script that needs a CSP nonce).
-- CSP headers in `server/index.js` — update when adding external resources.
+- CSP headers in `server/index.js` — update when adding external resources. There is no nonce and no inline script: every script is a same-origin file, so `script-src` is `'self' 'wasm-unsafe-eval'`.
 - Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals).
 - Game events (display → relay → controllers) flow over the WebSocket relay. Controller input (`CONTROL`) rides the low-latency WebRTC fastlane (`partyplug/PartyFastlane.js`, signalled over the relay) when its DataChannel is open, and falls back to the relay otherwise. The wiring lives in `public/shared/GameNet.js` (`_initFastlane`/`_isSignal`) with `display/Net.js` opening it as the input sink and `controller/Net.js` enqueuing over it; `protocol.js` provides `STUN_URL` and `FASTLANE_TYPES = { control: true }`. The lobby roster (`LOBBY_UPDATE`) is not a fanout: the display publishes it as the relay's retained host snapshot (`PartyConnection.setState`), pushed live to controllers (`onState`) and replayed to each (re)joiner right after `joined`.
 - Disconnects: the relay fires `peer_left` only on a real socket close. The display additionally runs 1 Hz liveness (phones ping at 1 Hz; a seat silent past 3 s is dropped mid-game, same path as `peer_left`, any traffic restores it) — detection is RoomFlow's nowMs-injected `liveness` engine (`onSeen`/`expiredPeers`), while `display/Net.js` owns the tick and the relay self-heartbeat that forces a reconnect when the display's own socket is half-dead.
@@ -52,14 +46,27 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   PartyFastlane}.js`). There is NO JS engine and NO fallback: `main.js` awaits the
   wasm at boot and a load failure is fatal. The JS twins were deleted once every
   layer was conformance-proven; git history has them.
-- Still JS BY DESIGN: rendering (`SceneRenderer.js`), the HUD/screens (`main.js`),
-  track geometry for the renderer (`TrackBuilder.js` + `Centerline.js`), audio, the
-  whole controller page, and the transport I/O — the WebSocket and
-  `RTCPeerConnection` live in `partyplug/PartyConnection.js` and
-  `PartyFastlane.js`, which SURVIVE: the native fastlane SUBCLASSES the kit class
-  to inherit its WebRTC handshake, and the controller uses both directly.
+- Rendering is NATIVE too, in the SAME wasm module as the sim. `native/renderer/`
+  (libttp-renderer, Filament) links into `ttp_runtime_web` alongside libttp-sim and
+  libttp-party, and `native/runtime/ttp_display.{h,cc}` drives it: per frame the
+  shell calls `ttp_display_frame(dt)` and C++ reads the live `Game` to build the
+  renderer's input in place. NOTHING about a car — pose, speed, steer, which cell
+  it owns — is ever serialized to JS and handed back. Cameras (the spring chase
+  per cell, the lobby/gallery overview rigs) and the fog profiles live there too.
+  `public/display/render/Display.js` is the browser's whole edge of it, and
+  `Stage.js` owns the canvas, the DOM HUD and the rAF loop. Three.js is GONE
+  (git history has it); it survives only as a TEST-ONLY devDependency, as the
+  bit-identity reference for `engine/Vec3.js` in `tests/vec3.test.js`.
+- Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), track geometry for
+  the renderer's scene build (`TrackBuilder.js` + `Centerline.js` → `trackBin.js`,
+  once per race, never per frame), the resolved biome theme
+  (`shared/themes.js` → `render/trackPayload.js`), audio, the whole controller
+  page, and the transport I/O — the WebSocket and `RTCPeerConnection` live in
+  `partyplug/PartyConnection.js` and `PartyFastlane.js`, which SURVIVE: the native
+  fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
+  controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (32 tests, the SAME 32 on every leg —
+  replayed by `native/` ctest (33 tests, the SAME 33 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
@@ -107,13 +114,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the vendored fdlibm/double-conversion deliberately do NOT (they are taken whole
   from upstream). Not `-Werror` — a newer compiler's new diagnostic must not block a
   build.
-- `public/display/engine/native/ttp_runtime.{mjs,wasm}` are CHECKED IN and are
-  what the browser actually runs. After touching `native/`, run
-  `native/scripts/build-runtime-web.sh` and commit the artifacts —
-  `tests/native-artifact.test.js` compares BUILD_STAMP.json's source hash and
-  fails when they drift (comment-only edits under `native/` count). The wasm
-  exports come from `TTP_ABI` (EMSCRIPTEN_KEEPALIVE) on each declaration in
-  `ttp_runtime.h`/`ttp_party.h`; there is no export list to maintain.
+- `public/display/engine/native/ttp_runtime.{mjs,wasm}` plus the `*.filamat`
+  blobs beside them are CHECKED IN and are what the browser actually runs. After
+  touching `native/`, run `native/scripts/build-runtime-web.sh` and commit the
+  artifacts — `tests/native-artifact.test.js` compares BUILD_STAMP.json's source
+  hash and fails when they drift (comment-only edits under `native/` count). The
+  wasm exports come from `TTP_ABI` (EMSCRIPTEN_KEEPALIVE) on each declaration in
+  `ttp_runtime.h`/`ttp_party.h`/`ttp_display.h`; there is no export list to
+  maintain. Building needs the Filament fork, which CI does not have: CMake only
+  adds the renderer when `-DFILAMENT_SDK` is passed, so CI's wasm leg still
+  link-checks the browser ABI against a sim-only build of the same target.
 - Balance/tuning: `npm run probe:cars` / `probe:laptime` / `probe:difficulty` build
   and run `native/build/probe_cli` (modes laptime|matrix|packed;
   `laptime --json` feeds `scripts/probe-difficulty.mjs`, the per-track report card). The old JS probes drove

@@ -11,26 +11,14 @@
   <link rel="apple-touch-icon" href="/assets/icon/apple-touch-icon.png?v=__APP_V__" />
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
-  <!-- Three.js (vendored). The inline importmap is the one script needing a CSP
-       nonce; the module entry is external so it's covered by 'self'. It precedes
-       the modulepreloads below so their bare `three` specifier (in GLTFLoader)
-       resolves at preload time. -->
-  <script type="importmap" nonce="__CSP_NONCE__">
-  {
-    "imports": {
-      "three": "/vendor/three/three.module.js",
-      "three/addons/": "/vendor/three/addons/"
-    }
-  }
-  </script>
-
-  <!-- Preload the heavy render deps up front. three.module.js statically pulls
-       in the larger three.core.js, and SceneRenderer always needs GLTFLoader to
-       place the track/cars — both are otherwise discovered only deep in the
-       module graph (modulepreload doesn't follow a module's own imports). -->
-  <link rel="modulepreload" href="/vendor/three/three.core.js" />
-  <link rel="modulepreload" href="/vendor/three/three.module.js" />
-  <link rel="modulepreload" href="/vendor/three/addons/loaders/GLTFLoader.js" />
+  <!-- The engine: sim, party layer and Filament renderer in one wasm module.
+       Nothing draws until it lands and main.js awaits it at boot, so start the
+       glue early rather than let it be discovered deep in the module graph
+       (modulepreload doesn't follow a module's own imports). The .wasm itself is
+       deliberately NOT preloaded: the glue fetches it with credentials
+       'same-origin', which a `preload as=fetch crossorigin` request would not
+       match — the browser would download all 2.7 MB of it twice. -->
+  <link rel="modulepreload" href="/display/engine/native/ttp_runtime.mjs" />
   <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
   <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
 

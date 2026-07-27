@@ -1,10 +1,9 @@
 'use strict';
-// Bit-identity gate for the vendored Vec3 (public/display/engine/Vec3.js): the
-// sim's own vector must produce EXACTLY the same floats as THREE.Vector3 on
-// every method it implements, or the future native port would be conformance-
-// tested against drifted reference numbers. THREE is imported HERE ONLY (the
-// npm copy is the same r184 as vendor/three) — the sim path itself is
-// three-free, which is the point. Every assertion is exact (Object.is via
+// Bit-identity gate for the vendored Vec3 (public/display/engine/Vec3.js): it
+// must produce EXACTLY the same floats as THREE.Vector3 on every method it
+// implements, because the golden traces were recorded through those numbers.
+// three is a TEST-ONLY dependency imported HERE ONLY — the game itself no
+// longer contains it at all, which is the point. Every assertion is exact (Object.is via
 // assert.strictEqual), never approximate: if a rounding difference shows up,
 // fix Vec3's operation order, do not loosen the test.
 //
@@ -16,8 +15,6 @@
 // transcendentals themselves are pinned by tests/mathlib.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 
 let Vec3, THREE, mulberry32;
 test.before(async () => {
@@ -116,17 +113,16 @@ test('Vec3 matches THREE.Vector3 bit-for-bit on the whole implemented surface', 
   }
 });
 
-// The parity gate compares against the NPM three (a caret range in
-// package.json), but the class certifies bit-identity with the VENDORED
-// r184 the renderer ships. Pin the two together: if an `npm update` moves
-// the npm copy to another revision, fail here instead of silently
-// certifying parity against math the game does not ship.
-test('npm three reference is the same revision as vendor/three', () => {
-  const vendored = fs.readFileSync(path.join(__dirname, '..', 'vendor', 'three', 'three.core.js'), 'utf8')
-    .match(/REVISION = '(\d+)'/);
-  assert.ok(vendored, 'vendor/three/three.core.js declares REVISION');
-  assert.equal(THREE.REVISION, vendored[1],
-    `npm three r${THREE.REVISION} drifted from vendored r${vendored[1]}; re-pin package.json so this gate certifies the shipped math`);
+// three is now a TEST-ONLY devDependency: nothing in the game imports it. What
+// it is still here for is this file — Vec3's numbers were certified against
+// r184, and the golden traces were recorded through those numbers, so the
+// reference must not move under us. An `npm update` that lands another revision
+// fails HERE rather than silently re-certifying parity against different math.
+const CERTIFIED_REVISION = '184';
+test('the three reference is the revision Vec3 was certified against', () => {
+  assert.equal(THREE.REVISION, CERTIFIED_REVISION,
+    `three r${THREE.REVISION} drifted from the certified r${CERTIFIED_REVISION}; `
+    + 're-pin package.json, or re-certify Vec3 and the traces against the new revision deliberately');
 });
 
 test('Vec3 edge cases: defaults, zero-length normalize guard, interop flag', () => {
@@ -134,7 +130,8 @@ test('Vec3 edge cases: defaults, zero-length normalize guard, interop flag', () 
   assert.deepStrictEqual({ x: zero.x, y: zero.y, z: zero.z }, { x: 0, y: 0, z: 0 }, 'default constructor is the origin');
   // THREE guards normalize with (length() || 1) — the zero vector stays zero
   sameVec(new Vec3(0, 0, 0).normalize(), new THREE.Vector3(0, 0, 0).normalize(), 'zero-vector normalize');
-  // Interop flag: render-side three APIs (Matrix4.setPosition in FinishGate)
-  // branch on isVector3 to read components off a frame vector.
+  // Interop flag, kept because the class is a faithful stand-in: three branches
+  // on isVector3 to read components off a vector, and this test's own
+  // comparisons construct both sides from the same class surface.
   assert.strictEqual(Vec3.prototype.isVector3, true, 'isVector3 interop flag');
 });

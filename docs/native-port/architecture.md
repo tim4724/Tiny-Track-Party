@@ -19,9 +19,9 @@ drivers. The web game keeps shipping throughout.
 - **Google Filament renders on all three platforms**: native on the TVs, a
   custom emscripten/WASM build on the web. There is no official Filament
   tvOS support — that port is ours (simulator-proven, branch
-  `tvos-v1.74.0`, packaged via `build.sh -p tvos`). Three.js remains the
-  web default until the Filament path proves parity and performance behind
-  a `?renderer=filament` flag.
+  `tvos-v1.74.0`, packaged via `build.sh -p tvos`). The web cutover is DONE:
+  Filament is the only renderer, Three.js is deleted, and the renderer links
+  into the SAME wasm module as the sim, so no frame state crosses to JS.
 - **The sim cutover is DONE.** The C++ core is the shipping web engine and
   there is no JS fallback. The retired JS engine's golden traces stay the
   conformance evidence and are never re-recorded from C++ — that would only

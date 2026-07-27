@@ -1101,6 +1101,34 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
     return tex;
 }
 
+bool TtpRenderer::trackFraming(TrackFraming& out) const {
+    if (!mTrack || mTrack->samples.empty()) return false;
+    float3 lo = mTrack->samples[0].pos, hi = lo;
+    for (const TrackBin::Sample& s : mTrack->samples) {
+        lo = min(lo, s.pos);
+        hi = max(hi, s.pos);
+    }
+    const float3 c = (lo + hi) * 0.5f, size = hi - lo;
+    out.centerX = c.x; out.centerY = c.y; out.centerZ = c.z;
+    out.sizeX = size.x; out.sizeY = size.y; out.sizeZ = size.z;
+    out.fogTune = mTrack->fogTune;
+    return true;
+}
+
+float TtpRenderer::maxOrbitDist(float radius, float height) const {
+    if (!mTrack || mTrack->samples.empty()) return 0;
+    TrackFraming f{};
+    trackFraming(f);
+    const float ringY = f.centerY + height;
+    float worst = 0;
+    for (const TrackBin::Sample& s : mTrack->samples) {
+        const float horiz = std::hypot(s.pos.x - f.centerX, s.pos.z - f.centerZ) + radius;
+        const float d = std::hypot(horiz, s.pos.y - ringY);
+        if (d > worst) worst = d;
+    }
+    return worst;
+}
+
 // Split-screen column count — SceneRenderer's bestGrid, verbatim: score every
 // column count by how far the resulting cell is from square, plus a real
 // penalty per wasted cell, and take the cheapest. `ceil(sqrt(n))` is NOT the

@@ -1,5 +1,5 @@
 // Machine-readable attribution data for the (future) in-game credits screen —
-// DATA ONLY (no DOM, no Three.js), so it loads in the display, the controller
+// DATA ONLY (no DOM, no renderer), so it loads in the display, the controller
 // and Node tests alike. Everything third-party that SHIPS is recorded here or
 // derives from game config; when the credits screen lands it should render
 // `creditsFor(RACE_MUSIC)` and be done.
@@ -10,8 +10,8 @@
 //    — they derive from display/Audio.js RACE_MUSIC via creditsFor(), so a
 //    picks change can never desync the screen.
 //  - CC0 entries (Kenney kit, OpenGameArt clips) need nothing; we credit anyway.
-//  - OFL/MIT keep their license files in-repo (assets/fonts/, vendor/three/);
-//    the screen line is good practice, not the license mechanism.
+//  - OFL / Apache-2.0 keep their license files in-repo (assets/fonts/, the
+//    Filament fork); the screen line is good practice, not the license mechanism.
 
 export const ASSET_CREDITS = [
   {
@@ -72,10 +72,10 @@ export const ASSET_CREDITS = [
   },
   {
     section: 'Software',
-    title: 'Three.js r184',
-    author: 'three.js authors',
-    license: 'MIT',
-    url: 'https://threejs.org',
+    title: 'Filament (the 3D renderer)',
+    author: 'Google LLC',
+    license: 'Apache-2.0',
+    url: 'https://github.com/google/filament',
     required: false,
   },
   {

@@ -8,7 +8,7 @@
 //   <model>.strip.png  — horizontal sprite strip, SPIN_FRAMES cells wide
 //
 // Same "render the real GLB offline" pipeline as capture-item-icon.js: reuse the
-// live origin so the vendored Three.js + importmap + CSP resolve, render into an
+// live origin so the page's CSP resolves, render into an
 // own transparent renderer with the game's toy lighting, then read PNGs back.
 //
 // Framing splits the two axes, because a yaw turntable treats them differently:
@@ -20,7 +20,7 @@
 // The frames are therefore WIDER THAN TALL (--aspect, 5:4): these cars are ~1.4x
 // longer than they are tall, and a sphere fit is sized by the long axis, so a square
 // frame spent ~40% of its height on empty air — nearly all of it above the roof.
-// The ground shadow reproduces the in-race look (SceneRenderer._bakeCarShadow): the
+// The ground shadow reproduces the in-race look (the renderer's baked car blob): the
 // car's baked top-down SILHOUETTE, tinted warm near-black with a tight penumbra,
 // laid flat under the car and parented to the turntable so it spins with the car.
 //
@@ -38,6 +38,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { chromium } = require('playwright');
+const { installThreeRoutes } = require('./lib/three-routes');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -109,6 +110,7 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: SIZE, height: HEIGHT }, deviceScaleFactor: 2 });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
+    await installThreeRoutes(page);
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
 
     for (const name of MODELS) {
@@ -124,7 +126,7 @@ async function main() {
         renderer.setClearColor(0x000000, 0);
 
         const scene = new THREE.Scene();
-        // Toy lighting matched to SceneRenderer / capture-item-icon.js. The key only LIGHTS
+        // Toy lighting matched to the game renderer / capture-item-icon.js. The key only LIGHTS
         // the body now — it casts no shadow (cars don't cast the sun shadow in-race either);
         // the ground shadow below is the car's baked top-down silhouette, like the engine.
         scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
@@ -145,15 +147,15 @@ async function main() {
         pivot.add(model);
         scene.add(pivot);
 
-        // Ground shadow — reproduce the in-race look (SceneRenderer._bakeCarShadow). The
+        // Ground shadow — reproduce the in-race look (the renderer's car blob). The
         // car's shadow in the game is NOT a cast shadow: it's the car's own top-down
         // SILHOUETTE (cabin + wheels) baked flat on the ground, tinted warm near-black with
         // a tight penumbra, sitting straight under the car. Bake the same silhouette here —
         // same overscan / colour / opacity / blur constants — so the lobby turntable's shadow
         // matches the one players see while racing instead of a soft offset cast blob.
-        const SHADOW_OVERSCAN = 1.45;   // keep in sync with SceneRenderer.SHADOW_OVERSCAN
-        const SHADOW_COLOR = 0x171513;  // SceneRenderer.UNDER_AO_COLOR (warm near-black)
-        const SHADOW_OPACITY = 0.55;    // SceneRenderer.UNDER_AO_OPACITY base (no brake-dive load on a turntable)
+        const SHADOW_OVERSCAN = 1.45;   // keep in sync with the renderer's blob overscan
+        const SHADOW_COLOR = 0x171513;  // the renderer's under-car blob colour (warm near-black)
+        const SHADOW_OPACITY = 0.55;    // the renderer's blob opacity base (no brake-dive load on a turntable)
 
         // Bbox of the centred model, in world space — the pivot is still untransformed, so
         // this is the car at rest. Doubles as the engine's footW/footL footprint (below) and

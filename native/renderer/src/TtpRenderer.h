@@ -9,7 +9,7 @@
 // cameras from FrameInput.views. buildScene() fails without that payload.
 #pragma once
 
-#include "ttp_runtime.h"
+#include "ttp_render.h"
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
@@ -76,6 +76,25 @@ public:
     // roster. The engine, views, materials and provided asset bytes survive.
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
+
+    // Split-screen column count for n views — the runtime needs it too, to give
+    // each chase camera the aspect of the cell it will land in.
+    uint32_t gridCols(uint32_t n) const { return bestGridCols(n); }
+
+    // What the built track measures, for the runtime's overview cameras and fog
+    // bands. The box is over the CENTERLINE points, like SceneRenderer's was.
+    struct TrackFraming {
+        float centerX, centerY, centerZ;
+        float sizeX, sizeY, sizeZ;
+        float fogTune;
+    };
+    bool trackFraming(TrackFraming& out) const;
+
+    // Worst-case distance from a camera orbiting at (radius, height) about the
+    // track centre to any centerline point — a point sitting diametrically
+    // opposite it. The overview fog's near plane starts just past this, so the
+    // whole circuit stays crisp however the turntable is pointed.
+    float maxOrbitDist(float radius, float height) const;
 
     // Per-section wall clock of the last frame, in milliseconds. Diagnostic
     // only — the sections are cheap (a clock read each) and the array is what
