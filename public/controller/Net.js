@@ -177,7 +177,11 @@ export class ControllerNet extends GameNet {
     const why = this.gate.decide(sample, nowMs, this._srtt);
     if (!why) return false;
     const msg = { s: sample.s, b: sample.b, u: sample.u, type: MSG.CONTROL };
-    const viaP2p = !!(this.fastlane && this.fastlane.enqueue(0, msg) === 'p2p');
+    // Routed through FASTLANE_TYPES exactly like send() does, so protocol.js
+    // stays the one place that decides what rides P2P — this path must not
+    // quietly keep using the fastlane if CONTROL is ever taken off it.
+    const viaP2p = !!(FASTLANE_TYPES[MSG.CONTROL] && this.fastlane
+      && this.fastlane.enqueue(0, msg) === 'p2p');
     if (!viaP2p) this.party.sendTo(0, msg);
     this.gate.markSent(sample, nowMs);
     // The relay path carries no acks — WS is reliable and ordered, so handing

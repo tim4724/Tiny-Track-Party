@@ -22,6 +22,15 @@
 // re-sent every 40 ms, and on a 100 ms link that is three copies where one would
 // do — burning exactly the bandwidth this gate exists to save.
 //
+// Rule 3 overlaps the kit's own loss recovery, deliberately. PartyFastlane keeps
+// retransmitting the ring every TICK_MS (50 ms) until the ack lands, so on a
+// healthy link the two never both fire: half-RTT there runs ~15-30 ms, the value
+// is confirmed inside a single 40 ms sample, and neither retransmit is reached.
+// They only meet on a link sick enough that a duplicate is the least of it. The
+// gate's copy is worth keeping as the backstop because the kit's stops at TTL_MS
+// (300 ms) — past that the ring is empty and nothing but rule 3 would ever tell
+// the display again.
+//
 // Every comparison is against the LAST ACKNOWLEDGED sample, never the last sent
 // one. If a send was lost, "last sent" is a value the display never saw, and
 // gating against it would leave the display stale with the sender believing
