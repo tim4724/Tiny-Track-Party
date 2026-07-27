@@ -166,6 +166,16 @@ const MUTATIONS = [
     expect: 'roomflow',
   },
   {
+    // The participant set the abandoned-race policy and the "joining" rows both
+    // read. A dropped seat is being HELD, not waiting — forget that and a blipped
+    // party's own ghost seats start counting as people waiting for the next race.
+    name: 'room/dropped-seat-stops-being-a-participant',
+    file: 'native/libttp-party/ttp/room_flow.cc',
+    find: 'bool active = discHas(p.peerIndex);  // a dropped seat is a participant, held',
+    replace: 'bool active = false;',
+    expect: 'abi',
+  },
+  {
     name: 'framing/encode-drops-a-field',
     file: 'native/libttp-party/ttp/relay_framing.cc',
     find: 'm.set("maxClients", Value::Num(maxClients));',
@@ -241,6 +251,15 @@ const MUTATIONS = [
     name: 'party-abi/event-queue-not-drained',
     file: 'native/runtime/ttp_party.cc',
     find: '  rh->events.clear();',
+    replace: '',
+    expect: 'abi',
+  },
+  {
+    // The one place the party ABI reads the sim: who is holding a car. Lose it
+    // and every racer reads as a late joiner waiting for the next race.
+    name: 'party-abi/active-order-never-sees-the-cars',
+    file: 'native/runtime/ttp_party.cc',
+    find: 'for (const auto& c : g->cars()) active.push_back(c->id);',
     replace: '',
     expect: 'abi',
   },

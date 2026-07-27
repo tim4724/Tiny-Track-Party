@@ -58,6 +58,16 @@ TTP_ABI int ttp_room_transition_to(int h, const char* stateName);  // 1 if accep
 TTP_ABI const char* ttp_room_state(int h);                         // "lobby"|"countdown"|"playing"|"results"
 // setActiveOrder(peerIndices): peerIdsJson is a JSON array of peer-id scalars.
 TTP_ABI void ttp_room_set_active_order(int h, const char* peerIdsJson);
+// syncActiveOrder against a LIVE RACE: every seat holding a car, plus every
+// dropped seat (RoomFlow::syncActiveOrder). Takes a session handle rather than a
+// list of ids for two reasons: no shell has to define the participant set the
+// abandoned-race policy and the "joining" rows both read, and no car id is ever
+// serialized out to a shell only to be handed straight back.
+//
+// sessionHandle 0 / unknown / disposed means "no cars" (the lobby), which leaves
+// the dropped seats as the whole order — the same answer a shell with no session
+// would produce. Emits nothing, exactly like ttp_room_set_active_order.
+TTP_ABI void ttp_room_sync_active_order(int h, int sessionHandle);
 
 // ---- liveness (pure predicates; never mutate, never emit) -------------------
 

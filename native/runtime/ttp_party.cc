@@ -18,6 +18,11 @@
 #include "ttp/fastlane.h"
 #include "ttp/relay_framing.h"
 #include "ttp/room_flow.h"
+// The live race, for ttp_room_sync_active_order alone: who is PLAYING is a fact
+// about the sim, and the room's participant order is a decision over it. Read
+// through the internal seam, never through a serialized snapshot.
+#include "ttp/game.h"
+#include "ttp_session.h"
 
 using namespace ttp;
 
@@ -171,6 +176,20 @@ void ttp_room_set_active_order(int h, const char* peerIdsJson) {
     }
   }
   rh->flow->setActiveOrder(order);
+}
+
+// The party layer's one read of the SIM, through the same internal seam the
+// display runtime uses (ttp_session.h): the participant set is a decision about
+// a live race, so it is taken here rather than in three shells. Nothing is
+// mutated on either side and no car id crosses the ABI.
+void ttp_room_sync_active_order(int h, int sessionHandle) {
+  RoomHandle* rh = room(h);
+  if (!rh) return;
+  std::vector<PeerId> active;
+  if (Game* g = ttp_session_engine(sessionHandle)) {
+    for (const auto& c : g->cars()) active.push_back(c->id);
+  }
+  rh->flow->syncActiveOrder(active);
 }
 
 // ---- liveness ---------------------------------------------------------------

@@ -938,13 +938,26 @@ void abandonedRacePolicy() {
 
   ttp_room_dispose(h);
 
-  // ---- the set display/Net.js feeds -----------------------------------------
-  // Same room, but the late joiner has ALSO dropped: a ghost seat, no car, no
-  // phone. With the raw COUNTDOWN snapshot it counts as someone waiting and would
-  // yank a blipped party's whole race back to the lobby; feeding the display's
-  // order (cars + dropped seats) is what makes "waiting" mean what it says.
+  // ---- the participant set, computed against a LIVE RACE ---------------------
+  // ttp_room_sync_active_order is the whole definition of "who this race is for",
+  // taken here rather than in each shell: every seat holding a car, plus every
+  // dropped seat. It reads the sim through ttp_session.h, so this section drives
+  // it with a REAL session — a room fed from a hand-written array proves the
+  // room's half and nothing about the join.
+  //
+  // The case that matters is a late joiner who has ALSO dropped: a ghost seat, no
+  // car, no phone. Against the raw COUNTDOWN snapshot it counts as someone
+  // waiting and would yank a blipped party's whole race back to the lobby.
   const int g = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
   if (g <= 0) { fail("abandoned-race/ghost: ttp_room_create returned no handle"); return; }
+  // The race: Ada (seat 0) plus a bot. The bot is deliberate — a car id that is
+  // no seat at all must never become a participant.
+  const int s = ttp_session_begin("tidepool", 42u, 3, nullptr);
+  if (s <= 0) { fail("abandoned-race/ghost: ttp_session_begin returned no handle"); return; }
+  ttp_add_human(s, "0", nullptr);
+  ttp_add_bot(s, "\"ai-1\"", 1.0, 0.0, 7u, nullptr);
+  ttp_session_start(s, 3);
+
   ttp_room_add_player(g, "0", "{\"name\":\"Ada\"}");
   ttp_room_transition_to(g, "countdown");
   ttp_room_transition_to(g, "playing");
@@ -954,19 +967,44 @@ void abandonedRacePolicy() {
   check(ttp_room_has_late_joiners(g) == 1, "raw: a dropped ghost still reads as a late joiner");
   check(ttp_room_grace_tick(g, 1000) == 0 && ttp_room_grace_tick(g, 3000) == 1,
         "raw: …and would abandon the race for nobody");
-  // The display's order: everyone with a car (0), plus every dropped seat (0, 2).
-  ttp_room_set_active_order(g, "[0,2]");
-  check(ttp_room_has_late_joiners(g) == 0, "fed: a dropped ghost is absent, not waiting");
+  // Synced: seat 0 holds a car and seat 2 is dropped, so both are participants.
+  ttp_room_sync_active_order(g, s);
+  check(ttp_room_has_late_joiners(g) == 0, "synced: a dropped ghost is absent, not waiting");
   check(std::strcmp(ttp_room_late_joiners_json(g), "[]") == 0,
-        "fed: …so it is no 'joining' row either");
+        "synced: …so it is no 'joining' row either");
+  // The bot is racing and will never disconnect, so an order that swallowed cars
+  // with no seat behind them could not read "every participant is gone" here.
+  check(ttp_room_all_participants_disconnected(g) == 1,
+        "synced: a bot's car is nobody's seat, so the race still counts as abandoned");
   check(ttp_room_grace_tick(g, 4000) == 0 && ttp_room_grace_tick(g, 9999) == 0,
-        "fed: the blipped party keeps its race");
-  // The ghost's phone comes back — now it really is waiting.
+        "synced: the blipped party keeps its race");
+  // The ghost's phone comes back — car-less and connected, which is a late joiner.
   ttp_room_mark_reconnected(g, "2");
-  ttp_room_set_active_order(g, "[0]");     // cars + dropped seats, recomputed
-  check(ttp_room_has_late_joiners(g) == 1, "fed: a returning ghost is waiting again");
+  ttp_room_sync_active_order(g, s);
+  check(ttp_room_has_late_joiners(g) == 1, "synced: a returning ghost is waiting again");
+  {
+    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/synced");
+    check(v.arr.size() == 1 && canonical_stringify(*v.arr[0].find("peerIndex")) == "2",
+          "synced: the car-less seat is the one waiting");
+  }
   check(ttp_room_grace_tick(g, 10000) == 0 && ttp_room_grace_tick(g, 11500) == 1,
-        "fed: and the deadline runs for them");
+        "synced: and the deadline runs for them");
+  // The cars really come from the SIM, not from presence. With both seats back,
+  // the ONLY thing separating them is that 0 holds a car and 2 does not — and
+  // against session handle 0 (no session: the lobby, or a shell between races)
+  // there are no cars and no dropped seats, so the order empties and both wait.
+  ttp_room_mark_reconnected(g, "0");
+  ttp_room_sync_active_order(g, s);
+  {
+    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/live");
+    check(v.arr.size() == 1, "synced: the car-holder is a participant, the car-less seat is not");
+  }
+  ttp_room_sync_active_order(g, 0);
+  {
+    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/no-session");
+    check(v.arr.size() == 2, "no session: no cars and no dropped seats leaves an empty order");
+  }
+  ttp_dispose(s);
   ttp_room_dispose(g);
 }
 

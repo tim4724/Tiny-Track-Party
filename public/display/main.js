@@ -564,6 +564,10 @@ const net = new DisplayNet({
   // phone drops back into the race); one without is a late joiner (the phone
   // waits in its lobby — they get a car when the next race builds its field).
   inRace: (peerIndex) => !!(session && session.hasCar(peerIndex)),
+  // The live race itself, as a native handle: the party layer works out its own
+  // participant order (cars + dropped seats) from it in C++ rather than being
+  // fed a set from here. 0 between races.
+  sessionHandle: () => (session ? session.h : 0),
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
   isPaused: () => paused,
@@ -635,19 +639,27 @@ window.addEventListener('pagehide', () => net.shutdown());
 function refreshAutoPause() {
   if (!session || raceEnded) return;
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
-  let connected = 0, inGrace = 0;
+  // "Is any human seat still IN this race?" is game state, not room state: it is
+  // a question about the live car list, which is why it is counted here. A seat
+  // that leaves the room forfeits its car (playerleave → forfeitCar), so a car
+  // whose owner is off the roster is transient and counts for nobody.
+  let humanCars = 0;
   for (const id of session.carIds()) {
-    if (isAiCar(id)) continue;                 // CPU racer
-    if (net.flow.isDisconnected(id)) inGrace++;   // seat held, QR showing
-    else if (net.flow.has(id)) connected++;       // human at the wheel
+    if (isAiCar(id)) continue;               // CPU racer
+    if (net.flow.has(id)) humanCars++;       // human at the wheel, or a held seat with its QR up
   }
-  if (!connected && !inGrace) { returnToLobby(); return; } // no human cars left at all
+  if (!humanCars) { returnToLobby(); return; } // no human cars left at all
+  // …but "is anyone AT those wheels?" is the room's, and RoomFlow already
+  // answers it over the very participant set the abandoned-race grace waits on
+  // (Net.js _syncActiveOrder). Reading it here rather than re-deriving it is what
+  // keeps the silent freeze and that policy from ever disagreeing.
+  //
   // The freeze is a PLAYING-state thing. Freezing the COUNTDOWN would strand the
   // room short of the only state the abandoned-race policy runs in (graceTick
   // requires PLAYING — that gate is frozen conformance evidence), so a field that
   // dropped during the beats would never reach the deadline that recovers the
   // room. Nothing moves before GO anyway, so the beats are free to run out.
-  autoPaused = connected === 0 && net.roomState === ROOM_STATE.PLAYING;
+  autoPaused = net.roomState === ROOM_STATE.PLAYING && net.allParticipantsDisconnected();
   syncSessionFrozen();
 }
 net.flow.on('rosterchange', refreshAutoPause);

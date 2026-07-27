@@ -105,6 +105,11 @@ export class DisplayNet extends GameNet {
     // brand-new late joiner (wait in the lobby for the next race). The game
     // layer answers from its session; default "yes" preserves the rejoin path.
     this.inRace = opts.inRace || (() => true);
+    // The live race's native session handle, or 0 between races. The only thing
+    // this module needs to hand the party layer for it to work out the active
+    // participant set itself (_syncActiveOrder); a shell that has no session yet
+    // answers 0 and gets "the dropped seats" — the same answer as an empty grid.
+    this.sessionHandle = opts.sessionHandle || (() => 0);
     // Asked per WELCOME: is the race manually paused? A rejoiner must re-raise
     // the pause overlay it missed while away, or its wheel just feels dead.
     this.isPaused = opts.isPaused || (() => false);
@@ -278,26 +283,26 @@ export class DisplayNet extends GameNet {
 
   // ---- the active participant order ----
   // RoomFlow's participant order, from THIS game's point of view: the seats this
-  // race is for. That is everyone holding a car — connected or blipped, since a
-  // dropped racer's car and seat are held for the whole race — plus every other
-  // dropped seat, which is absent rather than waiting. What is LEFT OVER is
-  // therefore exactly a CONNECTED seat with no car, which is precisely a late
-  // joiner: someone here, now, with nothing to drive.
+  // race is for. WHAT that set is (everyone holding a car — connected or blipped,
+  // since a dropped racer's car and seat are held for the whole race — plus every
+  // other dropped seat, which is absent rather than waiting) is decided in C++,
+  // by RoomFlow::syncActiveOrder over the live Game. This module supplies the
+  // session handle and nothing else, so a tvOS/Android shell inherits the
+  // definition instead of restating it.
   //
-  // That leftover set is the one RoomFlow answers both "is anyone waiting?"
-  // (hasLateJoiners → the abandoned-race grace) and "who?" (lateJoiners → the
-  // standings' `joining` rows) from, so the policy and the boards read one
-  // definition and cannot disagree.
+  // What is LEFT OVER is exactly a CONNECTED seat with no car, which is precisely
+  // a late joiner: someone here, now, with nothing to drive. That leftover set is
+  // the one RoomFlow answers both "is anyone waiting?" (hasLateJoiners → the
+  // abandoned-race grace) and "who?" (lateJoiners → the standings' `joining`
+  // rows) from, so the policy and the boards read one definition.
   //
-  // The kit maintains the order on its own — snapshot at COUNTDOWN, follow
+  // The kit maintains an order of its own — snapshot at COUNTDOWN, follow
   // removePlayer/rekey — and that snapshot already IS the human race field. What
   // it cannot know is which seats have a car NOW, so push before every read.
   // Presence-only members never change host election (a disconnected peer is
   // ineligible either way), so this stays host-neutral.
   _syncActiveOrder() {
-    this.flow.setActiveOrder(this.flow.list()
-      .filter((p) => this.inRace(p.peerIndex) || !p.connected)
-      .map((p) => p.peerIndex));
+    this.flow.syncActiveOrder(this.sessionHandle());
   }
 
   // Connected seats with no car in the live race — who the room is holding the
@@ -305,6 +310,15 @@ export class DisplayNet extends GameNet {
   lateJoiners() {
     this._syncActiveOrder();
     return this.flow.lateJoiners();
+  }
+
+  // Every seat this race is for has dropped: the room has a race running and
+  // nobody at any wheel. RoomFlow's predicate over the SAME participant set the
+  // abandoned-race grace waits on, so the display's freeze and that policy can
+  // never disagree about whether the race still has drivers.
+  allParticipantsDisconnected() {
+    this._syncActiveOrder();
+    return this.flow.allParticipantsDisconnected();
   }
 
   _usedColors() {

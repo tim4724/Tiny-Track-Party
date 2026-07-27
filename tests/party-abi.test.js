@@ -399,3 +399,77 @@ test('party ABI: the abandoned-race deadline and the late-joiner list', async ()
   assert.equal(graceTick(g, 11500), 1, 'and the deadline runs for them');
   dispose(g);
 });
+
+// ttp_room_sync_active_order — the participant set, against the SHIPPED wasm.
+//
+// It is the one party export that reaches ACROSS the two halves of the runtime:
+// it reads the live Game behind a session handle through ttp_session.h, so a
+// build that links the party ABI without the sim half (or drops the export)
+// fails here and nowhere else. display/Net.js calls nothing else to decide who
+// this race is for — the whole definition lives behind this call, which is what
+// keeps a tvOS/Android shell from restating it.
+test('party ABI: the participant set comes from the live race', async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const cw = (n, ret, args) => M.cwrap(n, ret, args);
+  const create = cw('ttp_room_create', 'number', ['string']);
+  const dispose = cw('ttp_room_dispose', null, ['number']);
+  const addPlayer = cw('ttp_room_add_player', 'string', ['number', 'string', 'string']);
+  const removePlayer = cw('ttp_room_remove_player', null, ['number', 'string']);
+  const transitionTo = cw('ttp_room_transition_to', 'number', ['number', 'string']);
+  const markDisc = cw('ttp_room_mark_disconnected', null, ['number', 'string']);
+  const markReconn = cw('ttp_room_mark_reconnected', null, ['number', 'string']);
+  const syncActiveOrder = cw('ttp_room_sync_active_order', null, ['number', 'number']);
+  const lateJoiners = cw('ttp_room_late_joiners_json', 'string', ['number']);
+  const allDisc = cw('ttp_room_all_participants_disconnected', 'number', ['number']);
+  // The sim half, for the session the room is synced against.
+  const begin = cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']);
+  const addHuman = cw('ttp_add_human', null, ['number', 'string', 'string']);
+  const addBot = cw('ttp_add_bot', null, ['number', 'string', 'number', 'number', 'number', 'string']);
+  const start = cw('ttp_session_start', null, ['number', 'number']);
+  const removeCar = cw('ttp_force_remove_car', 'number', ['number', 'string']);
+  const disposeSession = cw('ttp_dispose', null, ['number']);
+
+  // Ada (seat 0) races; Bo (seat 1) is a CPU-driven id that is nobody's seat.
+  const s = begin('tidepool', 42, 3, null);
+  assert.ok(s > 0);
+  addHuman(s, '0', null);
+  addBot(s, '"ai-1"', 1, 0, 7, null);
+  start(s, 3);
+
+  const h = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  const waiting = () => JSON.parse(lateJoiners(h)).map((p) => p.peerIndex);
+  addPlayer(h, '0', JSON.stringify({ name: 'Ada' }));
+  transitionTo(h, 'countdown');
+  transitionTo(h, 'playing');
+  addPlayer(h, '2', JSON.stringify({ name: 'Cy' }));   // scans in mid-race, car-less
+
+  syncActiveOrder(h, s);
+  assert.deepEqual(waiting(), [2], 'the car-less seat is the only one waiting');
+  assert.equal(allDisc(h), 0, 'the car-holder is here');
+
+  // Both phones drop. The held seat is still a participant; so is the ghost.
+  markDisc(h, '0'); markDisc(h, '2');
+  syncActiveOrder(h, s);
+  assert.deepEqual(waiting(), [], 'a dropped ghost is absent, not waiting');
+  assert.equal(allDisc(h), 1, 'every participant is gone — and no bot is one');
+
+  // The cars come from the SIM, not from presence: take Ada's car away with both
+  // seats connected and she becomes a late joiner like Cy.
+  markReconn(h, '0'); markReconn(h, '2');
+  syncActiveOrder(h, s);
+  assert.deepEqual(waiting(), [2]);
+  assert.equal(removeCar(s, '0'), 1);
+  syncActiveOrder(h, s);
+  assert.deepEqual(waiting(), [0, 2], 'a seat whose car is gone waits like any other');
+
+  // No session at all (the lobby, or a shell between races): no cars, and here no
+  // dropped seats either, so the order empties.
+  removePlayer(h, '2');
+  syncActiveOrder(h, 0);
+  assert.deepEqual(waiting(), [0]);
+  assert.equal(allDisc(h), 0, 'an empty order is not "everyone gone"');
+
+  disposeSession(s);
+  dispose(h);
+});

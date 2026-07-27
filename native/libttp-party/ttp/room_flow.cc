@@ -349,6 +349,25 @@ void RoomFlow::setActiveOrder(const std::vector<PeerId>& peerIndices) {
   order_ = std::move(out);
 }
 
+// "Actively playing, or being held" — see the header. Emitted in list() order
+// (joinedAt) rather than the caller's, since the order is a SET everywhere it is
+// read (host eligibility, the late-joiner complement) and a game's participant
+// list arrives in whatever order its engine happens to hold.
+void RoomFlow::syncActiveOrder(const std::vector<PeerId>& activeIds) {
+  std::vector<const Player*> keep;
+  for (const auto& p : players_) {
+    bool active = discHas(p.peerIndex);  // a dropped seat is a participant, held
+    if (!active) {
+      for (const auto& id : activeIds) if (id == p.peerIndex) { active = true; break; }
+    }
+    if (active) keep.push_back(&p);
+  }
+  std::stable_sort(keep.begin(), keep.end(),
+                   [](const Player* a, const Player* b) { return a->joinedAt < b->joinedAt; });
+  order_.clear();
+  for (const Player* p : keep) order_.push_back(p->peerIndex);
+}
+
 bool RoomFlow::transitionTo(const std::string& to) {
   std::string from = stateName();
   if (to == from) return true;
