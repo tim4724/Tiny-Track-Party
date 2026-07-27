@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tinytrack.couch-games.com/contract/track.schema.json",
   "title": "Built track",
-  "description": "The object returned by TrackBuilder.buildTrack() (public/display/TrackBuilder.js), from either a segment-DSL list or a {waypoints} spline descriptor (both share the same finalize step). All coordinates are world units, right-handed, +Y up. The centerline is a live class instance whose DATA shape is described here (see the `centerline` property); the host later AUGMENTS this object with game-side fields (cup, trackId, hazards, pads, boxes, poles, bananas, totalLaps, seed) that are a separate layer documented in docs/native-port/contract.md.",
+  "description": "The geometry half of a built track, from either a segment-DSL list or a {waypoints} spline descriptor (both share the same finalize step). Produced by the native TrackBuilder (native/libttp-track); the retired JS twin this was recorded from is in git history. All coordinates are world units, right-handed, +Y up. The centerline is a live class instance whose DATA shape is described here (see the `centerline` property); the host later AUGMENTS this object with game-side fields (cup, trackId, hazards, pads, boxes, poles, bananas, totalLaps, seed) that are a separate layer documented in docs/native-port/contract.md.",
   "type": "object",
   "required": [
     "version", "instances", "startGate", "pillars", "hills", "loopStarts",
@@ -112,7 +112,7 @@
         },
         "length": { "type": "number", "description": "Same value as the track's top-level `length`." }
       },
-      "description": "A Centerline class instance (public/display/Centerline.js); this schema describes its serializable DATA (in the live object the vectors are Vec3 instances). A port must also reproduce its methods, pinned numerically by the golden traces: sampleAt(s) (fresh frame {pos, tangent, up, lateral, width}; s wraps mod length; non-uniform Catmull-Rom position with the spline's own derivative as tangent; up lerped + renormalized; lateral = tangent x up), projectNear(point, sHint, maxStep) (Newton projection onto the local strand returning {s, lat, frame} with s accumulated and NOT wrapped, hard-clamped to sHint +- maxStep), and widthAt(s)."
+      "description": "The centerline (native/libttp-track/ttp/centerline.h); this schema describes its serializable DATA, which is what crosses the ABI. A port must also reproduce its methods, pinned numerically by the golden traces: sampleAt(s) (fresh frame {pos, tangent, up, lateral, width}; s wraps mod length; non-uniform Catmull-Rom position with the spline's own derivative as tangent; up lerped + renormalized; lateral = tangent x up), projectNear(point, sHint, maxStep) (Newton projection onto the local strand returning {s, lat, frame} with s accumulated and NOT wrapped, hard-clamped to sHint +- maxStep), and widthAt(s)."
     },
     "length": {
       "type": "number",

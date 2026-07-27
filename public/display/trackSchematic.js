@@ -2,11 +2,15 @@
 // can render WITHOUT Three.js. We project the centerline to the X/Z plane, fit it
 // to a padded square viewBox, and emit one closed path (the "map" of the loop).
 //
-// The display builds every track once at boot — buildTrack is pure geometry, so
-// it needs no GLBs — and ships each map to phones in the room snapshot, packed by
-// packSchematic (see the codec at the foot of this file). The phone unpacks it and
-// drops the path into an <svg>: no geometry math, no assets, and the map updates
-// automatically whenever a track's pieces change.
+// trackSchematic() runs OFFLINE now: nothing in the browser builds a track, so the
+// maps are baked into shared/trackSchematics.js by scripts/gen-track-schematics.js
+// (`npm run gen:schematics`, guarded by track.test.js) and the display just ships
+// them to phones in the room snapshot, packed by packSchematic (the codec at the
+// foot of this file). The phone unpacks it and drops the path into an <svg>: no
+// geometry math and no assets on either side.
+//
+// The pack/unpack codec below IS still browser code — the display packs, the phone
+// unpacks.
 
 const VIEW = 256;   // viewBox square == the uint8 range: a coordinate IS a byte, so the
                     // snapshot codec (packSchematic) is an identity map, not a rescale.

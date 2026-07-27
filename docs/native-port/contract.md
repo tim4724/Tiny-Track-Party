@@ -1,5 +1,15 @@
 # Sim data contract
 
+> **The JS sources cited below are RETIRED.** Every `public/display/…` path in
+> this document — `Game.js`, `AiDriver.js`, `TrackBuilder.js`, `Centerline.js`,
+> `engine/{Vec3,math,util}.js` — was deleted once its C++ twin was
+> conformance-proven; the `file:line` citations are historical provenance for how
+> each rule was derived, not places you can open today. `git log --diff-filter=D`
+> finds each one, and `node scripts/revive-js-oracle.mjs` restores the whole set
+> into a throwaway worktree. This document stays as written because rewriting the
+> citations would erase the only record of what the port was judged against.
+
+
 The seam between the game engine and everything else (renderers, host UI,
 tests, the future C++ port). The reference implementation is the JS engine at
 `public/display/engine/Game.js`; every shape below is verified against that
