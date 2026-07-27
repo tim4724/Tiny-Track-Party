@@ -593,11 +593,15 @@ export function bakeSeed(seed, profileName = 'classic', opts) {
 // cornering, the shortest recovery straight between real corners, width extremes and
 // total climb. Complements the structural gates (closure/smoothness/bridging), which
 // say a track is VALID — these say which cup it belongs in.
-// `t` is a built track (native-track.buildTrack) OR a descriptor/id — the sweep
-// needs the track itself, so pass whatever built it when you have it.
+// `t` is the BUILT track; `source` is whatever built it (a descriptor, a segment
+// array or an id). Both, because the metrics read the built object AND need frames
+// between its knots, which only the engine's sampler can produce. `source` is
+// required rather than defaulted to `t.trackId`: a descriptor-built candidate has
+// no id, and quietly sweeping the wrong track would skew every number below.
 export function measureTrack(t, source) {
+  if (source === undefined) throw new Error('measureTrack: pass the descriptor/id that built `t`');
   const L = t.length, STEP = 0.5;
-  const frames = trackSweep(source !== undefined ? source : t.trackId, STEP);
+  const frames = trackSweep(source, STEP);
   const stations = [];
   let prevH = null, prevS = 0, totTurn = 0, minW = Infinity, maxW = 0, climb = 0, prevY = null;
   for (const f of frames) {

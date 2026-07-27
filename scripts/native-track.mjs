@@ -66,7 +66,20 @@ const ready = () => {
 export const SCALE = 2;
 let scaleChecked = false;
 
+// A BOUNDED memo. A built circuit is a few hundred KB of parsed JSON, and the two
+// access patterns pull in opposite directions: a test re-builds the same handful
+// of catalogue tracks over and over (all hits), while a seed scan builds thousands
+// of DISTINCT candidates (all misses). Unbounded, the scan retained ~320 MB for
+// nothing. Small and oldest-first-evicted serves the first pattern and costs the
+// second only its insertion.
+const MEMO_MAX = 24;
 const memo = new Map();
+
+function memoSet(key, built) {
+  memo.set(key, built);
+  // Map iterates in insertion order, so the first key is the oldest.
+  if (memo.size > MEMO_MAX) memo.delete(memo.keys().next().value);
+}
 
 // Build a track from a DESCRIPTOR (a public/shared/tracks.js entry, a generated
 // candidate, or a bare segment array) or from a catalogue/dev track ID.
@@ -80,7 +93,13 @@ export function buildTrack(defOrId, { laps = 3, seed = 1, memoize = true } = {})
   // accepted one, and the authoring scripts lean on that heavily.
   const desc = Array.isArray(defOrId) ? { segments: defOrId } : defOrId;
   const key = memoize ? `${laps}|${seed}|${typeof desc === 'string' ? desc : stableKey(desc)}` : null;
-  if (key !== null && memo.has(key)) return memo.get(key);
+  if (key !== null && memo.has(key)) {
+    // Refresh its position so a hot key is not evicted by a burst of misses.
+    const hit = memo.get(key);
+    memo.delete(key);
+    memo.set(key, hit);
+    return hit;
+  }
 
   let json;
   if (typeof desc === 'string') {
@@ -113,7 +132,7 @@ export function buildTrack(defOrId, { laps = 3, seed = 1, memoize = true } = {})
     }
   }
 
-  if (key !== null) memo.set(key, built);
+  if (key !== null) memoSet(key, built);
   return built;
 }
 
@@ -183,7 +202,3 @@ function stripAuthoring(desc) {
 function stableKey(desc) {
   return JSON.stringify(stripAuthoring(desc));
 }
-
-// Drop everything cached — for a generator that builds tens of thousands of
-// candidates and would otherwise hold them all.
-export function clearMemo() { memo.clear(); }

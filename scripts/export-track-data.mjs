@@ -5,9 +5,9 @@
 // game-side layer (resolved furniture + identity + per-race inputs) — as canonical
 // JSON. Schema: docs/native-port/contract/race-track.schema.json.
 //
-// This is the fixture the C++ TrackBuilder + resolveFurniture port diffs against
+// This is the fixture the C++ TrackBuilder port diffs against
 // byte-for-byte, so determinism is the whole point:
-//   - no wall clock, no Math.random (buildTrack/resolveFurniture are pure);
+//   - no wall clock, no Math.random (the builder is pure);
 //   - the per-race `seed` and `totalLaps` — the only host-injected, machine-varying
 //     inputs in a live race — are PINNED here (default seed 1, laps 3), overridable
 //     with --seed/--laps so a fixture set can pin any value;
