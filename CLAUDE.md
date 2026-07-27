@@ -106,7 +106,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
   They are permanent cross-implementation evidence recorded against the JS engine
   while it existed — never re-record them from C++, which would only prove C++
-  matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators, and five are
+  matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators, and six are
   now FROZEN because their JS twins are gone: `gen-roomflow-corpus.mjs` (36 room
   scenarios), `gen-grandprix-corpus.mjs` (12 cup scripts + 5 shuffle-bag cases),
   `gen-trackbuilder-corpus.mjs` (all 20 tracks), `gen-track-sampler-corpus.mjs`,
