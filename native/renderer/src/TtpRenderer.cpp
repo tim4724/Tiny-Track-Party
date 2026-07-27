@@ -3208,17 +3208,21 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // TWO PASSES, one per axis. Separating it is what makes a wide kernel
         // affordable: sigma is what the penumbra inherits, and reaching a useful
         // sigma with the old single-pass square would have cost (6·sigma)²
-        // taps a texel. Two 17-tap passes cost 34.
+        // taps a texel. Two 81-tap passes cost 162.
         //
-        // The spacing is derived from a target penumbra in WORLD units so the
-        // shadow's edge is equally soft on the smallest circuit and the largest.
-        // mShadowTexel is world units per texel; vesm's sigma is R/3 taps.
-        const float sigmaTexels = kPenumbraSigmaWorld / std::max(1e-4f, mShadowTexel);
-        // Spacing so that (R/3) taps span sigma. Floored at half a texel — below
-        // that the taps land inside one texel and the pass does nothing — and
-        // capped so a tiny track cannot ask for a kernel wider than the margin
-        // baked into the frustum above.
-        const float spacing = std::clamp(sigmaTexels * 3.0f / 8.0f, 0.5f, 10.0f);
+        // The penumbra is specified in WORLD units so the edge is equally soft
+        // on the smallest circuit and the largest; mShadowTexel converts it to
+        // the map's own grid. vesm then takes one tap per texel — see the long
+        // note there for why anything sparser bands, which is the entire reason
+        // this is a uniform and not a spacing.
+        //
+        // The clamp is vesm's R/3: across the catalogue sigma runs 6.1 texels
+        // (glacier) to 12.2 (skyline), so it never binds today. If a future
+        // track's light frustum came out finer still, this truncates its
+        // Gaussian at 3 sigma-worth of taps — a slightly tighter penumbra —
+        // rather than stretching the taps back out into a comb.
+        const float sigmaTexels = std::min(kPenumbraSigmaWorld
+                        / std::max(1e-4f, mShadowTexel), 40.0f / 3.0f);
 
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
@@ -3259,8 +3263,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             // src, its sampler, its size, the axis, and whether src is raw depth.
             const struct { Texture* src; bool depth; float2 dir; Texture* dst; }
                     passes[2] = {
-                { mShadowMap, true,  { spacing, 0.0f }, tmp },
-                { tmp,        false, { 0.0f, spacing }, esm },
+                { mShadowMap, true,  { 1.0f, 0.0f }, tmp },
+                { tmp,        false, { 0.0f, 1.0f }, esm },
             };
             for (const auto& p : passes) {
                 MaterialInstance* emi = mEsmMaterial->createInstance();
@@ -3269,6 +3273,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                 const float srcSize = (float) (p.depth ? SM : ESM_SM);
                 emi->setParameter("texel", float2{ 1.0f / srcSize, 1.0f / srcSize });
                 emi->setParameter("dir", p.dir);
+                emi->setParameter("sigma", sigmaTexels);
                 emi->setParameter("fromDepth", p.depth ? 1.0f : 0.0f);
                 RenderableManager::Builder(1)
                         .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
