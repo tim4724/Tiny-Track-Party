@@ -47,8 +47,10 @@ material {
 }
 
 fragment {
-    // Half-width of the shadow's soft edge, in world units.
-    const float kPenumbraWorld = 1.0;
+    // Half-width of the shadow's soft edge, in world units. A floor on the
+    // transition rather than its width; see vlit.mat for the sweep that picked
+    // 0.6, and keep the two in step.
+    const float kPenumbraWorld = 0.6;
     // Identical to vlit's — see that file for why the depth is reversed [0,1]
     // and why both halves of the convention were measured rather than assumed.
     float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {

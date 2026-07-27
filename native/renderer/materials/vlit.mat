@@ -43,8 +43,23 @@ material {
 }
 
 fragment {
-    // Half-width of the shadow's soft edge, in world units.
-    const float kPenumbraWorld = 1.0;
+    // Half-width of the shadow's soft edge, in world units. This is a FLOOR on
+    // the transition, not its width — the bake blur (kPenumbraSigmaWorld) sets
+    // the width — but at 1.0 it WAS the floor most of the time, and it stopped
+    // the bake's sigma from buying anything below about half its old value.
+    //
+    // 0.6 is a measured optimum, not a round number. Sweeping it against the
+    // sharpened bake on skysnake's loop: 0.7 gives a 5.0 px edge, 0.6 gives
+    // 4.6, 0.5 gives 5.4 and 0.45 gives 5.2 — it turns back UP below 0.6,
+    // because once this drops under the 1.5*fwidth term the ramp is set by a
+    // screen-space derivative of the recovered depth and picks up its noise
+    // (normalised roughness 0.070 at 0.6, 0.111 at 0.5). Lowering it also lets
+    // a shadow reach full black over a smaller gap — the ramp needs
+    // 2*kPenumbraWorld of depth separation — so pillars and posts read as solid
+    // contact rather than grey smudges. Watch for acne when changing it: biasN
+    // below takes the max of the slope bias and this, so it doubles as the
+    // acne guard on surfaces that face the sun (checked, and 0.6 is clean).
+    const float kPenumbraWorld = 0.6;
     // ONE bilinear tap into the baked, pre-blurred exponential shadow map. The
     // penumbra comes from the bake filter (vesm.mat) and the compare below, not
     // from taps here — the shipped path went 9 -> 4 -> 1 as each of those moved

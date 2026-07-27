@@ -3138,7 +3138,18 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // Half-width of the shadow's soft edge, as a Gaussian sigma in WORLD units.
     // The bake blur below is sized from it, and so is the frustum margin here,
     // because a kernel that reaches past the map's border smears it.
-    constexpr float kPenumbraSigmaWorld = 0.55f;
+    //
+    // THE KNEE IS HERE. Once the kernel stopped being a comb (see vesm.mat) the
+    // old 0.55 was simply too wide: a deck's shadow arrived as a smear that no
+    // longer described the deck. Sweeping it on skysnake's loop, 10-90 edge
+    // width against a fixed camera ran 9.4 px at 0.55, 6.8 at 0.39, 5.6 at
+    // 0.28, 5.0 at 0.19 — and below 0.28 the ramp's smoothness falls apart
+    // (normalised roughness 0.086 -> 0.099 -> 0.202) while barely narrowing,
+    // because a penumbra thinner than a couple of ESM texels cannot survive the
+    // runtime's single bilinear tap. So 0.28: most of the sharpening, none of
+    // the return of the texel grid. Pair it with vlit/vground's kPenumbraWorld,
+    // which floors the width from the receiver side and was halved to match.
+    constexpr float kPenumbraSigmaWorld = 0.28f;
     // Margin so the bake blur never reaches off the edge of the map. Outside it
     // CLAMP_TO_EDGE repeats the border texel, which would smear whatever the
     // outermost row happens to hold inward by the kernel's whole reach. Four
@@ -3206,9 +3217,15 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // 0.036) and the contour indistinguishable, for a quarter of the memory
         // — 16 MB -> 4 MB resident, and a bake peak of 16 MB rather than 40.
         //
-        // The floor is real, though, and 1024 sits a clean 2x above it. Walking
-        // it down on glacier, whose elevated deck throws a long shadow past a
-        // row of pillars: 512 is still smooth, 256 SCALLOPS the contour visibly.
+        // The floor is real, though. Walking it down on glacier, whose elevated
+        // deck throws a long shadow past a row of pillars: 512 is still smooth,
+        // 256 SCALLOPS the contour visibly. What matters is sigma measured in
+        // THESE texels, so sharpening the penumbra walks toward that floor from
+        // the other side: glacier is the catalogue's coarsest map and now
+        // carries about 1.6 of them. Re-checked at the sharpened sigma, 1024 and
+        // 2048 render that contour indistinguishably (mean 0.12/255 apart, and
+        // the visibility field itself is smooth in both), so the quarter of the
+        // memory stands. Sharpen much further and this has to go back up.
         // Runtime is a single bilinear tap at any of these sizes.
         constexpr uint32_t ESM_SM = 1024;
 
@@ -3223,8 +3240,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // note there for why anything sparser bands, which is the entire reason
         // this is a uniform and not a spacing.
         //
-        // The clamp is vesm's R/3: across the catalogue sigma runs 6.1 texels
-        // (glacier) to 12.2 (skyline), so it never binds today. If a future
+        // The clamp is vesm's R/3: across the catalogue sigma runs 3.2 texels
+        // (glacier) to 6.4 (skyline), so it never binds today. If a future
         // track's light frustum came out finer still, this truncates its
         // Gaussian at 3 sigma-worth of taps — a slightly tighter penumbra —
         // rather than stretching the taps back out into a comb.

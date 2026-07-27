@@ -67,11 +67,14 @@ fragment {
         // exponent and the compare window were each measured) because none of
         // them adds back a texel the bake never sampled.
         //
-        // So: taps at exactly one source texel, and R sized for the finest
-        // penumbra the catalogue asks for (skyline, sigma 12.2 texels, needs
-        // 3 sigma = 37). Everything narrower simply weights its outer taps to
-        // nothing. bakeShadowMap clamps sigma to R/3 so an unusually fine map
-        // truncates the Gaussian rather than silently going back to a comb.
+        // So: taps at exactly one source texel. R is deliberately generous —
+        // the catalogue's widest sigma is 6.4 texels (skyline), needing 3 sigma
+        // = 19 — because everything narrower simply weights its outer taps to
+        // nothing and the bake is measurably free (797 ms vs 804 ms of track
+        // load at fifteen times the shipped tap count). Keeping it at 40 also
+        // keeps bakeShadowMap's sigma <= R/3 clamp off the shipped path; that
+        // clamp exists so an unusually fine map truncates the Gaussian rather
+        // than silently stretching the taps back out into a comb.
         //
         // Only exp(-k*d) may be averaged, never d. On the first pass the source
         // is still raw depth, so the exponential is applied per TAP, before the
