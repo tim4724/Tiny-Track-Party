@@ -142,10 +142,22 @@ track.totalLaps = TOTAL_LAPS;
 
 // ---- scene ----
 // The Stage owns the canvas the native renderer draws into and the DOM HUD over
-// it. Booting it is FATAL on failure: the renderer is the engine's own module,
-// so there is nothing to fall back to.
+// it.
+//
+// NOT a top-level await, deliberately: that would hold the whole module body —
+// net.start() at the tail included — behind standing up a Filament engine, a
+// WebGL2 context and ten .filamat fetches. The room is supposed to warm EAGERLY
+// behind the welcome board, and a display that hasn't opened its room yet is a
+// display phones cannot join. (The engine wasm above is a different story: the
+// party layer is in it, so the room genuinely cannot start without it.)
+//
+// Still FATAL on failure — there is no second renderer — it just fails through
+// scenePromise instead of by aborting module evaluation.
 const scene = new Stage(el('scene'), CAR_COLORS);
-await scene.boot();
+const sceneBooted = scene.boot().catch((e) => {
+  console.error('[display] renderer boot failed — nothing will draw', e);
+  throw e;
+});
 // ?biome=<name> — inspector override: force a biome on every track regardless of its cup
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
@@ -162,7 +174,7 @@ let sceneReady = false;
 const lobbyDemo = new LobbyDemo(scene);
 // Kept as a promise so the gallery TestHarness (and E2E) can wait for the first
 // scene build before placing preview cars or starting a race.
-const scenePromise = scene.setTrack(track).then(() => {
+const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   sceneReady = true;
   scene.start();
   refreshLobbyDemo(); // start the attract demo if a track is already picked (?track= / picked during load)
