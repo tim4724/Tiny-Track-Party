@@ -1,7 +1,10 @@
-// Perf HUD — the display's frame-cost readout (bottom-right; "P" toggles it,
-// ?perf=1 arms it at boot). Hidden by default: a party TV should not wear a
-// debug panel, and while hidden this file does no work at all (no GL queries,
-// no wasm profile reads, no canvas draws).
+// Perf HUD — the display's frame-cost readout (bottom-right; "P" hides it).
+//
+// ON BY DEFAULT while the game is in development: the frame budget is something
+// to keep under your eye, not something to remember to switch on. The hide path
+// is fully wired and inert (no GL queries, no wasm profile reads, no canvas
+// draws while hidden), so turning it off for release is a one-line change here —
+// gate the show() below on whatever release signal exists at that point.
 //
 // THREE CLOCKS, and they do not measure the same thing:
 //
@@ -129,8 +132,7 @@ export class PerfHud {
     this._ctx = scope.getContext('2d');
     this._ctx.scale(2, 2);
 
-    const q = new URLSearchParams(location.search).get('perf');
-    if (q !== null && q !== '0') this.show();
+    this.show();
     window.addEventListener('keydown', (e) => {
       if (e.key === 'p' || e.key === 'P') this.toggle();
     });

@@ -132,12 +132,13 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   not a gate, but the `probe_smoke` ctest keeps it from rotting (a row per catalogue
   track, every lap time plausible) — it is what surfaced the racing-line bug, as lap
   times that moved between identical sweeps.
-- Frame cost: `?perf=1` (or the "P" key, or Debug → Diagnostics) shows
-  `render/PerfHud.js` — REAL GPU ms per frame from a
-  `EXT_disjoint_timer_query_webgl2` query wrapped around `ttp_display_frame`,
-  next to the CPU total from `ttp_display_profile` and the dropped-vsync count.
-  It is hidden by default and instruments nothing while hidden; `window.__perf`
-  (`show()`/`sample()`) is the scripted-sweep surface. Do NOT reach for
+- Frame cost: `render/PerfHud.js` is ON by default during development (the "P"
+  key hides it) — REAL GPU ms per frame from a `EXT_disjoint_timer_query_webgl2`
+  query wrapped around `ttp_display_frame`, next to the CPU total from
+  `ttp_display_profile` and the dropped-vsync count. It instruments nothing while
+  hidden, so switching it off for release is one line (the `show()` in its
+  constructor); `window.__perf` (`show()`/`hide()`/`sample()`) is the live and
+  scripted-sweep surface. Do NOT reach for
   Filament's `Renderer::getFrameInfoHistory()` for the GPU number: on emscripten
   the backend's timer-query path is compiled out and `canCreateFence()` is false,
   so `gpuFrameDuration` is CPU submit time wearing a GPU label. A

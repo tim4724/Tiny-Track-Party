@@ -1787,7 +1787,5 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
   { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
     options: [{ value: '0', label: 'off' }] },
-  { section: 'Diagnostics' },
-  { key: 'perf', label: 'Perf overlay', hint: 'gpu/cpu frame cost + dropped vsyncs · "P" toggles', type: 'flag' },
   ], { title: 'Display' });
 });
