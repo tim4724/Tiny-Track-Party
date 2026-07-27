@@ -92,10 +92,22 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   fetch, and two colours for the two 2D widgets the renderer does not draw — the
   HUD boost chip's stroke and the music gallery's swatch. Wanting a third getter
   means the look is being rebuilt in the DOM; put it in the renderer instead.
+- AUDIO IS TWO HALVES, and only one of them is going native. The DECISIONS —
+  which cue, at what gain, which sustained voice at what level, the `audibility()`
+  distance curve, the shared curb-scrub throttle, the rocket jet lifecycle, the
+  music pool + no-repeat shuffle + per-song LUFS trim — live in
+  `public/display/audio/decide.js` as a PURE function of plain data returning a
+  stream of COMMANDS. It imports nothing, injects its clock and its RNG (the
+  shipped path still passes `Math.random`), and is loadable in Node. The DEVICE
+  half (`Audio.js`) performs those commands and decides nothing: AudioContext,
+  limiter, the gallery's variant picks, the `<audio>` element. `main.js` only ever
+  calls `sfx(audioDecide.…)`. shared-cpp-plan.md P7 ports the decisions and keeps
+  the DSP baked, so `tests/fixtures/audio-corpus.jsonl` records the command stream
+  NOW, while the JS that produces it exists — see the conformance rule below.
 - Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
-  into the wasm by `gen-track-defs-header.mjs`), audio, the whole
-  controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
+  into the wasm by `gen-track-defs-header.mjs`), the audio DEVICE + DSP palette,
+  the whole controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
   live in `partyplug/PartyConnection.js` and `PartyFastlane.js`, which SURVIVE: the
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
@@ -113,6 +125,17 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `gen-math-corpus.mjs` and `gen-theme-corpus.mjs` (6 biomes x 22 tracks, plus the
   cup/track resolution, the biome-name order and every boostShades shade). Each header names the `git show` that restores its twin if
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
+  `gen-audio-corpus.mjs` is the one recorded AHEAD of its port and is therefore
+  still RENEWABLE — every input it reads is committed (the golden traces, the
+  shipped wasm, `audio/decide.js`), and `tests/audio-corpus.test.js` re-runs it
+  in-process and demands the committed bytes back. Keep that green: the day it
+  goes red because an input rotted is the day the audio oracle stops being
+  re-derivable, and P7 deletes the JS that can produce it. It replays five of the
+  eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
+  `useItem`/`setCarStats`, which the C ABI does not export (only `replay_cli`,
+  calling C++ directly, can drive them), and tidepool-ailive is the same race as
+  tidepool-4bots. What those would have covered is covered by scripted cases
+  instead, which carry their own inputs and need no wasm at all.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,

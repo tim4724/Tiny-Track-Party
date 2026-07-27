@@ -12,6 +12,7 @@ import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
+import { AudioDecider } from './audio/decide.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
 import { CUPS, TRACK_LIST } from '../shared/tracks.js';
@@ -400,11 +401,20 @@ function demoSig(field, trackId) {
 }
 
 // ---- audio ----
-// All race/lobby sound — the "toy foley" cue palette (see Audio.js for how the
-// sound gallery's picks resolve). Browsers gate audio behind a user gesture, so
-// resume() rides the window gesture listeners below; until someone touches the
-// display every cue no-ops silently.
+// Two halves, and the split is load-bearing (docs/native-port/shared-cpp-plan.md
+// P7 ports one of them to C++ and leaves the other per-platform):
+//   audioDecide  the DECISIONS — which cue, how loud, which voice at what level
+//                — as a pure function of plain data (audio/decide.js). It is
+//                recorded as an oracle by scripts/gen-audio-corpus.mjs.
+//   audio        the DEVICE — the AudioContext, the cue palette, the song
+//                element. It performs the command stream and decides nothing.
+// Browsers gate audio behind a user gesture, so resume() rides the window
+// gesture listeners below; until someone touches the display every cue no-ops
+// silently (the decisions still run — they are what the corpus pins).
 const audio = new RaceAudio();
+const audioDecide = new AudioDecider();
+// Perform a decision stream. Every audio call in this file goes through here.
+const sfx = (cmds) => audio.apply(cmds);
 
 // Now-playing credit chip (bottom-left): the current song + artist, linking to
 // its source — and the on-screen CC-BY attribution. Filled from whichever song
@@ -481,41 +491,22 @@ scene.onFrame = (dt) => {
     return;                               // session ended; the results overlay covers the scene
   }
   const snap = session.getSnapshot();
-  let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop (see below)
   // The renderer already has every car's pose, lean, monster state and item
   // props — it reads the same Game this snapshot came from. What is left here is
   // what only the SHELL owns: the DOM steer bar and the audio mix.
-  for (const c of snap.cars) {
-    scene.setCarSteer(c.id, c.steerInput);
-    // Curb scrub — loudness by distance to the nearest human (the player's own car
-    // is at distance 0 → the ceiling). Unlike the one-shot cues this is a continuous
-    // grind on a single shared throttle, so only in-scene scrubs (≥ the FLOOR)
-    // compete and the loudest wins the window — a distant AI wall-grind can't claim it.
-    if (c.onWall && c.spd > 0.35) {
-      const g = audibility(c.pose && c.pose.pos);
-      if (g >= AUD_FLOOR && (!bestScrub || g > bestScrub.g)) bestScrub = { spd: c.spd, g };
-    }
-    // State-driven voices per HUMAN car — each level follows the physics this
-    // frame: boost wind from the boost multiplier, tire squeal from hard
-    // steering at speed (squared so gentle corrections stay silent; a spinning
-    // car's wheels aren't gripping, so no squeal), brake skid from brake
-    // pressure while the car still moves. CPU cars stay silent here — they
-    // corner and brake constantly, and a 7-car chorus would be noise.
-    // Gate thresholds are starting values — tune by ear in ?solo=1.
-    if (!isAiCar(c.id)) {
-      audio.boostWind(c.id, c.boostMul);
-      const fastGate = Math.max(0, Math.min(1, (c.spd - 0.45) / 0.3));
-      audio.cornerSqueal(c.id, c.spin ? 0 : c.steer * c.steer * fastGate);
-      audio.brakeSkid(c.id, c.brake * Math.max(0, Math.min(1, (c.spd - 0.2) / 0.4)));
-      // Engine voice — pitch + level rise with speed (recorded loop, RPM=rate).
-      // Divisor maps normal top speed (~1.0) to near-full and lets boost (~1.6)
-      // peg the top of the range; starting value, tune by ear in ?solo=1. While a
-      // monster truck, the same loop deepens into a heavy big-truck growl.
-      audio.engineDrive(c.id, c.spd / 1.2, c.monster);
-    }
-  }
-  if (bestScrub) audio.screech(bestScrub.spd, bestScrub.g); // the nearest scrub owns the shared throttle
-  driveRocketAudio(snap); // sustained jet per in-flight rocket, level by distance to the nearest player
+  for (const c of snap.cars) scene.setCarSteer(c.id, c.steerInput);
+  // The whole frame's audio in one pure decision: the shared curb-scrub throttle,
+  // the per-human state voices (boost wind, squeal, brake skid, engine) and a
+  // sustained jet per in-flight rocket, each level by distance to the nearest
+  // player. A rocket lives in the engine's (arclength, lat) space — rebuild its
+  // world point the same way the engine poses cars, so the flight is measured in
+  // the SAME 3D metric as its impact.
+  sfx(audioDecide.frame({
+    cars: snap.cars,
+    rockets: (snap.rockets || []).map((r) => ({ id: r.id, pos: session.trackPoint(r.s, r.lat) })),
+    aiIds: aiCarIds,
+    nowMs: performance.now(),
+  }));
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
@@ -607,7 +598,7 @@ const net = new DisplayNet({
 function forfeitCar(peerIndex) {
   if (!session || !session.forceRemoveCar(peerIndex)) return;
   scene.removeCar(peerIndex);
-  audio.stopCarVoices(peerIndex); // its id leaves the loop — no zero-level update will come
+  sfx(audioDecide.stopCar(peerIndex)); // its id leaves the loop — no zero-level update will come
   net.syncState(); // inRace(peerIndex) just flipped false with no roster event — republish
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
@@ -674,7 +665,7 @@ function rekeyCarPlayer(oldId, newId) {
   if (series) series.rekey(oldId, newId); // banked cup points follow the player, car or no car
   if (!session || !session.rekeyCar(oldId, newId)) return;
   scene.rekeyCar(oldId, newId);
-  audio.stopCarVoices(oldId); // the loop re-creates voices under newId next frame
+  sfx(audioDecide.stopCar(oldId)); // the loop re-creates voices under newId next frame
   for (const p of currentField) { if (p.peerIndex === oldId) p.peerIndex = newId; }
 }
 
@@ -695,12 +686,10 @@ let seriesDeadline = 0;         // when it fires — the countdown label reads t
 let intermissionTicker = null;  // ½ s "starting in N…" refresh
 
 // Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
-let lastRosterCount = 0;
 function renderRoster(roster, hostPeerIndex) {
   // A bigger roster means someone joined (renames/car picks keep the count) —
   // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
-  if (roster.length > lastRosterCount && net.roomState === ROOM_STATE.LOBBY) audio.join();
-  lastRosterCount = roster.length;
+  sfx(audioDecide.roster(roster.length, net.roomState === ROOM_STATE.LOBBY));
   renderSeats(el('players'), roster.map((p) => ({
     name: p.name, colorIndex: p.colorIndex, carIndex: p.carIndex,
     connected: p.connected, host: p.peerIndex === hostPeerIndex, ready: p.ready
@@ -904,7 +893,7 @@ function launchRace(players) {
       // restarts on the same element); GO! keeps its own is-go fade-out.
       cd.classList.remove('slap');
       if (n > 0) { void cd.offsetWidth; cd.classList.add('slap'); }
-      audio.countdown(n);
+      sfx(audioDecide.countdown(n));
       // The n<0 beat only clears the LOCAL banner — never broadcast it. The
       // phones' COUNTDOWN handler flips them onto the drive HUD, so a race that
       // ends within a second of GO (fast-forwarded finishes under test) would
@@ -926,7 +915,7 @@ function launchRace(players) {
       // Background song for the whole race, picked from the biome's pool. The
       // ?biome inspector override steers the music too, so an override race
       // sounds like it looks.
-      audio.startMusic(scene.biome());
+      if (audio.ready) sfx(audioDecide.startMusic(scene.biome())); // the pick only happens if the device can play it
       showMusicCredit(true);                   // now-playing credit chip (bottom-left)
     },
     onRaceEnd: endRace,
@@ -984,130 +973,40 @@ function clearSeriesTimers() {
   clearInterval(intermissionTicker); intermissionTicker = null;
 }
 
-// ---- spatial audio: world-cue loudness by 3D distance to the nearest human ----
-// The split-screen cells ARE the listeners: each shows one human car, so a world
-// sound is loud when it happens next to a human and fades with straight-line WORLD
-// distance to the nearest one — never gating hard to silence inside the scene, so
-// distant action stays present, just quiet. This is the whole sound model: one
-// curve, shared by every world cue (curb scrub, grabs, banana, spin, rocket). It
-// replaces the old binary "is this CPU car on a human's camera?" visibility gate
-// and generalises what used to be the rocket's private distance falloff.
+// ---- spatial audio: the sim queries behind the decision layer ----
+// The whole sound model — the distance curve, the cue table, the voice levels —
+// lives in audio/decide.js as a pure function of plain data. What stays here is
+// the part that names the sim: reading world points out of the live session.
 //
-// Distance is true 3D proximity (straight-line world distance): a car physically near a
-// human is loud even when far apart in race position — an overpass, a crossing, a
-// doubled-back straight — which reads on screen as "it's right there". Cheap: ≤4
-// humans × a handful of sources per frame. Starting values — tune by ear in ?solo=1.
-const AUD_PEAK = 0.7;  // loudness at point-blank (≤ AUD_NEAR) — the ceiling for EVERY world cue, so even
-                       //   your own car's events don't slam full master (HUD cues bypass this and stay full)
-const AUD_NEAR = 8;     // within this many world units of a human → AUD_PEAK (the pack around you)
-const AUD_FAR = 34;     // by here it has faded to the distance FLOOR (the far edge of the chase view)
-const AUD_FLOOR = 0.18; // quietest a still-in-scene source gets — distant but present, never silent here
-const AUD_CUT = 64;     // past here: out of the scene → silent (FLOOR tapers to 0 across [FAR, CUT], no click)
-
-// Min straight-line world distance from point `p` to any human car (Infinity with
-// no humans / no live poses). Humans are the only listeners — CPU cars have no cell.
-function nearestHumanDist(p) {
-  if (!session) return Infinity;
-  let best = Infinity;
+// The split-screen cells ARE the listeners, so `humanPositions` is the listener
+// set: every human car's world point. CPU cars have no cell and are never
+// listeners. Cheap — ≤4 humans, and a handful of sources per frame.
+function listenerPositions() {
+  const out = [];
+  if (!session) return out;
   for (const id of session.carIds()) {
     if (isAiCar(id)) continue;
     const hp = session.carWorldPos(id); // plain {x,y,z}, null while a car has no pose
-    if (!hp) continue;
-    const d = Math.hypot(hp.x - p.x, hp.y - p.y, hp.z - p.z);
-    if (d < best) best = d;
+    if (hp) out.push(hp);
   }
-  return best;
-}
-// Loudness in [0, AUD_PEAK] for a world cue at world position `p` (AUD_PEAK within
-// AUD_NEAR of a human, FLOOR at AUD_FAR, 0 past AUD_CUT). A human's own car is at
-// distance 0 → AUD_PEAK, so this needs no human/CPU branch: a player's own moments
-// come out at the ceiling for free. A missing position (`!p`) plays at the ceiling
-// rather than dropping the cue. (HUD cues — lap/roulette/countdown — never reach
-// here; they bypass the distance model and play at full master.)
-function audibility(p) {
-  if (!p) return AUD_PEAK;
-  const d = nearestHumanDist(p);
-  if (d <= AUD_NEAR) return AUD_PEAK;
-  if (d >= AUD_CUT) return 0;
-  if (d <= AUD_FAR) return AUD_PEAK - (AUD_PEAK - AUD_FLOOR) * (d - AUD_NEAR) / (AUD_FAR - AUD_NEAR);
-  return AUD_FLOOR * (1 - (d - AUD_FAR) / (AUD_CUT - AUD_FAR));
-}
-// Loudness for a race event = its car's world position through audibility;
-// idless/global events (no positioned source) play at the world-cue ceiling.
-function eventGain(e) {
-  if (e == null || e.id == null) return AUD_PEAK;
-  return audibility(session ? session.carWorldPos(e.id) : null); // null (car gone/no pose) → ceiling
+  return out;
 }
 
-// A rocket lives in the engine's (arclength, lat) space — rebuild its world point
-// the same way the engine poses cars (centreline sample + lateral offset) so the
-// flight is measured in the SAME 3D metric as its target-car impact below.
-function rocketWorldPos(r) {
-  return session.trackPoint(r.s, r.lat); // r.s is wrapped to [0, length); trackPoint wraps anyway
-}
-// Rocket flight: a sustained jet per in-flight rocket, held the whole air time, its
-// level set by the SAME audibility curve as every other world cue (so the jet and
-// its boom always agree, and a rocket near a human is loud while a far one is a
-// quiet whoosh). Voices stop when a rocket leaves the snapshot (hit/expired).
-let _rocketVoiceIds = new Set();
-function driveRocketAudio(snap) {
-  const seen = new Set();
-  for (const r of (snap.rockets || [])) { seen.add(r.id); audio.rocketFlight(r.id, audibility(rocketWorldPos(r))); }
-  for (const id of _rocketVoiceIds) if (!seen.has(id)) audio.rocketFlight(id, 0); // stop the ones that just landed/expired
-  _rocketVoiceIds = seen;
-}
-// Loudness of a rocket IMPACT, kept CONSISTENT with the flight so you never get a
-// jet that fades in with no boom: the detonation is at the target car, so reuse
-// audibility on the target's world position (a human hit → always full), with a
-// payoff floor so an audible jet always lands an audible boom. Returns 0 only when
-// the impact is out of every human's earshot.
-function rocketImpactLevel(targetId) {
-  if (!session || !session.hasCar(targetId)) return 1; // target already gone (rare) — just play it
-  if (!isAiCar(targetId)) return 1; // a human got hit → full
-  const a = audibility(session.carWorldPos(targetId));
-  return a > 0 ? Math.max(0.45, a) : 0; // audible whenever the flight was, with a clear payoff floor
-}
-
-// Map engine events onto cues. World moments (a car's grab, banana drop, spin,
-// curb scrub) are scaled by distance to the nearest human (eventGain): close =
-// loud, far = quiet but present — so the player's own moments come out full (gap
-// 0) and a CPU's fade with distance instead of popping on/off as they enter or
-// leave a camera. HUD-narration cues stay human-only and full: the roulette
-// describes the player's item slot, and lap / finish narrate their cell's HUD.
+// One race event -> its audio, through the decision layer. `pos` is the event's
+// source world point: the car's own for a car event (null once that car is gone),
+// and for a rocket whiff the rocket's track point — rebuilt the same way the
+// engine poses cars (centreline sample + lateral offset) so the self-destruct is
+// measured in the SAME 3D metric as the jet that preceded it.
 function audioForRaceEvent(e) {
-  const isHuman = e.id == null || !isAiCar(e.id);
-  const g = eventGain(e); // 1 for the player's own car / idless cues, distance-scaled for CPUs
-  switch (e.type) {
-    case 'pickup':
-      // A finished car has no HUD item slot to narrate, so its victory-lap grabs play
-      // just the world pop (like a CPU grab) — never the player roulette chain.
-      if (isHuman && !e.finished) audio.pickup(); // pop + roulette tick-down (player's own slot)
-      else if (g > 0) audio.pickupPop(g);         // any other grab: world pop, by distance
-      break;
-    // (boost item-use and pad crossings make no one-shot sound — the boost
-    // WIND in onFrame tracks the resulting speed state instead.)
-    case 'item_use':
-      if (g > 0 && e.item === 'banana') audio.bananaDrop(g);
-      else if (g > 0 && e.item === 'monster') audio.monsterInflate(g); // pump-up as the car transforms
-      // the rocket's launch+flight is a SUSTAINED voice driven per-frame in onFrame
-      // (driveRocketAudio), not a one-shot here; boost item-use stays silent.
-      break;
-    // The monster transform lapsing back to a car: the deflate sputter (pairs with the
-    // on-screen shrink). World cue, scaled by distance to the nearest human like the rest.
-    case 'monster_end':
-      if (g > 0) audio.monsterDeflate(g);
-      break;
-    case 'spin':
-      // rocket → boom (its own distance metric, kept in step with the flight so the
-      // jet and explosion are always heard together); oil/banana → comedy slip,
-      // scaled by distance to the nearest human like every other world cue.
-      if (e.cause === 'rocket') { const lvl = rocketImpactLevel(e.id); if (lvl > 0) audio.rocketHit(lvl); }
-      else if (g > 0) audio.spin(g);
-      break;
-    // The chequered-flag crossing chimes like any other lap (a 'finish' fanfare
-    // was auditioned and cut) — the results overlay carries the celebration.
-    case 'lap': case 'finish': if (isHuman) audio.lap(); break;
-  }
+  const pos = e.type === 'rocket_expire'
+    ? (session ? session.trackPoint(e.s, e.lat) : null) // e.s is wrapped to [0, length); trackPoint wraps anyway
+    : (e.id != null && session ? session.carWorldPos(e.id) : null);
+  sfx(audioDecide.event(e, {
+    pos,
+    humanPositions: listenerPositions(),
+    aiIds: aiCarIds,
+    nowMs: performance.now(),
+  }));
 }
 
 function onRaceEvent(e) {
@@ -1122,12 +1021,9 @@ function onRaceEvent(e) {
   // Rocket strike: pop a one-shot impact burst on the target (frustum culling drops it
   // off-screen). Skipped during the silent fast-forward, like the audio above.
   if (!fastForwarding && e.type === 'spin' && e.cause === 'rocket') scene.rocketImpact(e.id);
-  // A rocket self-destructing at the end of its flight (a whiff): detonate at its track point.
-  if (!fastForwarding && e.type === 'rocket_expire') {
-    scene.rocketExpire(e.s, e.lat);
-    const lvl = audibility(rocketWorldPos({ s: e.s, lat: e.lat })); // boom scaled by distance to the nearest human
-    if (lvl > 0) audio.rocketHit(lvl);
-  }
+  // A rocket self-destructing at the end of its flight (a whiff): detonate at its
+  // track point (the boom is audioForRaceEvent's, scaled like every world cue).
+  if (!fastForwarding && e.type === 'rocket_expire') scene.rocketExpire(e.s, e.lat);
   if (e.type !== 'finish') return;
   if (fastForwarding) return; // endRace sends the final board once; don't spam one per AI car
   // If that finish was the last human's, we're about to fast-forward to the flag
@@ -1239,8 +1135,8 @@ function endRace(results) {
   // carry this race's gains, and the intermission/podium reads them too.
   if (series) series.applyRace(results.results, currentField);
   raceEnded = true;                            // hold the finish frame behind the translucent results overlay
-  audio.stopVoices();                          // the frozen frame must not hold wind/squeal voices open
-  audio.stopMusic();                           // race over → results screen is quiet
+  sfx(audioDecide.stopVoices());               // the frozen frame must not hold wind/squeal voices open
+  sfx(audioDecide.stopMusic());                // race over → results screen is quiet
   showMusicCredit(false);
   paused = false;                              // results aren't pausable
   autoPaused = false;
@@ -1407,8 +1303,8 @@ function returnToLobby() {
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
-  audio.stopVoices();
-  audio.stopMusic();
+  sfx(audioDecide.stopVoices());
+  sfx(audioDecide.stopMusic());
   showMusicCredit(false);
   paused = false;
   autoPaused = false;
@@ -1480,13 +1376,13 @@ function syncSessionFrozen() {
   const frozen = paused || autoPaused;
   if (frozen && !session.paused) {
     session.pause();
-    audio.stopVoices();                  // frozen cars must not keep their wind/squeal going
-    audio.pauseMusic();                  // ... and the music holds where it was
+    sfx(audioDecide.stopVoices());       // frozen cars must not keep their wind/squeal going
+    sfx(audioDecide.pauseMusic());       // ... and the music holds where it was
     freezeCars();                        // hold the field at rest behind the overlay
   } else if (!frozen && session.paused) {
     session.resume();
     freezeCars(false);                   // back to reading the live engine
-    audio.resumeMusic();
+    sfx(audioDecide.resumeMusic());
   }
 }
 
@@ -1758,7 +1654,7 @@ if (_scenario) {
 // selectTrack), __debugSolo (lazy ?solo loader), __deviceChoicePending (boot flow).
 // E2E may also SET timing overrides read elsewhere: __countdownSeconds,
 // __intermissionMs, __abandonGraceMs.
-window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio;
+window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio; window.__audioDecide = audioDecide;
 window.__series = () => series; // live CupSeries (null outside a cup)
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
