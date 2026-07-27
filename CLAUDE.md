@@ -10,6 +10,11 @@ node --test tests/track.test.js   # A single unit test
 ctest --test-dir native/build     # Native conformance (configure/build native/ first)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
+node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
+node scripts/wire-mutate.mjs      # Prove the wire gate bites: break the C++ 5 ways,
+                                  # rebuild the wasm, require the named test to go red
+node scripts/wire-relay-contract.mjs  # Re-freeze the relay model's contract from a
+                                  # Party-Sockets checkout (--check to just verify)
 npm start                         # Run the server (node server/index.js)
 npm run dev                       # Run with --watch (auto-restart)
 native/scripts/build-runtime-web.sh  # The whole engine (sim + party + Filament
@@ -191,6 +196,30 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   lib, so the shipped wasm's `EMSCRIPTEN_KEEPALIVE` export list is untouched.
   `tests/party-abi.test.js` still covers the same ground in Node against the SHIPPED
   wasm, which is the only place that artifact is exercised.
+- WIRE-COMPAT (`tests/wire-compat.test.js` + `tests/wire-fastlane.test.js`, 34 tests
+  in `npm test`) is the PERMANENT gate architecture.md asks for, and the only one
+  where two LANGUAGES must agree on bytes at RUNTIME — phones stay on the JS
+  controller forever on all three TV platforms. Both ends are real: the C++ is the
+  SHIPPED wasm reached through the display's own adapters (`NativePartyConnection`/
+  `NativePartyFastlane`/`NativeRaceSession`), the JS is `partyplug/` plus
+  `public/controller/{Net,InputGate}.js` UNMODIFIED. Only TRANSPORT is fabricated —
+  a socket, a lossy/reordering DataChannel pair (`tests/wire-compat/rtc.js`), a
+  clock, four DOM leaves. It covers what neither the corpora nor E2E can: the corpora
+  replay RECORDED JS (never a live peer), and E2E runs against a PERMISSIVE stub
+  relay that cannot produce the frames that break a real party. So the relay here is
+  `tests/wire-compat/relay.js` — a MODEL of Party-Sockets with every prod/stub
+  divergence cited to a line of `server.ts` (a null `to` is an error not a broadcast;
+  indices grow past maxClients; `peer_joined` is suppressed on a socket replace;
+  10 s idleTimeout; the ~2 min hostless grace) — frozen in
+  `relay-contract.json` by `scripts/wire-relay-contract.mjs`, which re-derives it from
+  a checkout and fails loudly when a cited behaviour moves. GREEN IS NOT
+  "prod-faithful": read that file's header for what the model still is not.
+  `scripts/wire-mutate.mjs` is the gate's own gate — it patches `native/`, rebuilds
+  `ttp_runtime_web` (sim+party, CI's wasm configuration), swaps the artifact in and
+  requires the named test to go red. It immediately found the suite's one blind spot
+  (the display is the RECEIVER, so nothing ran the C++ Link as a SENDER and reversing
+  its newest-first ring was invisible); the fix is the "C++-SENT packet decodes in the
+  real JS receiver" test. Add a case there whenever a shell gains a new send path.
 - Two checks audit the SUITE, not the code, and run weekly + on demand
   (`.github/workflows/test-the-tests.yml`), never on PRs: `npm run mutation-check`
   breaks the engine 28 ways and requires the matching ctest to go red for each (two

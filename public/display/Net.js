@@ -7,6 +7,9 @@
 // state machine is NOT a global any more: it arrives as opts.RoomFlowImpl.
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 import { GameNet } from '../shared/GameNet.js';
+// The name cap is the phone's rule, applied again here because a HELLO from any
+// peer is untrusted input. Shared so the two halves cannot drift (shared/names.js).
+import { cleanName } from '../shared/names.js';
 
 const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS } = window;
 
@@ -440,7 +443,7 @@ export class DisplayNet extends GameNet {
         // e.g. this tab reloaded and missed their peer_joined): seat them now.
         if (!this.flow.has(from)) this._addPeer(from);
         const p = this.flow.get(from);
-        if (p && data.name) p.name = String(data.name).slice(0, 16);
+        if (p && data.name) p.name = cleanName(data.name);
         // No unicast reply: the phone recovers its whole state from the retained
         // room snapshot (_announce republishes it, and the relay replayed it right
         // after `joined`). onPlayerWelcomed only relights the per-owner ITEM.
