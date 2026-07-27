@@ -74,6 +74,28 @@ TTP_ABI void ttp_display_bind(int session);
  * An empty array means the single overview camera fills the surface. */
 TTP_ABI void ttp_display_cells(const char* idsJson);
 
+/* WHERE those cells are: the rectangles this surface is split into for the cars
+ * ttp_display_cells named, in cell order. The shell asks instead of computing
+ * it, so its HUD cannot disagree with the 3D — one function
+ * (ttp_grid_cell, renderer/ttp_render.h) answers both, and the column scoring in
+ * it is not ceil(sqrt(n)): a racing cell wants to be wider than tall, so two
+ * players on a 16:9 screen are STACKED rather than side by side.
+ *
+ * Writes 4 floats per cell — x, y, width, height, TOP-LEFT origin — and returns
+ * how many cells it wrote: min(cells, maxCells), or 0 when no car owns one
+ * (out null, or ttp_display_cells empty/never called). Neither an int PREDICATE
+ * nor an OUTCOME (ttp_abi.h): a COUNT, the only one in these headers.
+ *
+ * Units are the surface's PHYSICAL pixels, the same ones ttp_display_create and
+ * ttp_display_resize take. A shell drawing its overlay in scaled units divides
+ * by its own scale factor — the browser by devicePixelRatio, the one number the
+ * C side is never told (CSS pixels are not a concept tvOS or Android shares).
+ *
+ * Answers whether or not a scene is built: the layout is a function of the
+ * surface and the cell list alone, so the HUD stays put while a Grand Prix
+ * releases one track's scene and builds the next. */
+TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
+
 /* Camera mode for a surface with no cells (ttp_display_cells empty). */
 #define TTP_CAM_STILL  0  /* the fitted whole-track iso view, held still */
 #define TTP_CAM_ORBIT  1  /* turntable: circle the track at the overview radius */

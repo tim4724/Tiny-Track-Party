@@ -592,7 +592,9 @@ if(EMSCRIPTEN)
     # malloc/free are the allocator the JS side needs for stringToUTF8 buffers
     # and have no declaration of ours to tag.
     "-sEXPORTED_FUNCTIONS=_malloc,_free"
-    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64,HEAPU8"
+    # HEAPF32 is the packed float readback (ttp_display_cell_rects); HEAPF64 the
+    # profile block; HEAPU8 the asset upload.
+    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF32,HEAPF64,HEAPU8"
   )
   if(TARGET ttp_renderer)
     target_link_libraries(ttp_runtime_web PRIVATE ttp_renderer)

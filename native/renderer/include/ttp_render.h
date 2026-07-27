@@ -132,16 +132,17 @@ typedef struct TtpTrackFraming {
 /* Split-screen column count for n views on a w x h surface — SceneRenderer's
  * bestGrid, verbatim: score every column count by how far the resulting cell is
  * from square, plus a real penalty per wasted cell, and take the cheapest.
- * `ceil(sqrt(n))` is NOT the same function: on a 16:9 screen it lays 3 players
- * out 2x2 where the display lays them 3x1, so the 3D cells and the DOM HUD
- * (which uses the JS answer to place every label, place card and steer bar)
- * disagreed about where a cell is.
+ * `ceil(sqrt(n))` is NOT the same function: on a 16:9 screen it puts two players
+ * SIDE BY SIDE where this stacks them, and 7 players in a 3x3 where an ultrawide
+ * takes 4x2. Guessing it anywhere would put the 3D cells and the DOM HUD (which
+ * places every label, place card and steer bar) in different places.
  *
  * THREE callers had three copies of this: the renderer's viewport split, the
  * runtime's per-cell camera aspect, and Stage.js's HUD layout. It is a pure
  * function of (n, w, h), so it is one static inline in the header both C++
  * layers already include — deliberately NOT a function in libttp-runtime, which
- * would put a link edge between the renderer and a library it must not need. */
+ * would put a link edge between the renderer and a library it must not need.
+ * The shell's copy is gone: it ASKS, via ttp_display_cell_rects. */
 static inline uint32_t ttp_grid_cols(uint32_t n, uint32_t w, uint32_t h) {
     if (n == 0) return 1;
     /* Landscape is a HARD preference, not a weighted one. A racing cell wants to
@@ -174,6 +175,34 @@ static inline uint32_t ttp_grid_cols(uint32_t n, uint32_t w, uint32_t h) {
         }
     }
     return best;
+}
+
+/* One split-screen cell's rectangle, in the SURFACE's own pixels. */
+typedef struct TtpCellRect { uint32_t x, y, w, h; } TtpCellRect;
+
+/* Cell `i` of `n` on a w x h surface: the grid ttp_grid_cols scores, filled
+ * row-major from the TOP LEFT. i >= n is an empty rect (all zero).
+ *
+ * Top-left origin, because that is what every consumer of the ANSWER uses — the
+ * DOM HUD, the tvOS/Android overlays, and the renderer's own row order. GL
+ * viewports are bottom-left, so the one flip lives where GL is spoken
+ * (TtpRenderer::render) rather than being everyone's problem.
+ *
+ * Cells are whole pixels, so the last column/row leaves up to cols-1 (rows-1)
+ * pixels of the surface owned by no cell. That truncation is the renderer's, and
+ * it is exactly why the HUD must not compute its own: floor(W/cols) in CSS
+ * pixels and floor(W*dpr/cols)/dpr are DIFFERENT edges on a fractional-DPR
+ * surface, and the labels would drift off the cells the player sees. */
+static inline TtpCellRect ttp_grid_cell(uint32_t i, uint32_t n, uint32_t w, uint32_t h) {
+    TtpCellRect r = { 0u, 0u, 0u, 0u };
+    if (i >= n) return r;
+    const uint32_t cols = ttp_grid_cols(n, w, h);
+    const uint32_t rows = (n + cols - 1) / cols;
+    r.w = w / cols;
+    r.h = h / rows;
+    r.x = (i % cols) * r.w;
+    r.y = (i / cols) * r.h;
+    return r;
 }
 
 #ifdef __cplusplus

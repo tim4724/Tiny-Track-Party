@@ -79,6 +79,18 @@ void atRest(TtpCarInput& c);
 // The ABI's JSON array of scalar ids (a roster, a cell list) as ids.
 std::vector<ScalarId> parseIds(const char* json);
 
+// Where the split-screen cells ARE: the rectangles the cars in `d.cells` occupy
+// on this surface, in cell order, as 4 floats each (x, y, width, height) —
+// top-left origin, surface pixels (ttp_grid_cell). Returns how many rects were
+// written, which is min(cells, maxCells), or 0 when no car owns a cell.
+//
+// The body of ttp_display_cell_rects, here rather than in the ABI shim for the
+// usual reason: it names no platform API, and the shim is compiled only with a
+// Filament SDK, where no ctest on any leg would ever run it. The answer does NOT
+// depend on a built scene — it is a function of the surface and the cell list —
+// so a shell keeps its HUD placed while a Grand Prix swaps tracks underneath it.
+uint32_t cellRects(const DisplayState& d, float* out, uint32_t maxCells);
+
 // Assemble one frame into d.frame and return its header, which is followed
 // CONTIGUOUSLY by the arrays (ttp_render.h). `eng` is the bound session's live
 // Game, or nullptr for an empty track. Never returns null; the pointer is valid

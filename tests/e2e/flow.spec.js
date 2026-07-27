@@ -58,6 +58,59 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   expect(midRace.offenders).toEqual([]);
   expect(midRace.firstCountdownOk).toBe(true);
 
+  // The HUD sits on the cells the RENDERER drew. Stage.js has no split-screen
+  // layout of its own any more — it asks (ttp_display_cell_rects, one function
+  // with the renderer's own viewport split) and scales the answer out of
+  // drawing-buffer pixels by its DPR. That scale is the whole risk in the swap:
+  // this suite runs on the 0.25 automation cap, so a missing division puts every
+  // label at a quarter of its cell and a doubled one puts it off-screen.
+  const layout = await page.evaluate(() => {
+    const s = window.__scene;
+    const cells = [];
+    const packed = s.display.cellRects(8);
+    for (let i = 0; i < packed.length; i += 4) {
+      cells.push({ x: packed[i], y: packed[i + 1], w: packed[i + 2], h: packed[i + 3] });
+    }
+    const px = (el, p) => parseFloat(el.style[p]);
+    return {
+      dpr: s._dpr,
+      canvas: { w: s._canvas.width, h: s._canvas.height },
+      view: { w: window.innerWidth, h: window.innerHeight },
+      cells,
+      labels: [...document.querySelectorAll('.cell-label')].map((el) => [px(el, 'left'), px(el, 'top')]),
+      steers: [...document.querySelectorAll('.cell-steer')].map((el) => [px(el, 'left'), px(el, 'top')]),
+      dividers: document.querySelectorAll('.cell-divider').length
+    };
+  });
+  // Two racers, two cells, and they tile the drawing buffer: same size, and the
+  // grid spends the surface bar the whole-pixel remainder.
+  expect(layout.cells).toHaveLength(2);
+  expect(layout.cells[0].w).toBe(layout.cells[1].w);
+  expect(layout.cells[0].h).toBe(layout.cells[1].h);
+  expect(layout.cells[0]).toMatchObject({ x: 0, y: 0 });
+  const spanX = Math.max(...layout.cells.map((c) => c.x + c.w));
+  const spanY = Math.max(...layout.cells.map((c) => c.y + c.h));
+  expect(spanX).toBeLessThanOrEqual(layout.canvas.w);
+  expect(spanY).toBeLessThanOrEqual(layout.canvas.h);
+  expect(layout.canvas.w - spanX).toBeLessThan(2); // cols-1 px at most, cols <= 2 here
+  expect(layout.canvas.h - spanY).toBeLessThan(2);
+  // …and every label is at its cell's top-left corner IN CSS PIXELS, with the
+  // steer bar centred on the same cell. Compared as a set, since DOM order is
+  // creation order rather than cell order, and with Stage.js's own arithmetic
+  // (scale first, then offset) so this compares the layout, not two roundings.
+  const k = 1 / layout.dpr;
+  const css = layout.cells.map((c) => ({ x: c.x * k, y: c.y * k, w: c.w * k, h: c.h * k }));
+  const corners = css.map((r) => `${r.x},${r.y}`).sort();
+  const middles = css.map((r) => `${r.x + r.w / 2},${r.y + r.h - 61}`).sort();
+  expect(layout.labels.map((p) => p.join(',')).sort()).toEqual(corners);
+  expect(layout.steers.map((p) => p.join(',')).sort()).toEqual(middles);
+  // The cells fill the screen the HUD lays out on, so a label is never stranded
+  // in the corner of a quarter-sized grid (the un-scaled failure).
+  expect(spanX * k).toBeGreaterThan(layout.view.w - 4);
+  expect(spanY * k).toBeGreaterThan(layout.view.h - 4);
+  // One ink rule per interior seam: 1x2 here, so exactly one.
+  expect(layout.dividers).toBe(1);
+
   // Any phone can pause; the overlay raises on every screen.
   await bob.click('#pause-btn');
   await bob.waitForSelector(visible('#pause-overlay'));

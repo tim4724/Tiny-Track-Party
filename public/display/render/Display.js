@@ -21,11 +21,16 @@ export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal',
                    'vpresent', 'vesm', 'vblur', 'vburst'];
 
+// cellRects' "no cells" answer, so the caller's loop is the same shape either way.
+const EMPTY_RECTS = new Float32Array(0);
+
 export class Display {
   constructor(canvas, mod) {
     this.canvas = canvas;
     this.m = mod;
     this.built = false;
+    this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
+    this._rectBytes = 0;
     this._fn = {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
@@ -34,6 +39,7 @@ export class Display {
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
+      cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
@@ -166,6 +172,30 @@ export class Display {
   // The cars that own a split-screen cell, in cell order. Empty = one overview
   // camera over the whole surface.
   cells(ids) { this._fn.cells(JSON.stringify(ids || [])); }
+
+  // WHERE those cells are, as a flat [x, y, w, h, x, y, w, h, …] in cell order —
+  // the rects the renderer splits its own viewports into, read back rather than
+  // recomputed here (the shell has no opinion on split-screen layout any more).
+  //
+  // Values are DRAWING-BUFFER pixels, like every other number this class passes
+  // (resize, create); the caller scales to CSS pixels, since the DPR is its own.
+  // Packed floats over JSON because the HUD reads this every frame: one cwrap
+  // call and a heap read, no parse and no garbage. The returned array is a VIEW
+  // over a scratch buffer reused by the next call — read it now, don't keep it.
+  cellRects(maxCells) {
+    const n = Math.max(0, maxCells | 0);
+    if (!n) return EMPTY_RECTS;
+    const bytes = n * 4 * 4; // 4 floats per cell
+    if (!this._rectPtr || this._rectBytes < bytes) {
+      if (this._rectPtr) this.m._free(this._rectPtr);
+      this._rectPtr = this.m._malloc(bytes);
+      this._rectBytes = bytes;
+    }
+    const got = this._fn.cellRects(this._rectPtr, n);
+    // HEAPF32 is re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out
+    // from under any view held across an allocation.
+    return this.m.HEAPF32.subarray(this._rectPtr >> 2, (this._rectPtr >> 2) + got * 4);
+  }
 
   camera(mode) { this._fn.camera(mode); }
   look(eye, target) { this._fn.look(eye.x, eye.y, eye.z, target.x, target.y, target.z); }
