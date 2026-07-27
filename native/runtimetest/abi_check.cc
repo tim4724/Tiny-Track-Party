@@ -39,7 +39,11 @@
 #include <vector>
 
 #include "corpus_diff.h"  // read_line + diff_val
+#include "generated/track_defs.h"
 #include "ttp/canonical.h"
+#include "ttp/json_parse.h"
+#include "ttp/race_track_json.h"
+#include "ttp/trackbuilder.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 
@@ -58,6 +62,46 @@ void fail(const std::string& what) {
 void check(bool ok, const std::string& what) {
   checks++;
   if (!ok) fail(what);
+}
+
+// Re-spell a parsed JSON tree in the frozen corpus's hexJSON: numbers become
+// x<16-hex IEEE-754 bits>, everything else keeps its JSON form, keys stay in the
+// order they were parsed in. Used to compare ttp_track_json's decimal output
+// against the hex writer bit-for-bit — decimals cannot be diffed as text (two
+// spellings of one double), bit patterns can.
+std::string rehex(const Value& v) {
+  switch (v.type) {
+    case Value::NUM: {
+      std::string o;
+      ttp::rtjson::hex_number(o, v.num);
+      return o;
+    }
+    case Value::BOOL: return v.b ? "true" : "false";
+    case Value::NUL: return "null";
+    case Value::STR: return json_quote(v.str);
+    case Value::ARR: {
+      std::string o = "[";
+      for (size_t i = 0; i < v.arr.size(); i++) {
+        if (i) o += ",";
+        o += rehex(v.arr[i]);
+      }
+      return o + "]";
+    }
+    case Value::OBJ: {
+      std::string o = "{";
+      bool first = true;
+      for (const auto& kv : v.obj) {
+        if (kv.second.type == Value::UNDEF) continue;
+        if (!first) o += ",";
+        first = false;
+        o += json_quote(kv.first);
+        o += ":";
+        o += rehex(kv.second);
+      }
+      return o + "}";
+    }
+    default: return "null";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +340,103 @@ void boundaryExports() {
     check(v.has("contractVersion"), "ttp_version carries contractVersion");
     const Value* m = v.find("mathlib");
     check(m && !m->str.empty(), "ttp_version carries a non-empty mathlib stamp");
+  }
+
+  // ---- ttp_track_json: the Node scripts' only way to read a built track.
+  //
+  // The check re-spells the JSON it returns in the frozen corpus's own hexJSON
+  // and demands byte identity with the hex writer's output for the same track.
+  // That chains three things together: the returned text really is parseable
+  // JSON, its tree and key order are the contract's, and every double survived
+  // the decimal round-trip to the bit. Since kHex.object() is what
+  // trackbuilder_check diffs against the JS-recorded corpus, a green run here
+  // means the bytes handed to a Node script equal what the retired JS builder
+  // produced — the scripts inherit the port's conformance evidence instead of
+  // trusting a second implementation.
+  {
+    check(ttp_track_json("no-such-track", 3, 1u) == nullptr,
+          "ttp_track_json on an unknown trackId returns NULL");
+    check(ttp_track_json(nullptr, 3, 1u) == nullptr,
+          "ttp_track_json with a null trackId returns NULL");
+    check(ttp_track_json("gym", 3, 1u) != nullptr,
+          "ttp_track_json resolves a DEV-only range (?solo&track=gym)");
+
+    const ttp::rtjson::Writer hex(ttp::rtjson::hex_number);
+    long bad = 0;
+    for (int i = 0; i < ttp::TTP_TRACK_COUNT; i++) {
+      const char* id = ttp::TTP_TRACKS[i].id;
+      const char* jsonText = ttp_track_json(id, 3, 1u);
+      // The ORDINARY parser, not corpus::read_line: that one additionally demands
+      // every token already be in JSON.stringify's canonical form, which "-0" is
+      // deliberately not (see rtjson::decimal_number). This is the parser a caller
+      // actually reads the ABI's output with.
+      bool parsed = false;
+      const Value v = jsonText ? ttp::json::parse(jsonText, &parsed) : Value();
+      if (!parsed) {
+        std::fprintf(stderr, "ttp_track_json(%s): did not parse\n", id);
+        bad++;
+        continue;
+      }
+      const std::string want = hex.object(ttp::build_race_track(ttp::TTP_TRACKS[i], 3, 1u));
+      const std::string got = rehex(v);
+      if (want != got) {
+        std::fprintf(stderr, "ttp_track_json(%s) diverges from the hex writer\n", id);
+        bad++;
+      }
+    }
+    check(bad == 0, "ttp_track_json is bit-identical to the corpus-gated writer on every"
+                    " catalogue track (" + std::to_string(bad) + " diverged)");
+  }
+
+  // ---- ttp_track_build_json: the same builder, driven by a descriptor.
+  //
+  // That the descriptor parser AGREES with the compile-time codegen is checked in
+  // Node (tests/native-track.test.js), where the authored descriptors actually
+  // live — every catalogue track built both ways, demanding identical bytes.
+  // What is checked here is that a malformed descriptor is refused rather than
+  // half-read into a track that looks plausible and is wrong.
+  {
+    check(ttp_track_build_json(nullptr, 3, 1u) == nullptr, "a null descriptor returns NULL");
+    check(ttp_track_build_json("not json", 3, 1u) == nullptr, "a non-JSON descriptor returns NULL");
+    check(ttp_track_build_json("[]", 3, 1u) == nullptr, "a non-object descriptor returns NULL");
+    check(ttp_track_build_json("{}", 3, 1u) == nullptr,
+          "a descriptor with neither segments nor waypoints returns NULL");
+    check(ttp_track_build_json("{\"segments\":[{\"kind\":\"straight\",\"length\":10}],"
+                               "\"waypoints\":[{\"x\":0,\"z\":0}]}", 3, 1u) == nullptr,
+          "a descriptor with BOTH segments and waypoints returns NULL");
+    check(ttp_track_build_json("{\"segments\":[{\"kind\":\"spiral\",\"length\":10}]}", 3, 1u) == nullptr,
+          "an unknown segment kind returns NULL (a typo is not a track)");
+    check(ttp_track_build_json("{\"waypoints\":[{\"x\":0}]}", 3, 1u) == nullptr,
+          "a waypoint missing z returns NULL");
+    check(ttp_track_build_json("{\"segments\":[{\"kind\":\"straight\",\"length\":10}],"
+                               "\"boxes\":[{\"lat\":0}]}", 3, 1u) == nullptr,
+          "a furniture entry missing u returns NULL");
+    check(ttp_track_build_json("{\"segments\":[]}", 3, 1u) == nullptr,
+          "an empty segment list returns NULL");
+
+    // A real (if tiny) closed oval, to prove the happy path reaches the builder.
+    const char* oval = "{\"id\":\"abi-oval\",\"segments\":["
+        "{\"kind\":\"straight\",\"length\":20},{\"kind\":\"arc\",\"radius\":5,\"angle\":180},"
+        "{\"kind\":\"straight\",\"length\":20},{\"kind\":\"arc\",\"radius\":5,\"angle\":180}],"
+        "\"boxes\":[{\"u\":0.5,\"lat\":0}]}";
+    const char* built = ttp_track_build_json(oval, 3, 7u);
+    check(built != nullptr, "a well-formed descriptor builds");
+    if (built) {
+      bool parsedOk = false;
+      const Value v = ttp::json::parse(built, &parsedOk);
+      check(parsedOk, "ttp_track_build_json returns valid JSON");
+      const Value* id = v.find("trackId");
+      check(id && id->str == "abi-oval", "the descriptor's own id rides through");
+      const Value* len = v.find("length");
+      check(len && len->num > 0, "the built track has a positive length");
+      const Value* cl = v.find("centerline");
+      const Value* samples = cl ? cl->find("samples") : nullptr;
+      check(samples && samples->arr.size() > 2, "the built track has a sampled centerline");
+      const Value* boxes = v.find("boxes");
+      check(boxes && boxes->arr.size() == 1, "the authored box survived furniture resolution");
+      const Value* seed = v.find("seed");
+      check(seed && seed->num == 7, "the requested seed is stamped on the built track");
+    }
   }
 
   // ---- the global steer-expo tunable round-trips (and is restored).

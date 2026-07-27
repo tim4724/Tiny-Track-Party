@@ -40,8 +40,14 @@ TTP_ABI void ttp_display_destroy(void);
  * owns fetching; the bytes are copied before this returns. 0 on success. */
 TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len);
 
-/* Build the scene from the assets provided so far — "track.bin" (the track plus
- * its resolved biome theme and roster) and the GLBs/textures it names.
+/* Build the scene for `trackId` from the assets provided so far — "track.bin"
+ * (the resolved biome theme and the roster's liveries) and the GLBs/textures it
+ * names.
+ *
+ * The GEOMETRY is not among them. This runs the native TrackBuilder on trackId
+ * and meshes from the result, which is the same ttp::RaceTrack a session on that
+ * track races on — so the road drawn and the road driven are one object, not two
+ * builds of one descriptor that could drift. Returns 1 on an unknown trackId.
  *
  * rosterIdsJson is that roster's car ids as a JSON array, in slot order. The
  * renderer bakes a car's model and livery into its slot at build time, so this
@@ -51,7 +57,7 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * Every race start comes through here, since a Grand Prix chains four tracks
  * and even a restart wants the skid ribbons, kicked cones and collected boxes
  * back at their opening state. Returns 0 on success. */
-TTP_ABI int ttp_display_build(const char* rosterIdsJson);
+TTP_ABI int ttp_display_build(const char* trackId, const char* rosterIdsJson);
 
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */

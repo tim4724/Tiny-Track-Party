@@ -11,6 +11,11 @@
 
 #include "ttp_render.h"
 
+// The built track the scene is meshed from. libttp-track is platform-free and
+// header-light; this pulls in the geometry PODs only (no track catalogue — which
+// track to build stays the runtime's decision, not the renderer's).
+#include "ttp/trackbuilder.h"
+
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
@@ -77,7 +82,11 @@ public:
     // toggle, since the map is baked into the scene.
     void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
-    bool buildScene();
+    // `geo` is the built track this scene is meshed from — the SAME ttp::RaceTrack
+    // the sim races on, handed straight over rather than serialized. "track.bin"
+    // carries only what geometry cannot imply: the resolved biome theme and the
+    // roster's liveries.
+    bool buildScene(const ttp::RaceTrack& geo);
     // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
     // material instances — and reset the per-scene state, so buildScene() can
     // run again on a new track.bin (a Grand Prix chains four of them) or a new
@@ -565,8 +574,14 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
-    bool buildTrackScene(const std::vector<uint8_t>& bin);
+    bool buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo);
+    // The theme/roster half of the payload. Geometry does not come through here
+    // any more — see fillGeometry.
     bool parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out);
+    // The geometry half, copied (and float-narrowed) straight off the built
+    // track. Also derives what used to be computed JS-side from the geometry:
+    // the launch-strip blanking zones and the scenery/landmark/clutter seeds.
+    static void fillGeometry(TrackBin& out, const ttp::RaceTrack& geo);
     bool buildRoadMesh(const TrackBin& tb);
     void buildRoadGrid();
     // Height of the road ribbon straight below (x, z), picking the deck nearest

@@ -8,10 +8,10 @@
 // "Live engine" now means the NATIVE sim through its C ABI (the wasm build of
 // native/libttp-sim, loaded exactly as tests/runtime-abi.test.js does). Two
 // consequences:
-//   - the sim-side fixtures are a CATALOGUE track, not a private oval: the ABI
-//     builds tracks by id from a code-generated catalogue (track_defs.h), so an
-//     ad-hoc segment descriptor cannot cross it. Track-BUILDER schemas below
-//     still use a private fixture (TrackBuilder.js is JS and stays);
+//   - the sim-side fixtures are a CATALOGUE track, not a private oval: a session
+//     is opened by track id from a code-generated catalogue (track_defs.h). The
+//     track-BUILDER schemas still use a private descriptor, which the builder
+//     reaches through ttp_track_build_json (scripts/native-track.mjs);
 //   - the event vocabulary is read out of the C++ source (native/libttp-sim/
 //     ttp/game.cc), which is now the only place events are emitted.
 const test = require('node:test');
@@ -39,9 +39,11 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
-let buildTrack, resolveFurniture, TRACK_LIST, CONTRACT_VERSION;
+let buildTrack, CONTRACT_VERSION;
 test.before(async () => {
-  ({ buildTrack, resolveFurniture, TRACK_LIST } = await import('../public/display/TrackBuilder.js'));
+  const nt = await import('../scripts/native-track.mjs');
+  await nt.init();
+  buildTrack = nt.buildTrack;
   ({ CONTRACT_VERSION } = await import('../public/display/engine/contract.js'));
 });
 
@@ -196,44 +198,50 @@ test('input schema covers exactly the {s, b, u} triple', () => {
   assert.equal(schema.properties.u.maximum, 255, 'use-counter wraps at 8 bits');
 });
 
-test('track schema matches a live buildTrack() output', () => {
+// track.schema.json describes the GEOMETRY half of a built track — what the
+// builder produced before the host's furniture resolve and per-race stamps were
+// layered on. The builder no longer emits that half as a separate object (it
+// returns the augmented one in a single call), so the check is that every field
+// the schema names is really there, carrying the version it pins.
+test('track schema matches the geometry half of a live built track', { skip }, () => {
   const schema = loadSchema('track.schema.json');
-  const track = buildTrack(TEST_OVAL);
+  const track = buildTrack({ segments: TEST_OVAL });
   assert.equal(track.version, CONTRACT_VERSION, 'built track carries the code contract version');
   assert.equal(schema.properties.version.const, CONTRACT_VERSION, 'schema pins the same contract version');
-  assert.deepEqual(keysOf(track), keysOf(schema.properties), 'buildTrack fields == schema properties');
   assert.deepEqual(keysOf(schema.properties), [...schema.required].sort(), 'all track fields required');
+  for (const k of keysOf(schema.properties)) {
+    assert.ok(k in track, `schema names "${k}", which the builder does not emit`);
+  }
 
   const sampleProps = schema.$defs.centerlineSample.properties;
   assert.deepEqual(keysOf(track.centerline.samples[0]), keysOf(sampleProps), 'centerline sample fields');
 });
 
-// The augmented (race-ready) track object the sim actually consumes: buildTrack()
-// geometry + the host's game-side layer (resolved furniture + identity + per-race
-// inputs), the same assembly scripts/export-track-data.mjs dumps. Its built-track
-// fields are $ref'd to track.schema.json (checked here to point at real properties);
-// the augmentation fields are defined in race-track.schema.json in full.
-test('race-track schema matches a live augmented track', () => {
+// The augmented (race-ready) track object the sim actually consumes: the geometry
+// plus resolved furniture, identity and per-race inputs — one build now, the same
+// assembly scripts/export-track-data.mjs dumps. Its built-track fields are $ref'd
+// to track.schema.json (checked here to point at real properties); the
+// augmentation fields are defined in race-track.schema.json in full.
+test('race-track schema matches a live augmented track', { skip }, () => {
   const schema = loadSchema('race-track.schema.json');
   const trackSchema = loadSchema('track.schema.json');
 
   // A private descriptor (like TEST_OVAL) carrying every authored furniture kind, so
   // the resolve produces non-empty hazards (one with renderer-only `cones`), disc
   // pads, boxes, authored poles and bananas — no catalogue dependency.
+  // (No authored `cones` on the oil: the builder does not carry them — the codegen
+  // refuses a furniture entry that declares one rather than dropping it silently.)
   const def = {
+    id: 'test-oval',
     segments: TEST_OVAL,
-    oils: [{ u: 0.10, lat: 0.7, cones: [[0, 0]] }, { u: 0.55, lat: -0.5, radius: 1.2 }],
+    oils: [{ u: 0.10, lat: 0.7 }, { u: 0.55, lat: -0.5, radius: 1.2 }],
     pads: [{ u: 0.25, lat: 0.3 }, { u: 0.80, lat: 0, radius: 0.9 }],
     boxes: [{ u: 0.30, lat: 0.4 }, { u: 0.35, lat: -0.4 }],
     poles: [{ u: 0.50, lat: 1.0, radius: 0.6 }],
     bananas: [{ u: 0.70, lat: 0.2 }]
   };
-  const track = buildTrack(def);
-  track.cup = 'beach';         // renderer identity, as buildEntry sets it
-  track.trackId = 'test-oval';
-  resolveFurniture(track, def);
-  track.totalLaps = 3;         // per-race inputs the race stamps on
-  track.seed = 1;
+  const track = buildTrack(def, { laps: 3, seed: 1 });
+  track.cup = 'beach';         // renderer identity — the host's tag, not the builder's
 
   assert.equal(track.version, CONTRACT_VERSION, 'augmented track carries the code contract version');
   assert.equal(schema.properties.version.const, CONTRACT_VERSION, 'schema pins the same contract version');
@@ -270,9 +278,7 @@ test('race-track schema matches a live augmented track', () => {
 
   // The strip pad (auto loop-launch) has no analogue on the private oval; cover it on
   // a shipped stunt track, which builds a loop -> a `shape: 'strip'` pad.
-  const stunt = TRACK_LIST.find((t) => t.id === 'skysnake');
-  const st = buildTrack(stunt);
-  resolveFurniture(st, stunt);
+  const st = buildTrack('skysnake');
   const strips = st.pads.filter((p) => p.shape === 'strip');
   assert.ok(strips.length >= 1, 'skysnake resolves at least one strip launch pad');
   for (const p of strips) within(p, schema.$defs.padStrip, 'padStrip');

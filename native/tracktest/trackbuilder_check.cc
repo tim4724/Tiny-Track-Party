@@ -15,6 +15,11 @@
 // but were fully ported too — a STRETCH mismatch fails the run, it is never
 // silently skipped. Any key the corpus carries that this binary cannot emit is a
 // hard error (schema drift must surface, not vanish).
+//
+// The hexJSON walk itself lives in ttp/race_track_json.h, shared with the decimal
+// spelling ttp_track_json hands to the Node scripts. That sharing is the point:
+// this check is the only thing that proves the walk still reproduces the retired
+// JS builder's output, and it has to be judging the SAME walk the scripts read.
 
 #include <cctype>
 #include <cstdint>
@@ -28,6 +33,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
 #include "ttp/vec3.h"
 #include "generated/track_defs.h"
@@ -36,7 +42,6 @@ namespace {
 
 using ttp::RaceTrack;
 using ttp::Value;
-using ttp::Vec3;
 
 // ---- fnv1a over UTF-8 bytes, 8 lowercase hex (record-trace.mjs fnv1a) --------
 std::string fnv1a(const std::string& s) {
@@ -47,160 +52,9 @@ std::string fnv1a(const std::string& s) {
   return std::string(b);
 }
 
-// ---- hexJSON emitters (sorted keys, x<16 hex> numbers) -----------------------
-void emitNum(std::string& o, double d) {
-  uint64_t u;
-  std::memcpy(&u, &d, 8);
-  char b[20];
-  std::snprintf(b, sizeof b, "x%016llx", (unsigned long long)u);
-  o += b;
-}
-void emitBool(std::string& o, bool v) { o += v ? "true" : "false"; }
-void emitVec(std::string& o, const Vec3& v) {
-  o += "{\"x\":"; emitNum(o, v.x);
-  o += ",\"y\":"; emitNum(o, v.y);
-  o += ",\"z\":"; emitNum(o, v.z);
-  o += "}";
-}
-void emitSample(std::string& o, const ttp::OutSample& s) {
-  o += "{\"hillable\":"; emitBool(o, s.hillable);
-  o += ",\"lateral\":"; emitVec(o, s.lateral);
-  o += ",\"pillars\":"; emitBool(o, s.pillars);
-  o += ",\"pos\":"; emitVec(o, s.pos);
-  o += ",\"s\":"; emitNum(o, s.s);
-  o += ",\"tangent\":"; emitVec(o, s.tangent);
-  o += ",\"up\":"; emitVec(o, s.up);
-  o += ",\"width\":"; emitNum(o, s.width);
-  o += "}";
-}
-void emitSamples(std::string& o, const std::vector<ttp::OutSample>& v, size_t from, size_t to) {
-  o += "[";
-  for (size_t i = from; i < to; i++) { if (i > from) o += ","; emitSample(o, v[i]); }
-  o += "]";
-}
-void emitHazard(std::string& o, const ttp::Hazard& h) {
-  o += "{\"lat\":"; emitNum(o, h.lat);
-  o += ",\"radius\":"; emitNum(o, h.radius);
-  o += ",\"s\":"; emitNum(o, h.s);
-  o += "}";
-}
-void emitBox(std::string& o, const ttp::Box& b) {
-  o += "{\"lat\":"; emitNum(o, b.lat);
-  o += ",\"radius\":"; emitNum(o, b.radius);
-  o += ",\"s\":"; emitNum(o, b.s);
-  o += "}";
-}
-void emitBanana(std::string& o, const ttp::Banana& b) {
-  o += "{\"lat\":"; emitNum(o, b.lat);
-  o += ",\"s\":"; emitNum(o, b.s);
-  o += "}";
-}
-void emitPad(std::string& o, const ttp::Pad& p) {
-  if (!p.strip) {
-    o += "{\"lat\":"; emitNum(o, p.lat);
-    o += ",\"radius\":"; emitNum(o, p.radius);
-    o += ",\"s\":"; emitNum(o, p.s);
-    o += "}";
-  } else {
-    o += "{\"halfLen\":"; emitNum(o, p.halfLen);
-    o += ",\"halfWidth\":"; emitNum(o, p.halfWidth);
-    o += ",\"lat\":"; emitNum(o, p.lat);
-    o += ",\"s\":"; emitNum(o, p.s);
-    o += ",\"shape\":\"strip\"}";
-  }
-}
-void emitPole(std::string& o, const ttp::Pole& p) {
-  o += "{";
-  if (p.ghost) o += "\"ghost\":true,";
-  o += "\"lat\":"; emitNum(o, p.lat);
-  o += ",\"radius\":"; emitNum(o, p.radius);
-  o += ",\"s\":"; emitNum(o, p.s);
-  o += "}";
-}
-void emitAutoPole(std::string& o, const ttp::AutoPole& p) {
-  o += "{\"ghost\":true,\"lat\":"; emitNum(o, p.lat);
-  o += ",\"radius\":"; emitNum(o, p.radius);
-  o += ",\"s\":"; emitNum(o, p.s);
-  o += "}";
-}
-void emitLoopStart(std::string& o, const ttp::LoopStart& l) {
-  o += "{\"s\":"; emitNum(o, l.s);
-  o += ",\"width\":"; emitNum(o, l.width);
-  o += "}";
-}
-void emitPillar(std::string& o, const ttp::Pillar& p) {
-  o += "{\"baseY\":"; emitNum(o, p.baseY);
-  o += ",\"radius\":"; emitNum(o, p.radius);
-  o += ",\"topY\":"; emitNum(o, p.topY);
-  o += ",\"x\":"; emitNum(o, p.x);
-  o += ",\"z\":"; emitNum(o, p.z);
-  o += "}";
-}
-void emitHillRing(std::string& o, const ttp::HillRing& r) {
-  o += "{\"cx\":"; emitNum(o, r.cx);
-  o += ",\"cz\":"; emitNum(o, r.cz);
-  o += ",\"halfW\":"; emitNum(o, r.halfW);
-  o += ",\"lx\":"; emitNum(o, r.lx);
-  o += ",\"lz\":"; emitNum(o, r.lz);
-  o += ",\"topL\":"; emitNum(o, r.topL);
-  o += ",\"topR\":"; emitNum(o, r.topR);
-  o += "}";
-}
-void emitSupportPost(std::string& o, const ttp::SupportPost& p) {
-  o += "{\"baseY\":"; emitNum(o, p.baseY);
-  o += ",\"contact\":{\"pos\":"; emitVec(o, p.contactPos);
-  o += ",\"up\":"; emitVec(o, p.contactUp);
-  o += "},\"radius\":"; emitNum(o, p.radius);
-  o += ",\"x\":"; emitNum(o, p.x);
-  o += ",\"z\":"; emitNum(o, p.z);
-  o += "}";
-}
-
-template <class T, class F>
-std::string emitArr(const std::vector<T>& v, F emit) {
-  std::string o = "[";
-  for (size_t i = 0; i < v.size(); i++) { if (i) o += ","; emit(o, v[i]); }
-  o += "]";
-  return o;
-}
-
-// hexJSON of one top-level augmented-track key. Empty string => unknown key.
-std::string hexTopKey(const RaceTrack& b, const std::string& k) {
-  std::string o;
-  if (k == "version") { emitNum(o, (double)b.version); return o; }
-  if (k == "seed") { emitNum(o, (double)b.seed); return o; }
-  if (k == "totalLaps") { emitNum(o, (double)b.totalLaps); return o; }
-  if (k == "length") { emitNum(o, b.length); return o; }
-  if (k == "roadWidth") { emitNum(o, b.roadWidth); return o; }
-  if (k == "gap") { emitNum(o, b.gap); return o; }
-  if (k == "groundY") { emitNum(o, b.groundY); return o; }
-  if (k == "closed") { emitBool(o, b.closed); return o; }
-  if (k == "startGate") { emitBool(o, b.startGate); return o; }
-  if (k == "trackId") { o = "\"" + b.trackId + "\""; return o; }
-  if (k == "instances") { return "[]"; }
-  if (k == "hazards") return emitArr(b.hazards, emitHazard);
-  if (k == "boxes") return emitArr(b.boxes, emitBox);
-  if (k == "bananas") return emitArr(b.bananas, emitBanana);
-  if (k == "pads") return emitArr(b.pads, emitPad);
-  if (k == "poles") return emitArr(b.poles, emitPole);
-  if (k == "autoPoles") return emitArr(b.autoPoles, emitAutoPole);
-  if (k == "loopStarts") return emitArr(b.loopStarts, emitLoopStart);
-  if (k == "pillars") return emitArr(b.pillars, emitPillar);
-  if (k == "supportPosts") return emitArr(b.supportPosts, emitSupportPost);
-  if (k == "hills") {
-    o = "[";
-    for (size_t i = 0; i < b.hills.size(); i++) { if (i) o += ","; o += emitArr(b.hills[i], emitHillRing); }
-    o += "]";
-    return o;
-  }
-  if (k == "centerline") {
-    o = "{\"length\":"; emitNum(o, b.length);
-    o += ",\"samples\":"; emitSamples(o, b.samples, 0, b.samples.size());
-    o += "}";
-    return o;
-  }
-  return {};  // unknown
-}
+// The corpus's number spelling: x<16-hex IEEE-754 bits>, so nothing in this
+// comparison depends on decimal formatting on either side.
+const ttp::rtjson::Writer kHex(ttp::rtjson::hex_number);
 
 const std::set<std::string> kRequired = {
     "centerline", "length", "roadWidth", "totalLaps", "seed", "version", "trackId",
@@ -263,7 +117,7 @@ int main(int argc, char** argv) {
     for (const auto& kv : jKeys->obj) {
       const std::string& key = kv.first;
       const std::string& want = kv.second.str;
-      std::string hj = hexTopKey(b, key);
+      std::string hj = kHex.topKey(b, key);
       if (hj.empty() && !(key == "instances")) {
         std::fprintf(stderr, "%s: corpus carries key '%s' the check cannot emit (schema drift)\n",
                      id.c_str(), key.c_str());
@@ -280,14 +134,14 @@ int main(int argc, char** argv) {
         if (key == "centerline") {
           for (size_t c = 0, idx = 0; c < b.samples.size(); c += 64, idx++) {
             size_t to = c + 64 < b.samples.size() ? c + 64 : b.samples.size();
-            std::string chj; emitSamples(chj, b.samples, c, to);
+            std::string chj; kHex.samples(chj, b.samples, c, to);
             std::string cgot = fnv1a(chj);
             std::string cwant = idx < jChunks->arr.size() ? jChunks->arr[idx].str : "<none>";
             if (cgot != cwant)
               std::fprintf(stderr, "    chunk[%zu] samples[%zu..%zu) want=%s got=%s\n",
                            idx, c, to, cwant.c_str(), cgot.c_str());
           }
-          std::string fs; emitSamples(fs, b.samples, 0, b.samples.size() < 2 ? b.samples.size() : 2);
+          std::string fs; kHex.samples(fs, b.samples, 0, b.samples.size() < 2 ? b.samples.size() : 2);
           if (fs != jFirst->str)
             std::fprintf(stderr, "    firstSamples diverge:\n      want=%s\n      got =%s\n",
                          jFirst->str.c_str(), fs.c_str());
@@ -304,12 +158,12 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "MISMATCH %s furniture.%s\n      want=%s\n      got =%s\n",
                      id.c_str(), name, w->str.c_str(), got.c_str());
     };
-    furnCheck("hazards", emitArr(b.hazards, emitHazard));
-    furnCheck("pads", emitArr(b.pads, emitPad));
-    furnCheck("boxes", emitArr(b.boxes, emitBox));
-    furnCheck("poles", emitArr(b.poles, emitPole));
-    furnCheck("bananas", emitArr(b.bananas, emitBanana));
-    furnCheck("autoPoles", emitArr(b.autoPoles, emitAutoPole));
+    furnCheck("hazards", kHex.hazards(b.hazards));
+    furnCheck("pads", kHex.pads(b.pads));
+    furnCheck("boxes", kHex.boxes(b.boxes));
+    furnCheck("poles", kHex.poles(b.poles));
+    furnCheck("bananas", kHex.bananas(b.bananas));
+    furnCheck("autoPoles", kHex.autoPoles(b.autoPoles));
   }
 
   std::printf("trackbuilder corpus: %ld tracks, %ld required-key failures, %ld stretch-key failures\n",

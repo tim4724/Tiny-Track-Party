@@ -115,7 +115,7 @@ export function solveAlign(segs, iA, iB, iTarget, tx, tz) {
 // lap — the threaded ring must precede any other loop in the design): centre = mean of
 // the ring samples (a uniformly-sampled full circle averages to its centre), WORLD units.
 export function measureRing(segs) {
-  const t = buildTrack(segs, { startGate: false });
+  const t = buildTrack(segs);
   const ss = t.centerline.samples, n = ss.length;
   let a = -1, b = -1;
   for (let i = 0; i < n; i++) {
@@ -134,7 +134,7 @@ export function measureRing(segs) {
 // Score: ground-level, near-level road should sit upright (authored banks ≤10° pass
 // under the 12° allowance); un-cancelled holonomy tilts whole flat stretches 30-70°.
 function tiltScore(segs) {
-  const t = buildTrack(segs, { startGate: false });
+  const t = buildTrack(segs);
   let sc = 0;
   for (const sm of t.centerline.samples) {
     if (sm.pos.y > 0.6 || Math.abs(sm.tangent.y) > 0.12) continue;
@@ -367,7 +367,7 @@ export async function compose(design) {
   const r = sweepRolls(segs, rollIdx);
   for (const s of segs) { delete s._sweep; delete s._leg; delete s._align; delete s._ramp; }
   const g = grade(segs);
-  const m = measureTrack(buildTrack(segs));
+  const m = measureTrack(buildTrack(segs), segs);
   const ai = await aiProbe(segs);
   return { name, segs, closure: c, rolls: r, rollIdx, grade: g, metrics: m, ai };
 }

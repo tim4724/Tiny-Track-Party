@@ -30,7 +30,9 @@
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildTrack, resolveFurniture, TRACK_LIST } from '../public/display/TrackBuilder.js';
+import { init as initNativeTrack, buildTrack } from './native-track.mjs';
+import { TRACK_LIST } from '../public/shared/tracks.js';
+await initNativeTrack();
 // CONTRACT_VERSION lives in contract.js; sourcing it from Game.js pulled the whole
 // engine into an authoring tool that never simulates anything.
 import { CONTRACT_VERSION } from '../public/display/engine/contract.js';
@@ -52,28 +54,21 @@ export function canonicalStringify(v) {
 }
 
 // ---- augmentation ----
-// Assemble the RACE-READY track exactly as the host does: buildTrack() geometry,
-// then the identity (cup + trackId) and the SHARED furniture resolve
-// (TrackBuilder.resolveFurniture — the same code buildEntry and buildRaceTrack run,
-// so the game, the oracle, and this export can't drift), then the per-race inputs
-// (totalLaps + seed). The engine reads centerline/length/roadWidth/totalLaps/
-// hazards/pads/boxes/poles/bananas/seed; cup + trackId are identity for theming.
+// The RACE-READY track: the engine's own build (geometry + resolved furniture +
+// totalLaps/seed) plus the host's `cup` tag. The builder produces everything but
+// `cup`, which is a theming id the host attaches — so this is now one call and a
+// tag, where it used to re-run a JS builder and a JS furniture resolver.
 export function buildAugmentedTrack(entry, { laps = 3, seed = 1 } = {}) {
-  const b = buildTrack(entry);
+  const b = buildTrack(entry.id, { laps, seed });
   b.cup = entry.cup;      // biome theming id (renderer-side identity)
-  b.trackId = entry.id;   // registry id — theme patches + deterministic scatter seed
-  resolveFurniture(b, entry);
-  b.totalLaps = laps;
-  b.seed = seed >>> 0;    // the engine's item-roll RNG seed (Game reads track.seed)
   return b;
 }
 
-// The centerline is a live Centerline class instance carrying scratch buffers
-// (_mB/_mC/_d/_scratch) alongside its DATA. Project to just {samples, length} — the
-// serializable shape race-track.schema.json describes — so nothing machine-internal
-// reaches the bytes. Sample Vec3s serialize to plain {x, y, z} (their only own keys).
+// The engine already hands back plain data — `centerline` is { samples, length },
+// not a class with scratch buffers — so there is nothing left to project away.
+// Kept as the named step in the pipeline the exporter documents.
 export function serializableTrack(track) {
-  return { ...track, centerline: { samples: track.centerline.samples, length: track.centerline.length } };
+  return track;
 }
 
 // ---- CLI ----

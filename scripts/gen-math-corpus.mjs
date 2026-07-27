@@ -23,8 +23,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// FROZEN ORACLE. public/display/engine/math.js — fdlibm compiled to wasm, the JS
+// engine's transcendentals — was retired with the last of the JS engine. The
+// tests/fixtures/math-corpus.jsonl it produced gates BOTH builds' fdlibm (the
+// mathlib_corpus ctest, and it is what makes the golden traces platform-
+// independent), so it is permanent evidence and must not be re-recorded from the
+// C++ vendor copy. Restore the twin with scripts/revive-js-oracle.mjs, or:
+//   git show <commit-before-retirement>:public/display/engine/math.js > public/display/engine/math.js
+// (find it with: git log --diff-filter=D -- public/display/engine/math.js)
 import * as dmath from '../public/display/engine/math.js';
-import { mulberry32 } from '../public/display/engine/util.js';
+import { mulberry32 } from './oracle-lib.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = (process.argv.find((a) => a.startsWith('--out=')) || '').slice(6)

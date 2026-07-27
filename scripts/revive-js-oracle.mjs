@@ -8,15 +8,18 @@
 // one-way ratchet: every intended sim change burns some of it permanently, and no
 // new parity fixture can ever be authored.
 //
-// That turns out to be false, for now. The JS twin restores from git in one command
-// and still runs against the modules that SURVIVED the retirement (TrackBuilder,
-// Centerline, engine/{Vec3,util,math,contract}.js), and re-records all 8 fixtures
-// byte-identically. So the ratchet is really a decaying capability: it works until
-// one of those surviving modules changes shape under it, at which point it breaks
-// SILENTLY, and nobody finds out until the day they need a new parity fixture and
-// discover the oracle died months ago.
+// That turns out to be false. The JS twin restores from git in one command and
+// re-records all 8 fixtures byte-identically.
 //
-// This script is what makes that failure loud. It is deliberately NOT a per-PR gate
+// It used to lean on modules that SURVIVED the engine's retirement — TrackBuilder,
+// Centerline, engine/{Vec3,util,math} — which made it a decaying capability: it
+// would work until one of those changed shape under it, then break silently. Those
+// modules are gone too now (the C++ TrackBuilder is the only builder, and the
+// browser holds no track geometry at all), so the oracle restores its WHOLE
+// dependency set from git and depends on nothing live but engine/contract.js, which
+// is a dozen lines of constants. It cannot rot from under itself any more.
+//
+// This script is what makes a failure loud. It is deliberately NOT a per-PR gate
 // (it needs full git history and re-races ~10k frames); it runs on demand and on a
 // schedule. When it starts failing, that is the signal to decide consciously whether
 // to repair the twin or to accept that parity evidence is now frozen for good.
@@ -37,14 +40,25 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TRACES = path.join(ROOT, 'tests/fixtures/traces');
 
-// The JS sim + its recorder, as retired. Everything else these import still exists
-// in the tree — that is the whole reason this works.
+// Everything the JS oracle needs that no longer exists in the tree: the sim, the
+// track builder it races on, the vector/math primitives underneath both, and the
+// recorder that drives them. Each is restored from its OWN retirement commit —
+// they were retired in two waves, and hardcoding one base would restore a file
+// from a tree where it had not been written yet (or had already moved on).
 const REVIVE = [
+  // wave 1: the sim
   'public/display/engine/Game.js',
   'public/display/AiDriver.js',
   'public/display/RaceSession.js',
   'scripts/record-trace.mjs',
   'scripts/record-fixtures.mjs',
+  // wave 2: the builder + the primitives, retired when the renderer stopped
+  // needing a JS-side track build
+  'public/display/TrackBuilder.js',
+  'public/display/Centerline.js',
+  'public/display/engine/Vec3.js',
+  'public/display/engine/math.js',
+  'public/display/engine/util.js',
 ];
 
 const args = process.argv.slice(2);
@@ -53,23 +67,25 @@ const baseArg = args.find((a) => a.startsWith('--base='));
 
 const git = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' }).trim();
 
-// The commit that DELETED the engine; its parent is the last one that had it. Derived
-// rather than hardcoded so a rebase or a second retirement commit cannot silently
-// point this at the wrong tree.
-function resolveBase() {
+// The commit that DELETED a file; its parent is the last one that had it. Derived
+// per file rather than hardcoded, so a rebase, a second retirement wave, or a file
+// that moves between waves cannot silently point this at the wrong tree.
+// --base=<commit-ish> overrides for every file at once (an escape hatch for a
+// history this cannot walk).
+function resolveBase(rel) {
   if (baseArg) return baseArg.slice('--base='.length);
-  const sha = git(ROOT, 'log', '--diff-filter=D', '--format=%H', '-1',
-    '--', 'public/display/engine/Game.js');
+  const sha = git(ROOT, 'log', '--diff-filter=D', '--format=%H', '-1', '--', rel);
   if (!sha) {
-    throw new Error('cannot find the commit that deleted public/display/engine/Game.js — ' +
+    throw new Error(`cannot find the commit that deleted ${rel} — ` +
       'pass --base=<commit-ish> explicitly (shallow clone? needs fetch-depth: 0)');
   }
   return `${sha}^`;
 }
 
 function main() {
-  const base = resolveBase();
-  console.log(`reviving the JS oracle from ${base}`);
+  const bases = new Map(REVIVE.map((rel) => [rel, resolveBase(rel)]));
+  const distinct = [...new Set(bases.values())];
+  console.log(`reviving the JS oracle from ${distinct.join(', ')}`);
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ttp-js-oracle-'));
   const wt = path.join(tmp, 'wt');
@@ -81,7 +97,7 @@ function main() {
     added = true;
 
     for (const rel of REVIVE) {
-      const blob = execFileSync('git', ['show', `${base}:${rel}`], { cwd: ROOT, maxBuffer: 1 << 28 });
+      const blob = execFileSync('git', ['show', `${bases.get(rel)}:${rel}`], { cwd: ROOT, maxBuffer: 1 << 28 });
       fs.mkdirSync(path.join(wt, path.dirname(rel)), { recursive: true });
       fs.writeFileSync(path.join(wt, rel), blob);
     }

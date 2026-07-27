@@ -13,11 +13,16 @@
 // fight. bakeSeed() returns the resolved waypoints (with y/bridge) that tracks.js imports.
 //
 // Used by BOTH scripts/gen-tracks.mjs (bake the chosen seeds) and scripts/scan-seeds.mjs
-// (audition a whole range). Needs TrackBuilder (to sample + cross-detect), so it
+// (audition a whole range). Needs the track BUILDER (to sample + cross-detect), so it
 // runs OFFLINE in Node — the browser only ever sees the baked DATA.
-// Import SCALE from TrackBuilder so the plan→world factor can never drift out of sync
-// (findCrossings compares plan coords against world samples and must use the same value).
-const { buildTrack, SCALE } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
+//
+// The builder is the engine's, reached through the shipped wasm: a candidate this
+// tool measures is built by the same code that will race it. SCALE comes from
+// there too (findCrossings compares plan coords against world samples and must
+// use the same value), and native-track asserts it against the engine on the
+// first build rather than trusting the constant.
+import { init as initNativeTrack, buildTrack, trackSweep, trackFrames, trackFrameAt, SCALE } from './native-track.mjs';
+await initNativeTrack();
 const DEG = Math.PI / 180;
 
 export const mulberry32 = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -337,11 +342,17 @@ export function decoratePlan(wps, wpPairs, prof, seed, salt = 0) {
 // Worst |heading step| per 0.1 world units — the smoothness gate the unit tests enforce,
 // measured with the same skips (vertical stunt / tilted flank / high deck / flared width).
 function worstStepOf(wps) {
-  const t = buildTrack({ waypoints: wps });
+  return worstHeadingStep(trackSweep({ waypoints: wps }, 0.1));
+}
+
+// Worst |heading step| over a uniform frame sweep, with the gate's skips: a
+// vertical stunt (the tangent goes near-vertical, so its plan heading is noise),
+// a tilted flank, a high deck, and a flared width. Shared by worstStepOf and the
+// seed report so the two can never measure differently.
+function worstHeadingStep(frames) {
   let prev = null, worst = 0;
-  for (let s = 0; s <= t.length; s += 0.1) {
-    const f = t.centerline.sampleAt(s);
-    if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || t.centerline.widthAt(s) > 5.4) { prev = null; continue; }
+  for (const f of frames) {
+    if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || f.width > 5.4) { prev = null; continue; }
     const hd = Math.atan2(f.tangent.x, f.tangent.z);
     if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worst = Math.max(worst, Math.abs(d)); }
     prev = hd;
@@ -413,8 +424,8 @@ const ANCHOR_SHORTLIST = 16; // full resolves per seed — the prefilter's job i
 
 // The lowest road strand crossing over the gantry's footprint at arclength s0 (Infinity =
 // clear sky). Distances are to the gantry's lateral segment, not to a point.
-function gantryHeadroom(t, s0 = 0) {
-  const cl = t.centerline, L = t.length, f = cl.sampleAt(s0);
+function gantryHeadroom(t, source, s0 = 0) {
+  const cl = t.centerline, L = t.length, f = trackFrameAt(source, s0);
   const half = t.roadWidth / 2 + GANTRY_REACH;
   const ll = Math.hypot(f.lateral.x, f.lateral.z) || 1;
   const ux = f.lateral.x / ll, uz = f.lateral.z / ll;
@@ -432,9 +443,8 @@ function gantryHeadroom(t, s0 = 0) {
   return lowest;
 }
 
-// |curvature| at s, as a central difference of plan heading over ±h world units.
-const curvatureAt = (cl, s, h = 1.0) => {
-  const a = cl.sampleAt(s - h), b = cl.sampleAt(s + h);
+// |curvature| from a pair of frames straddling a point, ±h world units apart.
+const curvatureFrom = (a, b, h) => {
   let d = Math.atan2(b.tangent.x, b.tangent.z) - Math.atan2(a.tangent.x, a.tangent.z);
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
@@ -444,22 +454,32 @@ const curvatureAt = (cl, s, h = 1.0) => {
 // Measure the grid window of a BUILT track around arclength s0. Exported so the segment-DSL
 // tracks — which have no generator to re-anchor, and instead declare `startU` (see
 // TrackBuilder.finalizeTrack) — are judged against this same standard.
-export function measureGrid(t, s0 = 0) {
+// `source` is whatever built `t` (a descriptor, a segment array or an id) — the
+// window needs frames BETWEEN knots, which only the engine's sampler can give.
+export function measureGrid(t, source, s0 = 0) {
   const cl = t.centerline;
   let groundY = Infinity;
   for (const sm of cl.samples) groundY = Math.min(groundY, sm.pos.y);
+  // One batched sampler call for the whole window: each station wants its own
+  // frame plus the pair straddling it for the curvature difference.
+  const H = 1.0;
+  const stations = [];
+  for (let d = -GRID_BACK; d <= GRID_FWD; d += 0.5) stations.push(s0 + d);
+  const want = [];
+  for (const s of stations) want.push(s - H, s, s + H);
+  const f3 = trackFrames(source, want);
+
   let curvature = 0, grade = 0, bank = 0, minWidth = Infinity, maxWidth = 0, rise = 0;
-  for (let d = -GRID_BACK; d <= GRID_FWD; d += 0.5) {
-    const s = s0 + d, f = cl.sampleAt(s);
-    curvature = Math.max(curvature, curvatureAt(cl, s));
+  for (let i = 0; i < stations.length; i++) {
+    const before = f3[i * 3], f = f3[i * 3 + 1], after = f3[i * 3 + 2];
+    curvature = Math.max(curvature, curvatureFrom(before, after, H));
     grade = Math.max(grade, Math.abs(f.tangent.y));
     bank = Math.max(bank, Math.abs(f.lateral.y));
-    const w = cl.widthAt(s);
-    minWidth = Math.min(minWidth, w); maxWidth = Math.max(maxWidth, w);
+    minWidth = Math.min(minWidth, f.width); maxWidth = Math.max(maxWidth, f.width);
     rise = Math.max(rise, f.pos.y - groundY);
   }
   return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank,
-    minWidth, maxWidth, rise, headroom: gantryHeadroom(t, s0) };
+    minWidth, maxWidth, rise, headroom: gantryHeadroom(t, source, s0) };
 }
 export const gridPasses = (g, roadWidth) => g.minRadius > GRID_GATE.minRadius
   && g.grade < GRID_GATE.maxGrade && g.bank < GRID_GATE.maxBank && g.rise < GRID_GATE.maxRise
@@ -510,7 +530,7 @@ function chooseAnchor(plan, resolveAt) {
     let g, t;
     // solveElevation can diverge for a given anchor (a "crossing knot" it can't lift from
     // that seam) — that anchor simply isn't available; the shortlist has plenty more.
-    try { const r = resolveAt(k); t = buildTrack({ waypoints: roundWps(r.wps, r.h) }); g = measureGrid(t); }
+    try { const r = resolveAt(k); const wp = { waypoints: roundWps(r.wps, r.h) }; t = buildTrack(wp); g = measureGrid(t, wp); }
     catch { continue; }
     const cost = gridCost(g, t.roadWidth);
     if (!best || cost < best.cost) best = { k, cost };
@@ -573,13 +593,16 @@ export function bakeSeed(seed, profileName = 'classic', opts) {
 // cornering, the shortest recovery straight between real corners, width extremes and
 // total climb. Complements the structural gates (closure/smoothness/bridging), which
 // say a track is VALID — these say which cup it belongs in.
-export function measureTrack(t) {
-  const cl = t.centerline, L = t.length, STEP = 0.5;
+// `t` is a built track (native-track.buildTrack) OR a descriptor/id — the sweep
+// needs the track itself, so pass whatever built it when you have it.
+export function measureTrack(t, source) {
+  const L = t.length, STEP = 0.5;
+  const frames = trackSweep(source !== undefined ? source : t.trackId, STEP);
   const stations = [];
   let prevH = null, prevS = 0, totTurn = 0, minW = Infinity, maxW = 0, climb = 0, prevY = null;
-  for (let s = 0; s <= L; s += STEP) {
-    const f = cl.sampleAt(s);
-    const w = cl.widthAt ? cl.widthAt(s) : t.roadWidth;
+  for (const f of frames) {
+    const s = f.s;
+    const w = f.width;
     minW = Math.min(minW, w); maxW = Math.max(maxW, w);
     if (prevY != null) climb += Math.max(0, f.pos.y - prevY);
     prevY = f.pos.y;
@@ -662,14 +685,7 @@ export async function evaluateSeed(seed, profileName = 'classic', { probe = true
   catch (e) { return { seed, pass: false, fails: ['pipeline'], reason: e.message }; }
   const L = t.length, crossings = r.wpPairs.length;
   // smoothness: worst |heading step| per 0.1 world units, same skips as the unit test
-  let prev = null, worstStep = 0;
-  for (let s = 0; s <= L; s += 0.1) {
-    const f = t.centerline.sampleAt(s);
-    if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05 || t.centerline.widthAt(s) > 5.4) { prev = null; continue; }
-    const hd = Math.atan2(f.tangent.x, f.tangent.z);
-    if (prev != null) { let d = hd - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; worstStep = Math.max(worstStep, Math.abs(d)); }
-    prev = hd;
-  }
+  const worstStep = worstHeadingStep(trackSweep({ waypoints: baked }, 0.1));
   // bridge clearance + peak height, on the decorated geometry
   let minBridge = Infinity, maxY = 0;
   {
@@ -681,7 +697,7 @@ export async function evaluateSeed(seed, profileName = 'classic', { probe = true
       minBridge = Math.min(minBridge, Math.abs(E[i].pos.y - E[j].pos.y));
     }
   }
-  const m = measureTrack(t);
+  const m = measureTrack(t, { waypoints: baked });
   const fails = [];
   const band = (name, v, [lo, hi]) => { if (v < lo || v > hi) fails.push(`${name}=${v}∉[${lo},${hi}]`); };
   if (t.gap >= 0.5) fails.push(`gap=${t.gap.toFixed(2)}`);

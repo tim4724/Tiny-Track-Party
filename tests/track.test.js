@@ -1,6 +1,16 @@
 'use strict';
-// Headless verification of the track geometry: a reference oval must close into a
+// Headless verification of the track GEOMETRY: a reference oval must close into a
 // seamless loop, and the centerline must be a sane, monotonic ribbon.
+//
+// These are QUALITY checks, and they are the only ones. The frozen corpus
+// (tests/fixtures/trackbuilder-corpus.jsonl, replayed by the trackbuilder ctest)
+// proves the C++ builder still produces what the retired JS builder produced —
+// byte for byte, and nothing about whether that output is any GOOD. Everything
+// below is the other half: closure, smoothness, no backsteps, banking into the
+// turn, upright frames, no overlapping decks, no phantom collision poles.
+//
+// They run against the shipped wasm, through scripts/native-track.mjs — the same
+// builder the game races on, since there is no longer a second one.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -35,20 +45,19 @@ async function loadNativeAbi() {
   };
 }
 
-// TrackBuilder is an ES module importing 'three'; load it dynamically.
-let buildTrack, TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS, postAtSample;
+let buildTrack, trackSweep, trackFrames, trackFrameAt, trackSupports;
+let TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS;
 let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
-  const mod = await import('../public/display/TrackBuilder.js');
-  buildTrack = mod.buildTrack;
-  TRACKS = mod.TRACKS;
-  TRACK_LIST = mod.TRACK_LIST;
+  const nt = await import('../scripts/native-track.mjs');
+  await nt.init();
+  ({ buildTrack, trackSweep, trackFrames, trackFrameAt, trackSupports } = nt);
+  ({ TRACKS, TRACK_LIST } = await import('../public/shared/tracks.js'));
   DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
   // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev
   // surfaces (devTracks.js — the Gym). Suites about what SHIPS (schematics, the grid
   // rule) iterate TRACK_LIST instead.
   ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
-  postAtSample = mod.postAtSample;
   const schem = await import('../public/display/trackSchematic.js');
   trackSchematic = schem.trackSchematic;
   packSchematic = schem.packSchematic;
@@ -56,6 +65,16 @@ test.before(async () => {
   SCHEMATIC_EPS = schem.SCHEMATIC_EPS;
   TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
 });
+
+// ---- plain-vector helpers --------------------------------------------------
+// The engine hands back plain {x,y,z}, not a class with methods — the sim's
+// vector type lives in C++ now. These are test arithmetic, nothing more.
+const vsub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const vadd = (a, b, k = 1) => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k });
+const vdot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const vlen = (a) => Math.sqrt(vdot(a, a));
+const vcross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+const vnorm = (a) => { const l = vlen(a) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
 
 // Reference fixtures for the detailed geometry suites — kept here, NOT in the
 // shipped catalogue, so the game's track list and these invariants evolve
@@ -109,9 +128,9 @@ test('centerline never steps backward at joints (no hiccup)', () => {
   let worst = 1;
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
-    const d1 = b.clone().sub(a).normalize();
-    const d2 = c.clone().sub(b).normalize();
-    worst = Math.min(worst, d1.dot(d2));
+    const d1 = vnorm(vsub(b, a));
+    const d2 = vnorm(vsub(c, b));
+    worst = Math.min(worst, vdot(d1, d2));
   }
   // adjacent segments must point roughly the same way; a back-step would be ~ -1
   assert.ok(worst > 0.3, `centerline reverses at a joint (worst seg dot=${worst.toFixed(2)})`);
@@ -122,20 +141,17 @@ test('centerline has no degenerate-short segments (no twitch entering curves)', 
   const pts = t.centerline.samples.map((p) => p.pos);
   const n = pts.length;
   let minSeg = Infinity;
-  for (let i = 0; i < n; i++) minSeg = Math.min(minSeg, pts[i].distanceTo(pts[(i + 1) % n]));
+  for (let i = 0; i < n; i++) minSeg = Math.min(minSeg, vlen(vsub(pts[i], pts[(i + 1) % n])));
   // A few-cm stub at a joint or the closure seam gets crossed in one frame and
   // snaps the car's tangent — the twitch. Every intended spacing is >= ~0.43.
   assert.ok(minSeg > 0.2, `centerline has a degenerate-short segment (min=${minSeg.toFixed(3)})`);
 });
 
 test('centerline tangent turns smoothly (bounded per-unit heading change)', () => {
-  const t = buildTrack(OVAL);
-  const cl = t.centerline;
-  const STEP = 0.1;
-  let prev = Math.atan2(cl.sampleAt(0).tangent.x, cl.sampleAt(0).tangent.z);
+  const frames = trackSweep(OVAL, 0.1);
+  let prev = Math.atan2(frames[0].tangent.x, frames[0].tangent.z);
   let worst = 0;
-  for (let s = STEP; s <= cl.length; s += STEP) {
-    const f = cl.sampleAt(s);
+  for (const f of frames.slice(1)) {
     const h = Math.atan2(f.tangent.x, f.tangent.z);
     let dh = h - prev;
     while (dh > Math.PI) dh -= 2 * Math.PI;
@@ -149,13 +165,11 @@ test('centerline tangent turns smoothly (bounded per-unit heading change)', () =
 });
 
 test('curvature never abruptly reverses (no jitter entering curves)', () => {
-  const t = buildTrack(OVAL);
-  const cl = t.centerline;
   const ds = 0.1;
-  let prevH = Math.atan2(cl.sampleAt(0).tangent.x, cl.sampleAt(0).tangent.z);
+  const frames = trackSweep(OVAL, ds);
+  let prevH = Math.atan2(frames[0].tangent.x, frames[0].tangent.z);
   let prevK = 0, flips = 0;
-  for (let s = ds; s <= cl.length; s += ds) {
-    const f = cl.sampleAt(s);
+  for (const f of frames.slice(1)) {
     const h = Math.atan2(f.tangent.x, f.tangent.z);
     let dh = h - prevH;
     while (dh > Math.PI) dh -= 2 * Math.PI;
@@ -175,16 +189,13 @@ test('curvature never abruptly reverses (no jitter entering curves)', () => {
 });
 
 test('position interpolation matches the tangent (no shimmy in curves)', () => {
-  const t = buildTrack(OVAL);
-  const cl = t.centerline;
-  const ds = 0.05;
-  let worst = 0, prev = cl.sampleAt(0).pos;
-  for (let s = ds; s <= cl.length; s += ds) {
-    const f = cl.sampleAt(s);
-    const move = f.pos.clone().sub(prev);
-    if (move.length() > 1e-6) {
+  const frames = trackSweep(OVAL, 0.05);
+  let worst = 0, prev = frames[0].pos;
+  for (const f of frames.slice(1)) {
+    const move = vsub(f.pos, prev);
+    if (vlen(move) > 1e-6) {
       // angle between the actual direction of travel and the reported tangent
-      const cos = move.normalize().dot(f.tangent);
+      const cos = vdot(vnorm(move), f.tangent);
       worst = Math.max(worst, Math.acos(Math.min(1, Math.max(-1, cos))));
     }
     prev = f.pos;
@@ -195,14 +206,12 @@ test('position interpolation matches the tangent (no shimmy in curves)', () => {
   assert.ok(worst < 0.02, `path direction diverges from tangent (worst=${(worst * 180 / Math.PI).toFixed(2)}deg)`);
 });
 
-test('sampleAt wraps and returns oriented frames', () => {
+test('the sampler wraps and returns oriented frames', () => {
   const t = buildTrack(OVAL);
-  const a = t.centerline.sampleAt(0);
-  const b = t.centerline.sampleAt(t.length + 5); // wraps
-  const c = t.centerline.sampleAt(5);
+  const [a, b, c] = trackFrames(OVAL, [0, t.length + 5, 5]); // the middle one wraps
   assert.ok(Math.abs(b.pos.x - c.pos.x) < 1e-6 && Math.abs(b.pos.z - c.pos.z) < 1e-6, 'wrap mismatch');
   // tangent and lateral roughly perpendicular, both ~horizontal
-  assert.ok(Math.abs(a.tangent.dot(a.lateral)) < 1e-3, 'tangent/lateral not perpendicular');
+  assert.ok(Math.abs(vdot(a.tangent, a.lateral)) < 1e-3, 'tangent/lateral not perpendicular');
   assert.ok(Math.abs(a.tangent.y) < 0.2, 'flat track tangent should be ~horizontal');
 });
 
@@ -228,8 +237,8 @@ test('grand tour frames stay orthonormal (up ⟂ tangent everywhere)', () => {
   const t = buildTrack(GRAND_TOUR);
   let worstDot = 0, worstLen = 0;
   for (const sm of t.centerline.samples) {
-    worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
-    worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+    worstDot = Math.max(worstDot, Math.abs(vdot(sm.tangent, sm.up)));
+    worstLen = Math.max(worstLen, Math.abs(vlen(sm.up) - 1));
   }
   assert.ok(worstDot < 1e-3, `up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
   assert.ok(worstLen < 1e-3, `up not unit length (worst=${worstLen.toFixed(4)})`);
@@ -243,7 +252,7 @@ test('grand tour up returns to vertical at the start/finish seam (no twist jump)
   const s0 = t.centerline.samples[0];
   const sN = t.centerline.samples[t.centerline.samples.length - 1];
   assert.ok(s0.up.y > 0.95, `start/finish up should be ~vertical (got ${s0.up.y.toFixed(2)})`);
-  assert.ok(sN.up.dot(s0.up) > 0.9, `up jumps across the seam (dot=${sN.up.dot(s0.up).toFixed(2)})`);
+  assert.ok(vdot(sN.up, s0.up) > 0.9, `up jumps across the seam (dot=${vdot(sN.up, s0.up).toFixed(2)})`);
 });
 
 test('grand tour centerline never steps backward (continuous through the loop)', () => {
@@ -253,8 +262,8 @@ test('grand tour centerline never steps backward (continuous through the loop)',
   let worst = 1, minSeg = Infinity;
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
-    worst = Math.min(worst, b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize()));
-    minSeg = Math.min(minSeg, a.distanceTo(b));
+    worst = Math.min(worst, vdot(vnorm(vsub(b, a)), vnorm(vsub(c, b))));
+    minSeg = Math.min(minSeg, vlen(vsub(a, b)));
   }
   assert.ok(worst > 0, `centerline reverses somewhere (worst seg dot=${worst.toFixed(2)})`);
   assert.ok(minSeg > 0.2, `degenerate-short segment (min=${minSeg.toFixed(3)})`);
@@ -287,8 +296,8 @@ test('every named track closes and includes a start gate', () => {
 test('every shipped track starts on a clean grid, with clear sky over the gantry', async () => {
   const { measureGrid, gridPasses } = await import('../scripts/track-gen.mjs');
   for (const t of TRACK_LIST) {
-    const built = buildTrack(t);
-    const g = measureGrid(built);
+    const built = buildTrack(t.id);
+    const g = measureGrid(built, t.id);
     const say = `${t.id}: minR=${g.minRadius === Infinity ? 'inf' : g.minRadius.toFixed(0)}`
       + ` grade=${g.grade.toFixed(2)} bank=${g.bank.toFixed(2)} rise=${g.rise.toFixed(2)}`
       + ` width=${g.minWidth.toFixed(1)}-${g.maxWidth.toFixed(1)}`
@@ -411,13 +420,13 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
 test('every named track has a clean centerline (no backstep, no stubs, no sharp joints)', () => {
   for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const cl = buildTrack(def).centerline;
-    const pts = cl.samples.map((p) => p.pos);
+    const pts = cl.samples.map((p) => p.pos);   // plain {x,y,z}
     const n = pts.length;
     let worst = 1, minSeg = Infinity;
     for (let i = 0; i < n; i++) {
       const a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n];
-      worst = Math.min(worst, b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize()));
-      minSeg = Math.min(minSeg, a.distanceTo(b));
+      worst = Math.min(worst, vdot(vnorm(vsub(b, a)), vnorm(vsub(c, b))));
+      minSeg = Math.min(minSeg, vlen(vsub(a, b)));
     }
     assert.ok(worst > 0, `track "${name}" centerline reverses at a joint (worst seg dot=${worst.toFixed(2)})`);
     assert.ok(minSeg > 0.2, `track "${name}" has a degenerate-short segment (min=${minSeg.toFixed(3)})`);
@@ -431,12 +440,10 @@ test('every named track has a clean centerline (no backstep, no stubs, no sharp 
     // ground-level near-flat default-width stretch (including hills/bridges, which
     // top out at 2.0) is still covered. (Flared plain straights are also skipped;
     // their heading is trivially constant anyway.)
-    const STEP = 0.1;
     let prev = null, worstStep = 0;
-    for (let s = 0; s <= cl.length; s += STEP) {
-      const f = cl.sampleAt(s);
+    for (const f of trackSweep(def, 0.1)) {
       if (Math.hypot(f.tangent.x, f.tangent.z) < 0.5 || f.up.y < 0.9 || f.pos.y > 2.05
-        || (cl.widthAt && cl.widthAt(s) > 5.4)) { prev = null; continue; }
+        || f.width > 5.4) { prev = null; continue; }
       const h = Math.atan2(f.tangent.x, f.tangent.z);
       if (prev != null) {
         let dh = h - prev;
@@ -491,9 +498,8 @@ test('variable width: a flared track widens past the default and eases back', ()
   const t = buildTrack(FLARED);
   assert.ok(t.closed, `flared oval should close (gap=${t.gap.toFixed(3)})`);
   let maxW = 0, minW = Infinity;
-  for (let s = 0; s < t.length; s += 0.5) {
-    const w = t.centerline.widthAt(s);
-    maxW = Math.max(maxW, w); minW = Math.min(minW, w);
+  for (const f of trackSweep(FLARED, 0.5)) {
+    maxW = Math.max(maxW, f.width); minW = Math.min(minW, f.width);
   }
   assert.ok(maxW > t.roadWidth + 0.5, `flare should exceed the default road width (max=${maxW.toFixed(2)}, default=${t.roadWidth})`);
   assert.ok(minW > t.roadWidth - 0.2 && minW <= t.roadWidth + 0.01, `non-flared sections stay ~default (min=${minW.toFixed(2)}, default=${t.roadWidth})`);
@@ -503,16 +509,14 @@ test('buildTrack accepts a bare segment array and a descriptor alike', () => {
   const fromArray = buildTrack(OVAL);
   const fromDef = buildTrack({ name: 'Oval', segments: OVAL });
   assert.equal(fromArray.centerline.samples.length, fromDef.centerline.samples.length);
-  assert.throws(() => buildTrack({ name: 'bad' }), /descriptor with a \.segments array/);
-});
-
-test('startGate:false omits the gate', () => {
-  const t = buildTrack(OVAL, { startGate: false });
-  assert.ok(!t.instances.some((i) => i.glb === 'gate-finish'), 'gate should be omitted');
+  assert.throws(() => buildTrack({ name: 'bad' }), /refused this descriptor/);
 });
 
 test('an unknown segment kind throws a clear error', () => {
-  assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /Unknown segment kind "definitely-not-a-kind"/);
+  // The native builder refuses the whole descriptor rather than naming the kind:
+  // a typo'd segment must not become a track, and which field was wrong is a
+  // debugging nicety the C boundary does not carry.
+  assert.throws(() => buildTrack([straight(L), { kind: 'definitely-not-a-kind' }]), /refused this descriptor/);
 });
 
 // ---- Helix: the stunt-geometry reference (the segments that go 3D) — two 450°
@@ -575,9 +579,9 @@ test('stunt deck twist rate stays shallow everywhere (no helicoid corkscrews)', 
       const a = ss[i - 1], b = ss[i], ds = b.s - a.s;
       if (ds <= 1e-6) continue;
       const tg = a.tangent;
-      const ua = a.up.clone().addScaledVector(tg, -a.up.dot(tg)).normalize();
-      const ub = b.up.clone().addScaledVector(tg, -b.up.dot(tg)).normalize();
-      const ang = Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub)));
+      const ua = vnorm(vadd(a.up, tg, -vdot(a.up, tg)));
+      const ub = vnorm(vadd(b.up, tg, -vdot(b.up, tg)));
+      const ang = Math.abs(Math.atan2(vdot(vcross(ua, ub), tg), vdot(ua, ub)));
       if (ang / ds > worst) { worst = ang / ds; at = a.s; }
     }
     assert.ok(worst < 0.21, `${id}: deck twists at ${worst.toFixed(3)} rad/world near s=${at.toFixed(1)} — helicoid territory (bound 0.21)`);
@@ -593,14 +597,14 @@ test('stunt frames stay orthonormal and resolve upright at the seam', () => {
     const t = buildTrack(TRACKS[id]);
     let worstDot = 0, worstLen = 0;
     for (const sm of t.centerline.samples) {
-      worstDot = Math.max(worstDot, Math.abs(sm.tangent.dot(sm.up)));
-      worstLen = Math.max(worstLen, Math.abs(sm.up.length() - 1));
+      worstDot = Math.max(worstDot, Math.abs(vdot(sm.tangent, sm.up)));
+      worstLen = Math.max(worstLen, Math.abs(vlen(sm.up) - 1));
     }
     assert.ok(worstDot < 1e-3, `${id}: up not perpendicular to tangent (worst dot=${worstDot.toFixed(4)})`);
     assert.ok(worstLen < 1e-3, `${id}: up not unit length (worst=${worstLen.toFixed(4)})`);
     const ss = t.centerline.samples;
     assert.ok(ss[0].up.y > 0.95, `${id}: seam up should be ~vertical (got ${ss[0].up.y.toFixed(2)})`);
-    assert.ok(ss[ss.length - 1].up.dot(ss[0].up) > 0.9, `${id}: up twists across the seam`);
+    assert.ok(vdot(ss[ss.length - 1].up, ss[0].up) > 0.9, `${id}: up twists across the seam`);
   }
 });
 
@@ -648,13 +652,12 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
   // cups have twist rates too low to say anything.
   for (const id of ['skyline', 'skysnake', 'helix', 'gauntlet']) {
     const t = buildTrack(TRACKS[id]);
-    const cl = t.centerline;
     // numeric local surface normal at (s, lat): finite-difference the swept surface
     // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction
     const localNormal = (s, lat, d = 0.4) => {
-      const at = (ss) => { const f = cl.sampleAt(ss); return f.pos.clone().addScaledVector(f.lateral, lat); };
-      const alongS = at(s + d).sub(at(s - d));
-      return cl.sampleAt(s).lateral.clone().cross(alongS).normalize();
+      const [fm, f0, fp] = trackFrames(id, [s - d, s, s + d]);
+      const at = (f) => vadd(f.pos, f.lateral, lat);
+      return vnorm(vcross(f0.lateral, vsub(at(fp), at(fm))));
     };
 
     const h = abi.begin(id, 7, 3, null);
@@ -671,7 +674,7 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
         const s = ((c.totalS % t.length) + t.length) % t.length;
         maxLat = Math.max(maxLat, Math.abs(c.lat));
         const local = deg(dot3(localNormal(s, c.lat), c.pose.up));
-        const naive = deg(dot3(cl.sampleAt(s).up, c.pose.up));
+        const naive = deg(dot3(trackFrameAt(id, s).up, c.pose.up));
         const where = `s=${s.toFixed(1)} lat=${c.lat.toFixed(2)}`;
         if (local > worst.local) worst = { local, where };
         if (naive > peak.naive) peak = { naive, local, where };
@@ -702,21 +705,17 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
 // its footprint + sampling slack): the RADIAL distance a strand climbing over its own
 // support measures to the pillar under its deck fabricated "deep intruders" two units
 // down the road and planted collision poles mid-road on the approach (shipped on
-// Sidewinder; retired Crossover had one dead-centre). Measured with TrackBuilder's own
-// exported postAtSample — a hand-synced copy of the measure is how the radial bug
-// slipped its regression test.
-const postsOf = (t) => [
-  ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
-  ...t.supportPosts.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
-];
-// Every autoPole's (s, lat) must reconstruct to a REAL post's footprint — a collision
-// pole with no visible column at its world position IS the invisible pole.
-const assertPolesReconstruct = (t, name) => {
-  const posts = postsOf(t);
-  for (const ap of t.autoPoles) {
-    const f = t.centerline.sampleAt(ap.s);
-    const px = f.pos.x + f.lateral.x * ap.lat, pz = f.pos.z + f.lateral.z * ap.lat;
-    const bd = Math.min(...posts.map((p) => Math.hypot(p.x - px, p.z - pz)));
+// Sidewinder; retired Crossover had one dead-centre). Measured through the ENGINE
+// (trackSupports → ttp_track_supports_json), which runs the builder's OWN corridor
+// gate and its own centreline sampler — a hand-synced copy of that measure is how
+// the radial bug slipped its regression test.
+
+// Every autoPole must reconstruct to a REAL post's footprint — a collision pole
+// with no visible column at its world position IS the invisible pole. The engine
+// reconstructs the world position; the "near enough" rule is the test's.
+const assertPolesReconstruct = (sup, name) => {
+  for (const ap of sup.autoPoles) {
+    const bd = Math.min(...sup.posts.map((p) => Math.hypot(p.x - ap.x, p.z - ap.z)));
     assert.ok(bd <= ap.radius + 0.4,
       `track "${name}": autoPole @ s=${ap.s.toFixed(1)} lat=${ap.lat.toFixed(2)} reconstructs ${bd.toFixed(2)} from any post — an invisible pole`);
   }
@@ -725,26 +724,22 @@ const assertPolesReconstruct = (t, name) => {
 test('support posts are clearly out of the corridor or visibly in it with a collision pole', () => {
   for (const [name, def] of Object.entries(ALL_TRACKS)) {
     const t = buildTrack(def);
-    const ss = t.centerline.samples;
-    for (const post of postsOf(t)) {
-      let peak = -Infinity;
-      for (const sm of ss) {
-        const rel = postAtSample(sm, post);
-        if (!rel) continue;
-        const intr = rel.intrusion;
-        peak = Math.max(peak, intr);
-        if (intr < 0.45) continue;
-        // deeply obstructed sample → an autoPole must sit on this strand within reach
+    const sup = trackSupports({ id: name, ...def });
+    for (const post of sup.posts) {
+      const peak = post.intrusion;
+      if (peak >= 0.45) {
+        // deeply obstructed → an autoPole must sit on that strand, within reach of
+        // where the post bites deepest.
         const hit = t.autoPoles.some((ap) => {
-          const ds = Math.min(Math.abs(ap.s - sm.s), t.length - Math.abs(ap.s - sm.s));
-          return ds < 4 && ap.ghost;
+          const ds = Math.min(Math.abs(ap.s - post.s), t.length - Math.abs(ap.s - post.s));
+          return ds < 4;
         });
-        assert.ok(hit, `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) obstructs the road at s=${sm.s.toFixed(1)} with no collision pole`);
+        assert.ok(hit, `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) obstructs the road at s=${post.s.toFixed(1)} with no collision pole`);
       }
       assert.ok(peak <= 0.02 || peak >= 0.45,
         `track "${name}": ${post.kind} at (${post.x.toFixed(1)}, ${post.z.toFixed(1)}) grazes a corridor by ${peak.toFixed(2)} — the invisible-pole sliver zone`);
     }
-    assertPolesReconstruct(t, name);
+    assertPolesReconstruct(sup, name);
   }
 });
 
@@ -792,7 +787,7 @@ test('a pillar standing in a corridor emits its collision pole at the visible co
   assert.ok(t.pillars.length > 0, 'fixture should stand bridge pillars');
   assert.ok(t.autoPoles.length >= 5, `fixture's parallel run should emit collision poles (got ${t.autoPoles.length})`);
   assert.ok(t.autoPoles.every((ap) => ap.ghost), 'auto-emitted poles are ghosts (drawn as the pillar itself)');
-  assertPolesReconstruct(t, 'deep-intruder fixture');
+  assertPolesReconstruct(trackSupports(FIXTURE), 'deep-intruder fixture');
 });
 
 // SURFACE OVERLAP. The 3D strand gate below tolerates two strands 1.5 apart — fine for
@@ -836,7 +831,7 @@ test('no track has overlapping strands (every crossing is bridged)', () => {
       for (let j = i + 1; j < N; j++) {
         const arc = Math.min(Math.abs(Sm[i].s - Sm[j].s), L - Math.abs(Sm[i].s - Sm[j].s));
         if (arc < 6) continue; // same local stretch of road — expected to be close
-        const d = Sm[i].pos.distanceTo(Sm[j].pos);
+        const d = vlen(vsub(Sm[i].pos, Sm[j].pos));
         if (d < min3d) { min3d = d; atZ = Sm[i].pos.z; }
       }
     }

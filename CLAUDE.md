@@ -29,7 +29,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 ## Key Rules
 
 - The sim is display-authoritative: the car simulation runs in the browser (as wasm — see the NATIVE rule below), not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
-- Browser code is ES modules. The survivors Node tests import directly via dynamic `import()` (`TrackBuilder.js`, `Centerline.js`, `engine/Vec3.js`, `engine/math.js`) must stay dependency-free so they load in both browser and Node.
+- Browser code is ES modules. Modules Node imports directly via dynamic `import()` (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`, `engine/contract.js`) must stay dependency-free so they load in both browser and Node.
 - CSP headers in `server/index.js` — update when adding external resources. There is no nonce and no inline script: every script is a same-origin file, so `script-src` is `'self' 'wasm-unsafe-eval'`.
 - Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals).
 - Game events (display → relay → controllers) flow over the WebSocket relay. Controller input (`CONTROL`) rides the low-latency WebRTC fastlane (`partyplug/PartyFastlane.js`, signalled over the relay) when its DataChannel is open, and falls back to the relay otherwise. The wiring lives in `public/shared/GameNet.js` (`_initFastlane`/`_isSignal`) with `display/Net.js` opening it as the input sink and `controller/Net.js` enqueuing over it; `protocol.js` provides `STUN_URL` and `FASTLANE_TYPES = { control: true }`. The lobby roster (`LOBBY_UPDATE`) is not a fanout: the display publishes it as the relay's retained host snapshot (`PartyConnection.setState`), pushed live to controllers (`onState`) and replayed to each (re)joiner right after `joined`.
@@ -55,15 +55,27 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   per cell, the lobby/gallery overview rigs) and the fog profiles live there too.
   `public/display/render/Display.js` is the browser's whole edge of it, and
   `Stage.js` owns the canvas, the DOM HUD and the rAF loop. Three.js is GONE
-  (git history has it); it survives only as a TEST-ONLY devDependency, as the
-  bit-identity reference for `engine/Vec3.js` in `tests/vec3.test.js`.
-- Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), track geometry for
-  the renderer's scene build (`TrackBuilder.js` + `Centerline.js` → `trackBin.js`,
-  once per race, never per frame), the resolved biome theme
-  (`shared/themes.js` → `render/trackPayload.js`), audio, the whole controller
-  page, and the transport I/O — the WebSocket and `RTCPeerConnection` live in
-  `partyplug/PartyConnection.js` and `PartyFastlane.js`, which SURVIVE: the native
-  fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
+  (git history has it); it survives only as a TEST-ONLY devDependency, used by the
+  offline capture scripts (`scripts/lib/three-routes.js` serves it to a Playwright
+  page for the car thumbnails and item icons).
+- The TRACK BUILDER is native too, and there is no JS twin. `ttp_display_build`
+  takes a trackId and runs `ttp::build_race_track` itself, so the renderer meshes
+  from the SAME `ttp::RaceTrack` the sim races on; the browser holds no centerline,
+  no samples, no furniture. `public/shared/trackBin.js` is a THEME serializer now
+  (track.bin v16 = resolved biome + roster liveries, no geometry), and the lobby's
+  mini-maps come from the prebaked `shared/trackSchematics.js` (`npm run
+  gen:schematics`). Node reads geometry through `scripts/native-track.mjs` over the
+  shipped wasm — `ttp_track_json` (by id), `ttp_track_build_json` (by descriptor,
+  for unshipped candidates), `ttp_track_sweep_json`/`ttp_track_frames_json`
+  (interpolated frames) and `ttp_track_supports_json` (the builder's own
+  corridor gate, for the geometry audit).
+- Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), the track
+  DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
+  into the wasm by `gen-track-defs-header.mjs`), the resolved biome theme
+  (`shared/themes.js` → `render/trackPayload.js` → `trackBin.js`), audio, the whole
+  controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
+  live in `partyplug/PartyConnection.js` and `PartyFastlane.js`, which SURVIVE: the
+  native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
   replayed by `native/` ctest (33 tests, the SAME 33 on every leg —
@@ -72,11 +84,12 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
   They are permanent cross-implementation evidence recorded against the JS engine
   while it existed — never re-record them from C++, which would only prove C++
-  matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators;
-  `gen-roomflow-corpus.mjs` (36 room scenarios) and `gen-grandprix-corpus.mjs`
-  (12 cup scripts + 5 shuffle-bag cases) are FROZEN — their JS twins are gone, and
-  each header names the `git show` that restores one if the oracle must be
-  re-derived.
+  matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators, and five are
+  now FROZEN because their JS twins are gone: `gen-roomflow-corpus.mjs` (36 room
+  scenarios), `gen-grandprix-corpus.mjs` (12 cup scripts + 5 shuffle-bag cases),
+  `gen-trackbuilder-corpus.mjs` (all 20 tracks), `gen-track-sampler-corpus.mjs` and
+  `gen-math-corpus.mjs`. Each header names the `git show` that restores its twin if
+  the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`)
@@ -91,9 +104,9 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   REVERSE order demanding identical digests, and `replay_sequence` replays every
   trace in one process. When adding cross-race state, own it per `Game`.
 - Traces also only ever race CATALOGUE tracks, so anything no shipped layout
-  contains is unreachable by any fixture: no track builds with a pole (the JS
-  TrackBuilder agrees), which is why `Game::collidePole` is covered by
-  `hazard_check` constructing the situation directly rather than by a trace.
+  contains is unreachable by any fixture: no track builds with a pole, which is why
+  `Game::collidePole` is covered by `hazard_check` constructing the situation
+  directly rather than by a trace.
 - The C ABI (`runtime/`) is NOT on the replay path — `replay_cli` calls C++ objects
   directly. `abi_check` covers the marshalling layer the browser actually talks to,
   BOTH ABIs: two traces through `ttp_process_input`/`ttp_update`, the cup corpus
@@ -107,9 +120,12 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   (`.github/workflows/test-the-tests.yml`), never on PRs: `npm run mutation-check`
   breaks the engine 21 ways and requires the matching ctest to go red for each (two
   gates were found blind this way), and `npm run revive:js-oracle` restores the
-  retired JS sim from git and re-records all 8 golden traces byte-identically. While
-  the latter passes, parity evidence is renewable; when it starts failing, decide
-  consciously whether to repair the twin or accept that the traces are frozen.
+  retired JS sim AND its track builder from git — each file from its own retirement
+  commit — and re-records all 8 golden traces byte-identically. The twin now pulls
+  its whole dependency set out of history rather than leaning on surviving modules,
+  so it cannot rot from under itself. While it passes, parity evidence is renewable;
+  when it starts failing, decide consciously whether to repair the twin or accept
+  that the traces are frozen.
 - Our own C/C++ carries `-Wall -Wextra` via the `ttp_warnings` interface;
   the vendored fdlibm/double-conversion deliberately do NOT (they are taken whole
   from upstream). Not `-Werror` — a newer compiler's new diagnostic must not block a

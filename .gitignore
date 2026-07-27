@@ -22,3 +22,8 @@ public/assets/audio/_music-pool/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 native/build/
+
+# Local scratch from the authoring/preview scripts (preview-tracks.mjs writes
+# its gallery beside itself; captures land wherever they are pointed).
+scripts/.preview-tracks.html
+*.jpeg

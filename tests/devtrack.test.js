@@ -7,19 +7,17 @@
 // pursuit car around the dev-only Gym track (shared/devTracks.js) and poke the
 // engine's internals directly. Neither is possible on the native engine:
 //
-//   * ttp_session_begin takes a CATALOGUE TRACK ID. The native track defs are
-//     code-generated from the shipped TRACKS only (scripts/gen-track-defs-
-//     header.mjs -> native/libttp-track/generated/track_defs.h), so DEV_TRACKS is
-//     not in the catalogue and ttp_session_begin('gym') returns 0. That also means
-//     ?solo&track=gym cannot race on the native engine at all — the Gym range is
-//     dead until its descriptor is carried into the codegen.
 //   * The ABI exposes no car teleport and no trigger poll, so a check cannot park
 //     a car at a chosen (s, lat) and fire one trigger in isolation.
 //
 // So the portable half (the ?item= force hook, the monster transform, box respawn
 // cooldowns, and oil/banana spin-outs) is re-expressed below as REAL races on
-// catalogue tracks, and the two Gym-specific checks are left explicitly skipped
-// rather than quietly dropped. See the comments on each skipped test.
+// catalogue tracks. One Gym-specific check is left explicitly skipped rather than
+// quietly dropped; see the comment on it.
+//
+// The OTHER blocker is gone: gen-track-defs-header.mjs now carries DEV_TRACKS past
+// the shipped catalogue, so ttp_session_begin('gym') resolves and ?solo&track=gym
+// races again. The Gym check below is live.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -159,17 +157,37 @@ test('oil puddles spin cars on the tracks that carry them', { skip }, async () =
 // output. Neither is a false alarm — the behaviour is still real, just untested.
 // ---------------------------------------------------------------------------
 
-// The Gym range itself: a pure-pursuit lap of DEV_TRACKS.gym tripping
-// box -> oil -> banana in AUTHORED ORDER, with the Gym's respawning authored
-// bananas — a hit banana rearms instead of despawning (the live list keeps its
-// length), is hidden from the snapshot while it cools down, and reappears after
-// the cooldown.
-// BLOCKED ON: `gym` is not in the native track catalogue (ttp_session_begin('gym')
-// returns 0). Unblocked by carrying DEV_TRACKS through
-// scripts/gen-track-defs-header.mjs, which would also make ?solo&track=gym work
-// again on the native engine.
-test('gym: authored trigger order + respawning authored bananas',
-  { skip: 'gym is not in the native track catalogue (ttp_session_begin("gym") === 0)' }, () => {});
+// The Gym range itself. It is a DEV track, so it exercises two things no catalogue
+// track does: authored bananas seeded at race start (every shipped track has none),
+// and a furniture layout hand-placed in a known order along the lap.
+//
+// Authored bananas RESPAWN where dropped ones despawn: a hit one rearms
+// (Game::enterBanana sets liveAt and keeps it in the list) instead of being erased,
+// so the Gym's three are still standing at their authored spots after a full race.
+// A regression that treated them as droppable would empty the range permanently.
+test('gym: the authored range races, and its authored bananas respawn', { skip }, async () => {
+  const { DEV_TRACKS } = await import('../public/shared/devTracks.js');
+  const nt = await import('../scripts/native-track.mjs');
+  await nt.init();
+
+  const built = nt.buildTrack('gym');
+  const authored = DEV_TRACKS.gym.bananas;
+  assert.equal(built.bananas.length, authored.length,
+    'the Gym seeds its authored bananas onto the built track');
+  // Authored order along the lap is the layout's whole point: an isolated box, then
+  // the lane row, the pad, the poles, the oils, and the bananas last.
+  const lastBox = Math.max(...built.boxes.map((b) => b.s));
+  const firstOil = Math.min(...built.hazards.map((h) => h.s));
+  const firstBanana = Math.min(...built.bananas.map((b) => b.s));
+  assert.ok(lastBox < firstOil, `boxes come before the oils (${lastBox} < ${firstOil})`);
+  assert.ok(firstOil < firstBanana, `oils come before the bananas (${firstOil} < ${firstBanana})`);
+
+  const r = await race('gym', null, 3000);
+  assert.ok(r.events.length > 0, 'a four-bot field really races the Gym');
+  assert.ok(r.maxBananas >= authored.length,
+    `the authored bananas are live (saw at most ${r.maxBananas}, expected >= ${authored.length})`);
+  assert.ok(typesOf(r.events).has('lap'), 'the field completes laps on the dev range');
+});
 
 // Box pickup is a POINT test with the tuned 0.45 radius (9% of the 5-wide road):
 // a car centre at lat 0.40 grabs, at 0.50 does not, and a monster truck's larger

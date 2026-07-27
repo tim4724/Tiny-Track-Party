@@ -14,7 +14,9 @@ const fs = require('fs');
 const path = require('path');
 
 (async () => {
-  const { buildTrack, TRACK_LIST } = await import('../public/display/TrackBuilder.js');
+  const { init, buildTrack } = await import('../scripts/native-track.mjs');
+  await init();
+  const { TRACK_LIST } = await import('../public/shared/tracks.js');
   const { trackSchematic } = await import('../public/display/trackSchematic.js');
 
   const body = TRACK_LIST

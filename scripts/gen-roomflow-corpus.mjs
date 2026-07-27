@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { mulberry32 } from '../public/display/engine/util.js';
+import { mulberry32 } from './oracle-lib.mjs';
 import { canonicalStringify } from './oracle-lib.mjs';
 
 const require = createRequire(import.meta.url);

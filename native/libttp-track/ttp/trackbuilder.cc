@@ -43,9 +43,8 @@ inline double latX(double th) { return -ttp_fd_cos(th); }
 inline double latZ(double th) { return -ttp_fd_sin(th); }
 
 // Support-post probe: relation of a post (x,z,radius,baseY,topY) to one sample.
-struct Post { double x, z, radius, baseY, topY; };
-struct PostHit { bool valid; double lat, tan, intrusion; };
-
+// Post/PostHit and the entry point are declared in trackbuilder.h — the geometry
+// audit measures with this exact function rather than a copy of it.
 PostHit postAtSample(const OutSample& sm, const Post& post) {
   if (sm.up.y < 0.9) return {false, 0, 0, 0};
   if (sm.pos.y < post.baseY - 0.5 || sm.pos.y > post.topY - 0.5) return {false, 0, 0, 0};
@@ -553,6 +552,10 @@ void resolveFurniture(RaceTrack& b, const TrackDef& def) {
 }
 
 }  // namespace
+
+PostHit post_at_sample(const OutSample& sm, const Post& post) {
+  return postAtSample(sm, post);
+}
 
 RaceTrack build_race_track(const TrackDef& def, int laps, uint32_t seed) {
   RaceTrack b = def.isSpline ? buildSplineTrack(def) : buildTrackSegments(def);
