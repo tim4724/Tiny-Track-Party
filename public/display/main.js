@@ -1,5 +1,6 @@
-// Display entry — lobby + authoritative race. Owns the Three.js scene, the car
-// engine, the countdown→race→results flow, and per-player PLAYER_STATE.
+// Display entry — lobby + authoritative race. Owns the Stage (canvas + DOM HUD),
+// the race session, the countdown→race→results flow, and per-player
+// PLAYER_STATE. The 3D itself is the engine's: see Stage.js / render/Display.js.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { Stage } from './Stage.js';
 import { buildTrack, resolveFurniture, TRACK_LIST } from './TrackBuilder.js';
