@@ -3197,13 +3197,20 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
     bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
-        // Matching the depth map's own size. The blur, not the resolution, sets
+        // A QUARTER of the depth map's size. The blur, not the resolution, sets
         // how soft the edge is (see vesm.mat), so this only has to be fine
-        // enough that a texel is small next to the penumbra it carries — and at
-        // 2048 over a circuit's light frustum it is, by a wide margin. Runtime
-        // is a single bilinear tap at any size, measured at 0.00 +/- 0.05 ms
-        // across 1024/2048/4096; the cost is memory and a few ms of bake.
-        constexpr uint32_t ESM_SM = 2048;
+        // enough that a texel is small next to the penumbra it carries. Pass one
+        // still reads every depth texel, so what lands here is an already-smooth
+        // field and storing it coarsely costs almost nothing: 2048 -> 1024 left
+        // the ramp identical (10-90 width 6.5 px both ways, roughness 0.035 vs
+        // 0.036) and the contour indistinguishable, for a quarter of the memory
+        // — 16 MB -> 4 MB resident, and a bake peak of 16 MB rather than 40.
+        //
+        // The floor is real, though, and 1024 sits a clean 2x above it. Walking
+        // it down on glacier, whose elevated deck throws a long shadow past a
+        // row of pillars: 512 is still smooth, 256 SCALLOPS the contour visibly.
+        // Runtime is a single bilinear tap at any of these sizes.
+        constexpr uint32_t ESM_SM = 1024;
 
         // TWO PASSES, one per axis. Separating it is what makes a wide kernel
         // affordable: sigma is what the penumbra inherits, and reaching a useful
@@ -3273,7 +3280,11 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                 const float srcSize = (float) (p.depth ? SM : ESM_SM);
                 emi->setParameter("texel", float2{ 1.0f / srcSize, 1.0f / srcSize });
                 emi->setParameter("dir", p.dir);
-                emi->setParameter("sigma", sigmaTexels);
+                // sigma is in SOURCE texels, and the two passes have
+                // different sources: pass one reads the depth map, pass two
+                // reads this material's own 1/4-scale output.
+                emi->setParameter("sigma", sigmaTexels
+                        * (p.depth ? 1.0f : (float) ESM_SM / (float) SM));
                 emi->setParameter("fromDepth", p.depth ? 1.0f : 0.0f);
                 RenderableManager::Builder(1)
                         .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
