@@ -884,7 +884,13 @@ export class SceneRenderer {
     this.overview.updateProjectionMatrix();
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
     if (this.controls) return this.controls; // a second call raced us during the import
-    const dom = this.renderer.domElement;
+    // Listen on the CONTAINER, not three's canvas: under ?renderer=filament the
+    // native canvas is what's on screen and three's is display:none, so a canvas-
+    // bound listener would never see a pointer. #scene holds whichever canvas is
+    // drawing (both are its children), it's full-viewport, and it exists before the
+    // native module lands — so this binds right whatever the renderer, with no race
+    // against the async FilamentView boot.
+    const dom = this.container;
     const c = new OrbitControls(this.overview, dom);
     c.enableDamping = true;
     c.dampingFactor = 0.08;
