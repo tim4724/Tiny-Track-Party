@@ -53,14 +53,19 @@ jobs:
   # ran ~20 min against a 10-minute cap.
   e2e:
     runs-on: ubuntu-latest
-    # Four, because a shard's ~30-40 s of fixed overhead (mostly the playwright
-    # container pull) is now the BIGGER half of it. Once the automation render
-    # budget landed, whole-suite execution fell from 903 s to 219 s, so the
-    # arithmetic that once justified more runners inverted: measured at six
-    # shards the slowest was 96 s, of which only 35 s was tests. Four splits the
-    # same 219 s into ~55 s pieces and lands within ~10 s of that, for two fewer
-    # runners. Going the other way is equally pointless — the floor here is the
-    # container pull, not the suite.
+    # Six, measured against four on the real thing rather than reasoned about:
+    # 1m40s vs 2m01s for the whole workflow. Both were tried in anger, because
+    # once the automation render budget landed and whole-suite execution fell
+    # from 903 s to 219 s, the old arithmetic no longer applied.
+    #
+    # Do not "optimise" this down to save runners. The repo is PUBLIC, so
+    # standard-runner minutes are free, and wall clock is the only axis that
+    # pays. What DOES cap it is the ~60-70 s every shard spends before a test
+    # runs (container pull 25-40 s, checkout, setup-node): at six the slowest
+    # shard was 96 s with just 35 s of tests in it, so the suite is no longer
+    # what this workflow is waiting on. That floor is why eight would buy ~10 s
+    # at most, and why the honest next move — if this ever matters again — is a
+    # slimmer image, not more shards.
     #
     # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
     # of these splits even; by FILE, cup-series alone would pin one shard.
@@ -71,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false   # one shard's failure shouldn't hide the others' results
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     container:
       # Ships the matching browsers — keep the tag in sync with
       # @playwright/test in package.json.
@@ -87,7 +92,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Run E2E tests
-        run: npx playwright test --shard=${{ matrix.shard }}/4
+        run: npx playwright test --shard=${{ matrix.shard }}/6
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v4
