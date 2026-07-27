@@ -27,8 +27,10 @@ struct BuiltRaceTrack {
   GameTrack game;
 };
 
+// Scans TTP_TRACK_TOTAL, not TTP_TRACK_COUNT: the dev-only ranges sit past the
+// catalogue and must resolve by id (?solo&track=gym) without joining any sweep.
 inline const TrackDef* find_track_def(const std::string& id) {
-  for (int i = 0; i < TTP_TRACK_COUNT; i++)
+  for (int i = 0; i < TTP_TRACK_TOTAL; i++)
     if (id == TTP_TRACKS[i].id) return &TTP_TRACKS[i];
   return nullptr;
 }

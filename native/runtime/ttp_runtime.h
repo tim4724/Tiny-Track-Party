@@ -127,6 +127,82 @@ TTP_ABI void ttp_gp_advance(int h);
 TTP_ABI const char* ttp_gp_standings_json(int h);
 TTP_ABI void ttp_gp_rekey(int h, const char* oldIdJson, const char* newIdJson);
 
+// ---- track geometry, without a session --------------------------------------
+
+// The augmented race-track object for `trackId` as canonical JSON — the whole
+// thing (docs/native-port/contract/race-track.schema.json minus `cup`, which the
+// host tags on): centerline samples, resolved furniture, pillars, berms, support
+// posts. Returns NULL on an unknown trackId. Dev-only ranges resolve too.
+//
+// WHY THIS EXISTS. The browser does not call it: the display's renderer lives in
+// this same module and reads the built track in place. Its callers are the Node
+// authoring and codegen scripts (track-gen, compose-stunt, audit-tracks,
+// gen-track-schematics, …), which used to import a SECOND, JS implementation of
+// the builder. There is one builder now, and this is how a tool outside the
+// browser reads it.
+//
+// Not on a frame path — one call per track — so it returns a fresh full
+// serialization each time rather than keeping a per-track cache.
+TTP_ABI const char* ttp_track_json(const char* trackId, int laps, uint32_t seed);
+
+// The same, for a track that is not in the catalogue: `descriptorJson` is one
+// authored track descriptor, the shape public/shared/tracks.js entries have —
+//   { "id"?, "name"?, "difficulty"?, "width"?, "startU"?,
+//     "segments": [ { "kind": "straight"|"arc"|"loop", "length"?, "radius"?,
+//                     "angle"?, "rise"?, "bank"?, "roll"?, "drift"?,
+//                     "width"?: n | [a,b], "pillars"?, "over"? } ]
+//     | "waypoints": [ { "x", "z", "y"?, "w"?, "bank"?, "bridge"? } ],
+//     "oils"?/"pads"?/"boxes"?/"poles"?: [ { "u", "lat"?, "radius"? } ],
+//     "bananas"?: [ { "u", "lat"? } ] }
+// Returns NULL on anything it cannot read, rather than building a track from a
+// half-understood descriptor.
+//
+// WHY THE CATALOGUE IS NOT ENOUGH. The track AUTHORING tools (scripts/track-gen,
+// compose-stunt, preview-tracks, probe-cross) exist to evaluate layouts that are
+// not shipped yet — thousands of candidates per run, none of them in the
+// compiled-in defs. They used to reach a JS builder for that. This is the same
+// builder the game runs, driven by a descriptor instead of an id.
+TTP_ABI const char* ttp_track_build_json(const char* descriptorJson, int laps, uint32_t seed);
+
+// Support-structure measurements for a built track, for scripts/audit-tracks.mjs:
+//   { "posts": [ { "kind": "pillar"|"shaft", "x", "z", "radius",
+//                  "intrusion", "s" } ],
+//     "autoPoles": [ { "s", "lat", "radius", "x", "z" } ] }
+// `intrusion` is the DEEPEST the post reaches into a drivable corridor over the
+// whole lap and `s` the arclength where it peaks (intrusion is negative when the
+// post never intrudes). Each autoPole carries the world position its (s, lat)
+// reconstructs to.
+//
+// Both are PRIMITIVES, not verdicts: what counts as a graze worth reporting, and
+// how near a pole has to land to count as explained, stay in the audit script
+// where they are easy to retune. They live here because the alternative is a
+// second copy of the builder's own corridor gate and its centreline sampler,
+// which is what the audit is meant to be checking.
+//
+// Takes a track ID or (when it starts with '{') a descriptor, so an unshipped
+// candidate can be audited too. NULL if neither resolves.
+TTP_ABI const char* ttp_track_supports_json(const char* trackIdOrDescriptor);
+
+// A uniform sweep of interpolated frames along a built track — s = 0, step,
+// 2·step, … while s <= length — as
+//   [ { "s", "pos":{x,y,z}, "tangent":{x,y,z}, "up":{x,y,z},
+//       "lateral":{x,y,z}, "width" }, … ]
+// through the builder's own Centerline, so a frame BETWEEN knots is the same
+// cubic the sim and the renderer read.
+//
+// The authoring pipeline's smoothness gate walks a candidate at 0.1-unit steps
+// looking for the worst heading step; that is thousands of frames per candidate
+// and hundreds of candidates per scan, so it is a sweep rather than one call per
+// point. Takes an ID or a descriptor, like ttp_track_supports_json.
+// NULL on an unresolvable track or a step <= 0.
+TTP_ABI const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double step);
+
+// The same frames, at an EXPLICIT list of arclengths (a JSON array of numbers)
+// rather than a uniform sweep — for a caller that has particular points to ask
+// about. Arclengths wrap, like the sampler itself. NULL if the list is not a JSON
+// array of numbers.
+TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* sListJson);
+
 // {"contractVersion":N,"mathlib":"..."} — the adapter's sanity check.
 TTP_ABI const char* ttp_version(void);
 

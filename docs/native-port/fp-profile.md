@@ -10,6 +10,15 @@ citations. The reference is the JS engine at `public/display/engine/Game.js`
 and its sim-path siblings; the determinism guarantee it backs is
 [contract.md §Determinism guarantee](contract.md#determinism-guarantee).
 
+> **The JS sources cited below are RETIRED.** Every `public/display/…` path in
+> this document — `Game.js`, `AiDriver.js`, `TrackBuilder.js`, `Centerline.js`,
+> `engine/{Vec3,math,util}.js` — was deleted once its C++ twin was
+> conformance-proven; the `file:line` citations are historical provenance for how
+> each rule was derived, not places you can open today. `git log --diff-filter=D`
+> finds each one, and `node scripts/revive-js-oracle.mjs` restores the whole set
+> into a throwaway worktree. This document stays as written because rewriting the
+> citations would erase the only record of what the port was judged against.
+
 Sim path (the files this profile inventories, all comment-stripped scans):
 `public/display/engine/{Game,util,contract,Vec3,math}.js`,
 `public/display/{TrackBuilder,AiDriver,Centerline,RaceSession,GrandPrix}.js`,

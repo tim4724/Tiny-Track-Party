@@ -51,19 +51,37 @@ using namespace filament::math;
 
 namespace {
 
-// "track.bin" v4 layout (little-endian), written by gallery-compare.js:
-//   u32 version(=4), u32 sampleCount, f32 roadWidth, f32 groundY, f32 length,
-//   u32 closed, u32 carCount, u32 carColorsABGR[carCount],
+// "track.bin" v16 layout (little-endian), written by public/shared/trackBin.js.
+//
+// NO GEOMETRY. Up to v15 this payload carried the whole built track — samples,
+// furniture, pillars, berms — serialized by a second, JS implementation of the
+// track builder that ran in the browser on every race. That builder is gone: the
+// renderer meshes from the ttp::RaceTrack the sim itself is racing on
+// (fillGeometry), and the payload was cut down to what geometry cannot imply.
+//
+// What remains is the RESOLVED biome theme (shared/themes.js is authored in JS
+// and stays there) and the roster's liveries:
+//   u32 version(=16), u32 carCount, u32 carColorsABGR[carCount],
 //   char carNames[carCount][8], f32 carPlateY[carCount] (<0 = auto),
 //   u32 palette[7] (sRGB 0xrrggbb: asphalt line dash kerbA kerbB skirt shoulder),
-//   f32 kerbW, f32 kerbH, u32 edgeLines, u32 zoneCount, f32 zones[2·zoneCount],
+//   f32 kerbW, f32 kerbH, u32 edgeLines,
 //   u32 sky[3] (zenith horizon below), u32 fog, u32 hillShape,
 //   u32 hillColorCount, u32 hillColors[…],
-//   u32 boxCount, f32 boxes[2·boxCount] (s, lat),
-//   u32 padCount, per pad { u32 kind (0 disc, 1 strip), f32 s, lat, p0, p1 },
-//   then per sample 11×f32: pos.xyz, lateral.xyz, up.xyz, width, s.
-constexpr uint32_t TRACK_BIN_VERSION = 15;
-constexpr uint32_t SAMPLE_F32 = 11;
+//   f32 scDensity, scMixTree, scMixBush, u32 treeCount, per tree
+//     { u32 model, f32 w, s0, s1 }, u32 hasBush, [bush 16B],
+//   u32 rockCount, u32 rocks[…], f32 rockS[2], u32 sceneryModelCount,
+//   u32 landmarkCount, u32 landmarkKinds[…],
+//   f32 clutterDensity, u32 clutterCount, per kind { u32 kind, f32 w,
+//     u32 tintCount, u32 tints[…] },
+//   u32 structureCol, then the flat theme tag/value block.
+constexpr uint32_t TRACK_BIN_VERSION = 16;
+
+// Bare-asphalt margin either side of a launch strip, so the road's dashes and
+// edge lines stop clear of the chevrons rather than grazing them.
+constexpr float kStripMargin = 0.12f;
+// Cones per oil slick. Fixed: no shipped track authors a coned oil, and the
+// codegen refuses one rather than dropping the field silently.
+constexpr uint32_t kOilCones = 4;
 
 // Lawn base — makeLawnTexture's flat ground colour (#6aa84f); the stripe/grain
 // texture detail is later work.
@@ -573,15 +591,10 @@ void TtpRenderer::destroyMesh(Mesh& m) {
 bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) {
     const auto rdU32 = [&](size_t o) { uint32_t v; std::memcpy(&v, bin.data() + o, 4); return v; };
     const auto rdF32 = [&](size_t o) { float v; std::memcpy(&v, bin.data() + o, 4); return v; };
-    if (bin.size() < 28 || rdU32(0) != TRACK_BIN_VERSION) return false;
-    const uint32_t n = rdU32(4);
-    out.roadWidth = rdF32(8);
-    out.groundY = rdF32(12);
-    out.length = rdF32(16);
-    out.closed = rdU32(20) != 0;
-    const uint32_t carCount = rdU32(24);
-    size_t off = 28;
-    if (bin.size() < off + carCount * 4 + 7 * 4 + 12 + 4) return false;
+    if (bin.size() < 8 || rdU32(0) != TRACK_BIN_VERSION) return false;
+    const uint32_t carCount = rdU32(4);
+    size_t off = 8;
+    if (bin.size() < off + carCount * 4 + 7 * 4 + 12) return false;
     out.carColors.resize(carCount);
     for (uint32_t i = 0; i < carCount; i++, off += 4) out.carColors[i] = rdU32(off);
     if (bin.size() < off + carCount * 8) return false;
@@ -599,38 +612,18 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
     out.kerbW = rdF32(off); off += 4;
     out.kerbH = rdF32(off); off += 4;
     out.edgeLines = rdU32(off) != 0; off += 4;
-    const uint32_t zoneCount = rdU32(off); off += 4;
-    if (bin.size() < off + zoneCount * 8 + 6 * 4) return false;
-    out.zones.resize(zoneCount);
-    for (uint32_t i = 0; i < zoneCount; i++, off += 8) {
-        out.zones[i] = { rdF32(off), rdF32(off + 4) };
-    }
+    if (bin.size() < off + 6 * 4) return false;
     for (uint32_t i = 0; i < 3; i++, off += 4) out.sky[i] = rdU32(off);
     out.fog = rdU32(off); off += 4;
     out.hillShape = rdU32(off); off += 4;
     const uint32_t hillCount = rdU32(off); off += 4;
-    if (bin.size() < off + hillCount * 4 + 4) return false;
+    if (bin.size() < off + hillCount * 4 + 12) return false;
     out.hillColors.resize(hillCount);
     for (uint32_t i = 0; i < hillCount; i++, off += 4) out.hillColors[i] = rdU32(off);
-    const uint32_t boxCount = rdU32(off); off += 4;
-    if (bin.size() < off + boxCount * 8 + 4) return false;
-    out.boxes.resize(boxCount);
-    for (uint32_t i = 0; i < boxCount; i++, off += 8) {
-        out.boxes[i] = { rdF32(off), rdF32(off + 4) };
-    }
-    const uint32_t padCount = rdU32(off); off += 4;
-    if (bin.size() < off + padCount * 20) return false;
-    out.pads.resize(padCount);
-    for (uint32_t i = 0; i < padCount; i++, off += 20) {
-        out.pads[i] = { rdU32(off), rdF32(off + 4), rdF32(off + 8),
-                        rdF32(off + 12), rdF32(off + 16) };
-    }
-    if (bin.size() < off + 24) return false;
-    out.scSeed1 = rdU32(off); off += 4;
-    out.scSeed2 = rdU32(off); off += 4;
     out.scDensity = rdF32(off); off += 4;
     out.scMixTree = rdF32(off); off += 4;
     out.scMixBush = rdF32(off); off += 4;
+    if (bin.size() < off + 4) return false;
     const uint32_t treeCount = rdU32(off); off += 4;
     if (bin.size() < off + treeCount * 16 + 4) return false;
     out.scTrees.resize(treeCount);
@@ -651,8 +644,7 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
     out.scRockS[0] = rdF32(off); off += 4;
     out.scRockS[1] = rdF32(off); off += 4;
     out.scModelCount = rdU32(off); off += 4;
-    if (bin.size() < off + 8) return false;
-    out.lmSeed = rdU32(off); off += 4;
+    if (bin.size() < off + 4) return false;
     const uint32_t lmCount = rdU32(off); off += 4;
     if (bin.size() < off + lmCount * 4) return false;
     out.lmKinds.resize(lmCount);
@@ -669,46 +661,6 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
         if (bin.size() < off + tc * 4) return false;
         out.clKinds[i].tints.resize(tc);
         for (uint32_t t = 0; t < tc; t++, off += 4) out.clKinds[i].tints[t] = rdU32(off);
-    }
-    if (bin.size() < off + 4) return false;
-    const uint32_t oilCount = rdU32(off); off += 4;
-    if (bin.size() < off + oilCount * 16 + 4) return false;
-    out.oils.resize(oilCount);
-    for (uint32_t i = 0; i < oilCount; i++, off += 16) {
-        out.oils[i] = { rdF32(off), rdF32(off + 4), rdF32(off + 8), rdU32(off + 12) };
-    }
-    const uint32_t poleCount = rdU32(off); off += 4;
-    if (bin.size() < off + poleCount * 12 + 4) return false;
-    out.poles.resize(poleCount);
-    for (uint32_t i = 0; i < poleCount; i++, off += 12) {
-        out.poles[i] = { rdF32(off), rdF32(off + 4), rdF32(off + 8) };
-    }
-    const uint32_t pillarCount = rdU32(off); off += 4;
-    if (bin.size() < off + pillarCount * 20 + 4) return false;
-    out.pillars.resize(pillarCount);
-    for (uint32_t i = 0; i < pillarCount; i++, off += 20) {
-        out.pillars[i] = { rdF32(off), rdF32(off + 4), rdF32(off + 8),
-                           rdF32(off + 12), rdF32(off + 16) };
-    }
-    const uint32_t postCount = rdU32(off); off += 4;
-    if (bin.size() < off + postCount * 36 + 4) return false;
-    out.supportPosts.resize(postCount);
-    for (uint32_t i = 0; i < postCount; i++, off += 36) {
-        out.supportPosts[i] = { rdF32(off), rdF32(off + 4), rdF32(off + 8),
-                { rdF32(off + 12), rdF32(off + 16), rdF32(off + 20) },
-                { rdF32(off + 24), rdF32(off + 28), rdF32(off + 32) } };
-    }
-    const uint32_t bermRuns = rdU32(off); off += 4;
-    out.berms.resize(bermRuns);
-    for (uint32_t r = 0; r < bermRuns; r++) {
-        if (bin.size() < off + 4) return false;
-        const uint32_t rings = rdU32(off); off += 4;
-        if (bin.size() < off + (size_t) rings * 28) return false;
-        out.berms[r].resize(rings);
-        for (uint32_t i = 0; i < rings; i++, off += 28) {
-            out.berms[r][i] = { rdF32(off), rdF32(off + 4), rdF32(off + 8),
-                    rdF32(off + 12), rdF32(off + 16), rdF32(off + 20), rdF32(off + 24) };
-        }
     }
     if (bin.size() < off + 4) return false;
     out.structureCol = rdU32(off); off += 4;
@@ -782,17 +734,118 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
             }
         }
     }
-    if (bin.size() < off + (size_t) n * SAMPLE_F32 * 4 || n < 2) return false;
-    out.samples.resize(n);
-    for (uint32_t i = 0; i < n; i++, off += SAMPLE_F32 * 4) {
-        TrackBin::Sample& s = out.samples[i];
-        s.pos = { rdF32(off), rdF32(off + 4), rdF32(off + 8) };
-        s.lat = { rdF32(off + 12), rdF32(off + 16), rdF32(off + 20) };
-        s.up = { rdF32(off + 24), rdF32(off + 28), rdF32(off + 32) };
-        s.width = rdF32(off + 36);
-        s.s = rdF32(off + 40);
-    }
     return true;
+}
+
+// The geometry half of TrackBin, taken straight off the built track.
+//
+// This used to arrive in track.bin, serialized by a SECOND implementation of the
+// track builder that ran in JS on every race. There is one builder now, it runs
+// here, and the object below is the same ttp::RaceTrack the sim is racing on —
+// so the road the player drives and the road they see cannot disagree.
+//
+// Everything narrows double -> float: the renderer's whole vertex path is float,
+// and the sim's doubles never come back the other way.
+void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
+    out.roadWidth = (float) geo.roadWidth;
+    out.groundY = (float) geo.groundY;
+    out.length = (float) geo.length;
+    out.closed = geo.closed;
+
+    out.samples.resize(geo.samples.size());
+    for (size_t i = 0; i < geo.samples.size(); i++) {
+        const ttp::OutSample& s = geo.samples[i];
+        TrackBin::Sample& d = out.samples[i];
+        d.pos = { (float) s.pos.x, (float) s.pos.y, (float) s.pos.z };
+        d.lat = { (float) s.lateral.x, (float) s.lateral.y, (float) s.lateral.z };
+        d.up = { (float) s.up.x, (float) s.up.y, (float) s.up.z };
+        d.width = (float) s.width;
+        d.s = (float) s.s;
+    }
+
+    out.boxes.clear();
+    for (const ttp::Box& b : geo.boxes) out.boxes.push_back({ (float) b.s, (float) b.lat });
+
+    out.pads.clear();
+    out.zones.clear();
+    for (const ttp::Pad& p : geo.pads) {
+        if (p.strip) {
+            out.pads.push_back({ 1u, (float) p.s, (float) p.lat,
+                                 (float) p.halfLen, (float) p.halfWidth });
+            // Bare-asphalt blanking around a launch strip: the road's dashes and
+            // edge lines stop short of it, with a small margin so the paint does
+            // not graze the chevrons.
+            out.zones.push_back({ (float) p.s, (float) (p.halfLen + kStripMargin) });
+        } else {
+            out.pads.push_back({ 0u, (float) p.s, (float) p.lat, (float) p.radius, 0.0f });
+        }
+    }
+
+    out.oils.clear();
+    for (const ttp::Hazard& h : geo.hazards) {
+        // Cone count is fixed: no shipped track authors one, and the codegen
+        // (gen-track-defs-header.mjs) refuses a furniture entry that carries
+        // `cones` rather than silently dropping it.
+        out.oils.push_back({ (float) h.s, (float) h.lat, (float) h.radius, kOilCones });
+    }
+
+    // Ghost poles are collision proxies for supports that are already drawn
+    // elsewhere (bridge pillars, loop shafts) — meshing them would double them up.
+    out.poles.clear();
+    for (const ttp::Pole& p : geo.poles) {
+        if (p.ghost) continue;
+        out.poles.push_back({ (float) p.s, (float) p.lat, (float) p.radius });
+    }
+
+    out.pillars.clear();
+    for (const ttp::Pillar& p : geo.pillars) {
+        out.pillars.push_back({ (float) p.x, (float) p.z, (float) p.baseY,
+                                (float) p.topY, (float) p.radius });
+    }
+
+    out.supportPosts.clear();
+    for (const ttp::SupportPost& p : geo.supportPosts) {
+        out.supportPosts.push_back({ (float) p.x, (float) p.z, (float) p.radius,
+                { (float) p.contactPos.x, (float) p.contactPos.y, (float) p.contactPos.z },
+                { (float) p.contactUp.x, (float) p.contactUp.y, (float) p.contactUp.z } });
+    }
+
+    out.berms.clear();
+    out.berms.reserve(geo.hills.size());
+    for (const std::vector<ttp::HillRing>& run : geo.hills) {
+        std::vector<TrackBin::BermRing> rings;
+        rings.reserve(run.size());
+        for (const ttp::HillRing& r : run) {
+            rings.push_back({ (float) r.cx, (float) r.cz, (float) r.lx, (float) r.lz,
+                              (float) r.halfW, (float) r.topL, (float) r.topR });
+        }
+        out.berms.push_back(std::move(rings));
+    }
+
+    // The scatter streams' seeds. These are a function of the GEOMETRY — the
+    // built length, rounded to the centimetre and spelled as a decimal string,
+    // hashed three ways — so they are derived here rather than sent. Reproducing
+    // the JS exactly matters: a different seed reshuffles every tree, landmark
+    // and clutter piece on every track.
+    //
+    // NOTE the string is length ALONE. The JS read `track.id || track.name`
+    // first, but buildTrack's output object carried neither, so that prefix was
+    // always empty and the shipped scatter has only ever depended on length.
+    {
+        const double rounded = std::floor(geo.length * 100.0 + 0.5); // JS Math.round
+        char digits[32];
+        std::snprintf(digits, sizeof digits, "%.0f", rounded);
+        uint32_t s1 = 2166136261u, s2 = 5381u, s3 = 51966u; // scatter, clutter, landmarks
+        for (const char* c = digits; *c; ++c) {
+            const uint32_t ch = (uint32_t) (unsigned char) *c;
+            s1 = (s1 ^ ch) * 16777619u;
+            s2 = (s2 ^ ch) * 16777619u;
+            s3 = (s3 ^ ch) * 16777619u;
+        }
+        out.scSeed1 = s1;
+        out.scSeed2 = s2;
+        out.lmSeed = s3;
+    }
 }
 
 // The painted road — a direct port of render/track.js buildRoad's sweep: a
@@ -3607,9 +3660,10 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     }
 }
 
-bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
+bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo) {
     TrackBin tb;
     if (!parseTrackBin(bin, tb)) return false;
+    fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     const uint32_t carCount = (uint32_t) tb.carColors.size();
     const std::vector<uint32_t>& carColors = tb.carColors;
@@ -5892,7 +5946,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
     }
 }
 
-bool TtpRenderer::buildScene() {
+bool TtpRenderer::buildScene(const ttp::RaceTrack& geo) {
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
@@ -5969,7 +6023,7 @@ bool TtpRenderer::buildScene() {
             .color(float4{ 0.53f, 0.78f, 0.92f, 1.0f })
             .build(*mEngine);
     mScene->setSkybox(mSkybox);
-    return buildTrackScene(track->second);
+    return buildTrackScene(track->second, geo);
 }
 
 // Filament's exponential fog standing in for a three.js LINEAR ramp [near,

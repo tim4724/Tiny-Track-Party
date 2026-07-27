@@ -30,7 +30,7 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
-      build: mod.cwrap('ttp_display_build', 'number', ['string']),
+      build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -87,6 +87,9 @@ export class Display {
   // here — a Grand Prix chains four tracks, and even a restart wants the skid
   // ribbons, kicked cones and collected boxes back at their opening state.
   //
+  // `payload` names the track and carries its resolved theme; the geometry is
+  // built C++-side from payload.trackId.
+  //
   // `payload.roster` is in SLOT order, and the ids go across with it: the
   // renderer bakes each car's model and livery into its slot here, and every
   // later frame puts a car back in its own slot by identity.
@@ -136,7 +139,11 @@ export class Display {
     ]);
 
     const ids = JSON.stringify((payload.roster || []).map((r) => r.id));
-    if (this._fn.build(ids)) throw new Error('ttp_display_build failed');
+    // The track ID, not its geometry: the renderer runs the native TrackBuilder
+    // on it and meshes from the same object a session on that track would race.
+    if (this._fn.build(payload.trackId, ids)) {
+      throw new Error(`ttp_display_build(${payload.trackId}) failed`);
+    }
     this.built = true;
   }
 

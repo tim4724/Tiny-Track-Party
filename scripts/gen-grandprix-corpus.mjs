@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mulberry32 } from '../public/display/engine/util.js';
+import { mulberry32 } from './oracle-lib.mjs';
 import { canonicalStringify } from './oracle-lib.mjs';
 
 // FROZEN ORACLE. public/display/GrandPrix.js was retired when the cup layer moved

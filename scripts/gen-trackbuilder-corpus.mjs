@@ -32,9 +32,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildRaceTrack, fnv1a } from './oracle-lib.mjs';
-import { TRACKS } from '../public/display/TrackBuilder.js';
+import { fnv1a } from './oracle-lib.mjs';
+// FROZEN ORACLE. public/display/TrackBuilder.js (with Centerline.js and
+// engine/{Vec3,math,util}.js) was retired when the renderer stopped needing a
+// second, JS-side track build — the engine's C++ TrackBuilder is the only one
+// left, and the browser holds no track geometry at all. So this generator can no
+// longer RUN as committed: the tests/fixtures/trackbuilder-corpus.jsonl it
+// produced is permanent cross-implementation evidence, replayed by the
+// trackbuilder ctest, and re-recording it from C++ would only prove C++ matches
+// itself.
+//
+// It is kept because the hexJSON encoding below IS the comparison contract in
+// executable form. To re-derive the oracle, restore the JS twins first —
+// scripts/revive-js-oracle.mjs restores exactly this set in one command, or by
+// hand:
+//   git show <commit-before-retirement>:public/display/TrackBuilder.js > public/display/TrackBuilder.js
+//   …and Centerline.js, engine/Vec3.js, engine/math.js, engine/util.js
+// (find it with: git log --diff-filter=D -- public/display/TrackBuilder.js)
+import { TRACKS, buildTrack, resolveFurniture } from '../public/display/TrackBuilder.js';
 import { MATHLIB } from '../public/display/engine/math.js';
+
+// buildRaceTrack, as oracle-lib carried it before the JS builder was retired: the
+// augmented race-ready object (geometry + identity + resolved furniture). It lives
+// here now because this is the only thing that still wants it, and only after the
+// twins above have been restored.
+function buildRaceTrack(trackId, { laps = 3, seed = 1 } = {}) {
+  const def = TRACKS[trackId];
+  if (!def) throw new Error(`unknown trackId '${trackId}'`);
+  const b = buildTrack(def);
+  b.trackId = trackId;
+  b.totalLaps = laps;
+  b.seed = seed >>> 0; // the engine's item-roll RNG seed (Game reads track.seed)
+  resolveFurniture(b, def);
+  return b;
+}
 
 const TRACK_IDS = Object.keys(TRACKS);
 

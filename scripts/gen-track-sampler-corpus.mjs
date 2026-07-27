@@ -30,9 +30,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildRaceTrack } from './oracle-lib.mjs';
-import { mulberry32 } from '../public/display/engine/util.js';
-import { MATHLIB } from '../public/display/engine/math.js';
+// FROZEN ORACLE. buildRaceTrack ran the retired JS TrackBuilder; see the note in
+// gen-trackbuilder-corpus.mjs for what was retired and how to restore it
+// (scripts/revive-js-oracle.mjs does it in one command). The
+// tests/fixtures/track-sampler-corpus.jsonl this produced is replayed by the
+// track_sampler ctest and must not be re-recorded from C++.
+import { TRACKS, buildTrack, resolveFurniture } from '../public/display/TrackBuilder.js';
+
+// buildRaceTrack, as oracle-lib carried it before the JS builder was retired: the
+// augmented race-ready object (geometry + identity + resolved furniture). It lives
+// here now because this is the only thing that still wants it, and only after the
+// twins above have been restored.
+function buildRaceTrack(trackId, { laps = 3, seed = 1 } = {}) {
+  const def = TRACKS[trackId];
+  if (!def) throw new Error(`unknown trackId '${trackId}'`);
+  const b = buildTrack(def);
+  b.trackId = trackId;
+  b.totalLaps = laps;
+  b.seed = seed >>> 0; // the engine's item-roll RNG seed (Game reads track.seed)
+  resolveFurniture(b, def);
+  return b;
+}
+
+import { mulberry32 } from './oracle-lib.mjs';
+import { MATHLIB } from './oracle-lib.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'tests/fixtures/track-sampler-corpus.jsonl');

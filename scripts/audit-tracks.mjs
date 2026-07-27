@@ -14,13 +14,13 @@
 //      shipped one on Sidewinder).
 //   node scripts/audit-tracks.mjs
 import { buildTrack } from './track-gen.mjs';
+import { trackSupports } from './native-track.mjs';
 
 // Audit BOTH catalogues: the shipped tracks (tracks.js) and the dev surfaces
 // (devTracks.js — the Gym).
 const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
 const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
 const ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
-const { postAtSample } = await import(new URL('../public/display/TrackBuilder.js', import.meta.url));
 
 const KERB = 0.22 + 0.2;   // kerb width + height margin around the drivable deck
 const LEVEL = 0.6;         // |Δy| below this = same level (deck 0.34 + kerb 0.2 + slack)
@@ -55,29 +55,25 @@ for (const [name, def] of Object.entries(ALL_TRACKS)) {
   }
 
   // 2. support-post corridor grazes (0 < intrusion < 0.5 → invisible-pole zone).
-  // postAtSample (imported from TrackBuilder — the same function placement uses) gates
-  // on upright/height-band/abeam and measures the LATERAL intrusion.
-  const posts = [
-    ...t.pillars.map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.topY, kind: 'pillar' })),
-    ...(t.supportPosts || []).map((p) => ({ x: p.x, z: p.z, radius: p.radius, baseY: p.baseY, topY: p.contact.pos.y, kind: 'shaft' }))
-  ];
+  // The measurement comes from the ENGINE (ttp_track_supports_json): the deepest
+  // each pillar/shaft reaches into a drivable corridor, gated on
+  // upright/height-band/abeam by the same function that decides whether to plant
+  // a ghost collision pole there. A hand-synced copy of that gate is exactly how
+  // the radial-intrusion bug once slipped its own regression test.
+  const { posts, autoPoles } = trackSupports(def);
   for (const post of posts) {
-    let deepest = 0, at = 0;
-    for (const sm of ss) {
-      const hit = postAtSample(sm, post);
-      if (hit && hit.intrusion > deepest) { deepest = hit.intrusion; at = sm.s; }
+    if (post.intrusion > 0 && post.intrusion < 0.5) {
+      rows.push(`POST GRAZE ${post.kind} intrudes ${post.intrusion.toFixed(2)} @ s=${post.s.toFixed(0)} (invisible-pole zone)`);
     }
-    if (deepest > 0 && deepest < 0.5) rows.push(`POST GRAZE ${post.kind} intrudes ${deepest.toFixed(2)} @ s=${at.toFixed(0)} (invisible-pole zone)`);
   }
 
   // 3. phantom collision poles — every autoPole's (s, lat) must reconstruct to a REAL
   // post's footprint (the pole IS the post's collision; a pole with no post at its world
-  // position is an invisible wall).
-  for (const ap of (t.autoPoles || [])) {
-    const f = t.centerline.sampleAt(ap.s);
-    const px = f.pos.x + f.lateral.x * ap.lat, pz = f.pos.z + f.lateral.z * ap.lat;
+  // position is an invisible wall). The engine reconstructs the world position
+  // through its own centreline sampler; the "near enough" rule stays here.
+  for (const ap of autoPoles) {
     let bd = Infinity;
-    for (const post of posts) bd = Math.min(bd, Math.hypot(post.x - px, post.z - pz));
+    for (const post of posts) bd = Math.min(bd, Math.hypot(post.x - ap.x, post.z - ap.z));
     if (bd > ap.radius + 0.4) rows.push(`PHANTOM POLE @ s=${ap.s.toFixed(0)} lat=${ap.lat.toFixed(2)} — nearest post ${bd.toFixed(2)} away`);
   }
 

@@ -53,8 +53,8 @@ const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', imp
 
 console.log('track        diff     len  lap(s) brake  minR hairp  dens  rec  minW maxW climb');
 for (const [id, def] of Object.entries({ ...TRACKS, ...DEV_TRACKS })) {
-  const t = buildTrack(def);
-  const m = measureTrack(t);
+  const t = buildTrack(id);
+  const m = measureTrack(t, id);
   const ai = probed.get(id);
   console.log(
     `${id.padEnd(12)} ${String(def.difficulty).padEnd(8)}` +

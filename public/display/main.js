@@ -3,10 +3,10 @@
 // PLAYER_STATE. The 3D itself is the engine's: see Stage.js / render/Display.js.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { Stage } from './Stage.js';
-import { buildTrack, resolveFurniture, TRACK_LIST } from './TrackBuilder.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
-import { trackSchematic, packSchematic } from './trackSchematic.js';
+import { packSchematic } from './trackSchematic.js';
+import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
@@ -14,7 +14,7 @@ import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
-import { CUPS } from '../shared/tracks.js';
+import { CUPS, TRACK_LIST } from '../shared/tracks.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
@@ -40,27 +40,24 @@ function show(name) {
 }
 
 // ---- tracks ----
-// Build every track once (buildTrack is pure geometry — no GLBs needed), so we
-// can ship a schematic catalog to the phones and switch the lobby preview with
-// no rebuild. The catalog (id + name + top-down SVG path) is what the controllers'
-// track picker renders; `built` keeps the geometry for the race + the 3D preview.
-// Selection is host-driven (SELECT_TRACK) and echoed to all.
-function buildEntry(t) {
-  const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
-  b.cup = t.cup;             // carry the cup id onto the geometry → the Stage picks the biome theme
-  b.trackId = t.id;          // registry id, for per-track theme patches (ambientByTrack).
-                             // NOT `id` — buildScenery/buildLandmarks seed their rand
-                             // streams from track.id, and reseeding reshuffles every scatter.
-  // Resolve the authored furniture once (fraction-of-lap u → arclength s, default
-  // radii), via the shared single-source resolver — the trace recorder and the unit
-  // tests run the SAME code, so the game and the conformance oracle can't drift.
-  resolveFurniture(b, t);
-  return b;
+// A track is an ID here, and nothing more. The geometry is built inside the
+// engine — by the sim when a race begins (ttp_session_begin) and by the renderer
+// when the scene is built (ttp_display_build) — from the SAME C++ TrackBuilder,
+// on the same descriptor codegen'd into the wasm. The browser used to carry a
+// second builder purely to feed the renderer and to draw these mini-maps; the
+// mini-maps are baked ahead of time now (shared/trackSchematics.js, regenerated
+// by `npm run gen:schematics`) and nothing on this page integrates a track.
+//
+// `entry` is what the rest of the file passes around as "the track": the
+// catalogue row plus the two mutable per-race fields (the item-roll seed and the
+// lap count) the session reads off it.
+function trackEntry(t) {
+  return { ...t, trackId: t.id, totalLaps: TOTAL_LAPS, seed: 1 };
 }
-const built = new Map(TRACK_LIST.map((t) => [t.id, buildEntry(t)]));
+const built = new Map(TRACK_LIST.map((t) => [t.id, trackEntry(t)]));
 const trackCatalog = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: trackSchematic(built.get(t.id))
+  svg: TRACK_SCHEMATICS[t.id]
 }));
 
 // The controller is a dumb renderer driven entirely off the relay's retained room
@@ -73,7 +70,7 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 //                  livery dots always match the car the display paints.
 const trackChooser = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: packSchematic(trackSchematic(built.get(t.id))) // RDP-simplified, uint8-packed base64 (see trackSchematic codec)
+  svg: packSchematic(TRACK_SCHEMATICS[t.id]) // RDP-simplified, uint8-packed base64 (see trackSchematic codec)
 }));
 const carChooser = CAR_MODELS.map((id, i) => {
   const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};
@@ -133,12 +130,13 @@ const _nativeParty = {
 // collision track): a LIVE lobby preselecting one would offer phones a track their
 // picker catalog doesn't contain.
 if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
+  // Dev ranges are in the wasm's track table too (gen-track-defs-header.mjs
+  // carries DEV_TRACKS past the catalogue), so this only has to name one.
   const _devDef = DEV_TRACKS[_qTrack];
-  if (_devDef) built.set(_qTrack, buildEntry({ id: _qTrack, ..._devDef }));
+  if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
-track.totalLaps = TOTAL_LAPS;
 
 // ---- scene ----
 // The Stage owns the canvas the native renderer draws into and the DOM HUD over

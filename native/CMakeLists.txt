@@ -124,9 +124,16 @@ add_library(libttp_track STATIC
   libttp-track/ttp/util.cc
   libttp-track/ttp/centerline.cc
   libttp-track/ttp/trackbuilder.cc
+  # The augmented-track serializer, in whichever number spelling the caller asks
+  # for: hexJSON for the frozen corpus check, decimals for ttp_track_json. It
+  # takes the number formatter as a function pointer so libttp-track keeps its
+  # independence from libttp-json.
+  libttp-track/ttp/race_track_json.cc
 )
 target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
-target_link_libraries(libttp_track PUBLIC ttp_mathlib ttp_strict_fp ttp_warnings)
+# libttp_json is here for race_track_json's decimal spelling only (jsonnum's
+# shortest-round-trip formatter). No cycle: libttp-json depends on nothing of ours.
+target_link_libraries(libttp_track PUBLIC ttp_mathlib libttp_json ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the shared math corpus ------------------------------------
 # Replays tests/fixtures/math-corpus.jsonl (generated from the WASM build by
@@ -445,7 +452,10 @@ if(DEFINED FILAMENT_SDK)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src)
-  target_link_libraries(ttp_renderer PUBLIC filament-sdk PRIVATE ttp_warnings)
+  # libttp_track is here for the built-track TYPE the scene is meshed from
+  # (ttp::RaceTrack). The renderer never resolves a track ID — which track to
+  # build stays the runtime's call — so this adds a struct, not a catalogue.
+  target_link_libraries(ttp_renderer PUBLIC filament-sdk libttp_track PRIVATE ttp_warnings)
   target_compile_options(ttp_renderer PRIVATE -fno-rtti -fno-exceptions)
   set_target_properties(ttp_renderer PROPERTIES CXX_STANDARD 20)
 endif()

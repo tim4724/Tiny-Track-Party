@@ -7,10 +7,13 @@
 // the two halves of the running game disagree. Both cases are real and both were
 // verified by mutation:
 //
-//   track_defs.h        <- public/shared/tracks.js
+//   track_defs.h        <- public/shared/{tracks,devTracks}.js
 //     Adding `width: 3.1` to tidepool passed 33/33 ctest and 140/140 node while
 //     the renderer drew a 3.1-wide road and the wasm sim raced the stale
 //     2.5-wide one: cars clipping scenery that is not where it is drawn.
+//     That failure mode is gone now that the renderer builds from the same defs
+//     the sim does — but the header is still a bake of live JS, so a stale one
+//     now desyncs the whole GAME from its authored descriptors instead.
 //
 //   protocol-corpus     <- public/shared/protocol.js
 //   framing-corpus      <- partyplug/PartyConnection.js
@@ -37,7 +40,7 @@ const ROOT = path.join(__dirname, '..');
 const DERIVED = [
   {
     what: 'native/libttp-track/generated/track_defs.h',
-    from: 'public/shared/tracks.js',
+    from: 'public/shared/{tracks,devTracks}.js',
     gen: 'scripts/gen-track-defs-header.mjs',
     then: 'node scripts/gen-trackbuilder-corpus.mjs && native/scripts/build-runtime-web.sh',
   },

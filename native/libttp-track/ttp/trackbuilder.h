@@ -134,4 +134,15 @@ struct RaceTrack {
 // buildRaceTrack(trackId, {laps, seed}).
 RaceTrack build_race_track(const TrackDef& def, int laps, uint32_t seed);
 
+// ---- support-post corridor probe (exposed for the geometry audit) -----------
+// The gate the builder itself uses to decide whether a bridge pillar or loop
+// shaft intrudes into a drivable corridor, and so whether it needs a ghost
+// collision pole. scripts/audit-tracks.mjs reports the NEAR misses — a post
+// intruding a couple of centimetres is an invisible wall behind the kerb — and
+// it has to ask with THIS function: a hand-synced copy of the measure is exactly
+// how the radial-intrusion bug once slipped its own regression test.
+struct Post { double x, z, radius, baseY, topY; };
+struct PostHit { bool valid; double lat, tan, intrusion; };
+PostHit post_at_sample(const OutSample& sm, const Post& post);
+
 }  // namespace ttp

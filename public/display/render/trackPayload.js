@@ -1,7 +1,12 @@
-// The scene-build payload for the renderer: the built track plus the RESOLVED
-// theme — every biome slice the renderer needs, with the JS defaulting rules
-// (ambient kind presets, cloud/bird/plane defaults, the per-track ambient patch)
-// already folded in, so the C++ side never re-implements them.
+// The scene-build payload for the renderer: a track ID plus the RESOLVED theme —
+// every biome slice the renderer needs, with the JS defaulting rules (ambient
+// kind presets, cloud/bird/plane defaults, the per-track ambient patch) already
+// folded in, so the C++ side never re-implements them.
+//
+// An ID, not a track. The geometry is the renderer's own business: it runs the
+// native TrackBuilder on this ID and meshes from the result, which is the same
+// object the sim races on. What crosses is only what geometry cannot imply — the
+// biome palette, which is authored in JS (shared/themes.js) and stays there.
 //
 // Crossing ONCE PER RACE is the whole budget here: this is a scene build, not a
 // frame. Nothing that moves is in it (see render/Display.js).
@@ -29,12 +34,13 @@ const DEF_PLANE = { tint: 0xfaf7ec, size: 3.2, y: 22, a0: 1.3, rc: 95, rb: 32,
                     speed: 0.3, bank: 0.4 };
 
 // `theme`: the resolved biome (themeForCup / the ?biome= override).
-// `roster`: [{ id, name, carIndex, color }] in slot order. The JSON round-trip
-// drops the centerline's methods, which is deliberate — plain data crosses.
+// `track`:  the catalogue entry (shared/tracks.js TRACK_LIST) — an id and its
+//           metadata, never geometry.
+// `roster`: [{ id, name, carIndex, color }] in slot order.
 export function trackPayload(theme, track, roster) {
   const t = theme || {};
   return JSON.parse(JSON.stringify({
-  trackId: track.trackId, cup: track.cup, seed: track.seed,
+  trackId: track.id,
   // Resolved theme slices the renderer needs (palette truth stays JS-side).
   road: t.road || null,
   sky: t.sky || null,
@@ -54,7 +60,7 @@ export function trackPayload(theme, track, roster) {
   haze: t.haze || null,
   ambient: (() => {
     if (!t.ambient) return null;
-    const patch = t.ambientByTrack && t.ambientByTrack[track.trackId];
+    const patch = t.ambientByTrack && t.ambientByTrack[track.id];
     return { ...(AMB_KINDS[t.ambient.kind] || AMB_KINDS.flake), ...t.ambient, ...(patch || {}) };
   })(),
   birds: t.birds ? { ...DEF_BIRDS, ...t.birds } : null,
@@ -69,23 +75,13 @@ export function trackPayload(theme, track, roster) {
   structure: t.structure ?? null,
   scenery: t.scenery || null,
   landmark: t.landmark || null,
-  // buildScenery's stream seeds, computed HERE where the exact idStr inputs
-  // live — the C++ scatter replays the identical streams.
-  scenerySeeds: (() => {
-    const idStr = String(track.id || track.name || '') + Math.round(track.centerline.length * 100);
-    let s1 = 2166136261, s2 = 5381, s3 = 51966; // scatter, clutter, landmarks
-    for (let i = 0; i < idStr.length; i++) {
-      s1 = ((s1 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
-      s2 = ((s2 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
-      s3 = ((s3 ^ idStr.charCodeAt(i)) * 16777619) >>> 0;
-    }
-    return [s1, s2, s3];
-  })(),
+  // buildScenery's stream seeds are NOT here: they hash the built track's
+  // length, which is geometry, so the renderer derives them from the track it
+  // just built (TtpRenderer::fillGeometry).
   roster: roster.map((r) => ({
     id: r.id, name: r.name, carIndex: r.carIndex, color: r.color,
     plateY: PLATE_Y[r.carIndex % PLATE_Y.length] ?? null,
     model: (window.CAR_MODELS || [])[r.carIndex % (window.CAR_MODELS || [1]).length] || null
-  })),
-  track
+  }))
         }));
 }

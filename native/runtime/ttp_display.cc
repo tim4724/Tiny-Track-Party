@@ -26,6 +26,8 @@
 #include "TtpRenderer.h"
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
+#include "ttp/race_track.h"
+#include "ttp/trackbuilder.h"
 #include "ttp/scalar_id.h"
 #include "ttp/util.h"
 #include "ttp_render.h"
@@ -322,11 +324,17 @@ int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len) {
     return g_disp->renderer->provideAsset(name, bytes, len) ? 0 : 1;
 }
 
-int ttp_display_build(const char* rosterIdsJson) {
+int ttp_display_build(const char* trackId, const char* rosterIdsJson) {
     if (!g_disp) return 1;
+    const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
+    if (!def) return 1;
     if (g_disp->built) g_disp->renderer->releaseScene();
     g_disp->built = false;
-    if (!g_disp->renderer->buildScene()) return 1;
+    // laps and seed do not reach the geometry — build_race_track only stamps them
+    // onto RaceTrack.totalLaps/.seed, and the renderer reads neither. The scene is
+    // a function of the track descriptor alone.
+    const ttp::RaceTrack geo = ttp::build_race_track(*def, 1, 0u);
+    if (!g_disp->renderer->buildScene(geo)) return 1;
     g_disp->built = true;
     g_disp->roster = parseIds(rosterIdsJson);
     // A rebuild is a new track or a new field; either way the springs must not

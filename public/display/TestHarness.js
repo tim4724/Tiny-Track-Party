@@ -12,9 +12,8 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
-import { trackSchematic } from './trackSchematic.js';
-import { CUPS, TRACKS } from '../shared/tracks.js';
-import { TRACK_LIST, buildTrack } from './TrackBuilder.js';
+import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
+import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
@@ -66,10 +65,10 @@ const el = (id) => document.getElementById(id);
 // ---- track-preview minimap ----
 // A small schematic overlay (bottom-left) with LIVE car dots, so the orbiting
 // whole-layout shot always carries a readable map of the line. The path is the exact
-// SVG the phones' track picker renders; trackSchematic's `proj` maps world x/z onto it.
-function buildMinimap(parent, track, colors) {
-  const schem = trackSchematic(track);
-  if (!schem.d || !schem.proj) return null;
+// SVG the phones' track picker renders, and its baked `proj` maps world x/z onto it.
+function buildMinimap(parent, trackId, colors) {
+  const schem = TRACK_SCHEMATICS[trackId];
+  if (!schem || !schem.d || !schem.proj) return null;
   const old = parent.querySelector('#track-minimap');
   if (old) old.remove();
   const NS = 'http://www.w3.org/2000/svg';
@@ -278,12 +277,11 @@ export function runDisplayScenario(opts, ctx) {
       // over the live 3D preview (mirrors renderLobbyPick + the .is-dim
       // reveal). `picked` picks the MODE: 'cup' (legacy '1'), 'track' or
       // 'random'. Pair the card with a matching ?track=<id> so the orbiting
-      // preview shows the circuit the card names. The live lobby reads its
-      // schematics from main.js's prebuilt catalog; the harness builds them
-      // itself (pure geometry).
+      // preview shows the circuit the card names. Same prebaked schematics the
+      // live lobby uses — nothing in the browser integrates a track any more.
       const mode = opts.picked === '1' ? 'cup' : String(opts.picked);
       const qTrack = new URLSearchParams(location.search).get('track');
-      const mapOf = (id) => ({ svg: trackSchematic(buildTrack({ id, ...TRACKS[id] })) });
+      const mapOf = (id) => ({ svg: TRACK_SCHEMATICS[id] });
       const entryOf = (id) => TRACK_LIST.find((t) => t.id === id);
       const cupOf = (id) => CUPS.find((c) => c.tracks.includes(id));
       let state;
@@ -346,7 +344,7 @@ export function runDisplayScenario(opts, ctx) {
       // so _order stays empty and the overview camera frames the whole track.
       ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { cell: false }));
 
-      const minimap = buildMinimap(el('race'), track, COLORS);
+      const minimap = buildMinimap(el('race'), track.id, COLORS);
       scene.bindSession(engine.h); // the renderer draws this session's cars
 
       scene.onFrame = (dt) => {

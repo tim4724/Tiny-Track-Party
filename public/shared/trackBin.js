@@ -1,8 +1,15 @@
 // track.bin — the scene-build payload the native renderer meshes from.
 //
-// Written once per race by the display's scene build, never per frame. Pure data
-// in, bytes out — no DOM and no renderer — so it also runs in Node if a fixture
-// ever needs to bake one.
+// NO GEOMETRY LIVES HERE. Up to v15 this serialized the whole built track, which
+// meant the browser ran a second implementation of the track builder on every
+// race purely to feed the renderer. The renderer meshes from the ttp::RaceTrack
+// the sim is racing on now (TtpRenderer::fillGeometry), and this payload was cut
+// to what geometry cannot imply: the RESOLVED biome theme (shared/themes.js is
+// authored in JS and stays there) and the roster's liveries.
+//
+// So this file is a theme serializer, not a track serializer. Written once per
+// race by the display's scene build, never per frame. Pure data in, bytes out —
+// no DOM and no renderer.
 //
 // The layout is documented alongside the reader in TtpRenderer.cpp; the version
 // at the head of the buffer is the contract between them, and both sides move
@@ -42,13 +49,9 @@ export function resolveModelTint(td, model, bytes) {
 }
 
 // ---- scene-build payload ---------------------------------------------------
-// "track.bin" v2: the serialized built track the renderer meshes from — layout
-// documented in TtpRenderer.cpp. Carries the roster colours, the RESOLVED road
-// palette (theme.road with buildRoad's defaults applied, sRGB — one source of
-// palette truth, the JS theme), launch-strip zones (bare-asphalt dash blanking)
-// and 11×f32 per sample: pos, lateral, up, width, s. Binary — no JSON in C++.
+// "track.bin" v16: the resolved road palette + roster liveries + the whole biome
+// theme block. Binary — no JSON in C++. Layout documented in TtpRenderer.cpp.
 export function buildTrackBin(td) {
-  const ss = td.track.centerline.samples;
   const roster = td.roster || [];
   const rd = td.road || {};
   const num = (v, d) => {
@@ -64,10 +67,6 @@ export function buildTrackBin(td) {
     num(rd.skirt ?? rd.asphalt, 0x5a6078),
     num(rd.shoulder ?? rd.asphalt, 0x5a6078)
   ];
-  const STRIP_MARGIN = 0.12;
-  const zones = (td.track.pads || [])
-    .filter((p) => p.shape === 'strip')
-    .map((p) => [p.s, (p.halfLen || 0) + STRIP_MARGIN]);
   const sky = td.sky || {};
   const skyCols = [num(sky.zenith, 0x59a7e8), num(sky.horizon, 0x8ecae6), num(sky.below, 0xc8e9f2)];
   const fogCol = num(td.fog, 0x8ecae6);
@@ -75,14 +74,10 @@ export function buildTrackBin(td) {
   const hillShape = HILL_SHAPES[td.hillShape] ?? 0;
   const hillCols = (td.hills || [0x8cc578, 0x7cb86a, 0x9bce86]).map((h) => num(h, 0x8cc578));
   const envBytes = 3 * 4 + 4 + 4 + 4 + hillCols.length * 4;
-  // Furniture: item-box anchors + every pad (0 = chevron disc, 1 = launch strip).
-  const boxes = (td.track.boxes || []).map((b) => [b.s, b.lat || 0]);
-  const pads = (td.track.pads || []).map((p) => p.shape === 'strip'
-    ? [1, p.s, p.lat || 0, p.halfLen || 1, p.halfWidth || 2]
-    : [0, p.s, p.lat || 0, p.radius || 0.65, 0]);
-  const furnBytes = 4 + boxes.length * 8 + 4 + pads.length * 20;
-  // Scenery palette (trees/bush/boulders) + the exact stream seeds. Model
-  // names map to provided scenery<i>.glb assets by index.
+  // Scenery palette (trees/bush/boulders). Model names map to provided
+  // scenery<i>.glb assets by index. The placement STREAM SEEDS are not here:
+  // they are a function of the built track's length, so the renderer derives
+  // them (TtpRenderer::fillGeometry) rather than being told.
   const sc = td.scenery || {};
   const scModels = [...new Set([...(sc.trees || []).map((e) => e.model),
                                 ...(sc.bush ? [sc.bush.model] : [])])];
@@ -93,7 +88,7 @@ export function buildTrackBin(td) {
   // scatter picks by index over the FULL list, so a short list also skews
   // every other colour's share).
   const scRocks = sc.rocks || [0xaaaaaa, 0xb4a898, 0x9aa2a4];
-  const scBytes = 4 * 2 + 4 * 3 + 4 + scTrees.length * 16 + 4 + (scBush ? 16 : 0)
+  const scBytes = 4 * 3 + 4 + scTrees.length * 16 + 4 + (scBush ? 16 : 0)
       + 4 + scRocks.length * 4 + 2 * 4 + 4;
   // Landmark kinds (fixed enum shared with the C++ port) + their stream seed.
   // Enum shared with the C++ port. The C++ dispatches in buildLandmarks' SOURCE
@@ -104,7 +99,7 @@ export function buildTrackBin(td) {
                ball: 10, umbrella: 11, sandcastle: 12, cabin: 13, crayons: 14,
                books: 15, train: 16 };
   const lmKinds = [].concat(td.landmark || []).map((k) => LM[k]).filter((k) => k != null);
-  const lmBytes = 4 + 4 + lmKinds.length * 4;
+  const lmBytes = 4 + lmKinds.length * 4;
   // Ground clutter. A palette with an unported kind sends NONE — the C++ side
   // replays the same rand stream, so a silently skipped kind would diverge it.
   const CLK = { flower: 0, shell: 1, starfish: 2, driftwood: 3, drift: 4,
@@ -113,21 +108,7 @@ export function buildTrackBin(td) {
   const clOk = clRaw.every((k) => CLK[k.kind] != null);
   const clKinds = clOk ? clRaw.map((k) => [CLK[k.kind], k.w, k.tints || []]) : [];
   const clBytes = 4 + 4 + clKinds.reduce((a, [, , t]) => a + 12 + t.length * 4, 0);
-  const oils = (td.track.hazards || []).map((h) => [h.s, h.lat || 0, h.radius || 0.8, h.cones || 4]);
-  // Support structures (track.js buildPillars/buildPoles/buildLoopPoles) and the
-  // grass BERMS lofted under raised, non-pillared deck (buildHills). Ghost poles
-  // are collision proxies for supports already drawn — never meshed.
-  const poles = (td.track.poles || []).filter((p) => !p.ghost)
-      .map((p) => [p.s, p.lat || 0, p.radius || 0.45]);
-  const pillars = (td.track.pillars || []).map((p) => [p.x, p.z, p.baseY, p.topY, p.radius]);
-  const posts = (td.track.supportPosts || []).map((p) => [p.x, p.z, p.radius,
-      p.contact.pos.x, p.contact.pos.y, p.contact.pos.z,
-      p.contact.up.x, p.contact.up.y, p.contact.up.z]);
-  const berms = (td.track.hills || []).map((run) => run.map(
-      (r) => [r.cx, r.cz, r.lx, r.lz, r.halfW, r.topL, r.topR]));
-  const oilBytes = 4 + oils.length * 16 + 4 + poles.length * 12
-      + 4 + pillars.length * 20 + 4 + posts.length * 36
-      + 4 + berms.reduce((a, run) => a + 4 + run.length * 28, 0) + 4;
+  const structureBytes = 4;
   // ── theme block (v12) ─────────────────────────────────────────────────────
   // Everything the BIOME dresses beyond the road/sky/hill colours above: the
   // ground kind, the light rig, the sky/air/water furniture and the accent
@@ -216,18 +197,14 @@ export function buildTrackBin(td) {
     }
   }
   const themeBytes = T.length * 4;
-  const headerBytes = 28 + roster.length * 16 + pal.length * 4 + 12 + 4 + zones.length * 8 + envBytes + furnBytes + scBytes + lmBytes + clBytes + oilBytes + themeBytes;
-  const buf = new ArrayBuffer(headerBytes + ss.length * 11 * 4);
+  const totalBytes = 8 + roster.length * 16 + pal.length * 4 + 12
+      + envBytes + scBytes + lmBytes + clBytes + structureBytes + themeBytes;
+  const buf = new ArrayBuffer(totalBytes);
   const dv = new DataView(buf);
   let o = 0;
   const u32 = (v) => { dv.setUint32(o, v, true); o += 4; };
   const f32 = (v) => { dv.setFloat32(o, v, true); o += 4; };
-  u32(15);                                        // TRACK_BIN_VERSION
-  u32(ss.length);
-  f32(td.track.roadWidth);
-  f32(td.track.groundY ?? 0);
-  f32(td.track.length);
-  u32(td.track.closed ? 1 : 0);
+  u32(16);                                        // TRACK_BIN_VERSION
   u32(roster.length);
   for (const r of roster) {                       // '#rrggbb' → ABGR u32
     const n = parseInt((r.color || '#888888').slice(1), 16);
@@ -246,19 +223,11 @@ export function buildTrackBin(td) {
   f32(rd.kerbW ?? 0.22);
   f32(rd.kerbH ?? 0.20);
   u32(rd.edgeLines !== false ? 1 : 0);
-  u32(zones.length);
-  for (const [s, half] of zones) { f32(s); f32(half); }
   for (const c of skyCols) u32(c);                // sky zenith/horizon/below (sRGB)
   u32(fogCol);
   u32(hillShape);
   u32(hillCols.length);
   for (const c of hillCols) u32(c);
-  u32(boxes.length);
-  for (const [s, lat] of boxes) { f32(s); f32(lat); }
-  u32(pads.length);
-  for (const [k, s, lat, a, b] of pads) { u32(k); f32(s); f32(lat); f32(a); f32(b); }
-  u32((td.scenerySeeds || [0, 0])[0]);
-  u32((td.scenerySeeds || [0, 0])[1]);
   f32(sc.density ?? 0);
   f32((sc.mix && sc.mix.tree) ?? 0);
   f32((sc.mix && sc.mix.bush) ?? 0);
@@ -271,7 +240,6 @@ export function buildTrackBin(td) {
   f32((sc.rockS || [0.3, 0.45])[0]);
   f32((sc.rockS || [0.3, 0.45])[1]);
   u32(scModels.length);
-  u32((td.scenerySeeds || [0, 0, 0])[2]);
   u32(lmKinds.length);
   for (const k of lmKinds) u32(k);
   f32((sc.clutter && sc.clutter.density) || 0);
@@ -280,23 +248,8 @@ export function buildTrackBin(td) {
     u32(k); f32(w); u32(tints.length);
     for (const t of tints) u32(num(t, 0xffffff));
   }
-  u32(oils.length);
-  for (const [s, lat, r, cones] of oils) { f32(s); f32(lat); f32(r); u32(cones); }
-  u32(poles.length);
-  for (const [s, lat, r] of poles) { f32(s); f32(lat); f32(r); }
-  u32(pillars.length);
-  for (const p of pillars) for (const v of p) f32(v);
-  u32(posts.length);
-  for (const p of posts) for (const v of p) f32(v);
-  u32(berms.length);
-  for (const run of berms) { u32(run.length); for (const r of run) for (const v of r) f32(v); }
   u32(num(td.structure, 0x9aa1b4));               // support-structure tint
   for (const [tag, v] of T) { if (tag) f32(v); else u32(v); } // theme block
-  for (const s of ss) {
-    f32(s.pos.x); f32(s.pos.y); f32(s.pos.z);
-    f32(s.lateral.x); f32(s.lateral.y); f32(s.lateral.z);
-    f32(s.up.x); f32(s.up.y); f32(s.up.z);
-    f32(s.width); f32(s.s);
-  }
+  if (o !== totalBytes) throw new Error(`track.bin: wrote ${o} of ${totalBytes} bytes`);
   return new Uint8Array(buf);
 }

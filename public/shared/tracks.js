@@ -9,13 +9,15 @@ import { GEN_TRACKS, GEN_FURNITURE } from './genTracks.js';
 
 // Auto-placed furniture for a generated track — tolerant of a not-yet-baked id, so the
 // registry can name a new track BEFORE gen-tracks.mjs runs (the bake pipeline itself
-// imports this module via TrackBuilder; a hard read here would deadlock that workflow).
+// imports this module; a hard read here would deadlock that workflow).
 const genFurn = (id) => GEN_FURNITURE[id] || { oils: [], pads: [], boxes: [] };
 
 // Track catalogue — DATA ONLY, no renderer. The single source of truth for "what
 // tracks exist": each track is a display name, a default road `width`, and an ordered
-// list of parametric SEGMENTS (the geometry). TrackBuilder integrates the segments
-// into a drivable centerline; the renderer sweeps the procedural road over it.
+// list of parametric SEGMENTS (the geometry). The native TrackBuilder integrates the
+// segments into a drivable centerline; the renderer sweeps the procedural road over
+// it. This file is codegen'd into the wasm by scripts/gen-track-defs-header.mjs, so
+// an edit here is only live once that has run (tests/codegen-freshness.test.js).
 //
 // Kept dependency-free so the SAME module loads everywhere: the display engine, the
 // Node unit tests (imported directly), and the classic-script gallery.
