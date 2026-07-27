@@ -49,10 +49,26 @@ fixtures can be authored from C++: write a header JSON and record from it. Such 
 fixture proves "the sim still does what it did when this was recorded" and says
 NOTHING about JS parity.
 
-`tests/fixtures/catalogue-sweep-corpus.jsonl` is the other member of this class —
-all 20 tracks raced and digested, re-recordable with
-`catalogue_sweep_check --record`. Keep the two classes distinct in your head: only
-class 1 can ever settle a "did the port get it right" question.
+`tests/fixtures/catalogue-sweep-corpus.jsonl` and
+`tests/fixtures/runtime-camera-corpus.jsonl` are the other members of this class —
+all 20 tracks raced and digested (`catalogue_sweep_check --record`), and the chase
+camera, the framing/fog solve and the split-screen grid (`runtime_check --record`).
+Keep the two classes distinct in your head: only class 1 can ever settle a "did the
+port get it right" question. The camera corpus is the sharpest example of why:
+`ChaseCamera.js` and SceneRenderer's overview rigs were deleted with the JS
+renderer, so it can only ever say "the cameras still do what they did when this was
+recorded" — never that the port from JS was right.
+
+`runtime-camera-corpus.jsonl` is also the ONE fixture here whose numbers are not
+exact. Everything else is bit-exact because the sim routes every transcendental
+through the vendored fdlibm; the camera math deliberately does not — it is cosmetic
+float and calls the platform's `expf`/`logf`/`tanf`/`atan2f`, and Apple libm, glibc
+and musl (which is what emscripten ships) agree on those to about a ulp rather than
+to the bit. So each recorded value is rounded to 4 significant decimal digits, and
+`--record` refuses to freeze one sitting close enough to a rounding boundary that a
+one-ulp difference could flip it. That guard is what lets `record_runtime` hold byte
+identity on all four legs; it also means the fixture pins behaviour to ~0.1%, not to
+the bit. Do not copy the pattern anywhere the vendored math is available.
 
 ## Blind spots these traces structurally cannot cover
 

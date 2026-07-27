@@ -51,7 +51,7 @@ decision before anything else proceeds.
    — until every gallery scenario builds and animates.
 3. **Web integration — DONE.** Ran behind `?renderer=filament` with the sim
    feeding `FrameInput` across the wasm boundary, then cut over: the renderer
-   links into the sim's own module, `ttp_display.cc` builds each frame from the
+   links into the sim's own module, libttp-runtime builds each frame from the
    live `Game` in C++, and Three.js is deleted. Cameras and the split-screen
    cell layout moved to the runtime with it. The judging surface used to get
    there (`/gallery-compare.html`, one sim → two renderers) went with Three.js;

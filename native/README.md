@@ -25,11 +25,20 @@ libttp-json/    Canonical JSON (sorted keys, ECMA-262 shortest-form numbers)
                 + the parser. Byte-identical to JSON.stringify by contract.
 libttp-party/   RoomFlow, relay framing, fastlane netcode. Sans-IO: the host
                 owns the socket and the RTCPeerConnection.
+libttp-runtime/ The platform-free half of the display runtime: the chase and
+                overview cameras, the framing/fog solve, and the per-frame
+                TtpFrameInput built straight off the live Game. This is where
+                the sim and the renderer MEET, so no frame state is ever
+                serialized to the shell. No Filament, no emscripten, no
+                platform API — every leg compiles it AND runs it, via the
+                runtime_check (cameras/framing/grid) and frame_builder
+                (the per-frame assembly) ctests.
 runtime/        The three public C ABIs: ttp_runtime.h (sim), ttp_party.h
                 (party) and ttp_display.h (surface, scene, cameras, frame).
-                No C++ types cross them. ttp_display.cc is where the sim and
-                the renderer MEET: it builds each frame from the live Game in
-                C++, so no frame state is ever serialized to the shell.
+                No C++ types cross them. ttp_display_web.cc is the WEB shell
+                behind the third: the WebGL2 surface and the TtpRenderer calls
+                and nothing else, built only with -DFILAMENT_SDK. tvOS and
+                Android get siblings of that file, not of the library.
 mathlib/        Vendored fdlibm — transcendentals off V8's implementation, so
                 traces are platform-independent.
 replay/         replay_cli — the golden-trace conformance gate.
@@ -42,7 +51,7 @@ probe/          probe_cli — the balance instruments (lap times, car matrix).
 ```bash
 cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build -j8
-ctest --test-dir native/build            # 33 tests
+ctest --test-dir native/build            # 36 tests
 ```
 
 The browser artifacts are **checked in**. After touching anything under

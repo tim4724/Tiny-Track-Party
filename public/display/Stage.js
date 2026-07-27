@@ -2,7 +2,7 @@
 // DOM HUD floating over it, and the frame loop that drives both.
 //
 // It does NOT own the 3D world. Cars, track, cameras, split-screen cells and
-// every cosmetic that moves live in C++ (native/runtime/ttp_display.cc), which
+// every cosmetic that moves live in C++ (native/libttp-runtime/), which
 // reads the sim directly. So there is no scene graph here, no per-car pose
 // push, no camera math: a frame is `display.frame(dt)` plus the DOM writes that
 // place this frame's labels.

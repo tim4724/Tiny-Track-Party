@@ -12,6 +12,10 @@
 #ifndef TTP_RENDER_H
 #define TTP_RENDER_H
 
+/* <math.h> is here for ttp_grid_cols alone — see its comment below. Nothing
+ * else in this header needs more than <stdint.h>, and it must stay that way:
+ * libttp-runtime, the renderer and every platform shell all include this. */
+#include <math.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -19,7 +23,7 @@ extern "C" {
 #endif
 
 /*
- * One frame of everything that moves. Built by the runtime (ttp_display.cc)
+ * One frame of everything that moves. Built by libttp-runtime's frame builder
  * straight off the live Game — it never leaves the process, so "plain data"
  * here buys layout stability for the tvOS/Android shells and a serializable
  * fixture format, not marshalling.
@@ -110,6 +114,66 @@ static inline const TtpRocketInput* ttp_frame_rockets(const TtpFrameInput* f) {
 }
 static inline const TtpBurstInput* ttp_frame_bursts(const TtpFrameInput* f) {
     return (const TtpBurstInput*) (ttp_frame_rockets(f) + f->rocketCount);
+}
+
+/* What the built track measures, for the runtime's overview cameras and fog
+ * bands. The box is over the CENTERLINE points, like SceneRenderer's was.
+ *
+ * Lives here rather than inside TtpRenderer because both sides of the split
+ * need it: the renderer fills it (it owns the parsed track), libttp-runtime's
+ * solveFraming consumes it, and libttp-runtime must not know TtpRenderer
+ * exists. */
+typedef struct TtpTrackFraming {
+    float centerX, centerY, centerZ;
+    float sizeX, sizeY, sizeZ;
+    float fogTune;
+} TtpTrackFraming;
+
+/* Split-screen column count for n views on a w x h surface — SceneRenderer's
+ * bestGrid, verbatim: score every column count by how far the resulting cell is
+ * from square, plus a real penalty per wasted cell, and take the cheapest.
+ * `ceil(sqrt(n))` is NOT the same function: on a 16:9 screen it lays 3 players
+ * out 2x2 where the display lays them 3x1, so the 3D cells and the DOM HUD
+ * (which uses the JS answer to place every label, place card and steer bar)
+ * disagreed about where a cell is.
+ *
+ * THREE callers had three copies of this: the renderer's viewport split, the
+ * runtime's per-cell camera aspect, and Stage.js's HUD layout. It is a pure
+ * function of (n, w, h), so it is one static inline in the header both C++
+ * layers already include — deliberately NOT a function in libttp-runtime, which
+ * would put a link edge between the renderer and a library it must not need. */
+static inline uint32_t ttp_grid_cols(uint32_t n, uint32_t w, uint32_t h) {
+    if (n == 0) return 1;
+    /* Landscape is a HARD preference, not a weighted one. A racing cell wants to
+     * be wider than it is tall: the road runs away toward a horizon, so the
+     * useful information is spread horizontally, and a tall narrow cell crops the
+     * very thing the player steers by (the track ahead and to the sides) while
+     * spending pixels on sky and bonnet. Distance-from-square alone put two
+     * players side by side (0.89:1) and three in a row (0.59:1) on a 16:9 screen.
+     * So: if ANY layout gives landscape cells, only those are considered, and the
+     * score picks between them; portrait is reachable only when nothing else is
+     * (one player on a phone held upright).
+     *
+     * This replaces a +2.0 cost term that did the same job by arithmetic. The two
+     * agree on every display shape we could construct — |log(aspect)| only exceeds
+     * 2 past 7.4:1, so the penalty was already decisive — but a rule that says
+     * what it means cannot be defeated by a screen nobody tried. */
+    const float W = (float) w, H = (float) h;
+    uint32_t best = 1;
+    float bestCost = INFINITY;
+    int bestLandscape = 0;
+    for (uint32_t cols = 1; cols <= n; cols++) {
+        const uint32_t rows = (n + cols - 1) / cols;
+        const float cellAspect = (W / cols) / (H / rows);
+        const int landscape = cellAspect >= 1.0f;
+        /* distance from square + a real penalty per wasted cell (so 4 -> 2x2) */
+        const float cost = fabsf(logf(cellAspect)) + (cols * rows - n) * 0.4f;
+        if ((landscape && !bestLandscape)
+                || (landscape == bestLandscape && cost < bestCost)) {
+            bestCost = cost; best = cols; bestLandscape = landscape;
+        }
+    }
+    return best;
 }
 
 #ifdef __cplusplus

@@ -48,11 +48,23 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   layer was conformance-proven; git history has them.
 - Rendering is NATIVE too, in the SAME wasm module as the sim. `native/renderer/`
   (libttp-renderer, Filament) links into `ttp_runtime_web` alongside libttp-sim and
-  libttp-party, and `native/runtime/ttp_display.{h,cc}` drives it: per frame the
-  shell calls `ttp_display_frame(dt)` and C++ reads the live `Game` to build the
-  renderer's input in place. NOTHING about a car — pose, speed, steer, which cell
-  it owns — is ever serialized to JS and handed back. Cameras (the spring chase
-  per cell, the lobby/gallery overview rigs) and the fog profiles live there too.
+  libttp-party, and `native/runtime/ttp_display.h` is the ABI that drives it: per
+  frame the shell calls `ttp_display_frame(dt)` and C++ reads the live `Game` to
+  build the renderer's input in place. NOTHING about a car — pose, speed, steer,
+  which cell it owns — is ever serialized to JS and handed back. That ABI has TWO
+  implementations behind it, and the split is load-bearing: `native/libttp-runtime/`
+  holds everything platform-free (the spring chase per cell, the lobby/gallery
+  overview rigs, the fog profiles, the per-frame `TtpFrameInput` builder) and is
+  compiled AND EXECUTED on every leg by two ctests — `runtime_check` replays the
+  quantized camera/framing/grid corpus, `frame_check` drives the frame builder
+  (roster-slot identity, cell cameras, the hold, the banana/rocket/burst arrays)
+  and carries the one static_assert binding `TTP_CAM_*` to the library's enum.
+  Anything that must not drift silently belongs in one of those two, NOT in the
+  shim: `runtime/ttp_display_web.cc` is the WEB
+  shell — the emscripten WebGL2 surface and the TtpRenderer calls, nothing else —
+  and needs the Filament SDK, so it compiles on one machine configuration and no
+  ctest sees it. tvOS/Android get siblings of that file, not of the library. If a
+  line names no platform API it belongs in libttp-runtime.
   `public/display/render/Display.js` is the browser's whole edge of it, and
   `Stage.js` owns the canvas, the DOM HUD and the rAF loop. Three.js is GONE
   (git history has it); it survives only as a TEST-ONLY devDependency, used by the
@@ -78,7 +90,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (33 tests, the SAME 33 on every leg —
+  replayed by `native/` ctest (36 tests, the SAME 36 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
@@ -92,10 +104,15 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
-  C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`)
-  is regression evidence only: it proves the sim still does what it did, never that
-  the port was right. Both re-record via a `record_*` ctest holding byte identity.
-  See `tests/fixtures/traces/README.md`.
+  C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,
+  `runtime_check --record`) is regression evidence only: it proves the sim/cameras
+  still do what they did, never that the port was right. All three re-record via a
+  `record_*` ctest holding byte identity. See `tests/fixtures/traces/README.md`.
+  `runtime-camera-corpus.jsonl` is the one QUANTIZED fixture in the tree, and has
+  to be: the camera math is cosmetic float calling the PLATFORM's
+  expf/tanf/atan2f, not the vendored fdlibm, and the four legs' libms agree to a
+  ulp rather than to the bit. It is rounded to 4 significant digits with a
+  boundary guard in the recorder; do not read bit-exactness into it.
 - Traces are ONE RACE PER PROCESS, so they cannot see state that leaks from one
   race into the next (a racing-line cache keyed by a recycled `Centerline*` made
   bots drive the previous track's line — invisible to all 8 fixtures). Three gates
@@ -118,7 +135,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   wasm, which is the only place that artifact is exercised.
 - Two checks audit the SUITE, not the code, and run weekly + on demand
   (`.github/workflows/test-the-tests.yml`), never on PRs: `npm run mutation-check`
-  breaks the engine 21 ways and requires the matching ctest to go red for each (two
+  breaks the engine 28 ways and requires the matching ctest to go red for each (two
   gates were found blind this way), and `npm run revive:js-oracle` restores the
   retired JS sim AND its track builder from git — each file from its own retirement
   commit — and re-records all 8 golden traces byte-identically. The twin now pulls

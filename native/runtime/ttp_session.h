@@ -1,6 +1,6 @@
 // ttp_session.h — INTERNAL seam between the two halves of the runtime, not an
-// ABI: ttp_display.cc reads the live Game of a session handle in C++ instead of
-// receiving a serialized copy of it back from the shell.
+// ABI: the display shell reads the live Game of a session handle in C++ rather
+// than receiving a serialized copy of it back from the shell.
 //
 // One function, deliberately. Everything else the display needs it gets from
 // the Game itself, so the sim ABI in ttp_runtime.h stays the only way anything

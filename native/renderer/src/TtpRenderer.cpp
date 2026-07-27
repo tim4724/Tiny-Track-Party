@@ -1154,7 +1154,7 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
     return tex;
 }
 
-bool TtpRenderer::trackFraming(TrackFraming& out) const {
+bool TtpRenderer::trackFraming(TtpTrackFraming& out) const {
     if (!mTrack || mTrack->samples.empty()) return false;
     float3 lo = mTrack->samples[0].pos, hi = lo;
     for (const TrackBin::Sample& s : mTrack->samples) {
@@ -1170,7 +1170,7 @@ bool TtpRenderer::trackFraming(TrackFraming& out) const {
 
 float TtpRenderer::maxOrbitDist(float radius, float height) const {
     if (!mTrack || mTrack->samples.empty()) return 0;
-    TrackFraming f{};
+    TtpTrackFraming f{};
     trackFraming(f);
     const float ringY = f.centerY + height;
     float worst = 0;
@@ -1182,44 +1182,13 @@ float TtpRenderer::maxOrbitDist(float radius, float height) const {
     return worst;
 }
 
-// Split-screen column count — SceneRenderer's bestGrid: score every column
-// count by how far the resulting cell is from square, plus a real penalty per
-// wasted cell, and take the cheapest. `ceil(sqrt(n))` is NOT the same function:
-// on a 16:9 screen it lays 3 players out 2×2 where the display lays them 3×1,
-// so the 3D cells and the DOM HUD (which uses the JS answer to place every
-// label, place card and steer bar) disagreed about where a cell is.
-//
-// Landscape is a HARD preference, not a weighted one. A racing cell wants to be
-// wider than it is tall: the road runs away toward a horizon, so the useful
-// information is spread horizontally, and a tall narrow cell crops the very
-// thing the player steers by (the track ahead and to the sides) while spending
-// pixels on sky and bonnet. Distance-from-square alone put two players side by
-// side (0.89:1) and three in a row (0.59:1) on a 16:9 screen. So: if ANY layout
-// gives landscape cells, only those are considered, and the score picks between
-// them; portrait is reachable only when nothing else is (one player on a phone
-// held upright).
-//
-// This replaces a +2.0 cost term that did the same job by arithmetic. The two
-// agree on every display shape we could construct — |log(aspect)| only exceeds 2
-// past 7.4:1, so the penalty was already decisive — but a rule that says what it
-// means cannot be defeated by a screen nobody tried.
+// Split-screen column count. The scoring — including the hard landscape
+// preference — lives in ttp_grid_cols (renderer/include/ttp_render.h) so that
+// the renderer's viewport split and the runtime's per-cell camera aspect are one
+// definition rather than copies that can disagree about where a cell is; the
+// reasoning lives with it there.
 uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
-    if (n == 0) return 1;
-    const float W = (float) mWidth, H = (float) mHeight;
-    uint32_t best = 1;
-    float bestCost = std::numeric_limits<float>::infinity();
-    bool bestLandscape = false;
-    for (uint32_t cols = 1; cols <= n; cols++) {
-        const uint32_t rows = (n + cols - 1) / cols;
-        const float cellAspect = (W / cols) / (H / rows);
-        const bool landscape = cellAspect >= 1.0f;
-        // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
-        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f;
-        if ((landscape && !bestLandscape) || (landscape == bestLandscape && cost < bestCost)) {
-            bestCost = cost; best = cols; bestLandscape = landscape;
-        }
-    }
-    return best;
+    return ttp_grid_cols(n, mWidth, mHeight);
 }
 
 // Where cell i is drawn: its tile in a GRID that is letterboxed as one piece.

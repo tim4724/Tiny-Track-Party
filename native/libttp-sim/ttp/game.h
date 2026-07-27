@@ -111,7 +111,7 @@ class RacingLine;    // ai_driver.h
 // the front-wheel yaw and the body lean, or the car visibly leans out of the
 // corner it is turning into. `Car::steer` stores the raw input, so every
 // consumer of it as a DIRECTION multiplies by this (see Game::update and
-// getSnapshot's "steer", which is what ttp_display.cc mirrors).
+// getSnapshot's "steer", which is what libttp-runtime's frame builder mirrors).
 inline constexpr double STEER_SIGN = -1;
 
 // Live-tunable steering-response exponent — the C++ twin of Game.js
@@ -177,7 +177,7 @@ class Game {
   const std::vector<Zone>& hazards() const { return hazards_; }
   const std::vector<PoleRt>& poles() const { return poles_; }
   const std::vector<BananaRt>& bananas() const { return bananas_; }
-  // Read-only, for the renderer (ttp_display.cc builds its frame off these
+  // Read-only, for the renderer (libttp-runtime builds its frame off these
   // rather than off a serialized snapshot). getSnapshot() derives the same two:
   // a box is available when its cooldown has run out, a rocket's `s` wraps.
   const std::vector<BoxRt>& boxes() const { return boxes_; }

@@ -120,13 +120,9 @@ public:
     static constexpr float CELL_MAX_ASPECT = 21.0f / 9.0f;
 
     // What the built track measures, for the runtime's overview cameras and fog
-    // bands. The box is over the CENTERLINE points, like SceneRenderer's was.
-    struct TrackFraming {
-        float centerX, centerY, centerZ;
-        float sizeX, sizeY, sizeZ;
-        float fogTune;
-    };
-    bool trackFraming(TrackFraming& out) const;
+    // bands (TtpTrackFraming, ttp_render.h — the plain-data contract, so the
+    // runtime can consume it without knowing this class exists).
+    bool trackFraming(TtpTrackFraming& out) const;
 
     // Worst-case distance from a camera orbiting at (radius, height) about the
     // track centre to any centerline point — a point sitting diametrically

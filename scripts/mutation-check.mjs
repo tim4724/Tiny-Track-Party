@@ -180,6 +180,55 @@ const MUTATIONS = [
     expect: 'fastlane',
   },
 
+  // ---- the display runtime (libttp-runtime), which had NO gate at all until
+  // runtime_check: it lived in runtime/ttp_display.cc behind the Filament SDK,
+  // so every leg compiled around it and every ctest looked straight past it.
+  {
+    name: 'camera/chase-damping-not-frame-rate-independent',
+    file: 'native/libttp-runtime/ttp/camera.cc',
+    find: 'const float aPos = 1 - std::exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);',
+    replace: 'const float aPos = (CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt;',
+    expect: 'runtime_check',
+  },
+  {
+    name: 'framing/lobby-orbit-stops-clearing-the-bbox',
+    file: 'native/libttp-runtime/ttp/framing.cc',
+    find: 'f.bbAx = halfX + BBOX_CLEARANCE;',
+    replace: 'f.bbAx = halfX;',
+    expect: 'runtime_check',
+  },
+  // The frame BUILDER, which runtime_check does not reach — it calls the camera,
+  // framing and grid primitives itself and never runs the block that assembles a
+  // frame out of them. frame_check is that gate.
+  {
+    name: 'frame/cell-aspect-transposed',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'aspect = (float) (d.width / cols) / (float) (d.height / rows);',
+    replace: 'aspect = (float) (d.width / rows) / (float) (d.height / cols);',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/outlived-hold-drives-behind-the-overlay',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (d.hold) for (size_t i = 0; i < cars.size(); i++) atRest(outCars[i]);',
+    replace: '',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/roster-slot-taken-by-insertion-order',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (d.roster[i] == cp->id) { cars[i] = cp.get(); break; }',
+    replace: 'cars[i] = cp.get();',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/unarmed-banana-drawn',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (now < b.liveAt) continue;',
+    replace: '',
+    expect: 'frame_builder',
+  },
+
   // ---- the party C ABI marshalling (ttp_party.cc).
   {
     name: 'party-abi/add-player-drops-game-fields',

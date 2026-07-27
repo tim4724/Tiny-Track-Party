@@ -437,6 +437,83 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
 )
 
+# ---- libttp-runtime: the platform-free half of the display runtime ----------
+# Cameras (the spring chase per split-screen cell), the overview/lobby framing
+# and fog solve, and the per-frame TtpFrameInput built straight off the live
+# Game. All of it used to sit in runtime/ttp_display.cc, BEHIND the Filament
+# gate — so it compiled on exactly one machine configuration in the world (a dev
+# box with the Filament fork) and no ctest on any of the four legs ever saw a
+# line of it. Nothing in here names a platform API, a renderer or emscripten, so
+# nothing forced that.
+#
+# Includes renderer/include for ttp_render.h — the plain-data frame contract and
+# ttp_grid_cols. That is a HEADER path, not a link edge: this library must never
+# depend on ttp_renderer (which needs the SDK CI does not have).
+#
+# RaceSession deliberately stays in libttp-sim: replay_cli has to keep linking
+# the sim alone.
+add_library(libttp_runtime STATIC
+  libttp-runtime/ttp/camera.cc
+  libttp-runtime/ttp/framing.cc
+  libttp-runtime/ttp/frame_builder.cc
+)
+target_include_directories(libttp_runtime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+  ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+target_link_libraries(libttp_runtime PUBLIC libttp_json libttp_sim ttp_strict_fp)
+target_link_libraries(libttp_runtime PRIVATE ttp_warnings)
+
+# ---- Regression: the cameras, the framing solve and the split-screen grid ----
+# C++-AUTHORED evidence, NOT a parity oracle: ChaseCamera.js and SceneRenderer's
+# rigs were deleted with the JS renderer, so this proves the cameras still do
+# what they did when it was recorded and says NOTHING about whether the port was
+# right. Re-record deliberately with --record, exactly like the catalogue sweep.
+#
+# The corpus is QUANTIZED, unlike every other fixture in this tree. This is the
+# only check whose subject calls the PLATFORM's libm (expf/logf/tanf/atan2f)
+# rather than the vendored fdlibm — cosmetic float, by design — and Apple libm,
+# glibc and musl/emscripten agree on those to about a ulp, not to the bit. See
+# the file header.
+add_executable(runtime_check runtimetest/runtime_check.cc)
+target_link_libraries(runtime_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(runtime_check)
+add_test(NAME runtime_check
+  COMMAND runtime_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/runtime-camera-corpus.jsonl
+)
+add_test(NAME record_runtime
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:runtime_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/runtime-camera-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/runtime-camera-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+# (record_roundtrip.cmake invokes "<cli> --record <fixture> --out=<f>"; the cases
+# are compiled in, so the check accepts and ignores that positional.)
+
+# ---- Behaviour: the per-frame TtpFrameInput builder -------------------------
+# runtime_check above pins the cameras, the framing solve and the grid, but it
+# calls those three primitives ITSELF — it never runs the block that assembles a
+# frame out of them. That block (roster-slot identity, cell-to-camera
+# assignment, the hold, the banana liveness filter, the rocket wrap, the burst
+# drain) is the largest thing lifted out of the Filament-gated shim, and moving
+# it into libttp-runtime bought it COMPILE coverage on all four legs and nothing
+# else. This executes it.
+#
+# Assertions rather than a corpus, like hazard_check: almost everything here is
+# exactly reproducible on every leg (casts, integer mapping, copies), and the two
+# places that touch the platform libm are checked against a reference ChaseCam
+# driven in the same process. See the file header.
+#
+# It also carries the ONE binding between the frozen TTP_CAM_* ABI macros and
+# libttp-runtime's CamMode enum, which is why it puts runtime/ on the include
+# path — a test TU may include the emscripten-tagged ABI header, and unlike the
+# shim that used to hold those static_asserts, this target is built on every leg.
+add_executable(frame_check runtimetest/frame_check.cc)
+target_include_directories(frame_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+target_link_libraries(frame_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(frame_check)
+add_test(NAME frame_builder COMMAND frame_check)
+
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
 # ships on tvOS and Android TV, where the shell hands init() a CAMetalLayer or
@@ -478,12 +555,25 @@ endif()
 # artifact — it is CI's browser-ABI link check (the wasm leg has no SDK), which
 # is the one build that would otherwise never compile these link options.
 if(EMSCRIPTEN)
-  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc)
+  # libttp-runtime's sources are compiled straight into the module, OUTSIDE the
+  # renderer gate below: that is what puts the cameras and the frame builder
+  # through CI's Filament-less wasm leg, which is otherwise the one build that
+  # would never see them. (Sources, not a link against libttp_runtime, so they
+  # are in the link whether or not anything in this module references them.)
+  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc
+    libttp-runtime/ttp/camera.cc
+    libttp-runtime/ttp/framing.cc
+    libttp-runtime/ttp/frame_builder.cc)
   if(TARGET ttp_renderer)
-    list(APPEND TTP_WEB_SOURCES runtime/ttp_display.cc)
+    list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
   endif()
   add_executable(ttp_runtime_web ${TTP_WEB_SOURCES})
-  target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+  # renderer/include is ttp_render.h ONLY — the plain-data frame contract. It is
+  # on the path with or without an SDK, because libttp-runtime's sources need it.
+  target_include_directories(ttp_runtime_web PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
   target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
   set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
   target_link_options(ttp_runtime_web PRIVATE

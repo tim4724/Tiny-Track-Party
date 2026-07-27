@@ -28,6 +28,7 @@ const ROOTS = [
   'native/runtime',
   'native/renderer',
   'native/libttp-json',
+  'native/libttp-runtime',
   'native/libttp-sim',
   'native/libttp-party',
   'native/libttp-track',
