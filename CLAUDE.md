@@ -138,11 +138,11 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `ttp_display_profile` and the dropped-vsync count. It instruments nothing while
   hidden, so switching it off for release is one line (the `show()` in its
   constructor); `window.__perf` (`show()`/`hide()`/`sample()`) is the live and
-  scripted-sweep surface. Do NOT reach for
-  Filament's `Renderer::getFrameInfoHistory()` for the GPU number: on emscripten
-  the backend's timer-query path is compiled out and `canCreateFence()` is false,
-  so `gpuFrameDuration` is CPU submit time wearing a GPU label. A
-  `fenceSync`/`clientWaitSync` poll is worse (9.6 ms measured against a real
-  3.4 ms frame — it times `setTimeout` clamping). The rAF cadence alone measures
-  neither: it is a vsync plateau, so it can only ever show DROPS.
+  scripted-sweep surface. Do NOT reach for Filament's
+  `Renderer::getFrameInfoHistory()` for the GPU number: on emscripten the
+  backend's timer-query path is compiled out and `canCreateFence()` is false, so
+  `gpuFrameDuration` is CPU submit time wearing a GPU label. A `fenceSync` /
+  `clientWaitSync` poll is worse (9.6 ms measured against a real 3.4 ms frame —
+  it times `setTimeout` clamping). The rAF cadence alone measures neither: it is
+  a vsync plateau, so it can only ever show DROPS.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

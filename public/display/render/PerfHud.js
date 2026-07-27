@@ -16,8 +16,8 @@
 //     (a mean at vsync is just 1000/fps printed a second time).
 //
 //   • CPU — ttp_display_profile()'s total: the wasm building this frame's input
-//     from the live Game and issuing its GL. Measured ~0.8 ms for a one-cell
-//     race, which is close enough to performance.now()'s 0.1 ms coarsening that
+//     from the live Game and issuing its GL. Measured ~0.9 ms for a 4-cell race
+//     at 1280×720, which is close enough to performance.now()'s 0.1 ms coarsening that
 //     the per-section split below it is mostly quantization noise — hence the
 //     total here, with the sections left to profile() for anyone chasing one.
 //
@@ -295,12 +295,14 @@ export class PerfHud {
     for (const f of all) if (f.interval > 0 && f.interval < min) min = f.interval;
     this._periodMs = snapPeriod(min);
     const gpu = stat('gpu');
+    const target = Math.round(1000 / this._periodMs);
     return {
       fps: this._stamps.length,
-      target: Math.round(1000 / this._periodMs),
+      target,
       periodMs: this._periodMs,
-      drops: all.slice(-Math.min(all.length, Math.round(1000 / this._periodMs)))
-                .reduce((s, f) => s + f.drops, 0),
+      // The last second's worth of frames — one refresh period each, so `target`
+      // of them. slice clamps on its own when fewer have been recorded.
+      drops: all.slice(-target).reduce((s, f) => s + f.drops, 0),
       gpu, cpu: stat('cpu'), frame: stat('interval'),
       budget: gpu.p50 == null ? null : gpu.p50 / this._periodMs,
       gpuTimer: this._gpuState,
@@ -313,7 +315,7 @@ export class PerfHud {
 
   _render() {
     const s = this.sample();
-    const n1 = (v, d = 1) => (v == null ? '—' : v.toFixed(d));
+    const n1 = (v) => (v == null ? '—' : v.toFixed(1));
     const gpuLine = s.gpuTimer === 'ext'
         ? `gpu ${n1(s.gpu.p50)} (p95 ${n1(s.gpu.p95)}) · ${s.budget == null ? '—' : Math.round(s.budget * 100) + '%'}`
         : `gpu n/a · ${s.gpuTimer === 'unavailable' ? 'no timer ext' : s.gpuTimer}`;
@@ -324,7 +326,9 @@ export class PerfHud {
       `${s.pixels[0]}×${s.pixels[1]} · ${this._cells || 'no'} cell${this._cells === 1 ? '' : 's'}`
     ].join('\n');
     // Health is the GPU's p95 against the budget, plus dropped vsyncs. Both are
-    // "what you feel"; the p50 is what you tune against.
+    // "what you feel"; the p50 is what you tune against. With no GPU timer the
+    // fallback is the rAF interval's overshoot past one period, which lands on
+    // the same scale: 1.0 means the slow frames are taking two refreshes.
     const over = s.gpu.p95 != null ? s.gpu.p95 / s.periodMs : (s.frame.p95 / s.periodMs) - 1;
     this._el.style.color = (s.drops > 2 || over > 1) ? '#FF6B6B'
         : (s.drops > 0 || over > 0.7) ? '#FFD166' : '#7CFC8A';

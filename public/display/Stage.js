@@ -117,8 +117,9 @@ export class Stage {
     container.insertBefore(this._canvas, container.firstChild);
     this._sizeCanvas();
     this._initOverlay();
-    // Frame-cost readout. Hidden unless ?perf=1 (or "P"), and inert while hidden
-    // — it instruments the frame only when someone is looking at it.
+    // Frame-cost readout, on by default while the game is in development ("P"
+    // hides it). Inert while hidden: it instruments the frame only when someone
+    // is looking at it.
     this.perf = new PerfHud(this.container, this._canvas);
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs

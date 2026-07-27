@@ -183,15 +183,19 @@ export class Display {
   burstOn(id) { this._fn.burst(JSON.stringify(id), 0, 0); }
   burstAt(s, lat) { this._fn.burst(null, s, lat); }
 
-  // Last frame's per-section wall clock, as { section: ms }. The names are fixed
-  // for the life of the module, so they are marshalled across once — profileTotal
-  // below runs every frame while the perf HUD is up.
+  // The profile's section names, fixed for the life of the module and so
+  // marshalled across once: profileTotal() runs every frame while the perf HUD
+  // is up, and cwrap would rebuild the string on each call.
+  _profileNames() {
+    return this._profNames || (this._profNames = this._fn.profileNames().split(','));
+  }
+
+  // Last frame's per-section wall clock, as { section: ms }.
   profile() {
     const ptr = this.m._ttp_display_profile();
     if (!ptr) return null;
-    const names = this._profNames || (this._profNames = this._fn.profileNames().split(','));
     const out = {};
-    names.forEach((n, i) => { out[n] = this.m.HEAPF64[(ptr >> 3) + i]; });
+    this._profileNames().forEach((n, i) => { out[n] = this.m.HEAPF64[(ptr >> 3) + i]; });
     return out;
   }
 
@@ -201,8 +205,7 @@ export class Display {
   profileTotal() {
     const ptr = this.m._ttp_display_profile();
     if (!ptr) return null;
-    const names = this._profNames || (this._profNames = this._fn.profileNames().split(','));
-    const i = names.indexOf('total');
+    const i = this._profileNames().indexOf('total');
     return i < 0 ? null : this.m.HEAPF64[(ptr >> 3) + i];
   }
 }
