@@ -18,8 +18,9 @@ const RELAY_PORT = Number(process.env.PW_RELAY_PORT || PORT + 1);
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
-  // One worker: the display page renders the full Three.js scene under
-  // SwiftShader in headless — parallel displays just starve each other.
+  // One worker: the display page rasterizes the full Filament scene through
+  // SwiftShader in headless — parallel displays just starve each other. CI scales
+  // the suite by SHARDING across runners instead (.github/workflows/test.yml).
   workers: 1,
   // One retry everywhere (not just CI): a retry runs in a FRESH worker process —
   // a brand-new browser with no accumulated SwiftShader GL memory pressure — which

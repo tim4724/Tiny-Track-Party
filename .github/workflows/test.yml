@@ -42,9 +42,26 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # SHARDED across runners, which is not the same knob as playwright's `workers`.
+  # The runner has no GPU, so every display page rasterizes a full Filament scene
+  # through SwiftShader — that is why the config pins workers: 1 (parallel
+  # displays on ONE machine just starve each other). Separate runners don't
+  # share that contention, so this is the only axis the suite can scale on.
+  #
+  # It became necessary when the native renderer replaced Three.js: same 24
+  # specs, but ~2x the software-rasterized work per test, and the serial job
+  # ran ~20 min against a 10-minute cap.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Playwright splits by FILE, so the shards come out ~2.5/6.5/8/4 min against
+    # the suite's ~20: the two heavy ones draw cup-series (5 chained 4-race cups)
+    # and the reconnect/flow group. 15 leaves either room for the retry the
+    # config arms, and still trips on a genuine hang long before a serial job.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false   # one shard's failure shouldn't hide the others' results
+      matrix:
+        shard: [1, 2, 3, 4]
     container:
       # Ships the matching browsers — keep the tag in sync with
       # @playwright/test in package.json.
@@ -60,11 +77,12 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Run E2E tests
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.shard }}/4
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          # Unique per shard — upload-artifact@v4 rejects a duplicate name.
+          name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
