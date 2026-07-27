@@ -53,12 +53,17 @@ jobs:
   # ran ~20 min against a 10-minute cap.
   e2e:
     runs-on: ubuntu-latest
-    # Each shard is ~45 s of fixed overhead (container init, checkout, setup-node)
-    # on top of its tests, so shards are not free and this is not "more is
-    # better". Six is where the curve flattens: the suite is ~15 min of test
-    # execution, and with per-test sharding (fullyParallel in playwright.config.js)
-    # the slowest shard lands near 2.5 min. Eight would only buy ~20 s more while
-    # paying two more container pulls.
+    # Four, because a shard's ~30-40 s of fixed overhead (mostly the playwright
+    # container pull) is now the BIGGER half of it. Once the automation render
+    # budget landed, whole-suite execution fell from 903 s to 219 s, so the
+    # arithmetic that once justified more runners inverted: measured at six
+    # shards the slowest was 96 s, of which only 35 s was tests. Four splits the
+    # same 219 s into ~55 s pieces and lands within ~10 s of that, for two fewer
+    # runners. Going the other way is equally pointless — the floor here is the
+    # container pull, not the suite.
+    #
+    # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
+    # of these splits even; by FILE, cup-series alone would pin one shard.
     #
     # 10 covers the slowest shard plus the retry the config arms, with room for a
     # cold-cache run, and still trips on a genuine hang.
@@ -66,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false   # one shard's failure shouldn't hide the others' results
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4]
     container:
       # Ships the matching browsers — keep the tag in sync with
       # @playwright/test in package.json.
@@ -82,7 +87,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Run E2E tests
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+        run: npx playwright test --shard=${{ matrix.shard }}/4
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v4
