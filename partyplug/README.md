@@ -189,7 +189,9 @@ nowMs)`, `expiredPeers(nowMs)` (silent-past-`timeoutMs` peers; always empty in
 `LOBBY`), `allParticipantsDisconnected()`, `hasLateJoiners()` /
 `lateJoiners()` (the predicate and the list of the same roster-minus-order set),
 and `graceTick(nowMs)` (arms a `graceMs` return-to-lobby deadline while every
-participant is gone but late joiners wait; fires `true` exactly once). The
+participant is gone but late joiners wait; fires `true` when it elapses, then
+RE-ARMS — a caller still polling under the same condition gets another `true`
+every `graceMs`, so acting once is the caller's job). The
 detectors never mutate presence and never emit — the host applies an expiry
 through the normal `markDisconnected` path, keeping the single-writer
 invariant. All time is an injected `nowMs`; RoomFlow stays clock-free (the

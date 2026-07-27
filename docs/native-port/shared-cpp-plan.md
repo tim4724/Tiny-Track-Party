@@ -86,7 +86,7 @@ still works inside the branch.
 | | Phase | JS retired | Risk |
 |---|---|---|---|
 | P0 | `libttp-runtime` exists; CI compiles it | 0 | med |
-| P1 | Delete duplication that already exists | ~60 | low |
+| P1 | Delete duplication that already exists | ~78 gross, net +16 | low |
 | P2 | Design tokens, strings, catalogue as shared data | ~250 | low |
 | P3 | C++ owns the track payload | ~450 | high |
 | P4 | Cross-language wire-compat suite | 0 | med |

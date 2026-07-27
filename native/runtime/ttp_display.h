@@ -84,7 +84,8 @@ TTP_ABI void ttp_display_cells(const char* idsJson);
  * Writes 4 floats per cell — x, y, width, height, TOP-LEFT origin — and returns
  * how many cells it wrote: min(cells, maxCells), or 0 when no car owns one
  * (out null, or ttp_display_cells empty/never called). Neither an int PREDICATE
- * nor an OUTCOME (ttp_abi.h): a COUNT, the only one in these headers.
+ * nor an OUTCOME (ttp_abi.h): a COUNT, like ttp_room_size and
+ * ttp_room_connected_count.
  *
  * Units are the surface's PHYSICAL pixels, the same ones ttp_display_create and
  * ttp_display_resize take. A shell drawing its overlay in scaled units divides

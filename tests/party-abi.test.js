@@ -325,7 +325,9 @@ test('party ABI reproduces the fastlane netcode corpus', async () => {
 //  - EXPORT LIST. ttp_room_late_joiners_json has to survive into the artifact the
 //    browser loads. The exports come from TTP_ABI/EMSCRIPTEN_KEEPALIVE, so a
 //    missing one is a linker outcome ctest cannot see (it links a different
-//    target) — cwrap here throws if it is absent.
+//    target). cwrap does NOT throw on a missing name — it defers until the call
+//    — so absence surfaces here as the call failing, not the wrap. See
+//    tests/display-abi.test.js, which checks the export table directly.
 //  - The policy is now LOAD-BEARING in the display: DisplayNet polls graceTick on
 //    its liveness tick and returns to the lobby when it fires. The frozen corpus
 //    replayed above calls graceTick 146 times and gets `true` from none of them,
