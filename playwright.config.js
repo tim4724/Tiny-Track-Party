@@ -22,6 +22,16 @@ module.exports = defineConfig({
   // SwiftShader in headless — parallel displays just starve each other. CI scales
   // the suite by SHARDING across runners instead (.github/workflows/test.yml).
   workers: 1,
+  // Shard granularity, NOT in-machine parallelism: with workers: 1 every test
+  // still runs one at a time, locally and on CI. What this changes is how
+  // --shard splits the suite. Left off, Playwright shards whole FILES, so
+  // cup-series.spec.js (5 tests, ~3m49s on CI) is one atomic lump and the
+  // shards came out 2:19/3:54/6:01/2:50 against a 3:46 perfect split — the
+  // slowest shard set the whole workflow's wall clock. Per-test sharding lets
+  // that file spread. Safe because no spec has beforeAll/describe.serial or any
+  // other file-level shared state; every test opens its own display and phones,
+  // and the _reapContexts fixture in helpers.js closes them per test.
+  fullyParallel: true,
   // One retry everywhere (not just CI): a retry runs in a FRESH worker process —
   // a brand-new browser with no accumulated SwiftShader GL memory pressure — which
   // is the cleanest antidote to the occasional multi-second render stall that

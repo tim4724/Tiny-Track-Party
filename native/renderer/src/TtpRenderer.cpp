@@ -3107,6 +3107,11 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
 // ~2.5-texel normal bias.
 void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    // Shadows off (headless automation — see setShadowsEnabled): leave the map
+    // null and let the established no-map path carry it. Everything downstream
+    // already handles this, because a track whose road has no verts reaches the
+    // same state one line below.
+    if (!mShadowsEnabled) return;
     if (mRoad.verts.empty() || !mRenderer) return;
     constexpr uint32_t SM = 2048;
     // Fit: the road's own bounds, padded for the structures under it and the

@@ -68,6 +68,14 @@ public:
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
     void resize(uint32_t width, uint32_t height);
+    // Skip the sun's shadow bake for every scene built from here on. The bake is
+    // a 2048² depth pass over the whole circuit plus its ESM blur, once per
+    // track — cheap on a GPU, a genuinely heavy frame under software GL, and a
+    // Grand Prix pays it four times. Headless automation turns it off (the JS
+    // renderer this replaced did the same, via navigator.webdriver → key
+    // .castShadow = false). Takes effect at the next buildScene; not a live
+    // toggle, since the map is baked into the scene.
+    void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
     bool buildScene();
     // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
@@ -340,6 +348,10 @@ private:
     // The frozen sun shadow map and the matrix that puts a world position in
     // its [0,1] texture space (see bakeShadowMap).
     filament::Texture* mShadowMap = nullptr;
+    // See setShadowsEnabled. False leaves mShadowMap null, which is already the
+    // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
+    // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
+    bool mShadowsEnabled = true;
     filament::math::mat4f mShadowFromWorld;
     float mShadowTexel = 0.05f; // world units per shadow texel; also the "a map
                                 // is bound" sentinel the samplers test on

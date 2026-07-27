@@ -37,6 +37,7 @@ export class Display {
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
+      shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
       frame: mod.cwrap('ttp_display_frame', 'number', ['number']),
       burst: mod.cwrap('ttp_display_burst', null, ['string', 'number', 'number']),
@@ -156,6 +157,11 @@ export class Display {
   camera(mode) { this._fn.camera(mode); }
   look(eye, target) { this._fn.look(eye.x, eye.y, eye.z, target.x, target.y, target.z); }
   fog(on) { this._fn.fog(on ? 1 : 0); }
+
+  // The sun's baked shadow map, from the next setTrack onwards. Only the E2E
+  // suite turns it off (Stage.js, on navigator.webdriver): the bake is a heavy
+  // one-off frame under software GL, and no test looks at a shadow.
+  shadows(on) { this._fn.shadows(on ? 1 : 0); }
 
   // Hold the field where it is, at rest — the pause overlay and the end-of-race
   // fast-forward, where the engine's live state is not what should be on screen.

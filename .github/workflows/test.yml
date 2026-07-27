@@ -53,19 +53,40 @@ jobs:
   # ran ~20 min against a 10-minute cap.
   e2e:
     runs-on: ubuntu-latest
-    # Playwright splits by FILE, so the shards come out ~2.5/6.5/8/4 min against
-    # the suite's ~20: the two heavy ones draw cup-series (5 chained 4-race cups)
-    # and the reconnect/flow group. 15 leaves either room for the retry the
-    # config arms, and still trips on a genuine hang long before a serial job.
-    timeout-minutes: 15
+    # Six, measured against four on the real thing rather than reasoned about:
+    # 1m40s vs 2m01s for the whole workflow. Both were tried in anger, because
+    # once the automation render budget landed and whole-suite execution fell
+    # from 903 s to 219 s, the old arithmetic no longer applied.
+    #
+    # Do not "optimise" this down to save runners. The repo is PUBLIC, so
+    # standard-runner minutes are free, and wall clock is the only axis that
+    # pays.
+    #
+    # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
+    # of these splits even; by FILE, cup-series alone would pin one shard.
+    #
+    # 10 covers the slowest shard plus the retry the config arms, with room for a
+    # cold-cache run, and still trips on a genuine hang.
+    timeout-minutes: 10
     strategy:
       fail-fast: false   # one shard's failure shouldn't hide the others' results
       matrix:
-        shard: [1, 2, 3, 4]
-    container:
-      # Ships the matching browsers — keep the tag in sync with
-      # @playwright/test in package.json.
-      image: mcr.microsoft.com/playwright:v1.60.0-noble
+        shard: [1, 2, 3, 4, 5, 6]
+    # NO `container:`. This job used to run in mcr.microsoft.com/playwright,
+    # which is 922 MB and was re-pulled by every shard on every run — 25-40 s
+    # before a single test started, and then a different Node was installed on
+    # top of the one it ships anyway. Caching just the chromium binaries does
+    # the same job in ~4 s. Measured, four variants, warm cache:
+    #   container + setup-node (what this was)   50 s
+    #   container, image's own node              40 s
+    #   cached browsers + `install --with-deps`  35 s
+    #   cached browsers, no --with-deps          30 s   <- this
+    #
+    # No --with-deps because the ubuntu-latest image already carries chromium's
+    # shared libraries: the variant above ran the full 3D scene boot through
+    # SwiftShader on a stock runner. If GitHub ever drops one of those libs this
+    # goes red on every shard at once with a chromium launch error, and the fix
+    # is to put --with-deps back on the install step (+11 s).
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -76,8 +97,19 @@ jobs:
           node-version: 26
           cache: 'npm'
       - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Keyed on the lockfile, so bumping @playwright/test invalidates it
+          # automatically — no image tag to keep in sync by hand any more. The
+          # prefix restore-key means a miss still starts from the last browser
+          # set and only downloads the delta.
+          key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pw-browsers-${{ runner.os }}-
+      - run: npx playwright install chromium
       - name: Run E2E tests
-        run: npx playwright test --shard=${{ matrix.shard }}/4
+        run: npx playwright test --shard=${{ matrix.shard }}/6
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v4

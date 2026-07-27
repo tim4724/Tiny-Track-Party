@@ -384,6 +384,10 @@ void ttp_display_fog(int enabled) {
     if (g_disp) g_disp->fog = enabled != 0;
 }
 
+void ttp_display_shadows(int enabled) {
+    if (g_disp) g_disp->renderer->setShadowsEnabled(enabled != 0);
+}
+
 void ttp_display_hold(int held) {
     if (!g_disp) return;
     g_disp->hold = held != 0;

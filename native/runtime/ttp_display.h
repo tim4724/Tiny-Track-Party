@@ -83,6 +83,16 @@ TTP_ABI void ttp_display_look(double eyeX, double eyeY, double eyeZ,
  * clip the far side of the circuit); racing and the lobby orbit want it on. */
 TTP_ABI void ttp_display_fog(int enabled);
 
+/* The sun's baked shadow map on/off, from the next ttp_display_build onwards.
+ *
+ * Baking is a 2048² depth pass over the whole circuit plus an ESM blur, run
+ * once per track (never per frame). That is nothing on a GPU, but under the
+ * software GL of a headless test runner it is one of the heaviest frames in the
+ * whole session, and a Grand Prix chains four tracks. E2E turns it off; nothing
+ * on the shipped path does. Off renders lit but unshadowed — the same thing a
+ * track that bakes no map has always produced. */
+TTP_ABI void ttp_display_shadows(int enabled);
+
 /* Hold the field where it is: cars keep the pose they were last drawn at, with
  * every motion cue (speed, steer, brake, boost, wall scrub) zeroed, so nothing
  * keeps spinning its wheels or laying rubber while standing still.
