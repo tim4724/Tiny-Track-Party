@@ -4290,8 +4290,18 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // Per-car ground blobs (the frozen sun never sees cars — they carry a
     // contact shadow instead, the JS renderer's `ao` plane). The JS shadow is
     // a BAKED top-down car silhouette with a ~2% blur, tinted UNDER_AO_COLOR
-    // 0x171513 at UNDER_AO_OPACITY 0.55, on a footprint × SHADOW_OVERSCAN 1.45
-    // quad so the feather lands beyond the wheels.
+    // 0x171513, on a footprint × SHADOW_OVERSCAN 1.45 quad so the feather lands
+    // beyond the wheels.
+    //
+    // The OPACITY is the one thing here that is not the JS's. Blocking the sun
+    // leaves a surface its ambient, which on these rigs is about 65% of lit —
+    // so a real cast shadow is a 35% dip, and painting one wants roughly that
+    // opacity. The JS's UNDER_AO_OPACITY 0.55 was a 56% dip, picked when cast
+    // shadows were a vague haze; against a sharp one the car looked pressed
+    // into a hole. 0.35 is measured against the deck (34% dip on skysnake) and
+    // is close enough on every biome — the rigs only span 32% to 36%. It also
+    // puts the car back between its siblings, the prop blobs at 0.40 and the
+    // lawn discs at 0.30.
     //
     // It's a GRID, like the JS's (which is why a shadow can hug a bending deck
     // at all): the conform lands each vertex on the road and the quads between
@@ -4300,6 +4310,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     if (mBlendMaterial) {
         mCarBlobs.resize(carCount);
         const float3 INKC = srgbToLinear(0x171513);
+        constexpr float AO = 0.35f;                   // see the note above
         for (uint32_t c = 0; c < carCount; c++) {
             Mesh& m = mCarBlobs[c];
             const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
@@ -4315,9 +4326,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                 for (int i = 0; i <= GW; i++) {
                     const float x = ((float) i / GW - 0.5f) * W;
                     const float z = ((float) j / GL - 0.5f) * L;
-                    m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, 0.55f) });
+                    m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, AO) });
                     m.uvs.push_back({ (float) i / GW, (float) j / GL });
-                    m.local.push_back({ x, z, (uint8_t) std::lround(0.55f * 255.0f) });
+                    m.local.push_back({ x, z, (uint8_t) std::lround(AO * 255.0f) });
                 }
             }
             for (int j = 0; j < GL; j++) {
@@ -6340,6 +6351,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
+            // Carried across as the RELATIVE gain it was, 0.08/0.55, so it still
+            // deepens the blob by 15% at full pitch now that the base opacity
+            // comes from the light rig instead of from that 0.55.
             const float load = mCarWheels.size() > i
                     ? std::min(1.0f, std::fabs(mCarWheels[i].pitch) / 0.08f) : 0.0f;
             // One projection per car, shared with the boost disc below: both
@@ -6347,7 +6361,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
             haveCarS = true;
             conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.02f,
-                    (0.55f + 0.08f * load) / 0.55f);
+                    1.0f + (0.08f / 0.55f) * load);
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
         // each streak front (0.7) → back (−2.4) past the body at the car's
