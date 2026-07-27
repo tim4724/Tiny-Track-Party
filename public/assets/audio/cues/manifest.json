@@ -1,0 +1,848 @@
+{
+  "version": 1,
+  "generatedBy": "scripts/bake-cues.mjs",
+  "renderer": "chromium 148.0.7778.96 / OfflineAudioContext",
+  "sampleRate": 48000,
+  "bitDepth": 16,
+  "encoding": "pcm_s16le/wav",
+  "noiseSeed": 1414811697,
+  "trimFloor": 0.000031,
+  "trimFloorDbfs": -90.308734,
+  "loopSeconds": 1,
+  "voiceRenderSeconds": 3,
+  "reproducibility": "A re-bake lands within 1 LSB, not byte-identically. Chromium sums a node's fan-in in HashSet (heap-address) order, so any cue merging several branches into one destination adds its branches in a different ORDER each render; float addition is not associative, so the result moves by one float32 ULP (~2.98e-8, about -150 dBFS) and the occasional sample sitting on a .5 rounding boundary flips by one LSB. The LIVE game has the same instability on the same graphs. `npm run bake:cues -- --check` allows 1 LSB on 0.1% of samples; tests/bake-cues.test.js is an exact hash gate on what is committed.",
+  "note": "Baked from the live WebAudio synthesis in public/display/audio/cues.js with jitter forced to 1.0 (Math.random === 0.5) and the cached noise buffer filled from mulberry32(noiseSeed). Re-apply per-cue jitter at PLAYBACK as a playbackRate. cues.js stays the bake source and the gallery audition surface; nothing plays these yet.",
+  "masterBus": {
+    "limiter": {
+      "node": "DynamicsCompressor",
+      "thresholdDb": -12,
+      "kneeDb": 24,
+      "ratio": 6,
+      "attack": "WebAudio default 0.003 s",
+      "release": "WebAudio default 0.25 s"
+    },
+    "source": "public/display/Audio.js:120-125 (and gallery-sounds.js:23-27)",
+    "note": "master → compressor → destination. Every cue and the music bed share it. Without an equivalent on the native bus, dense overlap will read louder than the web build."
+  },
+  "variantSource": "DEFAULT_PICKS only — localStorage picks (tinytrack_sound_picks_v1) are NOT honoured by the bake",
+  "cues": {
+    "banana_drop": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "banana_drop.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 9517,
+          "durationSec": 0.198271,
+          "body60Sec": 0.089875,
+          "peak": 0.28431,
+          "rms": 0.036645,
+          "sha256": "db2fc1cb453cef3216c2061ce35b702c56a78c885e6dfe3933af01ce93589ae9",
+          "jitterDurationDriftMs": [
+            -11.128096,
+            11.789807
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "f 350 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.05,
+                "driftMs": [
+                  -2.806284,
+                  2.973155
+                ]
+              }
+            ],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 1,
+          "playbackRate": "2^(U(-1, +1)/12)",
+          "rateRange": [
+            0.943874,
+            1.059463
+          ]
+        }
+      },
+      "variant": "plop"
+    },
+    "banana_slip": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "banana_slip.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 41520,
+          "durationSec": 0.865,
+          "body60Sec": 0.770375,
+          "peak": 0.269997,
+          "rms": 0.104844,
+          "sha256": "cf3f1c36242c16245d878f7d70c5437413e6c925b3b199d325585179ec5b0a73",
+          "jitterDurationDriftMs": [
+            -24.624871,
+            25.346435
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [
+              {
+                "hz": 7.5,
+                "atRateExtremes": [
+                  7.28649,
+                  7.719767
+                ]
+              }
+            ],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.68,
+                "driftMs": [
+                  -19.35828,
+                  19.925521
+                ]
+              }
+            ],
+            "computedRhythm": false
+          },
+          "note": "also the oil-spin cue (Audio.spin) — cannot be specialised."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "dizzy"
+    },
+    "boost": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "smooth",
+      "playback": {
+        "gainFormula": "0.10 * l",
+        "smoothTauSec": 0.06,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": "linear between adjacent stops, sample-aligned (all stops share the loop phase)"
+      },
+      "stops": [
+        {
+          "level": 0.02,
+          "file": "boost-l002.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.379681,
+          "rms": 0.103515,
+          "sha256": "9e67670be5f2c3ec2756e63bb893db5cc1f327c62ec41afe61d6a71678d3f2dd",
+          "lowpassHz": 429.6,
+          "Q": 1
+        },
+        {
+          "level": 0.25,
+          "file": "boost-l025.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.415601,
+          "rms": 0.115555,
+          "sha256": "64170f0b1a9181dbc0a00a3e05f21aca8c9b82096b439a90769befd928af0bc3",
+          "lowpassHz": 540,
+          "Q": 1
+        },
+        {
+          "level": 0.5,
+          "file": "boost-l050.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.460921,
+          "rms": 0.126941,
+          "sha256": "1470931970b857c2279ad190f163ba1eb29f80f223802bd3fcd481da7cdcf33e",
+          "lowpassHz": 660,
+          "Q": 1
+        },
+        {
+          "level": 0.75,
+          "file": "boost-l075.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.541673,
+          "rms": 0.136983,
+          "sha256": "684bd76946d438b0fa944e165830d56274f4af39f03f436b81ba0e14178ddf0a",
+          "lowpassHz": 780,
+          "Q": 1
+        },
+        {
+          "level": 1,
+          "file": "boost-l100.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.609699,
+          "rms": 0.146193,
+          "sha256": "3500baa87dd1c6c3e319211968cc776b59aef8c9c04e59a25c31ba776b913744",
+          "lowpassHz": 900,
+          "Q": 1
+        }
+      ],
+      "note": "brightness IS the surge, so the filter needs stops; gain does not (it is exactly linear and is divided out)."
+    },
+    "brake": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "rubber",
+      "playback": {
+        "gainFormula": "0.14 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": null
+      },
+      "stops": [
+        {
+          "level": 1,
+          "file": "brake.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.261757,
+          "rms": 0.050722,
+          "sha256": "e85655cf3446a806487cc60d0845698e34fefb24ac66c5ad8cd9e0d8cfe27469",
+          "bandpassHz": 950,
+          "Q": 3,
+          "gateLfoHz": 11,
+          "gateRange": [
+            0.1,
+            1
+          ],
+          "levelInvariant": true
+        }
+      ],
+      "note": "ONE file. Nothing but the output gain moves with level — the 950 Hz Q3 bandpass and the 11 Hz gate LFO are static — so a single unit-gain loop plus 0.14*l (50 ms smoothing) is exact, not an approximation."
+    },
+    "corner": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "squeal",
+      "playback": {
+        "gainFormula": "0.07 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 1,
+        "crossfade": "linear between adjacent stops, sample-aligned (all stops share the loop phase)"
+      },
+      "stops": [
+        {
+          "level": 0.02,
+          "file": "corner-l002.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.296762,
+          "rms": 0.068835,
+          "sha256": "7f6a2db67a08fafded4f8b0975e98a87dc254d42186ca3bf52efdf06fa4185e3",
+          "bandpassHz": 1207,
+          "Q": 5,
+          "lfoHz": 6,
+          "lfoDepthHz": 70
+        },
+        {
+          "level": 0.5,
+          "file": "corner-l050.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.318247,
+          "rms": 0.074085,
+          "sha256": "35d7d78e00c46667b00bd4ce930318539c80f5c32a8da000c5057373828826fe",
+          "bandpassHz": 1375,
+          "Q": 5,
+          "lfoHz": 6,
+          "lfoDepthHz": 70
+        },
+        {
+          "level": 1,
+          "file": "corner-l100.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.304788,
+          "rms": 0.079281,
+          "sha256": "3b86b8f506af3df14ca6336cab0cade60585ed5c49893d4520cb3bdf7a422d91",
+          "bandpassHz": 1550,
+          "Q": 5,
+          "lfoHz": 6,
+          "lfoDepthHz": 70
+        }
+      ],
+      "note": "level is steer² × speed gate, so it is heavily biased low; a spinning car is forced silent by the caller."
+    },
+    "countdown": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "beat": "tick",
+          "file": "countdown_tick.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 18624,
+          "durationSec": 0.388,
+          "body60Sec": 0.257521,
+          "peak": 0.367534,
+          "rms": 0.047792,
+          "sha256": "d2ec8cc17909ae47b94853b3a47bc0f7266708d0d6a8f92cfba183ffe56c3189",
+          "jitterDurationDriftMs": [
+            -6.665608,
+            6.782121
+          ],
+          "jitterHazards": {
+            "clean": true,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [],
+            "computedRhythm": false
+          },
+          "note": "the 3/2/1 beat. RaceSession fires onCountdownTick at 1 Hz and the 1 s spacing belongs to the sim, so the beats are baked separately and the sequence is not baked at all."
+        },
+        {
+          "beat": "go",
+          "file": "countdown_go.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 21024,
+          "durationSec": 0.438,
+          "body60Sec": 0.307396,
+          "peak": 0.428938,
+          "rms": 0.059172,
+          "sha256": "4cd5811c8e9b9d48eb726ddea8d8366139f927479fb77257eab004734060a689",
+          "jitterDurationDriftMs": [
+            -7.524578,
+            7.656105
+          ],
+          "jitterHazards": {
+            "clean": true,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.05,
+                "driftMs": [
+                  -0.85897,
+                  0.873985
+                ]
+              }
+            ],
+            "computedRhythm": false
+          },
+          "note": "the launch beat (n === 0). One j is shared by both plucks in the synth, which one playbackRate reproduces exactly."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.3,
+          "playbackRate": "2^(U(-0.3, +0.3)/12)",
+          "rateRange": [
+            0.982821,
+            1.01748
+          ]
+        }
+      },
+      "variant": "marimba"
+    },
+    "engine_putt": {
+      "kind": "passthrough",
+      "loop": true,
+      "variant": "realloop",
+      "source": "public/assets/audio/engine_loop.ogg",
+      "bytes": 23774,
+      "sha256": "d0f8b89066792ccf23895f6d5bbc7fb1a0363691324b72c921099e57828fec96",
+      "playback": {
+        "jitter": null,
+        "liveDsp": "lowpass, 2nd order, Q 0.6, cutoff (900 + 5200*l) * lpMul, tau 0.10 s; playbackRate (0.9 + 0.75*l) * rateMul, tau 0.12 s; gain (0.007 + 0.06*l) * gainMul, tau 0.08 s. monster mod = { rateMul 0.6, gainMul 1.45, lpMul 0.82 }."
+      },
+      "note": "ship the .ogg as-is. The live LOWPASS stays live and is NOT baked to stops: playbackRate is the RPM here and shifts the filtered spectrum with it, so a stop baked at one cutoff would be wrong at every rate but one. One biquad per voice is the cheaper and more faithful call."
+    },
+    "join": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "join.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 22944,
+          "durationSec": 0.478,
+          "body60Sec": 0.367417,
+          "peak": 0.316141,
+          "rms": 0.049442,
+          "sha256": "076d55c66b45a992780de81052f895363051b3ab05a6f125873eb4bdb965484b",
+          "jitterDurationDriftMs": [
+            -13.607732,
+            14.006469
+          ],
+          "jitterHazards": {
+            "clean": true,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.09,
+                "driftMs": [
+                  -2.562125,
+                  2.637201
+                ]
+              }
+            ],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "risingtwo"
+    },
+    "lap": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "lap.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 23424,
+          "durationSec": 0.488,
+          "body60Sec": 0.375208,
+          "peak": 0.327433,
+          "rms": 0.052709,
+          "sha256": "7fb62478dfe2b16b809c8e5ea7aee78f192bd673c5c7bc225424746a42ad7c6e",
+          "jitterDurationDriftMs": [
+            -13.892413,
+            14.299491
+          ],
+          "jitterHazards": {
+            "clean": true,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.1,
+                "driftMs": [
+                  -2.846806,
+                  2.930224
+                ]
+              }
+            ],
+            "computedRhythm": false
+          },
+          "note": "also the finish chime (case 'lap': case 'finish') — cannot be specialised."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "plink2"
+    },
+    "monster_deflate": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "monster_deflate.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 20555,
+          "durationSec": 0.428229,
+          "body60Sec": 0.332729,
+          "peak": 0.189825,
+          "rms": 0.054225,
+          "sha256": "28b9b914f65a3b8f12d203eea8f6d0b1a387aaa47c646b4fd714b02b2d8d9cff",
+          "jitterDurationDriftMs": [
+            -9.780764,
+            10.009378
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "f 1300 Hz",
+              "fTo 280 Hz"
+            ],
+            "unjitteredLfoHz": [
+              {
+                "hz": 22,
+                "atRateExtremes": [
+                  21.497519,
+                  22.514226
+                ]
+              }
+            ],
+            "unjitteredOffsetsSec": [],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.4,
+          "playbackRate": "2^(U(-0.4, +0.4)/12)",
+          "rateRange": [
+            0.97716,
+            1.023374
+          ]
+        }
+      },
+      "variant": "hiss"
+    },
+    "monster_inflate": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "monster_inflate.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 20201,
+          "durationSec": 0.420854,
+          "body60Sec": 0.415083,
+          "peak": 0.128513,
+          "rms": 0.016764,
+          "sha256": "651ab84a932a33455a8b404e698b7dee27b75e9f0048f84926f73f9fa58b5a97",
+          "jitterDurationDriftMs": [
+            -7.23002,
+            7.356398
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "f 500 Hz",
+              "fTo 2600 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [],
+            "computedRhythm": false
+          }
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.3,
+          "playbackRate": "2^(U(-0.3, +0.3)/12)",
+          "rateRange": [
+            0.982821,
+            1.01748
+          ]
+        }
+      },
+      "variant": "turbo"
+    },
+    "pickup": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "pickup.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 7392,
+          "durationSec": 0.154,
+          "body60Sec": 0.064354,
+          "peak": 0.277413,
+          "rms": 0.036758,
+          "sha256": "db4189a60603e4e6b65993a987407a4fdd86c7063f63826c51358038f9e82a63",
+          "jitterDurationDriftMs": [
+            -8.643356,
+            9.157317
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "pop() f 2400 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [],
+            "computedRhythm": false
+          },
+          "note": "MUST stay separate from roulette: Audio.pickup() fires both for the local player but pickupPop() fires this one alone for every CPU/finished-car grab."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 1,
+          "playbackRate": "2^(U(-1, +1)/12)",
+          "rateRange": [
+            0.943874,
+            1.059463
+          ]
+        }
+      },
+      "variant": "bubble"
+    },
+    "rocket_fire": {
+      "kind": "sustained",
+      "loop": true,
+      "variant": "jet",
+      "playback": {
+        "gainFormula": "0.0001 + 0.8 * l",
+        "smoothTauSec": 0.05,
+        "bakeHeadroom": 1,
+        "jitter": null,
+        "levelFloor": 0.02,
+        "raceMaxLevel": 0.7,
+        "crossfade": "linear between adjacent stops, sample-aligned (all stops share the loop phase)"
+      },
+      "stops": [
+        {
+          "level": 0.02,
+          "file": "rocket_fire-l002.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.659536,
+          "rms": 0.181855,
+          "sha256": "be9e5f55c83c837ef1bd83e30cf9ed7e60bebe172ea6c0e7cfd991fc9e3da1ef",
+          "bandpassHz": 980,
+          "Q": 0.5,
+          "lowpassHz": 2800,
+          "lowpassQ": 0.4
+        },
+        {
+          "level": 0.25,
+          "file": "rocket_fire-l025.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.713095,
+          "rms": 0.197125,
+          "sha256": "4b0c2983017e929d2e95d1937181c9be6a80a303e2249f8ccb8abc761ebbf622",
+          "bandpassHz": 1325,
+          "Q": 0.5,
+          "lowpassHz": 2800,
+          "lowpassQ": 0.4
+        },
+        {
+          "level": 0.5,
+          "file": "rocket_fire-l050.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.74395,
+          "rms": 0.205305,
+          "sha256": "420de66c050a5b4209894fba6b9e63110ccbebb362ea80d10ac5a63cedf7fc70",
+          "bandpassHz": 1700,
+          "Q": 0.5,
+          "lowpassHz": 2800,
+          "lowpassQ": 0.4
+        },
+        {
+          "level": 0.7,
+          "file": "rocket_fire-l070.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.757286,
+          "rms": 0.207521,
+          "sha256": "73029b5f172d3a08f34dfd35cc83fd61110eb4ddb5cd8d8380cf047f24be8dab",
+          "bandpassHz": 2000,
+          "Q": 0.5,
+          "lowpassHz": 2800,
+          "lowpassQ": 0.4
+        },
+        {
+          "level": 1,
+          "file": "rocket_fire-l100.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.755913,
+          "rms": 0.206156,
+          "sha256": "8343e89ccfe533ffde74582c48d158fabc62c29c49597372b56b3c9b48d862cc",
+          "bandpassHz": 2450,
+          "Q": 0.5,
+          "lowpassHz": 2800,
+          "lowpassQ": 0.4
+        }
+      ],
+      "note": "no LFO, so crossfading stops is unconstrained by phase."
+    },
+    "rocket_hit": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "rocket_hit.wav",
+          "channels": 2,
+          "sampleRate": 44100,
+          "frames": 75637,
+          "durationSec": 1.715125,
+          "body60Sec": 1.670068,
+          "peak": 0.413434,
+          "rms": 0.026862,
+          "sha256": "e28da65c5f348c3ebdd41f565ee9a0ffca636f5eb1da9e293f7b4996df9f40c1",
+          "note": "the shipped CC0 explosion, baked WITH playSample's 4 ms/60 ms de-click envelope and gain 0.6 so no shell has to reimplement them. Stereo, at the recording's own 44.1 kHz — resampling a shipped recording to 48 k would change it for no gain."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": null
+      },
+      "variant": "punch"
+    },
+    "roulette": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "roulette.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 49632,
+          "durationSec": 1.034,
+          "body60Sec": 0.945813,
+          "peak": 0.262337,
+          "rms": 0.020942,
+          "sha256": "47f36e16b19c687a4298c37b7bd895f5bec02ccb078382e28813c6a6cc939b30",
+          "jitterDurationDriftMs": [
+            -29.435973,
+            30.298513
+          ],
+          "jitterHazards": {
+            "clean": false,
+            "unjitteredNoise": [
+              "pop() f 2400 Hz"
+            ],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [
+              {
+                "sec": 0.88,
+                "driftMs": [
+                  -25.051892,
+                  25.785968
+                ]
+              }
+            ],
+            "computedRhythm": true
+          },
+          "note": "baked WHOLE, not per knock: the race fires it as one atomic play() and its 0.88 s reveal pop is locked to the renderer's ~0.86 s chip spin."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "ticktock"
+    },
+    "screech": {
+      "kind": "one-shot",
+      "files": [
+        {
+          "file": "screech.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 9984,
+          "durationSec": 0.208,
+          "body60Sec": 0.126021,
+          "peak": 0.18891,
+          "rms": 0.030438,
+          "sha256": "931d0002a2571064fddf2480eeae6cf99e6aafd649f0c279e4dde83860701557",
+          "jitterDurationDriftMs": [
+            -5.921356,
+            6.094865
+          ],
+          "jitterHazards": {
+            "clean": true,
+            "unjitteredNoise": [],
+            "unjitteredLfoHz": [],
+            "unjitteredOffsetsSec": [],
+            "computedRhythm": true
+          },
+          "note": "the most repetition-exposed cue in the game (~7×/s under SCREECH_GAP_MS) and the strongest argument for keeping playback-rate jitter."
+        }
+      ],
+      "playback": {
+        "gain": 1,
+        "jitter": {
+          "spread": 0.5,
+          "playbackRate": "2^(U(-0.5, +0.5)/12)",
+          "rateRange": [
+            0.971532,
+            1.029302
+          ]
+        }
+      },
+      "variant": "rumble"
+    }
+  }
+}
