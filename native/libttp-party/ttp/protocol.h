@@ -58,6 +58,20 @@ inline constexpr int MAX_PLAYERS = 4;
 inline constexpr int TOTAL_LAPS = 3;
 inline constexpr int COUNTDOWN_SECONDS = 3;
 
+// ---- the steering contract (protocol.js STEER) ------------------------------
+// Five numbers the phone and the display's sim must agree on; see the JS block
+// for what each one does and why they only mean anything together. Only STEER_
+// EXPO has a C++ consumer today (libttp-sim's steering curve — partytest/
+// protocol_check.cc asserts ttp::getSteerExpo() equals it, which is what stops
+// game.cc drifting from the phone), but all five are mirrored because this
+// header mirrors protocol.js 1:1 and a TV shell will want the tilt numbers the
+// moment one exists.
+inline constexpr double STEER_EXPO = 1.25;
+inline constexpr double STEER_ROLL_LOCK_DEG = 30;
+inline constexpr double STEER_DEADZONE = 0.06;
+inline constexpr double STEER_SMOOTH = 0.5;
+inline constexpr double STEER_GATE_THRESHOLD = 0.03;
+
 inline const std::vector<std::string> CAR_COLORS = {
     "#e6492d", "#f2b134", "#2bb673", "#2d9cdb",
     "#9b51e0", "#eb5e9c", "#f2784b", "#56ccf2",

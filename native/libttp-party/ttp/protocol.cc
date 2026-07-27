@@ -55,6 +55,14 @@ Value manifest() {
   m.set("TOTAL_LAPS", Value::Num(TOTAL_LAPS));
   m.set("COUNTDOWN_SECONDS", Value::Num(COUNTDOWN_SECONDS));
 
+  Value steer = Value::Obj();
+  steer.set("EXPO", Value::Num(STEER_EXPO));
+  steer.set("ROLL_LOCK_DEG", Value::Num(STEER_ROLL_LOCK_DEG));
+  steer.set("DEADZONE", Value::Num(STEER_DEADZONE));
+  steer.set("SMOOTH", Value::Num(STEER_SMOOTH));
+  steer.set("GATE_THRESHOLD", Value::Num(STEER_GATE_THRESHOLD));
+  m.set("STEER", std::move(steer));
+
   Value colors = Value::Arr();
   for (const auto& c : CAR_COLORS) colors.push(Value::Str(c));
   m.set("CAR_COLORS", std::move(colors));

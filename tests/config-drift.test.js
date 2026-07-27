@@ -30,6 +30,14 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
+// The controller's two steering modules, loaded live rather than scraped: both
+// are browser ES modules written to import headlessly (see their headers).
+let tilt, gate;
+test.before(async () => {
+  tilt = await import(pathToFileURL(path.join(ROOT, 'public/controller/TiltInput.js')).href);
+  gate = await import(pathToFileURL(path.join(ROOT, 'public/controller/InputGate.js')).href);
+});
+
 // The runtime C ABI, same cwrap conventions as tests/runtime-abi.test.js (ids
 // cross as JSON scalars; null stats = the engine benchmark car).
 async function loadAbi() {
@@ -43,6 +51,7 @@ async function loadAbi() {
     update: cw('ttp_update', 'void', ['number', 'number']),
     snapshot: cw('ttp_snapshot_json', 'string', ['number']),
     dispose: cw('ttp_dispose', 'void', ['number']),
+    getSteerExpo: cw('ttp_get_steer_expo', 'number', []),
   };
 }
 
@@ -96,4 +105,69 @@ test('the live wasm engine ships those same values', { skip }, async () => {
   assert.equal(fallback.halfLen, ref.halfLen, 'live engine benchmark halfLen drifted from protocol.CAR_STATS[0]');
   assert.equal(fallback.halfWid, ref.halfWid, 'live engine benchmark halfWid drifted from protocol.CAR_STATS[0]');
   assert.equal(fallback.monster, false, 'sanity: the snapshot footprint is unmultiplied (not the x1.3 monster body)');
+});
+
+// ---------------------------------------------------------------------------
+// The steering contract: protocol.js STEER vs the three files that spend it.
+//
+// STEER_EXPO (the sim), ROLL_LOCK (the phone) and the CONTROL gate's dead-band
+// are one design, and the third is ARITHMETIC over the first two. Before the
+// manifest existed that was stated only in prose, in a file that owns none of
+// the numbers it reasons about — so tuning the steering curve in C++ left a
+// controller comment quietly describing a car that no longer exists.
+//
+// Four links, all machine-checked, and only the first two live here:
+//   1. TiltInput/InputGate  == the manifest        (this file, below)
+//   2. InputGate's derivation still closes          (this file, below)
+//   3. protocol.h           == protocol.js          (protocol-corpus + `protocol` ctest)
+//   4. game.cc              == protocol.h           (the same ctest's own assertion)
+// Plus the belt-and-braces guard this file already applies to everything else:
+// read the value back out of the SHIPPED wasm, not just the sources.
+// ---------------------------------------------------------------------------
+
+test('TiltInput spends the manifest steering numbers', () => {
+  const S = protocol.STEER;
+  assert.equal(tilt.ROLL_LOCK, S.ROLL_LOCK_DEG, 'TiltInput ROLL_LOCK drifted from protocol.STEER.ROLL_LOCK_DEG');
+  assert.equal(tilt.DEADZONE, S.DEADZONE, 'TiltInput DEADZONE drifted from protocol.STEER.DEADZONE');
+  assert.equal(tilt.SMOOTH, S.SMOOTH, 'TiltInput SMOOTH drifted from protocol.STEER.SMOOTH');
+});
+
+test('InputGate spends the manifest steering numbers', () => {
+  assert.equal(gate.DEFAULT_STEER_THRESHOLD, protocol.STEER.GATE_THRESHOLD,
+    'InputGate DEFAULT_STEER_THRESHOLD drifted from protocol.STEER.GATE_THRESHOLD');
+});
+
+test("InputGate's dead-band derivation still closes over the manifest", () => {
+  const S = protocol.STEER;
+  const t = S.GATE_THRESHOLD;
+
+  // Lower bound — the gate must ENGAGE. A phone lying still twitches
+  // SENSOR_NOISE_FLOOR_DEG at the quiet end; over ROLL_LOCK_DEG that is a
+  // fraction of full steer, and TiltInput's one-pole SMOOTH takes roughly half
+  // of it back out. A threshold under what survives calls every idle sample a
+  // change, so the gate passes everything and saves nothing.
+  const survivingNoise = (gate.SENSOR_NOISE_FLOOR_DEG / S.ROLL_LOCK_DEG) * S.SMOOTH;
+  assert.ok(t >= survivingNoise,
+    `gate threshold ${t} is under the ${survivingNoise} of sensor wobble that survives `
+    + `ROLL_LOCK_DEG=${S.ROLL_LOCK_DEG} and SMOOTH=${S.SMOOTH} — the gate would never engage`);
+
+  // Upper bound — the gate must not HIDE too much. Worst case is |s| -> 1, where
+  // the display's expo gain peaks at EXPO itself.
+  assert.ok(t * S.EXPO <= gate.STEER_ERROR_BUDGET,
+    `gate threshold ${t} at the display's peak expo gain ${S.EXPO} hides ${t * S.EXPO} of `
+    + `steer authority, over the ${gate.STEER_ERROR_BUDGET} budget`);
+
+  // And the band has to be a band: a floor above the ceiling means no threshold
+  // satisfies both, i.e. the four numbers no longer describe one design.
+  assert.ok(survivingNoise * S.EXPO <= gate.STEER_ERROR_BUDGET,
+    'no gate threshold can satisfy both bounds — the steering manifest is self-contradictory');
+});
+
+test('the live wasm engine ships the manifest steering exponent', { skip }, async () => {
+  const abi = await loadAbi();
+  // Read before anything calls ttp_set_steer_expo, so this is game.cc's own
+  // default arriving in the browser — the number the shipped game actually
+  // steers with, not a source literal.
+  assert.equal(abi.getSteerExpo(), protocol.STEER.EXPO,
+    'the shipped wasm steering exponent drifted from protocol.STEER.EXPO');
 });

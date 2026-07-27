@@ -3,6 +3,15 @@
 // against the C++ ttp::protocol twin. Line 1 header; line 2 {constants} vs
 // protocol::manifest(); each further line {carIndex, result} vs car_stats().
 // First divergence localizes and fails; spew capped at 20.
+//
+// Plus one assertion that is NOT from the corpus, and is the reason this binary
+// links libttp_sim: the sim's own default steering exponent must BE the manifest
+// value. The corpus proves protocol.h agrees with protocol.js; that assertion
+// proves game.cc agrees with protocol.h, and the two together are what make the
+// phone/display steering chain a checked chain rather than three comments. It
+// lives here rather than in game.cc as an include because libttp_sim must not
+// take a dependency on the party layer above it — a test binary linking both is
+// free, a layering inversion is not.
 
 #include <cmath>
 #include <cstdio>
@@ -11,6 +20,7 @@
 #include <string>
 
 #include "corpus_diff.h"
+#include "ttp/game.h"
 #include "ttp/protocol.h"
 
 using namespace ttp;
@@ -69,6 +79,20 @@ int main(int argc, char** argv) {
     } else {
       passed++;
     }
+  }
+
+  // ---- the sim's steering exponent IS the manifest's --------------------------
+  // getSteerExpo() reads the module global before anyone has called
+  // setSteerExpo, i.e. game.cc's own STEER_EXPO literal.
+  cases++;
+  const double simExpo = getSteerExpo();
+  if (simExpo != protocol::STEER_EXPO) {
+    std::fprintf(stderr,
+                 "FAIL steerExpo  libttp-sim game.cc STEER_EXPO has drifted from the "
+                 "protocol manifest\n  expected %.17g\n  actual   %.17g\n",
+                 protocol::STEER_EXPO, simExpo);
+  } else {
+    passed++;
   }
 
   std::printf("protocol corpus: %d/%d cases passed\n", passed, cases);

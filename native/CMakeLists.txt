@@ -375,7 +375,11 @@ add_test(NAME roomflow
 # the shared structural diff in testsupport/corpus_diff.h (libttp_json supplies
 # canonical_stringify + js_number_to_string for the expected side).
 add_executable(protocol_check partytest/protocol_check.cc)
-target_link_libraries(protocol_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+# libttp_sim is here for ONE assertion: the sim's default steering exponent must
+# equal protocol::STEER_EXPO (see the file header). The sim itself never links
+# the party layer — that direction would be a layering inversion; a test binary
+# linking both is not.
+target_link_libraries(protocol_check PRIVATE libttp_party libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(protocol_check)
 add_test(NAME protocol
   COMMAND protocol_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/protocol-corpus.jsonl

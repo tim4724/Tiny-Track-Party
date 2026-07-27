@@ -87,7 +87,7 @@ still works inside the branch.
 |---|---|---|---|
 | P0 | `libttp-runtime` exists; CI compiles it | 0 | med |
 | P1 | Delete duplication that already exists | ~78 gross, net +16 | low |
-| P2 | Design tokens, strings, catalogue as shared data | ~250 | low |
+| P2 | Design tokens + the protocol manifest as shared data | 0 (see below) | low |
 | P3 | C++ owns the track payload | ~450 | high |
 | P4 | Cross-language wire-compat suite | 0 | med |
 | P5 | Extract the UI model in JS; record both oracles | ~0 net | med |
@@ -114,6 +114,30 @@ leg would compile it).
 `maxOrbitDist` as inputs. Both are pure functions over the track samples and only
 live in `TtpRenderer` because it owns the parsed `TrackBin`; P3 moves their
 producers too.
+
+### P2 — what it actually was, once looked at
+
+Scoped down to two parts on contact, and the "~250 lines retired" estimate was
+wrong: P2 retires **nothing**. It adds checks. That is the honest shape of a
+phase whose product is *one source for a number*, not *one implementation of a
+behaviour*.
+
+- **CUT: the copy/strings table.** Exactly two user-facing strings live in JS
+  (`'Next race'`, `'Next up: '` in `main.js`). All other copy is in the HTML
+  markup, which every platform rewrites anyway. A strings table would have been
+  ceremony around two strings. The *Decisions taken* note about C++ emitting
+  string KEYS still stands — it is about P8's UI model, and lands there.
+- **The protocol manifest** (the non-goal above, delivered): `STEER` in
+  `public/shared/protocol.js`, mirrored in `protocol.h`, carried by the protocol
+  corpus, with `protocol_check` additionally asserting the sim's own
+  `getSteerExpo()` equals it. Four checked links replace three prose comments.
+- **The design tokens** shipped in the DERIVED direction — `theme.css` stays the
+  authored source and `scripts/gen-design-tokens.mjs` bakes
+  `public/shared/design-tokens.json` (typed, aliases resolved). A JSON source
+  with generated CSS was rejected: theme.css's value is largely its comments,
+  and generating it would make the file every UI change touches build output.
+  The generator's header carries the full argument. Flipping the direction later
+  costs nothing — the JSON shape does not change, only who writes it.
 
 ### P5 — record the oracles, and note the ratchet
 
