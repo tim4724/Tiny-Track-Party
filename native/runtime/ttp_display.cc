@@ -427,7 +427,19 @@ int ttp_display_frame(double dtSeconds) {
 
     // Views: one chase camera per cell car, or a single overview when no car
     // owns a cell (the lobby's attract race, the gallery, a track preview).
-    const bool raceCams = !d.cells.empty() && eng;
+    //
+    // A cell whose car is not in THIS scene's roster gets no camera worth
+    // pointing: the spring has never been seeded, so it would sit at the origin
+    // and stare at whatever happens to be there. That is reachable whenever the
+    // cells are set before the scene that holds those cars has finished
+    // building, so fall back to the overview until at least one of them lands.
+    bool anyCellCar = false;
+    for (const ScalarId& cell : d.cells) {
+        for (size_t i = 0; i < d.roster.size() && !anyCellCar; i++) {
+            if (d.roster[i] == cell && cars[i]) anyCellCar = true;
+        }
+    }
+    const bool raceCams = anyCellCar;
     uint32_t viewCount = raceCams ? (uint32_t) d.cells.size() : 1;
     float aspect = (float) d.width / (float) (d.height ? d.height : 1);
     if (raceCams) {

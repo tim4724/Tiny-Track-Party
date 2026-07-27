@@ -175,6 +175,11 @@ export class Stage {
           }
         }
         this._rebuilding = null;
+        // The scene the caller was waiting for only exists NOW. A running loop
+        // picks it up on the next rAF, but an idled preview (pauseAfterFrame)
+        // would sit forever on the frame it painted BEFORE the build — which is
+        // the old scene, or none at all. Same repaint-once rule as _onResize.
+        if (!this._running) { this.start(); this.pauseAfterFrame(); }
       })();
     }
     return this._rebuilding;
