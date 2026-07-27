@@ -469,7 +469,13 @@ int ttp_display_frame(double dtSeconds) {
             o.forward = { (float) c->pose.forward.x, (float) c->pose.forward.y, (float) c->pose.forward.z };
             o.up = { (float) c->pose.up.x, (float) c->pose.up.y, (float) c->pose.up.z };
             o.spd = c->vmax != 0 ? (float) (c->v / c->vmax) : 0;
-            o.steer = (float) c->steer;
+            // STEER_SIGN, exactly as getSnapshot applies it. `Car::steer` is the
+            // raw input; the sim turns the car by STEER_SIGN * steer, so the
+            // VISUAL cues (front-wheel yaw, body lean) have to carry the same
+            // sign or the car leans out of its own corners. The HUD's steer bar
+            // is the one thing that wants the raw value — it mirrors phone tilt,
+            // which is why it reads `steerInput` off the snapshot instead.
+            o.steer = (float) (ttp::STEER_SIGN * c->steer);
             o.brake = (float) c->brake;
             o.boostMul = (float) c->boostMul;
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;

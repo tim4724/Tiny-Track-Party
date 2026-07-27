@@ -11,20 +11,30 @@
 // its name plate colour, its place/lap/item chips — plus the roster order the
 // renderer baked its models and liveries in.
 import { ordinal } from '../shared/format.js';
-import { themeForCup } from '../shared/themes.js';
+import { boostShades, cssHex, themeForCup } from '../shared/themes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { FpsMeter } from './render/FpsMeter.js';
 import { trackPayload } from './render/trackPayload.js';
 
-// Item chips on the cell label. The icons are inline SVG so they inherit the
-// livery colour and need no sprite sheet.
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
+// The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
+// by _applyBoostShades, default teal for the pre-theme look). Takes a '#rrggbb'
+// stroke string. Two forward chevrons, apex-up (= travel), stacked and CENTRED on
+// the 24×24 box: each chevron is 6 tall, apexes 7 apart, so the pair spans
+// y5.5..18.5 (centre 12) with a 1u gap between the upper arms and the lower apex —
+// even, not overlapping.
 const boostIconSvg = (stroke) => `<svg viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,11.5 12,5.5 19,11.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>`;
 const ITEM_ICONS = {
-  boost: boostIconSvg('#2A2735'),
-  banana: '<svg viewBox="0 0 24 24"><path d="M5 4c0 7 3.5 12.5 10.5 14.5C18 19.2 20 18 20 18s-1.2 2.6-4.2 3.3C7.8 23 3 16 3 6.5 3 5 4 4 5 4z" fill="#2A2735"/></svg>',
-  rocket: '<svg viewBox="0 0 24 24"><path d="M12 2c3.5 3 5 7 5 11l-2.5 2.5h-5L7 13c0-4 1.5-8 5-11z" fill="#2A2735"/><path d="M9.5 18h5l-2.5 4z" fill="#2A2735"/></svg>',
-  monster: '<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="6" rx="1.5" fill="#2A2735"/><circle cx="7" cy="16" r="3.6" fill="#2A2735"/><circle cx="17" cy="16" r="3.6" fill="#2A2735"/></svg>'
+  boost: boostIconSvg('#12a99a'),
+  banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">',
+  // Toy rocket: cream body (red outline), blue porthole, red fins, orange flame — the
+  // 2D echo of the in-race procedural model (matched to the same toy palette). Inline
+  // SVG like boost, so no baked asset / CSP change is needed.
+  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="#e6492d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c2.7 2.3 4 5.4 4 9.3 0 2-.5 3.8-1.3 5.2H9.3C8.5 15.3 8 13.5 8 11.5c0-3.9 1.3-7 4-9.3z" fill="#fff3e0"/><circle cx="12" cy="9.2" r="1.5" fill="#2d9cdb" stroke="none"/><path d="M8.2 14.2 5.5 16.6l.3 3 2.9-1.4M15.8 14.2l2.7 2.4-.3 3-2.9-1.4z" fill="#e6492d"/><path d="M10.3 19.6c.5 1.3 1.7 2.2 1.7 2.2s1.2-.9 1.7-2.2" stroke="#f2784b"/></svg>',
+  // Monster truck: a chunky cab on a high frame over two fat tyres — the 2D echo of
+  // the in-race transform (gunmetal frame, purple cab nod to the kit body, dark
+  // tyres). Inline SVG like boost/rocket, so no baked asset / CSP change is needed.
+  monster: '<svg viewBox="0 0 24 24" fill="none" stroke="#3a3f47" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11.5h14l-1.3-3.2a1.6 1.6 0 0 0-1.5-1H7.8a1.6 1.6 0 0 0-1.5 1L5 11.5z" fill="#7b4fc0"/><path d="M3.5 11.5h17v2.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z" fill="#565b63"/><circle cx="7.2" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="16.8" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7.2" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/><circle cx="16.8" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/></svg>'
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
 
@@ -120,6 +130,10 @@ export class Stage {
   async setTrack(track) {
     this._track = track;
     this._theme = this.biomeOverride || themeForCup(track.cup);
+    // The boost chip wears the biome's own accent (green on Playroom, blue on
+    // Snow) so the HUD reads as the same item the deck does — see
+    // [per-biome boost accent] in themes.js.
+    ITEM_ICONS.boost = boostIconSvg(cssHex(boostShades(this._theme.boost).icon));
     return this._rebuild();
   }
 

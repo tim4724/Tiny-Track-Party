@@ -18,7 +18,6 @@ static const double BRAKE_DECEL = 4.5;
 static const double TURN_RATE = 0.90;
 static const double STEER_EXPO = 1.25;
 static const double MAX_HEADING = 1.25;
-static const double STEER_SIGN = -1;
 static const double WALL_SPEED_FRAC = 0.28;
 static const double WALL_DECEL = 20.0;
 static const double WALL_RASH_T = 0.5;
