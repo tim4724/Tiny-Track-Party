@@ -40,7 +40,14 @@ module.exports = defineConfig({
     // Generous per-action timeout: under the single-worker render load a controller
     // page can be janky enough that Playwright's actionability (visible/stable)
     // check on a button takes a few seconds to settle.
-    actionTimeout: 15000,
+    //
+    // 15s was tuned against the Three.js renderer. The native one rasterizes a
+    // heavier scene through the same SwiftShader, and the FIRST test in a CI
+    // shard additionally pays a cold fetch + compile of the 2.76 MB engine wasm
+    // — contexts don't share a cache, so every shard has one such test. That
+    // combination starved the actionability check on a phone's join button.
+    // The 120s test timeout is what still catches a genuinely stuck action.
+    actionTimeout: 30000,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
