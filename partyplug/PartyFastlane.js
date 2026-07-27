@@ -27,6 +27,15 @@
  * are off — app-layer redundancy + per-event seq dedup replaces them, with
  * tighter latency and no contention with SCTP's own retry timer.
  *
+ * The rolling window assumes EVENT-shaped input: each event means something
+ * on its own (rotate, drop), so losing one is unrecoverable and re-sending it
+ * for TTL_MS is the only way back. Games whose input is STATE sampled on a
+ * fixed clock (an absolute stick position resent every frame) get nothing from
+ * that — the newest packet already describes the world completely, so the older
+ * copies riding with it are dead weight that only inflates every packet. Those
+ * integrators pass `maxRing` to cap the window (1 = latest-only). Default is
+ * uncapped, i.e. TTL_MS is the only bound.
+ *
  * WATCHDOG_MS of inbound silence tears down the peer and surfaces
  * onPeerClosed so callers can fall back or update UI.
  *
@@ -56,6 +65,11 @@
     this.selfIndex = options.selfIndex != null ? options.selfIndex : null;
     this.sendSignal = options.sendSignal || function () {};
     this.onInput = options.onInput || null;
+    // onAcked(peerIdx, ev, es) — the peer CONFIRMED applying this payload.
+    // Senders that gate on "what does the peer actually hold" (state-shaped
+    // input; see the maxRing note above) need this: what was last SENT may
+    // have been lost, so only an ack reveals the peer's real state.
+    this.onAcked = options.onAcked || null;
     this.onPeerReady = options.onPeerReady || null;
     this.onPeerClosed = options.onPeerClosed || null;
     this.onConnectionState = options.onConnectionState || null;
@@ -64,6 +78,10 @@
     // every IDLE_MS while the channel is open and the ring is drained.
     // Receiving side (display) leaves this false — it only emits acks.
     this.emitIdleHeartbeat = !!options.emitIdleHeartbeat;
+    // Hard cap on the resend window, in events (see the header note on
+    // event- vs state-shaped input). Uncapped by default, leaving TTL_MS the
+    // only bound. 1 == latest-only: each packet carries just the newest event.
+    this.maxRing = options.maxRing > 0 ? options.maxRing : Infinity;
 
     this.peers = new Map();
 
@@ -183,6 +201,13 @@
       ev: ev,
       expires: Date.now() + TTL_MS,
     });
+    // Drop the oldest entries past the cap. The ring is newest-first, so this
+    // truncates a SUFFIX — the same shape as the TTL and ack prunes, which is
+    // what keeps the ring contiguous in es and the implicit seq encoding
+    // (es[i] = ps - i) sound. eventSeq still advances per event, so capping
+    // just leaves gaps between successive packets' es ranges; receivers only
+    // ever test es > lastAppliedEs and never assume contiguity across packets.
+    if (peer.ring.length > this.maxRing) peer.ring.length = this.maxRing;
     this._sendDataPacket(peer, peerIdx);
     return 'p2p';
   };
@@ -332,12 +357,19 @@
       // decode es[i] = ps - i without an explicit per-entry seq field.
       var keepLen = peer.ring.length;
       while (keepLen > 0 && peer.ring[keepLen - 1].es <= ack.pa) keepLen--;
+      // Newest entry this ack covers, captured before the truncation drops it.
+      // Null when the ack names an entry that already TTL-expired out of the
+      // ring — we then can't say WHICH payload landed, so onAcked stays silent
+      // and a gating sender simply doesn't advance its confirmed state. That
+      // errs toward re-sending, which is the safe direction.
+      var newestAcked = keepLen < peer.ring.length ? peer.ring[keepLen] : null;
       if (keepLen < peer.ring.length) peer.ring.length = keepLen;
       if (peer.ring.length === 0 && peer.sendTimer) {
         clearTimeout(peer.sendTimer);
         peer.sendTimer = null;
         this._resetIdleTimer(peer, peerIdx);
       }
+      if (newestAcked && this.onAcked) this.onAcked(peerIdx, newestAcked.ev, newestAcked.es);
     }
     if (typeof ack.t === 'number') {
       var rtt = Date.now() - ack.t;

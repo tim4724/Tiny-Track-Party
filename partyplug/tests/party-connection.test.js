@@ -98,6 +98,35 @@ describe('PartyConnection', () => {
     assert.equal(pc.relayUrl, before);
   });
 
+  test('frames that parse but are not objects are dropped, not routed', () => {
+    // The JSON.parse try/catch only covers MALFORMED input. A frame that parses
+    // to a non-object is still not a relay frame: `null` used to throw a
+    // TypeError straight out of onmessage (killing the handler), and `7` / `"x"`
+    // / `[1,2]` reached onProtocol with an undefined type — a scalar treated as
+    // protocol traffic. Mirrors the native ABI's ttp_framing_classify, which
+    // routes all of these to "none".
+    const pc = new PartyConnection('wss://test.example.com');
+    const protocols = [], messages = [], states = [];
+    pc.onProtocol = (type, msg) => protocols.push([type, msg]);
+    pc.onMessage = (from, data) => messages.push([from, data]);
+    pc.onState = (data) => states.push(data);
+    pc.connect();
+    const ws = MockWebSocket._instances[0];
+    ws._simulateOpen();
+
+    for (const frame of [null, 7, 'x', [1, 2], true]) {
+      assert.doesNotThrow(() => ws._simulateMessage(frame), `frame ${JSON.stringify(frame)} threw`);
+    }
+    assert.deepStrictEqual(protocols, []);
+    assert.deepStrictEqual(messages, []);
+    assert.deepStrictEqual(states, []);
+
+    // ...and the socket is still live afterwards: a bad frame must not take the
+    // handler down with it.
+    ws._simulateMessage({ type: 'joined', index: 2 });
+    assert.deepStrictEqual(protocols, [['joined', { type: 'joined', index: 2 }]]);
+  });
+
   test('onOpen callback fires on connection', () => {
     const pc = new PartyConnection('wss://test.example.com');
     let opened = false;
