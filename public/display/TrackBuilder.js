@@ -1,6 +1,6 @@
 // TrackBuilder — integrates a list of parametric SEGMENTS into a drivable centerline
 // ribbon the car physics follows AND the renderer sweeps the procedural road over
-// (see SceneRenderer._buildRibbonRoad). There are no road meshes here — only geometry.
+// (see TtpRenderer::buildRoadMesh). There are no road meshes here — only geometry.
 //
 // A track is authored as a sequence of segments (see ../shared/tracks.js):
 //   straight(length, opts)         — a run, optionally with an elevation `rise` or a
@@ -28,7 +28,7 @@ import { TRACKS, TRACK_LIST } from '../shared/tracks.js';
 export const SCALE = 2;    // unscaled track units → world (bigger track, more room for cars). Exported so the offline generator (scripts/track-gen.mjs) shares the exact value rather than duplicating it.
 const ROAD_WIDTH = 2.5;    // default drivable width (unscaled); ×SCALE = 5.0 world. The
                            // single source of truth, read by the physics (maxLat in Game.js)
-                           // AND the procedural road ribbon in SceneRenderer.
+                           // AND the renderer's procedural road ribbon.
 const DS = 0.25;           // centerline sample step (unscaled) — uniform arclength spacing,
                            // a few× finer than a kerb stripe and well above the min-seg floor.
 
@@ -342,7 +342,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
 
   // ---- Support pillars under raised bridge/ramp segments (opt `pillars: true`) ----
   // March the flagged samples at a fixed arclength spacing and record a vertical column
-  // running from the grass plane up to just under the deck (SceneRenderer renders each as
+  // running from the grass plane up to just under the deck (the renderer draws each as
   // a simple cylinder). A station is SKIPPED where the foot would land on a LOWER stretch
   // of road (the spine a crossover bridge flies over): there the deck must clear the
   // roadway, so we leave the gap unsupported rather than drop a column onto the track below.
@@ -398,7 +398,7 @@ function finalizeTrack(worldPts, widths, banks, pillarFlags, hillFlags, loopEntr
   // hill samples form a run; runs shorter than MIN_RUN are dropped as noise. Each run is
   // emitted as lofted cross-section rings (left foot → left top → right top → right foot),
   // feathered to lawn level one sample past each end so the berm rises smoothly out of
-  // flat ground. SceneRenderer.buildHills stitches the rings into a grass surface.
+  // flat ground. The renderer's buildHills stitches the rings into a grass surface.
   const hills = [];
   {
     const HILL_MIN = 0.15;  // a hillable sample this close to the lawn is essentially flat — skip it

@@ -231,6 +231,12 @@ void solveFraming(Display& d) {
     d.framing = f;
 }
 
+// Drop every motion cue but keep the pose — what "held" means (ttp_display_hold).
+void atRest(TtpCarInput& c) {
+    c.spd = c.steer = c.brake = c.spin = c.scrub = 0;
+    c.boostMul = 1;
+}
+
 std::vector<ScalarId> parseIds(const char* json) {
     std::vector<ScalarId> out;
     if (!json) return out;
@@ -341,6 +347,7 @@ void ttp_display_release(void) {
     g_disp->built = false;
     g_disp->roster.clear();
     g_disp->chase.clear();
+    g_disp->held.clear();  // a field belongs to the scene it was read from
 }
 
 // ---------------------------------------------------------------------------
@@ -383,10 +390,7 @@ void ttp_display_hold(int held) {
     if (!g_disp->hold) { g_disp->held.clear(); return; }
     // Freeze the poses already on screen and drop every motion cue with them,
     // so the held field neither drives nor spins its wheels.
-    for (TtpCarInput& c : g_disp->held) {
-        c.spd = c.steer = c.brake = c.spin = c.scrub = 0;
-        c.boostMul = 1;
-    }
+    for (TtpCarInput& c : g_disp->held) atRest(c);
 }
 
 void ttp_display_burst(const char* idJson, double s, double lat) {
@@ -494,6 +498,12 @@ int ttp_display_frame(double dtSeconds) {
             o.spin = (float) c->spin;
             o.scrub = c->onWall ? 1.0f : 0.0f;
         }
+        // A hold that OUTLIVED the field it was taken on lands here, because the
+        // memcpy above only fires while the sizes still match: a seat expiring
+        // mid-pause forfeits its car, which rebuilds the scene with a shorter
+        // roster. Re-apply the rest to the live read, or the frozen field would
+        // spin its wheels and lay rubber behind the pause overlay.
+        if (d.hold) for (size_t i = 0; i < cars.size(); i++) atRest(outCars[i]);
         // Keep this frame's field, so a hold taken mid-race has something to
         // hold — ttp_display_hold zeroes the motion cues on the way in.
         d.held.assign(outCars, outCars + cars.size());

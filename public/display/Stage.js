@@ -73,7 +73,14 @@ export class Stage {
     // close-up chase cells in the way.
     this.soloCam = false;
     this.showDividers = true;
-    this._dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Opt-in resolution cap (?dpr=0.5). A gallery preview iframe lays out at full
+    // logical size, so at full DPR every card allocates a screen-sized drawing
+    // buffer to show a ~500px thumbnail — and the gallery shows a grid of them.
+    // The gallery passes dpr=0.5 and strips it from the card's "open" link, so a
+    // real tab stays full-res. Guarded > 0: dpr=0 would allocate a 1×1 buffer.
+    const dprCap = parseFloat(new URLSearchParams(location.search).get('dpr'));
+    this._dpr = Math.min(window.devicePixelRatio || 1,
+                         Number.isFinite(dprCap) && dprCap > 0 ? dprCap : 2);
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';

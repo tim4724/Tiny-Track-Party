@@ -47,7 +47,7 @@ function show(name) {
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
 function buildEntry(t) {
   const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
-  b.cup = t.cup;             // carry the cup id onto the geometry → SceneRenderer picks the biome theme
+  b.cup = t.cup;             // carry the cup id onto the geometry → the Stage picks the biome theme
   b.trackId = t.id;          // registry id, for per-track theme patches (ambientByTrack).
                              // NOT `id` — buildScenery/buildLandmarks seed their rand
                              // streams from track.id, and reseeding reshuffles every scatter.
@@ -740,7 +740,7 @@ function renderLobbyPick() {
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
 // split-screen cell (same placement as the FINISHED card) so they can scan — their
 // own phone OR a new one — and drop back into their exact seat. The card rides on
-// their still-racing car via the renderer; SceneRenderer._loop keeps it centred.
+// their still-racing car via the renderer; Stage._loop keeps it centred.
 // Driven by DisplayNet.onReconnectChange; we diff against what's shown so a roster
 // reshuffle only adds/removes the cards that changed.
 const _rcShown = new Set(); // car ids currently showing a reconnect card
@@ -1741,7 +1741,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'features', 'countdown', 'racing', 'results', 'intermission', 'podium']
+    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

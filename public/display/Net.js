@@ -797,7 +797,7 @@ export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
 
 // Build a dropped-player reconnect card — name + "scan to rejoin" + the rejoin QR
 // — to be centred in that player's split-screen cell by the renderer (see
-// SceneRenderer.setCarReconnect / _loop). Reuses the .cell-finish chrome (frosted
+// Stage.setCarReconnect / _loop). Reuses the .cell-finish chrome (frosted
 // card, livery top-border, centred placement) so it matches the FINISHED card.
 // `seat` is {name, colorIndex, url}. Shared by the live display (main.js) and the
 // gallery harness so the markup stays in one place. QR matrices are cached by url.

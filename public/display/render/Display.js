@@ -201,9 +201,16 @@ function ghostGlb(bytes) {
     const f = pbr.baseColorFactor || [1, 1, 1, 1];
     pbr.baseColorFactor = [f[0], f[1], f[2], 0.5];
   }
-  let text = JSON.stringify(json);
-  while (text.length % 4) text += ' ';
-  const jsonBytes = new TextEncoder().encode(text);
+  // Pad the chunk to a 4-byte boundary, measured in BYTES rather than UTF-16
+  // units — a non-ASCII material name encodes wider than it measures, and a
+  // misaligned JSON chunk makes cgltf reject the whole file.
+  let jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+  if (jsonBytes.length % 4) {
+    const padded = new Uint8Array(jsonBytes.length + 4 - (jsonBytes.length % 4));
+    padded.set(jsonBytes);
+    padded.fill(0x20, jsonBytes.length); // trailing spaces, per the GLB spec
+    jsonBytes = padded;
+  }
   const rest = bytes.subarray(20 + jsonLen);
   const out = new Uint8Array(20 + jsonBytes.length + rest.length);
   out.set(bytes.subarray(0, 12), 0);
