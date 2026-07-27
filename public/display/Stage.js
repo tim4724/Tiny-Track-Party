@@ -13,7 +13,7 @@
 import { ordinal } from '../shared/format.js';
 import { boostShades, cssHex, themeForCup } from '../shared/themes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
-import { FpsMeter } from './render/FpsMeter.js';
+import { PerfHud } from './render/PerfHud.js';
 import { trackPayload } from './render/trackPayload.js';
 
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
@@ -117,7 +117,9 @@ export class Stage {
     container.insertBefore(this._canvas, container.firstChild);
     this._sizeCanvas();
     this._initOverlay();
-    this._fps = new FpsMeter(this.container);
+    // Frame-cost readout. Hidden unless ?perf=1 (or "P"), and inert while hidden
+    // — it instruments the frame only when someone is looking at it.
+    this.perf = new PerfHud(this.container, this._canvas);
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
@@ -638,7 +640,7 @@ export class Stage {
     // walking the chase camera away from the car until the scene is off-screen.
     const dt = Math.min(Math.max(rawMs, 0) / 1000, 0.05) * this._timeScale;
     this._last = t;
-    if (rawMs > 0 && rawMs < 1000) this._fps.tick(t, rawMs); // skip absurd post-stall deltas
+    if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);
     if (!this.display) { this._scheduleNext(); return; }
 
@@ -658,13 +660,13 @@ export class Stage {
 
     if (ids.length === 0) {
       if (this._free) this._stepFreeCam(dt);
-      this.display.frame(dt);
+      this._renderFrame(dt, 0);
       this._hideCellHud();
       this._scheduleNext();
       return;
     }
 
-    this.display.frame(dt);
+    this._renderFrame(dt, ids.length);
 
     // Place this frame's HUD over the cells the renderer just drew.
     const { cols, rows } = bestGrid(ids.length, W, H);
@@ -716,6 +718,19 @@ export class Stage {
       }
     });
     this._scheduleNext();
+  }
+
+  // The frame itself, and the only place the perf HUD instruments. The GPU timer
+  // brackets THIS call and nothing else: the HUD's own DOM writes and the cell
+  // placement below happen outside it, so the number stays a measure of the
+  // renderer. (snapshot()/repaint() deliberately go straight to the display —
+  // they re-present a frame that was already paid for.)
+  _renderFrame(dt, cells) {
+    this.perf.setCells(cells);
+    this.perf.gpuBegin();
+    this.display.frame(dt);
+    this.perf.gpuEnd();
+    if (this.perf.visible) this.perf.cpu(this.display.profileTotal());
   }
 
   // Tail of every iteration: idle if asked, else queue the next frame.

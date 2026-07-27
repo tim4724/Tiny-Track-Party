@@ -183,14 +183,27 @@ export class Display {
   burstOn(id) { this._fn.burst(JSON.stringify(id), 0, 0); }
   burstAt(s, lat) { this._fn.burst(null, s, lat); }
 
-  // Last frame's per-section wall clock, as { section: ms }.
+  // Last frame's per-section wall clock, as { section: ms }. The names are fixed
+  // for the life of the module, so they are marshalled across once — profileTotal
+  // below runs every frame while the perf HUD is up.
   profile() {
     const ptr = this.m._ttp_display_profile();
     if (!ptr) return null;
-    const names = this._fn.profileNames().split(',');
+    const names = this._profNames || (this._profNames = this._fn.profileNames().split(','));
     const out = {};
     names.forEach((n, i) => { out[n] = this.m.HEAPF64[(ptr >> 3) + i]; });
     return out;
+  }
+
+  // Just the frame total, in ms — one heap read, no object. This is the CPU cost
+  // of building and submitting the frame; what the GPU then does with it is a
+  // different (larger) number, which is why the perf HUD shows both.
+  profileTotal() {
+    const ptr = this.m._ttp_display_profile();
+    if (!ptr) return null;
+    const names = this._profNames || (this._profNames = this._fn.profileNames().split(','));
+    const i = names.indexOf('total');
+    return i < 0 ? null : this.m.HEAPF64[(ptr >> 3) + i];
   }
 }
 

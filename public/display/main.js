@@ -1740,6 +1740,10 @@ window.__net = net; window.__scene = scene; window.__startRace = startRace; wind
 window.__series = () => series; // live CupSeries (null outside a cup)
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
+// Perf HUD (render/PerfHud.js). show()/hide() arm it without a reload, and
+// sample() hands back the same numbers it prints — which is how a scripted GPU
+// budget sweep across the catalogue reads a track: show(), race it, sample().
+window.__perf = scene.perf;
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
@@ -1783,5 +1787,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
   { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
     options: [{ value: '0', label: 'off' }] },
+  { section: 'Diagnostics' },
+  { key: 'perf', label: 'Perf overlay', hint: 'gpu/cpu frame cost + dropped vsyncs · "P" toggles', type: 'flag' },
   ], { title: 'Display' });
 });
