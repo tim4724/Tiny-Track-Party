@@ -5,6 +5,7 @@
 // screen). Car images load by id from the web host.
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
+import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
 import { unpackSchematic } from '../display/trackSchematic.js';
@@ -72,33 +73,16 @@ function show(name) {
   if (!inShell && (SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
 }
 
-// haptics — vibrate the phone (ignored where unsupported). The player's eyes are
-// on the main display, not the phone, so a buzz is how a tap confirms it landed.
-const buzz = (p) => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (_) {} };
-
-// Brake rumble: a *continuous*-feeling LIGHT buzz for as long as BRAKE is held —
-// the player's eyes-free confirmation they're braking (they're watching the car
-// on the main display). navigator.vibrate has no intensity control, so "light" is
-// faked with duty cycle: a short on-pulse at a fast cycle = low average motor
-// power (faint) AND pulses too quick to feel apart (they blend into one smooth
-// hum, not taps). It also has no native loop, so we play a long pattern and renew
-// it just before it ends — the motor never falls silent.
-// Tune: raise the 8 (on-time) for a stronger rumble; raise the 22 (off-time) for
-// fainter. Keep the cycle (8+22=30ms) short or the pulses stop blending.
-const BRAKE_PULSE = [8, 22];                               // 30ms cycle, ~27% duty: a light hum
-const BRAKE_PATTERN = Array(60).fill(BRAKE_PULSE).flat();  // ~1.8s of rumble
-const BRAKE_RENEW_MS = 1500;                               // renew before it ends (1.8s > 1.5s, no gap)
-let _brakeTimer = null;
-function startBrakeRumble() {
-  if (_brakeTimer) return;
-  buzz(BRAKE_PATTERN);
-  _brakeTimer = setInterval(() => buzz(BRAKE_PATTERN), BRAKE_RENEW_MS);
-}
-function stopBrakeRumble() {
-  if (!_brakeTimer) return;
-  clearInterval(_brakeTimer); _brakeTimer = null;
-  buzz(0); // cancel any residual vibration immediately
-}
+// haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
+// navigator.vibrate at all, so every cue here is Android-only). The player's eyes
+// are on the main display, not the phone, so a buzz is how the phone confirms
+// something landed. ONE motor, so every cue routes through this instance: a
+// transient fired while the brake rumble is running would otherwise silence it
+// until the next renewal. See Haptics.js.
+const haptics = new Haptics();
+const buzz = (p) => haptics.tick(p);
+const startBrakeRumble = () => haptics.startLoop();   // defaults ARE the brake rumble
+const stopBrakeRumble = () => haptics.stopLoop();
 
 let myColorIndex = null;
 let myCarIndex = 0;

@@ -104,6 +104,13 @@
   --shadow-card:  6px 6px 0 var(--shadow-ink);        /* big sticker cards     */
   --shadow-float: 6px 6px 0 var(--shadow-ink);        /* alias — same as card  */
   --btn-ledge:    rgba(42, 39, 53, 0.9);              /* the push-button ledge */
+  /* Ledge geometry — ONE depth for every push-button in the app (chrome buttons
+     AND the big BRAKE/ITEM drive pads), so nothing sits deeper than anything
+     else. --btn-sink MUST stay under --btn-drop: press travel equal to the drop
+     would punch the button through its own ledge and flatten it. The pressed
+     ledge is always the difference, so the two can never drift apart. */
+  --btn-drop:     4px;                                /* ledge depth at rest   */
+  --btn-sink:     3px;                                /* travel while pressed  */
 }
 
 /* 3. Base / reset --------------------------------------------------------- */
@@ -145,29 +152,32 @@ body {
   border-radius: var(--r);
   padding: 0.8em 1.2em;
   background: var(--btn-bg);
-  box-shadow: 0 6px 0 var(--btn-ledge);
+  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   cursor: pointer;
   transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
 }
 .btn:hover { filter: brightness(1.04); }
 .btn:active, .btn.is-pressed {
-  transform: translateY(4px);
-  box-shadow: 0 2px 0 var(--btn-ledge);
+  transform: translateY(var(--btn-sink));
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
 }
 .btn--brand  { --btn-bg: var(--brand); }
 .btn--accent { --btn-bg: var(--accent); }   /* red now — white text stands */
 .btn--danger { --btn-bg: var(--danger); }
 .btn--item   { --btn-bg: var(--item); }
-.btn--ghost  {                                   /* quiet, secondary action */
+.btn--ghost  {                     /* quiet, secondary action — same ledge DEPTH
+                                      as the primary, just a lighter ink */
   --btn-bg: var(--surface);
   color: var(--ink);
-  box-shadow: 0 4px 0 rgba(42, 39, 53, 0.35);
+  box-shadow: 0 var(--btn-drop) 0 rgba(42, 39, 53, 0.35);
 }
-.btn--ghost:active, .btn--ghost.is-pressed { box-shadow: 0 1px 0 rgba(42, 39, 53, 0.35); }
+.btn--ghost:active, .btn--ghost.is-pressed {
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 rgba(42, 39, 53, 0.35);
+}
 .btn:disabled, .btn[disabled] {       /* e.g. join button while connecting */
   opacity: 0.5; cursor: default; filter: none;
 }
-.btn:disabled:active { transform: none; box-shadow: 0 6px 0 var(--btn-ledge); }
+.btn:disabled:active { transform: none; box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge); }
 
 /* Icon button — a small square sticker button for a single glyph (e.g. pause). */
 .icon-btn {

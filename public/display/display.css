@@ -302,7 +302,7 @@ html, body {
   transform: rotate(1.4deg);
 }
 /* keep the sticker tilt through the press (the kit's :active would drop it) */
-.welcome__btn:active, .welcome__btn.is-pressed { transform: rotate(1.4deg) translateY(4px); }
+.welcome__btn:active, .welcome__btn.is-pressed { transform: rotate(1.4deg) translateY(var(--btn-sink)); }
 
 /* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
    and the race (split-screen). The lobby/race sections layer on top. ---- */
