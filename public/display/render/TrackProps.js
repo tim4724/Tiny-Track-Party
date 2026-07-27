@@ -125,7 +125,7 @@ export class TrackProps {
     // the flame material is held so its flicker can be driven once per frame.
     this._rocketMeshes = new Map();        // rocket id -> cloned mesh group
     this._liveRockets = new Set();         // reused per-frame live-id set
-    this._rocketFlameMat = null;           // set by _buildRocketProto; flickered in _stepRockets
+    this._rocketFlameMat = null;           // set by _buildRocketProto; steady (no flicker)
     this._rocketProto = this._buildRocketProto();
     this._rkFwd = new THREE.Vector3();     // scratch: per-frame rocket orientation basis
     this._rkUp = new THREE.Vector3();
@@ -896,7 +896,8 @@ export class TrackProps {
       g.add(fin);
     }
     // Additive tail flame — small + glowing (not a second cone), pointing out the BACK
-    // (local -Y → trails the travel direction). Flicker driven via the held material.
+    // (local -Y → trails the travel direction). Held at a steady opacity: a pulse on
+    // something this small reads as noise, not as fire.
     this._rocketFlameMat = new THREE.MeshBasicMaterial({
       color: 0xffb33b, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false
     });
@@ -955,12 +956,12 @@ export class TrackProps {
   }
 
   // Animate the live rockets: accumulate a spin angle (applied in _syncRockets after the
-  // orientation) and flicker the shared tail flame. Cheap; a no-op when nothing's in flight.
+  // orientation). The flame is STEADY — it used to pulse, and at the size a rocket reads
+  // on a TV that is not a flicker but noise: too small to see as fire, too busy to ignore.
+  // Cheap; a no-op when nothing's in flight.
   _stepRockets(dt) {
     if (!this._rocketMeshes || !this._rocketMeshes.size) return;
     for (const m of this._rocketMeshes.values()) m.userData.roll = (m.userData.roll || 0) + ROCKET_ROLL * dt;
-    this._rocketClock = (this._rocketClock || 0) + dt;
-    if (this._rocketFlameMat) this._rocketFlameMat.opacity = 0.5 + 0.4 * (0.5 + 0.5 * Math.sin(this._rocketClock * 38));
   }
 
   // Spawn a one-shot impact burst at a car (the rocket's detonation point). `carGroup` is

@@ -39,6 +39,15 @@ const SKID_BRAKE_MIN = 0.6;        // analog brake input where marks start; full
 // Launch scratch: hard forward acceleration from near-standstill (race start,
 // boost from slow) scratches faint marks — torque biting into the asphalt.
 const SKID_LAUNCH_MIN = 0.5;       // accelNorm (smoothed d(spd)/dt vs full throttle) where it starts
+// Scuff RELEASE: how long a mark takes to trail off once the wheel stops
+// scuffing (seconds from full strength to nothing). Without it the marks come
+// out CHOPPED on a bendy road: a bot weaving down a curvy stretch crosses the
+// scuff threshold every few frames and brushes the curb in between, so the
+// ribbon is a run of hard-edged dashes — and worse, each dip DETACHES the
+// ribbon (below), so the next mark starts with a fresh unjoined rear edge and
+// the joints stack into dark bars on the bend. Holding the strength up through
+// the dips keeps one continuous trail that simply fades where the scrub eased.
+const SKID_RELEASE = 0.4;
 export { SKID_WIDTH }; // addCar's fallback tyre-contact width
 
 // Skidmark decals — flat quads laid on the road. ONE merged mesh with
@@ -189,7 +198,7 @@ export class SkidMarks {
   // straight cruise leaves nothing (the contact shadow grounds it there), gentle
   // bends fade in faintly; hard cornering, curb grinding, braking, launching and
   // spin-outs mark clearly.
-  layTrails(cars) {
+  layTrails(cars, dt = 1 / 60) {
     for (const c of cars.values()) {
       if (!c.pose) continue;
       const spd = c.spd || 0;                                // normalised 0..1 (per-car top speed)
@@ -215,11 +224,19 @@ export class SkidMarks {
       // the car gets rolling
       const launch = ((c.accelNorm || 0) > SKID_LAUNCH_MIN && spd < 0.5)
         ? Math.min(1, (c.accelNorm - SKID_LAUNCH_MIN) / (1 - SKID_LAUNCH_MIN)) * (1 - spd / 0.5) * 0.6 : 0;
-      const strength = (c.scrub || spinning) ? 1 : Math.min(1, Math.max(slip * 1.3, brakeBite, launch)); // 0 at threshold → smooth fade-in
+      const raw = (c.scrub || spinning) ? 1 : Math.min(1, Math.max(slip * 1.3, brakeBite, launch)); // 0 at threshold → smooth fade-in
+      // Attack instantly, release over SKID_RELEASE (see the constant): a scuff
+      // that stops dead leaves a dash, so every burst tapers into the trail.
+      c.skidHold = Math.max(raw, (c.skidHold || 0) - dt / SKID_RELEASE);
+      const strength = c.skidHold;
       c.group.updateWorldMatrix(false, true); // fresh wheel world transforms
       // curb grind / spin-out marks all four wheels; otherwise just the loaded
-      // rears (reset the fronts so a later scrub can't bridge from a stale spot)
-      const marksAll = c.scrub || spinning;
+      // rears (reset the fronts so a later scrub can't bridge from a stale spot).
+      // The four-wheel channel releases on the same taper, so the fronts fade
+      // out with the rears instead of stopping mid-mark.
+      c.skidAllHold = (c.scrub || spinning) ? 1
+        : Math.max(0, (c.skidAllHold || 0) - dt / SKID_RELEASE);
+      const marksAll = c.skidAllHold > 0.02;
       const wheels = marksAll ? c.allWheels : c.backWheels;
       if (!marksAll && c.frontWheels) for (const w of c.frontWheels) this._resetWheel(w);
       for (const w of wheels) {

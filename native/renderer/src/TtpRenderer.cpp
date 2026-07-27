@@ -36,6 +36,7 @@
 #include <gltfio/materials/uberarchive.h>
 
 #include <utils/EntityManager.h>
+#include <utils/NameComponentManager.h>
 
 #include <algorithm>
 #include <cmath>
@@ -3945,7 +3946,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         // patches the JSON), so it only needs the same chassis-only recolour —
         // its tyres keep their colour at half opacity, like the JS clone does.
         recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
-                math::float4{ 0.42f, 0.44f, 0.50f, 0.5f });
+                math::float4{ srgbToLinear(0x565b63), 0.5f });
     }
     if (mMonsterAsset) {
         const filament::Aabb mbb = mMonsterAsset->getBoundingBox();
@@ -4012,8 +4013,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         // mesh alone and drops its map, so do the same here — a per-primitive
         // instance on that renderable, with the atlas neutralised by a white
         // 1×1 so the flat colour is all that's left.
+        // MONSTER_CHASSIS_COLOR 0x565b63, through sRGB→linear: baseColorFactor
+        // is a LINEAR glTF factor, and the eyeballed 0.42/0.44/0.50 that used to
+        // sit here is that colour's *sRGB* triple — four times too bright once
+        // the shader stopped ignoring it (it never ran until the loader learned
+        // node names).
+        const float3 chassis = srgbToLinear(0x565b63);
         recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
-                math::float4{ 0.42f, 0.44f, 0.50f, 1.0f });
+                math::float4{ chassis, 1.0f });
     }
     buildPadsMesh(tb);
     buildWater(tb);
@@ -4100,33 +4107,48 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
     }
 
-    // Impact bursts, the JS spec: a THIN shockwave ring (0.25→2.0 world over
-    // 0.7 s, alpha 0.55) plus a cream flash ball (r 0.62, 0.5 s). Unit meshes,
-    // scaled/parked per frame.
-    if (mBlendMaterial) {
+    // Impact bursts, the JS spec (TrackProps): a THIN shockwave ring that
+    // sweeps 0.25 → 2.0 world over IMPACT_TIME 0.7 s at CONSTANT width and
+    // fades out, plus a cream flash ball (r 0.62) that pops to full in ~0.1 s
+    // and then fades over IMPACT_FLASH_TIME 0.5 s. Both ADDITIVE — see
+    // vburst.mat for why that and the shader-side ring matter.
+    //
+    // Per-slot material instances: radius, width and fade are all material
+    // parameters, so the meshes themselves never change after this.
+    if (mBurstMaterial) {
         for (int bi = 0; bi < 2; bi++) {
+            // Ring: every vertex sits at the LOCAL ORIGIN and the shader pushes
+            // it out along the camera axes, so the CPU only ever moves the
+            // burst centre. uv0 = (angle in turns, side across the width).
             Mesh& ring = mBurstMeshes[bi];
-            const uint32_t rc = packLinear(srgbToLinear(0xfff6eb), 1.0f, 0.55f);
-            const int SEG = 24;
+            const uint32_t rc = packLinear(srgbToLinear(0xffe6b0), 1.0f, 1.0f);
+            const int SEG = 36;
             for (int j = 0; j <= SEG; j++) {
-                const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                const float ca = std::cos(a), sa = std::sin(a);
-                ring.verts.push_back({ ca * 0.94f, 0, sa * 0.94f, rc });
-                ring.verts.push_back({ ca * 1.06f, 0, sa * 1.06f, rc });
+                const float u = (float) j / SEG;
+                ring.verts.push_back({ 0, 0, 0, rc });
+                ring.uvs.push_back({ u, -1.0f });
+                ring.verts.push_back({ 0, 0, 0, rc });
+                ring.uvs.push_back({ u, 1.0f });
             }
             for (int j = 0; j < SEG; j++) {
                 const uint32_t b = j * 2;
                 ring.idx.insert(ring.idx.end(), { b, b + 1, b + 2, b + 1, b + 3, b + 2 });
             }
-            if (!buildMesh(ring, true, mBlendMaterial->getDefaultInstance())) return false;
+            mBurstRingMats[bi] = sceneInstance(mBurstMaterial);
+            if (!buildMesh(ring, false, mBurstRingMats[bi])) return false;
+            // The ring's own vertices are a POINT, so its bounds are one too —
+            // a frustum test on them would drop the halo the moment the
+            // detonation point left the screen while the wave still crossed it.
+            setMeshCulling(ring, false);
+            // Ball: ring = (0, 0) leaves the shader displacement at zero, so
+            // the sphere's own geometry and its transform scale are the shape.
             Mesh& ball = mBurstBalls[bi];
             appendSphere(ball, 10, 7, [](const float3& p) { return p; },
-                    [&](const float3&) { return packLinear(srgbToLinear(0xfff6eb), 1.0f, 0.8f); });
-            if (!buildMesh(ball, true, mBlendMaterial->getDefaultInstance())) return false;
-            auto& tcm2 = mEngine->getTransformManager();
-            const mat4f park = mat4f::translation(float3{ 0, -1000, 0 });
-            tcm2.setTransform(tcm2.getInstance(ring.entity), park);
-            tcm2.setTransform(tcm2.getInstance(ball.entity), park);
+                    [&](const float3&) { return packLinear(srgbToLinear(0xffe0a8), 1.0f, 1.0f); });
+            ball.uvs.assign(ball.verts.size(), math::float2{ 0, 0 });
+            mBurstBallMats[bi] = sceneInstance(mBurstMaterial);
+            mBurstBallMats[bi]->setParameter("ring", math::float2{ 0, 0 });
+            if (!buildMesh(ball, false, mBurstBallMats[bi])) return false;
         }
     }
 
@@ -4856,6 +4878,12 @@ void TtpRenderer::ensureAssetLoader() {
     gltfio::AssetConfiguration ac{};
     ac.engine = mEngine;
     ac.materials = mMatProvider;
+    // Node names, which gltfio only records when handed a manager. Without
+    // one getName() is nullptr everywhere and every name-driven rule below
+    // (chassis recolour, monster wheels, the "skip the wheels" graft-seat
+    // measurement) no-ops without a word.
+    mNames = new utils::NameComponentManager(utils::EntityManager::get());
+    ac.names = mNames;
     mAssetLoader = gltfio::AssetLoader::create(ac);
     gltfio::ResourceConfiguration rc{};
     rc.engine = mEngine;
@@ -5824,6 +5852,12 @@ bool TtpRenderer::buildScene() {
     if (!mPointMaterial && vpoint != mAssets.end()) {
         mPointMaterial = Material::Builder()
                 .package(vpoint->second.data(), vpoint->second.size())
+                .build(*mEngine);
+    }
+    const auto vburst = mAssets.find("vburst.filamat");
+    if (!mBurstMaterial && vburst != mAssets.end()) {
+        mBurstMaterial = Material::Builder()
+                .package(vburst->second.data(), vburst->second.size())
                 .build(*mEngine);
     }
     const auto vblur = mAssets.find("vblur.filamat");
@@ -6817,10 +6851,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     * mat4f::rotation(mTime * 9.0f, float3{ 0, 1, 0 });
             tcm.setTransform(inst, rocketXf);
             if (haveFlame) {
-                // flicker (the JS jitters the flame material's opacity)
-                const float flick = 0.82f + 0.28f * std::sin(mTime * 37.0f + j * 2.1f);
-                tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity),
-                        rocketXf * mat4f::scaling(float3{ flick }));
+                // STEADY. The flame used to pulse (the JS jittered its
+                // opacity, this scaled it) — at the size a rocket reads on a TV
+                // that is not a flicker, it is noise: too small to see as fire
+                // and too busy to ignore. A constant flame is the clearer cue.
+                tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity), rocketXf);
             }
         }
         // A sim reset (fixture scrubbing) teleports every car — clear the
@@ -6883,13 +6918,14 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             if (mBurstMeshes[bi].entity.isNull()) continue;
             auto ringI = tcm.getInstance(mBurstMeshes[bi].entity);
             auto ballI = tcm.getInstance(mBurstBalls[bi].entity);
-            if (b.t < 0) { tcm.setTransform(ringI, PARK); tcm.setTransform(ballI, PARK); continue; }
-            b.t += input.dt;
             constexpr float DUR = 0.7f, FLASH = 0.5f; // IMPACT_TIME / IMPACT_FLASH_TIME
-            if (b.t >= DUR) {
-                b.t = -1;
-                tcm.setTransform(ringI, PARK);
-                tcm.setTransform(ballI, PARK);
+            if (b.t >= 0) {
+                b.t += input.dt;
+                if (b.t >= DUR) b.t = -1;
+            }
+            if (b.t < 0) {
+                setMeshInScene(mBurstMeshes[bi], false);
+                setMeshInScene(mBurstBalls[bi], false);
                 continue;
             }
             // The fireball chases the car it hit as that car spins away
@@ -6900,16 +6936,33 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         + float3{ hit.up.x, hit.up.y, hit.up.z } * 0.3f;
                 b.ball += (target - b.ball) * std::min(1.0f, 10.0f * input.dt);
             }
-            const float k = 0.25f + (b.t / DUR) * 1.75f; // ring 0.25 → 2.0
-            tcm.setTransform(ringI, mat4f::translation(b.pos) * mat4f::scaling(float3{ k, 1, k }));
-            if (b.t < FLASH) {
-                // brief hold, then the fireball shrinks out (alpha is baked —
-                // scale carries the fade)
-                const float f = b.t < 0.12f ? 1.0f : 1.0f - (b.t - 0.12f) / (FLASH - 0.12f);
+            // Ring: IMPACT_RING_R0 0.25 → R1 2.0 on the JS ease-out
+            // (1-(1-t)²), half-width held at IMPACT_RING_W 0.05 the whole way,
+            // alpha IMPACT_RING_OPACITY 0.55 tapering to nothing.
+            const float tr = b.t / DUR;
+            const float R = 0.25f + 1.75f * (1.0f - (1.0f - tr) * (1.0f - tr));
+            setMeshInScene(mBurstMeshes[bi], true);
+            tcm.setTransform(ringI, mat4f::translation(b.pos));
+            if (mBurstRingMats[bi]) {
+                mBurstRingMats[bi]->setParameter("ring", math::float2{ R, 0.05f });
+                mBurstRingMats[bi]->setParameter("tint",
+                        math::float4{ 1, 1, 1, 0.55f * (1.0f - tr) });
+            }
+            // Ball: pops to IMPACT_FLASH_R 0.62 in ~0.1 s and then HOLDS that
+            // size while its brightness dies — a fireball that shrank instead
+            // read as a balloon deflating.
+            const float tf = std::min(1.0f, b.t / FLASH);
+            const bool ballUp = b.t < FLASH;
+            setMeshInScene(mBurstBalls[bi], ballUp);
+            if (ballUp) {
                 tcm.setTransform(ballI, mat4f::translation(b.ball)
-                        * mat4f::scaling(float3{ 0.62f * f }));
-            } else {
-                tcm.setTransform(ballI, PARK);
+                        * mat4f::scaling(float3{ 0.62f
+                                * (0.5f + 0.5f * std::min(1.0f, tf * 5.0f)) }));
+                if (mBurstBallMats[bi]) {
+                    const float a = tf < 0.25f ? 1.0f
+                            : std::max(0.0f, 1.0f - (tf - 0.25f) / 0.75f);
+                    mBurstBallMats[bi]->setParameter("tint", math::float4{ 1, 1, 1, a });
+                }
             }
         }
     }
@@ -6929,6 +6982,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         constexpr float SKID_SEG_MIN = 0.25f, SKID_SEG_MAX = 1.5f;
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
         constexpr float SKID_LAUNCH_MIN = 0.5f;
+        constexpr float SKID_RELEASE = 0.4f; // s from full strength to nothing
         const uint32_t POOL = (uint32_t) mSkidLife.size();
         bool dirty = false;
         const auto detach = [&](WheelTrail& t) {
@@ -6983,8 +7037,16 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float launch = (cw.accelNorm > SKID_LAUNCH_MIN && spd < 0.5f)
                     ? std::min(1.0f, (cw.accelNorm - SKID_LAUNCH_MIN) / (1.0f - SKID_LAUNCH_MIN))
                             * (1.0f - spd / 0.5f) * 0.6f : 0.0f;
-            const float strength = (scrub || spinning) ? 1.0f
+            const float raw = (scrub || spinning) ? 1.0f
                     : std::min(1.0f, std::max(slip * 1.3f, std::max(brakeBite, launch)));
+            // Attack instantly, release over SKID_RELEASE (SkidMarks.js). A
+            // scuff that stops dead leaves a DASH: bots weaving down a bendy
+            // stretch cross the scuff threshold every few frames and clip the
+            // curb in between, and every dip detaches the ribbon (below) so the
+            // fresh unjoined rear edges stack into dark bars. Holding the
+            // strength through the dips keeps one trail that fades instead.
+            cw.skidHold = std::max(raw, cw.skidHold - input.dt / SKID_RELEASE);
+            const float strength = cw.skidHold;
             // Wheel contact patches from the posed wheel nodes (whirl included,
             // lean/dive not — JS wheels are children of the yawed car, not the
             // leaning body), dropped onto the road plane under the car.
@@ -6996,7 +7058,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     ? m2 * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
                     : m2 * FLIP;
             const float3 wlocal[4] = { cw.flT, cw.frT, cw.blT, cw.brT };
-            const bool marksAll = scrub || spinning;
+            // The four-wheel channel releases on the same taper, so the fronts
+            // fade out with the rears instead of stopping mid-mark.
+            cw.skidAllHold = (scrub || spinning) ? 1.0f
+                    : std::max(0.0f, cw.skidAllHold - input.dt / SKID_RELEASE);
+            const bool marksAll = cw.skidAllHold > 0.02f;
             if (!marksAll) { resetWheel(trails[0]); resetWheel(trails[1]); }
             const float halfW = cw.skidWidth / 2;
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
@@ -7418,6 +7484,9 @@ void TtpRenderer::releaseScene() {
     mPrevRockets.clear();
     mPrevRocketCount = 0;
     for (Burst& b : mBursts) b = {};
+    // The instances themselves are scene-scoped (sceneInstance), already
+    // destroyed above — just drop the dangling handles.
+    for (int bi = 0; bi < 2; bi++) { mBurstRingMats[bi] = nullptr; mBurstBallMats[bi] = nullptr; }
     mClouds.clear();
     mCloudPos.clear();
     mHaze.clear();
@@ -7456,6 +7525,7 @@ TtpRenderer::~TtpRenderer() {
     releaseScene();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
+    if (mBurstMaterial) mEngine->destroy(mBurstMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
@@ -7466,6 +7536,8 @@ TtpRenderer::~TtpRenderer() {
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);
+    delete mNames; // outlives the loader: it holds the name components
+    mNames = nullptr;
     if (mMatProvider) { mMatProvider->destroyMaterials(); delete mMatProvider; }
     if (mColorGrading) mEngine->destroy(mColorGrading);
     delete mToneMapper;

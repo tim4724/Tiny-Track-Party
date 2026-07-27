@@ -50,6 +50,10 @@ class TextureProvider;
 } // namespace gltfio
 } // namespace filament
 
+namespace utils {
+class NameComponentManager;
+} // namespace utils
+
 class TtpRenderer {
 public:
     // Out of line: members hold unique_ptr<TrackBin> (incomplete here).
@@ -214,6 +218,14 @@ private:
     filament::gltfio::AssetLoader* mAssetLoader = nullptr;
     filament::gltfio::ResourceLoader* mResourceLoader = nullptr;
     filament::gltfio::TextureProvider* mStbProvider = nullptr;
+    // glTF NODE NAMES. Optional to gltfio and easy to leave out — but without
+    // it FilamentAsset::getName() returns nullptr for EVERY entity, silently,
+    // while getFirstEntityByName() keeps working off its own map. Three things
+    // read names and all three quietly did nothing: the monster chassis
+    // recolour, the monster wheel handles, and the graft-seat measurement
+    // (which skips the car's WHEELS — with the skip dead the box reached the
+    // ground and the truck's body rode ~0.07 too high).
+    utils::NameComponentManager* mNames = nullptr;
     std::vector<filament::gltfio::FilamentAsset*> mCarAssets;
     // 50%-alpha ghost variants (patched GLBs) — the monster occlusion fade
     // swaps the whole rig (chassis AND grafted body) like the JS traversal.
@@ -238,6 +250,8 @@ private:
         float rideOff = 0;                         // damped road-minus-centreline offset
         bool hasRide = false;                      // rideOff seeded (re-seeds after a stunt)
         float skidWidth = 0.12f;                   // tyre-contact width (wheel AABB, clamped)
+        float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
+        float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
         float footW = 0.95f, footL = 2.0f;         // car footprint (asset AABB) — blob + boost disk
         filament::math::float3 bbMin{}, bbMax{};   // asset AABB — rear plate anchor
         bool monsterOn = false;                    // morph edge detect
@@ -285,6 +299,9 @@ private:
     // billboard + the radial falloff both live in the shader — see vpoint.mat.
     filament::Material* mPointMaterial = nullptr;
     filament::MaterialInstance* mPollenMat = nullptr; // owns the sprite's halfSize
+    // Additive rocket blast (vburst): the flash ball and the camera-facing
+    // shockwave ring, whose radius/width/fade are material parameters.
+    filament::Material* mBurstMaterial = nullptr;
     // Textured ground (vground): the biome's floor canvas, generated as pixels
     // to match the JS canvas texture rather than approximated with bands.
     filament::Material* mGroundMaterial = nullptr;
@@ -449,6 +466,10 @@ private:
     Burst mBursts[2];
     Mesh mBurstMeshes[2]; // shockwave rings
     Mesh mBurstBalls[2];  // flash balls
+    // One vburst instance each: the ring's radius/width and both fades are
+    // material parameters, so nothing about these meshes changes per frame.
+    filament::MaterialInstance* mBurstRingMats[2] = { nullptr, nullptr };
+    filament::MaterialInstance* mBurstBallMats[2] = { nullptr, nullptr };
     // No HUD here by design: everything in SCREEN space (place card, lap pill,
     // item slot, name chip, countdown, results) belongs to the shell's own UI
     // layer — DOM/CSS on web, Compose on Android TV, SwiftUI on tvOS. The

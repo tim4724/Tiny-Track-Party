@@ -2293,7 +2293,7 @@ export class SceneRenderer {
   _stepThreeScene(dt) {
     // Skidmark trails: bridge each wheel's contact path into the merged decal
     // pool (cornering scuffs, curb grinds, brake streaks, launch scratches).
-    this.skids.layTrails(this.cars);
+    this.skids.layTrails(this.cars, dt);
     this.skids.step(dt);
     this.props.step(dt, this.cars); // kickable cones + item-box idle/collect anims
     // clouds drift slowly east, wrapping well outside the playfield

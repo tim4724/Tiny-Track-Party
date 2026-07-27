@@ -61,7 +61,7 @@ async function bootWasm() {
   rt = Module._ttp_create(sel, W, H);
   Module._free(sel);
   if (!rt) throw new Error('ttp_create failed');
-  for (const name of ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal', 'vpresent']) {
+  for (const name of ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal', 'vpresent', 'vburst']) {
     const mat = await fetch(`/native/${name}.filamat`);
     if (mat.ok) await provide(`${name}.filamat`, new Uint8Array(await mat.arrayBuffer()));
   }
