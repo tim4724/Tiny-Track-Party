@@ -203,8 +203,8 @@ const MUTATIONS = [
   {
     name: 'frame/cell-aspect-transposed',
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
-    find: 'aspect = (float) (d.width / cols) / (float) (d.height / rows);',
-    replace: 'aspect = (float) (d.width / rows) / (float) (d.height / cols);',
+    find: 'aspect = (float) cell.w / (float) cell.h;',
+    replace: 'aspect = (float) cell.h / (float) cell.w;',
     expect: 'frame_builder',
   },
   {

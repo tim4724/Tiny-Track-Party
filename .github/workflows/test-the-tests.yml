@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'mutation-check --only=<substring> (blank runs all 24)'
+        description: 'mutation-check --only=<substring> (blank runs all 28)'
         required: false
         default: ''
 
