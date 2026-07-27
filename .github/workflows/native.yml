@@ -64,13 +64,19 @@ jobs:
         run: cmake --build native/build/wasm --parallel
       - name: Corpus + conformance tests (Node)
         run: ctest --test-dir native/build/wasm --output-on-failure
-      - name: Build the browser runtime module
-        # ttp_runtime_web is the artifact the GAME loads, and it is the only target
-        # whose link options differ (no NODERAWFS/EXIT_RUNTIME, KEEPALIVE-driven
+      - name: Link-check the browser module (sim + party, no renderer)
+        # ttp_runtime_web is the target the GAME loads, and the only one whose
+        # link options differ (no NODERAWFS/EXIT_RUNTIME, KEEPALIVE-driven
         # exports). Nothing else in CI compiles it, so an ABI change that breaks
-        # only the browser module would otherwise reach main. This does NOT check
-        # the checked-in artifact is current — tests/native-artifact.test.js does
-        # that, since emcc output is not reproducible across emsdk versions.
+        # only the browser module would otherwise reach main.
+        #
+        # This is NOT the shipped artifact. The real one also links
+        # libttp-renderer, which needs the Filament fork that this runner does
+        # not carry — so without -DFILAMENT_SDK the target builds sim+party
+        # only, which is exactly the ABI surface this step exists to check.
+        # Whether the CHECKED-IN artifact is current is a separate question,
+        # answered by tests/native-artifact.test.js: emcc output is not
+        # reproducible across emsdk versions, so it compares a source hash.
         run: cmake --build native/build/wasm --target ttp_runtime_web --parallel
 
   tvos-sim:

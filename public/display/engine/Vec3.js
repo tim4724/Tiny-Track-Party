@@ -2,7 +2,7 @@
 // path (TrackBuilder → Centerline → Game → AiDriver) so the engine has zero
 // three.js coupling. The JS engine is the reference implementation the future
 // native (C++) port will be conformance-tested against, so this class must be
-// numerically BIT-IDENTICAL to THREE.Vector3 (r184, vendor/three/three.core.js):
+// numerically BIT-IDENTICAL to THREE.Vector3 (r184, the test-only devDependency):
 // every method body below copies three's arithmetic verbatim, preserving the
 // exact operation order (float rounding differs if you reassociate). Only the
 // method surface the sim actually uses is implemented — nothing speculative.

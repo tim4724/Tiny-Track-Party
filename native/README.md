@@ -11,6 +11,13 @@ FP rules: [docs/native-port/fp-profile.md](../docs/native-port/fp-profile.md).
 ## Layout
 
 ```
+renderer/       libttp-renderer: platform-free Filament renderer (no platform or
+                emscripten includes). Ships identically on web/tvOS/Android.
+                include/ttp_render.h is its INPUT CONTRACT (TtpFrameInput), an
+                internal C++ header rather than an ABI. Built only when
+                -DFILAMENT_SDK points at the fork's wasm install
+                (~/Projects/filament, branch tvos-v1.74.0, which carries the
+                tvOS port + newer-clang fixes).
 libttp-track/   Vec3, Centerline, TrackBuilder, JS-parity math shims.
                 generated/track_defs.h carries the 20 shipped layouts.
 libttp-sim/     Game (physics/items/ranking), AiDriver, RaceSession, GrandPrix.
@@ -18,8 +25,11 @@ libttp-json/    Canonical JSON (sorted keys, ECMA-262 shortest-form numbers)
                 + the parser. Byte-identical to JSON.stringify by contract.
 libttp-party/   RoomFlow, relay framing, fastlane netcode. Sans-IO: the host
                 owns the socket and the RTCPeerConnection.
-runtime/        The two public C ABIs: ttp_runtime.h (sim) and ttp_party.h
-                (party). No C++ types cross them.
+runtime/        The three public C ABIs: ttp_runtime.h (sim), ttp_party.h
+                (party) and ttp_display.h (surface, scene, cameras, frame).
+                No C++ types cross them. ttp_display.cc is where the sim and
+                the renderer MEET: it builds each frame from the live Game in
+                C++, so no frame state is ever serialized to the shell.
 mathlib/        Vendored fdlibm — transcendentals off V8's implementation, so
                 traces are platform-independent.
 replay/         replay_cli — the golden-trace conformance gate.
@@ -32,7 +42,7 @@ probe/          probe_cli — the balance instruments (lap times, car matrix).
 ```bash
 cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build -j8
-ctest --test-dir native/build            # 32 tests
+ctest --test-dir native/build            # 33 tests
 ```
 
 The browser artifacts are **checked in**. After touching anything under

@@ -13,7 +13,7 @@
 // fight. bakeSeed() returns the resolved waypoints (with y/bridge) that tracks.js imports.
 //
 // Used by BOTH scripts/gen-tracks.mjs (bake the chosen seeds) and scripts/scan-seeds.mjs
-// (audition a whole range). Needs Three.js (via buildTrack to sample + cross-detect), so it
+// (audition a whole range). Needs TrackBuilder (to sample + cross-detect), so it
 // runs OFFLINE in Node — the browser only ever sees the baked DATA.
 // Import SCALE from TrackBuilder so the plan→world factor can never drift out of sync
 // (findCrossings compares plan coords against world samples and must use the same value).
@@ -389,15 +389,15 @@ const rotateRing = (a, k) => a.slice(k).concat(a.slice(0, k));
 const GRID_BACK = 7, GRID_FWD = 12;
 
 // ---- GANTRY dimensions ----
-// Mirrors render/FinishGate.js (which imports THREE, so it can't be imported here — keep
+// Mirrors the renderer's finish gantry (C++, so it can't be imported here — keep
 // these in sync; the "gantry clears any deck over the line" test guards the pair, and
-// FinishGate carries a back-reference). The gantry is a GATE, not a point: two pylons
+// TtpRenderer carries a back-reference). The gantry is a GATE, not a point: two pylons
 // straddling the road at ±(roadWidth/2 + REACH), a banner across the top, the whole thing
 // rising GANTRY_TOP above the road surface — so its clearance is tested against that full
 // lateral SPAN (a deck that misses the centreline entirely can still be speared by a pylon,
 // as avalanche's did: it passes 4.6 out, clear of the road, through the right-hand pylon).
-const GANTRY_TOP = 2.8;     // FinishGate CLEAR (2.0) + BANNER_H (0.8) — pylon/banner top
-const GANTRY_REACH = 1.15;  // FinishGate kerbW + KERB_CLEAR + 2×PYLON_R, plus slack for a
+const GANTRY_TOP = 2.8;     // renderer CLEAR (2.0) + BANNER_H (0.8) — pylon/banner top
+const GANTRY_REACH = 1.15;  // renderer kerbW + KERB_CLEAR + 2×PYLON_R, plus slack for a
                             // themed kerb (theme.road.kerbW overrides the 0.22 default)
 
 // What a good grid looks like. minRadius is world units against a 5-wide road (30 = a gentle

@@ -1,0 +1,59 @@
+// Bake-time gaussian over an RGBA mask. Used on the per-car ground-shadow
+// silhouette (bakeSilhouette).
+//
+// Same reasoning as vesm.mat, for a different texture. The silhouette comes out
+// of its render target hard-edged, and vdecal used to rebuild the penumbra with
+// a 5x5 = 25-tap gaussian in every fragment, every frame, for four cars in four
+// cells. The mask never changes, so that work belongs here: blur it once at load
+// and the draw is a single bilinear tap.
+//
+// It also fixes the LOOK, which is why it is worth doing beyond the taps. A
+// 25-tap gaussian over a 128-px source resolves the edge in about five
+// quantised steps, and those steps are the banding in the blob's gradient. A
+// wider kernel over a larger source, filtered once at full precision into a
+// texture, gives the hardware something smooth to interpolate.
+material {
+    name : TtpVblur,
+    parameters : [
+        { type : sampler2d, name : src },
+        { type : float2,    name : texel },  // 1 / source size
+        { type : float,     name : radius }  // kernel spacing, in source texels
+    ],
+    variables : [ uv ],
+    vertexDomain : device,
+    shadingModel : unlit,
+    blending : transparent,
+    culling : none,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.uv.xy = uvToRenderTargetUV(getPosition().xy * 0.5 + 0.5);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+
+        // 9x9, once per car at load — the cost is invisible next to parsing the
+        // GLB it is blurring.
+        highp vec2 uv = variable_uv.xy;
+        vec4 sum = vec4(0.0);
+        float wsum = 0.0;
+        const int R = 4;
+        highp float inv2s2 = 1.0 / (2.0 * (float(R) * 0.5) * (float(R) * 0.5));
+        for (int j = -R; j <= R; j++) {
+            for (int i = -R; i <= R; i++) {
+                highp vec2 o = vec2(float(i), float(j))
+                        * materialParams.texel * materialParams.radius;
+                float w = exp(-(float(i * i + j * j)) * inv2s2);
+                sum += w * texture(materialParams_src, uv + o);
+                wsum += w;
+            }
+        }
+        material.baseColor = sum / wsum;
+    }
+}

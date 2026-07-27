@@ -1,0 +1,101 @@
+// Bake-time filter: the sun's raw depth map -> a blurred EXPONENTIAL shadow map.
+//
+// Why this exists. The depth map is baked ONCE per track and never changes, so
+// every penumbra the runtime spends taps on is a penumbra we could have spent
+// them on at load instead. A depth map cannot be blurred (averaging depths
+// across a silhouette is meaningless), which is why softening it needed an
+// N-tap PCF in every lit fragment of every cell. An ESM can: exp(-k·d) is
+// linear under filtering, so blurring it here is exactly equivalent to blurring
+// the shadow, and the runtime lookup collapses to ONE bilinear tap.
+//
+// THIS KERNEL'S WIDTH IS THE PENUMBRA. The receiver inverts the exponential and
+// compares in log space (see sunVisibility), and the soft edge it produces is
+// proportional to this blur's sigma. Nothing at the receiver can manufacture
+// softness the bake did not put here, which was learnt the hard way: the map's
+// resolution, the runtime tap count and a cubic reconstruction filter were each
+// built and measured, and each left a hard edge exactly as hard. So this pass
+// is SEPARABLE and runs twice — two 81-tap passes reach a sigma a single 9x9
+// never could, and cost 162 taps where the square would have cost 6561.
+//
+// Reversed depth. Our map holds 1 at the light and 0 at the far plane (see
+// bakeShadowMap), so an occluder IN FRONT of a receiver has the GREATER value.
+// Standard ESM assumes the opposite, so the exponent is negated: we store
+// exp(-k·d) and the receiver compares against its own depth directly. Equal
+// depths give exp(0) = 1, an occluder in front gives exp(-k·Δ) < 1.
+material {
+    name : TtpVesm,
+    parameters : [
+        { type : sampler2d, name : src, precision : high },
+        { type : float,     name : k },      // exponent; see kShadowEsmK
+        { type : float2,    name : texel },  // 1 / source map size
+        { type : float2,    name : dir },    // blur axis: (1,0) or (0,1)
+        { type : float,     name : sigma },  // Gaussian sigma, in SOURCE texels
+        // 1 on the pass that reads the raw depth map, 0 on the pass that reads
+        // this material's own output (already exponential, only needs blurring).
+        { type : float,     name : fromDepth }
+    ],
+    variables : [ uv ],
+    vertexDomain : device,
+    shadingModel : unlit,
+    culling : none,
+    depthWrite : false,
+    depthCulling : false
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.uv.xy = uvToRenderTargetUV(getPosition().xy * 0.5 + 0.5);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        // One axis of a separable Gaussian, ONE TAP PER SOURCE TEXEL.
+        //
+        // The spacing is the whole point. This used to place its 17 taps
+        // `sigma * 3/8` texels apart, which across the catalogue worked out at
+        // 2.3 to 4.6 texels — so five texels in every six were never read, and
+        // the kernel was a sparse comb rather than a Gaussian. A comb does not
+        // slide: as a silhouette moves across it, whole texels flick in and out
+        // of the sum at once, and the shadow's soft edge comes out as three or
+        // four flat bands with a step between them instead of a smooth ramp.
+        // It survived every other cure (the map's resolution, the runtime tap
+        // count, a cubic reconstruction filter, a wider kernel, and both the
+        // exponent and the compare window were each measured) because none of
+        // them adds back a texel the bake never sampled.
+        //
+        // So: taps at exactly one source texel. R is deliberately generous —
+        // the catalogue's widest sigma is 6.4 texels (skyline), needing 3 sigma
+        // = 19 — because everything narrower simply weights its outer taps to
+        // nothing and the bake is measurably free (797 ms vs 804 ms of track
+        // load at fifteen times the shipped tap count). Keeping it at 40 also
+        // keeps bakeShadowMap's sigma <= R/3 clamp off the shipped path; that
+        // clamp exists so an unusually fine map truncates the Gaussian rather
+        // than silently stretching the taps back out into a comb.
+        //
+        // Only exp(-k*d) may be averaged, never d. On the first pass the source
+        // is still raw depth, so the exponential is applied per TAP, before the
+        // weights; on the second it is already exponential and passes through.
+        highp vec2 uv = variable_uv.xy;
+        highp float k = materialParams.k;
+        const int R = 40;
+        highp float inv2s2 = 1.0 / (2.0 * materialParams.sigma * materialParams.sigma);
+        float sum = 0.0;
+        float wsum = 0.0;
+        for (int i = -R; i <= R; i++) {
+            highp vec2 o = materialParams.dir * float(i) * materialParams.texel;
+            float s = texture(materialParams_src, uv + o).r;
+            float v = materialParams.fromDepth > 0.5 ? exp(-k * s) : s;
+            float w = exp(-(float(i * i)) * inv2s2);
+            sum += w * v;
+            wsum += w;
+        }
+        // The colour goes in `emissive` with w = 0, like every other material
+        // here: an unlit material's baseColor is zeroed when the view carries a
+        // directional light, and w = 0 opts out of the exposure attenuation.
+        material.emissive = vec4(sum / wsum, 0.0, 0.0, 0.0);
+    }
+}

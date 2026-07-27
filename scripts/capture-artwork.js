@@ -3,7 +3,7 @@
 // Capture a 2x2 split-screen hero shot of a 4-player race for the artwork/ dir.
 //
 // There's no E2E harness, but the display already renders itself in isolation
-// from fake data: `/?test=1&scenario=racing&players=4` stands up the real Three.js
+// from fake data: `/?test=1&scenario=racing&players=4` stands up the real
 // scene with four self-driving cars — one per CAR_MODELS slot, so the field shows
 // four DIFFERENT models — laid out in the same split-screen grid the live game
 // uses (bestGrid(4, 16:9) = 2x2). This script spins up the static server, drives

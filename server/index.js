@@ -10,16 +10,14 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 const QRCode = require('qrcode');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-// partyplug (transport kit) and vendor (Three.js) live OUTSIDE public/ as
-// clearly-separate vendored dependencies, served via the remaps below. Both are
-// restricted to .js so package artifacts / binaries can't be walked.
+// partyplug (the transport kit) lives OUTSIDE public/ as a clearly-separate
+// vendored dependency, served via the remap below. Restricted to .js so
+// package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
-const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
 const APP_VERSION = require('../package.json').version;
 const APP_ENV = String(process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development')).toLowerCase();
 const IS_PROD = APP_ENV === 'production';
@@ -54,7 +52,9 @@ const MIME_TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
   '.mjs': 'text/javascript',       // engine/native/ttp_runtime.mjs (ES module, strict MIME)
-  '.wasm': 'application/wasm',     // ttp_runtime.wasm — instantiateStreaming requires this type
+  // ttp_runtime.wasm — the engine (sim + party + renderer). The correct MIME is
+  // what enables WebAssembly.instantiateStreaming.
+  '.wasm': 'application/wasm',
   '.css': 'text/css',
   '.json': 'application/json',
   '.png': 'image/png',
@@ -73,7 +73,9 @@ const MIME_TYPES = {
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
   '.flac': 'audio/flac',
-  '.mp3': 'audio/mpeg'
+  '.mp3': 'audio/mpeg',
+  // Compiled Filament materials, shipped beside the engine wasm.
+  '.filamat': 'application/octet-stream'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -111,7 +113,7 @@ function getLocalIP() {
 // real route prefixes, JSON endpoints, and common crawler/legal paths must NOT
 // be mistaken for a room and must 404 instead of spinning up a controller.
 const RESERVED_SEGMENTS = new Set([
-  'display', 'controller', 'shared', 'assets', 'vendor', 'partyplug', 'gallery',
+  'display', 'controller', 'shared', 'assets', 'partyplug', 'gallery',
   'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon'
 ]);
 function isRoomCode(urlPath) {
@@ -122,17 +124,17 @@ function isRoomCode(urlPath) {
   return /^[A-Za-z0-9_-]{1,24}$/.test(seg) && !RESERVED_SEGMENTS.has(seg.toLowerCase());
 }
 
-// Content-Security-Policy. Vendoring Three.js keeps script-src/connect-src at
-// 'self'. The ONE relaxation the no-build stack needs: the inline <script
-// type="importmap"> is itself a script, so it must carry a per-response nonce.
+// Content-Security-Policy. Every script is a same-origin file, so script-src
+// and connect-src stay at 'self' with no nonce — the inline <script
+// type="importmap"> that used to need one went with the JS renderer.
 // STUN (fastlane iceServers) is UDP and not governed by connect-src.
-// 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval): the sim's
-// deterministic mathlib (engine/math.js) instantiates an embedded fdlibm
-// WASM module.
-function cspHeader(nonce, frameAncestors) {
+// 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval): the engine module
+// (sim + party + Filament renderer) and the deterministic mathlib both
+// instantiate WASM.
+function cspHeader(frameAncestors) {
   return [
     "default-src 'self'",
-    "script-src 'self' 'wasm-unsafe-eval' 'nonce-" + nonce + "'",
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     // RELAY_URL (env) widens connect-src to exactly the configured relay —
@@ -192,11 +194,6 @@ const server = http.createServer((req, res) => {
     if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);
-  } else if (urlPath.startsWith('/vendor/')) {
-    // Three.js + addons. Only .js is browser-facing.
-    if (!/\.js$/.test(urlPath)) { res.writeHead(404); res.end('Not Found'); return; }
-    baseDir = VENDOR_DIR;
-    lookupPath = urlPath.slice('/vendor'.length);
   }
 
   const filePath = path.join(baseDir, lookupPath);
@@ -211,16 +208,14 @@ const server = http.createServer((req, res) => {
     const headers = { 'Content-Type': contentType };
 
     if (ext === '.html') {
-      const nonce = crypto.randomBytes(16).toString('base64');
       let text = data.toString('utf8');
       text = text.replace(/__APP_VERSION__/g, VERSION_LABEL)
                  .replace(/__VERSION_BADGE__/g, VERSION_BADGE)
                  .replace(/__APP_V__/g, APP_VERSION)
-                 .replace(/__CSP_NONCE__/g, nonce)
                  .replace(/__RELAY_URL__/g, RELAY_URL_OVERRIDE);
       data = Buffer.from(text);
       const iframeable = urlPath === '/display/index.html' || urlPath === '/controller/index.html';
-      headers['Content-Security-Policy'] = cspHeader(nonce, iframeable ? "'self'" : "'none'");
+      headers['Content-Security-Policy'] = cspHeader(iframeable ? "'self'" : "'none'");
     }
 
     // HTML + JS always no-store (avoid stale-version mismatch). Other static

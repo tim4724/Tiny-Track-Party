@@ -1,0 +1,51 @@
+// Camera-facing round sprite — the ambient-particle cloud (snow, dust, sand,
+// pollen). The JS draws these as a THREE.Points cloud with a soft radial
+// texture, which is billboarded per camera and perfectly round; a world-space
+// polyhedron can be neither, and a diamond is exactly what it looked like.
+//
+// So the quad is spun toward the camera IN THE VERTEX SHADER: every particle is
+// four vertices carrying the same world centre, and uv0 is the corner in
+// [-1,1], pushed out along the camera's right/up. That makes it correct per
+// VIEW for free — the split-screen cells all look in different directions, and
+// one CPU billboard can only ever face one of them.
+//
+// The fragment then rebuilds the sprite texture's radial gradient from the same
+// uv (opaque core, 0.9 at 0.4r, out to nothing at the rim), so the silhouette
+// is a circle no matter how few vertices are behind it.
+material {
+    name : TtpVpoint,
+    requires : [
+        color,
+        uv0
+    ],
+    shadingModel : unlit,
+    culling : none,
+    blending : transparent,
+    depthWrite : false,
+    flipUV : false,
+    parameters : [
+        { type : float, name : halfSize }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        highp mat4 w = getWorldFromViewMatrix();
+        material.worldPosition.xyz +=
+                (w[0].xyz * material.uv0.x + w[1].xyz * material.uv0.y)
+                        * materialParams.halfSize;
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor();
+        float d = length(getUV0());
+        // makeSnowflakeTexture's stops: 1.0 at the centre, 0.9 at 0.4, 0 at 1.
+        float a = d < 0.4 ? 1.0 - 0.25 * d : 0.9 * (1.0 - (d - 0.4) / 0.6);
+        material.baseColor.a *= clamp(a, 0.0, 1.0);
+        // Premultiply, same as vblend (transparent blending expects it).
+        material.baseColor.rgb *= material.baseColor.a;
+    }
+}

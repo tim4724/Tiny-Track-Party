@@ -7,6 +7,7 @@
 // drains. Bots are driven inside ttp_update, mirroring the live render loop.
 
 #include "ttp_runtime.h"
+#include "ttp_session.h"
 
 #include <map>
 #include <memory>
@@ -118,6 +119,18 @@ static bool buildTrack(RuntimeSession& rs, const std::string& trackId, int laps,
 // A shared "no session" string result for calls on a bad/unstarted handle.
 static const char* NULL_JSON = "null";
 static const char* EMPTY_ARR = "[]";
+
+static void buildSession(RuntimeSession* rs);
+
+// ttp_session.h — the display's read-only seam onto the live engine. Same lazy
+// build every other query does, so binding a display to a begun-but-not-started
+// handle draws the grid poses rather than nothing.
+ttp::Game* ttp_session_engine(int h) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return nullptr;
+  if (!rs->eng) buildSession(rs);
+  return rs->eng;
+}
 
 // ---------------------------------------------------------------------------
 // ABI.

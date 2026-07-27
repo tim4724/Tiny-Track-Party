@@ -1,7 +1,7 @@
 'use strict';
 
 // Mesh surgery: split the exposed cross-axle ("the rod that connects the wheels")
-// out of a car's BODY mesh into its own GLB node named `axle`, so SceneRenderer
+// out of a car's BODY mesh into its own GLB node named `axle`, so the renderer
 // can reparent it off the body (like the wheels) and it stays level with the road
 // while the body leans/dives.
 //

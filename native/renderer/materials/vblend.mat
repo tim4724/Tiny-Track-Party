@@ -1,0 +1,24 @@
+material {
+    name : TtpVblend,
+    requires : [
+        color
+    ],
+    shadingModel : unlit,
+    culling : none,
+    blending : transparent,
+    depthWrite : false
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // Filament's `transparent` blending expects PREMULTIPLIED alpha (see
+        // surface_shading_lit.fs: "we work in premultiplied alpha mode"). The
+        // vertex colours carry straight alpha — without this multiply a vertex
+        // at alpha 0 still ADDS its full colour, which turned every soft edge
+        // into a solid one: clouds rendered as flat white blobs, the boost aura
+        // as a hard teal disc, and skid marks came out LIGHTER than the road.
+        material.baseColor = getColor();
+        material.baseColor.rgb *= material.baseColor.a;
+    }
+}

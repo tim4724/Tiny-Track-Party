@@ -6,7 +6,7 @@
 // actual banana model instead of a hand-drawn SVG, with no per-frame WebGL on
 // the HUD.
 //
-// It reuses the live origin (so the vendored Three.js + importmap resolve and
+// It reuses the live origin (so the page's CSP resolves and
 // the CSP is satisfied) but renders into its OWN transparent renderer with the
 // game's toy lighting (HemisphereLight + warm key), framed front-3/4, then reads
 // the canvas back as a PNG data URL.
@@ -24,6 +24,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { chromium } = require('playwright');
+const { installThreeRoutes } = require('./lib/three-routes');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -83,8 +84,9 @@ async function main() {
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
 
-    // The display page carries the importmap + CSP nonce, so same-origin dynamic
-    // import('three') resolves there. We don't need its scene — just the origin.
+    // We don't need the display's scene — just a same-origin page, so a dynamic
+    // import of the routed three module satisfies its script-src 'self'.
+    await installThreeRoutes(page);
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
 
     const dataUrl = await page.evaluate(async ({ name, size, yaw, pitch }) => {
@@ -99,7 +101,7 @@ async function main() {
       renderer.setClearColor(0x000000, 0); // transparent — the slot supplies its own white card
 
       const scene = new THREE.Scene();
-      // Toy lighting, matched to SceneRenderer: soft sky/ground fill + a warm key
+      // Toy lighting, matched to the game renderer: soft sky/ground fill + a warm key
       // for the injection-moulded-plastic gloss.
       scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
       const key = new THREE.DirectionalLight(0xfff1d0, 1.4);

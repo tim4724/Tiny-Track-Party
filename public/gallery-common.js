@@ -87,7 +87,7 @@ var Gallery = (function() {
   }
 
   // Display page is served at `/`. Any scenario keeps the page off the relay.
-  // dpr=0.5 caps the preview's render resolution (SceneRenderer reads it): the iframe
+  // dpr=0.5 caps the preview's render resolution (Stage reads it): the iframe
   // lays out at full logical size (1920×1080) and is only shrunk by a parent CSS
   // transform, so without the cap every ~500px thumbnail renders and retains 4K-class
   // framebuffers on a 2× screen. Still ~2× oversampled at typical card scale (~0.26).

@@ -1,0 +1,67 @@
+// Rocket detonation — the ADDITIVE half of the burst (TrackProps spawnImpact /
+// _stepImpacts): a warm flash ball and the shockwave ring that leaves it.
+//
+// Two things the plain vblend material cannot do, and both of them are what
+// made the native explosion read as a white balloon instead of a blast:
+//
+// 1. ADDITIVE. The JS burst is AdditiveBlending — it BRIGHTENS the car it went
+//    off on, so the victim stays readable through the fireball. Alpha-blended
+//    cream at any opacity that reads as "bright" simply hides the car.
+//
+// 2. A CAMERA-FACING RING. The shockwave is a flat halo aimed at the viewer, in
+//    every split-screen cell at once (the JS re-faces it per cell in
+//    onBeforeRender). A world-space ring can only face one of them, and lying
+//    it flat on the road — which is what the native did — turns the blast wave
+//    into a puddle.
+//
+// So the ring is built in the VERTEX SHADER, the same trick vpoint uses for the
+// ambient sprites: every vertex sits at the burst centre and is pushed out along
+// the camera's right/up by `ring.x ± ring.y`, at the angle in uv0.x. That gives
+// a ring of any radius at CONSTANT width (the JS rebuilds its RingGeometry every
+// frame for exactly that — a thin pulse, not a fattening donut) with no CPU work
+// and no per-cell fixup.
+//
+// The flash ball rides the same material with ring = (0, 0): no displacement, so
+// its own sphere geometry and transform scale are the whole shape. `tint` is the
+// fade for both — additive contribution is colour × alpha, so scaling it down is
+// what makes the blast die away instead of shrinking away.
+material {
+    name : TtpVburst,
+    requires : [
+        color,
+        uv0
+    ],
+    shadingModel : unlit,
+    // BACK-face culling, unlike every other blended material here. Additive
+    // blending accumulates, so a two-sided flash ball adds its own far side
+    // through its near one and comes out twice as bright as the JS mesh (which
+    // is FrontSide, three's default) — a white balloon again, by another route.
+    culling : back,
+    blending : add,
+    depthWrite : false,
+    flipUV : false,
+    parameters : [
+        { type : float2, name : ring },
+        { type : float4, name : tint }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // uv0 = (angle turns, side): side is -1 / +1 across the ring's width.
+        float a = material.uv0.x * 6.283185307;
+        float r = materialParams.ring.x + material.uv0.y * materialParams.ring.y;
+        highp mat4 w = getWorldFromViewMatrix();
+        material.worldPosition.xyz += (w[0].xyz * cos(a) + w[1].xyz * sin(a)) * r;
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor() * materialParams.tint;
+        // Additive blending is ONE/ONE here, so the alpha has to be folded in
+        // by hand — three's AdditiveBlending is SrcAlpha/One, i.e. exactly this.
+        material.baseColor.rgb *= material.baseColor.a;
+    }
+}

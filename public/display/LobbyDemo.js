@@ -50,7 +50,7 @@ export class LobbyDemo {
       if (epoch !== this._epoch) return;
       this.engine = this._buildEngine();
       for (const p of field) this.scene.addCar(p.id, p.colorIndex, p.name, { cell: false, carIndex: p.carIndex });
-      this._placeGrid();
+      this.scene.bindSession(this.engine.h); // the renderer draws this session's cars
       this.active = true;
     }).catch((e) => console.warn('[LobbyDemo] native sim unavailable — no attract race', e));
   }
@@ -85,42 +85,37 @@ export class LobbyDemo {
     if (!this.engine || !this.engine.hasCar(id)) return;
     const rec = this.field.find((p) => p.id === id); // keep our field record current for that later rebuild
     if (rec) { rec.colorIndex = colorIndex; rec.carIndex = carIndex; rec.name = name; rec.stats = stats; }
+    // Re-registering the car rebuilds the renderer's roster, which is what bakes
+    // the new model and livery into its slot. The car itself never moves — it
+    // keeps driving from wherever the sim has it.
     this.scene.removeCar(id);
     this.scene.addCar(id, colorIndex, name, { cell: false, carIndex });
-    const c = this.engine.getSnapshot().cars.find((x) => x.id === id);
-    if (c && c.pose) this.scene.setCarPose(id, c.pose.pos, c.pose.forward, c.pose.up); // place at its current pose so it doesn't pop to the grid for a frame
   }
 
-  _placeGrid() {
-    for (const c of this.engine.getSnapshot().cars) {
-      if (c.pose) this.scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
-    }
-  }
-
-  // One render-loop tick (driven by SceneRenderer.onFrame; dt in seconds). A no-op
-  // until start() has run, so the display can call it unconditionally each frame.
+  // One frame-loop tick (driven by Stage.onFrame; dt in seconds). A no-op until
+  // start() has run, so the display can call it unconditionally each frame.
   step(dt) {
     if (!this.active || !this.engine) return;
     this.engine.update(dt * 1000); // the bots are stepped inside ttp_update, in the live loop's order
+    // Endless: once every car is home, re-grid and lap again. Bare mode has no
+    // session layer to fire a raceEnd, so this is the engine's own `raceOver`
+    // rule (finishedOrder >= cars). Polled every half second rather than every
+    // frame — the renderer no longer needs a snapshot, and a lap takes a minute,
+    // so reading the whole field 60 times a second to ask "done yet?" is the
+    // only thing that would still be marshalling state for the attract loop.
+    if ((this._tick = (this._tick || 0) + 1) % 30) return;
     const snap = this.engine.getSnapshot();
-    for (const c of snap.cars) {
-      if (c.pose) this.scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
-    }
-    this.scene.syncProps(snap); // item boxes pop + dropped bananas, same as a live race
-    // Endless: once every car is home, re-grid and lap again. Bare mode has no session
-    // layer to fire a raceEnd, so this is the engine's own `raceOver` rule
-    // (finishedOrder >= cars) read off the snapshot. dispose() frees the wasm session —
-    // a JS Game was just garbage, a native handle is not.
     if (snap.cars.length > 0 && snap.cars.every((c) => c.finished)) {
       this.engine.dispose();
       this.engine = this._buildEngine();
-      this._placeGrid();
+      this.scene.bindSession(this.engine.h);
     }
   }
 
   stop() {
     this.active = false;
     this._epoch++; // cancels a start still waiting on the sim module
+    this.scene.bindSession(0);
     for (const id of this._ids) this.scene.removeCar(id);
     this._ids = [];
     if (this.engine) { this.engine.dispose(); this.engine = null; }

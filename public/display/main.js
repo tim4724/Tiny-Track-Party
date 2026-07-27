@@ -1,7 +1,8 @@
-// Display entry — lobby + authoritative race. Owns the Three.js scene, the car
-// engine, the countdown→race→results flow, and per-player PLAYER_STATE.
+// Display entry — lobby + authoritative race. Owns the Stage (canvas + DOM HUD),
+// the race session, the countdown→race→results flow, and per-player
+// PLAYER_STATE. The 3D itself is the engine's: see Stage.js / render/Display.js.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { SceneRenderer } from './SceneRenderer.js';
+import { Stage } from './Stage.js';
 import { buildTrack, resolveFurniture, TRACK_LIST } from './TrackBuilder.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
@@ -46,7 +47,7 @@ function show(name) {
 // Selection is host-driven (SELECT_TRACK) and echoed to all.
 function buildEntry(t) {
   const b = buildTrack(t);   // dispatches: t.waypoints → spline, else t.segments
-  b.cup = t.cup;             // carry the cup id onto the geometry → SceneRenderer picks the biome theme
+  b.cup = t.cup;             // carry the cup id onto the geometry → the Stage picks the biome theme
   b.trackId = t.id;          // registry id, for per-track theme patches (ambientByTrack).
                              // NOT `id` — buildScenery/buildLandmarks seed their rand
                              // streams from track.id, and reseeding reshuffles every scatter.
@@ -82,12 +83,11 @@ const colorPalette = CAR_COLORS.slice();
 
 // No track is selected at first: the lobby shows the plain diorama and the host's
 // "Start race" stays disabled until they pick one. ?track=<id> preselects (dev /
-// gallery), and ?centerline=1 overlays the magenta racing-line ribbon (a track-
-// gallery inspection aid). `track` always holds valid geometry (the pick, or the
-// first track as a render default) so the scene + gallery always have something to draw.
+// gallery). `track` always holds valid geometry (the pick, or the first track as
+// a render default) so the scene + gallery always have something to draw.
 const _trackParams = new URLSearchParams(location.search);
 const _qTrack = _trackParams.get('track');
-const _showCenterline = _trackParams.get('centerline') === '1';
+
 // Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
 // the live lobby attract demo must stay out of their way — guard every demo entry on it.
 const _isTestMode = !!_trackParams.get('scenario');
@@ -141,15 +141,28 @@ let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 track.totalLaps = TOTAL_LAPS;
 
 // ---- scene ----
-// Preload the UNION of every track's tiles up front, so the host can switch
-// tracks in the lobby with no load hitch. The renderer orbits the selected track
-// as a live lobby preview (scene.orbit).
-const allGlbs = [...new Set([...built.values()].flatMap((b) => b.instances.map((i) => i.glb)))];
-const scene = new SceneRenderer(el('scene'), CAR_COLORS);
+// The Stage owns the canvas the native renderer draws into and the DOM HUD over
+// it.
+//
+// NOT a top-level await, deliberately: that would hold the whole module body —
+// net.start() at the tail included — behind standing up a Filament engine, a
+// WebGL2 context and ten .filamat fetches. The room is supposed to warm EAGERLY
+// behind the welcome board, and a display that hasn't opened its room yet is a
+// display phones cannot join. (The engine wasm above is a different story: the
+// party layer is in it, so the room genuinely cannot start without it.)
+//
+// Still FATAL on failure — there is no second renderer — it just fails through
+// scenePromise instead of by aborting module evaluation.
+const scene = new Stage(el('scene'), CAR_COLORS);
+const sceneBooted = scene.boot().catch((e) => {
+  console.error('[display] renderer boot failed — nothing will draw', e);
+  throw e;
+});
 // ?biome=<name> — inspector override: force a biome on every track regardless of its cup
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
 scene.showDividers = _trackParams.get('dividers') !== '0';
@@ -159,12 +172,9 @@ let sceneReady = false;
 // Lobby attract demo: AI driving the players' picked cars around the selected track,
 // rendered under the orbiting overview camera. Runs only in the lobby (no session).
 const lobbyDemo = new LobbyDemo(scene);
-// Kept as a promise too so the gallery TestHarness can wait for the GLBs +
-// track before placing its preview cars.
-// item-cone rings each oil slick; item-box / item-banana are the pickup + dropped
-// hazard meshes — none are track tiles, so they're added to the preload set here.
-const scenePromise = scene.load([...allGlbs, 'item-cone', 'item-box', 'item-banana']).then(() => {
-  scene.setTrack(track, { debug: _showCenterline });
+// Kept as a promise so the gallery TestHarness (and E2E) can wait for the first
+// scene build before placing preview cars or starting a race.
+const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   sceneReady = true;
   scene.start();
   refreshLobbyDemo(); // start the attract demo if a track is already picked (?track= / picked during load)
@@ -183,8 +193,13 @@ function selectTrack(id) {
     // circuit straight into the next; the very first pick reveals the track over the diorama
     // (the default background). The build (geometry + demo cars) runs under cover either way.
     fadeBackdrop(() => {
-      scene.setTrack(track, { debug: _showCenterline });
+      // setTrack is ASYNC (asset provisioning + buildScene), so hand the
+      // crossfade something to wait on — otherwise the still dissolves off a
+      // canvas that still holds the old circuit and the new one pops in a beat
+      // later. refreshLobbyDemo re-grids the attract field onto the new track.
+      const built = scene.setTrack(track);
       refreshLobbyDemo();
+      return built;
     });
   } else {
     updateBackdrop();
@@ -267,16 +282,23 @@ function fadeBackdrop(mid) {
   // Until the rebuild swaps it, the live layer is still the OUTGOING track — same as the
   // still on top, so the early fade shows no change. mid() reads the latest pick, and a fast
   // re-pick supersedes this whole chain via fadeGen.
+  const dissolve = () => {
+    if (gen !== fadeGen) return;
+    still.classList.add('is-fading');            // hand the dissolve to the compositor
+    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
+  };
+  // The swap finishes LATER than the frame that starts it (asset provisioning +
+  // buildScene), so the still stays opaque until mid()'s promise resolves —
+  // dissolving on schedule would just uncover the OLD circuit and let the new
+  // one pop in.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (gen !== fadeGen) return;                 // superseded by a newer pick
-    still.classList.add('is-fading');            // hand the dissolve to the compositor…
-    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
-    requestAnimationFrame(() => {                // …then rebuild a frame later, hidden behind it
+    requestAnimationFrame(() => {                // rebuild a frame later, hidden behind the still
       if (gen !== fadeGen) return;               // a newer pick (or leaving the lobby) cancelled us
       if (!(sceneReady && net.roomState === ROOM_STATE.LOBBY)) { // race started under us → drop the still
         clearTimeout(snapTimer); still.remove(); return;
       }
-      mid();
+      Promise.resolve(mid()).then(dissolve, dissolve);
     });
   }));
 }
@@ -451,7 +473,7 @@ scene.onFrame = (dt) => {
     // seen whipping across the track to that far-away pose through the
     // translucent results glass. raceEnded then holds this frame until the next
     // race (see the onFrame guard above).
-    freezeCars(session.getSnapshot());
+    freezeCars();
     fastForwarding = true;
     session.fastForwardToEnd(); // runs to raceOver, then fires endRace (sets raceEnded)
     fastForwarding = false;
@@ -459,9 +481,11 @@ scene.onFrame = (dt) => {
   }
   const snap = session.getSnapshot();
   let bestScrub = null; // loudest curb scrub this frame — fired ONCE after the loop (see below)
+  // The renderer already has every car's pose, lean, monster state and item
+  // props — it reads the same Game this snapshot came from. What is left here is
+  // what only the SHELL owns: the DOM steer bar and the audio mix.
   for (const c of snap.cars) {
-    scene.setCarMonster(c.id, !!c.monster); // morph to/from the monster truck (idempotent)
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up, { steer: c.steer, spd: c.spd, scrub: c.onWall, steerInput: c.steerInput, spin: c.spin, boostMul: c.boostMul, brake: c.brake });
+    scene.setCarSteer(c.id, c.steerInput);
     // Curb scrub — loudness by distance to the nearest human (the player's own car
     // is at distance 0 → the ceiling). Unlike the one-shot cues this is a continuous
     // grind on a single shared throttle, so only in-scene scrubs (≥ the FLOOR)
@@ -490,7 +514,6 @@ scene.onFrame = (dt) => {
     }
   }
   if (bestScrub) audio.screech(bestScrub.spd, bestScrub.g); // the nearest scrub owns the shared throttle
-  scene.syncProps(snap); // show/hide item boxes + reconcile dropped-banana meshes
   driveRocketAudio(snap); // sustained jet per in-flight rocket, level by distance to the nearest player
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
@@ -729,7 +752,7 @@ function renderLobbyPick() {
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
 // split-screen cell (same placement as the FINISHED card) so they can scan — their
 // own phone OR a new one — and drop back into their exact seat. The card rides on
-// their still-racing car via the renderer; SceneRenderer._loop keeps it centred.
+// their still-racing car via the renderer; Stage._loop keeps it centred.
 // Driven by DisplayNet.onReconnectChange; we diff against what's shown so a roster
 // reshuffle only adds/removes the cards that changed.
 const _rcShown = new Set(); // car ids currently showing a reconnect card
@@ -837,8 +860,10 @@ function launchRace(players) {
   // opponents in the shared world, not players watching the screen.
   for (const c of [...scene.cars.keys()]) scene.removeCar(c);
   for (const p of field) scene.addCar(p.peerIndex, p.colorIndex, p.name, { cell: !p.ai, carIndex: p.carIndex });
-  scene.resetCones(); // a new race starts with the warning rings intact, not where they were knocked
-  scene.clearSkids(); // ... and a clean track — last race's rubber patina belongs to last race
+  // A new race rebuilds the scene from scratch, which is also what puts the
+  // warning cones back upright, clears last race's rubber patina and restores
+  // every collected item box.
+  scene.rebuild();
 
   // Same construction shape the JS engine had, native implementation. Fails
   // loudly if the wasm module hasn't finished loading (boot races only).
@@ -893,14 +918,12 @@ function launchRace(players) {
   // here and now, so this is the first snapshot any phone sees for the race.
   net.flow.transitionTo(ROOM_STATE.COUNTDOWN);
 
-  // Place cars at their grid poses immediately, and paint each cell's HUD
-  // (place badge + LAP pill) right away so the chrome sits at its final size
-  // through the countdown — no pop-in at GO (the racing loop takes over from
-  // the first ~6 Hz tick).
-  for (const c of session.getSnapshot().cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up);
-    scene.setCarHud(c.id, c);
-  }
+  // Hand the renderer this race's session: from here it reads the grid poses
+  // (and then every frame) straight off the engine. Paint each cell's HUD right
+  // away too, so the chrome sits at its final size through the countdown — no
+  // pop-in at GO (the racing loop takes over from the first ~6 Hz tick).
+  scene.bindSession(session.h);
+  for (const c of session.getSnapshot().cars) scene.setCarHud(c.id, c);
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
 
@@ -924,7 +947,7 @@ function advanceSeriesRace() {
   // selectTrack outside the lobby skips the scene swap (no preview to fade);
   // a chained start has no lobby step, so place the new circuit explicitly —
   // the results overlay covers the pop.
-  scene.setTrack(track, { debug: _showCenterline });
+  scene.setTrack(track);
   launchRace(players); // COUNTDOWN statechange republishes the snapshot (joiners now inRace) — no re-welcome
 }
 
@@ -1358,7 +1381,7 @@ function returnToLobby() {
   // held disconnected seats (Net._freeDisconnectedSeats → playerleave), and with
   // the session already gone forfeitCar no-ops instead of racing an endRace on
   // the way out.
-  if (session) { session.dispose(); session = null; }
+  if (session) { scene.bindSession(0); session.dispose(); session = null; }
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.
@@ -1378,7 +1401,7 @@ function returnToLobby() {
   // drop the race cars + restart the demo under cover so the reset doesn't pop on screen.
   fadeBackdrop(() => {
     for (const c of scene.cars.keys()) scene.removeCar(c);
-    if (trackSwapped) scene.setTrack(track, { debug: _showCenterline }); // the re-aimed pick (random re-roll / cup rewind)
+    if (trackSwapped) scene.setTrack(track); // the re-aimed pick (random re-roll / cup rewind)
     refreshLobbyDemo();           // AI back to driving the picked cars
   });
 }
@@ -1437,23 +1460,21 @@ function syncSessionFrozen() {
     session.pause();
     audio.stopVoices();                  // frozen cars must not keep their wind/squeal going
     audio.pauseMusic();                  // ... and the music holds where it was
-    freezeCars();                        // zero each car's speed so dust stops kicking up
+    freezeCars();                        // hold the field at rest behind the overlay
   } else if (!frozen && session.paused) {
     session.resume();
+    freezeCars(false);                   // back to reading the live engine
     audio.resumeMusic();
   }
 }
 
-// Re-pose every car at rest (spd 0, no scrub) so the renderer stops emitting
-// wheel dust while the field is frozen behind the overlay. Takes an optional
-// snapshot so the caller can freeze on a SPECIFIC frame (e.g. the finish moment
-// captured before the AI-only fast-forward burst teleports the cars); defaults
-// to the live snapshot for the pause path.
-function freezeCars(snap) {
-  if (!session) return;
-  for (const c of (snap || session.getSnapshot()).cars) {
-    if (c.pose) scene.setCarPose(c.id, c.pose.pos, c.pose.forward, c.pose.up); // static repose — all anim inputs default
-  }
+// Hold every car where it is, at rest, so nothing keeps spinning its wheels or
+// laying rubber while the field is frozen behind an overlay. Two callers: the
+// pause overlay, and the finish moment before the AI-only fast-forward runs the
+// sim on to the flag (which would otherwise whip the just-finished player's
+// chase camera across the track behind the results glass).
+function freezeCars(held = true) {
+  scene.hold(held);
 }
 
 function setPauseOverlay(on) {
@@ -1732,7 +1753,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'features', 'countdown', 'racing', 'results', 'intermission', 'podium']
+    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
@@ -1757,14 +1778,10 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   { section: 'Track' },
   { key: 'track', label: 'Preselect', type: 'select',
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
-  { key: 'centerline', label: 'Racing line', hint: 'magenta ribbon overlay', type: 'flag' },
   { section: 'Rendering' },
   { key: 'biome', label: 'Biome', hint: 'override the cup look (blank = cup decides)', type: 'select',
     options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
-  { key: 'msaa', label: 'MSAA', hint: 'default off (perf)', type: 'select',
-    options: [{ value: '0', label: 'off' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }] },
   { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
     options: [{ value: '0', label: 'off' }] },
-  { key: 'bbox', label: 'Collision boxes', type: 'flag' },
   ], { title: 'Display' });
 });

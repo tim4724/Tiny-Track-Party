@@ -18,8 +18,9 @@ const RELAY_PORT = Number(process.env.PW_RELAY_PORT || PORT + 1);
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
-  // One worker: the display page renders the full Three.js scene under
-  // SwiftShader in headless — parallel displays just starve each other.
+  // One worker: the display page rasterizes the full Filament scene through
+  // SwiftShader in headless — parallel displays just starve each other. CI scales
+  // the suite by SHARDING across runners instead (.github/workflows/test.yml).
   workers: 1,
   // One retry everywhere (not just CI): a retry runs in a FRESH worker process —
   // a brand-new browser with no accumulated SwiftShader GL memory pressure — which
@@ -39,7 +40,14 @@ module.exports = defineConfig({
     // Generous per-action timeout: under the single-worker render load a controller
     // page can be janky enough that Playwright's actionability (visible/stable)
     // check on a button takes a few seconds to settle.
-    actionTimeout: 15000,
+    //
+    // 15s was tuned against the Three.js renderer. The native one rasterizes a
+    // heavier scene through the same SwiftShader, and the FIRST test in a CI
+    // shard additionally pays a cold fetch + compile of the 2.76 MB engine wasm
+    // — contexts don't share a cache, so every shard has one such test. That
+    // combination starved the actionability check on a phone's join button.
+    // The 120s test timeout is what still catches a genuinely stuck action.
+    actionTimeout: 30000,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
