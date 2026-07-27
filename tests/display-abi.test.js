@@ -44,7 +44,8 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   // call, so check the exports themselves.
   for (const name of ['create', 'asset', 'resize', 'build', 'release', 'bind',
                       'cells', 'cell_rects', 'camera', 'look', 'fog', 'shadows',
-                      'hold', 'frame', 'burst', 'profile', 'profile_names']) {
+                      'hold', 'frame', 'burst', 'profile', 'profile_names',
+                      'biome']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }
@@ -83,4 +84,51 @@ test('ttp_display_cell_rects is a safe no-op with no display', async () => {
   } finally {
     M._free(ptr);
   }
+});
+
+// ---- the biome ABI (ttp_theme.h) --------------------------------------------
+// The other half of a scene build, and the half that CAN be exercised headless:
+// it needs no GL surface, because it is plain data. native/ ctest proves the
+// tables (theme_check) and the marshalling (abi_check); what only this file can
+// see is that the SHIPPED artifact still exports them — the biome ABI sits
+// OUTSIDE the Filament gate in native/CMakeLists.txt, so a build that dropped it
+// would still link, still race, and lose the HUD boost accent, the ?biome=
+// dropdown and the race music's pool key in the browser.
+test('the shipped module exports the biome ABI, and resolves through it', async () => {
+  const M = await load();
+  for (const name of ['biome_count', 'biome_name', 'has_biome', 'biome_for_cup',
+                      'biome_for_track', 'boost_icon', 'hill_color', 'scenery_models']) {
+    assert.equal(typeof M[`_ttp_theme_${name}`], 'function',
+      `_ttp_theme_${name} is not exported — shared/biomes.js would fail at the cwrap call`);
+  }
+  const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
+  const names = [];
+  for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
+    names.push(nameAt(i));
+  }
+  // The ORDER is what the ?biome= dropdown shows, so it is pinned, not just the set.
+  assert.deepEqual(names, ['grass', 'sunset', 'beach', 'canyon', 'snow', 'playroom']);
+
+  const forTrack = M.cwrap('ttp_theme_biome_for_track', 'string', ['string']);
+  assert.equal(forTrack('tidepool'), 'beach', 'a track resolves through its own cup');
+  assert.equal(forTrack('gym'), 'grass', 'a dev-only track falls back to grass');
+
+  // Every biome must name a race-music pool that exists, or a race in it plays
+  // the fallback song silently. This is the ONE place the two halves meet: the
+  // pool keys are JS (display/Audio.js), the biome names are C++.
+  const { RACE_MUSIC } = await import(pathToFileURL(
+    path.join(ROOT, 'public/display/Audio.js')).href);
+  const unpooled = names.filter((b) => !RACE_MUSIC[b] || !RACE_MUSIC[b].length);
+  assert.deepEqual(unpooled, ['sunset'],
+    'sunset is the one cupless biome with no pool of its own (it falls back); '
+    + 'any other name here means a cup races to the wrong music');
+
+  // The two colours a shell still draws itself, and the model list it fetches by.
+  const boostIcon = M.cwrap('ttp_theme_boost_icon', 'number', ['string']);
+  assert.equal(boostIcon('grass') >>> 0, 0x1ba192, 'the grass HUD boost chip stroke');
+  assert.equal(boostIcon('nope') >>> 0, boostIcon('grass') >>> 0, 'unknown biome -> grass');
+  const hill = M.cwrap('ttp_theme_hill_color', 'number', ['string', 'number']);
+  assert.equal(hill('playroom', 0) >>> 0, 0xe66a5a, "the playroom's swatch colour");
+  const models = M.cwrap('ttp_theme_scenery_models', 'string', ['string']);
+  assert.deepEqual(JSON.parse(models('beach')), ['palm-tall', 'palm-bend']);
 });

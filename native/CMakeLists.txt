@@ -414,9 +414,13 @@ add_test(NAME fastlane
 # declaration, and moving those definitions into a static archive risks the linker
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
-add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc)
+add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
+  runtime/ttp_theme.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-target_link_libraries(abi_check PRIVATE libttp_sim libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+# libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
+# ttp_theme.cc marshals), so naming libttp_sim again here only makes the
+# linker warn about a duplicate.
+target_link_libraries(abi_check PRIVATE libttp_runtime libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(abi_check)
 # Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
 # test uses, and helix adds 402 braking inputs — without it ttp_process_input's
@@ -456,6 +460,10 @@ add_library(libttp_runtime STATIC
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
+  # The per-cup biome palettes and the rules that resolve one. Data, not
+  # rendering: it was authored in the browser (public/shared/themes.js +
+  # render/trackPayload.js) until the shells stopped being one.
+  libttp-runtime/ttp/theme.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -514,6 +522,24 @@ target_link_libraries(frame_check PRIVATE libttp_runtime ttp_strict_fp ttp_warni
 ttp_emscripten_cli(frame_check)
 add_test(NAME frame_builder COMMAND frame_check)
 
+# ---- Conformance: the biome palettes ----------------------------------------
+# JS-RECORDED evidence, unlike the two checks above: the corpus was taken off the
+# live public/shared/themes.js + render/trackPayload.js + shared/trackBin.js
+# before they were deleted, so it settles the parity question the way the golden
+# traces do for the sim. There is no --record mode here on purpose — the JS twin
+# is gone, and re-recording from C++ would only prove C++ matches itself.
+#
+# It needs the shipped scenery GLBs, because half of the recolour rule is the
+# models' own authored material colours (a palm's fronds and trunk differ).
+add_executable(theme_check runtimetest/theme_check.cc)
+target_link_libraries(theme_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(theme_check)
+add_test(NAME theme
+  COMMAND theme_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/theme-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
+)
+
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
 # ships on tvOS and Android TV, where the shell hands init() a CAMetalLayer or
@@ -528,7 +554,12 @@ if(DEFINED FILAMENT_SDK)
   add_library(ttp_renderer STATIC renderer/src/TtpRenderer.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src
+    # ttp/theme.h — the resolved biome buildScene takes. A HEADER path, the
+    # mirror image of libttp_runtime's dependency on renderer/include, and for
+    # the same reason: neither library may LINK the other, or libttp-runtime
+    # would stop building on the legs with no Filament SDK.
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime)
   # libttp_track is here for the built-track TYPE the scene is meshed from
   # (ttp::RaceTrack). The renderer never resolves a track ID — which track to
   # build stays the runtime's call — so this adds a struct, not a catalogue.
@@ -561,9 +592,14 @@ if(EMSCRIPTEN)
   # would never see them. (Sources, not a link against libttp_runtime, so they
   # are in the link whether or not anything in this module references them.)
   set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc
+    # The biome ABI is OUTSIDE the renderer gate too: naming a biome (for the
+    # music pool, for the ?biome= list) is not rendering, and CI's Filament-less
+    # wasm leg is where the browser's link to it gets checked.
+    runtime/ttp_theme.cc
     libttp-runtime/ttp/camera.cc
     libttp-runtime/ttp/framing.cc
-    libttp-runtime/ttp/frame_builder.cc)
+    libttp-runtime/ttp/frame_builder.cc
+    libttp-runtime/ttp/theme.cc)
   if(TARGET ttp_renderer)
     list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
   endif()

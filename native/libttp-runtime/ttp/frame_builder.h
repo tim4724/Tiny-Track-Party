@@ -62,6 +62,12 @@ struct DisplayState {
     bool hold = false;                  // draw the last-read field, at rest
     std::vector<TtpCarInput> held;
 
+    // The ?biome= inspector override: force a biome on every track regardless
+    // of its cup, so any track can be compared in any look. Empty = the cup
+    // decides (ttp::rt::biome_for_track). Held here rather than in a shell so
+    // all three read the same field.
+    std::string biome;
+
     int camMode = CAM_STILL;
     V3 freeEye, freeTarget;
     bool fog = true;

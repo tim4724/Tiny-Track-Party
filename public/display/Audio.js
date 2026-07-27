@@ -17,8 +17,8 @@ const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 const SCREECH_GAP_MS = 140; // min spacing so curb contact can't machine-gun
 const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
 
-// Background music, keyed by BIOME name (shared/themes.js biomeNameForCup —
-// the Backyard cup resolves to 'grass'). Each biome holds a POOL of songs that
+// Background music, keyed by BIOME name (shared/biomes.js forTrack, over the
+// C++ palette tables — the Backyard cup resolves to 'grass'). Each biome holds a POOL of songs that
 // share its mood; startMusic picks one at random per race, never repeating the
 // song that just played when the pool allows. Descriptors carry the credit-chip
 // fields (title + artist, linking to `source`) — which is also how we satisfy

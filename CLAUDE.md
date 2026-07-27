@@ -73,24 +73,33 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - The TRACK BUILDER is native too, and there is no JS twin. `ttp_display_build`
   takes a trackId and runs `ttp::build_race_track` itself, so the renderer meshes
   from the SAME `ttp::RaceTrack` the sim races on; the browser holds no centerline,
-  no samples, no furniture. `public/shared/trackBin.js` is a THEME serializer now
-  (track.bin v16 = resolved biome + roster liveries, no geometry), and the lobby's
+  no samples, no furniture. `public/shared/trackBin.js` is down to the roster's
+  liveries (track.bin v17 — no geometry, no theme), and the lobby's
   mini-maps come from the prebaked `shared/trackSchematics.js` (`npm run
   gen:schematics`). Node reads geometry through `scripts/native-track.mjs` over the
   shipped wasm — `ttp_track_json` (by id), `ttp_track_build_json` (by descriptor,
   for unshipped candidates), `ttp_track_sweep_json`/`ttp_track_frames_json`
   (interpolated frames) and `ttp_track_supports_json` (the builder's own
   corridor gate, for the geometry audit).
+- The BIOME PALETTE is native too. Six biomes of sky/fog/light rig/road/scenery/
+  air/furniture live in `native/libttp-runtime/ttp/theme.{h,cc}`, resolved inside
+  `ttp_display_build` from the track's own cup (`gen-track-defs-header.mjs` carries
+  each track's `cup` into `track_defs.h`), with `ttp_display_biome` for the
+  `?biome=` override. NO COLOUR OF IT crosses back: `public/shared/biomes.js` is
+  the browser's whole edge (`native/runtime/ttp_theme.h`) and hands out only the
+  biome NAME (the music pool key, the `?biome=` list), the scenery GLB list to
+  fetch, and two colours for the two 2D widgets the renderer does not draw — the
+  HUD boost chip's stroke and the music gallery's swatch. Wanting a third getter
+  means the look is being rebuilt in the DOM; put it in the renderer instead.
 - Still JS BY DESIGN: the HUD/screens (`main.js`, `Stage.js`), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
-  into the wasm by `gen-track-defs-header.mjs`), the resolved biome theme
-  (`shared/themes.js` → `render/trackPayload.js` → `trackBin.js`), audio, the whole
+  into the wasm by `gen-track-defs-header.mjs`), audio, the whole
   controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
   live in `partyplug/PartyConnection.js` and `PartyFastlane.js`, which SURVIVE: the
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (36 tests, the SAME 36 on every leg —
+  replayed by `native/` ctest (37 tests, the SAME 37 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
@@ -99,8 +108,9 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   matches itself. `scripts/gen-*-corpus.mjs` are the oracle generators, and five are
   now FROZEN because their JS twins are gone: `gen-roomflow-corpus.mjs` (36 room
   scenarios), `gen-grandprix-corpus.mjs` (12 cup scripts + 5 shuffle-bag cases),
-  `gen-trackbuilder-corpus.mjs` (all 20 tracks), `gen-track-sampler-corpus.mjs` and
-  `gen-math-corpus.mjs`. Each header names the `git show` that restores its twin if
+  `gen-trackbuilder-corpus.mjs` (all 20 tracks), `gen-track-sampler-corpus.mjs`,
+  `gen-math-corpus.mjs` and `gen-theme-corpus.mjs` (6 biomes x 22 tracks, plus the
+  cup/track resolution, the biome-name order and every boostShades shade). Each header names the `git show` that restores its twin if
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.

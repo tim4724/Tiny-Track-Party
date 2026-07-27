@@ -46,6 +46,7 @@
 #include "ttp/trackbuilder.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
+#include "ttp_theme.h"
 
 using namespace ttp;
 using namespace ttp::corpus;
@@ -1138,6 +1139,64 @@ void fastlaneThroughAbi() {
         "ttp_link_stats_json on handle 0 returns JSON rather than garbage");
 }
 
+// ---------------------------------------------------------------------------
+// The BIOME ABI (ttp_theme.h).
+// ---------------------------------------------------------------------------
+// theme_check already proves the tables themselves against the recorded JS
+// palette; what is unproven there is this marshalling layer, which is the only
+// part of the biome the browser actually calls. Three things can break here and
+// nowhere else: a name pointer that does not survive the return, an out-of-range
+// index that returns garbage instead of the documented empty answer, and the
+// scenery model list — whose ORDER is the scenery<i>.glb slot contract between
+// the shell's fetches and the renderer's instanced props.
+void themeThroughAbi() {
+  const int n = ttp_theme_biome_count();
+  check(n > 0, "ttp_theme_biome_count is non-zero");
+  check(std::strcmp(ttp_theme_biome_name(0), "grass") == 0,
+        "the first biome is grass — the canonical fallback look leads the list");
+  check(ttp_theme_biome_name(-1)[0] == 0 && ttp_theme_biome_name(n)[0] == 0,
+        "an out-of-range biome index is the empty string, not null");
+  for (int i = 0; i < n; i++) {
+    check(ttp_theme_has_biome(ttp_theme_biome_name(i)) == 1,
+          std::string("ttp_theme_has_biome accepts ") + ttp_theme_biome_name(i));
+  }
+  check(ttp_theme_has_biome("no-such-biome") == 0, "an unknown ?biome= name is rejected");
+  check(ttp_theme_has_biome(nullptr) == 0, "a null biome name is rejected");
+
+  // The two resolution entry points, including both grass fallbacks.
+  check(std::strcmp(ttp_theme_biome_for_cup("rooftop"), "playroom") == 0,
+        "the stunt cup resolves to the playroom biome");
+  check(std::strcmp(ttp_theme_biome_for_cup("nope"), "grass") == 0,
+        "an unmapped cup falls back to grass");
+  check(std::strcmp(ttp_theme_biome_for_cup(nullptr), "grass") == 0,
+        "no cup at all falls back to grass");
+  check(std::strcmp(ttp_theme_biome_for_track("tidepool"), "beach") == 0,
+        "a track resolves through its own cup");
+  check(std::strcmp(ttp_theme_biome_for_track("gym"), "grass") == 0,
+        "a dev-only track, which no cup lists, falls back to grass");
+  check(std::strcmp(ttp_theme_biome_for_track("no-such-track"), "grass") == 0,
+        "an unknown track falls back to grass");
+
+  // The HUD chip stroke. Value pinned by theme_check against the recorded JS
+  // boostShades; here it only has to survive the C boundary as a u32.
+  check(ttp_theme_boost_icon("grass") == 0x1ba192u,
+        "the grass boost chip stroke is the recorded icon shade");
+  check(ttp_theme_boost_icon("no-such-biome") == ttp_theme_boost_icon("grass"),
+        "an unknown biome yields grass's accent rather than 0");
+
+  check(ttp_theme_hill_color("playroom", 3) == 0x6cbf6cu,
+        "the playroom's fourth block colour survives — a truncated hills list would lose it");
+  check(ttp_theme_hill_color("playroom", 4) == 0u, "an out-of-range hill index is 0");
+  check(ttp_theme_hill_color("grass", -1) == 0u, "a negative hill index is 0");
+
+  // Slot order is the contract, and the bush donor must not get a slot of its
+  // own when it is already one of the trees (grass sinks the oak as its bush).
+  check(std::strcmp(ttp_theme_scenery_models("grass"), "[\"tree\",\"tree-pine\"]") == 0,
+        "grass stamps two scenery models, the bush donor sharing the oak's slot");
+  check(std::strcmp(ttp_theme_scenery_models("playroom"), "[]") == 0,
+        "the playroom stamps no scenery models — no trees indoors");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1158,6 +1217,7 @@ int main(int argc, char** argv) {
   abandonedRacePolicy();
   framingCorpusThroughAbi(argv[3]);
   fastlaneThroughAbi();
+  themeThroughAbi();
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

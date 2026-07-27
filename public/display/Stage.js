@@ -13,10 +13,10 @@
 // C++ (display.cellRects): this file used to score the split-screen grid a
 // second time, and the two copies had already drifted once.
 import { ordinal } from '../shared/format.js';
-import { boostShades, cssHex, themeForCup } from '../shared/themes.js';
+import { cssHex, loadBiomes } from '../shared/biomes.js';
+import { rosterEntry } from '../shared/trackBin.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
-import { trackPayload } from './render/trackPayload.js';
 
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
 // The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
@@ -50,7 +50,7 @@ export class Stage {
     this._last = 0;
     this._timeScale = 1;
     this._track = null;
-    this._theme = null;
+    this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
     this.display = null;     // set by boot()
     this.biomeOverride = null;
     this.orbit = false;      // lobby/gallery turntable
@@ -151,13 +151,21 @@ export class Stage {
   // this.
   async setTrack(track) {
     this._track = track;
-    this._theme = this.biomeOverride || themeForCup(track.cup);
+    // Which biome this track wears. The RULES are C++ (a track resolves through
+    // its cup, an unmapped cup falls back to grass); the only thing decided here
+    // is that the ?biome= inspector override, which is a URL, beats them.
+    const b = await loadBiomes();
+    this._biome = this.biomeOverride || b.forTrack(track.id);
     // The boost chip wears the biome's own accent (green on Playroom, blue on
-    // Snow) so the HUD reads as the same item the deck does — see
-    // [per-biome boost accent] in themes.js.
-    ITEM_ICONS.boost = boostIconSvg(cssHex(boostShades(this._theme.boost).icon));
+    // Snow) so the HUD reads as the same item the deck does. This is the ONE
+    // colour of the palette that crosses back, because the chip is DOM: every
+    // other boost surface is drawn by the renderer from the same one recipe.
+    ITEM_ICONS.boost = boostIconSvg(cssHex(b.boostIcon(this._biome)));
     return this._rebuild();
   }
+
+  // The biome this track is being drawn in — the race-music pool key.
+  biome() { return this._biome; }
 
   // The roster the renderer bakes models and liveries into, in SLOT order: cars
   // that own a cell first, in cell order, then the rest of the field. Every
@@ -168,8 +176,8 @@ export class Stage {
     const all = [...seen, ...[...this.cars.keys()].filter((id) => !seen.has(id))];
     return all.map((id) => {
       const c = this.cars.get(id);
-      return { id, name: c.name || '', carIndex: c.carIndex ?? 0,
-               color: this.colors[(c.colorIndex ?? 0) % this.colors.length] };
+      return rosterEntry(id, c.name || '', c.carIndex ?? 0,
+          this.colors[(c.colorIndex ?? 0) % this.colors.length], window.CAR_MODELS);
     });
   }
 
@@ -190,7 +198,7 @@ export class Stage {
           if (sig === this._rosterSig) continue; // a seat edit the renderer can't see
           this._rosterSig = sig;
           try {
-            await this.display.setTrack(trackPayload(this._theme, this._track, roster), this._assets);
+            await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
           } catch (e) {
             this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);

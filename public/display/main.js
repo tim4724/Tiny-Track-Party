@@ -4,7 +4,7 @@
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { Stage } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
-import { themeByName, biomeNameForCup, BIOME_NAMES } from '../shared/themes.js';
+import { loadBiomes } from '../shared/biomes.js';
 import { packSchematic } from './trackSchematic.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
@@ -109,6 +109,9 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 const _nativeSim = await import('./NativeRaceSession.js');
 const _nativeSeries = await import('./NativeCupSeries.js');
 await Promise.all([_nativeSim.init(), _nativeSeries.init()]);
+// The biome ABI off the same module: the ?biome= list, the music pool key and
+// the HUD boost chip's accent. The palette itself never leaves C++.
+const _biomes = await loadBiomes();
 
 const [_room, _conn, _lane] = await Promise.all([
   import('./NativeRoomFlow.js'),
@@ -159,7 +162,7 @@ const sceneBooted = scene.boot().catch((e) => {
 // ?biome=<name> — inspector override: force a biome on every track regardless of its cup
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
-if (_qBiome) scene.biomeOverride = themeByName(_qBiome);
+if (_biomes.has(_qBiome)) scene.biomeOverride = _qBiome;
 
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
@@ -923,7 +926,7 @@ function launchRace(players) {
       // Background song for the whole race, picked from the biome's pool. The
       // ?biome inspector override steers the music too, so an override race
       // sounds like it looks.
-      audio.startMusic(scene.biomeOverride ? _qBiome : biomeNameForCup(track.cup));
+      audio.startMusic(scene.biome());
       showMusicCredit(true);                   // now-playing credit chip (bottom-left)
     },
     onRaceEnd: endRace,
@@ -1803,7 +1806,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
     options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
   { section: 'Rendering' },
   { key: 'biome', label: 'Biome', hint: 'override the cup look (blank = cup decides)', type: 'select',
-    options: BIOME_NAMES.map((b) => ({ value: b, label: b })) },
+    options: _biomes.names.map((b) => ({ value: b, label: b })) },
   { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
     options: [{ value: '0', label: 'off' }] },
   ], { title: 'Display' });

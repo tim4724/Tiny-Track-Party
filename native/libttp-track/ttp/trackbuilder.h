@@ -57,6 +57,12 @@ struct BananaDef { double u, lat; };
 
 struct TrackDef {
   const char* id;
+  // The CUP this track belongs to (public/shared/tracks.js CUPS), or nullptr
+  // for a dev-only surface that no cup lists. Not builder input — nothing here
+  // reads it — but it is the tag the biome resolves from
+  // (libttp-runtime/ttp/theme.h), and the catalogue is where a track's cup is
+  // authored, so carrying it here is what keeps that a single source.
+  const char* cup;
   bool isSpline;
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;

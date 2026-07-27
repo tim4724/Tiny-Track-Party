@@ -6,13 +6,17 @@
 // sim and the renderer are the SAME wasm module, so `ttp_display_frame` reads
 // the live Game in C++ and builds the renderer's frame in place. Nothing about
 // a car — pose, speed, steer, which cell it owns — is ever serialized to JS to
-// be handed back. What still crosses does so ONCE PER RACE, at scene build:
-// the track payload and the GLB/texture bytes.
+// be handed back. What still crosses does so ONCE PER RACE, at scene build, and
+// it is now only a track ID, a biome NAME, the roster's liveries and the
+// GLB/texture bytes those name — the geometry and the palette are both resolved
+// on the far side.
 //
 // The HUD is not here. It is DOM over the canvas (Stage.js), which is exactly
 // why it lives in the shell and not the renderer.
 
 import { loadNativeRuntime } from '../nativeRuntime.js';
+import { loadBiomes } from '../../shared/biomes.js';
+import { buildTrackBin } from '../../shared/trackBin.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
@@ -36,6 +40,7 @@ export class Display {
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
+      biome: mod.cwrap('ttp_display_biome', null, ['string']),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -93,24 +98,29 @@ export class Display {
   // here — a Grand Prix chains four tracks, and even a restart wants the skid
   // ribbons, kicked cones and collected boxes back at their opening state.
   //
-  // `payload` names the track and carries its resolved theme; the geometry is
-  // built C++-side from payload.trackId.
+  // A track ID and a BIOME NAME, not a scene description. The geometry is built
+  // C++-side from the id (the same ttp::RaceTrack a session on it races on) and
+  // the palette is resolved C++-side from the name, so what this method
+  // actually does is FETCH: the GLBs and textures the two of them name, which
+  // is the one part of a scene build that is a platform job.
   //
-  // `payload.roster` is in SLOT order, and the ids go across with it: the
-  // renderer bakes each car's model and livery into its slot here, and every
-  // later frame puts a car back in its own slot by identity.
-  async setTrack(payload, assets) {
-    const { buildTrackBin, resolveModelTint } = await import('/shared/trackBin.js');
+  // `roster` is in SLOT order, and the ids go across with it: the renderer bakes
+  // each car's model and livery into its slot here, and every later frame puts a
+  // car back in its own slot by identity.
+  async setTrack(trackId, biome, roster, assets) {
     if (this.built) this._fn.release();
     this.built = false;
+    // The look, before anything is fetched: the scenery model list is a
+    // function of it, and so is the scene the build call will produce.
+    this._fn.biome(biome);
+    this.provide('track.bin', buildTrackBin(roster));
 
-    // Scenery GLBs first: their authored material colours are what the biome's
-    // tint map keys on, and each kit may want its own colormap texture.
-    const scModels = [...new Set([...((payload.scenery || {}).trees || []).map((e) => e.model),
-                                  ...((payload.scenery || {}).bush ? [payload.scenery.bush.model] : [])])];
+    // Scenery GLBs, in the slot order C++ named them in: the renderer binds its
+    // instanced props by that index, and the biome's recolour — which keys on
+    // each model's own authored material colours — reads these same bytes back
+    // out on the C++ side.
+    const scModels = (await loadBiomes()).sceneryModels(biome);
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
-    payload.modelTints = scModels.map((m, i) => resolveModelTint(payload, m, scBytes[i]));
-    this.provide('track.bin', buildTrackBin(payload));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 
     const texUris = new Set();
@@ -129,7 +139,7 @@ export class Display {
     }));
 
     await Promise.all([
-      ...(payload.roster || []).map(async (r, i) => {
+      ...(roster || []).map(async (r, i) => {
         if (!r.model) return;
         const bytes = await assets.glb(r.model);
         if (!bytes) return;
@@ -150,12 +160,8 @@ export class Display {
       })
     ]);
 
-    const ids = JSON.stringify((payload.roster || []).map((r) => r.id));
-    // The track ID, not its geometry: the renderer runs the native TrackBuilder
-    // on it and meshes from the same object a session on that track would race.
-    if (this._fn.build(payload.trackId, ids)) {
-      throw new Error(`ttp_display_build(${payload.trackId}) failed`);
-    }
+    const ids = JSON.stringify((roster || []).map((r) => r.id));
+    if (this._fn.build(trackId, ids)) throw new Error(`ttp_display_build(${trackId}) failed`);
     this.built = true;
   }
 

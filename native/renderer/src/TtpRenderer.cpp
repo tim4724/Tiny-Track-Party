@@ -51,30 +51,23 @@ using namespace filament::math;
 
 namespace {
 
-// "track.bin" v16 layout (little-endian), written by public/shared/trackBin.js.
+// "track.bin" v17 layout (little-endian), written by public/shared/trackBin.js.
 //
-// NO GEOMETRY. Up to v15 this payload carried the whole built track — samples,
-// furniture, pillars, berms — serialized by a second, JS implementation of the
-// track builder that ran in the browser on every race. That builder is gone: the
-// renderer meshes from the ttp::RaceTrack the sim itself is racing on
-// (fillGeometry), and the payload was cut down to what geometry cannot imply.
+// NO GEOMETRY, AND NO THEME. Up to v15 this payload carried the whole built
+// track — samples, furniture, pillars, berms — serialized by a second, JS
+// implementation of the track builder that ran in the browser on every race.
+// v16 dropped that (the renderer meshes from the ttp::RaceTrack the sim itself
+// is racing on — see fillGeometry) but still carried the resolved biome, which
+// the browser authored. v17 drops that too: the palette is C++ data now
+// (libttp-runtime/ttp/theme.h), resolved from the track's own cup, so what
+// crosses is only what the SHELL genuinely supplies — who is in this race, and
+// what their cars look like:
+//   u32 version(=17), u32 carCount, u32 carColorsABGR[carCount],
+//   char carNames[carCount][8], f32 carPlateY[carCount] (<0 = auto).
 //
-// What remains is the RESOLVED biome theme (shared/themes.js is authored in JS
-// and stays there) and the roster's liveries:
-//   u32 version(=16), u32 carCount, u32 carColorsABGR[carCount],
-//   char carNames[carCount][8], f32 carPlateY[carCount] (<0 = auto),
-//   u32 palette[7] (sRGB 0xrrggbb: asphalt line dash kerbA kerbB skirt shoulder),
-//   f32 kerbW, f32 kerbH, u32 edgeLines,
-//   u32 sky[3] (zenith horizon below), u32 fog, u32 hillShape,
-//   u32 hillColorCount, u32 hillColors[…],
-//   f32 scDensity, scMixTree, scMixBush, u32 treeCount, per tree
-//     { u32 model, f32 w, s0, s1 }, u32 hasBush, [bush 16B],
-//   u32 rockCount, u32 rocks[…], f32 rockS[2], u32 sceneryModelCount,
-//   u32 landmarkCount, u32 landmarkKinds[…],
-//   f32 clutterDensity, u32 clutterCount, per kind { u32 kind, f32 w,
-//     u32 tintCount, u32 tints[…] },
-//   u32 structureCol, then the flat theme tag/value block.
-constexpr uint32_t TRACK_BIN_VERSION = 16;
+// Everything the biome dresses arrives instead as a ttp::rt::Theme handed to
+// buildScene, and applyTheme below is where it lands on the parsed payload.
+constexpr uint32_t TRACK_BIN_VERSION = 17;
 
 // Bare-asphalt margin either side of a launch strip, so the road's dashes and
 // edge lines stop clear of the chevrons rather than grazing them.
@@ -158,7 +151,10 @@ uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
 
 } // namespace
 
-// Parsed "track.bin" payload.
+// Everything one scene is built from, in one struct: the roster's liveries
+// (parsed from "track.bin"), the biome (copied in from a resolved
+// ttp::rt::Theme) and the geometry (taken off the built ttp::RaceTrack). All
+// three used to arrive serialized; two of them no longer do.
 struct TtpRenderer::TrackBin {
     struct Sample {
         float3 pos, lat, up;
@@ -225,9 +221,9 @@ struct TtpRenderer::TrackBin {
     bool closed = true;
 
     // ── Theme block (everything else the biome dresses) ───────────────────
-    // Sent RESOLVED by the harness: per-kind ambient presets, DEF_CLOUDS /
-    // DEF_BIRDS / DEF_PLANE and the per-track ambient patch are already folded
-    // in, so nothing here needs the JS defaulting rules.
+    // Copied in by applyTheme from an already-RESOLVED ttp::rt::Theme: the
+    // per-kind ambient presets, the cloud/bird/plane defaults and the per-track
+    // ambient patch are folded in there, so nothing here applies a default.
     uint32_t groundKind = 0;             // 0 lawn 1 sand 2 redrock 3 snow 4 wood
     float fogTune = 1;
     uint32_t keyCol = 0xfff1d0;
@@ -265,9 +261,10 @@ struct TtpRenderer::TrackBin {
     float balloonY = 44, balloonSize = 6;
     bool hasIce = false;
     uint32_t iceSheet = 0xa9d7ee, iceFrost = 0xf0f8fd;
-    // Per-scenery-model recolour (theme.scenery[].tint), resolved by the
-    // harness to gltfio material NAMES — the untextured Nature-Kit palms and
-    // cacti ship in their authored teal/peach and need the biome's palette.
+    // Per-scenery-model recolour (theme.scenery[].tint), resolved against each
+    // model's own glTF materials to gltfio material NAMES — the untextured
+    // Nature-Kit palms and cacti ship in their authored teal/peach and need the
+    // biome's palette.
     struct MatTint { std::string name; uint32_t rgb; };
     std::vector<std::vector<MatTint>> modelTints;
 
@@ -451,6 +448,11 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
     return true;
 }
 
+const std::vector<uint8_t>* TtpRenderer::asset(const char* name) const {
+    const auto it = mAssets.find(name);
+    return it == mAssets.end() ? nullptr : &it->second;
+}
+
 bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
@@ -594,7 +596,7 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
     if (bin.size() < 8 || rdU32(0) != TRACK_BIN_VERSION) return false;
     const uint32_t carCount = rdU32(4);
     size_t off = 8;
-    if (bin.size() < off + carCount * 4 + 7 * 4 + 12) return false;
+    if (bin.size() < off + carCount * 4) return false;
     out.carColors.resize(carCount);
     for (uint32_t i = 0; i < carCount; i++, off += 4) out.carColors[i] = rdU32(off);
     if (bin.size() < off + carCount * 8) return false;
@@ -608,133 +610,141 @@ bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) 
     if (bin.size() < off + carCount * 4) return false;
     out.carPlateY.resize(carCount);
     for (uint32_t i = 0; i < carCount; i++, off += 4) out.carPlateY[i] = rdF32(off);
-    for (uint32_t i = 0; i < 7; i++, off += 4) out.pal[i] = rdU32(off);
-    out.kerbW = rdF32(off); off += 4;
-    out.kerbH = rdF32(off); off += 4;
-    out.edgeLines = rdU32(off) != 0; off += 4;
-    if (bin.size() < off + 6 * 4) return false;
-    for (uint32_t i = 0; i < 3; i++, off += 4) out.sky[i] = rdU32(off);
-    out.fog = rdU32(off); off += 4;
-    out.hillShape = rdU32(off); off += 4;
-    const uint32_t hillCount = rdU32(off); off += 4;
-    if (bin.size() < off + hillCount * 4 + 12) return false;
-    out.hillColors.resize(hillCount);
-    for (uint32_t i = 0; i < hillCount; i++, off += 4) out.hillColors[i] = rdU32(off);
-    out.scDensity = rdF32(off); off += 4;
-    out.scMixTree = rdF32(off); off += 4;
-    out.scMixBush = rdF32(off); off += 4;
-    if (bin.size() < off + 4) return false;
-    const uint32_t treeCount = rdU32(off); off += 4;
-    if (bin.size() < off + treeCount * 16 + 4) return false;
-    out.scTrees.resize(treeCount);
-    for (uint32_t i = 0; i < treeCount; i++, off += 16) {
-        out.scTrees[i] = { rdU32(off), rdF32(off + 4), rdF32(off + 8), rdF32(off + 12) };
-    }
-    out.scHasBush = rdU32(off) != 0; off += 4;
-    if (out.scHasBush) {
-        if (bin.size() < off + 16) return false;
-        out.scBush = { rdU32(off), rdF32(off + 4), rdF32(off + 8), rdF32(off + 12) };
-        off += 16;
-    }
-    if (bin.size() < off + 4) return false;
-    const uint32_t rockCount = rdU32(off); off += 4;
-    if (bin.size() < off + rockCount * 4 + 12) return false;
-    out.scRocks.resize(rockCount);
-    for (uint32_t i = 0; i < rockCount; i++, off += 4) out.scRocks[i] = rdU32(off);
-    out.scRockS[0] = rdF32(off); off += 4;
-    out.scRockS[1] = rdF32(off); off += 4;
-    out.scModelCount = rdU32(off); off += 4;
-    if (bin.size() < off + 4) return false;
-    const uint32_t lmCount = rdU32(off); off += 4;
-    if (bin.size() < off + lmCount * 4) return false;
-    out.lmKinds.resize(lmCount);
-    for (uint32_t i = 0; i < lmCount; i++, off += 4) out.lmKinds[i] = rdU32(off);
-    if (bin.size() < off + 8) return false;
-    out.clDensity = rdF32(off); off += 4;
-    const uint32_t clCount = rdU32(off); off += 4;
-    out.clKinds.resize(clCount);
-    for (uint32_t i = 0; i < clCount; i++) {
-        if (bin.size() < off + 12) return false;
-        out.clKinds[i].kind = rdU32(off);
-        out.clKinds[i].w = rdF32(off + 4);
-        const uint32_t tc = rdU32(off + 8); off += 12;
-        if (bin.size() < off + tc * 4) return false;
-        out.clKinds[i].tints.resize(tc);
-        for (uint32_t t = 0; t < tc; t++, off += 4) out.clKinds[i].tints[t] = rdU32(off);
-    }
-    if (bin.size() < off + 4) return false;
-    out.structureCol = rdU32(off); off += 4;
-    // ── Theme block — the writer's flat tag/value list, same order ──────────
-    {
-        const auto u = [&]() { const uint32_t v = rdU32(off); off += 4; return v; };
-        const auto f = [&]() { const float v = rdF32(off); off += 4; return v; };
-        if (bin.size() < off + 72) return false;
-        out.groundKind = u();
-        out.fogTune = f();
-        out.keyCol = u(); out.keyIntensity = f();
-        out.hemiSky = u(); out.hemiGround = u(); out.hemiIntensity = f();
-        out.cloudCount = u(); out.cloudOpacity = f(); out.cloudScale = f();
-        out.cloudAspect = f(); out.cloudTint = u();
-        out.gateCol = u();
-        out.gantryPylon = u(); out.gantryFinial = u();
-        out.gantryHasRings = u() != 0; out.gantryRings = u();
-        out.boostCol = u();
-        if (bin.size() < off + 4) return false;
-        out.hasWater = u() != 0;
-        if (out.hasWater) {
-            if (bin.size() < off + 20) return false;
-            out.waterFoam = u(); out.waterShallow = u();
-            out.waterDeep = u(); out.waterWet = u();
-            out.shoreSeed = u();
-        }
-        if (bin.size() < off + 16 + 36 + 40 + 16) return false;
-        out.hazeCount = u(); out.hazeOpacity = f(); out.hazeTint = u(); out.hazeScale = f();
-        out.ambKind = u(); out.ambCount = u(); out.ambSize = f(); out.ambOpacity = f();
-        out.ambTint = u(); out.ambFall = f(); out.ambWind = f();
-        out.ambBob = f(); out.ambBand = f();
-        out.birdCount = u(); out.birdTint = u();
-        out.birdSize = f(); out.birdY = f(); out.birdRc = f(); out.birdRb = f();
-        out.birdSpeed = f(); out.birdFlap = f(); out.birdFlapHz = f(); out.birdDys = f();
-        out.kiteCount = u(); out.kiteSize = f(); out.kiteY = f();
-        const uint32_t kiteTints = u();
-        if (bin.size() < off + kiteTints * 4 + 4) return false;
-        out.kiteTints.resize(kiteTints);
-        for (uint32_t i = 0; i < kiteTints; i++) out.kiteTints[i] = u();
-        out.hasPlane = u() != 0;
-        if (out.hasPlane) {
-            if (bin.size() < off + 32) return false;
-            out.planeTint = u();
-            out.planeSize = f(); out.planeY = f(); out.planeA0 = f();
-            out.planeRc = f(); out.planeRb = f(); out.planeSpeed = f(); out.planeBank = f();
-        }
-        if (bin.size() < off + 4) return false;
-        const uint32_t panels = u();
-        if (bin.size() < off + panels * 4 + 12) return false;
-        out.balloonPanels.resize(panels);
-        for (uint32_t i = 0; i < panels; i++) out.balloonPanels[i] = u();
-        out.balloonY = f(); out.balloonSize = f();
-        out.hasIce = u() != 0;
-        if (out.hasIce) {
-            if (bin.size() < off + 8) return false;
-            out.iceSheet = u(); out.iceFrost = u();
-        }
-        if (bin.size() < off + 4) return false;
-        const uint32_t models = u();
-        out.modelTints.resize(models);
-        for (uint32_t m = 0; m < models; m++) {
-            if (bin.size() < off + 4) return false;
-            const uint32_t pairs = u();
-            if (bin.size() < off + (size_t) pairs * 20) return false;
-            out.modelTints[m].resize(pairs);
-            for (uint32_t k = 0; k < pairs; k++) {
-                char nm[17] = {};
-                std::memcpy(nm, bin.data() + off, 16);
-                off += 16;
-                out.modelTints[m][k] = { std::string(nm), u() };
-            }
-        }
-    }
     return true;
+}
+
+// The biome half of TrackBin, taken straight off the resolved theme.
+//
+// This used to arrive in track.bin, authored in the browser: ~120 colours and
+// intensities per biome serialized into a flat tag/value block that a JS writer
+// and this reader had to keep in lockstep by hand. The palette is C++ data now
+// (libttp-runtime/ttp/theme.h), already resolved — the ambient kind's motion
+// preset, the cloud/bird/plane defaults and the per-track ambient patch are all
+// folded in — so this is a copy, not a decode, and there is no defaulting left
+// to disagree about.
+//
+// The field names are kept verbatim from the payload they replace, so every
+// reader downstream (buildRoadMesh, buildScenery, the sky dome, the fog bands)
+// is untouched by the move.
+void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
+    out.pal[0] = th.road.asphalt; out.pal[1] = th.road.line; out.pal[2] = th.road.dash;
+    out.pal[3] = th.road.kerbA;   out.pal[4] = th.road.kerbB;
+    out.pal[5] = th.road.skirt;   out.pal[6] = th.road.shoulder;
+    out.kerbW = th.road.kerbW;
+    out.kerbH = th.road.kerbH;
+    out.edgeLines = th.road.edgeLines;
+
+    out.sky[0] = th.sky[0]; out.sky[1] = th.sky[1]; out.sky[2] = th.sky[2];
+    out.fog = th.fog;
+    out.hillShape = th.hillShape;
+    out.hillColors = th.hills;
+
+    // Scenery models are named in the theme and indexed here: the index IS the
+    // scenery<i>.glb slot the shell provided them in (ttp_theme_scenery_models
+    // hands out the same list, in the same order).
+    const ttp::rt::ScenerySpec& sc = th.scenery;
+    const auto modelIndex = [&](const std::string& m) -> uint32_t {
+        for (size_t i = 0; i < sc.models.size(); i++) if (sc.models[i] == m) return (uint32_t) i;
+        return 0;
+    };
+    out.scDensity = sc.density;
+    out.scMixTree = sc.mixTree;
+    out.scMixBush = sc.mixBush;
+    out.scTrees.clear();
+    for (const ttp::rt::TreeSpec& t : sc.trees) {
+        out.scTrees.push_back({ modelIndex(t.model), t.w, t.s0, t.s1 });
+    }
+    out.scHasBush = sc.hasBush;
+    if (sc.hasBush) {
+        out.scBush = { modelIndex(sc.bush.model), sc.bush.s0, sc.bush.s1, sc.bush.sink };
+    }
+    out.scRocks = sc.rocks;
+    out.scRockS[0] = sc.rockS[0];
+    out.scRockS[1] = sc.rockS[1];
+    out.scModelCount = (uint32_t) sc.models.size();
+    out.clDensity = sc.clutterDensity;
+    out.clKinds.clear();
+    for (const ttp::rt::ClutterSpec& c : sc.clutter) out.clKinds.push_back({ c.kind, c.w, c.tints });
+
+    out.lmKinds = th.landmarks;
+    out.structureCol = th.structure;
+
+    out.groundKind = th.groundKind;
+    out.fogTune = th.fogTune;
+    out.keyCol = th.key.color;
+    out.keyIntensity = th.key.intensity;
+    out.hemiSky = th.hemi.sky;
+    out.hemiGround = th.hemi.ground;
+    out.hemiIntensity = th.hemi.intensity;
+    out.cloudCount = th.clouds.count;
+    out.cloudOpacity = th.clouds.opacity;
+    out.cloudScale = th.clouds.scale;
+    out.cloudAspect = th.clouds.aspect;
+    out.cloudTint = th.clouds.tint;
+    out.gateCol = th.gate;
+    out.gantryPylon = th.gantry.pylon;
+    out.gantryFinial = th.gantry.finial;
+    out.gantryHasRings = th.gantry.hasRings;
+    out.gantryRings = th.gantry.rings;
+    out.boostCol = th.boost;
+    out.hasWater = th.hasWater;
+    if (th.hasWater) {
+        out.waterFoam = th.water.foam;
+        out.waterShallow = th.water.shallow;
+        out.waterDeep = th.water.deep;
+        out.waterWet = th.water.wet;
+        out.shoreSeed = th.water.shoreSeed;
+    }
+    out.hazeCount = th.haze.count;
+    out.hazeOpacity = th.haze.opacity;
+    out.hazeTint = th.haze.tint;
+    out.hazeScale = th.haze.scale;
+    out.ambKind = th.ambient.kind;
+    out.ambCount = th.ambient.count;
+    out.ambSize = th.ambient.size;
+    out.ambOpacity = th.ambient.opacity;
+    out.ambTint = th.ambient.tint;
+    out.ambFall = th.ambient.fall;
+    out.ambWind = th.ambient.wind;
+    out.ambBob = th.ambient.bob;
+    out.ambBand = th.ambient.band;
+    out.birdCount = th.birds.count;
+    out.birdTint = th.birds.tint;
+    out.birdSize = th.birds.size;
+    out.birdY = th.birds.y;
+    out.birdRc = th.birds.rc;
+    out.birdRb = th.birds.rb;
+    out.birdSpeed = th.birds.speed;
+    out.birdFlap = th.birds.flap;
+    out.birdFlapHz = th.birds.flapHz;
+    out.birdDys = th.birds.dys;
+    out.kiteCount = th.kites.count;
+    out.kiteSize = th.kites.size;
+    out.kiteY = th.kites.y;
+    out.kiteTints = th.kites.tints;
+    out.hasPlane = th.hasPlane;
+    if (th.hasPlane) {
+        out.planeTint = th.plane.tint;
+        out.planeSize = th.plane.size;
+        out.planeY = th.plane.y;
+        out.planeA0 = th.plane.a0;
+        out.planeRc = th.plane.rc;
+        out.planeRb = th.plane.rb;
+        out.planeSpeed = th.plane.speed;
+        out.planeBank = th.plane.bank;
+    }
+    out.balloonPanels = th.balloon.panels;
+    out.balloonY = th.balloon.y;
+    out.balloonSize = th.balloon.size;
+    out.hasIce = th.hasIce;
+    if (th.hasIce) { out.iceSheet = th.ice.sheet; out.iceFrost = th.ice.frost; }
+
+    out.modelTints.clear();
+    for (const std::vector<ttp::rt::MatTint>& model : th.modelTints) {
+        std::vector<TrackBin::MatTint> pairs;
+        for (const ttp::rt::MatTint& t : model) pairs.push_back({ t.name, t.rgb });
+        out.modelTints.push_back(std::move(pairs));
+    }
 }
 
 // The geometry half of TrackBin, taken straight off the built track.
@@ -3671,9 +3681,11 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     }
 }
 
-bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo) {
+bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo,
+        const ttp::rt::Theme& theme) {
     TrackBin tb;
     if (!parseTrackBin(bin, tb)) return false;
+    applyTheme(tb, theme);
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     const uint32_t carCount = (uint32_t) tb.carColors.size();
@@ -4229,7 +4241,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::Ra
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's
     // 74747 stream as tiny tinted sprites, drifted per frame by the kind's
     // motion preset (flake / mote / sand / pollen — all resolved into the
-    // payload by the harness).
+    // theme, ttp::rt::ambientKind).
     if (mPointMaterial && tb.ambKind != 0 && tb.ambCount > 0) {
         const int AMB_COUNT = (int) std::min(tb.ambCount, 2400u);
         constexpr float AMB_R = 170.0f, AMB_H = 34.0f;
@@ -6179,7 +6191,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
     }
 }
 
-bool TtpRenderer::buildScene(const ttp::RaceTrack& geo) {
+bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme) {
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
@@ -6256,7 +6268,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo) {
             .color(float4{ 0.53f, 0.78f, 0.92f, 1.0f })
             .build(*mEngine);
     mScene->setSkybox(mSkybox);
-    return buildTrackScene(track->second, geo);
+    return buildTrackScene(track->second, geo, theme);
 }
 
 // Filament's exponential fog standing in for a three.js LINEAR ramp [near,

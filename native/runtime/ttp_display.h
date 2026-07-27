@@ -40,14 +40,23 @@ TTP_ABI void ttp_display_destroy(void);
  * owns fetching; the bytes are copied before this returns. 0 on success. */
 TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len);
 
+/* Force a biome on every scene built from here on, regardless of the track's
+ * cup — the ?biome= inspector override, which is how any track gets compared in
+ * any look. null, "" or an unknown name clears it and lets the cup decide;
+ * ttp_theme_has_biome (ttp_theme.h) is the validity test a shell should use if
+ * it wants to tell the user their spelling was wrong. */
+TTP_ABI void ttp_display_biome(const char* name);
+
 /* Build the scene for `trackId` from the assets provided so far — "track.bin"
- * (the resolved biome theme and the roster's liveries) and the GLBs/textures it
- * names.
+ * (the roster's liveries) and the GLBs/textures the resolved biome names.
  *
- * The GEOMETRY is not among them. This runs the native TrackBuilder on trackId
- * and meshes from the result, which is the same ttp::RaceTrack a session on that
- * track races on — so the road drawn and the road driven are one object, not two
- * builds of one descriptor that could drift. Returns 1 on an unknown trackId.
+ * NEITHER THE GEOMETRY NOR THE PALETTE is among them. This runs the native
+ * TrackBuilder on trackId and meshes from the result, which is the same
+ * ttp::RaceTrack a session on that track races on — so the road drawn and the
+ * road driven are one object, not two builds of one descriptor that could drift.
+ * The biome comes from that track's own cup (or ttp_display_biome), resolved out
+ * of the C++ palette tables, so the look is not authored per shell either.
+ * Returns 1 on an unknown trackId.
  *
  * rosterIdsJson is that roster's car ids as a JSON array, in slot order. The
  * renderer bakes a car's model and livery into its slot at build time, so this

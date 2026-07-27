@@ -30,6 +30,7 @@
 #include "ttp/game.h"
 #include "ttp/race_track.h"
 #include "ttp/scalar_id.h"
+#include "ttp/theme.h"
 #include "ttp/trackbuilder.h"
 #include "ttp_render.h"
 #include "ttp_session.h"
@@ -147,6 +148,11 @@ int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len) {
     return g_disp->renderer->provideAsset(name, bytes, len) ? 0 : 1;
 }
 
+void ttp_display_biome(const char* name) {
+    if (!g_disp) return;
+    g_disp->biome = (name && ttp::rt::has_biome(name)) ? name : "";
+}
+
 int ttp_display_build(const char* trackId, const char* rosterIdsJson) {
     if (!g_disp) return 1;
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
@@ -157,7 +163,24 @@ int ttp_display_build(const char* trackId, const char* rosterIdsJson) {
     // onto RaceTrack.totalLaps/.seed, and the renderer reads neither. The scene is
     // a function of the track descriptor alone.
     const ttp::RaceTrack geo = ttp::build_race_track(*def, 1, 0u);
-    if (!g_disp->renderer->buildScene(geo)) return 1;
+    // The look, likewise a function of the track: its cup names the biome unless
+    // the inspector override forced one.
+    const char* biome = g_disp->biome.empty() ? ttp::rt::biome_for_track(trackId)
+                                              : g_disp->biome.c_str();
+    ttp::rt::Theme theme = ttp::rt::resolve_theme(biome, trackId);
+    // The one part of the palette that cannot be resolved from data alone: a
+    // scenery recolour keyed by AUTHORED colour has to read the model's own glTF
+    // materials. Those bytes are already here — the shell provided them as
+    // scenery<i>.glb, i being the model's index in this same list.
+    for (size_t i = 0; i < theme.scenery.models.size(); i++) {
+        const std::vector<uint8_t>* glb =
+                g_disp->renderer->asset(("scenery" + std::to_string(i) + ".glb").c_str());
+        theme.modelTints.push_back(glb
+                ? ttp::rt::resolve_model_tints(biome, theme.scenery.models[i],
+                                               glb->data(), glb->size())
+                : std::vector<ttp::rt::MatTint>());
+    }
+    if (!g_disp->renderer->buildScene(geo, theme)) return 1;
     g_disp->built = true;
     g_disp->roster = parseIds(rosterIdsJson);
     // A rebuild is a new track or a new field; either way the springs must not
