@@ -66,6 +66,10 @@ TTP_ABI int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs);
 TTP_ABI const char* ttp_room_expired_peers_json(int h, double nowMs);  // JSON array of peer ids
 TTP_ABI int ttp_room_all_participants_disconnected(int h);
 TTP_ABI int ttp_room_has_late_joiners(int h);
+// The late joiners themselves — a JSON array of player records (same shape and
+// order as ttp_room_list_json), i.e. the roster outside the active order. The
+// list form of ttp_room_has_late_joiners, for a shell that renders them.
+TTP_ABI const char* ttp_room_late_joiners_json(int h);
 TTP_ABI int ttp_room_grace_tick(int h, double nowMs);
 
 // ---- provider setters -------------------------------------------------------

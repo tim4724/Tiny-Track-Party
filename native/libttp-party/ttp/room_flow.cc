@@ -398,13 +398,28 @@ bool RoomFlow::allParticipantsDisconnected() const {
   return true;
 }
 
-bool RoomFlow::hasLateJoiners() const {
-  for (const auto& p : players_) {
-    bool inOrder = false;
-    for (const auto& id : order_) if (id == p.peerIndex) { inOrder = true; break; }
-    if (!inOrder) return true;
-  }
+bool RoomFlow::inActiveOrder(const PeerId& id) const {
+  for (const auto& o : order_) if (o == id) return true;
   return false;
+}
+
+// A late joiner is any roster member outside the active order — presence is NOT
+// part of it (a host that wants "connected and waiting" says so by putting the
+// absent seats in the order; see setActiveOrder). hasLateJoiners/lateJoinersValue
+// are the predicate and the list of the SAME set, so they cannot drift.
+bool RoomFlow::hasLateJoiners() const {
+  for (const auto& p : players_) if (!inActiveOrder(p.peerIndex)) return true;
+  return false;
+}
+
+Value RoomFlow::lateJoinersValue() const {
+  std::vector<const Player*> arr;
+  for (const auto& p : players_) if (!inActiveOrder(p.peerIndex)) arr.push_back(&p);
+  std::stable_sort(arr.begin(), arr.end(),
+                   [](const Player* a, const Player* b) { return a->joinedAt < b->joinedAt; });
+  Value out = Value::Arr();
+  for (const Player* p : arr) out.push(p->toValue());
+  return out;
 }
 
 bool RoomFlow::graceTick(double nowMs) {

@@ -30,6 +30,17 @@ const LIVENESS_TIMEOUT_MS = 3000;
 const RANDOM_MAX_RACES = 8;
 const RANDOM_DEFAULT_RACES = 4;
 const normRandomRaces = (n) => (Number.isInteger(n) && n >= 0 && n <= RANDOM_MAX_RACES ? n : RANDOM_DEFAULT_RACES);
+
+// Abandoned-race grace. Every racer gone (only held, dropped seats left) while
+// late joiners wait in their lobby: hold the room this long so the dropped party
+// can scan back in, then return to the lobby so the next race seats the people
+// who are actually here. Dropped seats are otherwise held for the WHOLE race, so
+// without this the newcomers would sit out an entire frozen race.
+// The DECISION is RoomFlow.graceTick's (arm/expire/disarm, nowMs-injected, shared
+// by every shell); this module only feeds it the participant set, polls it on the
+// liveness tick below and reports the one moment it fires (onRaceAbandoned).
+// __abandonGraceMs: E2E hook to shorten the wait.
+const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000;
 // Display self-heartbeat: each liveness tick relays a message to our own slot.
 // An echo overdue past this window means OUR socket is half-dead (the relay
 // can't reach us), so force a reconnect instead of waiting for TCP to notice.
@@ -101,6 +112,10 @@ export class DisplayNet extends GameNet {
     // catch-up state that normally only flows as broadcasts (e.g. the live
     // standings board for a rejoiner whose car already finished).
     this.onPlayerWelcomed = opts.onPlayerWelcomed || (() => {});
+    // Fired once when RoomFlow's abandoned-race deadline expires (see
+    // ABANDONED_RACE_GRACE_MS): the race has no racer left and someone is waiting
+    // for the next one. The game layer returns to the lobby.
+    this.onRaceAbandoned = opts.onRaceAbandoned || (() => {});
 
     // Dropped seats currently offering a reconnect QR. peerIndex -> {peerIndex,
     // name, colorIndex, url}. Held for the whole race (no give-up timer); freed
@@ -159,7 +174,9 @@ export class DisplayNet extends GameNet {
     // what the display uses; keep the kit class as the documented default.
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
-    this.flow = new this._RoomFlowImpl({ liveness: { timeoutMs: LIVENESS_TIMEOUT_MS } });
+    this.flow = new this._RoomFlowImpl({
+      liveness: { timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS }
+    });
     this.roomCode = null;
     this.instance = null;
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
@@ -258,6 +275,38 @@ export class DisplayNet extends GameNet {
       inRace: !!this.inRace(p.peerIndex)
     }));
   }
+
+  // ---- the active participant order ----
+  // RoomFlow's participant order, from THIS game's point of view: the seats this
+  // race is for. That is everyone holding a car — connected or blipped, since a
+  // dropped racer's car and seat are held for the whole race — plus every other
+  // dropped seat, which is absent rather than waiting. What is LEFT OVER is
+  // therefore exactly a CONNECTED seat with no car, which is precisely a late
+  // joiner: someone here, now, with nothing to drive.
+  //
+  // That leftover set is the one RoomFlow answers both "is anyone waiting?"
+  // (hasLateJoiners → the abandoned-race grace) and "who?" (lateJoiners → the
+  // standings' `joining` rows) from, so the policy and the boards read one
+  // definition and cannot disagree.
+  //
+  // The kit maintains the order on its own — snapshot at COUNTDOWN, follow
+  // removePlayer/rekey — and that snapshot already IS the human race field. What
+  // it cannot know is which seats have a car NOW, so push before every read.
+  // Presence-only members never change host election (a disconnected peer is
+  // ineligible either way), so this stays host-neutral.
+  _syncActiveOrder() {
+    this.flow.setActiveOrder(this.flow.list()
+      .filter((p) => this.inRace(p.peerIndex) || !p.connected)
+      .map((p) => p.peerIndex));
+  }
+
+  // Connected seats with no car in the live race — who the room is holding the
+  // next race for. Records in join order, like list().
+  lateJoiners() {
+    this._syncActiveOrder();
+    return this.flow.lateJoiners();
+  }
+
   _usedColors() {
     const s = new Set();
     for (const p of this.flow.list()) s.add(p.colorIndex);
@@ -583,6 +632,12 @@ export class DisplayNet extends GameNet {
     // expiredPeers is empty in the lobby); applying the drop stays here so
     // markDisconnected keeps its single writer.
     for (const id of this.flow.expiredPeers(now)) this._dropSeat(id);
+    // …then the abandoned-race deadline, on the same tick and the same clock:
+    // RoomFlow arms it while every participant is gone and someone is waiting,
+    // and returns true the one time it expires. Polled here rather than on a
+    // timer of its own so the decision runs where the drops that cause it land.
+    this._syncActiveOrder();
+    if (this.flow.graceTick(now)) this.onRaceAbandoned();
   }
 
   _resyncPeers(peers) {

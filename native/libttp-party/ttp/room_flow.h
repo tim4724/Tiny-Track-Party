@@ -88,6 +88,11 @@ class RoomFlow {
   std::vector<PeerId> expiredPeers(double nowMs) const;
   bool allParticipantsDisconnected() const;
   bool hasLateJoiners() const;
+  // WHO the late joiners are — the same roster-minus-active-order set
+  // hasLateJoiners() tests, as records in list() order. A shell that renders
+  // "waiting for the next race" rows must read them from here, so the rows and
+  // the graceTick policy can never disagree about who is waiting.
+  Value lateJoinersValue() const;
   bool graceTick(double nowMs);
 
   // ---- provider setters -----------------------------------------------------
@@ -132,6 +137,7 @@ class RoomFlow {
   void lastSeenSet(const PeerId& id, double v);
   void lastSeenDelete(const PeerId& id);
 
+  bool inActiveOrder(const PeerId& id) const;  // the late-joiner test, once
   bool restricted() const;
   bool isEligible(const PeerId& id, const std::vector<PeerId>* eligible) const;
   PeerId oldestEligible(const std::vector<PeerId>* eligible, const PeerId* exclude) const;

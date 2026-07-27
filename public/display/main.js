@@ -567,6 +567,9 @@ const net = new DisplayNet({
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
   isPaused: () => paused,
+  // RoomFlow's abandoned-race deadline expired: no racer left and someone is
+  // waiting for the next one. Same exit as any other quit path.
+  onRaceAbandoned: returnToLobby,
   // A (re)joining phone recovers all room/results state from the snapshot replay,
   // but its held item is per-owner and rides ITEM (sent only on change) — so
   // relight it here, once, or a reconnecting driver's USE button stays dark until
@@ -623,6 +626,12 @@ window.addEventListener('pagehide', () => net.shutdown());
 // for, so the room returns to the lobby — any late joiners waiting there get
 // seated in the next race immediately. Re-checked on every roster change
 // (disconnect, reconnect, rekey, leave, seat expiry).
+//
+// The escape hatch ON TOP of this — every racer gone while late joiners wait, so
+// give the dropped party a short window and then return to the lobby — is NOT
+// here: it is RoomFlow.graceTick, polled by DisplayNet's liveness tick and
+// surfaced as onRaceAbandoned below. It used to be a second copy of this
+// bookkeeping in JS.
 function refreshAutoPause() {
   if (!session || raceEnded) return;
   if (net.roomState !== ROOM_STATE.COUNTDOWN && net.roomState !== ROOM_STATE.PLAYING) return;
@@ -633,32 +642,15 @@ function refreshAutoPause() {
     else if (net.flow.has(id)) connected++;       // human at the wheel
   }
   if (!connected && !inGrace) { returnToLobby(); return; } // no human cars left at all
-  autoPaused = connected === 0;
+  // The freeze is a PLAYING-state thing. Freezing the COUNTDOWN would strand the
+  // room short of the only state the abandoned-race policy runs in (graceTick
+  // requires PLAYING — that gate is frozen conformance evidence), so a field that
+  // dropped during the beats would never reach the deadline that recovers the
+  // room. Nothing moves before GO anyway, so the beats are free to run out.
+  autoPaused = connected === 0 && net.roomState === ROOM_STATE.PLAYING;
   syncSessionFrozen();
-  refreshAbandonTimer();
 }
 net.flow.on('rosterchange', refreshAutoPause);
-
-// Escape hatch on top of the auto-pause: every racer is gone (only QR seats
-// left) while late joiners sit waiting in their lobby. Dropped seats are held for
-// the whole race, so without this the newcomers would wait out the entire (frozen)
-// race — give the dropped party a short window to scan back in, then return to the
-// lobby so the next race seats the people who are actually here. The timer is disarmed the moment any racer
-// reconnects or the last waiting late joiner leaves (both fire rosterchange).
-const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000; // __abandonGraceMs: E2E hook to shorten the wait
-let abandonTimer = null;
-function refreshAbandonTimer() {
-  const abandoned = autoPaused && lateJoiners().length > 0;
-  if (!abandoned) {
-    clearTimeout(abandonTimer);
-    abandonTimer = null;
-  } else if (!abandonTimer) {
-    abandonTimer = setTimeout(() => {
-      abandonTimer = null;
-      if (autoPaused) returnToLobby(); // re-check: state may have shifted since arming
-    }, ABANDONED_RACE_GRACE_MS);
-  }
-}
 
 // A dropped player reconnected on a different device (new peerIndex): move their
 // still-racing car — engine, render entry and results identity — onto the new
@@ -911,6 +903,11 @@ function launchRace(players) {
       // MAX_RACE_MS internally so AFK/DNF cars can't hang the room forever. A
       // clean 3-lap is ~50-80 s.
       net.flow.transitionTo(ROOM_STATE.PLAYING); // roomState=playing in the snapshot lands phones on the drive screen
+      // The auto-pause only freezes while PLAYING (see refreshAutoPause), so a
+      // field that emptied during the countdown has to be re-checked now that we
+      // are. DEFERRED off this stack on purpose: we are inside session.update(),
+      // and the no-seats-left branch tears the session down.
+      setTimeout(refreshAutoPause, 0);
       // Background song for the whole race, picked from the biome's pool. The
       // ?biome inspector override steers the music too, so an override race
       // sounds like it looks.
@@ -1179,7 +1176,10 @@ function standingsPayload(results, over) {
   // Anyone who joined mid-race has no car this round (the field is locked at
   // the start) — list them under the racers, flagged `joining`, so every board
   // shows who's waiting on the next race instead of silently omitting them.
-  for (const p of lateJoiners()) {
+  // WHO that is comes from RoomFlow (the roster outside the active participant
+  // order), which is the same set the abandoned-race grace waits for — so the
+  // boards and that policy can never disagree about who is waiting.
+  for (const p of net.lateJoiners()) {
     order.push({ playerId: p.peerIndex, name: p.name, colorIndex: p.colorIndex, joining: true });
   }
   return {
@@ -1208,14 +1208,6 @@ function seriesInfo() {
   };
 }
 
-// Connected players without a car in the current race — they joined after the
-// field was locked and ride the next one (see the `joining` rows above).
-// Both callers (standingsPayload + showResults) run synchronously inside the
-// same endRace flow, so the two boards always agree on who's joining.
-function lateJoiners() {
-  const byId = new Map(currentField.map((p) => [p.peerIndex, p]));
-  return net.flow.list().filter((p) => !!p.connected && !byId.has(p.peerIndex));
-}
 function broadcastStandings(over) {
   if (!session) return;
   const board = standingsPayload(session.getResults(), over);
@@ -1377,7 +1369,6 @@ function renderPodium(wrap, order) {
 function returnToLobby() {
   if (net.roomState === ROOM_STATE.LOBBY) return;
   clearTimeout(endTimer);
-  clearTimeout(abandonTimer); abandonTimer = null;
   series = null;        // every exit route cancels a running cup (quit, abandon, failsafe)
   clearSeriesTimers();
   // Re-aim the pick for the next lobby: random re-rolls every visit; a cup

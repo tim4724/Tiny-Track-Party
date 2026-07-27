@@ -847,6 +847,129 @@ bool roomCorpusThroughAbi(const std::string& path) {
   return bad == 0;
 }
 
+// ---------------------------------------------------------------------------
+// Part 4b: the ABANDONED-RACE policy — hand-authored, because the frozen oracle
+// cannot reach it.
+//
+// graceTick is called 146 times across the corpus's 36 scripts and returns true
+// in NONE of them: the recorded oracle never once let a deadline expire, so the
+// arm → fire → disarm path crossed into C++ carrying no cross-implementation
+// evidence whatsoever. The display now RUNS this policy (display/Net.js polls it
+// on the liveness tick and returns to the lobby when it fires), so it needs a
+// gate. This is C++-AUTHORED, i.e. REGRESSION evidence only — it proves the
+// policy still does what it does, never that the port was right
+// (tests/fixtures/traces/README.md). ttp_room_late_joiners_json is likewise
+// newer than the corpus.
+//
+// It also pins the wiring display/Net.js depends on. That module feeds the active
+// order "every seat holding a car, plus every dropped seat", so the leftover set
+// — what hasLateJoiners/lateJoiners answer for — is exactly a CONNECTED seat with
+// no car. A dropped, car-less ghost must therefore never be the thing that keeps
+// the room waiting, and must never appear as a "joining" row.
+// ---------------------------------------------------------------------------
+void abandonedRacePolicy() {
+  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  if (h <= 0) { fail("abandoned-race: ttp_room_create returned no handle"); return; }
+
+  check(std::strcmp(ttp_room_late_joiners_json(0), "[]") == 0,
+        "ttp_room_late_joiners_json on handle 0 is []");
+
+  auto add = [&](const char* id, const char* name) {
+    ttp_room_add_player(h, id, (std::string("{\"name\":\"") + name + "\",\"colorIndex\":0}").c_str());
+  };
+  auto lateIds = [&]() {
+    Value v = parseOrNull(ttp_room_late_joiners_json(h), "late_joiners_json");
+    std::string out;
+    for (const Value& e : v.arr) out += canonical_stringify(*e.find("peerIndex")) + ";";
+    return out;
+  };
+  // The predicate and the list are the same set, always.
+  auto agree = [&](const char* where) {
+    const bool anyBool = ttp_room_has_late_joiners(h) != 0;
+    const bool anyList = !lateIds().empty();
+    check(anyBool == anyList,
+          std::string("hasLateJoiners agrees with lateJoiners (") + where + ")");
+  };
+
+  add("0", "Ada");
+  add("1", "Bo");
+  agree("lobby");
+  // In the LOBBY the order is empty, so everyone is outside it — the corpus
+  // records exactly this (a room with no active order has only late joiners).
+  check(lateIds() == "0;1;", "lobby: the whole roster sits outside an empty order");
+
+  ttp_room_transition_to(h, "countdown");   // snapshots the order: [0, 1]
+  ttp_room_transition_to(h, "playing");
+  check(lateIds().empty(), "the countdown snapshot leaves no late joiners");
+  check(ttp_room_all_participants_disconnected(h) == 0, "two live racers are not all gone");
+  check(ttp_room_grace_tick(h, 1000) == 0, "no grace while the racers are here");
+
+  // Both racers drop. Their seats are held (a car and a reconnect QR each), so
+  // there is still nobody WAITING — the room must sit tight indefinitely.
+  ttp_room_mark_disconnected(h, "0");
+  ttp_room_mark_disconnected(h, "1");
+  check(ttp_room_all_participants_disconnected(h) == 1, "every participant is gone");
+  check(ttp_room_grace_tick(h, 1100) == 0, "no grace with nobody waiting");
+  check(ttp_room_grace_tick(h, 99999) == 0, "…and no deadline was armed to expire");
+
+  // A phone scans in mid-race: now someone IS waiting, and the clock starts.
+  add("2", "Cy");
+  agree("late joiner present");
+  check(lateIds() == "2;", "the mid-race joiner is the only late joiner");
+  check(ttp_room_grace_tick(h, 2000) == 0, "the first qualifying tick only ARMS");
+  check(ttp_room_grace_tick(h, 3499) == 0, "…and holds until graceMs has elapsed");
+  check(ttp_room_grace_tick(h, 3500) == 1, "fires at exactly nowMs + graceMs");
+  check(ttp_room_grace_tick(h, 3500) == 0, "fires exactly ONCE (it re-arms, not re-fires)");
+  check(ttp_room_grace_tick(h, 9999) == 1, "the re-armed deadline expires in its turn");
+
+  // A racer coming back disarms it: the room is being played again.
+  ttp_room_mark_reconnected(h, "0");
+  check(ttp_room_grace_tick(h, 20000) == 0, "a reconnected racer disarms the deadline");
+  check(ttp_room_grace_tick(h, 99999) == 0, "…and it stays disarmed while they are here");
+
+  // Leaving PLAYING disarms it too — the results board is not an abandoned race.
+  ttp_room_mark_disconnected(h, "0");
+  check(ttp_room_grace_tick(h, 100000) == 0, "re-arms on the first qualifying tick");
+  ttp_room_transition_to(h, "results");
+  check(ttp_room_grace_tick(h, 200000) == 0, "RESULTS is not a race to abandon");
+  ttp_room_transition_to(h, "countdown");
+  ttp_room_transition_to(h, "playing");
+  check(ttp_room_grace_tick(h, 300000) == 0, "the state change dropped the armed deadline");
+
+  ttp_room_dispose(h);
+
+  // ---- the set display/Net.js feeds -----------------------------------------
+  // Same room, but the late joiner has ALSO dropped: a ghost seat, no car, no
+  // phone. With the raw COUNTDOWN snapshot it counts as someone waiting and would
+  // yank a blipped party's whole race back to the lobby; feeding the display's
+  // order (cars + dropped seats) is what makes "waiting" mean what it says.
+  const int g = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  if (g <= 0) { fail("abandoned-race/ghost: ttp_room_create returned no handle"); return; }
+  ttp_room_add_player(g, "0", "{\"name\":\"Ada\"}");
+  ttp_room_transition_to(g, "countdown");
+  ttp_room_transition_to(g, "playing");
+  ttp_room_add_player(g, "2", "{\"name\":\"Cy\"}");
+  ttp_room_mark_disconnected(g, "0");
+  ttp_room_mark_disconnected(g, "2");
+  check(ttp_room_has_late_joiners(g) == 1, "raw: a dropped ghost still reads as a late joiner");
+  check(ttp_room_grace_tick(g, 1000) == 0 && ttp_room_grace_tick(g, 3000) == 1,
+        "raw: …and would abandon the race for nobody");
+  // The display's order: everyone with a car (0), plus every dropped seat (0, 2).
+  ttp_room_set_active_order(g, "[0,2]");
+  check(ttp_room_has_late_joiners(g) == 0, "fed: a dropped ghost is absent, not waiting");
+  check(std::strcmp(ttp_room_late_joiners_json(g), "[]") == 0,
+        "fed: …so it is no 'joining' row either");
+  check(ttp_room_grace_tick(g, 4000) == 0 && ttp_room_grace_tick(g, 9999) == 0,
+        "fed: the blipped party keeps its race");
+  // The ghost's phone comes back — now it really is waiting.
+  ttp_room_mark_reconnected(g, "2");
+  ttp_room_set_active_order(g, "[0]");     // cars + dropped seats, recomputed
+  check(ttp_room_has_late_joiners(g) == 1, "fed: a returning ghost is waiting again");
+  check(ttp_room_grace_tick(g, 10000) == 0 && ttp_room_grace_tick(g, 11500) == 1,
+        "fed: and the deadline runs for them");
+  ttp_room_dispose(g);
+}
+
 bool framingCorpusThroughAbi(const std::string& path) {
   std::ifstream in(path);
   if (!in) { fail("cannot open framing corpus " + path); return false; }
@@ -994,6 +1117,7 @@ int main(int argc, char** argv) {
   gpThroughAbi(argv[1]);
   boundaryExports();
   roomCorpusThroughAbi(argv[2]);
+  abandonedRacePolicy();
   framingCorpusThroughAbi(argv[3]);
   fastlaneThroughAbi();
 

@@ -73,6 +73,8 @@ declare class RoomFlow {
   allParticipantsDisconnected(): boolean;
   /** True when any roster member is not in the active participant order (a late joiner). */
   hasLateJoiners(): boolean;
+  /** The late joiners themselves, in `list()` order — the list form of `hasLateJoiners()`, for rendering "waiting for the next round" rows off the same set the grace policy uses. */
+  lateJoiners(): RoomFlow.PlayerRecord[];
   /** Deadline-driven late-joiner grace: arms on the first qualifying call, returns true exactly once when graceMs elapses. */
   graceTick(nowMs: number): boolean;
 

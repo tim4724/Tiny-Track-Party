@@ -318,3 +318,84 @@ test('party ABI reproduces the fastlane netcode corpus', async () => {
   }
   console.info(`[party-abi] ${scripts} fastlane scripts / ${steps} steps through the ABI`);
 });
+
+// The abandoned-race policy, against the SHIPPED wasm. Two reasons this is not
+// just a copy of native/'s abi_check section:
+//
+//  - EXPORT LIST. ttp_room_late_joiners_json has to survive into the artifact the
+//    browser loads. The exports come from TTP_ABI/EMSCRIPTEN_KEEPALIVE, so a
+//    missing one is a linker outcome ctest cannot see (it links a different
+//    target) — cwrap here throws if it is absent.
+//  - The policy is now LOAD-BEARING in the display: DisplayNet polls graceTick on
+//    its liveness tick and returns to the lobby when it fires. The frozen corpus
+//    replayed above calls graceTick 146 times and gets `true` from none of them,
+//    so nothing else in this file exercises the path that actually runs.
+test('party ABI: the abandoned-race deadline and the late-joiner list', async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const cw = (n, ret, args) => M.cwrap(n, ret, args);
+  const create = cw('ttp_room_create', 'number', ['string']);
+  const dispose = cw('ttp_room_dispose', null, ['number']);
+  const addPlayer = cw('ttp_room_add_player', 'string', ['number', 'string', 'string']);
+  const transitionTo = cw('ttp_room_transition_to', 'number', ['number', 'string']);
+  const markDisc = cw('ttp_room_mark_disconnected', null, ['number', 'string']);
+  const markReconn = cw('ttp_room_mark_reconnected', null, ['number', 'string']);
+  const setActiveOrder = cw('ttp_room_set_active_order', null, ['number', 'string']);
+  const hasLate = cw('ttp_room_has_late_joiners', 'number', ['number']);
+  const lateJoiners = cw('ttp_room_late_joiners_json', 'string', ['number']);
+  const graceTick = cw('ttp_room_grace_tick', 'number', ['number', 'number']);
+  const allDisc = cw('ttp_room_all_participants_disconnected', 'number', ['number']);
+
+  assert.equal(lateJoiners(0), '[]', 'an invalid handle answers []');
+
+  const h = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  assert.ok(h > 0);
+  const ids = () => JSON.parse(lateJoiners(h)).map((p) => p.peerIndex);
+
+  addPlayer(h, '0', JSON.stringify({ name: 'Ada', colorIndex: 0 }));
+  addPlayer(h, '1', JSON.stringify({ name: 'Bo', colorIndex: 1 }));
+  transitionTo(h, 'countdown');   // snapshots the participant order
+  transitionTo(h, 'playing');
+  assert.deepEqual(ids(), [], 'the countdown snapshot leaves nobody waiting');
+
+  // Both racers drop; their seats (and cars) are held, so nobody is WAITING.
+  markDisc(h, '0'); markDisc(h, '1');
+  assert.equal(allDisc(h), 1);
+  assert.equal(graceTick(h, 1000), 0, 'no deadline with nobody waiting');
+  assert.equal(graceTick(h, 99999), 0, 'and none was armed to expire');
+
+  // A phone scans in mid-race. Now the clock runs.
+  addPlayer(h, '2', JSON.stringify({ name: 'Cy', colorIndex: 2 }));
+  assert.equal(hasLate(h), 1);
+  assert.deepEqual(ids(), [2], 'the mid-race joiner is the one waiting');
+  const rec = JSON.parse(lateJoiners(h))[0];
+  assert.equal(rec.name, 'Cy', 'records carry the game fields, like list()');
+  assert.equal(rec.connected, true);
+  assert.equal(graceTick(h, 2000), 0, 'the first qualifying tick only arms');
+  assert.equal(graceTick(h, 3499), 0, 'holds until graceMs has elapsed');
+  assert.equal(graceTick(h, 3500), 1, 'fires at nowMs + graceMs');
+  assert.equal(graceTick(h, 3500), 0, 'fires exactly once');
+
+  markReconn(h, '0');
+  assert.equal(graceTick(h, 50000), 0, 'a returning racer disarms it');
+  dispose(h);
+
+  // The set display/Net.js feeds: cars + dropped seats, so the leftovers are the
+  // CONNECTED car-less seats. A dropped ghost must not abandon a blipped party's
+  // race, nor show up as a "joining" row.
+  const g = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  addPlayer(g, '0', JSON.stringify({ name: 'Ada' }));
+  transitionTo(g, 'countdown'); transitionTo(g, 'playing');
+  addPlayer(g, '2', JSON.stringify({ name: 'Cy' }));
+  markDisc(g, '0'); markDisc(g, '2');
+  setActiveOrder(g, '[0,2]');     // 0 holds a car; 2 is a dropped seat
+  assert.equal(hasLate(g), 0, 'a dropped ghost is absent, not waiting');
+  assert.equal(lateJoiners(g), '[]');
+  assert.equal(graceTick(g, 1000) + graceTick(g, 9999), 0, 'the blipped party keeps its race');
+  markReconn(g, '2');
+  setActiveOrder(g, '[0]');       // recomputed: the ghost is back and car-less
+  assert.deepEqual(JSON.parse(lateJoiners(g)).map((p) => p.peerIndex), [2]);
+  assert.equal(graceTick(g, 10000), 0);
+  assert.equal(graceTick(g, 11500), 1, 'and the deadline runs for them');
+  dispose(g);
+});

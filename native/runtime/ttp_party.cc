@@ -203,6 +203,12 @@ int ttp_room_has_late_joiners(int h) {
   return (rh && rh->flow->hasLateJoiners()) ? 1 : 0;
 }
 
+const char* ttp_room_late_joiners_json(int h) {
+  RoomHandle* rh = room(h);
+  if (!rh) return "[]";
+  return ret(rh, rh->flow->lateJoinersValue());
+}
+
 int ttp_room_grace_tick(int h, double nowMs) {
   RoomHandle* rh = room(h);
   return (rh && rh->flow->graceTick(nowMs)) ? 1 : 0;
