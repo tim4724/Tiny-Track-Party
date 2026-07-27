@@ -318,13 +318,13 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.6rem; letter-spacing: 0.08em; color: #fff;
   border: 3px solid var(--ink);
   border-radius: var(--r); background: var(--danger);
-  box-shadow: 0 6px 0 var(--btn-ledge);
+  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
   touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s;
 }
 #brake-btn.brake.held {
   filter: brightness(1.05);
-  transform: translateY(4px);
-  box-shadow: 0 2px 0 var(--btn-ledge);
+  transform: translateY(var(--btn-sink));
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
 }
 
 /* BRAKE + ITEM sit side by side, equal halves (BRAKE is held, ITEM is a tap).
@@ -336,10 +336,13 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.5rem; letter-spacing: 0.06em; color: #fff;
   border: 3px solid var(--ink);
   border-radius: var(--r); background: var(--item);
-  box-shadow: 0 6px 0 var(--btn-ledge);
+  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
 }
-#action-btn.action.held { transform: translateY(4px); box-shadow: 0 2px 0 var(--btn-ledge); }
+#action-btn.action.held {
+  transform: translateY(var(--btn-sink));
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+}
 #action-btn.action:disabled { opacity: 0.4; filter: grayscale(0.4); }
 
 /* In-race "tilt is off" chip — a tappable pill (reopens the motion-blocked popup),
@@ -358,10 +361,15 @@ input[type=text]:disabled { opacity: 0.6; }
    it visible over the red BRAKE button it can overlap (pointer-events:none, so
    it never eats taps). The colour comes from the .latency--good|ok|bad modifier;
    the bolt only shows under .latency--fastlane (P2P DataChannel carrying the
-   input/ping path). */
+   input/ping path).
+   Right edge: the safe inset ONLY, no design gutter on top of it. It's a readout,
+   not chrome the player aims at, so it hugs the corner rather than sitting on a
+   margin of its own that poked out past the button column (which rides the 12px
+   --edge-right). The sticker's 3px offset shadow would fall off-screen there, so
+   it goes: a half-clipped shadow reads as a rendering glitch. */
 .latency {
   position: fixed;
-  right: calc(0.55rem + var(--safe-right));
+  right: var(--safe-right);
   bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 20;
   display: inline-flex; align-items: center; gap: 3px;
@@ -372,7 +380,6 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--surface);
   border: 2.5px solid var(--ink);
   border-radius: var(--r-pill);
-  box-shadow: var(--shadow-pop);
   pointer-events: none; user-select: none;
 }
 .latency__bolt { display: none; font-size: 0.9em; }
@@ -624,9 +631,13 @@ input[type=text]:disabled { opacity: 0.6; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Mini steer strip — the live HUD track scaled down: paper surface, ink outline,
-   centre marker, and the same livery-colour fill sliding with the phone lean. */
+   centre marker, and the same livery-colour fill sliding with the phone lean.
+   Height is deliberately OFF true scale (the second such break after the border,
+   below): 5.2% of the screen is 10px here, of which the 2px ink border eats 4 —
+   6px of paint for the one thing the card exists to teach. 16px doubles the
+   visible fill, so the sliding bar reads as the steering at a glance. */
 .mini-steer {
-  position: relative; height: 10px; overflow: hidden;   /* real strip is 44px of 844 (5.2%) */
+  position: relative; height: 16px; overflow: hidden;   /* true scale is 10px — 44px of 844 (5.2%) */
   box-sizing: border-box;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r-pill);
 }
@@ -767,6 +778,7 @@ input[type=text]:disabled { opacity: 0.6; }
      buttons' widths are already relative, so only the vertical rhythm restates. */
   .phone-island { height: 7px; top: 3px; }
   .phone-name { top: 21px; font-size: 11px; }
+  .mini-steer { height: 13px; }
   .mini-btn { height: 47px; }
   .phone-inner { gap: 9px; }
 }
