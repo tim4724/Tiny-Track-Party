@@ -219,8 +219,16 @@ private:
     filament::Texture* buildGroundTexture(uint32_t kind);
     filament::Texture* buildShadowMask();
     // Top-down alpha coverage of a loaded car, at the blob quad's exact framing.
+    // The entity overload is what the INSTANCED monster rig needs: gltfio hands
+    // an instanced asset's renderables to the FilamentInstance, not the asset.
     filament::Texture* bakeSilhouette(filament::gltfio::FilamentAsset* asset,
             const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+    filament::Texture* bakeSilhouette(const utils::Entity* entities, size_t count,
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+    // Point a ground blob's decal instance at a mask. `baked` = a silhouette
+    // that came out of bakeSilhouette (single level, already blurred); false is
+    // the mipmapped generic rounded-rect fallback.
+    void setBlobMask(filament::MaterialInstance* mi, filament::Texture* mask, bool baked);
     // Split-screen column count for n cells — SceneRenderer's bestGrid, so the
     // 3D cells land where the DOM HUD puts its labels.
     uint32_t bestGridCols(uint32_t n) const;
@@ -375,6 +383,10 @@ private:
     // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
     std::vector<filament::Texture*> mCarSilhouettes;
     std::vector<Mesh> mCarBlobs;
+    // Each blob's own decal instance, kept so the mask can be swapped for the
+    // monster rig's outline while the truck is up (edge-triggered on blobMask).
+    std::vector<filament::MaterialInstance*> mCarBlobMats;
+    std::vector<filament::Texture*> mCarBlobMasks; // which mask each blob wears now
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1
     // Boost wind streaks (SceneRenderer STREAK_*): 4 thin axial-billboard
@@ -485,6 +497,11 @@ private:
     };
     std::vector<MonsterWheels> mMonsterWheels;
     float mMonsterWheelRadius = 0; // measured off a rear tyre (JS: bbox.y / 2)
+    float mMonsterSkidWidth = 0;   // the rig's tyre-contact width (fat = fat marks)
+    // The RIG's top-down outline, for the ground blob while the truck is up —
+    // painting the little car's silhouette under a lifted four-wheeled chassis
+    // put a car-shaped smudge between tyres that were nowhere near it.
+    filament::Texture* mMonsterSilhouette = nullptr;
     std::vector<Mesh> mRockets;      // in-flight toy rockets (pool of 4)
     std::vector<Mesh> mRocketFlames; // per-rocket blend tail flames
     // Impact bursts: expanding rings where a rocket vanished (hit or whiff).

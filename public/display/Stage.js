@@ -41,13 +41,21 @@ const ITEM_KEYS = Object.keys(ITEM_ICONS);
 // Split-screen layout. The C++ renderer scores column counts exactly this way
 // (TtpRenderer::bestGridCols) — the HUD and the 3D cells must agree on where a
 // cell IS, so the two implementations of this are pinned to each other.
+// PORTRAIT_COST: a racing cell wants to be WIDER than it is tall — the road runs
+// away toward a horizon, so a tall narrow cell crops the track ahead and to the
+// sides and spends the pixels on sky and bonnet. Distance from square alone put
+// 2 players side by side and 3 in a row on a 16:9 screen; this flips them to
+// stacked rows and a 2x2. It only bites when a landscape layout exists at all.
+const PORTRAIT_COST = 2.0;
 function bestGrid(n, W, H) {
   let best = { cols: 1, rows: n, cost: Infinity };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
     const cellAspect = (W / cols) / (H / rows);
     // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
-    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4;
+    // + the landscape bias
+    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4
+      + (cellAspect < 1 ? PORTRAIT_COST : 0);
     if (cost < best.cost) best = { cols, rows, cost };
   }
   return best;

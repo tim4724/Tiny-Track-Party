@@ -1129,21 +1129,33 @@ float TtpRenderer::maxOrbitDist(float radius, float height) const {
     return worst;
 }
 
-// Split-screen column count — SceneRenderer's bestGrid, verbatim: score every
-// column count by how far the resulting cell is from square, plus a real
-// penalty per wasted cell, and take the cheapest. `ceil(sqrt(n))` is NOT the
-// same function: on a 16:9 screen it lays 3 players out 2×2 where the display
-// lays them 3×1, so the 3D cells and the DOM HUD (which uses the JS answer to
-// place every label, place card and steer bar) disagreed about where a cell is.
+// Split-screen column count — SceneRenderer's bestGrid: score every column
+// count by how far the resulting cell is from square, plus a real penalty per
+// wasted cell, and take the cheapest. `ceil(sqrt(n))` is NOT the same function:
+// on a 16:9 screen it lays 3 players out 2×2 where the display lays them 3×1,
+// so the 3D cells and the DOM HUD (which uses the JS answer to place every
+// label, place card and steer bar) disagreed about where a cell is.
+//
+// PORTRAIT_COST is ours, not the JS's. A racing cell wants to be WIDER than it
+// is tall: the road runs away toward a horizon, so the useful information is
+// spread horizontally, and a tall narrow cell crops the very thing the player
+// steers by (the track ahead and to the sides) while spending pixels on sky and
+// bonnet. Distance-from-square alone put two players side by side (0.89:1) and
+// three in a row (0.59:1) on a 16:9 screen; the penalty flips those to stacked
+// rows and a 2×2, both landing at 16:9 cells. It only bites when a landscape
+// layout EXISTS — on an ultrawide, two side-by-side cells are already landscape
+// and stay.
 uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
     if (n == 0) return 1;
+    constexpr float PORTRAIT_COST = 2.0f;
     const float W = (float) mWidth, H = (float) mHeight;
     uint32_t best = 1;
     float bestCost = std::numeric_limits<float>::infinity();
     for (uint32_t cols = 1; cols <= n; cols++) {
         const uint32_t rows = (n + cols - 1) / cols;
         const float cellAspect = (W / cols) / (H / rows);
-        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f;
+        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f
+                + (cellAspect < 1.0f ? PORTRAIT_COST : 0.0f);
         if (cost < bestCost) { bestCost = cost; best = cols; }
     }
     return best;
@@ -1263,6 +1275,19 @@ Texture* TtpRenderer::buildShadowMask() {
     return tex;
 }
 
+// Both blob masks arrive PRE-BLURRED — the baked silhouette through vblur, the
+// generic rounded-rect fallback by construction — so the decal samples once and
+// does no filtering of its own. Only the fallback carries mips.
+void TtpRenderer::setBlobMask(MaterialInstance* mi, Texture* mask, bool baked) {
+    if (!mi || !mask) return;
+    TextureSampler smp(baked ? TextureSampler::MinFilter::LINEAR
+                             : TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("albedo", mask, smp);
+}
+
 // The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
 // puts an orthographic camera over the model, renders a flat white mask on
 // transparent, and reads it back for the blur; the same picture here comes from
@@ -1280,7 +1305,13 @@ Texture* TtpRenderer::buildShadowMask() {
 // an unlit car in an empty scene renders black.
 Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
         const float3& bbMin, const float3& bbMax) {
-    if (!asset || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
+    if (!asset) return nullptr;
+    return bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax);
+}
+
+Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
+        const float3& bbMin, const float3& bbMax) {
+    if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
     // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
     // gaussian resolves its edge in about five quantised steps, and those steps
     // are the banding in the blob's gradient. 256 plus the bake-time blur below
@@ -1306,7 +1337,7 @@ Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
     View* view = mEngine->createView();
     const float cx = (bbMin.x + bbMax.x) * 0.5f, cz = (bbMin.z + bbMax.z) * 0.5f;
     const float h = (bbMax.y - bbMin.y) + 2.0f;
-    scene->addEntities(asset->getEntities(), asset->getEntityCount());
+    scene->addEntities(entities, count);
     cam->setProjection(Camera::Projection::ORTHO, -hw, hw, -hl, hl, 0.01, h);
     cam->lookAt({ cx, bbMin.y - 1.0f, cz }, { cx, bbMax.y, cz }, { 0, 0, -1 });
     view->setScene(scene);
@@ -1323,9 +1354,7 @@ Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
     mRenderer->setClearOptions(co);
     mRenderer->renderStandaloneView(view);
     mRenderer->setClearOptions(prev);
-    for (size_t i = 0; i < asset->getEntityCount(); i++) {
-        scene->remove(asset->getEntities()[i]);
-    }
+    for (size_t i = 0; i < count; i++) scene->remove(entities[i]);
     mEngine->destroy(view);
     mEngine->destroy(rt);
     mEngine->destroyCameraComponent(camEnt);
@@ -3986,6 +4015,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
         if (mbb.max.x > mbb.min.x) {
             mMonsterFootW = mbb.max.x - mbb.min.x;
             mMonsterFootL = mbb.max.z - mbb.min.z;
+            // The rig's own outline, off instance 0 while the whole pool still
+            // sits at rest (loadInstancedProp adds them un-posed; the first
+            // frame is what takes them out of the scene). One bake serves every
+            // car — the truck under them all is the same truck.
+            if (!mMonsterInstances.empty() && mMonsterInstances[0]) {
+                mMonsterSilhouette = bakeSilhouette(mMonsterInstances[0]->getEntities(),
+                        mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max);
+            }
         }
         // The rig's wheels, per instance — these are what turn while the
         // monster is up (the car's own are scaled to nothing). Rest
@@ -4017,8 +4054,11 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                 const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
                 mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
             }
-            // Fat monster tyre: roll rate is travel/radius, so the big wheels
-            // have to turn SLOWER than the car's for the same ground speed.
+            // Fat monster tyre, measured once off a rear wheel — the same box
+            // answers both questions. RADIUS: roll rate is travel/radius, so the
+            // big wheels have to turn SLOWER than the car's for the same ground
+            // speed. CONTACT WIDTH: measured exactly as the car's is
+            // (loadCarAsset), so the rubber it lays down is as fat as it is.
             if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
                 const auto ri = rcmW.getInstance(mw.bl);
                 if (ri) {
@@ -4035,6 +4075,11 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                                 hi = std::max(hi, y);
                             }
                     mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
+                    const float wx = bx.halfExtent.x * 2, wz = bx.halfExtent.z * 2;
+                    if (wx > 0 && wz > 0) {
+                        mMonsterSkidWidth = std::min(0.24f,
+                                std::max(0.06f, std::min(wx, wz)));
+                    }
                 }
             }
         }
@@ -4064,30 +4109,37 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     buildLandmarks(tb);
     buildClutter(tb);
 
-    // Skid pool — SkidMarks.js port. SKID_POOL 3-column stamps (rear L/M/R,
-    // front L/M/R): vertex alpha feathers the width exactly like the JS
-    // texture's 0→1→0 linear gradient. Colour SKID_COLOR 0x241f1c; per-slot
-    // life/peak drive the SKID_LIFE fade down to the SKID_PATINA floor.
+    // Skid pool — SkidMarks.js port. SKID_POOL 4-column stamps (rear L/l/r/R,
+    // front L/l/r/R): the two INNER columns carry the full alpha and the outer
+    // pair sits SKID_FEATHER out at zero, so the rubber reads as one even band
+    // with a soft edge. (It was 3 columns reproducing the JS texture's 0→1→0
+    // linear gradient across the whole width — which painted a dark centre line
+    // with the tyre's edges fading to nothing, nothing like a tyre print.)
+    // Colour SKID_COLOR 0x241f1c; per-slot life/peak drive the SKID_LIFE fade
+    // down to the SKID_PATINA floor.
     if (mBlendMaterial) {
         constexpr uint32_t SKID_POOL = 4096;
         const uint32_t ink0 = packLinear(srgbToLinear(0x241f1c), 1.0f, 0.0f);
-        mSkids.verts.assign(SKID_POOL * 6, { 0, -1000, 0, ink0 });
-        mSkids.idx.resize(SKID_POOL * 12);
+        mSkids.verts.assign(SKID_POOL * 8, { 0, -1000, 0, ink0 });
+        mSkids.idx.resize(SKID_POOL * 18);
         for (uint32_t q = 0; q < SKID_POOL; q++) {
-            const uint32_t b = q * 6; // rL rM rR fL fM fR
-            const uint32_t src[12] = { b, b + 4, b + 1, b, b + 3, b + 4,
-                                       b + 1, b + 5, b + 2, b + 1, b + 4, b + 5 };
-            std::copy(src, src + 12, mSkids.idx.begin() + q * 12);
+            const uint32_t b = q * 8;      // rear b..b+3, front b+4..b+7 (L→R)
+            uint32_t* dst = &mSkids.idx[(size_t) q * 18];
+            for (uint32_t k = 0; k < 3; k++) { // one quad per column pair
+                const uint32_t r = b + k, f = b + 4 + k;
+                const uint32_t src[6] = { r, f + 1, r + 1, r, f, f + 1 };
+                std::copy(src, src + 6, dst + k * 6);
+            }
         }
         MaterialInstance* mi = sceneInstance(mBlendMaterial);
         mi->setPolygonOffset(-2.0f, -2.0f); // JS decal pull: never z-fight the road
         // Chunked, because the pool is drawn whether or not it holds anything:
-        // 4096 slots is 16k triangles submitted in EVERY cell, every frame, and
+        // 4096 slots is 24k triangles submitted in EVERY cell, every frame, and
         // a fresh track has none of them alive. Chunks that hold only parked
         // slots (y = -1000) fall outside every frustum and cull away; the ones
         // that hold real marks are a stretch of track, so a cell only pays for
         // the rubber it can actually see. refreshBounds re-fits them per frame.
-        buildMesh(mSkids, true, mi, 2, 1024);
+        buildMesh(mSkids, true, mi, 2, 1536);
         mWheelTrails.assign(carCount * 4, {});
         mSkidLife.assign(SKID_POOL, 0.0f);
         mSkidPeak.assign(SKID_POOL, 0.0f);
@@ -4364,6 +4416,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
     // crest. The silhouette is a rounded-rect falloff evaluated per vertex.
     if (mBlendMaterial) {
         mCarBlobs.resize(carCount);
+        mCarBlobMats.assign(carCount, nullptr);
+        mCarBlobMasks.assign(carCount, nullptr);
         const float3 INKC = srgbToLinear(0x171513);
         constexpr float AO = 0.35f;                   // see the note above
         for (uint32_t c = 0; c < carCount; c++) {
@@ -4406,16 +4460,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin) {
                     mask = mShadowMaskTex;
                 }
                 if (mask) {
-                    // Both masks arrive PRE-BLURRED now — the baked silhouette
-                    // through vblur, the generic fallback by construction — so
-                    // the decal samples once and does no filtering of its own.
-                    TextureSampler smp(baked ? TextureSampler::MinFilter::LINEAR
-                                             : TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
-                            TextureSampler::MagFilter::LINEAR);
-                    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-                    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-                    mi->setParameter("albedo", mask, smp);
+                    setBlobMask(mi, mask, baked);
+                    mCarBlobMasks[c] = mask;
                 }
+                mCarBlobMats[c] = mi; // the monster swaps this mask per frame
             } else {
                 m.uvs.clear(); // vblend has no uv0 attribute
             }
@@ -6412,9 +6460,25 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 })
                     : m;
             float sx = 1, sz = 1;
-            if (c.monster > 0.5f && mMonsterFootW > 0 && mCarWheels.size() > i) {
+            const bool monsterBlob = c.monster > 0.5f && mMonsterFootW > 0
+                    && mCarWheels.size() > i;
+            if (monsterBlob) {
                 sx = mMonsterFootW / mCarWheels[i].footW;
                 sz = mMonsterFootL / mCarWheels[i].footL;
+            }
+            // …and to the RIG's OUTLINE, not just its size. Scaling the little
+            // car's silhouette up to truck dimensions painted a car-shaped
+            // smudge under a chassis whose four fat tyres are the only things
+            // touching the road. Edge-triggered: setParameter rebinds a sampler.
+            if (mCarBlobMats.size() > i && mCarBlobMats[i]) { // sized with mCarBlobMasks
+                Texture* want = monsterBlob && mMonsterSilhouette
+                        ? mMonsterSilhouette
+                        : (mCarSilhouettes.size() > i && mCarSilhouettes[i])
+                                ? mCarSilhouettes[i] : mShadowMaskTex;
+                if (want && want != mCarBlobMasks[i]) {
+                    setBlobMask(mCarBlobMats[i], want, want != mShadowMaskTex);
+                    mCarBlobMasks[i] = want;
+                }
             }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
@@ -7016,6 +7080,13 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
         constexpr float SKID_LAUNCH_MIN = 0.5f;
         constexpr float SKID_RELEASE = 0.4f; // s from full strength to nothing
+        // Edge softening, as a fraction of the half-width. Small on purpose: the
+        // mark is meant to read as an even band of rubber that happens not to
+        // have a razor edge, NOT as an airbrushed streak.
+        constexpr float SKID_FEATHER = 0.22f;
+        // The stamp's INNER columns — the only four of its eight vertices that
+        // carry ink. Both the write and the fade below reach for exactly these.
+        static constexpr int INK[] = { 1, 2, 5, 6 };
         const uint32_t POOL = (uint32_t) mSkidLife.size();
         bool dirty = false;
         const auto detach = [&](WheelTrail& t) {
@@ -7028,21 +7099,24 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             t.seeded = false;
             t.hasEdge = false;
         };
-        // Positions + peak alpha for slot q: 3 columns (L 0 | mid peak | R 0),
-        // rear edge → front edge (the vertex-alpha feather = the JS texture).
-        const auto writeSlot = [&](int q, const float3& rL, const float3& rM,
-                const float3& rR, const float3& fL, const float3& fM,
-                const float3& fR, float strength) {
-            Vertex* v = &mSkids.verts[(size_t) q * 6];
-            const float3 pts[6] = { rL, rM, rR, fL, fM, fR };
-            for (int k = 0; k < 6; k++) {
+        // Positions + peak alpha for slot q: 4 columns per edge (L 0 | l peak |
+        // r peak | R 0), rear edge → front edge. The inner pair sits
+        // SKID_FEATHER in from the tyre's edge, so everything between them is
+        // one flat tone and only the last sliver ramps off.
+        const auto writeSlot = [&](int q, const float3& rC, const float3& rHalf,
+                const float3& fC, const float3& fHalf, float strength) {
+            Vertex* v = &mSkids.verts[(size_t) q * 8];
+            const float3 rIn = rHalf * (1.0f - SKID_FEATHER);
+            const float3 fIn = fHalf * (1.0f - SKID_FEATHER);
+            const float3 pts[8] = { rC - rHalf, rC - rIn, rC + rIn, rC + rHalf,
+                                    fC - fHalf, fC - fIn, fC + fIn, fC + fHalf };
+            for (int k = 0; k < 8; k++) {
                 v[k].px = pts[k].x; v[k].py = pts[k].y; v[k].pz = pts[k].z;
             }
             const float peak = SKID_MAX_OPACITY * strength;
             const uint32_t a = (uint32_t) std::lround(
                     std::min(1.0f, std::max(0.0f, peak)) * 255.0f);
-            v[1].abgr = (v[1].abgr & 0x00ffffffu) | (a << 24);
-            v[4].abgr = (v[4].abgr & 0x00ffffffu) | (a << 24);
+            for (int k : INK) v[k].abgr = (v[k].abgr & 0x00ffffffu) | (a << 24);
             mSkidLife[q] = SKID_LIFE;
             mSkidPeak[q] = peak;
             dirty = true;
@@ -7090,14 +7164,26 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const mat4f poseSpun = (c.spin != 0)
                     ? m2 * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
                     : m2 * FLIP;
-            const float3 wlocal[4] = { cw.flT, cw.frT, cw.blT, cw.brT };
+            // While the monster transform is up the car's own wheels are scaled
+            // to nothing and the RIG's fat tyres are the ones on the road, so
+            // the trails come off THEIR contact points and carry THEIR width.
+            // The rig rides the same `base` frame the car does (rigPose = flat),
+            // so its rest translations live in this very local space.
+            const bool onRig = c.monster > 0.5f && mMonsterWheels.size() > i
+                    && !mMonsterWheels[i].bl.isNull();
+            const MonsterWheels* mwp = onRig ? &mMonsterWheels[i] : nullptr;
+            const float3 wlocal[4] = {
+                mwp ? mwp->flT : cw.flT, mwp ? mwp->frT : cw.frT,
+                mwp ? mwp->blT : cw.blT, mwp ? mwp->brT : cw.brT,
+            };
             // The four-wheel channel releases on the same taper, so the fronts
             // fade out with the rears instead of stopping mid-mark.
             cw.skidAllHold = (scrub || spinning) ? 1.0f
                     : std::max(0.0f, cw.skidAllHold - input.dt / SKID_RELEASE);
             const bool marksAll = cw.skidAllHold > 0.02f;
             if (!marksAll) { resetWheel(trails[0]); resetWheel(trails[1]); }
-            const float halfW = cw.skidWidth / 2;
+            const float halfW = (mwp && mMonsterSkidWidth > 0
+                    ? mMonsterSkidWidth : cw.skidWidth) / 2;
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
                 float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
@@ -7134,8 +7220,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     if (prev >= 0) mWheelTrails[prev].slot = -1;
                     mSkidOwner[st.slot] = (int) (i * 4 + wi);
                 }
-                writeSlot(st.slot, rL, (rL + rR) * 0.5f, rR, fL, (fL + fR) * 0.5f, fR,
-                        strength);
+                writeSlot(st.slot, (rL + rR) * 0.5f, (rR - rL) * 0.5f,
+                        (fL + fR) * 0.5f, (fR - fL) * 0.5f, strength);
                 st.dir = dir;
                 if (dist >= SKID_SEG_MIN) {
                     detach(st);
@@ -7152,9 +7238,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float a = mSkidPeak[q] * (SKID_PATINA + (1.0f - SKID_PATINA) * k);
             const uint32_t au = (uint32_t) std::lround(
                     std::min(1.0f, std::max(0.0f, a)) * 255.0f);
-            Vertex* v = &mSkids.verts[(size_t) q * 6];
-            v[1].abgr = (v[1].abgr & 0x00ffffffu) | (au << 24);
-            v[4].abgr = (v[4].abgr & 0x00ffffffu) | (au << 24);
+            Vertex* v = &mSkids.verts[(size_t) q * 8];
+            for (int k : INK) v[k].abgr = (v[k].abgr & 0x00ffffffu) | (au << 24);
             dirty = true;
         }
         if (dirty) {
@@ -7505,6 +7590,9 @@ void TtpRenderer::releaseScene() {
     mConeStates.clear();
     mSignMeshes.clear();
     mCarBlobs.clear();
+    // Scene-scope instances (sceneInstance owns them) — drop the handles only.
+    mCarBlobMats.clear();
+    mCarBlobMasks.clear();
     mPlates.clear();
     mBoostDisks.clear();
     mStreaks.clear();
@@ -7550,6 +7638,8 @@ void TtpRenderer::releaseScene() {
     mMonsterFootW = mMonsterFootL = 0;
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
+    mMonsterSkidWidth = 0;
+    if (mMonsterSilhouette) { mEngine->destroy(mMonsterSilhouette); mMonsterSilhouette = nullptr; }
     mBoxScale = 1.0f;
 }
 
