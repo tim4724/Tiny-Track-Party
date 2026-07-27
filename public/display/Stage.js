@@ -78,9 +78,30 @@ export class Stage {
     // buffer to show a ~500px thumbnail — and the gallery shows a grid of them.
     // The gallery passes dpr=0.5 and strips it from the card's "open" link, so a
     // real tab stays full-res. Guarded > 0: dpr=0 would allocate a 1×1 buffer.
+    // Headless automation (E2E) gets its own, far harder cap for a different
+    // reason: there the scene rasterizes through SwiftShader, where the CPU IS
+    // the fill rate and cost is linear in pixels. 0.25 puts a 1280x720 display
+    // on a 320x180 buffer (split cells 160x90), which is 1/16th the fragments.
+    //
+    // 0.25 is the measured KNEE, not a guess. cup-series, the heaviest spec
+    // (4 chained tracks, split-screen), two runs each:
+    //   dpr 1     78.0 s   (and 1.3 m before the shadow bake was skipped too)
+    //   dpr 0.5   56.7 / 45.9 s
+    //   dpr 0.25  41.7 / 41.9 s   <- here
+    //   dpr 0.125 40.5 / 43.7 s   <- no further gain, so no reason to take on
+    //                                degenerate-viewport risk for it
+    // Below the knee the remaining time is not rasterization at all: it is the
+    // wasm compile, the GLB fetches, scene build, the sim and Playwright's own
+    // waits. Nothing is lost at 0.25 — the suite asserts DOM and engine state,
+    // never pixels (it has no screenshot comparisons), and every render path
+    // still executes at a sane resolution. An explicit ?dpr= still wins, so the
+    // gallery's 0.5 and a manual override behave exactly as before.
+    const automation = this._automation =
+        typeof navigator !== 'undefined' && !!navigator.webdriver;
     const dprCap = parseFloat(new URLSearchParams(location.search).get('dpr'));
     this._dpr = Math.min(window.devicePixelRatio || 1,
-                         Number.isFinite(dprCap) && dprCap > 0 ? dprCap : 2);
+                         Number.isFinite(dprCap) && dprCap > 0 ? dprCap
+                                                               : (automation ? 0.25 : 2));
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
@@ -100,6 +121,10 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    // The other half of the automation budget (see the DPR cap in the ctor):
+    // drop the per-track shadow bake. Must be set before any setTrack, since
+    // the map is baked into the scene at build time.
+    if (this._automation) this.display.shadows(false);
     return this.display;
   }
 

@@ -127,8 +127,11 @@ const visible = (sel) => `${sel}:not(.hidden)`;
 // busy box the steady frames are slow too, blocking the 1 Hz countdown setInterval
 // so the race starts many seconds late. The countdown is ~3 s on real hardware;
 // this generous budget absorbs the software-render stall without masking a
-// genuinely stuck start. (Disabling the per-frame shadow pass under automation —
-// see environment.js — is what keeps that stall to seconds rather than tens.)
+// genuinely stuck start. (Skipping the sun's shadow bake under automation is
+// what keeps that stall to seconds rather than tens: Stage.js turns it off on
+// navigator.webdriver, through Display.shadows → ttp_display_shadows. The JS
+// renderer did the same in environment.js, which the Filament port deleted
+// along with the rest of that file — this replaces it.)
 async function waitForRacing(displayPage, timeout = 45000) {
   await displayPage.waitForFunction(
     () => window.__session() && window.__session().racing, null, { timeout });
