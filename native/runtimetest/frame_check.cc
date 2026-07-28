@@ -684,7 +684,7 @@ void testCellHud(const GameTrack& track) {
   d.cells = {P0, P2};
 
   {
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(h->hudCount, 2, "one cell overlay per cell");
     checkF(h->uiScale, 2.0f, "uiScale reaches the frame");
@@ -702,7 +702,7 @@ void testCellHud(const GameTrack& track) {
   // goes, and ONLY that cell's — the mask is per cell, in cell order.
   {
     d.cardMask = 0x2;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(hud[0].flags, TTP_HUD_STEER_BAR, "a card over cell 1 leaves cell 0 alone");
     checkU(hud[1].flags, 0, "a card over cell 1 takes cell 1's bar");
@@ -715,7 +715,7 @@ void testCellHud(const GameTrack& track) {
   // the pause glass says the player is steering, which they are not.
   {
     d.hold = true;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkF(hud[0].steer, 0.0f, "a held field centres its bars");
     checkU(hud[0].flags, TTP_HUD_STEER_BAR, "…without hiding them");
@@ -726,7 +726,7 @@ void testCellHud(const GameTrack& track) {
   // ?dividers=0 — the seams go, the bars stay.
   {
     d.dividers = false;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
     checkU(h->flags & TTP_FRAME_DIVIDERS, 0, "the divider flag follows the toggle");
     checkU(h->hudCount, 2, "…and takes nothing else with it");
     d.dividers = true;
@@ -738,7 +738,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, P2};
     m.cells = {P0, Id::Str("stranger")};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseWidthFrac(m));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(h->hudCount, 2, "an unknown cell still occupies its cell");
     check(hud[1].car < 0, "…with no roster slot behind it");
@@ -753,7 +753,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, GHOST};
     m.cells = {P0, GHOST};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseWidthFrac(m));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     check(hud[1].car == 1, "a car-less roster seat still names its slot");
     checkF(hud[1].steer, 0.0f, "…and reads centred");
@@ -766,7 +766,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, GHOST};
     m.cells = {GHOST};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseWidthFrac(m));
     checkU(h->viewCount, 1, "premise: this is the overview fallback");
     checkU(h->hudCount, 0, "the overview carries no cell overlays");
   }
