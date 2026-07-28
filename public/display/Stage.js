@@ -610,6 +610,13 @@ export class Stage {
     if (!this._running) {
       this._running = true;
       this._last = performance.now();
+      // A cold loop pays the boot costs again (shader compilation, the first
+      // uploads), and its opening delta is not even a cadence: _last is a wall
+      // clock while the rAF behind it carries the next vsync's timestamp, so
+      // that delta is an arbitrary fraction of a period. Real for dt — the time
+      // did pass — but meaningless as a frame rate, so the HUD discards the
+      // whole warm-up rather than reporting it.
+      this.perf.warmUp();
       requestAnimationFrame((t) => this._loop(t));
     }
   }

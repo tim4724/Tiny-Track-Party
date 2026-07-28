@@ -6,14 +6,29 @@
 // draws while hidden), so turning it off for release is a one-line change here —
 // gate the show() below on whatever release signal exists at that point.
 //
+// THE BAR IS 60 fps, FLAT. The budget is a CONSTANT 16.7 ms and the panel's
+// refresh rate is deliberately not detected, because nothing here needs it: a
+// percentage is cost ÷ budget, and a fixed denominator serves that (and the
+// missed-budget count) exactly as well as a measured one. An earlier version
+// did detect it — a snap table, a k>1 harmonic pass, a rank statistic over a
+// 4 s ring to survive the junk interval Stage.start() feeds in — and all of it
+// existed to print "/144" and to pick a denominator. It is gone. 60+ is good,
+// below is bad, and a 144 Hz monitor no longer scores a perfectly good 16.7 ms
+// frame as 240% of budget and turns the whole readout red.
+//
+// KNOWN AND ACCEPTED: a 50 Hz TV (or a 30 Hz HDMI mode) presents below 60 no
+// matter how idle the machine is, so it sits amber permanently. The cost and
+// drop numbers beside it still read healthy, so the picture stays legible —
+// and that is cheaper than the detector was.
+//
 // THREE CLOCKS, and they do not measure the same thing:
 //
 //   • the rAF interval — the CADENCE the browser presented at. Under vsync it
 //     is a plateau (16.7 ms and nothing between), so on its own it says nothing
 //     about headroom: 60 fps is equally true at 10% and 95% GPU load. What it
-//     does say is whether a vsync was MISSED, which is the part a human feels.
-//     Reported here as presented/target + a drop count, never as a mean ms
-//     (a mean at vsync is just 1000/fps printed a second time).
+//     does say is whether a budget was MISSED, which is the part a human feels.
+//     Reported here as fps + a drop count, never as a mean ms (a mean at vsync
+//     is just 1000/fps printed a second time).
 //
 //   • CPU — ttp_display_profile()'s total: the wasm building this frame's input
 //     from the live Game and issuing its GL. Measured ~0.9 ms for a 4-cell race
@@ -23,9 +38,12 @@
 //
 //   • GPU — EXT_disjoint_timer_query_webgl2 wrapped around ttp_display_frame.
 //     This is the number nothing else in the page can see: the same frame that
-//     costs 0.8 ms of CPU costs 3.4 ms on the GPU. Shown in ms AND as a % of
-//     the vsync budget, because "GPU fps" is not a thing under vsync — it would
-//     just be the same plateau. Headroom is the gradient worth watching.
+//     costs 0.8 ms of CPU costs 3.4 ms on the GPU.
+//
+// BOTH COSTS ARE SHOWN AS % OF BUDGET USED, low is good — the same sense as the
+// scope bars, where height IS share of budget. They do NOT sum: the CPU builds
+// frame N's commands while the GPU is still drawing N-1, so 30% + 30% is a
+// comfortable frame, not a 60% one. Whichever is larger is the one to cut.
 //
 // TWO SOURCES THAT LOOK RIGHT AND ARE NOT, so nobody re-derives them:
 //   • Filament's Renderer::getFrameInfoHistory().gpuFrameDuration. On emscripten
@@ -42,43 +60,56 @@
 // number is arrival → GPU complete → +1 vsync, and its ground truth is a 240 fps
 // camera pointed at the TV.
 
-const CAP = 240;            // frames kept (4 s at 60 Hz) — also the period window
+const CAP = 240;            // frames kept in the ring (4 s at 60 Hz)
 const STRIP = 180;          // columns drawn in the scope (3 s at 60 Hz)
 const STRIP_H = 34;         // scope height, CSS px
 const STAT_FRAMES = 120;    // frames folded into the percentiles
 const TEXT_MS = 250;        // text refresh cadence
 const MAX_PENDING = 8;      // in-flight GPU queries before we assume a stall
 
-// Refresh rates we snap the measured vsync period to. A displayed target of
-// "60" beats "59.4", and the snap is what lets a solidly GPU-bound run still
-// name the right target: locked at 33.3 ms nothing here matches, so the k=2
-// pass finds 16.65 → 60 Hz and reports one dropped vsync per frame, which is
-// the truth. (A display genuinely running at 30 Hz reads as 60 Hz with constant
-// drops. That is a fair description of what it feels like.)
-const REFRESH_HZ = [240, 165, 144, 120, 100, 90, 75, 72, 60, 50, 48];
+// The bar, and the denominator of every percentage here.
+export const GOOD_HZ = 60;
+export const BUDGET_MS = 1000 / GOOD_HZ;
+// fps wobbles by a frame or so at a hard 60 Hz vsync, so "on the bar" has to be
+// a band rather than an equality, and it takes a few presents before a rate
+// means anything at all.
+const FPS_OK = GOOD_HZ - 3;
+const FPS_MIN_STAMPS = 10;
 
-// Exported for tests: this is the one piece of judgement in the file, and the
-// k>1 pass is exactly the case that is hard to get right by staring at it.
-export function snapPeriod(minMs) {
-  if (!(minMs > 0) || !Number.isFinite(minMs)) return 1000 / 60;
-  // k ascending, and k=1 wins outright when it matches: 16.7 ms must resolve to
-  // 60 Hz, never to "half of 120".
-  for (let k = 1; k <= 3; k++) {
-    const p = minMs / k;
-    for (const hz of REFRESH_HZ) {
-      const c = 1000 / hz;
-      if (Math.abs(c - p) <= 0.06 * c) return c;
-    }
-  }
-  return minMs; // an unrecognised (or unthrottled, e.g. headless) cadence
+// Budgets missed by a frame that took `interval`. Rounding is right rather than
+// flooring: presents land on vsyncs, so a 25 ms interval is a frame that
+// slipped one budget, not 1.5 of them.
+export function budgetsMissed(interval, budget = BUDGET_MS) {
+  if (!(budget > 0) || !(interval > 0)) return 0;
+  return Math.max(0, Math.round(interval / budget) - 1);
 }
 
-// Vsyncs missed by a frame that took `interval` on a display refreshing every
-// `period`. Rounding is right rather than flooring: presents land ON vsyncs, so
-// a 25 ms interval at 60 Hz is a frame that slipped one, not 1.5 of them.
-export function vsyncDrops(interval, period) {
-  if (!(period > 0) || !(interval > 0)) return 0;
-  return Math.max(0, Math.round(interval / period) - 1);
+// BOOT IS NOT A FRAME RATE. Measured here, the first four presents of a run
+// cost 75.5, 17, 50 and 58 ms — shader compilation, pipeline warm-up, the first
+// texture uploads — and every frame after them is a clean 8.3. Those four miss
+// ~9 budgets between them, and since fps and the drop count are BOTH windowed
+// over the trailing second, they hold the readout amber for a full second after
+// the game is already running perfectly. Nobody can act on that, and a HUD that
+// cries wolf at every boot is one you stop reading.
+//
+// So a run is WARMING until it delivers WARMUP_RUN frames in a row that miss no
+// budget, and warming frames are discarded rather than recorded. It has to be a
+// RUN, not one frame: boot is bursty rather than monotonic — that 17 ms second
+// frame is already inside budget, and taking it as the all-clear would let the
+// 50 and 58 ms frames behind it straight into the window, which is the whole
+// problem again.
+//
+// The condition scales itself. It ends on frame 7 here, later on a slower
+// machine, and after exactly WARMUP_RUN frames on a 50 Hz TV (a 20 ms present
+// misses no 16.7 ms budget). WARMUP_MAX is the backstop — a machine that cannot
+// string three good frames together in 30 is not warming up, it is slow, and it
+// must be shown as slow.
+const WARMUP_RUN = 3;
+const WARMUP_MAX = 30;
+
+// Exported for tests: the updated count of consecutive frames that were fine.
+export function warmupRun(interval, run) {
+  return budgetsMissed(interval) === 0 ? run + 1 : 0;
 }
 
 function pct(sorted, p) {
@@ -100,7 +131,9 @@ export class PerfHud {
     this._frames = [];        // ring of { interval, cpu, gpu, drops }, slot = n % CAP
     this._n = 0;              // absolute frame counter (never wraps)
     this._stamps = [];        // rAF timestamps in the trailing second
-    this._periodMs = 1000 / 60;
+    this._warming = true;     // discarding this run's warm-up frames
+    this._warmRun = 0;        // consecutive good frames seen
+    this._warmSeen = 0;
     this._cells = 0;
     this._lastText = 0;
     this._disjoints = 0;
@@ -118,7 +151,7 @@ export class PerfHud {
       + 'color:#7CFC8A;background:rgba(0,0,0,0.58);padding:5px 7px 4px;border-radius:7px;'
       + 'pointer-events:none;white-space:pre;text-align:left;letter-spacing:.2px;';
     const text = document.createElement('div');
-    text.textContent = 'perf: waiting for a frame';
+    text.textContent = 'perf: warming up';
     const scope = document.createElement('canvas');
     scope.width = STRIP * 2;          // 2× backing store: the scope is 1 CSS px
     scope.height = STRIP_H * 2;       // per frame, and a hairline needs the pixels
@@ -150,18 +183,29 @@ export class PerfHud {
     this._visible = on;
     this._el.style.display = on ? '' : 'none';
     if (!on) this._dropQueries();
-    else { this._frames = []; this._n = 0; this._stamps = []; } // stale history is worse than none
+    else { this._frames = []; this._n = 0; this._stamps = []; this.warmUp(); } // stale history is worse than none
   }
+
+  // Re-arm the warm-up discard. Called when the rAF loop starts from cold: a
+  // stopped-then-restarted loop pays the same first-frame costs a boot does.
+  // Costs WARMUP_RUN frames when the renderer is already warm, which is the
+  // price of not having to know whether it is.
+  warmUp() { this._warming = true; this._warmRun = 0; this._warmSeen = 0; }
 
   // ---- per-frame hooks --------------------------------------------------------
 
-  // One real frame's cadence (rawMs = the unclamped rAF delta). The drop count
-  // is measured against the period estimate as it stood at the last text update
-  // (sample() refreshes it), so it can lag a refresh-rate change by up to
-  // TEXT_MS. That is invisible next to the window the percentiles cover.
+  // One real frame's cadence (rawMs = the unclamped rAF delta).
   tick(t, rawMs) {
     if (!this._visible) return;
-    const drops = vsyncDrops(rawMs, this._periodMs);
+    // Discard the run's warm-up entirely — recording it would describe the
+    // shader compiler, not the game (see warmupRun). The frame that completes
+    // the run is itself a good one, so it is the first one kept.
+    if (this._warming) {
+      this._warmRun = warmupRun(rawMs, this._warmRun);
+      if (this._warmRun < WARMUP_RUN && ++this._warmSeen < WARMUP_MAX) return;
+      this._warming = false;
+    }
+    const drops = budgetsMissed(rawMs);
     this._frames[this._n % CAP] = { interval: rawMs, cpu: null, gpu: null, drops };
     this._n++;
     this._stamps.push(t);
@@ -279,8 +323,9 @@ export class PerfHud {
 
   // Everything the HUD shows, as data. Also the scripted-sweep surface
   // (window.__perf.sample()) — a GPU budget probe across the catalogue is just
-  // this, once per track. NOT a pure read: it re-estimates the vsync period,
-  // which is what every other number here is measured against.
+  // this, once per track. The ms percentiles stay in here even though the
+  // readout prints only percentages: a sweep wants the resolution, a glance
+  // does not.
   sample() {
     const w = this._window(STAT_FRAMES);
     const stat = (key) => {
@@ -288,23 +333,31 @@ export class PerfHud {
       return a.length ? { p50: pct(a, 0.5), p95: pct(a, 0.95), max: a[a.length - 1], n: a.length }
                       : { p50: null, p95: null, max: null, n: 0 };
     };
-    // The period estimate looks at the whole ring: a longer window is likelier to
-    // contain one frame that actually hit vsync.
     const all = this._window(CAP);
-    let min = Infinity;
-    for (const f of all) if (f.interval > 0 && f.interval < min) min = f.interval;
-    this._periodMs = snapPeriod(min);
-    const gpu = stat('gpu');
-    const target = Math.round(1000 / this._periodMs);
+    const gpu = stat('gpu'), cpu = stat('cpu');
+    const share = (ms) => (ms == null ? null : ms / BUDGET_MS);
+    // A RATE over the span actually sampled, not a count of what is in the
+    // trailing second: during the first second the window is short, and a bare
+    // count reads as a collapsed frame rate for exactly as long as it takes a
+    // human to look at it.
+    const span = this._stamps.length > 1
+        ? this._stamps[this._stamps.length - 1] - this._stamps[0] : 0;
     return {
-      fps: this._stamps.length,
-      target,
-      periodMs: this._periodMs,
-      // The last second's worth of frames — one refresh period each, so `target`
-      // of them. slice clamps on its own when fewer have been recorded.
-      drops: all.slice(-target).reduce((s, f) => s + f.drops, 0),
-      gpu, cpu: stat('cpu'), frame: stat('interval'),
-      budget: gpu.p50 == null ? null : gpu.p50 / this._periodMs,
+      fps: span > 0 ? Math.round((this._stamps.length - 1) * 1000 / span) : 0,
+      // Whether fps is meaningful yet. Judging the bar off two presents would
+      // paint the HUD red for the first tenth of a second of every run.
+      fpsReady: this._stamps.length >= FPS_MIN_STAMPS && span > 0,
+      good: GOOD_HZ,
+      budgetMs: BUDGET_MS,
+      // The last second's worth of frames. _stamps IS that set (it is pruned to
+      // the trailing second every tick), so its length is the exact count.
+      // slice clamps on its own.
+      drops: all.slice(-Math.max(1, this._stamps.length))
+                .reduce((s, f) => s + f.drops, 0),
+      gpu, cpu, frame: stat('interval'),
+      // Share of the 16.7 ms budget CONSUMED, 0..1+ — low is good. Not additive:
+      // the CPU runs a frame ahead of the GPU.
+      gpuUsed: share(gpu.p50), gpuUsedP95: share(gpu.p95), cpuUsed: share(cpu.p50),
       gpuTimer: this._gpuState,
       disjoints: this._disjoints,
       pixels: [this._canvas.width, this._canvas.height],
@@ -315,49 +368,48 @@ export class PerfHud {
 
   _render() {
     const s = this.sample();
-    const n1 = (v) => (v == null ? '—' : v.toFixed(1));
-    const gpuLine = s.gpuTimer === 'ext'
-        ? `gpu ${n1(s.gpu.p50)} (p95 ${n1(s.gpu.p95)}) · ${s.budget == null ? '—' : Math.round(s.budget * 100) + '%'}`
-        : `gpu n/a · ${s.gpuTimer === 'unavailable' ? 'no timer ext' : s.gpuTimer}`;
+    const p = (v) => (v == null ? '—' : Math.round(v * 100) + '%');
+    const gpuPart = s.gpuTimer === 'ext' ? `gpu ${p(s.gpuUsed)}`
+        : `gpu ${s.gpuTimer === 'unavailable' ? 'no timer ext' : s.gpuTimer}`;
     this._text.textContent = [
-      `${s.fps}/${s.target} fps · ${s.drops} drop${s.drops === 1 ? '' : 's'}`,
-      gpuLine,
-      `cpu ${n1(s.cpu.p50)} · frame p95 ${n1(s.frame.p95)}`,
+      `${s.fps} fps · ${s.drops} drop${s.drops === 1 ? '' : 's'}`,
+      `${gpuPart} · cpu ${p(s.cpuUsed)}`,
       `${s.pixels[0]}×${s.pixels[1]} · ${this._cells || 'no'} cell${this._cells === 1 ? '' : 's'}`
     ].join('\n');
-    // Health is the GPU's p95 against the budget, plus dropped vsyncs. Both are
-    // "what you feel"; the p50 is what you tune against. With no GPU timer the
-    // fallback is the rAF interval's overshoot past one period, which lands on
-    // the same scale: 1.0 means the slow frames are taking two refreshes.
-    const over = s.gpu.p95 != null ? s.gpu.p95 / s.periodMs : (s.frame.p95 / s.periodMs) - 1;
-    this._el.style.color = (s.drops > 2 || over > 1) ? '#FF6B6B'
-        : (s.drops > 0 || over > 0.7) ? '#FFD166' : '#7CFC8A';
-    this._drawScope(s.periodMs);
+    // Health: the rate against the bar, dropped budgets, and the GPU's p95 —
+    // the p95 is what you feel, the p50 printed above is what you tune against.
+    // With no GPU timer the fallback is the rAF interval's overshoot past one
+    // budget, which lands on the same scale: 1.0 means the slow frames take two.
+    const over = s.gpuUsedP95 != null ? s.gpuUsedP95 : (s.frame.p95 / BUDGET_MS) - 1;
+    const rate = s.fpsReady ? s.fps : GOOD_HZ;  // an unknown rate is not a bad one
+    this._el.style.color = (s.drops > 2 || over > 1 || rate < GOOD_HZ * 0.8) ? '#FF6B6B'
+        : (s.drops > 0 || over > 0.7 || rate < FPS_OK) ? '#FFD166' : '#7CFC8A';
+    this._drawScope();
   }
 
   // The scope: one column per frame, newest at the right. GPU as a filled bar,
-  // CPU as a dot trace over it, and a tick on the baseline for every dropped
-  // vsync.
+  // CPU as a dot trace over it, and a tick on the baseline for every missed
+  // budget period.
   //
-  // FULL HEIGHT IS ONE VSYNC PERIOD, so a bar's height IS its share of the
-  // budget and the top edge is the cliff. (Scaling to 2× budget instead draws a
-  // typical 40% frame as 4 px of 34 — measured, and unreadable. Headroom is the
-  // thing being watched; the strip should spend its pixels on it.) An
-  // over-budget frame clamps at the top and turns red, which is where the drop
-  // ticks under it start appearing anyway.
-  _drawScope(period) {
+  // FULL HEIGHT IS ONE FRAME BUDGET, so a bar's height IS the percentage on the
+  // line above and the top edge is the cliff. (Scaling to 2× budget instead
+  // draws a typical 40% frame as 4 px of 34 — measured, and unreadable. The
+  // gradient is the thing being watched; the strip should spend its pixels on
+  // it.) An over-budget frame clamps at the top and turns red, which is where
+  // the drop ticks under it start appearing anyway.
+  _drawScope() {
     const ctx = this._ctx;
     const H = STRIP_H;
     ctx.clearRect(0, 0, STRIP, H);
     const w = this._window(STRIP);
     const x0 = STRIP - w.length;
-    const y = (ms) => H - Math.min(H, (ms / period) * H);
+    const y = (ms) => H - Math.min(H, (ms / BUDGET_MS) * H);
     ctx.fillStyle = 'rgba(255,255,255,0.22)';   // half-budget reference
-    ctx.fillRect(0, y(period / 2), STRIP, 0.5);
+    ctx.fillRect(0, y(BUDGET_MS / 2), STRIP, 0.5);
     for (let i = 0; i < w.length; i++) {
       const f = w[i], x = x0 + i;
       if (f.gpu != null) {
-        ctx.fillStyle = f.gpu > period ? 'rgba(255,107,107,0.9)' : 'rgba(79,163,247,0.85)';
+        ctx.fillStyle = f.gpu > BUDGET_MS ? 'rgba(255,107,107,0.9)' : 'rgba(79,163,247,0.85)';
         ctx.fillRect(x, y(f.gpu), 1, H - y(f.gpu));
       }
       if (f.cpu != null) {

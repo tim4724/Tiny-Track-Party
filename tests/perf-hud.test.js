@@ -1,10 +1,14 @@
 'use strict';
-// The perf HUD's two pure decisions: what the display's refresh period IS, and
-// how many vsyncs a frame missed. Everything else in PerfHud.js is DOM, GL and
-// drawing, which this cannot reach — but these two are what every number the
-// HUD prints is measured against, so a wrong answer here mislabels the whole
-// readout (a 60 Hz TV reported as 30 Hz would show a comfortable frame as
-// "50% budget, no drops" while the player watches it stutter).
+// The perf HUD's one pure decision: how many frame budgets a frame missed.
+// Everything else in PerfHud.js is DOM, GL and drawing, which this cannot reach.
+//
+// There used to be a second decision here — what the display's refresh rate IS,
+// via a snap table and a rank statistic over the frame ring. It is gone, and
+// deliberately: the bar is a flat 60 fps, so every number the HUD prints is
+// measured against a CONSTANT 16.7 ms and there is nothing left to detect. The
+// detector's own boot bug (one junk interval from Stage.start() naming a 476 Hz
+// display) went with it. git history has it if a per-panel budget is ever
+// wanted back.
 //
 // Importing the module is safe in Node: the class touches document/window only
 // in its constructor, never at module scope.
@@ -16,55 +20,66 @@ const { pathToFileURL } = require('node:url');
 const MOD = pathToFileURL(
     path.join(__dirname, '..', 'public/display/render/PerfHud.js')).href;
 
-test('snapPeriod names the refresh rate a measured cadence belongs to', async () => {
-  const { snapPeriod } = await import(MOD);
-  const hz = (ms) => Math.round(1000 / snapPeriod(ms));
-
-  // The common displays, at their exact periods and with real jitter on top.
-  assert.equal(hz(1000 / 60), 60);
-  assert.equal(hz(16.61), 60, 'a jittery 60 Hz frame is still 60 Hz');
-  assert.equal(hz(17.2), 60);
-  assert.equal(hz(1000 / 120), 120);
-  assert.equal(hz(8.1), 120, 'headless Chrome ran at 8.1 ms and that is 120 Hz');
-  assert.equal(hz(1000 / 144), 144);
-  assert.equal(hz(1000 / 50), 50, 'a 50 Hz TV is a real thing in Europe');
-
-  // 16.7 must resolve at k=1. If the k>1 pass ever ran first (or the loops were
-  // nested the other way), a 60 Hz display would report a 120 Hz target and
-  // every frame would look like a dropped one.
-  assert.equal(hz(1000 / 60), 60);
-
-  // A solidly GPU-bound run: every single frame takes two vsyncs, so the FASTEST
-  // frame in the window is 33.3 ms and no refresh rate matches it directly. The
-  // k=2 pass recovers the real display, which is what makes the drop count
-  // truthful instead of the HUD quietly redefining 30 fps as the target.
-  assert.equal(hz(1000 / 30), 60);
-  assert.equal(hz(1000 / 40), 120, 'three vsyncs per frame on a 120 Hz panel');
-
-  // Nothing plausible: report what was measured rather than inventing a target.
-  // (An unthrottled context — headless with vsync off — lands here.)
-  assert.equal(snapPeriod(7.4), 7.4);
-  // Degenerate input must not poison the budget maths downstream.
-  assert.equal(hz(0), 60);
-  assert.equal(hz(-5), 60);
-  assert.equal(hz(NaN), 60);
-  assert.equal(hz(Infinity), 60);
+test('the frame budget is a flat 60 fps, not the panel', async () => {
+  const { BUDGET_MS, GOOD_HZ } = await import(MOD);
+  assert.equal(GOOD_HZ, 60);
+  assert.ok(Math.abs(BUDGET_MS - 16.6667) < 0.001);
 });
 
-test('vsyncDrops counts missed presents, not fractions of one', async () => {
-  const { vsyncDrops } = await import(MOD);
-  const P = 1000 / 60;
+test('warm-up needs a RUN of good frames, not one', async () => {
+  const { warmupRun } = await import(MOD);
+  const RUN = 3;   // WARMUP_RUN
+  // Fold a boot sequence the way tick() does; returns the index of the first
+  // frame that gets RECORDED (everything before it is discarded).
+  const firstKept = (seq) => {
+    let run = 0;
+    for (let i = 0; i < seq.length; i++) {
+      run = warmupRun(seq[i], run);
+      if (run >= RUN) return i;
+    }
+    return -1;
+  };
 
-  assert.equal(vsyncDrops(P, P), 0);
-  assert.equal(vsyncDrops(16.9, P), 0, 'jitter inside one period is not a drop');
-  assert.equal(vsyncDrops(2 * P, P), 1);
-  assert.equal(vsyncDrops(3 * P, P), 2);
+  // The measured boot of this game: shader compilation and first uploads, then
+  // a clean cadence. Recording any of those four would hold the readout amber
+  // for a full second after the game is already perfect, because fps and drops
+  // are both windowed over the trailing second.
+  const boot = [75.5, 17, 50, 58, 8.7, 8.3, 8.3, 8.3];
+  assert.equal(firstKept(boot), 6, 'all four boot frames are discarded');
+
+  // Why a run and not a single frame: boot is bursty. That 17 ms frame at index
+  // 1 is already inside budget, so a one-frame all-clear would start recording
+  // there and let the 50 and 58 ms frames straight into the window.
+  assert.equal(warmupRun(17, 0), 1, '17 ms misses no budget on its own...');
+  assert.equal(warmupRun(50, 1), 0, '...but the 50 ms behind it resets the run');
+
+  // A steady cadence needs exactly RUN frames, whatever the panel: a 50 Hz TV
+  // never "warms up" indefinitely just because it cannot reach 60.
+  assert.equal(firstKept([20, 20, 20, 20]), 2, 'a 50 Hz TV is warm in 3 frames');
+  assert.equal(firstKept([8.3, 8.3, 8.3]), 2, 'and so is an already-warm loop');
+
+  // A machine that never strings three together is not warming up, it is slow.
+  // tick()'s WARMUP_MAX backstop is what stops hiding that; here it just never
+  // resolves on its own.
+  assert.equal(firstKept(new Array(40).fill(200)), -1);
+});
+
+test('budgetsMissed counts missed budgets, not fractions of one', async () => {
+  const { budgetsMissed, BUDGET_MS } = await import(MOD);
+  const B = BUDGET_MS;
+
+  assert.equal(budgetsMissed(B), 0);
+  assert.equal(budgetsMissed(16.9), 0, 'jitter inside one budget is not a drop');
+  assert.equal(budgetsMissed(2 * B), 1);
+  assert.equal(budgetsMissed(3 * B), 2);
   // A present lands ON a vsync, so 25 ms is one slipped frame reported late,
   // not "1.5 frames" floored away to zero.
-  assert.equal(vsyncDrops(25, P), 1);
-  // A frame FASTER than the period (the period estimate lagging a mode change)
-  // must never report negative drops.
-  assert.equal(vsyncDrops(4, P), 0);
-  assert.equal(vsyncDrops(0, P), 0);
-  assert.equal(vsyncDrops(16, 0), 0, 'no period yet = nothing to have missed');
+  assert.equal(budgetsMissed(25), 1);
+  // Anything at or above the bar is free: on a 144 Hz panel a 6.9 ms frame must
+  // not read as a fraction of a drop, and on a 120 Hz one 8.3 ms is simply fine.
+  assert.equal(budgetsMissed(1000 / 144), 0);
+  assert.equal(budgetsMissed(1000 / 120), 0);
+  assert.equal(budgetsMissed(4), 0, 'never negative');
+  assert.equal(budgetsMissed(0), 0);
+  assert.equal(budgetsMissed(16, 0), 0, 'no budget = nothing to have missed');
 });
