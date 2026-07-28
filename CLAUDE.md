@@ -81,7 +81,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   UI toolkit the HUD exists for, and both are pinned to a cell whose geometry is
   already C++. It keeps OUT the place/lap ordinal, the name chip, the item slot,
   the FINISHED card and the reconnect QR. Moving them also made the whole
-  remaining HUD a ~6 Hz poll: nothing in the DOM is written per frame. They are
+  remaining HUD a ~6 Hz poll: nothing in the DOM is written per frame. THAT SAME
+  TICK is now the only thing on the race loop besides the frame itself — the
+  phones' ITEM push reads the HUD block the poll already fetched (it used to call
+  `ttp_snapshot_json`, ~59 us of key-sorted race state per call against a ~15 us
+  sim tick, to keep three fields per car), and the finish check
+  (`ttp_ui_race_flow_json`, ~11 us) rides it too rather than asking 60 times a
+  second whether anyone has crossed the line. A steady-state race frame is one
+  `ttp_display_frame(dt)`, one `ttp_audio_frame(now)` and a packed
+  `cellRects` read. Anything tempted onto the per-frame path needs to be
+  something that actually CHANGES per frame. They are
   the only thing the C side is ever told a UI SCALE for
   (`ttp_display_ui_scale`) — their sizes are authored in CSS pixels, everything
   else stays in the surface's physical ones — and the only place `--ink` /
@@ -103,10 +112,14 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   against the committed bake): `ttp_track_schematic_json` projects a built track
   to the 256-unit square, and `ttp_schematic_pack` is the RDP + uint8 + base64
   reduction the room snapshot's chooser payload rides
-  (`public/display/NativeSchematic.js`). `public/display/trackSchematic.js`
-  SURVIVES for two reasons and only two: it is the oracle that corpus was
-  recorded from, and its `unpackSchematic` is what the PHONE runs — phones stay
-  on the JS controller on all three TV platforms. Note the projection rounds
+  (`public/display/NativeSchematic.js`). The JS is SPLIT along the line of who
+  runs it: `public/shared/schematicCodec.js` is `pack`/`unpackSchematic`, and it
+  is SHARED because the PHONE unpacks — phones stay on the JS controller on all
+  three TV platforms, so that half is permanent browser code with no native twin.
+  `public/display/trackSchematic.js` is the PROJECTION alone, and ships to
+  nobody: it is only the oracle the corpus was recorded from. (They were one file
+  under `display/`, which made `controller/main.js` import from the directory
+  three native shells replace.) Note the projection rounds
   through `Number.prototype.toFixed`, which printf cannot reproduce; the port
   routes it through double-conversion's `ToFixed` (V8's own).
   Node reads geometry through `scripts/native-track.mjs` over the
@@ -153,8 +166,13 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   sequence number can no longer collide with a peer index; a picked song is an
   INDEX resolved once per race through `ttp_audio_song_json`.
   `public/display/audio/decide.js` STAYS, and its header says why: it is the
-  ORACLE the corpus was recorded from (plus the music catalogue the galleries
-  and `tests/credits.test.js` read). A disagreement between the two is a bug in
+  ORACLE the corpus was recorded from (plus the music catalogue, which the
+  galleries, `tests/credits.test.js` and `tests/display-abi.test.js` import from
+  it DIRECTLY — `Audio.js` used to re-export those four constants, which put the
+  whole oracle on the shipped display page's import graph for tables the race
+  path never reads; the device half holds no table at all now, and even the
+  monster engine's timbre arrives as numbers on a voice command).
+  A disagreement between the two is a bug in
   the C++, never in the corpus, and the JS must keep answering exactly as
   recorded rather than tracking whatever the port does next — `tests/audio-abi.test.js`
   is what holds them to that at RUNTIME: it races the shipped wasm and the

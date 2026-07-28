@@ -8,7 +8,7 @@ import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-import { packSchematic, unpackSchematic } from '../display/trackSchematic.js';
+import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];

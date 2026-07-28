@@ -27,18 +27,22 @@
 // Browsers require a user gesture before audio runs; call resume() from
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
-import { MUSIC_LEVEL, RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS, MONSTER_ENGINE_MOD }
-  from './audio/decide.js';
 
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
 const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 
-// The music catalogue is DATA the decision layer owns (the pool per biome, the
-// per-song LUFS trim, the no-repeat shuffle), so it lives in audio/decide.js.
-// Re-exported here because this is where the music gallery, the credits test and
-// the display-ABI biome check import it from, and that is still the honest
-// address: Audio.js is what plays it.
-export { RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS, MUSIC_LEVEL };
+// THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
+// description: it performs commands and decides nothing. The music catalogue —
+// the pool per biome, the per-song LUFS trim, the no-repeat shuffle — belongs to
+// the decision layer, which is C++ (libttp-runtime/ttp/audio.cc); a picked song
+// reaches this file as a descriptor on a `{music:'start', song, level}` command,
+// resolved once per race through ttp_audio_song_json.
+//
+// It used to re-export four constants from audio/decide.js so the music gallery
+// and the credits test had an address for them. That pulled the whole 495-line
+// ORACLE onto the shipped display page's import graph for tables nothing on the
+// race path reads. Those two surfaces import decide.js directly now — it is the
+// oracle, they are the only readers of its data, and neither ships.
 
 export class RaceAudio {
   constructor() {
@@ -198,11 +202,15 @@ export class RaceAudio {
   monsterDeflate(vol = 1) { this._play('monster_deflate', vol); }
   rocketFlight(id, level) { this._stateVoice('rocket_fire', id, Math.max(0, Math.min(1, level))); }
   rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); }
-  // monster=true DEEPENS the engine into a heavy big-truck growl (pitch down, a
-  // touch louder, top end muffled) — the monster-truck demo voices it directly.
-  engineDrive(id, level, monster = false) {
-    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)),
-      monster ? MONSTER_ENGINE_MOD : null);
+  // `mod` DEEPENS the engine into a heavy big-truck growl (pitch down, a touch
+  // louder, top end muffled) — {rateMul, gainMul, lpMul}, or null for the stock
+  // voice. The CALLER supplies it rather than this file keeping a monster flag
+  // and a table to resolve it: on the race path that timbre already arrives as
+  // numbers on the voice command (NativeAudio's cmd.mod, authored in the C++
+  // decision layer), so a second copy here would be the one place the growl was
+  // written down twice. The gallery hands in MONSTER_ENGINE_MOD from the oracle.
+  engineDrive(id, level, mod = null) {
+    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)), mod);
   }
 
   // ---- background music ----

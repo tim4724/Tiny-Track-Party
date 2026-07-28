@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 
 let RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS, ASSET_CREDITS, MUSIC_ATTRIBUTION_LINE, creditsFor;
 test.before(async () => {
-  ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/Audio.js'));
+  ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/decide.js'));
   ({ ASSET_CREDITS, MUSIC_ATTRIBUTION_LINE, creditsFor } = await import('../public/shared/credits.js'));
 });
 

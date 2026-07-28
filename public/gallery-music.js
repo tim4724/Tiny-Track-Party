@@ -10,7 +10,10 @@
 // values it would then have to keep in step by hand.
 import { CUPS } from '/shared/tracks.js';
 import { loadBiomes, cssHex } from '/shared/biomes.js';
-import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/Audio.js';
+// Straight from the audio ORACLE, which is where the catalogue is authored.
+// Audio.js used to re-export it, which put the oracle on the shipped display
+// page's import graph; this page is a dev surface and is free to read it.
+import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/decide.js';
 
 const biomes = await loadBiomes();
 

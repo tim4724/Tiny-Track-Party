@@ -8,7 +8,7 @@ import { TiltInput } from './TiltInput.js';
 import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
-import { unpackSchematic } from '../display/trackSchematic.js';
+import { unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is

@@ -157,9 +157,13 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
 
   // Every biome must name a race-music pool that exists, or a race in it plays
   // the fallback song silently. This is the ONE place the two halves meet: the
-  // pool keys are JS (display/Audio.js), the biome names are C++.
+  // pool keys come from the audio ORACLE (audio/decide.js — the catalogue's
+  // authored home, and what audio-abi.test.js pins the wasm's own copy to), the
+  // biome names are C++. Read straight from the oracle rather than through
+  // Audio.js, which no longer re-exports it: the device half performs commands
+  // and holds no table.
   const { RACE_MUSIC } = await import(pathToFileURL(
-    path.join(ROOT, 'public/display/Audio.js')).href);
+    path.join(ROOT, 'public/display/audio/decide.js')).href);
   const unpooled = names.filter((b) => !RACE_MUSIC[b] || !RACE_MUSIC[b].length);
   assert.deepEqual(unpooled, ['sunset'],
     'sunset is the one cupless biome with no pool of its own (it falls back); '

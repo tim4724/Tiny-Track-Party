@@ -29,8 +29,12 @@ const OUT = path.join(ROOT, 'tests/fixtures/schematic-corpus.jsonl');
 
 const { TRACK_LIST } = await import('../public/shared/tracks.js');
 const { TRACK_SCHEMATICS } = await import('../public/shared/trackSchematics.js');
-const { trackSchematic, packSchematic, unpackSchematic, SCHEMATIC_EPS } =
-  await import('../public/display/trackSchematic.js');
+// The PROJECTION oracle and the TRANSPORT codec are two files now: the codec is
+// shipped code the phone runs (shared/), the projection is offline oracle-only
+// (display/). The corpus records both halves, so it reads both.
+const { trackSchematic } = await import('../public/display/trackSchematic.js');
+const { packSchematic, unpackSchematic, SCHEMATIC_EPS } =
+  await import('../public/shared/schematicCodec.js');
 
 // Synthetic paths, in the same spelling trackSchematic emits, so the codec is
 // exercised on shapes the 20 shipped tracks do not contain.
