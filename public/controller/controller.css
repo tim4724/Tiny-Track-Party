@@ -23,6 +23,24 @@
   --edge-right:  max(var(--safe-right),  12px);
   --edge-bottom: max(var(--safe-bottom), 12px);
   --edge-left:   max(var(--safe-left),   12px);
+
+  /* The same four insets as a LAYOUT ROTATED 90° sees them (the landscape control
+     schemes — see html.ctrl-land at the foot of this file). The insets belong to
+     the device and don't turn with the pixels, so the box's own top edge is really
+     the device's right, and its bottom edge the device's left.
+
+     Its left and right map to the device's top and bottom — the notch and the home
+     indicator, which are rarely the same size. Taking each faithfully would inset
+     one flank more than the other and shove the whole drive column off-centre, so
+     BOTH take the larger: everything clears both insets and the controls still sit
+     in the middle of the screen, which is what a two-thumbed grip wants.
+
+     Resolved here at :root, where the --safe family is already folded, so the
+     rotated rule can assign them onto that family without a self-referential
+     cycle (a custom property may not be defined in terms of itself). */
+  --land-top:    var(--safe-right);
+  --land-bottom: var(--safe-left);
+  --land-side:   max(var(--safe-top), var(--safe-bottom));
 }
 
 html, body {
@@ -836,6 +854,18 @@ html.ctrl-land #conn {
   width: 100dvh; height: 100dvw;
   transform-origin: 0 0;
   transform: rotate(90deg) translateY(-100%);
+  /* Turn the safe zone with the pixels (--land-* at the top of this file). Both
+     the box's own padding and everything inside it — the fixed chrome buttons, the
+     pause overlay, the popup cards — are written against these two families, so
+     re-pointing them here rotates the whole safe zone in one place. */
+  --safe-top:    var(--land-top);
+  --safe-right:  var(--land-side);
+  --safe-bottom: var(--land-bottom);
+  --safe-left:   var(--land-side);
+  --edge-top:    max(var(--land-top),    12px);
+  --edge-right:  max(var(--land-side),   12px);
+  --edge-bottom: max(var(--land-bottom), 12px);
+  --edge-left:   max(var(--land-side),   12px);
 }
 /* The ping chip lives outside #game, so it rotates on its own. Anchoring it to the
    device's TOP-LEFT puts it in the player's BOTTOM-left once rotated — the far

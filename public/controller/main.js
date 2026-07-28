@@ -581,6 +581,10 @@ if (inShell && shellName) {
   show('name');
 }
 window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
+// The gallery harness moves between screens without going through `show`, so it
+// has no other way to re-resolve a scheme once it has revealed the drive surface
+// (landscape only rotates while that surface is up).
+window.__applyScheme = applyScheme;
 
 // Gallery / test mode: ?scenario=… lays out a single screen from fake data
 // without connecting to the relay (the controller never auto-connects, so

@@ -127,6 +127,10 @@ export function runControllerScenario(opts) {
     el('pause-btn').classList.remove('hidden');
     el('help-btn-game').classList.remove('hidden');
     el('ctrl-btn').classList.remove('hidden');
+    // We reveal the drive surface behind main.js's back (our own `show` above), and
+    // a landscape control scheme only rotates while that surface is up — so tell it
+    // to re-resolve, or the gallery previews a landscape scheme unrotated.
+    if (window.__applyScheme) window.__applyScheme();
   }
 
   switch (scenario) {

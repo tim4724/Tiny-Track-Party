@@ -64,6 +64,17 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // an unfiltered stream would chatter packets from a phone lying still.
 export const SMOOTH = 0.5;
 
+// Button steering does NOT go through SMOOTH, and must not: that filter is sized
+// against SENSOR NOISE (it halves the raw DeviceOrientation wobble, which is what
+// lets the send gate's dead-band sit where it does), and a button has none. What
+// a one-pole filter does have is an infinite tail — fed a STEP it reaches 50% in
+// one tick, 90% only after 3.3, and takes just as long to let go again, which on
+// a control that is strictly on or off reads as lag, not as smoothing. A constant
+// rate ARRIVES instead: full lock in 80 ms, released just as fast, and holding
+// longer still steers further, so a tap stays a correction and a hold is a full
+// turn. Steer units per tick.
+const BTN_RATE = 0.5;
+
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
 const DEG = Math.PI / 180;
@@ -223,23 +234,28 @@ export class TiltInput {
   }
 
   _tick() {
-    // One steer target, whichever scheme is live: the sensor's roll, or the
-    // LEFT/RIGHT buttons as ±1 (both held = 0, which is the brake pose). It runs
-    // through the same dead-zone + low-pass, so the buttons ramp to full lock over
-    // ~5 ticks instead of snapping — the car reads the same either way.
-    let target = this._tiltOn ? this._sensorSteer()
-      : (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
-    // dead-zone the centre, then re-expand so full lock still reaches ±1
-    if (Math.abs(target) < DEADZONE) target = 0;
-    else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
-    this._steer += (target - this._steer) * SMOOTH;
-    // Snap out of the EMA's asymptote: the filter halves the residual per
-    // sample, so it nears a held target but never lands on it — and the tail
-    // of a full flick then sits under the send gate's dead-band, reading as a
-    // steer bar stuck at ~97% until the idle resend. Once the residual is
-    // inside 0.01 (a third of the gate, invisible authority) converge exactly,
-    // so full lock and a released centre are values that actually occur.
-    if (Math.abs(target - this._steer) < 0.01) this._steer = target;
+    // Two steer sources, each with the ramp it actually wants. The sensor is a
+    // continuous signal carrying noise, so it gets the dead-zone and the one-pole
+    // SMOOTH. The buttons are a clean step, so they get a constant rate instead —
+    // no dead-zone (±1 and 0 are exact) and no exponential tail. See BTN_RATE.
+    if (this._tiltOn) {
+      let target = this._sensorSteer();
+      // dead-zone the centre, then re-expand so full lock still reaches ±1
+      if (Math.abs(target) < DEADZONE) target = 0;
+      else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
+      this._steer += (target - this._steer) * SMOOTH;
+      // Snap out of the EMA's asymptote: the filter halves the residual per
+      // sample, so it nears a held target but never lands on it — and the tail
+      // of a full flick then sits under the send gate's dead-band, reading as a
+      // steer bar stuck at ~97% until the idle resend. Once the residual is
+      // inside 0.01 (a third of the gate, invisible authority) converge exactly,
+      // so full lock and a released centre are values that actually occur.
+      if (Math.abs(target - this._steer) < 0.01) this._steer = target;
+    } else {
+      const target = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);  // both held = 0, the brake pose
+      const d = target - this._steer;
+      this._steer += Math.abs(d) <= BTN_RATE ? d : Math.sign(d) * BTN_RATE;
+    }
 
     const s = clamp1(this._steer + this._key);
     const b = Math.max(this._brakeBtn, this._brakeKey, this.bothSteerHeld ? BRAKE_LEVEL : 0);
@@ -281,16 +297,22 @@ export class TiltInput {
     if (this.surface) this.surface.style.touchAction = 'none';
   }
 
+  // Sample NOW rather than at the next 25 Hz beat. The sampler exists for the
+  // SENSOR, which has nothing to say between beats; a button edge does, and making
+  // it wait costs up to a full 40 ms period (20 ms on average) before the display
+  // hears about a press it could already have. Off the driving path (no timer) it
+  // is a no-op — there is nothing to send to. The regular interval is untouched,
+  // so this only ever ADDS the edge's own sample; the send gate treats it as the
+  // change it is, and drops it if the display already holds that value.
+  _flush() { if (this._timer) this._tick(); }
+
   // On-screen BRAKE button: held → brake at the fixed BRAKE_LEVEL, released → 0.
-  // Emits on the edge — a brake press must not wait out the interval tick.
-  pressBrake(on) {
-    this._brakeBtn = on ? BRAKE_LEVEL : 0;
-    if (this._timer) this._tick();
-  }
+  pressBrake(on) { this._brakeBtn = on ? BRAKE_LEVEL : 0; this._flush(); }
 
   // On-screen LEFT/RIGHT steer buttons (button schemes). `dir` < 0 is left.
   pressSteer(dir, on) {
     if (dir < 0) this._btnL = !!on; else this._btnR = !!on;
+    this._flush();
   }
   // Both steer buttons down = the brake. Exposed so the UI can light both buttons
   // and run the brake rumble off the same fact the tick brakes on.
@@ -302,11 +324,12 @@ export class TiltInput {
   setActionEnabled(on) { this._actionEnabled = !!on; }
 
   // ACTION button: one tap = one item use. Bump the wrapping counter on the press
-  // edge and emit immediately — the display fires the held item once per counter
-  // change. No-op when no item is held (see setActionEnabled).
+  // edge and carry it out on the spot (_flush), so the item fires when it was
+  // tapped rather than up to a sampler period later. No-op when no item is held
+  // (see setActionEnabled).
   pressAction() {
     if (!this._actionEnabled) return;
     this._useCount = (this._useCount + 1) & 255;
-    if (this._timer) this._tick();
+    this._flush();
   }
 }
