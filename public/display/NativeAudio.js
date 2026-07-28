@@ -148,11 +148,22 @@ export class NativeAudioDecider {
   }
 
   // The packed block -> the plain command objects Audio.js performs.
+  //
+  // THE DECODE LOOP CALLS NO WASM. That is a property worth stating, because the
+  // three heap views below are captured ONCE and ALLOW_MEMORY_GROWTH detaches
+  // any typed array held across an allocation — so a nested call that allocated
+  // would leave every later record in this batch decoding from a detached
+  // buffer, and a detached read returns `undefined` rather than throwing. The
+  // one call that could do it is the song lookup (ttp_audio_song_json builds a
+  // Value tree and canonical_stringify reserves 4 KB), so music indices are
+  // COLLECTED here and resolved after the loop, once the views are done with.
+  //
+  // It was previously resolved inline and was safe only by accident: C++ flushes
+  // queued race events AHEAD of a music command, so a MUSIC record happened to be
+  // last in its own batch. Nothing stated or enforced that, at either end.
   _drain() {
     const ptr = fn.drain();
     if (!ptr) return EMPTY;
-    // Both views are re-read every call: ALLOW_MEMORY_GROWTH detaches any typed
-    // array held across an allocation.
     const u32 = M.HEAPU32;
     const i32 = M.HEAP32;
     const f64 = M.HEAPF64;
@@ -172,6 +183,9 @@ export class NativeAudioDecider {
     if (!count) return EMPTY;
     const stride = u32[head + 2];
     const out = [];
+    // Music 'start' records, as [position in `out`, catalogue index]. Resolved
+    // below, after the heap views are out of scope — see the note above.
+    let pendingSongs = null;
     for (let i = 0; i < count; i++) {
       const off = ptr + HEADER_BYTES + i * stride;
       const at = off >> 2;
@@ -214,13 +228,20 @@ export class NativeAudioDecider {
           const op = MUSIC_OPS[code];
           if (!op) break;
           if (op !== 'start') { out.push({ music: op }); break; }
-          const song = this._song(subject);
-          if (song) out.push({ music: 'start', song, level });
+          // A placeholder, patched below. `song` stays null if the index does
+          // not resolve, and the entry is dropped — the same answer the inline
+          // lookup gave by simply not pushing.
+          (pendingSongs || (pendingSongs = [])).push([out.length, subject]);
+          out.push({ music: 'start', song: null, level });
           break;
         }
         default: break;
       }
     }
-    return out;
+    // Past here the heap views are no longer read, so a lookup that grows the
+    // wasm heap can detach nothing.
+    if (!pendingSongs) return out;
+    for (const [at, index] of pendingSongs) out[at].song = this._song(index);
+    return out.filter((c) => c.music !== 'start' || c.song);
   }
 }

@@ -1102,7 +1102,9 @@ function seriesInfo() {
     endless: series.endless,
     raceIndex: series.raceIndex, raceCount: series.raceCount,
     finished: series.finished, nextTrackId: series.nextTrackId,
-    catalog: TRACK_LIST,
+    // No catalogue: the model resolves nextTrackName against the one handed over
+    // ONCE at boot (ui.configure). Passing it here was a leftover from when this
+    // layer was JS and took its world per call — the adapter never forwarded it.
     autoAdvanceMs: intermissionMs()
   });
 }
