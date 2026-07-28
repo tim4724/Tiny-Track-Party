@@ -1,8 +1,8 @@
 // Display entry — lobby + authoritative race. Owns the Stage (canvas + DOM HUD),
-// the race session, the countdown→race→results flow, and per-player
-// PLAYER_STATE. The 3D itself is the engine's: see Stage.js / render/Display.js.
+// the race session, and the countdown→race→results flow. The 3D itself is the
+// engine's: see Stage.js / render/Display.js.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { Stage } from './Stage.js';
+import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { loadBiomes } from '../shared/biomes.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
@@ -468,7 +468,7 @@ function showMusicCredit(on) {
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
 let autoPaused = false;    // race frozen because no connected human holds a car (silent; see refreshAutoPause)
-let lastPlayerState = 0;
+let lastHudTick = 0;
 // Last held item pushed to each car's phone (peerIndex -> item|null), so ITEM is
 // sent only when it changes. Cleared per race (launchRace); a reconnect forces a
 // resend via onPlayerWelcomed.
@@ -499,12 +499,12 @@ scene.onFrame = (dt) => {
   // beats (this loop is the session's only clock); physics start at GO.
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
-  // One ~6 Hz tick drives everything below that isn't the frame itself: the
+  // One SLOW TICK drives everything below that isn't the frame itself: the
   // finish check here, and the HUD + ITEM push further down. Hoisted so the
   // ordering is unchanged (this check still runs before the audio drain) while
-  // the cost is paid six times a second instead of sixty.
+  // the cost is paid on HUD_TICK_MS rather than on every frame.
   const now = performance.now();
-  const slowTick = now - lastPlayerState > 160;
+  const slowTick = now - lastHudTick > HUD_TICK_MS;
   // Every human across the line but CPU cars still circulating? Don't make the
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
@@ -548,15 +548,15 @@ scene.onFrame = (dt) => {
   // layer a clock and takes back a list of commands (the shared curb-scrub
   // throttle, the per-human state voices, a sustained jet per in-flight rocket,
   // plus whatever the race events fired inside the update above decided). The
-  // HUD is the ~6 Hz poll below; the last per-frame getSnapshot went with this
-  // call.
+  // HUD is the slow-tick poll below; the last per-frame getSnapshot went with
+  // this call.
   sfx(audioDecide.frame(now));
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
-  // The other half of the ~6 Hz tick hoisted above. `lastPlayerState` is stamped
+  // The other half of the slow tick hoisted above. `lastHudTick` is stamped
   // HERE rather than at the top, so a countdown frame (which returns above) does
   // not consume the tick the first racing frame wants.
   if (slowTick) {
-    lastPlayerState = now;
+    lastHudTick = now;
     // The HUD values (ordinal, lap counter, held item, finish card) are the
     // ENGINE's, read back packed (ttp_hud.h) rather than picked out of a
     // serialized race state; painting them is still the Stage's. uiModel.hudRows
@@ -977,7 +977,7 @@ function launchRace(players) {
   // Hand the renderer this race's session: from here it reads the grid poses
   // (and then every frame) straight off the engine. Paint each cell's HUD right
   // away too, so the chrome sits at its final size through the countdown — no
-  // pop-in at GO (the racing loop takes over from the first ~6 Hz tick).
+  // pop-in at GO (the racing loop takes over from the first slow tick).
   scene.bindSession(session.h);
   // ... and the audio, for the same reason: this is the race the room can hear,
   // so its events and countdown beats make a sound while the lobby's attract

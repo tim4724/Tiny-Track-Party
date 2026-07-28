@@ -13,9 +13,10 @@
  * layout and no English. C++ emits the semantic values and a stable item CODE;
  * the ordinal suffix, "Lap 2/3", the item's icon and the FINISHED card are the
  * shell's, next to the elements they fill (docs/native-port/shared-cpp-plan.md's
- * strings decision). Nor is it a frame: the whole HUD is a ~6 Hz poll since the
- * steer bar moved into the renderer, so this is READ when the shell wants it,
- * not pushed every frame.
+ * strings decision). Nor is it a frame: nothing in the HUD has changed per frame
+ * since the steer bar moved into the renderer, so this is READ when the shell
+ * wants it, not pushed every frame. How often is the shell's call — see the
+ * cadence note on ttp_display_hud.
  *
  * SLOT IDENTITY, and why there is no car id in here. Entries are indexed by the
  * renderer's ROSTER SLOT — the order the shell handed ttp_display_build, which

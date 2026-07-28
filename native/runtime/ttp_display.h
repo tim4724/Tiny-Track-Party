@@ -152,9 +152,14 @@ TTP_ABI void ttp_display_cell_cards(uint32_t mask);
  * state and discarding all of it but these.
  *
  * A READBACK, not a frame. Since the steer bar moved into the renderer nothing
- * in the HUD changes faster than a place does, so the shell polls this at its
- * own cadence (~6 Hz on web) rather than being pushed a stream. It is also the
- * whole of what leaves: no pose, no speed, no camera, no car id.
+ * in the HUD changes faster than a place does, so the shell polls this AT ITS OWN
+ * CADENCE rather than being pushed a stream. That rate is genuinely the shell's
+ * to pick and nothing here depends on it: this call is a struct read with no
+ * allocation, and the values behind it move under one time a second across a full
+ * field. The web shell uses HUD_TICK_MS (display/Stage.js, 160 ms); a shell that
+ * polls twice as often, or that drives the paint off its own UI framework's
+ * invalidation instead, is equally correct. It is also the whole of what leaves:
+ * no pose, no speed, no camera, no car id.
  *
  * Never null, and answers with or without a built scene — a slot no live car
  * claims comes back zeroed rather than stale, so a Grand Prix swapping tracks

@@ -20,7 +20,8 @@
  * packed record cannot hold a name without inventing a string table and a
  * second read, so the precedent that fits is ttp_room_events_json's: bursty,
  * string-shaped data, drained as JSON. The one call on anything like a cadence
- * (ttp_ui_item_pushes_json, ~6 Hz) carries three fields per car.
+ * (ttp_ui_item_pushes_json) carries three fields per car, and the shell picks how
+ * often to ask — the web one folds it into the same tick as the HUD read.
  *
  * There is a second reason, and it is the deciding one for the standings board:
  * that answer IS a JSON message. The shell puts it on the relay verbatim, so a

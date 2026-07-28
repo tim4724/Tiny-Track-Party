@@ -49,6 +49,31 @@ const ITEM_ICONS = {
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
 
+// The race loop's SLOW TICK: everything on that loop which is not the frame
+// itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
+// finish check that triggers the fast-forward to results. Exported because the
+// gallery harness (display/TestHarness.js) paints the same HUD and had its own
+// copy of the number.
+//
+// 160 ms is quoted everywhere in this tree as "~6 Hz", and it is worth writing
+// down why that is true and where it stops being true. The guard is tested
+// inside rAF, so firing is quantised to frame boundaries: the first frame whose
+// elapsed time EXCEEDS 160 ms. At 24/30/60/90/120/144 fps that lands on 166.7 ms
+// — exactly 6.00 Hz at every one of them, because 160 sits just under a whole
+// number of frames in each case. At 50 Hz (PAL) it does not: 160 is an exact
+// multiple of 20 ms and the comparison is strict, so it slips to the 9th frame,
+// 180 ms, 5.56 Hz. Nothing depends on the difference; it is here so the next
+// person to read "6 Hz" in a header can tell it is a consequence, not a target.
+//
+// The value itself is inherited — it predates the native port entirely (it is in
+// the game's first commit) and has never been re-derived for any of the three
+// jobs above. It is defensible for all three: nothing in the HUD changes faster
+// than a place does, the ITEM message is per-owner and sent only on change, and
+// the finish check is a safety net behind the 'finish' event. But it was picked
+// for none of them, so treat it as a budget to revisit, not a constant to
+// preserve.
+export const HUD_TICK_MS = 160;
+
 export class Stage {
   constructor(container, colors) {
     this.container = container;

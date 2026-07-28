@@ -9,6 +9,10 @@
 // every car driven by an in-wasm AI bot, so the split-screen chase cams, HUD, lean,
 // and dust all show real motion in the preview.
 import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js';
+// The HUD cadence, from the file that owns the HUD — this preview paints the
+// same chrome through the same setCarHud, and used to carry its own copy of the
+// number.
+import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
@@ -482,7 +486,7 @@ export function runDisplayScenario(opts, ctx) {
       // engine growl, silent otherwise — so the gallery hears the sound change too.
       if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, MONSTER_ENGINE_MOD);
       const now = performance.now();
-      if (now - lastHud > 160) {
+      if (now - lastHud > HUD_TICK_MS) {
         lastHud = now;
         for (const c of snap.cars) scene.setCarHud(c.id, c);
       }
