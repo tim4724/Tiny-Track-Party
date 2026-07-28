@@ -21,6 +21,7 @@
 import { loadNativeRuntime } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
 import { buildTrackBin } from '../../shared/trackBin.js';
+import { ITEM_IDS } from '../engine/contract.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
@@ -31,6 +32,37 @@ const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal',
 
 // cellRects' "no cells" answer, so the caller's loop is the same shape either way.
 const EMPTY_RECTS = new Float32Array(0);
+// hud()'s, for the same reason.
+const EMPTY_HUD = [];
+
+// The packed HUD block (native/libttp-runtime/ttp_hud.h), as this reader needs
+// it. Only the HEADER's size is written down: the SLOT's comes out of the block
+// itself (`stride`), which is why it is carried — a decoder that baked in a
+// sizeof would silently misread every slot after the day a field was added.
+const HUD_VERSION = 1;       // TTP_HUD_BLOCK_VERSION
+const HUD_HEADER_BYTES = 16; // sizeof(TtpHudBlock): version, slotCount, stride, flags
+// finishTime's byte offset INSIDE a slot. Hardcoded where the slot's size is
+// not, and the asymmetry is the point: `stride` covers a slot growing at the
+// end, which is the change a block can absorb; anything moving a field this
+// reader already knows bumps TTP_HUD_BLOCK_VERSION, which the guard below sees.
+const HUD_SLOT_TIME = 24;
+const HUD_LIVE = 1;          // TTP_HUD_SLOT_LIVE
+const HUD_FINISHED = 2;      // TTP_HUD_SLOT_FINISHED
+const HUD_TIMED = 4;         // TTP_HUD_SLOT_TIMED
+
+// A held item crosses as a CODE (TTP_ITEM_*), not a string: the index in the
+// sim's own roll table plus one, so 0 can mean "empty" without a sentinel that
+// looks like an item. ITEM_IDS is the browser's mirror of that table, and
+// tests/display-abi.test.js holds it to ttp_item_id in the shipped wasm so the
+// two cannot drift apart.
+//
+// TTP_ITEM_UNKNOWN (-1) folds to null HERE, and only here: this block feeds the
+// DRAWN slot, and a shell with no icon for an item draws an empty square. The
+// phone's ITEM message — which must not call an occupied slot empty — is not
+// sourced from this block.
+function itemId(code) {
+  return code >= 1 && code <= ITEM_IDS.length ? ITEM_IDS[code - 1] : null;
+}
 
 export class Display {
   constructor(canvas, mod) {
@@ -39,6 +71,12 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
+    // The roster ids handed to ttp_display_build, in SLOT order. The HUD block
+    // comes back indexed by slot and carries no car id (ttp_hud.h's slot
+    // identity note), so this list — the one this class authored — is what maps
+    // an entry back to a car. Empty whenever no scene is built, which is exactly
+    // when C++ has no roster either.
+    this._rosterIds = [];
     this._fn = {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
@@ -117,6 +155,10 @@ export class Display {
   async setTrack(trackId, biome, roster, assets) {
     if (this.built) this._fn.release();
     this.built = false;
+    // Released, so C++ holds no roster either: the two lists go empty together
+    // and the HUD reads as "nothing to say yet" for the length of the rebuild,
+    // rather than mapping this race's slots onto last race's ids.
+    this._rosterIds = [];
     // The look, before anything is fetched: the scenery model list is a
     // function of it, and so is the scene the build call will produce.
     this._fn.biome(biome);
@@ -167,14 +209,16 @@ export class Display {
       })
     ]);
 
-    const ids = JSON.stringify((roster || []).map((r) => r.id));
-    if (this._fn.build(trackId, ids)) throw new Error(`ttp_display_build(${trackId}) failed`);
+    const ids = (roster || []).map((r) => r.id);
+    if (this._fn.build(trackId, JSON.stringify(ids))) throw new Error(`ttp_display_build(${trackId}) failed`);
+    this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
   }
 
   release() {
     if (!this.built) return;
     this._fn.release();
+    this._rosterIds = [];
     this.built = false;
   }
 
@@ -208,6 +252,67 @@ export class Display {
     // HEAPF32 is re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out
     // from under any view held across an allocation.
     return this.m.HEAPF32.subarray(this._rectPtr >> 2, (this._rectPtr >> 2) + got * 4);
+  }
+
+  // WHAT the HUD says: place, lap, total laps, the held item, finished and the
+  // finish time, per car — read out of the packed block ttp_display_hud points
+  // at (ttp_hud.h) rather than out of a serialized race state. Those six values
+  // used to cost a JSON.stringify of the whole field in C++ and a JSON.parse of
+  // it here, every one of which was thrown away but these.
+  //
+  // A READ, not a frame: since the steer bar moved into the renderer nothing in
+  // the HUD changes faster than a place does, so the shell calls this at its own
+  // ~6 Hz cadence. Rows come back in the shape uiModel.hudRows used to produce
+  // — that function is now the CORPUS ORACLE only, and this is the runtime path.
+  //
+  // A slot no live car claims is SKIPPED rather than reported as zeroes, so a
+  // Grand Prix swapping tracks underneath the HUD (or the async gap between a
+  // field change and the scene rebuild that lands it) leaves each cell's chrome
+  // alone instead of painting it "0th, lap 0".
+  hud() {
+    const ptr = this.m._ttp_display_hud();
+    if (!ptr) return EMPTY_HUD;
+    // Both views are re-read every call, for cellRects' reason: memory growth
+    // detaches any view held across an allocation.
+    const u32 = this.m.HEAPU32;
+    const i32 = this.m.HEAP32;
+    const head = ptr >> 2;
+    if (u32[head] !== HUD_VERSION) {
+      // Unreachable while the wasm and this file ship in one repo, which is why
+      // it is a one-shot log and an empty HUD rather than a throw on a polling
+      // path: a stale checked-in artifact should be legible, not a stack trace
+      // six times a second.
+      if (!this._hudVersionLogged) {
+        this._hudVersionLogged = true;
+        console.error(`[display] HUD block v${u32[head]}, expected v${HUD_VERSION} —`
+            + ' rebuild with native/scripts/build-runtime-web.sh');
+      }
+      return EMPTY_HUD;
+    }
+    const count = u32[head + 1];
+    const stride = u32[head + 2];
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const id = this._rosterIds[i];
+      if (id === undefined) continue; // a slot this side never named: nothing to paint
+      const off = ptr + HUD_HEADER_BYTES + i * stride;
+      const at = off >> 2;
+      const flags = u32[at + 4];
+      if (!(flags & HUD_LIVE)) continue;
+      rows.push({
+        id,
+        position: i32[at],
+        lap: i32[at + 1],
+        totalLaps: i32[at + 2],
+        item: itemId(i32[at + 3]),
+        finished: !!(flags & HUD_FINISHED),
+        // The JSON null distinction, kept: a car can be finished with no
+        // recorded time (a forfeit resolved at the flag), and the card prints an
+        // empty string for that rather than "0.0s".
+        finishTime: (flags & HUD_TIMED) ? this.m.HEAPF64[(off + HUD_SLOT_TIME) >> 3] : null
+      });
+    }
+    return rows;
   }
 
   // Physical pixels per CSS pixel — devicePixelRatio, capped by Stage. The

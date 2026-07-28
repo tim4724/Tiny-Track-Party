@@ -464,6 +464,11 @@ add_library(libttp_runtime STATIC
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
+  # The per-player HUD block the shell reads back, which is uiModel.js's
+  # hudRows ported. Beside the frame builder because it reads the same live
+  # Game through the same roster slots — but for the shell's ~6 Hz poll, not
+  # for the renderer's frame.
+  libttp-runtime/ttp/hud.cc
   # The per-cup biome palettes and the rules that resolve one. Data, not
   # rendering: it was authored in the browser (public/shared/themes.js +
   # render/trackPayload.js) until the shells stopped being one.
@@ -525,6 +530,23 @@ target_include_directories(frame_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runti
 target_link_libraries(frame_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(frame_check)
 add_test(NAME frame_builder COMMAND frame_check)
+
+# ---- Conformance: the per-player race HUD -----------------------------------
+# JS-RECORDED evidence, like the biome check below and unlike the two above: the
+# `hud` steps of tests/fixtures/ui-corpus.jsonl were recorded off the live
+# public/display/uiModel.js, so they settle whether hudRows was ported right.
+# uiModel.js has not been deleted yet, which makes the corpus still RENEWABLE
+# (tests/ui-corpus.test.js re-derives it) — but it is the recorded bytes this
+# replays, and no --record mode exists here on purpose.
+#
+# It links libttp_runtime for ttp::rt::hudSlot and libttp_sim (carried PUBLICly)
+# for ITEM_IDS, which is the table the packed item code decodes back through.
+add_executable(hud_check runtimetest/hud_check.cc)
+target_link_libraries(hud_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(hud_check)
+add_test(NAME ui_hud
+  COMMAND hud_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
 
 # ---- Conformance: the biome palettes ----------------------------------------
 # JS-RECORDED evidence, unlike the two checks above: the corpus was taken off the
@@ -603,6 +625,11 @@ if(EMSCRIPTEN)
     libttp-runtime/ttp/camera.cc
     libttp-runtime/ttp/framing.cc
     libttp-runtime/ttp/frame_builder.cc
+    # The packed HUD block ttp_display_hud answers with. Outside the gate with
+    # the rest of libttp-runtime, and for the extra reason that it is what the
+    # SHELL reads rather than what the renderer draws: a Filament-less leg still
+    # has every line of it in the link.
+    libttp-runtime/ttp/hud.cc
     libttp-runtime/ttp/theme.cc)
   if(TARGET ttp_renderer)
     list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
@@ -633,8 +660,11 @@ if(EMSCRIPTEN)
     # and have no declaration of ours to tag.
     "-sEXPORTED_FUNCTIONS=_malloc,_free"
     # HEAPF32 is the packed float readback (ttp_display_cell_rects); HEAPF64 the
-    # profile block; HEAPU8 the asset upload.
-    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF32,HEAPF64,HEAPU8"
+    # profile block AND the HUD block's finish times; HEAPU8 the asset upload;
+    # HEAP32/HEAPU32 the HUD block's signed values and its header/flags
+    # (ttp_hud.h) — an unsigned field read through a signed view is exactly the
+    # kind of thing that only bites once the numbers get big.
+    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAP32,HEAPU32,HEAPF32,HEAPF64,HEAPU8"
   )
   if(TARGET ttp_renderer)
     target_link_libraries(ttp_runtime_web PRIVATE ttp_renderer)

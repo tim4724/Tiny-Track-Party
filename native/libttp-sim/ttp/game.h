@@ -121,6 +121,17 @@ inline constexpr double STEER_SIGN = -1;
 void setSteerExpo(double v);
 double getSteerExpo();
 
+// The item vocabulary a box can yield, in ROLL-TABLE order: index i is the item
+// ITEM_PLACE_TABLE's column i weights, and `roll` walks the two together.
+//
+// It is here rather than file-static in game.cc because that order is now a
+// CONTRACT, not an implementation detail: TTP_ITEM_* (libttp-runtime/ttp_hud.h)
+// is this index plus one, which is how a held item reaches a shell without a
+// string crossing the boundary, and ttp_item_id (runtime/ttp_runtime.h) reads
+// the table back out so the browser's mirror in
+// public/display/engine/contract.js is pinned to it by a test.
+extern const char* const ITEM_IDS[4];
+
 class Game {
  public:
   ~Game();  // out-of-line: racingLine_ points at a type this header only forward-declares
@@ -168,6 +179,15 @@ class Game {
 
   Value getSnapshot();
   Value getResults();
+
+  // The lap number to SHOW for a car: its completed laps plus the one it is on,
+  // held at 1 before the start line and capped at totalLaps once it is home.
+  // getSnapshot's "lap" and the HUD block's (libttp-runtime/ttp/hud.h) are this
+  // one function, because they must never differ by a lap — the whole point of
+  // the packed readback is that it replaces the snapshot, not that it agrees
+  // with it by inspection.
+  double displayLap(const Car& c) const;
+  int totalLaps() const { return totalLaps_; }
   bool raceOver() const { return (long)finishedOrder_.size() >= (long)cars_.size(); }
 
   double length() const { return length_; }

@@ -202,6 +202,16 @@ export function reconnectDiff(shownIds, seats) {
 // the held item, and the finish card's place + time. The one DECISION in here is
 // the item: a finished car is on a victory lap with no usable slot, so its item
 // reads empty however full the engine says it is.
+//
+// NOT ON THE RUNTIME PATH ANY MORE. This is ported — the shipping HUD reads
+// ttp::rt::hudSlot's answers out of the packed block (native/libttp-runtime/
+// ttp_hud.h, via render/Display.js's hud()), and no snapshot is serialized for
+// it. What survives here is the ORACLE: tests/fixtures/ui-corpus.jsonl was
+// recorded off this function while it was live, and native/runtimetest/
+// hud_check.cc replays every row of it through the port on all four legs. So it
+// stays for the same reason TrackBuilder.js's twin is kept in git history — it
+// is the only thing that can settle whether the C++ is right — and it must keep
+// answering exactly as recorded, not track whatever the port does next.
 export function hudRows(cars) {
   return cars.map((c) => ({
     id: c.id,

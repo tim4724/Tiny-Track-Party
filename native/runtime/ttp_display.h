@@ -20,6 +20,10 @@
 #include <stdint.h>
 
 #include "ttp_abi.h"
+/* The packed HUD readback's layout. Plain data with no platform in it, so it
+ * lives beside the renderer's frame contract in libttp-runtime rather than
+ * here — same reason, and same shape, as ttp_render.h. */
+#include "ttp_hud.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -140,6 +144,29 @@ TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
  * carries type), so this is the whole of what the renderer needs to know about
  * it: one bit, not a description. */
 TTP_ABI void ttp_display_cell_cards(uint32_t mask);
+
+/* WHAT that HUD says: the bound session's per-player race values, packed, one
+ * entry per roster slot in ttp_display_build order (ttp_hud.h). Place, lap,
+ * total laps, the held item as a CODE, finished, finish time — the six values
+ * the shell used to pull out of ttp_snapshot_json by parsing the entire race
+ * state and discarding all of it but these.
+ *
+ * A READBACK, not a frame. Since the steer bar moved into the renderer nothing
+ * in the HUD changes faster than a place does, so the shell polls this at its
+ * own cadence (~6 Hz on web) rather than being pushed a stream. It is also the
+ * whole of what leaves: no pose, no speed, no camera, no car id.
+ *
+ * Never null, and answers with or without a built scene — a slot no live car
+ * claims comes back zeroed rather than stale, so a Grand Prix swapping tracks
+ * underneath the HUD reads as "nothing to say yet", not as last race's places.
+ * The block is the display's own scratch, valid until the next
+ * ttp_display_hud: read it now, don't keep it and don't free it (the
+ * ttp_display_profile convention).
+ *
+ * ttp_snapshot_json is NOT going anywhere — abi_check and the eight golden
+ * traces depend on it byte-for-byte forever. This is about the shipping game no
+ * longer calling it. */
+TTP_ABI const TtpHudBlock* ttp_display_hud(void);
 
 /* The chunky ink rules on the seams between split-screen cells. On by default;
  * the display's ?dividers=0 debug toggle turns them off so the look can be

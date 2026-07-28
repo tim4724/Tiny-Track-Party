@@ -45,7 +45,7 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   for (const name of ['create', 'asset', 'resize', 'build', 'release', 'bind',
                       'cells', 'cell_rects', 'cell_cards', 'dividers', 'ui_scale',
                       'camera', 'look', 'fog', 'shadows',
-                      'hold', 'frame', 'burst', 'profile', 'profile_names',
+                      'hold', 'frame', 'burst', 'hud', 'profile', 'profile_names',
                       'biome']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
@@ -70,11 +70,40 @@ test('the heap views the display edge reads are on the Module', async () => {
   // asset upload. All three are EXPORTED_RUNTIME_METHODS in native/CMakeLists
   // — with -sASSERTIONS=0 a missing one is plain `undefined`, i.e. a TypeError
   // in the render loop rather than a build error.
-  for (const view of ['HEAPF32', 'HEAPF64', 'HEAPU8']) {
+  for (const view of ['HEAP32', 'HEAPU32', 'HEAPF32', 'HEAPF64', 'HEAPU8']) {
     assert.ok(M[view] && typeof M[view].subarray === 'function', `Module.${view}`);
   }
   assert.equal(typeof M._malloc, 'function');
   assert.equal(typeof M._free, 'function');
+});
+
+// ---- the packed HUD's item codes (ttp_hud.h) --------------------------------
+// A held item crosses to the shell as a CODE now, not a string, so the browser
+// keeps a mirror of the sim's roll table (ITEM_IDS in display/engine/contract.js
+// — which is ALSO what an ITEM message puts on the wire for the phone). Two
+// lists, and nothing but this test between them: reorder ttp::ITEM_IDS and every
+// phone's USE button relabels itself silently, with the ctests still green
+// (native/runtimetest/hud_check.cc pins the C++ half to itself, and neither the
+// corpus nor E2E can see a browser array). ttp_item_id exists to be read from
+// here (native/runtime/ttp_runtime.h).
+test('the item codes in the packed HUD decode to the ids the browser knows', async () => {
+  const M = await load();
+  assert.equal(typeof M._ttp_item_id, 'function',
+    '_ttp_item_id is not exported — the HUD block would decode against nothing');
+  const idOf = M.cwrap('ttp_item_id', 'string', ['number']);
+  const ptrOf = M.cwrap('ttp_item_id', 'number', ['number']); // '' and NULL read alike as a string
+  const { ITEM_IDS } = await import(pathToFileURL(
+    path.join(ROOT, 'public/display/engine/contract.js')).href);
+
+  // TTP_ITEM_BOOST is 1, not 0: the code is the roll table's index PLUS ONE, so
+  // 0 is free to mean "empty slot" without a sentinel that looks like an item.
+  ITEM_IDS.forEach((id, i) => {
+    assert.equal(idOf(i + 1), id, `TTP_ITEM_* code ${i + 1} is "${id}" on both sides`);
+  });
+  assert.equal(ITEM_IDS.length, 4, 'the roll table is four wide (TTP_ITEM_BOOST..MONSTER)');
+  assert.equal(ptrOf(0), 0, 'TTP_ITEM_NONE has no id — an empty slot is not an item');
+  assert.equal(ptrOf(-1), 0, 'TTP_ITEM_UNKNOWN names nothing this build can draw');
+  assert.equal(ptrOf(ITEM_IDS.length + 1), 0, 'nothing past the end of the table');
 });
 
 test('ttp_display_cell_rects is a safe no-op with no display', async () => {

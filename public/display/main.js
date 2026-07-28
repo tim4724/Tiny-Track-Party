@@ -512,9 +512,11 @@ scene.onFrame = (dt) => {
   const now = performance.now();
   if (now - lastPlayerState > 160) {
     lastPlayerState = now;
-    // The HUD values (ordinal, lap counter, held item, finish card) are the UI
-    // model's; painting them is the Stage's.
-    for (const row of ui.hudRows(snap.cars)) scene.setCarHud(row.id, row);
+    // The HUD values (ordinal, lap counter, held item, finish card) are the
+    // ENGINE's, read back packed (ttp_hud.h) rather than picked out of a
+    // serialized race state; painting them is still the Stage's. uiModel.hudRows
+    // is off this path — it survives as the oracle the C++ port is pinned to.
+    for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
     // Held item lights the phone's USE button (all other race state — place/lap,
     // standings — lives on the TV or the room snapshot). It's per-owner, so it
     // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes

@@ -143,6 +143,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the plan's non-goals). shared-cpp-plan.md P8 ports the model and P6 takes the
   per-frame HUD block ahead of it, so `tests/fixtures/ui-corpus.jsonl` records its
   answers NOW — same reason, and same rule, as the audio corpus above.
+  ONE of those decisions has already gone: `hudRows` is ported
+  (`native/libttp-runtime/ttp/hud.{h,cc}`, read back through the packed
+  `ttp_display_hud` / `ttp_hud.h` by `render/Display.js`'s `hud()`), so the race
+  HUD's values no longer come out of a snapshot at all. The JS twin STAYS in
+  `uiModel.js` and its header says why: it is the oracle `ui-corpus.jsonl` was
+  recorded from, replayed on all four legs by `native/runtimetest/hud_check.cc`.
+  A held item crosses as a CODE, not a string — `TTP_ITEM_*`, pinned to the
+  browser's `ITEM_IDS` mirror through `ttp_item_id` by
+  `tests/display-abi.test.js`, because nothing else can see those two lists at
+  once.
 - Still JS BY DESIGN: the HUD/screens RENDERING (`main.js`, `Stage.js` — the
   decisions behind them are `uiModel.js`, above), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
@@ -152,7 +162,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (37 tests, the SAME 37 on every leg —
+  replayed by `native/` ctest (38 tests, the SAME 38 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).

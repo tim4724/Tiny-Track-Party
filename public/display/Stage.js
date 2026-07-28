@@ -359,6 +359,16 @@ export class Stage {
 
   // ---- HUD ------------------------------------------------------------------
 
+  // What each cell's chrome should say right now, straight off the engine as a
+  // packed block (Display.hud → ttp_hud.h): one row per car that holds a
+  // renderer slot, in the shape setCarHud takes. No race state is serialized for
+  // it, and the values are the sim's own — Game::displayLap and Car::rank — not
+  // a second derivation of them.
+  //
+  // Polled, not pushed: the caller reads this at its own ~6 Hz and paints. The
+  // one HUD element that needed 60 Hz, the steer bar, is the renderer's now.
+  hudRows() { return this.display ? this.display.hud() : []; }
+
   setCarHud(id, info) {
     const c = this.cars.get(id);
     if (!c || !c.label) return; // cell-less AI cars have no HUD label

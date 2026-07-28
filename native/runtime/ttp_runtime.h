@@ -203,6 +203,23 @@ TTP_ABI const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double
 // array of numbers.
 TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* sListJson);
 
+// The item vocabulary, by CODE: the id a box roll can yield for TTP_ITEM_BOOST
+// (1) … TTP_ITEM_MONSTER (4), and NULL for anything else (TTP_ITEM_NONE
+// included — an empty slot has no id).
+//
+// It exists because a held item now crosses as a code, not a string
+// (libttp-runtime/ttp_hud.h): the shells need the enum, but the WEB shell also
+// still puts the id on the wire in its ITEM message, so it keeps a mirror of the
+// list in public/display/engine/contract.js. This is what pins the two —
+// tests/display-abi.test.js reads the table back out of the SHIPPED wasm and
+// holds the browser's array to it, index for index, so a reordered roll table
+// cannot silently relabel every phone's USE button. A comment could not have
+// caught that.
+//
+// Static storage: the returned pointer is the sim's own literal and outlives
+// every call, unlike the per-handle scratch the JSON getters return.
+TTP_ABI const char* ttp_item_id(int code);
+
 // {"contractVersion":N,"mathlib":"..."} — the adapter's sanity check.
 TTP_ABI const char* ttp_version(void);
 

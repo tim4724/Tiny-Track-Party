@@ -28,6 +28,7 @@
 #include "ttp/frame_builder.h"
 #include "ttp/framing.h"
 #include "ttp/game.h"
+#include "ttp/hud.h"
 #include "ttp/race_track.h"
 #include "ttp/scalar_id.h"
 #include "ttp/theme.h"
@@ -250,6 +251,17 @@ int ttp_display_cell_rects(float* out, int maxCells) {
 
 void ttp_display_cell_cards(uint32_t mask) {
     if (g_disp) g_disp->cardMask = mask;
+}
+
+const TtpHudBlock* ttp_display_hud(void) {
+    // An empty block rather than null with no display: ttp_abi.h's rule is that
+    // an absent singleton answers emptily, and the shell's loop is then the same
+    // shape whether or not boot() has resolved a display for it.
+    static const TtpHudBlock kEmpty = { TTP_HUD_BLOCK_VERSION, 0,
+                                        (uint32_t) sizeof(TtpHudSlot), 0 };
+    if (!g_disp) return &kEmpty;
+    const Game* eng = g_disp->session ? ttp_session_engine(g_disp->session) : nullptr;
+    return ttp::rt::buildHud(*g_disp, eng);
 }
 
 void ttp_display_dividers(int enabled) {

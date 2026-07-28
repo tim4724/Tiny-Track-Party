@@ -933,6 +933,13 @@ const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* s
   return out.c_str();
 }
 
+const char* ttp_item_id(int code) {
+  // 1-based so TTP_ITEM_NONE can be 0 without a sentinel that looks like an
+  // item; ttp::ITEM_IDS is the sim's own roll table, not a second list.
+  if (code < 1 || code > 4) return nullptr;
+  return ttp::ITEM_IDS[code - 1];
+}
+
 const char* ttp_version(void) {
   static std::string v;
   if (v.empty()) {

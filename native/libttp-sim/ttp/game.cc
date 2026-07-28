@@ -77,7 +77,7 @@ void setSteerExpo(double v) {
 }
 double getSteerExpo() { return g_steerExpo; }
 
-static const char* ITEM_IDS[4] = {"boost", "banana", "rocket", "monster"};
+const char* const ITEM_IDS[4] = {"boost", "banana", "rocket", "monster"};
 static const int ITEM_PLACE_TABLE[8][4] = {
     {20, 80, 0, 0}, {25, 55, 20, 0}, {30, 30, 40, 0}, {30, 30, 30, 10},
     {30, 25, 25, 20}, {30, 25, 20, 25}, {30, 10, 20, 40}, {30, 0, 20, 50}};
@@ -811,6 +811,10 @@ static Value vec3Value(const Vec3& v) {
   return o;
 }
 
+double Game::displayLap(const Car& c) const {
+  return js_min((double)totalLaps_, js_max(1.0, c.lap + (c.totalS >= 0 ? 1.0 : 0.0)));
+}
+
 Value Game::getSnapshot() {
   Value cars = Value::Arr();
   for (const auto& cp : cars_) {
@@ -825,7 +829,7 @@ Value Game::getSnapshot() {
     car.set("pose", pose);
     car.set("lat", Value::Num(c.lat));
     car.set("spd", Value::Num(c.v / c.vmax));
-    car.set("lap", Value::Num(js_min((double)totalLaps_, js_max(1.0, c.lap + (c.totalS >= 0 ? 1.0 : 0.0)))));
+    car.set("lap", Value::Num(displayLap(c)));
     car.set("totalLaps", Value::Num(totalLaps_));
     car.set("position", Value::Num(c.rank));
     car.set("finished", Value::Bool(c.finished));

@@ -91,6 +91,11 @@ struct DisplayState {
     float orbitAngle = 0;
     std::vector<TtpBurstInput> bursts;  // queued since the last frame
     std::vector<uint8_t> frame;         // TtpFrameInput scratch, reused every frame
+    // TtpHudBlock scratch (ttp/hud.h), likewise reused. The HUD is a ~6 Hz POLL
+    // rather than a per-frame push — the one element that needed 60 Hz, the
+    // steer bar, is drawn by the renderer now — so this is refilled far more
+    // rarely than `frame`, and for a different reader.
+    std::vector<uint8_t> hudBlock;
 };
 
 // Freeze one car: pose kept, every motion cue dropped (see the definition).
