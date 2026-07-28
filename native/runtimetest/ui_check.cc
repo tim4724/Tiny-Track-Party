@@ -27,10 +27,12 @@
 // THE BOARD'S KEY ORDER. `out.wire` is the recorded JSON.stringify of the
 // standings payload — INSERTION order, the bytes the phones receive. The
 // structural diff cannot see that (it sorts keys, as canonical JSON must), so
-// the board is rebuilt in the JS's own key order and serialized by a local
-// insertion-order stringifier. That is the ONLY place in this tree a second
-// serializer exists, and it is deliberately test-only: canonical_stringify is
-// the sorted-key one every corpus digest depends on and must not grow a mode.
+// the board is rebuilt in the JS's own key order and serialized with
+// ordered_stringify — libttp-json's second emitter, which shares its whole walk
+// with canonical_stringify and differs only in not sorting. That is also what
+// runtime/ttp_ui.cc emits with, so this check pins the exact bytes the shipping
+// ABI hands a shell. canonical_stringify keeps the sort and its evidence-only
+// job; it must not grow a mode.
 //
 // THE SYNTHETIC WORLD. The model is catalogue-AGNOSTIC — it looks cups and
 // tracks up in whatever list it is handed — so the generator carries its own
@@ -179,46 +181,10 @@ Value idArray(const std::vector<ui::Id>& ids) {
   return a;
 }
 
-// ---- JSON.stringify in INSERTION order (the wire bytes) ----------------------
-// canonical_stringify sorts keys — correct for every digest in this tree and
-// wrong for this one thing. Values are built below in the JS literal's own key
-// order, so walking them unsorted reproduces the phones' bytes exactly.
-void wireInto(const Value& v, std::string& o) {
-  switch (v.type) {
-    case Value::NUL:
-    case Value::UNDEF: o += "null"; return;
-    case Value::BOOL: o += v.b ? "true" : "false"; return;
-    case Value::NUM: o += js_number_to_string(v.num); return;
-    case Value::STR: o += json_quote(v.str); return;
-    case Value::ARR:
-      o += '[';
-      for (size_t i = 0; i < v.arr.size(); i++) {
-        if (i) o += ',';
-        wireInto(v.arr[i], o);
-      }
-      o += ']';
-      return;
-    case Value::OBJ: {
-      o += '{';
-      bool first = true;
-      for (const auto& kv : v.obj) {
-        if (kv.second.type == Value::UNDEF) continue;
-        if (!first) o += ',';
-        first = false;
-        o += json_quote(kv.first);
-        o += ':';
-        wireInto(kv.second, o);
-      }
-      o += '}';
-      return;
-    }
-  }
-}
-std::string wire(const Value& v) {
-  std::string o;
-  wireInto(v, o);
-  return o;
-}
+// The wire bytes: JSON.stringify in INSERTION order. Values are built below in
+// the JS literal's own key order, so walking them unsorted reproduces the
+// phones' bytes exactly.
+std::string wire(const Value& v) { return ordered_stringify(v); }
 
 // ---- the shell state a scenario threads --------------------------------------
 // Exactly what main.js owns beside the model, and what gen-ui-corpus.mjs's

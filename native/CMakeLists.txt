@@ -419,7 +419,7 @@ add_test(NAME fastlane
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
-  runtime/ttp_theme.cc)
+  runtime/ttp_theme.cc runtime/ttp_ui.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the
@@ -440,6 +440,7 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
@@ -684,12 +685,15 @@ if(EMSCRIPTEN)
     # SHELL reads rather than what the renderer draws: a Filament-less leg still
     # has every line of it in the link.
     libttp-runtime/ttp/hud.cc
-    # The rest of the UI model. Nothing in the ABI reaches it YET — the shells
-    # still render from public/display/uiModel.js — so wasm-ld strips it and the
-    # artifact does not grow. It is listed anyway because THIS list is the sync
-    # point: a source that lands in libttp_runtime alone makes this module
-    # unlinkable the moment an export references it, and no ctest target says so.
+    # The rest of the UI model, reached through runtime/ttp_ui.cc below: the
+    # browser's boards are rendered from this, not from public/display/
+    # uiModel.js, which survives only as the oracle the corpus was recorded off.
+    # This list is the sync point — a source that lands in libttp_runtime alone
+    # leaves this module unlinkable and no ctest target says so.
     libttp-runtime/ttp/ui_model.cc
+    # ... and the ABI over it. JSON in, JSON out: this layer answers once per
+    # event and half of what it answers is text, so there is nothing to pack.
+    runtime/ttp_ui.cc
     # The audio decisions, for the same reason and with the same trap: this list
     # is COMPILED, not linked against libttp_runtime, so a source added to the
     # library alone leaves this module unlinkable and no ctest target notices.

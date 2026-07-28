@@ -36,7 +36,11 @@ void quote_into(const std::string& s, std::string& o) {
   o += '"';
 }
 
-void stringify_into(const Value& v, std::string& o) {
+// The two stringifiers differ in ONE line — whether an object's kept keys are
+// sorted — so they are one walker with a flag rather than two copies that can
+// drift. Everything else (undefined dropping, shortest-form numbers, escaping)
+// is shared by construction.
+void stringify_into(const Value& v, std::string& o, bool sortKeys) {
   switch (v.type) {
     case Value::NUL:
     case Value::UNDEF:  // only reachable as an array element; JS maps undefined -> null
@@ -55,24 +59,25 @@ void stringify_into(const Value& v, std::string& o) {
       o += '[';
       for (size_t i = 0; i < v.arr.size(); i++) {
         if (i) o += ',';
-        stringify_into(v.arr[i], o);  // UNDEF elements fall through to "null"
+        stringify_into(v.arr[i], o, sortKeys);  // UNDEF elements fall through to "null"
       }
       o += ']';
       return;
     case Value::OBJ: {
-      // Object.keys(...).filter(v[k] !== undefined).sort()
+      // Object.keys(...).filter(v[k] !== undefined)[.sort()]
       std::vector<const std::pair<std::string, Value>*> kept;
       kept.reserve(v.obj.size());
       for (const auto& kv : v.obj)
         if (kv.second.type != Value::UNDEF) kept.push_back(&kv);
-      std::sort(kept.begin(), kept.end(),
-                [](const auto* a, const auto* b) { return a->first < b->first; });
+      if (sortKeys)
+        std::sort(kept.begin(), kept.end(),
+                  [](const auto* a, const auto* b) { return a->first < b->first; });
       o += '{';
       for (size_t i = 0; i < kept.size(); i++) {
         if (i) o += ',';
         quote_into(kept[i]->first, o);
         o += ':';
-        stringify_into(kept[i]->second, o);
+        stringify_into(kept[i]->second, o, sortKeys);
       }
       o += '}';
       return;
@@ -95,13 +100,25 @@ std::string canonical_stringify(const Value& v) {
   // Only containers are worth pre-sizing: a lone scalar (an id, a number) stays
   // inside the small-string buffer and must not be charged a 4 KB allocation.
   if (v.type == Value::ARR || v.type == Value::OBJ) o.reserve(4096);
-  stringify_into(v, o);
+  stringify_into(v, o, true);
   return o;
 }
 
 void canonical_stringify_into(const Value& v, std::string& out) {
   out.clear();
-  stringify_into(v, out);
+  stringify_into(v, out, true);
+}
+
+std::string ordered_stringify(const Value& v) {
+  std::string o;
+  if (v.type == Value::ARR || v.type == Value::OBJ) o.reserve(4096);
+  stringify_into(v, o, false);
+  return o;
+}
+
+void ordered_stringify_into(const Value& v, std::string& out) {
+  out.clear();
+  stringify_into(v, out, false);
 }
 
 uint32_t fnv1a(const std::string& utf8) {

@@ -159,8 +159,11 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   ITEM-on-change gate, the reconnect-card diff, the standings board + the cup
   chip + the results overlay, the fast-forward/forfeit predicates, the
   pause/auto-pause arbitration, and the screen enum + per-screen back EFFECT —
-  live in `public/display/uiModel.js` as pure functions of plain data. It imports
-  nothing, touches no DOM/clock/RNG/history, and is loadable in Node.
+  are `native/libttp-runtime/ttp/ui_model.{h,cc}`, pure functions of plain data,
+  reached from the browser through `native/runtime/ttp_ui.h` and the adapter
+  `public/display/NativeUiModel.js`. The JS twin they were ported from
+  (`public/display/uiModel.js`) imports nothing, touches no DOM/clock/RNG/history
+  and is loadable in Node — see the port note below.
   `main.js` and `lobbySeats.js` RENDER from it and decide nothing; the shell keeps
   the three pieces of state the model threads (current screen, which reconnect
   cards actually attached, what each phone was last told its item was). Strings
@@ -181,9 +184,26 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   replays EVERY step of the corpus through it on all four legs, `out` and the
   threaded shell state alike; a disagreement is a bug in the C++, never in the
   fixture. The JS twin STAYS in `uiModel.js` — it is the ORACLE'S SOURCE, the
-  standing `decide.js` has — and the WEB shell still renders from it; tvOS and
-  Android TV read the port instead, which is exactly the two-implementation
-  shape the corpus exists to hold together. What did NOT cross: the back-stack
+  standing `decide.js` has — but nothing that ships imports it: the WEB shell
+  renders from the port too now, and tvOS/Android TV will read the same ABI
+  through shells of their own, which is exactly the two-implementation shape the
+  corpus exists to hold together.
+  THE ABI IS JSON, and deliberately: this layer answers ONCE PER EVENT (a join,
+  a pick, a car crossing the line) and half of what it answers is unbounded TEXT
+  — player, cup and track names — so there is nothing to pack the way
+  `ttp_hud.h`/`ttp_audio.h` pack their per-frame numbers; the precedent that fits
+  is `ttp_room_events_json`'s. And the standings board's answer IS a JSON
+  message, handed straight to the relay. That last point is why `ttp_ui.h` is the
+  ONE ABI whose returns are not canonical: keys come out in the model's own
+  order, because the board's key order is the order the phones have always
+  received it in. `libttp-json`'s `ordered_stringify` is that emitter (one walk
+  shared with `canonical_stringify`, differing only in the sort);
+  `canonical_stringify` keeps its sort and its evidence-only job. The catalogue
+  is the one piece of ABI state (`ttp_ui_configure`, set once at boot) —
+  `ui_model.cc` itself stays catalogue-agnostic, which is what lets the corpus
+  carry a synthetic world. `abi_check` replays the whole ui corpus through the C
+  boundary, wire bytes included, so the marshalling is covered on every leg and
+  not only in the browser. What did NOT cross: the back-stack
   TRAVERSAL (the table did, the walk did not) and `ROOM_STATE`, which
   `ui_model.h` MIRRORS rather than import, so libttp-runtime never gains an edge
   on the party layer — `ui_check` pins the copy to `protocol.h`.
@@ -192,7 +212,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `tests/display-abi.test.js`, because nothing else can see those two lists at
   once.
 - Still JS BY DESIGN: the HUD/screens RENDERING (`main.js`, `Stage.js` — the
-  decisions behind them are `uiModel.js`, above), the track
+  decisions behind them are `ttp_ui.h`, above), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
   into the wasm by `gen-track-defs-header.mjs`), the audio DEVICE + DSP palette,
   the whole controller page, and the transport I/O — the WebSocket and `RTCPeerConnection`
@@ -253,9 +273,11 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   directly rather than by a trace.
 - The C ABI (`runtime/`) is NOT on the replay path — `replay_cli` calls C++ objects
   directly. `abi_check` covers the marshalling layer the browser actually talks to,
-  BOTH ABIs: two traces through `ttp_process_input`/`ttp_update`, the cup corpus
+  EVERY ABI: two traces through `ttp_process_input`/`ttp_update`, the cup corpus
   through `ttp_gp_*`, the room and framing corpora through `ttp_room_*`/
-  `ttp_framing_*`, a fastlane plumbing pass, and every boundary/mutation export
+  `ttp_framing_*`, the ui corpus through `ttp_ui_*` (wire bytes included — the one
+  place the standings board's key order is asserted where it is made), a fastlane
+  plumbing pass, and every boundary/mutation export
   against its header contract. It recompiles `runtime/*.cc` rather than linking a
   lib, so the shipped wasm's `EMSCRIPTEN_KEEPALIVE` export list is untouched.
   `tests/party-abi.test.js` still covers the same ground in Node against the SHIPPED

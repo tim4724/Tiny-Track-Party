@@ -16,20 +16,25 @@
 // produces them still exists. Keep this file free of imports; the moment it
 // grows one, the generator and the C++ port both inherit it.
 //
-// IT IS PORTED. Every rule below now exists in native/libttp-runtime/ttp/
-// ui_model.{h,cc} — hudRows went first as ttp/hud.h (see its note further down),
-// the other twenty-odd followed. native/runtimetest/ui_check.cc replays EVERY
-// step of tests/fixtures/ui-corpus.jsonl through the port on all four legs, out
-// AND the shell state the driver threads, so the two implementations are bound
-// step for step. What that means for this file: it is the ORACLE'S SOURCE, the
-// same standing decide.js and TrackBuilder.js have. It must keep answering
-// exactly as recorded — never track whatever the port does next, and never be
-// "fixed" to agree with it. A disagreement is a bug in the C++.
+// IT IS PORTED, AND IT IS OFF THE RUNTIME PATH. Every rule below now exists in
+// native/libttp-runtime/ttp/ui_model.{h,cc} — hudRows went first as ttp/hud.h
+// (see its note further down), the other twenty-odd followed — and the shipping
+// browser game reads THOSE, through native/runtime/ttp_ui.h and the adapter
+// public/display/NativeUiModel.js. Nothing that ships imports this file any
+// more.
 //
-// The WEB shell still renders from here; tvOS and Android TV will read the port
-// through a shell of their own. Those are two implementations of one rule set,
-// which is the whole point — and the corpus, not this file, is what keeps them
-// from drifting.
+// What that leaves it as: the ORACLE'S SOURCE, the same standing decide.js and
+// TrackBuilder.js have. tests/fixtures/ui-corpus.jsonl was recorded off it while
+// it was live; native/runtimetest/ui_check.cc replays EVERY step of that through
+// the C++ rules on all four legs (out AND the shell state the driver threads),
+// and native/runtimetest/abi_check.cc replays the same corpus through the C
+// BOUNDARY the browser actually calls. So it must keep answering exactly as
+// recorded — never track whatever the port does next, and never be "fixed" to
+// agree with it. A disagreement is a bug in the C++.
+//
+// tvOS and Android TV will read the port through a shell of their own. Those
+// are two more implementations of one rule set, which is the whole point — and
+// the corpus, not this file, is what keeps them from drifting.
 //
 // WHAT IS DELIBERATELY NOT HERE (see the plan's non-goals): DOM construction,
 // CSS classes, fades, canvas sizing, rAF, fullscreen, QR painting, and the

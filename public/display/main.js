@@ -12,7 +12,12 @@ import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
-import * as ui from './uiModel.js';
+// The UI MODEL is C++ too (ttp_ui.h over libttp-runtime/ttp/ui_model.cc). Every
+// screen decision below — which seats, which race card, which rows, whether the
+// field may freeze — is ITS answer; this file renders and decides nothing. The
+// JS twin (uiModel.js) survives only as the oracle ui-corpus.jsonl was recorded
+// from, exactly as decide.js does for the audio.
+import * as ui from './NativeUiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
 import { CUPS, TRACK_LIST } from '../shared/tracks.js';
@@ -113,7 +118,13 @@ const _nativeSeries = await import('./NativeCupSeries.js');
 // AudioContext, the cue palette, the song element — is still JS, and it decides
 // nothing.
 const _nativeAudio = await import('./NativeAudio.js');
-await Promise.all([_nativeSim.init(), _nativeSeries.init(), _nativeAudio.init()]);
+await Promise.all([_nativeSim.init(), _nativeSeries.init(), _nativeAudio.init(), ui.init()]);
+// The world the UI model resolves ids against, handed over ONCE: the cups, the
+// track catalogue and the two field sizes the seat grid needs. Authored data —
+// it changes when the game ships, not while it runs — so it is set here rather
+// than re-sent with every pick. Before ANY render below (the gallery harness
+// grids seats off it too).
+ui.configure({ cups: CUPS, catalog: trackCatalog, maxPlayers: MAX_PLAYERS, carCount: CAR_MODELS.length });
 // The biome ABI off the same module: the ?biome= list, the music pool key and
 // the HUD boost chip's accent. The palette itself never leaves C++.
 const _biomes = await loadBiomes();
@@ -481,12 +492,16 @@ scene.onFrame = (dt) => {
   // Every human across the line but CPU cars still circulating? Don't make the
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
-  if (session.racing && humansAllDone()) {
+  // ONE crossing per frame for both answers: `allDone` is read every frame and
+  // `forfeit` only on the frame it flips, so asking for them separately would
+  // double the traffic to save nothing.
+  const flow = session.racing ? raceFlow() : null;
+  if (flow && flow.allDone) {
     // A dropped racer's ghost can never cross the line — forfeit any such car now
     // that every connected human is home, so the burst (and the race) ends
     // promptly instead of running to the guard cap on a car that can't finish.
     // fresh array — safe while forfeitCar removes cars
-    for (const id of ui.forfeitCandidates(raceRoleSets())) forfeitCar(id);
+    for (const id of flow.forfeit) forfeitCar(id);
     if (!session.racing) return; // forfeiting the last unfinished car already ended the race
     // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
     // advances the deterministic sim with NO rendering, and the just-finished
@@ -722,7 +737,7 @@ function renderLobbyPick() {
   if (!slot) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
   const m = ui.cupSlot({ mode: net.mode, cupId: net.cupId, trackId: net.trackId,
-                         randomRaces: net.randomRaces, cups: CUPS, catalog: trackCatalog });
+                         randomRaces: net.randomRaces });
   renderCupSlot(slot, m && {
     name: m.nameKey === 'random' ? 'Random' : (m.name || '?'),
     races: RACES_COPY[m.racesKey](m.raceCount),
@@ -1013,13 +1028,15 @@ function raceRoleSets() {
   return { carIds, aiIds: aiCarIds, disconnectedIds, finishedIds };
 }
 
-// True once every CONNECTED human car has crossed the line (CPU cars may still be
-// out). Drives the "only CPU left → skip to results" fast-forward. See
-// uiModel.humansAllDone for the rule.
-function humansAllDone() {
-  if (!session) return false;
-  return ui.humansAllDone(raceRoleSets());
+// The finish-moment pair, off one call: `allDone` is true once every CONNECTED
+// human car has crossed the line (CPU cars may still be out — the cue to skip
+// to results), and `forfeit` names the dropped-racer ghosts to pull out at that
+// moment. Both rules are the native UI model's.
+function raceFlow() {
+  if (!session) return { allDone: false, forfeit: [] };
+  return ui.raceFlow(raceRoleSets());
 }
+function humansAllDone() { return raceFlow().allDone; }
 
 // Live standings for the controllers' results overlay. Pushed as each car
 // finishes (over=false) and once more at race end (over=true, so DNF/AFK cars

@@ -25,6 +25,9 @@
 //   4. THE PARTY ABI (ttp_party.h) — the room corpus and the framing corpus
 //      through the C boundary, plus a fastlane plumbing pass. Same gap one file
 //      over: ttp_party.cc was emscripten-only too.
+//   5. THE UI ABI (ttp_ui.h) — ui-corpus.jsonl through the C boundary, so the
+//      screen decisions a native shell will consume are marshalled on every leg
+//      and the standings board's WIRE BYTES are asserted where they are made.
 //
 // Part 3 is a behavioural gate, not conformance evidence: no JS twin of the glue
 // survives to record an oracle from, so the assertions encode what the header
@@ -48,6 +51,7 @@
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 #include "ttp_theme.h"
+#include "ttp_ui.h"
 
 using namespace ttp;
 using namespace ttp::corpus;
@@ -1333,12 +1337,362 @@ void audioThroughAbi() {
   ttp_audio_drain();
 }
 
+// ---------------------------------------------------------------------------
+// Part 6: the UI ABI (ttp_ui.h) — the display's screen decisions as C entry
+// points.
+//
+// Same gap, third file over: runtime/ttp_ui.cc is compiled by the emscripten
+// module and by this target and by nothing else, so without this the desktop
+// and tvOS legs would never see a line of the marshalling a native shell is
+// going to consume.
+//
+// It replays ui-corpus.jsonl — the SAME JS-recorded fixture ui_check.cc holds
+// the RULES to — through the C boundary instead of through C++ objects. The
+// driver is much shorter than ui_check's for one reason worth stating: the ABI
+// speaks JSON, and the corpus is JSON, so a step's recorded `in` goes across
+// almost untouched and the recorded `out` is diffed against what comes back.
+// There is no second transcription of the corpus's shapes here, which is what
+// keeps this from becoming a copy of ui_check that can drift from it.
+//
+// The two things the boundary can break that the library cannot are exactly
+// what this catches: a key spelled differently on the way out (the corpus
+// records every one), and an id crossing as the wrong JSON type (`3` vs `"3"` —
+// the corpus's bots are strings and its seats are numbers).
+// ---------------------------------------------------------------------------
+
+// gen-ui-corpus.mjs's synthetic world as a configure payload — the same two cups
+// and nine circuits ui_check.cc transcribes, in the ABI's shape. The corpus
+// header's counts are checked against it below, so a corpus regenerated against
+// a different world fails loudly rather than replaying into the wrong catalogue.
+const char* UI_WORLD =
+    "{\"maxPlayers\":4,\"carCount\":6,"
+    "\"cups\":["
+    "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"a1\",\"a2\",\"a3\",\"a4\"]},"
+    "{\"id\":\"cup-b\",\"name\":\"Thunder\",\"tracks\":[\"b1\",\"b2\",\"b3\",\"b4\"]},"
+    "{\"id\":\"cup-empty\",\"name\":\"Hollow\",\"tracks\":[]}],"
+    "\"catalog\":["
+    "{\"id\":\"a1\",\"name\":\"Dune Loop\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
+    "{\"id\":\"a2\",\"name\":\"Palm Sprint\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
+    "{\"id\":\"a3\",\"name\":\"Reef Run\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
+    "{\"id\":\"a4\",\"name\":\"Sand Spiral\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
+    "{\"id\":\"b1\",\"name\":\"Storm Gate\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
+    "{\"id\":\"b2\",\"name\":\"Bolt Bend\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
+    "{\"id\":\"b3\",\"name\":\"Rift Rise\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
+    "{\"id\":\"b4\",\"name\":\"Crash Coil\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
+    "{\"id\":\"solo\",\"name\":\"Lone Oval\",\"cup\":null,\"cupDifficulty\":null}]}";
+const double UI_INTERMISSION_MS = 10000;
+
+// A parsed ABI answer, or a typed hole that will diff loudly.
+Value uiJson(const char* text) {
+  if (!text) return Value::Null();
+  bool ok = false;
+  Value v = json::parse(text, &ok);
+  return ok ? v : Value::Str(std::string("<unparseable> ") + text);
+}
+// The subset of a step's `in` that an export takes, re-emitted as a JSON string.
+// Passing the whole object through would work too (every reader ignores keys it
+// does not name), but naming the fields is what makes a renamed input visible.
+std::string uiArg(const Value& v) { return canonical_stringify(v); }
+Value uiField(const Value& in, const char* k) {
+  const Value* v = in.find(k);
+  return v ? *v : Value::Null();
+}
+std::string uiArgField(const Value& in, const char* k) { return uiArg(uiField(in, k)); }
+
+// The shell state the corpus threads. Only what the ABI's own arguments need:
+// the current screen name, the reconnect cards that actually landed, and the
+// per-race item map (which crosses as an array, in Map insertion order).
+struct UiShell {
+  std::string screen;      // "" = no board yet, which reads as the root
+  std::vector<Value> shown;
+  std::vector<std::pair<Value, Value>> lastItem;   // id -> item (Null = no key)
+
+  void reset(const Value* s) {
+    screen = (s && s->type == Value::STR) ? s->str : std::string();
+    shown.clear();
+    lastItem.clear();
+  }
+  // JS Map.set: an existing key keeps its position.
+  void setItem(const Value& id, const Value& item) {
+    for (auto& kv : lastItem) {
+      if (canonical_stringify(kv.first) == canonical_stringify(id)) { kv.second = item; return; }
+    }
+    lastItem.emplace_back(id, item);
+  }
+  std::string itemsArg() const {
+    Value a = Value::Arr();
+    for (const auto& kv : lastItem) {
+      Value e = Value::Obj();
+      e.set("id", kv.first);
+      // UNDEF is dropped by the stringifier — which is the ABSENT item the
+      // three-state rule turns on, so it must NOT become null here.
+      if (kv.second.type != Value::UNDEF) e.set("item", kv.second);
+      a.push(e);
+    }
+    return canonical_stringify(a);
+  }
+  std::string shownArg() const {
+    Value a = Value::Arr();
+    for (const Value& v : shown) a.push(v);
+    return canonical_stringify(a);
+  }
+};
+
+// One step through the C exports, answering in the corpus's `out` shape.
+Value uiStep(UiShell& st, const std::string& op, const Value& in) {
+  Value out = Value::Obj();
+
+  if (op == "show") {
+    const Value* to = in.find("to");
+    const std::string next = (to && to->type == Value::STR) ? to->str : std::string();
+    const int step = ttp_ui_screen_step(st.screen.c_str(), next.c_str());
+    st.screen = next;
+    out.set("step", Value::Num(step));
+    out.set("nav", Value::Str(step > 0 ? "push" : step < 0 ? "pop" : "none"));
+    return out;
+  }
+  if (op == "back") {
+    out.set("effect", Value::Str(ttp_ui_back_effect(st.screen.c_str())));
+    return out;
+  }
+  if (op == "roster") {
+    const std::string roster = uiArgField(in, "roster");
+    const std::string host = uiArgField(in, "host");
+    const Value seats = uiJson(ttp_ui_roster_seats_json(roster.c_str(), host.c_str()));
+    const std::string seatsArg = canonical_stringify(seats);
+    out.set("seats", seats);
+    out.set("grid", uiJson(ttp_ui_seat_grid_json(seatsArg.c_str())));
+    out.set("ready", Value::Bool(ttp_ui_all_racers_ready(roster.c_str(), host.c_str()) != 0));
+    // The ABI answers with INDICES so a shell keeps its own objects; the corpus
+    // recorded the ids, so resolving them back is also what pins the indices.
+    const Value idx = uiJson(ttp_ui_connected_players_json(roster.c_str()));
+    const Value* rosterV = in.find("roster");
+    Value conn = Value::Arr();
+    if (idx.type == Value::ARR && rosterV && rosterV->type == Value::ARR) {
+      for (const Value& i : idx.arr) {
+        const size_t n = (size_t) i.num;
+        conn.push(n < rosterV->arr.size() ? uiField(rosterV->arr[n], "peerIndex") : Value::Str("<out of range>"));
+      }
+    }
+    out.set("connected", conn);
+    return out;
+  }
+  if (op == "pick") {
+    Value pick = Value::Obj();
+    pick.set("mode", uiField(in, "mode"));
+    pick.set("cupId", uiField(in, "cupId"));
+    pick.set("trackId", uiField(in, "trackId"));
+    const std::string arg = uiArg(pick);
+    out.set("slot", uiJson(ttp_ui_cup_slot_json(arg.c_str())));
+    return out;
+  }
+  if (op == "reconnect") {
+    const Value* seatsV = in.find("seats");
+    Value seatIds = Value::Arr();
+    if (seatsV && seatsV->type == Value::ARR) {
+      for (const Value& s : seatsV->arr) seatIds.push(uiField(s, "peerIndex"));
+    }
+    const std::string shownArg = st.shownArg();
+    const std::string seatsArg = canonical_stringify(seatIds);
+    const Value d = uiJson(ttp_ui_reconnect_diff_json(shownArg.c_str(), seatsArg.c_str()));
+    const Value* remove = d.find("remove");
+    const Value* add = d.find("add");
+    const Value* land = in.find("land");
+    const auto landed = [&land](const Value& id) {
+      if (!land || land->type != Value::ARR) return true;
+      for (const Value& e : land->arr) if (canonical_stringify(e) == canonical_stringify(id)) return true;
+      return false;
+    };
+    std::vector<Value> kept;
+    for (const Value& id : st.shown) {
+      bool gone = false;
+      if (remove && remove->type == Value::ARR) {
+        for (const Value& r : remove->arr) if (canonical_stringify(r) == canonical_stringify(id)) { gone = true; break; }
+      }
+      if (!gone) kept.push_back(id);
+    }
+    st.shown = kept;
+    Value addIds = Value::Arr();
+    if (add && add->type == Value::ARR) {
+      for (const Value& i : add->arr) {
+        const size_t n = (size_t) i.num;
+        const Value id = n < seatIds.arr.size() ? seatIds.arr[n] : Value::Str("<out of range>");
+        addIds.push(id);
+        if (landed(id)) st.shown.push_back(id);
+      }
+    }
+    out.set("remove", remove ? *remove : Value::Null());
+    out.set("add", addIds);
+    return out;
+  }
+  if (op == "hud") {
+    // `rows` is hudRows, which ttp_display_hud answers for off a LIVE session —
+    // unreachable from a scripted car list, so it is not re-checked here (that
+    // is hud_check's and ui_check's job). This step exists for `pushes`, which
+    // is the one rule whose answer depends on the map threaded above.
+    const std::string cars = uiArgField(in, "cars");
+    const std::string ai = uiArgField(in, "aiIds");
+    const std::string last = st.itemsArg();
+    const Value pushes = uiJson(ttp_ui_item_pushes_json(cars.c_str(), ai.c_str(), last.c_str()));
+    if (pushes.type == Value::ARR) {
+      for (const Value& p : pushes.arr) {
+        const Value* item = p.find("item");
+        st.setItem(uiField(p, "id"), item ? *item : Value{});   // absent -> UNDEF
+      }
+    }
+    out.set("pushes", pushes);
+    return out;
+  }
+  if (op == "clearItems") {
+    st.lastItem.clear();
+    out.set("cleared", Value::Bool(true));
+    return out;
+  }
+  if (op == "welcomeItem") {
+    const std::string car = uiArgField(in, "car");
+    out.set("item", uiJson(ttp_ui_welcome_item_json(car.c_str())));
+    return out;
+  }
+  if (op == "flow") {
+    const std::string arg = uiArg(in);
+    const Value r = uiJson(ttp_ui_race_flow_json(arg.c_str()));
+    out.set("allDone", r.find("allDone") ? *r.find("allDone") : Value::Null());
+    out.set("forfeit", r.find("forfeit") ? *r.find("forfeit") : Value::Null());
+    return out;
+  }
+  if (op == "autopause") {
+    const std::string arg = uiArg(in);
+    const int asks = ttp_ui_auto_pause_asks(arg.c_str());
+    const bool allDown = asks && in.find("allDisconnected") &&
+                         in.find("allDisconnected")->type == Value::BOOL &&
+                         in.find("allDisconnected")->b;
+    out.set("asks", Value::Bool(asks != 0));
+    out.set("decision", uiJson(ttp_ui_auto_pause_json(arg.c_str(), allDown ? 1 : 0)));
+    return out;
+  }
+  if (op == "freeze") {
+    const auto flag = [&in](const char* k) {
+      const Value* v = in.find(k);
+      return (v && v->type == Value::BOOL && v->b) ? 1 : 0;
+    };
+    const Value* rsV = in.find("roomState");
+    const std::string rs = (rsV && rsV->type == Value::STR) ? rsV->str : std::string();
+    out.set("move", Value::Str(ttp_ui_freeze_transition(flag("paused"), flag("autoPaused"),
+                                                        flag("sessionPaused"))));
+    out.set("canPause", Value::Bool(ttp_ui_can_pause(flag("hasSession"), flag("paused"),
+                                                     rs.c_str()) != 0));
+    out.set("canResume", Value::Bool(ttp_ui_can_resume(flag("hasSession"), flag("paused")) != 0));
+    return out;
+  }
+  if (op == "board") {
+    // The cup chip is its own export, and the board takes its answer back —
+    // exactly how a shell composes them, so a mismatch between the two spellings
+    // of SeriesInfo shows up here rather than on a phone.
+    Value cup = Value::Null();
+    const Value* sV = in.find("series");
+    if (sV && sV->type == Value::OBJ) {
+      Value si = *sV;
+      si.set("autoAdvanceMs", Value::Num(UI_INTERMISSION_MS));
+      const std::string siArg = uiArg(si);
+      cup = Value::Obj();
+      cup.set("standings", uiField(*sV, "standings"));
+      cup.set("info", uiJson(ttp_ui_series_info_json(siArg.c_str())));
+    }
+    Value board = Value::Obj();
+    board.set("results", uiField(in, "results"));
+    board.set("field", uiField(in, "field"));
+    board.set("cup", cup);
+    board.set("lateJoiners", uiField(in, "lateJoiners"));
+    board.set("hostPeerIndex", uiField(in, "hostPeerIndex"));
+    board.set("over", uiField(in, "over"));
+    const std::string arg = uiArg(board);
+    const char* bytes = ttp_ui_standings_json(arg.c_str());
+    const std::string wire = bytes ? bytes : "";
+    out.set("board", uiJson(bytes));
+    // The WIRE bytes, and this is the assertion that only the ABI can make:
+    // ui_check proves the C++ builds the right board, this proves the exported
+    // string IS those bytes in the phones' key order rather than a sorted
+    // re-spelling of them.
+    out.set("wire", Value::Str(wire));
+    const Value* over = in.find("over");
+    out.set("view", (over && over->type == Value::BOOL && over->b)
+                        ? uiJson(ttp_ui_results_view_json(wire.c_str(), UI_INTERMISSION_MS))
+                        : Value::Null());
+    return out;
+  }
+  if (op == "intermission") {
+    const auto num = [&in](const char* k) {
+      const Value* v = in.find(k);
+      return (v && v->type == Value::NUM) ? v->num : 0.0;
+    };
+    out.set("secs", Value::Num(ttp_ui_intermission_secs(num("deadlineMs"), num("nowMs"))));
+    return out;
+  }
+  fail("unknown ui-corpus op '" + op + "'");
+  return out;
+}
+
+void uiCorpusThroughAbi(const char* path) {
+  std::ifstream in(path);
+  if (!in) { fail(std::string("cannot open ") + path); return; }
+  check(ttp_ui_configure(UI_WORLD) == 1, "the synthetic catalogue configured");
+
+  UiShell st;
+  std::string line, scenario;
+  int steps = 0;
+  bool header = false;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    Value root;
+    std::string err;
+    if (!read_line(line, root, &err)) { fail("ui corpus parse: " + err); return; }
+    const Value* kind = root.find("case");
+    if (!kind) {
+      if (header) continue;
+      header = true;
+      // The world this driver hardcodes, against the one the generator recorded.
+      const auto n = [&root](const char* k) {
+        const Value* v = root.find(k);
+        return (v && v->type == Value::NUM) ? v->num : -1.0;
+      };
+      check(n("maxPlayers") == 4 && n("carCount") == 6 && n("intermissionMs") == UI_INTERMISSION_MS
+            && n("cups") == 3 && n("catalog") == 9,
+            "ui corpus recorded against abi_check's synthetic world");
+      continue;
+    }
+    if (kind->str == "scenario") {
+      const Value* nm = root.find("name");
+      scenario = nm && nm->type == Value::STR ? nm->str : "?";
+      st.reset(root.find("screen"));
+      continue;
+    }
+    if (kind->str != "step") continue;
+    const Value* opV = root.find("op");
+    const Value* wantOut = root.find("out");
+    if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed ui step"); return; }
+    const Value empty = Value::Obj();
+    const Value* inV = root.find("in");
+    const Value got = uiStep(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
+    steps++;
+    // Only the keys this driver answers: `rows` is a live-session readback and
+    // is checked by hud_check / ui_check, not here.
+    for (const auto& kv : got.obj) {
+      const Value* want = wantOut->find(kv.first);
+      if (!want) { fail("ui " + scenario + ": corpus has no " + kv.first); continue; }
+      const Diff d = diff_val(*want, kv.second, kv.first);
+      check(!d.differ, "ui " + opV->str + " " + scenario + " step " + std::to_string(steps) +
+                       ": " + d.path + " expected " + d.expected + " got " + d.actual);
+    }
+  }
+  check(header && steps > 0, "ui corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 5) {
+  if (argc < 6) {
     std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
-                         "<framing-corpus> <trace.jsonl>...\n");
+                         "<framing-corpus> <ui-corpus> <trace.jsonl>...\n");
     return 2;
   }
   std::printf("abi check:\n");
@@ -1346,7 +1700,7 @@ int main(int argc, char** argv) {
   // marshalling its recorded inputs contain: tidepool's four bots never brake, so
   // on that fixture alone ttp_process_input's brake bit could be deleted outright
   // and every frame would still hash correctly. helix carries 402 braking inputs.
-  for (int i = 4; i < argc; i++) traceThroughAbi(argv[i]);
+  for (int i = 5; i < argc; i++) traceThroughAbi(argv[i]);
   gpThroughAbi(argv[1]);
   boundaryExports();
   roomCorpusThroughAbi(argv[2]);
@@ -1355,6 +1709,7 @@ int main(int argc, char** argv) {
   fastlaneThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
+  uiCorpusThroughAbi(argv[4]);
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
