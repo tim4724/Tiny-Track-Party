@@ -10,53 +10,56 @@ import { GameNet } from '../shared/GameNet.js';
 // The name cap is the phone's rule, applied again here because a HELLO from any
 // peer is untrusted input. Shared so the two halves cannot drift (shared/names.js).
 import { cleanName } from '../shared/names.js';
+// The SESSION POLICY is C++ too (ttp_net.h over libttp-party/ttp/session.cc).
+// Every room decision below — what the retained snapshot contains, what a new
+// seat starts as, what a drop or a LEAVE means in each phase, which picks are
+// refused, when the socket is declared dead, who may claim a dropped seat — is
+// ITS answer; this file performs them against the socket, the timers, the
+// storage and the RoomFlow, and decides nothing. The JS twin (sessionModel.js)
+// survives only as the oracle session-corpus.jsonl was recorded from, exactly as
+// uiModel.js and decide.js do for the screens and the sound.
+import * as session from './NativeSessionModel.js';
+// The sharded dial URL, from the same encoder party.pinInstance calls. This file
+// used to build that string by hand eleven lines above asking C++ for it.
+import { pinUrl } from './NativePartyConnection.js';
 
-const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS } = window;
+const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS, LIVENESS } = window;
 
 const enc = encodeURIComponent;
 
-// Controller liveness. The relay only reports a drop when a socket actually
-// CLOSES — a locked phone or dead Wi-Fi leaves it dangling for minutes. Phones
-// ping at 1 Hz (controller/Net.js), so a seat silent past this window is treated
-// as dropped through the same path as a real peer_left. Detection lives in
+// Presence windows. All six live in the shared manifest (protocol.js LIVENESS)
+// because they only mean anything TOGETHER and against the phone's ping cadence:
+// the relay only reports a drop when a socket actually CLOSES — a locked phone
+// or dead Wi-Fi leaves it dangling for minutes — so a seat silent past
+// TIMEOUT_MS is dropped through the same path as a real peer_left, which is only
+// safe because phones ping at PING_INTERVAL_MS. Detection itself lives in
 // RoomFlow (opts.liveness + onSeen/expiredPeers, nowMs-injected); this module
-// just stamps traffic and applies expiries. Lobby seats are exempt (expiredPeers
-// is empty there): peer_left stays the authority, so a brief blip can't kick a
-// lobby seat.
-const LIVENESS_TIMEOUT_MS = 3000;
+// stamps traffic and applies expiries. Lobby seats are exempt (expiredPeers is
+// empty there): peer_left stays the authority, so a brief blip can't kick a
+// lobby seat. The abandoned-race grace is RoomFlow's decision too (graceTick);
+// this module only feeds it the participant set and reports the one moment it
+// fires. __abandonGraceMs is the E2E hook that shortens the wait, and it is the
+// one platform-flavoured part — an override of a manifest number, not a second
+// declaration of it.
+const LIVENESS_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
+const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || LIVENESS.ABANDONED_RACE_GRACE_MS;
+const LIVENESS_TICK_MS = LIVENESS.TICK_MS;
+const CREATE_TIMEOUT_MS = LIVENESS.CREATE_TIMEOUT_MS;
 
 // A 'random' pick's run length off the wire: 0 is ENDLESS, anything else is that
 // many races. The phone offers 4 or endless, but the value is host-supplied like
 // every other field here, so it's clamped rather than trusted — and a pick that
 // carries no length at all (a phone from before they existed) gets the default
 // card rather than an endless run nobody asked for.
+//
+// This stays in the shell rather than crossing into session.cc with the rest of
+// the room policy, and it is the same call _applyMode/setTrack/clearPick already
+// made: the host's MODE PICK needs a track catalogue and a game-owned shuffle
+// bag, which makes it a cup-series concern wearing a session hat. The length is
+// part of that pick, so it travels with it.
 const RANDOM_MAX_RACES = 8;
 const RANDOM_DEFAULT_RACES = 4;
 const normRandomRaces = (n) => (Number.isInteger(n) && n >= 0 && n <= RANDOM_MAX_RACES ? n : RANDOM_DEFAULT_RACES);
-
-// Abandoned-race grace. Every racer gone (only held, dropped seats left) while
-// late joiners wait in their lobby: hold the room this long so the dropped party
-// can scan back in, then return to the lobby so the next race seats the people
-// who are actually here. Dropped seats are otherwise held for the WHOLE race, so
-// without this the newcomers would sit out an entire frozen race.
-// The DECISION is RoomFlow.graceTick's (arm/expire/disarm, nowMs-injected, shared
-// by every shell); this module only feeds it the participant set, polls it on the
-// liveness tick below and reports the one moment it fires (onRaceAbandoned).
-// __abandonGraceMs: E2E hook to shorten the wait.
-const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || 15000;
-// Display self-heartbeat: each liveness tick relays a message to our own slot.
-// An echo overdue past this window means OUR socket is half-dead (the relay
-// can't reach us), so force a reconnect instead of waiting for TCP to notice.
-// Wider than the controller window: with the fastlane carrying inputs the WS
-// sees only ~1 Hz traffic, so this lone canary needs more margin.
-const HEARTBEAT_DEAD_MS = 6000;
-const LIVENESS_TICK_MS = 1000;
-
-// How long an open socket may sit without a created/joined answer before the
-// attempt is written off (party.failAttempt → normal backoff/retry). Guards the
-// silent failure mode where the relay accepts the socket but never answers the
-// create/join — which fires no error and no close.
-const CREATE_TIMEOUT_MS = 8000;
 
 // sessionStorage key for the live room — a crash-recovery fallback. A page
 // exit normally ends the party (pagehide → shutdown → close_room), so on a
@@ -148,6 +151,11 @@ export class DisplayNet extends GameNet {
     this.trackChooser = opts.trackChooser || this.tracks;
     this.carChooser = opts.carChooser || [];
     this.colorPalette = opts.colorPalette || [];
+    // Handed to the session model ONCE: it is authored data that changes when
+    // the game ships, not while it runs, so it does not ride every publish
+    // across the boundary. The model treats it as opaque — the lobby-only gate
+    // on `tracks` is the only thing it knows about the shape.
+    session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
     // Latest standings board, mirrored into the snapshot so a phone that reconnects
     // on the results screen (or after its car finished) recovers it by replay.
     // null outside a race; set via setStandings on each finish + at race end.
@@ -200,13 +208,12 @@ export class DisplayNet extends GameNet {
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     this.flow.on('rosterchange', () => this._announce());
     this.flow.on('hostchange', ({ hostPeerIndex }) => {
-      // A promoted host has no ready toggle (their footer button is "Start
-      // race"), so a ready flag left over from before the promotion could
-      // never be cleared — and it would keep their car pick locked (SET_CAR
-      // refuses ready seats). Drop it on promotion.
-      const h = this.flow.get(hostPeerIndex);
-      if (h) h.ready = false;
-      this._announce();
+      const plan = session.hostChangePlan();
+      if (plan.clearReady) {
+        const h = this.flow.get(hostPeerIndex);
+        if (h) h.ready = false;
+      }
+      if (plan.publish) this._announce();
     });
     // Republish the snapshot on every phase flip: the retained copy carries
     // roomState, and a replay to a (re)joining phone must never hand it a
@@ -217,24 +224,21 @@ export class DisplayNet extends GameNet {
     // ready seat's car pick is locked (SET_CAR below) — anyone who wants to
     // switch cars un-readies first, so a ready flag always means "ready".
     this.flow.on('statechange', ({ to }) => {
-      // Race start: re-stamp every CONNECTED seat's liveness so silence accumulated in
-      // the lobby (where expiredPeers is gated off) isn't charged against the first
-      // COUNTDOWN tick — a phone whose 1 Hz ping was throttled >3s before the host hit
-      // Start would otherwise be dropped one tick in. The 3s window must run from race
-      // start. Deliberately NOT flow.clearDisconnected(now): flipping a grace-pending
-      // seat back to connected here would orphan its reconnect QR and 90s expiry timer
-      // (only _seen/markReconnected/_claimReconnect may flip presence). Disconnected
-      // seats keep their stale stamp; expiredPeers already skips them.
-      if (to === ROOM_STATE.COUNTDOWN) {
+      const plan = session.stateChangePlan(to);
+      // Race start: re-stamp every CONNECTED seat's liveness, so silence
+      // accumulated in the lobby (where expiredPeers is gated off) isn't charged
+      // against the first COUNTDOWN tick. Deliberately not a blanket
+      // clearDisconnected: flipping a grace-pending seat back to connected here
+      // would orphan its reconnect QR (only _seen/markReconnected/
+      // _claimReconnect may flip presence). Disconnected seats keep their stale
+      // stamp; expiredPeers already skips them.
+      if (plan.restampConnected) {
         const now = Date.now();
         for (const p of this.flow.list()) if (p.connected) this.flow.onSeen(p.peerIndex, now);
       }
-      // Back in the lobby: the race that reserved dropped seats is over, so
-      // reclaim any that never came back (their claim QRs die with them).
-      if (to === ROOM_STATE.LOBBY) this._freeDisconnectedSeats();
-      // A fresh race and the lobby both start with no results board.
-      if (to === ROOM_STATE.COUNTDOWN || to === ROOM_STATE.LOBBY) this._standings = null;
-      this._publishLobby();
+      if (plan.freeDisconnected) this._freeDisconnectedSeats();
+      if (plan.clearStandings) this._standings = null;
+      if (plan.publish) this._publishLobby();
     });
   }
 
@@ -273,15 +277,14 @@ export class DisplayNet extends GameNet {
     this._publishLobby();
     this.onRosterChange(this.roster(), this.flow.host);
   }
+  // The LOBBY_UPDATE `players` projection. The composition is the session
+  // model's; this only supplies the roster and the game layer's per-seat answer
+  // to "does this seat hold a car in the live race" — which is what lets a
+  // (re)joining phone route itself (true = drop back into the race, false
+  // mid-race = wait for the next one).
   roster() {
-    return this.flow.list().map((p) => ({
-      peerIndex: p.peerIndex, name: p.name,
-      colorIndex: p.colorIndex, carIndex: p.carIndex, connected: p.connected,
-      ready: !!p.ready,
-      // Has a car in the live race — lets a (re)joining phone route itself:
-      // true = drop back into the race, false mid-race = wait for the next one.
-      inRace: !!this.inRace(p.peerIndex)
-    }));
+    const list = this.flow.list();
+    return session.rosterRows(list, list.map((p) => !!this.inRace(p.peerIndex)));
   }
 
   // ---- the active participant order ----
@@ -334,9 +337,10 @@ export class DisplayNet extends GameNet {
   _connect() {
     if (this.party) this.party.close(); // fresh-room fallback replaces the connection
     this.fastlane.closeAll();
-    const url = (this.roomCode && this.instance)
-      ? RELAY_URL + '/' + enc(this.roomCode) + '?instance=' + enc(this.instance)
-      : RELAY_URL;
+    // The sharded dial URL, from ttp::framing::pin_instance_url — the same
+    // encoder party.pinInstance calls below, rather than a second hand-built
+    // copy of the string in the same file. No instance = the plain relay URL.
+    const url = this.roomCode ? pinUrl(RELAY_URL, this.roomCode, this.instance) : RELAY_URL;
     // Per-session secret (genDisplayClientId) keyed to slot 0 → reconnect/reload
     // lands back on slot 0, while an outsider with only the room code can't forge it.
     this.party = new this._PartyConnectionImpl(url, { clientId: this.clientId });
@@ -426,15 +430,18 @@ export class DisplayNet extends GameNet {
 
   _onMessage(from, data) {
     if (!data) return;
-    if (from === 0) { // our own relay echo coming back (see _livenessTick)
-      if (data.type === '_heartbeat') this._hbPending = false;
+    // Slot 0 is US: the only thing that can arrive from it is our own relayed
+    // echo, which is how the self-heartbeat closes its loop.
+    const route = session.inboundRoute(from, data.type);
+    if (route !== 'peer') {
+      if (route === 'self-heartbeat') this._hbPending = false;
       return;
     }
     // ANY traffic from a peer — app message or RTC signal — is proof of life.
     this._seen(from);
     if (this._isSignal(from, data)) return;
-    switch (data.type) {
-      case MSG.HELLO: {
+    switch (session.messageAction(data.type)) {
+      case 'hello': {
         // A cross-device rejoin claims its dropped seat first, so the snapshot we
         // publish below reflects the restored identity (livery/car/host) — not the
         // throwaway placeholder slot the relay just handed this fresh connection.
@@ -451,55 +458,46 @@ export class DisplayNet extends GameNet {
         this._announce();
         break;
       }
-      case MSG.LEAVE:
-        // Intentional back-out. In the lobby (and on the results board) the
-        // seat is freed outright — the join QR covers coming back. Mid-race
-        // it's treated as a DROP instead: one accidental back-swipe must not
-        // forfeit a car for good, so the seat holds its reconnect QR through
-        // the usual grace window (re-joining lands straight back in the seat)
-        // and expires like any other drop if the player is truly gone.
-        if (this.roomState === ROOM_STATE.COUNTDOWN || this.roomState === ROOM_STATE.PLAYING) {
-          this._dropSeat(from);
-        } else {
-          this._expireSeat(from);
-        }
+      case 'leave':
+        // Intentional back-out. The fork is the session model's: freed outright
+        // in the lobby (and on the results board), a soft DROP mid-race so one
+        // accidental back-swipe cannot forfeit a car.
+        if (session.leaveAction(this.roomState) === 'drop') this._dropSeat(from);
+        else this._expireSeat(from);
         break;
-      case MSG.SET_CAR: {
-        // Lobby car-model pick. Car and colour are independent and duplicates
-        // are allowed, so no uniqueness check — just validate and store, then
-        // broadcast so this phone's picker confirms and the display renders the
-        // chosen model at race start. Allowed in the lobby, and mid-race for
-        // players with no car on track (late joiners wait in THEIR lobby while
-        // a race runs — their pick must stick for the next race). Racers stay
-        // locked to their car until the room is back in the lobby. A READY
-        // seat is locked too: ready survives race → lobby, so the pick behind
-        // a standing ready flag must not shift — un-ready (SET_READY) first.
+      case 'set_car': {
+        // Lobby car-model pick. Whether it is allowed — a ready seat's pick is
+        // locked, a racer's is locked until the lobby, a late joiner may pick
+        // mid-race, and the index must be an integer in range — is decided in
+        // C++ off untrusted phone input.
         const p = this.flow.get(from);
-        const idx = data.carIndex;
-        if (p && !p.ready && (this.roomState === ROOM_STATE.LOBBY || !this.inRace(from))
-          && Number.isInteger(idx) && idx >= 0 && idx < CAR_MODELS.length) {
-          p.carIndex = idx;
+        if (p && session.setCarDecision({
+          ready: p.ready, roomState: this.roomState, inRace: this.inRace(from),
+          carIndex: data.carIndex, carCount: CAR_MODELS.length
+        })) {
+          p.carIndex = data.carIndex;
           this._announce();
         }
         break;
       }
-      case MSG.SET_READY: {
-        // Lobby readiness toggle (non-hosts — the host starts the race instead
-        // of readying up). Stored on the player record and echoed to every
-        // phone via LOBBY_UPDATE; the game layer requires every non-host
-        // player ready before honouring the host's START_GAME.
+      case 'set_ready': {
+        // Readiness toggle. Stored on the player record and echoed to every
+        // phone via LOBBY_UPDATE; the game layer requires every non-host player
+        // ready before honouring the host's START_GAME.
         const p = this.flow.get(from);
-        const ready = !!data.ready;
-        if (p && from !== this.flow.host && this.roomState === ROOM_STATE.LOBBY && ready !== !!p.ready) {
-          p.ready = ready;
+        if (p && session.setReadyDecision({
+          isHost: from === this.flow.host, roomState: this.roomState,
+          ready: data.ready, current: p.ready
+        })) {
+          p.ready = !!data.ready;
           this._announce();
         }
         break;
       }
-      case MSG.SELECT_MODE:
+      case 'select_mode':
         this._applyMode(from, data);
         break;
-      case MSG.PING:
+      case 'ping':
         this.party.sendTo(from, { type: MSG.PONG, t: data.t });
         break;
       default:
@@ -556,20 +554,21 @@ export class DisplayNet extends GameNet {
   }
 
   _addPeer(peerIndex) {
-    if (!this.flow.has(peerIndex)) {
-      if (this.flow.size >= MAX_PLAYERS) return;
-      const colorIndex = this._RoomFlowImpl.lowestFreeSlot(this._usedColors(), MAX_PLAYERS);
-      // Default the car model to the livery slot so everyone starts on a distinct
-      // car; the player can change it in the lobby (SET_CAR), colour stays fixed.
-      this.flow.addPlayer(peerIndex, { name: 'Player ' + (colorIndex + 1), colorIndex, carIndex: colorIndex, ready: false });
-      // rosterchange fires from addPlayer → announce() handles broadcast + UI.
-    }
-    // Existing seat = same-device reconnect: the relay keys slots by clientId,
-    // so a returning phone lands back on its old index — _seen flips presence
-    // back on and drops its reconnect QR. (A cross-device rejoin gets a NEW
-    // index instead and is re-keyed onto the dropped seat in _claimReconnect
-    // via HELLO.) New seats just get their liveness clock started.
-    this._seen(peerIndex);
+    // The seat rule is the session model's: a full room refuses the seat and
+    // does not even stamp it; an EXISTING seat is a same-device reconnect (the
+    // relay keys slots by clientId, so a returning phone lands back on its old
+    // index) and only needs its liveness clock restarted. A cross-device rejoin
+    // gets a NEW index instead and is re-keyed in _claimReconnect via HELLO.
+    // lowestFreeSlot stays RoomFlow's, resolved here and passed in.
+    const plan = session.addPeerPlan({
+      has: this.flow.has(peerIndex),
+      size: this.flow.size,
+      maxPlayers: MAX_PLAYERS,
+      colorIndex: this._RoomFlowImpl.lowestFreeSlot(this._usedColors(), MAX_PLAYERS)
+    });
+    // rosterchange fires from addPlayer → announce() handles broadcast + UI.
+    if (plan.seat) this.flow.addPlayer(peerIndex, plan.seat);
+    if (plan.stamp) this._seen(peerIndex);
   }
 
   _removePeer(peerIndex) {
@@ -580,7 +579,7 @@ export class DisplayNet extends GameNet {
     // the player's car running — so the camera stays on it and a quick reconnect
     // resumes driving — and offer a reconnect QR for that exact seat. The car is
     // only forfeited if the seat's grace window elapses (playerleave → forfeitCar).
-    if (this.roomState === ROOM_STATE.LOBBY) {
+    if (session.presenceAction(this.roomState) === 'free') {
       this.flow.removePlayer(peerIndex); // emits rosterchange → announce(); drops its last-seen stamp
     } else {
       this._dropSeat(peerIndex);
@@ -628,23 +627,21 @@ export class DisplayNet extends GameNet {
   }
 
   _livenessTick() {
-    if (!this._inRoom || !this.party) return;
+    if (!this.party) return;
     const now = Date.now();
-    // Self-heartbeat: relay a message to our own slot and expect it echoed back.
-    // Tracked as an in-flight flag rather than an echo-age so a throttled
-    // background tab — whose ticks may run minutes apart — can't misread its own
-    // starvation as a dead link. No echo inside the window = the socket is
-    // half-dead; reconnect now instead of waiting for TCP to notice.
-    if (this._hbPending && now - this._hbSentAt > HEARTBEAT_DEAD_MS) {
-      this._hbPending = false;
-      this.party.reconnectNow();
-      return;
-    }
-    if (!this._hbPending) {
-      this._hbPending = true;
-      this._hbSentAt = now;
-      this.party.sendTo(0, { type: '_heartbeat' });
-    }
+    // The self-heartbeat's state machine is the session model's: overdue is an
+    // IN-FLIGHT FLAG rather than an echo age, so a throttled background tab —
+    // whose ticks may run minutes apart — cannot misread its own starvation as a
+    // dead link. This side only performs: relay a message to our own slot, or
+    // force the reconnect the relay can no longer reach us to ask for.
+    const tick = session.heartbeatTick({
+      inRoom: this._inRoom, hbPending: this._hbPending, hbSentAt: this._hbSentAt, now
+    });
+    this._hbPending = tick.hbPending;
+    this._hbSentAt = tick.hbSentAt;
+    if (tick.act === 'reconnect') this.party.reconnectNow();
+    else if (tick.act === 'send') this.party.sendTo(0, { type: MSG.HEARTBEAT });
+    if (!tick.sweep) return;
     // Per-controller silence check. RoomFlow owns the detection (mid-game only —
     // expiredPeers is empty in the lobby); applying the drop stays here so
     // markDisconnected keeps its single writer.
@@ -658,22 +655,19 @@ export class DisplayNet extends GameNet {
   }
 
   _resyncPeers(peers) {
-    const present = new Set(peers);
-    for (const p of this.flow.list()) {
-      if (!present.has(p.peerIndex)) this._expireSeat(p.peerIndex);
-    }
-    // Peers the relay knows that we don't — this tab RELOADED mid-session and
-    // lost the roster. Seat them with placeholder identities now; each phone
-    // also re-HELLOs when it sees the display return, restoring its name.
-    for (const idx of peers) {
-      if (idx !== 0 && !this.flow.has(idx)) this._addPeer(idx);
-    }
+    // Post-reload reconciliation: seats the relay no longer knows are expired,
+    // peers it knows that we don't are seated with placeholder identities (this
+    // tab RELOADED mid-session and lost the roster). Slot 0 is us. The set logic
+    // is the session model's; both halves are performed here.
+    const plan = session.resyncPlan(this.flow.list().map((p) => p.peerIndex), peers);
+    for (const id of plan.expire) this._expireSeat(id);
+    for (const idx of plan.add) this._addPeer(idx);
     // Overwrite the snapshot retained from before the reload: this fresh flow is
     // now the authority (roster + roomState), so the live push clears every
     // phone's reconnect overlay and the next joiner isn't replayed the old roster.
     // Each phone also re-HELLOs when it sees the display return (restoring its
     // name + relighting its ITEM via onPlayerWelcomed).
-    this._publishLobby();
+    if (plan.publish) this._publishLobby();
   }
 
   // ---- reconnect (dropped-seat) handling ----
@@ -683,15 +677,25 @@ export class DisplayNet extends GameNet {
   // their livery/car/name/host slot. A same-device reconnect keeps its index and
   // never reaches here (oldId === fromId, handled in _addPeer instead).
   _claimReconnect(fromId, msg) {
-    const oldId = this._normIndex(msg && msg.rejoinToken);
-    if (oldId == null || oldId === fromId) return false;
-    if (!this.flow.has(oldId) || !this.flow.isDisconnected(oldId)) return false;
+    // The WHOLE message crosses, not just the token: an ABSENT rejoinToken and
+    // an explicit null answer differently (Number(undefined) is NaN, Number(null)
+    // is 0), and that difference is frozen — see the model's norm_index.
+    // `hasOld`/`oldDisconnected` are asked speculatively because the model needs
+    // them alongside the token it is about to normalize.
+    const guess = session.normIndexOf(msg);
+    const plan = session.claimPlan({
+      hello: msg, fromId,
+      hasOld: guess !== null && this.flow.has(guess),
+      oldDisconnected: guess !== null && this.flow.isDisconnected(guess)
+    });
+    if (!plan.claim) return false;
+    const oldId = plan.oldId;
     this.fastlane.close(oldId);
     this.fastlane.close(fromId);
     this.flow.rekey(oldId, fromId); // moves the seat record (+ last-seen stamp), marks it reconnected
-    // Re-stamp now: the carried stamp is from before the drop (> timeout old), so
-    // without this the reclaimed seat could expire again on the very next tick.
-    this.flow.onSeen(fromId, Date.now());
+    // The carried stamp is from before the drop (> timeout old), so without this
+    // the reclaimed seat would expire again on the very next tick.
+    if (plan.restamp) this.flow.onSeen(fromId, Date.now());
     this.onPlayerRekey(oldId, fromId); // move their still-racing car onto the new slot
     this._clearReconnect(oldId);
     this._clearReconnect(fromId);
@@ -708,9 +712,8 @@ export class DisplayNet extends GameNet {
   _showReconnect(peerIndex) {
     const p = this.flow.get(peerIndex);
     if (!p) return;
-    this._reconnectSeats.set(peerIndex, {
-      peerIndex, name: p.name, colorIndex: p.colorIndex, url: this._claimUrl(peerIndex)
-    });
+    this._reconnectSeats.set(peerIndex,
+      session.reconnectCard(p, session.claimUrl(this._joinUrl(), peerIndex)));
     this.onReconnectChange([...this._reconnectSeats.values()]);
   }
 
@@ -729,23 +732,6 @@ export class DisplayNet extends GameNet {
     }
   }
 
-  // Join URL with ?claim=<peerIndex> spliced in BEFORE the #instance fragment so
-  // the relay-shard pin survives (cf. _joinUrl). Scanning this lands a fresh
-  // device on the room with the token that reclaims this exact seat.
-  _claimUrl(peerIndex) {
-    const u = this._joinUrl();
-    const h = u.indexOf('#');
-    const base = h >= 0 ? u.slice(0, h) : u;
-    const frag = h >= 0 ? u.slice(h) : '';
-    const sep = base.indexOf('?') >= 0 ? '&' : '?';
-    return base + sep + 'claim=' + enc(peerIndex) + frag;
-  }
-
-  _normIndex(value) {
-    const n = Number(value);
-    return Number.isInteger(n) && n >= 0 ? n : null;
-  }
-
   // ---- outbound protocol ----
   // The room's single outbound message: the retained host snapshot (relay
   // set_state). The relay pushes it live to every controller and replays it right
@@ -753,27 +739,27 @@ export class DisplayNet extends GameNet {
   // roster, selection, results, and the chooser content — from the replay alone.
   // There is no per-phone WELCOME: the controller funnels the replayed/pushed
   // replayed/pushed snapshot into their existing LOBBY_UPDATE handler.
+  // The COMPOSITION is the session model's — including the rule three shells
+  // must not each re-author, that the bulky track schematics ride the LOBBY
+  // snapshot only (the picker is shown nowhere else, and the whole blob has to
+  // fit the relay's 16 KiB set_state cap). The chooser content itself was handed
+  // over once at construction. This side supplies the room's live fields and
+  // puts the answer on the relay.
   _publishLobby() {
     if (!this.party) return;
-    const lobby = this.roomState === ROOM_STATE.LOBBY;
-    this.party.setState({
-      type: MSG.LOBBY_UPDATE,
+    const list = this.flow.list();
+    this.party.setState(session.lobbySnapshot({
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       paused: !!this.isPaused(),
-      players: this.roster(),        // each carries inRace + ready + connected
+      roster: list,
+      inRace: list.map((p) => !!this.inRace(p.peerIndex)),
       mode: this.mode,
       cupId: this.cupId,
       randomRaces: this.randomRaces, // 'random' run length (0 = endless)
       trackId: this.trackId,         // resolved concrete track
-      standings: this._standings,    // results board (playing/results), else null
-      // Chooser content the dumb controller renders from. cars/colors ride every
-      // snapshot (tiny; the late-joiner picker needs cars mid-race); the bulky
-      // track schematics only in the lobby, where the picker is actually shown.
-      cars: this.carChooser,
-      colors: this.colorPalette,
-      tracks: lobby ? this.trackChooser : null
-    });
+      standings: this._standings      // results board (playing/results), else null
+    }));
   }
 
   // Mirror the latest standings board into the snapshot (display drives this on
@@ -787,6 +773,20 @@ export class DisplayNet extends GameNet {
   // Public nudge for the game layer to republish the snapshot when a field it owns
   // changes without a roster/state event (manual pause, mid-race car forfeit/rekey).
   syncState() { this._publishLobby(); }
+
+  // Replace the chooser content the snapshot carries. It is normally authored
+  // data set once at construction — which is why the session model holds it
+  // rather than being handed 4 KB of it on every publish — so this exists for
+  // the cases where it genuinely changes: a shell that loads its catalogue
+  // late, and the wire-compat fixture that pushes an oversize one to prove the
+  // relay's 16 KiB cap actually bites. Republishes, like every other writer.
+  setChooser({ cars, colors, tracks } = {}) {
+    if (cars) this.carChooser = cars;
+    if (colors) this.colorPalette = colors;
+    if (tracks) this.trackChooser = tracks;
+    session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
+    this._publishLobby();
+  }
 
   // Reset the lobby pick to the pre-pick state (End party → fresh room: the
   // next party must not inherit the old party's cup). The retained snapshot
@@ -824,9 +824,7 @@ export class DisplayNet extends GameNet {
 
   // ---- join URL / QR base ----
   _baseUrl() { return this.baseUrlOverride || window.location.origin; }
-  _joinUrl() {
-    return this._baseUrl() + '/' + this.roomCode + (this.instance ? '#' + enc(this.instance) : '');
-  }
+  _joinUrl() { return session.joinUrl(this._baseUrl(), this.roomCode, this.instance); }
   // Controller-URL template registered with the relay on room create. The relay
   // fills {room}/{instance} and hands the result to anyone holding only the room
   // code (native shells via GET /room/:code, controllers in `joined`), so a
@@ -835,9 +833,10 @@ export class DisplayNet extends GameNet {
   // absolute https templates and rejects the whole create on an invalid one, so
   // plain-http origins (local dev, e2e) register none.
   _controllerUrlTemplate() {
-    const base = this._baseUrl().replace(/\/+$/, '');
-    if (base.indexOf('https://') !== 0) return undefined;
-    return base + '/{room}#{instance}';
+    // null == register NONE. party.create takes `undefined` for that, so the
+    // model's null is translated once, here, rather than the model learning
+    // about a JS-only value.
+    return session.controllerUrlTemplate(this._baseUrl()) || undefined;
   }
   async _fetchBaseUrl() {
     const host = window.location.hostname;

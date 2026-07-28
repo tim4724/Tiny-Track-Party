@@ -144,6 +144,30 @@ const MUTATIONS = [
     expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {
+    // The snapshot is COMPOSED in C++ now (ttp::session::lobby_snapshot), so the
+    // object the phone parses is authored on the far side of the boundary. The
+    // roster row is the part the phone matches ITSELF against — it reads
+    // `inRace` by name to decide whether to drop into the race or wait for the
+    // next one — and nothing but this suite has both parsers in one process.
+    name: 'session/roster-row-loses-inrace',
+    kind: 'drop a field the phone routes itself on',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '    row.set("inRace", Value::Bool(truthy(flag)));',
+    replace: '    (void) flag;',
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+  },
+  {
+    // The chooser payload the dumb controller renders from. `cars` rides every
+    // snapshot on purpose (the late-joiner picker needs it mid-race); dropping
+    // it leaves a phone that joined during a race with nothing to pick from.
+    name: 'session/chooser-cars-go-lobby-only',
+    file: 'native/libttp-party/ttp/session.cc',
+    kind: 'gate an always-present chooser key on the lobby',
+    find: '  copyKey(out, chooser, "cars");',
+    replace: '  if (lobby) copyKey(out, chooser, "cars");',
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+  },
+  {
     name: 'roomflow/state-renamed',
     kind: 'rename a phase string the phone compares against protocol.js',
     file: 'native/libttp-party/ttp/room_flow.cc',

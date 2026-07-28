@@ -129,6 +129,11 @@ add_library(libttp_track STATIC
   # takes the number formatter as a function pointer so libttp-track keeps its
   # independence from libttp-json.
   libttp-track/ttp/race_track_json.cc
+  # The top-down schematic + its snapshot codec (public/display/trackSchematic.js
+  # ported). Here rather than in libttp-runtime because it reads a built
+  # ttp::RaceTrack and nothing else — no Game, no cameras, no renderer — and
+  # because the browser reaches it through the TRACK half of the ABI.
+  libttp-track/ttp/schematic.cc
 )
 target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
 # libttp_json is here for race_track_json's decimal spelling only (jsonnum's
@@ -171,6 +176,27 @@ target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_testsupport tt
 ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
+)
+
+# ---- Conformance: the top-down schematic + its snapshot codec ---------------
+# Replays tests/fixtures/schematic-corpus.jsonl against libttp-track's schematic
+# port. JS-RECORDED evidence, and it is worth being precise about why: the
+# per-track expectations are public/shared/trackSchematics.js — committed, baked
+# by the JS trackSchematic(), and already held to the live geometry by
+# tests/track.test.js — so this rebuilds each track through the native
+# TrackBuilder and must reproduce bytes the JS wrote. Not C++ agreeing with C++,
+# and there is no --record mode.
+#
+# The projection rounds through Number.prototype.toFixed, which printf cannot
+# reproduce; the port routes it through double-conversion's ToFixed (the same
+# code V8 runs), and this corpus is what proves the two agree over 20 real
+# tracks' worth of coordinates.
+add_executable(schematic_check tracktest/schematic_check.cc)
+target_include_directories(schematic_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
+target_link_libraries(schematic_check PRIVATE libttp_track ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(schematic_check)
+add_test(NAME schematic
+  COMMAND schematic_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/schematic-corpus.jsonl
 )
 
 # ---- libttp-sim: the sim-core port ------------------------------------------
@@ -352,6 +378,14 @@ add_library(libttp_party STATIC
   libttp-party/ttp/protocol.cc
   libttp-party/ttp/relay_framing.cc
   libttp-party/ttp/fastlane.cc
+  # The layer directly ABOVE RoomFlow: the display's session policy
+  # (public/display/sessionModel.js ported) — the retained room snapshot, the
+  # seat rules, the SET_CAR/SET_READY guards, the phase-flip effects, the
+  # self-heartbeat, the seat claim and the post-reload reconciliation. It holds
+  # no RoomFlow handle and mutates nothing: every function is pure over plain
+  # data and the shell performs the answers, which is what lets its corpus
+  # replay with no room machine at all.
+  libttp-party/ttp/session.cc
 )
 target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party)
 target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp ttp_warnings)
@@ -398,6 +432,25 @@ add_test(NAME framing
 # ttp::fastlane::Link: per op the enqueue return, the packet written, the events
 # applied, the RTT sample, and the full link-state digest. The srtt EWMA is real
 # FP, so ttp_strict_fp (-ffp-contract=off) is load-bearing here.
+# ---- Conformance: the display's session policy -------------------------------
+# Replays tests/fixtures/session-corpus.jsonl (recorded off the live
+# public/display/sessionModel.js in P9) against ttp::session — the room snapshot
+# and its players projection, the URL trio, the seat defaults and the room-full
+# cap, the presence/LEAVE fork, the SET_CAR and SET_READY guards, the phase-flip
+# effects, the heartbeat state machine, the seat claim and the resync plan.
+#
+# It is the first oracle three of those units have EVER had: the claim URL, the
+# rejoinToken normalizer and the cross-device seat claim were exercised by
+# nothing in the tree — not one test built a claim URL or scanned a claim QR —
+# and the normalizer carries a frozen security-adjacent quirk (Number(null) is 0,
+# so every ordinary HELLO is a claim on seat 0). No --record mode on purpose.
+add_executable(session_check partytest/session_check.cc)
+target_link_libraries(session_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(session_check)
+add_test(NAME session
+  COMMAND session_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
+)
+
 add_executable(fastlane_check partytest/fastlane_check.cc)
 target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(fastlane_check)
@@ -419,7 +472,7 @@ add_test(NAME fastlane
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
-  runtime/ttp_theme.cc runtime/ttp_ui.cc)
+  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_net.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the
@@ -441,6 +494,7 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
@@ -694,6 +748,12 @@ if(EMSCRIPTEN)
     # ... and the ABI over it. JSON in, JSON out: this layer answers once per
     # event and half of what it answers is text, so there is nothing to pack.
     runtime/ttp_ui.cc
+    # The session-policy ABI over libttp-party's ttp::session — the room
+    # snapshot the display puts on the relay, the seat rules and the guards
+    # behind it. Same trap as every line in this list: it is COMPILED here, not
+    # linked from a library, so an ABI source that lands only in the CMake
+    # target above leaves this module unlinkable and no ctest says so.
+    runtime/ttp_net.cc
     # The audio decisions, for the same reason and with the same trap: this list
     # is COMPILED, not linked against libttp_runtime, so a source added to the
     # library alone leaves this module unlinkable and no ctest target notices.

@@ -184,7 +184,13 @@ function installBrowserGlobals() {
   globalThis.window.STUN_URL = proto.STUN_URL;
   globalThis.window.ROOM_STATE = proto.ROOM_STATE;
   globalThis.window.CAR_MODELS = proto.CAR_MODELS;
+  globalThis.window.CAR_COLORS = proto.CAR_COLORS;
   globalThis.window.MAX_PLAYERS = proto.MAX_PLAYERS;
+  // The presence contract both ends spend: the phone's ping cadence and the
+  // display's drop/grace/canary windows. Real values, from the real manifest —
+  // "a seat silent past 3 s is dropped" only means anything against a 1 Hz ping,
+  // and this suite is where the two ends actually meet.
+  globalThis.window.LIVENESS = proto.LIVENESS;
 }
 
 function kit() {
@@ -227,6 +233,11 @@ async function displayModules() {
   const adapters = await displayAdapters();
   const flow = await import(pathToFileURL(path.join(ROOT, 'public/display/NativeRoomFlow.js')).href);
   await flow.init();
+  // The session policy is native too (ttp_net.h): the snapshot the phone reads
+  // is COMPOSED in C++ now, so this is part of the display edge under test, not
+  // a stand-in for it.
+  const sess = await import(pathToFileURL(path.join(ROOT, 'public/display/NativeSessionModel.js')).href);
+  await sess.init();
   const net = await import(pathToFileURL(path.join(ROOT, 'public/display/Net.js')).href);
   return { ...adapters, DisplayNet: net.DisplayNet, NativeRoomFlow: flow.NativeRoomFlow };
 }

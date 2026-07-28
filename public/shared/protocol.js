@@ -65,7 +65,16 @@ var MSG = {
   PONG: 'pong',
 
   // Display -> all controllers (transient broadcast)
-  COUNTDOWN: 'countdown'        // {n} 3..2..1..GO — the haptic tick (the snapshot's roomState owns the actual screen)
+  COUNTDOWN: 'countdown',       // {n} 3..2..1..GO — the haptic tick (the snapshot's roomState owns the actual screen)
+
+  // Display -> ITS OWN SLOT (never reaches a controller). The self-heartbeat:
+  // the display relays this to slot 0 once a second and expects the relay to
+  // echo it back, which is the only way it can tell a half-dead socket from a
+  // quiet room (see LIVENESS.HEARTBEAT_DEAD_MS). It lived as a bare string
+  // literal inside display/Net.js until this entry existed, which meant a TV
+  // shell reimplementing the display's own liveness had nothing to copy it
+  // from — the type is as much a wire contract as any of the above.
+  HEARTBEAT: '_heartbeat'
 };
 
 // Message types that ride the low-latency WebRTC fastlane (unreliable, unordered,
@@ -88,6 +97,45 @@ var ROOM_STATE = {
 var MAX_PLAYERS = 4;
 var TOTAL_LAPS = 3;
 var COUNTDOWN_SECONDS = 3;
+
+// ---- The presence contract (phone pings -> display drops) ----
+// Six numbers that, like STEER above, only mean anything TOGETHER and are read
+// by two files in two roles: the phone's ping cadence (controller/Net.js) and
+// the display's drop/grace/canary windows (display/Net.js, fed straight into
+// the native RoomFlow's liveness config). "A seat silent past 3 s is dropped"
+// is only true because the phone pings at 1 Hz — until this block existed that
+// was a two-file chain held together by prose comments, and a tvOS shell would
+// have picked its own 3 s with nothing to say so.
+//
+// These are the WINDOWS, not the timers: setInterval/setTimeout stay with each
+// platform's shell, and so does the E2E `window.__abandonGraceMs` override.
+// tests/config-drift.test.js pins both files to this block, and
+// scripts/gen-protocol-corpus.mjs carries it into the protocol corpus, which
+// the `protocol` ctest replays against native/libttp-party/ttp/protocol.h.
+var LIVENESS = {
+  // PHONE. How often a controller pings the display (MSG.PING). Everything
+  // below is budgeted against this cadence.
+  PING_INTERVAL_MS: 1000,
+  // DISPLAY. Silence longer than this drops a seat mid-game, through the same
+  // path as a real peer_left. Three missed pings, so a single dropped packet
+  // or a scheduling hiccup can never kick a live phone.
+  TIMEOUT_MS: 3000,
+  // DISPLAY. The cadence the display re-checks presence on (its own tick).
+  TICK_MS: 1000,
+  // DISPLAY. The self-heartbeat's deadline: no echo of MSG.HEARTBEAT back from
+  // our own slot inside this window means OUR socket is half-dead, so force a
+  // reconnect rather than wait for TCP. Wider than TIMEOUT_MS because with the
+  // fastlane carrying inputs the display's socket sees only ~1 Hz of traffic,
+  // so this lone canary needs the margin.
+  HEARTBEAT_DEAD_MS: 6000,
+  // DISPLAY. Every racer gone while late joiners wait: hold the room this long
+  // for the dropped party to scan back in, then return to the lobby.
+  ABANDONED_RACE_GRACE_MS: 15000,
+  // DISPLAY. How long an open socket may sit without a created/joined answer
+  // before the attempt is written off (the relay accepted the socket and never
+  // replied — no error, no close).
+  CREATE_TIMEOUT_MS: 8000
+};
 
 // ---- The steering contract (phone tilt -> display sim) ----
 // Five numbers that only mean anything TOGETHER, read by three files in two
@@ -209,7 +257,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, STEER,
+    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, STEER, LIVENESS,
     CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
     CAR_STATS, carStats
   };

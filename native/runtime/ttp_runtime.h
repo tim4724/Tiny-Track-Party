@@ -203,6 +203,41 @@ TTP_ABI const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double
 // array of numbers.
 TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* sListJson);
 
+// ---- the top-down schematic + its snapshot codec ----------------------------
+// libttp-track/ttp/schematic.h — public/display/trackSchematic.js ported. Three
+// separate jobs, and only the middle one is on a shipping path today.
+//
+// ttp_track_schematic_json builds the track and projects its centreline into a
+// padded 256-unit square as one closed SVG path:
+//   {"viewBox":"0 0 256 256","d":"M x y L x y … Z","start":{"x","y"}|null,
+//    "proj":{"minX","minZ","scale","offX","offZ"}}
+// `proj` is the world->map transform, so an overlay can plot LIVE positions onto
+// the same map; it is ABSENT (not zeroed) for a track with no samples, exactly
+// as the JS early return leaves it. This is the call a TV shell with no baked
+// maps makes; the web display reads the prebaked shared/trackSchematics.js
+// instead, because building 20 tracks at boot to redraw data that never changes
+// would be work for nothing. NULL for an unknown track.
+TTP_ABI const char* ttp_track_schematic_json(const char* trackId, int laps, uint32_t seed);
+
+// The transport codec, and the piece the LOBBY SNAPSHOT actually spends. A full
+// loop is ~877 points (~180 KiB of SVG text), far past the relay's 16 KiB
+// set_state cap: simplify with Ramer-Douglas-Peucker, quantize each survivor to
+// two bytes (a coordinate IS a byte — VIEW is 256, so this is a round, not a
+// rescale), base64. The whole 20-track catalogue lands ~3.9 KiB.
+//
+// `eps` is the RDP tolerance in viewBox units; pass 0 for the tuned default
+// (0.35, chosen for FIDELITY — straights must reproduce, corners must not clip).
+// The simplification runs on the SMOOTH sub-integer path and only then rounds,
+// because rounding first would jitter straights by ±0.5 and defeat it.
+TTP_ABI const char* ttp_schematic_pack(const char* pathD, double eps);
+
+// The phone's half, for completeness and for the round-trip gate: back to
+// {viewBox, d, start}. Straight segments between the kept points, no spline (a
+// spline IMPOSES a rounded look the original does not have). Phones stay on the
+// JS controller on all three TV platforms, so this is not on a shipping path —
+// public/display/trackSchematic.js's unpackSchematic is what a player runs.
+TTP_ABI const char* ttp_schematic_unpack_json(const char* b64);
+
 // The item vocabulary, by CODE: the id a box roll can yield for TTP_ITEM_BOOST
 // (1) … TTP_ITEM_MONSTER (4), and NULL for anything else (TTP_ITEM_NONE
 // included — an empty slot has no id).

@@ -49,6 +49,15 @@ fixtures can be authored from C++: write a header JSON and record from it. Such 
 fixture proves "the sim still does what it did when this was recorded" and says
 NOTHING about JS parity.
 
+Class 1 also has members that are not traces at all. `session-corpus.jsonl` (the
+display's room policy, recorded off `public/display/sessionModel.js`) and
+`schematic-corpus.jsonl` (the top-down track map, whose per-track expectations are
+the committed `public/shared/trackSchematics.js` bake) join `ui-corpus.jsonl` and
+`audio-corpus.jsonl` as oracles recorded AHEAD of their port. All four are still
+RENEWABLE — `tests/codegen-freshness.test.js` re-derives each one and demands the
+committed bytes back — and each stops being renewable the day its JS is deleted.
+That is the whole reason they were recorded before the port rather than after.
+
 `tests/fixtures/catalogue-sweep-corpus.jsonl` and
 `tests/fixtures/runtime-camera-corpus.jsonl` are the other members of this class —
 all 20 tracks raced and digested (`catalogue_sweep_check --record`), and the chase

@@ -190,6 +190,79 @@ const MUTATIONS = [
     expect: 'fastlane',
   },
 
+  // ---- the session policy, whose corpus exists mostly FOR the branches nothing
+  // else in the tree covers. Each of these was a real hole before it: the
+  // rejection guards were untested (wire-compat drives the accepted paths only),
+  // and the claim path had no coverage anywhere.
+  {
+    // Ready survives race -> lobby, so the pick behind a standing ready flag must
+    // not shift. Drop this and a ready player can silently swap cars.
+    name: 'session/ready-seat-stops-locking-its-car-pick',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (ready) return false;\n  if (!(state == RoomState::LOBBY || !inRace)) return false;',
+    replace: '  if (!(state == RoomState::LOBBY || !inRace)) return false;',
+    expect: 'session',
+  },
+  {
+    // The bulky track schematics ride the LOBBY snapshot only — nothing about the
+    // other eleven keys hints at it, and shipping them every publish is how the
+    // room silently exceeds the relay's 16 KiB cap.
+    name: 'session/track-chooser-rides-every-snapshot',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (lobby) copyKey(out, chooser, "tracks");\n  else out.set("tracks", Value::Null());',
+    replace: '  copyKey(out, chooser, "tracks");',
+    expect: 'session',
+  },
+  {
+    // FROZEN QUIRK: Number(null) is 0 and Number(undefined) is NaN, so an absent
+    // rejoinToken and an explicit null claim different seats. "Tidying" this is
+    // exactly the change the corpus exists to refuse.
+    name: 'session/absent-rejoin-token-becomes-an-explicit-null',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (!v) return kNaN;  // Number(undefined)',
+    replace: '  if (!v) return 0;',
+    expect: 'session',
+  },
+  {
+    // The heartbeat is an in-flight FLAG, not an echo AGE. Swap it and a
+    // background tab whose ticks ran minutes apart reconnects a healthy socket.
+    name: 'session/heartbeat-reads-echo-age-instead-of-the-flag',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (hbPending && now - hbSentAt > kHeartbeatDeadMs) {',
+    replace: '  if (now - hbSentAt > kHeartbeatDeadMs) {',
+    expect: 'session',
+  },
+  {
+    // The claim QR's URL: ?claim= must go BEFORE the fragment or the reconnect
+    // lands on a relay shard that has never heard of the room.
+    name: 'session/claim-url-appends-after-the-fragment',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  return base + sep + "claim=" +\n         framing::encode_uri_component(js_number_to_string(peerIndex)) + frag;',
+    replace: '  return base + frag + sep + "claim=" +\n         framing::encode_uri_component(js_number_to_string(peerIndex));',
+    expect: 'session',
+  },
+
+  // ---- the track map + its snapshot codec.
+  {
+    // RDP runs on the SMOOTH sub-integer path and only THEN rounds. Round first
+    // and every straight jitters by +/-0.5, which defeats the simplification and
+    // blows the byte budget.
+    name: 'schematic/rdp-runs-on-already-rounded-points',
+    file: 'native/libttp-track/ttp/schematic.cc',
+    find: '    return z0(js_fixed(js_max(0.0, js_min(VIEW - 1.0, n)), 1));',
+    replace: '    return z0(js_fixed(js_max(0.0, js_min(VIEW - 1.0, n)), 0));',
+    expect: 'schematic',
+  },
+  {
+    // toFixed is not printf: it picks the integer minimizing |n/10^f - x| and
+    // breaks ties away from zero. Truncating instead moves points by up to 0.1.
+    name: 'schematic/tofixed-truncates-instead-of-rounding',
+    file: 'native/libttp-track/ttp/schematic.cc',
+    find: '  const std::string t = fixedText(v, digits);\n  return std::strtod(t.c_str(), nullptr);',
+    replace: '  double p = 1; for (int i = 0; i < digits; i++) p *= 10;\n  return std::trunc(v * p) / p;',
+    expect: 'schematic',
+  },
+
   // ---- the display runtime (libttp-runtime), which had NO gate at all until
   // runtime_check: it lived in runtime/ttp_display.cc behind the Filament SDK,
   // so every leg compiled around it and every ctest looked straight past it.
@@ -213,8 +286,11 @@ const MUTATIONS = [
   {
     name: 'frame/cell-aspect-transposed',
     file: 'native/libttp-runtime/ttp/frame_builder.cc',
-    find: 'aspect = (float) cell.w / (float) cell.h;',
-    replace: 'aspect = (float) cell.h / (float) cell.w;',
+    // The overview/lobby rigs derive the aspect from the surface (the race cams
+    // take the caller's cell aspect instead — a cell is a tile of the LETTERBOXED
+    // picture, which only the renderer knows). frame_check drives both.
+    find: ': (float) d.width / (float) (d.height ? d.height : 1);',
+    replace: ': (float) (d.height ? d.height : 1) / (float) d.width;',
     expect: 'frame_builder',
   },
   {

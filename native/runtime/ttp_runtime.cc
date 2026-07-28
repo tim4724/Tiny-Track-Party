@@ -26,6 +26,7 @@
 #include "ttp/jsonnum.h"
 #include "ttp/race_track.h"
 #include "ttp/race_track_json.h"
+#include "ttp/schematic.h"
 #include "ttp/json_parse.h"
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
@@ -1354,6 +1355,64 @@ const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* s
   Value arr = Value::Arr();
   for (const Value& v : list.arr) arr.push(frameValue(cl, v.num));
   out = canonical_stringify(arr);
+  return out.c_str();
+}
+
+// ---- the top-down schematic + its snapshot codec ----------------------------
+// Marshalling only; every rule is in libttp-track/ttp/schematic.h, where
+// tracktest/schematic_check.cc gates it against the JS-recorded corpus.
+// Fills rather than returns: this block is inside extern "C", where a function
+// returning a C++ type earns -Wreturn-type-c-linkage even with internal linkage.
+namespace {
+void schematicInto(const ttp::schematic::Schematic& s, Value& o) {
+  o = Value::Obj();
+  o.set("viewBox", Value::Str(s.viewBox));
+  o.set("d", Value::Str(s.d));
+  if (s.hasStart) {
+    Value st = Value::Obj();
+    st.set("x", Value::Num(s.start.x));
+    st.set("y", Value::Num(s.start.y));
+    o.set("start", std::move(st));
+  } else {
+    o.set("start", Value::Null());
+  }
+  // Absent, not zeroed, for a sample-less track — see the header.
+  if (s.hasProj) {
+    Value p = Value::Obj();
+    p.set("minX", Value::Num(s.proj.minX));
+    p.set("minZ", Value::Num(s.proj.minZ));
+    p.set("scale", Value::Num(s.proj.scale));
+    p.set("offX", Value::Num(s.proj.offX));
+    p.set("offZ", Value::Num(s.proj.offZ));
+    o.set("proj", std::move(p));
+  }
+}
+}  // namespace
+
+const char* ttp_track_schematic_json(const char* trackId, int laps, uint32_t seed) {
+  static std::string out;
+  if (!trackId) return nullptr;
+  const TrackDef* def = find_track_def(trackId);
+  if (!def) return nullptr;
+  const RaceTrack rt = build_race_track(*def, laps, seed);
+  Value v;
+  schematicInto(ttp::schematic::build(rt), v);
+  out = canonical_stringify(v);
+  return out.c_str();
+}
+
+const char* ttp_schematic_pack(const char* pathD, double eps) {
+  static std::string out;
+  out = ttp::schematic::pack(pathD ? pathD : "",
+                             eps > 0 ? eps : ttp::schematic::EPS);
+  return out.c_str();
+}
+
+const char* ttp_schematic_unpack_json(const char* b64) {
+  static std::string out;
+  Value v;
+  schematicInto(ttp::schematic::unpack(b64 ? b64 : ""), v);
+  out = canonical_stringify(v);
   return out.c_str();
 }
 

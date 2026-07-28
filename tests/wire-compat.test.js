@@ -458,8 +458,27 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   for (const phase of phases) {
     assert.equal(net.flow.transitionTo(phase), true, `the machine accepts ${phase}`);
     await H.flush();
-    assert.equal(lastLobby(ada).roomState, phase,
+    const now = lastLobby(ada);
+    assert.equal(now.roomState, phase,
       'the phase C++ publishes is the exact string protocol.js told the phone to expect');
+    // 4b. THE CHOOSER PAYLOAD, which is phase-dependent in ONE direction only.
+    //     `cars` and `colors` ride EVERY snapshot on purpose — a phone that
+    //     joins mid-race is a late joiner picking a car for the next race, and
+    //     an empty picker is a silent dead end. `tracks` are the bulk and ride
+    //     the LOBBY only, which is what keeps the whole blob inside the relay's
+    //     16 KiB cap. Both halves are one rule in ttp::session::lobby_snapshot,
+    //     and scripts/wire-mutate.mjs found this suite blind to the first half:
+    //     gating `cars` on the lobby broke nothing.
+    assert.ok(Array.isArray(now.cars) && now.cars.length,
+      `cars must ride the ${phase} snapshot — the late-joiner picker has nothing else`);
+    assert.ok(Array.isArray(now.colors) && now.colors.length,
+      `colors must ride the ${phase} snapshot — a phone's livery dots come from it`);
+    if (phase === ROOM_STATE.LOBBY) {
+      assert.ok(Array.isArray(now.tracks), 'the track chooser rides the lobby snapshot');
+    } else {
+      assert.equal(now.tracks, null,
+        `the bulky track schematics must NOT ride the ${phase} snapshot (the 16 KiB cap)`);
+    }
   }
   assert.equal(net.roomState, ROOM_STATE.LOBBY);
 
@@ -686,9 +705,12 @@ test('wire: a snapshot over the cap is REFUSED, and the room silently keeps the 
   assert.ok(fatBytes > MAX_STATE_BYTES, `the fixture really is oversize (${fatBytes} B)`);
   assert.ok(fatBytes < 32 * 1024, `...and stays well clear of the stack limit (${fatBytes} B)`);
 
-  net.trackChooser = fat;
+  // setChooser rather than a field poke: the chooser payload lives in the native
+  // session model now (it is authored data, handed over once instead of crossing
+  // the boundary on every publish), so replacing it goes through the setter that
+  // re-configures it. The publish it triggers is the one under test.
   const before = phone.seen.message.length;
-  net.syncState();
+  net.setChooser({ tracks: fat });
   await H.flush();
 
   assert.equal(phone.seen.message.length, before, 'the phone received NOTHING — no error, no update');

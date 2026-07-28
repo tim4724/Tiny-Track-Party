@@ -163,6 +163,90 @@ test("InputGate's dead-band derivation still closes over the manifest", () => {
     'no gate threshold can satisfy both bounds — the steering manifest is self-contradictory');
 });
 
+// ---------------------------------------------------------------------------
+// The presence contract: protocol.js LIVENESS vs the files that spend it.
+//
+// "A seat silent past 3 s is dropped" is only true because phones ping at 1 Hz,
+// and those two numbers lived in two different files with nothing but a comment
+// between them — the exact failure mode the steering manifest above was built to
+// end. A tvOS shell would have picked its own 3 s and nobody would have noticed
+// until a party.
+//
+// Four links, and the first three are here:
+//   1. controller/Net.js + display/Net.js == the manifest   (source text)
+//   2. sessionModel.js's restated constants == the manifest (source text)
+//   3. the windows are internally consistent               (arithmetic)
+//   4. protocol.h == protocol.js                (protocol-corpus + `protocol` ctest)
+// The source-text guards are literal on purpose: a reformat fails them loudly
+// rather than silently matching nothing.
+// ---------------------------------------------------------------------------
+const CTRL_NET = path.join(ROOT, 'public/controller/Net.js');
+const DISPLAY_NET = path.join(ROOT, 'public/display/Net.js');
+const SESSION_MODEL = path.join(ROOT, 'public/display/sessionModel.js');
+
+test('the two shells read their presence windows off the manifest', () => {
+  const ctrl = fs.readFileSync(CTRL_NET, 'utf8');
+  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
+  const pairs = [
+    [ctrl, 'controller/Net.js', 'PING_INTERVAL_MS', 'LIVENESS.PING_INTERVAL_MS'],
+    [ctrl, 'controller/Net.js', 'PONG_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
+    [disp, 'display/Net.js', 'LIVENESS_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
+    [disp, 'display/Net.js', 'LIVENESS_TICK_MS', 'LIVENESS.TICK_MS'],
+    [disp, 'display/Net.js', 'CREATE_TIMEOUT_MS', 'LIVENESS.CREATE_TIMEOUT_MS'],
+  ];
+  for (const [src, where, name, expr] of pairs) {
+    assert.match(src, new RegExp(`const ${name} = ${expr.replace('.', '\\.')};`),
+      `${where}: ${name} must read ${expr}, not restate a number`);
+  }
+  // The abandoned-race grace keeps its E2E override, which is an override OF a
+  // manifest number rather than a second declaration of one.
+  assert.match(disp, /const ABANDONED_RACE_GRACE_MS = window\.__abandonGraceMs \|\| LIVENESS\.ABANDONED_RACE_GRACE_MS;/,
+    'display/Net.js: the abandoned-race grace must fall back to the manifest');
+});
+
+test('sessionModel.js restates only what it must, and restates it correctly', () => {
+  const src = fs.readFileSync(SESSION_MODEL, 'utf8');
+  // It may import nothing (session-corpus.test.js enforces that), so the one
+  // window it spends and the heartbeat's wire type are literals — held here.
+  const dead = /const HEARTBEAT_DEAD_MS = (\d+);/.exec(src);
+  assert.ok(dead, 'sessionModel.js still declares HEARTBEAT_DEAD_MS');
+  assert.equal(Number(dead[1]), protocol.LIVENESS.HEARTBEAT_DEAD_MS,
+    'sessionModel.js HEARTBEAT_DEAD_MS drifted from protocol.LIVENESS.HEARTBEAT_DEAD_MS');
+  const type = /const HEARTBEAT_TYPE = '([^']+)';/.exec(src);
+  assert.ok(type, 'sessionModel.js still declares HEARTBEAT_TYPE');
+  assert.equal(type[1], protocol.MSG.HEARTBEAT,
+    'sessionModel.js HEARTBEAT_TYPE drifted from protocol.MSG.HEARTBEAT');
+});
+
+test('the presence windows still describe one design', () => {
+  const L = protocol.LIVENESS;
+  // The drop window must swallow at least two missed pings, or one dropped
+  // packet kicks a live phone mid-corner.
+  assert.ok(L.TIMEOUT_MS >= 3 * L.PING_INTERVAL_MS,
+    `a ${L.TIMEOUT_MS}ms drop window is under three ${L.PING_INTERVAL_MS}ms pings — a single hiccup would kick a live seat`);
+  // The display re-checks at least as often as it is willing to wait.
+  assert.ok(L.TICK_MS <= L.TIMEOUT_MS,
+    'the liveness tick is slower than the window it enforces');
+  // The display's own canary must be SLACKER than a controller's, because with
+  // the fastlane carrying inputs its socket sees only the heartbeat itself.
+  assert.ok(L.HEARTBEAT_DEAD_MS > L.TIMEOUT_MS,
+    'the display self-heartbeat window must be wider than the per-controller one');
+  // The abandoned-race grace only starts once every racer has already been
+  // dropped, so it has to outlast the drop window by a wide margin or the room
+  // bounces to the lobby before a returning party can scan back in.
+  assert.ok(L.ABANDONED_RACE_GRACE_MS >= 4 * L.TIMEOUT_MS,
+    'the abandoned-race grace is too close to the drop window to be a grace at all');
+});
+
+test('the C++ mirror of the presence contract matches the manifest', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'native/libttp-party/ttp/protocol.h'), 'utf8');
+  for (const [key, want] of Object.entries(protocol.LIVENESS)) {
+    const m = new RegExp(`LIVENESS_${key} = ([\\d.]+);`).exec(src);
+    assert.ok(m, `protocol.h still declares LIVENESS_${key}`);
+    assert.equal(Number(m[1]), want, `protocol.h LIVENESS_${key} drifted from protocol.LIVENESS.${key}`);
+  }
+});
+
 test('the live wasm engine ships the manifest steering exponent', { skip }, async () => {
   const abi = await loadAbi();
   // Read before anything calls ttp_set_steer_expo, so this is game.cc's own

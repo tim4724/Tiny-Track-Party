@@ -38,6 +38,8 @@ inline const std::vector<std::pair<std::string, std::string>> MSG = {
     {"LEAVE", "leave"},         {"PING", "ping"},
     {"LOBBY_UPDATE", "lobby_update"}, {"ITEM", "item"},
     {"PONG", "pong"},           {"COUNTDOWN", "countdown"},
+    // Display -> its own slot; never reaches a controller. See protocol.js.
+    {"HEARTBEAT", "_heartbeat"},
 };
 
 // FASTLANE_TYPES is keyed by the wire type string; value true = rides the
@@ -57,6 +59,20 @@ inline const std::string STUN_URL = "stun:stun.couch-games.com:3478";
 inline constexpr int MAX_PLAYERS = 4;
 inline constexpr int TOTAL_LAPS = 3;
 inline constexpr int COUNTDOWN_SECONDS = 3;
+
+// ---- the presence contract (protocol.js LIVENESS) ---------------------------
+// The phone's ping cadence and the display's drop / grace / canary windows.
+// Mirrored here for the same reason STEER is: these are the numbers two
+// implementations must agree on, and "a seat silent past 3 s is dropped" is
+// only true against a 1 Hz ping. ttp::session (session.h) spends
+// LIVENESS_HEARTBEAT_DEAD_MS directly; the rest are the shell's to feed into
+// RoomFlow's liveness config and its timers.
+inline constexpr double LIVENESS_PING_INTERVAL_MS = 1000;
+inline constexpr double LIVENESS_TIMEOUT_MS = 3000;
+inline constexpr double LIVENESS_TICK_MS = 1000;
+inline constexpr double LIVENESS_HEARTBEAT_DEAD_MS = 6000;
+inline constexpr double LIVENESS_ABANDONED_RACE_GRACE_MS = 15000;
+inline constexpr double LIVENESS_CREATE_TIMEOUT_MS = 8000;
 
 // ---- the steering contract (protocol.js STEER) ------------------------------
 // Five numbers the phone and the display's sim must agree on; see the JS block

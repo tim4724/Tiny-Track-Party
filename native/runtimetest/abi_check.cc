@@ -48,6 +48,7 @@
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
 #include "ttp_audio.h"
+#include "ttp_net.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 #include "ttp_theme.h"
@@ -1687,12 +1688,164 @@ void uiCorpusThroughAbi(const char* path) {
   check(header && steps > 0, "ui corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
 }
 
+// ---------------------------------------------------------------------------
+// The SESSION-POLICY ABI (ttp_net.h), replayed against the same corpus
+// partytest/session_check.cc drives the C++ objects with.
+//
+// The two checks are not redundant and the difference is the whole point: the
+// session check proves the RULES, this one proves the MARSHALLING. Everything
+// that can go wrong only here is invisible there — an absent rejoinToken
+// arriving as an explicit null (they answer differently, and that is frozen), a
+// snapshot key dropped on the way out, a carIndex string coerced to a number
+// somewhere in the parse, the chooser payload leaking into a non-lobby snapshot.
+// ---------------------------------------------------------------------------
+Value netStep(const std::string& op, const Value& in) {
+  const auto txt = [](const Value* v) -> std::string {
+    return v ? canonical_stringify(*v) : std::string();
+  };
+  const auto num = [&in](const char* k) {
+    const Value* v = in.find(k);
+    return (v && v->type == Value::NUM) ? v->num : 0.0;
+  };
+  const auto str = [&in](const char* k) {
+    const Value* v = in.find(k);
+    return (v && v->type == Value::STR) ? v->str : std::string();
+  };
+  const auto flag = [&in](const char* k) {
+    const Value* v = in.find(k);
+    if (!v) return false;
+    if (v->type == Value::BOOL) return v->b;
+    if (v->type == Value::NUM) return v->num != 0 && v->num == v->num;
+    if (v->type == Value::STR) return !v->str.empty();
+    return v->type == Value::ARR || v->type == Value::OBJ;
+  };
+  const auto parse = [](const char* json) {
+    bool ok = false;
+    Value v = json::parse(json ? json : "null", &ok);
+    return ok ? v : Value::Null();
+  };
+
+  Value out = Value::Obj();
+  if (op == "roster") {
+    out.set("rows", parse(ttp_net_roster_rows_json(txt(in.find("roster")).c_str(),
+                                                   txt(in.find("inRace")).c_str())));
+  } else if (op == "snapshot") {
+    const Value* chooser = in.find("chooser");
+    // Set once per step here rather than once per run: the corpus deliberately
+    // walks a configured and an UNCONFIGURED chooser, and "the three keys are
+    // simply absent" is part of the contract.
+    check(ttp_net_configure(chooser && chooser->type == Value::OBJ
+                                ? canonical_stringify(*chooser).c_str() : "") == 1,
+          "net chooser configured");
+    out.set("snapshot", parse(ttp_net_lobby_snapshot_json(canonical_stringify(in).c_str())));
+  } else if (op == "joinUrl") {
+    out.set("url", Value::Str(ttp_net_join_url(str("base").c_str(), str("room").c_str(),
+                                               str("instance").c_str())));
+  } else if (op == "claimUrl") {
+    out.set("url", Value::Str(ttp_net_claim_url(str("url").c_str(), num("peerIndex"))));
+  } else if (op == "template") {
+    const std::string t = ttp_net_controller_url_template(str("base").c_str());
+    out.set("template", t.empty() ? Value::Null() : Value::Str(t));
+  } else if (op == "normIndex") {
+    // NULL is JS undefined; "null" is an explicit null. Passing the wrong one
+    // here is exactly the marshalling bug this driver exists to catch.
+    const std::string arg = flag("absent") ? std::string() : txt(in.find("value"));
+    out.set("index", parse(ttp_net_norm_index_json(arg.empty() ? nullptr : arg.c_str())));
+  } else if (op == "seat") {
+    out.set("defaults", parse(ttp_net_seat_defaults_json(num("colorIndex"))));
+  } else if (op == "addPeer") {
+    out.set("plan", parse(ttp_net_add_peer_plan_json(flag("has") ? 1 : 0, num("size"),
+                                                     num("maxPlayers"), num("colorIndex"))));
+  } else if (op == "presence") {
+    out.set("action", Value::Str(ttp_net_presence_action(str("roomState").c_str())));
+  } else if (op == "leave") {
+    out.set("action", Value::Str(ttp_net_leave_action(str("roomState").c_str())));
+  } else if (op == "card") {
+    out.set("card", parse(ttp_net_reconnect_card_json(txt(in.find("seat")).c_str(),
+                                                      str("url").c_str())));
+  } else if (op == "route") {
+    out.set("route", Value::Str(ttp_net_inbound_route(num("from"), str("type").c_str())));
+  } else if (op == "action") {
+    out.set("action", Value::Str(ttp_net_message_action(str("type").c_str())));
+  } else if (op == "setCar") {
+    const std::string idx = txt(in.find("carIndex"));
+    out.set("accept", Value::Bool(ttp_net_set_car(flag("ready") ? 1 : 0, str("roomState").c_str(),
+                                                  flag("inRace") ? 1 : 0,
+                                                  idx.empty() ? nullptr : idx.c_str(),
+                                                  num("carCount")) != 0));
+  } else if (op == "setReady") {
+    out.set("accept", Value::Bool(ttp_net_set_ready(flag("isHost") ? 1 : 0,
+                                                    str("roomState").c_str(),
+                                                    flag("ready") ? 1 : 0,
+                                                    flag("current") ? 1 : 0) != 0));
+  } else if (op == "stateChange") {
+    out.set("plan", parse(ttp_net_state_change_json(str("to").c_str())));
+  } else if (op == "hostChange") {
+    out.set("plan", parse(ttp_net_host_change_json()));
+  } else if (op == "hb") {
+    out.set("tick", parse(ttp_net_heartbeat_tick_json(flag("inRoom") ? 1 : 0,
+                                                      flag("hbPending") ? 1 : 0,
+                                                      num("hbSentAt"), num("now"))));
+  } else if (op == "claim") {
+    Value hello = Value::Obj();
+    if (!flag("absent")) {
+      const Value* tok = in.find("rejoinToken");
+      hello.set("rejoinToken", tok ? *tok : Value::Null());
+    }
+    out.set("plan", parse(ttp_net_claim_plan_json(canonical_stringify(hello).c_str(),
+                                                  num("fromId"), flag("hasOld") ? 1 : 0,
+                                                  flag("oldDisconnected") ? 1 : 0)));
+  } else if (op == "resync") {
+    out.set("plan", parse(ttp_net_resync_plan_json(txt(in.find("rosterIds")).c_str(),
+                                                   txt(in.find("relayPeers")).c_str())));
+  }
+  return out;
+}
+
+void sessionCorpusThroughAbi(const char* path) {
+  std::ifstream in(path);
+  if (!in) { fail(std::string("cannot open ") + path); return; }
+  std::string line, scenario;
+  int steps = 0;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    Value root;
+    std::string err;
+    if (!read_line(line, root, &err)) { fail("session corpus parse: " + err); return; }
+    const Value* kind = root.find("case");
+    if (!kind || kind->type != Value::STR) continue;
+    if (kind->str == "scenario") {
+      const Value* nm = root.find("name");
+      scenario = nm && nm->type == Value::STR ? nm->str : "?";
+      continue;
+    }
+    if (kind->str != "step") continue;
+    const Value* opV = root.find("op");
+    const Value* wantOut = root.find("out");
+    if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed session step"); return; }
+    const Value empty = Value::Obj();
+    const Value* inV = root.find("in");
+    const Value got = netStep(opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
+    if (got.obj.empty()) { fail("session: unhandled op " + opV->str); return; }
+    steps++;
+    for (const auto& kv : got.obj) {
+      const Value* want = wantOut->find(kv.first);
+      if (!want) { fail("session " + scenario + ": corpus has no " + kv.first); continue; }
+      const Diff d = diff_val(*want, kv.second, kv.first);
+      check(!d.differ, "session " + opV->str + " " + scenario + " step " + std::to_string(steps) +
+                       ": " + d.path + " expected " + d.expected + " got " + d.actual);
+    }
+  }
+  check(steps > 0, "session corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
+  ttp_net_configure("");  // leave no configured chooser behind
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 6) {
+  if (argc < 7) {
     std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
-                         "<framing-corpus> <ui-corpus> <trace.jsonl>...\n");
+                         "<framing-corpus> <ui-corpus> <session-corpus> <trace.jsonl>...\n");
     return 2;
   }
   std::printf("abi check:\n");
@@ -1700,7 +1853,7 @@ int main(int argc, char** argv) {
   // marshalling its recorded inputs contain: tidepool's four bots never brake, so
   // on that fixture alone ttp_process_input's brake bit could be deleted outright
   // and every frame would still hash correctly. helix carries 402 braking inputs.
-  for (int i = 5; i < argc; i++) traceThroughAbi(argv[i]);
+  for (int i = 6; i < argc; i++) traceThroughAbi(argv[i]);
   gpThroughAbi(argv[1]);
   boundaryExports();
   roomCorpusThroughAbi(argv[2]);
@@ -1710,6 +1863,7 @@ int main(int argc, char** argv) {
   themeThroughAbi();
   audioThroughAbi();
   uiCorpusThroughAbi(argv[4]);
+  sessionCorpusThroughAbi(argv[5]);
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

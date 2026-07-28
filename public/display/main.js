@@ -5,7 +5,6 @@ import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from
 import { Stage } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { loadBiomes } from '../shared/biomes.js';
-import { packSchematic } from './trackSchematic.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -74,10 +73,9 @@ const trackCatalog = TRACK_LIST.map((t) => ({
 //   carChooser   — car id/name/handling stats (images load by id from the web host),
 //   colorPalette — the livery hex palette (colorIndex → colour), so the phone's
 //                  livery dots always match the car the display paints.
-const trackChooser = TRACK_LIST.map((t) => ({
-  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: packSchematic(TRACK_SCHEMATICS[t.id]) // RDP-simplified, uint8-packed base64 (see trackSchematic codec)
-}));
+// Filled at boot, once the wasm is up: the codec is C++ (NativeSchematic.js over
+// libttp-track/ttp/schematic.cc), so this cannot be a module-scope constant.
+let trackChooser;
 const carChooser = CAR_MODELS.map((id, i) => {
   const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};
   return { id, name: (window.CAR_NAMES && window.CAR_NAMES[i]) || id, stats: { accel: s.accel, vmax: s.vmax, turn: s.turn, mass: s.mass } };
@@ -129,13 +127,25 @@ ui.configure({ cups: CUPS, catalog: trackCatalog, maxPlayers: MAX_PLAYERS, carCo
 // the HUD boost chip's accent. The palette itself never leaves C++.
 const _biomes = await loadBiomes();
 
-const [_room, _conn, _lane] = await Promise.all([
+const [_room, _conn, _lane, _sess, _schem] = await Promise.all([
   import('./NativeRoomFlow.js'),
   import('./NativePartyConnection.js'),
-  import('./NativePartyFastlane.js')
+  import('./NativePartyFastlane.js'),
+  // The SESSION POLICY: the room snapshot, the seat rules, the message guards,
+  // the self-heartbeat, the seat claim. DisplayNet performs its answers.
+  import('./NativeSessionModel.js'),
+  // ...and the track-map codec the snapshot's chooser payload is packed with.
+  import('./NativeSchematic.js')
 ]);
 // One shared wasm module backs all of these (nativeRuntime.js memoizes it).
-await Promise.all([_room.init(), _conn.init(), _lane.init()]);
+await Promise.all([_room.init(), _conn.init(), _lane.init(), _sess.init(), _schem.init()]);
+// The reduced maps the phones' picker renders: the baked full-res schematic,
+// RDP-simplified and uint8-packed by the native codec so the whole catalogue
+// fits the relay's 16 KiB set_state cap.
+trackChooser = TRACK_LIST.map((t) => ({
+  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+  svg: _schem.pack(TRACK_SCHEMATICS[t.id].d)
+}));
 const _nativeParty = {
   RoomFlowImpl: _room.NativeRoomFlow,
   PartyConnectionImpl: _conn.NativePartyConnection,
