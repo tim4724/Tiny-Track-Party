@@ -81,17 +81,24 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       ranks: [...document.querySelectorAll('.cell-rank')].map((el) => [px(el, 'left'), px(el, 'top')])
     };
   });
-  // Two racers, two cells, and they tile the drawing buffer: same size, and the
-  // grid spends the surface bar the whole-pixel remainder.
+  // Two racers, two cells, same size, tiling a grid that starts at the TOP of
+  // the drawing buffer and is centred across it. Not `x: 0`: a stacked pair is
+  // the one small-party grid whose cells are wider than CELL_MAX_ASPECT, so the
+  // renderer letterboxes the grid as ONE piece (TtpRenderer::cellRect) and the
+  // bars it leaves land at the screen's two edges rather than as a seam through
+  // the layout. Assert THAT — equal bars, whole-pixel remainder — instead of an
+  // origin, so this reads the same on a surface where nothing is capped.
   expect(layout.cells).toHaveLength(2);
   expect(layout.cells[0].w).toBe(layout.cells[1].w);
   expect(layout.cells[0].h).toBe(layout.cells[1].h);
-  expect(layout.cells[0]).toMatchObject({ x: 0, y: 0 });
+  expect(layout.cells[0].y).toBe(0);
+  const barL = Math.min(...layout.cells.map((c) => c.x));
   const spanX = Math.max(...layout.cells.map((c) => c.x + c.w));
   const spanY = Math.max(...layout.cells.map((c) => c.y + c.h));
   expect(spanX).toBeLessThanOrEqual(layout.canvas.w);
   expect(spanY).toBeLessThanOrEqual(layout.canvas.h);
-  expect(layout.canvas.w - spanX).toBeLessThan(2); // cols-1 px at most, cols <= 2 here
+  // cols-1 px at most either side of centre, cols <= 2 here
+  expect(Math.abs(layout.canvas.w - spanX - barL)).toBeLessThan(2);
   expect(layout.canvas.h - spanY).toBeLessThan(2);
   // …and every label is at its cell's top-left corner IN CSS PIXELS, with the
   // place/lap readout on the same cell's top-RIGHT (so the width is scaled too,
@@ -105,9 +112,11 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   expect(layout.labels.map((p) => p.join(',')).sort()).toEqual(corners);
   expect(layout.ranks.map((p) => p.join(',')).sort()).toEqual(rights);
   // The cells fill the screen the HUD lays out on, so a label is never stranded
-  // in the corner of a quarter-sized grid (the un-scaled failure).
-  expect(spanX * k).toBeGreaterThan(layout.view.w - 4);
+  // in the corner of a quarter-sized grid (the un-scaled failure). Height is
+  // never capped, so it is the exact check; across the width it is the grid PLUS
+  // the two letterbox bars that reaches both edges.
   expect(spanY * k).toBeGreaterThan(layout.view.h - 4);
+  expect((spanX + barL) * k).toBeGreaterThan(layout.view.w - 4);
 
   // The steer bar and the cell dividers are no longer DOM: they are drawn by the
   // renderer (cell-anchored and textless, so they need no UI toolkit), which
