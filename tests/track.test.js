@@ -45,13 +45,13 @@ async function loadNativeAbi() {
   };
 }
 
-let buildTrack, trackSweep, trackFrames, trackFrameAt, trackSupports;
+let buildTrack, trackSweep, trackFrames, trackSupports;
 let TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS;
 let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
   const nt = await import('../scripts/native-track.mjs');
   await nt.init();
-  ({ buildTrack, trackSweep, trackFrames, trackFrameAt, trackSupports } = nt);
+  ({ buildTrack, trackSweep, trackFrames, trackSupports } = nt);
   ({ TRACKS, TRACK_LIST } = await import('../public/shared/tracks.js'));
   DEV_TRACKS = (await import('../public/shared/devTracks.js')).DEV_TRACKS;
   // Every track the BUILDER must handle: the shipped catalogue (tracks.js) plus the dev
@@ -652,12 +652,17 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
   // cups have twist rates too low to say anything.
   for (const id of ['skyline', 'skysnake', 'helix', 'gauntlet']) {
     const t = buildTrack(TRACKS[id]);
-    // numeric local surface normal at (s, lat): finite-difference the swept surface
-    // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction
-    const localNormal = (s, lat, d = 0.4) => {
-      const [fm, f0, fp] = trackFrames(id, [s - d, s, s + d]);
-      const at = (f) => vadd(f.pos, f.lateral, lat);
-      return vnorm(vcross(f0.lateral, vsub(at(fp), at(fm))));
+    // Local surface normal at (s, lat): finite-difference the swept surface
+    // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction.
+    // f0.up is the CENTRE-frame up at the same s, which is what `naive` wants —
+    // `trackFrameAt(id, s)` is literally `trackFrames(id, [s])[0]`
+    // (scripts/native-track.mjs), so asking for it separately would be a second
+    // wasm call and JSON parse for a frame already in hand.
+    const D = 0.4;
+    const surfaces = (fr, k, lat) => {
+      const fm = fr[k * 3], f0 = fr[k * 3 + 1], fp = fr[k * 3 + 2];
+      const off = (f) => vadd(f.pos, f.lateral, lat);
+      return { local: vnorm(vcross(f0.lateral, vsub(off(fp), off(fm)))), centre: f0.up };
     };
 
     const h = abi.begin(id, 7, 3, null);
@@ -669,16 +674,26 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
     let maxLat = 0, worst = { local: 0, where: null }, peak = { naive: 0, local: 0, where: null };
     for (let i = 0; i < 3000; i++) {
       abi.update(h, 1000 / 60);
-      for (const c of JSON.parse(abi.snapshot(h)).cars) {
-        if (c.totalS < 0) continue; // still on the grid, behind the line
-        const s = ((c.totalS % t.length) + t.length) % t.length;
+      // On the grid (totalS < 0) a car is behind the line and says nothing here.
+      const cars = JSON.parse(abi.snapshot(h)).cars.filter((c) => c.totalS >= 0);
+      if (!cars.length) continue;
+      const ats = cars.map((c) => ((c.totalS % t.length) + t.length) % t.length);
+      // ONE frames call for the whole field, not one per car: trackFrames takes a
+      // LIST, and every call is a JSON round trip through the wasm. Same three
+      // arclengths per car as before, just asked together.
+      const qs = [];
+      for (const s of ats) qs.push(s - D, s, s + D);
+      const fr = trackFrames(id, qs);
+      cars.forEach((c, k) => {
+        const s = ats[k];
         maxLat = Math.max(maxLat, Math.abs(c.lat));
-        const local = deg(dot3(localNormal(s, c.lat), c.pose.up));
-        const naive = deg(dot3(trackFrameAt(id, s).up, c.pose.up));
+        const surf = surfaces(fr, k, c.lat);
+        const local = deg(dot3(surf.local, c.pose.up));
+        const naive = deg(dot3(surf.centre, c.pose.up));
         const where = `s=${s.toFixed(1)} lat=${c.lat.toFixed(2)}`;
         if (local > worst.local) worst = { local, where };
         if (naive > peak.naive) peak = { naive, local, where };
-      }
+      });
     }
     abi.dispose(h);
 
