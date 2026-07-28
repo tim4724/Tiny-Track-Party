@@ -129,6 +129,11 @@ add_library(libttp_track STATIC
   # takes the number formatter as a function pointer so libttp-track keeps its
   # independence from libttp-json.
   libttp-track/ttp/race_track_json.cc
+  # The top-down schematic + its snapshot codec (public/display/trackSchematic.js
+  # ported). Here rather than in libttp-runtime because it reads a built
+  # ttp::RaceTrack and nothing else — no Game, no cameras, no renderer — and
+  # because the browser reaches it through the TRACK half of the ABI.
+  libttp-track/ttp/schematic.cc
 )
 target_include_directories(libttp_track PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
 # libttp_json is here for race_track_json's decimal spelling only (jsonnum's
@@ -171,6 +176,27 @@ target_link_libraries(trackbuilder_check PRIVATE libttp_track ttp_testsupport tt
 ttp_emscripten_cli(trackbuilder_check)
 add_test(NAME trackbuilder
   COMMAND trackbuilder_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/trackbuilder-corpus.jsonl
+)
+
+# ---- Conformance: the top-down schematic + its snapshot codec ---------------
+# Replays tests/fixtures/schematic-corpus.jsonl against libttp-track's schematic
+# port. JS-RECORDED evidence, and it is worth being precise about why: the
+# per-track expectations are public/shared/trackSchematics.js — committed, baked
+# by the JS trackSchematic(), and already held to the live geometry by
+# tests/track.test.js — so this rebuilds each track through the native
+# TrackBuilder and must reproduce bytes the JS wrote. Not C++ agreeing with C++,
+# and there is no --record mode.
+#
+# The projection rounds through Number.prototype.toFixed, which printf cannot
+# reproduce; the port routes it through double-conversion's ToFixed (the same
+# code V8 runs), and this corpus is what proves the two agree over 20 real
+# tracks' worth of coordinates.
+add_executable(schematic_check tracktest/schematic_check.cc)
+target_include_directories(schematic_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libttp-track)
+target_link_libraries(schematic_check PRIVATE libttp_track ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(schematic_check)
+add_test(NAME schematic
+  COMMAND schematic_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/schematic-corpus.jsonl
 )
 
 # ---- libttp-sim: the sim-core port ------------------------------------------
@@ -352,6 +378,14 @@ add_library(libttp_party STATIC
   libttp-party/ttp/protocol.cc
   libttp-party/ttp/relay_framing.cc
   libttp-party/ttp/fastlane.cc
+  # The layer directly ABOVE RoomFlow: the display's session policy
+  # (public/display/sessionModel.js ported) — the retained room snapshot, the
+  # seat rules, the SET_CAR/SET_READY guards, the phase-flip effects, the
+  # self-heartbeat, the seat claim and the post-reload reconciliation. It holds
+  # no RoomFlow handle and mutates nothing: every function is pure over plain
+  # data and the shell performs the answers, which is what lets its corpus
+  # replay with no room machine at all.
+  libttp-party/ttp/session.cc
 )
 target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libttp-party)
 target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp ttp_warnings)
@@ -375,7 +409,11 @@ add_test(NAME roomflow
 # the shared structural diff in testsupport/corpus_diff.h (libttp_json supplies
 # canonical_stringify + js_number_to_string for the expected side).
 add_executable(protocol_check partytest/protocol_check.cc)
-target_link_libraries(protocol_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+# libttp_sim is here for ONE assertion: the sim's default steering exponent must
+# equal protocol::STEER_EXPO (see the file header). The sim itself never links
+# the party layer — that direction would be a layering inversion; a test binary
+# linking both is not.
+target_link_libraries(protocol_check PRIVATE libttp_party libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(protocol_check)
 add_test(NAME protocol
   COMMAND protocol_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/protocol-corpus.jsonl
@@ -394,6 +432,25 @@ add_test(NAME framing
 # ttp::fastlane::Link: per op the enqueue return, the packet written, the events
 # applied, the RTT sample, and the full link-state digest. The srtt EWMA is real
 # FP, so ttp_strict_fp (-ffp-contract=off) is load-bearing here.
+# ---- Conformance: the display's session policy -------------------------------
+# Replays tests/fixtures/session-corpus.jsonl (recorded off the live
+# public/display/sessionModel.js in P9) against ttp::session — the room snapshot
+# and its players projection, the URL trio, the seat defaults and the room-full
+# cap, the presence/LEAVE fork, the SET_CAR and SET_READY guards, the phase-flip
+# effects, the heartbeat state machine, the seat claim and the resync plan.
+#
+# It is the first oracle three of those units have EVER had: the claim URL, the
+# rejoinToken normalizer and the cross-device seat claim were exercised by
+# nothing in the tree — not one test built a claim URL or scanned a claim QR —
+# and the normalizer carries a frozen security-adjacent quirk (Number(null) is 0,
+# so every ordinary HELLO is a claim on seat 0). No --record mode on purpose.
+add_executable(session_check partytest/session_check.cc)
+target_link_libraries(session_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(session_check)
+add_test(NAME session
+  COMMAND session_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
+)
+
 add_executable(fastlane_check partytest/fastlane_check.cc)
 target_link_libraries(fastlane_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(fastlane_check)
@@ -414,9 +471,13 @@ add_test(NAME fastlane
 # declaration, and moving those definitions into a static archive risks the linker
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
-add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc)
+add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
+  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_net.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-target_link_libraries(abi_check PRIVATE libttp_sim libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+# libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
+# ttp_theme.cc marshals), so naming libttp_sim again here only makes the
+# linker warn about a duplicate.
+target_link_libraries(abi_check PRIVATE libttp_runtime libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(abi_check)
 # Both BARE (no-countdown, input-replay) traces: tidepool is the one the Node ABI
 # test uses, and helix adds 402 braking inputs — without it ttp_process_input's
@@ -432,9 +493,186 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
+)
+
+# ---- libttp-runtime: the platform-free half of the display runtime ----------
+# Cameras (the spring chase per split-screen cell), the overview/lobby framing
+# and fog solve, and the per-frame TtpFrameInput built straight off the live
+# Game. All of it used to sit in runtime/ttp_display.cc, BEHIND the Filament
+# gate — so it compiled on exactly one machine configuration in the world (a dev
+# box with the Filament fork) and no ctest on any of the four legs ever saw a
+# line of it. Nothing in here names a platform API, a renderer or emscripten, so
+# nothing forced that.
+#
+# Includes renderer/include for ttp_render.h — the plain-data frame contract and
+# ttp_grid_cols. That is a HEADER path, not a link edge: this library must never
+# depend on ttp_renderer (which needs the SDK CI does not have).
+#
+# RaceSession deliberately stays in libttp-sim: replay_cli has to keep linking
+# the sim alone.
+add_library(libttp_runtime STATIC
+  libttp-runtime/ttp/camera.cc
+  libttp-runtime/ttp/framing.cc
+  libttp-runtime/ttp/frame_builder.cc
+  # The per-player HUD block the shell reads back, which is uiModel.js's
+  # hudRows ported. Beside the frame builder because it reads the same live
+  # Game through the same roster slots — but for the shell's ~6 Hz poll, not
+  # for the renderer's frame.
+  libttp-runtime/ttp/hud.cc
+  # The rest of uiModel.js — the seat grid, the lobby rules, the race card, the
+  # ITEM-push gate, the reconnect diff, the flow predicates, the pause
+  # arbitration, the standings board and the results overlay, plus the screen
+  # enum and its per-screen back EFFECT. Pure decisions over plain data, so it
+  # sits beside hud.cc for the same reason: no platform API, every leg compiles
+  # AND executes it. The back-stack TRAVERSAL is NOT here — that is the History
+  # API wearing a C hat, and each shell owns its own.
+  libttp-runtime/ttp/ui_model.cc
+  # The audio DECISIONS — public/display/audio/decide.js ported. Here rather
+  # than in a library of its own because it is the same thing the two files
+  # above are: a display rule that names no platform API, so every leg compiles
+  # AND executes it. The device half (AudioContext / the baked cue palette) is
+  # per-platform and stays out of this tree entirely.
+  libttp-runtime/ttp/audio.cc
+  # The per-cup biome palettes and the rules that resolve one. Data, not
+  # rendering: it was authored in the browser (public/shared/themes.js +
+  # render/trackPayload.js) until the shells stopped being one.
+  libttp-runtime/ttp/theme.cc
+)
+target_include_directories(libttp_runtime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+  ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+target_link_libraries(libttp_runtime PUBLIC libttp_json libttp_sim ttp_strict_fp)
+target_link_libraries(libttp_runtime PRIVATE ttp_warnings)
+
+# ---- Regression: the cameras, the framing solve and the split-screen grid ----
+# C++-AUTHORED evidence, NOT a parity oracle: ChaseCamera.js and SceneRenderer's
+# rigs were deleted with the JS renderer, so this proves the cameras still do
+# what they did when it was recorded and says NOTHING about whether the port was
+# right. Re-record deliberately with --record, exactly like the catalogue sweep.
+#
+# The corpus is QUANTIZED, unlike every other fixture in this tree. This is the
+# only check whose subject calls the PLATFORM's libm (expf/logf/tanf/atan2f)
+# rather than the vendored fdlibm — cosmetic float, by design — and Apple libm,
+# glibc and musl/emscripten agree on those to about a ulp, not to the bit. See
+# the file header.
+add_executable(runtime_check runtimetest/runtime_check.cc)
+target_link_libraries(runtime_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(runtime_check)
+add_test(NAME runtime_check
+  COMMAND runtime_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/runtime-camera-corpus.jsonl
+)
+add_test(NAME record_runtime
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:runtime_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/runtime-camera-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/runtime-camera-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+# (record_roundtrip.cmake invokes "<cli> --record <fixture> --out=<f>"; the cases
+# are compiled in, so the check accepts and ignores that positional.)
+
+# ---- Behaviour: the per-frame TtpFrameInput builder -------------------------
+# runtime_check above pins the cameras, the framing solve and the grid, but it
+# calls those three primitives ITSELF — it never runs the block that assembles a
+# frame out of them. That block (roster-slot identity, cell-to-camera
+# assignment, the hold, the banana liveness filter, the rocket wrap, the burst
+# drain) is the largest thing lifted out of the Filament-gated shim, and moving
+# it into libttp-runtime bought it COMPILE coverage on all four legs and nothing
+# else. This executes it.
+#
+# Assertions rather than a corpus, like hazard_check: almost everything here is
+# exactly reproducible on every leg (casts, integer mapping, copies), and the two
+# places that touch the platform libm are checked against a reference ChaseCam
+# driven in the same process. See the file header.
+#
+# It also carries the ONE binding between the frozen TTP_CAM_* ABI macros and
+# libttp-runtime's CamMode enum, which is why it puts runtime/ on the include
+# path — a test TU may include the emscripten-tagged ABI header, and unlike the
+# shim that used to hold those static_asserts, this target is built on every leg.
+add_executable(frame_check runtimetest/frame_check.cc)
+target_include_directories(frame_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+target_link_libraries(frame_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(frame_check)
+add_test(NAME frame_builder COMMAND frame_check)
+
+# ---- Conformance: the per-player race HUD -----------------------------------
+# JS-RECORDED evidence, like the biome check below and unlike the two above: the
+# `hud` steps of tests/fixtures/ui-corpus.jsonl were recorded off the live
+# public/display/uiModel.js, so they settle whether hudRows was ported right.
+# uiModel.js has not been deleted yet, which makes the corpus still RENEWABLE
+# (tests/ui-corpus.test.js re-derives it) — but it is the recorded bytes this
+# replays, and no --record mode exists here on purpose.
+#
+# It links libttp_runtime for ttp::rt::hudSlot and libttp_sim (carried PUBLICly)
+# for ITEM_IDS, which is the table the packed item code decodes back through.
+add_executable(hud_check runtimetest/hud_check.cc)
+target_link_libraries(hud_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(hud_check)
+add_test(NAME ui_hud
+  COMMAND hud_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
+
+# ---- Conformance: the rest of the UI model ----------------------------------
+# The same fixture as ui_hud above and the same class of evidence, one layer
+# wider: this replays EVERY step of tests/fixtures/ui-corpus.jsonl — all 37
+# scenarios, all thirteen op kinds — through ttp/ui_model.h, and checks the
+# shell state the driver threads as well as each answer. Three rules are only
+# correct IN SEQUENCE (the reconnect diff, the per-race ITEM map, the screen
+# step), so a table of isolated calls would not settle them.
+#
+# It links libttp_party for ONE assertion: ui_model.h keeps a local mirror of
+# protocol.h's ROOM_STATE rather than making libttp-runtime depend on the party
+# layer, and this pins the copy (see the file header). The library itself never
+# links libttp_party — that direction would be a layering inversion; a test
+# binary linking both is not, exactly as protocol_check links libttp_sim.
+add_executable(ui_check runtimetest/ui_check.cc)
+target_link_libraries(ui_check PRIVATE libttp_runtime libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(ui_check)
+add_test(NAME ui_model
+  COMMAND ui_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
+
+# ---- Conformance: the audio decisions ---------------------------------------
+# JS-RECORDED evidence, like the HUD check above: tests/fixtures/audio-corpus.jsonl
+# was recorded off the live public/display/audio/decide.js in P5, so it settles
+# whether the decisions were ported right. No --record mode here on purpose.
+#
+# It takes the TRACES DIRECTORY as well as the corpus, and that is the shape of
+# the fixture rather than a convenience: the 5900 trace frames record only the
+# COMMANDS, so the world they were decided from has to be re-raced here through
+# libttp-sim (every roster entry a human, the recorded inputs fed back) with each
+# frame's events and snapshot hash checked against the trace before anything is
+# compared. The 497 scripted steps carry their own input and need none of that.
+add_executable(audio_check runtimetest/audio_check.cc)
+target_link_libraries(audio_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(audio_check)
+add_test(NAME audio
+  COMMAND audio_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/audio-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces
+)
+
+# ---- Conformance: the biome palettes ----------------------------------------
+# JS-RECORDED evidence, unlike the two checks above: the corpus was taken off the
+# live public/shared/themes.js + render/trackPayload.js + shared/trackBin.js
+# before they were deleted, so it settles the parity question the way the golden
+# traces do for the sim. There is no --record mode here on purpose — the JS twin
+# is gone, and re-recording from C++ would only prove C++ matches itself.
+#
+# It needs the shipped scenery GLBs, because half of the recolour rule is the
+# models' own authored material colours (a palm's fronds and trunk differ).
+add_executable(theme_check runtimetest/theme_check.cc)
+target_link_libraries(theme_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(theme_check)
+add_test(NAME theme
+  COMMAND theme_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/theme-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
 )
 
 # ---- libttp-renderer --------------------------------------------------------
@@ -451,7 +689,12 @@ if(DEFINED FILAMENT_SDK)
   add_library(ttp_renderer STATIC renderer/src/TtpRenderer.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src
+    # ttp/theme.h — the resolved biome buildScene takes. A HEADER path, the
+    # mirror image of libttp_runtime's dependency on renderer/include, and for
+    # the same reason: neither library may LINK the other, or libttp-runtime
+    # would stop building on the legs with no Filament SDK.
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime)
   # libttp_track is here for the built-track TYPE the scene is meshed from
   # (ttp::RaceTrack). The renderer never resolves a track ID — which track to
   # build stays the runtime's call — so this adds a struct, not a catalogue.
@@ -478,12 +721,54 @@ endif()
 # artifact — it is CI's browser-ABI link check (the wasm leg has no SDK), which
 # is the one build that would otherwise never compile these link options.
 if(EMSCRIPTEN)
-  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc)
+  # libttp-runtime's sources are compiled straight into the module, OUTSIDE the
+  # renderer gate below: that is what puts the cameras and the frame builder
+  # through CI's Filament-less wasm leg, which is otherwise the one build that
+  # would never see them. (Sources, not a link against libttp_runtime, so they
+  # are in the link whether or not anything in this module references them.)
+  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc
+    # The biome ABI is OUTSIDE the renderer gate too: naming a biome (for the
+    # music pool, for the ?biome= list) is not rendering, and CI's Filament-less
+    # wasm leg is where the browser's link to it gets checked.
+    runtime/ttp_theme.cc
+    libttp-runtime/ttp/camera.cc
+    libttp-runtime/ttp/framing.cc
+    libttp-runtime/ttp/frame_builder.cc
+    # The packed HUD block ttp_display_hud answers with. Outside the gate with
+    # the rest of libttp-runtime, and for the extra reason that it is what the
+    # SHELL reads rather than what the renderer draws: a Filament-less leg still
+    # has every line of it in the link.
+    libttp-runtime/ttp/hud.cc
+    # The rest of the UI model, reached through runtime/ttp_ui.cc below: the
+    # browser's boards are rendered from this, not from public/display/
+    # uiModel.js, which survives only as the oracle the corpus was recorded off.
+    # This list is the sync point — a source that lands in libttp_runtime alone
+    # leaves this module unlinkable and no ctest target says so.
+    libttp-runtime/ttp/ui_model.cc
+    # ... and the ABI over it. JSON in, JSON out: this layer answers once per
+    # event and half of what it answers is text, so there is nothing to pack.
+    runtime/ttp_ui.cc
+    # The session-policy ABI over libttp-party's ttp::session — the room
+    # snapshot the display puts on the relay, the seat rules and the guards
+    # behind it. Same trap as every line in this list: it is COMPILED here, not
+    # linked from a library, so an ABI source that lands only in the CMake
+    # target above leaves this module unlinkable and no ctest says so.
+    runtime/ttp_net.cc
+    # The audio decisions, for the same reason and with the same trap: this list
+    # is COMPILED, not linked against libttp_runtime, so a source added to the
+    # library alone leaves this module unlinkable and no ctest target notices.
+    libttp-runtime/ttp/audio.cc
+    libttp-runtime/ttp/theme.cc)
   if(TARGET ttp_renderer)
-    list(APPEND TTP_WEB_SOURCES runtime/ttp_display.cc)
+    list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
   endif()
   add_executable(ttp_runtime_web ${TTP_WEB_SOURCES})
-  target_include_directories(ttp_runtime_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+  # renderer/include is ttp_render.h ONLY — the plain-data frame contract. It is
+  # on the path with or without an SDK, because libttp-runtime's sources need it.
+  target_include_directories(ttp_runtime_web PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
   target_link_libraries(ttp_runtime_web PRIVATE libttp_sim libttp_party ttp_strict_fp ttp_warnings)
   set_target_properties(ttp_runtime_web PROPERTIES OUTPUT_NAME "ttp_runtime" SUFFIX ".mjs")
   target_link_options(ttp_runtime_web PRIVATE
@@ -502,7 +787,12 @@ if(EMSCRIPTEN)
     # malloc/free are the allocator the JS side needs for stringToUTF8 buffers
     # and have no declaration of ours to tag.
     "-sEXPORTED_FUNCTIONS=_malloc,_free"
-    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAPF64,HEAPU8"
+    # HEAPF32 is the packed float readback (ttp_display_cell_rects); HEAPF64 the
+    # profile block AND the HUD block's finish times; HEAPU8 the asset upload;
+    # HEAP32/HEAPU32 the HUD block's signed values and its header/flags
+    # (ttp_hud.h) — an unsigned field read through a signed view is exactly the
+    # kind of thing that only bites once the numbers get big.
+    "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString,stringToUTF8,HEAP32,HEAPU32,HEAPF32,HEAPF64,HEAPU8"
   )
   if(TARGET ttp_renderer)
     target_link_libraries(ttp_runtime_web PRIVATE ttp_renderer)

@@ -349,6 +349,25 @@ void RoomFlow::setActiveOrder(const std::vector<PeerId>& peerIndices) {
   order_ = std::move(out);
 }
 
+// "Actively playing, or being held" — see the header. Emitted in list() order
+// (joinedAt) rather than the caller's, since the order is a SET everywhere it is
+// read (host eligibility, the late-joiner complement) and a game's participant
+// list arrives in whatever order its engine happens to hold.
+void RoomFlow::syncActiveOrder(const std::vector<PeerId>& activeIds) {
+  std::vector<const Player*> keep;
+  for (const auto& p : players_) {
+    bool active = discHas(p.peerIndex);  // a dropped seat is a participant, held
+    if (!active) {
+      for (const auto& id : activeIds) if (id == p.peerIndex) { active = true; break; }
+    }
+    if (active) keep.push_back(&p);
+  }
+  std::stable_sort(keep.begin(), keep.end(),
+                   [](const Player* a, const Player* b) { return a->joinedAt < b->joinedAt; });
+  order_.clear();
+  for (const Player* p : keep) order_.push_back(p->peerIndex);
+}
+
 bool RoomFlow::transitionTo(const std::string& to) {
   std::string from = stateName();
   if (to == from) return true;
@@ -398,13 +417,28 @@ bool RoomFlow::allParticipantsDisconnected() const {
   return true;
 }
 
-bool RoomFlow::hasLateJoiners() const {
-  for (const auto& p : players_) {
-    bool inOrder = false;
-    for (const auto& id : order_) if (id == p.peerIndex) { inOrder = true; break; }
-    if (!inOrder) return true;
-  }
+bool RoomFlow::inActiveOrder(const PeerId& id) const {
+  for (const auto& o : order_) if (o == id) return true;
   return false;
+}
+
+// A late joiner is any roster member outside the active order — presence is NOT
+// part of it (a host that wants "connected and waiting" says so by putting the
+// absent seats in the order; see setActiveOrder). hasLateJoiners/lateJoinersValue
+// are the predicate and the list of the SAME set, so they cannot drift.
+bool RoomFlow::hasLateJoiners() const {
+  for (const auto& p : players_) if (!inActiveOrder(p.peerIndex)) return true;
+  return false;
+}
+
+Value RoomFlow::lateJoinersValue() const {
+  std::vector<const Player*> arr;
+  for (const auto& p : players_) if (!inActiveOrder(p.peerIndex)) arr.push_back(&p);
+  std::stable_sort(arr.begin(), arr.end(),
+                   [](const Player* a, const Player* b) { return a->joinedAt < b->joinedAt; });
+  Value out = Value::Arr();
+  for (const Player* p : arr) out.push(p->toValue());
+  return out;
 }
 
 bool RoomFlow::graceTick(double nowMs) {

@@ -55,6 +55,23 @@ Value manifest() {
   m.set("TOTAL_LAPS", Value::Num(TOTAL_LAPS));
   m.set("COUNTDOWN_SECONDS", Value::Num(COUNTDOWN_SECONDS));
 
+  Value steer = Value::Obj();
+  steer.set("EXPO", Value::Num(STEER_EXPO));
+  steer.set("ROLL_LOCK_DEG", Value::Num(STEER_ROLL_LOCK_DEG));
+  steer.set("DEADZONE", Value::Num(STEER_DEADZONE));
+  steer.set("SMOOTH", Value::Num(STEER_SMOOTH));
+  steer.set("GATE_THRESHOLD", Value::Num(STEER_GATE_THRESHOLD));
+  m.set("STEER", std::move(steer));
+
+  Value liveness = Value::Obj();
+  liveness.set("PING_INTERVAL_MS", Value::Num(LIVENESS_PING_INTERVAL_MS));
+  liveness.set("TIMEOUT_MS", Value::Num(LIVENESS_TIMEOUT_MS));
+  liveness.set("TICK_MS", Value::Num(LIVENESS_TICK_MS));
+  liveness.set("HEARTBEAT_DEAD_MS", Value::Num(LIVENESS_HEARTBEAT_DEAD_MS));
+  liveness.set("ABANDONED_RACE_GRACE_MS", Value::Num(LIVENESS_ABANDONED_RACE_GRACE_MS));
+  liveness.set("CREATE_TIMEOUT_MS", Value::Num(LIVENESS_CREATE_TIMEOUT_MS));
+  m.set("LIVENESS", std::move(liveness));
+
   Value colors = Value::Arr();
   for (const auto& c : CAR_COLORS) colors.push(Value::Str(c));
   m.set("CAR_COLORS", std::move(colors));

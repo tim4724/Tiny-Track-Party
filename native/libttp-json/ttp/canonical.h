@@ -55,6 +55,23 @@ std::string canonical_stringify(const Value& v);
 // path allocates nothing steady-state.
 void canonical_stringify_into(const Value& v, std::string& out);
 
+// JSON.stringify with NO key sort — the object's own INSERTION order, which is
+// the order a JS object literal was written in. Everything else is identical
+// (undefined dropped, shortest-form numbers, the same escaping), so the two
+// share one walker.
+//
+// WHEN TO USE WHICH, and it is not a taste question. canonical_stringify is for
+// EVIDENCE: every corpus digest, every recorded frame hash and every ABI
+// readback whose bytes are compared to a fixture depends on the sort, and it
+// must never grow an ordering mode. This one is for BYTES SOMEBODY ELSE READS
+// in a shape we did not choose — the standings board that
+// libttp-runtime/ttp/ui_model.h builds is JSON.stringify'd onto the relay by
+// whichever shell holds it, and its key order is the wire order the phones have
+// always received. Emitting it sorted would be a silent re-spelling of a shipped
+// message; there is nothing else in the tree that cares.
+std::string ordered_stringify(const Value& v);
+void ordered_stringify_into(const Value& v, std::string& out);
+
 // JSON string escaping identical to JSON.stringify's QuoteJSONString: escapes
 // " \ and control chars (\b \t \n \f \r, else \u00XX lowercase), passes bytes
 // >= 0x20 through verbatim (no forward-slash escaping, no non-ASCII escaping).

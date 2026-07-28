@@ -8,15 +8,17 @@
 import { GameNet } from '../shared/GameNet.js';
 import { InputGate } from './InputGate.js';
 
-const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES } = window;
+const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES, LIVENESS } = window;
 const enc = encodeURIComponent;
 
 // Relay-liveness ping cadence and the overdue-PONG threshold after which we
 // surface a "no signal" reading (only when the fastlane isn't carrying its own
-// live RTT). 1 Hz is plenty for a latency readout and matches the display's
-// per-controller liveness expectations.
-const PING_INTERVAL_MS = 1000;
-const PONG_TIMEOUT_MS = 3000;
+// live RTT). Both come from the shared presence contract (protocol.js LIVENESS)
+// rather than being restated here: this cadence is the thing the display's
+// 3 s drop window is budgeted against, and the two files used to name their own
+// numbers with only a comment between them.
+const PING_INTERVAL_MS = LIVENESS.PING_INTERVAL_MS;
+const PONG_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
 
 function deriveRoomCode() {
   const seg = (location.pathname || '/').split('/').filter(Boolean)[0];

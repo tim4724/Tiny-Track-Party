@@ -39,6 +39,19 @@ export async function init() {
   };
 }
 
+// base + '/' + enc(room) + '?instance=' + enc(instance), or `base` unchanged
+// when there is no instance — ttp::framing::pin_instance_url, which the
+// framing-corpus `pin` cases already gate.
+//
+// It is exported because DISPLAY BOOT needs it before there is a connection to
+// call pinInstance on: reopening a saved room dials the shard directly, and
+// display/Net.js used to build that same string by hand eleven lines above the
+// call that asks C++ for it. One string, one implementation.
+export function pinUrl(base, room, instance) {
+  if (!fn) throw new Error('NativePartyConnection: init() not awaited');
+  return fn.pinUrl(base, room, instance || '');
+}
+
 export class NativePartyConnection {
   constructor(relayUrl, options) {
     if (!fn) throw new Error('NativePartyConnection: init() not awaited');

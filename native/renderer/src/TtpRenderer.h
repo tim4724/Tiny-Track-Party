@@ -3,10 +3,13 @@
 // pass backend + native window through init(); everything else lives here so
 // the same code ships on web, tvOS and Android TV.
 //
-// The scene is built entirely from the serialized track payload ("track.bin"):
-// road ribbon swept from the centerline, ground/sky/hills, scenery and
-// furniture, cars from provided GLBs, and 2×2 split-screen with per-cell
-// cameras from FrameInput.views. buildScene() fails without that payload.
+// The scene is built from three things the caller already holds: the built
+// track (ttp::RaceTrack — the one the sim races on), the resolved biome
+// (ttp::rt::Theme), and the roster's liveries, which are the only part still
+// serialized ("track.bin"). From those come the road ribbon swept from the
+// centerline, ground/sky/hills, scenery and furniture, cars from provided GLBs,
+// and 2×2 split-screen with per-cell cameras from FrameInput.views. buildScene()
+// fails without the liveries payload.
 #pragma once
 
 #include "ttp_render.h"
@@ -15,6 +18,12 @@
 // header-light; this pulls in the geometry PODs only (no track catalogue — which
 // track to build stays the runtime's decision, not the renderer's).
 #include "ttp/trackbuilder.h"
+
+// The resolved biome. Same deal: libttp-runtime owns the palette tables, and
+// this is a HEADER dependency on the resolved struct — never a link edge, since
+// libttp-runtime must stay buildable (and ctested) on the legs that have no
+// Filament SDK.
+#include "ttp/theme.h"
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
@@ -82,11 +91,16 @@ public:
     // toggle, since the map is baked into the scene.
     void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
+    // The bytes provided under `name`, or nullptr. The scene's caller needs the
+    // scenery GLBs back: half of a biome's recolour rule is each model's own
+    // AUTHORED material colours, and this class is where those bytes live.
+    const std::vector<uint8_t>* asset(const char* name) const;
     // `geo` is the built track this scene is meshed from — the SAME ttp::RaceTrack
-    // the sim races on, handed straight over rather than serialized. "track.bin"
-    // carries only what geometry cannot imply: the resolved biome theme and the
-    // roster's liveries.
-    bool buildScene(const ttp::RaceTrack& geo);
+    // the sim races on, handed straight over rather than serialized; `theme` is
+    // the resolved biome, likewise a live object rather than a payload. Both are
+    // C++ data the caller already has, so what is left in "track.bin" is only
+    // what the SHELL supplies: the roster's liveries.
+    bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme);
     // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
     // material instances — and reset the per-scene state, so buildScene() can
     // run again on a new track.bin (a Grand Prix chains four of them) or a new
@@ -120,13 +134,9 @@ public:
     static constexpr float CELL_MAX_ASPECT = 21.0f / 9.0f;
 
     // What the built track measures, for the runtime's overview cameras and fog
-    // bands. The box is over the CENTERLINE points, like SceneRenderer's was.
-    struct TrackFraming {
-        float centerX, centerY, centerZ;
-        float sizeX, sizeY, sizeZ;
-        float fogTune;
-    };
-    bool trackFraming(TrackFraming& out) const;
+    // bands (TtpTrackFraming, ttp_render.h — the plain-data contract, so the
+    // runtime can consume it without knowing this class exists).
+    bool trackFraming(TtpTrackFraming& out) const;
 
     // Worst-case distance from a camera orbiting at (radius, height) about the
     // track centre to any centerline point — a point sitting diametrically
@@ -229,6 +239,36 @@ private:
     // stand up the present view on first use. Both no-op without vpresent.
     void ensureSceneTarget();
     void destroySceneTarget();
+
+    // The 2D cell overlay — the split-screen dividers and the per-player steer
+    // bar (voverlay.mat carries the whole argument for why these two, and only
+    // these two, are drawn here rather than by the shell's UI layer).
+    //
+    // Canvas scope, like the present pass: a pool of unit quads, each with its
+    // own MaterialInstance, scaled and placed by the transform manager and drawn
+    // through one ortho camera in PIXEL space. Elements are handed out per frame
+    // from the front of the pool and the tail is dropped from the scene, so the
+    // count follows the split without allocating per frame.
+    filament::Material* mOverlayMaterial = nullptr;
+    filament::View* mOverlayView = nullptr;
+    filament::Scene* mOverlayScene = nullptr;
+    filament::Camera* mOverlayCamera = nullptr;
+    utils::Entity mOverlayCameraEntity;
+    filament::VertexBuffer* mOverlayVB = nullptr;
+    filament::IndexBuffer* mOverlayIB = nullptr;
+    struct OverlayQuad {
+        utils::Entity entity;
+        filament::MaterialInstance* mi = nullptr;
+        bool inScene = false;
+    };
+    std::vector<OverlayQuad> mOverlayQuads;
+    uint32_t mOverlayUsed = 0;
+    void ensureOverlay();
+    // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
+    // origin (the units ttp_grid_cell answers in). Returns its instance for the
+    // caller to paint, or nullptr if the material never arrived.
+    filament::MaterialInstance* overlayQuad(float x, float y, float w, float h);
+    void drawOverlay(const TtpFrameInput& input);
 
     Mesh mRoad;
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS
@@ -557,11 +597,15 @@ private:
     // material parameters, so nothing about these meshes changes per frame.
     filament::MaterialInstance* mBurstRingMats[2] = { nullptr, nullptr };
     filament::MaterialInstance* mBurstBallMats[2] = { nullptr, nullptr };
-    // No HUD here by design: everything in SCREEN space (place card, lap pill,
-    // item slot, name chip, countdown, results) belongs to the shell's own UI
-    // layer — DOM/CSS on web, Compose on Android TV, SwiftUI on tvOS. The
-    // renderer draws only what is anchored in the world or depth-tested (the
-    // rear name plates, the boost aura, the skids, the gantry).
+    // Almost no HUD here by design: everything in SCREEN space that carries
+    // TYPE or sticker chrome (place card, lap pill, item slot, name chip,
+    // countdown, results, the FINISHED card, the reconnect QR) belongs to the
+    // shell's own UI layer — DOM/CSS on web, Compose on Android TV, SwiftUI on
+    // tvOS. The two exceptions are the steer bar and the cell dividers
+    // (mOverlay*, voverlay.mat): cell-anchored and textless, so they need no
+    // toolkit and must not be laid out twice. Everything else the renderer draws
+    // is anchored in the world or depth-tested (the rear name plates, the boost
+    // aura, the skids, the gantry).
 
     // Ambient particles (theme.ambient): base positions from the 74747 stream,
     // drifted per frame (fall/wind/bob) with a whole-VB re-upload.
@@ -604,10 +648,12 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
-    bool buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo);
+    bool buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo,
+            const ttp::rt::Theme& theme);
     // The theme/roster half of the payload. Geometry does not come through here
     // any more — see fillGeometry.
     bool parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out);
+    static void applyTheme(TrackBin& out, const ttp::rt::Theme& theme);
     // The geometry half, copied (and float-narrowed) straight off the built
     // track. Also derives what used to be computed JS-side from the geometry:
     // the launch-strip blanking zones and the scenery/landmark/clutter seeds.

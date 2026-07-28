@@ -5,8 +5,9 @@
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
 import { schematicSvg, cupTint, FIELD_TINT } from '../shared/trackPicker.js';
+import { seatGrid } from './NativeUiModel.js';
 
-const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
+const { CAR_COLORS, CAR_MODELS } = window;
 
 // Render the roster into `listEl`: one card per player, padded with open-seat
 // placeholders to at least MAX_PLAYERS so the lobby card keeps a fixed size as
@@ -16,16 +17,19 @@ const { CAR_COLORS, CAR_MODELS, MAX_PLAYERS } = window;
 //   { name, colorIndex, carIndex?, connected?, host?, ready? }
 // carIndex falls back to colorIndex (the slot default before they pick);
 // connected === false dims the seat; host appends the ★; ready lights the pill.
+//
+// WHICH seats and WHAT each one holds is the native UI model's seatGrid (the
+// padding rule, the car-pick fallback, the model wrap) — this function is
+// markup only. MAX_PLAYERS and the car-roster size are not passed: they were
+// handed to the model once at boot (NativeUiModel.configure), so this file no
+// longer holds a second copy of either.
 export function renderSeats(listEl, seats) {
   listEl.innerHTML = '';
-  const total = Math.max(MAX_PLAYERS, seats.length);
-  for (let i = 0; i < total; i++) {
-    const p = seats[i];
+  for (const p of seatGrid(seats)) {
     const seat = document.createElement('div');
-    if (p) {
-      seat.className = 'seat' + (p.connected === false ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
+    if (!p.open) {
+      seat.className = 'seat' + (p.off ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
       seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
-      const carIdx = (p.carIndex == null ? p.colorIndex : p.carIndex);
       // the name itself carries the livery colour (via the seat's --c) — no dot
       const row = document.createElement('div');
       row.className = 'seat__name';
@@ -43,7 +47,7 @@ export function renderSeats(listEl, seats) {
         seat.appendChild(hs);
       }
       // each joined car rotates in spin mode, in lockstep via the shared clock
-      seat.appendChild(carThumbNode(CAR_MODELS[carIdx % CAR_MODELS.length], { spin: true }));
+      seat.appendChild(carThumbNode(CAR_MODELS[p.modelIndex], { spin: true }));
       seat.appendChild(row);
       // readiness check — a circle checkmark pinned to the seat's top-right
       // corner (visibility-toggled in CSS, so it never shifts the seat layout).

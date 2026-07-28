@@ -103,6 +103,19 @@ export default [
     },
   },
 
+  // ── Node CommonJS helpers for the wire-compat suite ───────────────────────
+  // tests/wire-compat/*.js are require()d by tests/wire-*.test.js (the relay
+  // model, the DataChannel fakes, the wasm/kit harness). Node CommonJS, plus the
+  // browser globals they INSTALL for the unchanged controller + kit modules.
+  {
+    files: ['tests/wire-compat/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
   // ── Node CommonJS that drives a browser: capture scripts + E2E specs ──────
   // These run page.evaluate() closures, so the file is Node but references
   // browser globals (window, document, OffscreenCanvas, …) inside those closures.
@@ -122,6 +135,18 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: { ...globals.node },
+    },
+  },
+
+  // ── Node ESM that drives a browser: the cue baker ─────────────────────────
+  // Same reasoning as the CommonJS capture-script block above — the file is
+  // Node, but its page.evaluate() closures run in Chromium and reference window.
+  // (scripts/lib/bake-harness.js is browser-only and is covered by the
+  // scripts/**/*.js block, which already carries browser globals.)
+  {
+    files: ['scripts/bake-cues.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 

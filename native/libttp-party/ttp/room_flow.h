@@ -81,6 +81,20 @@ class RoomFlow {
   bool endGame() { return transitionTo("results"); }
   bool returnToLobby() { return transitionTo("lobby"); }
   void setActiveOrder(const std::vector<PeerId>& peerIndices);
+  // The active order from a GAME's point of view, derived HERE so no shell has to
+  // define the participant set: the ids the caller counts as actively playing (in
+  // Tiny Track: holding a car in the live race), PLUS every dropped seat. An
+  // absent seat is being HELD for its player, not waiting for the next round —
+  // which is exactly what makes the leftover set (hasLateJoiners /
+  // lateJoinersValue) mean "connected, and with nothing to play".
+  //
+  // Ids that are not on the roster are ignored, so a caller may hand over its
+  // whole participant list — bots included — without filtering it first.
+  //
+  // NOT a kit method (partyplug/RoomFlow.d.ts has no twin of it): it is the
+  // convention every host of setActiveOrder ends up writing, hoisted to where
+  // three shells can share one copy.
+  void syncActiveOrder(const std::vector<PeerId>& activeIds);
 
   // ---- liveness (pure predicates) ------------------------------------------
   void onSeen(const PeerId& peerIndex, double nowMs);
@@ -88,6 +102,11 @@ class RoomFlow {
   std::vector<PeerId> expiredPeers(double nowMs) const;
   bool allParticipantsDisconnected() const;
   bool hasLateJoiners() const;
+  // WHO the late joiners are — the same roster-minus-active-order set
+  // hasLateJoiners() tests, as records in list() order. A shell that renders
+  // "waiting for the next race" rows must read them from here, so the rows and
+  // the graceTick policy can never disagree about who is waiting.
+  Value lateJoinersValue() const;
   bool graceTick(double nowMs);
 
   // ---- provider setters -----------------------------------------------------
@@ -132,6 +151,7 @@ class RoomFlow {
   void lastSeenSet(const PeerId& id, double v);
   void lastSeenDelete(const PeerId& id);
 
+  bool inActiveOrder(const PeerId& id) const;  // the late-joiner test, once
   bool restricted() const;
   bool isEligible(const PeerId& id, const std::vector<PeerId>* eligible) const;
   PeerId oldestEligible(const std::vector<PeerId>* eligible, const PeerId* exclude) const;

@@ -73,7 +73,11 @@ declare class RoomFlow {
   allParticipantsDisconnected(): boolean;
   /** True when any roster member is not in the active participant order (a late joiner). */
   hasLateJoiners(): boolean;
-  /** Deadline-driven late-joiner grace: arms on the first qualifying call, returns true exactly once when graceMs elapses. */
+  /** The late joiners themselves, in `list()` order — the list form of `hasLateJoiners()`, for rendering "waiting for the next round" rows off the same set the grace policy uses. */
+  lateJoiners(): RoomFlow.PlayerRecord[];
+  /** Deadline-driven late-joiner grace: arms on the first qualifying call and returns true when graceMs elapses.
+   *  It then RE-ARMS — firing clears the deadline, so a caller that keeps polling while the condition still holds
+   *  gets another true every graceMs. Callers that must act once are responsible for standing themselves down. */
   graceTick(nowMs: number): boolean;
 
   // --- reads ---

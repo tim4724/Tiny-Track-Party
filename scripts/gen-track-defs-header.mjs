@@ -38,13 +38,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRACKS } from '../public/shared/tracks.js';
+import { TRACKS, CUPS } from '../public/shared/tracks.js';
 import { DEV_TRACKS } from '../public/shared/devTracks.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'native/libttp-track/generated/track_defs.h');
 
 const ROAD_WIDTH = 2.5; // TrackBuilder ROAD_WIDTH — the descriptor-width fallback.
+
+// Track id -> cup id. Not builder input: it is the tag the BIOME resolves from
+// (native/libttp-runtime/ttp/theme.h), and cup membership is authored in CUPS,
+// so carrying it across here keeps one source for it. A dev-only track belongs
+// to no cup and emits nullptr, which resolves to the grass fallback.
+const CUP_OF = {};
+for (const c of CUPS) for (const id of c.tracks) CUP_OF[id] = c.id;
 
 // ---- exact double -> C++ hex-float literal ----
 // A hex float (0x1.<52-bit mantissa>p<exp>) names the binary64 value EXACTLY —
@@ -193,7 +200,8 @@ for (const id of [...trackIds, ...devIds]) {
   out.push('');
 
   // Field order MUST match TrackDef in trackbuilder.h.
-  perTrack.push(`  { ${JSON.stringify(id)}, ${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
+  const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
+  perTrack.push(`  { ${JSON.stringify(id)}, ${cup}, ${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
     + `${D(trackWidth)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
     + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n} }`);

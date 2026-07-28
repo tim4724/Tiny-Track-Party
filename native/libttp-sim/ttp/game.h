@@ -111,7 +111,7 @@ class RacingLine;    // ai_driver.h
 // the front-wheel yaw and the body lean, or the car visibly leans out of the
 // corner it is turning into. `Car::steer` stores the raw input, so every
 // consumer of it as a DIRECTION multiplies by this (see Game::update and
-// getSnapshot's "steer", which is what ttp_display.cc mirrors).
+// getSnapshot's "steer", which is what libttp-runtime's frame builder mirrors).
 inline constexpr double STEER_SIGN = -1;
 
 // Live-tunable steering-response exponent — the C++ twin of Game.js
@@ -120,6 +120,17 @@ inline constexpr double STEER_SIGN = -1;
 // and ignores non-finite input, matching the JS `Number.isFinite` guard.
 void setSteerExpo(double v);
 double getSteerExpo();
+
+// The item vocabulary a box can yield, in ROLL-TABLE order: index i is the item
+// ITEM_PLACE_TABLE's column i weights, and `roll` walks the two together.
+//
+// It is here rather than file-static in game.cc because that order is now a
+// CONTRACT, not an implementation detail: TTP_ITEM_* (libttp-runtime/ttp_hud.h)
+// is this index plus one, which is how a held item reaches a shell without a
+// string crossing the boundary, and ttp_item_id (runtime/ttp_runtime.h) reads
+// the table back out so the browser's mirror in
+// public/display/engine/contract.js is pinned to it by a test.
+extern const char* const ITEM_IDS[4];
 
 class Game {
  public:
@@ -168,6 +179,15 @@ class Game {
 
   Value getSnapshot();
   Value getResults();
+
+  // The lap number to SHOW for a car: its completed laps plus the one it is on,
+  // held at 1 before the start line and capped at totalLaps once it is home.
+  // getSnapshot's "lap" and the HUD block's (libttp-runtime/ttp/hud.h) are this
+  // one function, because they must never differ by a lap — the whole point of
+  // the packed readback is that it replaces the snapshot, not that it agrees
+  // with it by inspection.
+  double displayLap(const Car& c) const;
+  int totalLaps() const { return totalLaps_; }
   bool raceOver() const { return (long)finishedOrder_.size() >= (long)cars_.size(); }
 
   double length() const { return length_; }
@@ -177,7 +197,7 @@ class Game {
   const std::vector<Zone>& hazards() const { return hazards_; }
   const std::vector<PoleRt>& poles() const { return poles_; }
   const std::vector<BananaRt>& bananas() const { return bananas_; }
-  // Read-only, for the renderer (ttp_display.cc builds its frame off these
+  // Read-only, for the renderer (libttp-runtime builds its frame off these
   // rather than off a serialized snapshot). getSnapshot() derives the same two:
   // a box is available when its cooldown has run out, a rocket's `s` wraps.
   const std::vector<BoxRt>& boxes() const { return boxes_; }

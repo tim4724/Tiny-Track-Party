@@ -8,19 +8,19 @@ import { TiltInput } from './TiltInput.js';
 import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
-import { unpackSchematic } from '../display/trackSchematic.js';
+import { unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
+// Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
+// shared with the display's own re-clamp of an incoming HELLO, so it lives in
+// shared/names.js — one function, imported by both pages and driven directly by
+// tests/wire-compat.test.js. Returns '' for blank input; callers that need a
+// seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
+// missing cgName falls back to the name screen).
+import { cleanName } from '../shared/names.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
-
-// Sanitize a display name to the wire limit (trim + ≤16 chars). One source of
-// truth for the length cap, shared by the name form, the shell's injected name,
-// and the launcher's live rename. Returns '' for blank input — callers that need
-// a seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
-// missing cgName falls back to the name screen).
-const cleanName = (n) => (n || '').trim().slice(0, 16);
 
 // ---- Couch Games launcher shell (CONTRACT.md) ----
 // The launcher (native Android app hosting this page in a WebView) appends

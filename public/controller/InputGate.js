@@ -62,7 +62,22 @@
 // 1.25, so the worst-case visible error stays under 0.0375 of steer authority
 // (near centre the expo's ~0.70 gain suppresses it further). For scale, the
 // controller already discards +/-0.06 around centre as DEADZONE.
+//
+// That paragraph is arithmetic over numbers owned by two OTHER files, so it is
+// no longer only a paragraph: ROLL_LOCK/SMOOTH/STEER_EXPO and this threshold all
+// live in the shared steering contract (shared/protocol.js STEER), and the two
+// figures below are the derivation's own inputs. tests/config-drift.test.js
+// re-runs both bounds against the manifest, so tuning STEER_EXPO in the C++ sim
+// or ROLL_LOCK on the phone fails here instead of silently invalidating this.
 export const DEFAULT_STEER_THRESHOLD = 0.03;
+
+// The FLOOR of the measured idle twitch (the "1-2 degrees" above). The floor, not
+// the ceiling: a threshold under the QUIETEST phone's surviving wobble never
+// engages at all, so that is the bound worth pinning.
+export const SENSOR_NOISE_FLOOR_DEG = 1;
+// ...and the ceiling on the other side: the most steer authority the gate is
+// allowed to hide, measured at the gain STEER_EXPO peaks at.
+export const STEER_ERROR_BUDGET = 0.0375;
 
 // Staleness bound: the longest a sub-threshold change can wait. Matches the kit's
 // IDLE_MS so a gated stream degrades into exactly the heartbeat cadence the

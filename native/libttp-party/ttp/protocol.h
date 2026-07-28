@@ -38,6 +38,8 @@ inline const std::vector<std::pair<std::string, std::string>> MSG = {
     {"LEAVE", "leave"},         {"PING", "ping"},
     {"LOBBY_UPDATE", "lobby_update"}, {"ITEM", "item"},
     {"PONG", "pong"},           {"COUNTDOWN", "countdown"},
+    // Display -> its own slot; never reaches a controller. See protocol.js.
+    {"HEARTBEAT", "_heartbeat"},
 };
 
 // FASTLANE_TYPES is keyed by the wire type string; value true = rides the
@@ -57,6 +59,34 @@ inline const std::string STUN_URL = "stun:stun.couch-games.com:3478";
 inline constexpr int MAX_PLAYERS = 4;
 inline constexpr int TOTAL_LAPS = 3;
 inline constexpr int COUNTDOWN_SECONDS = 3;
+
+// ---- the presence contract (protocol.js LIVENESS) ---------------------------
+// The phone's ping cadence and the display's drop / grace / canary windows.
+// Mirrored here for the same reason STEER is: these are the numbers two
+// implementations must agree on, and "a seat silent past 3 s is dropped" is
+// only true against a 1 Hz ping. ttp::session (session.h) spends
+// LIVENESS_HEARTBEAT_DEAD_MS directly; the rest are the shell's to feed into
+// RoomFlow's liveness config and its timers.
+inline constexpr double LIVENESS_PING_INTERVAL_MS = 1000;
+inline constexpr double LIVENESS_TIMEOUT_MS = 3000;
+inline constexpr double LIVENESS_TICK_MS = 1000;
+inline constexpr double LIVENESS_HEARTBEAT_DEAD_MS = 6000;
+inline constexpr double LIVENESS_ABANDONED_RACE_GRACE_MS = 15000;
+inline constexpr double LIVENESS_CREATE_TIMEOUT_MS = 8000;
+
+// ---- the steering contract (protocol.js STEER) ------------------------------
+// Five numbers the phone and the display's sim must agree on; see the JS block
+// for what each one does and why they only mean anything together. Only STEER_
+// EXPO has a C++ consumer today (libttp-sim's steering curve — partytest/
+// protocol_check.cc asserts ttp::getSteerExpo() equals it, which is what stops
+// game.cc drifting from the phone), but all five are mirrored because this
+// header mirrors protocol.js 1:1 and a TV shell will want the tilt numbers the
+// moment one exists.
+inline constexpr double STEER_EXPO = 1.25;
+inline constexpr double STEER_ROLL_LOCK_DEG = 30;
+inline constexpr double STEER_DEADZONE = 0.06;
+inline constexpr double STEER_SMOOTH = 0.5;
+inline constexpr double STEER_GATE_THRESHOLD = 0.03;
 
 inline const std::vector<std::string> CAR_COLORS = {
     "#e6492d", "#f2b134", "#2bb673", "#2d9cdb",

@@ -9,11 +9,21 @@
 // every car driven by an in-wasm AI bot, so the split-screen chase cams, HUD, lean,
 // and dust all show real motion in the preview.
 import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js';
+// The HUD cadence, from the file that owns the HUD — this preview paints the
+// same chrome through the same setCarHud, and used to carry its own copy of the
+// number.
+import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
+// The monster engine's timbre, from the audio ORACLE. This is a gallery-only
+// surface — it fires cues directly, with no decision stream behind them — so it
+// is one of the two readers left of decide.js's tables. Nothing that ships
+// imports that file: the race path gets this same growl as numbers on a voice
+// command from the C++ decision layer.
+import { MONSTER_ENGINE_MOD } from './audio/decide.js';
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
@@ -474,11 +484,11 @@ export function runDisplayScenario(opts, ctx) {
       if (kind === 'rocket') driveGalleryRocketAudio(snap); // sustained jet per in-flight rocket
       // Monster demo (standalone tab only): voice the transformed car's deep big-truck
       // engine growl, silent otherwise — so the gallery hears the sound change too.
-      if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, true);
+      if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, MONSTER_ENGINE_MOD);
       const now = performance.now();
-      if (now - lastHud > 160) {
+      if (now - lastHud > HUD_TICK_MS) {
         lastHud = now;
-        for (const c of snap.cars) { scene.setCarHud(c.id, c); scene.setCarSteer(c.id, c.steerInput); }
+        for (const c of snap.cars) scene.setCarHud(c.id, c);
       }
       // Endless preview: once everyone crosses the line, reset and lap again.
       // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.

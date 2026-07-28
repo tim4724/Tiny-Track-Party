@@ -62,6 +62,38 @@ const DERIVED = [
     gen: 'scripts/gen-fastlane-corpus.mjs',
     then: 'ctest --test-dir native/build -R fastlane   # then match native/libttp-party/ttp/fastlane.cc',
   },
+  {
+    // The display's session policy. Recorded AHEAD of its port (P9), so — like
+    // the audio and UI corpora — it is still RENEWABLE and must stay that way:
+    // the day this goes red because an input rotted is the day the oracle stops
+    // being re-derivable, and the JS that can produce it goes with the port.
+    what: 'tests/fixtures/session-corpus.jsonl',
+    from: 'public/display/sessionModel.js',
+    gen: 'scripts/gen-session-corpus.mjs',
+    then: 'ctest --test-dir native/build -R session   # then match native/libttp-party/ttp/session.cc',
+  },
+  {
+    // The top-down map + its snapshot codec. Its inputs are the committed
+    // shared/trackSchematics.js bake and the live trackSchematic.js, both of
+    // which survive — the phone still unpacks in JS — so this one stays
+    // re-derivable for as long as the controller does.
+    what: 'tests/fixtures/schematic-corpus.jsonl',
+    from: 'public/display/trackSchematic.js + public/shared/trackSchematics.js',
+    gen: 'scripts/gen-schematic-corpus.mjs',
+    then: 'ctest --test-dir native/build -R schematic  # then match native/libttp-track/ttp/schematic.cc',
+  },
+  // Not a C++ input (yet): the design tokens as data, for the tvOS/Android TV
+  // shells architecture.md accepts three implementations of the sticker look
+  // for. Same failure mode though — theme.css is the authored source, the JSON
+  // is a bake, and a stale bake is a second look silently disagreeing with the
+  // web. tests/design-tokens.test.js is the other half: it proves the bake is
+  // FAITHFUL, this proves it is CURRENT.
+  {
+    what: 'public/shared/design-tokens.json',
+    from: 'public/shared/theme.css',
+    gen: 'scripts/gen-design-tokens.mjs',
+    then: 'node --test tests/design-tokens.test.js',
+  },
 ];
 
 for (const d of DERIVED) {

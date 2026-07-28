@@ -6,34 +6,90 @@
 // sim and the renderer are the SAME wasm module, so `ttp_display_frame` reads
 // the live Game in C++ and builds the renderer's frame in place. Nothing about
 // a car — pose, speed, steer, which cell it owns — is ever serialized to JS to
-// be handed back. What still crosses does so ONCE PER RACE, at scene build:
-// the track payload and the GLB/texture bytes.
+// be handed back. What still crosses does so ONCE PER RACE, at scene build, and
+// it is now only a track ID, a biome NAME, the roster's liveries and the
+// GLB/texture bytes those name — the geometry and the palette are both resolved
+// on the far side.
 //
-// The HUD is not here. It is DOM over the canvas (Stage.js), which is exactly
-// why it lives in the shell and not the renderer.
+// Almost none of the HUD is here. It is DOM over the canvas (Stage.js), which
+// is exactly why it lives in the shell and not the renderer. The two exceptions
+// are the STEER BAR and the CELL DIVIDERS: cell-anchored and textless, so they
+// need none of the UI toolkit the rest of the HUD is written against and must
+// not be laid out a second time. Everything crossing for them is here —
+// uiScale, cellCards, dividers — and it is three latched setters, not a stream.
 
 import { loadNativeRuntime } from '../nativeRuntime.js';
+import { loadBiomes } from '../../shared/biomes.js';
+import { buildTrackBin } from '../../shared/trackBin.js';
+import { ITEM_IDS } from '../engine/contract.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
 export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal',
-                   'vpresent', 'vesm', 'vblur', 'vburst'];
+                   'vpresent', 'vesm', 'vblur', 'vburst', 'voverlay'];
+
+// cellRects' "no cells" answer, so the caller's loop is the same shape either way.
+const EMPTY_RECTS = new Float32Array(0);
+// hud()'s, for the same reason.
+const EMPTY_HUD = [];
+
+// The packed HUD block (native/libttp-runtime/ttp_hud.h), as this reader needs
+// it. Only the HEADER's size is written down: the SLOT's comes out of the block
+// itself (`stride`), which is why it is carried — a decoder that baked in a
+// sizeof would silently misread every slot after the day a field was added.
+const HUD_VERSION = 1;       // TTP_HUD_BLOCK_VERSION
+const HUD_HEADER_BYTES = 16; // sizeof(TtpHudBlock): version, slotCount, stride, flags
+// finishTime's byte offset INSIDE a slot. Hardcoded where the slot's size is
+// not, and the asymmetry is the point: `stride` covers a slot growing at the
+// end, which is the change a block can absorb; anything moving a field this
+// reader already knows bumps TTP_HUD_BLOCK_VERSION, which the guard below sees.
+const HUD_SLOT_TIME = 24;
+const HUD_LIVE = 1;          // TTP_HUD_SLOT_LIVE
+const HUD_FINISHED = 2;      // TTP_HUD_SLOT_FINISHED
+const HUD_TIMED = 4;         // TTP_HUD_SLOT_TIMED
+
+// A held item crosses as a CODE (TTP_ITEM_*), not a string: the index in the
+// sim's own roll table plus one, so 0 can mean "empty" without a sentinel that
+// looks like an item. ITEM_IDS is the browser's mirror of that table, and
+// tests/display-abi.test.js holds it to ttp_item_id in the shipped wasm so the
+// two cannot drift apart.
+//
+// TTP_ITEM_UNKNOWN (-1) folds to null HERE, and only here: this block feeds the
+// DRAWN slot, and a shell with no icon for an item draws an empty square. The
+// phone's ITEM message — which must not call an occupied slot empty — is not
+// sourced from this block.
+function itemId(code) {
+  return code >= 1 && code <= ITEM_IDS.length ? ITEM_IDS[code - 1] : null;
+}
 
 export class Display {
   constructor(canvas, mod) {
     this.canvas = canvas;
     this.m = mod;
     this.built = false;
+    this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
+    this._rectBytes = 0;
+    // The roster ids handed to ttp_display_build, in SLOT order. The HUD block
+    // comes back indexed by slot and carries no car id (ttp_hud.h's slot
+    // identity note), so this list — the one this class authored — is what maps
+    // an entry back to a car. Empty whenever no scene is built, which is exactly
+    // when C++ has no roster either.
+    this._rosterIds = [];
     this._fn = {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
+      biome: mod.cwrap('ttp_display_biome', null, ['string']),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
+      cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
+      cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
+      dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
+      uiScale: mod.cwrap('ttp_display_ui_scale', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
@@ -87,24 +143,33 @@ export class Display {
   // here — a Grand Prix chains four tracks, and even a restart wants the skid
   // ribbons, kicked cones and collected boxes back at their opening state.
   //
-  // `payload` names the track and carries its resolved theme; the geometry is
-  // built C++-side from payload.trackId.
+  // A track ID and a BIOME NAME, not a scene description. The geometry is built
+  // C++-side from the id (the same ttp::RaceTrack a session on it races on) and
+  // the palette is resolved C++-side from the name, so what this method
+  // actually does is FETCH: the GLBs and textures the two of them name, which
+  // is the one part of a scene build that is a platform job.
   //
-  // `payload.roster` is in SLOT order, and the ids go across with it: the
-  // renderer bakes each car's model and livery into its slot here, and every
-  // later frame puts a car back in its own slot by identity.
-  async setTrack(payload, assets) {
-    const { buildTrackBin, resolveModelTint } = await import('/shared/trackBin.js');
+  // `roster` is in SLOT order, and the ids go across with it: the renderer bakes
+  // each car's model and livery into its slot here, and every later frame puts a
+  // car back in its own slot by identity.
+  async setTrack(trackId, biome, roster, assets) {
     if (this.built) this._fn.release();
     this.built = false;
+    // Released, so C++ holds no roster either: the two lists go empty together
+    // and the HUD reads as "nothing to say yet" for the length of the rebuild,
+    // rather than mapping this race's slots onto last race's ids.
+    this._rosterIds = [];
+    // The look, before anything is fetched: the scenery model list is a
+    // function of it, and so is the scene the build call will produce.
+    this._fn.biome(biome);
+    this.provide('track.bin', buildTrackBin(roster));
 
-    // Scenery GLBs first: their authored material colours are what the biome's
-    // tint map keys on, and each kit may want its own colormap texture.
-    const scModels = [...new Set([...((payload.scenery || {}).trees || []).map((e) => e.model),
-                                  ...((payload.scenery || {}).bush ? [payload.scenery.bush.model] : [])])];
+    // Scenery GLBs, in the slot order C++ named them in: the renderer binds its
+    // instanced props by that index, and the biome's recolour — which keys on
+    // each model's own authored material colours — reads these same bytes back
+    // out on the C++ side.
+    const scModels = (await loadBiomes()).sceneryModels(biome);
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
-    payload.modelTints = scModels.map((m, i) => resolveModelTint(payload, m, scBytes[i]));
-    this.provide('track.bin', buildTrackBin(payload));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 
     const texUris = new Set();
@@ -123,7 +188,7 @@ export class Display {
     }));
 
     await Promise.all([
-      ...(payload.roster || []).map(async (r, i) => {
+      ...(roster || []).map(async (r, i) => {
         if (!r.model) return;
         const bytes = await assets.glb(r.model);
         if (!bytes) return;
@@ -144,18 +209,16 @@ export class Display {
       })
     ]);
 
-    const ids = JSON.stringify((payload.roster || []).map((r) => r.id));
-    // The track ID, not its geometry: the renderer runs the native TrackBuilder
-    // on it and meshes from the same object a session on that track would race.
-    if (this._fn.build(payload.trackId, ids)) {
-      throw new Error(`ttp_display_build(${payload.trackId}) failed`);
-    }
+    const ids = (roster || []).map((r) => r.id);
+    if (this._fn.build(trackId, JSON.stringify(ids))) throw new Error(`ttp_display_build(${trackId}) failed`);
+    this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
   }
 
   release() {
     if (!this.built) return;
     this._fn.release();
+    this._rosterIds = [];
     this.built = false;
   }
 
@@ -166,6 +229,106 @@ export class Display {
   // The cars that own a split-screen cell, in cell order. Empty = one overview
   // camera over the whole surface.
   cells(ids) { this._fn.cells(JSON.stringify(ids || [])); }
+
+  // WHERE those cells are, as a flat [x, y, w, h, x, y, w, h, …] in cell order —
+  // the rects the renderer splits its own viewports into, read back rather than
+  // recomputed here (the shell has no opinion on split-screen layout any more).
+  //
+  // Values are DRAWING-BUFFER pixels, like every other number this class passes
+  // (resize, create); the caller scales to CSS pixels, since the DPR is its own.
+  // Packed floats over JSON because the HUD reads this every frame: one cwrap
+  // call and a heap read, no parse and no garbage. The returned array is a VIEW
+  // over a scratch buffer reused by the next call — read it now, don't keep it.
+  cellRects(maxCells) {
+    const n = Math.max(0, maxCells | 0);
+    if (!n) return EMPTY_RECTS;
+    const bytes = n * 4 * 4; // 4 floats per cell
+    if (!this._rectPtr || this._rectBytes < bytes) {
+      if (this._rectPtr) this.m._free(this._rectPtr);
+      this._rectPtr = this.m._malloc(bytes);
+      this._rectBytes = bytes;
+    }
+    const got = this._fn.cellRects(this._rectPtr, n);
+    // HEAPF32 is re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out
+    // from under any view held across an allocation.
+    return this.m.HEAPF32.subarray(this._rectPtr >> 2, (this._rectPtr >> 2) + got * 4);
+  }
+
+  // WHAT the HUD says: place, lap, total laps, the held item, finished and the
+  // finish time, per car — read out of the packed block ttp_display_hud points
+  // at (ttp_hud.h) rather than out of a serialized race state. Those six values
+  // used to cost a JSON.stringify of the whole field in C++ and a JSON.parse of
+  // it here, every one of which was thrown away but these.
+  //
+  // A READ, not a frame: since the steer bar moved into the renderer nothing in
+  // the HUD changes faster than a place does, so the shell calls this at its own
+  // ~6 Hz cadence. Rows come back in the shape uiModel.hudRows used to produce
+  // — that function is now the CORPUS ORACLE only, and this is the runtime path.
+  //
+  // A slot no live car claims is SKIPPED rather than reported as zeroes, so a
+  // Grand Prix swapping tracks underneath the HUD (or the async gap between a
+  // field change and the scene rebuild that lands it) leaves each cell's chrome
+  // alone instead of painting it "0th, lap 0".
+  hud() {
+    const ptr = this.m._ttp_display_hud();
+    if (!ptr) return EMPTY_HUD;
+    // Both views are re-read every call, for cellRects' reason: memory growth
+    // detaches any view held across an allocation.
+    const u32 = this.m.HEAPU32;
+    const i32 = this.m.HEAP32;
+    const head = ptr >> 2;
+    if (u32[head] !== HUD_VERSION) {
+      // Unreachable while the wasm and this file ship in one repo, which is why
+      // it is a one-shot log and an empty HUD rather than a throw on a polling
+      // path: a stale checked-in artifact should be legible, not a stack trace
+      // six times a second.
+      if (!this._hudVersionLogged) {
+        this._hudVersionLogged = true;
+        console.error(`[display] HUD block v${u32[head]}, expected v${HUD_VERSION} —`
+            + ' rebuild with native/scripts/build-runtime-web.sh');
+      }
+      return EMPTY_HUD;
+    }
+    const count = u32[head + 1];
+    const stride = u32[head + 2];
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const id = this._rosterIds[i];
+      if (id === undefined) continue; // a slot this side never named: nothing to paint
+      const off = ptr + HUD_HEADER_BYTES + i * stride;
+      const at = off >> 2;
+      const flags = u32[at + 4];
+      if (!(flags & HUD_LIVE)) continue;
+      rows.push({
+        id,
+        position: i32[at],
+        lap: i32[at + 1],
+        totalLaps: i32[at + 2],
+        item: itemId(i32[at + 3]),
+        finished: !!(flags & HUD_FINISHED),
+        // The JSON null distinction, kept: a car can be finished with no
+        // recorded time (a forfeit resolved at the flag), and the card prints an
+        // empty string for that rather than "0.0s".
+        finishTime: (flags & HUD_TIMED) ? this.m.HEAPF64[(off + HUD_SLOT_TIME) >> 3] : null
+      });
+    }
+    return rows;
+  }
+
+  // Physical pixels per CSS pixel — devicePixelRatio, capped by Stage. The
+  // renderer needs it for the one thing it draws whose size is authored in the
+  // UI's units rather than the world's: the steer bar (34 CSS px tall, 4 px
+  // border). Points on tvOS and density on Android are the same idea, which is
+  // why this number can cross where a CSS pixel could not.
+  uiScale(k) { this._fn.uiScale(k); }
+
+  // Which cells have a centred card over them (bit i = cell i), which is where
+  // the steer bar must not be. The card itself stays in the DOM — it carries
+  // type — so this is one bit per cell, not a description of it.
+  cellCards(mask) { this._fn.cellCards(mask >>> 0); }
+
+  // The ink rules on the split-screen seams (?dividers=0 turns them off).
+  dividers(on) { this._fn.dividers(on ? 1 : 0); }
 
   camera(mode) { this._fn.camera(mode); }
   look(eye, target) { this._fn.look(eye.x, eye.y, eye.z, target.x, target.y, target.z); }

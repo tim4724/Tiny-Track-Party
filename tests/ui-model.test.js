@@ -1,0 +1,188 @@
+'use strict';
+// The UI model against the things the FROZEN corpus deliberately does not touch.
+//
+// tests/ui-corpus.test.js pins the model's behaviour byte for byte over a
+// SYNTHETIC catalogue, because binding a frozen oracle to shared/tracks.js would
+// turn every new track into a corpus re-record. This file is the other half: the
+// links between the model and the data it is actually handed in the browser, and
+// the invariants a recorded answer cannot state. It is free to change when the
+// catalogue does — that is the point of keeping the two apart.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+const ROOT = path.join(__dirname, '..');
+const load = (rel) => import(pathToFileURL(path.join(ROOT, rel)).href);
+
+test('the model mirrors protocol.js ROOM_STATE exactly', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const protocol = require('../public/shared/protocol.js');
+  // uiModel cannot import protocol.js (it is a classic script, and the model
+  // stays import-free), so it keeps a copy. This is the check that stops the
+  // copy drifting — CLAUDE.md's rule that nothing re-declares a shared value
+  // silently.
+  assert.deepEqual(ui.ROOM_STATE, protocol.ROOM_STATE,
+    'uiModel.ROOM_STATE has drifted from shared/protocol.js');
+});
+
+test('every screen has a back effect, and only screens do', async () => {
+  const ui = await load('public/display/uiModel.js');
+  assert.deepEqual(Object.keys(ui.BACK_EFFECT).sort(), ui.SCREENS.slice().sort(),
+    'BACK_EFFECT and SCREEN_ORDER must name the same boards');
+  // The order is what "forward" and "back" MEAN, so it has to be a strict rank.
+  const ranks = ui.SCREENS.map((s) => ui.SCREEN_ORDER[s]);
+  assert.deepEqual(ranks, [...new Set(ranks)].sort((a, b) => a - b), 'SCREEN_ORDER must be a strict rank');
+  // Only the root swallows: every other board must do something.
+  assert.equal(ui.backEffect('welcome'), 'swallow');
+  for (const s of ui.SCREENS.filter((x) => x !== 'welcome')) {
+    assert.notEqual(ui.backEffect(s), 'swallow', `${s} must act on back`);
+  }
+});
+
+test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
+  const catalog = TRACK_LIST.map((t) => ({ id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty }));
+
+  for (const cup of CUPS) {
+    const slot = ui.cupSlot({ mode: 'cup', cupId: cup.id, trackId: cup.tracks[0], cups: CUPS, catalog });
+    assert.equal(slot.name, cup.name, `cup ${cup.id} did not resolve its name`);
+    assert.equal(slot.raceCount, cup.tracks.length);
+    assert.deepEqual(slot.maps.map((m) => m.trackId), cup.tracks, 'the minis must be the cup, in order');
+    assert.deepEqual(slot.maps.map((m) => m.n), cup.tracks.map((_, i) => i + 1), 'the minis are numbered 1..N');
+    assert.ok(slot.difficulty >= 0 && slot.difficulty <= 4, `cup ${cup.id} has no difficulty in 0..4`);
+  }
+  for (const t of TRACK_LIST) {
+    const slot = ui.cupSlot({ mode: 'track', trackId: t.id, cups: CUPS, catalog });
+    assert.equal(slot.name, t.name);
+    assert.equal(slot.cupId, t.cup, `${t.id} must tint with its own cup`);
+    assert.deepEqual(slot.maps, [{ trackId: t.id }]);
+  }
+  // The random sticker never names a track — the mini carries the draw instead.
+  const rnd = ui.cupSlot({ mode: 'random', trackId: TRACK_LIST[3].id, cups: CUPS, catalog });
+  assert.equal(rnd.nameKey, 'random');
+  assert.equal(rnd.name, null);
+  assert.equal(rnd.difficulty, null, 'a random draw shows no difficulty meter');
+});
+
+test('the cup chip names the next race out of the shipped catalogue', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
+  const cup = CUPS[0];
+  const info = ui.seriesInfo({
+    cupId: cup.id, cupName: cup.name, endless: false, raceIndex: 1, raceCount: 4,
+    finished: false, nextTrackId: cup.tracks[2], catalog: TRACK_LIST, autoAdvanceMs: 10000
+  });
+  assert.equal(info.nextTrackId, cup.tracks[2]);
+  assert.equal(info.nextTrackName, TRACK_LIST.find((t) => t.id === cup.tracks[2]).name);
+  assert.equal(info.final, false);
+  const done = ui.seriesInfo({ ...{
+    cupId: cup.id, cupName: cup.name, endless: false, raceIndex: 3, raceCount: 4,
+    catalog: TRACK_LIST, autoAdvanceMs: 10000
+  }, finished: true, nextTrackId: cup.tracks[3] });
+  assert.equal(done.nextTrackId, null, 'a finished cup queues nothing');
+  assert.equal(done.nextTrackName, null);
+  assert.equal(done.final, true);
+});
+
+test('the standings board keeps its wire key order', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const board = ui.standingsPayload({
+    results: [{ playerId: 0, rank: 1, finished: true, time: 60 }],
+    field: [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }],
+    cup: null,
+    lateJoiners: [{ peerIndex: 1, name: 'Bo', colorIndex: 3 }],
+    hostPeerIndex: 0,
+    over: true
+  });
+  // The controller reads this by key, but the shape is a contract two languages
+  // will implement, so pin it rather than leave it to whoever writes the struct.
+  assert.deepEqual(Object.keys(board), ['over', 'hostPeerIndex', 'total', 'order']);
+  assert.deepEqual(Object.keys(board.order[0]), ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time']);
+  assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
+  assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
+
+  const cupBoard = ui.standingsPayload({
+    results: [{ playerId: 0, rank: 1, finished: true, time: 60 }],
+    field: [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }],
+    cup: { standings: [{ playerId: 0, points: 9, gained: 9 }], info: { cupId: 'c', final: false } },
+    lateJoiners: [], hostPeerIndex: 0, over: true
+  });
+  assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
+  assert.deepEqual(Object.keys(cupBoard.order[0]),
+    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'points', 'gained']);
+});
+
+test('a live cup board stays in race order; only the final board re-sorts', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const results = [
+    { playerId: 1, rank: 1, finished: true, time: 60 },
+    { playerId: 0, rank: 2, finished: true, time: 61 }
+  ];
+  const field = [{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }];
+  // Ada leads the CUP, Bo won this RACE.
+  const cup = { standings: [{ playerId: 0, points: 20, gained: 6 }, { playerId: 1, points: 12, gained: 9 }], info: {} };
+
+  const live = ui.standingsPayload({ results, field, cup, lateJoiners: [], hostPeerIndex: 0, over: false });
+  assert.deepEqual(live.order.map((r) => r.playerId), [1, 0], 'mid-race the drama is who crossed the line');
+  assert.ok(live.order.every((r) => r.gained === undefined), 'gains only appear on the final board');
+
+  const final = ui.standingsPayload({ results, field, cup, lateJoiners: [], hostPeerIndex: 0, over: true });
+  assert.deepEqual(final.order.map((r) => r.playerId), [0, 1], 'the final board tells the cup story');
+  assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
+});
+
+test('the results overlay splits the podium from the list the frozen way', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const row = (playerId, o = {}) => ({ playerId, name: `P${playerId}`, colorIndex: 0, ...o });
+  const board = {
+    over: true, hostPeerIndex: 0,
+    series: { cupName: 'Sunrise', final: true, endless: false, raceIndex: 3, raceCount: 4 },
+    total: 5,
+    order: [row(0), row(1), row(9, { joining: true }), row(2), row(3)]
+  };
+  const v = ui.resultsView(board, { intermissionMs: 10000 });
+  assert.equal(v.podium, true);
+  // The steps skip the joining row; the list still starts at index 3. That gap
+  // is the recorded quirk — 2 lands on neither.
+  assert.deepEqual(v.podiumRows.map((r) => r.playerId), [0, 1, 2]);
+  assert.deepEqual(v.listRows.map((r) => r.playerId), [2, 3]);
+  assert.equal(v.next, null, 'a podium queues nothing');
+  assert.equal(v.newGameKey, 'new_game');
+});
+
+test('the auto-pause read is deferred to exactly the ticks that use it', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const base = { hasSession: true, raceEnded: false, carIds: [0, 'ai-0'], aiIds: new Set(['ai-0']), seatedIds: new Set([0]) };
+  // The party layer's answer is only consulted while PLAYING with a human seat
+  // still in the race — everywhere else the shell must not pay for the read.
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing' }), true);
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'countdown' }), false);
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'results' }), false);
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', seatedIds: new Set() }), false);
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', hasSession: false }), false);
+  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', raceEnded: true }), false);
+  // ... and when it is not consulted, passing it cannot change the answer.
+  for (const roomState of ['lobby', 'countdown', 'playing', 'results']) {
+    const a = ui.autoPause({ ...base, roomState, allParticipantsDisconnected: false });
+    const b = ui.autoPause({ ...base, roomState, allParticipantsDisconnected: true });
+    if (!a.asked) assert.deepEqual(a, b, `${roomState}: an unconsulted input changed the decision`);
+  }
+});
+
+test('the seat grid never shrinks below the field that races', async () => {
+  const ui = await load('public/display/uiModel.js');
+  const protocol = require('../public/shared/protocol.js');
+  const MAX = protocol.MAX_PLAYERS;
+  for (let n = 0; n <= MAX + 2; n++) {
+    const seats = Array.from({ length: n }, (_, i) => ({ name: `P${i}`, colorIndex: i }));
+    const grid = ui.seatGrid(seats, MAX, protocol.CAR_MODELS.length);
+    assert.equal(grid.length, Math.max(MAX, n), `a roster of ${n} must fill ${Math.max(MAX, n)} tiles`);
+    assert.equal(grid.filter((g) => g.open).length, Math.max(0, MAX - n));
+    // Every taken tile names a car that exists in the model roster.
+    for (const g of grid.filter((x) => !x.open)) {
+      assert.ok(protocol.CAR_MODELS[g.modelIndex], `seat car ${g.modelIndex} is not in CAR_MODELS`);
+    }
+  }
+});

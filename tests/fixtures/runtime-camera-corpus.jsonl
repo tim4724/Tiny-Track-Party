@@ -1,0 +1,16 @@
+{"cases":15,"kind":"runtime-camera","sigDigits":4}
+{"case":"grid","cols":[1,1,1,2,2,3,3,3,3],"h":1080,"name":"1080p","w":1920}
+{"case":"grid","cols":[1,1,1,2,2,2,2,3,3],"h":768,"name":"720p-4x3","w":1024}
+{"case":"grid","cols":[1,1,2,2,2,3,3,4,4],"h":1080,"name":"ultrawide","w":2560}
+{"case":"grid","cols":[1,1,1,1,1,1,1,2,2],"h":1280,"name":"portrait","w":800}
+{"bbAx":99,"bbAz":96,"bbFogFar":165,"bbFogNear":55,"bbHeight":86.65,"case":"framing","center":[12.5,1.5,-30.25],"name":"square","ovBearing":1.2,"ovFogFar":446.4,"ovFogNear":226.4,"ovHeight":121.9,"ovOffset":[53.33,121.9,137.1],"ovRadius":147.1,"raceFogFar":170,"raceFogNear":70}
+{"bbAx":221.7,"bbAz":54.3,"bbFogFar":227.3,"bbFogNear":40.15,"bbHeight":115,"case":"framing","center":[-64,3.25,41.5],"name":"wideX","ovBearing":1.2,"ovFogFar":838.7,"ovFogNear":395.3,"ovHeight":273,"ovOffset":[119.4,273,307.1],"ovRadius":329.5,"raceFogFar":124.1,"raceFogNear":51.1}
+{"bbAx":46.2,"bbAz":158.9,"bbFogFar":323.4,"bbFogNear":75.35,"bbHeight":90.17,"case":"framing","center":[31,-2.5,118],"name":"longZ","ovBearing":1.2,"ovFogFar":627.3,"ovFogNear":309.5,"ovHeight":195.6,"ovOffset":[85.58,195.6,220.1],"ovRadius":236.1,"raceFogFar":232.9,"raceFogNear":95.9}
+{"bbAx":460.6,"bbAz":363.7,"bbFogFar":370.8,"bbFogNear":34.1,"bbHeight":306.9,"case":"framing","center":[5,12,7.5],"name":"huge","ovBearing":1.2,"ovFogFar":2037,"ovFogNear":1116,"ovHeight":567.1,"ovOffset":[248.1,567.1,638],"ovRadius":684.6,"raceFogFar":105.4,"raceFogNear":43.4}
+{"bbAx":99,"bbAz":96,"bbFogFar":165,"bbFogNear":55,"bbHeight":86.65,"case":"framing","center":[12.5,1.5,-30.25],"name":"firstPass","ovBearing":1.2,"ovFogFar":232,"ovFogNear":12,"ovHeight":121.9,"ovOffset":[53.33,121.9,137.1],"ovRadius":147.1,"raceFogFar":170,"raceFogNear":70}
+{"case":"chase","fov":55,"frames":40,"name":"standing","pos":[38.65,3.64,25],"target":[41.5,3.11,25]}
+{"case":"chase","fov":57.39,"frames":40,"name":"cruise","pos":[46.99,3.64,25],"target":[50,3.11,25]}
+{"case":"chase","fov":58.4,"frames":40,"name":"corner","pos":[56.1,4.185,33.78],"target":[57.6,3.786,35.82]}
+{"case":"chase","fov":62.59,"frames":40,"name":"boost","pos":[57.5,7.073,63.36],"target":[57.52,6.608,64.01]}
+{"case":"chase","fov":56.32,"frames":40,"name":"halfrate","pos":[52.33,7.293,70.88],"target":[50.07,6.767,73.07]}
+{"case":"chase","fov":55.35,"frames":40,"name":"rollingOut","pos":[51.55,7.298,72.29],"target":[48.62,6.768,72.31]}

@@ -321,7 +321,9 @@ export const TRACKS = {
 // derived by flattening it, so a track appears in the picker iff it's listed in a cup.
 // New track: add the descriptor to TRACKS above, then drop its id into a cup here.
 // Cup order IS the difficulty ladder (tendencies 1→2→3→3→4); each cup's biome is
-// mapped in themes.js CUP_BIOME (Backyard keeps the canonical grass look).
+// mapped in native/libttp-runtime/ttp/theme.cc CUP_BIOME (Backyard keeps the
+// canonical grass look), reached from here through the `cup` field
+// gen-track-defs-header.mjs carries into the C++ catalogue.
 export const CUPS = [
   { id: 'beach',    name: 'Beach Cup',    tracks: ['tidepool', 'cove', 'driftwood', 'riptide'] }, // easy: flowing sweepers + hops (beach biome)
   { id: 'snow',     name: 'Snow Cup',     tracks: ['powder', 'flurry', 'glacier', 'avalanche'] }, // medium: gentle-mid crossings + climb (snow biome)

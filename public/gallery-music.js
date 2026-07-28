@@ -1,11 +1,21 @@
 // Music gallery — the SHIPPED soundtrack, cup by cup. Everything renders from
-// live game data (CUPS for the cup list/names, biomeNameForCup + THEMES for the
-// biome identity/swatch, RACE_MUSIC for the songs), so the page is drift-free
-// by construction: wiring a new pick into display/Audio.js is what updates it.
+// live game data (CUPS for the cup list/names, the biome ABI for the biome
+// identity/swatch, RACE_MUSIC for the songs), so the page is drift-free by
+// construction: wiring a new pick into display/Audio.js is what updates it.
 // Playback mirrors the audition galleries: one shared streaming <audio>.
+//
+// The biome half comes from the wasm runtime, because the palette does: a cup's
+// biome and that biome's identity colour are C++ data now (shared/biomes.js).
+// This page pays a module load to stay drift-free rather than re-authoring two
+// values it would then have to keep in step by hand.
 import { CUPS } from '/shared/tracks.js';
-import { biomeNameForCup, THEMES } from '/shared/themes.js';
-import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/Audio.js';
+import { loadBiomes, cssHex } from '/shared/biomes.js';
+// Straight from the audio ORACLE, which is where the catalogue is authored.
+// Audio.js used to re-export it, which put the oracle on the shipped display
+// page's import graph; this page is a dev surface and is free to read it.
+import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/decide.js';
+
+const biomes = await loadBiomes();
 
 const VOL_KEY = 'tinytrack_sound_volume_v1'; // shared with the other galleries
 
@@ -41,8 +51,6 @@ player.addEventListener('timeupdate', () => {
     current.seek.value = String(Math.round((player.currentTime / player.duration) * 1000));
   }
 });
-
-const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
 function songRow(song, { fallback = false } = {}) {
   const row = document.createElement('div');
@@ -102,7 +110,7 @@ function songRow(song, { fallback = false } = {}) {
 
 const cupsEl = document.getElementById('music-cups');
 for (const cup of CUPS) {
-  const biome = biomeNameForCup(cup.id);
+  const biome = biomes.forCup(cup.id);
   const pool = RACE_MUSIC[biome] || [];
 
   const section = document.createElement('div');
@@ -112,7 +120,7 @@ for (const cup of CUPS) {
   head.className = 'rail-title';
   const dot = document.createElement('span');
   dot.className = 'biome-dot';
-  dot.style.background = hex(THEMES[biome].hills[0]);
+  dot.style.background = cssHex(biomes.hill(biome, 0));
   head.append(dot, document.createTextNode(`${cup.name} · ${biome} biome`));
   section.appendChild(head);
 

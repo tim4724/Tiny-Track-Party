@@ -35,12 +35,22 @@
 // Emits {s,b} to onControl at ~25 Hz.
 
 const SEND_HZ = 25;
-const ROLL_LOCK = 30;      // degrees of left/right roll for full lock
-const DEADZONE = 0.06;     // normalized steer ignored around centre
+
+// The three steering numbers below are MANIFEST values: they belong to the
+// shared steering contract in shared/protocol.js (STEER), because the display's
+// sim and the CONTROL send gate are sized against them. They are re-declared
+// here rather than read from `window.STEER` because protocol.js is a classic
+// script (the controller page loads it with <script src> before any module) and
+// this file is documented importable headlessly by the Node suites — so they are
+// EXPORTED instead, and tests/config-drift.test.js fails if either copy moves
+// without the other.
+export const ROLL_LOCK = 30;      // degrees of left/right roll for full lock
+export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // Single light low-pass on the steer output: just enough to take the edge off
 // sensor jitter (raw DeviceOrientation twitches ~1-2° even held still) without
 // the lag of a heavier filter. Higher = snappier; set to 1 for fully raw.
-const SMOOTH = 0.5;
+export const SMOOTH = 0.5;
+
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
 const DEG = Math.PI / 180;

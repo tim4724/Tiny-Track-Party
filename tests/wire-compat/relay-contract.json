@@ -1,0 +1,84 @@
+{
+  "_": "FROZEN. Derived from Party-Sockets by scripts/wire-relay-contract.mjs; do not hand-edit.",
+  "source": {
+    "package": "party-sockets",
+    "version": "2.3.1",
+    "file": "server.ts"
+  },
+  "limits": {
+    "maxStateBytes": 16384,
+    "maxUrlBytes": 512,
+    "idleTimeoutMs": 10000,
+    "hostGraceMs": 120000
+  },
+  "closeCodes": {
+    "replaced": 4000,
+    "roomClosed": 4001
+  },
+  "errors": [
+    "Already in a room",
+    "Invalid JSON",
+    "Not in a room",
+    "Only the host can close the room",
+    "Only the host can set state",
+    "Room is full",
+    "Room not found",
+    "Server draining",
+    "State data is required",
+    "State too large",
+    "Target peer not found",
+    "Unknown message type",
+    "clientId is required",
+    "maxClients must be a positive number",
+    "room is required"
+  ],
+  "inboundTypes": [
+    "close_room",
+    "create",
+    "join",
+    "send",
+    "set_state"
+  ],
+  "behaviours": [
+    {
+      "id": "null-to-is-an-error",
+      "why": "A present-but-null `to` fails Number.isSafeInteger and answers \"Target peer not found\"; the E2E stub broadcasts it instead."
+    },
+    {
+      "id": "index-grows-past-maxclients",
+      "why": "New joiners push to members.length, so indices grow monotonically and may exceed maxClients after churn."
+    },
+    {
+      "id": "cap-counts-live-clients",
+      "why": "A disconnect frees the cap, so a returning owner can be answered \"Room is full\"."
+    },
+    {
+      "id": "peer-joined-suppressed-on-replace",
+      "why": "peer_joined fires only when the slot was not already active, so a display replacing its own live socket is invisible to phones."
+    },
+    {
+      "id": "hostless-grace-closes-the-room",
+      "why": "Slot 0 vanishing arms a timer that tears the whole room down and 4001s everyone."
+    },
+    {
+      "id": "created-carries-instance-and-region",
+      "why": "party.pinInstance -> ttp_framing_pin_url and the display join URL's #instance fragment only run when these are non-empty."
+    },
+    {
+      "id": "state-null-is-retained-not-rejected",
+      "why": "setState(undefined) is refused, but an explicit null is RETAINED and replayed as a cleared-state signal."
+    },
+    {
+      "id": "state-cap-measures-utf8-bytes",
+      "why": "The 16 KiB cap is UTF-8 bytes, not UTF-16 units, which is what makes the C++ round trip length-sensitive."
+    },
+    {
+      "id": "retained-state-replayed-after-joined",
+      "why": "Every (re)joiner gets the host snapshot right after `joined`, which is how a phone recovers without a per-phone WELCOME."
+    },
+    {
+      "id": "invalid-json-answers-an-error",
+      "why": "A single malformed frame is a session-ending event in prod and a no-op in the E2E stub."
+    }
+  ]
+}

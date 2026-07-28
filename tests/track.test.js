@@ -58,11 +58,13 @@ test.before(async () => {
   // surfaces (devTracks.js — the Gym). Suites about what SHIPS (schematics, the grid
   // rule) iterate TRACK_LIST instead.
   ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
-  const schem = await import('../public/display/trackSchematic.js');
-  trackSchematic = schem.trackSchematic;
-  packSchematic = schem.packSchematic;
-  unpackSchematic = schem.unpackSchematic;
-  SCHEMATIC_EPS = schem.SCHEMATIC_EPS;
+  trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
+  // The transport codec is shared/ now — the phone unpacks it, and phones stay
+  // on the JS controller on every TV platform.
+  const codec = await import('../public/shared/schematicCodec.js');
+  packSchematic = codec.packSchematic;
+  unpackSchematic = codec.unpackSchematic;
+  SCHEMATIC_EPS = codec.SCHEMATIC_EPS;
   TRACK_SCHEMATICS = (await import('../public/shared/trackSchematics.js')).TRACK_SCHEMATICS;
 });
 

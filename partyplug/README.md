@@ -186,9 +186,12 @@ connection (sleeping phone, dropped Wi-Fi) never closes its socket, so the
 relay's `peer_left` alone can't catch it. The host stamps every inbound message
 with `onSeen(peerIndex, nowMs)` and polls the pure predicates: `isExpired(id,
 nowMs)`, `expiredPeers(nowMs)` (silent-past-`timeoutMs` peers; always empty in
-`LOBBY`), `allParticipantsDisconnected()`, `hasLateJoiners()`, and
-`graceTick(nowMs)` (arms a `graceMs` return-to-lobby deadline while every
-participant is gone but late joiners wait; fires `true` exactly once). The
+`LOBBY`), `allParticipantsDisconnected()`, `hasLateJoiners()` /
+`lateJoiners()` (the predicate and the list of the same roster-minus-order set),
+and `graceTick(nowMs)` (arms a `graceMs` return-to-lobby deadline while every
+participant is gone but late joiners wait; fires `true` when it elapses, then
+RE-ARMS — a caller still polling under the same condition gets another `true`
+every `graceMs`, so acting once is the caller's job). The
 detectors never mutate presence and never emit — the host applies an expiry
 through the normal `markDisconnected` path, keeping the single-writer
 invariant. All time is an injected `nowMs`; RoomFlow stays clock-free (the
@@ -238,7 +241,11 @@ handoff is committed when the room re-enters `LOBBY`/`RESULTS`.
 
 To keep host eligibility in sync with a game-maintained participant list, call
 `setActiveOrder(peerIndices)` whenever that list changes; otherwise entering
-`COUNTDOWN` snapshots the currently-connected roster automatically.
+`COUNTDOWN` snapshots the currently-connected roster automatically. The order is
+also the definition of "late joiner": everyone NOT in it
+(`hasLateJoiners()`/`lateJoiners()`), which is what the abandoned-round grace
+waits for — so a game whose participants aren't simply "whoever was connected at
+`COUNTDOWN`" must supply the order, or those predicates answer for the wrong set.
 
 #### Reconnect
 

@@ -166,6 +166,16 @@ const MUTATIONS = [
     expect: 'roomflow',
   },
   {
+    // The participant set the abandoned-race policy and the "joining" rows both
+    // read. A dropped seat is being HELD, not waiting — forget that and a blipped
+    // party's own ghost seats start counting as people waiting for the next race.
+    name: 'room/dropped-seat-stops-being-a-participant',
+    file: 'native/libttp-party/ttp/room_flow.cc',
+    find: 'bool active = discHas(p.peerIndex);  // a dropped seat is a participant, held',
+    replace: 'bool active = false;',
+    expect: 'abi',
+  },
+  {
     name: 'framing/encode-drops-a-field',
     file: 'native/libttp-party/ttp/relay_framing.cc',
     find: 'm.set("maxClients", Value::Num(maxClients));',
@@ -180,6 +190,165 @@ const MUTATIONS = [
     expect: 'fastlane',
   },
 
+  // ---- the session policy, whose corpus exists mostly FOR the branches nothing
+  // else in the tree covers. Each of these was a real hole before it: the
+  // rejection guards were untested (wire-compat drives the accepted paths only),
+  // and the claim path had no coverage anywhere.
+  {
+    // Ready survives race -> lobby, so the pick behind a standing ready flag must
+    // not shift. Drop this and a ready player can silently swap cars.
+    name: 'session/ready-seat-stops-locking-its-car-pick',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (ready) return false;\n  if (!(state == RoomState::LOBBY || !inRace)) return false;',
+    replace: '  if (!(state == RoomState::LOBBY || !inRace)) return false;',
+    expect: 'session',
+  },
+  {
+    // The bulky track schematics ride the LOBBY snapshot only — nothing about the
+    // other eleven keys hints at it, and shipping them every publish is how the
+    // room silently exceeds the relay's 16 KiB cap.
+    name: 'session/track-chooser-rides-every-snapshot',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (lobby) copyKey(out, chooser, "tracks");\n  else out.set("tracks", Value::Null());',
+    replace: '  copyKey(out, chooser, "tracks");',
+    expect: 'session',
+  },
+  {
+    // FROZEN QUIRK: Number(null) is 0 and Number(undefined) is NaN, so an absent
+    // rejoinToken and an explicit null claim different seats. "Tidying" this is
+    // exactly the change the corpus exists to refuse.
+    name: 'session/absent-rejoin-token-becomes-an-explicit-null',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (!v) return kNaN;  // Number(undefined)',
+    replace: '  if (!v) return 0;',
+    expect: 'session',
+  },
+  {
+    // The heartbeat is an in-flight FLAG, not an echo AGE. Swap it and a
+    // background tab whose ticks ran minutes apart reconnects a healthy socket.
+    name: 'session/heartbeat-reads-echo-age-instead-of-the-flag',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  if (hbPending && now - hbSentAt > kHeartbeatDeadMs) {',
+    replace: '  if (now - hbSentAt > kHeartbeatDeadMs) {',
+    expect: 'session',
+  },
+  {
+    // The claim QR's URL: ?claim= must go BEFORE the fragment or the reconnect
+    // lands on a relay shard that has never heard of the room.
+    name: 'session/claim-url-appends-after-the-fragment',
+    file: 'native/libttp-party/ttp/session.cc',
+    find: '  return base + sep + "claim=" +\n         framing::encode_uri_component(js_number_to_string(peerIndex)) + frag;',
+    replace: '  return base + frag + sep + "claim=" +\n         framing::encode_uri_component(js_number_to_string(peerIndex));',
+    expect: 'session',
+  },
+
+  // ---- the track map + its snapshot codec.
+  {
+    // RDP runs on the SMOOTH sub-integer path and only THEN rounds. Round first
+    // and every straight jitters by +/-0.5, which defeats the simplification and
+    // blows the byte budget.
+    name: 'schematic/rdp-runs-on-already-rounded-points',
+    file: 'native/libttp-track/ttp/schematic.cc',
+    find: '    return z0(js_fixed(js_max(0.0, js_min(VIEW - 1.0, n)), 1));',
+    replace: '    return z0(js_fixed(js_max(0.0, js_min(VIEW - 1.0, n)), 0));',
+    expect: 'schematic',
+  },
+  {
+    // toFixed is not printf: it picks the integer minimizing |n/10^f - x| and
+    // breaks ties away from zero. Truncating instead moves points by up to 0.1.
+    name: 'schematic/tofixed-truncates-instead-of-rounding',
+    file: 'native/libttp-track/ttp/schematic.cc',
+    find: '  const std::string t = fixedText(v, digits);\n  return std::strtod(t.c_str(), nullptr);',
+    replace: '  double p = 1; for (int i = 0; i < digits; i++) p *= 10;\n  return std::trunc(v * p) / p;',
+    expect: 'schematic',
+  },
+
+  // ---- the display runtime (libttp-runtime), which had NO gate at all until
+  // runtime_check: it lived in runtime/ttp_display.cc behind the Filament SDK,
+  // so every leg compiled around it and every ctest looked straight past it.
+  {
+    name: 'camera/chase-damping-not-frame-rate-independent',
+    file: 'native/libttp-runtime/ttp/camera.cc',
+    find: 'const float aPos = 1 - std::exp(-(CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt);',
+    replace: 'const float aPos = (CAM_POS_RATE + CAM_POS_RATE_SPD * rateSpd * rateSpd) * dt;',
+    expect: 'runtime_check',
+  },
+  {
+    name: 'framing/lobby-orbit-stops-clearing-the-bbox',
+    file: 'native/libttp-runtime/ttp/framing.cc',
+    find: 'f.bbAx = halfX + BBOX_CLEARANCE;',
+    replace: 'f.bbAx = halfX;',
+    expect: 'runtime_check',
+  },
+  // The frame BUILDER, which runtime_check does not reach — it calls the camera,
+  // framing and grid primitives itself and never runs the block that assembles a
+  // frame out of them. frame_check is that gate.
+  {
+    name: 'frame/cell-aspect-transposed',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    // The overview/lobby rigs derive the aspect from the surface (the race cams
+    // take the caller's cell aspect instead — a cell is a tile of the LETTERBOXED
+    // picture, which only the renderer knows). frame_check drives both.
+    find: ': (float) d.width / (float) (d.height ? d.height : 1);',
+    replace: ': (float) (d.height ? d.height : 1) / (float) d.width;',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/outlived-hold-drives-behind-the-overlay',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (d.hold) for (size_t i = 0; i < cars.size(); i++) atRest(outCars[i]);',
+    replace: '',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/roster-slot-taken-by-insertion-order',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (d.roster[i] == cp->id) { cars[i] = cp.get(); break; }',
+    replace: 'cars[i] = cp.get();',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'frame/unarmed-banana-drawn',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    find: 'if (now < b.liveAt) continue;',
+    replace: '',
+    expect: 'frame_builder',
+  },
+
+  // ---- the audio decisions. Three halves of one gate: the distance curve every
+  // world cue is scaled by, the voice start/stop EDGE (which the traces exercise
+  // 5900 times and no scripted case could), and the music trim — the one number
+  // in this layer that a port is tempted to DERIVE rather than copy. Deriving it
+  // with the vendored fdlibm pow is the exact mistake the corpus was re-recorded
+  // to make catchable, and it is caught on the very first music pick.
+  {
+    name: 'audio/impact-loses-its-payoff-floor',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    find: 'return a > 0 ? js_max(0.45, a) : 0;',
+    replace: 'return a;',
+    expect: 'audio',
+  },
+  {
+    name: 'audio/voice-stop-is-not-an-edge',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    find: 'if (level <= VOICE_FLOOR) {',
+    replace: 'if (level <= VOICE_FLOOR) { { Command z; z.kind = Command::VOICE_STOP; z.name = cue;'
+      + ' z.id = id; out.push_back(z); return; }',
+    expect: 'audio',
+  },
+  {
+    name: 'audio/music-trim-derived-with-pow',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    // One song's trim, as ttp_fd_pow(10, (-19.2 - -15.3) / 20) computes it: one
+    // ULP below the literal V8's `10 ** x` produced and the corpus recorded.
+    // Spelled as the number rather than as the pow CALL because a linkage
+    // specification is illegal at block scope, so the honest mutation would not
+    // compile — and a mutation that does not compile proves nothing.
+    find: '212, -15.3, 0.6382634861905488)',
+    replace: '212, -15.3, 0.63826348619054873)',
+    expect: 'audio',
+  },
+
   // ---- the party C ABI marshalling (ttp_party.cc).
   {
     name: 'party-abi/add-player-drops-game-fields',
@@ -192,6 +361,15 @@ const MUTATIONS = [
     name: 'party-abi/event-queue-not-drained',
     file: 'native/runtime/ttp_party.cc',
     find: '  rh->events.clear();',
+    replace: '',
+    expect: 'abi',
+  },
+  {
+    // The one place the party ABI reads the sim: who is holding a car. Lose it
+    // and every racer reads as a late joiner waiting for the next race.
+    name: 'party-abi/active-order-never-sees-the-cars',
+    file: 'native/runtime/ttp_party.cc',
+    find: 'for (const auto& c : g->cars()) active.push_back(c->id);',
     replace: '',
     expect: 'abi',
   },

@@ -30,6 +30,14 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
+// The controller's two steering modules, loaded live rather than scraped: both
+// are browser ES modules written to import headlessly (see their headers).
+let tilt, gate;
+test.before(async () => {
+  tilt = await import(pathToFileURL(path.join(ROOT, 'public/controller/TiltInput.js')).href);
+  gate = await import(pathToFileURL(path.join(ROOT, 'public/controller/InputGate.js')).href);
+});
+
 // The runtime C ABI, same cwrap conventions as tests/runtime-abi.test.js (ids
 // cross as JSON scalars; null stats = the engine benchmark car).
 async function loadAbi() {
@@ -43,6 +51,7 @@ async function loadAbi() {
     update: cw('ttp_update', 'void', ['number', 'number']),
     snapshot: cw('ttp_snapshot_json', 'string', ['number']),
     dispose: cw('ttp_dispose', 'void', ['number']),
+    getSteerExpo: cw('ttp_get_steer_expo', 'number', []),
   };
 }
 
@@ -96,4 +105,153 @@ test('the live wasm engine ships those same values', { skip }, async () => {
   assert.equal(fallback.halfLen, ref.halfLen, 'live engine benchmark halfLen drifted from protocol.CAR_STATS[0]');
   assert.equal(fallback.halfWid, ref.halfWid, 'live engine benchmark halfWid drifted from protocol.CAR_STATS[0]');
   assert.equal(fallback.monster, false, 'sanity: the snapshot footprint is unmultiplied (not the x1.3 monster body)');
+});
+
+// ---------------------------------------------------------------------------
+// The steering contract: protocol.js STEER vs the three files that spend it.
+//
+// STEER_EXPO (the sim), ROLL_LOCK (the phone) and the CONTROL gate's dead-band
+// are one design, and the third is ARITHMETIC over the first two. Before the
+// manifest existed that was stated only in prose, in a file that owns none of
+// the numbers it reasons about — so tuning the steering curve in C++ left a
+// controller comment quietly describing a car that no longer exists.
+//
+// Four links, all machine-checked, and only the first two live here:
+//   1. TiltInput/InputGate  == the manifest        (this file, below)
+//   2. InputGate's derivation still closes          (this file, below)
+//   3. protocol.h           == protocol.js          (protocol-corpus + `protocol` ctest)
+//   4. game.cc              == protocol.h           (the same ctest's own assertion)
+// Plus the belt-and-braces guard this file already applies to everything else:
+// read the value back out of the SHIPPED wasm, not just the sources.
+// ---------------------------------------------------------------------------
+
+test('TiltInput spends the manifest steering numbers', () => {
+  const S = protocol.STEER;
+  assert.equal(tilt.ROLL_LOCK, S.ROLL_LOCK_DEG, 'TiltInput ROLL_LOCK drifted from protocol.STEER.ROLL_LOCK_DEG');
+  assert.equal(tilt.DEADZONE, S.DEADZONE, 'TiltInput DEADZONE drifted from protocol.STEER.DEADZONE');
+  assert.equal(tilt.SMOOTH, S.SMOOTH, 'TiltInput SMOOTH drifted from protocol.STEER.SMOOTH');
+});
+
+test('InputGate spends the manifest steering numbers', () => {
+  assert.equal(gate.DEFAULT_STEER_THRESHOLD, protocol.STEER.GATE_THRESHOLD,
+    'InputGate DEFAULT_STEER_THRESHOLD drifted from protocol.STEER.GATE_THRESHOLD');
+});
+
+test("InputGate's dead-band derivation still closes over the manifest", () => {
+  const S = protocol.STEER;
+  const t = S.GATE_THRESHOLD;
+
+  // Lower bound — the gate must ENGAGE. A phone lying still twitches
+  // SENSOR_NOISE_FLOOR_DEG at the quiet end; over ROLL_LOCK_DEG that is a
+  // fraction of full steer, and TiltInput's one-pole SMOOTH takes roughly half
+  // of it back out. A threshold under what survives calls every idle sample a
+  // change, so the gate passes everything and saves nothing.
+  const survivingNoise = (gate.SENSOR_NOISE_FLOOR_DEG / S.ROLL_LOCK_DEG) * S.SMOOTH;
+  assert.ok(t >= survivingNoise,
+    `gate threshold ${t} is under the ${survivingNoise} of sensor wobble that survives `
+    + `ROLL_LOCK_DEG=${S.ROLL_LOCK_DEG} and SMOOTH=${S.SMOOTH} — the gate would never engage`);
+
+  // Upper bound — the gate must not HIDE too much. Worst case is |s| -> 1, where
+  // the display's expo gain peaks at EXPO itself.
+  assert.ok(t * S.EXPO <= gate.STEER_ERROR_BUDGET,
+    `gate threshold ${t} at the display's peak expo gain ${S.EXPO} hides ${t * S.EXPO} of `
+    + `steer authority, over the ${gate.STEER_ERROR_BUDGET} budget`);
+
+  // And the band has to be a band: a floor above the ceiling means no threshold
+  // satisfies both, i.e. the four numbers no longer describe one design.
+  assert.ok(survivingNoise * S.EXPO <= gate.STEER_ERROR_BUDGET,
+    'no gate threshold can satisfy both bounds — the steering manifest is self-contradictory');
+});
+
+// ---------------------------------------------------------------------------
+// The presence contract: protocol.js LIVENESS vs the files that spend it.
+//
+// "A seat silent past 3 s is dropped" is only true because phones ping at 1 Hz,
+// and those two numbers lived in two different files with nothing but a comment
+// between them — the exact failure mode the steering manifest above was built to
+// end. A tvOS shell would have picked its own 3 s and nobody would have noticed
+// until a party.
+//
+// Four links, and the first three are here:
+//   1. controller/Net.js + display/Net.js == the manifest   (source text)
+//   2. sessionModel.js's restated constants == the manifest (source text)
+//   3. the windows are internally consistent               (arithmetic)
+//   4. protocol.h == protocol.js                (protocol-corpus + `protocol` ctest)
+// The source-text guards are literal on purpose: a reformat fails them loudly
+// rather than silently matching nothing.
+// ---------------------------------------------------------------------------
+const CTRL_NET = path.join(ROOT, 'public/controller/Net.js');
+const DISPLAY_NET = path.join(ROOT, 'public/display/Net.js');
+const SESSION_MODEL = path.join(ROOT, 'public/display/sessionModel.js');
+
+test('the two shells read their presence windows off the manifest', () => {
+  const ctrl = fs.readFileSync(CTRL_NET, 'utf8');
+  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
+  const pairs = [
+    [ctrl, 'controller/Net.js', 'PING_INTERVAL_MS', 'LIVENESS.PING_INTERVAL_MS'],
+    [ctrl, 'controller/Net.js', 'PONG_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
+    [disp, 'display/Net.js', 'LIVENESS_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
+    [disp, 'display/Net.js', 'LIVENESS_TICK_MS', 'LIVENESS.TICK_MS'],
+    [disp, 'display/Net.js', 'CREATE_TIMEOUT_MS', 'LIVENESS.CREATE_TIMEOUT_MS'],
+  ];
+  for (const [src, where, name, expr] of pairs) {
+    assert.match(src, new RegExp(`const ${name} = ${expr.replace('.', '\\.')};`),
+      `${where}: ${name} must read ${expr}, not restate a number`);
+  }
+  // The abandoned-race grace keeps its E2E override, which is an override OF a
+  // manifest number rather than a second declaration of one.
+  assert.match(disp, /const ABANDONED_RACE_GRACE_MS = window\.__abandonGraceMs \|\| LIVENESS\.ABANDONED_RACE_GRACE_MS;/,
+    'display/Net.js: the abandoned-race grace must fall back to the manifest');
+});
+
+test('sessionModel.js restates only what it must, and restates it correctly', () => {
+  const src = fs.readFileSync(SESSION_MODEL, 'utf8');
+  // It may import nothing (session-corpus.test.js enforces that), so the one
+  // window it spends and the heartbeat's wire type are literals — held here.
+  const dead = /const HEARTBEAT_DEAD_MS = (\d+);/.exec(src);
+  assert.ok(dead, 'sessionModel.js still declares HEARTBEAT_DEAD_MS');
+  assert.equal(Number(dead[1]), protocol.LIVENESS.HEARTBEAT_DEAD_MS,
+    'sessionModel.js HEARTBEAT_DEAD_MS drifted from protocol.LIVENESS.HEARTBEAT_DEAD_MS');
+  const type = /const HEARTBEAT_TYPE = '([^']+)';/.exec(src);
+  assert.ok(type, 'sessionModel.js still declares HEARTBEAT_TYPE');
+  assert.equal(type[1], protocol.MSG.HEARTBEAT,
+    'sessionModel.js HEARTBEAT_TYPE drifted from protocol.MSG.HEARTBEAT');
+});
+
+test('the presence windows still describe one design', () => {
+  const L = protocol.LIVENESS;
+  // The drop window must swallow at least two missed pings, or one dropped
+  // packet kicks a live phone mid-corner.
+  assert.ok(L.TIMEOUT_MS >= 3 * L.PING_INTERVAL_MS,
+    `a ${L.TIMEOUT_MS}ms drop window is under three ${L.PING_INTERVAL_MS}ms pings — a single hiccup would kick a live seat`);
+  // The display re-checks at least as often as it is willing to wait.
+  assert.ok(L.TICK_MS <= L.TIMEOUT_MS,
+    'the liveness tick is slower than the window it enforces');
+  // The display's own canary must be SLACKER than a controller's, because with
+  // the fastlane carrying inputs its socket sees only the heartbeat itself.
+  assert.ok(L.HEARTBEAT_DEAD_MS > L.TIMEOUT_MS,
+    'the display self-heartbeat window must be wider than the per-controller one');
+  // The abandoned-race grace only starts once every racer has already been
+  // dropped, so it has to outlast the drop window by a wide margin or the room
+  // bounces to the lobby before a returning party can scan back in.
+  assert.ok(L.ABANDONED_RACE_GRACE_MS >= 4 * L.TIMEOUT_MS,
+    'the abandoned-race grace is too close to the drop window to be a grace at all');
+});
+
+test('the C++ mirror of the presence contract matches the manifest', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'native/libttp-party/ttp/protocol.h'), 'utf8');
+  for (const [key, want] of Object.entries(protocol.LIVENESS)) {
+    const m = new RegExp(`LIVENESS_${key} = ([\\d.]+);`).exec(src);
+    assert.ok(m, `protocol.h still declares LIVENESS_${key}`);
+    assert.equal(Number(m[1]), want, `protocol.h LIVENESS_${key} drifted from protocol.LIVENESS.${key}`);
+  }
+});
+
+test('the live wasm engine ships the manifest steering exponent', { skip }, async () => {
+  const abi = await loadAbi();
+  // Read before anything calls ttp_set_steer_expo, so this is game.cc's own
+  // default arriving in the browser — the number the shipped game actually
+  // steers with, not a source literal.
+  assert.equal(abi.getSteerExpo(), protocol.STEER.EXPO,
+    'the shipped wasm steering exponent drifted from protocol.STEER.EXPO');
 });

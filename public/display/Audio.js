@@ -1,6 +1,22 @@
-// RaceAudio — all sound for the big screen, built on the "toy foley" cue
-// palette in audio/cues.js (Web Audio synthesis, no asset files, no engine
+// RaceAudio — the DEVICE half of the big screen's sound, built on the "toy foley"
+// cue palette in audio/cues.js (Web Audio synthesis, no asset files, no engine
 // drone — see the rejected v1 for why).
+//
+// It decides nothing, and the decisions are no longer even in this language:
+// every "should a sound happen, which one, how loud" rule is C++
+// (native/libttp-runtime/ttp/audio.cc, behind the ttp_audio.h ABI), and arrives
+// here as a stream of COMMANDS that apply() performs. NativeAudio.js decodes the
+// packed block into the plain objects below; the vocabulary is unchanged from
+// when the rules were JS, which is why nothing in this file moved when they
+// went. audio/decide.js survives as the ORACLE the port is pinned to — and as
+// the music catalogue the galleries and the credits test read, re-exported
+// below.
+//
+// What is left here is exactly what names a platform API: the AudioContext, the
+// master bus + limiter, the variant picks, the <audio> element streaming the
+// song. That split is what let the rules move at all
+// (docs/native-port/shared-cpp-plan.md P7, which keeps the DSP baked and the
+// device per-platform).
 //
 // Which variant plays per cue: the sound gallery's starred picks (localStorage,
 // same browser + origin as /gallery-sounds.html) override the committed
@@ -14,95 +30,25 @@ import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
 
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
 const VOLUME_KEY = 'tinytrack_sound_volume_v1';
-const SCREECH_GAP_MS = 140; // min spacing so curb contact can't machine-gun
-const LAP_GAP_MS = 350;     // min spacing between lap chimes (8 cars can bunch)
 
-// Background music, keyed by BIOME name (shared/themes.js biomeNameForCup —
-// the Backyard cup resolves to 'grass'). Each biome holds a POOL of songs that
-// share its mood; startMusic picks one at random per race, never repeating the
-// song that just played when the pool allows. Descriptors carry the credit-chip
-// fields (title + artist, linking to `source`) — which is also how we satisfy
-// the CC-BY attribution for Kevin MacLeod's tracks (see music/CREDITS.txt).
-// duration = whole seconds, baked so galleries can show a song's length
-// without loading its metadata (the race itself never reads it).
-const MACLEOD = {
-  artist: 'Kevin MacLeod',
-  license: 'CC-BY 4.0',
-  source: 'https://incompetech.com/music/royalty-free/music.html',
-};
-// lufs = the file's integrated EBU R128 loudness, measured once at wiring time:
-//   ffmpeg -i song.mp3 -map 0:a -filter ebur128=framelog=quiet -f null -
-// (read the summary's "I:" line). The catalogue is mastered all over the place
-// (-19.1 .. -8.7 LUFS as shipped — the hottest song lands >2x as loud as the
-// quietest), so each song carries a gain trimming it to a common target and
-// every pick sits at the same perceived level. The target sits just under the
-// quietest pick so gains stay ≤ 1 (safe for plain el.volume routing); if a new
-// pick measures quieter, lower the target and raise MUSIC_LEVEL by the same dB
-// (the credits test pins gain ≤ 1 so a too-quiet pick fails loudly).
-const MUSIC_TARGET_LUFS = -19.2;
-const song = (file, title, duration, lufs, credit = MACLEOD) => ({
-  file: `/assets/audio/music/${file}`,
-  title,
-  duration,
-  lufs,
-  gain: 10 ** ((MUSIC_TARGET_LUFS - lufs) / 20),
-  ...credit,
-});
-export const RACE_MUSIC = {
-  beach: [
-    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187, -9.2),
-    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217, -13.6),
-    song('paradise_found.mp3', 'Paradise Found', 187, -11.5),
-    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212, -15.3),
-    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162, -13.2),
-  ],
-  playroom: [
-    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194, -11.9),
-    song('bit_shift.mp3', 'Bit Shift', 192, -13.3),
-    song('chipper_doodle_v2.mp3', 'Chipper Doodle v2', 172, -12.2),
-    song('voice_over_under.mp3', 'Voice Over Under', 197, -15.4),
-    song('delightful_d.mp3', 'Delightful D', 184, -10.3),
-  ],
-  snow: [
-    song('wallpaper.mp3', 'Wallpaper', 220, -11.2),
-    song('new_friendly.mp3', 'New Friendly', 169, -15.7),
-    song('glitter_blast.mp3', 'Glitter Blast', 178, -15.1),
-    song('cloud_dancer.mp3', 'Cloud Dancer', 220, -13.6),
-    song('digital_lemonade.mp3', 'Digital Lemonade', 180, -14.0),
-  ],
-  grass: [
-    song('happy_bee.mp3', 'Happy Bee', 302, -9.1),
-    song('hyperfun.mp3', 'Hyperfun', 233, -19.1),
-    song('feelin_good.mp3', 'Feelin Good', 225, -18.0),
-    song('vivacity.mp3', 'Vivacity', 232, -12.8),
-    song('happy_happy_game_show.mp3', 'Happy Happy Game Show', 158, -9.7),
-  ],
-  canyon: [
-    song('still_pickin.mp3', 'Still Pickin', 298, -13.9),
-    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181, -16.7),
-    song('surf_shimmy.mp3', 'Surf Shimmy', 123, -13.4),
-    song('bama_country.mp3', 'Bama Country', 212, -18.2),
-  ],
-  // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
-  // the neutral ex-global track rather than silence. Exported for the music
-  // gallery, which shows the fallback on pickless cups.
-};
-export const MUSIC_FALLBACK = RACE_MUSIC.snow;
-// MUSIC_LEVEL is a STARTING VALUE — a bed under the SFX, not a wall of sound.
-// Tune by ear in ?solo=1: if it buries the cues, drop by 0.05; if it vanishes,
-// raise it. It rides the master gain, so the volume slider scales it too.
-// Settled at 0.28 by ear (Tim, 2026-06-14) when songs played raw; per-song
-// gains now trim every pick to MUSIC_TARGET_LUFS (≈5 dB below the old average
-// pick), so the level here is 0.28 × 10^(5.2/20) — same perceived bed height.
-const MUSIC_LEVEL = 0.51;
+// THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
+// description: it performs commands and decides nothing. The music catalogue —
+// the pool per biome, the per-song LUFS trim, the no-repeat shuffle — belongs to
+// the decision layer, which is C++ (libttp-runtime/ttp/audio.cc); a picked song
+// reaches this file as a descriptor on a `{music:'start', song, level}` command,
+// resolved once per race through ttp_audio_song_json.
+//
+// It used to re-export four constants from audio/decide.js so the music gallery
+// and the credits test had an address for them. That pulled the whole 495-line
+// ORACLE onto the shipped display page's import graph for tables nothing on the
+// race path reads. Those two surfaces import decide.js directly now — it is the
+// oracle, they are the only readers of its data, and neither ships.
 
 export class RaceAudio {
   constructor() {
     this.ctx = null;
     this.master = null;
     this._picks = null;
-    this._lastScreech = -Infinity;
-    this._lastLap = -Infinity;
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
@@ -171,42 +117,55 @@ export class RaceAudio {
     v.play(this.ctx, dest);
   }
 
+  // ---- the command bus ----
+  // Perform a decision stream, in order. This is the ONLY path the race drives
+  // (NativeAudio.js hands it the wasm's answers); the named methods below exist
+  // for the gallery harness, which has no decision layer behind it.
+  apply(cmds) {
+    for (const c of cmds) {
+      if (c.cue !== undefined) {
+        if (c.cue === 'countdown') this._countdownBeat(c.part);
+        else this._play(c.cue, c.gain);
+      } else if (c.voice !== undefined) {
+        if (c.stop) this._stopVoice(c.voice, c.id);
+        else this._stateVoice(c.voice, c.id, c.level, c.mod);
+      } else if (c.voices === 'stop-all') {
+        this.stopVoices();
+      } else if (c.voices === 'stop-car') {
+        this.stopCarVoices(c.id);
+      } else if (c.music === 'start') {
+        this._startMusic(c.song, c.level);
+      } else if (c.music === 'stop') {
+        this.stopMusic();
+      } else if (c.music === 'pause') {
+        this.pauseMusic();
+      } else if (c.music === 'resume') {
+        this.resumeMusic();
+      }
+    }
+  }
+
   // ---- race moments ----
 
-  // RaceSession's 1 Hz countdown: n > 0 ticks, n === 0 is the GO beat.
-  countdown(n) {
-    if (!this.ready || n < 0) return;
+  // One beat of the 3-2-1-GO countdown: the cue exposes tick()/go() so the race
+  // can play a beat at a time as RaceSession's 1 Hz timer fires.
+  _countdownBeat(part) {
+    if (!this.ready) return;
     const v = this._variant('countdown');
     if (!v) return;
-    if (n > 0) v.tick(this.ctx, this.master);
-    else v.go(this.ctx, this.master);
+    if (part === 'go') v.go(this.ctx, this.master);
+    else v.tick(this.ctx, this.master);
   }
-
-  // Box grab: pickup pop + the roulette tick-down (the renderer's chip spin is
-  // ~0.86s). The roulette's reveal pop lands the "item ready" beat — a separate
-  // ding was auditioned and cut as redundant.
-  pickup() {
-    this._play('pickup');
-    this._play('roulette');
-  }
-
-  // Just the world pop — no roulette/ready chain. For any non-player grab (a CPU,
-  // or a finished human's victory lap): the box bounce is a world event, so it's
-  // scaled by `vol` (distance to the nearest human — see main.js audibility()).
-  pickupPop(vol = 1) { this._play('pickup', vol); }
 
   // STATE-DRIVEN voices: a continuous sound per (cue, car) whose level follows
-  // live physics every frame (boost wind, cornering squeal, brake skid). A
-  // voice starts when its level rises above the floor and dies when it falls
-  // back — call these from the render loop with the snapshot values.
+  // live physics every frame (boost wind, cornering squeal, brake skid, the
+  // engine loop, a rocket's jet). The decision layer owns when one starts and
+  // stops; this just holds the live nodes.
   _stateVoice(cueId, id, level, mod) {
     if (!this.ready) return;
     const key = cueId + ':' + id;
     let voice = this._voices.get(key);
-    if (level <= 0.02) {
-      if (voice) { voice.stop(); this._voices.delete(key); }
-      return;
-    }
+    if (level <= 0.02) { this._stopVoice(cueId, id); return; }
     if (!voice) {
       const v = this._variant(cueId);
       if (!v || !v.start) return;
@@ -215,19 +174,10 @@ export class RaceAudio {
     }
     voice.set(level, mod); // mod (optional) deepens the engine voice into a monster-truck growl
   }
-  // boostMul 1.0 → silent; the pad/item peak (~1.6) → full level.
-  boostWind(id, boostMul) { this._stateVoice('boost', id, Math.max(0, Math.min(1, (boostMul - 1) / 0.6))); }
-  cornerSqueal(id, level) { this._stateVoice('corner', id, level); }
-  brakeSkid(id, level) { this._stateVoice('brake', id, level); }
-  // Driving sound — a STATE-DRIVEN voice like the others: the recorded engine
-  // loop, pitch + level following the car's speed every frame (silent at rest).
-  // Called per HUMAN car from the render loop; CPU cars stay silent (an 8-car
-  // engine chorus would be mud, same reasoning as corner/brake).
-  // monster=true DEEPENS the engine into a heavy big-truck growl for the duration of a
-  // monster-truck transform: pitch down, a touch louder, top end muffled. Starting values.
-  engineDrive(id, level, monster = false) {
-    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)),
-      monster ? { rateMul: 0.6, gainMul: 1.45, lpMul: 0.82 } : null);
+  _stopVoice(cueId, id) {
+    const key = cueId + ':' + id;
+    const voice = this._voices.get(key);
+    if (voice) { voice.stop(); this._voices.delete(key); }
   }
   // Kill all live voices — pause, race end, return to lobby. Without this a
   // frozen frame would hold its sounds forever (the loop stops updating levels).
@@ -242,54 +192,40 @@ export class RaceAudio {
       if (key.endsWith(':' + id)) { voice.stop(); this._voices.delete(key); }
     }
   }
-  // World cues, scaled by `vol` (distance to the nearest human — see main.js
-  // audibility()): full for the player's own car, quieter for a distant CPU.
-  bananaDrop(vol = 1) { this._play('banana_drop', vol); }
+
+  // ---- gallery surface ----
+  // /gallery.html's scenarios (display/TestHarness.js) fire cues directly: they
+  // run a preview world with no players, so there is no distance model and no
+  // decision stream behind them. Full level, no gating.
   spin(vol = 1) { this._play('banana_slip', vol); } // oil shares the comedy cue
-  // Monster-truck transform: inflate (pump up) on use, deflate (sputter down) on lapse.
-  // World cues — scaled by distance to the nearest human, like the other one-shots.
   monsterInflate(vol = 1) { this._play('monster_inflate', vol); }
   monsterDeflate(vol = 1) { this._play('monster_deflate', vol); }
-  // Rocket FLIGHT — a sustained voice (like boost wind / engine), one per in-flight rocket id,
-  // held from launch to impact. level 0 stops + frees it. The host drives level by the rocket's
-  // distance to the nearest player (see main.js driveRocketAudio). NOT a one-shot.
   rocketFlight(id, level) { this._stateVoice('rocket_fire', id, Math.max(0, Math.min(1, level))); }
-  rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); } // detonation thump; level scaled by distance to a player (main.js), default full (gallery)
-  lap() {
-    const now = performance.now();
-    if (now - this._lastLap < LAP_GAP_MS) return;
-    this._lastLap = now;
-    this._play('lap');
+  rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); }
+  // `mod` DEEPENS the engine into a heavy big-truck growl (pitch down, a touch
+  // louder, top end muffled) — {rateMul, gainMul, lpMul}, or null for the stock
+  // voice. The CALLER supplies it rather than this file keeping a monster flag
+  // and a table to resolve it: on the race path that timbre already arrives as
+  // numbers on the voice command (NativeAudio's cmd.mod, authored in the C++
+  // decision layer), so a second copy here would be the one place the growl was
+  // written down twice. The gallery hands in MONSTER_ENGINE_MOD from the oracle.
+  engineDrive(id, level, mod = null) {
+    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)), mod);
   }
-  // intensity = how hard the scrub (from speed); dist = spatial attenuation in
-  // [0,1] (1 for the player's own car, lower for a distant CPU's curb contact on
-  // a human's screen — see main.js audibility()).
-  screech(intensity = 1, dist = 1) {
-    const now = performance.now();
-    if (now - this._lastScreech < SCREECH_GAP_MS) return;
-    this._lastScreech = now;
-    this._play('screech', Math.max(0.3, Math.min(1, intensity)) * dist);
-  }
-  join() { this._play('join'); }
 
   // ---- background music ----
-  // Ambient, not a cue: the race song plays globally for the whole race (it does
-  // NOT follow the visible-events rule the SFX do). Unlike the synth cues and the
-  // tiny engine loop (Web Audio buffers), the song is a multi-MB full track, so
-  // it STREAMS through an <audio> element rather than decoding ~40 MB of PCM into
-  // memory. It's routed into the master gain so the limiter and volume slider
-  // apply; if MediaElementSource isn't available it falls back to the element's
-  // own volume scaled by the master level.
+  // Ambient, not a cue: the race song plays globally for the whole race. Unlike
+  // the synth cues and the tiny engine loop (Web Audio buffers), the song is a
+  // multi-MB full track, so it STREAMS through an <audio> element rather than
+  // decoding ~40 MB of PCM into memory. It's routed into the master gain so the
+  // limiter and volume slider apply; if MediaElementSource isn't available it
+  // falls back to the element's own volume scaled by the master level.
   //
-  // Takes the race's BIOME name and picks from that biome's pool — random, but
-  // never the song that just played (across races AND biomes) when there's an
-  // alternative, so a 4-race GP through one biome rotates its pool.
-  startMusic(biome) {
+  // WHICH song and at WHAT level is decided in audio/decide.js (pool by biome,
+  // no-repeat shuffle, per-song LUFS trim) and arrives as a 'start' command.
+  _startMusic(song, level) {
     if (!this.ready) return;
-    const pool = (RACE_MUSIC[biome] && RACE_MUSIC[biome].length) ? RACE_MUSIC[biome] : MUSIC_FALLBACK;
-    const fresh = pool.length > 1 ? pool.filter((s) => s.file !== this._musicUrl) : pool;
-    const pick = fresh[(Math.random() * fresh.length) | 0];
-    this.nowPlaying = pick;
+    this.nowPlaying = song;
     if (!this._music) {
       const el = new Audio();
       el.loop = true;
@@ -303,15 +239,12 @@ export class RaceAudio {
         this._musicGain = g; // kept for inspection / live level tuning
       } catch (_) { /* no MediaElementSource — level lands on el.volume below */ }
     }
-    // Per-pick loudness trim: MUSIC_LEVEL is the bed height, pick.gain flattens
-    // the catalogue's mastering spread so every song sits at that height.
-    const level = MUSIC_LEVEL * (pick.gain || 1);
     if (this._musicGain) this._musicGain.gain.value = level;
     else this._music.volume = level * this._volume(); // routed straight to the device
     // Swap src only on a real song change; re-racing the same song keeps it
     // buffered. createMediaElementSource follows the element, so the routing
     // survives a src change.
-    if (this._musicUrl !== pick.file) { this._music.src = pick.file; this._musicUrl = pick.file; }
+    if (this._musicUrl !== song.file) { this._music.src = song.file; this._musicUrl = song.file; }
     try { this._music.currentTime = 0; } catch (_) { /* not seekable yet */ }
     this._music.play().catch(() => { /* gesture/decoding race — stays silent */ });
   }

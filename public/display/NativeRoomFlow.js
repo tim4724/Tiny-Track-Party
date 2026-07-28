@@ -50,11 +50,13 @@ export async function init() {
     transitionTo: c('ttp_room_transition_to', 'number', ['number', 'string']),
     state: c('ttp_room_state', 'string', ['number']),
     setActiveOrder: c('ttp_room_set_active_order', null, ['number', 'string']),
+    syncActiveOrder: c('ttp_room_sync_active_order', null, ['number', 'number']),
     onSeen: c('ttp_room_on_seen', null, ['number', 'string', 'number']),
     isExpired: c('ttp_room_is_expired', 'number', ['number', 'string', 'number']),
     expiredPeers: c('ttp_room_expired_peers_json', 'string', ['number', 'number']),
     allDisc: c('ttp_room_all_participants_disconnected', 'number', ['number']),
     hasLateJoiners: c('ttp_room_has_late_joiners', 'number', ['number']),
+    lateJoiners: c('ttp_room_late_joiners_json', 'string', ['number']),
     graceTick: c('ttp_room_grace_tick', 'number', ['number', 'number']),
     setMaster: c('ttp_room_set_master', null, ['number', 'string']),
     setLivenessEnabled: c('ttp_room_set_liveness_enabled', null, ['number', 'number']),
@@ -209,6 +211,14 @@ export class NativeRoomFlow {
     this._drain();
   }
 
+  // Not a kit method: the participant set of a LIVE RACE, computed in C++ off a
+  // session handle (cars + dropped seats). No car id crosses the boundary — the
+  // argument is the handle, not a roster. 0 = no session (lobby).
+  syncActiveOrder(sessionHandle) {
+    fn.syncActiveOrder(this._h, sessionHandle | 0);
+    this._drain();
+  }
+
   reset() {
     fn.reset(this._h);
     this._drain();
@@ -229,6 +239,8 @@ export class NativeRoomFlow {
 
   allParticipantsDisconnected() { return fn.allDisc(this._h) === 1; }
   hasLateJoiners() { return fn.hasLateJoiners(this._h) === 1; }
+  // Plain snapshots, like list() — a read-only path (the standings' "joining" rows).
+  lateJoiners() { return JSON.parse(fn.lateJoiners(this._h)); }
   graceTick(nowMs) { return fn.graceTick(this._h, nowMs) === 1; }
 
   // ---- reads ---------------------------------------------------------------

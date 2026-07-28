@@ -2,19 +2,30 @@
 // DOM HUD floating over it, and the frame loop that drives both.
 //
 // It does NOT own the 3D world. Cars, track, cameras, split-screen cells and
-// every cosmetic that moves live in C++ (native/runtime/ttp_display.cc), which
+// every cosmetic that moves live in C++ (native/libttp-runtime/), which
 // reads the sim directly. So there is no scene graph here, no per-car pose
 // push, no camera math: a frame is `display.frame(dt)` plus the DOM writes that
 // place this frame's labels.
 //
 // What the Stage tracks per car is only what the HUD needs — the cell it owns,
 // its name plate colour, its place/lap/item chips — plus the roster order the
-// renderer baked its models and liveries in.
+// renderer baked its models and liveries in. Even WHERE a cell is comes from
+// C++ (display.cellRects): this file used to score the split-screen grid a
+// second time, and the two copies had already drifted once.
+//
+// The steer bar and the cell dividers used to be here too, and are not any
+// more: both are cell-anchored and textless, so they need no part of the UI
+// toolkit this file exists for, and the renderer draws them (voverlay.mat). The
+// bar was also the ONLY per-frame element in the HUD — everything left here is
+// written from a ~6 Hz poll, which is a far cleaner contract for three shells
+// than each writing its own 60 Hz animation over a GL surface. What crosses for
+// them now is three setters and no stream: uiScale once at boot, cellCards and
+// dividers latched in _loop and pushed only when they change.
 import { ordinal } from '../shared/format.js';
-import { boostShades, cssHex, themeForCup } from '../shared/themes.js';
+import { cssHex, loadBiomes } from '../shared/biomes.js';
+import { rosterEntry } from '../shared/trackBin.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
-import { trackPayload } from './render/trackPayload.js';
 
 const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
 // The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
@@ -38,45 +49,30 @@ const ITEM_ICONS = {
 };
 const ITEM_KEYS = Object.keys(ITEM_ICONS);
 
-// Split-screen layout. The C++ renderer scores column counts exactly this way
-// (TtpRenderer::bestGridCols) — the HUD and the 3D cells must agree on where a
-// cell IS, so the two implementations of this are pinned to each other.
+// The race loop's SLOW TICK: everything on that loop which is not the frame
+// itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
+// finish check that triggers the fast-forward to results. Exported because the
+// gallery harness (display/TestHarness.js) paints the same HUD and had its own
+// copy of the number.
 //
-// Landscape is a HARD preference: a racing cell wants to be wider than it is
-// tall (the road runs away toward a horizon, so a tall narrow cell crops the
-// track ahead and to the sides and spends the pixels on sky and bonnet). If any
-// layout gives landscape cells, only those are scored; portrait is reachable
-// only when nothing else is.
+// 160 ms is quoted everywhere in this tree as "~6 Hz", and it is worth writing
+// down why that is true and where it stops being true. The guard is tested
+// inside rAF, so firing is quantised to frame boundaries: the first frame whose
+// elapsed time EXCEEDS 160 ms. At 24/30/60/90/120/144 fps that lands on 166.7 ms
+// — exactly 6.00 Hz at every one of them, because 160 sits just under a whole
+// number of frames in each case. At 50 Hz (PAL) it does not: 160 is an exact
+// multiple of 20 ms and the comparison is strict, so it slips to the 9th frame,
+// 180 ms, 5.56 Hz. Nothing depends on the difference; it is here so the next
+// person to read "6 Hz" in a header can tell it is a consequence, not a target.
 //
-// CELL_MAX_ASPECT: how wide a cell may get before the sides are black bars,
-// pinned to TtpRenderer::CELL_MAX_ASPECT. A cell's camera locks its PIXEL SCALE
-// to the single-player reference (cellFov in ttp_display.cc), so this sets
-// neither car size nor vertical fov — only how much width of world a cell shows,
-// and what that width costs to draw. The HUD has to follow the rect the renderer
-// actually drew, or a two-player race puts its steer bars and place cards out on
-// the bars.
-const CELL_MAX_ASPECT = 21 / 9;
-function bestGrid(n, W, H) {
-  let best = { cols: 1, rows: n, cost: Infinity, landscape: false };
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols);
-    const cellAspect = (W / cols) / (H / rows);
-    const landscape = cellAspect >= 1;
-    // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
-    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4;
-    if ((landscape && !best.landscape) || (landscape === best.landscape && cost < best.cost)) {
-      best = { cols, rows, cost, landscape };
-    }
-  }
-  // The GRID is letterboxed as one piece, so bars only ever land at the screen's
-  // left and right edges — never between two cells. `x0` is where the grid
-  // starts and `cw` is a cell's full drawn width inside it; cells touch.
-  const ch = Math.floor(H / best.rows);
-  const stageW = Math.min(W, Math.floor(ch * CELL_MAX_ASPECT * best.cols));
-  const cw = Math.floor(stageW / best.cols);
-  const x0 = Math.floor((W - cw * best.cols) / 2);
-  return { cols: best.cols, rows: best.rows, cw, ch, x0 };
-}
+// The value itself is inherited — it predates the native port entirely (it is in
+// the game's first commit) and has never been re-derived for any of the three
+// jobs above. It is defensible for all three: nothing in the HUD changes faster
+// than a place does, the ITEM message is per-owner and sent only on change, and
+// the finish check is a safety net behind the 'finish' event. But it was picked
+// for none of them, so treat it as a budget to revisit, not a constant to
+// preserve.
+export const HUD_TICK_MS = 160;
 
 export class Stage {
   constructor(container, colors) {
@@ -88,7 +84,7 @@ export class Stage {
     this._last = 0;
     this._timeScale = 1;
     this._track = null;
-    this._theme = null;
+    this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
     this.display = null;     // set by boot()
     this.biomeOverride = null;
     this.orbit = false;      // lobby/gallery turntable
@@ -97,7 +93,7 @@ export class Stage {
     // grid of cars racing, so a track's SHADOWS can be looked at without four
     // close-up chase cells in the way.
     this.soloCam = false;
-    this.showDividers = true;
+    this._dividers = true;   // ?dividers=0; pushed to the renderer by _loop
     // Opt-in resolution cap (?dpr=0.5). A gallery preview iframe lays out at full
     // logical size, so at full DPR every card allocates a screen-sized drawing
     // buffer to show a ~500px thumbnail — and the gallery shows a grid of them.
@@ -142,13 +138,27 @@ export class Stage {
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
     this._camMode = null;
+    this._cardMask = null;   // last pushed "a card owns this cell" bitmask
+    this._divPushed = null;  // last pushed divider toggle
     window.addEventListener('resize', () => this._onResize());
   }
+
+  // The chunky ink rules between split-screen cells (?dividers=0 turns them
+  // off). A property rather than a method because main.js has always set it as
+  // one, and it is read back by the debug panel; the push to the renderer is
+  // latched in _loop, since this can be set before boot() has a display at all.
+  get showDividers() { return this._dividers; }
+  set showDividers(on) { this._dividers = on !== false; }
 
   // Boot the native renderer onto our canvas. Fatal on failure: there is no
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    // The renderer draws two pieces of chrome now (the steer bar and the cell
+    // dividers), and their sizes are authored in CSS pixels. This is the one
+    // number that converts them — the same _dpr the canvas was sized by and
+    // that _cellRects divides the answer back out with.
+    this.display.uiScale(this._dpr);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
@@ -189,13 +199,21 @@ export class Stage {
   // this.
   async setTrack(track) {
     this._track = track;
-    this._theme = this.biomeOverride || themeForCup(track.cup);
+    // Which biome this track wears. The RULES are C++ (a track resolves through
+    // its cup, an unmapped cup falls back to grass); the only thing decided here
+    // is that the ?biome= inspector override, which is a URL, beats them.
+    const b = await loadBiomes();
+    this._biome = this.biomeOverride || b.forTrack(track.id);
     // The boost chip wears the biome's own accent (green on Playroom, blue on
-    // Snow) so the HUD reads as the same item the deck does — see
-    // [per-biome boost accent] in themes.js.
-    ITEM_ICONS.boost = boostIconSvg(cssHex(boostShades(this._theme.boost).icon));
+    // Snow) so the HUD reads as the same item the deck does. This is the ONE
+    // colour of the palette that crosses back, because the chip is DOM: every
+    // other boost surface is drawn by the renderer from the same one recipe.
+    ITEM_ICONS.boost = boostIconSvg(cssHex(b.boostIcon(this._biome)));
     return this._rebuild();
   }
+
+  // The biome this track is being drawn in — the race-music pool key.
+  biome() { return this._biome; }
 
   // The roster the renderer bakes models and liveries into, in SLOT order: cars
   // that own a cell first, in cell order, then the rest of the field. Every
@@ -206,8 +224,8 @@ export class Stage {
     const all = [...seen, ...[...this.cars.keys()].filter((id) => !seen.has(id))];
     return all.map((id) => {
       const c = this.cars.get(id);
-      return { id, name: c.name || '', carIndex: c.carIndex ?? 0,
-               color: this.colors[(c.colorIndex ?? 0) % this.colors.length] };
+      return rosterEntry(id, c.name || '', c.carIndex ?? 0,
+          this.colors[(c.colorIndex ?? 0) % this.colors.length], window.CAR_MODELS);
     });
   }
 
@@ -228,7 +246,7 @@ export class Stage {
           if (sig === this._rosterSig) continue; // a seat edit the renderer can't see
           this._rosterSig = sig;
           try {
-            await this.display.setTrack(trackPayload(this._theme, this._track, roster), this._assets);
+            await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
           } catch (e) {
             this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);
@@ -269,8 +287,15 @@ export class Stage {
     const carIndex = (opts.carIndex == null ? colorIndex : opts.carIndex);
     const cell = opts.cell !== false;
     const colHex = this.colors[colorIndex % this.colors.length] || '#fff';
+    // The *El fields are the leaves setCarHud writes, resolved ONCE here rather
+    // than re-queried per paint — they are created a few lines below, so a
+    // selector match every tick was only ever finding what we already had. The
+    // _*Text fields are the last string written to each, so an unchanged value
+    // costs a comparison instead of a DOM write (see setCarHud).
     const c = { name, colorIndex, carIndex, finished: false, reconnecting: false,
-                label: null, steerBar: null, steerFill: null, placeEl: null,
+                label: null, placeEl: null, placeTextEl: null, lapTextEl: null,
+                itemEl: null, finPlaceEl: null, finTimeEl: null,
+                _placeText: null, _lapText: null, _finPlaceText: null, _finTimeText: null,
                 finishEl: null, reconnectEl: null, _chipItem: null, _chipTimer: null };
 
     if (cell) {
@@ -281,6 +306,7 @@ export class Stage {
       label.style.setProperty('--c', colHex);
       this.overlay.appendChild(label);
       c.label = label;
+      c.itemEl = label.querySelector('.cell-label__item');
 
       // place + lap readout — pinned to this player's cell top-right, no card,
       // white text over the scene (positioned by _loop, filled by setCarHud).
@@ -289,19 +315,17 @@ export class Stage {
       placeEl.innerHTML = `<div class="cell-rank__place"></div><div class="cell-rank__lap"></div>`;
       this.overlay.appendChild(placeEl);
       c.placeEl = placeEl;
+      c.placeTextEl = placeEl.querySelector('.cell-rank__place');
+      c.lapTextEl = placeEl.querySelector('.cell-rank__lap');
 
-      // on-screen steer indicator for this player's cell (mirrors the phone bar)
-      const steerBar = document.createElement('div');
-      steerBar.className = 'cell-steer';
-      steerBar.style.setProperty('--c', colHex);
-      steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
-      this.overlay.appendChild(steerBar);
-      c.steerBar = steerBar;
-      c.steerFill = steerBar.querySelector('.cell-steer__fill');
+      // The on-screen steer indicator is NOT here: the renderer draws it, from
+      // the same cell rects this HUD is placed on and the same roster livery
+      // its car model wears (voverlay.mat).
 
       // "FINISHED / place / time" — centred in this player's cell the instant
       // they cross the line while the rest of the field is still racing.
-      // Replaces the steer bar (they're on a victory lap now, not steering).
+      // Replaces the steer bar (they're on a victory lap now, not steering) —
+      // which is what the cellCards bitmask in _loop tells the renderer.
       const finishEl = document.createElement('div');
       finishEl.className = 'cell-finish';
       finishEl.style.setProperty('--c', colHex);
@@ -311,6 +335,8 @@ export class Stage {
         `<div class="cell-finish__time"></div>`;
       this.overlay.appendChild(finishEl);
       c.finishEl = finishEl;
+      c.finPlaceEl = finishEl.querySelector('.cell-finish__place');
+      c.finTimeEl = finishEl.querySelector('.cell-finish__time');
     }
 
     this.cars.set(id, c);
@@ -326,7 +352,7 @@ export class Stage {
     const c = this.cars.get(id);
     if (!c) return;
     if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
-    for (const el of [c.label, c.steerBar, c.finishEl, c.placeEl, c.reconnectEl]) {
+    for (const el of [c.label, c.finishEl, c.placeEl, c.reconnectEl]) {
       if (el && el.parentNode) el.parentNode.removeChild(el);
     }
     this.cars.delete(id);
@@ -370,21 +396,39 @@ export class Stage {
 
   // ---- HUD ------------------------------------------------------------------
 
-  // The steer indicator mirrors raw phone tilt, so it wants every frame — unlike
-  // the rest of the HUD, which the caller polls at ~6 Hz.
-  setCarSteer(id, steerInput) {
-    const c = this.cars.get(id);
-    if (c && c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
-  }
+  // What each cell's chrome should say right now, straight off the engine as a
+  // packed block (Display.hud → ttp_hud.h): one row per car that holds a
+  // renderer slot, in the shape setCarHud takes. No race state is serialized for
+  // it, and the values are the sim's own — Game::displayLap and Car::rank — not
+  // a second derivation of them.
+  //
+  // Polled, not pushed: the caller reads this at its own ~6 Hz and paints. The
+  // one HUD element that needed 60 Hz, the steer bar, is the renderer's now.
+  hudRows() { return this.display ? this.display.hud() : []; }
 
+  // WRITES ONLY WHAT CHANGED. The poll runs at ~6 Hz but the values behind it
+  // move about 0.9 times a second across a whole 8-car field (measured over a
+  // 90 s race: 61 place changes, 16 item, 4 lap), so ~85% of these calls have
+  // nothing to say. Re-writing textContent with an identical string is not free:
+  // it is a selector match, a string build and a DOM property set per field per
+  // car, and the FINISHED card used to repaint its place and toFixed'd time
+  // every tick for the whole rest of the race.
+  //
+  // The DIFF is here rather than upstream because the readback is not what
+  // costs — ttp_display_hud is a packed struct, no JSON — and because `position`
+  // has no event to be driven by: it is a side effect of physics that the sim
+  // recomputes every tick. Turning that into a push would mean the sim diffing
+  // ranks and emitting, for a saving the diff already gets.
   setCarHud(id, info) {
     const c = this.cars.get(id);
     if (!c || !c.label) return; // cell-less AI cars have no HUD label
     // place + lap, top-right (no card): a big ordinal over a smaller "Lap n/N".
     // Hidden while finished — the centred FINISHED overlay shows place + time.
     if (c.placeEl) {
-      c.placeEl.querySelector('.cell-rank__place').textContent = ordinal(info.position);
-      c.placeEl.querySelector('.cell-rank__lap').textContent = `Lap ${info.lap}/${info.totalLaps}`;
+      const place = ordinal(info.position);
+      const lap = `Lap ${info.lap}/${info.totalLaps}`;
+      if (place !== c._placeText) { c._placeText = place; c.placeTextEl.textContent = place; }
+      if (lap !== c._lapText) { c._lapText = lap; c.lapTextEl.textContent = lap; }
     }
     // Held-item slot — a fixed reserved square. On a fresh pickup it SLOT-MACHINES
     // the item icons and lands on what they got; on use it returns to the empty
@@ -394,13 +438,16 @@ export class Stage {
       c._chipItem = next;
       if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
       if (next) this._rouletteChip(c, next);
-      else { const e = c.label.querySelector('.cell-label__item'); if (e) this._paintSlot(e, null, false); }
+      else if (c.itemEl) this._paintSlot(c.itemEl, null, false);
     }
     c.finished = !!info.finished;
     if (c.finished && c.finishEl) {
-      c.finishEl.querySelector('.cell-finish__place').textContent = ordinal(info.position);
-      c.finishEl.querySelector('.cell-finish__time').textContent =
-        info.finishTime != null ? `${info.finishTime.toFixed(1)}s` : '';
+      // Both fields are fixed the moment the car crosses, so this card is
+      // written ONCE and then left alone for the rest of the race.
+      const place = ordinal(info.position);
+      const time = info.finishTime != null ? `${info.finishTime.toFixed(1)}s` : '';
+      if (place !== c._finPlaceText) { c._finPlaceText = place; c.finPlaceEl.textContent = place; }
+      if (time !== c._finTimeText) { c._finTimeText = time; c.finTimeEl.textContent = time; }
     }
   }
 
@@ -432,7 +479,7 @@ export class Stage {
   // decelerating, then land on `item` with a pop. Self-driven so it animates
   // faster than the ~6 Hz HUD poll; cancelled on change/teardown.
   _rouletteChip(c, item) {
-    const el = c.label && c.label.querySelector('.cell-label__item');
+    const el = c.itemEl;
     if (!el) return;
     let i = 0, n = 0; const TOTAL = 9;
     const spin = () => {
@@ -448,45 +495,63 @@ export class Stage {
     spin();
   }
 
-  // Chunky ink rules between split-screen cells (.cell-divider, display.css).
-  // Rebuilt only when the grid layout (or the toggle) changes.
-  _syncDividers(cols, rows, cw, ch, x0, H) {
-    const sig = this.showDividers === false ? 'off' : `${cols}x${rows}:${cw}x${ch}+${x0}`;
-    if (sig === this._divSig) return;
-    this._divSig = sig;
-    for (const d of this._dividers || []) d.remove();
-    this._dividers = [];
-    if (this.showDividers === false) return;
-    const mk = (x, y, w, h) => {
-      const d = document.createElement('div');
-      d.className = 'cell-divider';
-      d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
-      this.overlay.appendChild(d);
-      this._dividers.push(d);
-    };
-    // A divider separates two PICTURES, so both rules stay inside the grid: run
-    // a row rule to the canvas edge and it reads as a line drawn on the black
-    // surround. Column rules sit on the seam where two cells meet.
-    for (let c = 1; c < cols; c++) mk(x0 + c * cw - 2, 0, 4, H);
-    for (let r = 1; r < rows; r++) mk(x0, r * ch - 2, cw * cols, 4);
+  // Where this frame's split-screen cells are, as [{ x, y, w, h }, …] in CSS
+  // pixels and in cell order — the renderer's OWN split, not a second opinion.
+  // Empty until a car owns a cell.
+  //
+  // THE ONE CONVERSION. C++ answers in drawing-buffer pixels, which is the only
+  // surface it is ever told about (ttp_display_create/resize take physical
+  // pixels; CSS pixels are a web idea that tvOS and Android do not share). The
+  // canvas was sized by multiplying the CSS box by _dpr in _sizeCanvas, so the
+  // DOM's coordinates are the reciprocal of that, applied here — the single
+  // place in the shell holding both numbers. Scale in the wrong place, or not at
+  // all, and every label, steer bar and FINISHED card lands at 1/dpr of its cell
+  // on a HiDPI screen (and 4x outside it under the E2E suite's 0.25 cap).
+  //
+  // The rects are truncated to whole DEVICE pixels C++-side, so a cell edge can
+  // land on a half CSS pixel at dpr 2. That is deliberate: the label follows the
+  // edge the player actually sees, which is where the renderer put its viewport.
+  _cellRects(n) {
+    const packed = this.display.cellRects(n);
+    const k = 1 / this._dpr;
+    const out = [];
+    for (let i = 0; i + 3 < packed.length; i += 4) {
+      out.push({ x: packed[i] * k, y: packed[i + 1] * k,
+                 w: packed[i + 2] * k, h: packed[i + 3] * k });
+    }
+    return out;
   }
 
-  _hideDividers() {
-    if (this._divSig === 'hidden' || !(this._dividers || []).length) return;
-    this._divSig = 'hidden';
-    for (const d of this._dividers) d.remove();
-    this._dividers = [];
+  // Push what the renderer's own cell overlay needs, on change only. Two latched
+  // values, neither of them per-frame state: which cells have a centred card
+  // over them (so the steer bar under it goes), and the divider toggle. The
+  // third, uiScale, is a constant and goes across once in boot().
+  //
+  // The rules themselves are NOT computed here any more. They used to be built
+  // from the CSS-pixel rects — one per distinct cell edge — and the renderer now
+  // derives the same set from the same grid, so the seam is exactly where the
+  // viewport edge is rather than a rounded-back copy of it.
+  _syncOverlay(ids) {
+    let mask = 0;
+    ids.forEach((id, i) => {
+      const c = this.cars.get(id);
+      if (c && (c.finished || c.reconnecting)) mask |= 1 << i;
+    });
+    if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
+    if (this._dividers !== this._divPushed) {
+      this._divPushed = this._dividers;
+      this.display.dividers(this._dividers);
+    }
   }
 
   // The no-cell branch runs for the whole lobby, so this latches: hiding the
   // same elements 60 times a second is a style write per car per frame for a
   // HUD that is already hidden.
   _hideCellHud() {
-    this._hideDividers();
     if (this._hudHidden) return;
     this._hudHidden = true;
     for (const c of this.cars.values()) {
-      for (const el of [c.label, c.steerBar, c.finishEl, c.placeEl, c.reconnectEl]) {
+      for (const el of [c.label, c.finishEl, c.placeEl, c.reconnectEl]) {
         if (el) el.style.display = 'none';
       }
     }
@@ -630,13 +695,6 @@ export class Stage {
     if (!this._running) {
       this._running = true;
       this._last = performance.now();
-      // A cold loop pays the boot costs again (shader compilation, the first
-      // uploads), and its opening delta is not even a cadence: _last is a wall
-      // clock while the rAF behind it carries the next vsync's timestamp, so
-      // that delta is an arbitrary fraction of a period. Real for dt — the time
-      // did pass — but meaningless as a frame rate, so the HUD discards the
-      // whole warm-up rather than reporting it.
-      this.perf.warmUp();
       requestAnimationFrame((t) => this._loop(t));
     }
   }
@@ -672,7 +730,6 @@ export class Stage {
     if (this.onFrame) this.onFrame(dt);
     if (!this.display) { this._scheduleNext(); return; }
 
-    const W = window.innerWidth, H = window.innerHeight;
     const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
     // Which cars own cells, and which camera rig is running, change on a seat
@@ -680,6 +737,10 @@ export class Stage {
     // steady-state frame really is one call with a dt.
     const cellSig = ids.join(',');
     if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
+    // …and the same for the cell overlay's two flags, BEFORE the frame draws
+    // with them: a mask pushed afterwards would leave the bar under a fresh
+    // FINISHED card for one frame.
+    if (ids.length) this._syncOverlay(ids);
     const mode = ids.length ? null
         : this._free ? CAM.FREE
         : this.bboxOrbit ? CAM.BBOX
@@ -696,43 +757,36 @@ export class Stage {
 
     this._renderFrame(dt, ids.length);
 
-    // Place this frame's HUD over the cells the renderer just drew.
-    const { cols, rows, cw, ch, x0 } = bestGrid(ids.length, W, H);
-    this._syncDividers(cols, rows, cw, ch, x0, H);
+    // Place this frame's HUD over the cells the renderer just drew — ASKING it
+    // where they are (_cellRects) instead of scoring the same grid again here.
+    const cells = this._cellRects(ids.length);
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
-      const col = i % cols, row = Math.floor(i / cols);
-      // Inside the letterboxed grid: `x0` steps over the left bar, so everything
-      // below anchors to picture edges.
-      const x = x0 + col * cw;
+      const r = cells[i];
+      if (!r) return; // more cells than rects: only if the two lists disagree
       // The corner label is hidden while the reconnect card owns the cell — that
       // card already shows the name, so the label would just duplicate it. (The
       // FINISHED card has no name, so it keeps the label.)
       if (c.label) {
         c.label.style.display = c.reconnecting ? 'none' : 'block';
-        c.label.style.left = x + 'px';
-        c.label.style.top = (row * ch) + 'px';
+        c.label.style.left = r.x + 'px';
+        c.label.style.top = r.y + 'px';
       }
-      // place/lap + steer are hidden while a centred card owns the cell — when
-      // the player has FINISHED or has dropped and is shown the reconnect QR.
+      // place/lap is hidden while a centred card owns the cell — when the player
+      // has FINISHED or has dropped and is shown the reconnect QR. The steer bar
+      // goes with it, one layer down: same predicate, pushed as _syncOverlay's
+      // bitmask above.
       const cardInCell = c.finished || c.reconnecting;
       if (c.placeEl) {
         c.placeEl.style.display = cardInCell ? 'none' : 'block';
-        c.placeEl.style.left = (x + cw - 12) + 'px';
-        c.placeEl.style.top = (row * ch + 11) + 'px';
-      }
-      if (c.steerBar) {
-        c.steerBar.style.display = cardInCell ? 'none' : 'block';
-        c.steerBar.style.left = (x + cw / 2) + 'px';
-        // bottom-anchored: bar height is 34px (.cell-steer); the offset keeps a
-        // ~27px gap between its bottom edge and the cell bottom.
-        c.steerBar.style.top = (row * ch + ch - 61) + 'px';
+        c.placeEl.style.left = (r.x + r.w - 12) + 'px';
+        c.placeEl.style.top = (r.y + 11) + 'px';
       }
       if (c.finishEl) {
         c.finishEl.style.display = c.finished ? 'flex' : 'none';
         if (c.finished) {
-          c.finishEl.style.left = (x + cw / 2) + 'px';
-          c.finishEl.style.top = (row * ch + ch / 2) + 'px';
+          c.finishEl.style.left = (r.x + r.w / 2) + 'px';
+          c.finishEl.style.top = (r.y + r.h / 2) + 'px';
         }
       }
       // Reconnect QR: centred exactly like FINISHED, while their car keeps its
@@ -741,8 +795,8 @@ export class Stage {
         const showRc = c.reconnecting && !c.finished;
         c.reconnectEl.style.display = showRc ? 'flex' : 'none';
         if (showRc) {
-          c.reconnectEl.style.left = (x + cw / 2) + 'px';
-          c.reconnectEl.style.top = (row * ch + ch / 2) + 'px';
+          c.reconnectEl.style.left = (r.x + r.w / 2) + 'px';
+          c.reconnectEl.style.top = (r.y + r.h / 2) + 'px';
         }
       }
     });

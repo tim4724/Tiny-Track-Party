@@ -12,6 +12,10 @@
 #ifndef TTP_RENDER_H
 #define TTP_RENDER_H
 
+/* <math.h> is here for ttp_grid_cols alone — see its comment below. Nothing
+ * else in this header needs more than <stdint.h>, and it must stay that way:
+ * libttp-runtime, the renderer and every platform shell all include this. */
+#include <math.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -19,7 +23,7 @@ extern "C" {
 #endif
 
 /*
- * One frame of everything that moves. Built by the runtime (ttp_display.cc)
+ * One frame of everything that moves. Built by libttp-runtime's frame builder
  * straight off the live Game — it never leaves the process, so "plain data"
  * here buys layout stability for the tvOS/Android shells and a serializable
  * fixture format, not marshalling.
@@ -70,10 +74,55 @@ typedef struct TtpBurstInput {
     float s, lat;
 } TtpBurstInput;
 
+/* One split-screen cell's 2D overlay — the steer bar, and nothing else.
+ *
+ * The HUD lives in the shells (DOM/CSS, SwiftUI, Compose) because the Sticker
+ * Bash look is a UI-toolkit problem. TWO elements are exempt, by the line in
+ * docs/native-port/shared-cpp-plan.md: cell-anchored AND textless goes to the
+ * renderer, anything carrying type or sticker chrome stays in the shell. That
+ * admits the steer bar and the cell dividers; it keeps out the place/lap
+ * ordinal, the name chip, the item slot, the FINISHED card and the reconnect QR.
+ *
+ * Anchoring is the reason it can be here at all: a cell's rectangle is already
+ * a C++ answer (ttp_grid_cell), so the bar cannot drift from the viewport it
+ * belongs to the way a second layout in the shell could. */
+typedef struct TtpCellHudInput {
+    /* Which car this cell follows, as an index into cars[] — the roster slot,
+     * so the bar wears the same livery the model does. < 0 = no car (nothing to
+     * draw). NOT a car id: no identity crosses this boundary. */
+    int32_t car;
+    /* RAW steer input, -1..1 — the phone's tilt as the player produced it.
+     * Deliberately NOT TtpCarInput.steer, which carries STEER_SIGN because the
+     * VISUAL cues (front-wheel yaw, body lean) have to turn the way the car
+     * turns. The bar mirrors the phone's own bar, so it wants the raw value. */
+    float steer;
+    uint32_t flags; /* TTP_HUD_STEER_BAR */
+} TtpCellHudInput;
+
+/* Draw this cell's steer bar. Clear while a centred card owns the cell — the
+ * player has FINISHED, or has dropped and is being shown the reconnect QR — for
+ * the same reason the DOM hid it: they are not steering, and the card is what
+ * the cell is saying. */
+#define TTP_HUD_STEER_BAR 1u
+
+/* TtpFrameInput.flags */
+#define TTP_FRAME_DIVIDERS 1u /* draw the ink rules on the split-screen seams */
+
+/* Chrome colours for the overlay, as 0xRRGGBB. These are `--ink` and
+ * `--surface` from public/shared/theme.css, which is the authored source for
+ * the sticker palette; tests/design-tokens.test.js holds these two against the
+ * baked token table so the two languages cannot drift apart silently.
+ *
+ * Only these two. A third would mean the look is being rebuilt here rather than
+ * quoted — the livery colour arrives as roster data (track.bin), and every
+ * other surface in view is drawn by the renderer from the biome palette. */
+#define TTP_HUD_INK     0x2A2735u
+#define TTP_HUD_SURFACE 0xFFFFFFu
+
 /* Header, followed CONTIGUOUSLY by cars[carCount], views[viewCount],
  * boxStates[boxCount] (u32: 1 = available, 0 = collected; indexed like the
- * scene payload's box list), bananas[bananaCount], rockets[rocketCount] and
- * bursts[burstCount]. */
+ * scene payload's box list), bananas[bananaCount], rockets[rocketCount],
+ * bursts[burstCount] and hud[hudCount]. */
 typedef struct TtpFrameInput {
     uint32_t version;  /* TTP_FRAME_INPUT_VERSION */
     float dt;          /* seconds since previous frame */
@@ -83,15 +132,24 @@ typedef struct TtpFrameInput {
     uint32_t bananaCount;
     uint32_t rocketCount;
     uint32_t burstCount; /* detonations fired THIS frame (usually 0) */
-    uint32_t flags;    /* reserved (no flags defined) */
+    uint32_t hudCount;   /* cell overlays — viewCount while cells are up, else 0 */
+    uint32_t flags;    /* TTP_FRAME_* */
     float sceneT;      /* the driving renderer's scene clock (accumulated dt since
                         * its scene booted) — phase source for every wall-clock
                         * cosmetic (box bob/spin, cloud drift, balloon lap, rocket
                         * roll), so both renderers animate in the SAME phase */
+    /* Physical pixels per UI point — devicePixelRatio on web, UIScreen
+     * nativeScale on tvOS, density on Android. The overlay is the first thing
+     * the renderer draws whose size is authored in the UI's units rather than
+     * the world's (34 pt tall, 4 pt border), so this is the one number that
+     * converts them. Everything ELSE the C side is told stays in the surface's
+     * own physical pixels, which is why this is a frame field rather than a
+     * second unit system running through the whole layer. <= 0 reads as 1. */
+    float uiScale;
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 9u
+#define TTP_FRAME_INPUT_VERSION 10u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);
@@ -110,6 +168,98 @@ static inline const TtpRocketInput* ttp_frame_rockets(const TtpFrameInput* f) {
 }
 static inline const TtpBurstInput* ttp_frame_bursts(const TtpFrameInput* f) {
     return (const TtpBurstInput*) (ttp_frame_rockets(f) + f->rocketCount);
+}
+static inline const TtpCellHudInput* ttp_frame_hud(const TtpFrameInput* f) {
+    return (const TtpCellHudInput*) (ttp_frame_bursts(f) + f->burstCount);
+}
+
+/* What the built track measures, for the runtime's overview cameras and fog
+ * bands. The box is over the CENTERLINE points, like SceneRenderer's was.
+ *
+ * Lives here rather than inside TtpRenderer because both sides of the split
+ * need it: the renderer fills it (it owns the parsed track), libttp-runtime's
+ * solveFraming consumes it, and libttp-runtime must not know TtpRenderer
+ * exists. */
+typedef struct TtpTrackFraming {
+    float centerX, centerY, centerZ;
+    float sizeX, sizeY, sizeZ;
+    float fogTune;
+} TtpTrackFraming;
+
+/* Split-screen column count for n views on a w x h surface — SceneRenderer's
+ * bestGrid, verbatim: score every column count by how far the resulting cell is
+ * from square, plus a real penalty per wasted cell, and take the cheapest.
+ * `ceil(sqrt(n))` is NOT the same function: on a 16:9 screen it puts two players
+ * SIDE BY SIDE where this stacks them, and 7 players in a 3x3 where an ultrawide
+ * takes 4x2. Guessing it anywhere would put the 3D cells and the DOM HUD (which
+ * places every label, place card and steer bar) in different places.
+ *
+ * THREE callers had three copies of this: the renderer's viewport split, the
+ * runtime's per-cell camera aspect, and Stage.js's HUD layout. It is a pure
+ * function of (n, w, h), so it is one static inline in the header both C++
+ * layers already include — deliberately NOT a function in libttp-runtime, which
+ * would put a link edge between the renderer and a library it must not need.
+ * The shell's copy is gone: it ASKS, via ttp_display_cell_rects. */
+static inline uint32_t ttp_grid_cols(uint32_t n, uint32_t w, uint32_t h) {
+    if (n == 0) return 1;
+    /* Landscape is a HARD preference, not a weighted one. A racing cell wants to
+     * be wider than it is tall: the road runs away toward a horizon, so the
+     * useful information is spread horizontally, and a tall narrow cell crops the
+     * very thing the player steers by (the track ahead and to the sides) while
+     * spending pixels on sky and bonnet. Distance-from-square alone put two
+     * players side by side (0.89:1) and three in a row (0.59:1) on a 16:9 screen.
+     * So: if ANY layout gives landscape cells, only those are considered, and the
+     * score picks between them; portrait is reachable only when nothing else is
+     * (one player on a phone held upright).
+     *
+     * This replaces a +2.0 cost term that did the same job by arithmetic. The two
+     * agree on every display shape we could construct — |log(aspect)| only exceeds
+     * 2 past 7.4:1, so the penalty was already decisive — but a rule that says
+     * what it means cannot be defeated by a screen nobody tried. */
+    const float W = (float) w, H = (float) h;
+    uint32_t best = 1;
+    float bestCost = INFINITY;
+    int bestLandscape = 0;
+    for (uint32_t cols = 1; cols <= n; cols++) {
+        const uint32_t rows = (n + cols - 1) / cols;
+        const float cellAspect = (W / cols) / (H / rows);
+        const int landscape = cellAspect >= 1.0f;
+        /* distance from square + a real penalty per wasted cell (so 4 -> 2x2) */
+        const float cost = fabsf(logf(cellAspect)) + (cols * rows - n) * 0.4f;
+        if ((landscape && !bestLandscape)
+                || (landscape == bestLandscape && cost < bestCost)) {
+            bestCost = cost; best = cols; bestLandscape = landscape;
+        }
+    }
+    return best;
+}
+
+/* One split-screen cell's rectangle, in the SURFACE's own pixels. */
+typedef struct TtpCellRect { uint32_t x, y, w, h; } TtpCellRect;
+
+/* Cell `i` of `n` on a w x h surface: the grid ttp_grid_cols scores, filled
+ * row-major from the TOP LEFT. i >= n is an empty rect (all zero).
+ *
+ * Top-left origin, because that is what every consumer of the ANSWER uses — the
+ * DOM HUD, the tvOS/Android overlays, and the renderer's own row order. GL
+ * viewports are bottom-left, so the one flip lives where GL is spoken
+ * (TtpRenderer::render) rather than being everyone's problem.
+ *
+ * Cells are whole pixels, so the last column/row leaves up to cols-1 (rows-1)
+ * pixels of the surface owned by no cell. That truncation is the renderer's, and
+ * it is exactly why the HUD must not compute its own: floor(W/cols) in CSS
+ * pixels and floor(W*dpr/cols)/dpr are DIFFERENT edges on a fractional-DPR
+ * surface, and the labels would drift off the cells the player sees. */
+static inline TtpCellRect ttp_grid_cell(uint32_t i, uint32_t n, uint32_t w, uint32_t h) {
+    TtpCellRect r = { 0u, 0u, 0u, 0u };
+    if (i >= n) return r;
+    const uint32_t cols = ttp_grid_cols(n, w, h);
+    const uint32_t rows = (n + cols - 1) / cols;
+    r.w = w / cols;
+    r.h = h / rows;
+    r.x = (i % cols) * r.w;
+    r.y = (i / cols) * r.h;
+    return r;
 }
 
 #ifdef __cplusplus
