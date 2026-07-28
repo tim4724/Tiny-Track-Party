@@ -27,6 +27,21 @@
 // fainter. Keep the cycle (8+22 = 30 ms) short or the pulses stop blending.
 const BRAKE_PULSE = [8, 22];                                      // 30 ms cycle, ~27% duty: a light hum
 export const BRAKE_PATTERN = Array(60).fill(BRAKE_PULSE).flat();  // ~1.8 s of rumble
+
+// ...but a rumble that OPENS on that duty cycle feels late, and the reason is
+// mechanical rather than a matter of code: a vibration motor has a mass to get
+// moving, and 8 ms of drive followed by 22 ms of coast barely starts it. The hum
+// only builds over several cycles, so the brake seems to answer a beat after the
+// press even though vibrate() was called on the press itself.
+//
+// So the loop OPENS with one solid pulse — long enough to bring the motor up at
+// once — then hands over to the duty cycle through a single lighter pulse, so it
+// settles into the hum instead of reading as a knock followed by a rumble.
+//
+// This is the FIRST play only. Renewals replay BRAKE_PATTERN, because an opening
+// on every renewal would put a thump into the middle of a long brake hold every
+// BRAKE_RENEW_MS — which is the same two-things-to-feel bug in slow motion.
+export const BRAKE_OPENING = [26, 14, 12, 18, ...BRAKE_PATTERN];
 export const BRAKE_RENEW_MS = 1500;                               // renew before it ends (1.8 s > 1.5 s, no gap)
 
 // Gap between a transient ending and the loop resuming underneath it. Small
@@ -62,10 +77,17 @@ export class Haptics {
   // has no native loop, so we play a long pattern and re-issue it just before it
   // ends — the motor never falls silent. A second call while one is running is a
   // no-op, so a repeated press can't stack renewals.
-  startLoop(pattern = BRAKE_PATTERN, renewMs = BRAKE_RENEW_MS) {
+  //
+  // `opening` is what the FIRST play uses (see BRAKE_OPENING: the same rumble with
+  // a lead-in that gets the motor up immediately). Everything after it — renewals,
+  // and the re-arm that restores the loop under a transient — replays `pattern`,
+  // which is why the two are separate arguments and only one of them is retained.
+  // It DEFAULTS to the lead-in rather than to `pattern`: opening softly is the bug
+  // this exists to fix, so a caller has to ask for that, not remember to avoid it.
+  startLoop(pattern = BRAKE_PATTERN, renewMs = BRAKE_RENEW_MS, opening = BRAKE_OPENING) {
     if (this._loop) return;
     this._loop = { pattern, renewMs };
-    this._vibrate(pattern);
+    this._vibrate(opening);
     this._arm(renewMs);
   }
 

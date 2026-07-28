@@ -80,8 +80,20 @@ function _pressBrake(on) {
 
 // LEFT / RIGHT steer buttons — the button schemes' whole steering, and their brake:
 // holding BOTH cancels the steer to centre and brakes, so the same continuous
-// rumble the BRAKE button runs confirms it eyes-free. A single press gets a light
-// tick instead (the rumble would drown a per-corner tap).
+// rumble the BRAKE button runs confirms it eyes-free.
+//
+// A steer press itself buzzes NOTHING, deliberately. It used to get a light tick,
+// and that tick was what made braking feel like TWO vibrations: fingers never land
+// together, so the first button ticked and the second started the rumble — one
+// gesture, two separate things to feel. Steering is also the wrong shape for a
+// tick: it is HELD, not tapped (a buzz per corner entry is a rattle), and it is
+// already confirmed by the car turning on the screen the player is watching. The
+// brake is the one thing here with no visual tell of its own, so it keeps the
+// rumble and now owns the whole channel.
+//
+// Input goes out BEFORE the haptic call on purpose: navigator.vibrate reaches the
+// OS vibrator service and is not guaranteed to return instantly, and nothing may
+// sit between a press and the wire.
 const steerBtnFor = (dir) => el(dir < 0 ? 'left-btn' : 'right-btn');
 function pressSteerBtn(dir, on) {
   steerBtnFor(dir).classList.toggle('held', on);
@@ -89,7 +101,6 @@ function pressSteerBtn(dir, on) {
   _tilt.pressSteer(dir, on);
   const now = _tilt.bothSteerHeld;
   if (now !== was) { if (now) _haptics.startLoop(); else _haptics.stopLoop(); }
-  else if (on) _buzz(10);
 }
 
 export function initDriveSurface({ tilt, buzz, haptics }) {

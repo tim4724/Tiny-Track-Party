@@ -9,9 +9,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let Haptics, BRAKE_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS;
+let Haptics, BRAKE_PATTERN, BRAKE_OPENING, BRAKE_RENEW_MS, REARM_GAP_MS;
 test.before(async () => {
-  ({ Haptics, BRAKE_PATTERN, BRAKE_RENEW_MS, REARM_GAP_MS } =
+  ({ Haptics, BRAKE_PATTERN, BRAKE_OPENING, BRAKE_RENEW_MS, REARM_GAP_MS } =
     await import('../public/controller/Haptics.js'));
 });
 
@@ -55,10 +55,32 @@ test('a transient with no loop running is a single pulse and schedules nothing',
 test('the brake loop renews itself before the pattern runs out', () => {
   const { h, calls, advance } = harness();
   h.startLoop();
-  assert.deepEqual(calls, [BRAKE_PATTERN]);
+  assert.deepEqual(calls, [BRAKE_OPENING]);
   advance(BRAKE_RENEW_MS * 3 + 1);
   assert.equal(calls.length, 4, 'one initial play plus one renewal per period');
-  assert.ok(calls.every((c) => c === BRAKE_PATTERN));
+  assert.ok(calls.slice(1).every((c) => c === BRAKE_PATTERN));
+});
+
+test('the lead-in plays ONCE — a long hold must not thump every renewal', () => {
+  // The rumble opens with a solid pulse because a duty-cycled hum takes several
+  // cycles to spin the motor up and so feels late (see BRAKE_OPENING). That pulse
+  // belongs to the START of the brake: replaying it on every renewal would put a
+  // knock into the middle of a held brake once every BRAKE_RENEW_MS.
+  const { h, calls, advance } = harness();
+  h.startLoop();
+  advance(BRAKE_RENEW_MS * 4 + 1);
+  assert.equal(calls.filter((c) => c === BRAKE_OPENING).length, 1, 'exactly one lead-in, at the press');
+  assert.ok(calls.length > 1, 'and the loop really did renew');
+});
+
+test('a transient restores the loop with the BODY, not another lead-in', () => {
+  // Same rule mid-brake: an item buzz over the rumble hands back to the hum. A
+  // lead-in here would read as a second brake press the player never made.
+  const { h, calls, advance } = harness();
+  h.startLoop();
+  h.tick(20);
+  advance(20 + REARM_GAP_MS);
+  assert.deepEqual(calls, [BRAKE_OPENING, 20, BRAKE_PATTERN]);
 });
 
 test('starting a running loop again is a no-op (a repeated press cannot stack renewals)', () => {
@@ -75,7 +97,7 @@ test('stopLoop kills the motor immediately and stops renewing', () => {
   const { h, calls, advance, pending } = harness();
   h.startLoop();
   h.stopLoop();
-  assert.deepEqual(calls, [BRAKE_PATTERN, 0], 'vibrate(0) cancels the pattern still playing out');
+  assert.deepEqual(calls, [BRAKE_OPENING, 0], 'vibrate(0) cancels the pattern still playing out');
   assert.equal(pending(), 0);
   advance(10_000);
   assert.equal(calls.length, 2);
@@ -95,12 +117,12 @@ test('THE FIX: a transient during the brake rumble restores it, not silences it'
   const { h, calls, advance } = harness();
   h.startLoop();
   h.tick(20);
-  assert.deepEqual(calls, [BRAKE_PATTERN, 20]);
+  assert.deepEqual(calls, [BRAKE_OPENING, 20]);
 
   // The rumble comes back as soon as the pulse has finished — NOT a renewal
   // period later.
   advance(20 + REARM_GAP_MS);
-  assert.deepEqual(calls, [BRAKE_PATTERN, 20, BRAKE_PATTERN]);
+  assert.deepEqual(calls, [BRAKE_OPENING, 20, BRAKE_PATTERN]);
 
   // ...and the renew loop is running again off the new play, so the rumble is
   // sustained rather than trailing off after this one pattern.
@@ -125,7 +147,7 @@ test('a transient after stopLoop does not resurrect the rumble', () => {
   h.stopLoop();
   h.tick(15);
   advance(10_000);
-  assert.deepEqual(calls, [BRAKE_PATTERN, 0, 15], 'the tap is the last thing the motor does');
+  assert.deepEqual(calls, [BRAKE_OPENING, 0, 15], 'the tap is the last thing the motor does');
 });
 
 test('stopping between a transient and its re-arm leaves the motor silent', () => {
@@ -136,7 +158,7 @@ test('stopping between a transient and its re-arm leaves the motor silent', () =
   h.tick(20);
   h.stopLoop();
   advance(10_000);
-  assert.deepEqual(calls, [BRAKE_PATTERN, 20, 0]);
+  assert.deepEqual(calls, [BRAKE_OPENING, 20, 0]);
 });
 
 test('the default vibrate is safe to construct and call without a browser', () => {
