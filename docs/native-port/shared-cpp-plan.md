@@ -85,16 +85,51 @@ still works inside the branch.
 
 | | Phase | JS retired | Risk |
 |---|---|---|---|
-| P0 | `libttp-runtime` exists; CI compiles it | 0 | med |
-| P1 | Delete duplication that already exists | ~78 gross, net +16 | low |
-| P2 | Design tokens + the protocol manifest as shared data | 0 (see below) | low |
-| P3 | C++ owns the track payload | ~450 | high |
-| P4 | Cross-language wire-compat suite | 0 | med |
-| P5 | Extract the UI model in JS; record both oracles | ~0 net | med |
-| P6 | Packed HUD block + cell rects + steer bar to Filament | ~120 | med |
-| P7 | Audio decisions to C++; cues baked | ~230 | high |
-| P8 | UI model into C++ | ~1,450 | high |
-| P9 | `PartySession` + the schematic codec | ~810 | high |
+| P0 | `libttp-runtime` exists; CI compiles it | 0 | ✅ ~500 lines onto all 4 legs; 2 new ctests |
+| P1 | Delete duplication that already exists | 78 gross, net +16 | ✅ dead abandon policy made live; a real bug closed |
+| P2 | Design tokens + the protocol manifest as shared data | 0 | ✅ 4 checked links replace 3 prose comments |
+| P3 | C++ owns the track payload | ~660 | ✅ `themes.js` gone; `track.bin` 268 → 68 lines |
+| P4 | Cross-language wire-compat suite | 0 | ✅ 20 asymmetries found, 3 live bugs |
+| P5 | Extract the UI model in JS; record both oracles | ~0 net | ✅ both oracles clean-clone reproducible |
+| P6 | Packed HUD + cell rects + steer bar to Filament | ~120 | ✅ 435 rows matched first run |
+| P7 | Audio decisions to C++; cues baked | ~230 | ✅ 6397/6397 bit-for-bit |
+| P8 | UI model into C++ | **235, not ~1,450** | ✅ 3120/3120; the estimate counted prose |
+| P9 | `PartySession` + the schematic codec | partial, by choice | ✅ oracle recorded FIRST; `_applyMode` left in JS |
+
+## What the estimates got wrong
+
+Worth keeping, because the errors were systematic rather than random.
+
+- **P8 was out by 6x.** "~1,450 JS lines retired" counted the FILE; `uiModel.js`
+  is roughly half prose. The real figure is 235 code lines, and netted against
+  the new adapter the browser's JS shrank by about 75. The value of that phase is
+  the second and third shell not re-deriving the model — not bytes on the web.
+- **P2 retires nothing.** Its product is *one source for a number*, not one
+  implementation of a behaviour. A phase whose output is checks, not deletions.
+- **P9 was not a single decision.** Its 70 units split 21 platform / 29 policy /
+  15 with NO recorded evidence / 5 already C++. Porting the third group would
+  have been porting on faith, so the oracle was recorded first (the P5 pattern)
+  and one unit was deliberately left in JS.
+- **The per-frame readback was never a performance story.** Measured: 52.35 µs →
+  3.26 µs, i.e. 0.29% of a 60 Hz frame. It shipped for the contract.
+
+## The recurring defect, in four subsystems
+
+Every phase that looked hard was hard for the same reason, and it is worth
+naming: **a gate nobody has watched fail is not yet a gate.**
+
+- the frozen theme generator imported a symbol that exists in NO commit — the
+  oracle for 745 lines of palette was unrenewable one commit after being armed;
+- the audio oracle was recorded through `Math.hypot` and `10 ** x`, which V8
+  approximates and the vendored fdlibm does not — unmatchable by the port it
+  existed to gate, and one ULP there changes which COMMAND fires;
+- `hud.cc` built green while leaving the shipped wasm unlinkable, because no
+  ctest links the web module;
+- four wire mutations pointed at anchors that had ceased to exist, so the gate's
+  own demonstration silently tested nothing.
+
+Each was found by an adversarial pass, not by the suite. The suite was green
+throughout.
 
 ### P0 — `libttp-runtime` exists
 
