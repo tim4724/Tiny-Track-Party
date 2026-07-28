@@ -4,9 +4,17 @@
 // JS-RECORDED evidence, like the roomflow/ui/audio corpora and unlike the
 // C++-authored ones: every line here was taken off the live
 // public/display/sessionModel.js before the port, so it settles whether the port
-// matches the JS it replaced. There is NO --record mode on purpose — re-recording
-// from C++ would only prove C++ agrees with C++ (tests/fixtures/traces/README.md,
-// the two-classes-of-fixture rule).
+// matches the JS it replaced.
+//
+// --record RE-EMITS, IT DOES NOT REGENERATE. `--record <fixture> --out=<f>`
+// replays the fixture's own recorded INPUTS through the port and writes the
+// corpus back with the C++'s answers; record_session holds the result
+// byte-identical. It cannot invent a case — the scenarios are read off the
+// committed file, not rebuilt — so what it proves is that the port reproduces
+// every recorded answer and its exact JSON spelling, which is strictly more than
+// the structural replay below asserts. It is NOT parity evidence: the committed
+// bytes carry that, and the JS wrote them. If a re-record ever differs, the
+// committed file is right.
 //
 // Line 1 is a header {kind,scenarios,steps}. Then {case:"scenario",name} starts a
 // scenario and {case:"step",name,step,op,in,out,state} is one step. Each step's
@@ -34,6 +42,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "corpus_record.h"
 #include "ttp/canonical.h"
 #include "ttp/session.h"
 
@@ -252,10 +261,46 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
 
 }  // namespace
 
+// Re-emit the corpus from the port. Same driver as the replay below, same shell
+// threading; only the comparison is replaced by a write.
+int recordCorpus(const std::string& fixture, const std::string& outPath) {
+  Shell st;
+  bool bad = false;
+  const int rc = corpus::record(fixture, outPath, [&](const Value& rec) {
+    const std::string kind = strOf(rec, "case");
+    if (kind == "scenario") { st = Shell{}; return Value(); }   // UNDEF: copy through
+    if (kind != "step") return Value();
+    const Value* in = field(rec, "in");
+    Value out;
+    std::string why;
+    if (!applyOp(st, strOf(rec, "op"), in ? *in : Value::Obj(), out, why)) {
+      std::fprintf(stderr, "--record: %s\n", why.c_str());
+      bad = true;
+      return Value();
+    }
+    // The same key SET the generator wrote; canonical_stringify sorts them.
+    Value line = Value::Obj();
+    line.set("case", Value::Str("step"));
+    line.set("name", Value::Str(strOf(rec, "name")));
+    line.set("step", Value::Num(numOf(rec, "step")));
+    line.set("op", Value::Str(strOf(rec, "op")));
+    line.set("in", in ? *in : Value::Obj());
+    line.set("out", out);
+    line.set("state", shellState(st));
+    return line;
+  });
+  return (rc == 0 && !bad) ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: session_check <session-corpus.jsonl>\n");
+    std::fprintf(stderr, "usage: session_check <session-corpus.jsonl>\n"
+                         "       session_check --record <corpus> --out=<file>\n");
     return 2;
+  }
+  {
+    std::string fixture, outPath;
+    if (corpus::wants_record(argc, argv, &fixture, &outPath)) return recordCorpus(fixture, outPath);
   }
   std::ifstream f(argv[1]);
   if (!f) {

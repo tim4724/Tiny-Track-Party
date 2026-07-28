@@ -25,12 +25,13 @@
 // race counts and the back gesture's meaning all arrive as stable keys plus
 // data. The copy tables are in main.js, next to the elements they fill.
 //
-// public/display/uiModel.js stays in the tree and stays the ORACLE:
-// tests/fixtures/ui-corpus.jsonl was recorded off it, and
-// native/runtimetest/ui_check.cc replays all 1559 steps of that through the C++
-// on every leg while abi_check.cc replays the same corpus through the C
-// boundary this file calls. A disagreement between the two is a bug in the
-// port, never in the corpus. It is no longer imported by anything that ships.
+// public/display/uiModel.js is GONE. It was the ORACLE
+// tests/fixtures/ui-corpus.jsonl was recorded off, and it was retired once the
+// port was conformance-proven. That corpus is now FROZEN and is held by
+// native/runtimetest/ui_check.cc (all 1559 steps, every leg), by abi_check.cc
+// (the same corpus through the C boundary this file calls) and by record_ui (a
+// byte-identical re-emission from the port). If any of those ever disagrees with
+// the corpus, the corpus is right.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 

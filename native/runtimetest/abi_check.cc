@@ -52,6 +52,7 @@
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 #include "ttp_theme.h"
+#include "ttp_race.h"
 #include "ttp_ui.h"
 
 using namespace ttp;
@@ -1689,6 +1690,187 @@ void uiCorpusThroughAbi(const char* path) {
   check(header && steps > 0, "ui corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
 }
 
+
+// ---------------------------------------------------------------------------
+// The RACE-ORCHESTRATION ABI (ttp_race.h), replayed against the same corpus
+// runtimetest/raceflow_check.cc drives the C++ objects with.
+//
+// The two checks are not redundant, and the difference is the same one the ui
+// and session pairs have: raceflow_check proves the RULES, this proves the
+// MARSHALLING. What can only go wrong here is invisible there — an effect's
+// payload key dropped on the way out, a bot id emitted as a number instead of
+// the string "ai-0", the opaque car-stats row not surviving the round trip, or
+// the key-PRESENCE contract (a rejected start must carry `reason` and no
+// `series`) collapsing into a null.
+//
+// Four of the corpus's ops have no export of their own — carStatsAt,
+// lowestFreeSlot and cpuSeats are internals reached through buildField, and the
+// shell never calls them across the boundary — so they are skipped here and
+// covered by raceflow_check alone.
+const char* RACE_WORLD =
+    "{\"fieldSize\":4,\"carCount\":6,\"colorCount\":8,\"aiPrefix\":\"ai-\","
+    "\"personas\":["
+    "{\"name\":\"Alpha\",\"caution\":1.1,\"laneBias\":-0.5},"
+    "{\"name\":\"Beta\",\"caution\":1,\"laneBias\":0.5},"
+    "{\"name\":\"Gamma\",\"caution\":0.95,\"laneBias\":-0.2},"
+    "{\"name\":\"Delta\",\"caution\":0.9,\"laneBias\":0.2}],"
+    "\"carStats\":["
+    "{\"accel\":1,\"top\":1,\"turn\":1,\"weight\":1},"
+    "{\"accel\":1.1,\"top\":0.95,\"turn\":1.05,\"weight\":0.9},"
+    "{\"accel\":0.9,\"top\":1.1,\"turn\":0.95,\"weight\":1.1},"
+    "{\"accel\":1.05,\"top\":1,\"turn\":0.9,\"weight\":1},"
+    "{\"accel\":0.95,\"top\":1.05,\"turn\":1.1,\"weight\":0.95},"
+    "{\"accel\":1,\"top\":0.9,\"turn\":1,\"weight\":1.2}],"
+    "\"cups\":["
+    "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"a1\",\"a2\",\"a3\",\"a4\"]},"
+    "{\"id\":\"cup-b\",\"name\":\"Thunder\",\"tracks\":[\"b1\",\"b2\",\"b3\",\"b4\"]},"
+    "{\"id\":\"cup-empty\",\"name\":\"Hollow\",\"tracks\":[]}]}";
+
+// The corpus's `in` is already the ABI's input shape for most ops, so the step
+// mostly re-stringifies it. Returns UNDEF for an op with no export.
+Value raceStep(const std::string& op, const Value& in) {
+  const auto J = [](const Value& v) { return ordered_stringify(v); };
+  const auto jsonOf = [](const char* s) {
+    bool ok = false;
+    Value v = json::parse(s ? s : "", &ok);
+    return ok ? v : Value::Null();
+  };
+  const auto sub = [&in](const char* k) {
+    const Value* v = in.find(k);
+    return v ? ordered_stringify(*v) : std::string("null");
+  };
+  const auto numIn = [&in](const char* k) {
+    const Value* v = in.find(k);
+    return (v && v->type == Value::NUM) ? v->num : 0.0;
+  };
+  const auto strIn = [&in](const char* k) {
+    const Value* v = in.find(k);
+    return (v && v->type == Value::STR) ? v->str : std::string();
+  };
+  const auto truthyIn = [&in](const char* k) {
+    const Value* v = in.find(k);
+    if (!v) return false;
+    if (v->type == Value::BOOL) return v->b;
+    if (v->type == Value::NUM) return v->num != 0;
+    if (v->type == Value::STR) return !v->str.empty();
+    return v->type == Value::ARR || v->type == Value::OBJ;
+  };
+
+  if (op == "buildField") {
+    return jsonOf(ttp_race_build_field_json(sub("humans").c_str(), numIn("seed"),
+                                            sub("botCap").c_str()));
+  }
+  if (op == "buildDemoField") {
+    return jsonOf(ttp_race_build_demo_field_json(sub("humans").c_str(), sub("botCap").c_str()));
+  }
+  if (op == "demoSig") {
+    return Value::Str(ttp_race_demo_sig(sub("field").c_str(), strIn("trackId").c_str()));
+  }
+  if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
+  if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
+  if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
+  if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));
+  if (op == "raceStart") {
+    return jsonOf(ttp_race_start_beat_json(strIn("biome").c_str(), truthyIn("audioReady") ? 1 : 0));
+  }
+  if (op == "raceEvent") return jsonOf(ttp_race_event_json(J(in).c_str()));
+  if (op == "endRace") return jsonOf(ttp_race_end_json(J(in).c_str()));
+  if (op == "advanceSeriesRace") return jsonOf(ttp_race_advance_json(J(in).c_str()));
+  if (op == "returnToLobby") return jsonOf(ttp_race_return_json(J(in).c_str()));
+  if (op == "forfeitCar") {
+    return jsonOf(ttp_race_forfeit_json(truthyIn("removed") ? 1 : 0, sub("peerIndex").c_str()));
+  }
+  if (op == "rekeyCarPlayer") {
+    return jsonOf(ttp_race_rekey_json(truthyIn("hasSeries") ? 1 : 0, truthyIn("rekeyed") ? 1 : 0,
+                                      sub("oldId").c_str(), sub("newId").c_str()));
+  }
+  if (op == "autoPauseEffects") return jsonOf(ttp_race_auto_pause_json(sub("decision").c_str()));
+  if (op == "seriesForStart") {
+    // No export of its own: startRace is how a shell reaches it, and the plan it
+    // returns is the same object. Replay it through the accepting path.
+    Value si = Value::Obj();
+    si.set("roomState", Value::Str("lobby"));
+    si.set("sceneReady", Value::Bool(true));
+    si.set("selectedTrackId", Value::Str("a1"));
+    Value players = Value::Arr();
+    Value p = Value::Obj();
+    p.set("peerIndex", Value::Num(1));
+    p.set("name", Value::Str("P"));
+    p.set("colorIndex", Value::Num(0));
+    p.set("carIndex", Value::Num(0));
+    players.push(p);
+    si.set("players", players);
+    for (const char* k : {"mode", "cupId", "trackId", "randomRaces", "draws"}) {
+      const Value* v = in.find(k);
+      if (v) si.set(k, *v);
+    }
+    const Value got = jsonOf(ttp_race_start_json(ordered_stringify(si).c_str()));
+    // startRace's answer wraps the same plan under `series` + `drawsUsed`.
+    Value out = Value::Obj();
+    const Value* s = got.find("series");
+    out.set("series", s ? *s : Value::Null());
+    const Value* d = got.find("drawsUsed");
+    out.set("drawsUsed", d ? *d : Value::Num(0));
+    return out;
+  }
+  return Value();   // UNDEF: no export, covered by raceflow_check
+}
+
+void raceCorpusThroughAbi(const char* path) {
+  std::ifstream in(path);
+  if (!in) { fail(std::string("cannot open ") + path); return; }
+  check(ttp_race_configure(RACE_WORLD) == 1, "the synthetic race world configured");
+
+  std::string line, scenario;
+  int steps = 0, skipped = 0;
+  bool header = false;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    Value root;
+    std::string err;
+    if (!read_line(line, root, &err)) { fail("raceflow corpus parse: " + err); return; }
+    const Value* kind = root.find("case");
+    if (!kind) {
+      if (header) continue;
+      header = true;
+      const auto n = [&root](const char* k) {
+        const Value* v = root.find(k);
+        return (v && v->type == Value::NUM) ? v->num : -1.0;
+      };
+      check(n("fieldSize") == 4 && n("carCount") == 6 && n("colorCount") == 8 &&
+                n("personas") == 4 && n("carStats") == 6,
+            "raceflow corpus recorded against abi_check's synthetic world");
+      continue;
+    }
+    if (kind->str == "scenario") {
+      const Value* nm = root.find("name");
+      scenario = nm && nm->type == Value::STR ? nm->str : "?";
+      continue;
+    }
+    if (kind->str != "step") continue;
+    const Value* opV = root.find("op");
+    const Value* wantOut = root.find("out");
+    if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed raceflow step"); return; }
+    const Value empty = Value::Obj();
+    const Value* inV = root.find("in");
+    const Value got = raceStep(opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
+    if (got.type == Value::UNDEF) { skipped++; continue; }
+    steps++;
+    // WHOLE-VALUE diff, not key-by-key: key PRESENCE is this ABI's contract, so
+    // an extra key the corpus does not have has to fail too.
+    const Diff d = diff_val(*wantOut, got, "out");
+    check(!d.differ, "race " + opV->str + " " + scenario + " step " + std::to_string(steps) +
+                     ": " + d.path + " expected " + d.expected + " got " + d.actual);
+  }
+  check(header && steps > 0,
+        "raceflow corpus replayed through the ABI (" + std::to_string(steps) + " steps, " +
+            std::to_string(skipped) + " internals skipped)");
+  // Printed rather than silent: the four skipped ops make "it ran" and "it ran
+  // over nothing" look alike from the assertion count alone.
+  std::printf("  raceflow corpus through the race ABI: %d steps (%d internals skipped)\n",
+              steps, skipped);
+}
+
 // ---------------------------------------------------------------------------
 // The SESSION-POLICY ABI (ttp_net.h), replayed against the same corpus
 // partytest/session_check.cc drives the C++ objects with.
@@ -1844,9 +2026,10 @@ void sessionCorpusThroughAbi(const char* path) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 7) {
+  if (argc < 8) {
     std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
-                         "<framing-corpus> <ui-corpus> <session-corpus> <trace.jsonl>...\n");
+                         "<framing-corpus> <ui-corpus> <session-corpus> <raceflow-corpus> "
+                         "<trace.jsonl>...\n");
     return 2;
   }
   std::printf("abi check:\n");
@@ -1854,7 +2037,7 @@ int main(int argc, char** argv) {
   // marshalling its recorded inputs contain: tidepool's four bots never brake, so
   // on that fixture alone ttp_process_input's brake bit could be deleted outright
   // and every frame would still hash correctly. helix carries 402 braking inputs.
-  for (int i = 6; i < argc; i++) traceThroughAbi(argv[i]);
+  for (int i = 7; i < argc; i++) traceThroughAbi(argv[i]);
   gpThroughAbi(argv[1]);
   boundaryExports();
   roomCorpusThroughAbi(argv[2]);
@@ -1865,6 +2048,7 @@ int main(int argc, char** argv) {
   audioThroughAbi();
   uiCorpusThroughAbi(argv[4]);
   sessionCorpusThroughAbi(argv[5]);
+  raceCorpusThroughAbi(argv[6]);
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

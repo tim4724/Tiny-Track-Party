@@ -11,6 +11,8 @@ ctest --test-dir native/build     # Native conformance (configure/build native/ 
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
+ctest --test-dir native/build -R raceflow   # Race-orchestration conformance
+ctest --test-dir native/build -R "^record_" # Re-record roundtrips (byte identity)
 node scripts/wire-mutate.mjs      # Prove the wire gate bites: break the C++ 14 ways,
                                   # rebuild the wasm, require the named test to go red
 node scripts/wire-relay-contract.mjs  # Re-freeze the relay model's contract from a
@@ -165,18 +167,22 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   an opaque interned SUBJECT, so no car id is handed back and a rocket's
   sequence number can no longer collide with a peer index; a picked song is an
   INDEX resolved once per race through `ttp_audio_song_json`.
-  `public/display/audio/decide.js` STAYS, and its header says why: it is the
-  ORACLE the corpus was recorded from (plus the music catalogue, which the
-  galleries, `tests/credits.test.js` and `tests/display-abi.test.js` import from
-  it DIRECTLY — `Audio.js` used to re-export those four constants, which put the
+  `public/display/audio/decide.js` is RETIRED — it was the oracle the corpus was
+  recorded from, and it went with `gen-audio-corpus.mjs` once the port was
+  conformance-proven. The MUSIC CATALOGUE it also held moved to
+  `public/display/audio/musicCatalogue.js`, which is pure data: the galleries,
+  `tests/credits.test.js` and `tests/display-abi.test.js` import it from there
+  (they used to import it from the oracle DIRECTLY — `Audio.js` used to re-export those four constants, which put the
   whole oracle on the shipped display page's import graph for tables the race
   path never reads; the device half holds no table at all now, and even the
   monster engine's timbre arrives as numbers on a voice command).
-  A disagreement between the two is a bug in
-  the C++, never in the corpus, and the JS must keep answering exactly as
-  recorded rather than tracking whatever the port does next — `tests/audio-abi.test.js`
-  is what holds them to that at RUNTIME: it races the shipped wasm and the
-  oracle side by side for 3600 frames and demands the same command stream.
+  `audio-corpus.jsonl` is now FROZEN, held by the `audio` ctest (replay) and
+  `record_audio` (a byte-identical re-emission). What went with the oracle is
+  named in `tests/audio-abi.test.js`: it used to race the shipped wasm and the
+  JS side by side for 3600 frames, and that was the only check anywhere running
+  the SHIPPED artifact against a second implementation at runtime. The decisions,
+  the world they read and the ABI wiring are each still gated; their ASSEMBLY
+  inside `ttp_runtime.wasm` is not.
   Two things that check pins are worth knowing before touching either side: the
   distance metric must be `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` (one ULP
   flips a knee of the curve and changes the command outright), and the music
@@ -273,6 +279,48 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the display's own slot and never appears on the roster. Do not tidy it; the
   corpus pins both answers, and the ABI takes the whole HELLO (not the token) so
   absent and null stay distinguishable.
+- THE RACE ORCHESTRATION IS A LAYER TOO, and it was the last thing in the
+  display a second shell had to re-derive from prose. The state machine `main.js`
+  used to run inline — `startRace`/`launchRace`, the countdown beats, `endRace`,
+  `advanceSeriesRace`, `returnToLobby`, the AI field composition (`buildField`/
+  `cpuSeats`, persona assignment, per-bot seeding), `forfeitCar`,
+  `rekeyCarPlayer`, the auto-pause effects and `broadcastStandings` — is
+  `native/libttp-runtime/ttp/race_flow.{h,cc}`, reached through
+  `native/runtime/ttp_race.h` and the adapter `public/display/NativeRaceFlow.js`.
+  `ttp_ui.h` took the PREDICATES (`allRacersReady`, `canPause`, `raceFlow`,
+  `autoPause`); this is the machine that calls them IN ORDER.
+  EVERY ANSWER IS AN ORDERED EFFECT LIST, and that is the whole design — nothing
+  returns a verdict for a shell to sequence, because the sequencing is the part
+  that is load-bearing AND silent when wrong. Four constraints live in the order
+  alone: COUNTDOWN is published only after the session exists (else every racer's
+  `inRace` reads false and phones flash "you're in the next race"); the post-GO
+  auto-pause re-check is DEFERRED off the launch stack (it runs inside
+  `session.update()`, whose no-seats-left branch tears the session down under the
+  caller); cup points are banked BEFORE the final board goes out; the session is
+  disposed BEFORE the flow flips to LOBBY. `main.js`'s `perform()` walks the array
+  and may not reorder, batch or skip — an op it cannot perform throws rather than
+  being dropped.
+  `tests/fixtures/raceflow-corpus.jsonl` was recorded off the live
+  `public/display/raceFlow.js` before the port existed; `raceflow_check.cc`
+  replays every step on all four legs and checks BOTH the answer and the shell
+  state its driver threads, because `out` alone would pass a port that emits
+  exactly the right effects in the wrong order. `abi_check` replays the same
+  corpus through the C boundary. raceFlow.js survives as the oracle's source and
+  ships to nobody.
+  A DRAW CANNOT BE PUT BACK, which is why `startRace` and `returnToLobby` are each
+  asked TWICE: once with no draws, read for the verdict only, and again with
+  exactly `ttp_race_draws_needed` draws once the answer is "launch". Pre-drawing
+  for a start that is then rejected advances the shuffle bag for a race that never
+  happened, so "random" repeats sooner and silently skips a track nobody saw.
+  The PERSONA TABLE is single-sourced now: `ttp_race_personas_json` hands out
+  libttp-sim's own `ttp::AI_PERSONALITIES` and the shell configures it straight
+  back. `public/display/aiPersonas.js` used to be a hand-synced copy held together
+  by a prose "keep in sync" comment — the exact drift the manifest rule exists to
+  stop — and survives only for the test surfaces that need it synchronously.
+  What deliberately did NOT cross: the shuffle BAG (page RNG, not sim state), the
+  host's mode pick, `LobbyDemo`, and the performing itself (sockets, timers, the
+  History API, the AudioContext, scene objects).
+
 - Still JS BY DESIGN: the HUD/screens RENDERING (`main.js`, `Stage.js` — the
   decisions behind them are `ttp_ui.h`, above), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
@@ -282,7 +330,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (42 tests, the SAME 42 on every leg —
+  replayed by `native/` ctest (47 tests, the SAME 47 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
@@ -295,14 +343,14 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `gen-math-corpus.mjs` and `gen-theme-corpus.mjs` (6 biomes x 22 tracks, plus the
   cup/track resolution, the biome-name order and every boostShades shade). Each header names the `git show` that restores its twin if
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
-  `gen-audio-corpus.mjs`, `gen-ui-corpus.mjs`, `gen-session-corpus.mjs` and
-  `gen-schematic-corpus.mjs` are the four recorded AHEAD of
-  their port and are therefore still RENEWABLE — every input they read is
-  committed, and `tests/{audio,ui,session}-corpus.test.js` plus
-  `tests/codegen-freshness.test.js` re-run each generator
-  in-process and demand the committed bytes back. Keep those green: the day one
-  goes red because an input rotted is the day that oracle stops being
-  re-derivable, and the ports delete the JS that can produce it. The audio one reads
+  Four more were recorded AHEAD of their port. THREE ARE NOW FROZEN TOO:
+  `gen-audio-corpus.mjs`, `gen-ui-corpus.mjs` and `gen-session-corpus.mjs` are
+  deleted with the JS twins they read, so those corpora can never be re-derived
+  and `tests/{audio,ui,session}-corpus.test.js` are gone with them. What replaced
+  the freshness obligation is the `record_*` roundtrip (below). Still RENEWABLE:
+  `gen-schematic-corpus.mjs` (its inputs — the committed bake and
+  `display/trackSchematic.js` — both survive, and `tests/codegen-freshness.test.js`
+  re-derives it) and `gen-raceflow-corpus.mjs`. The audio one reads
   the golden traces, the shipped wasm and `audio/decide.js`; it replays five of
   the eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
   `useItem`/`setCarStats`, which the C ABI does not export (only `replay_cli`,
@@ -327,7 +375,18 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,
   `runtime_check --record`) is regression evidence only: it proves the sim/cameras
   still do what they did, never that the port was right. All three re-record via a
-  `record_*` ctest holding byte identity. See `tests/fixtures/traces/README.md`.
+  `record_*` ctest holding byte identity.
+  `--record` NOW EXISTS ON BOTH CLASSES AND MEANS DIFFERENT THINGS, which is the
+  one thing to get right here. On a class-2 fixture it AUTHORS: hand it a header
+  and it produces a new fixture. On a class-1 fixture (`ui_check`,
+  `audio_check`, `session_check`, `schematic_check` — gated by `record_ui`,
+  `record_audio`, `record_session`, `record_schematic`) it only RE-EMITS: each
+  line's own recorded INPUT is fed back through the port and the answers are
+  written out again, so the scenarios are read off the committed file and can
+  never be invented. Byte identity there proves the port reproduces every
+  recorded answer and its exact JSON spelling — strictly more than the structural
+  replays assert, and still NOT parity evidence. If one of those four ever
+  differs, THE COMMITTED FILE IS RIGHT. See `tests/fixtures/traces/README.md`.
   `runtime-camera-corpus.jsonl` is the one QUANTIZED fixture in the tree, and has
   to be: the camera math is cosmetic float calling the PLATFORM's
   expf/tanf/atan2f, not the vendored fdlibm, and the four legs' libms agree to a

@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "corpus_record.h"
 #include "ttp/audio.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
@@ -578,12 +579,35 @@ au::AiIds splitAi(const std::vector<Id>& roster, const std::string& split) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
-  if (argc != 3) {
-    std::fprintf(stderr, "usage: audio_check <audio-corpus.jsonl> <traces-dir>\n");
-    return 2;
+// The recorded line with the port's own commands in place. Copying the parsed
+// record rather than rebuilding it is what guarantees the KEY SET matches — a
+// re-record must differ in values or not at all.
+Value withCmds(const Value& rec, const Value& cmds) {
+  Value out = rec;
+  for (auto& kv : out.obj) {
+    if (kv.first == "cmds") { kv.second = cmds; return out; }
   }
-  const std::string corpusPath = argv[1], traceDir = argv[2];
+  out.set("cmds", cmds);
+  return out;
+}
+
+// ONE driver for both modes. `recordOut` empty means replay-and-compare;
+// otherwise every case is written out instead of diffed. Sharing the loop is the
+// point: a second copy of this much stateful threading would drift from the
+// replay and the two would stop describing the same run.
+int runCorpus(const std::string& corpusPath, const std::string& traceDir,
+              const std::string& recordOut) {
+  const bool recording = !recordOut.empty();
+  std::ofstream rec_out;
+  if (recording) {
+    rec_out.open(recordOut, std::ios::binary);
+    if (!rec_out) { std::fprintf(stderr, "--record: cannot write %s\n", recordOut.c_str()); return 2; }
+  }
+  const auto emit = [&](const std::string& what, const Value& line, const Value& want,
+                        const Value& got) {
+    if (recording) rec_out << canonical_stringify(withCmds(line, got)) << "\n";
+    else report(what, diff_val(want, got, "cmds"));
+  };
   std::ifstream in(corpusPath);
   if (!in) { std::fprintf(stderr, "cannot open %s\n", corpusPath.c_str()); return 2; }
 
@@ -603,6 +627,7 @@ int main(int argc, char** argv) {
       return 2;
     }
   }
+  if (recording) rec_out << canonical_stringify(header) << "\n";
   const int wantTraceFrames = (int) header.find("traceFrames")->num;
   const int wantScripted = (int) header.find("scriptedSteps")->num;
   const int wantScenarios = (int) header.find("scenarios")->num;
@@ -687,8 +712,8 @@ int main(int argc, char** argv) {
       // raceEnded freezes the scene, so the per-frame drive stops with it.
       if (!ended) traceDec->frame(f.cars, f.rockets, traceAi, f.nowMs, out);
 
-      report("trace " + file + " " + split + " frame " + std::to_string(f.frame),
-             diff_val(*rec.find("cmds"), cmdsValue(out), "cmds"));
+      emit("trace " + file + " " + split + " frame " + std::to_string(f.frame), rec,
+           *rec.find("cmds"), cmdsValue(out));
       traceFrames++;
       continue;
     }
@@ -707,6 +732,7 @@ int main(int argc, char** argv) {
         bool* drew = &scn.drew;
         scn.dec = std::make_unique<au::Decider>([drew]() { *drew = true; return 0.0; });
       }
+      if (recording) rec_out << canonical_stringify(rec) << "\n";
       scenarios++;
       continue;
     }
@@ -715,8 +741,8 @@ int main(int argc, char** argv) {
       if (!scn.dec) { std::fprintf(stderr, "a scripted step before its scenario\n"); return 2; }
       out.clear();
       applyStep(scn, rec.find("kind")->str, rec.find("in"), out);
-      report("scripted " + scn.name + " step " + std::to_string((long long) rec.find("step")->num),
-             diff_val(*rec.find("cmds"), cmdsValue(out), "cmds"));
+      emit("scripted " + scn.name + " step " + std::to_string((long long) rec.find("step")->num),
+           rec, *rec.find("cmds"), cmdsValue(out));
       scriptedSteps++;
       // A seedless scenario must not draw randomness: the generator's rng threw.
       if (!scn.seeded && scn.drew) {
@@ -740,7 +766,27 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  if (recording) return 0;
   std::printf("audio corpus: %d/%d cases passed (%d trace frames, %d scripted steps over %d scenarios)\n",
               passed, cases, traceFrames, scriptedSteps, scenarios);
   return passed == cases ? 0 : 1;
+}
+
+int main(int argc, char** argv) {
+  std::string fixture, outPath;
+  if (corpus::wants_record(argc, argv, &fixture, &outPath)) {
+    // The traces directory is still needed: the trace cases record only the
+    // COMMANDS, so the world they were decided from has to be re-raced.
+    if (argc < 5) {
+      std::fprintf(stderr, "usage: audio_check --record <corpus> --out=<file> <traces-dir>\n");
+      return 2;
+    }
+    return runCorpus(fixture, argv[argc - 1], outPath);
+  }
+  if (argc != 3) {
+    std::fprintf(stderr, "usage: audio_check <audio-corpus.jsonl> <traces-dir>\n"
+                         "       audio_check --record <corpus> --out=<file> <traces-dir>\n");
+    return 2;
+  }
+  return runCorpus(argv[1], argv[2], "");
 }

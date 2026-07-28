@@ -157,13 +157,12 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
 
   // Every biome must name a race-music pool that exists, or a race in it plays
   // the fallback song silently. This is the ONE place the two halves meet: the
-  // pool keys come from the audio ORACLE (audio/decide.js — the catalogue's
-  // authored home, and what audio-abi.test.js pins the wasm's own copy to), the
-  // biome names are C++. Read straight from the oracle rather than through
-  // Audio.js, which no longer re-exports it: the device half performs commands
-  // and holds no table.
+  // pool keys come from audio/musicCatalogue.js (the catalogue's authored home
+  // — it moved there when the decide.js oracle was retired), the biome names are
+  // C++. Read straight from the data rather than through Audio.js, which does
+  // not re-export it: the device half performs commands and holds no table.
   const { RACE_MUSIC } = await import(pathToFileURL(
-    path.join(ROOT, 'public/display/audio/decide.js')).href);
+    path.join(ROOT, 'public/display/audio/musicCatalogue.js')).href);
   const unpooled = names.filter((b) => !RACE_MUSIC[b] || !RACE_MUSIC[b].length);
   assert.deepEqual(unpooled, ['sunset'],
     'sunset is the one cupless biome with no pool of its own (it falls back); '
@@ -177,4 +176,25 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
   assert.equal(hill('playroom', 0) >>> 0, 0xe66a5a, "the playroom's swatch colour");
   const models = M.cwrap('ttp_theme_scenery_models', 'string', ['string']);
   assert.deepEqual(JSON.parse(models('beach')), ['palm-tall', 'palm-bend']);
+});
+
+// ---- the CPU roster is one table ---------------------------------------------
+test('aiPersonas.js has not drifted from the wasm persona table', async () => {
+  const M = await load();
+  // The runtime path no longer holds a copy: main.js reads the table out of
+  // ttp_race_personas_json (libttp-sim's own ttp::AI_PERSONALITIES) and
+  // configures it straight back. public/display/aiPersonas.js survives only for
+  // the test surfaces that need it synchronously — the gallery harness grids a
+  // persona per slot before any wasm call — so it is a second spelling of a
+  // shipped table, and this is the check that stops it drifting. It used to be
+  // held by a prose "keep in sync" comment and nothing else.
+  const want = JSON.parse(M.cwrap('ttp_race_personas_json', 'string', [])());
+  const { AI_PERSONALITIES } = await import(pathToFileURL(
+    path.join(ROOT, 'public/display/aiPersonas.js')).href);
+  assert.equal(AI_PERSONALITIES.length, want.length, 'the roster changed size');
+  AI_PERSONALITIES.forEach((p, i) => {
+    assert.equal(p.name, want[i].name, `persona ${i} name`);
+    assert.equal(p.caution, want[i].caution, `persona ${i} (${p.name}) caution`);
+    assert.equal(p.laneBias, want[i].laneBias, `persona ${i} (${p.name}) laneBias`);
+  });
 });

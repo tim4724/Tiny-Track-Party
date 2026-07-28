@@ -20,10 +20,13 @@ import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 // The monster engine's timbre, from the audio ORACLE. This is a gallery-only
 // surface — it fires cues directly, with no decision stream behind them — so it
-// is one of the two readers left of decide.js's tables. Nothing that ships
-// imports that file: the race path gets this same growl as numbers on a voice
-// command from the C++ decision layer.
-import { MONSTER_ENGINE_MOD } from './audio/decide.js';
+// The monster demo's engine timbre. It used to be imported from decide.js, the
+// retired audio oracle; the race path never read it that way — a transformed
+// car's growl arrives as numbers on a voice command from the C++ decision layer
+// (ttp/audio.cc's MONSTER_ENGINE_MOD, which this mirrors). It lives here because
+// the gallery is the only caller: it drives engineDrive itself, outside any
+// session, so no command stream reaches it.
+const MONSTER_ENGINE_MOD = { rateMul: 0.6, gainMul: 1.45, lpMul: 0.82 };
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).

@@ -24,7 +24,7 @@
 //   * seatDefaults answers {nameKey:'player_n', nameArg:N}, never the sentence.
 //     The copy table is below, next to nothing else that composes English.
 //
-// public/display/sessionModel.js stays in the tree and stays the ORACLE:
+// public/display/sessionModel.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/session-corpus.jsonl was recorded off it, native/partytest/
 // session_check.cc replays every step through the C++ on all four legs, and
 // runtimetest/abi_check.cc replays the same corpus through the C boundary this

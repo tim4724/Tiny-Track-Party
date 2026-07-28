@@ -11,6 +11,11 @@ if(EMULATOR)
   list(APPEND _cmd ${EMULATOR})
 endif()
 list(APPEND _cmd "${CLI}" --record "${FIXTURE}" "--out=${OUT}")
+# Some checks need one more positional after the flags (audio_check re-races the
+# golden traces, so it still takes the traces directory).
+if(EXTRA)
+  list(APPEND _cmd "${EXTRA}")
+endif()
 execute_process(COMMAND ${_cmd} RESULT_VARIABLE _rc)
 if(NOT _rc EQUAL 0)
   message(FATAL_ERROR "--record failed (exit ${_rc}) for ${FIXTURE}")
