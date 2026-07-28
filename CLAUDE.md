@@ -44,7 +44,9 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - Display boot lands on the welcome board (`#welcome`): the room warms eagerly behind it (net.start() at boot, gated only on the device chooser), and NEW GAME reveals the lobby while carrying the user-gesture unlocks (fullscreen + AudioContext). Browser back walks `SCREEN_ORDER` (race → lobby → welcome): back from a race is the usual full reset, back from the lobby ends the party and warms a fresh room behind the title board. Test/gallery/solo surfaces bypass the welcome and push no history.
 - PartyPlug (`partyplug/`) is the reusable party-game framework (transport layer) shared across games, served under `/partyplug/`.
 - 3D assets are the Kenney Toy Car Kit under `public/assets/toycar/` — the `toycar` path names the asset pack, not the game.
-- UI is the "Sticker Bash" theme: die-cut stickers on the TV glass — flat colour on warm paper, thick warm-ink (`#2A2735`, never `#000`) outlines, hard zero-blur offset shadows, slight rotations. Chrome colours are red/green/blue/purple ONLY (yellow/amber + pink are vetoed in chrome — liveries only; celebration is RED). Design tokens + reusable bits (`.card .btn .chip .pill .field`, the `.wordmark` badge, the `.scene` paper stage) live in `public/shared/theme.css`, `<link>`ed by both display and controller before their page CSS. Build new UI from those tokens/classes — page CSS owns layout, the theme owns colour/type/surface. Never outline/toon-shade anything inside the 3D scene; paper backgrounds only on full-screen boards (chrome floats bare over the live 3D view). Fonts (Fredoka, Nunito) are self-hosted variable woff2 under `public/assets/fonts/` (SIL OFL) so the CSP keeps `font-src 'self'`.
+- UI is the "Sticker Bash" theme (two cell-anchored, textless pieces of it — the
+  steer bar and the split-screen dividers — are drawn by the RENDERER, not CSS;
+  see the NATIVE rendering rule below): die-cut stickers on the TV glass — flat colour on warm paper, thick warm-ink (`#2A2735`, never `#000`) outlines, hard zero-blur offset shadows, slight rotations. Chrome colours are red/green/blue/purple ONLY (yellow/amber + pink are vetoed in chrome — liveries only; celebration is RED). Design tokens + reusable bits (`.card .btn .chip .pill .field`, the `.wordmark` badge, the `.scene` paper stage) live in `public/shared/theme.css`, `<link>`ed by both display and controller before their page CSS. Build new UI from those tokens/classes — page CSS owns layout, the theme owns colour/type/surface. Never outline/toon-shade anything inside the 3D scene; paper backgrounds only on full-screen boards (chrome floats bare over the live 3D view). Fonts (Fredoka, Nunito) are self-hosted variable woff2 under `public/assets/fonts/` (SIL OFL) so the CSP keeps `font-src 'self'`.
 - The engine is NATIVE. The sim, the cup-series layer, and the party layer's
   decisions (room state, relay framing, fastlane netcode) all run as C++ compiled
   to WASM (`native/`, loaded via `public/display/engine/native/ttp_runtime.mjs`
@@ -71,6 +73,20 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   and needs the Filament SDK, so it compiles on one machine configuration and no
   ctest sees it. tvOS/Android get siblings of that file, not of the library. If a
   line names no platform API it belongs in libttp-runtime.
+  TWO HUD elements are drawn here rather than by a shell, and the line that
+  admits them is exact: CELL-ANCHORED AND TEXTLESS goes to the renderer,
+  anything carrying type or sticker chrome stays in the shell. That is the steer
+  bar and the cell dividers (`materials/voverlay.mat`, `TtpRenderer::drawOverlay`,
+  `TtpCellHudInput`) — a rounded rect with a translating fill needs none of the
+  UI toolkit the HUD exists for, and both are pinned to a cell whose geometry is
+  already C++. It keeps OUT the place/lap ordinal, the name chip, the item slot,
+  the FINISHED card and the reconnect QR. Moving them also made the whole
+  remaining HUD a ~6 Hz poll: nothing in the DOM is written per frame. They are
+  the only thing the C side is ever told a UI SCALE for
+  (`ttp_display_ui_scale`) — their sizes are authored in CSS pixels, everything
+  else stays in the surface's physical ones — and the only place `--ink` /
+  `--surface` are written down twice (`TTP_HUD_*` in `ttp_render.h`, held to the
+  tokens by `tests/design-tokens.test.js`).
   `public/display/render/Display.js` is the browser's whole edge of it, and
   `Stage.js` owns the canvas, the DOM HUD and the rAF loop. Three.js is GONE
   (git history has it); it survives only as a TEST-ONLY devDependency, used by the

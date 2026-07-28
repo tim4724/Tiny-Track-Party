@@ -54,10 +54,24 @@ static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3
 struct DisplayState {
     uint32_t width = 1, height = 1;
 
+    // Physical pixels per UI point (TtpFrameInput.uiScale). The one place the
+    // display is told about the shell's unit system, and only because the cell
+    // overlay's sizes are authored in it.
+    float uiScale = 1;
+
     int session = 0;                    // bound session handle (0 = draw an empty track)
     std::vector<ScalarId> roster;       // slot order, fixed at build
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
+
+    // Cell overlay state (TtpCellHudInput). `cardMask` bit i = a centred card
+    // owns cell i (finished, or dropped and showing the reconnect QR), which is
+    // exactly when its steer bar is hidden. Latched by the shell rather than
+    // read per frame: it is a state transition a handful of times a race, and
+    // the alternative — the shell describing its cards to C++ every frame — is
+    // the serialized-HUD shape this whole layer exists to avoid.
+    uint32_t cardMask = 0;
+    bool dividers = true;               // ?dividers=0 debug toggle
 
     bool hold = false;                  // draw the last-read field, at rest
     std::vector<TtpCarInput> held;

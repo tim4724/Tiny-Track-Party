@@ -6258,6 +6258,12 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vpresent->second.data(), vpresent->second.size())
                 .build(*mEngine);
     }
+    const auto voverlay = mAssets.find("voverlay.filamat");
+    if (!mOverlayMaterial && voverlay != mAssets.end()) {
+        mOverlayMaterial = Material::Builder()
+                .package(voverlay->second.data(), voverlay->second.size())
+                .build(*mEngine);
+    }
     ensureSceneTarget(); // between frames — the material only lands now
     const auto track = mAssets.find("track.bin");
     if (track == mAssets.end()) return false; // no scene without a track payload
@@ -6429,6 +6435,189 @@ void TtpRenderer::ensureCells(uint32_t count) {
         mCellViews.push_back(v);
         mCellCameras.push_back(cam);
         mCellCameraEntities.push_back(camEnt);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The 2D cell overlay: the split-screen dividers and the per-player steer bar.
+//
+// The rule that admits these two and nothing else is in voverlay.mat, which also
+// carries why they composite in sRGB. What lives here is the plumbing: a pool of
+// unit quads through one ortho camera in PIXEL space, drawn straight onto the
+// swap chain AFTER the present pass.
+// ---------------------------------------------------------------------------
+
+// 0xRRGGBB as it is written on screen. NOT srgbToLinear: this pass runs past the
+// grade, so the value written IS the panel value (see voverlay.mat).
+static float3 hudRgb(uint32_t rgb) {
+    return { ((rgb >> 16) & 0xff) / 255.0f, ((rgb >> 8) & 0xff) / 255.0f,
+             (rgb & 0xff) / 255.0f };
+}
+
+void TtpRenderer::ensureOverlay() {
+    if (mOverlayView || !mOverlayMaterial) return;
+    // The unit quad every element scales out of. Positions only — the material
+    // needs no vertex colour, and its one varying is derived from the position.
+    static const float3 verts[4] = {
+        { 0, 0, -1 }, { 1, 0, -1 }, { 1, 1, -1 }, { 0, 1, -1 },
+    };
+    static const uint16_t indices[6] = { 0, 1, 2, 0, 2, 3 };
+    mOverlayVB = VertexBuffer::Builder()
+            .vertexCount(4).bufferCount(1)
+            .attribute(VertexAttribute::POSITION, 0,
+                    VertexBuffer::AttributeType::FLOAT3, 0, sizeof(float3))
+            .build(*mEngine);
+    mOverlayVB->setBufferAt(*mEngine, 0,
+            VertexBuffer::BufferDescriptor(verts, sizeof(verts), nullptr));
+    mOverlayIB = IndexBuffer::Builder()
+            .indexCount(6).bufferType(IndexBuffer::IndexType::USHORT)
+            .build(*mEngine);
+    mOverlayIB->setBuffer(*mEngine,
+            IndexBuffer::BufferDescriptor(indices, sizeof(indices), nullptr));
+
+    mOverlayScene = mEngine->createScene(); // deliberately lightless
+    mOverlayCameraEntity = utils::EntityManager::get().create();
+    mOverlayCamera = mEngine->createCamera(mOverlayCameraEntity);
+    mOverlayView = mEngine->createView();
+    mOverlayView->setScene(mOverlayScene);
+    mOverlayView->setCamera(mOverlayCamera);
+    // TRANSLUCENT is what makes this an OVERLAY: the view blends onto whatever
+    // the present pass already put on the canvas instead of replacing it.
+    mOverlayView->setBlendMode(View::BlendMode::TRANSLUCENT);
+    mOverlayView->setPostProcessingEnabled(false); // we are past the grade
+    mOverlayView->setShadowingEnabled(false);
+    mOverlayView->setFrustumCullingEnabled(false);
+}
+
+MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
+    if (!mOverlayMaterial || w <= 0 || h <= 0) return nullptr;
+    ensureOverlay();
+    if (mOverlayQuads.size() <= mOverlayUsed) {
+        OverlayQuad q;
+        q.mi = mOverlayMaterial->createInstance();
+        q.entity = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                .material(0, q.mi)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mOverlayVB, mOverlayIB, 0, 6)
+                .culling(false)
+                .castShadows(false).receiveShadows(false)
+                .build(*mEngine, q.entity);
+        mOverlayQuads.push_back(q);
+    }
+    OverlayQuad& q = mOverlayQuads[mOverlayUsed++];
+    if (!q.inScene) { mOverlayScene->addEntity(q.entity); q.inScene = true; }
+    // ttp_grid_cell measures from the TOP left, like the DOM and like every
+    // consumer of the answer; the ortho camera below is ordinary GL, measuring
+    // from the bottom. This is the one flip — the same one the cell viewports
+    // make. It costs the shapes nothing: both are symmetric about their own
+    // horizontal midline, so the material never has to know which way is up.
+    auto& tcm = mEngine->getTransformManager();
+    tcm.setTransform(tcm.getInstance(q.entity),
+            mat4f::translation(float3{ x, (float) mHeight - y - h, 0 })
+                    * mat4f::scaling(float3{ w, h, 1 }));
+    q.mi->setParameter("size", float2{ w, h });
+    return q.mi;
+}
+
+void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
+    const uint32_t before = mOverlayUsed;
+    mOverlayUsed = 0;
+    if (mOverlayMaterial && input.hudCount && mWidth && mHeight) {
+        // Physical pixels per UI point. Every size below is the CSS number out
+        // of display.css, so this is the only place the two units meet.
+        const float s = input.uiScale > 0 ? input.uiScale : 1.0f;
+        const float4 ink{ hudRgb(TTP_HUD_INK), 1.0f };
+        const float3 surface = hudRgb(TTP_HUD_SURFACE);
+        const uint32_t n = input.hudCount;
+
+        // .cell-divider — a 4 px ink rule down every seam that has cells on both
+        // sides, spanning the whole canvas. Derived from the same rects the
+        // shell is handed, and deduplicated exactly as the DOM's loop was: one
+        // rule per distinct cell edge, not one per cell.
+        if (input.flags & TTP_FRAME_DIVIDERS) {
+            uint32_t xs[8], ys[8], nx = 0, ny = 0;
+            for (uint32_t i = 0; i < n; i++) {
+                const TtpCellRect r = ttp_grid_cell(i, n, mWidth, mHeight);
+                bool seen = false;
+                for (uint32_t k = 0; k < nx; k++) seen = seen || xs[k] == r.x;
+                if (r.x > 0 && !seen && nx < 8) xs[nx++] = r.x;
+                seen = false;
+                for (uint32_t k = 0; k < ny; k++) seen = seen || ys[k] == r.y;
+                if (r.y > 0 && !seen && ny < 8) ys[ny++] = r.y;
+            }
+            // rgba(42, 39, 53, 0.88) — the ink, let through by the tiniest bit.
+            const float4 rule{ ink.xyz, 0.88f };
+            for (uint32_t k = 0; k < nx; k++) {
+                if (MaterialInstance* mi =
+                            overlayQuad(xs[k] - 2 * s, 0, 4 * s, (float) mHeight)) {
+                    mi->setParameter("shape", float3{ 0, 0, 0 });
+                    mi->setParameter("fill", float3{ 0, 0, 0 });
+                    mi->setParameter("ink", rule);
+                    mi->setParameter("surface", surface);
+                    mi->setParameter("bar", surface);
+                }
+            }
+            for (uint32_t k = 0; k < ny; k++) {
+                if (MaterialInstance* mi =
+                            overlayQuad(0, ys[k] - 2 * s, (float) mWidth, 4 * s)) {
+                    mi->setParameter("shape", float3{ 0, 0, 0 });
+                    mi->setParameter("fill", float3{ 0, 0, 0 });
+                    mi->setParameter("ink", rule);
+                    mi->setParameter("surface", surface);
+                    mi->setParameter("bar", surface);
+                }
+            }
+        }
+
+        // .cell-steer — width clamp(190px, 16.5vw, 270px), height 34, border 4,
+        // pill radius, bottom-anchored 61 above the cell's bottom edge and
+        // centred on it. The viewport the 16.5vw measures is this SURFACE: a TV
+        // shell has no second viewport behind its canvas, and taking one from
+        // the browser would put a web idea back into the contract.
+        const float barW = std::max(190 * s, std::min(0.165f * mWidth, 270 * s));
+        const float barH = 34 * s, border = 4 * s;
+        const float innerW = barW - 2 * border, innerH = barH - 2 * border;
+        const TtpCellHudInput* hud = ttp_frame_hud(&input);
+        for (uint32_t i = 0; i < n; i++) {
+            if (!(hud[i].flags & TTP_HUD_STEER_BAR)) continue;
+            const TtpCellRect cell = ttp_grid_cell(i, n, mWidth, mHeight);
+            MaterialInstance* mi = overlayQuad(cell.x + (cell.w - barW) * 0.5f,
+                    cell.y + cell.h - 61 * s, barW, barH);
+            if (!mi) continue;
+            // The livery this cell's car wears, straight off the roster the
+            // renderer baked its model from — the shell never restates it.
+            float3 bar = surface;
+            if (mTrack && hud[i].car >= 0
+                    && (size_t) hud[i].car < mTrack->carColors.size()) {
+                const uint32_t abgr = mTrack->carColors[hud[i].car];
+                bar = hudRgb(((abgr & 0xff) << 16) | (abgr & 0xff00)
+                        | ((abgr >> 16) & 0xff));
+            }
+            // .cell-steer__fill: half the interior wide, centred, translated by
+            // 50 % of ITS OWN width per unit of tilt — so full lock puts the
+            // fill's edge on the interior's edge and never past it.
+            mi->setParameter("shape", float3{ barH * 0.5f, border, 3 * s });
+            mi->setParameter("fill",
+                    float3{ border + innerW * (0.25f + 0.25f * hud[i].steer),
+                            innerW * 0.5f, innerH * 0.5f });
+            mi->setParameter("ink", ink);
+            mi->setParameter("surface", surface);
+            mi->setParameter("bar", bar);
+        }
+    }
+    // Retire what this frame did not claim. Scene membership, not a parked
+    // transform: the pool outlives every split it ever drew.
+    for (uint32_t i = mOverlayUsed; i < before && i < mOverlayQuads.size(); i++) {
+        if (!mOverlayQuads[i].inScene) continue;
+        mOverlayScene->remove(mOverlayQuads[i].entity);
+        mOverlayQuads[i].inScene = false;
+    }
+    if (mOverlayUsed && mOverlayView) {
+        mOverlayView->setViewport({ 0, 0, mWidth, mHeight });
+        mOverlayCamera->setProjection(Camera::Projection::ORTHO,
+                0, (double) mWidth, 0, (double) mHeight, 0, 2);
     }
 }
 
@@ -7624,6 +7813,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // returns false, the caller has the choice to either skip the frame ... or
     // proceed as though true was returned" (Renderer.h). Native shells keep the
     // skipper; they have a real display pipeline behind them and no rAF.
+    // The 2D cell overlay's geometry for this frame — placed before beginFrame,
+    // since it edits scene membership, and drawn after the present pass below.
+    drawOverlay(input);
+
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
@@ -7804,6 +7997,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // One pass for the whole canvas: grade, sRGB, FXAA, done.
         if (mSceneRT) mRenderer->render(mPresentView);
     }
+    // The cell overlay goes on LAST, over the graded canvas — see voverlay.mat
+    // for why it is past the grade and not inside it.
+    if (mOverlayUsed && mOverlayView) mRenderer->render(mOverlayView);
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
     mProfile[kProfEndFrame] = ttpNowMs() - tMark;
@@ -8024,6 +8220,21 @@ TtpRenderer::~TtpRenderer() {
     if (mPresentIB) mEngine->destroy(mPresentIB);
     if (mPresentInstance) mEngine->destroy(mPresentInstance);
     if (mPresentMaterial) mEngine->destroy(mPresentMaterial);
+    for (OverlayQuad& q : mOverlayQuads) {
+        mEngine->destroy(q.entity);
+        utils::EntityManager::get().destroy(q.entity);
+        if (q.mi) mEngine->destroy(q.mi);
+    }
+    mOverlayQuads.clear();
+    if (mOverlayView) mEngine->destroy(mOverlayView);
+    if (mOverlayScene) mEngine->destroy(mOverlayScene);
+    if (mOverlayCamera) {
+        mEngine->destroyCameraComponent(mOverlayCameraEntity);
+        utils::EntityManager::get().destroy(mOverlayCameraEntity);
+    }
+    if (mOverlayVB) mEngine->destroy(mOverlayVB);
+    if (mOverlayIB) mEngine->destroy(mOverlayIB);
+    if (mOverlayMaterial) mEngine->destroy(mOverlayMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {

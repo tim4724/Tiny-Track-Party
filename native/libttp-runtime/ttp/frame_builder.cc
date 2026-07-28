@@ -101,10 +101,15 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     const size_t nRockets = eng ? eng->rockets().size() : 0;
     const size_t nBoxes = eng ? eng->boxes().size() : 0;
 
+    // A cell overlay per cell, but only once the cells are REAL: the no-car
+    // fallback above collapses to a single overview camera, and a steer bar
+    // hanging in the middle of it would belong to no cell at all.
+    const uint32_t hudCount = raceCams ? (uint32_t) d.cells.size() : 0;
+
     const size_t bytes = sizeof(TtpFrameInput) + cars.size() * sizeof(TtpCarInput)
             + viewCount * sizeof(TtpViewInput) + nBoxes * sizeof(uint32_t)
             + nBananas * sizeof(TtpBananaInput) + nRockets * sizeof(TtpRocketInput)
-            + d.bursts.size() * sizeof(TtpBurstInput);
+            + d.bursts.size() * sizeof(TtpBurstInput) + hudCount * sizeof(TtpCellHudInput);
     if (d.frame.size() < bytes) d.frame.resize(bytes);
     auto* head = reinterpret_cast<TtpFrameInput*>(d.frame.data());
     std::memset(head, 0, sizeof(TtpFrameInput));
@@ -114,6 +119,9 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     head->viewCount = viewCount;
     head->boxCount = (uint32_t) nBoxes;
     head->burstCount = (uint32_t) d.bursts.size();
+    head->hudCount = hudCount;
+    head->uiScale = d.uiScale;
+    if (d.dividers) head->flags |= TTP_FRAME_DIVIDERS;
 
     auto* outCars = const_cast<TtpCarInput*>(ttp_frame_cars(head));
     if (d.hold && d.held.size() == cars.size()) {
@@ -241,6 +249,25 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     auto* outBursts = const_cast<TtpBurstInput*>(ttp_frame_bursts(head));
     for (size_t i = 0; i < d.bursts.size(); i++) outBursts[i] = d.bursts[i];
     d.bursts.clear();
+
+    // Cell overlays. The steer bar mirrors the PHONE's own bar, so it carries
+    // `Car::steer` untouched — the raw tilt — where the car cues twenty lines up
+    // carry STEER_SIGN * steer for the opposite reason.
+    auto* outHud = const_cast<TtpCellHudInput*>(ttp_frame_hud(head));
+    for (uint32_t i = 0; i < hudCount; i++) {
+        TtpCellHudInput& o = outHud[i];
+        o.car = -1;
+        o.steer = 0;
+        o.flags = (d.cardMask >> i) & 1u ? 0u : TTP_HUD_STEER_BAR;
+        for (size_t j = 0; j < d.roster.size(); j++) {
+            if (d.roster[j] != d.cells[i]) continue;
+            o.car = (int32_t) j;
+            // A held field is at rest, so its bars are centred with it — the
+            // pause overlay must not show a car steering it is not doing.
+            if (cars[j] && !d.hold) o.steer = (float) cars[j]->steer;
+            break;
+        }
+    }
 
     d.sceneT += dt;
     head->sceneT = d.sceneT;

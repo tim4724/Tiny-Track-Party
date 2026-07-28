@@ -240,6 +240,36 @@ private:
     void ensureSceneTarget();
     void destroySceneTarget();
 
+    // The 2D cell overlay — the split-screen dividers and the per-player steer
+    // bar (voverlay.mat carries the whole argument for why these two, and only
+    // these two, are drawn here rather than by the shell's UI layer).
+    //
+    // Canvas scope, like the present pass: a pool of unit quads, each with its
+    // own MaterialInstance, scaled and placed by the transform manager and drawn
+    // through one ortho camera in PIXEL space. Elements are handed out per frame
+    // from the front of the pool and the tail is dropped from the scene, so the
+    // count follows the split without allocating per frame.
+    filament::Material* mOverlayMaterial = nullptr;
+    filament::View* mOverlayView = nullptr;
+    filament::Scene* mOverlayScene = nullptr;
+    filament::Camera* mOverlayCamera = nullptr;
+    utils::Entity mOverlayCameraEntity;
+    filament::VertexBuffer* mOverlayVB = nullptr;
+    filament::IndexBuffer* mOverlayIB = nullptr;
+    struct OverlayQuad {
+        utils::Entity entity;
+        filament::MaterialInstance* mi = nullptr;
+        bool inScene = false;
+    };
+    std::vector<OverlayQuad> mOverlayQuads;
+    uint32_t mOverlayUsed = 0;
+    void ensureOverlay();
+    // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
+    // origin (the units ttp_grid_cell answers in). Returns its instance for the
+    // caller to paint, or nullptr if the material never arrived.
+    filament::MaterialInstance* overlayQuad(float x, float y, float w, float h);
+    void drawOverlay(const TtpFrameInput& input);
+
     Mesh mRoad;
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS
     // keeps per-tile collision clones out of the scene graph and raycasts them;
@@ -567,11 +597,15 @@ private:
     // material parameters, so nothing about these meshes changes per frame.
     filament::MaterialInstance* mBurstRingMats[2] = { nullptr, nullptr };
     filament::MaterialInstance* mBurstBallMats[2] = { nullptr, nullptr };
-    // No HUD here by design: everything in SCREEN space (place card, lap pill,
-    // item slot, name chip, countdown, results) belongs to the shell's own UI
-    // layer — DOM/CSS on web, Compose on Android TV, SwiftUI on tvOS. The
-    // renderer draws only what is anchored in the world or depth-tested (the
-    // rear name plates, the boost aura, the skids, the gantry).
+    // Almost no HUD here by design: everything in SCREEN space that carries
+    // TYPE or sticker chrome (place card, lap pill, item slot, name chip,
+    // countdown, results, the FINISHED card, the reconnect QR) belongs to the
+    // shell's own UI layer — DOM/CSS on web, Compose on Android TV, SwiftUI on
+    // tvOS. The two exceptions are the steer bar and the cell dividers
+    // (mOverlay*, voverlay.mat): cell-anchored and textless, so they need no
+    // toolkit and must not be laid out twice. Everything else the renderer draws
+    // is anchored in the world or depth-tested (the rear name plates, the boost
+    // aura, the skids, the gantry).
 
     // Ambient particles (theme.ambient): base positions from the 74747 stream,
     // drifted per frame (fall/wind/bob) with a whole-VB re-upload.

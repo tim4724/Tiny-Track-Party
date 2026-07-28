@@ -132,6 +132,10 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
     g_disp->renderer->resize(g_disp->width, g_disp->height);
 }
 
+void ttp_display_ui_scale(double scale) {
+    if (g_disp && scale > 0) g_disp->uiScale = (float) scale;
+}
+
 void ttp_display_destroy(void) {
     if (!g_disp) return;
     delete g_disp->renderer;
@@ -242,6 +246,14 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         out[i * 4 + 3] = (float) r.h;
     }
     return (int) want;
+}
+
+void ttp_display_cell_cards(uint32_t mask) {
+    if (g_disp) g_disp->cardMask = mask;
+}
+
+void ttp_display_dividers(int enabled) {
+    if (g_disp) g_disp->dividers = enabled != 0;
 }
 
 void ttp_display_camera(int mode) {

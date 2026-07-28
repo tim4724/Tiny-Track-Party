@@ -43,12 +43,25 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   // Every name Display.js cwraps. cwrap('missing') does not throw until the
   // call, so check the exports themselves.
   for (const name of ['create', 'asset', 'resize', 'build', 'release', 'bind',
-                      'cells', 'cell_rects', 'camera', 'look', 'fog', 'shadows',
+                      'cells', 'cell_rects', 'cell_cards', 'dividers', 'ui_scale',
+                      'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'profile', 'profile_names',
                       'biome']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }
+});
+
+test('the cell-overlay setters are a safe no-op with no display', async () => {
+  const M = await load();
+  // Same contract as cell_rects above, and the same reason it matters: Stage.js
+  // pushes these from _loop, which starts running before boot() has resolved a
+  // display for it. ttp_abi.h says an absent singleton is a no-op, not a trap.
+  assert.doesNotThrow(() => {
+    M.cwrap('ttp_display_ui_scale', null, ['number'])(2);
+    M.cwrap('ttp_display_cell_cards', null, ['number'])(0x3);
+    M.cwrap('ttp_display_dividers', null, ['number'])(0);
+  });
 });
 
 test('the heap views the display edge reads are on the Module', async () => {

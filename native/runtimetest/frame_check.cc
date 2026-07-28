@@ -285,7 +285,9 @@ void testCarsAndRoster(const GameTrack& track) {
   checkU(h->viewCount, 1, "no cells means one overview view");
   checkU(h->boxCount, (uint32_t)game.boxes().size(), "boxCount");
   checkU(h->burstCount, 0, "no bursts queued");
-  checkU(h->flags, 0, "flags are reserved and stay zero");
+  checkU(h->flags, TTP_FRAME_DIVIDERS, "the cell dividers are on unless a shell says otherwise");
+  checkU(h->hudCount, 0, "no cells means no cell overlays");
+  checkF(h->uiScale, 1.0f, "uiScale defaults to 1, so a shell that never sets it still draws");
   checkF(h->sceneT, DT, "sceneT accumulates dt");
 
   checkCar(cars[0], c2, "slot 0 (cpu-bolt)");
@@ -652,6 +654,124 @@ void testProps(const BuiltRaceTrack& base) {
   checkF(h->sceneT, DT + DT, "the scene clock accumulates");
 }
 
+// ---------------------------------------------------------------------------
+// 9. The cell overlay — the steer bar's per-cell block (TtpCellHudInput).
+//
+//    This is the one place a HUD value is assembled in C++ at all, and the two
+//    fields in it are both places a plausible-looking mistake is invisible on
+//    screen. `steer` must be the RAW tilt: every other steer number in this file
+//    carries STEER_SIGN, because the front wheels and the body lean have to turn
+//    the way the car turns, and a bar that took the same treatment would simply
+//    lean the wrong way — which reads as "the phone is mis-calibrated", not as a
+//    renderer bug. `car` must be the ROSTER SLOT, because that is what indexes
+//    the liveries the renderer baked; the cell INDEX is a different number that
+//    happens to be equal in the easy case.
+// ---------------------------------------------------------------------------
+void testCellHud(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  const Car& c0 = *game.cars()[0];
+  const Car& c2 = *game.cars()[2];
+
+  check(ttp::STEER_SIGN != 1, "premise: raw and signed steer are actually different numbers");
+  check(c0.steer != 0 && c2.steer != 0, "premise: both cells' cars are steering");
+
+  DisplayState d = freshState();
+  d.uiScale = 2.0f;
+  // Cell order and roster order deliberately disagree, and the roster carries a
+  // seat with no car: cell 0 is roster slot 1, cell 1 is roster slot 0.
+  d.roster = {P2, P0, GHOST, P1};
+  d.cells = {P0, P2};
+
+  {
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    checkU(h->hudCount, 2, "one cell overlay per cell");
+    checkF(h->uiScale, 2.0f, "uiScale reaches the frame");
+    check(hud[0].car == 1, "cell 0's car is its ROSTER SLOT, not its cell index");
+    check(hud[1].car == 0, "cell 1's car is its roster slot");
+    checkF(hud[0].steer, (float)c0.steer, "the bar carries RAW tilt");
+    checkF(hud[1].steer, (float)c2.steer, "…for every cell");
+    check(hud[0].steer != ttp_frame_cars(h)[1].steer,
+          "the bar's steer is NOT the car cue's — that one carries STEER_SIGN");
+    checkU(hud[0].flags, TTP_HUD_STEER_BAR, "the bar is drawn by default");
+    checkU(hud[1].flags, TTP_HUD_STEER_BAR, "…in every cell");
+  }
+
+  // A centred card (FINISHED, or the reconnect QR) owns a cell: that cell's bar
+  // goes, and ONLY that cell's — the mask is per cell, in cell order.
+  {
+    d.cardMask = 0x2;
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    checkU(hud[0].flags, TTP_HUD_STEER_BAR, "a card over cell 1 leaves cell 0 alone");
+    checkU(hud[1].flags, 0, "a card over cell 1 takes cell 1's bar");
+    check(hud[1].car == 0, "…but the cell still names its car");
+    d.cardMask = 0;
+  }
+
+  // Held (the pause overlay, the end-of-race fast-forward): the field is at
+  // rest, so the bars are centred with it. A bar still showing full lock behind
+  // the pause glass says the player is steering, which they are not.
+  {
+    d.hold = true;
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    checkF(hud[0].steer, 0.0f, "a held field centres its bars");
+    checkU(hud[0].flags, TTP_HUD_STEER_BAR, "…without hiding them");
+    d.hold = false;
+    d.held.clear();
+  }
+
+  // ?dividers=0 — the seams go, the bars stay.
+  {
+    d.dividers = false;
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT);
+    checkU(h->flags & TTP_FRAME_DIVIDERS, 0, "the divider flag follows the toggle");
+    checkU(h->hudCount, 2, "…and takes nothing else with it");
+    d.dividers = true;
+  }
+
+  // A cell naming a car this scene has never heard of: no slot, so no livery to
+  // wear and nothing to draw a bar for. The OTHER cell is unaffected.
+  {
+    DisplayState m = freshState();
+    m.roster = {P0, P1, P2};
+    m.cells = {P0, Id::Str("stranger")};
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    checkU(h->hudCount, 2, "an unknown cell still occupies its cell");
+    check(hud[1].car < 0, "…with no roster slot behind it");
+    checkF(hud[1].steer, 0.0f, "…and no tilt to show");
+    check(hud[0].car == 0, "the known cell is untouched");
+  }
+
+  // A roster seat whose car has left the field (or has not been added yet): the
+  // slot is real — the renderer baked a livery into it — but there is no car to
+  // read a tilt off.
+  {
+    DisplayState m = freshState();
+    m.roster = {P0, GHOST};
+    m.cells = {P0, GHOST};
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    check(hud[1].car == 1, "a car-less roster seat still names its slot");
+    checkF(hud[1].steer, 0.0f, "…and reads centred");
+  }
+
+  // No cell has a car in this scene, so the views collapse to the single
+  // overview — and a bar anchored to a cell that is not being drawn would be
+  // hanging in the middle of it.
+  {
+    DisplayState m = freshState();
+    m.roster = {P0, P1, GHOST};
+    m.cells = {GHOST};
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT);
+    checkU(h->viewCount, 1, "premise: this is the overview fallback");
+    checkU(h->hudCount, 0, "the overview carries no cell overlays");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -668,6 +788,7 @@ int main() {
   testHold(bt.game);
   testOverviewViews(bt.game);
   testRaceViews(bt.game);
+  testCellHud(bt.game);
   testProps(bt);
 
   std::printf("frame builder check: %d assertions, %d failures\n", checks, failures);

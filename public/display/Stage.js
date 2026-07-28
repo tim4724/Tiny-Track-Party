@@ -12,6 +12,15 @@
 // renderer baked its models and liveries in. Even WHERE a cell is comes from
 // C++ (display.cellRects): this file used to score the split-screen grid a
 // second time, and the two copies had already drifted once.
+//
+// The steer bar and the cell dividers used to be here too, and are not any
+// more: both are cell-anchored and textless, so they need no part of the UI
+// toolkit this file exists for, and the renderer draws them (voverlay.mat). The
+// bar was also the ONLY per-frame element in the HUD — everything left here is
+// written from a ~6 Hz poll, which is a far cleaner contract for three shells
+// than each writing its own 60 Hz animation over a GL surface. What crosses for
+// them now is three setters and no stream: uiScale once at boot, cellCards and
+// dividers latched in _loop and pushed only when they change.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { rosterEntry } from '../shared/trackBin.js';
@@ -59,7 +68,7 @@ export class Stage {
     // grid of cars racing, so a track's SHADOWS can be looked at without four
     // close-up chase cells in the way.
     this.soloCam = false;
-    this.showDividers = true;
+    this._dividers = true;   // ?dividers=0; pushed to the renderer by _loop
     // Opt-in resolution cap (?dpr=0.5). A gallery preview iframe lays out at full
     // logical size, so at full DPR every card allocates a screen-sized drawing
     // buffer to show a ~500px thumbnail — and the gallery shows a grid of them.
@@ -104,13 +113,27 @@ export class Stage {
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
     this._camMode = null;
+    this._cardMask = null;   // last pushed "a card owns this cell" bitmask
+    this._divPushed = null;  // last pushed divider toggle
     window.addEventListener('resize', () => this._onResize());
   }
+
+  // The chunky ink rules between split-screen cells (?dividers=0 turns them
+  // off). A property rather than a method because main.js has always set it as
+  // one, and it is read back by the debug panel; the push to the renderer is
+  // latched in _loop, since this can be set before boot() has a display at all.
+  get showDividers() { return this._dividers; }
+  set showDividers(on) { this._dividers = on !== false; }
 
   // Boot the native renderer onto our canvas. Fatal on failure: there is no
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    // The renderer draws two pieces of chrome now (the steer bar and the cell
+    // dividers), and their sizes are authored in CSS pixels. This is the one
+    // number that converts them — the same _dpr the canvas was sized by and
+    // that _cellRects divides the answer back out with.
+    this.display.uiScale(this._dpr);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
@@ -240,7 +263,7 @@ export class Stage {
     const cell = opts.cell !== false;
     const colHex = this.colors[colorIndex % this.colors.length] || '#fff';
     const c = { name, colorIndex, carIndex, finished: false, reconnecting: false,
-                label: null, steerBar: null, steerFill: null, placeEl: null,
+                label: null, placeEl: null,
                 finishEl: null, reconnectEl: null, _chipItem: null, _chipTimer: null };
 
     if (cell) {
@@ -260,18 +283,14 @@ export class Stage {
       this.overlay.appendChild(placeEl);
       c.placeEl = placeEl;
 
-      // on-screen steer indicator for this player's cell (mirrors the phone bar)
-      const steerBar = document.createElement('div');
-      steerBar.className = 'cell-steer';
-      steerBar.style.setProperty('--c', colHex);
-      steerBar.innerHTML = `<div class="cell-steer__fill"></div>`;
-      this.overlay.appendChild(steerBar);
-      c.steerBar = steerBar;
-      c.steerFill = steerBar.querySelector('.cell-steer__fill');
+      // The on-screen steer indicator is NOT here: the renderer draws it, from
+      // the same cell rects this HUD is placed on and the same roster livery
+      // its car model wears (voverlay.mat).
 
       // "FINISHED / place / time" — centred in this player's cell the instant
       // they cross the line while the rest of the field is still racing.
-      // Replaces the steer bar (they're on a victory lap now, not steering).
+      // Replaces the steer bar (they're on a victory lap now, not steering) —
+      // which is what the cellCards bitmask in _loop tells the renderer.
       const finishEl = document.createElement('div');
       finishEl.className = 'cell-finish';
       finishEl.style.setProperty('--c', colHex);
@@ -296,7 +315,7 @@ export class Stage {
     const c = this.cars.get(id);
     if (!c) return;
     if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
-    for (const el of [c.label, c.steerBar, c.finishEl, c.placeEl, c.reconnectEl]) {
+    for (const el of [c.label, c.finishEl, c.placeEl, c.reconnectEl]) {
       if (el && el.parentNode) el.parentNode.removeChild(el);
     }
     this.cars.delete(id);
@@ -339,13 +358,6 @@ export class Stage {
   }
 
   // ---- HUD ------------------------------------------------------------------
-
-  // The steer indicator mirrors raw phone tilt, so it wants every frame — unlike
-  // the rest of the HUD, which the caller polls at ~6 Hz.
-  setCarSteer(id, steerInput) {
-    const c = this.cars.get(id);
-    if (c && c.steerFill) c.steerFill.style.transform = `translateX(${(steerInput * 50).toFixed(1)}%)`;
-  }
 
   setCarHud(id, info) {
     const c = this.cars.get(id);
@@ -445,51 +457,36 @@ export class Stage {
     return out;
   }
 
-  // Chunky ink rules between split-screen cells (.cell-divider, display.css).
-  // Rebuilt only when the grid layout (or the toggle) changes.
+  // Push what the renderer's own cell overlay needs, on change only. Two latched
+  // values, neither of them per-frame state: which cells have a centred card
+  // over them (so the steer bar under it goes), and the divider toggle. The
+  // third, uiScale, is a constant and goes across once in boot().
   //
-  // `cells` is the CSS-pixel rect list from _cellRects. A rule runs down the
-  // left edge of every cell that has a neighbour to its left, and along the top
-  // edge of every cell with one above — which is the same set of seams the
-  // column/row loop used to draw, without this file needing to know the grid.
-  _syncDividers(cells, W, H) {
-    const sig = this.showDividers === false ? 'off'
-      : cells.map((r) => `${r.x},${r.y},${r.w},${r.h}`).join(';');
-    if (sig === this._divSig) return;
-    this._divSig = sig;
-    for (const d of this._dividers || []) d.remove();
-    this._dividers = [];
-    if (this.showDividers === false) return;
-    const mk = (x, y, w, h) => {
-      const d = document.createElement('div');
-      d.className = 'cell-divider';
-      d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
-      this.overlay.appendChild(d);
-      this._dividers.push(d);
-    };
-    const seen = new Set();
-    for (const r of cells) {
-      if (r.x > 0 && !seen.has('x' + r.x)) { seen.add('x' + r.x); mk(r.x - 2, 0, 4, H); }
-      if (r.y > 0 && !seen.has('y' + r.y)) { seen.add('y' + r.y); mk(0, r.y - 2, W, 4); }
+  // The rules themselves are NOT computed here any more. They used to be built
+  // from the CSS-pixel rects — one per distinct cell edge — and the renderer now
+  // derives the same set from the same grid, so the seam is exactly where the
+  // viewport edge is rather than a rounded-back copy of it.
+  _syncOverlay(ids) {
+    let mask = 0;
+    ids.forEach((id, i) => {
+      const c = this.cars.get(id);
+      if (c && (c.finished || c.reconnecting)) mask |= 1 << i;
+    });
+    if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
+    if (this._dividers !== this._divPushed) {
+      this._divPushed = this._dividers;
+      this.display.dividers(this._dividers);
     }
-  }
-
-  _hideDividers() {
-    if (this._divSig === 'hidden' || !(this._dividers || []).length) return;
-    this._divSig = 'hidden';
-    for (const d of this._dividers) d.remove();
-    this._dividers = [];
   }
 
   // The no-cell branch runs for the whole lobby, so this latches: hiding the
   // same elements 60 times a second is a style write per car per frame for a
   // HUD that is already hidden.
   _hideCellHud() {
-    this._hideDividers();
     if (this._hudHidden) return;
     this._hudHidden = true;
     for (const c of this.cars.values()) {
-      for (const el of [c.label, c.steerBar, c.finishEl, c.placeEl, c.reconnectEl]) {
+      for (const el of [c.label, c.finishEl, c.placeEl, c.reconnectEl]) {
         if (el) el.style.display = 'none';
       }
     }
@@ -668,7 +665,6 @@ export class Stage {
     if (this.onFrame) this.onFrame(dt);
     if (!this.display) { this._scheduleNext(); return; }
 
-    const W = window.innerWidth, H = window.innerHeight;
     const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
     // Which cars own cells, and which camera rig is running, change on a seat
@@ -676,6 +672,10 @@ export class Stage {
     // steady-state frame really is one call with a dt.
     const cellSig = ids.join(',');
     if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
+    // …and the same for the cell overlay's two flags, BEFORE the frame draws
+    // with them: a mask pushed afterwards would leave the bar under a fresh
+    // FINISHED card for one frame.
+    if (ids.length) this._syncOverlay(ids);
     const mode = ids.length ? null
         : this._free ? CAM.FREE
         : this.bboxOrbit ? CAM.BBOX
@@ -695,7 +695,6 @@ export class Stage {
     // Place this frame's HUD over the cells the renderer just drew — ASKING it
     // where they are (_cellRects) instead of scoring the same grid again here.
     const cells = this._cellRects(ids.length);
-    this._syncDividers(cells, W, H);
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
       const r = cells[i];
@@ -708,20 +707,15 @@ export class Stage {
         c.label.style.left = r.x + 'px';
         c.label.style.top = r.y + 'px';
       }
-      // place/lap + steer are hidden while a centred card owns the cell — when
-      // the player has FINISHED or has dropped and is shown the reconnect QR.
+      // place/lap is hidden while a centred card owns the cell — when the player
+      // has FINISHED or has dropped and is shown the reconnect QR. The steer bar
+      // goes with it, one layer down: same predicate, pushed as _syncOverlay's
+      // bitmask above.
       const cardInCell = c.finished || c.reconnecting;
       if (c.placeEl) {
         c.placeEl.style.display = cardInCell ? 'none' : 'block';
         c.placeEl.style.left = (r.x + r.w - 12) + 'px';
         c.placeEl.style.top = (r.y + 11) + 'px';
-      }
-      if (c.steerBar) {
-        c.steerBar.style.display = cardInCell ? 'none' : 'block';
-        c.steerBar.style.left = (r.x + r.w / 2) + 'px';
-        // bottom-anchored: bar height is 34px (.cell-steer); the offset keeps a
-        // ~27px gap between its bottom edge and the cell bottom.
-        c.steerBar.style.top = (r.y + r.h - 61) + 'px';
       }
       if (c.finishEl) {
         c.finishEl.style.display = c.finished ? 'flex' : 'none';

@@ -478,7 +478,7 @@ export function runDisplayScenario(opts, ctx) {
       const now = performance.now();
       if (now - lastHud > 160) {
         lastHud = now;
-        for (const c of snap.cars) { scene.setCarHud(c.id, c); scene.setCarSteer(c.id, c.steerInput); }
+        for (const c of snap.cars) scene.setCarHud(c.id, c);
       }
       // Endless preview: once everyone crosses the line, reset and lap again.
       // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.

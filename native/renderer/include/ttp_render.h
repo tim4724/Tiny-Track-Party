@@ -74,10 +74,55 @@ typedef struct TtpBurstInput {
     float s, lat;
 } TtpBurstInput;
 
+/* One split-screen cell's 2D overlay — the steer bar, and nothing else.
+ *
+ * The HUD lives in the shells (DOM/CSS, SwiftUI, Compose) because the Sticker
+ * Bash look is a UI-toolkit problem. TWO elements are exempt, by the line in
+ * docs/native-port/shared-cpp-plan.md: cell-anchored AND textless goes to the
+ * renderer, anything carrying type or sticker chrome stays in the shell. That
+ * admits the steer bar and the cell dividers; it keeps out the place/lap
+ * ordinal, the name chip, the item slot, the FINISHED card and the reconnect QR.
+ *
+ * Anchoring is the reason it can be here at all: a cell's rectangle is already
+ * a C++ answer (ttp_grid_cell), so the bar cannot drift from the viewport it
+ * belongs to the way a second layout in the shell could. */
+typedef struct TtpCellHudInput {
+    /* Which car this cell follows, as an index into cars[] — the roster slot,
+     * so the bar wears the same livery the model does. < 0 = no car (nothing to
+     * draw). NOT a car id: no identity crosses this boundary. */
+    int32_t car;
+    /* RAW steer input, -1..1 — the phone's tilt as the player produced it.
+     * Deliberately NOT TtpCarInput.steer, which carries STEER_SIGN because the
+     * VISUAL cues (front-wheel yaw, body lean) have to turn the way the car
+     * turns. The bar mirrors the phone's own bar, so it wants the raw value. */
+    float steer;
+    uint32_t flags; /* TTP_HUD_STEER_BAR */
+} TtpCellHudInput;
+
+/* Draw this cell's steer bar. Clear while a centred card owns the cell — the
+ * player has FINISHED, or has dropped and is being shown the reconnect QR — for
+ * the same reason the DOM hid it: they are not steering, and the card is what
+ * the cell is saying. */
+#define TTP_HUD_STEER_BAR 1u
+
+/* TtpFrameInput.flags */
+#define TTP_FRAME_DIVIDERS 1u /* draw the ink rules on the split-screen seams */
+
+/* Chrome colours for the overlay, as 0xRRGGBB. These are `--ink` and
+ * `--surface` from public/shared/theme.css, which is the authored source for
+ * the sticker palette; tests/design-tokens.test.js holds these two against the
+ * baked token table so the two languages cannot drift apart silently.
+ *
+ * Only these two. A third would mean the look is being rebuilt here rather than
+ * quoted — the livery colour arrives as roster data (track.bin), and every
+ * other surface in view is drawn by the renderer from the biome palette. */
+#define TTP_HUD_INK     0x2A2735u
+#define TTP_HUD_SURFACE 0xFFFFFFu
+
 /* Header, followed CONTIGUOUSLY by cars[carCount], views[viewCount],
  * boxStates[boxCount] (u32: 1 = available, 0 = collected; indexed like the
- * scene payload's box list), bananas[bananaCount], rockets[rocketCount] and
- * bursts[burstCount]. */
+ * scene payload's box list), bananas[bananaCount], rockets[rocketCount],
+ * bursts[burstCount] and hud[hudCount]. */
 typedef struct TtpFrameInput {
     uint32_t version;  /* TTP_FRAME_INPUT_VERSION */
     float dt;          /* seconds since previous frame */
@@ -87,15 +132,24 @@ typedef struct TtpFrameInput {
     uint32_t bananaCount;
     uint32_t rocketCount;
     uint32_t burstCount; /* detonations fired THIS frame (usually 0) */
-    uint32_t flags;    /* reserved (no flags defined) */
+    uint32_t hudCount;   /* cell overlays — viewCount while cells are up, else 0 */
+    uint32_t flags;    /* TTP_FRAME_* */
     float sceneT;      /* the driving renderer's scene clock (accumulated dt since
                         * its scene booted) — phase source for every wall-clock
                         * cosmetic (box bob/spin, cloud drift, balloon lap, rocket
                         * roll), so both renderers animate in the SAME phase */
+    /* Physical pixels per UI point — devicePixelRatio on web, UIScreen
+     * nativeScale on tvOS, density on Android. The overlay is the first thing
+     * the renderer draws whose size is authored in the UI's units rather than
+     * the world's (34 pt tall, 4 pt border), so this is the one number that
+     * converts them. Everything ELSE the C side is told stays in the surface's
+     * own physical pixels, which is why this is a frame field rather than a
+     * second unit system running through the whole layer. <= 0 reads as 1. */
+    float uiScale;
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 9u
+#define TTP_FRAME_INPUT_VERSION 10u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);
@@ -114,6 +168,9 @@ static inline const TtpRocketInput* ttp_frame_rockets(const TtpFrameInput* f) {
 }
 static inline const TtpBurstInput* ttp_frame_bursts(const TtpFrameInput* f) {
     return (const TtpBurstInput*) (ttp_frame_rockets(f) + f->rocketCount);
+}
+static inline const TtpCellHudInput* ttp_frame_hud(const TtpFrameInput* f) {
+    return (const TtpCellHudInput*) (ttp_frame_bursts(f) + f->burstCount);
 }
 
 /* What the built track measures, for the runtime's overview cameras and fog

@@ -101,3 +101,34 @@ test('chrome roles resolve to chrome colours only', () => {
       + '(+ paper/ink) — yellow/amber and pink are liveries, never chrome');
   }
 });
+
+// The FIRST two tokens with a second implementation behind them. The renderer
+// draws the steer bar and the cell dividers now (they are cell-anchored and
+// textless, so they need no UI toolkit — voverlay.mat carries the argument),
+// which means --ink and --surface are written down in C++ as well as in
+// theme.css. That is exactly the shape P2 exists to police: one source for a
+// number two languages share, with a check instead of a prose comment.
+//
+// Scraped out of the header rather than generated into it: two colours do not
+// earn a codegen step, and a wrong constant here is silent — the bar simply
+// stops matching the chrome around it.
+test('the renderer quotes --ink and --surface, and has not drifted from them', () => {
+  const header = fs.readFileSync(
+    path.join(ROOT, 'native/renderer/include/ttp_render.h'), 'utf8');
+  const hex = (name) => {
+    const m = header.match(new RegExp(`#define\\s+${name}\\s+0x([0-9A-Fa-f]{6})u`));
+    assert.ok(m, `${name} is not defined in ttp_render.h`);
+    return m[1].toLowerCase();
+  };
+  const token = (name) => {
+    const t = byName.get(name);
+    assert.equal(t.type, 'color', `--${name} is not a colour`);
+    assert.equal(t.rgba[3], 1, `--${name} is not opaque, so a 0xRRGGBB copy cannot be faithful`);
+    return t.rgba.slice(0, 3).map((c) => c.toString(16).padStart(2, '0')).join('');
+  };
+  assert.equal(hex('TTP_HUD_INK'), token('ink'),
+    'TTP_HUD_INK has drifted from --ink: the steer bar would be outlined in a '
+    + 'different warm ink from every sticker beside it');
+  assert.equal(hex('TTP_HUD_SURFACE'), token('surface'),
+    'TTP_HUD_SURFACE has drifted from --surface');
+});

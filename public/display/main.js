@@ -491,10 +491,10 @@ scene.onFrame = (dt) => {
     return;                               // session ended; the results overlay covers the scene
   }
   const snap = session.getSnapshot();
-  // The renderer already has every car's pose, lean, monster state and item
-  // props — it reads the same Game this snapshot came from. What is left here is
-  // what only the SHELL owns: the DOM steer bar and the audio mix.
-  for (const c of snap.cars) scene.setCarSteer(c.id, c.steerInput);
+  // The renderer already has every car's pose, lean, monster state, item props
+  // AND its steer bar — it reads the same Game this snapshot came from. What is
+  // left here is what only the SHELL owns: the audio mix. Nothing in the HUD is
+  // written per frame any more; it is all on the ~6 Hz poll below.
   // The whole frame's audio in one pure decision: the shared curb-scrub throttle,
   // the per-human state voices (boost wind, squeal, brake skid, engine) and a
   // sustained jet per in-flight rocket, each level by distance to the nearest
