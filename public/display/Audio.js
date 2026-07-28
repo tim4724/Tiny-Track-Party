@@ -2,14 +2,21 @@
 // cue palette in audio/cues.js (Web Audio synthesis, no asset files, no engine
 // drone — see the rejected v1 for why).
 //
-// It decides nothing. Every "should a sound happen, which one, how loud" rule
-// lives in audio/decide.js as a pure function of plain data, and arrives here as
-// a stream of COMMANDS that apply() performs (see decide.js for the vocabulary).
-// That split is what makes the decisions recordable as an oracle and portable to
-// C++ (docs/native-port/shared-cpp-plan.md P7, which keeps the DSP baked and the
-// device per-platform). What is left here is exactly what names a platform API:
-// the AudioContext, the master bus + limiter, the variant picks, the <audio>
-// element streaming the song.
+// It decides nothing, and the decisions are no longer even in this language:
+// every "should a sound happen, which one, how loud" rule is C++
+// (native/libttp-runtime/ttp/audio.cc, behind the ttp_audio.h ABI), and arrives
+// here as a stream of COMMANDS that apply() performs. NativeAudio.js decodes the
+// packed block into the plain objects below; the vocabulary is unchanged from
+// when the rules were JS, which is why nothing in this file moved when they
+// went. audio/decide.js survives as the ORACLE the port is pinned to — and as
+// the music catalogue the galleries and the credits test read, re-exported
+// below.
+//
+// What is left here is exactly what names a platform API: the AudioContext, the
+// master bus + limiter, the variant picks, the <audio> element streaming the
+// song. That split is what let the rules move at all
+// (docs/native-port/shared-cpp-plan.md P7, which keeps the DSP baked and the
+// device per-platform).
 //
 // Which variant plays per cue: the sound gallery's starred picks (localStorage,
 // same browser + origin as /gallery-sounds.html) override the committed
@@ -107,9 +114,9 @@ export class RaceAudio {
   }
 
   // ---- the command bus ----
-  // Perform a decision stream from audio/decide.js, in order. This is the ONLY
-  // path the race drives; the named methods below exist for the gallery harness,
-  // which has no decision layer behind it.
+  // Perform a decision stream, in order. This is the ONLY path the race drives
+  // (NativeAudio.js hands it the wasm's answers); the named methods below exist
+  // for the gallery harness, which has no decision layer behind it.
   apply(cmds) {
     for (const c of cmds) {
       if (c.cue !== undefined) {

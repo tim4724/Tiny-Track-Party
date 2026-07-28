@@ -7,8 +7,10 @@
 // drains. Bots are driven inside ttp_update, mirroring the live render loop.
 
 #include "ttp_runtime.h"
+#include "ttp_audio.h"
 #include "ttp_session.h"
 
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
@@ -17,6 +19,7 @@
 
 #include "generated/track_defs.h"
 #include "ttp/ai_driver.h"
+#include "ttp/audio.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
@@ -27,6 +30,7 @@
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
+#include "ttp/util.h"
 
 using namespace ttp;
 
@@ -237,7 +241,17 @@ struct BotEntry {
   std::unique_ptr<AiController> ai;  // built at start
 };
 
+// Forward declarations of the audio bus's two taps (defined in the audio
+// section at the bottom). A race event and a countdown beat are decided into
+// sound HERE, as the sim fires them, rather than being serialized out and
+// handed back — so the session's own callbacks are where they are picked up.
+// `handle` is what tells the bus whether this is the session it is bound to.
+static void audio_tap_event(int handle, const Event& e);
+static void audio_tap_tick(int handle, int n);
+static void audio_forget_session(int handle);
+
 struct RuntimeSession {
+  int handle = 0;
   std::unique_ptr<Centerline> centerline;
   GameTrack track;
   std::string forceItem;
@@ -301,6 +315,406 @@ ttp::Game* ttp_session_engine(int h) {
   return rs->eng;
 }
 
+// ===========================================================================
+// Audio decisions (ttp_audio.h).
+//
+// The rules themselves are libttp-runtime/ttp/audio.{h,cc} — the port of
+// public/display/audio/decide.js, pinned to tests/fixtures/audio-corpus.jsonl
+// on every leg. What lives here is the SEAM: one bus per process holding the
+// Decider, the queue of commands it has decided and not yet been drained of,
+// and the small amount of reading-the-live-race that the decisions are a pure
+// function of.
+//
+// It sits in this file rather than in one of its own because it is the same
+// thing every other function above it is: a shim over a RuntimeSession's
+// internals. It needs the bound session's Game (the cars and rockets to voice),
+// its BOTS (a CPU car is neither a listener nor a voice — the sim knows which
+// cars it drives itself, so nothing has to tell it) and its event callbacks
+// (the tap below). None of that is reachable through the seam ttp_session.h
+// exposes, and widening that seam to keep a second file company would be the
+// worse trade.
+//
+// The definitions are ABOVE the extern "C" block on purpose: they are already
+// declared with C language linkage by ttp_audio.h, and the static helpers they
+// share must not be declared in one linkage and defined in another.
+// ===========================================================================
+// A silent scope: the taps below drop everything fired inside it. The
+// end-of-race fast-forward is SKIPPING, not racing — it runs the deterministic
+// sim to the flag with no rendering, so a burst of laps, pickups and finishes
+// fires in one call and none of it happened on screen.
+static bool g_audioMute = false;
+struct AudioMute {
+  bool prev;
+  AudioMute() : prev(g_audioMute) { g_audioMute = true; }
+  ~AudioMute() { g_audioMute = prev; }
+};
+
+namespace {
+
+namespace au = ttp::rt::audio;
+
+// One queued beat: a race event, or a countdown tick. Both make sound and both
+// fire from inside ttp_update, so both wait here in ONE ordered list until the
+// shell's next audio call dates them with its clock.
+struct AudioBeat {
+  bool tick = false;
+  int n = 0;
+  Event ev;
+};
+
+struct AudioBus {
+  au::Decider dec;
+  std::vector<au::Command> cmds;   // decided, not yet drained
+  std::vector<AudioBeat> pending;  // fired, not yet decided
+  std::vector<uint8_t> block;      // the packed readback
+  std::vector<Id> subjects;        // interned voice subjects (index + 1)
+  int session = 0;
+  double nowMs = 0;
+};
+
+AudioBus& bus() {
+  // Function-local so the Decider's construction (which reaches for the
+  // platform RNG) cannot race a static initializer in another translation unit.
+  static AudioBus b;
+  return b;
+}
+
+// The opaque voice identity TtpAudioCmd.subject carries. Interned per distinct
+// source, so a car and a rocket can never collide the way their raw sim ids
+// can, and no car id is ever handed to a shell. Reset by STOP_ALL, which is the
+// one moment when the shell has no live voice left to key.
+int32_t audioSubject(const Id& id) {
+  AudioBus& b = bus();
+  for (size_t i = 0; i < b.subjects.size(); i++) {
+    if (b.subjects[i] == id) return (int32_t) (i + 1);
+  }
+  b.subjects.push_back(id);
+  return (int32_t) b.subjects.size();
+}
+
+au::Point audioPoint(const Vec3& v) {
+  au::Point p;
+  p.x = v.x; p.y = v.y; p.z = v.z;
+  return p;
+}
+
+// The world point of a track (arclength, lateral) pair — ttp_track_point's body,
+// so a rocket's jet and its detonation are measured by the same sampler the
+// shell used to ask for over the boundary.
+au::Point audioTrackPoint(Game* eng, double s, double lat) {
+  Frame f = eng->centerline()->sampleAt(s);
+  f.pos.addScaledVector(f.lateral, lat);
+  return audioPoint(f.pos);
+}
+
+// The cars the sim drives itself. They have no split-screen cell, so they are
+// neither listeners nor voices.
+au::AiIds audioAiIds(const RuntimeSession& rs) {
+  au::AiIds ai;
+  for (const auto& b : rs.bots) ai.add(b.id);
+  return ai;
+}
+
+// Decide every queued beat, then empty the queue. Positions are resolved HERE,
+// against the state the sim settled into at the end of the update that fired
+// them — which is exactly where main.js read them when this was the shell's
+// job, and what audio-corpus.jsonl therefore recorded.
+void audioFlush() {
+  AudioBus& b = bus();
+  if (b.pending.empty()) return;
+  std::vector<AudioBeat> beats;
+  beats.swap(b.pending);
+
+  RuntimeSession* rs = get(b.session);
+  Game* eng = rs ? rs->eng : nullptr;
+  if (!eng) return;  // the race is gone; so is anything it had left to say
+  const au::AiIds ai = audioAiIds(*rs);
+
+  // The listeners: every human car's world point. One set for the whole batch —
+  // no time passes between the beats of one flush.
+  std::vector<au::Point> pts;
+  pts.reserve(eng->cars().size());
+  for (const auto& c : eng->cars()) {
+    if (!ai.has(c->id)) pts.push_back(audioPoint(c->pose.pos));
+  }
+  au::Listeners humans;
+  humans.reserve(pts.size());
+  for (const au::Point& p : pts) humans.push_back(&p);
+
+  for (const AudioBeat& beat : beats) {
+    if (beat.tick) { b.dec.countdown(beat.n, b.cmds); continue; }
+    au::Point pos;
+    bool hasPos = false;
+    if (beat.ev.type == "rocket_expire") {
+      pos = audioTrackPoint(eng, beat.ev.s, beat.ev.lat);
+      hasPos = true;
+    } else if (!beat.ev.id.isNull()) {
+      for (const auto& c : eng->cars()) {
+        if (c->id == beat.ev.id) { pos = audioPoint(c->pose.pos); hasPos = true; break; }
+      }
+    }
+    b.dec.event(beat.ev, hasPos ? &pos : nullptr, humans, ai, b.nowMs, b.cmds);
+  }
+}
+
+// ---- the cue vocabulary, as codes ----
+// Index + 1 is the TTP_CUE_* value; the strings are the decision layer's own
+// literals, so this table names cues rather than restating them.
+const char* const AUDIO_CUES[] = {
+  "pickup", "roulette", "banana_drop", "monster_inflate", "monster_deflate",
+  "banana_slip", "rocket_hit", "screech", "lap", "join", "countdown",
+  "boost", "corner", "brake", "engine_putt", "rocket_fire",
+};
+const int AUDIO_CUE_COUNT = (int) (sizeof(AUDIO_CUES) / sizeof(AUDIO_CUES[0]));
+static_assert(AUDIO_CUE_COUNT == TTP_CUE_ROCKET_FIRE,
+              "TTP_CUE_* must run 1..N over the table above");
+
+int32_t audioCueCode(const char* name) {
+  if (!name) return 0;
+  for (int i = 0; i < AUDIO_CUE_COUNT; i++) {
+    if (std::strcmp(name, AUDIO_CUES[i]) == 0) return (int32_t) (i + 1);
+  }
+  return 0;  // a cue this ABI has no code for: the shell drops it rather than
+             // guessing, and the static_assert above is what keeps it empty
+}
+
+int32_t audioMusicOp(const char* name) {
+  if (!name) return 0;
+  if (std::strcmp(name, "start") == 0) return TTP_AUD_MUSIC_START;
+  if (std::strcmp(name, "stop") == 0) return TTP_AUD_MUSIC_STOP;
+  if (std::strcmp(name, "pause") == 0) return TTP_AUD_MUSIC_PAUSE;
+  if (std::strcmp(name, "resume") == 0) return TTP_AUD_MUSIC_RESUME;
+  return 0;
+}
+
+// A song's flat catalogue index: pools in table order, songs in pool order.
+int32_t audioSongIndex(const au::Song* s) {
+  int32_t n = 0;
+  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
+    const au::MusicPool& p = au::RACE_MUSIC[i];
+    for (int j = 0; j < p.count; j++, n++) {
+      if (&p.songs[j] == s) return n;
+    }
+  }
+  return -1;
+}
+
+const au::Song* audioSongAt(int index) {
+  int32_t n = 0;
+  for (int i = 0; i < au::RACE_MUSIC_COUNT; i++) {
+    const au::MusicPool& p = au::RACE_MUSIC[i];
+    for (int j = 0; j < p.count; j++, n++) {
+      if (n == index) return &p.songs[j];
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+// The taps. Called from the session callbacks above, for EVERY session; only
+// the bound one is heard, which is what keeps the lobby's attract race silent
+// without the shell having to remember to mute it.
+static void audio_tap_event(int handle, const Event& e) {
+  AudioBus& b = bus();
+  if (g_audioMute || !handle || handle != b.session) return;
+  AudioBeat beat;
+  beat.ev = e;
+  b.pending.push_back(std::move(beat));
+}
+
+static void audio_tap_tick(int handle, int n) {
+  AudioBus& b = bus();
+  if (g_audioMute || !handle || handle != b.session) return;
+  AudioBeat beat;
+  beat.tick = true;
+  beat.n = n;
+  b.pending.push_back(std::move(beat));
+}
+
+static void audio_forget_session(int handle) {
+  AudioBus& b = bus();
+  if (b.session != handle) return;
+  b.session = 0;
+  b.pending.clear();
+}
+
+void ttp_audio_bind(int session) {
+  AudioBus& b = bus();
+  if (b.session == session) return;
+  b.session = session;
+  b.pending.clear();  // whatever the last race had left to say, it is over
+}
+
+void ttp_audio_frame(double nowMs) {
+  AudioBus& b = bus();
+  b.nowMs = nowMs;
+  audioFlush();  // events first, then this frame's mix — the order they happened
+  RuntimeSession* rs = get(b.session);
+  if (!rs || !rs->eng) return;
+  Game* eng = rs->eng;
+  const au::AiIds ai = audioAiIds(*rs);
+
+  // The snapshot's own derivations, taken off the live Car rather than out of a
+  // serialized copy of it: `spd` is v/vmax, `steer` carries STEER_SIGN (the sim
+  // turns the car by STEER_SIGN * steer, and the sign is what a snapshot
+  // publishes), `monster` is the transform timer still running.
+  std::vector<au::Car> cars;
+  cars.reserve(eng->cars().size());
+  for (const auto& cp : eng->cars()) {
+    const Car& c = *cp;
+    au::Car a;
+    a.id = c.id;
+    a.hasPos = true;
+    a.pos = audioPoint(c.pose.pos);
+    a.spd = c.v / c.vmax;
+    a.steer = STEER_SIGN * c.steer;
+    a.brake = c.brake;
+    a.boostMul = c.boostMul;
+    a.spin = c.spin;
+    a.monster = c.monsterT > 0;
+    a.onWall = c.onWall;
+    cars.push_back(std::move(a));
+  }
+
+  std::vector<au::Rocket> rockets;
+  rockets.reserve(eng->rockets().size());
+  for (const RocketRt& r : eng->rockets()) {
+    au::Rocket a;
+    a.id = Id::Num((double) r.id);
+    a.hasPos = true;
+    // wrap_s first, exactly as the snapshot publishes a rocket's arclength: the
+    // sampler wraps too, but the gains recorded in the corpus came off the
+    // wrapped number and one ULP of `s` moves the jet's world point.
+    a.pos = audioTrackPoint(eng, wrap_s(r.s, eng->length()), r.lat);
+    rockets.push_back(std::move(a));
+  }
+
+  b.dec.frame(cars, rockets, ai, nowMs, b.cmds);
+}
+
+void ttp_audio_roster(int count, int inLobby) {
+  AudioBus& b = bus();
+  audioFlush();
+  b.dec.roster(count, inLobby != 0, b.cmds);
+}
+
+void ttp_audio_stop_voices(void) {
+  AudioBus& b = bus();
+  audioFlush();
+  b.dec.stopVoices(b.cmds);
+}
+
+void ttp_audio_stop_car(const char* idJson) {
+  AudioBus& b = bus();
+  audioFlush();
+  b.dec.stopCar(parse_scalar_id(idJson), b.cmds);
+}
+
+void ttp_audio_music(int op, const char* biomeOrNull) {
+  AudioBus& b = bus();
+  audioFlush();
+  switch (op) {
+    case TTP_AUD_MUSIC_START:
+      b.dec.startMusic(biomeOrNull ? std::string(biomeOrNull) : std::string(), b.cmds);
+      break;
+    case TTP_AUD_MUSIC_STOP: b.dec.stopMusic(b.cmds); break;
+    case TTP_AUD_MUSIC_PAUSE: b.dec.pauseMusic(b.cmds); break;
+    case TTP_AUD_MUSIC_RESUME: b.dec.resumeMusic(b.cmds); break;
+    default: break;  // an op this build has no meaning for makes no sound
+  }
+}
+
+const TtpAudioBlock* ttp_audio_drain(void) {
+  AudioBus& b = bus();
+  audioFlush();
+  const size_t n = b.cmds.size();
+  const size_t bytes = sizeof(TtpAudioBlock) + n * sizeof(TtpAudioCmd);
+  if (b.block.size() < bytes) b.block.resize(bytes);
+  auto* head = reinterpret_cast<TtpAudioBlock*>(b.block.data());
+  head->version = TTP_AUDIO_BLOCK_VERSION;
+  head->count = (uint32_t) n;
+  head->stride = (uint32_t) sizeof(TtpAudioCmd);
+  head->flags = 0;
+
+  auto* out = const_cast<TtpAudioCmd*>(ttp_audio_cmds(head));
+  std::memset(out, 0, n * sizeof(TtpAudioCmd));
+  for (size_t i = 0; i < n; i++) {
+    const au::Command& c = b.cmds[i];
+    TtpAudioCmd& o = out[i];
+    switch (c.kind) {
+      case au::Command::CUE:
+        o.kind = TTP_AUD_CUE;
+        o.code = audioCueCode(c.name);
+        o.level = c.gain;
+        break;
+      case au::Command::COUNTDOWN:
+        o.kind = TTP_AUD_COUNTDOWN;
+        o.code = TTP_CUE_COUNTDOWN;
+        if (c.goBeat) o.flags |= TTP_AUD_F_GO;
+        break;
+      case au::Command::VOICE:
+        o.kind = TTP_AUD_VOICE;
+        o.code = audioCueCode(c.name);
+        o.subject = audioSubject(c.id);
+        o.level = c.level;
+        if (c.mod) {
+          o.flags |= TTP_AUD_F_MOD;
+          o.rateMul = c.mod->rateMul;
+          o.gainMul = c.mod->gainMul;
+          o.lpMul = c.mod->lpMul;
+        }
+        break;
+      case au::Command::VOICE_STOP:
+        o.kind = TTP_AUD_VOICE_STOP;
+        o.code = audioCueCode(c.name);
+        o.subject = audioSubject(c.id);
+        break;
+      case au::Command::STOP_ALL:
+        o.kind = TTP_AUD_STOP_ALL;
+        // Every live voice dies on this command, on both sides, so no subject
+        // minted before it can be referenced after it: the interning table is
+        // free to start over instead of growing for the life of the party.
+        b.subjects.clear();
+        break;
+      case au::Command::STOP_CAR:
+        o.kind = TTP_AUD_STOP_CAR;
+        o.subject = audioSubject(c.id);
+        break;
+      case au::Command::MUSIC:
+        o.kind = TTP_AUD_MUSIC;
+        o.code = audioMusicOp(c.name);
+        o.level = c.level;
+        if (c.song) o.subject = audioSongIndex(c.song);
+        break;
+    }
+  }
+  b.cmds.clear();
+  return head;
+}
+
+const char* ttp_audio_cue_id(int code) {
+  if (code < 1 || code > AUDIO_CUE_COUNT) return nullptr;
+  return AUDIO_CUES[code - 1];
+}
+
+const char* ttp_audio_song_json(int index) {
+  static std::string out;
+  const au::Song* s = index < 0 ? nullptr : audioSongAt(index);
+  if (!s) return NULL_JSON;
+  Value o = Value::Obj();
+  o.set("file", Value::Str(s->file));
+  o.set("title", Value::Str(s->title));
+  o.set("duration", Value::Num((double) s->duration));
+  o.set("lufs", Value::Num(s->lufs));
+  o.set("gain", Value::Num(s->gain));
+  o.set("artist", Value::Str(s->artist));
+  o.set("license", Value::Str(s->license));
+  o.set("source", Value::Str(s->source));
+  out = canonical_stringify(o);
+  return out.c_str();
+}
+
 // ---------------------------------------------------------------------------
 // ABI.
 // ---------------------------------------------------------------------------
@@ -312,6 +726,7 @@ int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* 
   if (!buildTrack(*rs, trackId, laps, seed)) return 0;
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
   int h = g_next++;
+  rs->handle = h;
   g_sessions[h] = std::move(rs);
   return h;
 }
@@ -368,12 +783,16 @@ static void buildSession(RuntimeSession* rs) {
   for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
 
   RuntimeSession* self = rs;
-  auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
+  auto onEvent = [self](const Event& e) {
+      self->outQueue.push_back(e.toValue());
+      audio_tap_event(self->handle, e);
+    };
   auto onTick = [self](int n) {
       Value c = Value::Obj();
       c.set("type", Value::Str("_countdown"));
       c.set("n", Value::Num((double)n));
       self->outQueue.push_back(std::move(c));
+      audio_tap_tick(self->handle, n);
       if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
         Value s = Value::Obj();
         s.set("type", Value::Str("_raceStart"));
@@ -407,7 +826,10 @@ void ttp_session_start(int h, int countdownSeconds) {
     std::vector<PlayerDesc> players = rs->humans;
     for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
     RuntimeSession* self = rs;
-    auto onEvent = [self](const Event& e) { self->outQueue.push_back(e.toValue()); };
+    auto onEvent = [self](const Event& e) {
+      self->outQueue.push_back(e.toValue());
+      audio_tap_event(self->handle, e);
+    };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
     buildBots(*rs);
@@ -551,6 +973,7 @@ void ttp_force_finish(int h, const char* idJson, double time) {
 void ttp_fast_forward(int h) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return;
+  AudioMute silent;
   if (rs->session) {
     RuntimeSession* self = rs;
     rs->session->fastForwardToEnd([self]() { self->driveBots(); });
@@ -596,6 +1019,7 @@ void ttp_dispose(int h) {
   if (it == g_sessions.end()) return;
   if (it->second->session) it->second->session->dispose();
   g_sessions.erase(it);
+  audio_forget_session(h);  // a disposed race is not one the audio can still read
 }
 
 void ttp_set_steer_expo(double v) { setSteerExpo(v); }

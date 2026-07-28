@@ -3,10 +3,11 @@
  *
  * WHAT THIS REPLACES. The HUD's values used to come out of the sim as
  * `ttp_snapshot_json` — the whole race state, serialized, parsed, and thrown
- * away for six integers per car. That readback is the last per-frame string on
- * the web shell's critical path, and on tvOS/Android it would be a per-frame
- * JSON parse in a language that has no reason to own one. This is the same six
- * values as a struct: one call, no allocation, no parse.
+ * away for six integers per car. On tvOS/Android that would be a per-frame JSON
+ * parse in a language with no reason to own one. This is the same six values as
+ * a struct: one call, no allocation, no parse. (The other per-frame reader of
+ * that snapshot was the AUDIO mix; ttp_audio.h took it off the frame path the
+ * same way, and between them nothing serializes a race per frame any more.)
  *
  * WHAT IT IS NOT. Not a HUD description — there is no text in it, no colour, no
  * layout and no English. C++ emits the semantic values and a stable item CODE;

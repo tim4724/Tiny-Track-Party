@@ -123,16 +123,31 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `<audio>` element; `main.js` only ever calls `sfx(audioDecide.…)`. The DSP
   palette stays BAKED rather than ported, because emscripten's AudioWorklet path
   needs the COOP/COEP isolation this build refuses.
-  That layer is now PORTED — `native/libttp-runtime/ttp/audio.{h,cc}`, replayed
-  on all four legs by `native/runtimetest/audio_check.cc` against
+  That layer is PORTED AND LIVE — `native/libttp-runtime/ttp/audio.{h,cc}`,
+  replayed on all four legs by `native/runtimetest/audio_check.cc` against
   `tests/fixtures/audio-corpus.jsonl` (5900 trace frames + 497 scripted steps,
-  every command bit-exact). What has NOT happened yet is the SWAP: the browser
-  still runs `public/display/audio/decide.js`, and the C ABI that would let
-  `Audio.js` pull the commands out of the wasm instead is the rest of P7. So the
-  JS is BOTH the shipped path and the ORACLE, and its header says so — a
-  disagreement between the two is a bug in the C++, never in the corpus, and the
-  JS must keep answering exactly as recorded rather than tracking whatever the
-  port does next.
+  every command bit-exact), and reached by the browser through
+  `native/runtime/ttp_audio.h` / `public/display/NativeAudio.js`. Nothing about
+  a car crosses to decide a sound: `ttp_audio_frame(nowMs)` reads the bound
+  session's live Game itself, and RACE EVENTS + COUNTDOWN BEATS are decided
+  where they fire (the taps in `ttp_runtime.cc`), so the shell hands over a
+  clock and takes back COMMANDS — a packed block of tagged records, not JSON,
+  because it is drained per frame. Three rules live only on the C side and are
+  invisible above the ABI, which is why `abi_check` asserts each: only the BOUND
+  session is heard (so the lobby's attract race is silent for free), the
+  end-of-race fast-forward is MUTED, and a disposed handle takes its queued
+  beats with it. A cue crosses as a CODE and the browser derives its whole cue
+  table from `ttp_audio_cue_id` rather than mirroring one; a voice's identity is
+  an opaque interned SUBJECT, so no car id is handed back and a rocket's
+  sequence number can no longer collide with a peer index; a picked song is an
+  INDEX resolved once per race through `ttp_audio_song_json`.
+  `public/display/audio/decide.js` STAYS, and its header says why: it is the
+  ORACLE the corpus was recorded from (plus the music catalogue the galleries
+  and `tests/credits.test.js` read). A disagreement between the two is a bug in
+  the C++, never in the corpus, and the JS must keep answering exactly as
+  recorded rather than tracking whatever the port does next — `tests/audio-abi.test.js`
+  is what holds them to that at RUNTIME: it races the shipped wasm and the
+  oracle side by side for 3600 frames and demands the same command stream.
   Two things that check pins are worth knowing before touching either side: the
   distance metric must be `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` (one ULP
   flips a knee of the curve and changes the command outright), and the music

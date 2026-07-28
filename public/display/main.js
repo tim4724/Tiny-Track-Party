@@ -12,7 +12,6 @@ import { LobbyDemo } from './LobbyDemo.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
-import { AudioDecider } from './audio/decide.js';
 import * as ui from './uiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
@@ -110,7 +109,11 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 // RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
 const _nativeSim = await import('./NativeRaceSession.js');
 const _nativeSeries = await import('./NativeCupSeries.js');
-await Promise.all([_nativeSim.init(), _nativeSeries.init()]);
+// The audio DECISIONS are C++ too (ttp_audio.h). Only the device half — the
+// AudioContext, the cue palette, the song element — is still JS, and it decides
+// nothing.
+const _nativeAudio = await import('./NativeAudio.js');
+await Promise.all([_nativeSim.init(), _nativeSeries.init(), _nativeAudio.init()]);
 // The biome ABI off the same module: the ?biome= list, the music pool key and
 // the HUD boost chip's accent. The palette itself never leaves C++.
 const _biomes = await loadBiomes();
@@ -403,17 +406,23 @@ function demoSig(field, trackId) {
 
 // ---- audio ----
 // Two halves, and the split is load-bearing (docs/native-port/shared-cpp-plan.md
-// P7 ports one of them to C++ and leaves the other per-platform):
-//   audioDecide  the DECISIONS — which cue, how loud, which voice at what level
-//                — as a pure function of plain data (audio/decide.js). It is
-//                recorded as an oracle by scripts/gen-audio-corpus.mjs.
+// P7 ported one of them to C++ and left the other per-platform):
+//   audioDecide  the DECISIONS — which cue, how loud, which voice at what level.
+//                NATIVE (native/runtime/ttp_audio.h over libttp-runtime/ttp/
+//                audio.cc), reached through NativeAudio.js, which hands back the
+//                same command stream the JS layer used to. The JS twin survives
+//                as the ORACLE audio-corpus.jsonl was recorded from, nothing
+//                more (public/display/audio/decide.js).
 //   audio        the DEVICE — the AudioContext, the cue palette, the song
 //                element. It performs the command stream and decides nothing.
+// Race events and countdown beats are decided inside the wasm as the sim fires
+// them, so there is no event() call anywhere below: whatever they decided rides
+// out on the next drain, ahead of that frame's own commands.
 // Browsers gate audio behind a user gesture, so resume() rides the window
 // gesture listeners below; until someone touches the display every cue no-ops
 // silently (the decisions still run — they are what the corpus pins).
 const audio = new RaceAudio();
-const audioDecide = new AudioDecider();
+const audioDecide = new _nativeAudio.NativeAudioDecider();
 // Perform a decision stream. Every audio call in this file goes through here.
 const sfx = (cmds) => audio.apply(cmds);
 
@@ -450,9 +459,10 @@ const _lastItem = new Map();
 // controller for it" — bots drive inside the wasm and hold no JS object at all, so
 // a controller-derived test would answer "not an AI" for every bot (that bug broke
 // the finish check, and with it cups reaching the podium, plus audio/item/cell
-// targeting — see git history for aiBots).
+// targeting — see git history for aiBots). The AUDIO no longer asks: the
+// decision layer reads the sim's own bot list, which is the same set by
+// construction (buildField registers exactly these as ttp_add_bot personas).
 let aiCarIds = new Set();
-const isAiCar = (id) => aiCarIds.has(id);
 let nativeBotSpecs = []; // persona specs for the in-wasm bots (see buildField)
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
@@ -490,23 +500,15 @@ scene.onFrame = (dt) => {
     fastForwarding = false;
     return;                               // session ended; the results overlay covers the scene
   }
-  const snap = session.getSnapshot();
-  // The renderer already has every car's pose, lean, monster state, item props
-  // AND its steer bar — it reads the same Game this snapshot came from. What is
-  // left here is what only the SHELL owns: the audio mix. Nothing in the HUD is
-  // written per frame any more; it is all on the ~6 Hz poll below.
-  // The whole frame's audio in one pure decision: the shared curb-scrub throttle,
-  // the per-human state voices (boost wind, squeal, brake skid, engine) and a
-  // sustained jet per in-flight rocket, each level by distance to the nearest
-  // player. A rocket lives in the engine's (arclength, lat) space — rebuild its
-  // world point the same way the engine poses cars, so the flight is measured in
-  // the SAME 3D metric as its impact.
-  sfx(audioDecide.frame({
-    cars: snap.cars,
-    rockets: (snap.rockets || []).map((r) => ({ id: r.id, pos: session.trackPoint(r.s, r.lat) })),
-    aiIds: aiCarIds,
-    nowMs: performance.now(),
-  }));
+  // NOTHING about the race is read out per frame any more. The renderer has
+  // every car's pose, lean, monster state, item props AND its steer bar — it
+  // reads the live Game itself — and so does the audio: this hands the decision
+  // layer a clock and takes back a list of commands (the shared curb-scrub
+  // throttle, the per-human state voices, a sustained jet per in-flight rocket,
+  // plus whatever the race events fired inside the update above decided). The
+  // HUD is the ~6 Hz poll below; the last per-frame getSnapshot went with this
+  // call.
+  sfx(audioDecide.frame(performance.now()));
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
   // throttle HUD + PLAYER_STATE to ~6 Hz
   const now = performance.now();
@@ -521,7 +523,12 @@ scene.onFrame = (dt) => {
     // standings — lives on the TV or the room snapshot). It's per-owner, so it
     // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes
     // from onPlayerWelcomed).
-    for (const { id, item } of ui.itemPushes(snap.cars, aiCarIds, _lastItem)) {
+    //
+    // The one readback still on this loop, and it is here rather than on the
+    // HUD block on purpose: this value goes to a PHONE, and the block folds an
+    // item it has no code for to "empty" (render/Display.js itemId) — fine for
+    // a drawn slot, wrong for a USE button. ~6 Hz, never per frame.
+    for (const { id, item } of ui.itemPushes(session.getSnapshot().cars, aiCarIds, _lastItem)) {
       _lastItem.set(id, item);
       net.sendTo(id, { type: MSG.ITEM, item });
     }
@@ -871,7 +878,8 @@ function launchRace(players) {
       // restarts on the same element); GO! keeps its own is-go fade-out.
       cd.classList.remove('slap');
       if (n > 0) { void cd.offsetWidth; cd.classList.add('slap'); }
-      sfx(audioDecide.countdown(n));
+      // The beat's own sound is the wasm's (it taps the same tick), so there is
+      // no cue call here — it rides out on the next frame's drain, in order.
       // The n<0 beat only clears the LOCAL banner — never broadcast it. The
       // phones' COUNTDOWN handler flips them onto the drive HUD, so a race that
       // ends within a second of GO (fast-forwarded finishes under test) would
@@ -918,6 +926,11 @@ function launchRace(players) {
   // away too, so the chrome sits at its final size through the countdown — no
   // pop-in at GO (the racing loop takes over from the first ~6 Hz tick).
   scene.bindSession(session.h);
+  // ... and the audio, for the same reason: this is the race the room can hear,
+  // so its events and countdown beats make a sound while the lobby's attract
+  // race (never bound) stays silent. Before startCountdown, so the opening beat
+  // is not the one that gets away.
+  audioDecide.bind(session.h);
   for (const c of session.getSnapshot().cars) scene.setCarHud(c.id, c);
   session.startCountdown(window.__countdownSeconds || COUNTDOWN_SECONDS); // __countdownSeconds: E2E hook to shorten the countdown
 }
@@ -951,48 +964,20 @@ function clearSeriesTimers() {
   clearInterval(intermissionTicker); intermissionTicker = null;
 }
 
-// ---- spatial audio: the sim queries behind the decision layer ----
-// The whole sound model — the distance curve, the cue table, the voice levels —
-// lives in audio/decide.js as a pure function of plain data. What stays here is
-// the part that names the sim: reading world points out of the live session.
-//
-// The split-screen cells ARE the listeners, so `humanPositions` is the listener
-// set: every human car's world point. CPU cars have no cell and are never
-// listeners. Cheap — ≤4 humans, and a handful of sources per frame.
-function listenerPositions() {
-  const out = [];
-  if (!session) return out;
-  for (const id of session.carIds()) {
-    if (isAiCar(id)) continue;
-    const hp = session.carWorldPos(id); // plain {x,y,z}, null while a car has no pose
-    if (hp) out.push(hp);
-  }
-  return out;
-}
-
-// One race event -> its audio, through the decision layer. `pos` is the event's
-// source world point: the car's own for a car event (null once that car is gone),
-// and for a rocket whiff the rocket's track point — rebuilt the same way the
-// engine poses cars (centreline sample + lateral offset) so the self-destruct is
-// measured in the SAME 3D metric as the jet that preceded it.
-function audioForRaceEvent(e) {
-  const pos = e.type === 'rocket_expire'
-    ? (session ? session.trackPoint(e.s, e.lat) : null) // e.s is wrapped to [0, length); trackPoint wraps anyway
-    : (e.id != null && session ? session.carWorldPos(e.id) : null);
-  sfx(audioDecide.event(e, {
-    pos,
-    humanPositions: listenerPositions(),
-    aiIds: aiCarIds,
-    nowMs: performance.now(),
-  }));
-}
-
+// ---- race events ----
+// NO AUDIO HERE ANY MORE, and the deletion is the point. A pickup, a banana, a
+// spin, a lap chime and a countdown beat are decided into sound INSIDE the wasm
+// as the sim fires them (ttp_audio_bind names the session the room can hear), so
+// the shell no longer reads each event's world point, gathers every human's
+// position as the listener set, and hands all of it back over the boundary — a
+// pair of ABI calls per human per event, gone. The fast-forward burst stays
+// silent for the same reason it always did, decided in the same place: it is
+// skipping, not racing (ttp_fast_forward runs muted).
 function onRaceEvent(e) {
   // As each car crosses the line, push the running standings so a finished
   // player's phone flips to the results overlay and it fills in for everyone
   // else as more cars finish.
   if (!e) return;
-  if (!fastForwarding) audioForRaceEvent(e); // the fast-forward burst is silent — it's skipping, not racing
   // A live car's grab always re-spins its cell roulette (incl. a box swap that re-rolls
   // the same item) — a finished car's victory-lap grab has no usable slot, so no spin.
   if (!fastForwarding && e.type === 'pickup' && !e.finished) scene.itemPickup(e.id, e.item);
@@ -1261,7 +1246,7 @@ function returnToLobby() {
   // held disconnected seats (Net._freeDisconnectedSeats → playerleave), and with
   // the session already gone forfeitCar no-ops instead of racing an endRace on
   // the way out.
-  if (session) { scene.bindSession(0); session.dispose(); session = null; }
+  if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
   net.flow.transitionTo(ROOM_STATE.LOBBY);
   // Reachable straight from a live race (controller RETURN_TO_LOBBY, solo's R
   // key) — kill any state voices or a boost wind would drone on in the lobby.

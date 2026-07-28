@@ -44,6 +44,7 @@
 #include "ttp/json_parse.h"
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
+#include "ttp_audio.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
 #include "ttp_theme.h"
@@ -1197,6 +1198,141 @@ void themeThroughAbi() {
         "the playroom stamps no scenery models — no trees indoors");
 }
 
+// ---------------------------------------------------------------------------
+// The AUDIO ABI (ttp_audio.h).
+// ---------------------------------------------------------------------------
+// The `audio` ctest already replays audio-corpus.jsonl through the DECISIONS on
+// every leg, and tests/audio-abi.test.js races the shipped wasm against the JS
+// oracle command for command. Neither covers what is only here: this bus reads
+// the live race itself, so its rules about WHICH race and WHEN are C++ and
+// nothing above the ABI can see them. Three of them, and each is a silent
+// failure — an audible bug with no error anywhere:
+//   - only the BOUND session is heard (the lobby's attract race must not sing);
+//   - the fast-forward burst is MUTED (it skips a race, it does not play one);
+//   - a disposed handle takes its queued beats with it.
+void audioThroughAbi() {
+  // The two lookups a shell derives its tables from.
+  check(ttp_audio_cue_id(0) == nullptr, "cue code 0 is 'no cue', not the first one");
+  check(ttp_audio_cue_id(-1) == nullptr, "no cue below the table");
+  check(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT) != nullptr
+        && std::strcmp(ttp_audio_cue_id(TTP_CUE_ENGINE_PUTT), "engine_putt") == 0,
+        "TTP_CUE_ENGINE_PUTT names the engine loop");
+  check(ttp_audio_cue_id(TTP_CUE_ROCKET_FIRE) != nullptr, "the last code names a cue");
+  check(ttp_audio_cue_id(TTP_CUE_ROCKET_FIRE + 1) == nullptr, "and nothing past it");
+  {
+    Value s = parseOrNull(ttp_audio_song_json(0), "audio_song_json(0)");
+    check(s.type == Value::OBJ && s.find("file") && s.find("gain") && s.find("artist"),
+          "a song carries its file, its trim and its credit");
+    check(std::strcmp(ttp_audio_song_json(-1), "null") == 0, "no song below the catalogue");
+  }
+
+  // Drain whatever earlier sections left behind, so the counts below are ours.
+  ttp_audio_bind(0);
+  ttp_audio_drain();
+
+  auto count = [](int kind) {
+    const TtpAudioBlock* b = ttp_audio_drain();
+    if (!b) return -1;
+    int n = 0;
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    for (uint32_t i = 0; i < b->count; i++) if (kind < 0 || cmds[i].kind == kind) n++;
+    return n;
+  };
+
+  const TtpAudioBlock* empty = ttp_audio_drain();
+  check(empty != nullptr && empty->version == TTP_AUDIO_BLOCK_VERSION
+        && empty->stride == sizeof(TtpAudioCmd) && empty->count == 0,
+        "an idle drain answers a zero-count block rather than null");
+
+  // Two races at once: one bound (the party can hear it), one not (the lobby's
+  // attract demo). Same track, same field, so the only difference is the bind.
+  const int heard = ttp_session_begin("tidepool", 42, 3, "rocket");
+  const int unheard = ttp_session_begin("tidepool", 42, 3, "rocket");
+  check(heard && unheard, "two sessions opened");
+  for (int h : {heard, unheard}) {
+    ttp_add_human(h, "0", nullptr);
+    ttp_add_bot(h, "\"ai-1\"", 1, 0, 7, nullptr);
+    ttp_add_bot(h, "\"ai-2\"", 0.9, 0.3, 11, nullptr);
+    ttp_add_bot(h, "\"ai-3\"", 1.1, -0.2, 13, nullptr);
+  }
+  ttp_audio_bind(heard);
+  ttp_session_start(heard, 3);
+  ttp_session_start(unheard, 3);
+
+  // The countdown beats of the BOUND race, and only its beats: three ticks and
+  // a GO, with the unbound race counting down beside it in silence.
+  int ticks = 0, gos = 0, voices = 0;
+  double nowMs = 0;
+  for (int f = 0; f < 260; f++) {
+    ttp_process_input(heard, "0", 7, 0.2, 0, 0);
+    ttp_process_input(unheard, "0", 7, 0.2, 0, 0);
+    ttp_update(heard, 1000.0 / 60.0);
+    ttp_update(unheard, 1000.0 / 60.0);
+    ttp_events_json(heard);
+    ttp_events_json(unheard);
+    nowMs += 1000.0 / 60.0;
+    ttp_audio_frame(nowMs);
+    const TtpAudioBlock* b = ttp_audio_drain();
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    for (uint32_t i = 0; i < b->count; i++) {
+      if (cmds[i].kind == TTP_AUD_COUNTDOWN) { (cmds[i].flags & TTP_AUD_F_GO) ? gos++ : ticks++; }
+      if (cmds[i].kind == TTP_AUD_VOICE) {
+        voices++;
+        check(cmds[i].subject != 0, "a voice names a subject");
+        check(cmds[i].code >= 1 && ttp_audio_cue_id(cmds[i].code) != nullptr,
+              "a voice names a cue this build has");
+      }
+    }
+  }
+  check(ticks == 3 && gos == 1, "exactly one countdown was heard: "
+        + std::to_string(ticks) + " ticks, " + std::to_string(gos) + " GO");
+  check(voices > 100, "the human's state voices ran (" + std::to_string(voices) + ")");
+
+  // The fast-forward is SILENT. It fires a burst of laps and finishes with no
+  // frame between them, so anything it decided would land in one lump on the
+  // next drain — which is precisely the noise the shell used to suppress.
+  ttp_fast_forward(heard);
+  ttp_events_json(heard);
+  check(count(-1) == 0, "the fast-forward burst decided nothing");
+
+  // A disposed race says nothing more, even with beats still queued.
+  ttp_update(unheard, 1000.0 / 60.0);
+  ttp_dispose(heard);
+  ttp_audio_frame(nowMs);
+  check(count(-1) == 0, "a disposed session is silent");
+
+  // ... and the one that was never bound stayed silent throughout.
+  ttp_audio_bind(unheard);
+  ttp_audio_bind(0);
+  check(count(-1) == 0, "binding does not release a race's backlog");
+  ttp_dispose(unheard);
+
+  // stop_car and stop_voices answer whether or not a race is bound: both are
+  // teardown paths the shell can reach with the session already gone.
+  ttp_audio_stop_car("0");
+  ttp_audio_stop_voices();
+  check(count(TTP_AUD_STOP_CAR) == 1, "stop_car answers with no session bound");
+  ttp_audio_stop_voices();
+  check(count(TTP_AUD_STOP_ALL) == 1, "stop_voices answers with no session bound");
+
+  // Music needs no race at all — it is picked by BIOME.
+  ttp_audio_music(TTP_AUD_MUSIC_START, "beach");
+  {
+    const TtpAudioBlock* b = ttp_audio_drain();
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    check(b->count == 1 && cmds[0].kind == TTP_AUD_MUSIC
+          && cmds[0].code == TTP_AUD_MUSIC_START,
+          "a music start is one command");
+    if (b->count == 1) {
+      Value song = parseOrNull(ttp_audio_song_json(cmds[0].subject), "the picked song");
+      check(song.type == Value::OBJ, "the picked song resolves through its index");
+      check(cmds[0].level > 0 && cmds[0].level < 1, "and comes with a bed level");
+    }
+  }
+  ttp_audio_music(TTP_AUD_MUSIC_STOP, nullptr);
+  ttp_audio_drain();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1218,6 +1354,7 @@ int main(int argc, char** argv) {
   framingCorpusThroughAbi(argv[3]);
   fastlaneThroughAbi();
   themeThroughAbi();
+  audioThroughAbi();
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
