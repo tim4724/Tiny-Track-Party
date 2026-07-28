@@ -5,17 +5,34 @@
 // gate that a drifted or hand-edited bake cannot slip through — it re-derives
 // every number the manifest claims straight from the committed PCM.
 //
-// What it CANNOT prove, and deliberately does not pretend to: that the samples
-// still match what cues.js synthesises. Only a re-bake settles that
+// What it CANNOT prove by itself, and deliberately does not pretend to: that the
+// PCM is what cues.js would synthesise TODAY. Only a re-bake settles that
 // (`npm run bake:cues -- --check`, which re-renders in a real browser and demands
-// byte identity). What it does prove is that the manifest and the WAVs are the
-// same bake — which is what every consumer downstream will trust.
+// byte identity). What it can do — and does, below — is notice that cues.js has
+// MOVED since the bake, which is the failure that would otherwise be silent.
 //
-// It also pins the JITTER CONTRACT against cues.js. The baked one-shots carry no
-// detune; a player is expected to re-roll it per fire as a playbackRate of
-// 2^(±spread/12). That spread lives in two places now, and if cues.js changes
-// its jitter() argument without a re-bake, every shipped fire of that cue would
-// silently get the wrong amount of variation — nothing else in the tree notices.
+// Three things it pins against cues.js, all of them numbers that live on both
+// sides of the bake and would drift without a word:
+//
+//   • THE SOURCE ITSELF. manifest.source.sharedSha256 plus each cue's
+//     sourceSha256 fingerprint the shared DSP prelude and the picked variant
+//     block the bake rendered. Retune a cue and this goes red. Same mechanism as
+//     BUILD_STAMP.json for the wasm, and the same bluntness — an edit inside a
+//     variant counts even if it turns out to be inaudible, because a hash cannot
+//     tell and the alternative is trusting that someone noticed.
+//   • THE VOICE GAIN. The sustained voices ship as unit-gain TIMBRES: the
+//     analytic gain is DIVIDED OUT of the PCM and the player re-applies
+//     `gainFormula` live. So a manifest promising 0.14*l for PCM divided by
+//     0.10*l is wrong by 40% at every level, and every metric in this file would
+//     still agree with itself. Re-derived from cues.js here.
+//   • THE JITTER SPREAD. The baked one-shots carry no detune; a player re-rolls
+//     it per fire as a playbackRate of 2^(±spread/12). If cues.js changes its
+//     jitter() argument without a re-bake, every shipped fire of that cue gets
+//     the wrong amount of variation.
+//
+// All three read cues.js through scripts/lib/cue-source.mjs — the same module
+// the baker derives them with, so this is a re-derivation and not a second
+// opinion about how to slice the file.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -27,8 +44,11 @@ const DIR = path.join(__dirname, '..', 'public', 'assets', 'audio', 'cues');
 const MANIFEST = path.join(DIR, 'manifest.json');
 const CUES_JS = path.join(__dirname, '..', 'public', 'display', 'audio', 'cues.js');
 const ROOT = path.join(__dirname, '..');
+const CUE_SOURCE = path.join(ROOT, 'scripts', 'lib', 'cue-source.mjs');
 
 const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+const cueSrc = () => fs.readFileSync(CUES_JS, 'utf8');
+const cueSource = () => import(pathToFileURL(CUE_SOURCE).href);
 
 // Every file the manifest describes, flattened out of one-shots and voice stops.
 function allFiles() {
@@ -181,27 +201,13 @@ test('the manifest was baked from DEFAULT_PICKS, not a gallery override', async 
 
 test('the jitter spread the manifest promises is the spread cues.js actually rolls', async () => {
   const { DEFAULT_PICKS } = await import(pathToFileURL(CUES_JS).href);
-  const src = fs.readFileSync(CUES_JS, 'utf8');
-  const spans = (indent) => {
-    const out = [];
-    const re = new RegExp(`\\n {${indent}}id: '([a-z_0-9]+)'`, 'g');
-    let m;
-    while ((m = re.exec(src))) out.push({ id: m[1], at: m.index });
-    return out;
-  };
-  const cueSpans = spans(4), varSpans = spans(8);
-  const sliceOf = (list, id, from, to) => {
-    const i = list.findIndex((s) => s.id === id && s.at >= from && s.at < to);
-    assert.ok(i >= 0, `${id}: not found in cues.js`);
-    const next = list[i + 1];
-    return [list[i].at, Math.min(next ? next.at : src.length, to)];
-  };
+  const { variantBlock, rolledJitter } = await cueSource();
+  const src = cueSrc();
 
   for (const [id, cue] of Object.entries(manifest.cues)) {
-    const [cFrom, cTo] = sliceOf(cueSpans, id, 0, src.length);
-    const [vFrom, vTo] = sliceOf(varSpans, DEFAULT_PICKS[id], cFrom, cTo);
-    const rolled = [...new Set([...src.slice(vFrom, vTo).matchAll(/jitter\(([^)]*)\)/g)]
-      .map((c) => (c[1].trim() === '' ? 1 : parseFloat(c[1]))))];
+    const block = variantBlock(src, id, DEFAULT_PICKS[id]);
+    assert.ok(block !== null, `${id}/${DEFAULT_PICKS[id]}: not found in cues.js`);
+    const rolled = rolledJitter(block);
     const promised = cue.playback.jitter ? cue.playback.jitter.spread : null;
     if (promised === null) {
       assert.equal(rolled.length, 0,
@@ -215,4 +221,75 @@ test('the jitter spread the manifest promises is the spread cues.js actually rol
         `${id}: rateRange does not match spread ±${promised}`);
     }
   }
+});
+
+// THE GATE THIS FILE WAS MISSING. Everything above re-derives the manifest from
+// the PCM, so a bake and a manifest that were made together always agree —
+// including about a cue cues.js no longer makes. The bake is only valid for one
+// state of cues.js, and that state is recorded as a hash, exactly the way
+// BUILD_STAMP.json records the wasm's sources.
+//
+// If this goes red the samples are STALE, not corrupt: someone retuned a cue (or
+// a shared helper) and the committed WAVs are still the old sound. `npm run
+// bake:cues` is the fix. It is deliberately blunt — a comment or a label inside a
+// picked variant block counts as a change — because a hash cannot know which
+// edits are audible, and the failure it replaces was silent.
+test('the manifest is a bake of the cues.js that is in the tree', async () => {
+  const { DEFAULT_PICKS } = await import(pathToFileURL(CUES_JS).href);
+  const { sourceHashes } = await cueSource();
+
+  assert.ok(manifest.source, 'manifest.source is missing — re-bake (this is a v2 manifest field)');
+  assert.equal(manifest.source.file, 'public/display/audio/cues.js');
+
+  const now = sourceHashes(cueSrc(), DEFAULT_PICKS, Object.keys(manifest.cues));
+  assert.equal(now.shared, manifest.source.sharedSha256,
+    'the shared DSP in cues.js (jitter, the noise buffer, tone/noise/pluck/knock/pop/tremTone, '
+    + 'playSample, DEFAULT_PICKS) changed since the bake — every WAV in the palette is stale. '
+    + 'Re-run `npm run bake:cues`.');
+  for (const [id, cue] of Object.entries(manifest.cues)) {
+    assert.equal(now.variants[id], cue.sourceSha256,
+      `${id}: its picked variant '${cue.variant}' changed in cues.js since the bake — the committed `
+      + `sample is a sound the game no longer makes. Re-run \`npm run bake:cues\`.`);
+  }
+});
+
+// The sustained voices ship as unit-gain TIMBRES: the baker divides the voice's
+// analytic gain out of the PCM and the manifest tells the player to re-apply it.
+// That is the one number whose drift is invisible to every other check here —
+// the PCM stays self-consistent, the metrics still reproduce, and every stop is
+// simply the wrong loudness. So re-read it from cues.js, and compare NUMERICALLY
+// rather than textually: `0.0001 + l * 0.8` and `0.0001 + 0.8 * l` are the same
+// contract and a string compare would fight the source's formatting.
+test('each sustained voice re-applies exactly the gain the bake divided out', async () => {
+  const { DEFAULT_PICKS } = await import(pathToFileURL(CUES_JS).href);
+  const { variantBlock, voiceSet, evalLevelExpr, LEVEL_PROBES } = await cueSource();
+  const src = cueSrc();
+  const round1 = (x) => Math.round(x * 10) / 10;
+
+  let seen = 0;
+  for (const [id, cue] of Object.entries(manifest.cues)) {
+    if (cue.kind !== 'sustained') continue;
+    seen++;
+    const set = voiceSet(variantBlock(src, id, DEFAULT_PICKS[id]), id);
+
+    for (const l of LEVEL_PROBES) {
+      assert.ok(Math.abs(evalLevelExpr(cue.playback.gainFormula, l) - evalLevelExpr(set.gainExpr, l)) < 1e-12,
+        `${id}: the manifest tells a player to apply '${cue.playback.gainFormula}' but cues.js applies `
+        + `'${set.gainExpr}' — at level ${l} every committed stop is the wrong loudness by that ratio`);
+    }
+    assert.equal(cue.playback.smoothTauSec, set.gainTau,
+      `${id}: gain smoothing is ${set.gainTau}s in cues.js, ${cue.playback.smoothTauSec}s in the manifest`);
+
+    // …and the stops themselves: each level stop claims a filter setting, and
+    // that claim is what tells a player which two stops to crossfade. It has to
+    // be the sweep cues.js schedules, sampled at that stop's level.
+    for (const f of set.freqs) {
+      const describedBy = Object.keys(cue.stops[0]).filter((k) => typeof cue.stops[0][k] === 'number'
+        && cue.stops.every((s) => s[k] === round1(evalLevelExpr(f.expr, s.level))));
+      assert.ok(describedBy.length,
+        `${id}: cues.js sweeps ${f.node}.frequency to '${f.expr}', and no stop parameter tracks it — `
+        + `the stops describe a filter the voice does not have`);
+    }
+  }
+  assert.ok(seen >= 4, `expected every sustained voice, saw ${seen}`);
 });

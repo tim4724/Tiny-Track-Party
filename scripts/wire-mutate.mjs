@@ -29,6 +29,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CPP_MUTATIONS as MUTATIONS } from './wire-mutations.mjs';
+
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EMSDK_DIR = process.env.EMSDK_DIR || process.env.EMSDK || path.join(process.env.HOME, 'emsdk');
 const BUILD = path.join(ROOT, 'native/build/wire-mutation');
@@ -39,166 +41,11 @@ const args = process.argv.slice(2);
 const only = (args.find((a) => a.startsWith('--only=')) || '').slice('--only='.length);
 const listOnly = args.includes('--list');
 
-// ---------------------------------------------------------------------------
-// The mutations. `expect` names the test whose title must appear as a FAILURE.
-// One per class the brief calls out: a renamed field, a reformatted number, an
-// optional flipped to null, a reordered array — plus one that silently
-// misroutes, because that is the failure mode a shell port actually produces.
-//
-// The ROSTER block below covers the same classes on the object the phone actually
-// lives off: every field of LOBBY_UPDATE that C++ contributes (RoomFlow's player
-// serialization and its state names) plus the escaper that has to keep that
-// object parseable. They were all silent until tests/wire-compat.test.js stopped
-// deep-equalling a literal it had just written and started driving
-// DisplayNet._publishLobby.
-//
-// The JS half of the same boundary — display/Net.js (which AUTHORS that object),
-// shared/names.js and the relay model's own enforcement — needs no rebuild, so it
-// lives in the sibling scripts/wire-mutate-js.mjs and runs in seconds.
-// ---------------------------------------------------------------------------
-const MUTATIONS = [
-  {
-    name: 'framing/renamed-field',
-    kind: 'change a field name in the C++ encoder',
-    file: 'native/libttp-party/ttp/relay_framing.cc',
-    find: '  m.set("to", to);',
-    replace: '  m.set("peer", to);',
-    expect: 'every C++ outbound encoder produces bytes the relay accepts',
-  },
-  {
-    name: 'serializer/number-formatting',
-    kind: "change a number's formatting",
-    file: 'native/libttp-json/ttp/jsonnum.cc',
-    find: 'EcmaScriptConverter().ToShortest(v, &sb);',
-    replace: 'EcmaScriptConverter().ToPrecision(v, 17, &sb);',
-    expect: 'numbers cross the boundary in shortest form, both directions',
-  },
-  {
-    name: 'fastlane/ack-t-null',
-    kind: 'flip an optional to null',
-    file: 'native/libttp-party/ttp/fastlane.cc',
-    find: '  ack.set("t", t ? *t : Value());',
-    replace: '  ack.set("t", t ? *t : Value::Null());',
-    expect: 'the ack DROPS `t` when the data packet had none',
-  },
-  {
-    name: 'fastlane/ring-order-reversed',
-    kind: 'reorder an array',
-    file: 'native/libttp-party/ttp/fastlane.cc',
-    find: '  for (const RingEntry& e : ring_) h.push(e.ev);',
-    replace: '  for (auto it = ring_.rbegin(); it != ring_.rend(); ++it) h.push(it->ev);',
-    // Found the suite's one blind spot on the first run: the display is the
-    // RECEIVING side, so nothing exercised the C++ Link as a SENDER and reversing
-    // this turned no test red. tests/wire-fastlane.test.js now decodes a
-    // C++-authored packet with the real JS receiver, which is what bites here.
-    expect: 'a C++-SENT packet decodes in the real JS receiver',
-  },
-  {
-    name: 'framing/misrouted-from',
-    kind: 'read the wrong key on the inbound path',
-    file: 'native/libttp-party/ttp/relay_framing.cc',
-    find: '    if (const Value* f = field(frame, "from")) in.from = *f;',
-    replace: '    if (const Value* f = field(frame, "index")) in.from = *f;',
-    expect: 'the kit and C++ classify every prod relay frame identically',
-  },
-
-  // ---- the roster the phone reads (LOBBY_UPDATE) ---------------------------
-  {
-    name: 'roomflow/peerindex-stringified',
-    kind: 'retype a roster field the phone matches with ===',
-    file: 'native/libttp-party/ttp/room_flow.cc',
-    find: '  o.set("peerIndex", peerIndex.toValue());',
-    replace: '  o.set("peerIndex", Value::Str(peerIndex.key()));',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    name: 'roomflow/connected-bool-to-num',
-    kind: 'retype a boolean to 0/1',
-    file: 'native/libttp-party/ttp/room_flow.cc',
-    find: '  o.set("connected", Value::Bool(connected));',
-    replace: '  o.set("connected", Value::Num(connected ? 1 : 0));',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    name: 'roomflow/roster-fields-dropped',
-    kind: 'drop the opaque game fields (name/colorIndex/carIndex/ready)',
-    file: 'native/libttp-party/ttp/room_flow.cc',
-    find: '  for (const auto& kv : fields) o.set(kv.first, kv.second);',
-    replace: '  for (const auto& kv : fields) { (void)kv; }',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    name: 'roomflow/roster-order-reversed',
-    kind: 'reorder the roster',
-    file: 'native/libttp-party/ttp/room_flow.cc',
-    find: `Value RoomFlow::listValue() const {
-  std::vector<const Player*> arr;
-  for (const auto& p : players_) arr.push_back(&p);
-  std::stable_sort(arr.begin(), arr.end(),
-                   [](const Player* a, const Player* b) { return a->joinedAt < b->joinedAt; });`,
-    replace: `Value RoomFlow::listValue() const {
-  std::vector<const Player*> arr;
-  for (const auto& p : players_) arr.push_back(&p);
-  std::stable_sort(arr.begin(), arr.end(),
-                   [](const Player* a, const Player* b) { return a->joinedAt > b->joinedAt; });`,
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    // The snapshot is COMPOSED in C++ now (ttp::session::lobby_snapshot), so the
-    // object the phone parses is authored on the far side of the boundary. The
-    // roster row is the part the phone matches ITSELF against — it reads
-    // `inRace` by name to decide whether to drop into the race or wait for the
-    // next one — and nothing but this suite has both parsers in one process.
-    name: 'session/roster-row-loses-inrace',
-    kind: 'drop a field the phone routes itself on',
-    file: 'native/libttp-party/ttp/session.cc',
-    find: '    row.set("inRace", Value::Bool(truthy(flag)));',
-    replace: '    (void) flag;',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    // The chooser payload the dumb controller renders from. `cars` rides every
-    // snapshot on purpose (the late-joiner picker needs it mid-race); dropping
-    // it leaves a phone that joined during a race with nothing to pick from.
-    name: 'session/chooser-cars-go-lobby-only',
-    file: 'native/libttp-party/ttp/session.cc',
-    kind: 'gate an always-present chooser key on the lobby',
-    find: '  copyKey(out, chooser, "cars");',
-    replace: '  if (lobby) copyKey(out, chooser, "cars");',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    name: 'roomflow/state-renamed',
-    kind: 'rename a phase string the phone compares against protocol.js',
-    file: 'native/libttp-party/ttp/room_flow.cc',
-    find: '    case State::RESULTS: return "results";',
-    replace: '    case State::RESULTS: return "result";',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    name: 'serializer/tab-unescaped',
-    kind: 'emit a raw control byte instead of an escape',
-    file: 'native/libttp-json/ttp/canonical.cc',
-    find: "      case '\\t': o += \"\\\\t\"; break;",
-    replace: "      case '\\t': o += '\\t'; break;",
-    // Invalid JSON on the wire: prod answers "Invalid JSON" and the roster stops
-    // updating for the whole room. Only reachable through a NAME, which is the one
-    // free-text field on the wire.
-    expect: 'a control character in a name stays ESCAPED all the way round',
-  },
-  {
-    name: 'fastlane/ack-prune-off-by-one',
-    kind: 'move a boundary in the sender-side ring prune',
-    file: 'native/libttp-party/ttp/fastlane.cc',
-    find: '    while (keepLen > 0 && ring_[keepLen - 1].es <= pa->num) keepLen--;',
-    replace: '    while (keepLen > 0 && ring_[keepLen - 1].es <  pa->num) keepLen--;',
-    // The other half of "nothing in the browser runs the C++ Link as a SENDER":
-    // the ring-order fix covered sendDataPacket, handleAck was still uncovered, so
-    // a fully-acked event resent forever at 20 Hz with the suite green.
-    expect: 'a C++ SENDER stops resending what the ack covered',
-  },
-];
-
+// The mutations live in scripts/wire-mutations.mjs — shared with the JS harness
+// and read by tests/wire-mutation-anchors.test.js, which fails on every `npm test`
+// when an anchor or an expected test title stops existing. That check is not
+// optional bookkeeping: these harnesses run on demand, so a rotted anchor here is
+// a gate that silently stopped being run at all.
 if (listOnly) {
   for (const m of MUTATIONS) console.log(`${m.name.padEnd(34)} ${m.kind}  ->  ${m.expect}`);
   process.exit(0);

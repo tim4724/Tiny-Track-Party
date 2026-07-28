@@ -1,11 +1,18 @@
 {
-  "version": 1,
+  "version": 2,
   "generatedBy": "scripts/bake-cues.mjs",
   "renderer": "chromium 148.0.7778.96 / OfflineAudioContext",
   "sampleRate": 48000,
   "bitDepth": 16,
   "encoding": "pcm_s16le/wav",
   "noiseSeed": 1414811697,
+  "source": {
+    "file": "public/display/audio/cues.js",
+    "sharedSha256": "c928aefcdf2830993d7ecf2106b9e532dd9da046ee511d37dbd07793b446cf51",
+    "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
+    "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
+    "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
+  },
   "trimFloor": 0.000031,
   "trimFloorDbfs": -90.308734,
   "loopSeconds": 1,
@@ -73,7 +80,8 @@
           ]
         }
       },
-      "variant": "plop"
+      "variant": "plop",
+      "sourceSha256": "5ec2a17bd6390576b7b1ad925ec97e39cd3546a2bca01d8c024f38ba308ef2db"
     },
     "banana_slip": {
       "kind": "one-shot",
@@ -129,14 +137,15 @@
           ]
         }
       },
-      "variant": "dizzy"
+      "variant": "dizzy",
+      "sourceSha256": "433f5475b561c66b1f1cba1dc7a9a130efa30348c9bc7dfce029c7da79b40ebf"
     },
     "boost": {
       "kind": "sustained",
       "loop": true,
       "variant": "smooth",
       "playback": {
-        "gainFormula": "0.10 * l",
+        "gainFormula": "0.1 * l",
         "smoothTauSec": 0.06,
         "bakeHeadroom": 1,
         "jitter": null,
@@ -216,7 +225,8 @@
           "Q": 1
         }
       ],
-      "note": "brightness IS the surge, so the filter needs stops; gain does not (it is exactly linear and is divided out)."
+      "note": "brightness IS the surge, so the filter needs stops; gain does not (it is exactly linear and is divided out).",
+      "sourceSha256": "dd4bd3ac734b3338c8e42ddca51c4c1b68e0fe4f18f94d218fead4b704c3a728"
     },
     "brake": {
       "kind": "sustained",
@@ -253,7 +263,8 @@
           "levelInvariant": true
         }
       ],
-      "note": "ONE file. Nothing but the output gain moves with level — the 950 Hz Q3 bandpass and the 11 Hz gate LFO are static — so a single unit-gain loop plus 0.14*l (50 ms smoothing) is exact, not an approximation."
+      "note": "ONE file. Nothing but the output gain moves with level — the 950 Hz Q3 bandpass and the 11 Hz gate LFO are static — so a single unit-gain loop plus the (divided-out) gain is exact, not an approximation.",
+      "sourceSha256": "2c6cafa0e015322227816f16dfde260acdcbb015be109bb70f540e02f3b23b07"
     },
     "corner": {
       "kind": "sustained",
@@ -286,6 +297,22 @@
           "lfoDepthHz": 70
         },
         {
+          "level": 0.25,
+          "file": "corner-l025.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.299692,
+          "rms": 0.070823,
+          "sha256": "42100ddaead5e35bacc7c774c798702d09f974421c51d2742c39244df359e059",
+          "bandpassHz": 1287.5,
+          "Q": 5,
+          "lfoHz": 6,
+          "lfoDepthHz": 70
+        },
+        {
           "level": 0.5,
           "file": "corner-l050.wav",
           "channels": 1,
@@ -297,6 +324,22 @@
           "rms": 0.074085,
           "sha256": "35d7d78e00c46667b00bd4ce930318539c80f5c32a8da000c5057373828826fe",
           "bandpassHz": 1375,
+          "Q": 5,
+          "lfoHz": 6,
+          "lfoDepthHz": 70
+        },
+        {
+          "level": 0.75,
+          "file": "corner-l075.wav",
+          "channels": 1,
+          "sampleRate": 48000,
+          "frames": 48000,
+          "durationSec": 1,
+          "body60Sec": 1,
+          "peak": 0.299234,
+          "rms": 0.077013,
+          "sha256": "6f5f4063a723041cc1d37fa7a3f93f39a9a6c86bc3f7ca04935b669bc5c04d89",
+          "bandpassHz": 1462.5,
           "Q": 5,
           "lfoHz": 6,
           "lfoDepthHz": 70
@@ -318,7 +361,8 @@
           "lfoDepthHz": 70
         }
       ],
-      "note": "level is steer² × speed gate, so it is heavily biased low; a spinning car is forced silent by the caller."
+      "note": "level is steer² × speed gate, so it is heavily biased low; a spinning car is forced silent by the caller.",
+      "sourceSha256": "09a9a1129ddc77a3d6e12dbac4cc5ad10510781d004cf28d3de589c354214fb6"
     },
     "countdown": {
       "kind": "one-shot",
@@ -391,7 +435,8 @@
           ]
         }
       },
-      "variant": "marimba"
+      "variant": "marimba",
+      "sourceSha256": "966d84d6f441a23dd99ae13e8cdc3185242e9559a263ca1645e235581c566d6f"
     },
     "engine_putt": {
       "kind": "passthrough",
@@ -404,7 +449,8 @@
         "jitter": null,
         "liveDsp": "lowpass, 2nd order, Q 0.6, cutoff (900 + 5200*l) * lpMul, tau 0.10 s; playbackRate (0.9 + 0.75*l) * rateMul, tau 0.12 s; gain (0.007 + 0.06*l) * gainMul, tau 0.08 s. monster mod = { rateMul 0.6, gainMul 1.45, lpMul 0.82 }."
       },
-      "note": "ship the .ogg as-is. The live LOWPASS stays live and is NOT baked to stops: playbackRate is the RPM here and shifts the filtered spectrum with it, so a stop baked at one cutoff would be wrong at every rate but one. One biquad per voice is the cheaper and more faithful call."
+      "note": "ship the .ogg as-is. The live LOWPASS stays live and is NOT baked to stops: playbackRate is the RPM here and shifts the filtered spectrum with it, so a stop baked at one cutoff would be wrong at every rate but one. One biquad per voice is the cheaper and more faithful call.",
+      "sourceSha256": "3bdc588cffc212418345325d1266a8f7bce8519f02cb995b3a14fbb8260e4729"
     },
     "join": {
       "kind": "one-shot",
@@ -451,7 +497,8 @@
           ]
         }
       },
-      "variant": "risingtwo"
+      "variant": "risingtwo",
+      "sourceSha256": "e4a8bbf50945807ddc7a7a5896286a927e15a0dddd1f75c910f94c5df0952e29"
     },
     "lap": {
       "kind": "one-shot",
@@ -465,7 +512,7 @@
           "body60Sec": 0.375208,
           "peak": 0.327433,
           "rms": 0.052709,
-          "sha256": "7fb62478dfe2b16b809c8e5ea7aee78f192bd673c5c7bc225424746a42ad7c6e",
+          "sha256": "8881658c5a47abb3a12406c994d03dc8779e3ecc44ab7e7e6da1054546b22fbc",
           "jitterDurationDriftMs": [
             -13.892413,
             14.299491
@@ -499,7 +546,8 @@
           ]
         }
       },
-      "variant": "plink2"
+      "variant": "plink2",
+      "sourceSha256": "76414ea5f0711b09d81e917140b53d71b624927995da544e5683c72fb8ae4971"
     },
     "monster_deflate": {
       "kind": "one-shot",
@@ -549,7 +597,8 @@
           ]
         }
       },
-      "variant": "hiss"
+      "variant": "hiss",
+      "sourceSha256": "0698f804278018bf826218c9ccc977b0a463312ad3c2745b5c85be01cfc49a8f"
     },
     "monster_inflate": {
       "kind": "one-shot",
@@ -591,7 +640,8 @@
           ]
         }
       },
-      "variant": "turbo"
+      "variant": "turbo",
+      "sourceSha256": "e7250a7646dd700bfec389b45ef04e4cd0d9c76eae02f359f5dd5c41318393da"
     },
     "pickup": {
       "kind": "one-shot",
@@ -633,14 +683,15 @@
           ]
         }
       },
-      "variant": "bubble"
+      "variant": "bubble",
+      "sourceSha256": "04f7b7b83cbadd94ac8585ad784fd7e76dce189abf1a2328074d1845d640fb31"
     },
     "rocket_fire": {
       "kind": "sustained",
       "loop": true,
       "variant": "jet",
       "playback": {
-        "gainFormula": "0.0001 + 0.8 * l",
+        "gainFormula": "0.0001 + l * 0.8",
         "smoothTauSec": 0.05,
         "bakeHeadroom": 1,
         "jitter": null,
@@ -730,7 +781,8 @@
           "lowpassQ": 0.4
         }
       ],
-      "note": "no LFO, so crossfading stops is unconstrained by phase."
+      "note": "no LFO, so crossfading stops is unconstrained by phase.",
+      "sourceSha256": "8bfa7884a015f4b0e5780b03e1a3e6e18dc8f5d6caeefe886fc9f41952ee7056"
     },
     "rocket_hit": {
       "kind": "one-shot",
@@ -752,7 +804,8 @@
         "gain": 1,
         "jitter": null
       },
-      "variant": "punch"
+      "variant": "punch",
+      "sourceSha256": "5637fa7a77027ac534d7ab00ab6cbe84d192c39e8218f9a39d93427517980fb9"
     },
     "roulette": {
       "kind": "one-shot",
@@ -802,7 +855,8 @@
           ]
         }
       },
-      "variant": "ticktock"
+      "variant": "ticktock",
+      "sourceSha256": "b5a0518c7ed3528908c9fd769bb8378c67d554c5d602757053f51bb564ea8e9f"
     },
     "screech": {
       "kind": "one-shot",
@@ -842,7 +896,8 @@
           ]
         }
       },
-      "variant": "rumble"
+      "variant": "rumble",
+      "sourceSha256": "5595c526d918aca6150e8840c65ebafed2ca4bb0faf9b4179f26af3142681a79"
     }
   }
 }

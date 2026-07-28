@@ -1,4 +1,4 @@
-// frame_check — buildFrame, atRest and parseIds, driven directly.
+// frame_check — buildFrame, buildHud, atRest and parseIds, driven directly.
 //
 // WHY IT EXISTS. runtime_check pins the cameras, the framing/fog solve and the
 // split-screen grid, but it calls those three primitives itself: it never runs
@@ -7,6 +7,15 @@
 // which bananas are live — was the largest thing lifted out of the
 // Filament-gated shim, and moving it into libttp-runtime bought it COMPILE
 // coverage on all four legs and nothing more. This is the gate that executes it.
+//
+// ttp::rt::buildHud is here for exactly the same reason. hud_check replays the
+// ui-corpus through `hudSlot`, which settles the per-car RULE and nothing else:
+// the corpus carries snapshot-level values, not a live Game, so the block
+// ASSEMBLY around it — roster-slot mapping, zeroing the slots no car claims, the
+// header, the reused scratch — had compile-only coverage too. It needs a Game
+// with a shuffled roster and a car-less seat, which is the fixture this file
+// already stands up. It stays OUT of hud_check because these are behavioural
+// assertions (see below), and that file is class-1 JS-recorded evidence.
 //
 // WHAT THIS IS. A BEHAVIOURAL gate, like hazard_check — not a corpus and not
 // conformance evidence. SceneRenderer's frame assembly was deleted with the JS
@@ -34,6 +43,7 @@
 #include "ttp/frame_builder.h"
 #include "ttp/framing.h"
 #include "ttp/game.h"
+#include "ttp/hud.h"
 #include "ttp/race_track.h"
 #include "ttp/util.h"
 #include "ttp/vecmath.h"
@@ -140,6 +150,13 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
   checkF(o.monster, c.monsterT > 0 ? 1.0f : 0.0f, what + ".monster");
   checkF(o.spin, (float)c.spin, what + ".spin");
   checkF(o.scrub, c.onWall ? 1.0f : 0.0f, what + ".scrub");
+}
+
+void checkEmptyHudSlot(const TtpHudSlot& s, const std::string& what) {
+  TtpHudSlot zero;
+  std::memset(&zero, 0, sizeof zero);
+  check(std::memcmp(&s, &zero, sizeof zero) == 0,
+        what + " — a roster slot no live car claims is zeroed, not stale");
 }
 
 void checkEmptySlot(const TtpCarInput& o, const std::string& what) {
@@ -772,6 +789,105 @@ void testCellHud(const GameTrack& track) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 10. The HUD block (ttp/hud.h) — the ASSEMBLY around hudSlot.
+//
+//     What the per-car RULE answers is hud_check's, replayed against the
+//     JS-recorded ui-corpus; nothing here re-litigates it. What is left is
+//     everything the corpus cannot reach because it carries values instead of a
+//     race: which car lands in which slot, what a slot no car claims contains,
+//     the header a shell strides the array with, and the scratch the block is
+//     assembled into being REUSED across rosters of different lengths.
+// ---------------------------------------------------------------------------
+void checkHudSlot(const TtpHudSlot& got, const Game& g, const Car& c, const std::string& what) {
+  const TtpHudSlot want =
+      rt::hudSlot((int32_t) c.rank, (int32_t) g.displayLap(c), (int32_t) g.totalLaps(),
+                  c.item, c.finished, !c.finishTimeNull, c.finishTime);
+  checks++;
+  if (std::memcmp(&got, &want, sizeof want) != 0) {
+    failures++;
+    std::fprintf(stderr,
+                 "FAIL %s: place %d/%d lap %d/%d laps %d/%d item %d/%d flags %u/%u t %g/%g\n",
+                 what.c_str(), got.place, want.place, got.lap, want.lap, got.totalLaps,
+                 want.totalLaps, got.item, want.item, got.flags, want.flags, got.finishTime,
+                 want.finishTime);
+  }
+}
+
+void testHud(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  Car& a = *game.cars()[0];
+  Car& b = *game.cars()[1];
+  Car& c = *game.cars()[2];
+  // Distinct on every field a slot carries, so a slot reading the wrong car
+  // cannot look right by accident.
+  a.rank = 3; a.lap = 1.5; a.item = "banana";
+  b.rank = 1; b.lap = 3.0; b.item = "rocket";
+  b.finished = true; b.finishTimeNull = false; b.finishTime = 42.5;
+  c.rank = 2; c.lap = 2.25; c.item = "";
+  check(a.rank != c.rank, "premise: the cars really do disagree about their places");
+
+  DisplayState d = freshState();
+  // Deliberately NOT insertion order, and with a seat whose car is absent —
+  // the same fixture the frame builder is driven with above.
+  d.roster = {P2, P0, GHOST, P1};
+
+  const TtpHudBlock* h = rt::buildHud(d, &game);
+  const TtpHudSlot* s = ttp_hud_slots(h);
+
+  checkU(h->version, TTP_HUD_BLOCK_VERSION, "header version");
+  checkU(h->slotCount, 4, "slotCount is the ROSTER size, not the field size");
+  checkU(h->stride, (uint32_t) sizeof(TtpHudSlot),
+         "the header carries the stride, so a shell can walk the array without this struct");
+  checkU(h->flags, 0, "header flags are reserved and zero");
+
+  checkHudSlot(s[0], game, c, "slot 0 (cpu-bolt)");
+  checkHudSlot(s[1], game, a, "slot 1 (0)");
+  checkEmptyHudSlot(s[2], "slot 2 (no-such-car)");
+  checkHudSlot(s[3], game, b, "slot 3 (1)");
+  check(s[0].place == c.rank && s[1].place == a.rank,
+        "slots map by ROSTER position, not the sim's insertion order");
+  checkU(s[0].flags & TTP_HUD_SLOT_LIVE, TTP_HUD_SLOT_LIVE, "a claimed slot is LIVE");
+  checkU(s[2].flags & TTP_HUD_SLOT_LIVE, 0, "a car-less seat comes back without LIVE");
+  // Not the gate itself (that is hud_check's, against the corpus) — only that
+  // the three facts behind it reach the block at all.
+  check(s[1].item == TTP_ITEM_BANANA, "a live slot carries its held item's code");
+  check(s[3].item == TTP_ITEM_NONE, "a finished car's slot reads empty");
+  checkU(s[3].flags, TTP_HUD_SLOT_LIVE | TTP_HUD_SLOT_FINISHED | TTP_HUD_SLOT_TIMED,
+         "…with the finish flags, and a time that is a number");
+
+  // No bound session: a slot per seat, none of them live. This is the display
+  // between scenes, and it must not answer with the last race's places.
+  {
+    const TtpHudBlock* n = rt::buildHud(d, nullptr);
+    checkU(n->slotCount, 4, "an unbound display still emits a slot per roster entry");
+    for (uint32_t i = 0; i < n->slotCount; i++)
+      checkEmptyHudSlot(ttp_hud_slots(n)[i], "unbound slot " + std::to_string(i));
+  }
+
+  // The scratch is grown and never shrunk, so a roster that gets longer and
+  // then shorter is where a stale slot would survive: the short block must
+  // report the short count and re-resolve every slot in it, including the ones
+  // a live car held one build ago.
+  {
+    DisplayState m = freshState();
+    m.roster = {P0, P1, P2, GHOST, GHOST, GHOST};
+    const TtpHudBlock* big = rt::buildHud(m, &game);
+    checkU(big->slotCount, 6, "the long roster");
+    const size_t grown = m.hudBlock.size();
+    check(grown >= sizeof(TtpHudBlock) + 6 * sizeof(TtpHudSlot), "premise: the scratch grew to fit");
+    checkU(ttp_hud_slots(big)[0].flags & TTP_HUD_SLOT_LIVE, TTP_HUD_SLOT_LIVE,
+           "premise: slot 0 of the long roster is live");
+
+    m.roster = {GHOST, P1};
+    const TtpHudBlock* small = rt::buildHud(m, &game);
+    checkU(small->slotCount, 2, "a shorter roster reports the SHORT count");
+    check(m.hudBlock.size() == grown, "…out of the same scratch, which is not shrunk");
+    checkEmptyHudSlot(ttp_hud_slots(small)[0], "shrunk slot 0");
+    checkHudSlot(ttp_hud_slots(small)[1], game, b, "shrunk slot 1");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -789,6 +905,7 @@ int main() {
   testOverviewViews(bt.game);
   testRaceViews(bt.game);
   testCellHud(bt.game);
+  testHud(bt.game);
   testProps(bt);
 
   std::printf("frame builder check: %d assertions, %d failures\n", checks, failures);
