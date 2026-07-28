@@ -499,13 +499,30 @@ scene.onFrame = (dt) => {
   // beats (this loop is the session's only clock); physics start at GO.
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
+  // One ~6 Hz tick drives everything below that isn't the frame itself: the
+  // finish check here, and the HUD + ITEM push further down. Hoisted so the
+  // ordering is unchanged (this check still runs before the audio drain) while
+  // the cost is paid six times a second instead of sixty.
+  const now = performance.now();
+  const slowTick = now - lastPlayerState > 160;
   // Every human across the line but CPU cars still circulating? Don't make the
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
-  // ONE crossing per frame for both answers: `allDone` is read every frame and
-  // `forfeit` only on the frame it flips, so asking for them separately would
-  // double the traffic to save nothing.
-  const flow = session.racing ? raceFlow() : null;
+  // ONE crossing for both answers: `forfeit` is only read on the tick `allDone`
+  // flips, so asking for them separately would double the traffic to save
+  // nothing.
+  //
+  // NOT PER FRAME, and it never needed to be. This question is a pure function of
+  // who holds a car, who is connected and who has finished — three sets that only
+  // move on discrete events — and asking it costs ~11 us against a ~15 us sim
+  // tick: a car-ids readback, then two string-marshalled ABI calls PER CAR, then
+  // a four-array JSON round trip. The moment it can actually flip is already
+  // covered synchronously by onRaceEvent's own humansAllDone() on the 'finish'
+  // beat, so what is left here is the SAFETY NET for the paths that carry no
+  // finish event (a drop, a forfeit, a rekey). A net does not need 60 Hz; the
+  // worst case is ~160 ms before a fast-forward that then resolves the whole
+  // remaining race instantly.
+  const flow = (slowTick && session.racing) ? raceFlow() : null;
   if (flow && flow.allDone) {
     // A dropped racer's ghost can never cross the line — forfeit any such car now
     // that every connected human is home, so the burst (and the race) ends
@@ -533,27 +550,38 @@ scene.onFrame = (dt) => {
   // plus whatever the race events fired inside the update above decided). The
   // HUD is the ~6 Hz poll below; the last per-frame getSnapshot went with this
   // call.
-  sfx(audioDecide.frame(performance.now()));
+  sfx(audioDecide.frame(now));
   if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
-  // throttle HUD + PLAYER_STATE to ~6 Hz
-  const now = performance.now();
-  if (now - lastPlayerState > 160) {
+  // The other half of the ~6 Hz tick hoisted above. `lastPlayerState` is stamped
+  // HERE rather than at the top, so a countdown frame (which returns above) does
+  // not consume the tick the first racing frame wants.
+  if (slowTick) {
     lastPlayerState = now;
     // The HUD values (ordinal, lap counter, held item, finish card) are the
     // ENGINE's, read back packed (ttp_hud.h) rather than picked out of a
     // serialized race state; painting them is still the Stage's. uiModel.hudRows
     // is off this path — it survives as the oracle the C++ port is pinned to.
-    for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
+    const rows = scene.hudRows();
+    for (const row of rows) scene.setCarHud(row.id, row);
     // Held item lights the phone's USE button (all other race state — place/lap,
     // standings — lives on the TV or the room snapshot). It's per-owner, so it
     // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes
     // from onPlayerWelcomed).
     //
-    // The one readback still on this loop, and it is here rather than on the
-    // HUD block on purpose: this value goes to a PHONE, and the block folds an
-    // item it has no code for to "empty" (render/Display.js itemId) — fine for
-    // a drawn slot, wrong for a USE button. ~6 Hz, never per frame.
-    for (const { id, item } of ui.itemPushes(session.getSnapshot().cars, aiCarIds, _lastItem)) {
+    // OFF THE SAME BLOCK the HUD was just painted from, which is the last thing
+    // on this loop that used to serialize a race. It read ttp_snapshot_json — a
+    // canonical (key-sorted) stringify of every car's pose, forward and up
+    // vectors, plus every box, banana and rocket, ~4 KB parsed back in JS — to
+    // keep three fields per car. Measured, that snapshot was ~59 us against a
+    // ~15 us sim tick, and the rule it fed costs ~3 us; the plan's P7 line
+    // ("the shipping game simply stops calling ttp_snapshot_json") is this.
+    //
+    // The block carries what the rule reads: the id (its roster slot), the
+    // finished flag, and the held item as a CODE. A code this build cannot name
+    // resolves to null and the phone's button stays dark — the same degradation
+    // the drawn slot takes, and reachable only if ITEM_IDS has drifted from the
+    // sim's roll table, which tests/display-abi.test.js exists to prevent.
+    for (const { id, item } of ui.itemPushes(rows, aiCarIds, _lastItem)) {
       _lastItem.set(id, item);
       net.sendTo(id, { type: MSG.ITEM, item });
     }
