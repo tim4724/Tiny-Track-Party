@@ -706,6 +706,15 @@ net.flow.on('rosterchange', refreshAutoPause);
 // still-racing car — engine, render entry and results identity — onto the new
 // slot so that phone drives it and the camera keeps following the same car.
 function rekeyCarPlayer(oldId, newId) {
+  // ORDER NOTE: the session rekey happens HERE, before the series rekey the
+  // 'series-rekey' effect performs — the reverse of the pre-port shell, which
+  // moved the cup points first. Forced by the shape of the layer: it cannot ask
+  // a handle whether the car moved, so the shell answers that first and hands
+  // the boolean in. Safe because the two are independent wasm handles with no
+  // cross-reads (ttp_gp_rekey touches only the series' points table,
+  // ttp_rekey_car only the race session's cars), so nothing observes the order.
+  // Worth knowing anyway: the corpus pins the order of the EFFECTS, never when
+  // a shell-side query runs relative to them.
   const rekeyed = !!(session && session.rekeyCar(oldId, newId));
   perform(flow.rekeyCarPlayer(!!series, rekeyed, oldId, newId).effects);
 }
@@ -790,6 +799,13 @@ function renderReconnect(seats) {
 // `ctx` carries the few things an effect names but the layer cannot hold: the
 // race results in flight (endRace's callback argument) and the launch's field,
 // which `create-session` needs and `set-field` has already delivered.
+//
+// `ctx.results` IS LOAD-BEARING AND UNTYPED. Three ops read it — 'apply-race-points',
+// 'show-results' and the final 'broadcast-standings' — and all three are emitted
+// only by the layer's endRace(), which only main.js's endRace() performs, and it
+// always passes {results}. Nothing enforces that pairing. If one of those ops
+// ever starts being emitted from another entry point, give it its own carrier
+// rather than hoping the context happens to be populated.
 function perform(effects, ctx = {}) {
   for (const e of effects) applyEffect(e, ctx);
 }
