@@ -27,9 +27,10 @@
 // tap handler). HTTPS is required for sensors.
 //
 // Steering can also come from BUTTONS instead of the sensor (setScheme). LEFT and
-// RIGHT are held like a d-pad and feed the same smoothed steer output, so the car
-// reacts identically whichever source is driving it; holding BOTH is the brake
-// (the two cancel to centre, so the pair reads as "stop", not "steer nowhere").
+// RIGHT are held like a d-pad and steer FULL LOCK the instant they are pressed —
+// no ramp, no waiting for the next sample (see BRAKE_LEVEL's neighbouring note and
+// _flush). Holding BOTH is the brake: the two cancel to centre, so the pair reads
+// as "stop", not "steer nowhere".
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -64,16 +65,17 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // an unfiltered stream would chatter packets from a phone lying still.
 export const SMOOTH = 0.5;
 
-// Button steering does NOT go through SMOOTH, and must not: that filter is sized
-// against SENSOR NOISE (it halves the raw DeviceOrientation wobble, which is what
-// lets the send gate's dead-band sit where it does), and a button has none. What
-// a one-pole filter does have is an infinite tail — fed a STEP it reaches 50% in
-// one tick, 90% only after 3.3, and takes just as long to let go again, which on
-// a control that is strictly on or off reads as lag, not as smoothing. A constant
-// rate ARRIVES instead: full lock in 80 ms, released just as fast, and holding
-// longer still steers further, so a tap stays a correction and a hold is a full
-// turn. Steer units per tick.
-const BTN_RATE = 0.5;
+// Button steering has NO ramp at all: press = full lock, that instant. It must not
+// borrow SMOOTH — that filter is sized against SENSOR NOISE (it halves the raw
+// DeviceOrientation wobble, which is what lets the send gate's dead-band sit where
+// it does) and a button has none; what a one-pole filter does have is an infinite
+// tail, 133 ms to reach 90% of a step and as long again to let go, which on a
+// control that is strictly on or off reads as lag rather than as smoothing. A
+// gentler linear ramp was tried too and rejected for the same reason: any ramp at
+// all is felt. So the press edge writes ±1 straight through, and _flush carries it
+// without waiting for the sampler — the whole path from touch to wire is one hop.
+// The trade is deliberate: a tap can no longer be a small correction, because
+// there is no small. Steering is full lock or centre.
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
@@ -234,10 +236,10 @@ export class TiltInput {
   }
 
   _tick() {
-    // Two steer sources, each with the ramp it actually wants. The sensor is a
+    // Two steer sources, each handled the way it deserves. The sensor is a
     // continuous signal carrying noise, so it gets the dead-zone and the one-pole
-    // SMOOTH. The buttons are a clean step, so they get a constant rate instead —
-    // no dead-zone (±1 and 0 are exact) and no exponential tail. See BTN_RATE.
+    // SMOOTH. The buttons are a clean step, so they get NOTHING between the press
+    // and the wire: no dead-zone (±1 and 0 are already exact) and no ramp.
     if (this._tiltOn) {
       let target = this._sensorSteer();
       // dead-zone the centre, then re-expand so full lock still reaches ±1
@@ -252,9 +254,7 @@ export class TiltInput {
       // so full lock and a released centre are values that actually occur.
       if (Math.abs(target - this._steer) < 0.01) this._steer = target;
     } else {
-      const target = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);  // both held = 0, the brake pose
-      const d = target - this._steer;
-      this._steer += Math.abs(d) <= BTN_RATE ? d : Math.sign(d) * BTN_RATE;
+      this._steer = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);  // both held = 0, the brake pose
     }
 
     const s = clamp1(this._steer + this._key);
