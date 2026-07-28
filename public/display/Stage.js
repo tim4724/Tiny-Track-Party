@@ -41,24 +41,41 @@ const ITEM_KEYS = Object.keys(ITEM_ICONS);
 // Split-screen layout. The C++ renderer scores column counts exactly this way
 // (TtpRenderer::bestGridCols) — the HUD and the 3D cells must agree on where a
 // cell IS, so the two implementations of this are pinned to each other.
-// PORTRAIT_COST: a racing cell wants to be WIDER than it is tall — the road runs
-// away toward a horizon, so a tall narrow cell crops the track ahead and to the
-// sides and spends the pixels on sky and bonnet. Distance from square alone put
-// 2 players side by side and 3 in a row on a 16:9 screen; this flips them to
-// stacked rows and a 2x2. It only bites when a landscape layout exists at all.
-const PORTRAIT_COST = 2.0;
+//
+// Landscape is a HARD preference: a racing cell wants to be wider than it is
+// tall (the road runs away toward a horizon, so a tall narrow cell crops the
+// track ahead and to the sides and spends the pixels on sky and bonnet). If any
+// layout gives landscape cells, only those are scored; portrait is reachable
+// only when nothing else is.
+//
+// CELL_MAX_ASPECT: how wide a cell may get before the sides are black bars,
+// pinned to TtpRenderer::CELL_MAX_ASPECT. A cell's camera locks its PIXEL SCALE
+// to the single-player reference (cellFov in ttp_display.cc), so this sets
+// neither car size nor vertical fov — only how much width of world a cell shows,
+// and what that width costs to draw. The HUD has to follow the rect the renderer
+// actually drew, or a two-player race puts its steer bars and place cards out on
+// the bars.
+const CELL_MAX_ASPECT = 21 / 9;
 function bestGrid(n, W, H) {
-  let best = { cols: 1, rows: n, cost: Infinity };
+  let best = { cols: 1, rows: n, cost: Infinity, landscape: false };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
     const cellAspect = (W / cols) / (H / rows);
+    const landscape = cellAspect >= 1;
     // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
-    // + the landscape bias
-    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4
-      + (cellAspect < 1 ? PORTRAIT_COST : 0);
-    if (cost < best.cost) best = { cols, rows, cost };
+    const cost = Math.abs(Math.log(cellAspect)) + (cols * rows - n) * 0.4;
+    if ((landscape && !best.landscape) || (landscape === best.landscape && cost < best.cost)) {
+      best = { cols, rows, cost, landscape };
+    }
   }
-  return best;
+  // The GRID is letterboxed as one piece, so bars only ever land at the screen's
+  // left and right edges — never between two cells. `x0` is where the grid
+  // starts and `cw` is a cell's full drawn width inside it; cells touch.
+  const ch = Math.floor(H / best.rows);
+  const stageW = Math.min(W, Math.floor(ch * CELL_MAX_ASPECT * best.cols));
+  const cw = Math.floor(stageW / best.cols);
+  const x0 = Math.floor((W - cw * best.cols) / 2);
+  return { cols: best.cols, rows: best.rows, cw, ch, x0 };
 }
 
 export class Stage {
@@ -433,8 +450,8 @@ export class Stage {
 
   // Chunky ink rules between split-screen cells (.cell-divider, display.css).
   // Rebuilt only when the grid layout (or the toggle) changes.
-  _syncDividers(cols, rows, cw, ch, W, H) {
-    const sig = this.showDividers === false ? 'off' : `${cols}x${rows}:${cw}x${ch}`;
+  _syncDividers(cols, rows, cw, ch, x0, H) {
+    const sig = this.showDividers === false ? 'off' : `${cols}x${rows}:${cw}x${ch}+${x0}`;
     if (sig === this._divSig) return;
     this._divSig = sig;
     for (const d of this._dividers || []) d.remove();
@@ -447,8 +464,11 @@ export class Stage {
       this.overlay.appendChild(d);
       this._dividers.push(d);
     };
-    for (let c = 1; c < cols; c++) mk(c * cw - 2, 0, 4, H);
-    for (let r = 1; r < rows; r++) mk(0, r * ch - 2, W, 4);
+    // A divider separates two PICTURES, so both rules stay inside the grid: run
+    // a row rule to the canvas edge and it reads as a line drawn on the black
+    // surround. Column rules sit on the seam where two cells meet.
+    for (let c = 1; c < cols; c++) mk(x0 + c * cw - 2, 0, 4, H);
+    for (let r = 1; r < rows; r++) mk(x0, r * ch - 2, cw * cols, 4);
   }
 
   _hideDividers() {
@@ -677,13 +697,14 @@ export class Stage {
     this._renderFrame(dt, ids.length);
 
     // Place this frame's HUD over the cells the renderer just drew.
-    const { cols, rows } = bestGrid(ids.length, W, H);
-    const cw = Math.floor(W / cols), ch = Math.floor(H / rows);
-    this._syncDividers(cols, rows, cw, ch, W, H);
+    const { cols, rows, cw, ch, x0 } = bestGrid(ids.length, W, H);
+    this._syncDividers(cols, rows, cw, ch, x0, H);
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
       const col = i % cols, row = Math.floor(i / cols);
-      const x = col * cw;
+      // Inside the letterboxed grid: `x0` steps over the left bar, so everything
+      // below anchors to picture edges.
+      const x = x0 + col * cw;
       // The corner label is hidden while the reconnect card owns the cell — that
       // card already shows the name, so the label would just duplicate it. (The
       // FINISHED card has no name, so it keeps the label.)

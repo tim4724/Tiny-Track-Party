@@ -94,9 +94,30 @@ public:
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
 
-    // Split-screen column count for n views — the runtime needs it too, to give
-    // each chase camera the aspect of the cell it will land in.
-    uint32_t gridCols(uint32_t n) const { return bestGridCols(n); }
+    // The rect view i actually RENDERS into, in GL viewport terms (bottom-left
+    // origin) — a tile of the split-screen grid, after that grid has been
+    // letterboxed to CELL_MAX_ASPECT as one piece. The runtime asks for it to
+    // size its projection to what is really drawn.
+    struct CellRect { int32_t x, y; uint32_t w, h; };
+    CellRect cellRect(uint32_t n, uint32_t i) const;
+
+    // How wide a racing cell is allowed to get before the sides are bars.
+    //
+    // A cell's camera locks its PIXEL SCALE to the single-player reference
+    // (cellFov in ttp_display.cc), so this does NOT set how big the car is —
+    // that is fixed in every layout by construction, and stays fixed whatever
+    // this is. Nor does it set the vertical fov, which works out to depend only
+    // on the cell's HEIGHT against the screen's. What it sets is how much width
+    // of world a cell shows, and what that width costs to rasterize.
+    //
+    // So the trade here is peripheral view against fill, and 21:9 is a shape
+    // people read as a picture rather than a slot. On a 16:9 screen it gives a
+    // stacked 2-player cell a 1260 px picture with 330 px bars, ~18% off the
+    // scene's GPU cost at 4K.
+    //
+    // Anything at or under 16:9 — every 1, 3 and 4-player cell — never reaches
+    // this and is drawn whole.
+    static constexpr float CELL_MAX_ASPECT = 21.0f / 9.0f;
 
     // What the built track measures, for the runtime's overview cameras and fog
     // bands. The box is over the CENTERLINE points, like SceneRenderer's was.

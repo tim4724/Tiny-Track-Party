@@ -129,6 +129,51 @@ struct ChaseCam {
     }
 };
 
+// A split-screen cell is not a small screen. It is a CROP of one.
+//
+// BASE_FOV is authored VERTICAL, which quietly makes the car's on-screen size a
+// function of the cell's HEIGHT: a cell half as tall draws the car half as big,
+// and a two-player 32:9 strip also opened the lens to 123° and pushed it further
+// away still. The chase camera never moved — CHASE_DIST is a fixed 1.35 world
+// units in every layout — so this is not distance, it is pixels per world unit,
+// and the lever for it is the lens.
+//
+// So lock the pixel scale instead of the angle. Solve each cell's fov so that
+//
+//     renderedWidth / (2·tan(hFov/2))  ==  referenceWidth / (2·tan(hRef/2))
+//
+// and a world unit at the car covers the same number of pixels no matter how the
+// screen is carved up. The car is then the same size on the TV in 1, 2, 3 and 4
+// player games, and every cell is a genuine CROP of the single-player view: same
+// scale, no distortion, just less of the world. What you give up is exactly that
+// — peripheral view — and it is the unavoidable half of the trade, because a
+// quarter-screen cell has half the linear pixels and they can be spent on car
+// size or on world coverage but not both.
+//
+// FRAME_LOCK is how much of the shrink gets paid back: 0 holds the HORIZONTAL
+// fov at the reference (the car still shrinks with the cell, just without the
+// fish-eye), 1 holds the pixel scale outright (car size fixed). It applies to
+// the rendered rect, so the renderer's letterbox is already accounted for.
+//
+// `widthFrac` is the picture's width against a 16:9 view OF THE SAME HEIGHT —
+// the referenceWidth above — not against the screen. That distinction is
+// invisible on a 16:9 display, where they are the same number, and wrong
+// everywhere else: measured against raw screen width, one player on a 32:9
+// monitor would come out zoomed 2x against the identical game on a 16:9 monitor
+// of the same height, because the reference would have stretched with the glass.
+// Height is what the authored vertical fov was authored against, so height is
+// what the scale hangs off.
+//
+// Single player is the fixed point: its cell is the full screen, so the vertical
+// fov comes back exactly as authored on any display shape.
+constexpr float REF_ASPECT = 16.0f / 9.0f;
+constexpr float FRAME_LOCK = 1.0f;
+static float cellFov(float fovV, float aspect, float widthFrac) {
+    const float tanH = std::tan(fovV * (float) M_PI / 360.0f) * REF_ASPECT;
+    return std::atan(tanH * std::pow(widthFrac, FRAME_LOCK) / aspect)
+            * 360.0f / (float) M_PI;
+}
+
 // ---------------------------------------------------------------------------
 // Overview rigs (SceneRenderer's _loop, ported).
 // ---------------------------------------------------------------------------
@@ -458,12 +503,18 @@ int ttp_display_frame(double dtSeconds) {
     const bool raceCams = anyCellCar;
     uint32_t viewCount = raceCams ? (uint32_t) d.cells.size() : 1;
     float aspect = (float) d.width / (float) (d.height ? d.height : 1);
+    // One cell's PICTURE width against a 16:9 view of the same height — the term
+    // that holds the car at a fixed on-screen size (see cellFov). Only the chase
+    // cams read it; the overview sets its fov outright, so the placeholder here
+    // is never the one used.
+    float widthFrac = 1.0f;
     if (raceCams) {
-        // Match the renderer's own viewport split exactly, or the projection
-        // disagrees with the cell it lands in.
-        const uint32_t cols = d.renderer->gridCols(viewCount);
-        const uint32_t rows = (viewCount + cols - 1) / cols;
-        aspect = (float) (d.width / cols) / (float) (d.height / rows);
+        // Match the renderer's own viewport exactly, or the projection
+        // disagrees with the rect it lands in. cellRect is a tile of the
+        // letterboxed grid, so this is the aspect of what is actually drawn.
+        const TtpRenderer::CellRect r = d.renderer->cellRect(viewCount, 0);
+        aspect = (float) r.w / (float) (r.h ? r.h : 1);
+        widthFrac = (float) r.w / (REF_ASPECT * (float) (d.height ? d.height : 1));
     }
 
     const size_t nBananas = eng ? eng->bananas().size() : 0;  // filtered below
@@ -540,7 +591,7 @@ int ttp_display_frame(double dtSeconds) {
             if (c) cam.update(c->pose, c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
             TtpViewInput& v = outViews[i];
             lookAtWorld(v.world, cam.pos, cam.target, c ? v3(c->pose.up) : V3{ 0, 1, 0 });
-            v.fov = cam.fov;
+            v.fov = cellFov(cam.fov, aspect, widthFrac);
             v.aspect = aspect;
             v.nearZ = CAM_NEAR;
             v.farZ = CAM_FAR;

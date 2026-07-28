@@ -1189,29 +1189,71 @@ float TtpRenderer::maxOrbitDist(float radius, float height) const {
 // so the 3D cells and the DOM HUD (which uses the JS answer to place every
 // label, place card and steer bar) disagreed about where a cell is.
 //
-// PORTRAIT_COST is ours, not the JS's. A racing cell wants to be WIDER than it
-// is tall: the road runs away toward a horizon, so the useful information is
-// spread horizontally, and a tall narrow cell crops the very thing the player
-// steers by (the track ahead and to the sides) while spending pixels on sky and
-// bonnet. Distance-from-square alone put two players side by side (0.89:1) and
-// three in a row (0.59:1) on a 16:9 screen; the penalty flips those to stacked
-// rows and a 2×2, both landing at 16:9 cells. It only bites when a landscape
-// layout EXISTS — on an ultrawide, two side-by-side cells are already landscape
-// and stay.
+// Landscape is a HARD preference, not a weighted one. A racing cell wants to be
+// wider than it is tall: the road runs away toward a horizon, so the useful
+// information is spread horizontally, and a tall narrow cell crops the very
+// thing the player steers by (the track ahead and to the sides) while spending
+// pixels on sky and bonnet. Distance-from-square alone put two players side by
+// side (0.89:1) and three in a row (0.59:1) on a 16:9 screen. So: if ANY layout
+// gives landscape cells, only those are considered, and the score picks between
+// them; portrait is reachable only when nothing else is (one player on a phone
+// held upright).
+//
+// This replaces a +2.0 cost term that did the same job by arithmetic. The two
+// agree on every display shape we could construct — |log(aspect)| only exceeds 2
+// past 7.4:1, so the penalty was already decisive — but a rule that says what it
+// means cannot be defeated by a screen nobody tried.
 uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
     if (n == 0) return 1;
-    constexpr float PORTRAIT_COST = 2.0f;
     const float W = (float) mWidth, H = (float) mHeight;
     uint32_t best = 1;
     float bestCost = std::numeric_limits<float>::infinity();
+    bool bestLandscape = false;
     for (uint32_t cols = 1; cols <= n; cols++) {
         const uint32_t rows = (n + cols - 1) / cols;
         const float cellAspect = (W / cols) / (H / rows);
-        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f
-                + (cellAspect < 1.0f ? PORTRAIT_COST : 0.0f);
-        if (cost < bestCost) { bestCost = cost; best = cols; }
+        const bool landscape = cellAspect >= 1.0f;
+        // distance from square + a real penalty per wasted cell (so 4 → 2x2, not 3x2)
+        const float cost = std::fabs(std::log(cellAspect)) + (cols * rows - n) * 0.4f;
+        if ((landscape && !bestLandscape) || (landscape == bestLandscape && cost < bestCost)) {
+            bestCost = cost; best = cols; bestLandscape = landscape;
+        }
     }
     return best;
+}
+
+// Where cell i is drawn: its tile in a GRID that is letterboxed as one piece.
+//
+// A cell wider than CELL_MAX_ASPECT is width the camera declines to use, so it
+// is not drawn — but the bars that leaves belong at the SCREEN's edges, never
+// between two pictures. Letterboxing each cell on its own would put a gutter
+// down the middle of a 2x2 on an ultrawide (two 330px half-bars meeting as one
+// 660px band) while the edges got half as much: the same pixels saved, arranged
+// as a seam through the layout. So cap the width of the whole grid instead and
+// tile it edge to edge inside that, and every bar ends up on the outside.
+//
+// The bars cost nothing to draw: the clear colour is black (setClearOptions in
+// init) and the scene target is cleared whole by the first view of the frame.
+// And they cost nothing to LOSE, either — no pixel the camera would have shown
+// is dropped. Any grid whose cells are already at or under the cap (all of 1, 2,
+// 3 and 4 players on a 16:9 screen but the stacked pair) is untouched.
+//
+// Bottom-left origin, because GL viewports are; row 0 is the TOP row, as the
+// DOM HUD lays it out (Stage.js has the same rules, pinned to these).
+TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
+    const uint32_t cols = bestGridCols(n);
+    const uint32_t rows = (n + cols - 1) / cols;
+    const uint32_t ch = mHeight / rows;
+    uint32_t stageW = mWidth;
+    const uint32_t capped = (uint32_t) ((float) ch * CELL_MAX_ASPECT * (float) cols);
+    if (capped < stageW) stageW = capped;
+    const uint32_t cw = stageW / cols;
+    // Centre what the columns actually cover, so integer division can't drift
+    // the grid off-centre by up to cols-1 pixels.
+    const uint32_t x0 = (mWidth - cw * cols) / 2;
+    const uint32_t col = i % cols, row = i / cols;
+    return { (int32_t) (x0 + col * cw),
+             (int32_t) (mHeight - (row + 1) * ch), cw, ch };
 }
 
 // Repaint the monster truck's CHASSIS (only) to one flat neutral, per instance.
@@ -7558,11 +7600,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         mProfile[kProfCellSetup] = 0; mProfile[kProfCellRender] = 0;
         ensureSceneTarget();
         ensureCells(input.viewCount);
-        const uint32_t cols = bestGridCols(input.viewCount);
-        const uint32_t rows = (input.viewCount + cols - 1) / cols;
-        const uint32_t cw = mWidth / cols, ch = mHeight / rows;
         for (uint32_t i = 0; i < input.viewCount; i++) {
-            const uint32_t col = i % cols, row = i / cols;
+            const CellRect rect = cellRect(input.viewCount, i);
             View* v = mCellViews[i];
             Camera* cam = mCellCameras[i];
             // Every cell into the one scene buffer, each in its own sub-rect.
@@ -7571,8 +7610,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // wiping each other — the same thing three does with one target and
             // per-cell viewport + scissor.
             v->setRenderTarget(mSceneRT);
-            v->setViewport({ (int32_t) (col * cw),
-                    (int32_t) (mHeight - (row + 1) * ch), cw, ch });
+            v->setViewport({ rect.x, rect.y, rect.w, rect.h });
             mat4f world;
             std::memcpy(&world, views[i].world, sizeof(world));
             cam->setModelMatrix(world);
