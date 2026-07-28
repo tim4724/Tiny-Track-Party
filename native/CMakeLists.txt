@@ -469,6 +469,12 @@ add_library(libttp_runtime STATIC
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
   # for the renderer's frame.
   libttp-runtime/ttp/hud.cc
+  # The audio DECISIONS — public/display/audio/decide.js ported. Here rather
+  # than in a library of its own because it is the same thing the two files
+  # above are: a display rule that names no platform API, so every leg compiles
+  # AND executes it. The device half (AudioContext / the baked cue palette) is
+  # per-platform and stays out of this tree entirely.
+  libttp-runtime/ttp/audio.cc
   # The per-cup biome palettes and the rules that resolve one. Data, not
   # rendering: it was authored in the browser (public/shared/themes.js +
   # render/trackPayload.js) until the shells stopped being one.
@@ -546,6 +552,26 @@ target_link_libraries(hud_check PRIVATE libttp_runtime ttp_testsupport ttp_stric
 ttp_emscripten_cli(hud_check)
 add_test(NAME ui_hud
   COMMAND hud_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
+
+# ---- Conformance: the audio decisions ---------------------------------------
+# JS-RECORDED evidence, like the HUD check above: tests/fixtures/audio-corpus.jsonl
+# was recorded off the live public/display/audio/decide.js in P5, so it settles
+# whether the decisions were ported right. No --record mode here on purpose.
+#
+# It takes the TRACES DIRECTORY as well as the corpus, and that is the shape of
+# the fixture rather than a convenience: the 5900 trace frames record only the
+# COMMANDS, so the world they were decided from has to be re-raced here through
+# libttp-sim (every roster entry a human, the recorded inputs fed back) with each
+# frame's events and snapshot hash checked against the trace before anything is
+# compared. The 497 scripted steps carry their own input and need none of that.
+add_executable(audio_check runtimetest/audio_check.cc)
+target_link_libraries(audio_check PRIVATE libttp_runtime ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(audio_check)
+add_test(NAME audio
+  COMMAND audio_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/audio-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces
 )
 
 # ---- Conformance: the biome palettes ----------------------------------------
@@ -630,6 +656,10 @@ if(EMSCRIPTEN)
     # SHELL reads rather than what the renderer draws: a Filament-less leg still
     # has every line of it in the link.
     libttp-runtime/ttp/hud.cc
+    # The audio decisions, for the same reason and with the same trap: this list
+    # is COMPILED, not linked against libttp_runtime, so a source added to the
+    # library alone leaves this module unlinkable and no ctest target notices.
+    libttp-runtime/ttp/audio.cc
     libttp-runtime/ttp/theme.cc)
   if(TARGET ttp_renderer)
     list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)

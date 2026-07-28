@@ -17,6 +17,16 @@
 // layer still exists. Keep this file free of imports; the moment it grows one,
 // the generator and the C++ port both inherit it.
 //
+// THE PORT HAS LANDED, AND THIS FILE IS NOW THE ORACLE. Every rule below is
+// native/libttp-runtime/ttp/audio.{h,cc}, and tests/fixtures/audio-corpus.jsonl
+// was recorded off THIS module while it was the only implementation:
+// native/runtimetest/audio_check.cc replays all 5900 trace frames and 497
+// scripted steps of it through the C++ on all four legs. So this stays for the
+// same reason uiModel.js's `hudRows` and TrackBuilder.js's twin do — it is the
+// only thing that can settle whether the C++ is right — and it must keep
+// answering exactly as recorded, not track whatever the port does next. A
+// disagreement between the two is a bug in the C++, never in the corpus.
+//
 // THE COMMAND VOCABULARY. Plain data, one object per command, emitted in the
 // order the shell must perform them:
 //

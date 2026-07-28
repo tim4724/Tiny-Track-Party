@@ -239,6 +239,38 @@ const MUTATIONS = [
     expect: 'frame_builder',
   },
 
+  // ---- the audio decisions. Three halves of one gate: the distance curve every
+  // world cue is scaled by, the voice start/stop EDGE (which the traces exercise
+  // 5900 times and no scripted case could), and the music trim — the one number
+  // in this layer that a port is tempted to DERIVE rather than copy. Deriving it
+  // with the vendored fdlibm pow is the exact mistake the corpus was re-recorded
+  // to make catchable, and it is caught on the very first music pick.
+  {
+    name: 'audio/impact-loses-its-payoff-floor',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    find: 'return a > 0 ? js_max(0.45, a) : 0;',
+    replace: 'return a;',
+    expect: 'audio',
+  },
+  {
+    name: 'audio/voice-stop-is-not-an-edge',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    find: 'if (level <= VOICE_FLOOR) {',
+    replace: 'if (level <= VOICE_FLOOR) { { Command z; z.kind = Command::VOICE_STOP; z.name = cue;'
+      + ' z.id = id; out.push_back(z); return; }',
+    expect: 'audio',
+  },
+  {
+    name: 'audio/music-trim-derived-with-pow',
+    file: 'native/libttp-runtime/ttp/audio.cc',
+    find: 'c.level = MUSIC_LEVEL * (pick->gain != 0 ? pick->gain : 1);',
+    // ttp_fd_pow declared inline rather than via ttp/dmath.h, so the mutation
+    // needs no include audio.cc would otherwise carry for nothing.
+    replace: 'extern "C" double ttp_fd_pow(double, double);'
+      + ' c.level = MUSIC_LEVEL * ttp_fd_pow(10.0, (MUSIC_TARGET_LUFS - pick->lufs) / 20.0);',
+    expect: 'audio',
+  },
+
   // ---- the party C ABI marshalling (ttp_party.cc).
   {
     name: 'party-abi/add-player-drops-game-fields',

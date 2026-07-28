@@ -116,15 +116,28 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - AUDIO IS TWO HALVES, and only one of them is going native. The DECISIONS —
   which cue, at what gain, which sustained voice at what level, the `audibility()`
   distance curve, the shared curb-scrub throttle, the rocket jet lifecycle, the
-  music pool + no-repeat shuffle + per-song LUFS trim — live in
-  `public/display/audio/decide.js` as a PURE function of plain data returning a
-  stream of COMMANDS. It imports nothing, injects its clock and its RNG (the
-  shipped path still passes `Math.random`), and is loadable in Node. The DEVICE
-  half (`Audio.js`) performs those commands and decides nothing: AudioContext,
-  limiter, the gallery's variant picks, the `<audio>` element. `main.js` only ever
-  calls `sfx(audioDecide.…)`. shared-cpp-plan.md P7 ports the decisions and keeps
-  the DSP baked, so `tests/fixtures/audio-corpus.jsonl` records the command stream
-  NOW, while the JS that produces it exists — see the conformance rule below.
+  music pool + no-repeat shuffle + per-song LUFS trim — are a pure layer over
+  plain data returning a stream of COMMANDS, with the clock passed per call and
+  the RNG injected. The DEVICE half (`Audio.js`) performs those commands and
+  decides nothing: AudioContext, limiter, the gallery's variant picks, the
+  `<audio>` element; `main.js` only ever calls `sfx(audioDecide.…)`. The DSP
+  palette stays BAKED rather than ported, because emscripten's AudioWorklet path
+  needs the COOP/COEP isolation this build refuses.
+  That layer is now PORTED — `native/libttp-runtime/ttp/audio.{h,cc}`, replayed
+  on all four legs by `native/runtimetest/audio_check.cc` against
+  `tests/fixtures/audio-corpus.jsonl` (5900 trace frames + 497 scripted steps,
+  every command bit-exact). What has NOT happened yet is the SWAP: the browser
+  still runs `public/display/audio/decide.js`, and the C ABI that would let
+  `Audio.js` pull the commands out of the wasm instead is the rest of P7. So the
+  JS is BOTH the shipped path and the ORACLE, and its header says so — a
+  disagreement between the two is a bug in the C++, never in the corpus, and the
+  JS must keep answering exactly as recorded rather than tracking whatever the
+  port does next.
+  Two things that check pins are worth knowing before touching either side: the
+  distance metric must be `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` (one ULP
+  flips a knee of the curve and changes the command outright), and the music
+  trims are AUTHORED LITERALS — deriving them with the vendored `pow` turns the
+  corpus red on the very first pick.
 - THE UI MODEL IS A LAYER, not a pile of render functions. The DECISIONS behind
   the 2D screens — the seat grid (padding, the car-pick fallback), the lobby
   readiness rule, the lobby race card, the per-player race HUD values, the
@@ -162,7 +175,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (38 tests, the SAME 38 on every leg —
+  replayed by `native/` ctest (39 tests, the SAME 39 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
