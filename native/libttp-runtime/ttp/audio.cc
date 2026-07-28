@@ -96,6 +96,15 @@ const MusicPool RACE_MUSIC[] = {
   {"canyon", CANYON, 4},
 };
 
+// RACE_MUSIC is `extern` in the header, so RACE_MUSIC_COUNT cannot be derived
+// there and is hand-maintained beside it. This is what keeps the two honest: a
+// sixth pool added above without bumping the constant would not be a compile
+// error, it would be a biome startMusic's lookup never reaches and silently
+// answers with the snow fallback — and the corpus knows only the five shipped
+// biomes, so no gate would say a word.
+static_assert(sizeof(RACE_MUSIC) / sizeof(RACE_MUSIC[0]) == RACE_MUSIC_COUNT,
+              "RACE_MUSIC_COUNT must match the pool table above");
+
 const MusicPool& musicFallback() { return RACE_MUSIC[2]; }  // MUSIC_FALLBACK = RACE_MUSIC.snow
 
 // ---------------------------------------------------------------------------
