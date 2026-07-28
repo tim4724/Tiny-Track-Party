@@ -120,11 +120,13 @@ export function runControllerScenario(opts) {
     show('game');
     el('drive-hud').classList.remove('hidden');
     el('motion-tip').classList.add('hidden');
-    // The pause + "?" buttons ride with the HUD live (see startDriving in main.js),
-    // so the gallery shows them too. Both are z-8 fixed, so the paused/conn overlays
-    // (z-15/z-30) still cover them where those scenarios layer one on top.
+    // The pause, "?" and control-scheme buttons ride with the HUD live (see
+    // showGameChrome in main.js), so the gallery shows them too. All are z-8 fixed,
+    // so the paused/conn overlays (z-15/z-30) still cover them where those scenarios
+    // layer one on top.
     el('pause-btn').classList.remove('hidden');
     el('help-btn-game').classList.remove('hidden');
+    el('ctrl-btn').classList.remove('hidden');
   }
 
   switch (scenario) {

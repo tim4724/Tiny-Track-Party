@@ -289,11 +289,12 @@ input[type=text]:disabled { opacity: 0.6; }
    ping text just below with a minor gap to the screen edge. */
 #drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; padding-bottom: 1.7rem; }
 /* Player name only — top-left, tinted with the car livery (like the display's
-   .cell-label__name). It shares the top row with the fixed pause/? buttons: a
-   min-height matching the 3.2rem buttons + centred text levels it with them, and the
-   right padding reserves the buttons' zone so a long name ellipsises before it. No
-   place/lap on the phone — the standings live on the big screen. */
-.hud-top { display: flex; align-items: center; min-height: 3.2rem; padding-right: 7rem; }
+   .cell-label__name). It shares the top row with the fixed chrome buttons (control
+   scheme / ? / pause): a min-height matching the 3.2rem buttons + centred text
+   levels it with them, and the right padding reserves all three (3 × 3.2rem + gutters)
+   so a long name ellipsises before it. No place/lap on the phone — the standings
+   live on the big screen. */
+.hud-top { display: flex; align-items: center; min-height: 3.2rem; padding-right: 11rem; }
 .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
@@ -357,6 +358,27 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
 }
 #action-btn.action:disabled { opacity: 0.4; filter: grayscale(0.4); }
+
+/* LEFT / RIGHT steer buttons — the button schemes only (hidden by default; see
+   the control-scheme block at the foot of this file). Blue: the fourth chrome
+   colour, so the row reads LEFT-blue / ITEM-purple / RIGHT-blue and neither steer
+   half can be mistaken for the red BRAKE they replace. Same sticker press as
+   BRAKE/ITEM. Holding both is the brake, so both light up together. */
+.steer-btn {
+  display: none;
+  flex: 1; padding: 6.8rem 0.6rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; line-height: 1;
+  color: #fff;
+  border: 3px solid var(--ink);
+  border-radius: var(--r); background: var(--blue);
+  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
+  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s;
+}
+.steer-btn.held {
+  filter: brightness(1.05);
+  transform: translateY(var(--btn-sink));
+  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+}
 
 /* In-race "tilt is off" chip — a tappable pill (reopens the motion-blocked popup),
    so it reads as actionable on a touch screen. Shown only while motion isn't granted. */
@@ -759,6 +781,19 @@ input[type=text]:disabled { opacity: 0.6; }
   right: calc(4.2rem + var(--safe-right));   /* pause-btn is 3.2rem + 0.6rem gutter */
   width: 3.2rem; height: 3.2rem; font-family: var(--font-display); font-size: 1.7rem;
 }
+/* Control-scheme cycler — third in the same fixed row, left of "?". Two stacked
+   lines (source over orientation) because the button IS the readout: there's no
+   settings screen to check what's live. */
+.ctrl-btn {
+  position: fixed; z-index: 8;
+  top: calc(0.6rem + var(--safe-top));
+  right: calc(7.8rem + var(--safe-right));   /* one more 3.2rem + 0.6rem step */
+  width: 3.2rem; height: 3.2rem;
+  flex-direction: column; gap: 1px;
+  font-family: var(--font-display); font-weight: 700; line-height: 1;
+}
+.ctrl-btn__src { font-size: 0.6rem; letter-spacing: 0.05em; }
+.ctrl-btn__rot { font-size: 0.95rem; color: var(--ink-2); }
 
 /* Reduced motion: the demo must still TEACH, so freeze the phone in a clear
    leaned pose with the bar offset to match (a calm, static illustration of the
@@ -772,6 +807,55 @@ input[type=text]:disabled { opacity: 0.6; }
   .chev--l { opacity: 1; }
   .chev--r { opacity: 0; }
 }
+
+/* ---- control schemes (EXPLORATION) ----
+   Four ways to drive, cycled from #ctrl-btn mid-race: tilt or buttons, portrait or
+   landscape. Two <html> classes carry the choice:
+
+     .ctrl-buttons — swap BRAKE out for LEFT | ITEM | RIGHT (both steer = brake).
+     .ctrl-land    — emulate landscape.
+
+   The PAGE never rotates itself: the Couch Games shell locks the WebView to
+   portrait, so landscape has to be faked — the whole game surface is rotated 90°
+   in CSS and the player turns the phone to meet it. A 90° rotation about the
+   top-left corner lands the box back over the viewport once it's pre-shifted up by
+   its own height, and the width/height swap makes that box landscape-shaped. The
+   transform also makes #game the containing block for its own position:fixed
+   chrome, so the pause/?/scheme buttons and the pause overlay ride along without
+   restating a single offset. TiltInput is told about the extra 90° (setScheme's
+   extraAngle) so the steering reference follows the pixels, not the device. */
+html.ctrl-buttons .steer-btn { display: block; }
+html.ctrl-buttons #brake-btn { display: none; }
+
+html.ctrl-land #game,
+html.ctrl-land #help-overlay,
+html.ctrl-land #motion-overlay,
+html.ctrl-land #conn {
+  position: fixed;
+  top: 0; left: 0; right: auto; bottom: auto;
+  width: 100dvh; height: 100dvw;
+  transform-origin: 0 0;
+  transform: rotate(90deg) translateY(-100%);
+}
+/* The ping chip lives outside #game, so it rotates on its own. Anchoring it to the
+   device's TOP-LEFT puts it in the player's BOTTOM-left once rotated — the far
+   corner from the chrome buttons, same as the portrait layout intends. */
+html.ctrl-land #latency {
+  top: calc(0.5rem + var(--safe-top)); left: var(--safe-left);
+  right: auto; bottom: auto;
+  transform-origin: 0 0;
+  transform: rotate(90deg) translateY(-100%);
+}
+/* Same compaction as a real landscape viewport (the media query below can't see
+   this one — the viewport is still portrait). */
+html.ctrl-land #drive-hud { gap: 0.8rem; }
+html.ctrl-land #brake-btn.brake,
+html.ctrl-land #action-btn.action,
+html.ctrl-land .steer-btn { padding-top: 2.8rem; padding-bottom: 2.8rem; }
+html.ctrl-land .steer { margin-top: 0.4rem; }
+html.ctrl-land .help-card { gap: 0.6rem; padding: 0.9rem 1.1rem; }
+html.ctrl-land .help-title { font-size: 1.5rem; }
+html.ctrl-land .phone-frame { width: 92px; height: 170px; }
 
 /* Landscape: less vertical room, so compact the paddings and shrink the big
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */

@@ -82,8 +82,16 @@
     <!-- Mid-race re-check: reopens the same How-to-Drive popup as the lobby "?".
          Sits just left of the pause button (fixed; shown with the HUD). -->
     <button id="help-btn-game" class="help-btn-game icon-btn hidden" type="button" aria-label="How to drive" aria-haspopup="dialog">?</button>
+    <!-- EXPLORATION: cycles the four control schemes (tilt/buttons × portrait/
+         landscape) live, mid-race. Third in the fixed chrome row, left of "?".
+         Two lines: the input source over the orientation. See CTRL_SCHEMES in
+         main.js — no settings screen, this button IS the setting. -->
+    <button id="ctrl-btn" class="ctrl-btn icon-btn hidden" type="button" aria-label="Change control scheme">
+      <span id="ctrl-btn-src" class="ctrl-btn__src">TILT</span>
+      <span id="ctrl-btn-rot" class="ctrl-btn__rot">P</span>
+    </button>
     <div id="drive-hud" class="hidden">
-      <!-- Player name only — top-left, sharing the top row with the fixed pause/?
+      <!-- Player name only — top-left, sharing the top row with the fixed chrome
            buttons (lined up in CSS). No place/lap on the phone; the live standings
            live on the big screen. -->
       <div class="hud-top">
@@ -91,10 +99,16 @@
       </div>
       <div class="steer">
         <div class="steer__track"><div id="steer-fill"></div></div>
-        <div class="steer__label">Tilt to steer</div>
+        <div id="steer-label" class="steer__label">Tilt to steer</div>
       </div>
+      <!-- Two layouts, one row. TILT schemes show ITEM + BRAKE (halves); BUTTON
+           schemes hide BRAKE and show LEFT | ITEM | RIGHT (thirds) — holding both
+           steer buttons IS the brake. CSS picks which via html.ctrl-buttons; the
+           DOM order below is already correct for both. -->
       <div class="drive-controls">
+        <button id="left-btn" class="steer-btn" aria-label="Steer left">◀</button>
         <button id="action-btn" class="action" disabled aria-label="Use item">ITEM</button>
+        <button id="right-btn" class="steer-btn" aria-label="Steer right">▶</button>
         <button id="brake-btn" class="brake">BRAKE</button>
       </div>
       <!-- Shown mid-race only while tilt is blocked (see startDriving). A tap

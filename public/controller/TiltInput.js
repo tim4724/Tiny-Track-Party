@@ -26,6 +26,11 @@
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
 // tap handler). HTTPS is required for sensors.
 //
+// Steering can also come from BUTTONS instead of the sensor (setScheme). LEFT and
+// RIGHT are held like a d-pad and feed the same smoothed steer output, so the car
+// reacts identically whichever source is driving it; holding BOTH is the brake
+// (the two cancel to centre, so the pair reads as "stop", not "steer nowhere").
+//
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
 // the car all the way down to a standstill.
@@ -91,6 +96,9 @@ export class TiltInput {
     this._steer = 0;       // smoothed steer output (-1..1)
     this._key = 0;         // keyboard steer (-1/0/1)
     this._keyL = false; this._keyR = false;
+    this._tiltOn = true;   // sensor steering (off in the button schemes — see setScheme)
+    this._btnL = false; this._btnR = false;  // on-screen LEFT/RIGHT steer buttons
+    this.extraAngle = 0;   // degrees the LAYOUT is rotated on top of the OS (see setScheme)
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
@@ -156,6 +164,7 @@ export class TiltInput {
   stop() {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
+    this._btnL = false; this._btnR = false; // a race can end with a steer button still down
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }
@@ -168,8 +177,29 @@ export class TiltInput {
   // upright twist runs gz→0 so roll heads toward ±90° and twisting steers too. In
   // landscape the same screen-relative lean is read off the device's pitch axis
   // instead — one signal, any orientation.
+  // Pick which source drives the steer, and tell the sensor how the LAYOUT is
+  // oriented. `extraAngle` is degrees the PAGE has rotated its own pixels on top
+  // of whatever the OS did (90 for the emulated-landscape schemes, which rotate
+  // the game surface in CSS because the shell locks the WebView to portrait). It
+  // adds to the real screen angle, so "lean toward the right of what you're
+  // looking at" keeps steering right however the picture got there.
+  setScheme({ tilt = true, extraAngle = 0 } = {}) {
+    const on = !!tilt;
+    const ang = ((Math.round(extraAngle / 90) * 90) % 360 + 360) % 360;
+    // Re-applying the live scheme must be free: callers refresh it on every screen
+    // change, and a race is full of those — resetting the steer there would flick
+    // the wheel straight mid-corner.
+    if (on === this._tiltOn && ang === this.extraAngle) return;
+    this._tiltOn = on;
+    this.extraAngle = ang;
+    // Drop the old source's output rather than letting it decay into the new
+    // one: a scheme swap mid-corner would otherwise carry that lock across.
+    this._steer = 0;
+    this._btnL = false; this._btnR = false;
+  }
+
   _sensorSteer() {
-    if (!this.haveTilt) return 0;
+    if (!this.haveTilt || !this._tiltOn) return 0;
     const { x, y, z } = this._g;
     const { rx, ry } = SCREEN_RIGHT[this._screenAngle()] || SCREEN_RIGHT[0];
     const gRight = x * rx + y * ry;
@@ -177,20 +207,28 @@ export class TiltInput {
     return clamp1(rollDeg / ROLL_LOCK);
   }
 
-  // Degrees the OS has rotated the UI from its natural (portrait) orientation,
-  // snapped to {0,90,180,270}. Prefer the modern Screen Orientation API; fall back
-  // to the legacy window.orientation (which reports -90, hence the wrap). Absent
-  // both (desktop / Node test), assume portrait.
+  // Degrees the UI is rotated from the device's natural (portrait) orientation,
+  // snapped to {0,90,180,270}: what the OS did, plus what the page did to itself
+  // (extraAngle). Prefer the modern Screen Orientation API; fall back to the
+  // legacy window.orientation (which reports -90, hence the wrap). Absent both
+  // (desktop / Node test), assume portrait. The two compose exactly — each 90°
+  // step maps the layout's "right" onto the previous frame's "down" — so an
+  // auto-rotating browser and our own CSS rotation can both be in play.
   _screenAngle() {
     const so = (typeof screen !== 'undefined' && screen.orientation
         && typeof screen.orientation.angle === 'number') ? screen.orientation.angle
       : (typeof window !== 'undefined' && typeof window.orientation === 'number'
         ? window.orientation : 0);
-    return (((Math.round(so / 90) * 90) % 360) + 360) % 360;
+    return (((Math.round(so / 90) * 90 + this.extraAngle) % 360) + 360) % 360;
   }
 
   _tick() {
-    let target = this._sensorSteer();
+    // One steer target, whichever scheme is live: the sensor's roll, or the
+    // LEFT/RIGHT buttons as ±1 (both held = 0, which is the brake pose). It runs
+    // through the same dead-zone + low-pass, so the buttons ramp to full lock over
+    // ~5 ticks instead of snapping — the car reads the same either way.
+    let target = this._tiltOn ? this._sensorSteer()
+      : (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
     // dead-zone the centre, then re-expand so full lock still reaches ±1
     if (Math.abs(target) < DEADZONE) target = 0;
     else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
@@ -204,7 +242,7 @@ export class TiltInput {
     if (Math.abs(target - this._steer) < 0.01) this._steer = target;
 
     const s = clamp1(this._steer + this._key);
-    const b = Math.max(this._brakeBtn, this._brakeKey);
+    const b = Math.max(this._brakeBtn, this._brakeKey, this.bothSteerHeld ? BRAKE_LEVEL : 0);
     // u is a wrapping use-counter: the display fires the held item once each time it
     // CHANGES, so it survives the fastlane's latest-wins drops (a dropped frame just
     // re-delivers the same value) without a separate reliable message.
@@ -249,6 +287,14 @@ export class TiltInput {
     this._brakeBtn = on ? BRAKE_LEVEL : 0;
     if (this._timer) this._tick();
   }
+
+  // On-screen LEFT/RIGHT steer buttons (button schemes). `dir` < 0 is left.
+  pressSteer(dir, on) {
+    if (dir < 0) this._btnL = !!on; else this._btnR = !!on;
+  }
+  // Both steer buttons down = the brake. Exposed so the UI can light both buttons
+  // and run the brake rumble off the same fact the tick brakes on.
+  get bothSteerHeld() { return this._btnL && this._btnR; }
 
   // Enable/disable ACTION — mirrors the held-item slot (main.js drives this from
   // setHeldItem). Gates BOTH input paths (on-screen button AND keyboard) so a press

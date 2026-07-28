@@ -30,7 +30,8 @@ import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarInde
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
 import { initModals, onEnterLobby, closeAnyModal, refreshHelpName } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
-import { initDriveSurface, startDriving, stopDriving, setHeldItem, resetHeldItem } from './driveSurface.js';
+import { initDriveSurface, startDriving, stopDriving, setHeldItem, resetHeldItem, releaseControls } from './driveSurface.js';
+import { initControlScheme, applyScheme } from './controlScheme.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -52,6 +53,14 @@ function show(name) {
   // In the shell the launcher owns the back gesture (it swallows it and shows its
   // own LEAVE bar), so we push nothing — our own back handling would fight it (§1).
   if (!inShell && (SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
+  // The landscape control schemes rotate the drive surface, so the live screen is
+  // part of what a scheme resolves to — re-apply on every move.
+  applyScheme();
+}
+
+// The fixed game-screen chrome (control scheme / ? / pause) shows and hides as one.
+function showGameChrome(on) {
+  for (const id of ['ctrl-btn', 'help-btn-game', 'pause-btn']) el(id).classList.toggle('hidden', !on);
 }
 
 // haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
@@ -149,6 +158,11 @@ const tilt = new TiltInput({
 
 initModals({ screens, tilt, buzz, playerName: () => myName || 'Racer' });
 initDriveSurface({ tilt, buzz, haptics });
+initControlScheme({
+  tilt, buzz,
+  gameVisible: () => !screens.game.classList.contains('hidden'),
+  releaseControls
+});
 
 function setStatus(t) { el('name-status').textContent = t; }
 // Lock the join form while a connection is in flight so a double-tap can't fire
@@ -251,8 +265,7 @@ function syncRoom(data) {
     inResults = false;
     show('game');
     el('drive-hud').classList.remove('hidden');
-    el('pause-btn').classList.remove('hidden');
-    el('help-btn-game').classList.remove('hidden');
+    showGameChrome(true);
     setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
     if (data.paused) haptics.stopLoop();
     startDriving(myName || 'Racer'); // resume/continue streaming tilt to our car
@@ -267,8 +280,7 @@ function syncRoom(data) {
     const entering = currentScreen !== 'lobby';
     stopDriving();
     setPauseOverlay(false);
-    el('pause-btn').classList.add('hidden');
-    el('help-btn-game').classList.add('hidden');
+    showGameChrome(false);
     renderLobby();
     show('lobby');
     if (entering) onEnterLobby(); // teach controls / surface blocked motion once, on entry
@@ -282,8 +294,7 @@ function syncRoom(data) {
 function showResultsScreen() {
   if (!inResults) { inResults = true; stopDriving(); }
   setPauseOverlay(false);
-  el('pause-btn').classList.add('hidden');
-  el('help-btn-game').classList.add('hidden');
+  showGameChrome(false);
   show('results');
 }
 
@@ -450,8 +461,7 @@ function leaveToName() {
   amReady = false;
   roster = [];
   setPauseOverlay(false);
-  el('pause-btn').classList.add('hidden');
-  el('help-btn-game').classList.add('hidden');
+  showGameChrome(false);
   closeAnyModal();     // don't strand either popup over the name screen
   setJoining(false);
   setStatus('');

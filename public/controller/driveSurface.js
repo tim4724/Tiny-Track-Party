@@ -7,6 +7,8 @@
 // The item's IDENTITY is shown on the main display (flashy roulette there); the
 // phone stays a clean driving surface. The only controller-side cue is the USE
 // button lighting up when you're holding something, plus a light buzz on pickup.
+import { applyScheme } from './controlScheme.js';
+
 const el = (id) => document.getElementById(id);
 
 let _tilt = null;
@@ -21,7 +23,7 @@ export function startDriving(playerName) {
   if (steerRaf) return; // already driving (may have begun during the countdown)
   _tilt.start();
   const fill = el('steer-fill');
-  el('motion-tip').classList.toggle('hidden', _tilt.motionState === 'granted');
+  applyScheme();   // owns the motion tip (a blocked sensor is only a problem for the tilt schemes)
   const loop = () => {
     fill.style.transform = `translateX(${_tilt.state.steer * 50}%)`;
     steerRaf = requestAnimationFrame(loop);
@@ -31,9 +33,18 @@ export function startDriving(playerName) {
 
 export function stopDriving() {
   _tilt.stop();
-  _haptics.stopLoop(); // never leave the motor humming if BRAKE was held at race end
   if (steerRaf) cancelAnimationFrame(steerRaf);
   steerRaf = null;
+  releaseControls();   // a race can end mid-hold
+}
+
+// Drop every held control back to rest: the input, the motor, and the pressed
+// look. Called at race end and on a scheme swap — after a swap the button that
+// was down may be the one the new scheme hides, and its input would stick forever.
+export function releaseControls() {
+  _pressBrake(false);
+  pressSteerBtn(-1, false);
+  pressSteerBtn(1, false);
 }
 
 // --- held item / ACTION gating ---
@@ -58,22 +69,45 @@ export function resetHeldItem() {
   setHeldItem(null);
 }
 
+// BRAKE — held = brake at the fixed rate, released = release. A continuous
+// rumble runs while it's held: the player's eyes-free confirmation they're
+// braking (they're watching the car on the main display, not the phone).
+function _pressBrake(on) {
+  on ? _haptics.startLoop() : _haptics.stopLoop();
+  _tilt.pressBrake(on);
+  el('brake-btn').classList.toggle('held', on);
+}
+
+// LEFT / RIGHT steer buttons — the button schemes' whole steering, and their brake:
+// holding BOTH cancels the steer to centre and brakes, so the same continuous
+// rumble the BRAKE button runs confirms it eyes-free. A single press gets a light
+// tick instead (the rumble would drown a per-corner tap).
+const steerBtnFor = (dir) => el(dir < 0 ? 'left-btn' : 'right-btn');
+function pressSteerBtn(dir, on) {
+  steerBtnFor(dir).classList.toggle('held', on);
+  const was = _tilt.bothSteerHeld;
+  _tilt.pressSteer(dir, on);
+  const now = _tilt.bothSteerHeld;
+  if (now !== was) { if (now) _haptics.startLoop(); else _haptics.stopLoop(); }
+  else if (on) _buzz(10);
+}
+
 export function initDriveSurface({ tilt, buzz, haptics }) {
   _tilt = tilt; _buzz = buzz; _haptics = haptics;
 
-  // BRAKE — held = brake at the fixed rate, released = release. A continuous
-  // rumble runs while it's held: the player's eyes-free confirmation they're
-  // braking (they're watching the car on the main display, not the phone).
   const brakeBtn = el('brake-btn');
-  const pressBrake = (on) => {
-    on ? _haptics.startLoop() : _haptics.stopLoop();
-    _tilt.pressBrake(on);
-    brakeBtn.classList.toggle('held', on);
-  };
-  brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake(true); });
-  brakeBtn.addEventListener('pointerup', () => pressBrake(false));
-  brakeBtn.addEventListener('pointercancel', () => pressBrake(false));
-  brakeBtn.addEventListener('pointerleave', () => pressBrake(false));
+  brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); _pressBrake(true); });
+  brakeBtn.addEventListener('pointerup', () => _pressBrake(false));
+  brakeBtn.addEventListener('pointercancel', () => _pressBrake(false));
+  brakeBtn.addEventListener('pointerleave', () => _pressBrake(false));
+
+  for (const dir of [-1, 1]) {
+    const btn = steerBtnFor(dir);
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressSteerBtn(dir, true); });
+    btn.addEventListener('pointerup', () => pressSteerBtn(dir, false));
+    btn.addEventListener('pointercancel', () => pressSteerBtn(dir, false));
+    btn.addEventListener('pointerleave', () => pressSteerBtn(dir, false));
+  }
 
   // ACTION (use item) — one tap = one use. Bumps the wrapping use-counter the next
   // CONTROL frame carries; disabled (and ignored) while the slot is empty.
