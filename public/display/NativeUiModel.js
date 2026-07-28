@@ -122,12 +122,15 @@ export function connectedPlayers(roster) {
   return JSON.parse(fn.connectedPlayers(arr)).map((i) => roster[i]);
 }
 
-// The lobby's right-rail race card, or null before a pick.
-export function cupSlot({ mode, cupId, trackId }) {
+// The lobby's right-rail race card, or null before a pick. randomRaces is the
+// RANDOM mode's run length (0 = endless); absent reads as endless, so a shell
+// that never sets it gets what `random` meant before run lengths existed.
+export function cupSlot({ mode, cupId, trackId, randomRaces }) {
   return JSON.parse(fn.cupSlot(J({
     mode: mode == null ? null : mode,
     cupId: cupId == null ? null : cupId,
-    trackId: trackId == null ? null : trackId
+    trackId: trackId == null ? null : trackId,
+    randomRaces: randomRaces == null ? null : randomRaces
   })));
 }
 

@@ -1483,6 +1483,7 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in) {
     pick.set("mode", uiField(in, "mode"));
     pick.set("cupId", uiField(in, "cupId"));
     pick.set("trackId", uiField(in, "trackId"));
+    pick.set("randomRaces", uiField(in, "randomRaces"));
     const std::string arg = uiArg(pick);
     out.set("slot", uiJson(ttp_ui_cup_slot_json(arg.c_str())));
     return out;

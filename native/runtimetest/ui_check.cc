@@ -461,7 +461,8 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
     const ui::OptStr mode = strOf(in.find("mode"));
     ui::CupSlot slot;
     const bool any = ui::cupSlot(ui::pickModeOf(mode), strOf(in.find("cupId")),
-                                 strOf(in.find("trackId")), cups, catalog, slot);
+                                 strOf(in.find("trackId")), numOf(in.find("randomRaces")),
+                                 cups, catalog, slot);
     out.set("slot", any ? slotValue(slot) : Value::Null());
     return out;
   }

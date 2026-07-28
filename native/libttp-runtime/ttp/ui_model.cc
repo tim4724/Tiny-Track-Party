@@ -187,9 +187,17 @@ const CatalogEntry* byTrackId(const std::vector<CatalogEntry>& catalog, const Op
   return nullptr;
 }
 
+// JS Number.isInteger over a value already known to be a number: finite, and
+// equal to its own floor. (NaN and the infinities both fail isfinite, which is
+// the whole of what the JS check adds over the equality.)
+bool isIntegerValue(double v) {
+  return std::isfinite(v) && std::floor(v) == v;
+}
+
 }  // namespace
 
 bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
+             const OptNum& randomRaces,
              const std::vector<Cup>& cups, const std::vector<CatalogEntry>& catalog,
              CupSlot& out) {
   if (mode == PickMode::CUP) {
@@ -233,14 +241,25 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     return true;
   }
   if (mode == PickMode::RANDOM) {
-    // An endless surprise series: the sticker sells the MODE, the mini shows
-    // this round's draw (which is also what the lobby preview is orbiting).
+    // A surprise series: the sticker sells the MODE, the mini shows this round's
+    // draw (which is also what the lobby preview is orbiting). Only race 1 is
+    // known here — the rest of a fixed card is drawn as the series runs — so the
+    // card promises a COUNT where a cup shows its four circuits.
+    //
+    // randomRaces is the run length the room SETTLED on: 0 endless, a positive
+    // integer that many races. The wire's default for an absent length is applied
+    // by the shell's clamp before a pick reaches this layer, so what arrives is
+    // always a settled number. Anything else reads as endless — that is what
+    // `random` meant before run lengths existed, so an older shell driving this
+    // model gets the behaviour it was written against rather than a card with no
+    // count on it. Matches uiModel.js's Number.isInteger(n) && n > 0.
     const CatalogEntry* entry = byTrackId(catalog, trackId);
+    const bool endless = !(randomRaces.has && isIntegerValue(randomRaces.v) && randomRaces.v > 0);
     out = CupSlot{};
     out.nameKey = NameKey::RANDOM;
     out.name = OptStr::None();
-    out.racesKey = RacesKey::ENDLESS;
-    out.raceCount = OptNum::None();
+    out.racesKey = endless ? RacesKey::ENDLESS : RacesKey::COUNT;
+    out.raceCount = endless ? OptNum::None() : OptNum::Of(randomRaces.v);
     out.difficulty = OptNum::None();
     out.maps.push_back(MapChip{trackId, OptNum::None()});
     out.cupId = entry ? entry->cup : OptStr::None();

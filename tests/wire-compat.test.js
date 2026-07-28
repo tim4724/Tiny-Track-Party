@@ -399,7 +399,10 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // roster shuffles the seat order under everyone; a dropped `ready` freezes the
   // host's Start button.
   const { MSG, ROOM_STATE } = H.kit().protocol;
-  const { relay, net, room } = await bringUpRealDisplay();
+  // drawRandomTrack is the game layer's shuffle bag (main.js owns it — the mode
+  // pick deliberately never crossed into C++). Random mode is refused outright
+  // without one, so the run-length assertions below need it stubbed.
+  const { relay, net, room } = await bringUpRealDisplay({}, { drawRandomTrack: () => 'tidepool' });
   const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'lu-a' });
   const bo = await bringUpPhone(relay, room, { name: 'Bo', clientKey: 'lu-b' });
 
@@ -409,7 +412,7 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // 1. THE TOP-LEVEL SCHEMA. Every key syncRoom reads, and nothing it does not.
   assert.deepEqual(Object.keys(snap).sort(), [
     'cars', 'colors', 'cupId', 'hostPeerIndex', 'mode', 'paused', 'players',
-    'roomState', 'standings', 'trackId', 'tracks', 'type',
+    'randomRaces', 'roomState', 'standings', 'trackId', 'tracks', 'type',
   ], 'the snapshot schema is the contract; renaming or dropping a key is silent');
   assert.equal(snap.type, MSG.LOBBY_UPDATE, 'routed by the shared type tag');
 
@@ -449,6 +452,33 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   await H.flush();
   assert.equal(lastLobby(ada).players.find((p) => p.peerIndex === 1).carIndex, 1,
     'a car pick is echoed back through the same field');
+
+  // 3b. THE RANDOM RUN LENGTH, which is the newest field on this message and the
+  //     only one whose meaning turns on a NUMBER rather than a string or a flag.
+  //     0 is endless and any other value is a race count, so a length that
+  //     crossed as "4", or that C++ dropped because lobby_snapshot never learned
+  //     the key, would silently turn a 4-race card into an endless run nobody
+  //     can leave. The display clamps it (Net.js normRandomRaces) and C++ copies
+  //     it through; this is the only place both halves are exercised at once.
+  //     Driven the way a real party does it: the HOST's phone sends SELECT_MODE
+  //     over the wire, the display validates and clamps, C++ re-emits.
+  ada.net.send(MSG.SELECT_MODE, { mode: 'random', randomRaces: 4 });
+  await H.flush();
+  const randomPick = lastLobby(ada);
+  assert.equal(randomPick.mode, 'random', 'the mode reached every phone');
+  assert.equal(randomPick.randomRaces, 4, 'the run length survived the C++ emitter');
+  assert.equal(typeof randomPick.randomRaces, 'number',
+    'randomRaces is a NUMBER — the phone tests it against 0 to mean endless');
+  ada.net.send(MSG.SELECT_MODE, { mode: 'random', randomRaces: 0 });
+  await H.flush();
+  assert.equal(lastLobby(ada).randomRaces, 0,
+    'ZERO survives too: it is endless, not absent, and a falsy-drop would read as a default card');
+  //     And the clamp is the display's, not the phone's to bypass: a forged
+  //     length comes back as the default rather than as itself.
+  ada.net.send(MSG.SELECT_MODE, { mode: 'random', randomRaces: 999 });
+  await H.flush();
+  assert.equal(lastLobby(ada).randomRaces, 4,
+    'an out-of-range length is clamped to the default before it is ever published');
 
   // 4. THE PHASE STRING. RoomFlow names its own states in C++ (room_flow.cc's
   //    stateName), the phone compares them against protocol.js's ROOM_STATE

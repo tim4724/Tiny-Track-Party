@@ -209,7 +209,13 @@ struct CupSlot {
   OptStr cupId;
 };
 // false = no pick yet (the slot stays empty); `out` is untouched.
+//
+// randomRaces is the RANDOM mode's run length: 0 endless, a positive integer
+// that many races. Absent (or any non-positive non-integer) reads as endless,
+// which is what `random` meant before run lengths existed. It is ignored by the
+// other two modes — a cup's count is its track list and a track pick is one race.
 bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
+             const OptNum& randomRaces,
              const std::vector<Cup>& cups, const std::vector<CatalogEntry>& catalog,
              CupSlot& out);
 

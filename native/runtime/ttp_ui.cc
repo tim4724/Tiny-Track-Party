@@ -370,6 +370,7 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
   ui::CupSlot slot;
   const bool any = ui::cupSlot(ui::pickModeOf(strOf(in.find("mode"))),
                                strOf(in.find("cupId")), strOf(in.find("trackId")),
+                               numOf(in.find("randomRaces")),
                                g_cups, g_catalog, slot);
   if (!any) return put(g_bufSlot, Value::Null());
   Value o = Value::Obj();

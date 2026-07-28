@@ -143,6 +143,11 @@ export function applyOp(st, op) {
           mode: op.mode === undefined ? null : op.mode,
           cupId: op.cupId === undefined ? null : op.cupId,
           trackId: op.trackId === undefined ? null : op.trackId,
+          // Absent stays absent rather than becoming null: the C side reads a
+          // missing key and an explicit null the same way here (both endless),
+          // and recording the absence keeps a case for the shell that never sets
+          // it at all.
+          randomRaces: op.randomRaces === undefined ? null : op.randomRaces,
           cups: CUPS, catalog: CATALOG
         })
       };
@@ -371,6 +376,24 @@ scenarios.push({
     { op: 'pick', mode: 'random', trackId: 'a3' },
     { op: 'pick', mode: 'random', trackId: 'solo' },
     { op: 'pick', mode: 'random', trackId: null },
+    // Random's RUN LENGTH. 0 is endless; a positive integer is a fixed card, which
+    // makes the slot read "N races" exactly as a cup's does. An absent length (the
+    // three cases above) is endless too — what `random` meant before lengths
+    // existed — so a shell that never sets it is unchanged. The rejects are here
+    // because this number arrives from a phone: only a positive INTEGER counts, so
+    // a fraction, a negative and a non-number all fall back to endless rather than
+    // printing themselves onto the card.
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 0 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 1 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 4 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 8 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 2.5 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: -3 },
+    { op: 'pick', mode: 'random', trackId: 'a3', randomRaces: 'four' },
+    // ...and it is RANDOM's alone: a cup counts its own circuits and a track pick
+    // is one race, however loudly a stale length rides along beside them.
+    { op: 'pick', mode: 'cup', cupId: 'cup-a', trackId: 'a1', randomRaces: 7 },
+    { op: 'pick', mode: 'track', trackId: 'b3', randomRaces: 7 },
     { op: 'pick', mode: 'no-such-mode', trackId: 'a1' }
   ]
 });

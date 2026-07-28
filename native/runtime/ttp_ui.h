@@ -136,7 +136,11 @@ TTP_ABI int ttp_ui_all_racers_ready(const char* rosterJson, const char* hostIdJs
 TTP_ABI const char* ttp_ui_connected_players_json(const char* rosterJson);
 
 /* The lobby's right-rail race card, from the room's pick.
- *   {"mode":"cup"|"track"|"random"|null, "cupId":"id"|null, "trackId":"id"|null}
+ *   {"mode":"cup"|"track"|"random"|null, "cupId":"id"|null, "trackId":"id"|null,
+ *    "randomRaces": n|null}
+ * randomRaces is RANDOM mode's run length — 0 endless, a positive integer that
+ * many races, absent/null endless (what `random` meant before run lengths). The
+ * shell clamps it before it gets here; the other two modes ignore it.
  *   -> null                      no pick yet — the slot stays empty
  *   -> {"nameKey":"cup"|"track"|"random",   what the name IS
  *       "name": str|null,                   null for random / an unresolved id
