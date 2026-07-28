@@ -72,15 +72,22 @@ display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
 AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
 expectations being the committed `public/shared/trackSchematics.js` bake.
 
-**Three of them are now FROZEN.** `sessionModel.js`, `uiModel.js` and
-`audio/decide.js` were deleted once their ports were conformance-proven, and
-their generators (`gen-session-corpus.mjs`, `gen-ui-corpus.mjs`,
-`gen-audio-corpus.mjs`) went with them: those three corpora can never be
-re-derived, exactly like the traces above, and the `record_*` roundtrips are what
-replaced the freshness checks. `raceflow-corpus.jsonl` and
-`schematic-corpus.jsonl` are still RENEWABLE — `public/display/raceFlow.js` and
-`public/display/trackSchematic.js` survive, and
-`tests/codegen-freshness.test.js` still re-derives the schematic one.
+**Four of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
+`audio/decide.js` and `trackSchematic.js` were deleted once their ports were
+conformance-proven, and their generators went with them: those four corpora can
+never be re-derived, exactly like the traces above, and the `record_*`
+roundtrips are what replaced the freshness checks. Only
+`raceflow-corpus.jsonl` is still RENEWABLE (`public/display/raceFlow.js`
+survives).
+
+The schematic one is worth a note, because retiring its twin also moved a
+SHIPPING codegen path onto C++: `scripts/gen-track-schematics.js` bakes
+`public/shared/trackSchematics.js` from `ttp_track_schematic_json` now. That is
+licensed by this corpus and by the bake reproducing BYTE-IDENTICALLY — the
+committed file is still the bytes the JS wrote, and the `schematic` ctest holds
+the native projection to them for all 20 tracks. What no longer has JS evidence
+is a track added AFTER the recording; `tests/track.test.js` covers those against
+the live geometry, but as C++ agreeing with C++.
 
 The consequence is the one the ratchet always had: a frozen corpus can be
 replayed and re-emitted forever, but it can never GROW. A new scenario for the

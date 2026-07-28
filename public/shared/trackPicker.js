@@ -4,7 +4,7 @@
 // track (single race). Six
 // compact tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
 // from the schematic catalog the display ships in WELCOME (each entry carries
-// its cup + a top-down SVG path; see display/trackSchematic.js). Only the HOST
+// its cup + a top-down SVG path; see native/libttp-track/ttp/schematic.h). Only the HOST
 // picks, so `canPick` gates the taps — read-only rendering is for the gallery.
 
 const SVGNS = 'http://www.w3.org/2000/svg';

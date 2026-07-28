@@ -51,7 +51,8 @@ export async function init() {
     byDescriptor: mod.cwrap('ttp_track_build_json', 'string', ['string', 'number', 'number']),
     supports: mod.cwrap('ttp_track_supports_json', 'string', ['string']),
     sweep: mod.cwrap('ttp_track_sweep_json', 'string', ['string', 'number']),
-    frames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string'])
+    frames: mod.cwrap('ttp_track_frames_json', 'string', ['string', 'string']),
+    schematic: mod.cwrap('ttp_track_schematic_json', 'string', ['string', 'number', 'number'])
   };
 }
 
@@ -178,6 +179,26 @@ export function trackFrames(defOrId, sList) {
 
 // One frame, for the occasional point lookup.
 export function trackFrameAt(defOrId, s) { return trackFrames(defOrId, [s])[0]; }
+
+// The track's top-down schematic — {viewBox, d, start, proj} — projected into the
+// 256-unit square by libttp-track's own ttp::schematic. Laps and seed touch
+// furniture, never the centreline the map is drawn from, so any values give the
+// same map.
+//
+// THE KEY ORDER IS RESPELLED, and it is not cosmetic fussiness. The ABI emits
+// canonical (sorted) JSON, but public/shared/trackSchematics.js is a GENERATED
+// SOURCE FILE whose bytes were written by the JS projection this replaced
+// (display/trackSchematic.js, retired once tests/fixtures/schematic-corpus.jsonl
+// had frozen its output for all 20 tracks). Re-baking in sorted order would
+// rewrite every line of a shipped file to say exactly what it already said. So
+// the historical order is restored here, and the bake stays byte-identical —
+// which is also what keeps `node scripts/gen-track-schematics.js` an honest
+// no-op check rather than a diff.
+export function trackSchematic(trackId, { laps = 3, seed = 1 } = {}) {
+  const { viewBox, d, start, proj } = JSON.parse(fn.schematic(trackId, laps, seed));
+  const { minX, minZ, scale, offX, offZ } = proj;
+  return { viewBox, d, start, proj: { minX, minZ, scale, offX, offZ } };
+}
 
 function idOrDescriptorArg(defOrId) {
   return typeof defOrId === 'string'

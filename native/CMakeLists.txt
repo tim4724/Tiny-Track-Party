@@ -130,7 +130,8 @@ add_library(libttp_track STATIC
   # independence from libttp-json.
   libttp-track/ttp/race_track_json.cc
   # The top-down schematic + its snapshot codec (public/display/trackSchematic.js
-  # ported). Here rather than in libttp-runtime because it reads a built
+  # ported; that JS is retired now, and tests/fixtures/schematic-corpus.jsonl is
+  # the frozen record of what it produced). Here rather than in libttp-runtime because it reads a built
   # ttp::RaceTrack and nothing else — no Game, no cameras, no renderer — and
   # because the browser reaches it through the TRACK half of the ABI.
   libttp-track/ttp/schematic.cc

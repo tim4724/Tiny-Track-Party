@@ -13,7 +13,12 @@
 // the game guaranteed to stay JS forever — imported from the directory that is
 // being replaced by three native shells.
 //
-// public/display/trackSchematic.js keeps the PROJECTION (buildTrack output -> a
+// The PROJECTION half (built track -> a 256-unit path) is NATIVE
+// (native/libttp-track/ttp/schematic.{h,cc}); its JS twin was retired once the
+// frozen corpus had pinned it. THIS half is permanent browser code with no
+// native twin, because the PHONE runs it: phones stay on the JS controller on
+// all three TV platforms.
+// (historically: public/display/trackSchematic.js kept the projection -> a
 // normalized SVG path). That half runs offline and is the oracle
 // tests/fixtures/schematic-corpus.jsonl was recorded from; nothing ships it.
 

@@ -118,10 +118,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   runs it: `public/shared/schematicCodec.js` is `pack`/`unpackSchematic`, and it
   is SHARED because the PHONE unpacks — phones stay on the JS controller on all
   three TV platforms, so that half is permanent browser code with no native twin.
-  `public/display/trackSchematic.js` is the PROJECTION alone, and ships to
-  nobody: it is only the oracle the corpus was recorded from. (They were one file
-  under `display/`, which made `controller/main.js` import from the directory
-  three native shells replace.) Note the projection rounds
+  The PROJECTION half is RETIRED: `public/display/trackSchematic.js` was the
+  oracle the corpus was recorded from and shipped to nobody, and it went once
+  `schematic-corpus.jsonl` had frozen its output for all 20 tracks. The bake is
+  native now — `scripts/gen-track-schematics.js` reads
+  `ttp_track_schematic_json` through `scripts/native-track.mjs` and reproduces
+  the committed `shared/trackSchematics.js` BYTE-IDENTICALLY (the historical
+  `proj` key order is respelled in `native-track.mjs` for exactly that reason,
+  since the ABI emits canonical JSON). (The two halves were one file under
+  `display/`, which made `controller/main.js` import from the directory three
+  native shells replace.) Note the projection rounds
   through `Number.prototype.toFixed`, which printf cannot reproduce; the port
   routes it through double-conversion's `ToFixed` (V8's own).
   Node reads geometry through `scripts/native-track.mjs` over the
