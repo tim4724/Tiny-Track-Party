@@ -469,6 +469,14 @@ add_library(libttp_runtime STATIC
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
   # for the renderer's frame.
   libttp-runtime/ttp/hud.cc
+  # The rest of uiModel.js — the seat grid, the lobby rules, the race card, the
+  # ITEM-push gate, the reconnect diff, the flow predicates, the pause
+  # arbitration, the standings board and the results overlay, plus the screen
+  # enum and its per-screen back EFFECT. Pure decisions over plain data, so it
+  # sits beside hud.cc for the same reason: no platform API, every leg compiles
+  # AND executes it. The back-stack TRAVERSAL is NOT here — that is the History
+  # API wearing a C hat, and each shell owns its own.
+  libttp-runtime/ttp/ui_model.cc
   # The audio DECISIONS — public/display/audio/decide.js ported. Here rather
   # than in a library of its own because it is the same thing the two files
   # above are: a display rule that names no platform API, so every leg compiles
@@ -552,6 +560,26 @@ target_link_libraries(hud_check PRIVATE libttp_runtime ttp_testsupport ttp_stric
 ttp_emscripten_cli(hud_check)
 add_test(NAME ui_hud
   COMMAND hud_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
+
+# ---- Conformance: the rest of the UI model ----------------------------------
+# The same fixture as ui_hud above and the same class of evidence, one layer
+# wider: this replays EVERY step of tests/fixtures/ui-corpus.jsonl — all 37
+# scenarios, all thirteen op kinds — through ttp/ui_model.h, and checks the
+# shell state the driver threads as well as each answer. Three rules are only
+# correct IN SEQUENCE (the reconnect diff, the per-race ITEM map, the screen
+# step), so a table of isolated calls would not settle them.
+#
+# It links libttp_party for ONE assertion: ui_model.h keeps a local mirror of
+# protocol.h's ROOM_STATE rather than making libttp-runtime depend on the party
+# layer, and this pins the copy (see the file header). The library itself never
+# links libttp_party — that direction would be a layering inversion; a test
+# binary linking both is not, exactly as protocol_check links libttp_sim.
+add_executable(ui_check runtimetest/ui_check.cc)
+target_link_libraries(ui_check PRIVATE libttp_runtime libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(ui_check)
+add_test(NAME ui_model
+  COMMAND ui_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
 )
 
 # ---- Conformance: the audio decisions ---------------------------------------
@@ -656,6 +684,12 @@ if(EMSCRIPTEN)
     # SHELL reads rather than what the renderer draws: a Filament-less leg still
     # has every line of it in the link.
     libttp-runtime/ttp/hud.cc
+    # The rest of the UI model. Nothing in the ABI reaches it YET — the shells
+    # still render from public/display/uiModel.js — so wasm-ld strips it and the
+    # artifact does not grow. It is listed anyway because THIS list is the sync
+    # point: a source that lands in libttp_runtime alone makes this module
+    # unlinkable the moment an export references it, and no ctest target says so.
+    libttp-runtime/ttp/ui_model.cc
     # The audio decisions, for the same reason and with the same trap: this list
     # is COMPILED, not linked against libttp_runtime, so a source added to the
     # library alone leaves this module unlinkable and no ctest target notices.

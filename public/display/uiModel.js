@@ -9,12 +9,27 @@
 // rule for modules the Node tests import directly) and recordable as an oracle.
 //
 // WHY IT IS SEPARATE. docs/native-port/shared-cpp-plan.md P8 moves exactly these
-// decisions into C++ (P6 moves the per-frame HUD block ahead of it). Once the JS
+// decisions into C++ (P6 moved the per-frame HUD block ahead of it). Once the JS
 // is gone the oracle can never be recorded again — the one-way ratchet that
 // already froze gen-roomflow-corpus.mjs and gen-grandprix-corpus.mjs — so
 // scripts/gen-ui-corpus.mjs records this layer's answers NOW, while the JS that
 // produces them still exists. Keep this file free of imports; the moment it
 // grows one, the generator and the C++ port both inherit it.
+//
+// IT IS PORTED. Every rule below now exists in native/libttp-runtime/ttp/
+// ui_model.{h,cc} — hudRows went first as ttp/hud.h (see its note further down),
+// the other twenty-odd followed. native/runtimetest/ui_check.cc replays EVERY
+// step of tests/fixtures/ui-corpus.jsonl through the port on all four legs, out
+// AND the shell state the driver threads, so the two implementations are bound
+// step for step. What that means for this file: it is the ORACLE'S SOURCE, the
+// same standing decide.js and TrackBuilder.js have. It must keep answering
+// exactly as recorded — never track whatever the port does next, and never be
+// "fixed" to agree with it. A disagreement is a bug in the C++.
+//
+// The WEB shell still renders from here; tvOS and Android TV will read the port
+// through a shell of their own. Those are two implementations of one rule set,
+// which is the whole point — and the corpus, not this file, is what keeps them
+// from drifting.
 //
 // WHAT IS DELIBERATELY NOT HERE (see the plan's non-goals): DOM construction,
 // CSS classes, fades, canvas sizing, rAF, fullscreen, QR painting, and the
@@ -208,7 +223,9 @@ export function reconnectDiff(shownIds, seats) {
 // ttp_hud.h, via render/Display.js's hud()), and no snapshot is serialized for
 // it. What survives here is the ORACLE: tests/fixtures/ui-corpus.jsonl was
 // recorded off this function while it was live, and native/runtimetest/
-// hud_check.cc replays every row of it through the port on all four legs. So it
+// hud_check.cc replays every row of it through the port on all four legs (so
+// does ui_check.cc, through the same ttp::rt::hudSlot, because the scenario
+// replay has to drive the item map beside it). So it
 // stays for the same reason TrackBuilder.js's twin is kept in git history — it
 // is the only thing that can settle whether the C++ is right — and it must keep
 // answering exactly as recorded, not track whatever the port does next.

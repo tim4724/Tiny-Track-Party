@@ -168,15 +168,25 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   copy — the copy tables sit in `main.js` next to the elements they fill. What is
   deliberately NOT in it: DOM/CSS, fades, canvas sizing, rAF, fullscreen, QR
   painting, and the back-stack TRAVERSAL (the History API wearing a C hat — see
-  the plan's non-goals). shared-cpp-plan.md P8 ports the model and P6 takes the
-  per-frame HUD block ahead of it, so `tests/fixtures/ui-corpus.jsonl` records its
-  answers NOW — same reason, and same rule, as the audio corpus above.
-  ONE of those decisions has already gone: `hudRows` is ported
+  the plan's non-goals). `tests/fixtures/ui-corpus.jsonl` recorded its answers
+  while the JS alone produced them — same reason, and same rule, as the audio
+  corpus above.
+  IT IS NOW PORTED, all of it. `hudRows` went first
   (`native/libttp-runtime/ttp/hud.{h,cc}`, read back through the packed
   `ttp_display_hud` / `ttp_hud.h` by `render/Display.js`'s `hud()`), so the race
-  HUD's values no longer come out of a snapshot at all. The JS twin STAYS in
-  `uiModel.js` and its header says why: it is the oracle `ui-corpus.jsonl` was
-  recorded from, replayed on all four legs by `native/runtimetest/hud_check.cc`.
+  HUD's values no longer come out of a snapshot at all; the other twenty-odd
+  rules are `native/libttp-runtime/ttp/ui_model.{h,cc}`. Keys stay KEYS across
+  the port — an `enum class` with a `key()` spelling, never composed English, so
+  the copy tables can stay in each shell. `native/runtimetest/ui_check.cc`
+  replays EVERY step of the corpus through it on all four legs, `out` and the
+  threaded shell state alike; a disagreement is a bug in the C++, never in the
+  fixture. The JS twin STAYS in `uiModel.js` — it is the ORACLE'S SOURCE, the
+  standing `decide.js` has — and the WEB shell still renders from it; tvOS and
+  Android TV read the port instead, which is exactly the two-implementation
+  shape the corpus exists to hold together. What did NOT cross: the back-stack
+  TRAVERSAL (the table did, the walk did not) and `ROOM_STATE`, which
+  `ui_model.h` MIRRORS rather than import, so libttp-runtime never gains an edge
+  on the party layer — `ui_check` pins the copy to `protocol.h`.
   A held item crosses as a CODE, not a string — `TTP_ITEM_*`, pinned to the
   browser's `ITEM_IDS` mirror through `ttp_item_id` by
   `tests/display-abi.test.js`, because nothing else can see those two lists at
@@ -190,7 +200,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (39 tests, the SAME 39 on every leg —
+  replayed by `native/` ctest (40 tests, the SAME 40 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
