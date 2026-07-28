@@ -149,3 +149,30 @@ test('the decision layer stays dependency-free, so Node and C++ can both read it
   assert.equal(rand.length, 1, 'Math.random must appear once, as the constructor default');
   assert.match(code, /this\.rng = opts\.rng \|\| Math\.random;/, 'the RNG default must stay injectable');
 });
+
+// The corpus is only cross-implementation evidence if a C++ port can actually
+// reach the recorded numbers. docs/native-port/fp-profile.md §2: V8's
+// sin/cos/atan2/exp/pow/hypot are IMPLEMENTATION-APPROXIMATED — they differ in the
+// last bit from the fdlibm both sides vendor, and across V8 versions and CPUs. The
+// sim keeps off them by routing through the mathlib; decide.js cannot, because it
+// is deliberately import-free, so its only safe option is to not need them.
+//
+// This gate is retrospective. decide.js shipped with `Math.hypot` in the distance
+// metric and `10 ** x` in the music trim, and BOTH reached recorded gains: 28 of
+// the corpus's distances and 2 of its 23 song trims were values no port could have
+// matched. `Math.sqrt` is the exception the profile grants (IEEE-754 requires it
+// correctly rounded, so it is bit-identical everywhere) and is what the distance
+// metric uses now; the trims are authored literals.
+test('the decision layer computes nothing a C++ port cannot reproduce to the bit', () => {
+  const code = fs.readFileSync(DECIDE, 'utf8').replace(/\/\/.*$/gm, '');
+  // The six fp-profile §2 transcendentals, plus the operator form of pow.
+  for (const fn of ['sin', 'cos', 'tan', 'atan', 'atan2', 'exp', 'pow', 'hypot', 'log', 'log2', 'log10', 'cbrt']) {
+    assert.ok(!new RegExp(`Math\\.${fn}\\s*\\(`).test(code),
+      `audio/decide.js must not call Math.${fn} — it is implementation-approximated (fp-profile.md §2), `
+      + 'and every number this file computes is recorded as cross-implementation evidence. '
+      + 'Math.sqrt is the correctly-rounded exception; constants belong in the table as literals.');
+  }
+  assert.ok(!/\*\*/.test(code),
+    'audio/decide.js must not use `**` — it is V8 pow by another name. The music trims are baked '
+    + 'literals for exactly this reason (tests/credits.test.js re-checks them against their LUFS).');
+});

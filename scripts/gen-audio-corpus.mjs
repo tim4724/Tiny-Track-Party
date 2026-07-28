@@ -16,6 +16,19 @@
 // no hidden state: the clock is a synthetic dt accumulator and the music RNG is
 // a seeded mulberry32, both injected.
 //
+// WHAT THE `math` STAMP COVERS, AND WHAT MAKES THE REST REPRODUCIBLE. The header's
+// MATHLIB stamp is checked against the trace headers and the shipped wasm's own
+// version block, so it pins the engine that produced the WORLD the decisions see.
+// It says nothing about the decisions themselves, and for a while that gap hid a
+// real defect: decide.js reached for `Math.hypot` and `10 ** x`, two of the
+// implementation-approximated builtins docs/native-port/fp-profile.md §2 keeps off
+// the byte path, and their last-bit results landed in recorded gains that the C++
+// port of P7 could never have matched. Fixed at the source — the distance metric is
+// `Math.sqrt` of the sum of squares (IEEE-754 correctly rounded, hence identical on
+// every engine and CPU) and the music trims are authored literals — so the decision
+// layer now computes only exactly-reproducible arithmetic and calls no
+// transcendental at all. tests/audio-corpus.test.js holds that property.
+//
 // TWO KINDS OF CASE, and they cover different things.
 //
 // 1. TRACE cases. Each golden trace is replayed through the SHIPPED wasm's C ABI

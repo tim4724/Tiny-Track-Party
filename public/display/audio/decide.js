@@ -73,11 +73,36 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 // Min straight-line world distance from point `p` to any human car (Infinity with
 // no humans / no live poses). Humans are the only listeners — CPU cars have no cell.
+//
+// WHY sqrt OF THE SUM OF SQUARES AND NOT Math.hypot. Every gain this file records
+// is derived from this number, and audio-corpus.jsonl is CROSS-IMPLEMENTATION
+// evidence — the C++ port of P7 has to reproduce it to the bit. `Math.hypot` is one
+// of the six implementation-approximated transcendentals docs/native-port/
+// fp-profile.md §2 bans from the byte path: V8's result differs in the last bit
+// from the vendored fdlibm both sides link, and there is no drop-in on the C++ side
+// at all, because fdlibm's `hypot` is 2-argument and composing it
+// (`hypot(hypot(dx,dy),dz)`) is a different rounding — measured against the real
+// vendored lib, that composition disagrees with V8's 3-arg builtin on 20 of the 179
+// distances this corpus evaluates. A gain that no port can reproduce is not
+// evidence, and the knees below make it worse than a last-bit cosmetic: one ULP on
+// `d` flips `d <= AUD_NEAR` / `d >= AUD_CUT` and changes the command outright.
+//
+// `Math.sqrt` is the way out: IEEE-754 requires it CORRECTLY ROUNDED, so it is
+// bit-identical on every engine and every CPU (fp-profile §2 already exempts it,
+// and Vec3's length/normalize have always relied on that). The three squares and
+// two adds are exact IEEE ops in one fixed order. Verified: 200,179 triples — every
+// distance the corpus evaluates plus a 200k random sweep — agree bit-for-bit
+// between V8 and clang.
+//
+// PORTING NOTE: `std::sqrt(dx*dx + dy*dy + dz*dz)`, in this order, and NEVER
+// `std::hypot`. The sum must not be contracted into an FMA — that is what
+// `ttp_strict_fp`'s `-ffp-contract=off` is for (fp-profile §8, risk 1).
 export function nearestHumanDist(p, humanPositions) {
   let best = Infinity;
   for (const hp of humanPositions) {
     if (!hp) continue;
-    const d = Math.hypot(hp.x - p.x, hp.y - p.y, hp.z - p.z);
+    const dx = hp.x - p.x, dy = hp.y - p.y, dz = hp.z - p.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (d < best) best = d;
   }
   return best;
@@ -138,48 +163,66 @@ const MACLEOD = {
 // pick measures quieter, lower the target and raise MUSIC_LEVEL by the same dB
 // (the credits test pins gain ≤ 1 so a too-quiet pick fails loudly).
 export const MUSIC_TARGET_LUFS = -19.2;
-const song = (file, title, duration, lufs, credit = MACLEOD) => ({
+// `gain` is an AUTHORED LITERAL, not `10 ** ((MUSIC_TARGET_LUFS - lufs) / 20)`
+// evaluated here, and that is deliberate. `**` on doubles is V8's pow — the same
+// implementation-approximated builtin fp-profile.md §2 keeps off the byte path —
+// and this number is recorded into audio-corpus.jsonl as the music `gain`/`level`,
+// which the C++ port of P7 must reproduce to the bit. Measured against the vendored
+// fdlibm the port actually links: `ttp_fd_pow(10, x)` disagrees with V8's `10 ** x`
+// on 2 of the 23 distinct trims shipped below (lufs -15.7 and -15.3), so deriving
+// the number at load time would hand the port two songs it could never match.
+// A decimal literal has no such problem: JS and C++ both parse it correctly
+// rounded, so both get the identical double.
+//
+// The values ARE that formula's output, kept to the last bit, so nothing about the
+// mix changed when they were frozen. `lufs` stays beside each one as the authored
+// measurement and the reason for the number, and tests/credits.test.js re-runs the
+// derivation over every row to a few-ULP tolerance — so a mistyped literal or a new
+// song with a stale trim fails loudly, without the gate resting on V8's pow.
+// ADDING A SONG: measure its LUFS, then take the literal from
+//   node -e "console.log(10 ** ((-19.2 - <lufs>) / 20))"
+const song = (file, title, duration, lufs, gain, credit = MACLEOD) => ({
   file: `/assets/audio/music/${file}`,
   title,
   duration,
   lufs,
-  gain: 10 ** ((MUSIC_TARGET_LUFS - lufs) / 20),
+  gain,
   ...credit,
 });
 export const RACE_MUSIC = {
   beach: [
-    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187, -9.2),
-    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217, -13.6),
-    song('paradise_found.mp3', 'Paradise Found', 187, -11.5),
-    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212, -15.3),
-    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162, -13.2),
+    song('beachfront_celebration.mp3', 'Beachfront Celebration', 187, -9.2, 0.31622776601683794),
+    song('island_meet_and_greet.mp3', 'Island Meet and Greet', 217, -13.6, 0.5248074602497727),
+    song('paradise_found.mp3', 'Paradise Found', 187, -11.5, 0.4120975190973303),
+    song('tiki_bar_mixer.mp3', 'Tiki Bar Mixer', 212, -15.3, 0.6382634861905488),
+    song('arroz_con_pollo.mp3', 'Arroz Con Pollo', 162, -13.2, 0.5011872336272722),
   ],
   playroom: [
-    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194, -11.9),
-    song('bit_shift.mp3', 'Bit Shift', 192, -13.3),
-    song('chipper_doodle_v2.mp3', 'Chipper Doodle v2', 172, -12.2),
-    song('voice_over_under.mp3', 'Voice Over Under', 197, -15.4),
-    song('delightful_d.mp3', 'Delightful D', 184, -10.3),
+    song('itty_bitty_8_bit.mp3', 'Itty Bitty 8 Bit', 194, -11.9, 0.4315190768277653),
+    song('bit_shift.mp3', 'Bit Shift', 192, -13.3, 0.5069907082747045),
+    song('chipper_doodle_v2.mp3', 'Chipper Doodle v2', 172, -12.2, 0.44668359215096315),
+    song('voice_over_under.mp3', 'Voice Over Under', 197, -15.4, 0.6456542290346556),
+    song('delightful_d.mp3', 'Delightful D', 184, -10.3, 0.35892193464500527),
   ],
   snow: [
-    song('wallpaper.mp3', 'Wallpaper', 220, -11.2),
-    song('new_friendly.mp3', 'New Friendly', 169, -15.7),
-    song('glitter_blast.mp3', 'Glitter Blast', 178, -15.1),
-    song('cloud_dancer.mp3', 'Cloud Dancer', 220, -13.6),
-    song('digital_lemonade.mp3', 'Digital Lemonade', 180, -14.0),
+    song('wallpaper.mp3', 'Wallpaper', 220, -11.2, 0.3981071705534972),
+    song('new_friendly.mp3', 'New Friendly', 169, -15.7, 0.6683439175686147),
+    song('glitter_blast.mp3', 'Glitter Blast', 178, -15.1, 0.6237348354824193),
+    song('cloud_dancer.mp3', 'Cloud Dancer', 220, -13.6, 0.5248074602497727),
+    song('digital_lemonade.mp3', 'Digital Lemonade', 180, -14.0, 0.5495408738576246),
   ],
   grass: [
-    song('happy_bee.mp3', 'Happy Bee', 302, -9.1),
-    song('hyperfun.mp3', 'Hyperfun', 233, -19.1),
-    song('feelin_good.mp3', 'Feelin Good', 225, -18.0),
-    song('vivacity.mp3', 'Vivacity', 232, -12.8),
-    song('happy_happy_game_show.mp3', 'Happy Happy Game Show', 158, -9.7),
+    song('happy_bee.mp3', 'Happy Bee', 302, -9.1, 0.3126079367123955),
+    song('hyperfun.mp3', 'Hyperfun', 233, -19.1, 0.9885530946569391),
+    song('feelin_good.mp3', 'Feelin Good', 225, -18.0, 0.8709635899560807),
+    song('vivacity.mp3', 'Vivacity', 232, -12.8, 0.4786300923226384),
+    song('happy_happy_game_show.mp3', 'Happy Happy Game Show', 158, -9.7, 0.33496543915782767),
   ],
   canyon: [
-    song('still_pickin.mp3', 'Still Pickin', 298, -13.9),
-    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181, -16.7),
-    song('surf_shimmy.mp3', 'Surf Shimmy', 123, -13.4),
-    song('bama_country.mp3', 'Bama Country', 212, -18.2),
+    song('still_pickin.mp3', 'Still Pickin', 298, -13.9, 0.5432503314924333),
+    song('desert_of_lost_souls.mp3', 'Desert of Lost Souls', 181, -16.7, 0.7498942093324559),
+    song('surf_shimmy.mp3', 'Surf Shimmy', 123, -13.4, 0.5128613839913649),
+    song('bama_country.mp3', 'Bama Country', 212, -18.2, 0.8912509381337456),
   ],
   // Unlisted/empty biomes (currently just the cupless 'sunset') fall back to
   // the neutral ex-global track rather than silence. Exported for the music
