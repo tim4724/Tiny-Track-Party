@@ -343,13 +343,22 @@ private:
     // boost pads are painted overlays (mPads, polygon-offset material).
     std::unique_ptr<TrackBin> mTrack; // kept for render-time banana placement
     filament::gltfio::FilamentAsset* mBoxAsset = nullptr;
+    filament::gltfio::FilamentAsset* mBoxFadeAsset = nullptr; // BLEND twin, collect fade
     filament::gltfio::FilamentAsset* mBananaAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mBoxInstances;
+    std::vector<filament::gltfio::FilamentInstance*> mBoxFadeInstances;
     std::vector<filament::gltfio::FilamentInstance*> mBananaInstances;
     std::vector<filament::math::mat4f> mBoxXf; // box anchor bases (world)
     float mBoxScale = 1.0f;                    // kit box → BOX_H 0.3 world units
-    std::vector<float> mBoxCollectT;           // grow+pop burst clocks (TrackProps)
+    std::vector<float> mBoxCollectT;           // grow+fade burst clocks (TrackProps)
     std::vector<uint8_t> mBoxPrevAvail;        // availability edge detect
+    // Every box's contact blob is baked into the ONE mPropShadows mesh, so a
+    // collected box's blob can only be hidden by rewriting its slice of the
+    // vertex alphas: `mBoxShadowRest` is the baked colour to scale, and
+    // `mBoxShadowFade` what is currently uploaded (re-upload only on a change).
+    std::vector<uint32_t> mBoxShadowRest;
+    std::vector<uint8_t> mBoxShadowFade;
+    uint32_t mBoxShadowStride = 0;             // verts per box in mPropShadows
     Mesh mStructures;             // pillars / poles / loop shafts (matte concrete)
     Mesh mBerms;                  // grass lofted under a raised, non-pillared deck
     Mesh mPropShadows;            // baked contact blobs under the item boxes
@@ -618,8 +627,14 @@ private:
     bool loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb);
     void ensureAssetLoader();
     void registerAssetUris(filament::gltfio::FilamentAsset* asset);
+    // shareMaterials false keeps each instance's own MaterialInstance, so they
+    // can be tinted APART — costing the draw-call batching the sharing buys.
+    // Only the box fade pool wants it: two players can grab two boxes a beat
+    // apart, and on one shared material the second grab would rewrite the
+    // first's alpha mid-fade.
     filament::gltfio::FilamentAsset* loadInstancedProp(const char* assetName,
-            size_t count, std::vector<filament::gltfio::FilamentInstance*>& out);
+            size_t count, std::vector<filament::gltfio::FilamentInstance*>& out,
+            bool shareMaterials = true);
     void buildPadsMesh(const TrackBin& tb);
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);

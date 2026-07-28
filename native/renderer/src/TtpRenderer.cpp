@@ -3996,6 +3996,12 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::Ra
         const float h = bb.max.y - bb.min.y;
         if (h > 1e-3f) mBoxScale = 0.3f / h;
     }
+    // The collect fade runs on a BLEND clone of the same GLB (Display.js patches
+    // it with ghostGlb, as the monster's ghost bodies are): the kit material is
+    // OPAQUE, so the solid instance above cannot be faded at all. The grab hands
+    // the box over to its twin at the same pose and ramps that one's alpha out.
+    mBoxFadeAsset = loadInstancedProp("item-box-fade.glb", tb.boxes.size(),
+            mBoxFadeInstances, false);
     mBoxXf.clear();
     for (const TrackBin::Box& b : tb.boxes) {
         mBoxXf.push_back(tb.frameAt(b.s).basis(b.lat));
@@ -4039,6 +4045,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::Ra
             }
             ring(mPropShadows, base);
         }
+        // Each box owns an equal, contiguous slice of the baked mesh — that is
+        // what lets the reconcile fade one box's blob out when it is collected.
+        mBoxShadowStride = tb.boxes.empty() ? 0
+                : (uint32_t) (mPropShadows.verts.size() / tb.boxes.size());
+        mBoxShadowRest.clear();
+        mBoxShadowRest.reserve(mPropShadows.verts.size());
+        for (const Vertex& v : mPropShadows.verts) mBoxShadowRest.push_back(v.abgr);
+        mBoxShadowFade.assign(tb.boxes.size(), 255);
         if (!mPropShadows.verts.empty()) {
             MaterialInstance* mi = sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f);
@@ -5211,7 +5225,8 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
 // Instanced prop pool (item boxes, bananas): one shared GLB, `count` instances,
 // each posed independently via its root. Unused pool entries park underground.
 gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
-        size_t count, std::vector<gltfio::FilamentInstance*>& out) {
+        size_t count, std::vector<gltfio::FilamentInstance*>& out,
+        bool shareMaterials) {
     const auto it = mAssets.find(assetName);
     if (it == mAssets.end() || count == 0) return nullptr;
     ensureAssetLoader();
@@ -5234,12 +5249,13 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     }
     // Point every instance at instance 0's materials. gltfio hands each
     // FilamentInstance its own MaterialInstance so they can be tinted apart —
-    // we tint per MODEL, never per instance — and that alone stops Filament's
+    // we tint per MODEL, not per instance (the box fade pool is the one
+    // exception, and opts out via shareMaterials) — and that alone stops Filament's
     // automatic instancing from batching them, since it needs identical
     // geometry AND the same MaterialInstance. Fifty trees were fifty draw
     // calls; three merges its scenery into one mesh for the same reason.
     auto& rcm = mEngine->getRenderableManager();
-    if (out.size() > 1 && out[0]) {
+    if (shareMaterials && out.size() > 1 && out[0]) {
         const size_t nEnt = out[0]->getEntityCount();
         for (size_t i = 1; i < out.size(); i++) {
             if (!out[i] || out[i]->getEntityCount() != nEnt) continue;
@@ -7151,15 +7167,19 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         if (mBoxAsset) {
             const float pulse = 0.16f + 0.18f * (0.5f + 0.5f * std::sin(mTime * 4.5f));
             const float3 gold = srgbToLinear(0xffd23f) * pulse;
-            for (auto* inst : mBoxInstances) {
-                if (!inst) continue;
+            // The fade twins carry it too, or a box would drop its glow on the
+            // frame it is grabbed — the one frame anyone is looking at it.
+            const auto glow = [&](gltfio::FilamentInstance* inst) {
+                if (!inst) return;
                 MaterialInstance* const* mats = inst->getMaterialInstances();
                 for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
                     if (mats[mi]->getMaterial()->hasParameter("emissiveFactor")) {
                         mats[mi]->setParameter("emissiveFactor", gold);
                     }
                 }
-            }
+            };
+            for (auto* inst : mBoxInstances) glow(inst);
+            for (auto* inst : mBoxFadeInstances) glow(inst);
         }
         const uint32_t* boxStates = ttp_frame_box_states(&input);
         const uint32_t nBoxes = std::min<uint32_t>(input.boxCount,
@@ -7167,35 +7187,76 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         static const mat4f PARK = mat4f::translation(float3{ 0, -1000, 0 });
         if (mBoxCollectT.size() < nBoxes) mBoxCollectT.assign(nBoxes, 0.0f);
         if (mBoxPrevAvail.size() < nBoxes) mBoxPrevAvail.assign(nBoxes, 1);
+        // Collect burst (TrackProps): a grabbed box GROWS (→2.1×) while it fades,
+        // spinning up 2.2×. That is the authored beat, and it can finally be
+        // rendered as authored — the BLEND twin carries the alpha the solid
+        // instance has no channel for, so the growth reads as a poof dispersing
+        // instead of a box inflating in the road. The old `pop` tail is gone
+        // with it: it only ever existed to stand in for this alpha.
+        constexpr float POOF = 0.2f;
+        bool shadowsDirty = false;
         for (uint32_t i = 0; i < nBoxes; i++) {
             auto inst = tcm.getInstance(mBoxInstances[i]->getRoot());
+            gltfio::FilamentInstance* fadeInst =
+                    mBoxFadeInstances.size() > i ? mBoxFadeInstances[i] : nullptr;
             const bool avail = boxStates[i] != 0;
-            // Collect burst (TrackProps): a grabbed box GROWS (→2.1×) while it
-            // fades over 0.35 s, spinning up 2.2×. The ubershader can't fade,
-            // so the tail COLLAPSES instead — same "poof, grabbed" beat.
-            if (!avail && mBoxPrevAvail[i]) mBoxCollectT[i] = 0.35f;
+            // With no BLEND twin there is nothing to fade, and a grow with no
+            // fade is the box inflating — so skip the burst and just go.
+            if (!avail && mBoxPrevAvail[i]) mBoxCollectT[i] = fadeInst ? POOF : 0.0f;
             mBoxPrevAvail[i] = avail ? 1 : 0;
             // Hover: the box's BASE floats BOX_FLOAT 0.18 over the deck and
             // bobs ±BOX_BOB_AMP 0.07 at ω 3.0 with the 0.9·i phase stagger.
             const float bob = 0.18f + 0.07f * std::sin(mTime * 3.0f + 0.9f * i);
-            if (!avail && mBoxCollectT[i] > 0) {
-                mBoxCollectT[i] -= input.dt;
-                const float k = std::max(0.0f, mBoxCollectT[i] / 0.35f);
-                const float grow = 1.0f + (1.0f - k) * 1.1f;
-                const float pop = k > 0.45f ? 1.0f : k / 0.45f; // fade stand-in
-                const mat4f spin = mat4f::rotation(mTime * 1.6f * 2.2f, float3{ 0, 1, 0 });
-                tcm.setTransform(inst, mBoxXf[i]
-                        * mat4f::translation(float3{ 0, bob, 0 }) * spin
-                        * mat4f::scaling(float3{ mBoxScale * grow * pop }));
-                continue;
+            const mat4f hover = mBoxXf[i] * mat4f::translation(float3{ 0, bob, 0 });
+            float alpha = 1.0f; // the box's own opacity, and its blob's
+            if (!avail && mBoxCollectT[i] > 0 && fadeInst) {
+                mBoxCollectT[i] = std::max(0.0f, mBoxCollectT[i] - input.dt);
+                alpha = mBoxCollectT[i] / POOF;                  // 1 → 0
+                const float grow = 1.0f + (1.0f - alpha) * 1.1f; // 1 → 2.1
+                tcm.setTransform(inst, PARK);
+                tcm.setTransform(tcm.getInstance(fadeInst->getRoot()),
+                        hover * mat4f::rotation(mTime * 1.6f * 2.2f, float3{ 0, 1, 0 })
+                        * mat4f::scaling(float3{ mBoxScale * grow }));
+                MaterialInstance* const* mats = fadeInst->getMaterialInstances();
+                for (size_t mi = 0; mi < fadeInst->getMaterialInstanceCount(); mi++) {
+                    if (mats[mi]->getMaterial()->hasParameter("baseColorFactor")) {
+                        mats[mi]->setParameter("baseColorFactor",
+                                math::float4{ 1, 1, 1, alpha });
+                    }
+                }
+            } else if (!avail) {
+                tcm.setTransform(inst, PARK);
+                if (fadeInst) tcm.setTransform(tcm.getInstance(fadeInst->getRoot()), PARK);
+                alpha = 0.0f;
+            } else {
+                mBoxCollectT[i] = 0;
+                // Idle (TrackProps _stepBoxes): spin 1.6 rad/s in unison.
+                tcm.setTransform(inst, hover
+                        * mat4f::rotation(mTime * 1.6f, float3{ 0, 1, 0 })
+                        * mat4f::scaling(float3{ mBoxScale }));
+                if (fadeInst) tcm.setTransform(tcm.getInstance(fadeInst->getRoot()), PARK);
             }
-            if (!avail) { tcm.setTransform(inst, PARK); continue; }
-            mBoxCollectT[i] = 0;
-            // Idle (TrackProps _stepBoxes): spin 1.6 rad/s in unison.
-            const mat4f spin = mat4f::rotation(mTime * 1.6f, float3{ 0, 1, 0 });
-            tcm.setTransform(inst, mBoxXf[i]
-                    * mat4f::translation(float3{ 0, bob, 0 }) * spin
-                    * mat4f::scaling(float3{ mBoxScale }));
+            const uint8_t fade = (uint8_t) std::lround(alpha * 255.0f);
+            if (i < mBoxShadowFade.size() && mBoxShadowFade[i] != fade) {
+                mBoxShadowFade[i] = fade;
+                shadowsDirty = true;
+            }
+        }
+        // One re-upload of the whole baked blob mesh, only on a state change —
+        // a box collect or respawn, so a handful of frames per race.
+        if (shadowsDirty && mPropShadows.vb && mBoxShadowStride) {
+            for (size_t i = 0; i < mBoxShadowFade.size(); i++) {
+                const size_t v0 = i * mBoxShadowStride;
+                const size_t v1 = std::min(v0 + mBoxShadowStride, mPropShadows.verts.size());
+                for (size_t v = v0; v < v1; v++) {
+                    const uint32_t rest = mBoxShadowRest[v];
+                    const uint32_t a = ((rest >> 24) * mBoxShadowFade[i] + 127) / 255;
+                    mPropShadows.verts[v].abgr = (a << 24) | (rest & 0x00ffffffu);
+                }
+            }
+            mPropShadows.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                    mPropShadows.verts.data(),
+                    mPropShadows.verts.size() * sizeof(Vertex), nullptr));
         }
         // Ground blob under each dynamic prop (TrackProps shares one blob geo,
         // scaled 0.7 for a banana and 0.95 for a rocket).
@@ -7842,6 +7903,7 @@ void TtpRenderer::releaseScene() {
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     dropAsset(mBoxAsset);
+    dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
     dropAsset(mConeAsset);
     dropAsset(mMonsterAsset);
@@ -7873,6 +7935,7 @@ void TtpRenderer::releaseScene() {
     mMonsterInstances.clear();
     mMonsterGhostInstances.clear();
     mBoxInstances.clear();
+    mBoxFadeInstances.clear();
     mBananaInstances.clear();
     mConeInstances.clear();
     mSceneryAssets.clear();
@@ -7881,6 +7944,9 @@ void TtpRenderer::releaseScene() {
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
+    mBoxShadowRest.clear();
+    mBoxShadowFade.clear();
+    mBoxShadowStride = 0;
     mCarGhostIn.clear();
     mMonsterIn.clear();
     mMonsterGhostIn.clear();

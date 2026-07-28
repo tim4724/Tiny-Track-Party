@@ -135,6 +135,12 @@ export class Display {
         if (!bytes) return;
         this.provide(`${name}.glb`, bytes);
         if (name === 'vehicle-monster-truck') this.provide('monster-ghost.glb', ghostGlb(bytes));
+        // A BLEND clone of the box, for the collect fade. The kit material is
+        // OPAQUE, so the solid instance cannot be faded at all — the renderer
+        // hands the grab over to this one and ramps its alpha down. ghostGlb's
+        // 0.5 never shows: the renderer writes the alpha on every frame a box
+        // is dissolving, and parks these instances the rest of the time.
+        if (name === 'item-box') this.provide('item-box-fade.glb', ghostGlb(bytes));
       })
     ]);
 

@@ -112,12 +112,24 @@ export class LobbyDemo {
     }
   }
 
+  // Unbinds only OUR session. stop() doubles as the "make sure the demo isn't
+  // running" call — refreshLobbyDemo fires it on every roster change, including
+  // ones that land mid-race — so a blind bindSession(0) here cut the RACE's
+  // session out of the renderer: no cars drawn at all, and with every cell's car
+  // missing the chase cameras fell back to the whole-track overview for the rest
+  // of the race. The seat edit that triggers it is ordinary (a phone joining
+  // during the countdown; in ?solo the roster settles a beat after launchRace).
   stop() {
     this.active = false;
     this._epoch++; // cancels a start still waiting on the sim module
-    this.scene.bindSession(0);
+    // engine and binding are set together (and only together), so this is
+    // exactly "the renderer is drawing the demo".
+    if (this.engine) {
+      this.scene.bindSession(0);
+      this.engine.dispose();
+      this.engine = null;
+    }
     for (const id of this._ids) this.scene.removeCar(id);
     this._ids = [];
-    if (this.engine) { this.engine.dispose(); this.engine = null; }
   }
 }
