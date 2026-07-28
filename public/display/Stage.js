@@ -262,8 +262,15 @@ export class Stage {
     const carIndex = (opts.carIndex == null ? colorIndex : opts.carIndex);
     const cell = opts.cell !== false;
     const colHex = this.colors[colorIndex % this.colors.length] || '#fff';
+    // The *El fields are the leaves setCarHud writes, resolved ONCE here rather
+    // than re-queried per paint — they are created a few lines below, so a
+    // selector match every tick was only ever finding what we already had. The
+    // _*Text fields are the last string written to each, so an unchanged value
+    // costs a comparison instead of a DOM write (see setCarHud).
     const c = { name, colorIndex, carIndex, finished: false, reconnecting: false,
-                label: null, placeEl: null,
+                label: null, placeEl: null, placeTextEl: null, lapTextEl: null,
+                itemEl: null, finPlaceEl: null, finTimeEl: null,
+                _placeText: null, _lapText: null, _finPlaceText: null, _finTimeText: null,
                 finishEl: null, reconnectEl: null, _chipItem: null, _chipTimer: null };
 
     if (cell) {
@@ -274,6 +281,7 @@ export class Stage {
       label.style.setProperty('--c', colHex);
       this.overlay.appendChild(label);
       c.label = label;
+      c.itemEl = label.querySelector('.cell-label__item');
 
       // place + lap readout — pinned to this player's cell top-right, no card,
       // white text over the scene (positioned by _loop, filled by setCarHud).
@@ -282,6 +290,8 @@ export class Stage {
       placeEl.innerHTML = `<div class="cell-rank__place"></div><div class="cell-rank__lap"></div>`;
       this.overlay.appendChild(placeEl);
       c.placeEl = placeEl;
+      c.placeTextEl = placeEl.querySelector('.cell-rank__place');
+      c.lapTextEl = placeEl.querySelector('.cell-rank__lap');
 
       // The on-screen steer indicator is NOT here: the renderer draws it, from
       // the same cell rects this HUD is placed on and the same roster livery
@@ -300,6 +310,8 @@ export class Stage {
         `<div class="cell-finish__time"></div>`;
       this.overlay.appendChild(finishEl);
       c.finishEl = finishEl;
+      c.finPlaceEl = finishEl.querySelector('.cell-finish__place');
+      c.finTimeEl = finishEl.querySelector('.cell-finish__time');
     }
 
     this.cars.set(id, c);
@@ -369,14 +381,29 @@ export class Stage {
   // one HUD element that needed 60 Hz, the steer bar, is the renderer's now.
   hudRows() { return this.display ? this.display.hud() : []; }
 
+  // WRITES ONLY WHAT CHANGED. The poll runs at ~6 Hz but the values behind it
+  // move about 0.9 times a second across a whole 8-car field (measured over a
+  // 90 s race: 61 place changes, 16 item, 4 lap), so ~85% of these calls have
+  // nothing to say. Re-writing textContent with an identical string is not free:
+  // it is a selector match, a string build and a DOM property set per field per
+  // car, and the FINISHED card used to repaint its place and toFixed'd time
+  // every tick for the whole rest of the race.
+  //
+  // The DIFF is here rather than upstream because the readback is not what
+  // costs — ttp_display_hud is a packed struct, no JSON — and because `position`
+  // has no event to be driven by: it is a side effect of physics that the sim
+  // recomputes every tick. Turning that into a push would mean the sim diffing
+  // ranks and emitting, for a saving the diff already gets.
   setCarHud(id, info) {
     const c = this.cars.get(id);
     if (!c || !c.label) return; // cell-less AI cars have no HUD label
     // place + lap, top-right (no card): a big ordinal over a smaller "Lap n/N".
     // Hidden while finished — the centred FINISHED overlay shows place + time.
     if (c.placeEl) {
-      c.placeEl.querySelector('.cell-rank__place').textContent = ordinal(info.position);
-      c.placeEl.querySelector('.cell-rank__lap').textContent = `Lap ${info.lap}/${info.totalLaps}`;
+      const place = ordinal(info.position);
+      const lap = `Lap ${info.lap}/${info.totalLaps}`;
+      if (place !== c._placeText) { c._placeText = place; c.placeTextEl.textContent = place; }
+      if (lap !== c._lapText) { c._lapText = lap; c.lapTextEl.textContent = lap; }
     }
     // Held-item slot — a fixed reserved square. On a fresh pickup it SLOT-MACHINES
     // the item icons and lands on what they got; on use it returns to the empty
@@ -386,13 +413,16 @@ export class Stage {
       c._chipItem = next;
       if (c._chipTimer) { clearTimeout(c._chipTimer); c._chipTimer = null; }
       if (next) this._rouletteChip(c, next);
-      else { const e = c.label.querySelector('.cell-label__item'); if (e) this._paintSlot(e, null, false); }
+      else if (c.itemEl) this._paintSlot(c.itemEl, null, false);
     }
     c.finished = !!info.finished;
     if (c.finished && c.finishEl) {
-      c.finishEl.querySelector('.cell-finish__place').textContent = ordinal(info.position);
-      c.finishEl.querySelector('.cell-finish__time').textContent =
-        info.finishTime != null ? `${info.finishTime.toFixed(1)}s` : '';
+      // Both fields are fixed the moment the car crosses, so this card is
+      // written ONCE and then left alone for the rest of the race.
+      const place = ordinal(info.position);
+      const time = info.finishTime != null ? `${info.finishTime.toFixed(1)}s` : '';
+      if (place !== c._finPlaceText) { c._finPlaceText = place; c.finPlaceEl.textContent = place; }
+      if (time !== c._finTimeText) { c._finTimeText = time; c.finTimeEl.textContent = time; }
     }
   }
 
@@ -424,7 +454,7 @@ export class Stage {
   // decelerating, then land on `item` with a pop. Self-driven so it animates
   // faster than the ~6 Hz HUD poll; cancelled on change/teardown.
   _rouletteChip(c, item) {
-    const el = c.label && c.label.querySelector('.cell-label__item');
+    const el = c.itemEl;
     if (!el) return;
     let i = 0, n = 0; const TOTAL = 9;
     const spin = () => {
