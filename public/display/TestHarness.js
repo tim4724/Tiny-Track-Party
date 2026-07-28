@@ -296,7 +296,9 @@ export function runDisplayScenario(opts, ctx) {
       } else if (mode === 'random') {
         const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[1].tracks[0];
         const cup = cupOf(id);
-        state = { name: 'Random', races: 'endless', difficulty: null, maps: [mapOf(id)], cupId: cup && cup.id };
+        // the default card, not the endless run — the gallery previews what a
+        // 🎲 tap actually lands on (only race 1 is drawn yet, hence one mini)
+        state = { name: 'Random', races: '4 races', difficulty: null, maps: [mapOf(id)], cupId: cup && cup.id };
       } else {
         const cup = (qTrack && cupOf(qTrack)) || CUPS[0];
         const first = TRACK_LIST.find((t) => t.cup === cup.id);

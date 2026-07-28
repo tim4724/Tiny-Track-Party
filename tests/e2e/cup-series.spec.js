@@ -115,10 +115,13 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
-  // The Beach auto-pick lands first (fresh phone); then the host taps 🎲.
+  // The Beach auto-pick lands first (fresh phone); then the host taps 🎲, which
+  // lands on the 4-race card, and opens its panel for the endless run.
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
   await alice.locator('.mode-opt', { hasText: 'Random' }).click();
   await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.trackId != null, null, { timeout: 10000 });
+  await alice.locator('.modepick__opts .mode-opt', { hasText: 'Endless' }).click();
+  await page.waitForFunction(() => window.__net.randomRaces === 0, null, { timeout: 10000 });
   const first = await page.evaluate(() => window.__net.trackId);
 
   await startRace(alice, []);
@@ -144,6 +147,38 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => ({ series: window.__series(), mode: window.__net.mode })))
     .toEqual({ series: null, mode: 'random' });
+});
+
+// The default half of Random: the bare tile is a fixed card, a cup made of
+// tracks nobody chose — numbered "of N", and it ENDS.
+test('Random defaults to a fixed 4-race card', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__intermissionMs = 60000; });
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.locator('.mode-opt', { hasText: 'Random' }).click();
+  await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.randomRaces === 4, null, { timeout: 10000 });
+  const drawn = await page.evaluate(() => window.__net.trackId);
+  expect(drawn).not.toBe(null);
+  await expect(page.locator('.cup-races')).toHaveText('4 races');
+
+  // Changing the LENGTH keeps the drawn track — the button chose a run, not a
+  // circuit — in both directions.
+  await alice.locator('.modepick__opts .mode-opt', { hasText: 'Endless' }).click();
+  await page.waitForFunction(() => window.__net.randomRaces === 0, null, { timeout: 10000 });
+  expect(await page.evaluate(() => window.__net.trackId)).toBe(drawn);
+  await alice.locator('.modepick__opts .mode-opt', { hasText: '4 races' }).click();
+  await page.waitForFunction(() => window.__net.randomRaces === 4, null, { timeout: 10000 });
+  expect(await page.evaluate(() => window.__net.trackId)).toBe(drawn);
+
+  await startRace(alice, []);
+  await waitForRacing(page);
+  expect(await page.evaluate(() => window.__net.trackId)).toBe(drawn); // race 1 IS the preview
+  await finishHumans(page);
+  await inResults(page);
+  await expect(page.locator('#results-sub')).toHaveText('Random · Race 1 of 4');
+  expect(await page.evaluate(() => ({ endless: window.__series().endless, races: window.__series().raceCount })))
+    .toEqual({ endless: false, races: 4 });
 });
 
 test('a mid-cup joiner is seated into the next series race and scores from there', async ({ page, browser }) => {

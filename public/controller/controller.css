@@ -152,15 +152,21 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-opt {
   position: relative; cursor: pointer; padding: 0.4rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.car-opt:active:not(:disabled) { transform: translateY(2px); }
+/* pressed: the sticker goes down onto the paper and its drop closes up —
+   the theme's own press (.icon-btn), so a tile presses like every other
+   button on the page */
+.car-opt:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 /* locked strip (player is READY): the pick stands, the alternatives recede */
 .car-opt:disabled { cursor: default; }
 .car-opt:disabled:not(.car-opt--mine) { opacity: 0.45; }
-/* selected strip tile: tinted toward YOUR livery with the hard drop (the hero
-   shows which it is; the pale-blue highlight didn't fit the warm palette) */
-.car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); box-shadow: var(--shadow-pop); }
+/* selected strip tile: tinted toward YOUR livery. The drop is NOT the mark —
+   every tile wears the same one, because every tile is equally pressable; the
+   fill alone says which is yours (the hero shows which it is too; the pale-blue
+   highlight didn't fit the warm palette) */
+.car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* under the footer button: why it's gated / who we're waiting on */
 #ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
@@ -191,17 +197,21 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
   cursor: pointer; padding: 0.45rem 0.4rem 0.4rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.mode-opt:active:not(:disabled) { transform: translateY(2px); }
+.mode-opt:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 .mode-opt:disabled { cursor: default; }
 /* ONE picked look across the whole picker (see .track-opt--mine), and it's the one
    the lobby already uses a row above (.car-opt--mine): the tile fills with its own
-   colour and takes the hard drop. No chrome colour is dragged in to say "picked",
-   which is what made the old green ring shout green and fight the cup colour under
-   it — the fill IS the cup, so the mark and the identity are the same stroke. */
-.mode-opt--mine { box-shadow: var(--shadow-pop); }
-/* the hint is muted for scanning past on white paper; on a loud fill that muting
+   colour, and that fill is the WHOLE mark. The drop stays exactly as it is on every
+   other tile — it belongs to being pressable, not to being picked, and a taller one
+   would say "picked" in a second language the fill is already saying. No chrome
+   colour is dragged in either, which is what made the old green ring shout green and
+   fight the cup colour under it — the fill IS the cup, so the mark and the identity
+   are the same stroke. The fill itself is painted inline by buildModePicker, so
+   --mine carries no rule of its own here beyond the text contrast below.
+   the hint is muted for scanning past on white paper; on a loud fill that muting
    turns into poor contrast, so a picked tile takes it back up */
 .mode-opt--mine .mode-opt__sub { color: var(--ink-2); }
 .mode-opt__name {
@@ -222,6 +232,11 @@ input[type=text]:disabled { opacity: 0.6; }
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
+/* Random's panel holds run LENGTHS, not tracks — the same inset surface (neutral
+   grey, since Random belongs to no cup), the same tiles, two across instead of four
+   so the labels are words rather than map thumbnails. */
+.modepick__opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.45rem; }
+.modepick__opts .mode-opt { border-width: 2px; padding: 0.35rem 0.3rem; }
 .modepick__tracks .track-opt { padding: 0.3rem 0.25rem 0.35rem; border-width: 2px; }
 .modepick__tracks .track-opt__name { font-size: 0.64rem; }
 /* difficulty TENDENCY meter — 4 pips, the first `data-level` filled RED
@@ -242,15 +257,15 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
   cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.track-opt:active:not(:disabled) { transform: translateY(2px); }
+.track-opt:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 .track-opt:disabled { cursor: default; }
-/* picked tile — the identical fill-and-drop a picked cup wears, so "picked" looks
-   the same wherever it lands in the picker. The fill (its cup's colour, loud) is
-   painted inline by trackTile; here it also darkens the name to full ink, since the
-   tile is no longer white paper under the text. */
-.track-opt--mine { box-shadow: var(--shadow-pop); }
+/* picked tile — the identical fill a picked cup wears (and the same unchanged
+   drop), so "picked" looks the same wherever it lands in the picker. The fill (its
+   cup's colour, loud) is painted inline by trackTile; here it only darkens the name
+   to full ink, since the tile is no longer white paper under the text. */
 .track-opt--mine .track-opt__name { color: var(--ink); }
 .track-opt__name {
   font-weight: 800; font-size: 0.74rem; color: var(--ink-2);

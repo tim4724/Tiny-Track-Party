@@ -47,13 +47,13 @@ var MSG = {
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
-  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), or random (ENDLESS run of drawn tracks; re-tap re-rolls the preview)
+  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), or random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4; a random tap that doesn't change the length re-rolls the preview)
   SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
   // Display -> all controllers: the retained room snapshot (relay set_state)
-  LOBBY_UPDATE: 'lobby_update', // THE room snapshot. { roomState, hostPeerIndex, paused, mode, cupId, trackId,
+  LOBBY_UPDATE: 'lobby_update', // THE room snapshot. { roomState, hostPeerIndex, paused, mode, cupId, trackId, randomRaces,
                                 //   players:[{peerIndex,name,colorIndex,carIndex,connected,ready,inRace}],
                                 //   standings:{over,order:[…],series?}|null (playing/results),
                                 //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only) }.

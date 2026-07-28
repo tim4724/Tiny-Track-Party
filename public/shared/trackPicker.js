@@ -1,6 +1,7 @@
-// Mode picker UI — how the host picks what to race: 🎲 Random (an endless run
-// of display-drawn tracks), a Cup (its 4 tracks back-to-back as a Grand Prix),
-// or — from the panel a picked cup opens — one exact track (single race). Five
+// Mode picker UI — how the host picks what to race: a Cup (its 4 tracks
+// back-to-back as a Grand Prix), 🎲 Random (a run of display-drawn tracks,
+// endless or a fixed card), or — from the panel a picked cup opens — one exact
+// track (single race). Six
 // compact tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
 // from the schematic catalog the display ships in WELCOME (each entry carries
 // its cup + a top-down SVG path; see display/trackSchematic.js). Only the HOST
@@ -41,6 +42,23 @@ const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;  // cup-less catalog: the old def
 // Random belongs to no cup, so it has no colour to turn up — a warm grey stands in,
 // which is honest: "any biome" isn't one of them.
 const NEUTRAL_COLOR = '#8C8398';
+
+// How LONG a Random run is, in tile order — the options in the panel Random
+// opens, mirroring the exact-track panel a cup opens. `randomRaces: 0` is
+// endless (no last race; only a lobby return ends it), any other count is a
+// fixed card drawn up front, which means points, a final race and a podium —
+// a Grand Prix out of tracks nobody chose.
+export const RANDOM_LENGTHS = [
+  { randomRaces: 4, label: '4 races', sub: 'then a podium' },
+  { randomRaces: 0, label: 'Endless', sub: 'no last race' }
+];
+// What the tile means on its own — a 4-race card, matching every cup beside it.
+// Random used to mean ENDLESS, but a run with no finish line is a strange thing
+// to hand a host who just tapped a tile: nothing on screen promises an end, and
+// leaving one is a deliberate act. A card ends by itself, on a podium, and the
+// panel is one tap away for the party that wants to keep going.
+export const RANDOM_DEFAULT_RACES = 4;
+const randomSub = (n) => (n ? `${n} races` : 'endless');
 
 // How much colour a surface wears; `pct` is how much survives a mix with white.
 const PANEL_TINT = 45;  // the open cup's track panel: a surface behind cards, so deeper than they are
@@ -162,10 +180,10 @@ function modeTile({ label, glyph, sub, meter, mine, pickTint, canPick, onTap }) 
 
 // Render the picker into `stripEl`.
 //   catalog   : [{ id, name, svg, cup, cupName, cupDifficulty }] (from the display)
-//   selection : {mode:'track'|'cup'|'random', trackId?, cupId?} | null (nothing picked)
+//   selection : {mode:'track'|'cup'|'random', trackId?, cupId?, randomRaces?} | null
 //   canPick   : whether taps are live (host only)
-//   onPickMode: ({mode, trackId?, cupId?}) => void — also fired by a re-tap on
-//               Random (the display re-rolls the draw), so don't filter it here.
+//   onPickMode: ({mode, trackId?, cupId?, randomRaces?}) => void — also fired by a
+//               re-tap on Random (the display re-rolls the draw), so don't filter it here.
 // A catalog whose entries predate cups collapses to a flat grid of exact picks.
 export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMode }) {
   if (!stripEl) return;
@@ -199,18 +217,16 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   const ownerOf = (id) => { const t = list.find((x) => x.id === id); return t ? t.cup : null; };
   const expanded = sel.mode === 'cup' ? sel.cupId : sel.mode === 'track' ? ownerOf(sel.trackId) : null;
 
+  // The length a Random tap carries: whatever it's already set to, so tapping the
+  // tile re-rolls the draw without also resetting the run's shape. A selection
+  // with no length at all (a phone whose stored pick predates them) takes the
+  // default, so 0 has to be tested for rather than falsy-checked — it's endless,
+  // not "unset".
+  const randomRaces = sel.mode === 'random' && Number.isInteger(sel.randomRaces)
+    ? sel.randomRaces : RANDOM_DEFAULT_RACES;
+
   const grid = document.createElement('div');
   grid.className = 'modepick';
-
-  grid.appendChild(modeTile({
-    label: 'Random', glyph: '🎲', sub: 'endless',
-    mine: sel.mode === 'random',
-    // Belonging to no cup, it has no colour of its own — a neutral grey stands in so it
-    // still wears the same fill-and-drop mark the cups do.
-    pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
-    canPick,
-    onTap: () => pick({ mode: 'random' })  // re-tap re-rolls — deliberately not filtered
-  }));
 
   for (const g of groups) {
     grid.appendChild(modeTile({
@@ -226,7 +242,44 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
       onTap: () => pick({ mode: 'cup', cupId: g.id })
     }));
   }
+
+  // Random sits AFTER the cups: the cups are the game's own ladder and read in
+  // difficulty order, so a tile in front of them cut that order in half. Last, it
+  // reads as what it is — the thing you reach for once the five named cups aren't
+  // what you want.
+  grid.appendChild(modeTile({
+    label: 'Random', glyph: '🎲', sub: randomSub(randomRaces),
+    mine: sel.mode === 'random',
+    // Belonging to no cup, it has no colour of its own — a neutral grey stands in so it
+    // still wears the same fill-and-drop mark the cups do.
+    pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
+    canPick,
+    onTap: () => pick({ mode: 'random', randomRaces })  // re-tap re-rolls — deliberately not filtered
+  }));
   stripEl.appendChild(grid);
+
+  // Picked Random opens a panel of its own, in the same slot and the same inset
+  // surface a cup's four tracks open into — one panel position, so the picker
+  // never grows a second place to look. Where a cup panel asks WHICH track, this
+  // one asks HOW LONG.
+  if (sel.mode === 'random') {
+    const panel = document.createElement('div');
+    panel.className = 'modepick__tracks';
+    panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
+    const opts = document.createElement('div');
+    opts.className = 'modepick__opts';
+    for (const o of RANDOM_LENGTHS) {
+      opts.appendChild(modeTile({
+        label: o.label, sub: o.sub,
+        mine: randomRaces === o.randomRaces,
+        pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
+        canPick,
+        onTap: () => pick({ mode: 'random', randomRaces: o.randomRaces })
+      }));
+    }
+    panel.appendChild(opts);
+    stripEl.appendChild(panel);
+  }
 
   const openCup = expanded != null ? byCup.get(expanded) : null;
   if (openCup) {

@@ -111,7 +111,7 @@ let waitingForNextRace = false;
 let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
 
 const NAME_KEY = 'tinytrack_name';
-const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?, cupId?}
+const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?, cupId?, randomRaces?}
 const TRACK_KEY = 'tinytrack_track';   // legacy pre-mode key (bare track id) — read-only fallback
 const CAR_KEY = 'tinytrack_car';       // last-picked car model index
 const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
@@ -241,8 +241,19 @@ function setJoining(on) {
 // flat). A display that predates modes sends a bare trackId — read it as an
 // exact pick so a mid-deploy pairing still works.
 function modeFrom(data) {
-  if (data.mode) return { mode: data.mode, cupId: data.cupId != null ? data.cupId : null, trackId: data.trackId != null ? data.trackId : null };
-  if (data.trackId != null) return { mode: 'track', cupId: null, trackId: data.trackId };
+  if (data.mode) {
+    return {
+      mode: data.mode,
+      cupId: data.cupId != null ? data.cupId : null,
+      // How long a Random run is (0 = endless). The display owns it — it clamps
+      // whatever we sent — so the picker's length tiles read it back from here.
+      // null when the snapshot carries none, which lets the picker apply its own
+      // default instead of reading the absence as endless.
+      randomRaces: Number.isInteger(data.randomRaces) ? data.randomRaces : null,
+      trackId: data.trackId != null ? data.trackId : null
+    };
+  }
+  if (data.trackId != null) return { mode: 'track', cupId: null, randomRaces: null, trackId: data.trackId };
   return null;
 }
 
@@ -485,9 +496,9 @@ function renderLobby() {
   });
 }
 
-// Mode picker — host only: 🎲 Random (endless drawn races) + one tile per cup
-// (a cup pick runs its 4-race Grand Prix; the open cup's panel offers exact
-// single-track picks). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
+// Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
+// 4-race Grand Prix and its open panel offers exact single-track picks; Random's
+// panel offers the run's length instead). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
 // shows the host's pick. Also hidden until the catalog arrives (older display /
 // pre-WELCOME). Layout in shared/trackPicker.js.
 function renderModePicker() {
@@ -543,7 +554,9 @@ function chooseMode(pick) {
   const same = cur.mode === pick.mode
     && (pick.mode === 'cup' ? cur.cupId === pick.cupId
       : pick.mode === 'track' ? cur.trackId === pick.trackId
-        : false); // a Random re-tap re-rolls the draw — never filtered
+        // Random is never filtered: a tap that changes the length changes the
+        // pick, and one that doesn't re-rolls the draw. Both need the display.
+        : false);
   if (same) return;
   selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth
   saveMode(pick);              // remember it so the next lobby auto-picks this mode

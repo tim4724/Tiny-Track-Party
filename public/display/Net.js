@@ -21,6 +21,15 @@ const enc = encodeURIComponent;
 // is empty there): peer_left stays the authority, so a brief blip can't kick a
 // lobby seat.
 const LIVENESS_TIMEOUT_MS = 3000;
+
+// A 'random' pick's run length off the wire: 0 is ENDLESS, anything else is that
+// many races. The phone offers 4 or endless, but the value is host-supplied like
+// every other field here, so it's clamped rather than trusted — and a pick that
+// carries no length at all (a phone from before they existed) gets the default
+// card rather than an endless run nobody asked for.
+const RANDOM_MAX_RACES = 8;
+const RANDOM_DEFAULT_RACES = 4;
+const normRandomRaces = (n) => (Number.isInteger(n) && n >= 0 && n <= RANDOM_MAX_RACES ? n : RANDOM_DEFAULT_RACES);
 // Display self-heartbeat: each liveness tick relays a message to our own slot.
 // An echo overdue past this window means OUR socket is half-dead (the relay
 // can't reach us), so force a reconnect instead of waiting for TCP to notice.
@@ -130,6 +139,10 @@ export class DisplayNet extends GameNet {
     // drawRandomTrack (game-supplied shuffle bag; re-picking random re-rolls).
     this.mode = this.trackId != null ? 'track' : null;
     this.cupId = null;
+    // How long a 'random' run is: 0 = endless (only a lobby return ends it),
+    // otherwise that many drawn races and then a podium. Meaningless in the
+    // other modes, where it stays 0.
+    this.randomRaces = 0;
     this.drawRandomTrack = opts.drawRandomTrack || null;
 
     // The room state machine — NativeRoomFlow (C++ decisions, kit surface),
@@ -431,11 +444,11 @@ export class DisplayNet extends GameNet {
 
   // Host's lobby pick — exact track, a cup (Grand Prix), or a random draw.
   // Validates, resolves the concrete trackId, echoes to every phone
-  // (LOBBY_UPDATE mode/cupId/trackId) and tells the display to swap the 3D
-  // preview. Same-pick taps no-op EXCEPT random, where a re-tap re-rolls.
+  // (LOBBY_UPDATE mode/cupId/trackId/randomRaces) and tells the display to swap
+  // the 3D preview. Same-pick taps no-op EXCEPT random, where a re-tap re-rolls.
   _applyMode(from, data) {
     if (from !== this.flow.host || this.roomState !== ROOM_STATE.LOBBY) return;
-    let cupId = null, trackId;
+    let cupId = null, randomRaces = 0, trackId;
     if (data.mode === 'track') {
       if (!this.tracks.some((t) => t.id === data.trackId)) return;
       if (this.mode === 'track' && data.trackId === this.trackId) return;
@@ -449,10 +462,17 @@ export class DisplayNet extends GameNet {
       trackId = first.id;
     } else if (data.mode === 'random') {
       if (!this.drawRandomTrack) return;
-      trackId = this.drawRandomTrack();
+      randomRaces = normRandomRaces(data.randomRaces);
+      // Changing the LENGTH keeps the drawn track — only the shape of the run
+      // changed, and re-rolling the preview under the host would read as the
+      // length button having picked a track. Every other random tap (the tile
+      // itself, or arriving from another mode) draws.
+      const keepDraw = this.mode === 'random' && randomRaces !== this.randomRaces && this.trackId != null;
+      trackId = keepDraw ? this.trackId : this.drawRandomTrack();
     } else return;
     this.mode = data.mode;
     this.cupId = cupId;
+    this.randomRaces = randomRaces;
     this.trackId = trackId;
     this._publishLobby();
     this.onTrackChange(this.trackId);
@@ -672,6 +692,7 @@ export class DisplayNet extends GameNet {
       players: this.roster(),        // each carries inRace + ready + connected
       mode: this.mode,
       cupId: this.cupId,
+      randomRaces: this.randomRaces, // 'random' run length (0 = endless)
       trackId: this.trackId,         // resolved concrete track
       standings: this._standings,    // results board (playing/results), else null
       // Chooser content the dumb controller renders from. cars/colors ride every
@@ -698,7 +719,7 @@ export class DisplayNet extends GameNet {
   // Reset the lobby pick to the pre-pick state (End party → fresh room: the
   // next party must not inherit the old party's cup). The retained snapshot
   // republishes with the cleared values when the fresh room comes up.
-  clearPick() { this.mode = null; this.cupId = null; this.trackId = null; }
+  clearPick() { this.mode = null; this.cupId = null; this.randomRaces = 0; this.trackId = null; }
 
   // End the party for everyone: the relay deletes the room (stale rejoin links
   // 404) and closes every socket with 4001 — phones bail terminally (their

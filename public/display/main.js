@@ -733,11 +733,13 @@ function renderLobbyPick() {
       cupId: entry ? entry.cup : null
     };
   } else if (net.mode === 'random') {
-    // an endless surprise series — the sticker sells the mode; the map shows
-    // this round's draw (it's also what the preview is orbiting)
+    // a surprise series, endless or a fixed card — the sticker sells the mode;
+    // the map shows this round's draw (it's also what the preview is orbiting).
+    // Only race 1 is known here: the rest of a fixed card is drawn at the start,
+    // so the slot promises a COUNT where a cup shows its four circuits.
     const entry = trackCatalog.find((t) => t.id === net.trackId);
     state = {
-      name: 'Random', races: 'endless', difficulty: null,
+      name: 'Random', races: net.randomRaces ? `${net.randomRaces} races` : 'endless', difficulty: null,
       maps: [{ svg: svgOf(net.trackId) }],
       cupId: entry ? entry.cup : null
     };
@@ -806,6 +808,21 @@ function allRacersReady() {
   return players.length > 0 && players.every((p) => p.ready || p.peerIndex === net.flow.host);
 }
 
+// The series behind a Random start, per the host's length pick (net.randomRaces).
+// Endless (0) is the original behaviour: one track on the card and a draw offered
+// at every intermission, so it never finishes. A fixed count instead draws the
+// WHOLE card up front — race 1 is the track the lobby already previewed — and
+// hands it over with no drawNext, which makes it a cup in every way that matters:
+// "Race 2 of 4", a last race, points and a podium. A count of 1 is just a single
+// race (no series), which the phone can't pick but the wire allows.
+function randomSeries(SeriesImpl) {
+  const cup = (tracks) => ({ id: 'random', name: 'Random', tracks });
+  if (!net.randomRaces) return new SeriesImpl(cup([net.trackId]), { drawNext: () => randomBag.draw() });
+  if (net.randomRaces === 1) return null;
+  const rest = Array.from({ length: net.randomRaces - 1 }, () => randomBag.draw());
+  return new SeriesImpl(cup([net.trackId, ...rest]));
+}
+
 function startRace() {
   if (net.roomState !== ROOM_STATE.LOBBY || !sceneReady) return;
   if (!selectedTrackId) return;              // a track must be chosen first
@@ -815,15 +832,16 @@ function startRace() {
   if (!players.length) return;
   // Cup mode: this Start commits to the whole Grand Prix — the series engine
   // walks the cup from race 1 (the lobby preview already sits on it — the cup
-  // pick resolved trackId to its first track). Random mode: an ENDLESS series
-  // seeded with the previewed draw, each intermission pulling the next track
-  // from the bag; only a lobby return ends it. Exact picks stay single races.
+  // pick resolved trackId to its first track). Random mode: a series of drawn
+  // tracks, either ENDLESS (each intermission pulls the next from the bag; only
+  // a lobby return ends it) or a fixed card, per the host's length pick. Exact
+  // picks stay single races.
   // The series layer runs on C++ too (the shuffle bag stays JS — it is page RNG,
   // not sim state, so the draw is OFFERED to the port, which takes it only when
   // the rules call for one).
   const SeriesImpl = _nativeSeries.NativeCupSeries;
   series = net.mode === 'cup' ? new SeriesImpl(CUPS.find((c) => c.id === net.cupId))
-    : net.mode === 'random' ? new SeriesImpl({ id: 'random', name: 'Random', tracks: [net.trackId] }, { drawNext: () => randomBag.draw() })
+    : net.mode === 'random' ? randomSeries(SeriesImpl)
       : null;
   launchRace(players);
 }
