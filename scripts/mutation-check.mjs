@@ -263,11 +263,13 @@ const MUTATIONS = [
   {
     name: 'audio/music-trim-derived-with-pow',
     file: 'native/libttp-runtime/ttp/audio.cc',
-    find: 'c.level = MUSIC_LEVEL * (pick->gain != 0 ? pick->gain : 1);',
-    // ttp_fd_pow declared inline rather than via ttp/dmath.h, so the mutation
-    // needs no include audio.cc would otherwise carry for nothing.
-    replace: 'extern "C" double ttp_fd_pow(double, double);'
-      + ' c.level = MUSIC_LEVEL * ttp_fd_pow(10.0, (MUSIC_TARGET_LUFS - pick->lufs) / 20.0);',
+    // One song's trim, as ttp_fd_pow(10, (-19.2 - -15.3) / 20) computes it: one
+    // ULP below the literal V8's `10 ** x` produced and the corpus recorded.
+    // Spelled as the number rather than as the pow CALL because a linkage
+    // specification is illegal at block scope, so the honest mutation would not
+    // compile — and a mutation that does not compile proves nothing.
+    find: '212, -15.3, 0.6382634861905488)',
+    replace: '212, -15.3, 0.63826348619054873)',
     expect: 'audio',
   },
 
