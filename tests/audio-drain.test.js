@@ -113,17 +113,22 @@ test('a drain with nothing queued is the shared empty array, not a fresh one', a
   assert.equal(a, b, 'an empty drain answers the shared EMPTY constant');
 });
 
-test('a music command decodes correctly even when it is NOT last in the batch', async () => {
+test('a music start is the LAST command in its batch', async () => {
   const d = await decider();
-  // THE REGRESSION THIS FILE EXISTS FOR. Song resolution is a nested wasm call
-  // that can grow the heap and detach the decoder's captured views, so anything
-  // decoded AFTER a music record is what would break. Today C++ flushes queued
-  // race events ahead of a music command, so a MUSIC record happens to land last
-  // in its own batch — nothing states or enforces that, at either end.
+  // THE CROSS-FILE INVARIANT, pinned. Resolving a song is a nested wasm call
+  // that can grow the heap, and the decoder captures its heap views once — so
+  // anything decoded AFTER a music record is what a stale view would corrupt,
+  // silently (a detached read yields undefined, it does not throw).
   //
-  // Rather than depend on that ordering, drive the decoder over a block that
-  // definitely contains records after a music start: bind a live race (whose
-  // frame emits engine voices) and start music on the same tick.
+  // `_drain` no longer depends on this: it resolves songs after the decode loop,
+  // so the ordering below is not load-bearing for correctness any more. It is
+  // pinned anyway because it is what made the PREVIOUS version safe, it was
+  // never stated at either end, and a shell built against the old shape would
+  // still be relying on it. If C++ ever queues a command after a music record,
+  // this goes red and this comment is the explanation.
+  //
+  // Driven with a live race bound so the flush path is exercised: C++ empties
+  // whatever the sim queued BEFORE appending the music command.
   const sim = await imp('public/display/NativeRaceSession.js');
   await sim.init();
   const field = [];
@@ -131,24 +136,78 @@ test('a music command decodes correctly even when it is NOT last in the batch', 
     field.push({ peerIndex: i + 1, name: 'P' + i, colorIndex: i, carIndex: i, ai: false });
   }
   const session = new sim.NativeRaceSession(field, { trackId: 'tidepool', totalLaps: 3, seed: 1 }, {});
-  session.startCountdown(0);
-  for (let i = 0; i < 120; i++) session.update(16.6);
-
   d.bind(session.h);
-  d.startMusic('beach');
-  const cmds = d.frame(2000);
-  // Every command that came back is intact — the point is that NOTHING decodes
-  // to a partially-undefined record, which is what a detached view produces.
+  session.startCountdown(0);
+  for (let i = 0; i < 120; i++) { session.update(16.6); d.frame(1000 + i * 16.6); }
+
+  const cmds = d.startMusic('beach');
+  const at = cmds.findIndex((c) => c.music === 'start');
+  assert.ok(at >= 0, 'starting music emits a start command');
+  assert.equal(at, cmds.length - 1,
+    'a music start is last in its batch — anything C++ queues after it would decode '
+    + 'through heap views the song lookup may have detached');
+  // Whatever else rode along is intact, which is the observable form of "no view
+  // went stale": a detached read produces undefined, never a finite number.
   for (const c of cmds) {
     assert.ok(c && typeof c === 'object', 'a decoded command is an object');
     if (c.cue) assert.equal(typeof c.cue, 'string', 'a cue id resolved');
     if (c.voice) {
       assert.equal(typeof c.voice, 'string', 'a voice id resolved');
-      assert.equal(typeof c.level, 'number', 'a voice level decoded');
       assert.ok(Number.isFinite(c.level), 'a voice level is finite, not a detached read');
     }
-    if (c.music === 'start') assert.equal(typeof c.song, 'object', 'a song resolved');
   }
   d.bind(0);
   session.dispose();
 });
+
+test('a drain re-reads its heap views, so a grown heap decodes normally', async () => {
+  const d = await decider();
+  const M = await (await imp('public/display/nativeRuntime.js')).loadNativeRuntime();
+  // This asserts the HALF of the rule that is reachable from a test: views are
+  // captured per call, so growth BETWEEN drains is a non-event.
+  //
+  // The other half — growth DURING a decode — is not provokable from out here.
+  // The only nested call now happens after the loop; `fn` is module-private with
+  // no injection seam; and leaning on ttp_audio_song_json's own ~4 KB allocation
+  // to grow the heap does not work, because emscripten's allocator has slack (I
+  // reintroduced the bug and squeezed the heap, and it still did not grow at the
+  // wrong moment — so a green run there would have proved nothing). _drain
+  // carries a runtime guard for that case instead: it compares its captured view
+  // against the live one and names the cause rather than returning quietly
+  // corrupt commands. Same standing as the BLOCK_VERSION guard above it — a
+  // condition this repo cannot reach, instrumented so that if a future change
+  // does reach it, the failure says what happened instead of going silent.
+  const errs = [];
+  const realError = console.error;
+  console.error = (...a) => errs.push(a.join(' '));
+  let big = 0;
+  try {
+    // ALLOW_MEMORY_GROWTH is live, so a large allocation swaps every typed array
+    // the module hands out. This is exactly what a nested call inside the decode
+    // loop would do — the difference is only WHEN.
+    const before = M.HEAPU32;
+    big = M._malloc(128 * 1024 * 1024);
+    assert.ok(big, 'the probe allocation succeeded');
+    assert.notEqual(M.HEAPU32, before,
+      'growing the heap swaps the views — the mechanism the guard exists for');
+
+    // Growth BEFORE a drain is ordinary: _drain re-reads its views per call, so
+    // it must decode normally and report nothing.
+    const cmds = d.stopVoices();
+    assert.deepEqual(cmds, [{ voices: 'stop-all' }], 'a drain after a growth decodes normally');
+    assert.deepEqual(errs, [], 'and says nothing — the guard is about growth DURING a decode');
+  } finally {
+    if (big) M._free(big);
+    console.error = realError;
+  }
+});
+
+// WHAT THIS FILE STILL DOES NOT PROVE, so the coverage is not mistaken for more
+// than it is: it does not catch the original bug. Every test here passes against
+// the pre-fix decoder too, because that decoder was correct in every reachable
+// scenario — the corruption needed an allocation at one exact moment, and no
+// caller can force one. An earlier draft had a test NAMED for the regression
+// that could not reproduce it (it passed against the broken code), which is
+// worse than no test: it reads like cover. What is genuinely held here is the
+// decoder that had NO test at all, the cross-file ordering invariant above, and
+// the guard that makes a reintroduction loud instead of silent.

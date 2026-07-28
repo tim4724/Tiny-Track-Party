@@ -238,6 +238,20 @@ export class NativeAudioDecider {
         default: break;
       }
     }
+    // THE GUARD that keeps the rule above from being a comment. If a future edit
+    // puts an allocating wasm call back inside the loop, these three views are
+    // swapped out from under it and every record decoded afterwards is garbage —
+    // silently, because a detached read yields `undefined` rather than throwing.
+    // An identity check costs one comparison per drain and turns that into a
+    // stated cause. One-shot, and not a throw, for the version guard's reason:
+    // this is a per-frame path and a stale build should be legible, not a stack
+    // trace at 60 Hz.
+    if (M.HEAPU32 !== u32 && !this._detachLogged) {
+      this._detachLogged = true;
+      console.error('[audio] the wasm heap grew while the command block was being decoded —'
+          + ' the views this drain read are stale, so some commands were lost.'
+          + ' Nothing in the decode loop may call into wasm; resolve after it (see _drain).');
+    }
     // Past here the heap views are no longer read, so a lookup that grows the
     // wasm heap can detach nothing.
     if (!pendingSongs) return out;
