@@ -100,8 +100,8 @@ const ctestCount = (() => {
 })();
 
 console.log('\nReady:');
-console.log('  npm test                        unit + wire-compat  (~6 s)');
-console.log(`  ctest --test-dir native/build   native conformance, ${ctestCount}  (~6 s, after a build)`);
+console.log('  npm test                        unit + wire-compat  (~5 s)');
+console.log(`  npm run test:native             native conformance, ${ctestCount}  (~2 s, build included)`);
 console.log('  npm run test:e2e                Playwright  (~90 s)');
 console.log('  npm run dev                     the server, watching');
 console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk:');

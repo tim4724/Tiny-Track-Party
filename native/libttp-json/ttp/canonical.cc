@@ -12,6 +12,7 @@ namespace {
 // returning its own std::string for the parent to concatenate — allocated a
 // temporary per node and copied every byte once per level of nesting; a per-frame
 // 8-car snapshot is ~330 nodes, so it dominated the render readback.
+
 // The bytes JSON may not carry raw: the C0 controls, plus the quote and the
 // backslash. Everything else — including every UTF-8 continuation byte — is
 // copied verbatim, which is what makes the run-based loop below legal.

@@ -9,8 +9,8 @@
 //      about the C++ you just edited. That is the worst possible failure mode in
 //      a repo whose entire discipline is "nothing drifts silently".
 //   2. CTEST IS SERIAL BY DEFAULT. Measured on this tree: 6.16 s serial against
-//      2.37 s at -j10, for 5.90 s vs 6.53 s of CPU. The suite is 48 mostly-
-//      independent replay binaries, so the parallel run is nearly free.
+//      2.37 s at -j10, for 5.90 s vs 6.53 s of CPU. The suite is a few dozen
+//      mostly-independent replay binaries, so the parallel run is nearly free.
 //
 // Extra args are passed through, so the usual filters still work:
 //   npm run test:native -- -R raceflow

@@ -402,11 +402,9 @@ std::string authoredKey(double r, double g, double b) {
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// Boost accent.
-// ---------------------------------------------------------------------------
-// mix_hex + boost_shades are INLINE in theme.h — the renderer needs them and
-// cannot link this library. See the note there.
+// The BOOST ACCENT used to live here. mix_hex + boost_shades are inline in
+// theme.h now — the renderer is their biggest consumer and may not link this
+// library. See the note there.
 
 // ---------------------------------------------------------------------------
 // Resolution.

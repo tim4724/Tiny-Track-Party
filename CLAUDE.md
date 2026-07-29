@@ -10,12 +10,14 @@ npm run setup                     # Make a FRESH WORKTREE ready: deps + native/b
                                   # (ninja, ccache, the Playwright browser).
 npm test                          # Unit tests (node:test) — track, ABI, partyplug
 node --test tests/track.test.js   # A single unit test
-ctest --test-dir native/build     # Native conformance (configure/build native/ first)
+npm run test:native               # Native conformance: builds, then runs ctest -j
+                                  # (plain `ctest --test-dir native/build` also works,
+                                  # but is serial and will run stale binaries)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
-ctest --test-dir native/build -R raceflow   # Race-orchestration conformance
-ctest --test-dir native/build -R "^record_" # Re-record roundtrips (byte identity)
+npm run test:native -- -R raceflow    # Race-orchestration conformance
+npm run test:native -- -R "^record_"  # Re-record roundtrips (byte identity)
 node scripts/wire-mutate.mjs      # Prove the wire gate bites: break the C++ 14 ways,
                                   # rebuild the wasm, require the named test to go red
 node scripts/wire-relay-contract.mjs  # Re-freeze the relay model's contract from a

@@ -98,25 +98,22 @@ if (bakeArg) {
 
 // The 16 bakes are INDEPENDENT and each costs 0.4-0.8 s of pure CPU: 16 elevation
 // solves and grid-anchor shortlists, each building real geometry through the
-// native builder. Serially that was 9.8 s at 104% CPU, and since this script is
-// what tests/codegen-freshness.test.js shells out to, those 9.8 s were 93% of the
-// whole `npm test` wall clock — one assertion, one core, everything else waiting.
+// native builder. Serially that was 10.3 s at 104% CPU, and since this script is
+// what tests/codegen-freshness.test.js shells out to, those 10.3 s were 93% of
+// the whole `npm test` wall clock — one assertion, one core, everything waiting.
 //
-// So: one child process per track, a pool the width of the machine. THE GATE IS
-// UNCHANGED — all 16 solves still run, through the same code, and the same bytes
-// are still compared. Only the waiting is gone (9.8 s -> ~1.6 s here). Node boots
-// and imports track-gen in ~60 ms, which against a 400-800 ms bake is cheap
-// enough that per-track processes beat hand-balanced chunks and stay self-
-// balancing when one profile is twice the work of another.
+// So: fan them across child processes, 10.3 s -> 2.5 s. THE GATE IS UNCHANGED —
+// all 16 solves still run, through the same code, and the same bytes are still
+// compared. Only the waiting is gone.
+//
+// Batches are STRIDED (worker w takes tracks w, w+W, w+2W...) rather than
+// contiguous, because SEEDS is grouped by cup and therefore by profile: a `hard`
+// bake is roughly twice an `easy` one, so contiguous slices would hand one
+// worker all four Canyon tracks and leave it running alone at the end.
 //
 // --serial runs the old in-process loop. Keep it working: it is the readable
 // stack when a bake throws, and the fallback if a machine ever makes spawning
 // worker processes the slower answer.
-//
-// Batches are STRIDED (worker i takes tracks i, i+W, i+2W...) rather than
-// contiguous, because SEEDS is grouped by cup and therefore by profile: a `hard`
-// bake is roughly twice a `easy` one, so contiguous slices would hand one worker
-// all four Canyon tracks and leave it running alone at the end.
 async function bakeAll(entries) {
   if (process.argv.includes('--serial') || entries.length < 2) {
     return entries.map(([id, s]) => bakeOne(id, s));

@@ -37,16 +37,11 @@ Centerline::Centerline(std::vector<Sample> samples, double length)
 int Centerline::seg(double s) const {
   const auto& a = samples_;
   const int n = (int)a.size();
-  int i = lastSeg_;
-  if (i >= 0 && i < n) {
-    for (int step = 0; step < 4 && i < n; step++) {
-      if (a[i].s <= s && (i == n - 1 || a[i + 1].s > s)) { lastSeg_ = i; return i; }
-      if (a[i].s > s) break;   // hint is ahead of s: walking forward cannot help
-      i++;
-    }
+  for (int i = lastSeg_, step = 0; step < 4 && i >= 0 && i < n; step++, i++) {
+    if (a[i].s <= s && (i == n - 1 || a[i + 1].s > s)) { lastSeg_ = i; return i; }
+    if (a[i].s > s) break;     // hint is ahead of s: walking forward cannot help
   }
-  int lo = 0, hi = n - 1;
-  i = 0;
+  int lo = 0, hi = n - 1, i = 0;
   while (lo <= hi) {
     int mid = (lo + hi) >> 1;
     if (a[mid].s <= s) { i = mid; lo = mid + 1; } else hi = mid - 1;
