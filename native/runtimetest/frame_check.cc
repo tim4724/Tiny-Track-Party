@@ -944,6 +944,137 @@ void testHud(const GameTrack& track) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The camera basis and the split-screen lens, as PROPERTIES.
+//
+// Everything else in this file that touches lookAtWorld/cellFov builds its
+// `want` by calling lookAtWorld/cellFov — so those assertions pin the WIRING
+// (that a view got the eye and target the rig chose) and say nothing whatever
+// about the functions themselves. Measured: reversing the camera's Z basis,
+// moving REF_ASPECT and changing FRAME_LOCK all leave the whole 48-test suite
+// green. Two functions on the steady-state race frame, with no oracle anywhere.
+//
+// There is no JS left to record against — SceneRenderer went with the JS
+// renderer — so the oracle here is the DEFINITION rather than a recording: one
+// hand-computed matrix for the conventions, then the algebra a look-at basis
+// must satisfy for rigs the code actually produces. Both are things a reader
+// can check against the comment on lookAtWorld without running anything.
+void testCameraMath() {
+  const auto col = [](const float m[16], int c) {
+    return rt::V3{ m[c * 4], m[c * 4 + 1], m[c * 4 + 2] };
+  };
+
+  // Hand-computed, not called: eye 5 up the +Z axis looking at the origin, Y up.
+  // z = norm(eye-target) = +Z, x = cross(up,z) = +X, y = cross(z,x) = +Y.
+  // Pins ALL FOUR conventions at once — column-major storage, the basis order,
+  // the Z column pointing BACK from the target (a camera looks down -Z), and the
+  // eye living in the translation column.
+  {
+    float m[16];
+    rt::lookAtWorld(m, { 0, 0, 5 }, { 0, 0, 0 }, { 0, 1, 0 });
+    const float want[16] = { 1, 0, 0, 0,
+                             0, 1, 0, 0,
+                             0, 0, 1, 0,
+                             0, 0, 5, 1 };
+    checkMat(m, want, "lookAtWorld: eye +5Z at the origin is the identity basis");
+  }
+
+  // The rigs the display actually builds: a chase from behind and above, an
+  // overview from high and off-axis, and a banked car whose `up` is not +Y.
+  struct Rig { rt::V3 eye, target, up; const char* what; };
+  const Rig rigs[] = {
+    { { 0, 3, -8 }, { 0, 1, 0 }, { 0, 1, 0 }, "chase" },
+    { { 40, 60, 40 }, { 0, 0, 0 }, { 0, 1, 0 }, "overview" },
+    { { -12, 4, 7 }, { -3, 1.5f, 2 }, { 0.26f, 0.95f, 0 }, "banked" },
+    { { 0, 25, 0.001f }, { 0, 0, 0 }, { 0, 1, 0 }, "near-degenerate up" },
+  };
+  for (const Rig& r : rigs) {
+    float m[16];
+    rt::lookAtWorld(m, r.eye, r.target, r.up);
+    const std::string w = std::string("lookAtWorld[") + r.what + "]";
+    const rt::V3 x = col(m, 0), y = col(m, 1), z = col(m, 2);
+
+    // Orthonormal, and RIGHT-handed. cross(x,y)==z is what a mirrored basis
+    // fails while every length and angle still checks out.
+    const auto unit = [&](rt::V3 v, const char* n) {
+      check(std::fabs(std::sqrt(rt::dot(v, v)) - 1.0f) < 1e-5f, w + "." + n + " is unit length");
+    };
+    unit(x, "x"); unit(y, "y"); unit(z, "z");
+    check(std::fabs(rt::dot(x, y)) < 1e-5f, w + ": x . y == 0");
+    check(std::fabs(rt::dot(x, z)) < 1e-5f, w + ": x . z == 0");
+    check(std::fabs(rt::dot(y, z)) < 1e-5f, w + ": y . z == 0");
+    const rt::V3 xy = rt::cross(x, y);
+    check(std::fabs(xy.x - z.x) < 1e-5f && std::fabs(xy.y - z.y) < 1e-5f
+              && std::fabs(xy.z - z.z) < 1e-5f,
+          w + ": cross(x, y) == z (right-handed, not mirrored)");
+
+    // The Z column points from the TARGET to the EYE, which is the half of the
+    // convention a sign flip inverts while leaving the basis orthonormal — the
+    // whole scene would render backwards and every assertion above would pass.
+    const rt::V3 back = rt::norm(r.eye - r.target);
+    check(std::fabs(z.x - back.x) < 1e-5f && std::fabs(z.y - back.y) < 1e-5f
+              && std::fabs(z.z - back.z) < 1e-5f,
+          w + ": the Z column is norm(eye - target), pointing BACK");
+
+    checkF(m[12], r.eye.x, w + ": translation.x is the eye");
+    checkF(m[13], r.eye.y, w + ": translation.y is the eye");
+    checkF(m[14], r.eye.z, w + ": translation.z is the eye");
+    checkF(m[3], 0.0f, w + ": [3] is affine");
+    checkF(m[7], 0.0f, w + ": [7] is affine");
+    checkF(m[11], 0.0f, w + ": [11] is affine");
+    checkF(m[15], 1.0f, w + ": [15] is affine");
+  }
+
+  // Degenerate: eye directly above the target, so cross(up, z) is zero and the
+  // nudge branch runs. It must still hand back a usable basis rather than NaNs.
+  {
+    float m[16];
+    rt::lookAtWorld(m, { 0, 10, 0 }, { 0, 0, 0 }, { 0, 1, 0 });
+    for (int i = 0; i < 16; i++) check(std::isfinite(m[i]), "degenerate up stays finite");
+    const rt::V3 x = col(m, 0), y = col(m, 1), z = col(m, 2);
+    check(std::fabs(std::sqrt(rt::dot(x, x)) - 1.0f) < 1e-3f, "degenerate up: x still unit");
+    check(std::fabs(rt::dot(x, z)) < 1e-3f, "degenerate up: x still perpendicular to z");
+    check(std::fabs(rt::dot(y, z)) < 1e-3f, "degenerate up: y still perpendicular to z");
+  }
+
+  // cellFov solves the VERTICAL fov that holds horizontal PIXEL SCALE fixed
+  // against the single-player reference, so a cell keeps drawing the car the
+  // same size whatever shape the cell is. Two constants carry that and neither
+  // is otherwise pinned: REF_ASPECT (what "the reference" is) and FRAME_LOCK
+  // (how the width fraction enters).
+  {
+    const float REF = 16.0f / 9.0f;
+    // A full-width cell at the reference aspect is the identity: this is the
+    // assertion REF_ASPECT cannot be moved past. Approximate, not exact — the
+    // round trip is atan(tan(x)) in float, which lands a ulp or two out (38
+    // comes back as 37.9999962). A ulp is not what this is watching for; moving
+    // REF_ASPECT to 4:3 puts it 12 degrees out.
+    const auto identity = [&](float fov) {
+      const float got = rt::cellFov(fov, REF, 1.0f);
+      check(std::fabs(got - fov) < 1e-3f,
+            "cellFov: a full-width cell at 16:9 is the fov it was given ("
+                + std::to_string(fov) + " -> " + std::to_string(got) + ")");
+    };
+    identity(60.0f);
+    identity(38.0f);
+
+    // And the relation itself, which is what FRAME_LOCK lives in. With
+    // FRAME_LOCK == 1 the half-width tangent scales LINEARLY with widthFrac;
+    // squaring it moves this for every widthFrac but 1.
+    const auto tanHalf = [](float fovDeg) {
+      return std::tan(fovDeg * (float) M_PI / 360.0f);
+    };
+    struct Case { float fov, aspect, wf; };
+    for (const Case& c : { Case{ 60, 3.56f, 1.0f }, Case{ 60, 1.0f, 0.5f },
+                           Case{ 45, 2.4f, 0.25f }, Case{ 72, 0.75f, 0.5f } }) {
+      const float got = tanHalf(rt::cellFov(c.fov, c.aspect, c.wf)) * c.aspect;
+      const float want = tanHalf(c.fov) * REF * c.wf;
+      check(std::fabs(got - want) < 1e-4f * (want > 0 ? want : 1.0f),
+            "cellFov: tan(half) * aspect == tan(half ref) * REF_ASPECT * widthFrac");
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -956,6 +1087,7 @@ int main() {
 
   testParseIds();
   testParseRoster();
+  testCameraMath();
   testAtRest();
   testCarsAndRoster(bt.game);
   testHold(bt.game);

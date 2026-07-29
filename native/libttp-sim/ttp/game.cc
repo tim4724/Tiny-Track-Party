@@ -233,6 +233,19 @@ bool Game::rekeyCar(const Id& oldId, const Id& newId) {
   cars_.erase(it);
   car->id = newId;
   cars_.push_back(std::move(car));
+  // Keeping the finished board's ids in step. UNOBSERVABLE as the code stands,
+  // and deliberately kept anyway — checked 2026-07-29 rather than assumed, so
+  // that nobody has to work it out twice:
+  //   finishedOrder_ is read in exactly two places, raceOver() and the finish
+  //   event's rank, and BOTH use only its size, which a rename cannot change.
+  //   getResults() sorts cars_ and never looks at it. The one guard that reads
+  //   the ids, forceFinish's dedup, sits behind `if (c->finished) return false`
+  //   — and a rekeyed car carries its finished flag — so it is unreachable too.
+  // So there is no test that can catch this line going missing, and one was
+  // written and then deleted for exactly that reason: it passed with the line
+  // removed, which is worse than no test. Keep it as the invariant it states;
+  // if finishedOrder_ ever grows a reader that cares about ORDER or IDENTITY,
+  // this becomes load-bearing and gateable on the same commit.
   long fi = indexOfId(finishedOrder_, oldId);
   if (fi != -1) finishedOrder_[fi] = newId;
   for (auto& b : bananas_) if (b.owner == oldId) b.owner = newId;

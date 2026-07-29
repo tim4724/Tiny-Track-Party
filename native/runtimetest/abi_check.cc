@@ -630,6 +630,57 @@ void boundaryExports() {
   check(ttp_has_car(h, "\"ai-1\"") == 0, "the removed car is gone");
   check(ttp_force_remove_car(h, "\"ai-1\"") == 0, "removing it twice fails");
 
+  // ---- removing a car takes it OFF the finished board too.
+  //
+  // raceOver() is `finishedOrder_.size() >= cars_.size()`, so a finished car
+  // that leaves must come off BOTH sides or the count is one too high forever
+  // after and the race ends a car early. Nothing gated that: deleting the erase
+  // in Game::removeCar left all 48 tests green.
+  //
+  // It is not a corner case. The live route is a mid-race disconnect —
+  // display/Net.js holds the seat, the grace window elapses, `playerleave` ->
+  // main.js forfeitCar -> forceRemoveCar — and forceRemoveCar has no "only if
+  // unfinished" filter, so a player who crossed the line and then closed their
+  // phone is exactly this. The remaining racers would be shown the results
+  // board mid-lap.
+  //
+  // The sequence below is the discriminating one: removing the finished car is
+  // NOT enough to tell the two versions apart (2 >= 3 is false either way).
+  // Finishing the NEXT car is — with the erase [2,3] is 2 of 3 and the race runs
+  // on; without it [1,2,3] is 3 of 3 and the flag drops.
+  // raceOver() is only CONSULTED by RaceSession::update, so each step below is
+  // followed by a tick — that tick is the moment the flag would drop early.
+  {
+    const int r = ttp_session_begin("tidepool", 7, 3, nullptr);
+    check(r != 0, "a session for the finished-board removal case");
+    for (const char* id : { "1", "2", "3", "4" }) ttp_add_human(r, id, nullptr);
+    ttp_session_start(r, 3);
+    const auto tick = [&]() { ttp_update(r, 1000.0 / 60.0); };
+    for (int i = 0; i < 4 * 60; i++) tick();   // walk the 3 s countdown out
+    check(ttp_racing(r) == 1, "premise: four cars, none finished, still racing");
+
+    ttp_force_finish(r, "1", 10.0);
+    ttp_force_finish(r, "2", 11.0);
+    tick();
+    check(ttp_racing(r) == 1, "two of four home is not a finished race");
+
+    check(ttp_force_remove_car(r, "1") == 1, "the FINISHED car leaves the field");
+    tick();
+    check(ttp_racing(r) == 1, "…three cars, one home: still racing");
+
+    ttp_force_finish(r, "3", 12.0);
+    tick();
+    check(ttp_racing(r) == 1,
+          "two of the three REMAINING cars are home — the departed car's finish "
+          "left with it, so the race runs on");
+
+    ttp_force_finish(r, "4", 13.0);
+    tick();
+    check(ttp_racing(r) == 0, "…and ends when the last of them is actually home");
+    ttp_dispose(r);
+  }
+
+
   // ---- fast-forward drives the remaining bots to the flag and ends the race.
   ttp_fast_forward(h);
   check(ttp_racing(h) == 0, "the race is over after ttp_fast_forward");

@@ -315,6 +315,61 @@ const MUTATIONS = [
     expect: 'frame_builder',
   },
 
+  // ---- the camera BASIS and the split-screen LENS. Both run on every race
+  // frame and both were unpinned until 2026-07-29: every assertion that touched
+  // them built its `want` by calling them, so the wiring was gated and the
+  // functions were not. All four mutations below left the WHOLE 48-test suite
+  // green. frame_check's testCameraMath now asserts the definition instead —
+  // hand-computed conventions plus the algebra a look-at basis must satisfy.
+  {
+    name: 'camera/z-basis-reversed',
+    file: 'native/libttp-runtime/ttp/vecmath.h',
+    // The Z column points from the target BACK to the eye (a camera looks down
+    // -Z). Flipping it renders the world backwards and leaves the basis
+    // perfectly orthonormal, which is why lengths and angles cannot catch it.
+    find: 'V3 z = eye - target;',
+    replace: 'V3 z = target - eye;',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'camera/basis-mirrored',
+    file: 'native/libttp-runtime/ttp/vecmath.h',
+    // Handedness alone: still orthonormal, still pointing the right way.
+    find: 'const V3 y = cross(z, x);',
+    replace: 'const V3 y = cross(x, z);',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'camera/ref-aspect-moved',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    // What "the single-player reference" IS. Move it and every cell draws the
+    // car at the wrong size, consistently, so nothing looks obviously broken.
+    find: 'REF_ASPECT = 16.0f / 9.0f',
+    replace: 'REF_ASPECT = 4.0f / 3.0f',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'camera/frame-lock-exponent',
+    file: 'native/libttp-runtime/ttp/frame_builder.cc',
+    // How the width fraction enters the lens. Identity at widthFrac == 1, so a
+    // single-player check can never see it — only a split cell can.
+    find: 'FRAME_LOCK = 1.0f',
+    replace: 'FRAME_LOCK = 2.0f',
+    expect: 'frame_builder',
+  },
+  {
+    name: 'sim/removed-car-keeps-its-finish',
+    file: 'native/libttp-sim/ttp/game.cc',
+    // raceOver() is finishedOrder_.size() >= cars_.size(), so a finished car
+    // that leaves must come off BOTH sides. Losing this ends the race a car
+    // early the first time someone crosses the line and then drops — which is
+    // an ordinary mid-race disconnect, not a corner case. Green across all 48
+    // tests until abi_check grew the sequence that can see it.
+    find: 'if (i >= 0) finishedOrder_.erase(finishedOrder_.begin() + i);',
+    replace: '',
+    expect: 'abi',
+  },
+
   // ---- the audio decisions. Three halves of one gate: the distance curve every
   // world cue is scaled by, the voice start/stop EDGE (which the traces exercise
   // 5900 times and no scripted case could), and the music trim — the one number
