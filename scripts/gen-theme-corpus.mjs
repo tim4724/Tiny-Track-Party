@@ -398,17 +398,17 @@ for (const name of BIOME_NAMES) {
 }
 
 const text = lines.join('\n') + '\n';
-// --stdout goes to a PIPE, and `process.exit()` right after a write to one
-// TRUNCATES it silently at the 64 KiB pipe buffer (this corpus is 264 KB). The
-// branch ends here instead; the `--check` path below is guarded on it.
+// Three modes, ONE of which runs — the braces matter. `process.exit()` right
+// after a write to a PIPE truncates it silently at the 64 KiB buffer (this
+// corpus is 264 KB), so --stdout must fall out of the chain rather than exit,
+// which in turn means the default write has to be an `else` and not trailing
+// statements. Proof (1) below is the middle arm: the corpus is frozen evidence,
+// so re-deriving it is a CHECK by default of intent — --check re-runs the whole
+// recording and requires the committed bytes back, which is what makes the
+// inlined resolver above the same function that recorded them.
 if (process.argv.includes('--stdout')) {
   process.stdout.write(text);
-} else
-// Proof (1). The corpus is frozen evidence, so re-deriving it is a CHECK by
-// default of intent: --check re-runs the whole recording and requires the
-// committed bytes back, which is what makes the inlined resolver above the same
-// function that recorded them.
-if (process.argv.includes('--check')) {
+} else if (process.argv.includes('--check')) {
   const have = fs.readFileSync(OUT, 'utf8');
   if (have !== text) {
     console.error(`${OUT}: re-derived corpus differs from the committed one`);
@@ -416,8 +416,8 @@ if (process.argv.includes('--check')) {
   }
   console.log(`${OUT}: reproduced byte-identically (${cases} resolved palettes, `
     + `${cases} lossless-split checks against the shipped buildTrackBin)`);
-  process.exit(0);
+} else {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, text);
+  console.log(`${OUT}: ${BIOME_NAMES.length} biomes x ${tracks.length} tracks = ${cases} resolved palettes`);
 }
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.writeFileSync(OUT, text);
-console.log(`${OUT}: ${BIOME_NAMES.length} biomes x ${tracks.length} tracks = ${cases} resolved palettes`);

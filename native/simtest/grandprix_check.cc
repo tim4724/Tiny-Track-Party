@@ -34,12 +34,7 @@ using namespace ttp::corpus;
 
 namespace {
 
-Id idFrom(const Value& v) {
-  if (v.type == Value::NUM) return Id::Num(v.num);
-  if (v.type == Value::STR) return Id::Str(v.str);
-  return Id::None();
-}
-
+Id idFrom(const Value& v) { return json::id_of<Id>(&v); }
 
 // The digest the generator recorded, rebuilt from the port. "" stands for JS null
 // in nextTrackId (CupSeries::nextTrackId's documented convention).

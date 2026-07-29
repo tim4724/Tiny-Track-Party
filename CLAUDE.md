@@ -379,10 +379,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `gen-audio-corpus.mjs`, `gen-ui-corpus.mjs` and `gen-session-corpus.mjs` are
   deleted with the JS twins they read, so those corpora can never be re-derived
   and `tests/{audio,ui,session}-corpus.test.js` are gone with them. What replaced
-  the freshness obligation is the `record_*` roundtrip (below). Still RENEWABLE:
-  `gen-schematic-corpus.mjs` (its inputs — the committed bake and
-  `display/trackSchematic.js` — both survive, and `tests/codegen-freshness.test.js`
-  re-derives it) and `gen-raceflow-corpus.mjs`. The audio one reads
+  the freshness obligation is the `record_*` roundtrip (below). The schematic one
+  went the same way: `gen-schematic-corpus.mjs` and `display/trackSchematic.js`
+  are both deleted, its corpus is frozen, and the SHIPPING bake it fed moved onto
+  the native projection (`gen-track-schematics.js` reads
+  `ttp_track_schematic_json` and reproduces the committed bytes). So
+  `gen-raceflow-corpus.mjs` is the LAST RENEWABLE oracle in the tree, and the
+  only remaining entry in `tests/codegen-freshness.test.js` that is one — keep it
+  there. That list is the only thing that runs these generators at all, so an
+  entry missing from it is not a weaker gate, it is no gate; four live ones were
+  dropped from it once already. The audio one reads
   the golden traces, the shipped wasm and `audio/decide.js`; it replays five of
   the eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
   `useItem`/`setCarStats`, which the C ABI does not export (only `replay_cli`,

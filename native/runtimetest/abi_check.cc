@@ -1382,6 +1382,29 @@ void audioThroughAbi() {
 double UI_INTERMISSION_MS = 0;
 
 // A parsed ABI answer, or a typed hole that will diff loudly.
+// A `world` off a corpus header, checked before it is handed to a configure
+// export. The type test alone is not enough: ttp_ui_configure treats "neither
+// cups nor catalog" as "install the SHIPPED catalogue" and returns 1, so a
+// hollow world configures CLEANLY and then diffs a hundred steps later against
+// a catalogue nobody asked for. Refuse it where the cause is still visible.
+const Value* corpusWorld(const Value& header, const char* what,
+                         std::initializer_list<const char*> lists) {
+  const Value* w = header.find("world");
+  if (!json::is_obj(w)) {
+    fail(std::string(what) + " corpus header carries no `world` object");
+    return nullptr;
+  }
+  for (const char* k : lists) {
+    const Value* v = w->find(k);
+    if (!json::is_arr(v) || v->arr.empty()) {
+      fail(std::string(what) + " corpus header's `world` has no " + k +
+           " — configuring from it would silently install a different world");
+      return nullptr;
+    }
+  }
+  return w;
+}
+
 Value uiJson(const char* text) {
   if (!text) return Value::Null();
   bool ok = false;
@@ -1748,12 +1771,8 @@ void uiCorpusThroughAbi(const char* path) {
       if (header) continue;
       header = true;
       // The world the generator recorded against, handed straight to the ABI.
-      const Value* world = root.find("world");
-      if (!world || world->type != Value::OBJ) {
-        fail("the ui corpus header carries no `world` — regenerate it: "
-             "node scripts/gen-ui-corpus.mjs");
-        return;
-      }
+      const Value* world = corpusWorld(root, "ui", {"cups", "catalog"});
+      if (!world) return;
       const Value* ims = world->find("intermissionMs");
       UI_INTERMISSION_MS = (ims && ims->type == Value::NUM) ? ims->num : 0;
       check(ttp_ui_configure(canonical_stringify(*world).c_str()) == 1,
@@ -1917,12 +1936,9 @@ void raceCorpusThroughAbi(const char* path) {
     if (!kind) {
       if (header) continue;
       header = true;
-      const Value* world = root.find("world");
-      if (!world || world->type != Value::OBJ) {
-        fail("the raceflow corpus header carries no `world` — regenerate it: "
-             "node scripts/gen-raceflow-corpus.mjs");
-        return;
-      }
+      const Value* world = corpusWorld(root, "raceflow",
+                                       {"personas", "carStats", "cups"});
+      if (!world) return;
       check(ttp_race_configure(canonical_stringify(*world).c_str()) == 1,
             "the corpus's own world configured through ttp_race_configure");
       continue;

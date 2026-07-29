@@ -123,11 +123,15 @@ bool loadWorld(const Value& header, World& w) {
     return false;
   }
   const Value* wv = header.find("world");
-  if (!wv || wv->type != Value::OBJ) {
+  if (!json::is_obj(wv)) {
+    // NOT "regenerate it": this corpus is FROZEN — gen-ui-corpus.mjs went with
+    // uiModel.js — so a header without a world means the fixture was damaged,
+    // and the fix is git, not a generator.
     std::fprintf(stderr,
-                 "the corpus header carries no `world`. Regenerate it: "
-                 "node scripts/gen-ui-corpus.mjs — this check configures itself "
-                 "from the fixture and has no world of its own to fall back on.\n");
+                 "the ui corpus header carries no `world`, and this check has no "
+                 "world of its own to fall back on. The corpus is FROZEN (its "
+                 "generator was deleted with its oracle), so restore it rather "
+                 "than re-deriving it: git checkout -- tests/fixtures/ui-corpus.jsonl\n");
     return false;
   }
   w.maxPlayers = (int) json::num_field(*wv, "maxPlayers");
@@ -753,14 +757,18 @@ void checkStableCupSort() {
 // comparison replaced by a write.
 int recordCorpus(const std::string& fixture, const std::string& outPath) {
   Shell st;
-  bool world = false;
+  // A failed world load must reach the EXIT CODE. Re-emitting 1500 lines
+  // computed against an empty catalogue and then exiting 0 leaves the byte
+  // comparison in record_roundtrip.cmake to notice, which it does — but it
+  // reports a diff rather than the cause.
+  bool world = false, bad = false;
   const int rc = corpus::record(fixture, outPath, [&](const Value& root) {
     const Value* kind = root.find("case");
     // UNDEF copies the header through verbatim — and the header is also where
     // the world comes from, so the re-emit configures itself exactly as the
     // replay does rather than carrying a second copy of the catalogue.
     if (!kind) {
-      if (!world) world = loadWorld(root, g_world);
+      if (!world && !(world = loadWorld(root, g_world))) bad = true;
       return Value();
     }
     if (kind->str == "scenario") { st.reset(root.find("screen")); return Value(); }
@@ -783,7 +791,7 @@ int recordCorpus(const std::string& fixture, const std::string& outPath) {
     line.set("state", st.toValue());
     return line;
   });
-  return rc;
+  return bad ? 2 : rc;
 }
 
 int main(int argc, char** argv) {

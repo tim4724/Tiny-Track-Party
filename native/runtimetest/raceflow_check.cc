@@ -40,8 +40,8 @@
 #include <vector>
 
 #include "corpus_diff.h"
-#include "ttp/json_read.h"
 #include "ttp/canonical.h"
+#include "ttp/json_read.h"
 #include "ttp/race_flow.h"
 
 using namespace ttp;
