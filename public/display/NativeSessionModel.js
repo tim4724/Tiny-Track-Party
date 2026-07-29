@@ -42,6 +42,7 @@ export async function init() {
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
     lobbySnapshot: c('ttp_net_lobby_snapshot_json', 'string', ['string']),
+    lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
     controllerUrlTemplate: c('ttp_net_controller_url_template', 'string', ['string']),
@@ -101,6 +102,28 @@ export function configure({ cars, colors, tracks }) {
 // protect it.
 export function lobbySnapshot(input) {
   return JSON.parse(fn.lobbySnapshot(J(input)));
+}
+
+// THE SAME SNAPSHOT, ALREADY FRAMED — the publish path, and the shell's whole
+// part in it is two handles and the six fields only the game knows.
+//
+// What it replaces is a round trip: lobbySnapshot() above serialized the whole
+// snapshot, this side parsed it, PartyConnection.setState re-serialized it and
+// ttp_framing_encode_set_state parsed it BACK. The roster made the same trip one
+// layer earlier — pulled out of the room as JSON only to be handed straight
+// back. Now nothing about a seat is serialized out at all: ttp_net_lobby_frame
+// reads the roster off the room handle and every seat's inRace off the live
+// Game. Measured in the browser at the 4-player cap: 169.6 us -> 44.4 us.
+//
+// The size is the chooser, not the party: ~5.9 KB of the ~7 KB snapshot is the
+// `tracks` payload, set once at boot and never read by anything above the wire.
+// That is the blob the round trip kept re-parsing on every rename.
+//
+// Returns the exact frame TEXT for the socket. There is deliberately no parse
+// here — a caller that wants to look inside is asking for the snapshot, not the
+// frame, and should say so.
+export function lobbyFrame(roomHandle, sessionHandle, fields) {
+  return fn.lobbyFrame(roomHandle | 0, sessionHandle | 0, J(fields));
 }
 
 // ---- URLs -------------------------------------------------------------------

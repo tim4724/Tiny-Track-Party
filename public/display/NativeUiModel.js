@@ -47,6 +47,7 @@ export async function init() {
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string']),
     rosterSeats: c('ttp_ui_roster_seats_json', 'string', ['string', 'string']),
+    rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     allRacersReady: c('ttp_ui_all_racers_ready', 'number', ['string', 'string']),
     connectedPlayers: c('ttp_ui_connected_players_json', 'string', ['string']),
@@ -113,6 +114,21 @@ export function screenStep(prev, next) { return fn.screenStep(prev || '', next |
 export function backEffect(screen) { return fn.backEffect(screen || ''); }
 
 // ---- the lobby -------------------------------------------------------------
+// The seat grid off a LIVE ROOM handle. A Seat carries name, colorIndex,
+// carIndex, connected, host and ready — never inRace — so this is a projection
+// of the room alone and needs no session handle.
+//
+// The shell used to reach the same rows the long way round: pull the roster out
+// of the party ABI, ferry it through the retained snapshot's `players`
+// projection, then hand those rows back here. That made the lobby's own grid
+// depend on the wire message sitting next to it, and serialized the roster three
+// times to render it once. rosterSeats (the plain-data spelling) stays for
+// callers that hold rows rather than a room — the test surfaces, and any shell
+// whose roster does not live in this wasm.
+export function rosterSeatsFromRoom(roomHandle, hostPeerIndex) {
+  return JSON.parse(fn.rosterSeatsFromRoom(roomHandle | 0, id(hostPeerIndex)));
+}
+
 export function rosterSeats(roster, hostPeerIndex) {
   return JSON.parse(fn.rosterSeats(J(roster.map((p) => ({
     peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex,

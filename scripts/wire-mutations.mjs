@@ -34,6 +34,40 @@
 // ---------------------------------------------------------------------------
 export const CPP_MUTATIONS = [
   {
+    // A key typo at the seam. copyKey copies by NAME, so misnaming a field does
+    // not error — it produces a snapshot with the key ABSENT, and every phone
+    // loses the host (no Start button, anywhere).
+    //
+    // THIS PAIR AND THE NEXT USED TO BE JS MUTATIONS against Net.js, back when
+    // the shell gathered the roster and the host and handed them to the session
+    // model. ttp_net_lobby_frame gathers them in C++ now, so the hazard moved
+    // here with the code — same break, same assertion, one language over. A
+    // mutation whose anchor vanishes is a DEAD gate, which is what
+    // tests/wire-mutation-anchors.test.js exists to notice.
+    name: 'display/lobby-key-typo',
+    kind: 'misname a key the frame builder hands the session model',
+    file: 'native/runtime/ttp_net.cc',
+    find: '  input.set("hostPeerIndex", ttp_room_host_value(roomHandle));',
+    replace: '  input.set("host", ttp_room_host_value(roomHandle));',
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+  },
+  {
+    // The frame builder chooses the ORDER the seats are published in (the model
+    // projects the rows it is handed, one for one). Reversing the roster also
+    // misaligns the parallel inRace array, which is exactly what a caller that
+    // sorted its own list would do.
+    name: 'display/roster-order-reversed',
+    kind: 'publish the roster in a different order than the model was told',
+    file: 'native/runtime/ttp_net.cc',
+    find: '  input.set("roster", ttp_room_roster_value(roomHandle));',
+    // Spelled with only what the file already includes, so the mutation is a
+    // one-line swap and never drags a header in behind it.
+    replace: '  { Value r_ = ttp_room_roster_value(roomHandle), rev_ = Value::Arr();\n'
+      + '    for (size_t i_ = r_.arr.size(); i_ > 0; i_--) rev_.push(r_.arr[i_ - 1]);\n'
+      + '    input.set("roster", rev_); }',
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+  },
+  {
     name: 'framing/renamed-field',
     kind: 'change a field name in the C++ encoder',
     file: 'native/libttp-party/ttp/relay_framing.cc',
@@ -201,29 +235,6 @@ export const CPP_MUTATIONS = [
 // has to go red when it lands. Red here means the claim is true.
 // ---------------------------------------------------------------------------
 export const JS_MUTATIONS = [
-  {
-    // A key typo at the seam. copyKey copies by NAME, so a shell that misnames a
-    // field does not get an error — it gets a snapshot with the key ABSENT, and
-    // every phone loses the host (no Start button, anywhere).
-    name: 'display/lobby-key-typo',
-    kind: 'misname a key the shell hands the session model',
-    file: 'public/display/Net.js',
-    find: '      hostPeerIndex: this.flow.host,',
-    replace: '      host: this.flow.host,',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
-    // The shell chooses the ORDER the seats are published in (the model projects
-    // the rows it is handed, one for one). Reversing it also misaligns the
-    // parallel inRace array, which is exactly what a shell that sorts its own
-    // list would do.
-    name: 'display/roster-order-reversed',
-    kind: 'publish the roster in a different order than the model was told',
-    file: 'public/display/Net.js',
-    find: '      roster: list,',
-    replace: '      roster: list.slice().reverse(),',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
   {
     // Storing a mutation without republishing it. The room is RIGHT and every
     // phone is stale — the classic shell bug, and invisible to anything that

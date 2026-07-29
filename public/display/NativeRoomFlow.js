@@ -121,6 +121,13 @@ export class NativeRoomFlow {
     this._enabledProvider = (opts.liveness && opts.liveness.enabledProvider) || null;
   }
 
+  // The wasm handle behind this room, for the ABIs that read a LIVE ROOM in C++
+  // instead of being handed a copy of it: ttp_net_lobby_frame composes the
+  // retained snapshot off it, ttp_ui_roster_seats_room_json draws the seat grid
+  // off it. NOT a kit method — the kit's rooms are JS objects with nothing to
+  // name. 0 once disposed, which every reader treats as an empty room.
+  get handle() { return this._h; }
+
   // ---- events (same tiny emitter contract as the kit) -----------------------
   on(type, handler) {
     (this._listeners[type] = this._listeners[type] || []).push(handler);

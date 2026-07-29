@@ -176,6 +176,19 @@ export class NativePartyConnection {
     this._sendText(fn.encSetState(JSON.stringify(data ?? null)));
   }
 
+  // The same publish, when the frame was ALREADY built in C++
+  // (ttp_net_lobby_frame). Put the bytes on the socket and touch nothing.
+  //
+  // A SECOND METHOD rather than a smarter setState, because a JSON string is
+  // itself a legal set_state payload — there is no way to sniff "already
+  // encoded" from "a string to encode", and guessing would silently publish a
+  // quoted blob the phones cannot read. setState keeps the kit's exact object
+  // contract (wire-compat asserts it against the real kit, undefined-coercion
+  // included); this is the display's own path and says so.
+  setStateFrame(frameText) {
+    if (frameText) this._sendText(frameText);
+  }
+
   closeRoom() {
     this._sendText(fn.encCloseRoom());
   }

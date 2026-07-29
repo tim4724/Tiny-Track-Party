@@ -88,8 +88,44 @@ TTP_ABI const char* ttp_net_roster_rows_json(const char* rosterJson, const char*
  *    "mode":str|null,"cupId":str|null,"trackId":str|null,"standings":obj|null}
  *   -> the LOBBY_UPDATE object, chooser content included (from
  *      ttp_net_configure), with `tracks` present only in the lobby.
- * THE KEY ORDER OF THIS ANSWER IS THE WIRE'S. See the deviation note above. */
+ * Emitted with ordered_stringify. See the deviation note above — and note that
+ * the order stops at this boundary: whatever frames this for the wire
+ * canonicalizes it. */
 TTP_ABI const char* ttp_net_lobby_snapshot_json(const char* inputJson);
+
+/* THE SAME SNAPSHOT, COMPOSED AND FRAMED WITHOUT LEAVING C++, and the whole
+ * point is what the shell no longer carries. Hand over the two handles and the
+ * fields only the game knows; get back the exact set_state frame text to put on
+ * the socket.
+ *
+ *   roomHandle     a ttp_room_create handle — supplies the roster, the effective
+ *                  host and the room phase
+ *   sessionHandle  a ttp_session_begin handle, or 0 for no live race — supplies
+ *                  every seat's inRace, read off the Game itself
+ *   fieldsJson     {"paused":bool,"mode":str|null,"cupId":str|null,
+ *                   "randomRaces":num,"trackId":str|null,"standings":obj|null}
+ *   ->             {"data":{...the LOBBY_UPDATE...},"type":"set_state"}
+ *
+ * ttp_net_lobby_snapshot_json + ttp_framing_encode_set_state are the two halves
+ * this replaces, and they used to reach each other THROUGH THE SHELL: C++
+ * serialized the snapshot, JS parsed it, JS re-serialized it, C++ parsed it
+ * back, and every shell owed the round trip. The roster went the same way —
+ * pulled out of the room as JSON only to be handed straight back. Nothing about
+ * a seat is serialized out now; the roster and each seat's inRace are read
+ * through ttp_room.h. Measured in the browser at the 4-player cap: 169.6 us ->
+ * 44.4 us per publish.
+ *
+ * WHAT MADE IT EXPENSIVE WAS NOT THE ROSTER. The snapshot is ~7 KB and ~5.9 KB
+ * of that is the `tracks` chooser payload, which ttp_net_configure sets ONCE and
+ * nothing here ever looks inside; the roster is ~431 bytes. The round trip was
+ * re-parsing an immutable 6 KB blob on every rename and ready toggle. A
+ * microbenchmark that builds its own snapshot has no chooser in it and will
+ * under-read this by about 3x.
+ *
+ * The frame is canonical, exactly as ttp_framing_encode_set_state's is — the
+ * snapshot's model key order never survived framing and never has. */
+TTP_ABI const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle,
+                                        const char* fieldsJson);
 
 /* ---- URLs ------------------------------------------------------------------ */
 

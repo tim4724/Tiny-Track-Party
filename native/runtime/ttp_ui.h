@@ -140,6 +140,22 @@ TTP_ABI const char* ttp_ui_back_effect(const char* screen);
  *   ->      [{"name","colorIndex","carIndex","connected","host","ready"}, ...] */
 TTP_ABI const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJson);
 
+/* THE SAME SEATS, READ STRAIGHT OFF A LIVE ROOM. Hand over a ttp_room_create
+ * handle instead of the roster it holds.
+ *
+ * NO SESSION HANDLE, and the absence is the point: a Seat carries name,
+ * colorIndex, carIndex, connected, host and ready — never inRace — so the seat
+ * grid is a projection of the ROOM alone. The shell used to reach it by pulling
+ * the roster out of the party ABI, ferrying it through the retained snapshot's
+ * `players` rows and handing those back here, which made the lobby's own grid
+ * depend on the wire message next to it.
+ *
+ * The roster crosses as ttp_room_roster_value (ttp_room.h), so this file gains
+ * no edge on libttp-party — the LIBRARY rule (ui_model.h mirrors ROOM_STATE
+ * rather than import it) is untouched; only this shim, which already links
+ * both, reads across. */
+TTP_ABI const char* ttp_ui_roster_seats_room_json(int roomHandle, const char* hostIdJson);
+
 /* The seat grid itself: those seats padded with OPEN placeholders up to
  * maxPlayers, so the lobby card keeps a fixed size as players trickle in and
  * never shrinks below the field that actually races. Takes the array

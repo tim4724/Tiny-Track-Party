@@ -274,15 +274,22 @@ export class DisplayNet extends GameNet {
   // phone sees (LOBBY_UPDATE) and the display's own UI. Called on any
   // roster/host/ready/car change.
   //
-  // ONE PROJECTION, not two. The snapshot's own `players` array IS the roster
-  // the UI renders — ttp_net_lobby_snapshot_json composes it with the very
-  // rule ttp_net_roster_rows_json applies, and the two are byte-identical. This
-  // used to publish and then ask a SECOND time, which pulled the roster out of
-  // the wasm twice and re-composed the same rows twice (~74 us and four
-  // crossings of a ~640-byte roster per announce, on every join, rename, car
-  // pick, ready toggle and host change). Read it off the snapshot instead.
+  // THE ROSTER NEVER BECOMES A JS VALUE. Publishing reads it off the room handle
+  // in C++ (_publishLobby) and rendering reads it off the same handle in C++
+  // (onRosterChange -> ui.rosterSeatsFromRoom), so this function passes a COUNT
+  // and a host and nothing else. It used to publish and then ask a SECOND time
+  // for the same projection, which pulled the roster out of the wasm twice and
+  // re-composed the same rows twice on every join, rename, car pick, ready
+  // toggle and host change.
+  //
+  // ~324 us -> ~189 us in the browser at the 4-player cap. WHAT IS LEFT IS NOT
+  // THIS BOUNDARY: ~137 us of that is the DOM writes, the join cue, the lobby
+  // pick and the demo debounce downstream of onRosterChange, against ~52 us of
+  // marshalling. The halves have swapped, so the next win here is in what
+  // renderRoster does, not in how the roster gets to it.
   _announce() {
-    this.onRosterChange(this._publishLobby().players, this.flow.host);
+    this._publishLobby();
+    this.onRosterChange(this.flow.size, this.flow.host);
   }
 
   // ---- the active participant order ----
@@ -744,26 +751,29 @@ export class DisplayNet extends GameNet {
   // over once at construction. This side supplies the room's live fields and
   // puts the answer on the relay.
   //
-  // RETURNS the snapshot, because _announce needs its `players` and composing
-  // that array twice is composing it once too often. Built even with no socket
-  // (boot and teardown, where the roster still has to reach our own UI); only
-  // the send is gated.
+  // NOTHING ABOUT A SEAT CROSSES. The roster, the effective host, the room phase
+  // and every seat's "does this seat hold a car in the live race" are read off
+  // the two HANDLES in C++ (ttp_net_lobby_frame over ttp_room.h's seam); what is
+  // passed here is the six fields only the game knows. The answer is the finished
+  // frame text, so the socket write is the next statement and there is no object
+  // in between.
+  //
+  // It used to be a round trip through this file: C++ composed the snapshot, JS
+  // parsed it, PartyConnection.setState re-serialized it and the frame encoder
+  // parsed it BACK, and the roster made the same trip one layer earlier. In the
+  // browser at the 4-player cap that was 169.6 us a publish; it is 44.4 us now.
+  // Most of what was being re-read is the ~5.9 KB `tracks` chooser payload,
+  // which is set once at boot and never changes — see NativeSessionModel.
   _publishLobby() {
-    const list = this.flow.list();
-    const snapshot = session.lobbySnapshot({
-      hostPeerIndex: this.flow.host,
-      roomState: this.roomState,
+    if (!this.party) return;
+    this.party.setStateFrame(session.lobbyFrame(this.flow.handle, this.sessionHandle(), {
       paused: !!this.isPaused(),
-      roster: list,
-      inRace: list.map((p) => !!this.inRace(p.peerIndex)),
       mode: this.mode,
       cupId: this.cupId,
       randomRaces: this.randomRaces, // 'random' run length (0 = endless)
       trackId: this.trackId,         // resolved concrete track
       standings: this._standings      // results board (playing/results), else null
-    });
-    if (this.party) this.party.setState(snapshot);
-    return snapshot;
+    }));
   }
 
   // Mirror the latest standings board into the snapshot (display drives this on

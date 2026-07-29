@@ -24,6 +24,10 @@
 #include "ttp/json_read.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
+// The live room, for ttp_ui_roster_seats_room_json alone, and through a seam
+// that hands over a plain Value — this file gains no edge on libttp-party, only
+// on the shim that already links it. See ttp_room.h.
+#include "ttp_room.h"
 
 using namespace ttp;
 namespace ui = ttp::rt::ui;
@@ -303,8 +307,9 @@ const char* ttp_ui_back_effect(const char* screen) {
 
 // ---- the lobby ---------------------------------------------------------------
 
-const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJson) {
-  const Value roster = json::parse_or(rosterJson, Value::Arr());
+// Shared by both spellings below, so the room-backed one cannot drift into a
+// second seat encoder.
+static const char* putSeats(const Value& roster, const char* hostIdJson) {
   const std::vector<ui::Seat> seats = ui::rosterSeats(rosterOf(roster),
                                                       parse_scalar_id(hostIdJson));
   Value a = Value::Arr();
@@ -319,6 +324,14 @@ const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJ
     a.push(o);
   }
   return put(g_bufSeats, a);
+}
+
+const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJson) {
+  return putSeats(json::parse_or(rosterJson, Value::Arr()), hostIdJson);
+}
+
+const char* ttp_ui_roster_seats_room_json(int roomHandle, const char* hostIdJson) {
+  return putSeats(ttp_room_roster_value(roomHandle), hostIdJson);
 }
 
 const char* ttp_ui_seat_grid_json(const char* seatsJson) {

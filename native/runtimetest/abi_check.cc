@@ -2133,6 +2133,135 @@ void sessionCorpusThroughAbi(const char* path) {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// The handle-taking spellings against the JSON ones they replace.
+//
+// NO CORPUS COVERS THIS, and that is exactly why it is here. Every frozen
+// fixture in the tree feeds a layer plain data and reads its answer back, so it
+// gates the RULES; ttp_net_lobby_frame and ttp_ui_roster_seats_room_json add no
+// rule at all — they GATHER, in C++, what a shell used to gather in JS and hand
+// back. The only thing that can be wrong with them is the gathering, and the
+// only statement of what "right" means is that they agree, byte for byte, with
+// the two-call path they were introduced to remove.
+//
+// Assert the equivalence, not the bytes: the expected value is computed the old
+// way in the same run, so this stays true when the snapshot's shape changes and
+// can never become a second, stale copy of the wire format.
+void handlePathsMatchJsonPaths() {
+  const int room = ttp_room_create("{}");
+  if (room <= 0) { fail("lobby-frame: ttp_room_create returned no handle"); return; }
+
+  ttp_net_configure("{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
+                    "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\"}]}");
+
+  // Three seats: one that will hold a car, one that will not (a late joiner),
+  // and one dropped — so `inRace`, `connected` and the host election all carry
+  // something the comparison could catch.
+  ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+  ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":false}");
+  ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":1,\"ready\":false}");
+  ttp_room_mark_disconnected(room, "3");
+
+  const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  if (sess <= 0) { fail("lobby-frame: ttp_session_begin returned no handle"); return; }
+  ttp_add_human(sess, "1", nullptr);
+  ttp_add_human(sess, "3", nullptr);   // a dropped seat still holds its car
+
+  const char* kFields =
+      "{\"paused\":false,\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
+      "\"trackId\":\"tidepool\",\"standings\":null}";
+
+  // The old path, spelled out: the four keys the shell used to gather, each
+  // through the ABI call it used to make.
+  const auto twoCallFrame = [&](int r, int s) {
+    Value input = parseOrNull(kFields, "lobby-frame fields");
+    Value roster = parseOrNull(ttp_room_list_json(r), "room list");
+    Value inRace = Value::Arr();
+    for (const Value& seat : roster.arr) {
+      const std::string id = canonical_stringify(*seat.find("peerIndex"));
+      inRace.push(Value::Bool(ttp_has_car(s, id.c_str()) != 0));
+    }
+    input.set("roster", roster);
+    input.set("inRace", inRace);
+    input.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "room host"));
+    input.set("roomState", Value::Str(ttp_room_state(r)));
+    const std::string snapshot = canonical_stringify(input);
+    return std::string(ttp_framing_encode_set_state(
+        ttp_net_lobby_snapshot_json(snapshot.c_str())));
+  };
+
+  const auto sameFrame = [&](int r, int s, const char* where) {
+    const std::string want = twoCallFrame(r, s);
+    const std::string got = ttp_net_lobby_frame(r, s, kFields);
+    check(got == want, std::string("ttp_net_lobby_frame == snapshot+encode (") + where + ")");
+  };
+
+  const auto sameSeats = [&](int r, const char* host, const char* where) {
+    const std::string want = ttp_ui_roster_seats_json(ttp_room_list_json(r), host);
+    const std::string got = ttp_ui_roster_seats_room_json(r, host);
+    check(got == want,
+          std::string("ttp_ui_roster_seats_room_json == roster_seats_json (") + where + ")");
+  };
+
+  sameFrame(room, sess, "lobby, a live race");
+  sameSeats(room, "1", "lobby, host 1");
+  sameSeats(room, "null", "lobby, no host");
+
+  // Phase matters: `tracks` rides the LOBBY snapshot only, and the frame has to
+  // pick that up from the room rather than from an argument.
+  ttp_room_transition_to(room, "countdown");
+  sameFrame(room, sess, "countdown, tracks gated out");
+  ttp_room_transition_to(room, "playing");
+  sameFrame(room, sess, "playing");
+  sameSeats(room, "1", "playing");
+
+  // NO SESSION is the lobby's own case, and the one an inRace default could get
+  // wrong in a direction nothing else would notice: every seat answers false.
+  sameFrame(room, 0, "no session");
+  {
+    Value frame = parseOrNull(ttp_net_lobby_frame(room, 0, kFields), "frame, no session");
+    const Value* players = frame.find("data") ? frame.find("data")->find("players") : nullptr;
+    bool anyInRace = false;
+    if (players && players->type == Value::ARR) {
+      for (const Value& p : players->arr) anyInRace = anyInRace || json::truthy(p.find("inRace"));
+    }
+    check(players && players->type == Value::ARR && !anyInRace,
+          "no session: every seat's inRace is false");
+  }
+
+  // A roster that MOVES under both spellings — the gathering reads it live, so a
+  // stale read would show up here and nowhere else.
+  ttp_room_remove_player(room, "2");
+  sameFrame(room, sess, "after a seat leaves");
+  sameSeats(room, "1", "after a seat leaves");
+
+  // Unknown handles: an empty room, not a crash and not a stale answer.
+  //
+  // NOT compared against the two-call path, and the reason is worth writing
+  // down. ttp_room_state spells an unknown handle's phase as the literal text
+  // "null" (it is a raw string return, so it has no other way to say "absent"),
+  // while the seam spells it "". Every reader treats both as "not a phase" —
+  // tracks gate out, presence/leave actions fall through — so the two frames
+  // differ only in that one field's spelling, in a case no shell can reach:
+  // DisplayNet creates its room in the constructor and never publishes without
+  // one. Asserting the frames equal here would be asserting a wart.
+  sameSeats(0, "null", "unknown room handle");
+  check(std::strcmp(ttp_ui_roster_seats_room_json(0, "null"), "[]") == 0,
+        "ttp_ui_roster_seats_room_json on handle 0 is []");
+  {
+    Value frame = parseOrNull(ttp_net_lobby_frame(0, 0, kFields), "frame, unknown room");
+    const Value* data = frame.find("data");
+    const Value* players = data ? data->find("players") : nullptr;
+    check(players && players->type == Value::ARR && players->arr.empty(),
+          "unknown room handle: a well-formed frame with no players");
+  }
+
+  ttp_dispose(sess);
+  // A DISPOSED session must read as no race, not as the race it used to be.
+  sameFrame(room, sess, "disposed session");
+  ttp_room_dispose(room);
+}
+
 int main(int argc, char** argv) {
   if (argc < 8) {
     std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
@@ -2157,6 +2286,7 @@ int main(int argc, char** argv) {
   uiShippedCatalogue();
   uiCupTendency();
   uiCorpusThroughAbi(argv[4]);
+  handlePathsMatchJsonPaths();
   sessionCorpusThroughAbi(argv[5]);
   raceCorpusThroughAbi(argv[6]);
 

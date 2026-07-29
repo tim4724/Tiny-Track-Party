@@ -782,11 +782,17 @@ let seriesDeadline = 0;         // when it fires — the countdown label reads t
 let intermissionTicker = null;  // ½ s "starting in N…" refresh
 
 // Seat grid + headline live in lobbySeats.js (shared with the gallery preview).
-function renderRoster(roster, hostPeerIndex) {
+//
+// A COUNT, not a roster. The seat rows are read off the room handle in C++
+// (ui.rosterSeatsFromRoom), so the only thing this callback still needs in JS is
+// how many seats there are — which is the one fact the join plink turns on. The
+// roster used to arrive here as an array that was immediately serialized back
+// into the wasm to be turned into seats.
+function renderRoster(rosterSize, hostPeerIndex) {
   // A bigger roster means someone joined (renames/car picks keep the count) —
   // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
-  sfx(audioDecide.roster(roster.length, net.roomState === ROOM_STATE.LOBBY));
-  renderSeats(el('players'), ui.rosterSeats(roster, hostPeerIndex));
+  sfx(audioDecide.roster(rosterSize, net.roomState === ROOM_STATE.LOBBY));
+  renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex));
   renderLobbyPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }

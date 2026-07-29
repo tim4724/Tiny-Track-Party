@@ -19,10 +19,12 @@
 #include "ttp/json_read.h"
 #include "ttp/relay_framing.h"
 #include "ttp/room_flow.h"
-// The live race, for ttp_room_sync_active_order alone: who is PLAYING is a fact
-// about the sim, and the room's participant order is a decision over it. Read
-// through the internal seam, never through a serialized snapshot.
+// The live race, for ttp_room_sync_active_order and ttp_room_in_race_flags: who
+// is PLAYING is a fact about the sim, and both the room's participant order and
+// each seat's inRace flag are decisions over it. Read through the internal seam,
+// never through a serialized snapshot.
 #include "ttp/game.h"
+#include "ttp_room.h"
 #include "ttp_session.h"
 
 using namespace ttp;
@@ -191,6 +193,40 @@ void ttp_room_sync_active_order(int h, int sessionHandle) {
     for (const auto& c : g->cars()) active.push_back(c->id);
   }
   rh->flow->syncActiveOrder(active);
+}
+
+// ---- the internal seam (ttp_room.h) -----------------------------------------
+// The same read, generalized: a room handle plus a session handle is everything
+// needed to describe the room to a phone or a screen, and both answers are taken
+// HERE rather than reassembled by whichever shell asked. See ttp_room.h.
+
+Value ttp_room_roster_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->flow->listValue() : Value::Arr();
+}
+
+Value ttp_room_in_race_flags(int roomHandle, int sessionHandle) {
+  RoomHandle* rh = room(roomHandle);
+  Value flags = Value::Arr();
+  if (!rh) return flags;
+  Game* g = ttp_session_engine(sessionHandle);
+  const Value roster = rh->flow->listValue();
+  if (roster.type != Value::ARR) return flags;
+  for (const Value& seat : roster.arr) {
+    const Id id = json::id_of<Id>(seat.find("peerIndex"));
+    flags.push(Value::Bool(g && !id.isNull() && g->hasCar(id)));
+  }
+  return flags;
+}
+
+Value ttp_room_host_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->flow->host().toValue() : Value::Null();
+}
+
+std::string ttp_room_state_name(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->flow->stateName() : std::string();
 }
 
 // ---- liveness ---------------------------------------------------------------

@@ -25,8 +25,12 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // already marks them as racing (regression guard below).
   await page.evaluate(() => {
     window.__snaps = [];
-    const p = window.__net.party, orig = p.setState.bind(p);
-    p.setState = (payload) => { window.__snaps.push(JSON.parse(JSON.stringify(payload))); return orig(payload); };
+    // The retained snapshot is composed AND FRAMED in C++ now
+    // (ttp_net_lobby_frame), so the display publishes pre-encoded bytes through
+    // setStateFrame rather than handing setState an object. Unwrap the frame to
+    // get back the same snapshot this hook has always collected.
+    const p = window.__net.party, orig = p.setStateFrame.bind(p);
+    p.setStateFrame = (frame) => { window.__snaps.push(JSON.parse(frame).data); return orig(frame); };
   });
   const seated = await page.evaluate(() => window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
 

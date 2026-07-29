@@ -20,7 +20,12 @@
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
+#include "ttp/relay_framing.h"
 #include "ttp/session.h"
+// The live room + the live race, for ttp_net_lobby_frame alone. Narrow
+// accessors returning plain Values, so this file gains no edge on RoomFlow or
+// on Game — see ttp_room.h.
+#include "ttp_room.h"
 
 using namespace ttp;
 namespace ns = ttp::session;
@@ -38,7 +43,7 @@ Value g_chooser = Value::Obj();
 // per handle, and this ABI has none.
 std::string g_bufRows, g_bufSnapshot, g_bufJoin, g_bufClaimUrl, g_bufTemplate,
     g_bufNorm, g_bufSeat, g_bufAddPeer, g_bufCard, g_bufState, g_bufHost,
-    g_bufTick, g_bufClaim, g_bufResync;
+    g_bufTick, g_bufClaim, g_bufResync, g_bufFrame;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -108,6 +113,23 @@ const char* ttp_net_roster_rows_json(const char* rosterJson, const char* inRaceJ
 
 const char* ttp_net_lobby_snapshot_json(const char* inputJson) {
   return put(g_bufSnapshot, ns::lobby_snapshot(json::parse_or(inputJson, Value::Obj()), g_chooser));
+}
+
+const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
+  // The game-owned half — everything the room machine cannot know.
+  Value input = json::parse_or(fieldsJson, Value::Obj());
+  if (input.type != Value::OBJ) input = Value::Obj();
+  // The room-owned half, read through the seam — the SAME four keys the shell
+  // used to gather and hand back, so lobby_snapshot below is the untouched,
+  // corpus-pinned rule and not a variant of it.
+  input.set("roster", ttp_room_roster_value(roomHandle));
+  input.set("inRace", ttp_room_in_race_flags(roomHandle, sessionHandle));
+  input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
+  input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
+  // Canonical, like every other frame encoder: g_bufFrame is framed output, not
+  // an ABI answer, so it takes ttp_party.cc's spelling and not this file's.
+  g_bufFrame = canonical_stringify(framing::encode_set_state(ns::lobby_snapshot(input, g_chooser)));
+  return g_bufFrame.c_str();
 }
 
 // ---- URLs ---------------------------------------------------------------------
