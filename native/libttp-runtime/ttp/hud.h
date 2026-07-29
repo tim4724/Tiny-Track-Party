@@ -54,9 +54,11 @@ TtpHudSlot hudSlot(int32_t place, int32_t lap, int32_t totalLaps,
 // (nullptr = no session: every slot comes back dead). Never returns null; the
 // pointer is valid until the next buildHud on the same state.
 //
-// The body of ttp_display_hud, here rather than in the ABI shim for the same
-// reason cellRects is: it names no platform API, and the shim compiles only with
-// a Filament SDK, where no ctest on any leg would ever run it.
+// The body of ttp_display_hud, here rather than in the ABI shim: it names no
+// platform API, and the shim compiles only with a Filament SDK, where no ctest
+// on any leg would ever run it. (This used to cite cellRects as the precedent.
+// It was a bad one — that declaration was dead and its premise was wrong; see
+// frame_builder.h. This one is the real article: hud_check executes it.)
 const TtpHudBlock* buildHud(DisplayState& d, const Game* eng);
 
 }  // namespace rt

@@ -29,6 +29,7 @@
 // cup/track resolution, the biome-name order and every boostShades shade.
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -189,7 +190,42 @@ struct BoostShades {
   uint32_t streak;  // near-white wind streak with the accent's cast
   uint32_t icon;    // HUD item-chip stroke — darkened for contrast on paper
 };
-BoostShades boost_shades(uint32_t hex);
+
+// INLINE, in the header, because the RENDERER is the biggest consumer of these
+// shades and may not link libttp-runtime (neither library may link the other, or
+// libttp-runtime would stop building on the legs with no Filament SDK — see
+// native/CMakeLists.txt). It reaches theme.h by include path alone, so anything
+// it must AGREE with has to be callable from a header.
+//
+// It used to re-derive them instead, with its own float/lround copy of mixHex
+// against this file's double/floor one, and four coefficients retyped as
+// literals. Four of the five stayed in step by luck; the fifth, the wind streak,
+// was a hardcoded 0xdffcf8 that matches no biome's accent at all — so the one
+// surface no biome drove was the one the recipe below names last. `boostShades`
+// is pinned shade-by-shade for all six biomes by the frozen theme corpus, which
+// is exactly the gate the renderer's copy could never be under.
+//
+// double, not float, and floor(x + 0.5) rather than lround: this is themes.js's
+// arithmetic, and the corpus was recorded off it.
+inline uint32_t mix_hex(uint32_t hex, double t) {
+  const double to = t >= 0 ? 255.0 : 0.0, a = t < 0 ? -t : t;
+  const auto m = [&](uint32_t c) -> uint32_t {
+    return (uint32_t) std::floor((double) c + (to - (double) c) * a + 0.5);
+  };
+  return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
+}
+
+inline BoostShades boost_shades(uint32_t hex) {
+  BoostShades s;
+  s.base = hex;
+  s.light = mix_hex(hex, 0.55);    // pad-disc bright core (radial-gradient centre)
+  s.dark = mix_hex(hex, -0.42);    // pad-disc rim (radial-gradient edge)
+  s.strip = mix_hex(hex, -0.12);   // flat launch-strip body — reads as paint
+  s.disk = mix_hex(hex, 0.15);     // under-car aura tint: the SATURATED accent, small lift
+  s.streak = mix_hex(hex, 0.86);   // near-white wind streak with the accent's cast
+  s.icon = mix_hex(hex, -0.2);     // HUD item-chip stroke — darkened for paper
+  return s;
+}
 
 // ---- resolution -------------------------------------------------------------
 

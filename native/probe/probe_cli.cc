@@ -52,16 +52,17 @@ namespace {
 
 constexpr double DT_MS = 1000.0 / 60.0;
 
-// AI_PERSONALITIES (public/display/AiDriver.js). Persona 0 ("Bolt", the
+// ttp::AI_PERSONALITIES itself, not a copy of it. Persona 0 ("Bolt", the
 // overdriver) is the single driver used by laptime + matrix, so the only variable
 // there is the car; packed uses all four, one per grid slot.
-struct Persona { const char* name; double caution; double laneBias; };
-constexpr Persona PERSONAS[4] = {
-    {"Bolt", 1.05, -0.6},
-    {"Pixel", 1.00, 0.6},
-    {"Rusty", 0.97, -0.25},
-    {"Zippy", 0.94, 0.25},
-};
+//
+// This file used to hand-transcribe the four {caution, laneBias} pairs under a
+// comment pointing at a JS file that no longer exists, which is the exact drift
+// the tree single-sourced everywhere else (ttp_race_personas_json hands the same
+// table to the shell rather than letting it keep one). A probe reading different
+// personas from the game would not fail anything — it would just quietly report
+// lap times for bots nobody races.
+using ttp::AI_PERSONALITIES;
 // The JS AiController's default seed when a persona carries none.
 constexpr uint32_t DEFAULT_AI_SEED = 1;
 
@@ -108,7 +109,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
   }
   std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st}};
   Game game(players, bt.game, [](const Event&) {});
-  AiController ai(PERSONAS[0].caution, LOOKAHEAD, STEER_GAIN, PERSONAS[0].laneBias, DEFAULT_AI_SEED);
+  AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED);
 
   double t = 0, sum = 0;
   int lastLap = 0;
@@ -282,8 +283,8 @@ int runPacked(const std::string& only, uint32_t seed) {
       Game game(players, bt.game, [](const Event&) {});
       std::vector<std::unique_ptr<AiController>> ais;
       for (size_t slot = 0; slot < N; slot++) {
-        ais.push_back(std::make_unique<AiController>(PERSONAS[slot].caution, LOOKAHEAD, STEER_GAIN,
-                                                     PERSONAS[slot].laneBias, DEFAULT_AI_SEED));
+        ais.push_back(std::make_unique<AiController>(AI_PERSONALITIES[slot].caution, LOOKAHEAD, STEER_GAIN,
+                                                     AI_PERSONALITIES[slot].laneBias, DEFAULT_AI_SEED));
       }
 
       double t = 0;

@@ -85,9 +85,23 @@ if (!fs.existsSync(pwCache) && !fs.existsSync(path.join(process.env.HOME || '', 
   notes.push('no Playwright browser — run `npx playwright install chromium` before `npm run test:e2e`.');
 }
 
+// Asked rather than remembered. A hand-typed count is wrong the first time a
+// ctest is added and nothing ever tells you — this banner claimed 47 for a tree
+// that had 48. `ctest -N` only lists, needs no build, and costs ~13 ms.
+const ctestCount = (() => {
+  try {
+    const out = execFileSync('ctest', ['--test-dir', path.join(ROOT, 'native/build'), '-N'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = out.match(/Total Tests:\s*(\d+)/);
+    return m ? `${m[1]} tests` : 'the conformance suite';
+  } catch {
+    return 'the conformance suite';  // not configured (the step above said so)
+  }
+})();
+
 console.log('\nReady:');
-console.log('  npm test                        unit + wire-compat  (~11 s)');
-console.log('  ctest --test-dir native/build   native conformance, 47 tests  (~6 s, after a build)');
+console.log('  npm test                        unit + wire-compat  (~6 s)');
+console.log(`  ctest --test-dir native/build   native conformance, ${ctestCount}  (~6 s, after a build)`);
 console.log('  npm run test:e2e                Playwright  (~90 s)');
 console.log('  npm run dev                     the server, watching');
 console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk:');

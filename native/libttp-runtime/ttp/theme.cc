@@ -405,28 +405,8 @@ std::string authoredKey(double r, double g, double b) {
 // ---------------------------------------------------------------------------
 // Boost accent.
 // ---------------------------------------------------------------------------
-namespace {
-// themes.js mixHex: blend a 0xRRGGBB toward white (t > 0) or black (t < 0).
-uint32_t mixHex(uint32_t hex, double t) {
-  const double to = t >= 0 ? 255.0 : 0.0, a = t < 0 ? -t : t;
-  const auto m = [&](uint32_t c) -> uint32_t {
-    return (uint32_t) std::floor((double) c + (to - (double) c) * a + 0.5);
-  };
-  return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
-}
-}  // namespace
-
-BoostShades boost_shades(uint32_t hex) {
-  BoostShades s;
-  s.base = hex;
-  s.light = mixHex(hex, 0.55);    // pad-disc bright core (radial-gradient centre)
-  s.dark = mixHex(hex, -0.42);    // pad-disc rim (radial-gradient edge)
-  s.strip = mixHex(hex, -0.12);   // flat launch-strip body — reads as paint
-  s.disk = mixHex(hex, 0.15);     // under-car aura tint: the SATURATED accent, small lift
-  s.streak = mixHex(hex, 0.86);   // near-white wind streak with the accent's cast
-  s.icon = mixHex(hex, -0.2);     // HUD item-chip stroke — darkened for paper
-  return s;
-}
+// mix_hex + boost_shades are INLINE in theme.h — the renderer needs them and
+// cannot link this library. See the note there.
 
 // ---------------------------------------------------------------------------
 // Resolution.

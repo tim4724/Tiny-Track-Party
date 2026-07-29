@@ -254,12 +254,12 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         // The RENDERER owns the rect: it letterboxes the grid as ONE piece, so a
         // cell is a tile of the capped picture and not of the raw surface. Asking
         // it is the whole point of this export — a shell that re-derived the grid
-        // would put its labels on the surface where the picture is not.
-        const TtpRenderer::CellRect r = g_disp->renderer->cellRect(n, i);
-        // cellRect is GL viewport terms (bottom-left origin); this ABI is
-        // documented TOP-LEFT, which is what every UI toolkit lays out in.
+        // would put its labels on the surface where the picture is not. The
+        // renderer's own steer bar and dividers ask the same function, so the
+        // shell's chrome and the renderer's cannot land on different grids.
+        const TtpCellRect r = g_disp->renderer->cellRectTopLeft(n, i);
         out[i * 4 + 0] = (float) r.x;
-        out[i * 4 + 1] = (float) ((int32_t) g_disp->height - r.y - (int32_t) r.h);
+        out[i * 4 + 1] = (float) r.y;
         out[i * 4 + 2] = (float) r.w;
         out[i * 4 + 3] = (float) r.h;
     }

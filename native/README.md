@@ -49,10 +49,23 @@ probe/          probe_cli — the balance instruments (lap times, car matrix).
 ## Build and test
 
 ```bash
+npm run test:native                      # build + the whole suite, in parallel
+npm run test:native -- -R raceflow        # one test
+```
+
+That is the two commands below with the two edges taken off — `ctest` runs
+whatever binaries are already there, so forgetting the build is a green suite
+that says nothing, and it is serial by default (6.2 s against 2.4 s at `-j`).
+By hand, if you want the pieces:
+
+```bash
 cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build -j8
-ctest --test-dir native/build            # 36 tests
+ctest --test-dir native/build -j8
 ```
+
+(No test count here on purpose. It was written down as 36 for a 48-test suite;
+`ctest -N` will tell you, and `npm run setup` prints it.)
 
 The browser artifacts are **checked in**. After touching anything under
 `native/`, rebuild and commit them:

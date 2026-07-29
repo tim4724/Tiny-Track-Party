@@ -25,11 +25,25 @@ if [ ! -x "$MATC" ]; then
     exit 1
 fi
 
+# Only the ones that actually moved. matc is deterministic — the .filamat it
+# writes for an unchanged .mat is byte-identical — so recompiling all eleven on
+# every engine build was ~1 s spent reproducing bytes we already had, on the
+# command you run most while working on native/.
+#
+# matc ITSELF is a dependency, not just the .mat: a rebuilt Filament fork can
+# change the output of an untouched material, and a stale blob is the kind of bug
+# you chase in the renderer for an hour. -nt covers both. The OUTDIR is per
+# backend, so the metal and opengl blobs never gate each other.
 mkdir -p "$OUTDIR"
-count=0
+built=0 kept=0
 for mat in "$MATDIR"/*.mat; do
     name="$(basename "${mat%.mat}")"
-    "$MATC" -a "$API" -p "$PLATFORM" -o "$OUTDIR/$name.filamat" "$mat"
-    count=$((count + 1))
+    out="$OUTDIR/$name.filamat"
+    if [ ! -f "$out" ] || [ "$mat" -nt "$out" ] || [ "$MATC" -nt "$out" ]; then
+        "$MATC" -a "$API" -p "$PLATFORM" -o "$out" "$mat"
+        built=$((built + 1))
+    else
+        kept=$((kept + 1))
+    fi
 done
-echo "==> $count materials -> $OUTDIR ($API/$PLATFORM)"
+echo "==> materials -> $OUTDIR ($API/$PLATFORM): $built compiled, $kept up to date"

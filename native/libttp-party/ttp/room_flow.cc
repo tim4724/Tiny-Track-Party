@@ -289,11 +289,14 @@ PeerId RoomFlow::oldestEligible(const std::vector<PeerId>* eligible, const PeerI
   return best;
 }
 
+// `eligible` points AT order_, never at a copy of it. The three functions below
+// used to each build a std::vector<PeerId> copy purely to have something to take
+// the address of; isEligible/oldestEligible only ever read through the pointer,
+// and none of them can mutate order_ while it is held (all three are const or
+// call only const helpers). The copy was a heap allocation per host election and
+// per publish, for nothing.
 PeerId RoomFlow::host() const {
-  bool r = restricted();
-  std::vector<PeerId> orderSet;
-  const std::vector<PeerId>* eligible = nullptr;
-  if (r) { orderSet = order_; eligible = &orderSet; }
+  const std::vector<PeerId>* eligible = restricted() ? &order_ : nullptr;
   if (cfg_.hasMasterProvider) {
     PeerId m = masterValue_;
     if (isEligible(m, eligible)) return m;
@@ -307,17 +310,12 @@ bool RoomFlow::isHost(const PeerId& peerIndex) const {
 }
 
 PeerId RoomFlow::electNextHost(const PeerId* exclude) const {
-  std::vector<PeerId> orderSet;
-  const std::vector<PeerId>* eligible = nullptr;
-  if (restricted()) { orderSet = order_; eligible = &orderSet; }
-  return oldestEligible(eligible, exclude);
+  return oldestEligible(restricted() ? &order_ : nullptr, exclude);
 }
 
 void RoomFlow::reconcileStickyHost() {
   if (players_.empty()) return;
-  std::vector<PeerId> orderSet;
-  const std::vector<PeerId>* eligible = nullptr;
-  if (restricted()) { orderSet = order_; eligible = &orderSet; }
+  const std::vector<PeerId>* eligible = restricted() ? &order_ : nullptr;
   if (!hostPeerIndex_.isNull() && find(hostPeerIndex_) && !discHas(hostPeerIndex_)) {
     bool ok = true;
     if (eligible) {

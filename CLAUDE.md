@@ -100,7 +100,27 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   `TtpCellHudInput`) — a rounded rect with a translating fill needs none of the
   UI toolkit the HUD exists for, and both are pinned to a cell whose geometry is
   already C++. It keeps OUT the place/lap ordinal, the name chip, the item slot,
-  the FINISHED card and the reconnect QR. Moving them also made the whole
+  the FINISHED card and the reconnect QR.
+  THERE ARE TWO GRIDS AND ONLY ONE OF THEM IS WHERE THE PICTURE IS, which is the
+  trap to know about here. `ttp_grid_cell` (ttp_render.h) tiles the RAW surface;
+  `TtpRenderer::cellRect` letterboxes the grid to `CELL_MAX_ASPECT` as one piece
+  and CENTRES it, and that is what the cameras actually render into. Anything
+  placing chrome wants `cellRectTopLeft` — the one `ttp_display_cell_rects`
+  returns, so the shell's chips and the renderer's steer bar cannot land on
+  different grids. drawOverlay used the raw grid until 2026-07-29: measured at
+  2560x720 with four cells, every steer bar sat a fifth of a cell off, under a
+  car that was not there. It bites in ordinary play, not just on an ultrawide —
+  the 2-PLAYER layout is STACKED, so its cells are 3.56:1 and past the cap. The
+  DIVIDER span is the deliberate exception: it stays the whole canvas (E2E's
+  `flow.spec.js` samples that seam row), because a rule between two views that
+  stopped at the picture's edge would read as a gap.
+  BOOST SHADES ARE `ttp::rt::boost_shades`, inline in libttp-runtime's theme.h
+  precisely so the renderer can call it without linking that library (neither
+  may link the other). The renderer kept its own float copy of `mixHex` plus four
+  retyped coefficients until 2026-07-29, and the one shade with no pad beside it
+  to keep it honest — the wind streak — had drifted to a hardcoded `0xdffcf8`
+  that matches no biome's accent at all. Do not re-derive a shade; the frozen
+  theme corpus pins all seven. Moving them also made the whole
   remaining HUD a ~6 Hz poll: nothing in the DOM is written per frame. THAT SAME
   TICK is now the only thing on the race loop besides the frame itself — the
   phones' ITEM push reads the HUD block the poll already fetched (it used to call
@@ -618,12 +638,24 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   (9.8 s vs Make's 14.0 s) — the generator is fixed for the life of the
   directory, so it can only be chosen once. E2E runs `workers: 3` off CI
   (213 s → 79 s; see `playwright.config.js` for why not more).
-  The steady state is `npm test` ~11 s, `ctest` ~6 s, E2E ~90 s, and a one-file
-  engine change ~9 s through `build-runtime-web.sh` (of which ~5 s is the emcc
-  link, which no cache can help). Anything much worse than that is a
-  regression worth chasing — `npm test` was 18.5 s until one audit ABI stopped
-  rebuilding its track per call. Of the ~11 s, ~10.6 s is
-  `codegen-freshness.test.js` alone, which re-derives the track bake: that one
-  is real work and not a regression, but it does mean the suite's wall clock is
-  now ONE test, so read a jump there before suspecting anything else.
+  The steady state is `npm test` ~4.6 s, `npm run test:native` ~1.6 s (build
+  included), E2E ~80 s, and a one-file engine change ~4.9 s through
+  `build-runtime-web.sh` (nearly all of it the emcc link, which no cache can
+  help). Anything much worse than that is a regression worth chasing — `npm
+  test` was 18.5 s until one audit ABI stopped rebuilding its track per call.
+  THE THREE THINGS THAT GOT IT THERE are each worth knowing, because each was
+  one command doing avoidable work rather than anything structural:
+  `codegen-freshness.test.js` re-derives the 16-track bake, which was 10.6 s of
+  an 11 s suite — 93% of the wall clock in ONE assertion, single-threaded.
+  `gen-tracks.mjs` now fans those 16 independent solves across worker processes
+  (10.3 s → 2.5 s, byte-identical, ~4 tracks per worker so cold JIT is not paid
+  16 times); THE GATE IS UNCHANGED, all 16 still run.
+  `ctest` is serial by default (6.2 s against 2.4 s at `-j`), and it will also
+  happily run stale binaries if you forget to build — `npm run test:native`
+  does both and is what the docs now point at.
+  `build-materials.sh` recompiled all 11 materials every time (~1 s) to
+  reproduce bytes it already had; it is mtime-gated on the `.mat` AND on `matc`,
+  inside the shared script so the tvOS/Android legs inherit it.
+  The suite's wall clock is no longer any one test, so a jump is worth reading
+  rather than assuming.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

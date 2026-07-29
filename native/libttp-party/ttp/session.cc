@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <set>
 
+#include "ttp/json_read.h"
 #include "ttp/jsonnum.h"
 #include "ttp/protocol.h"
 #include "ttp/relay_framing.h"
@@ -146,17 +147,7 @@ std::string jsToString(const Value& v) {
   return "";
 }
 
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && !std::isnan(v->num);
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
-  }
-}
+using json::truthy;   // JS truthiness — libttp-json's, not a fourth copy of it
 
 // Copy a key across VERBATIM, dropping it when the source has none — JS reads an
 // absent field as undefined and JSON.stringify drops the key, and the roster row

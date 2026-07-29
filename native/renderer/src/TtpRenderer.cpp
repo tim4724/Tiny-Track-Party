@@ -131,16 +131,12 @@ struct BlurKernel {
     }
 };
 
-// themes.js mixHex: blend a 0xRRGGBB toward white (t > 0) or black (t < 0).
-// boostShades derives every boost SURFACE from the one biome accent, so the
-// pad, the launch strip, the under-car aura and the streaks stay in lockstep.
-uint32_t mixHex(uint32_t hex, float t) {
-    const float to = t >= 0 ? 255.0f : 0.0f, a = t < 0 ? -t : t;
-    const auto m = [&](uint32_t c) -> uint32_t {
-        return (uint32_t) std::lround(c + (to - (float) c) * a);
-    };
-    return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
-}
+// boostShades — every boost SURFACE from the one biome accent, so the pad, the
+// launch strip, the under-car aura and the streaks stay in lockstep — lives in
+// libttp-runtime/ttp/theme.h as ttp::rt::boost_shades, where the frozen theme
+// corpus pins it shade by shade. This file used to re-derive it from a local
+// mixHex and four retyped coefficients, and the shade that had no pad to keep it
+// honest (the wind streak) had drifted to a hardcoded near-white.
 
 uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
     const auto b = [&](float v) -> uint32_t {
@@ -1229,6 +1225,13 @@ TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
     const uint32_t col = i % cols, row = i / cols;
     return { (int32_t) (x0 + col * cw),
              (int32_t) (mHeight - (row + 1) * ch), cw, ch };
+}
+
+TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {
+    if (i >= n) return TtpCellRect{ 0u, 0u, 0u, 0u };
+    const CellRect r = cellRect(n, i);
+    return TtpCellRect{ (uint32_t) r.x, (uint32_t) ((int32_t) mHeight - r.y - (int32_t) r.h),
+                        r.w, r.h };
 }
 
 // Repaint the monster truck's CHASSIS (only) to one flat neutral, per instance.
@@ -4718,7 +4721,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // concentric rings reproduce exactly. Unit radius; conformed onto the
         // road per frame (a flat disc clipped through every bend).
         mBoostDisks.resize(carCount);
-        const float3 TEALC = srgbToLinear(mixHex(tb.boostCol, 0.15f));
+        const float3 TEALC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
         for (uint32_t c = 0; c < carCount; c++) {
             Mesh& m = mBoostDisks[c];
             const int SEG = 16; // BOOST_DISK_SEG
@@ -4758,7 +4761,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mStreakMeshes.resize(carCount * 4);
         mStreakSeed.resize(carCount);
         for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
-        const float3 STREAKC = srgbToLinear(0xdffcf8);
+        const float3 STREAKC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).streak);
         {
             const BlurKernel blur(3.0f);
             const auto ellipse = [](float x, float y) {
@@ -5558,10 +5561,11 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
 void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
     if (tb.pads.empty()) return;
     // boostShades(theme.boost) — one accent per biome drives every surface.
-    const float3 PAD_LIGHT = srgbToLinear(mixHex(tb.boostCol, 0.55f));  // disc core
-    const float3 PAD_BASE = srgbToLinear(tb.boostCol);                  // disc mid stop (0.7)
-    const float3 PAD_DARK = srgbToLinear(mixHex(tb.boostCol, -0.42f));  // disc rim
-    const float3 STRIP_BODY = srgbToLinear(mixHex(tb.boostCol, -0.12f));// flat strip body
+    const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
+    const float3 PAD_LIGHT = srgbToLinear(boost.light);   // disc core
+    const float3 PAD_BASE = srgbToLinear(boost.base);     // disc mid stop (0.7)
+    const float3 PAD_DARK = srgbToLinear(boost.dark);     // disc rim
+    const float3 STRIP_BODY = srgbToLinear(boost.strip);  // flat strip body
     const float3 CREAM = srgbToLinear(0xfdf3cf);
     const float LIFT = 0.01f;
 
@@ -6533,13 +6537,26 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         const uint32_t n = input.hudCount;
 
         // .cell-divider — a 4 px ink rule down every seam that has cells on both
-        // sides, spanning the whole canvas. Derived from the same rects the
-        // shell is handed, and deduplicated exactly as the DOM's loop was: one
-        // rule per distinct cell edge, not one per cell.
+        // sides, SPANNING THE WHOLE CANVAS, deduplicated exactly as the DOM's
+        // loop was: one rule per distinct cell edge, not one per cell.
+        //
+        // The seam positions come from cellRectTopLeft, the letterboxed grid the
+        // shell is also handed. For every layout this game can produce that is
+        // the same number ttp_grid_cell gave (a 2-column seam is at W/2 either
+        // way, and 3+ columns needs 5 players), so this is about being derived
+        // from one grid rather than two, not about moving a line.
+        //
+        // The SPAN stays the canvas, and that is deliberate rather than an
+        // oversight: clipping the rules to the picture is visibly wrong on the
+        // STACKED PAIR, which is not an exotic layout but the ordinary 2-player
+        // one — a 16:9 surface splits into two 3.56:1 cells, which is past
+        // CELL_MAX_ASPECT, so the picture is inset with bars either side and the
+        // rule between the two views would stop short of the screen edges.
+        // tests/e2e/flow.spec.js samples that seam row and holds this.
         if (input.flags & TTP_FRAME_DIVIDERS) {
             uint32_t xs[8], ys[8], nx = 0, ny = 0;
             for (uint32_t i = 0; i < n; i++) {
-                const TtpCellRect r = ttp_grid_cell(i, n, mWidth, mHeight);
+                const TtpCellRect r = cellRectTopLeft(n, i);
                 bool seen = false;
                 for (uint32_t k = 0; k < nx; k++) seen = seen || xs[k] == r.x;
                 if (r.x > 0 && !seen && nx < 8) xs[nx++] = r.x;
@@ -6582,7 +6599,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         const TtpCellHudInput* hud = ttp_frame_hud(&input);
         for (uint32_t i = 0; i < n; i++) {
             if (!(hud[i].flags & TTP_HUD_STEER_BAR)) continue;
-            const TtpCellRect cell = ttp_grid_cell(i, n, mWidth, mHeight);
+            const TtpCellRect cell = cellRectTopLeft(n, i);
             MaterialInstance* mi = overlayQuad(cell.x + (cell.w - barW) * 0.5f,
                     cell.y + cell.h - 61 * s, barW, barH);
             if (!mi) continue;
@@ -6989,7 +7006,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // Math.random — character parity, not per-pixel). Alpha lands in the
         // centre vertex; the per-view pass orients the billboards.
         if (mCarBasis.size() < nCars) mCarBasis.resize(nCars);
-        if (mCarBasis.size() > i) mCarBasis[i] = m;
+        if (mCarBasisInv.size() < nCars) mCarBasisInv.resize(nCars);
+        if (mCarBasis.size() > i) { mCarBasis[i] = m; mCarBasisInv[i] = inverse(m); }
         if (mStreaks.size() >= (i + 1) * 4 && mStreakSeed.size() > i) {
             const bool on = c.boostMul > 1.001f;
             CarWheels* cwp = mCarWheels.size() > i ? &mCarWheels[i] : nullptr;
@@ -7975,13 +7993,16 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 auto sInst = tcmV.getInstance(sm.entity);
                 const Streak& st = mStreaks[si];
                 const size_t car = si / 4;
-                if (st.dead || st.alpha <= 0 || mCarBasis.size() <= car) {
+                if (st.dead || st.alpha <= 0 || mCarBasis.size() <= car
+                        || mCarBasisInv.size() <= car) {
                     tcmV.setTransform(sInst,
                             mat4f::translation(float3{ 0, -1000, 0 }));
                     continue;
                 }
                 const mat4f& P = mCarBasis[car];
-                const float3 camL = (inverse(P)
+                // The inverse is the car's, not the cell's — cached per car per
+                // frame above rather than recomputed for each of the four cells.
+                const float3 camL = (mCarBasisInv[car]
                         * float4{ world[3].x, world[3].y, world[3].z, 1 }).xyz;
                 const float3 vv = camL - float3{ st.x, st.y, st.z };
                 const float beta = std::atan2(-vv.x, vv.y);
@@ -8140,6 +8161,7 @@ void TtpRenderer::releaseScene() {
     mStreakMeshes.clear();
     mStreakSeed.clear();
     mCarBasis.clear();
+    mCarBasisInv.clear();
     mPropBlobs.clear();
     mRockets.clear();
     mRocketFlames.clear();

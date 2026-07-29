@@ -10,9 +10,12 @@
 //   tracks.js (waypoints + furniture from GEN_TRACKS/GEN_FURNITURE, cup, difficulty)
 //   →  node scripts/gen-track-schematics.js  →  preview at /?scenario=track&track=<id>
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { execFile } from 'child_process';
 import { bakeSeed, buildTrack, placeFurniture, PROFILES } from './track-gen.mjs';
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
+const SELF = new URL(import.meta.url).pathname;
 
 // which {seed, profile} becomes which track id (re-pick by editing this, then re-run)
 // User-picked rosters (audition round of 2026-07-03; see gallery-tracks.html).
@@ -49,16 +52,108 @@ const SEEDS = {
 const toStdout = process.argv.includes('--stdout');
 const report = (line) => { if (toStdout) process.stderr.write(`${line}\n`); else console.log(line); };
 
-const out = {}, furn = {};
-for (const [id, { seed, profile }] of Object.entries(SEEDS)) {
-  const wp = bakeSeed(seed, profile); out[id] = wp;
+// Bake ONE track. Everything below is a pure function of {seed, profile} — the
+// RNG is track-gen's seeded mulberry32 and there is no Math.random anywhere in
+// the pipeline — which is what makes the fan-out below legitimate rather than a
+// race waiting to happen.
+//
+// It returns the two fragments ALREADY STRINGIFIED, and that is deliberate: the
+// bytes a worker prints are the bytes the parent splices, so a value never makes
+// a JSON round trip on its way into the bake. Re-serializing a parsed double is
+// byte-safe in practice, but "safe in practice" is the wrong standard for the
+// one file tests/codegen-freshness.test.js compares byte for byte.
+function bakeOne(id, { seed, profile }) {
+  const wp = bakeSeed(seed, profile);
   const src = { waypoints: wp };
   const t = buildTrack(src);
-  if (profile !== 'classic') furn[id] = placeFurniture(src, { oils: PROFILES[profile].oilCount });
-  report(`${id.padEnd(11)} ${profile.padEnd(7)} seed ${String(seed).padStart(3)}  ${wp.length} wp  len ${t.length.toFixed(0)} (~${(t.length * 0.124).toFixed(0)}s)  pillars ${t.pillars.length}  hills ${t.hills.length}  closed ${t.closed}`);
+  const f = profile === 'classic'
+    ? null
+    : placeFurniture(src, { oils: PROFILES[profile].oilCount });
+  return {
+    id,
+    wp: JSON.stringify(wp),
+    furn: f === null ? null : JSON.stringify(f),
+    line: `${id.padEnd(11)} ${profile.padEnd(7)} seed ${String(seed).padStart(3)}  ${wp.length} wp  len ${t.length.toFixed(0)} (~${(t.length * 0.124).toFixed(0)}s)  pillars ${t.pillars.length}  hills ${t.hills.length}  closed ${t.closed}`,
+  };
 }
-const body = Object.entries(out).map(([id, wp]) => `  ${id}: ${JSON.stringify(wp)}`).join(',\n');
-const furnBody = Object.entries(furn).map(([id, f]) => `  ${id}: ${JSON.stringify(f)}`).join(',\n');
+
+// WORKER MODE. A BATCH of tracks, one line of JSON each on stdout, then out.
+// Nothing else may reach stdout in this mode.
+//
+// A batch rather than a single track because the fixed cost of a worker is not
+// just the ~60 ms of node boot + import: the first bake in a process also pays
+// cold JIT on the whole solver, and measured that is ~0.15 s of CPU per process.
+// One process per track spent 15.6 s of CPU to save wall clock; batching spends
+// ~11 s for the same wall clock. This tree runs ~70 worktrees on one machine, so
+// the CPU it does NOT burn is the difference between everyone else's build being
+// slow or not.
+const bakeArg = process.argv.find((a) => a.startsWith('--bake='));
+if (bakeArg) {
+  const ids = bakeArg.slice('--bake='.length).split(',').filter(Boolean);
+  const unknown = ids.find((id) => !SEEDS[id]);
+  if (unknown) { process.stderr.write(`unknown track id: ${unknown}\n`); process.exit(2); }
+  process.stdout.write(ids.map((id) => `${JSON.stringify(bakeOne(id, SEEDS[id]))}\n`).join(''));
+  process.exit(0);
+}
+
+// The 16 bakes are INDEPENDENT and each costs 0.4-0.8 s of pure CPU: 16 elevation
+// solves and grid-anchor shortlists, each building real geometry through the
+// native builder. Serially that was 9.8 s at 104% CPU, and since this script is
+// what tests/codegen-freshness.test.js shells out to, those 9.8 s were 93% of the
+// whole `npm test` wall clock — one assertion, one core, everything else waiting.
+//
+// So: one child process per track, a pool the width of the machine. THE GATE IS
+// UNCHANGED — all 16 solves still run, through the same code, and the same bytes
+// are still compared. Only the waiting is gone (9.8 s -> ~1.6 s here). Node boots
+// and imports track-gen in ~60 ms, which against a 400-800 ms bake is cheap
+// enough that per-track processes beat hand-balanced chunks and stay self-
+// balancing when one profile is twice the work of another.
+//
+// --serial runs the old in-process loop. Keep it working: it is the readable
+// stack when a bake throws, and the fallback if a machine ever makes spawning
+// worker processes the slower answer.
+//
+// Batches are STRIDED (worker i takes tracks i, i+W, i+2W...) rather than
+// contiguous, because SEEDS is grouped by cup and therefore by profile: a `hard`
+// bake is roughly twice a `easy` one, so contiguous slices would hand one worker
+// all four Canyon tracks and leave it running alone at the end.
+async function bakeAll(entries) {
+  if (process.argv.includes('--serial') || entries.length < 2) {
+    return entries.map(([id, s]) => bakeOne(id, s));
+  }
+  // Enough workers to fill the machine, but never so many that each one bakes
+  // only a track or two. Measured over the 16-track catalogue (user seconds are
+  // the stable number here; wall clock swings with whatever the other worktrees
+  // are doing): 3 workers 11.4 s CPU, 4 -> 11.5, 6 -> 12.2, 10 -> 13.9, against
+  // 10.2 s serial. Wall clock is flat from 4 upward (~2.8 s), so everything past
+  // that is CPU spent on cold JIT for no one's benefit. Four tracks per worker
+  // is where the curve turns, and it scales: add tracks and the width grows.
+  const cores = os.availableParallelism?.() ?? os.cpus().length;
+  const want = parseInt(process.env.TTP_BAKE_WORKERS, 10) || Math.ceil(entries.length / 4);
+  const width = Math.max(1, Math.min(entries.length, cores, want));
+  const batches = Array.from({ length: width }, (_, w) => entries.filter((_, i) => i % width === w));
+  const lines = await Promise.all(batches.filter((b) => b.length).map((batch) => new Promise((resolve, reject) => {
+    const ids = batch.map(([id]) => id);
+    execFile(process.execPath, [SELF, `--bake=${ids.join(',')}`],
+      { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) return reject(new Error(`baking ${ids.join(',')} failed: ${err.message}\n${stderr}`));
+        try {
+          const got = stdout.trim().split('\n').map((l) => JSON.parse(l));
+          if (got.length !== ids.length) throw new Error(`asked for ${ids.length} bakes, got ${got.length}`);
+          resolve(got);
+        } catch (e) { reject(new Error(`baking ${ids.join(',')} produced no usable JSON: ${e.message}\n${stdout}\n${stderr}`)); }
+      });
+  })));
+  const byId = new Map(lines.flat().map((b) => [b.id, b]));
+  return entries.map(([id]) => byId.get(id));
+}
+
+// Assembled in SEEDS order regardless of which worker finished first — the bake's
+// key order is part of the committed file.
+const baked = await bakeAll(Object.entries(SEEDS));
+for (const b of baked) report(b.line);
+const body = baked.map((b) => `  ${b.id}: ${b.wp}`).join(',\n');
+const furnBody = baked.filter((b) => b.furn !== null).map((b) => `  ${b.id}: ${b.furn}`).join(',\n');
 const seedNote = Object.entries(SEEDS).map(([id, s]) => `${id}=${s.seed}(${s.profile})`).join(', ');
 const text =
   `// GENERATED by scripts/gen-tracks.mjs — DO NOT EDIT BY HAND.\n` +

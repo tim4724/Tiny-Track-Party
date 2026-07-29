@@ -428,7 +428,11 @@ double Game::placeT(const Car& c) const {
 
 std::string Game::roll(double t) {
   if (!forceItem_.empty()) return forceItem_;
-  int last = 8 - 1;
+  // From the table, not retyped from it. The JS this was ported from wrote
+  // `ITEM_PLACE_TABLE.length - 1`; the port turned that into a literal 8, so a
+  // ninth tier would have been unindexable and every corpus would have stayed
+  // green while its author believed it had been added.
+  int last = (int)(sizeof(ITEM_PLACE_TABLE) / sizeof(ITEM_PLACE_TABLE[0])) - 1;
   int idx = (int)js_max(0.0, js_min((double)last, js_round(t * last)));
   const int* row = ITEM_PLACE_TABLE[idx];
   double total = 0; for (int i = 0; i < 4; i++) total += row[i];

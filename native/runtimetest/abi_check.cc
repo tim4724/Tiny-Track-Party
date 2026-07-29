@@ -1291,6 +1291,32 @@ void audioThroughAbi() {
         && empty->stride == sizeof(TtpAudioCmd) && empty->count == 0,
         "an idle drain answers a zero-count block rather than null");
 
+  // ttp_audio_roster — the join plink. This was the one shipped audio export
+  // with no coverage anywhere: not here, not in a corpus, not in a JS test,
+  // while main.js calls it on every roster change. Both of its arguments carry a
+  // rule that a silent swap would break, and both are pinned here:
+  //   the COUNT is remembered, so only a RISE is a join (a rename or a car pick
+  //   keeps the count and must stay silent),
+  //   and inLobby GATES it, because a mid-race arrival is a reconnect.
+  auto joins = []() {
+    const TtpAudioBlock* b = ttp_audio_drain();
+    int n = 0;
+    const TtpAudioCmd* cmds = ttp_audio_cmds(b);
+    for (uint32_t i = 0; i < b->count; i++)
+      if (cmds[i].kind == TTP_AUD_CUE && cmds[i].code == TTP_CUE_JOIN) n++;
+    return n;
+  };
+  ttp_audio_roster(1, 1);                            // first sighting, seats the count
+  ttp_audio_drain();
+  ttp_audio_roster(2, 1);
+  check(joins() == 1, "a roster that GREW in the lobby plinks");
+  ttp_audio_roster(2, 1);
+  check(joins() == 0, "the same roster again is a rename, not a guest");
+  ttp_audio_roster(3, 0);
+  check(joins() == 0, "a mid-race arrival is a reconnect and stays silent");
+  ttp_audio_roster(4, 1);
+  check(joins() == 1, "and the lobby plinks again once it is back");
+
   // Two races at once: one bound (the party can hear it), one not (the lobby's
   // attract demo). Same track, same field, so the only difference is the bind.
   const int heard = ttp_session_begin("tidepool", 42, 3, "rocket");

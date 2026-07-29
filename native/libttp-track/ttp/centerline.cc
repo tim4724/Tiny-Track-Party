@@ -17,14 +17,41 @@ Centerline::Centerline(std::vector<Sample> samples, double length)
 }
 
 // Largest index i with samples[i].s <= s (capped at n-1, the wrap segment).
-// Binary search; midpoint via int >> 1 (operands small non-negative).
+//
+// THE ANSWER IS THE BINARY SEARCH'S, always — the walk in front of it is a pure
+// short-circuit and returns only when it has PROVEN the same index (a[i].s <= s
+// and either i is the last segment or a[i+1].s > s, which is the definition).
+// So this is bit-exact by construction, not by measurement, and no fixture can
+// tell the two spellings apart.
+//
+// It pays because callers arrive in order. A car advances a few centimetres per
+// tick along a centreline sampled every ~0.5 units, so consecutive lookups land
+// in the same segment or the next one or two; the search meanwhile is ~10 levels
+// of dependent, unpredictable loads over a 663-1001 sample array (one cache miss
+// per level, none of which the branch predictor can help with). game.cc calls
+// this 8 times a tick per car and ai_driver twice more, and projectNear probes
+// it 8 times in one go — it was ~19% of the sim tick.
+//
+// Four steps and no more: past that the walk is losing to the search, which is
+// what a fresh lookup after a teleport, a respawn or a new car gets.
 int Centerline::seg(double s) const {
   const auto& a = samples_;
-  int lo = 0, hi = (int)a.size() - 1, i = 0;
+  const int n = (int)a.size();
+  int i = lastSeg_;
+  if (i >= 0 && i < n) {
+    for (int step = 0; step < 4 && i < n; step++) {
+      if (a[i].s <= s && (i == n - 1 || a[i + 1].s > s)) { lastSeg_ = i; return i; }
+      if (a[i].s > s) break;   // hint is ahead of s: walking forward cannot help
+      i++;
+    }
+  }
+  int lo = 0, hi = n - 1;
+  i = 0;
   while (lo <= hi) {
     int mid = (lo + hi) >> 1;
     if (a[mid].s <= s) { i = mid; lo = mid + 1; } else hi = mid - 1;
   }
+  lastSeg_ = i;
   return i;
 }
 

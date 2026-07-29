@@ -118,6 +118,24 @@ public:
     struct CellRect { int32_t x, y; uint32_t w, h; };
     CellRect cellRect(uint32_t n, uint32_t i) const;
 
+    // THE SAME RECT, TOP-LEFT, which is the form every consumer of the ANSWER
+    // wants: ttp_display_cell_rects hands it to the shell for the HUD, and
+    // drawOverlay places the steer bar with it.
+    //
+    // It exists because those two had drifted apart. drawOverlay used
+    // ttp_grid_cell — the RAW surface tiled edge to edge — while the picture is
+    // letterboxed to CELL_MAX_ASPECT and centred, so wherever the cap bites the
+    // two disagree about where a cell is. Measured at 2560x720 with four cells:
+    // the steer bars sat at x 640 and 1920, the raw grid's cell centres, while
+    // their cells were actually centred at 860 and 1700 — each bar a fifth of a
+    // cell out, hugging the wrong side, under a car that was not there. The
+    // shell's own chrome (name chip, place, lap) was right all along, because it
+    // comes from cellRect; the bar was the one piece drawn off a second grid.
+    //
+    // Note what is NOT a consumer: the divider SPAN. It stays the canvas — see
+    // drawOverlay.
+    TtpCellRect cellRectTopLeft(uint32_t n, uint32_t i) const;
+
     // How wide a racing cell is allowed to get before the sides are bars.
     //
     // A cell's camera locks its PIXEL SCALE to the single-player reference
@@ -482,6 +500,12 @@ private:
     std::vector<Mesh> mStreakMeshes;           // carCount × 4 (vblend ellipses)
     std::vector<uint32_t> mStreakSeed;         // per-car respawn LCG
     std::vector<filament::math::mat4f> mCarBasis; // road-aligned pose per car (streak parent)
+    // ...and its inverse, cached because the streak billboards need it ONCE PER
+    // CELL while the basis itself only changes once per car per frame. Inverting
+    // it at the use site meant a general 4x4 inverse per streak per cell — 128 of
+    // them a frame at the 4-player cap, all but 32 of which recomputed a matrix
+    // that had not moved since the last cell.
+    std::vector<filament::math::mat4f> mCarBasisInv;
     // Skid trails — full SkidMarks.js port: per-wheel connected ribbons
     // (shared joint edges), slip/scrub/spin/brake/launch channels, peak-alpha
     // by strength, SKID_LIFE fade to the SKID_PATINA floor. One ring buffer of
