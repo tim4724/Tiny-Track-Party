@@ -29,6 +29,16 @@
 //     `record_*` roundtrips took over; this one's JS survives, so it keeps the
 //     original obligation and belongs here.
 //
+//   genTracks.js        <- scripts/track-gen.mjs (the seed grammar)
+//     The odd member: not a C++ input, and its generator reads no JS twin — it
+//     reads the NATIVE builder through scripts/native-track.mjs. Which is exactly
+//     why it needs an entry. It went un-run from 2201d21 ("one track builder —
+//     delete the JS twin") until this test, because placeFurniture still called
+//     `cl.sampleAt(s)` on a Centerline that commit deleted: the whole bake for 16
+//     shipped tracks could not be re-derived and nothing anywhere noticed. A
+//     generator that consumes an ABI can rot without its own source changing, so
+//     "the JS moved" is not the only trigger this list guards against.
+//
 // The FROZEN generators are deliberately NOT covered — gen-roomflow-corpus,
 // gen-grandprix-corpus, gen-trackbuilder-corpus, gen-track-sampler-corpus,
 // gen-math-corpus, gen-theme-corpus, and now gen-ui-corpus / gen-session-corpus
@@ -98,6 +108,20 @@ const DERIVED = [
     from: 'public/shared/theme.css',
     gen: 'scripts/gen-design-tokens.mjs',
     then: 'node --test tests/design-tokens.test.js',
+  },
+  // Also not a C++ input: the baked waypoints + auto-placed furniture for the 16
+  // seeded tracks. Slow (~12 s) and it earns it — every other entry re-derives in
+  // milliseconds because it just re-reads a JS file, while this one re-runs the
+  // whole search: 16 elevation solves and grid-anchor shortlists, each building
+  // real geometry through the native builder. That IS the check. A cheaper
+  // version (one track per profile, say) would prove the pipeline executes and
+  // then read like it proved the bake, which is the failure this file's header
+  // is about.
+  {
+    what: 'public/shared/genTracks.js',
+    from: 'scripts/track-gen.mjs + the native builder',
+    gen: 'scripts/gen-tracks.mjs',
+    then: 'node scripts/gen-track-schematics.js   # the schematics bake off these waypoints',
   },
 ];
 

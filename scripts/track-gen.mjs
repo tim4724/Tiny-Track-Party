@@ -21,7 +21,7 @@
 // there too (findCrossings compares plan coords against world samples and must
 // use the same value), and native-track asserts it against the engine on the
 // first build rather than trusting the constant.
-import { init as initNativeTrack, buildTrack, trackSweep, trackFrames, trackFrameAt, SCALE } from './native-track.mjs';
+import { init as initNativeTrack, buildTrack, trackSweep, trackFrames, SCALE } from './native-track.mjs';
 await initNativeTrack();
 const DEG = Math.PI / 180;
 
@@ -424,8 +424,11 @@ const ANCHOR_SHORTLIST = 16; // full resolves per seed — the prefilter's job i
 
 // The lowest road strand crossing over the gantry's footprint at arclength s0 (Infinity =
 // clear sky). Distances are to the gantry's lateral segment, not to a point.
-function gantryHeadroom(t, source, s0 = 0) {
-  const cl = t.centerline, L = t.length, f = trackFrameAt(source, s0);
+//
+// `f` is the frame AT s0, passed in rather than fetched — see the batch in measureGrid,
+// the only caller.
+function gantryHeadroom(t, s0, f) {
+  const cl = t.centerline, L = t.length;
   const half = t.roadWidth / 2 + GANTRY_REACH;
   const ll = Math.hypot(f.lateral.x, f.lateral.z) || 1;
   const ux = f.lateral.x / ll, uz = f.lateral.z / ll;
@@ -467,7 +470,12 @@ export function measureGrid(t, source, s0 = 0) {
   for (let d = -GRID_BACK; d <= GRID_FWD; d += 0.5) stations.push(s0 + d);
   const want = [];
   for (const s of stations) want.push(s - H, s, s + H);
+  // The gantry's own frame rides along in this batch. Every sampler call rebuilds the
+  // whole track inside the ABI (build_by_id_or_descriptor, no cache), so fetching it
+  // separately costs a full build while one more point in an existing call costs nothing.
+  want.push(s0);
   const f3 = trackFrames(source, want);
+  const fStart = f3[f3.length - 1];
 
   let curvature = 0, grade = 0, bank = 0, minWidth = Infinity, maxWidth = 0, rise = 0;
   for (let i = 0; i < stations.length; i++) {
@@ -479,7 +487,7 @@ export function measureGrid(t, source, s0 = 0) {
     rise = Math.max(rise, f.pos.y - groundY);
   }
   return { curvature, minRadius: curvature > 1e-5 ? 1 / curvature : Infinity, grade, bank,
-    minWidth, maxWidth, rise, headroom: gantryHeadroom(t, source, s0) };
+    minWidth, maxWidth, rise, headroom: gantryHeadroom(t, s0, fStart) };
 }
 export const gridPasses = (g, roadWidth) => g.minRadius > GRID_GATE.minRadius
   && g.grade < GRID_GATE.maxGrade && g.bank < GRID_GATE.maxBank && g.rise < GRID_GATE.maxRise
@@ -517,6 +525,10 @@ const gridWindowIdx = (plan, k) => {
 
 // Pick the plan waypoint the start line should sit on: shortlist by plan straightness, then
 // fully resolve each survivor and score its real, decorated grid.
+//
+// Returns the winner's RESOLVE, not its index — it already carries the index as `anchor`,
+// and resolveAt is pure, so handing back the index alone just made the caller run the
+// winning resolve a second time.
 function chooseAnchor(plan, resolveAt) {
   const ranked = [];
   for (let k = 0; k < plan.length; k++) {
@@ -527,16 +539,16 @@ function chooseAnchor(plan, resolveAt) {
   ranked.sort((a, b) => a.worst - b.worst || a.k - b.k);
   let best = null;
   for (const { k } of ranked.slice(0, ANCHOR_SHORTLIST)) {
-    let g, t;
+    let g, t, r;
     // solveElevation can diverge for a given anchor (a "crossing knot" it can't lift from
     // that seam) — that anchor simply isn't available; the shortlist has plenty more.
-    try { const r = resolveAt(k); const wp = { waypoints: roundWps(r.wps, r.h) }; t = buildTrack(wp); g = measureGrid(t, wp); }
+    try { r = resolveAt(k); const wp = { waypoints: roundWps(r.wps, r.h) }; t = buildTrack(wp); g = measureGrid(t, wp); }
     catch { continue; }
     const cost = gridCost(g, t.roadWidth);
-    if (!best || cost < best.cost) best = { k, cost };
+    if (!best || cost < best.cost) best = { cost, r };
   }
   if (!best) throw new Error('no usable start anchor: every shortlisted candidate diverged');
-  return best.k;
+  return best.r;
 }
 
 // Resolve a seed through the full pipeline WITHOUT rounding: plan → crossings → start
@@ -578,7 +590,7 @@ export function resolveSeed(seed, profileName = 'classic', { anchor = true } = {
     return { prof, plan, flat, wpPairs, h, wps, anchor: k };
   };
 
-  return resolveAt(anchor ? chooseAnchor(plan0, resolveAt) : 0);
+  return anchor ? chooseAnchor(plan0, resolveAt) : resolveAt(0);
 }
 
 // Resolve a seed → rounded waypoints with baked y/bridge/w/bank (what tracks.js imports).
@@ -734,13 +746,22 @@ export async function evaluateSeed(seed, profileName = 'classic', { probe = true
 // pillars) and never up on a bridge/hill (a forced spin mustn't throw you off a drop).
 // Deterministic (pure argmin over centerline stats). Returns {oils, pads, boxes} in the
 // catalogue's u/lat form; the shipped hand-tuned tracks keep their authored data.
-export function placeFurniture(t, { oils = 2 } = {}) {
+//
+// Takes the DESCRIPTOR, not a built track: the stations come from the builder's own
+// Centerline through trackFrames, so it measures with the same cubic the sim reads.
+// buildTrack memoizes, so a caller that already built this descriptor pays nothing.
+// (One bulk call rather than one per station — a lap is thousands of them.)
+export function placeFurniture(source, { oils = 2 } = {}) {
+  const t = buildTrack(source);
   const cl = t.centerline, L = t.length, STEP = 0.5, N = Math.floor(L / STEP);
+  const sList = [];
+  for (let i = 0; i < N; i++) sList.push(i * STEP);
+  const frames = trackFrames(source, sList);
   const st = [];
   let groundY = Infinity;
   for (let i = 0; i < N; i++) {
-    const s = i * STEP, f = cl.sampleAt(s);
-    st.push({ s, pos: f.pos.clone(), grade: Math.abs(f.tangent.y), h: Math.atan2(f.tangent.x, f.tangent.z) });
+    const s = sList[i], f = frames[i];
+    st.push({ s, pos: { ...f.pos }, grade: Math.abs(f.tangent.y), h: Math.atan2(f.tangent.x, f.tangent.z) });
     groundY = Math.min(groundY, f.pos.y);
   }
   for (let i = 0; i < N; i++) {
