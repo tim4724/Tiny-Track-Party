@@ -23,8 +23,11 @@ if (typeof document !== 'undefined') {
 // cross-network peers connect when host candidates aren't reachable. STUN is
 // UDP and not subject to CSP connect-src (browsers ignore the `stun:` scheme
 // there). On the same LAN, host candidates work even without STUN.
-// TODO(confirm): verify stun.couchpad.games:3478 exists; the connection glue
-// also lists a public STUN fallback so cross-network play degrades gracefully.
+// VERIFIED 2026-07-29: an eturnal server answers Binding Requests here on both
+// A and AAAA (it is STUN ONLY — no TURN relay is configured, so a symmetric NAT
+// on both ends still has no path and falls back to the relay). GameNet.js also
+// lists a public STUN fallback after this one, so a stun.* outage costs
+// cross-network play nothing.
 var STUN_URL = 'stun:stun.couchpad.games:3478';
 
 // Message types carried inside the Party-Server `data` field. Every message is
