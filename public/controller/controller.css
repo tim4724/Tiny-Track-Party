@@ -867,21 +867,46 @@ html.ctrl-land #conn {
   --edge-bottom: max(var(--land-bottom), 12px);
   --edge-left:   max(var(--land-side),   12px);
 }
-/* The ping chip lives outside #game, so it rotates on its own. Anchoring it to the
-   device's TOP-LEFT puts it in the player's BOTTOM-left once rotated — the far
-   corner from the chrome buttons, same as the portrait layout intends. */
+/* The ping chip lives outside #game (it shows on every screen), so it doesn't
+   inherit the rotated safe zone and has to turn on its own.
+
+   It goes where portrait puts it — the BOTTOM-RIGHT of what the player sees,
+   clear of the button row on the #drive-hud padding-bottom reserves for it.
+   Getting there needs a different translate from #game's, because a rotation
+   swaps which axis a size lives on: `top`/`left` size a box by its width, but
+   after the turn its width runs DOWN the device. Under
+   `translate(-100%, -100%)` the laid-out top-left lands on the visual box's
+   device bottom-left corner whatever the chip measures, which is exactly its
+   content bottom-right corner — so both offsets below are size-independent, and
+   the ms count can change width without the chip drifting.
+
+     left → the content's BOTTOM inset (content bottom is the device's left)
+     top  → the content's RIGHT inset (content right is the device's bottom),
+            measured back from the device's full height
+
+   The two insets mirror portrait's exactly: a 0.5rem gutter under the chip, and
+   none beside it (see .latency — it hugs the flank so its offset shadow can't
+   fall off-screen). */
 html.ctrl-land #latency {
-  top: calc(0.5rem + var(--safe-top)); left: var(--safe-left);
+  left: calc(0.5rem + var(--land-bottom));
+  top: calc(100dvh - var(--land-side));
   right: auto; bottom: auto;
   transform-origin: 0 0;
-  transform: rotate(90deg) translateY(-100%);
+  transform: rotate(90deg) translate(-100%, -100%);
 }
 /* Same compaction as a real landscape viewport (the media query below can't see
    this one — the viewport is still portrait). */
 html.ctrl-land #drive-hud { gap: 0.8rem; }
+/* Landscape is SHORT, so the button row takes whatever height is left rather
+   than standing at a fixed one: it's the flex column's only growing child (the
+   steer bar gives up its margin-top:auto just above), and the buttons stretch to
+   it. The padding is only a floor for a very short screen — it must stay well
+   under the height the row actually gets, or min-content sizing would set the
+   height back and the growth would do nothing. */
+html.ctrl-land .drive-controls { flex: 1; min-height: 0; }
 html.ctrl-land #brake-btn.brake,
 html.ctrl-land #action-btn.action,
-html.ctrl-land .steer-btn { padding-top: 2.8rem; padding-bottom: 2.8rem; }
+html.ctrl-land .steer-btn { padding-top: 1.2rem; padding-bottom: 1.2rem; }
 html.ctrl-land .steer { margin-top: 0.4rem; }
 html.ctrl-land .help-card { gap: 0.6rem; padding: 0.9rem 1.1rem; }
 html.ctrl-land .help-title { font-size: 1.5rem; }
@@ -891,8 +916,14 @@ html.ctrl-land .phone-frame { width: 92px; height: 170px; }
    targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
 @media (orientation: landscape) {
   #drive-hud { gap: 0.8rem; }
-  #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
-  #action-btn.action { padding: 2.8rem 1.4rem; }   /* match BRAKE's height + h-pad in landscape (equal halves) */
+  /* Same growing row as the emulated landscape above — one rule for both, since a
+     real landscape viewport is just as short. It also covers the steer buttons,
+     which the old fixed paddings never mentioned: at portrait's 6.8rem they
+     overflowed a genuinely landscape window. */
+  .drive-controls { flex: 1; min-height: 0; }
+  #brake-btn.brake { padding: 1.2rem 1.4rem; }
+  #action-btn.action { padding: 1.2rem 1.4rem; }   /* match BRAKE's h-pad (equal halves) */
+  .steer-btn { padding: 1.2rem 0.6rem; }
   .steer { margin-top: 0.4rem; }
   /* Help popup compacts too — trim gaps + shrink the demo so more fits; the card
      still scrolls if it overflows a short landscape phone. */
