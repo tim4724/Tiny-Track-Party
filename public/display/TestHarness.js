@@ -533,8 +533,8 @@ export function runDisplayScenario(opts, ctx) {
             // (four SHAPES, not three detail levels) and is staged at 9x, so
             // it needs both a wider shot and more height than the other two.
             const wide = model === 'rocket';
-            cam.eye = { x: wide ? 35.0 : 31.5, y: wide ? 5.2 : 2.6,
-                        z: wide ? -17.0 : -10.5 };
+            cam.eye = { x: wide ? 37.0 : 31.5, y: wide ? 5.4 : 2.6,
+                        z: wide ? -19.0 : -10.5 };
             cam.yaw = 0;
             cam.pitch = -0.05;
           } else {

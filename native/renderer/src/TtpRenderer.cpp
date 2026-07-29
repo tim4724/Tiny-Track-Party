@@ -2191,7 +2191,7 @@ enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_COUNT =
 // SHAPE", and that needs as many entries as there are shapes worth arguing
 // about. A single count for all three would either starve one row or pad the
 // others with a duplicate.
-inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 4 : 3; }
+inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 5 : 3; }
 
 // Model ids are a URL param and a dropdown value, so they are spelled, not
 // numbered. Unknown names answer -1 (the caller leaves the bench off).
@@ -2249,21 +2249,28 @@ inline TrainAt trainAt(float s) {
 
 // ---- rocket ---------------------------------------------------------------
 // Ship scale is TINY — the body is 0.2 world units — and it is only ever seen
-// crossing the screen at speed. So the only thing that carries is the OUTLINE,
-// and the first two passes at this both missed that in the same way: they kept
-// changing the trim on one silhouette. v0's tube-with-a-cone, a tidier
-// tube-with-a-cone, a tube with a rounded cone. Three answers to a question
-// nobody asked.
+// crossing the screen at speed. Two rounds of this changed the wrong thing
+// (trim on one silhouette), and a third changed the profile but stayed inside
+// one archetype: an upright rocket standing on tail fins. Tube-and-cone, slim
+// tube-and-cone, teardrop, wide-tailed tube-and-cone. Four hats on one head.
 //
-// These are three different SHAPES. Each is still four to six prims and two or
-// three colours — the "keep it simple" call from the last round stands, and a
-// silhouette argument is not a parts-count argument.
+// These four are different OBJECTS. Each still costs three to six prims — the
+// "keep it simple" call stands.
+//
+// ONE CONSTRAINT SHAPES ALL OF THEM, and it should have been driving this from
+// the first attempt: TtpRenderer::render whizz-rolls a rocket about its travel
+// axis at 9 rad/s. Anything that is not rotationally symmetric WHIRLS. Three
+// fins at 120 degrees read as a still object because the eye cannot tell one
+// blade from the next; a pair of wings, a winding key or a stripe down one side
+// reads as a propeller. So every feature below is either on the axis, or
+// three-fold, or a full ring — and one of them (the pinwheel) makes the roll
+// the point instead of fighting it.
 void buildRocketModel(const PartFn& part, int variant) {
-    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f;
+    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f,
+                       WOOD = 0x8a6f4d, GOLD = 0xf2c14e;
     // Nose is local +Y; the renderer lays that along the direction of travel.
     if (variant <= 0) {
-        // v0 — the original, kept as the thing to argue against: a straight
-        // tube, a stubby cone and three square tabs.
+        // v0 — the original, kept as the thing to argue against.
         part(primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, RED, 1.0f);
         part(primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, CREAM, 1.0f);
         for (int i = 0; i < 3; i++) {
@@ -2274,50 +2281,58 @@ void buildRocketModel(const PartFn& part, int variant) {
         return;
     }
     if (variant == 1) {
-        // v1 "dart" — LONG AND THIN, and pointed. Half again the length of v0
-        // on two thirds the width, with a nose that is most of the model and
-        // fins swept hard back at the very tail. The outline says thrown
-        // weapon; the thing it is least likely to be mistaken for is an item
-        // box. Five prims.
-        part(primCylinder(0.052f, 0.070f, 0.26f, 12), 0, 0, 0, RED, 1.0f);
-        part(primCylinder(0.070f, 0.050f, 0.05f, 12), 0, -0.155f, 0, DARK, 1.0f);
-        part(primCone(0.052f, 0.20f, 12), 0, 0.23f, 0, CREAM, 1.0f);
-        const Prim fin = primPlate({ { -0.020f, 0.060f }, { -0.130f, 0.068f },
-                                     { -0.150f, 0.112f } }, 0.013f);
-        for (int i = 0; i < 3; i++) {
-            part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
-        }
+        // v1 "firework" — not a missile at all: a PARTY ROCKET. A paper tube
+        // with a wrapper band, a conical cap and a long balance stick trailing
+        // out the back. The stick is the whole idea — nothing else in the game
+        // has a thin trailing line, so the silhouette is unmistakable even
+        // small, and it is on the axis so the roll leaves it alone. Four prims.
+        part(primCylinder(0.078f, 0.078f, 0.20f, 14), 0, 0.020f, 0, CREAM, 1.0f);
+        part(primCylinder(0.084f, 0.084f, 0.055f, 14), 0, 0.020f, 0, RED, 1.0f);
+        part(primCone(0.078f, 0.125f, 14), 0, 0.182f, 0, RED, 1.0f);
+        part(primCylinder(0.013f, 0.013f, 0.34f, 6), 0, -0.250f, 0, WOOD, 1.0f);
         return;
     }
     if (variant == 2) {
-        // v2 "teardrop" — no straight edge anywhere and no cone at all: a
-        // rounded head running back into a taper that ends in a point, like a
-        // water drop travelling nose-first. The one shape here with a soft
-        // outline, which at 0.2 units may well be the one that reads at speed
-        // when a spiky one just aliases. Three fins kept tiny and low so it
-        // still says projectile rather than pebble. Four prims, two colours.
-        part(primSphere(0.090f, 16, 11), 0, 0.055f, 0, CREAM, 1.0f);
-        part(primCylinder(0.090f, 0.014f, 0.30f, 16), 0, -0.095f, 0, RED, 1.0f);
-        const Prim fin = primPlate({ { -0.070f, 0.052f }, { -0.190f, 0.020f },
-                                     { -0.150f, 0.098f } }, 0.014f);
+        // v2 "ring-tail" — a tube and a cone, and then a HOOP where the fins
+        // would be, held off the body on three struts. A closed ring is the one
+        // shape that looks identical however far the roll has turned it, so
+        // this is the only entry here that is completely still in flight. It
+        // also gives the outline a hole in it, which nothing else in the kit
+        // has. Six prims.
+        part(primCylinder(0.062f, 0.074f, 0.22f, 14), 0, 0.010f, 0, RED, 1.0f);
+        part(primCone(0.062f, 0.130f, 14), 0, 0.185f, 0, CREAM, 1.0f);
+        part(primTorusArc(0.108f, 0.022f, 8, 22, 2.0f * (float) M_PI),
+                0, -0.115f, 0, DARK, 1.0f);
         for (int i = 0; i < 3; i++) {
-            part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, RED, 0.72f);
+            const float a = (float) i * (2.0f * (float) M_PI / 3);
+            part(applyPre(primBox(0.052f, 0.020f, 0.020f), rotYm(-a)),
+                    std::cos(a) * 0.062f, -0.115f, std::sin(a) * 0.062f, DARK, 1.0f);
         }
         return;
     }
-    // v3 "toy rocket" — the storybook one: WIDEST AT THE TAIL, tapering the
-    // whole way to a point, standing on three big tripod fins. A triangle
-    // rather than a tube, which is the most distinct outline of the four and
-    // the one that matches the rest of the kit — everything else in this scene
-    // is a soft plastic toy, and this is the shape a toy rocket is. Six prims.
-    part(primCylinder(0.098f, 0.118f, 0.060f, 14), 0, -0.145f, 0, DARK, 1.0f);
-    part(primCylinder(0.062f, 0.100f, 0.220f, 14), 0, -0.005f, 0, RED, 1.0f);
-    part(primCylinder(0.089f, 0.095f, 0.026f, 14), 0, -0.050f, 0, CREAM, 1.0f);
-    part(primCone(0.062f, 0.170f, 14), 0, 0.190f, 0, CREAM, 1.0f);
-    const Prim fin = primPlate({ { 0.040f, 0.070f }, { -0.175f, 0.100f },
-                                 { -0.180f, 0.200f } }, 0.016f);
+    if (variant == 3) {
+        // v3 "capsule" — the fewest parts of anything tried: a rounded head, a
+        // body that widens downwards, and a big flared SKIRT. No fins at all.
+        // A bell, essentially — and a bell is a strong dark-against-sky
+        // outline at any size, where fins are the first thing to disappear.
+        // Three prims, and the only one with no thin feature anywhere on it.
+        part(primSphere(0.076f, 14, 10), 0, 0.112f, 0, CREAM, 1.0f);
+        part(primCylinder(0.076f, 0.100f, 0.200f, 16), 0, 0.012f, 0, RED, 1.0f);
+        part(primCylinder(0.100f, 0.158f, 0.100f, 16), 0, -0.138f, 0, DARK, 1.0f);
+        return;
+    }
+    // v4 "pinwheel" — the roll made deliberate. A stubby body under a gold
+    // nose, with three vanes CANTED like turbine blades instead of set flat, so
+    // the spin the renderer already applies reads as the thing driving it
+    // rather than as an artefact. The only entry whose look depends on being in
+    // motion, which is also the only state it is ever seen in. Five prims.
+    part(primCylinder(0.086f, 0.086f, 0.170f, 14), 0, 0, 0, RED, 1.0f);
+    part(primCone(0.086f, 0.120f, 14), 0, 0.145f, 0, GOLD, 1.0f);
+    const Prim vane = primPlate({ { 0.055f, 0.070f }, { -0.075f, 0.070f },
+                                  { -0.075f, 0.165f }, { 0.055f, 0.165f } }, 0.016f);
     for (int i = 0; i < 3; i++) {
-        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
+        const float a = (float) i * (2.0f * (float) M_PI / 3);
+        part(applyPre(vane, rotYm(a) * rotZm(0.62f)), 0, -0.020f, 0, CREAM, 1.0f);
     }
 }
 
@@ -2876,7 +2891,13 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     // side by side at near-equal distance, which is the only way a shape
     // argument gets settled.
     if (mBenchModel >= 0 && mBenchModel < MODEL_COUNT) {
-        constexpr float BENCH_S0 = 26, BENCH_STEP = 7, BENCH_OFF = 4.2f;
+        constexpr float BENCH_S0 = 26, BENCH_OFF = 4.2f;
+        // Spacing is per model for the same reason the COUNT is: the rocket row
+        // is five entries of a narrow object, and at the gnome's spacing it
+        // would run 28 units up the straight and have to be viewed from so far
+        // back that the shapes stop resolving — which is the one thing a bench
+        // may not do.
+        const float BENCH_STEP = mBenchModel == MODEL_ROCKET ? 5.6f : 7.0f;
         // The ROCKET ships at 0.2 world units — a fist. Judged at that size a
         // bench tells you nothing but which one is a dot, so its row is blown
         // up and the legend says by how much. Nothing else is rescaled.

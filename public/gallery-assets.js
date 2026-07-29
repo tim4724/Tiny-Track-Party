@@ -34,14 +34,15 @@ const state = Gallery.loadState();
 // row and is kept whether or not it won, because a comparison with no "what we
 // had" in it is not a comparison.
 const BENCH_MODELS = [
-  // Four, and they are four SHAPES rather than four detail levels — the row
-  // that was three variations on "a tube with a cone on it" answered a question
-  // nobody had asked.
-  { id: 'rocket', label: 'Rocket', ships: 3, scale: '9x (it ships at 0.2 units)',
+  // Five, and they are five OBJECTS rather than five detail levels. Earlier
+  // rounds offered variations on one archetype (an upright rocket standing on
+  // tail fins) and were turned down as a set, twice.
+  { id: 'rocket', label: 'Rocket', ships: 2, scale: '9x (it ships at 0.2 units)',
     variants: ['0 · original — straight tube, stubby cone, square tabs',
-               '1 · dart — long and thin, mostly nose, fins swept hard back',
-               '2 · teardrop — rounded head into a point, no straight edge',
-               '3 · toy rocket — widest at the tail, tripod fins, tapers to a point'] },
+               '1 · firework — paper tube, wrapper band, long trailing stick',
+               '2 · ring-tail — a hoop on three struts where the fins would be',
+               '3 · capsule — rounded head, flared skirt, no fins at all',
+               '4 · pinwheel — three canted vanes, so the spin reads as the drive'] },
   { id: 'gnome', label: 'Garden gnome', ships: 1, scale: null,
     variants: ['0 · original — cone, ball, beard, hat',
                '1 · detailed — belt, arms, face, layered beard, brimmed hat',

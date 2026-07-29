@@ -569,17 +569,17 @@ private:
     //
     // THESE DEFAULTS ARE WHAT THE GAME DRAWS. The gnome and the train are the
     // picks off the model bench (/gallery-assets.html) — the detailed gnome,
-    // the classic loco. The ROCKET is 3, the toy-rocket silhouette, and that
-    // one is a standing recommendation rather than a settled pick: its four
-    // variants are four different SHAPES, not four detail levels, and the
-    // choice between them is a taste call nobody has made yet.
+    // the classic loco. The ROCKET is 2, the ring-tail, and that one is a
+    // standing recommendation rather than a settled pick: its five variants are
+    // five different OBJECTS, not five detail levels, and every set offered so
+    // far has been turned down. Expect this number to move.
     //
     // Variant 0 is the pre-bench geometry on every row and is kept — a bench
     // with no "what we have today" in it is not a comparison — but it is no
     // longer any model's default, so a shell that never calls setModelVariant
     // now gets the picked set rather than the original one.
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
-    int mModelVariant[3] = { 3, 1, 1 };
+    int mModelVariant[3] = { 2, 1, 1 };
     int mBenchModel = -1;
 
     filament::math::float3 mTrainCentre{};
