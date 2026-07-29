@@ -1213,25 +1213,6 @@ const char* ttp_track_build_json(const char* descriptorJson, int laps, uint32_t 
   return out.c_str();
 }
 
-// Resolve an "id or descriptor" argument into a built track. A leading '{' is
-// the only thing that distinguishes the two, and no track id can start with one.
-static bool build_by_id_or_descriptor(const char* arg, RaceTrack& out) {
-  if (!arg) return false;
-  if (arg[0] == '{') {
-    bool ok = false;
-    const Value desc = json::parse(arg, &ok);
-    if (!ok || desc.type != Value::OBJ) return false;
-    ParsedTrackDef parsed;
-    if (!parse_track_def(desc, parsed)) return false;
-    out = build_race_track(parsed.def, 3, 1u);
-    return true;
-  }
-  const TrackDef* def = find_track_def(arg);
-  if (!def) return false;
-  out = build_race_track(*def, 3, 1u);
-  return true;
-}
-
 // The built track's samples as a Centerline, for the interpolating queries.
 static Centerline centerline_of(const RaceTrack& rt) {
   std::vector<Sample> cs;
@@ -1243,6 +1224,62 @@ static Centerline centerline_of(const RaceTrack& rt) {
     cs.push_back(c);
   }
   return Centerline(std::move(cs), rt.length);
+}
+
+// Resolve an "id or descriptor" argument into a built track and its Centerline,
+// MEMOIZED on the argument string. A leading '{' is the only thing that
+// distinguishes the two, and no track id can start with one.
+//
+// The memo is one entry deep, and it is load-bearing for the three audit entry
+// points below rather than a micro-optimization: every one of them is called in
+// a loop that asks about the SAME track over and over. The helicoid check in
+// tests/track.test.js samples four shipped tracks every frame of a 3000-frame
+// race, so rebuilding per call was 15.4 s of an 18.5 s `npm test` — against
+// 0.15 s of actual simulation. scripts/track-gen.mjs has the same shape,
+// asking one candidate for a sweep, a frame and a frame list in a row. One
+// entry is the right depth: the hot pattern is a run of calls about one track,
+// and a seed scan walking thousands of DISTINCT descriptors would only thrash a
+// bigger cache (the same reasoning as scripts/native-track.mjs's MEMO_MAX).
+//
+// Safe to share because every caller below is READ-ONLY over both, and
+// Centerline's only mutable state is the scratch buffers it overwrites per
+// query (centerline.h) — a reused one returns bit-identical frames. None of
+// this is on the game's path: the sim builds its own track in ttp_session_begin.
+namespace {
+struct TrackCache {
+  RaceTrack rt;
+  std::unique_ptr<Centerline> cl;
+};
+}  // namespace
+
+static const TrackCache* track_by_id_or_descriptor(const char* arg) {
+  if (!arg) return nullptr;
+  static std::string key;
+  static TrackCache cache;
+  static bool valid = false;
+  if (valid && key == arg) return &cache;
+
+  // Dropped BEFORE the build, so a refused descriptor cannot leave the previous
+  // track answerable under the new key.
+  valid = false;
+  RaceTrack rt;
+  if (arg[0] == '{') {
+    bool ok = false;
+    const Value desc = json::parse(arg, &ok);
+    if (!ok || desc.type != Value::OBJ) return nullptr;
+    ParsedTrackDef parsed;
+    if (!parse_track_def(desc, parsed)) return nullptr;
+    rt = build_race_track(parsed.def, 3, 1u);
+  } else {
+    const TrackDef* def = find_track_def(arg);
+    if (!def) return nullptr;
+    rt = build_race_track(*def, 3, 1u);
+  }
+  cache.rt = std::move(rt);
+  cache.cl.reset(new Centerline(centerline_of(cache.rt)));
+  key = arg;
+  valid = true;
+  return &cache;
 }
 
 // One interpolated frame, as the shape the tools read.
@@ -1270,8 +1307,9 @@ static Value frameValue(Centerline& cl, double s) {
 
 const char* ttp_track_supports_json(const char* trackIdOrDescriptor) {
   static std::string out;
-  RaceTrack rt;
-  if (!build_by_id_or_descriptor(trackIdOrDescriptor, rt)) return nullptr;
+  const TrackCache* cached = track_by_id_or_descriptor(trackIdOrDescriptor);
+  if (!cached) return nullptr;
+  const RaceTrack& rt = cached->rt;
 
   // The audit treats a bridge pillar and a loop shaft alike; they differ only in
   // where their top sits (a shaft is cut to the deck underside it holds up).
@@ -1306,7 +1344,7 @@ const char* ttp_track_supports_json(const char* trackIdOrDescriptor) {
 
   // Each ghost pole's (s, lat) put back into world space through the builder's
   // own centreline sampler, so the audit can ask whether a real post stands there.
-  Centerline cl = centerline_of(rt);
+  Centerline& cl = *cached->cl;
   Value autoPoles = Value::Arr();
   for (const AutoPole& ap : rt.autoPoles) {
     const Frame f = cl.sampleAt(ap.s);
@@ -1329,10 +1367,11 @@ const char* ttp_track_supports_json(const char* trackIdOrDescriptor) {
 const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double step) {
   static std::string out;
   if (!(step > 0)) return nullptr;
-  RaceTrack rt;
-  if (!build_by_id_or_descriptor(trackIdOrDescriptor, rt)) return nullptr;
+  const TrackCache* cached = track_by_id_or_descriptor(trackIdOrDescriptor);
+  if (!cached) return nullptr;
+  const RaceTrack& rt = cached->rt;
 
-  Centerline cl = centerline_of(rt);
+  Centerline& cl = *cached->cl;
   Value arr = Value::Arr();
   // `s <= length` inclusive, matching the JS callers' `for (s = 0; s <= L; s += step)`
   // — the last frame lands on the lap line, which wraps to the first.
@@ -1349,9 +1388,9 @@ const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* s
   if (!ok || list.type != Value::ARR) return nullptr;
   for (const Value& v : list.arr) if (v.type != Value::NUM) return nullptr;
 
-  RaceTrack rt;
-  if (!build_by_id_or_descriptor(trackIdOrDescriptor, rt)) return nullptr;
-  Centerline cl = centerline_of(rt);
+  const TrackCache* cached = track_by_id_or_descriptor(trackIdOrDescriptor);
+  if (!cached) return nullptr;
+  Centerline& cl = *cached->cl;
   Value arr = Value::Arr();
   for (const Value& v : list.arr) arr.push(frameValue(cl, v.num));
   out = canonical_stringify(arr);

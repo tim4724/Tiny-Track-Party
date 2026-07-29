@@ -5,6 +5,40 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ---- ccache, when it is installed -------------------------------------------
+# This tree is developed across MANY git worktrees at once (agents working in
+# parallel), and native/build/ is gitignored — so every fresh worktree pays a
+# full cold build of sources that are usually byte-identical to a sibling's.
+# Measured on two worktrees at the same commit: 12.07 s, then 0.64 s.
+#
+# The two env vars are what make that work, and neither is optional:
+#   CCACHE_BASEDIR   ccache hashes the ABSOLUTE source path, so without a base
+#                    directory to make paths relative against, two worktrees
+#                    share NOTHING — measured 0/160 hits. $HOME is the shallowest
+#                    ancestor every worktree is guaranteed to sit under.
+#   CCACHE_NOHASHDIR stops the CWD going into the hash for the same reason.
+# They are passed through `cmake -E env` rather than written to the user's global
+# ccache config: this build's need for them should not silently retune ccache for
+# every other project on the machine.
+#
+# Safe against this tree's conformance discipline, which is the only question
+# that matters here. `basedir` trades away the guarantee that a hit came from an
+# identically-PATHED compile, so what could differ is anything that bakes its own
+# path into the object — and native/ contains no __FILE__, __DATE__ or __TIME__
+# at all, vendored sources included (assert() is compiled out under NDEBUG in
+# Release). Checked rather than assumed: a ccache-populated build of
+# ttp_runtime_web reproduces the committed ttp_runtime.wasm and .mjs byte for
+# byte. Set TTP_NO_CCACHE=1 to opt out; passing your own
+# CMAKE_<LANG>_COMPILER_LAUNCHER also wins.
+find_program(TTP_CCACHE ccache)
+if(TTP_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER AND NOT DEFINED ENV{TTP_NO_CCACHE})
+  set(TTP_CCACHE_LAUNCHER ${CMAKE_COMMAND} -E env
+      CCACHE_BASEDIR=$ENV{HOME} CCACHE_NOHASHDIR=1 ${TTP_CCACHE})
+  set(CMAKE_C_COMPILER_LAUNCHER ${TTP_CCACHE_LAUNCHER})
+  set(CMAKE_CXX_COMPILER_LAUNCHER ${TTP_CCACHE_LAUNCHER})
+  message(STATUS "ccache: ${TTP_CCACHE} (basedir $ENV{HOME})")
+endif()
+
 # ---- Strict FP: the determinism-bearing flags -------------------------------
 # docs/native-port/fp-profile.md §6. These apply to EVERY target in this tree:
 # the whole sim surface is conformance-gated, not just the mathlib.
@@ -877,6 +911,17 @@ if(EMSCRIPTEN)
     # a canvas, so a headless load never reaches a GL call.
     -sENVIRONMENT=web,node
     -sALLOW_MEMORY_GROWTH=1
+    # 1 MB, not emscripten's 64 KB default. cwrap/ccall marshal a `string`
+    # argument with stringToUTF8OnStack, so EVERY JSON-in ABI here — the
+    # ttp_track_* audit calls, ttp_display_build's roster, ttp_ui_configure's
+    # catalogue, ttp_room_* frames — spends the wasm STACK on its argument, not
+    # the heap. ALLOW_MEMORY_GROWTH does not help: the stack is a fixed region.
+    #
+    # Measured: ttp_track_frames_json took a 63,081-byte list fine and blew up on
+    # 67,525. With -sASSERTIONS=0 that surfaces as a bare "memory access out of
+    # bounds" with no diagnostic, and the module stays CORRUPTED — every later
+    # call into it fails too, so the symptom shows up nowhere near the cause.
+    -sSTACK_SIZE=1MB
     -sASSERTIONS=0
     # The ABI itself is exported by TTP_ABI (EMSCRIPTEN_KEEPALIVE) on every
     # declaration in ttp_runtime.h / ttp_party.h — no list to keep in sync here.
