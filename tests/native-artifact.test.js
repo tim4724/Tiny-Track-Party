@@ -9,6 +9,14 @@
 //
 // So the build script stamps which sources it built from, and this test checks it.
 // Failure means: run native/scripts/build-runtime-web.sh and commit the result.
+//
+// The hash is over BYTES, so a comment-only edit under native/ invalidates it as
+// surely as a code change does. That is deliberate — a hash that tried to see
+// through comments would need a C++ lexer, and "which edits are semantically
+// free" is not a question a build stamp gets to answer — but it is a surprise
+// worth paying for ONCE, not once per round trip. Hence `npm run check:artifact`
+// (this file alone, well under a second) and the note in the failure below:
+// batch the whole native/ edit, then rebuild.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -35,6 +43,10 @@ test('the checked-in native runtime was built from the current native/ sources',
     `public/display/engine/native/ttp_runtime.wasm is STALE: native/ sources hash to\n` +
     `  ${actual}\nbut the artifacts were built from\n  ${stamp.sourceHash}\n` +
     `The game loads the artifact, so this is shipping an engine the conformance ` +
-    `suite never ran. Fix: ${REBUILD}.`
+    `suite never ran. Fix: ${REBUILD}.\n` +
+    `The hash is over source BYTES: a COMMENT-ONLY edit under native/ lands here ` +
+    `too. Finish the native/ edits first, rebuild once, and re-check with ` +
+    `\`npm run check:artifact\` (this file alone) rather than a full \`npm test\`.\n` +
+    `What hashes: \`node native/scripts/runtime-source-hash.mjs --files\`.`
   );
 });

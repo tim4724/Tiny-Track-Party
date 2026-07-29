@@ -21,6 +21,7 @@
 
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
 
@@ -53,47 +54,12 @@ const char* put(std::string& buf, const Value& v) {
 }
 
 // ---- Value readers -----------------------------------------------------------
-// The same handful ui_check.cc uses, for the same shapes. `truthy` is JS
-// truthiness rather than a bool test because a corpus/shell field may arrive as
-// a missing key, a 0 or an empty string and JS reads all three as false.
-Value parseOr(const char* json, Value fallback) {
-  if (!json || !*json) return fallback;
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  return ok ? v : fallback;
-}
-
-ui::Id idOf(const Value* v) {
-  if (!v) return ui::Id::None();
-  if (v->type == Value::NUM) return ui::Id::Num(v->num);
-  if (v->type == Value::STR) return ui::Id::Str(v->str);
-  return ui::Id::None();
-}
-ui::OptNum numOf(const Value* v) {
-  return (v && v->type == Value::NUM) ? ui::OptNum::Of(v->num) : ui::OptNum::None();
-}
-ui::OptStr strOf(const Value* v) {
-  return (v && v->type == Value::STR) ? ui::OptStr::Of(v->str) : ui::OptStr::None();
-}
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && !(v->num != v->num);
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
-  }
-}
-double numField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::NUM) ? v->num : 0.0;
-}
-std::string strField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
-}
+// The plain ones are ttp/json_read.h, shared with every other ABI and with the
+// checks that replay them; only the three that name THIS layer's option types
+// are local, and they are one line each over the same shared mapping.
+ui::Id idOf(const Value* v) { return json::id_of<ui::Id>(v); }
+ui::OptNum numOf(const Value* v) { return json::opt_num<ui::OptNum>(v); }
+ui::OptStr strOf(const Value* v) { return json::opt_str<ui::OptStr>(v); }
 
 Value valOf(const ui::OptNum& n) { return n.has ? Value::Num(n.v) : Value::Null(); }
 Value valOf(const ui::OptStr& s) { return s.has ? Value::Str(s.v) : Value::Null(); }
@@ -138,11 +104,11 @@ std::vector<ui::RosterEntry> rosterOf(const Value& arr) {
   for (const Value& p : arr.arr) {
     ui::RosterEntry e;
     e.peerIndex = idOf(p.find("peerIndex"));
-    e.name = strField(p, "name");
-    e.colorIndex = numField(p, "colorIndex");
+    e.name = json::str_field(p, "name");
+    e.colorIndex = json::num_field(p, "colorIndex");
     e.carIndex = numOf(p.find("carIndex"));
-    e.connected = truthy(p.find("connected"));
-    e.ready = truthy(p.find("ready"));
+    e.connected = json::truthy(p.find("connected"));
+    e.ready = json::truthy(p.find("ready"));
     out.push_back(std::move(e));
   }
   return out;
@@ -172,12 +138,12 @@ Value rowValue(const ui::BoardRow& r) {
 ui::BoardRow rowOf(const Value& v) {
   ui::BoardRow r;
   r.playerId = idOf(v.find("playerId"));
-  r.name = strField(v, "name");
-  r.colorIndex = numField(v, "colorIndex");
-  r.joining = truthy(v.find("joining"));
+  r.name = json::str_field(v, "name");
+  r.colorIndex = json::num_field(v, "colorIndex");
+  r.joining = json::truthy(v.find("joining"));
   if (r.joining) return r;
-  r.ai = truthy(v.find("ai"));
-  r.finished = truthy(v.find("finished"));
+  r.ai = json::truthy(v.find("ai"));
+  r.finished = json::truthy(v.find("finished"));
   r.time = numOf(v.find("time"));
   const Value* pts = v.find("points");
   if (pts && pts->type == Value::NUM) { r.hasPoints = true; r.points = pts->num; }
@@ -204,19 +170,19 @@ ui::SeriesInfo seriesOf(const Value& v) {
   ui::SeriesInfo s;
   s.cupId = strOf(v.find("cupId"));
   s.cupName = strOf(v.find("cupName"));
-  s.endless = truthy(v.find("endless"));
-  s.raceIndex = numField(v, "raceIndex");
+  s.endless = json::truthy(v.find("endless"));
+  s.raceIndex = json::num_field(v, "raceIndex");
   s.raceCount = numOf(v.find("raceCount"));
   s.nextTrackId = strOf(v.find("nextTrackId"));
   s.nextTrackName = strOf(v.find("nextTrackName"));
-  s.isFinal = truthy(v.find("final"));
-  s.autoAdvanceMs = numField(v, "autoAdvanceMs");
+  s.isFinal = json::truthy(v.find("final"));
+  s.autoAdvanceMs = json::num_field(v, "autoAdvanceMs");
   return s;
 }
 
 ui::Board boardOf(const Value& v) {
   ui::Board b;
-  b.over = truthy(v.find("over"));
+  b.over = json::truthy(v.find("over"));
   b.hostPeerIndex = idOf(v.find("hostPeerIndex"));
   const Value* s = v.find("series");
   if (s && s->type == Value::OBJ) { b.hasSeries = true; b.series = seriesOf(*s); }
@@ -230,9 +196,9 @@ ui::Board boardOf(const Value& v) {
 // The auto-pause input, shared by the two exports that read it.
 ui::AutoPauseInput autoPauseInputOf(const Value& in) {
   ui::AutoPauseInput api;
-  api.hasSession = truthy(in.find("hasSession"));
-  api.raceEnded = truthy(in.find("raceEnded"));
-  api.roomState = ui::roomStateOf(strField(in, "roomState"));
+  api.hasSession = json::truthy(in.find("hasSession"));
+  api.raceEnded = json::truthy(in.find("raceEnded"));
+  api.roomState = ui::roomStateOf(json::str_field(in, "roomState"));
   api.carIds = idListOf(in.find("carIds"));
   api.aiIds = idSetOf(in.find("aiIds"));
   api.seatedIds = idSetOf(in.find("seatedIds"));
@@ -247,8 +213,8 @@ int ttp_ui_configure(const char* json) {
   bool ok = false;
   Value c = json::parse(json && *json ? json : "", &ok);
   if (!ok || c.type != Value::OBJ) return 0;
-  g_maxPlayers = (int) numField(c, "maxPlayers");
-  g_carCount = (int) numField(c, "carCount");
+  g_maxPlayers = (int) json::num_field(c, "maxPlayers");
+  g_carCount = (int) json::num_field(c, "carCount");
   g_cups.clear();
   g_catalog.clear();
   const Value* cups = c.find("cups");
@@ -274,8 +240,8 @@ int ttp_ui_configure(const char* json) {
   if (cups && cups->type == Value::ARR) {
     for (const Value& v : cups->arr) {
       ui::Cup cup;
-      cup.id = strField(v, "id");
-      cup.name = strField(v, "name");
+      cup.id = json::str_field(v, "id");
+      cup.name = json::str_field(v, "name");
       const Value* tracks = v.find("tracks");
       if (tracks && tracks->type == Value::ARR) {
         for (const Value& t : tracks->arr) {
@@ -288,8 +254,8 @@ int ttp_ui_configure(const char* json) {
   if (cat && cat->type == Value::ARR) {
     for (const Value& v : cat->arr) {
       ui::CatalogEntry e;
-      e.id = strField(v, "id");
-      e.name = strField(v, "name");
+      e.id = json::str_field(v, "id");
+      e.name = json::str_field(v, "name");
       e.cup = strOf(v.find("cup"));
       e.cupDifficulty = numOf(v.find("cupDifficulty"));
       g_catalog.push_back(std::move(e));
@@ -338,7 +304,7 @@ const char* ttp_ui_back_effect(const char* screen) {
 // ---- the lobby ---------------------------------------------------------------
 
 const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJson) {
-  const Value roster = parseOr(rosterJson, Value::Arr());
+  const Value roster = json::parse_or(rosterJson, Value::Arr());
   const std::vector<ui::Seat> seats = ui::rosterSeats(rosterOf(roster),
                                                       parse_scalar_id(hostIdJson));
   Value a = Value::Arr();
@@ -356,17 +322,17 @@ const char* ttp_ui_roster_seats_json(const char* rosterJson, const char* hostIdJ
 }
 
 const char* ttp_ui_seat_grid_json(const char* seatsJson) {
-  const Value arr = parseOr(seatsJson, Value::Arr());
+  const Value arr = json::parse_or(seatsJson, Value::Arr());
   std::vector<ui::Seat> seats;
   if (arr.type == Value::ARR) {
     for (const Value& v : arr.arr) {
       ui::Seat s;
-      s.name = strField(v, "name");
-      s.colorIndex = numField(v, "colorIndex");
+      s.name = json::str_field(v, "name");
+      s.colorIndex = json::num_field(v, "colorIndex");
       s.carIndex = numOf(v.find("carIndex"));
-      s.connected = truthy(v.find("connected"));
-      s.host = truthy(v.find("host"));
-      s.ready = truthy(v.find("ready"));
+      s.connected = json::truthy(v.find("connected"));
+      s.host = json::truthy(v.find("host"));
+      s.ready = json::truthy(v.find("ready"));
       seats.push_back(std::move(s));
     }
   }
@@ -392,12 +358,12 @@ const char* ttp_ui_seat_grid_json(const char* seatsJson) {
 }
 
 int ttp_ui_all_racers_ready(const char* rosterJson, const char* hostIdJson) {
-  const Value roster = parseOr(rosterJson, Value::Arr());
+  const Value roster = json::parse_or(rosterJson, Value::Arr());
   return ui::allRacersReady(rosterOf(roster), parse_scalar_id(hostIdJson)) ? 1 : 0;
 }
 
 const char* ttp_ui_connected_players_json(const char* rosterJson) {
-  const Value rosterV = parseOr(rosterJson, Value::Arr());
+  const Value rosterV = json::parse_or(rosterJson, Value::Arr());
   const std::vector<ui::RosterEntry> roster = rosterOf(rosterV);
   const std::vector<const ui::RosterEntry*> kept = ui::connectedPlayers(roster);
   // Indices, not entries — the shell keeps its own objects. The rule answers
@@ -410,7 +376,7 @@ const char* ttp_ui_connected_players_json(const char* rosterJson) {
 }
 
 const char* ttp_ui_cup_slot_json(const char* pickJson) {
-  const Value in = parseOr(pickJson, Value::Obj());
+  const Value in = json::parse_or(pickJson, Value::Obj());
   ui::CupSlot slot;
   const bool any = ui::cupSlot(ui::pickModeOf(strOf(in.find("mode"))),
                                strOf(in.find("cupId")), strOf(in.find("trackId")),
@@ -438,8 +404,8 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
 // ---- dropped-seat reconnect cards --------------------------------------------
 
 const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const char* seatIdsJson) {
-  const Value shownV = parseOr(shownIdsJson, Value::Arr());
-  const Value seatsV = parseOr(seatIdsJson, Value::Arr());
+  const Value shownV = json::parse_or(shownIdsJson, Value::Arr());
+  const Value seatsV = json::parse_or(seatIdsJson, Value::Arr());
   const ui::ReconnectDiff d = ui::reconnectDiff(idListOf(&shownV), idListOf(&seatsV));
   Value o = Value::Obj();
   o.set("remove", idArray(d.remove));
@@ -453,9 +419,9 @@ const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const char* sea
 
 const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
                                     const char* lastItemJson) {
-  const Value carsV = parseOr(carsJson, Value::Arr());
-  const Value aiV = parseOr(aiIdsJson, Value::Arr());
-  const Value lastV = parseOr(lastItemJson, Value::Arr());
+  const Value carsV = json::parse_or(carsJson, Value::Arr());
+  const Value aiV = json::parse_or(aiIdsJson, Value::Arr());
+  const Value lastV = json::parse_or(lastItemJson, Value::Arr());
 
   std::vector<ui::PushCar> cars;
   if (carsV.type == Value::ARR) {
@@ -463,7 +429,7 @@ const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
       ui::PushCar pc;
       pc.id = idOf(c.find("id"));
       pc.item = itemOf(c);
-      pc.finished = truthy(c.find("finished"));
+      pc.finished = json::truthy(c.find("finished"));
       cars.push_back(std::move(pc));
     }
   }
@@ -484,13 +450,13 @@ const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
 }
 
 const char* ttp_ui_welcome_item_json(const char* carJson) {
-  const Value carV = parseOr(carJson, Value::Null());
+  const Value carV = json::parse_or(carJson, Value::Null());
   ui::PushCar car;
   const bool live = carV.type == Value::OBJ;
   if (live) {
     car.id = idOf(carV.find("id"));
     car.item = itemOf(carV);
-    car.finished = truthy(carV.find("finished"));
+    car.finished = json::truthy(carV.find("finished"));
   }
   const ui::ItemVal item = ui::welcomeItem(live ? &car : nullptr);
   // A bare value, not an object: the relight message carries `item` directly,
@@ -502,7 +468,7 @@ const char* ttp_ui_welcome_item_json(const char* carJson) {
 // ---- race flow ---------------------------------------------------------------
 
 const char* ttp_ui_race_flow_json(const char* json) {
-  const Value in = parseOr(json, Value::Obj());
+  const Value in = json::parse_or(json, Value::Obj());
   const std::vector<ui::Id> carIds = idListOf(in.find("carIds"));
   const ui::IdSet ai = idSetOf(in.find("aiIds"));
   const ui::IdSet disc = idSetOf(in.find("disconnectedIds"));
@@ -525,12 +491,12 @@ int ttp_ui_can_resume(int hasSession, int paused) {
 }
 
 int ttp_ui_auto_pause_asks(const char* json) {
-  const Value in = parseOr(json, Value::Obj());
+  const Value in = json::parse_or(json, Value::Obj());
   return ui::autoPauseAsksParticipants(autoPauseInputOf(in)) ? 1 : 0;
 }
 
 const char* ttp_ui_auto_pause_json(const char* json, int allParticipantsDisconnected) {
-  const Value in = parseOr(json, Value::Obj());
+  const Value in = json::parse_or(json, Value::Obj());
   const ui::AutoPauseDecision d =
       ui::autoPause(autoPauseInputOf(in), allParticipantsDisconnected != 0);
   Value o = Value::Obj();
@@ -547,23 +513,23 @@ const char* ttp_ui_freeze_transition(int paused, int autoPaused, int sessionPaus
 // ---- the Grand Prix chip -----------------------------------------------------
 
 const char* ttp_ui_series_info_json(const char* json) {
-  const Value in = parseOr(json, Value::Obj());
+  const Value in = json::parse_or(json, Value::Obj());
   ui::SeriesInput si;
   si.cupId = strOf(in.find("cupId"));
   si.cupName = strOf(in.find("cupName"));
-  si.endless = truthy(in.find("endless"));
-  si.raceIndex = numField(in, "raceIndex");
+  si.endless = json::truthy(in.find("endless"));
+  si.raceIndex = json::num_field(in, "raceIndex");
   si.raceCount = numOf(in.find("raceCount"));
-  si.finished = truthy(in.find("finished"));
+  si.finished = json::truthy(in.find("finished"));
   si.nextTrackId = strOf(in.find("nextTrackId"));
-  si.autoAdvanceMs = numField(in, "autoAdvanceMs");
+  si.autoAdvanceMs = json::num_field(in, "autoAdvanceMs");
   return put(g_bufSeries, seriesValue(ui::seriesInfo(si, g_catalog)));
 }
 
 // ---- the standings board -----------------------------------------------------
 
 const char* ttp_ui_standings_json(const char* json) {
-  const Value in = parseOr(json, Value::Obj());
+  const Value in = json::parse_or(json, Value::Obj());
 
   std::vector<ui::ResultRow> results;
   const Value* rV = in.find("results");
@@ -571,7 +537,7 @@ const char* ttp_ui_standings_json(const char* json) {
     for (const Value& r : rV->arr) {
       ui::ResultRow rr;
       rr.playerId = idOf(r.find("playerId"));
-      rr.finished = truthy(r.find("finished"));
+      rr.finished = json::truthy(r.find("finished"));
       rr.time = numOf(r.find("time"));
       results.push_back(std::move(rr));
     }
@@ -582,9 +548,9 @@ const char* ttp_ui_standings_json(const char* json) {
     for (const Value& f : fV->arr) {
       ui::FieldRow fr;
       fr.peerIndex = idOf(f.find("peerIndex"));
-      fr.name = strField(f, "name");
+      fr.name = json::str_field(f, "name");
       fr.colorIndex = numOf(f.find("colorIndex"));
-      fr.ai = truthy(f.find("ai"));
+      fr.ai = json::truthy(f.find("ai"));
       field.push_back(std::move(fr));
     }
   }
@@ -594,8 +560,8 @@ const char* ttp_ui_standings_json(const char* json) {
     for (const Value& l : lV->arr) {
       ui::LateJoiner lj;
       lj.peerIndex = idOf(l.find("peerIndex"));
-      lj.name = strField(l, "name");
-      lj.colorIndex = numField(l, "colorIndex");
+      lj.name = json::str_field(l, "name");
+      lj.colorIndex = json::num_field(l, "colorIndex");
       late.push_back(std::move(lj));
     }
   }
@@ -610,8 +576,8 @@ const char* ttp_ui_standings_json(const char* json) {
       for (const Value& r : sV->arr) {
         ui::StandingRow sr;
         sr.playerId = idOf(r.find("playerId"));
-        sr.points = numField(r, "points");
-        sr.gained = numField(r, "gained");
+        sr.points = json::num_field(r, "points");
+        sr.gained = json::num_field(r, "gained");
         standings.push_back(std::move(sr));
       }
     }
@@ -622,7 +588,7 @@ const char* ttp_ui_standings_json(const char* json) {
 
   const ui::Board b = ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
                                            late, idOf(in.find("hostPeerIndex")),
-                                           truthy(in.find("over")));
+                                           json::truthy(in.find("over")));
   Value o = Value::Obj();      // over, hostPeerIndex, [series], total, order
   o.set("over", Value::Bool(b.over));
   o.set("hostPeerIndex", b.hostPeerIndex.toValue());
@@ -635,7 +601,7 @@ const char* ttp_ui_standings_json(const char* json) {
 }
 
 const char* ttp_ui_results_view_json(const char* boardJson, double intermissionMs) {
-  const Value bv = parseOr(boardJson, Value::Obj());
+  const Value bv = json::parse_or(boardJson, Value::Obj());
   const ui::Board board = boardOf(bv);
   const ui::ResultsView v = ui::resultsView(board, intermissionMs);
 

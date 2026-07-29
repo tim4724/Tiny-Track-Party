@@ -19,6 +19,7 @@
 
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/session.h"
 
 using namespace ttp;
@@ -48,13 +49,6 @@ const char* putStr(std::string& buf, std::string s) {
   return buf.c_str();
 }
 
-Value parseOr(const char* json, Value fallback) {
-  if (!json || !*json) return fallback;
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  return ok ? v : fallback;
-}
-
 // A JSON text that may legitimately be "absent". NULL and "" mean JS
 // `undefined`; anything else parses, and a parse FAILURE is undefined too (a
 // malformed token is not a null). Returns nullptr for absent.
@@ -67,7 +61,7 @@ const Value* parseOptional(const char* json, Value& storage) {
 
 std::vector<double> numbersOf(const char* json) {
   std::vector<double> out;
-  Value v = parseOr(json, Value::Arr());
+  Value v = json::parse_or(json, Value::Arr());
   if (v.type != Value::ARR) return out;
   for (const Value& e : v.arr) {
     if (e.type == Value::NUM) out.push_back(e.num);
@@ -108,12 +102,12 @@ int ttp_net_configure(const char* chooserJson) {
 // ---- the retained room snapshot ----------------------------------------------
 
 const char* ttp_net_roster_rows_json(const char* rosterJson, const char* inRaceJson) {
-  return put(g_bufRows, ns::roster_rows(parseOr(rosterJson, Value::Arr()),
-                                        parseOr(inRaceJson, Value::Arr())));
+  return put(g_bufRows, ns::roster_rows(json::parse_or(rosterJson, Value::Arr()),
+                                        json::parse_or(inRaceJson, Value::Arr())));
 }
 
 const char* ttp_net_lobby_snapshot_json(const char* inputJson) {
-  return put(g_bufSnapshot, ns::lobby_snapshot(parseOr(inputJson, Value::Obj()), g_chooser));
+  return put(g_bufSnapshot, ns::lobby_snapshot(json::parse_or(inputJson, Value::Obj()), g_chooser));
 }
 
 // ---- URLs ---------------------------------------------------------------------
@@ -163,7 +157,7 @@ const char* ttp_net_leave_action(const char* roomState) {
 }
 
 const char* ttp_net_reconnect_card_json(const char* seatJson, const char* url) {
-  return put(g_bufCard, ns::reconnect_card(parseOr(seatJson, Value::Obj()), strOr(url)));
+  return put(g_bufCard, ns::reconnect_card(json::parse_or(seatJson, Value::Obj()), strOr(url)));
 }
 
 // ---- controller messages ------------------------------------------------------
@@ -223,7 +217,7 @@ const char* ttp_net_heartbeat_tick_json(int inRoom, int hbPending, double hbSent
 
 const char* ttp_net_claim_plan_json(const char* helloJson, double fromId, int hasOld,
                                     int oldDisconnected) {
-  Value hello = parseOr(helloJson, Value::Obj());
+  Value hello = json::parse_or(helloJson, Value::Obj());
   // An ABSENT rejoinToken is JS undefined and an explicit null is not; find()
   // answers nullptr for both absent and undefined, which is exactly the
   // distinction claim_plan turns on.

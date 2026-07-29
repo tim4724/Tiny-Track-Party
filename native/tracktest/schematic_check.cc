@@ -33,6 +33,7 @@
 #include "corpus_record.h"
 #include "generated/track_defs.h"
 #include "ttp/canonical.h"
+#include "ttp/json_read.h"
 #include "ttp/schematic.h"
 #include "ttp/trackbuilder.h"
 
@@ -41,15 +42,6 @@ using namespace ttp::corpus;
 namespace sch = ttp::schematic;
 
 namespace {
-
-std::string strOf(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
-}
-double numOf(const Value& o, const char* k, double dflt = 0) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::NUM) ? v->num : dflt;
-}
 
 Value schematicValue(const sch::Schematic& s) {
   Value o = Value::Obj();
@@ -163,10 +155,10 @@ int main(int argc, char** argv) {
   // The three shape constants are compiled into the library; a corpus recorded
   // against a different VIEW/PAD/eps would compare green while describing a
   // different map, so pin them rather than assume them.
-  if (numOf(header, "view") != sch::VIEW || numOf(header, "pad") != sch::PAD ||
-      numOf(header, "eps") != sch::EPS) {
+  if (json::num_field(header, "view") != sch::VIEW || json::num_field(header, "pad") != sch::PAD ||
+      json::num_field(header, "eps") != sch::EPS) {
     std::fprintf(stderr, "FAIL: corpus was recorded at VIEW/PAD/eps %g/%g/%g, library has %d/%d/%g\n",
-                 numOf(header, "view"), numOf(header, "pad"), numOf(header, "eps"),
+                 json::num_field(header, "view"), json::num_field(header, "pad"), json::num_field(header, "eps"),
                  sch::VIEW, sch::PAD, sch::EPS);
     return 1;
   }
@@ -179,10 +171,10 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "bad line: %s\n", err.c_str());
       return 2;
     }
-    const std::string kind = strOf(rec, "case");
+    const std::string kind = json::str_field(rec, "case");
 
     if (kind == "track") {
-      const std::string id = strOf(rec, "id");
+      const std::string id = json::str_field(rec, "id");
       const TrackDef* def = findDef(id);
       if (!def) {
         std::fprintf(stderr, "FAIL %s: no such track in generated/track_defs.h\n", id.c_str());
@@ -229,9 +221,9 @@ int main(int argc, char** argv) {
     }
 
     if (kind == "codec") {
-      const std::string name = strOf(rec, "name");
-      const std::string d = strOf(rec, "d");
-      const double eps = numOf(rec, "eps");
+      const std::string name = json::str_field(rec, "name");
+      const std::string d = json::str_field(rec, "d");
+      const double eps = json::num_field(rec, "eps");
       const std::string packed = sch::pack(d, eps > 0 ? eps : sch::EPS);
       bool ok = true;
       const Value* expP = rec.find("packed");

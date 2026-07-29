@@ -26,6 +26,7 @@
 #include "corpus_diff.h"  // read_line + the shared structural diff_val
 #include "ttp/canonical.h"
 #include "ttp/grand_prix.h"
+#include "ttp/json_read.h"
 #include "ttp/util.h"
 
 using namespace ttp;
@@ -39,8 +40,6 @@ Id idFrom(const Value& v) {
   return Id::None();
 }
 
-std::string strOr(const Value* v, const char* dflt) { return v ? v->str : std::string(dflt); }
-double numOr(const Value* v, double dflt) { return v ? v->num : dflt; }
 
 // The digest the generator recorded, rebuilt from the port. "" stands for JS null
 // in nextTrackId (CupSeries::nextTrackId's documented convention).
@@ -78,8 +77,8 @@ Value buildDigest(const CupSeries& s) {
 
 GpCup cupFrom(const Value& v) {
   GpCup c;
-  c.id = strOr(v.find("id"), "");
-  c.name = strOr(v.find("name"), "");
+  c.id = json::str_field(v, "id", "");
+  c.name = json::str_field(v, "name", "");
   if (const Value* t = v.find("tracks")) for (const Value& e : t->arr) c.tracks.push_back(e.str);
   return c;
 }
@@ -96,7 +95,7 @@ bool reportDiff(const std::string& script, int step, const std::string& op, cons
 }
 
 bool runScript(const Value& root) {
-  const std::string name = strOr(root.find("name"), "?");
+  const std::string name = json::str_field(root, "name", "?");
   const Value* config = root.find("config");
   if (!config) { std::fprintf(stderr, "FAIL %s: no config\n", name.c_str()); return false; }
 
@@ -127,14 +126,14 @@ bool runScript(const Value& root) {
 
   int i = 0;
   for (const Value& step : steps->arr) {
-    const std::string op = strOr(step.find("op"), "?");
+    const std::string op = json::str_field(step, "op", "?");
     if (op == "applyRace") {
       std::vector<GpResult> results;
       if (const Value* rs = step.find("results")) {
         for (const Value& r : rs->arr) {
           GpResult g;
           g.playerId = idFrom(*r.find("playerId"));
-          g.rank = (int)numOr(r.find("rank"), 0);
+          g.rank = (int)json::num_field(r, "rank", 0);
           const Value* f = r.find("finished");
           g.finished = f && f->b;
           results.push_back(g);
@@ -145,8 +144,8 @@ bool runScript(const Value& root) {
         for (const Value& f : fs->arr) {
           GpFieldEntry e;
           e.peerIndex = idFrom(*f.find("peerIndex"));
-          e.name = strOr(f.find("name"), "");
-          e.colorIndex = (int)numOr(f.find("colorIndex"), 0);
+          e.name = json::str_field(f, "name", "");
+          e.colorIndex = (int)json::num_field(f, "colorIndex", 0);
           const Value* ai = f.find("ai");
           e.ai = ai && ai->b;
           field.push_back(e);
@@ -173,18 +172,18 @@ bool runScript(const Value& root) {
 bool runBagCase(const Value& c) {
   std::vector<std::string> ids;
   if (const Value* v = c.find("ids")) for (const Value& e : v->arr) ids.push_back(e.str);
-  Mulberry32 rng((uint32_t)numOr(c.find("seed"), 1));
+  Mulberry32 rng((uint32_t)json::num_field(c, "seed", 1));
   ShuffleBag bag(ids, [&rng]() { return rng.next(); });
 
   Value got = Value::Arr();
-  const int draws = (int)numOr(c.find("draws"), 0);
+  const int draws = (int)json::num_field(c, "draws", 0);
   for (int i = 0; i < draws; i++) got.push(Value::Str(bag.draw()));
 
   const Diff d = diff_val(*c.find("out"), got, "bagCase.out");
   if (d.differ) {
     if (spew++ < 20) {
       std::fprintf(stderr, "FAIL bagCase(seed %d): %s\n  expected %s\n  actual   %s\n",
-                   (int)numOr(c.find("seed"), 0), d.path.c_str(), d.expected.c_str(), d.actual.c_str());
+                   (int)json::num_field(c, "seed", 0), d.path.c_str(), d.expected.c_str(), d.actual.c_str());
     }
     return false;
   }

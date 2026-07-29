@@ -405,6 +405,19 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   ALL THREE OF THOSE GENERATORS ARE DELETED with the twins they read, along with
   `gen-audio-corpus.mjs`; the four corpora are frozen and the `record_*`
   roundtrips replaced their freshness checks.
+  A SYNTHETIC WORLD RIDES IN THE CORPUS, never in the C++. A generator that
+  invents cups, a catalogue, personas, stats or caps writes them into the
+  FIXTURE, and every replayer configures itself from what it reads — the ui
+  corpus carries its world in the header's `world` (`ui_check.cc` builds the
+  model's types from it, `abi_check.cc` hands the same object to
+  `ttp_ui_configure`, and `record_ui` re-emits from it), the session corpus
+  resolves its world into every step. Transcribing it instead is a number that
+  must be edited in N places and silently rots in N-1 of them: ONE corpus has
+  several replayers (two in C++ today, a tvOS/Android shell tomorrow). This
+  binds hardest on `gen-raceflow-corpus.mjs`, the one generator still RENEWABLE
+  — the others are frozen, so their worlds can no longer move, but a stale
+  transcription of one can also no longer be caught by regenerating. If you are
+  typing a constant that also exists in a `.mjs`, put it in the fixture instead.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,
@@ -483,6 +496,15 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   so it cannot rot from under itself. While it passes, parity evidence is renewable;
   when it starts failing, decide consciously whether to repair the twin or accept
   that the traces are frozen.
+- Two shared C++ headers exist so that a per-feature copy never has to: a
+  boundary reads JSON with `native/libttp-json/ttp/json_read.h` (`truthy` — JS
+  truthiness, not a bool test — `num_field`/`str_field`/`arr_field`/`parse_or`,
+  plus `opt_num`/`opt_str`/`id_of` templated on the caller's own option types),
+  and a conformance check reads and compares a corpus with
+  `native/testsupport/corpus_diff.h` (`read_line` + `diff_val`). Both are in the
+  tree because the hand-copied versions had already drifted once. A new ABI or
+  check writes neither: it includes them. The split is by who may link what —
+  json_read ships inside the ABIs, testsupport is test-only.
 - Our own C/C++ carries `-Wall -Wextra` via the `ttp_warnings` interface;
   the vendored fdlibm/double-conversion deliberately do NOT (they are taken whole
   from upstream). Not `-Werror` — a newer compiler's new diagnostic must not block a
@@ -491,7 +513,11 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   blobs beside them are CHECKED IN and are what the browser actually runs. After
   touching `native/`, run `native/scripts/build-runtime-web.sh` and commit the
   artifacts — `tests/native-artifact.test.js` compares BUILD_STAMP.json's source
-  hash and fails when they drift (comment-only edits under `native/` count). The
+  hash and fails when they drift (comment-only edits under `native/` count, since
+  the hash is over bytes). Batch the whole `native/` edit before rebuilding, and
+  re-check with `npm run check:artifact` (that one test, ~70 ms) rather than a
+  full `npm test`; `node native/scripts/runtime-source-hash.mjs --files` lists
+  what is hashed. The
   wasm exports come from `TTP_ABI` (EMSCRIPTEN_KEEPALIVE) on each declaration in
   `ttp_runtime.h`/`ttp_party.h`/`ttp_display.h`; there is no export list to
   maintain. Building needs the Filament fork, which CI does not have: CMake only

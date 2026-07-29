@@ -49,6 +49,7 @@
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
+#include "ttp/json_read.h"
 #include "ttp/race_session.h"
 #include "ttp/race_track.h"
 #include "ttp/util.h"
@@ -146,17 +147,7 @@ Value cmdsValue(const std::vector<au::Command>& cmds) {
 // Corpus -> plain data.
 // ---------------------------------------------------------------------------
 
-Id idFrom(const Value* v) {
-  if (!v) return Id::None();
-  if (v->type == Value::STR) return Id::Str(v->str);
-  if (v->type == Value::NUM) return Id::Num(v->num);
-  return Id::None();
-}
-
-double numOr(const Value& o, const char* key, double dflt) {
-  const Value* v = o.find(key);
-  return (v && v->type == Value::NUM) ? v->num : dflt;
-}
+Id idFrom(const Value* v) { return json::id_of<Id>(v); }
 
 bool boolOf(const Value& o, const char* key) {
   const Value* v = o.find(key);
@@ -165,9 +156,9 @@ bool boolOf(const Value& o, const char* key) {
 
 au::Point pointOf(const Value& v) {
   au::Point p;
-  p.x = numOr(v, "x", 0);
-  p.y = numOr(v, "y", 0);
-  p.z = numOr(v, "z", 0);
+  p.x = json::num_field(v, "x", 0);
+  p.y = json::num_field(v, "y", 0);
+  p.z = json::num_field(v, "z", 0);
   return p;
 }
 
@@ -185,11 +176,11 @@ au::Car carOf(const Value& v) {
   const Value* pose = v.find("pose");
   const Value* pos = pose ? pose->find("pos") : nullptr;
   if (pos && pos->type == Value::OBJ) { c.hasPos = true; c.pos = pointOf(*pos); }
-  c.spd = numOr(v, "spd", 0);
-  c.steer = numOr(v, "steer", 0);
-  c.brake = numOr(v, "brake", 0);
-  c.boostMul = numOr(v, "boostMul", 1);
-  c.spin = numOr(v, "spin", 0);
+  c.spd = json::num_field(v, "spd", 0);
+  c.steer = json::num_field(v, "steer", 0);
+  c.brake = json::num_field(v, "brake", 0);
+  c.boostMul = json::num_field(v, "boostMul", 1);
+  c.spin = json::num_field(v, "spin", 0);
   c.monster = boolOf(v, "monster");
   c.onWall = boolOf(v, "onWall");
   return c;
@@ -239,7 +230,7 @@ void applyStep(ScenarioState& st, const std::string& kind, const Value* in,
         rockets.push_back(rk);
       }
     }
-    st.dec->frame(cars, rockets, aiIdsOf(i.find("aiIds")), numOr(i, "nowMs", 0), out);
+    st.dec->frame(cars, rockets, aiIdsOf(i.find("aiIds")), json::num_field(i, "nowMs", 0), out);
     return;
   }
   if (kind == "event") {
@@ -261,12 +252,12 @@ void applyStep(ScenarioState& st, const std::string& kind, const Value* in,
     const bool hasPos = pv && pv->type == Value::OBJ;
     if (hasPos) pos = pointOf(*pv);
     st.dec->event(eventOf(ev ? *ev : empty), hasPos ? &pos : nullptr, humans,
-                  aiIdsOf(c.find("aiIds")), numOr(c, "nowMs", 0), out);
+                  aiIdsOf(c.find("aiIds")), json::num_field(c, "nowMs", 0), out);
     return;
   }
-  if (kind == "countdown") { st.dec->countdown((int) numOr(i, "n", 0), out); return; }
+  if (kind == "countdown") { st.dec->countdown((int) json::num_field(i, "n", 0), out); return; }
   if (kind == "roster") {
-    st.dec->roster((int) numOr(i, "count", 0), boolOf(i, "inLobby"), out);
+    st.dec->roster((int) json::num_field(i, "count", 0), boolOf(i, "inLobby"), out);
     return;
   }
   if (kind == "stopVoices") { st.dec->stopVoices(out); return; }
@@ -557,7 +548,7 @@ Capture captureTrace(const std::string& dir, const std::string& file) {
         au::Rocket rocket;
         rocket.id = idFrom(r.find("id"));
         rocket.hasPos = true;
-        rocket.pos = trackPoint(numOr(r, "s", 0), numOr(r, "lat", 0));
+        rocket.pos = trackPoint(json::num_field(r, "s", 0), json::num_field(r, "lat", 0));
         cf.rockets.push_back(std::move(rocket));
       }
     }

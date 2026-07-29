@@ -34,12 +34,15 @@
 // ABI hands a shell. canonical_stringify keeps the sort and its evidence-only
 // job; it must not grow a mode.
 //
-// THE SYNTHETIC WORLD. The model is catalogue-AGNOSTIC — it looks cups and
-// tracks up in whatever list it is handed — so the generator carries its own
-// two cups and nine circuits rather than binding the oracle to shared/tracks.js.
-// They are transcribed below, and the corpus header's counts are asserted
-// against them, so a corpus regenerated against a different world fails loudly
-// instead of replaying into the wrong catalogue.
+// THE SYNTHETIC WORLD COMES OUT OF THE CORPUS. The model is catalogue-AGNOSTIC
+// — it looks cups and tracks up in whatever list it is handed — so the generator
+// carries its own two cups and nine circuits rather than binding the oracle to
+// shared/tracks.js, and it WRITES THAT WORLD INTO THE HEADER LINE. This check
+// reads it from there and transcribes nothing: editing a number in
+// gen-ui-corpus.mjs must not be able to leave a replayer configured for a world
+// the recorded answers were never produced in. (It used to be hand-copied here,
+// and again in abi_check.cc; a third copy arrived with the next ABI, which is
+// the drift this shape removes. tests/fixtures/traces/README.md states the rule.)
 //
 // Usage: ui_check <ui-corpus.jsonl>
 
@@ -53,6 +56,7 @@
 #include "corpus_record.h"
 #include "ttp/game.h"        // ITEM_IDS — the sim's own roll table
 #include "ttp/hud.h"         // hudSlot — the P6 half of this same JS module
+#include "ttp/json_read.h"   // the shared field readers every ABI marshals with
 #include "ttp/protocol.h"    // ROOM_STATE — the vocabulary ui_model.h mirrors
 #include "ttp/ui_model.h"
 
@@ -77,77 +81,92 @@ void report(const std::string& what, const Diff& d) {
 }
 
 // ---- the generator's synthetic world ----------------------------------------
-// scripts/gen-ui-corpus.mjs's CUPS / CATALOG / MAX_PLAYERS / CAR_COUNT /
-// INTERMISSION_MS, transcribed. cup-empty has no circuits and `solo` is in no
-// cup: between them they reach every arm of the lookups (cup -> its races,
-// track -> its cup + difficulty, an id in no cup, an id in no catalogue).
-const int MAX_PLAYERS = 4;
-const int CAR_COUNT = 6;
-const double INTERMISSION_MS = 10000;
+// Read from the corpus header, never transcribed — see the note up top. The
+// world is line 1's `world` object: gen-ui-corpus.mjs's CUPS / CATALOG /
+// MAX_PLAYERS / CAR_COUNT / INTERMISSION_MS, verbatim. (cup-empty has no
+// circuits and `solo` is in no cup: between them they reach every arm of the
+// lookups — cup -> its races, track -> its cup + difficulty, an id in no cup,
+// an id in no catalogue.)
+struct World {
+  int maxPlayers = 0;
+  int carCount = 0;
+  double intermissionMs = 0;
+  std::vector<ui::Cup> cups;
+  std::vector<ui::CatalogEntry> catalog;
+};
 
-std::vector<ui::Cup> makeCups() {
-  return {
-      {"cup-a", "Sunrise", {"a1", "a2", "a3", "a4"}},
-      {"cup-b", "Thunder", {"b1", "b2", "b3", "b4"}},
-      {"cup-empty", "Hollow", {}},
-  };
-}
-
-std::vector<ui::CatalogEntry> makeCatalog() {
-  const auto row = [](const char* id, const char* name, const char* cup, double diff) {
-    ui::CatalogEntry e;
-    e.id = id;
-    e.name = name;
-    e.cup = cup ? ui::OptStr::Of(cup) : ui::OptStr::None();
-    e.cupDifficulty = cup ? ui::OptNum::Of(diff) : ui::OptNum::None();
-    return e;
-  };
-  return {
-      row("a1", "Dune Loop", "cup-a", 1),   row("a2", "Palm Sprint", "cup-a", 1),
-      row("a3", "Reef Run", "cup-a", 1),    row("a4", "Sand Spiral", "cup-a", 1),
-      row("b1", "Storm Gate", "cup-b", 4),  row("b2", "Bolt Bend", "cup-b", 4),
-      row("b3", "Rift Rise", "cup-b", 4),   row("b4", "Crash Coil", "cup-b", 4),
-      row("solo", "Lone Oval", nullptr, 0),
-  };
-}
+// One per process, because the replay reaches for it from every op. Filled from
+// the header before step 1; a corpus without one is refused rather than replayed
+// into an empty catalogue, which would diff loudly but blame the wrong side.
+World g_world;
 
 // ---- Value <-> the model's plain types ---------------------------------------
 
-ui::Id idOf(const Value* v) {
-  if (!v) return ui::Id::None();
-  if (v->type == Value::NUM) return ui::Id::Num(v->num);
-  if (v->type == Value::STR) return ui::Id::Str(v->str);
-  return ui::Id::None();
-}
-ui::OptNum numOf(const Value* v) {
-  return (v && v->type == Value::NUM) ? ui::OptNum::Of(v->num) : ui::OptNum::None();
-}
-ui::OptStr strOf(const Value* v) {
-  return (v && v->type == Value::STR) ? ui::OptStr::Of(v->str) : ui::OptStr::None();
-}
-// JS truthiness, over the shapes a corpus field can hold.
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && !(v->num != v->num);
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
-  }
-}
-double numField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::NUM) ? v->num : 0.0;
-}
-std::string strField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
-}
+// The three that name this layer's option types; everything else a corpus field
+// needs read out of it is ttp/json_read.h, shared with runtime/ttp_ui.cc and
+// every other replayer.
+ui::Id idOf(const Value* v) { return json::id_of<ui::Id>(v); }
+ui::OptNum numOf(const Value* v) { return json::opt_num<ui::OptNum>(v); }
+ui::OptStr strOf(const Value* v) { return json::opt_str<ui::OptStr>(v); }
 
 Value valOf(const ui::OptNum& n) { return n.has ? Value::Num(n.v) : Value::Null(); }
 Value valOf(const ui::OptStr& s) { return s.has ? Value::Str(s.v) : Value::Null(); }
+
+// ---- the header's world, into the model's types ------------------------------
+// The one place this check learns what it is replaying against. `cupName` rides
+// the catalogue in the fixture but is not a CatalogEntry field — the model
+// derives a cup's name from the cup list — so it is read and dropped here.
+bool loadWorld(const Value& header, World& w) {
+  const Value* kind = header.find("kind");
+  if (!kind || kind->type != Value::STR || kind->str != "ui") {
+    std::fprintf(stderr, "not a ui corpus: no {kind:'ui'} header\n");
+    return false;
+  }
+  const Value* wv = header.find("world");
+  if (!wv || wv->type != Value::OBJ) {
+    std::fprintf(stderr,
+                 "the corpus header carries no `world`. Regenerate it: "
+                 "node scripts/gen-ui-corpus.mjs — this check configures itself "
+                 "from the fixture and has no world of its own to fall back on.\n");
+    return false;
+  }
+  w.maxPlayers = (int) json::num_field(*wv, "maxPlayers");
+  w.carCount = (int) json::num_field(*wv, "carCount");
+  w.intermissionMs = json::num_field(*wv, "intermissionMs");
+
+  const Value* cups = wv->find("cups");
+  if (cups && cups->type == Value::ARR) {
+    for (const Value& c : cups->arr) {
+      ui::Cup cup;
+      cup.id = json::str_field(c, "id");
+      cup.name = json::str_field(c, "name");
+      const Value* tracks = c.find("tracks");
+      if (tracks && tracks->type == Value::ARR) {
+        for (const Value& t : tracks->arr) {
+          if (t.type == Value::STR) cup.tracks.push_back(t.str);
+        }
+      }
+      w.cups.push_back(std::move(cup));
+    }
+  }
+  const Value* cat = wv->find("catalog");
+  if (cat && cat->type == Value::ARR) {
+    for (const Value& e : cat->arr) {
+      ui::CatalogEntry row;
+      row.id = json::str_field(e, "id");
+      row.name = json::str_field(e, "name");
+      row.cup = strOf(e.find("cup"));
+      row.cupDifficulty = numOf(e.find("cupDifficulty"));
+      w.catalog.push_back(std::move(row));
+    }
+  }
+  if (w.maxPlayers <= 0 || w.carCount <= 0 || w.cups.empty() || w.catalog.empty()) {
+    std::fprintf(stderr, "the corpus header's `world` is not a world "
+                         "(maxPlayers/carCount/cups/catalog)\n");
+    return false;
+  }
+  return true;
+}
 
 // The item as JS spells it: undefined is a MISSING KEY (JSON.stringify drops
 // it), and that is a real recorded push.
@@ -231,11 +250,11 @@ std::vector<ui::RosterEntry> rosterOf(const Value* arr) {
   for (const Value& p : arr->arr) {
     ui::RosterEntry e;
     e.peerIndex = idOf(p.find("peerIndex"));
-    e.name = strField(p, "name");
-    e.colorIndex = numField(p, "colorIndex");
+    e.name = json::str_field(p, "name");
+    e.colorIndex = json::num_field(p, "colorIndex");
     e.carIndex = numOf(p.find("carIndex"));
-    e.connected = truthy(p.find("connected"));
-    e.ready = truthy(p.find("ready"));
+    e.connected = json::truthy(p.find("connected"));
+    e.ready = json::truthy(p.find("ready"));
     out.push_back(std::move(e));
   }
   return out;
@@ -311,10 +330,10 @@ Value hudRowValue(const Value& car) {
   const bool timed = ft && ft->type == Value::NUM;
   const ui::ItemVal item = itemOf(car);
   const TtpHudSlot s = rt::hudSlot(
-      (int32_t) numField(car, "position"), (int32_t) numField(car, "lap"),
-      (int32_t) numField(car, "totalLaps"),
+      (int32_t) json::num_field(car, "position"), (int32_t) json::num_field(car, "lap"),
+      (int32_t) json::num_field(car, "totalLaps"),
       item.kind == ui::ItemVal::STR ? item.str : std::string(),
-      truthy(car.find("finished")), timed, timed ? ft->num : 0.0);
+      json::truthy(car.find("finished")), timed, timed ? ft->num : 0.0);
   Value o = Value::Obj();
   const Value* id = car.find("id");
   o.set("id", id ? *id : Value::Null());
@@ -332,12 +351,12 @@ ui::SeriesInfo seriesFrom(const Value& s, const std::vector<ui::CatalogEntry>& c
   ui::SeriesInput in;
   in.cupId = strOf(s.find("cupId"));
   in.cupName = strOf(s.find("cupName"));
-  in.endless = truthy(s.find("endless"));
-  in.raceIndex = numField(s, "raceIndex");
+  in.endless = json::truthy(s.find("endless"));
+  in.raceIndex = json::num_field(s, "raceIndex");
   in.raceCount = numOf(s.find("raceCount"));
-  in.finished = truthy(s.find("finished"));
+  in.finished = json::truthy(s.find("finished"));
   in.nextTrackId = strOf(s.find("nextTrackId"));
-  in.autoAdvanceMs = INTERMISSION_MS;
+  in.autoAdvanceMs = g_world.intermissionMs;
   return ui::seriesInfo(in, catalog);
 }
 
@@ -427,8 +446,9 @@ Value viewValue(const ui::ResultsView& v) {
 }
 
 // One step: run the op, mutate the shell, return the `out` the corpus records.
-Value applyOp(Shell& st, const std::string& op, const Value& in,
-              const std::vector<ui::Cup>& cups, const std::vector<ui::CatalogEntry>& catalog) {
+Value applyOp(Shell& st, const std::string& op, const Value& in) {
+  const std::vector<ui::Cup>& cups = g_world.cups;
+  const std::vector<ui::CatalogEntry>& catalog = g_world.catalog;
   Value out = Value::Obj();
 
   if (op == "show") {
@@ -451,7 +471,7 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
     const ui::Id host = idOf(in.find("host"));
     const std::vector<ui::Seat> seats = ui::rosterSeats(roster, host);
     out.set("seats", seatsValue(seats));
-    out.set("grid", gridValue(ui::seatGrid(seats, MAX_PLAYERS, CAR_COUNT)));
+    out.set("grid", gridValue(ui::seatGrid(seats, g_world.maxPlayers, g_world.carCount)));
     out.set("ready", Value::Bool(ui::allRacersReady(roster, host)));
     Value conn = Value::Arr();
     for (const ui::RosterEntry* p : ui::connectedPlayers(roster)) conn.push(p->peerIndex.toValue());
@@ -509,7 +529,7 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
         ui::PushCar pc;
         pc.id = idOf(c.find("id"));
         pc.item = itemOf(c);
-        pc.finished = truthy(c.find("finished"));
+        pc.finished = json::truthy(c.find("finished"));
         cars.push_back(std::move(pc));
       }
     }
@@ -538,7 +558,7 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
     if (live) {
       car.id = idOf(carV->find("id"));
       car.item = itemOf(*carV);
-      car.finished = truthy(carV->find("finished"));
+      car.finished = json::truthy(carV->find("finished"));
     }
     const ui::ItemVal item = ui::welcomeItem(live ? &car : nullptr);
     out.set("item", item.kind == ui::ItemVal::STR ? Value::Str(item.str) : Value::Null());
@@ -555,16 +575,17 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
   }
   if (op == "autopause") {
     ui::AutoPauseInput api;
-    api.hasSession = truthy(in.find("hasSession"));
-    api.raceEnded = truthy(in.find("raceEnded"));
-    api.roomState = ui::roomStateOf(strField(in, "roomState"));
+    api.hasSession = json::truthy(in.find("hasSession"));
+    api.raceEnded = json::truthy(in.find("raceEnded"));
+    api.roomState = ui::roomStateOf(json::str_field(in, "roomState"));
     api.carIds = idListOf(in.find("carIds"));
     api.aiIds = idSetOf(in.find("aiIds"));
     api.seatedIds = idSetOf(in.find("seatedIds"));
     const bool asks = ui::autoPauseAsksParticipants(api);
     // The shell only READS the party layer when the model asks — the read has a
     // side effect on the room machine, so its timing is part of the contract.
-    const ui::AutoPauseDecision d = ui::autoPause(api, asks && truthy(in.find("allDisconnected")));
+    const ui::AutoPauseDecision d =
+        ui::autoPause(api, asks && json::truthy(in, "allDisconnected"));
     out.set("asks", Value::Bool(asks));
     Value dv = Value::Obj();
     dv.set("action", Value::Str(ui::key(d.action)));
@@ -574,18 +595,18 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
     return out;
   }
   if (op == "freeze") {
-    const bool hasSession = truthy(in.find("hasSession"));
-    const bool paused = truthy(in.find("paused"));
-    const ui::RoomState rs = ui::roomStateOf(strField(in, "roomState"));
+    const bool hasSession = json::truthy(in.find("hasSession"));
+    const bool paused = json::truthy(in.find("paused"));
+    const ui::RoomState rs = ui::roomStateOf(json::str_field(in, "roomState"));
     out.set("move", Value::Str(ui::key(ui::freezeTransition(
-        paused, truthy(in.find("autoPaused")), truthy(in.find("sessionPaused"))))));
+        paused, json::truthy(in.find("autoPaused")), json::truthy(in.find("sessionPaused"))))));
     out.set("canPause", Value::Bool(ui::canPause(hasSession, paused, rs)));
     out.set("canResume", Value::Bool(ui::canResume(hasSession, paused)));
     return out;
   }
   if (op == "board") {
     const Value* sV = in.find("series");
-    const bool over = truthy(in.find("over"));
+    const bool over = json::truthy(in.find("over"));
     std::vector<ui::StandingRow> standings;
     ui::CupBoard cup;
     if (sV && sV->type == Value::OBJ) {
@@ -594,13 +615,13 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
         for (const Value& r : st_->arr) {
           ui::StandingRow sr;
           sr.playerId = idOf(r.find("playerId"));
-          sr.points = numField(r, "points");
-          sr.gained = numField(r, "gained");
+          sr.points = json::num_field(r, "points");
+          sr.gained = json::num_field(r, "gained");
           standings.push_back(std::move(sr));
         }
       }
       cup.standings = &standings;
-      cup.info = seriesFrom(*sV, catalog);
+      cup.info = seriesFrom(*sV, g_world.catalog);
     }
     std::vector<ui::ResultRow> results;
     const Value* rV = in.find("results");
@@ -608,7 +629,7 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
       for (const Value& r : rV->arr) {
         ui::ResultRow rr;
         rr.playerId = idOf(r.find("playerId"));
-        rr.finished = truthy(r.find("finished"));
+        rr.finished = json::truthy(r.find("finished"));
         rr.time = numOf(r.find("time"));
         results.push_back(std::move(rr));
       }
@@ -619,9 +640,9 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
       for (const Value& f : fV->arr) {
         ui::FieldRow fr;
         fr.peerIndex = idOf(f.find("peerIndex"));
-        fr.name = strField(f, "name");
+        fr.name = json::str_field(f, "name");
         fr.colorIndex = numOf(f.find("colorIndex"));
-        fr.ai = truthy(f.find("ai"));
+        fr.ai = json::truthy(f.find("ai"));
         field.push_back(std::move(fr));
       }
     }
@@ -631,8 +652,8 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
       for (const Value& l : lV->arr) {
         ui::LateJoiner lj;
         lj.peerIndex = idOf(l.find("peerIndex"));
-        lj.name = strField(l, "name");
-        lj.colorIndex = numField(l, "colorIndex");
+        lj.name = json::str_field(l, "name");
+        lj.colorIndex = json::num_field(l, "colorIndex");
         late.push_back(std::move(lj));
       }
     }
@@ -641,12 +662,13 @@ Value applyOp(Shell& st, const std::string& op, const Value& in,
     const Value bv = boardValue(board);
     out.set("board", bv);
     out.set("wire", Value::Str(wire(bv)));
-    out.set("view", over ? viewValue(ui::resultsView(board, INTERMISSION_MS)) : Value::Null());
+    out.set("view", over ? viewValue(ui::resultsView(board, g_world.intermissionMs))
+                         : Value::Null());
     return out;
   }
   if (op == "intermission") {
-    out.set("secs", Value::Num(ui::intermissionSecs(numField(in, "deadlineMs"),
-                                                    numField(in, "nowMs"))));
+    out.set("secs", Value::Num(ui::intermissionSecs(json::num_field(in, "deadlineMs"),
+                                                    json::num_field(in, "nowMs"))));
     return out;
   }
   std::fprintf(stderr, "unknown ui-corpus op '%s'\n", op.c_str());
@@ -725,47 +747,29 @@ void checkStableCupSort() {
   }
 }
 
-// The generator's world, pinned by the header line it wrote.
-bool checkHeader(const Value& h, const std::vector<ui::Cup>& cups,
-                 const std::vector<ui::CatalogEntry>& catalog) {
-  const auto n = [&h](const char* k) {
-    const Value* v = h.find(k);
-    return (v && v->type == Value::NUM) ? v->num : -1.0;
-  };
-  const Value* kind = h.find("kind");
-  if (!kind || kind->type != Value::STR || kind->str != "ui") {
-    std::fprintf(stderr, "not a ui corpus: no {kind:'ui'} header\n");
-    return false;
-  }
-  if (n("maxPlayers") != MAX_PLAYERS || n("carCount") != CAR_COUNT ||
-      n("intermissionMs") != INTERMISSION_MS ||
-      n("cups") != (double) cups.size() || n("catalog") != (double) catalog.size()) {
-    std::fprintf(stderr,
-                 "the corpus was recorded against a different synthetic world "
-                 "(maxPlayers/carCount/intermissionMs/cups/catalog); ui_check's "
-                 "transcription of gen-ui-corpus.mjs is stale\n");
-    return false;
-  }
-  return true;
-}
-
 }  // namespace
 
 // Re-emit the corpus from the port: same driver, same shell threading, the
 // comparison replaced by a write.
-int recordCorpus(const std::string& fixture, const std::string& outPath,
-                 const std::vector<ui::Cup>& cups, const std::vector<ui::CatalogEntry>& catalog) {
+int recordCorpus(const std::string& fixture, const std::string& outPath) {
   Shell st;
+  bool world = false;
   const int rc = corpus::record(fixture, outPath, [&](const Value& root) {
     const Value* kind = root.find("case");
-    if (!kind) return Value();                       // UNDEF: copy the header through
+    // UNDEF copies the header through verbatim — and the header is also where
+    // the world comes from, so the re-emit configures itself exactly as the
+    // replay does rather than carrying a second copy of the catalogue.
+    if (!kind) {
+      if (!world) world = loadWorld(root, g_world);
+      return Value();
+    }
     if (kind->str == "scenario") { st.reset(root.find("screen")); return Value(); }
     if (kind->str != "step") return Value();
     const Value* opV = root.find("op");
     const Value* inV = root.find("in");
     const Value empty = Value::Obj();
     const Value got = applyOp(st, opV ? opV->str : std::string(),
-                              inV && inV->type == Value::OBJ ? *inV : empty, cups, catalog);
+                              inV && inV->type == Value::OBJ ? *inV : empty);
     // The generator's key SET; canonical_stringify sorts them.
     Value line = Value::Obj();
     line.set("case", Value::Str("step"));
@@ -791,7 +795,7 @@ int main(int argc, char** argv) {
   {
     std::string fixture, outPath;
     if (corpus::wants_record(argc, argv, &fixture, &outPath))
-      return recordCorpus(fixture, outPath, makeCups(), makeCatalog());
+      return recordCorpus(fixture, outPath);
   }
   std::ifstream in(argv[1]);
   if (!in) {
@@ -799,8 +803,6 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  const std::vector<ui::Cup> cups = makeCups();
-  const std::vector<ui::CatalogEntry> catalog = makeCatalog();
   checkRoomStates();
   checkStableCupSort();
 
@@ -821,7 +823,7 @@ int main(int argc, char** argv) {
     if (!kind) {
       if (header) continue;
       header = true;
-      if (!checkHeader(root, cups, catalog)) return 2;
+      if (!loadWorld(root, g_world)) return 2;
       continue;
     }
     if (kind->str == "scenario") {
@@ -841,8 +843,7 @@ int main(int argc, char** argv) {
     }
     const Value* inV = root.find("in");
     const Value empty = Value::Obj();
-    const Value got = applyOp(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty,
-                              cups, catalog);
+    const Value got = applyOp(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
     steps++;
 
     const Value* stepN = root.find("step");

@@ -45,6 +45,7 @@
 #include "generated/track_defs.h"
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/race_track.h"       // find_track_def — the levels the tendency cases pick by
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
@@ -1369,27 +1370,16 @@ void audioThroughAbi() {
 // the corpus's bots are strings and its seats are numbers).
 // ---------------------------------------------------------------------------
 
-// gen-ui-corpus.mjs's synthetic world as a configure payload — the same two cups
-// and nine circuits ui_check.cc transcribes, in the ABI's shape. The corpus
-// header's counts are checked against it below, so a corpus regenerated against
-// a different world fails loudly rather than replaying into the wrong catalogue.
-const char* UI_WORLD =
-    "{\"maxPlayers\":4,\"carCount\":6,"
-    "\"cups\":["
-    "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"a1\",\"a2\",\"a3\",\"a4\"]},"
-    "{\"id\":\"cup-b\",\"name\":\"Thunder\",\"tracks\":[\"b1\",\"b2\",\"b3\",\"b4\"]},"
-    "{\"id\":\"cup-empty\",\"name\":\"Hollow\",\"tracks\":[]}],"
-    "\"catalog\":["
-    "{\"id\":\"a1\",\"name\":\"Dune Loop\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
-    "{\"id\":\"a2\",\"name\":\"Palm Sprint\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
-    "{\"id\":\"a3\",\"name\":\"Reef Run\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
-    "{\"id\":\"a4\",\"name\":\"Sand Spiral\",\"cup\":\"cup-a\",\"cupDifficulty\":1},"
-    "{\"id\":\"b1\",\"name\":\"Storm Gate\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
-    "{\"id\":\"b2\",\"name\":\"Bolt Bend\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
-    "{\"id\":\"b3\",\"name\":\"Rift Rise\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
-    "{\"id\":\"b4\",\"name\":\"Crash Coil\",\"cup\":\"cup-b\",\"cupDifficulty\":4},"
-    "{\"id\":\"solo\",\"name\":\"Lone Oval\",\"cup\":null,\"cupDifficulty\":null}]}";
-const double UI_INTERMISSION_MS = 10000;
+// gen-ui-corpus.mjs's synthetic world is READ OUT OF THE CORPUS HEADER, not
+// transcribed here. It arrives in exactly ttp_ui_configure's shape (the
+// generator writes cups/catalog/maxPlayers/carCount verbatim into line 1), so
+// the ABI is configured by handing the header's `world` straight back across
+// the boundary — which also makes the configure export's own contract part of
+// what this replay proves. Two C++ replayers used to carry a copy of that world
+// and a count guard to catch it going stale; ui_check.cc reads the header too
+// now, and nothing downstream of the generator transcribes anything. See
+// tests/fixtures/traces/README.md, "A corpus carries its own world".
+double UI_INTERMISSION_MS = 0;
 
 // A parsed ABI answer, or a typed hole that will diff loudly.
 Value uiJson(const char* text) {
@@ -1631,11 +1621,8 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in) {
     return out;
   }
   if (op == "intermission") {
-    const auto num = [&in](const char* k) {
-      const Value* v = in.find(k);
-      return (v && v->type == Value::NUM) ? v->num : 0.0;
-    };
-    out.set("secs", Value::Num(ttp_ui_intermission_secs(num("deadlineMs"), num("nowMs"))));
+    out.set("secs", Value::Num(ttp_ui_intermission_secs(json::num_field(in, "deadlineMs"),
+                                                        json::num_field(in, "nowMs"))));
     return out;
   }
   fail("unknown ui-corpus op '" + op + "'");
@@ -1684,8 +1671,15 @@ void uiShippedCatalogue() {
   }
 
   // The override still overrides — and the getter still answers SHIPPED, so a
-  // synthetic conformance world can never reach a picker through it.
-  check(ttp_ui_configure(UI_WORLD) == 1, "the synthetic world still overrides");
+  // synthetic conformance world can never reach a picker through it. Any
+  // override does; this one is written here rather than borrowed from the ui
+  // corpus because nothing is being replayed, so it is not a world that has to
+  // match a recording.
+  check(ttp_ui_configure("{\"maxPlayers\":2,\"carCount\":2,"
+                         "\"cups\":[{\"id\":\"c\",\"name\":\"C\",\"tracks\":[\"t\"]}],"
+                         "\"catalog\":[{\"id\":\"t\",\"name\":\"T\",\"cup\":\"c\","
+                         "\"cupDifficulty\":1}]}") == 1,
+        "the synthetic world still overrides");
   check(std::string(ttp_ui_catalogue_json()) == shipped,
         "the getter ignores whatever was configured");
 }
@@ -1739,7 +1733,6 @@ void uiCupTendency() {
 void uiCorpusThroughAbi(const char* path) {
   std::ifstream in(path);
   if (!in) { fail(std::string("cannot open ") + path); return; }
-  check(ttp_ui_configure(UI_WORLD) == 1, "the synthetic catalogue configured");
 
   UiShell st;
   std::string line, scenario;
@@ -1754,14 +1747,17 @@ void uiCorpusThroughAbi(const char* path) {
     if (!kind) {
       if (header) continue;
       header = true;
-      // The world this driver hardcodes, against the one the generator recorded.
-      const auto n = [&root](const char* k) {
-        const Value* v = root.find(k);
-        return (v && v->type == Value::NUM) ? v->num : -1.0;
-      };
-      check(n("maxPlayers") == 4 && n("carCount") == 6 && n("intermissionMs") == UI_INTERMISSION_MS
-            && n("cups") == 3 && n("catalog") == 9,
-            "ui corpus recorded against abi_check's synthetic world");
+      // The world the generator recorded against, handed straight to the ABI.
+      const Value* world = root.find("world");
+      if (!world || world->type != Value::OBJ) {
+        fail("the ui corpus header carries no `world` — regenerate it: "
+             "node scripts/gen-ui-corpus.mjs");
+        return;
+      }
+      const Value* ims = world->find("intermissionMs");
+      UI_INTERMISSION_MS = (ims && ims->type == Value::NUM) ? ims->num : 0;
+      check(ttp_ui_configure(canonical_stringify(*world).c_str()) == 1,
+            "the corpus's own catalogue configured through ttp_ui_configure");
       continue;
     }
     if (kind->str == "scenario") {
@@ -1987,22 +1983,10 @@ Value netStep(const std::string& op, const Value& in) {
   const auto txt = [](const Value* v) -> std::string {
     return v ? canonical_stringify(*v) : std::string();
   };
-  const auto num = [&in](const char* k) {
-    const Value* v = in.find(k);
-    return (v && v->type == Value::NUM) ? v->num : 0.0;
-  };
-  const auto str = [&in](const char* k) {
-    const Value* v = in.find(k);
-    return (v && v->type == Value::STR) ? v->str : std::string();
-  };
-  const auto flag = [&in](const char* k) {
-    const Value* v = in.find(k);
-    if (!v) return false;
-    if (v->type == Value::BOOL) return v->b;
-    if (v->type == Value::NUM) return v->num != 0 && v->num == v->num;
-    if (v->type == Value::STR) return !v->str.empty();
-    return v->type == Value::ARR || v->type == Value::OBJ;
-  };
+  // The shared readers (ttp/json_read.h), bound to this step's `in`.
+  const auto num = [&in](const char* k) { return json::num_field(in, k); };
+  const auto str = [&in](const char* k) { return json::str_field(in, k); };
+  const auto flag = [&in](const char* k) { return json::truthy(in, k); };
   const auto parse = [](const char* json) {
     bool ok = false;
     Value v = json::parse(json ? json : "null", &ok);

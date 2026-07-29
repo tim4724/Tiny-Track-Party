@@ -14,8 +14,9 @@
 #include <vector>
 
 #include "ttp/canonical.h"
-#include "ttp/json_parse.h"
 #include "ttp/fastlane.h"
+#include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/relay_framing.h"
 #include "ttp/room_flow.h"
 // The live race, for ttp_room_sync_active_order alone: who is PLAYING is a fact
@@ -319,12 +320,6 @@ const char* put(std::string& buf, const Value& v) {
   buf = canonical_stringify(v);
   return buf.c_str();
 }
-Value parseOr(const char* json, Value fallback) {
-  if (!json || !*json) return fallback;
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  return ok ? v : fallback;
-}
 }  // namespace
 
 const char* ttp_framing_encode_create(const char* clientId, double maxClients, const char* urlOrNull) {
@@ -341,15 +336,15 @@ const char* ttp_framing_encode_join(const char* clientId, const char* room) {
 
 const char* ttp_framing_encode_send_to(const char* toJson, const char* dataJson) {
   return put(g_bufSendTo,
-             framing::encode_send_to(parseOr(toJson, Value::Null()), parseOr(dataJson, Value::Null())));
+             framing::encode_send_to(json::parse_or(toJson, Value::Null()), json::parse_or(dataJson, Value::Null())));
 }
 
 const char* ttp_framing_encode_broadcast(const char* dataJson) {
-  return put(g_bufBroadcast, framing::encode_broadcast(parseOr(dataJson, Value::Null())));
+  return put(g_bufBroadcast, framing::encode_broadcast(json::parse_or(dataJson, Value::Null())));
 }
 
 const char* ttp_framing_encode_set_state(const char* dataJson) {
-  return put(g_bufSetState, framing::encode_set_state(parseOr(dataJson, Value::Null())));
+  return put(g_bufSetState, framing::encode_set_state(json::parse_or(dataJson, Value::Null())));
 }
 
 const char* ttp_framing_encode_close_room(void) {
@@ -453,7 +448,7 @@ void ttp_link_set_channel_open(int h, int open) {
 const char* ttp_link_enqueue(int h, const char* evJson, double nowMs) {
   LinkHandle* lh = linkOf(h);
   if (!lh) return EMPTY_OUTCOME;
-  return outcomeJson(lh, lh->link.enqueue(parseOr(evJson, Value::Null()), nowMs));
+  return outcomeJson(lh, lh->link.enqueue(json::parse_or(evJson, Value::Null()), nowMs));
 }
 
 const char* ttp_link_send_tick(int h, double nowMs) {

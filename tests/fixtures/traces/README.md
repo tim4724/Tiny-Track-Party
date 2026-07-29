@@ -115,6 +115,74 @@ one-ulp difference could flip it. That guard is what lets `record_runtime` hold 
 identity on all four legs; it also means the fixture pins behaviour to ~0.1%, not to
 the bit. Do not copy the pattern anywhere the vendored math is available.
 
+## Retiring an oracle: what it still feeds is not visible from the generator
+
+All four JS oracles are gone now (`uiModel.js`, `sessionModel.js`,
+`audio/decide.js`, `trackSchematic.js`), so this is a note for the next
+retirement rather than a live checklist. Twice in that round the module fed
+something the generator naming it could not show you, and both were found by
+grepping rather than by reading:
+
+- `audio/decide.js` was also the MUSIC CATALOGUE, imported by
+  `public/gallery-music.js` — a SERVED PAGE. Retiring it meant extracting
+  `audio/musicCatalogue.js` first, not deleting a test fixture's oracle.
+- `trackSchematic.js` was also a CODEGEN SOURCE FOR SHIPPED DATA: `npm run
+  gen:schematics` baked `public/shared/trackSchematics.js` with it, and
+  `display/main.js` imports that bake for the lobby mini-maps. Retiring it meant
+  moving the bake onto `ttp_track_schematic_json` and proving the output
+  byte-identical, which is what `scripts/gen-track-schematics.js` does now.
+
+So before planning one: grep the whole tree for the module, separate the real
+`import`s from the mentions in comments, and check `scripts/` and `package.json`
+for a codegen path as well as `public/` for a page. "It is only an oracle" is a
+claim about the whole repo, and the generator is the one file that cannot
+support it. `public/display/raceFlow.js` is the only oracle left.
+
+## A corpus carries its own world
+
+A generator that invents a synthetic world — cups, a track catalogue, personas,
+car stats, room sizes, a max-players cap — must **write that world into the
+corpus**, and every replayer must **read it from there**. Do not transcribe it
+into C++.
+
+The reason is that one corpus has many replayers. `ui-corpus.jsonl` is replayed
+by `runtimetest/ui_check.cc` (through the library), by `runtimetest/abi_check.cc`
+(through the C boundary) and re-emitted by `record_ui`; a tvOS or Android shell
+would be a fourth. A transcribed world is therefore a number that has to be
+edited in N places and rots in N-1 of them — and it does not fail cleanly when it
+does: a replayer configured for the wrong catalogue diffs on every step that
+touches it, which reads as a broken port rather than a stale copy.
+
+So the ui corpus carries its world in the header:
+
+```jsonc
+{"kind":"ui","scenarios":37,"steps":1568,"version":1,
+ "world":{"carCount":6,"catalog":[…],"cups":[…],"intermissionMs":10000,"maxPlayers":4}}
+```
+
+`ui_check` builds the model's types from it, `abi_check` hands the same object
+straight to `ttp_ui_configure` — which makes the configure export's own contract
+part of what the replay proves — and `record_ui` copies the header through
+verbatim and configures from it, so the re-emit and the replay cannot disagree
+about which world they are in. A corpus with no `world` is refused rather than
+replayed against an empty catalogue.
+
+Two shapes satisfy the rule, and either is fine:
+
+- **In the header**, when the world is fixed for the whole file (the ui corpus).
+- **In every step**, when it varies or is small — `session-corpus.jsonl` carries a
+  fully resolved `in` per step, including its chooser payload, which is why
+  `session_check.cc` needs no world at all and a step replays standalone.
+
+What is *not* fine is a `const` in the check that the generator also spells. If
+you are typing a number that also exists in a `.mjs`, put it in the fixture.
+
+**Where this still bites.** `gen-raceflow-corpus.mjs` is the only RENEWABLE
+generator left, so it is the only place a world can still move under a
+transcription. The frozen four cannot move — but a stale copy of one of their
+worlds can no longer be caught by regenerating either, which is the same argument
+pointing the same way.
+
 ## Blind spots these traces structurally cannot cover
 
 - **ONE RACE PER PROCESS**, so no trace sees state leaking from one race into the

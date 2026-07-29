@@ -44,6 +44,7 @@
 #include "corpus_diff.h"
 #include "corpus_record.h"
 #include "ttp/canonical.h"
+#include "ttp/json_read.h"
 #include "ttp/session.h"
 
 using namespace ttp;
@@ -54,39 +55,13 @@ namespace {
 
 const Value* field(const Value& o, const char* k) { return o.find(k); }
 
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && v->num == v->num;
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
-  }
+// Everything a corpus field needs read out of it is ttp/json_read.h — the same
+// readers runtime/ttp_net.cc marshals this layer's ABI with, so a step replayed
+// here and the same step crossing the boundary in abi_check.cc read their input
+// exactly alike.
+ns::RoomState stateOf(const Value& o, const char* k) {
+  return ns::room_state_of(json::str_field(o, k));
 }
-double numOf(const Value& o, const char* k, double dflt = 0) {
-  const Value* v = field(o, k);
-  return (v && v->type == Value::NUM) ? v->num : dflt;
-}
-std::string strOf(const Value& o, const char* k) {
-  const Value* v = field(o, k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
-}
-Value arrOf(const Value& o, const char* k) {
-  const Value* v = field(o, k);
-  return (v && v->type == Value::ARR) ? *v : Value::Arr();
-}
-std::vector<double> numbersOf(const Value& o, const char* k) {
-  std::vector<double> out;
-  const Value* v = field(o, k);
-  if (!v || v->type != Value::ARR) return out;
-  for (const Value& e : v->arr) {
-    if (e.type == Value::NUM) out.push_back(e.num);
-  }
-  return out;
-}
-ns::RoomState stateOf(const Value& o, const char* k) { return ns::room_state_of(strOf(o, k)); }
 
 Value seatValue(const ns::SeatDefaults& d) {
   Value v = Value::Obj();
@@ -116,7 +91,7 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
   out = Value::Obj();
 
   if (op == "roster") {
-    out.set("rows", ns::roster_rows(arrOf(in, "roster"), arrOf(in, "inRace")));
+    out.set("rows", ns::roster_rows(json::arr_field(in, "roster"), json::arr_field(in, "inRace")));
     return true;
   }
   if (op == "snapshot") {
@@ -126,34 +101,34 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "joinUrl") {
-    out.set("url", Value::Str(ns::join_url(strOf(in, "base"), strOf(in, "room"),
-                                           strOf(in, "instance"))));
+    out.set("url", Value::Str(ns::join_url(json::str_field(in, "base"), json::str_field(in, "room"),
+                                           json::str_field(in, "instance"))));
     return true;
   }
   if (op == "claimUrl") {
-    out.set("url", Value::Str(ns::claim_url(strOf(in, "url"), numOf(in, "peerIndex"))));
+    out.set("url", Value::Str(ns::claim_url(json::str_field(in, "url"), json::num_field(in, "peerIndex"))));
     return true;
   }
   if (op == "template") {
     std::string t;
-    out.set("template", ns::controller_url_template(strOf(in, "base"), &t) ? Value::Str(t)
+    out.set("template", ns::controller_url_template(json::str_field(in, "base"), &t) ? Value::Str(t)
                                                                           : Value::Null());
     return true;
   }
   if (op == "normIndex") {
     // `absent` is JS undefined; otherwise the recorded value, INCLUDING null.
-    const Value* v = truthy(field(in, "absent")) ? nullptr : field(in, "value");
+    const Value* v = json::truthy(field(in, "absent")) ? nullptr : field(in, "value");
     double n = 0;
     out.set("index", ns::norm_index(v, &n) ? Value::Num(n) : Value::Null());
     return true;
   }
   if (op == "seat") {
-    out.set("defaults", seatValue(ns::seat_defaults(numOf(in, "colorIndex"))));
+    out.set("defaults", seatValue(ns::seat_defaults(json::num_field(in, "colorIndex"))));
     return true;
   }
   if (op == "addPeer") {
-    const ns::AddPeerPlan p = ns::add_peer_plan(truthy(field(in, "has")), numOf(in, "size"),
-                                                numOf(in, "maxPlayers"), numOf(in, "colorIndex"));
+    const ns::AddPeerPlan p = ns::add_peer_plan(json::truthy(field(in, "has")), json::num_field(in, "size"),
+                                                json::num_field(in, "maxPlayers"), json::num_field(in, "colorIndex"));
     Value plan = Value::Obj();
     plan.set("seat", p.hasSeat ? seatValue(p.seat) : Value::Null());
     plan.set("stamp", Value::Bool(p.stamp));
@@ -170,28 +145,28 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
   }
   if (op == "card") {
     const Value* seat = field(in, "seat");
-    out.set("card", ns::reconnect_card(seat ? *seat : Value::Obj(), strOf(in, "url")));
+    out.set("card", ns::reconnect_card(seat ? *seat : Value::Obj(), json::str_field(in, "url")));
     return true;
   }
   if (op == "route") {
-    out.set("route", Value::Str(ns::key(ns::inbound_route(numOf(in, "from"), strOf(in, "type")))));
+    out.set("route", Value::Str(ns::key(ns::inbound_route(json::num_field(in, "from"), json::str_field(in, "type")))));
     return true;
   }
   if (op == "action") {
-    out.set("action", Value::Str(ns::key(ns::message_action(strOf(in, "type")))));
+    out.set("action", Value::Str(ns::key(ns::message_action(json::str_field(in, "type")))));
     return true;
   }
   if (op == "setCar") {
     out.set("accept", Value::Bool(ns::set_car_decision(
-                          truthy(field(in, "ready")), stateOf(in, "roomState"),
-                          truthy(field(in, "inRace")), field(in, "carIndex"),
-                          numOf(in, "carCount"))));
+                          json::truthy(field(in, "ready")), stateOf(in, "roomState"),
+                          json::truthy(field(in, "inRace")), field(in, "carIndex"),
+                          json::num_field(in, "carCount"))));
     return true;
   }
   if (op == "setReady") {
     out.set("accept", Value::Bool(ns::set_ready_decision(
-                          truthy(field(in, "isHost")), stateOf(in, "roomState"),
-                          truthy(field(in, "ready")), truthy(field(in, "current")))));
+                          json::truthy(field(in, "isHost")), stateOf(in, "roomState"),
+                          json::truthy(field(in, "ready")), json::truthy(field(in, "current")))));
     return true;
   }
   if (op == "stateChange") {
@@ -213,9 +188,9 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "hb") {
-    const ns::HeartbeatTick t = ns::heartbeat_tick(truthy(field(in, "inRoom")),
-                                                   truthy(field(in, "hbPending")),
-                                                   numOf(in, "hbSentAt"), numOf(in, "now"));
+    const ns::HeartbeatTick t = ns::heartbeat_tick(json::truthy(field(in, "inRoom")),
+                                                   json::truthy(field(in, "hbPending")),
+                                                   json::num_field(in, "hbSentAt"), json::num_field(in, "now"));
     st.hbPending = t.hbPending;
     st.hbSentAt = t.hbSentAt;
     Value tick = Value::Obj();
@@ -227,10 +202,10 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "claim") {
-    const Value* token = truthy(field(in, "absent")) ? nullptr : field(in, "rejoinToken");
-    const ns::ClaimPlan p = ns::claim_plan(numOf(in, "fromId"), token,
-                                           truthy(field(in, "hasOld")),
-                                           truthy(field(in, "oldDisconnected")));
+    const Value* token = json::truthy(field(in, "absent")) ? nullptr : field(in, "rejoinToken");
+    const ns::ClaimPlan p = ns::claim_plan(json::num_field(in, "fromId"), token,
+                                           json::truthy(field(in, "hasOld")),
+                                           json::truthy(field(in, "oldDisconnected")));
     Value plan = Value::Obj();
     plan.set("claim", Value::Bool(p.claim));
     if (p.claim) {
@@ -241,8 +216,8 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "resync") {
-    const ns::ResyncPlan p = ns::resync_plan(numbersOf(in, "rosterIds"),
-                                             numbersOf(in, "relayPeers"));
+    const ns::ResyncPlan p = ns::resync_plan(json::num_list(in, "rosterIds"),
+                                             json::num_list(in, "relayPeers"));
     Value expire = Value::Arr();
     for (double id : p.expire) expire.push(Value::Num(id));
     Value add = Value::Arr();
@@ -319,8 +294,8 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "bad header: %s\n", err.c_str());
     return 2;
   }
-  const int wantSteps = static_cast<int>(numOf(header, "steps", -1));
-  const int wantScenarios = static_cast<int>(numOf(header, "scenarios", -1));
+  const int wantSteps = static_cast<int>(json::num_field(header, "steps", -1));
+  const int wantScenarios = static_cast<int>(json::num_field(header, "scenarios", -1));
 
   Shell st;
   std::string scenario;
@@ -333,22 +308,22 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "bad line: %s\n", err.c_str());
       return 2;
     }
-    const std::string kind = strOf(rec, "case");
+    const std::string kind = json::str_field(rec, "case");
     if (kind == "scenario") {
-      scenario = strOf(rec, "name");
+      scenario = json::str_field(rec, "name");
       st = Shell{};
       scenarios++;
       continue;
     }
     if (kind != "step") continue;
 
-    const std::string op = strOf(rec, "op");
+    const std::string op = json::str_field(rec, "op");
     const Value* in = field(rec, "in");
     Value out;
     std::string why;
     if (!applyOp(st, op, in ? *in : Value::Obj(), out, why)) {
       std::fprintf(stderr, "FAIL %s step %d: %s\n", scenario.c_str(),
-                   static_cast<int>(numOf(rec, "step")), why.c_str());
+                   static_cast<int>(json::num_field(rec, "step")), why.c_str());
       return 2;
     }
     steps++;
@@ -366,7 +341,7 @@ int main(int argc, char** argv) {
       if (spew++ < 20) {
         std::fprintf(stderr,
                      "FAIL %s  step %d  op %s\n  piece %s  path %s\n  expected %s\n  actual   %s\n",
-                     scenario.c_str(), static_cast<int>(numOf(rec, "step")), op.c_str(),
+                     scenario.c_str(), static_cast<int>(json::num_field(rec, "step")), op.c_str(),
                      pc.label, d.path.c_str(), d.expected.c_str(), d.actual.c_str());
       }
       break;
