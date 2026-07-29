@@ -91,6 +91,30 @@ TTP_ABI void ttp_display_biome(const char* name);
  * for every biome. */
 TTP_ABI void ttp_display_showcase(int on);
 
+/* ---- model variants (DEV) ----------------------------------------------- *
+ *
+ * Some of what the renderer draws is procedural geometry authored in C++
+ * rather than a GLB from the kit — the garden gnome, the wind-up train, the
+ * rocket. There is no file to open and no modelling tool in the loop, so the
+ * only way to argue about one of those shapes is to build two and look at
+ * them, which is what these two latches are for.
+ *
+ * ttp_display_model_variant picks which take on `model` ("rocket", "gnome",
+ * "train") every scene from here on is built with. VARIANT 0 IS WHAT SHIPS, so
+ * a shell that never calls this draws exactly what it drew before. An unknown
+ * name is ignored; an out-of-range variant clamps.
+ *
+ * ttp_display_bench turns the next build into a MODEL BENCH for `model`: every
+ * variant of it standing in a row on the verge, all facing the road, and NO
+ * other landmarks at all — a doghouse behind the middle gnome is a thumb on
+ * the scale. null or "" builds the normal scene.
+ *
+ * Latched, like ttp_display_biome, and for the same reason: they change what
+ * the next ttp_display_build meshes. Reached only by the asset gallery
+ * (/gallery-assets.html); nothing on the shipping path calls either. */
+TTP_ABI void ttp_display_model_variant(const char* model, int variant);
+TTP_ABI void ttp_display_bench(const char* model);
+
 /* Build the scene for `trackId` from the GLBs/textures the resolved biome names
  * and the roster handed over here.
  *

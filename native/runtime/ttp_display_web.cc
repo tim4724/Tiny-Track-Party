@@ -164,6 +164,14 @@ void ttp_display_showcase(int on) {
     if (g_disp) g_disp->showcase = on != 0;
 }
 
+void ttp_display_model_variant(const char* model, int variant) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setModelVariant(model, variant);
+}
+
+void ttp_display_bench(const char* model) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setModelBench(model);
+}
+
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     if (!g_disp) return 1;
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;

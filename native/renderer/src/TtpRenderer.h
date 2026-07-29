@@ -91,6 +91,20 @@ public:
     // .castShadow = false). Takes effect at the next buildScene; not a live
     // toggle, since the map is baked into the scene.
     void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
+
+    // ---- model variants (dev) ---------------------------------------------
+    // Which take on a named prop ("rocket", "gnome", "train") this and every
+    // later scene is built with, and — for the asset gallery's MODEL BENCH —
+    // which prop to stand ALL of its variants in a row of instead of building
+    // the usual landmark set. Both are latched, like the biome override: they
+    // change what the next buildScene meshes, not what a frame draws.
+    //
+    // Variant 0 is what the game ships, so the default state of both of these
+    // is exactly the scene that existed before they were added. Unknown names
+    // are ignored (the bench turns off); "" also turns the bench off.
+    void setModelVariant(const char* model, int variant);
+    void setModelBench(const char* model);
+
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
     // The bytes provided under `name`, or nullptr. The scene's caller needs the
     // scenery GLBs back: half of a biome's recolour rule is each model's own
@@ -547,6 +561,12 @@ private:
     filament::math::float3 mSmokeOrigin{};
     // The wind-up train: loco + key, driven round a stadium oval each frame.
     Mesh mTrain, mTrainKey;
+    // Per-model variant picks and the bench, indexed by the .cpp's ModelId
+    // (rocket, gnome, train). Sized by hand because that enum lives beside the
+    // builders it names; a static_assert in the .cpp holds the two together.
+    int mModelVariant[3] = { 0, 0, 0 };
+    int mBenchModel = -1;
+
     filament::math::float3 mTrainCentre{};
     float mTrainCos = 1, mTrainSin = 0;
     bool mHasTrain = false;

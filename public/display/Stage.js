@@ -224,6 +224,17 @@ export class Stage {
   // scope, before boot() has a display to latch it on.
   showcase(on) { this._showcase = on !== false; }
 
+  // DEV, the asset gallery's model bench (ttp_display_bench /
+  // ttp_display_model_variant). Held here and pushed in _rebuild for the same
+  // reason showcase() is — and they go in the rebuild SIGNATURE too, or picking
+  // a new variant on a settled field would leave the roster identical and the
+  // rebuild would be skipped, which is precisely the bug the biome pick had.
+  bench(model) { this._bench = model || ''; }
+  modelVariant(model, variant) {
+    this._variants = { ...(this._variants || {}), [model]: variant | 0 };
+  }
+  variants() { return { ...(this._variants || {}) }; }
+
   // The roster the renderer bakes models and liveries into, in SLOT order: cars
   // that own a cell first, in cell order, then the rest of the field. Every
   // frame then finds a car's slot by its id, so this order only has to be
@@ -267,11 +278,15 @@ export class Stage {
           // leaves the seats identical, and on a roster-only signature that
           // rebuild was silently skipped — the scene kept the old palette and
           // the caller's await resolved as if it had not.
-          const sig = JSON.stringify([this._biome, !!this._showcase, roster]);
+          const variants = this._variants || {};
+          const sig = JSON.stringify([this._biome, !!this._showcase, roster,
+                                      this._bench || '', variants]);
           if (sig === this._rosterSig) continue; // nothing the renderer can see
           this._rosterSig = sig;
           try {
             this.display.showcase(!!this._showcase); // latched; see showcase()
+            this.display.bench(this._bench || '');   // …and see bench()
+            for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
           } catch (e) {
             this._rosterSig = null; // let the next change retry

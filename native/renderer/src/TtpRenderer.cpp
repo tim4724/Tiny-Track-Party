@@ -2132,6 +2132,353 @@ Prim applyPre(Prim p, const mat4f& m) {
     for (auto& v : p.v) v = (m * float4{ v, 1 }).xyz;
     return p;
 }
+
+// A flat PLATE: a convex outline in the (y,z) plane, extruded by `t` along x.
+//
+// The one shape neither a box nor a cylinder makes — a fin, a cowcatcher, a
+// hat brim, a nameplate. Every model that wanted one before either did without
+// or spent a rotated box on it, which is why the rocket's fins were rectangles
+// standing straight up rather than anything swept. Outline points are (y, z)
+// and must be convex and consistently wound; the material culls nothing, so a
+// backwards winding costs shading, not visibility.
+Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
+    Prim p;
+    const uint32_t n = (uint32_t) yz.size();
+    if (n < 3) return p;
+    const float h = t / 2;
+    for (int side = 0; side < 2; side++) {
+        for (const auto& q : yz) p.v.push_back({ side ? h : -h, q.first, q.second });
+    }
+    for (uint32_t k = 1; k + 1 < n; k++) {
+        p.i.insert(p.i.end(), { 0u, k + 1, k });                    // -x face
+        p.i.insert(p.i.end(), { n, n + k, n + k + 1 });             // +x face
+    }
+    for (uint32_t k = 0; k < n; k++) {                              // the rim
+        const uint32_t a = k, b = (k + 1) % n;
+        p.i.insert(p.i.end(), { a, b, n + b, a, n + b, n + a });
+    }
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+// MODEL VARIANTS — three takes on each of the props worth looking at closely.
+//
+// WHY THESE ARE FUNCTIONS AND NOT INLINE IN buildLandmarks. Two callers need
+// the same geometry from different frames: the landmark placer, which stands
+// ONE of them wherever its clearance search lands, and the MODEL BENCH, which
+// stands ALL of them in a row so they can be judged against each other. A
+// model authored inline in the placer can only ever be seen in the place the
+// placer chose, next to nothing to compare it with — which is how the rocket
+// shipped as four rectangles and a cone for as long as it did.
+//
+// Everything emits through a `part` callback in the model's OWN local frame
+// (y up, +z forward, origin on the ground for the standing models and at the
+// body centre for the rocket, whose +y is its nose). Placement, yaw and world
+// offset are the caller's.
+//
+// VARIANT 0 IS ALWAYS WHAT SHIPPED BEFORE, byte for byte. That is what makes
+// the bench a decision rather than a fait accompli: the row's first entry is
+// the thing being argued against, and picking it is a legitimate outcome.
+// ---------------------------------------------------------------------------
+
+using PartFn = std::function<void(const Prim&, float, float, float, uint32_t, float)>;
+
+enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_COUNT = 3 };
+constexpr int MODEL_VARIANTS = 3;
+
+// Model ids are a URL param and a dropdown value, so they are spelled, not
+// numbered. Unknown names answer -1 (the caller leaves the bench off).
+int modelIdByName(const char* name) {
+    if (!name || !*name) return -1;
+    const std::string n = name;
+    if (n == "rocket") return MODEL_ROCKET;
+    if (n == "gnome") return MODEL_GNOME;
+    if (n == "train") return MODEL_TRAIN;
+    return -1;
+}
+
+const mat4f rotXm(float a) { return mat4f::rotation(a, float3{ 1, 0, 0 }); }
+const mat4f rotYm(float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); }
+const mat4f rotZm(float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); }
+
+// ---- rocket ---------------------------------------------------------------
+// Ship scale is TINY — the body is 0.2 world units, about the size of a fist —
+// so detail here only pays if it changes the SILHOUETTE. Panel lines and
+// rivets would be invisible; a swept fin and a flared bell are not.
+void buildRocketModel(const PartFn& part, int variant) {
+    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f,
+                       STEEL = 0x2b313c, GOLD = 0xf2c14e, GLASS = 0x7fd4e8;
+    if (variant <= 0) {
+        // v0 — what shipped: a tube, a cone and three upright tabs.
+        part(primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, RED, 1.0f);
+        part(primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, CREAM, 1.0f);
+        for (int i = 0; i < 3; i++) {
+            const float a = (float) i * (2.0f * (float) M_PI / 3);
+            part(applyPre(primBox(0.012f, 0.085f, 0.07f), rotYm((float) M_PI / 2 - a)),
+                    std::cos(a) * 0.085f, -0.055f, std::sin(a) * 0.085f, DARK, 1.0f);
+        }
+        return;
+    }
+    if (variant == 1) {
+        // v1 "finned" — the same missile read properly: a flared bell, a
+        // shouldered body under two bands, a porthole and four swept fins.
+        part(primCylinder(0.058f, 0.086f, 0.055f, 14), 0, -0.155f, 0, STEEL, 1.0f);
+        part(primCylinder(0.088f, 0.096f, 0.045f, 16), 0, -0.118f, 0, DARK, 1.0f);
+        part(primCylinder(0.080f, 0.090f, 0.175f, 18), 0, -0.010f, 0, RED, 1.0f);
+        part(primCylinder(0.0885f, 0.0895f, 0.028f, 18), 0, -0.055f, 0, CREAM, 1.0f);
+        part(primCylinder(0.0828f, 0.0838f, 0.020f, 18), 0, 0.045f, 0, CREAM, 1.0f);
+        part(primCylinder(0.058f, 0.080f, 0.048f, 18), 0, 0.1015f, 0, RED, 1.0f);
+        part(primCone(0.058f, 0.135f, 18), 0, 0.193f, 0, CREAM, 1.0f);
+        part(primSphere(0.017f, 8, 6), 0, 0.258f, 0, RED, 1.0f);
+        part(applyPre(primCylinder(0.030f, 0.030f, 0.014f, 12), rotXm((float) M_PI / 2)),
+                0, 0.020f, 0.086f, CREAM, 1.0f);
+        part(applyPre(primCylinder(0.021f, 0.021f, 0.018f, 10), rotXm((float) M_PI / 2)),
+                0, 0.020f, 0.088f, GLASS, 1.0f);
+        const Prim fin = primPlate({ { 0.020f, 0.070f }, { -0.100f, 0.070f },
+                                     { -0.145f, 0.148f }, { -0.048f, 0.140f } }, 0.013f);
+        for (int i = 0; i < 4; i++) {
+            part(applyPre(fin, rotYm((float) i * (float) M_PI / 2)), 0, 0, 0, DARK, 1.0f);
+        }
+        return;
+    }
+    // v2 "stubby" — a different silhouette rather than a busier one: a fat
+    // firework with a domed nose and three big fins, which is what actually
+    // reads at 40 metres on a TV.
+    part(primCylinder(0.070f, 0.100f, 0.050f, 12), 0, -0.135f, 0, STEEL, 1.0f);
+    part(primCylinder(0.104f, 0.098f, 0.160f, 16), 0, -0.030f, 0, RED, 1.0f);
+    part(primCylinder(0.108f, 0.108f, 0.042f, 16), 0, -0.030f, 0, CREAM, 1.0f);
+    part(primCylinder(0.107f, 0.107f, 0.016f, 16), 0, 0.042f, 0, GOLD, 1.0f);
+    part(primSphere(0.104f, 16, 11), 0, 0.055f, 0, RED, 1.0f);
+    part(primSphere(0.028f, 8, 6), 0, 0.168f, 0, GOLD, 1.0f);
+    const Prim fin = primPlate({ { 0.010f, 0.098f }, { -0.110f, 0.098f },
+                                 { -0.132f, 0.180f }, { -0.016f, 0.168f } }, 0.018f);
+    for (int i = 0; i < 3; i++) {
+        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
+    }
+}
+
+// ---- garden gnome ---------------------------------------------------------
+// Origin on the ground, facing +z. ~2.7 units tall at v0.
+void buildGnomeModel(const PartFn& part, int variant) {
+    constexpr uint32_t COAT = 0x3b6fb0, BOOT = 0x4a3a2e, SKIN = 0xf0c8a2,
+                       NOSE = 0xe8a87e, HAIR = 0xf5f2ea, HAT = 0xd8463f,
+                       GOLD = 0xf2c14e, INK = 0x2a2735, ROSY = 0xe89a86;
+    if (variant <= 0) {
+        // v0 — what shipped: cone, ball, beard, hat. No arms, no face.
+        part(primCone(0.62f, 1.3f, 10), 0, 0.65f, 0, COAT, 1.0f);
+        for (const int sd : { -1, 1 })
+            part(primIcoDetail(0.13f, 1), sd * 0.24f, 0.09f, 0.14f, BOOT, 1.0f);
+        part(primSphere(0.36f, 12, 9), 0, 1.42f, 0, SKIN, 1.0f);
+        part(primIcoDetail(0.1f, 1), 0, 1.4f, 0.35f, NOSE, 1.0f);
+        Prim beard = primIcoDetail(0.32f, 1);
+        for (auto& v : beard.v) { v.y *= 1.2f; v.z *= 0.62f; }
+        part(beard, 0, 1.12f, 0.18f, HAIR, 1.0f);
+        part(applyPre(primCone(0.42f, 1.25f, 10), rotXm(-0.12f)), 0, 2.1f, -0.04f, HAT, 1.0f);
+        return;
+    }
+
+    // Shared between v1 and v2: the body, the face and the beard. Only the hat
+    // and what he is holding change.
+    for (const int sd : { -1, 1 }) {
+        part(primIcoDetail(0.155f, 1), sd * 0.25f, 0.11f, 0.13f, BOOT, 1.0f);
+        part(primIcoDetail(0.095f, 1), sd * 0.25f, 0.075f, 0.29f, BOOT, 0.92f);
+    }
+    part(primCone(0.64f, 1.28f, 14), 0, 0.64f, 0, COAT, 1.0f);
+    part(primTorusArc(0.375f, 0.072f, 8, 22, 2.0f * (float) M_PI), 0, 0.62f, 0, BOOT, 1.0f);
+    part(primBox(0.17f, 0.15f, 0.07f), 0, 0.62f, 0.40f, GOLD, 1.0f);
+    for (const int sd : { -1, 1 }) {
+        part(applyPre(primCylinder(0.085f, 0.105f, 0.44f, 9), rotZm(sd * 0.62f)),
+                sd * 0.31f, 0.82f, 0.07f, COAT, 1.0f);
+        part(primSphere(0.10f, 9, 7), sd * 0.50f, 0.63f, 0.13f, SKIN, 1.0f);
+    }
+    part(primSphere(0.36f, 14, 10), 0, 1.42f, 0, SKIN, 1.0f);
+    for (const int sd : { -1, 1 }) {
+        part(primSphere(0.046f, 8, 6), sd * 0.135f, 1.505f, 0.305f, INK, 1.0f);
+        part(primIcoDetail(0.078f, 1), sd * 0.225f, 1.40f, 0.255f, ROSY, 1.0f);
+        part(primIcoDetail(0.10f, 1), sd * 0.125f, 1.305f, 0.305f, HAIR, 1.0f);
+    }
+    part(primIcoDetail(0.115f, 1), 0, 1.40f, 0.335f, NOSE, 1.0f);
+    {
+        Prim b1 = primIcoDetail(0.335f, 1);
+        for (auto& v : b1.v) { v.y *= 1.15f; v.z *= 0.62f; }
+        part(b1, 0, 1.14f, 0.18f, HAIR, 1.0f);
+        Prim b2 = primIcoDetail(0.245f, 1);
+        for (auto& v : b2.v) { v.y *= 1.20f; v.z *= 0.60f; }
+        part(b2, 0, 0.88f, 0.215f, HAIR, 0.97f);
+        part(primIcoDetail(0.15f, 1), 0, 0.70f, 0.235f, HAIR, 0.94f);
+    }
+
+    if (variant == 1) {
+        // v1 "detailed" — the same gnome, finished: a brimmed hat that sits on
+        // the head rather than balancing on it.
+        part(primCylinder(0.50f, 0.545f, 0.09f, 16), 0, 1.66f, 0, HAT, 1.0f);
+        part(applyPre(primCone(0.44f, 1.20f, 14), rotXm(-0.14f)), 0, 2.28f, -0.02f, HAT, 1.0f);
+        part(primSphere(0.085f, 8, 6), 0, 2.874f, -0.104f, HAT, 0.95f);
+        return;
+    }
+
+    // v2 "storybook" — v1 plus the two things that turn an ornament into a
+    // character: a tall FLOPPY hat with a bend in it, and something in his hand.
+    part(primCylinder(0.48f, 0.545f, 0.09f, 16), 0, 1.66f, 0, HAT, 1.0f);
+    part(applyPre(primCylinder(0.30f, 0.46f, 0.78f, 14), rotXm(-0.10f)), 0, 2.09f, -0.02f, HAT, 1.0f);
+    part(applyPre(primCone(0.31f, 0.95f, 12), rotXm(-0.62f)), 0, 2.62f, -0.30f, HAT, 0.97f);
+    part(primSphere(0.095f, 8, 6), 0, 2.90f, -0.79f, HAIR, 1.0f);
+    // The lantern, hung off the right hand on a wire hoop.
+    part(applyPre(primTorusArc(0.10f, 0.018f, 6, 14, (float) M_PI), rotZm((float) M_PI / 2)),
+            0.50f, 0.50f, 0.13f, INK, 1.0f);
+    part(primBox(0.20f, 0.24f, 0.20f), 0.50f, 0.30f, 0.13f, GOLD, 1.0f);
+    part(primBox(0.24f, 0.05f, 0.24f), 0.50f, 0.43f, 0.13f, INK, 1.0f);
+    part(primBox(0.24f, 0.05f, 0.24f), 0.50f, 0.17f, 0.13f, INK, 1.0f);
+    // A toadstool at his other foot — the thing every garden gnome is sold with.
+    part(primCylinder(0.075f, 0.095f, 0.26f, 10), -0.62f, 0.13f, 0.32f, HAIR, 1.0f);
+    part(applyPre(primSphere(0.21f, 12, 8), mat4f::scaling(float3{ 1.0f, 0.62f, 1.0f })),
+            -0.62f, 0.27f, 0.32f, HAT, 1.0f);
+    for (int i = 0; i < 4; i++) {
+        const float a = (float) i * (float) M_PI / 2 + 0.4f;
+        part(primSphere(0.035f, 6, 5), -0.62f + std::cos(a) * 0.11f, 0.375f,
+                0.32f + std::sin(a) * 0.11f, HAIR, 1.0f);
+    }
+}
+
+// ---- wind-up train --------------------------------------------------------
+// Origin on the ground at the loco's centre, facing +z (the direction of
+// travel). The winding key is a second mesh and gets its own builder.
+void buildTrainModel(const PartFn& part, int variant) {
+    constexpr uint32_t BODY = 0x3b6fb0, TRIM = 0xd8463f, GOLD = 0xf2c14e,
+                       IRON = 0x2f2b38, GLASS = 0x2a3550, STEEL = 0x4a4653;
+    const float PI2 = (float) M_PI / 2;
+    if (variant <= 0) {
+        // v0 — what shipped: seven boxes and a cylinder.
+        part(primBox(1.0f, 0.36f, 2.4f), 0, 0.52f, 0, BODY, 1.0f);
+        part(applyPre(primCylinder(0.44f, 0.44f, 1.45f, 12), rotXm(PI2)), 0, 1.02f, 0.45f, TRIM, 1.0f);
+        part(primBox(1.05f, 0.95f, 0.85f), 0, 1.15f, -0.85f, BODY, 1.0f);
+        part(primBox(1.15f, 0.16f, 1.0f), 0, 1.72f, -0.85f, TRIM, 1.0f);
+        part(primCylinder(0.14f, 0.2f, 0.5f, 10), 0, 1.62f, 0.95f, GOLD, 1.0f);
+        part(primSphere(0.18f, 10, 7), 0, 1.5f, 0.25f, GOLD, 1.0f);
+        for (const int sd : { -1, 1 }) for (const float wz : { 0.65f, -0.65f }) {
+            part(applyPre(primCylinder(0.3f, 0.3f, 0.14f, 12), rotZm(PI2)),
+                    sd * 0.56f, 0.3f, wz, IRON, 1.0f);
+        }
+        return;
+    }
+
+    if (variant == 1) {
+        // v1 "classic" — the same loco with the parts a loco actually has: a
+        // smokebox and its door, boiler bands, a flared funnel, a lamp, glazed
+        // cab windows, buffers, a cowcatcher and wheels with hubs and a rod.
+        part(primBox(1.06f, 0.24f, 2.50f), 0, 0.40f, 0, IRON, 1.0f);
+        part(primBox(1.22f, 0.09f, 2.42f), 0, 0.545f, 0, BODY, 1.0f);
+        part(applyPre(primCylinder(0.44f, 0.46f, 1.52f, 18), rotXm(PI2)), 0, 1.02f, 0.40f, TRIM, 1.0f);
+        for (const float bz : { 0.02f, 0.80f }) {
+            part(applyPre(primCylinder(0.475f, 0.475f, 0.085f, 18), rotXm(PI2)),
+                    0, 1.02f, bz, GOLD, 1.0f);
+        }
+        part(applyPre(primCylinder(0.455f, 0.455f, 0.24f, 18), rotXm(PI2)), 0, 1.02f, 1.24f, IRON, 1.0f);
+        part(applyPre(primCylinder(0.325f, 0.325f, 0.07f, 16), rotXm(PI2)), 0, 1.02f, 1.375f, STEEL, 1.0f);
+        part(primBox(0.075f, 0.56f, 0.04f), 0, 1.02f, 1.405f, GOLD, 1.0f);
+        part(primBox(0.56f, 0.075f, 0.04f), 0, 1.02f, 1.405f, GOLD, 1.0f);
+        part(primCylinder(0.155f, 0.135f, 0.46f, 14), 0, 1.55f, 0.92f, IRON, 1.0f);
+        part(primCylinder(0.235f, 0.165f, 0.16f, 14), 0, 1.82f, 0.92f, IRON, 1.0f);
+        part(primSphere(0.20f, 12, 9), 0, 1.44f, 0.26f, GOLD, 1.0f);
+        part(primCylinder(0.05f, 0.05f, 0.16f, 8), 0, 1.60f, 0.26f, GOLD, 1.0f);
+        part(primCylinder(0.045f, 0.045f, 0.22f, 8), 0.20f, 1.54f, -0.10f, GOLD, 1.0f);
+        part(primBox(1.04f, 0.96f, 0.86f), 0, 1.16f, -0.86f, BODY, 1.0f);
+        for (const int sd : { -1, 1 }) {
+            part(primBox(0.045f, 0.44f, 0.46f), sd * 0.53f, 1.32f, -0.86f, GLASS, 1.0f);
+        }
+        part(primBox(0.42f, 0.38f, 0.05f), 0, 1.34f, -0.44f, GLASS, 1.0f);
+        part(primBox(1.26f, 0.06f, 1.10f), 0, 1.655f, -0.86f, GOLD, 1.0f);
+        part(primBox(1.20f, 0.11f, 1.04f), 0, 1.735f, -0.86f, TRIM, 1.0f);
+        part(applyPre(primCylinder(0.13f, 0.13f, 0.17f, 12), rotXm(PI2)), 0, 1.44f, 1.44f, GOLD, 1.0f);
+        part(applyPre(primCylinder(0.095f, 0.095f, 0.05f, 12), rotXm(PI2)), 0, 1.44f, 1.53f, 0xfff3e0, 1.0f);
+        for (const int sd : { -1, 1 }) {
+            part(applyPre(primCylinder(0.075f, 0.075f, 0.18f, 8), rotXm(PI2)),
+                    sd * 0.38f, 0.50f, 1.47f, IRON, 1.0f);
+        }
+        // Cowcatcher: a raked plate each side of the centreline.
+        for (const int sd : { -1, 1 }) {
+            part(applyPre(primPlate({ { 0.30f, 0.0f }, { -0.24f, 0.0f },
+                                      { -0.24f, 0.46f }, { 0.16f, 0.30f } }, 0.07f),
+                        rotYm(sd * 0.42f)), sd * 0.20f, 0.36f, 1.32f, IRON, 1.0f);
+        }
+        for (const int sd : { -1, 1 }) {
+            for (const float wz : { 0.62f, -0.62f }) {
+                part(applyPre(primCylinder(0.34f, 0.34f, 0.13f, 16), rotZm(PI2)),
+                        sd * 0.58f, 0.34f, wz, IRON, 1.0f);
+                part(applyPre(primCylinder(0.20f, 0.20f, 0.15f, 12), rotZm(PI2)),
+                        sd * 0.60f, 0.34f, wz, TRIM, 1.0f);
+                part(applyPre(primCylinder(0.065f, 0.065f, 0.17f, 8), rotZm(PI2)),
+                        sd * 0.62f, 0.34f, wz, GOLD, 1.0f);
+            }
+            part(applyPre(primCylinder(0.20f, 0.20f, 0.11f, 14), rotZm(PI2)),
+                    sd * 0.56f, 0.22f, 1.16f, IRON, 1.0f);
+            part(primBox(0.055f, 0.10f, 1.30f), sd * 0.68f, 0.50f, 0, STEEL, 1.0f);
+        }
+        return;
+    }
+
+    // v2 "chunky" — a different toy rather than a busier one: shorter, taller
+    // and rounder, the way a wooden pull-along reads, with spoked wheels and a
+    // funnel you can see from the far side of the track.
+    part(primBox(1.16f, 0.28f, 2.10f), 0, 0.44f, 0, IRON, 1.0f);
+    part(applyPre(primCylinder(0.56f, 0.58f, 1.30f, 20), rotXm(PI2)), 0, 1.10f, 0.30f, TRIM, 1.0f);
+    part(applyPre(primCylinder(0.60f, 0.60f, 0.13f, 20), rotXm(PI2)), 0, 1.10f, 0.92f, GOLD, 1.0f);
+    part(applyPre(primSphere(0.575f, 18, 12), mat4f::scaling(float3{ 1, 1, 0.55f })),
+            0, 1.10f, 1.00f, TRIM, 1.0f);
+    part(applyPre(primCylinder(0.30f, 0.30f, 0.08f, 16), rotXm(PI2)), 0, 1.10f, 1.30f, GOLD, 1.0f);
+    part(primCylinder(0.20f, 0.17f, 0.52f, 16), 0, 1.72f, 0.72f, IRON, 1.0f);
+    part(primCylinder(0.34f, 0.21f, 0.22f, 16), 0, 2.06f, 0.72f, IRON, 1.0f);
+    part(primSphere(0.26f, 14, 10), 0, 1.62f, 0.10f, GOLD, 1.0f);
+    part(applyPre(primSphere(0.62f, 18, 12), mat4f::scaling(float3{ 1, 1, 0.86f })),
+            0, 1.26f, -0.76f, BODY, 1.0f);
+    part(primBox(1.24f, 1.02f, 0.92f), 0, 1.16f, -0.76f, BODY, 1.0f);
+    for (const int sd : { -1, 1 }) {
+        part(primBox(0.05f, 0.46f, 0.50f), sd * 0.62f, 1.34f, -0.76f, GLASS, 1.0f);
+    }
+    part(primBox(1.36f, 0.13f, 1.06f), 0, 1.79f, -0.76f, GOLD, 1.0f);
+    part(primSphere(0.13f, 10, 8), 0, 1.90f, -0.76f, TRIM, 1.0f);
+    // The bell, on a yoke over the boiler.
+    part(primCylinder(0.055f, 0.13f, 0.17f, 10), 0, 1.62f, 0.46f, GOLD, 1.0f);
+    // Chunky spoked wheels: a tyre, a hub and six spokes turned about the axle.
+    for (const int sd : { -1, 1 }) {
+        for (const float wz : { 0.58f, -0.58f }) {
+            part(applyPre(primCylinder(0.42f, 0.42f, 0.16f, 18), rotZm(PI2)),
+                    sd * 0.62f, 0.42f, wz, IRON, 1.0f);
+            part(applyPre(primCylinder(0.35f, 0.35f, 0.17f, 18), rotZm(PI2)),
+                    sd * 0.635f, 0.42f, wz, GOLD, 1.0f);
+            for (int k = 0; k < 6; k++) {
+                part(applyPre(primBox(0.19f, 0.62f, 0.10f),
+                            rotXm((float) k * (float) M_PI / 6)),
+                        sd * 0.645f, 0.42f, wz, TRIM, 1.0f);
+            }
+            part(applyPre(primCylinder(0.10f, 0.10f, 0.19f, 10), rotZm(PI2)),
+                    sd * 0.65f, 0.42f, wz, IRON, 1.0f);
+        }
+    }
+}
+
+// The winding key. v0 is what shipped; the others give it a shaft collar and a
+// proper bow, since on the bench it is the part nearest the viewer.
+void buildTrainKeyModel(const PartFn& part, int variant) {
+    constexpr uint32_t GOLD = 0xf2c14e, IRON = 0x2f2b38;
+    if (variant <= 0) {
+        part(applyPre(primCylinder(0.07f, 0.07f, 0.5f, 8),
+                    mat4f::translation(float3{ 0, 0.25f, 0 })), 0, 0, 0, GOLD, 1.0f);
+        for (const int sd : { -1, 1 })
+            part(primBox(0.5f, 0.3f, 0.09f), sd * 0.28f, 0.62f, 0, GOLD, 0.95f);
+        return;
+    }
+    part(applyPre(primCylinder(0.075f, 0.075f, 0.52f, 10),
+                mat4f::translation(float3{ 0, 0.26f, 0 })), 0, 0, 0, GOLD, 1.0f);
+    part(primCylinder(0.13f, 0.13f, 0.07f, 12), 0, 0.10f, 0, IRON, 1.0f);
+    part(primCylinder(0.11f, 0.11f, 0.06f, 12), 0, 0.55f, 0, IRON, 1.0f);
+    for (const int sd : { -1, 1 }) {
+        part(applyPre(primTorusArc(0.20f, 0.055f, 8, 16, (float) M_PI),
+                    rotZm(sd > 0 ? 0.0f : (float) M_PI) * rotXm((float) M_PI / 2)),
+                sd * 0.20f, 0.70f, 0, GOLD, 1.0f);
+        part(primBox(0.34f, 0.10f, 0.075f), sd * 0.17f, 0.70f, 0, GOLD, 0.95f);
+    }
+}
 } // namespace
 
 // Near-field ground clutter — the flower patches, on their own rand2 stream
@@ -2347,8 +2694,20 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
 
 // Grass-biome landmarks — verbatim placement streams (seed 51966-FNV) and the
 // track.js builders' numbers: the gnome, the doghouse, the picnic spread.
+static_assert(MODEL_COUNT == 3, "TtpRenderer::mModelVariant is sized to ModelId");
+
+void TtpRenderer::setModelVariant(const char* model, int variant) {
+    const int id = modelIdByName(model);
+    if (id < 0) return;
+    mModelVariant[id] = variant < 0 ? 0 : (variant >= MODEL_VARIANTS ? MODEL_VARIANTS - 1 : variant);
+}
+
+void TtpRenderer::setModelBench(const char* model) { mBenchModel = modelIdByName(model); }
+
 void TtpRenderer::buildLandmarks(const TrackBin& tb) {
-    if (tb.lmKinds.empty()) return;
+    // The BENCH has no landmark set behind it — it replaces one — so it must
+    // not be gated on the theme listing kinds the way everything below is.
+    if (tb.lmKinds.empty() && mBenchModel < 0) return;
     uint32_t seed = tb.lmSeed;
     const auto rnd = [&]() {
         seed = seed * 1664525u + 1013904223u;
@@ -2436,6 +2795,73 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     const auto rotX = [](float a) { return mat4f::rotation(a, float3{ 1, 0, 0 }); };
     const auto rotY = [](float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); };
     const auto rotZ = [](float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); };
+
+    // A model builder emits in its OWN local frame; this binds one to a placed
+    // spot so the builder never learns where it stands (see buildRocketModel).
+    const auto at = [&](const Spot& sp) {
+        return [&, sp](const Prim& prim, float lx, float ly, float lz,
+                uint32_t hex, float shade) { part(prim, lx, ly, lz, sp, hex, shade); };
+    };
+
+    // ---- the MODEL BENCH ---------------------------------------------------
+    // Every variant of one model, in a row on the verge, all facing the road.
+    // The row replaces the landmark set entirely: this is a scene for judging
+    // one thing, and a doghouse behind the middle gnome is a thumb on the
+    // scale. Stand on the road opposite the middle entry and the three are
+    // side by side at near-equal distance, which is the only way a shape
+    // argument gets settled.
+    if (mBenchModel >= 0 && mBenchModel < MODEL_COUNT) {
+        constexpr float BENCH_S0 = 26, BENCH_STEP = 7, BENCH_OFF = 4.2f;
+        // The ROCKET ships at 0.2 world units — a fist. Judged at that size a
+        // bench tells you nothing but which one is a dot, so its row is blown
+        // up and the legend says by how much. Nothing else is rescaled.
+        const float scale = mBenchModel == MODEL_ROCKET ? 9.0f : 1.0f;
+        const float lift = mBenchModel == MODEL_ROCKET ? 3.1f : 0.0f;
+        // A PRESENTATION YAW off square, per model, because "facing the road"
+        // is not the same as "the angle this shape reads at". A gnome is a
+        // front elevation and wants none; a locomotive seen nose-on is a dark
+        // rectangle with a lamp on it, and everything the detail went into —
+        // the boiler bands, the rods, the wheels, the cab — is edge-on to the
+        // viewer. Three quarters is the angle a toy train is photographed at.
+        const float present = mBenchModel == MODEL_TRAIN ? 0.85f : 0.0f;
+        for (int v = 0; v < MODEL_VARIANTS; v++) {
+            // LAID OUT BACKWARDS ALONG THE TRACK, on purpose. The row faces the
+            // road, so the only place it can be read from is the far verge —
+            // and from there the track runs right to left. Placing v0 at the
+            // FAR end puts it on the left of the one shot this whole mode
+            // exists to produce, which is the order the legend lists them in.
+            const float s = BENCH_S0 + (float) (MODEL_VARIANTS - 1 - v) * BENCH_STEP;
+            if (s > tb.length - 10) break;
+            const TrackBin::Sample f = tb.frameAt(s);
+            const float lat = f.width / 2 + BENCH_OFF;
+            const Spot sp{ f.pos.x + f.lat.x * lat, f.pos.z + f.lat.z * lat,
+                           std::atan2(-f.lat.x, -f.lat.z) + present, true };
+            mShadowSpots.push_back({ sp.x, sp.z, 1.6f, 1.6f });
+            const PartFn emit = [&, sp, scale, lift](const Prim& prim, float lx,
+                    float ly, float lz, uint32_t hex, float shade) {
+                Prim s2 = prim;
+                if (scale != 1.0f) for (auto& q : s2.v) q *= scale;
+                part(s2, lx * scale, ly * scale + lift, lz * scale, sp, hex, shade);
+            };
+            if (mBenchModel == MODEL_ROCKET) buildRocketModel(emit, v);
+            else if (mBenchModel == MODEL_GNOME) buildGnomeModel(emit, v);
+            else {
+                buildTrainModel(emit, v);
+                // The key rides behind the loco rather than on it, which is
+                // where the render loop puts it in play.
+                const PartFn keyEmit = [&, sp](const Prim& prim, float lx, float ly,
+                        float lz, uint32_t hex, float shade) {
+                    part(prim, lx, ly + 0.9f, lz - 1.9f, sp, hex, shade);
+                };
+                buildTrainKeyModel(keyEmit, v);
+            }
+        }
+        if (!mLandmarks.verts.empty()) {
+            accumulateNormals(mLandmarks);
+            buildMesh(mLandmarks);
+        }
+        return;
+    }
 
     // The kinds run in buildLandmarks' SOURCE order (not id order): several
     // share one rand stream, so the draw order is part of the contract.
@@ -2999,15 +3425,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         const Spot sp = findSpot(30, 3.4f, 2.2f);
         if (sp.ok) {
             mShadowSpots.push_back({ sp.x, sp.z, 0.9f, 1.2f });
-            part(primCone(0.62f, 1.3f, 10), 0, 0.65f, 0, sp, 0x3b6fb0);
-            for (const int sd : { -1, 1 })
-                part(primIcoDetail(0.13f, 1), sd * 0.24f, 0.09f, 0.14f, sp, 0x4a3a2e);
-            part(primSphere(0.36f, 12, 9), 0, 1.42f, 0, sp, 0xf0c8a2);
-            part(primIcoDetail(0.1f, 1), 0, 1.4f, 0.35f, sp, 0xe8a87e);
-            Prim beard = primIcoDetail(0.32f, 1);
-            for (auto& v : beard.v) { v.y *= 1.2f; v.z *= 0.62f; }
-            part(beard, 0, 1.12f, 0.18f, sp, 0xf5f2ea);
-            part(applyPre(primCone(0.42f, 1.25f, 10), rotX(-0.12f)), 0, 2.1f, -0.04f, sp, 0xd8463f);
+            buildGnomeModel(at(sp), mModelVariant[MODEL_GNOME]);
         }
     }
     if (has(1)) { // doghouse
@@ -3146,28 +3564,13 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 }
                 for (const uint32_t i : prim.i) mesh.idx.push_back(base + i);
             };
-            lp(mTrain, primBox(1.0f, 0.36f, 2.4f), 0, 0.52f, 0, 0x3b6fb0, 1.0f);
-            lp(mTrain, applyPre(primCylinder(0.44f, 0.44f, 1.45f, 12),
-                        rotX((float) M_PI / 2)), 0, 1.02f, 0.45f, 0xd8463f, 1.0f);
-            lp(mTrain, primBox(1.05f, 0.95f, 0.85f), 0, 1.15f, -0.85f, 0x3b6fb0, 1.0f);
-            lp(mTrain, primBox(1.15f, 0.16f, 1.0f), 0, 1.72f, -0.85f, 0xd8463f, 1.0f);
-            lp(mTrain, primCylinder(0.14f, 0.2f, 0.5f, 10), 0, 1.62f, 0.95f, 0xf2c14e, 1.0f);
-            lp(mTrain, primSphere(0.18f, 10, 7), 0, 1.5f, 0.25f, 0xf2c14e, 1.0f);
-            for (const int sd : { -1, 1 }) {
-                for (const float wz : { 0.65f, -0.65f }) {
-                    lp(mTrain, applyPre(primCylinder(0.3f, 0.3f, 0.14f, 12),
-                                rotZ((float) M_PI / 2)),
-                            sd * 0.56f, 0.3f, wz, 0x2f2b38, 1.0f);
-                }
-            }
+            const int tv = mModelVariant[MODEL_TRAIN];
+            buildTrainModel([&](const Prim& p, float lx, float ly, float lz,
+                    uint32_t hex, float shade) { lp(mTrain, p, lx, ly, lz, hex, shade); }, tv);
             accumulateNormals(mTrain);
             buildMesh(mTrain);
-            lp(mTrainKey, applyPre(primCylinder(0.07f, 0.07f, 0.5f, 8),
-                        mat4f::translation(float3{ 0, 0.25f, 0 })), 0, 0, 0, 0xf2c14e, 1.0f);
-            for (const int sd : { -1, 1 }) {
-                lp(mTrainKey, primBox(0.5f, 0.3f, 0.09f), sd * 0.28f, 0.62f, 0,
-                        0xf2c14e, 0.95f);
-            }
+            buildTrainKeyModel([&](const Prim& p, float lx, float ly, float lz,
+                    uint32_t hex, float shade) { lp(mTrainKey, p, lx, ly, lz, hex, shade); }, tv);
             accumulateNormals(mTrainKey);
             buildMesh(mTrainKey);
             mTrainCentre = { sp.x, gy, sp.z };
@@ -4375,15 +4778,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         auto& tcm2 = mEngine->getTransformManager();
         for (size_t r = 0; r < mRockets.size(); r++) {
             Mesh& m = mRockets[r];
-            rocketPart(m, primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, 0xe6492d);
-            rocketPart(m, primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, 0xfff3e0);
-            for (int i = 0; i < 3; i++) {
-                const float a = (float) i * (2.0f * (float) M_PI / 3);
-                rocketPart(m,
-                        applyPre(primBox(0.012f, 0.085f, 0.07f),
-                                mat4f::rotation((float) M_PI / 2 - a, float3{ 0, 1, 0 })),
-                        std::cos(a) * 0.085f, -0.055f, std::sin(a) * 0.085f, 0x37414f);
-            }
+            buildRocketModel([&](const Prim& p, float lx, float ly, float lz,
+                    uint32_t hex, float shade) { rocketPart(m, p, lx, ly, lz, hex, shade); },
+                    mModelVariant[MODEL_ROCKET]);
             if (!buildMesh(m)) break;
             tcm2.setTransform(tcm2.getInstance(m.entity),
                     mat4f::translation(float3{ 0, -1000, 0 }));

@@ -21,9 +21,33 @@ import { ITEM_IDS } from '/display/engine/contract.js';
 const Gallery = window.Gallery;
 const state = Gallery.loadState();
 
+// The procedural props with more than one take on them, and what each take is.
+// AUTHORED HERE and nowhere else on this side: these are captions for a human
+// choosing between shapes, and the shapes themselves are
+// native/renderer/src/TtpRenderer.cpp's buildRocketModel / buildGnomeModel /
+// buildTrainModel. Index in the array IS the variant number the ABI takes, and
+// index 0 is always what the game currently ships — so "keep what we have" is
+// the first option on every row rather than a thing you have to know to ask for.
+const BENCH_MODELS = [
+  { id: 'rocket', label: 'Rocket', scale: '9x (it ships at 0.2 units)',
+    variants: ['0 · shipping — tube, cone, three tabs',
+               '1 · finned — flared bell, banded body, porthole, four swept fins',
+               '2 · stubby — fat firework, domed nose, three big fins'] },
+  { id: 'gnome', label: 'Garden gnome', scale: null,
+    variants: ['0 · shipping — cone, ball, beard, hat',
+               '1 · detailed — belt, arms, face, layered beard, brimmed hat',
+               '2 · storybook — v1 plus a floppy hat, a lantern and a toadstool'] },
+  { id: 'train', label: 'Wind-up train', scale: null,
+    variants: ['0 · shipping — seven boxes and a cylinder',
+               '1 · classic — smokebox, boiler bands, cowcatcher, lamp, rods',
+               '2 · chunky — shorter and rounder, spoked wheels, big funnel'] }
+];
+
 const frame = document.getElementById('asset-stage');
 const biomeSel = document.getElementById('asset-biome');
 const itemSel = document.getElementById('asset-item');
+const benchSel = document.getElementById('asset-bench');
+const variantSel = document.getElementById('asset-variant');
 const legendPanel = document.getElementById('asset-legend-panel');
 const legendLists = document.getElementById('asset-legend-lists');
 const homeBtn = document.getElementById('asset-home');
@@ -61,6 +85,64 @@ for (const id of ITEM_IDS) {
 Gallery.bindSelect(state, 'asset-item', 'assetItem', () => {
   const s = showroom();
   if (s) s.item(state.assetItem || null);
+});
+
+// ---- the model bench --------------------------------------------------------
+// Two controls that answer two different questions. BENCH stands every take on
+// one prop in a row so they can be compared; VARIANT picks which one the scene
+// is actually built with, so the winner can then be seen where it belongs —
+// among the landmarks, at the size it ships, in whichever biome. Judging a
+// shape only on the bench is how you end up keeping the one that looks best in
+// a row and worst on a track.
+
+for (const m of BENCH_MODELS) {
+  const o = document.createElement('option');
+  o.value = m.id;
+  o.textContent = `Bench: ${m.label}`;
+  benchSel.appendChild(o);
+}
+
+// The variant picker only ever offers the BENCHED model's takes: a single
+// dropdown that changed meaning depending on another dropdown would be worse
+// than no dropdown, so with the bench off this one is empty and disabled.
+function syncVariantOptions() {
+  const m = BENCH_MODELS.find((b) => b.id === state.assetBench);
+  variantSel.innerHTML = '';
+  variantSel.disabled = !m;
+  if (!m) {
+    const o = document.createElement('option');
+    o.textContent = 'Variant: bench off';
+    variantSel.appendChild(o);
+    return;
+  }
+  m.variants.forEach((label, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    // Just the name in the dropdown; the header is one row and a full sentence
+    // in it pushes every other control off a laptop screen. What each variant
+    // actually IS is the legend's job, and the legend is beside it.
+    o.textContent = `In use: ${label.split(' — ')[0]}`;
+    variantSel.appendChild(o);
+  });
+  variantSel.value = String((state.assetVariants || {})[m.id] || 0);
+}
+
+Gallery.bindSelect(state, 'asset-bench', 'assetBench', () => {
+  syncVariantOptions();
+  buildLegend();
+  const s = showroom();
+  if (s) s.bench(state.assetBench || '');
+});
+
+variantSel.addEventListener('change', () => {
+  const m = BENCH_MODELS.find((b) => b.id === state.assetBench);
+  if (!m) return;
+  const v = parseInt(variantSel.value, 10) || 0;
+  state.assetVariants = { ...(state.assetVariants || {}), [m.id]: v };
+  Gallery.saveState(state);
+  buildLegend();
+  const s = showroom();
+  if (s) s.variant(m.id, v);
 });
 
 Gallery.bindCheckbox(state, 'asset-drive', 'assetDrive', () => {
@@ -117,7 +199,16 @@ async function buildLegend() {
   const models = window.CAR_MODELS || [];
   const names = window.CAR_NAMES || [];
   legendLists.innerHTML = '';
+  const benched = BENCH_MODELS.find((b) => b.id === state.assetBench);
   const parts = [
+    // The bench first when it is on, because when it is on it IS the scene —
+    // the row replaces the landmark set, so a legend still leading with the
+    // seventeen kinds would be describing a scene that is not there.
+    benched && list(`Bench · ${benched.label}`, benched.variants,
+        'Listed left to right as the camera lands on them. '
+        + (benched.scale ? `Staged at ${benched.scale}. ` : '')
+        + '"In use" picks which one the game is actually built with, so the '
+        + 'winner can be checked where it belongs before anyone commits to it.'),
     list('Cars', models.map((m, i) => `${names[i] || m} · ${m}`),
          'Parked on the grid, one seat per livery.'),
     list('Props', PROP_MODELS),
@@ -178,12 +269,20 @@ whenReady((s) => {
     if (live) live.biome(state.assetBiome);
   });
 
+  syncVariantOptions();
   buildLegend();
 
   // Re-apply what the page remembers. The frame booted on the track's own look
   // with the field parked, so this is the one place the two can disagree.
   // Re-picking the biome it already built is free (Stage keys its rebuild on
   // every input to the scene, the look included).
+  //
+  // ORDER MATTERS ONLY IN THAT THE LAST ONE WINS THE AWAIT: each of these is a
+  // scene rebuild, and Stage collapses a burst of them into one build off the
+  // final state. So push the variants BEFORE the bench, and the bench before
+  // the biome, and the single build that results has all three.
+  for (const [m, v] of Object.entries(state.assetVariants || {})) s.variant(m, v);
+  if (state.assetBench) s.bench(state.assetBench);
   s.biome(state.assetBiome);
   if (state.assetItem) s.item(state.assetItem);
   if (state.assetDrive) s.drive(true);

@@ -91,6 +91,8 @@ export class Display {
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
+      modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
+      bench: mod.cwrap('ttp_display_bench', null, ['string']),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -155,6 +157,14 @@ export class Display {
     this._showcase = on !== false;
     this._fn.showcase(this._showcase ? 1 : 0);
   }
+
+  // DEV. Which take on a procedural prop ("rocket" | "gnome" | "train") later
+  // scenes are meshed with, and the asset gallery's MODEL BENCH — every variant
+  // of one prop in a row instead of the usual landmarks. Variant 0 ships, and a
+  // null/"" bench is the normal scene, so leaving both alone is the status quo.
+  // Latched like showcase(): they change what the next setTrack meshes.
+  modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
+  bench(model) { this._fn.bench(model || ''); }
 
   // Build (or REBUILD) the scene for a track. Every race start comes through
   // here — a Grand Prix chains four tracks, and even a restart wants the skid

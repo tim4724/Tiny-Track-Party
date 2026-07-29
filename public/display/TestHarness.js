@@ -512,6 +512,41 @@ export function runDisplayScenario(opts, ctx) {
           scene.bindSession(engine.h);
           return scene.biome();
         },
+        // The MODEL BENCH: every variant of one procedural prop in a row on the
+        // verge, instead of the usual landmark set. Same rebuild shape as the
+        // biome pick above — the geometry is baked into the scene's meshes, so
+        // there is nothing to toggle on a live one.
+        // Flies you there too. The row is 30 units up the exhibition straight,
+        // on the far verge, facing the road — findable, but only if you already
+        // know it is there, and a bench you have to search for is a bench that
+        // gets used once. Authored from the showroom's own geometry for the
+        // same reason START_CAM is: this scenario builds exactly one track.
+        // BENCH_CAM.y lifts for the rocket, whose row is staged at 9x.
+        async bench(model) {
+          scene.bench(model || '');
+          await scene.setTrack(track);
+          scene.bindSession(engine.h);
+          if (model) {
+            // Offset up-track and pulled back so all three clear the legend
+            // panel, which is the right quarter of the frame whenever the
+            // gallery is showing one.
+            cam.eye = { x: 31.5, y: model === 'rocket' ? 4.6 : 2.6, z: -10.5 };
+            cam.yaw = 0;
+            cam.pitch = model === 'rocket' ? -0.03 : -0.05;
+          } else {
+            this.home();
+          }
+          return model || '';
+        },
+        // Which variant of a prop the SCENE is built with, which is the answer
+        // the bench exists to reach: pick one here and it is what the showroom
+        // (and every race, until the page reloads) draws.
+        async variant(model, v) {
+          scene.modelVariant(model, v | 0);
+          await scene.setTrack(track);
+          scene.bindSession(engine.h);
+          return scene.variants();
+        },
         // Where the camera is, and how to put it back on the cars. `cam` is the
         // free cam's own state (enableFreeCam hands it back), so this moves the
         // camera the same way a drag does.
