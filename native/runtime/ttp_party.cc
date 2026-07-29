@@ -17,6 +17,9 @@
 #include "ttp/fastlane.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
+// The shared constant tables, for ttp_protocol_manifest_json. A C++ layer just
+// includes this header; the export exists for shells that cannot.
+#include "ttp/protocol.h"
 #include "ttp/relay_framing.h"
 #include "ttp/room_flow.h"
 // The live race, for ttp_room_sync_active_order and ttp_room_in_race_flags: who
@@ -537,5 +540,12 @@ const char* ttp_party_version(void) {
   o.set("contractVersion", Value::Num(static_cast<double>(CONTRACT_VERSION)));
   o.set("layer", Value::Str("party"));
   buf = canonical_stringify(o);
+  return buf.c_str();
+}
+
+const char* ttp_protocol_manifest_json(void) {
+  // Built once: the tables are compile-time constants, so a shell may call this
+  // at boot and keep the parsed result for the life of the process.
+  static const std::string buf = canonical_stringify(protocol::manifest());
   return buf.c_str();
 }

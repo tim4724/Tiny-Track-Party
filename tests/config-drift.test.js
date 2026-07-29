@@ -52,6 +52,7 @@ async function loadAbi() {
     snapshot: cw('ttp_snapshot_json', 'string', ['number']),
     dispose: cw('ttp_dispose', 'void', ['number']),
     getSteerExpo: cw('ttp_get_steer_expo', 'number', []),
+    manifest: cw('ttp_protocol_manifest_json', 'string', []),
   };
 }
 
@@ -232,6 +233,31 @@ test('the C++ mirror of the presence contract matches the manifest', () => {
     assert.ok(m, `protocol.h still declares LIVENESS_${key}`);
     assert.equal(Number(m[1]), want, `protocol.h LIVENESS_${key} drifted from protocol.LIVENESS.${key}`);
   }
+});
+
+// The manifest a NON-JS shell reads. A tvOS or Android TV shell cannot import
+// protocol.js and (in Kotlin's case) cannot include protocol.h either, so
+// ttp_protocol_manifest_json is its only honest source for the car tables, the
+// tilt contract and the presence windows — and if it and protocol.js ever
+// disagree, every shell that trusted it is wrong in a way nothing on the web
+// would notice.
+//
+// The VALUES are already gated elsewhere and this does not restate that:
+// protocol.js -> protocol-corpus.jsonl (codegen-freshness) -> protocol.h (the
+// `protocol` ctest) -> the export (abi_check, on every leg). What that chain
+// cannot see is a key nobody listed. gen-protocol-corpus.mjs names the constants
+// it records ONE BY ONE, so a constant added to protocol.js and not added there
+// is absent from the corpus, absent from protocol.h, and absent from what a
+// shell is handed — with every existing check still green.
+//
+// Hence deepEqual against the WHOLE export surface, which is the one assertion
+// in the tree that would go red on that omission.
+test('the live wasm ships the whole shared manifest, and it matches protocol.js', { skip }, async () => {
+  const abi = await loadAbi();
+  const got = JSON.parse(abi.manifest());
+  const { carStats, ...want } = protocol;  // carStats is a function, not a constant
+  assert.deepEqual(got, want,
+    'ttp_protocol_manifest_json drifted from public/shared/protocol.js — a port shell would read the stale side');
 });
 
 test('the live wasm engine ships the manifest steering exponent', { skip }, async () => {

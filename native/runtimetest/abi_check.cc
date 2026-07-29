@@ -49,11 +49,17 @@
 #include "ttp/race_track.h"       // find_track_def — the levels the tendency cases pick by
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
-// The ONE library header this ABI check reaches past its own boundary for.
-// ttp::rt::ui::cupTendency has no export of its own — the only ABI path to it
-// is the shipped catalogue, which exposes five answers and none of the edges —
-// and it is a RULE, so it needs a gate on every leg. See uiCupTendency below.
+// TWO library headers this ABI check reaches past its own boundary for, each
+// for its own reason.
+//
+// ttp::rt::ui::cupTendency has no export of its own — the only ABI path to it is
+// the shipped catalogue, which exposes five answers and none of the edges — and
+// it is a RULE, so it needs a gate on every leg. See uiCupTendency below.
 #include "ttp/ui_model.h"
+// ttp::protocol::manifest() is the ORACLE for ttp_protocol_manifest_json: the
+// export's only claim is that it hands the library's own tables over unchanged,
+// and the sole way to state that is to hold the two side by side.
+#include "ttp/protocol.h"
 #include "ttp_audio.h"
 #include "ttp_net.h"
 #include "ttp_party.h"
@@ -689,6 +695,14 @@ bool roomCorpusThroughAbi(const std::string& path) {
     check(layer && layer->str == "party", "ttp_party_version reports the party layer");
     check(v.has("contractVersion"), "ttp_party_version carries contractVersion");
   }
+
+  // The shared manifest across the boundary. partytest/protocol_check.cc already
+  // holds ttp::protocol::manifest() to the JS-recorded corpus, so all this must
+  // add is that the EXPORT hands over that same object unaltered — which is the
+  // whole claim a shell reading it at boot depends on. Byte comparison, not a
+  // field walk: the export's job is to be the manifest, not a projection of it.
+  check(ttp_protocol_manifest_json() == canonical_stringify(protocol::manifest()),
+        "ttp_protocol_manifest_json is ttp::protocol::manifest() verbatim");
 
   // Error paths first: no handle required, and a room getter must still answer.
   check(ttp_room_state(0) != nullptr, "ttp_room_state on handle 0 returns a string, not null");

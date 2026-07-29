@@ -823,7 +823,7 @@ add_test(NAME showcase COMMAND showcase_check)
 # Deliberately NOT ttp_strict_fp: nothing here is conformance-bearing, and the
 # renderer wants the compiler's normal float latitude.
 if(DEFINED FILAMENT_SDK)
-  include(cmake/FilamentWasm.cmake)
+  include(cmake/FilamentSdk.cmake)
   add_library(ttp_renderer STATIC renderer/src/TtpRenderer.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
@@ -840,6 +840,59 @@ if(DEFINED FILAMENT_SDK)
   target_compile_options(ttp_renderer PRIVATE -fno-rtti -fno-exceptions)
   set_target_properties(ttp_renderer PROPERTIES CXX_STANDARD 20)
 endif()
+
+# ---- The app's own sources --------------------------------------------------
+# Every platform module — the browser one below, and the tvOS/Android ones when
+# they land — compiles EXACTLY this list plus its own shell file. It is a
+# variable rather than a line in the web target because it is not a web fact: a
+# second target that retyped it would drift on the first ABI added, and the
+# omission would surface as a link error on one platform only, months later.
+#
+# COMPILED, never linked from libttp_runtime, and that is the trap the whole list
+# exists to hold shut: a source added to the library target alone leaves this
+# module unlinkable and no ctest anywhere says so.
+#
+# Note what is NOT gated on a renderer. Everything here is platform-free, so
+# CI's Filament-less wasm leg still compiles and link-checks all of it — the
+# cameras, the frame builder, the UI model, the audio decisions, the roster
+# parse. Only the shell file (a WebGL2 context, a CAMetalLayer, an
+# ANativeWindow) sits behind the SDK gate.
+set(TTP_APP_SOURCES
+  runtime/ttp_runtime.cc runtime/ttp_party.cc
+  # The biome ABI: naming a biome (for the music pool, for the ?biome= list) is
+  # not rendering, and CI's Filament-less wasm leg is where the browser's link
+  # to it gets checked.
+  runtime/ttp_theme.cc
+  libttp-runtime/ttp/camera.cc
+  libttp-runtime/ttp/framing.cc
+  libttp-runtime/ttp/frame_builder.cc
+  # The roster parse ttp_display_build calls: it turns the shell's JSON into
+  # slots and touches no renderer type beyond the plain TtpRosterCar.
+  libttp-runtime/ttp/roster.cc
+  # The packed HUD block ttp_display_hud answers with — what the SHELL reads
+  # rather than what the renderer draws, so an SDK-less leg still has every line
+  # of it in the link.
+  libttp-runtime/ttp/hud.cc
+  # The rest of the UI model: every shell's boards are rendered from this.
+  libttp-runtime/ttp/ui_model.cc
+  # ... and the ABI over it. JSON in, JSON out: this layer answers once per
+  # event and half of what it answers is text, so there is nothing to pack.
+  runtime/ttp_ui.cc
+  # The race ORCHESTRATION and its ABI — the state machine that calls the
+  # predicates above IN ORDER.
+  libttp-runtime/ttp/race_flow.cc
+  runtime/ttp_race.cc
+  # The session-policy ABI over libttp-party's ttp::session — the room snapshot
+  # the display puts on the relay, the seat rules and the guards behind it.
+  runtime/ttp_net.cc
+  # The audio decisions. The DEVICE half is the shell's (WebAudio, AAudio,
+  # CoreAudio); nothing about which cue at what gain is.
+  libttp-runtime/ttp/audio.cc
+  libttp-runtime/ttp/theme.cc
+  # The asset gallery's world. Dev-only and latched off, but compiled
+  # everywhere: ttp_theme_showcase_models is a fetch list, which is a shell's job
+  # with or without a renderer in the build.
+  libttp-runtime/ttp/showcase.cc)
 
 # ---- Browser module: the whole game --------------------------------------
 # Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"
@@ -859,59 +912,11 @@ endif()
 # artifact — it is CI's browser-ABI link check (the wasm leg has no SDK), which
 # is the one build that would otherwise never compile these link options.
 if(EMSCRIPTEN)
-  # libttp-runtime's sources are compiled straight into the module, OUTSIDE the
-  # renderer gate below: that is what puts the cameras and the frame builder
-  # through CI's Filament-less wasm leg, which is otherwise the one build that
-  # would never see them. (Sources, not a link against libttp_runtime, so they
-  # are in the link whether or not anything in this module references them.)
-  set(TTP_WEB_SOURCES runtime/ttp_runtime.cc runtime/ttp_party.cc
-    # The biome ABI is OUTSIDE the renderer gate too: naming a biome (for the
-    # music pool, for the ?biome= list) is not rendering, and CI's Filament-less
-    # wasm leg is where the browser's link to it gets checked.
-    runtime/ttp_theme.cc
-    libttp-runtime/ttp/camera.cc
-    libttp-runtime/ttp/framing.cc
-    libttp-runtime/ttp/frame_builder.cc
-    # The roster parse ttp_display_build calls. Outside the Filament gate on
-    # purpose: it turns the shell's JSON into slots and touches no renderer type
-    # beyond the plain TtpRosterCar, so CI's SDK-less leg still compiles it.
-    libttp-runtime/ttp/roster.cc
-    # The packed HUD block ttp_display_hud answers with. Outside the gate with
-    # the rest of libttp-runtime, and for the extra reason that it is what the
-    # SHELL reads rather than what the renderer draws: a Filament-less leg still
-    # has every line of it in the link.
-    libttp-runtime/ttp/hud.cc
-    # The rest of the UI model, reached through runtime/ttp_ui.cc below: the
-    # browser's boards are rendered from this, not from public/display/
-    # uiModel.js, which survives only as the oracle the corpus was recorded off.
-    # This list is the sync point — a source that lands in libttp_runtime alone
-    # leaves this module unlinkable and no ctest target says so.
-    libttp-runtime/ttp/ui_model.cc
-    # ... and the ABI over it. JSON in, JSON out: this layer answers once per
-    # event and half of what it answers is text, so there is nothing to pack.
-    runtime/ttp_ui.cc
-    # The race ORCHESTRATION and its ABI — the state machine that calls the
-    # predicates above in order. Same trap as every line in this list: COMPILED
-    # here, not linked from libttp_runtime, so a source that lands only in the
-    # library target leaves this module unlinkable and no ctest says so.
-    libttp-runtime/ttp/race_flow.cc
-    runtime/ttp_race.cc
-    # The session-policy ABI over libttp-party's ttp::session — the room
-    # snapshot the display puts on the relay, the seat rules and the guards
-    # behind it. Same trap as every line in this list: it is COMPILED here, not
-    # linked from a library, so an ABI source that lands only in the CMake
-    # target above leaves this module unlinkable and no ctest says so.
-    runtime/ttp_net.cc
-    # The audio decisions, for the same reason and with the same trap: this list
-    # is COMPILED, not linked against libttp_runtime, so a source added to the
-    # library alone leaves this module unlinkable and no ctest target notices.
-    libttp-runtime/ttp/audio.cc
-    libttp-runtime/ttp/theme.cc
-    # The asset gallery's world. Outside the renderer gate with the biome ABI it
-    # is reached through (ttp_theme_showcase_models is a fetch list, which is a
-    # shell's job with or without a renderer in the build), and in this list for
-    # the same trap as every line above it.
-    libttp-runtime/ttp/showcase.cc)
+  # The shared list plus this platform's shell. The shell is the ONLY difference
+  # between this target and the tvOS/Android ones — if a second file ever has to
+  # be appended here, check first whether it names a platform API; if it does not,
+  # it belongs in TTP_APP_SOURCES above.
+  set(TTP_WEB_SOURCES ${TTP_APP_SOURCES})
   if(TARGET ttp_renderer)
     list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
   endif()

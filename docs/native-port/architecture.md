@@ -2,7 +2,9 @@
 
 The target stack for the native port of Tiny Track Party. The sim contract
 lives in [contract.md](contract.md) with schemas under [contract/](contract/);
-the execution plan is [plan.md](plan.md).
+the execution plan is [plan.md](plan.md). What a new platform actually owes
+once every shared layer is C++ — audited against the tree rather than planned —
+is [shells.md](shells.md).
 
 ## Goal
 
@@ -53,12 +55,25 @@ viewer (the renderer dev harness).
   hazards/pads/boxes/poles + identity) is schema'd by
   `contract/race-track.schema.json` and dumped as canonical-JSON fixtures by
   `scripts/export-track-data.mjs`.
-- **One public C ABI.** `ttp_runtime.h` — lifecycle, input injection, and
-  one outbound event queue — is the only boundary a non-C++ caller crosses
-  in production; Swift, Kotlin and JS shells are three thin wrappers over
-  it. Everything else is internal C++ headers. No ABI versioning
-  machinery: all boundaries deploy atomically; versioning lives on
-  persisted data only (`CONTRACT_VERSION`, `trackMathVersion`).
+- **One public C ABI.** `ttp_runtime.h` and its siblings (`ttp_party.h`,
+  `ttp_display.h`, `ttp_ui.h`, `ttp_race.h`, `ttp_net.h`, `ttp_audio.h`,
+  `ttp_theme.h`) are the only boundary a non-C++ caller crosses in production.
+  Everything else is internal C++ headers. No ABI versioning machinery: all
+  boundaries deploy atomically; versioning lives on persisted data only
+  (`CONTRACT_VERSION`, `trackMathVersion`).
+  THE WRAPPERS ARE NOT EQUALLY THIN, which the original wording ("three thin
+  wrappers") hid. Swift consumes a C header directly and JS has `cwrap`; the
+  JVM has neither, and the web shell touches 182 distinct exports. An Android
+  shell therefore needs a generated JNI bridge or a C++ performer that keeps
+  the JNI surface small — a decision to take before any Kotlin exists. See
+  [shells.md](shells.md).
+- **A shell reads shared constants, it does not copy them.** The manifest
+  (`public/shared/protocol.js`, mirrored 1:1 in
+  `native/libttp-party/ttp/protocol.h`) crosses to non-C++ shells whole through
+  `ttp_protocol_manifest_json`. What comes out of that export is pinned to
+  `protocol.js` by `tests/config-drift.test.js` and to the library by
+  `abi_check`; a table retyped into Kotlin or Swift is pinned by nothing, and
+  will drift silently the first time a number moves.
 - **One renderer call per frame.** `submitFrame(FrameInput{ticks: [{snapshot,
   events, dt}], ui, views})` — events ride inside their tick, and a timeline
   fixture is just a recorded `FrameInput` sequence. Exact shapes settle in
@@ -125,3 +140,14 @@ viewer (the renderer dev harness).
   unsupported — and a Mali-G31-class Android TV.
 - **No fallback renderer.** The code targets Filament's API directly;
   switching to bgfx/Diligent would be a restart, not a swap.
+- **Asset delivery** is undecided and store-shaped: `public/assets/` is ~170 MB,
+  164 MB of it race music the web simply streams off an origin. An asset pack,
+  a first-run download or a smaller shipped pool — whichever is chosen,
+  `ttp_audio_song_json`'s index has to resolve to it.
+- **A TV app has no origin of its own.** The join QR and the controller URL
+  template are composed from a base URL (`session.h`), so the web deployment is
+  a runtime dependency of every native shell.
+- **The Android leg does not execute.** CI cross-compiles arm64-v8a but runs no
+  fixture there, while [fp-profile.md](fp-profile.md) §NDK singles out clang's
+  statement-level contraction as the risk. An emulator ctest leg modelled on
+  `native/scripts/tvos-sim-spawn.sh` is the missing gate.

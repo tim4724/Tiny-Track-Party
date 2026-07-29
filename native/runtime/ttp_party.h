@@ -173,6 +173,28 @@ TTP_ABI int ttp_room_lowest_free_slot(const char* usedJson, int max);
 // {"contractVersion":N,"layer":"party"} — the adapter's sanity check.
 TTP_ABI const char* ttp_party_version(void);
 
+// The whole shared manifest as one JSON object: the wire vocabulary (MSG,
+// FASTLANE_TYPES, ROOM_STATE), the relay/STUN URLs, MAX_PLAYERS, TOTAL_LAPS,
+// COUNTDOWN_SECONDS, the STEER and LIVENESS blocks, and the car tables
+// (CAR_COLORS / CAR_MODELS / CAR_NAMES / CAR_MODEL_YAW / CAR_STATS). Exactly
+// ttp::protocol::manifest() (native/libttp-party/ttp/protocol.h), which is the
+// 1:1 C++ mirror of public/shared/protocol.js.
+//
+// WHY THIS IS AN EXPORT AND NOT JUST A HEADER. Those numbers are the manifest
+// the config rule exists to protect: nothing may re-declare one silently. A C++
+// layer honours that by including protocol.h and the web shell by reading
+// protocol.js, but a shell in a language that can do NEITHER (Kotlin over JNI is
+// the case in front of us) had no third option, so its lobby would hand-copy the
+// car list and its input path the tilt numbers — with nothing anywhere watching
+// the copy. This is that third option. tests/config-drift.test.js pins what
+// comes out of here to protocol.js; runtimetest/abi_check.cc pins it to the
+// library on every leg.
+//
+// The web shell does NOT read this (protocol.js is the authored source and is
+// already on its page), which is deliberate: this is the port surface, and a
+// second consumer of it would be a second spelling of the same fact.
+TTP_ABI const char* ttp_protocol_manifest_json(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -50,11 +50,9 @@ if [ ! -f "$SDK/include/filament/Engine.h" ] || [ ! -x "$MATC" ]; then
 fi
 
 # --- 3. materials -----------------------------------------------------------
-mkdir -p "$OUTDIR"
-for mat in "$ROOT"/native/renderer/materials/*.mat; do
-    name="$(basename "${mat%.mat}")"
-    "$MATC" -a opengl -p mobile -o "$OUTDIR/$name.filamat" "$mat"
-done
+# opengl/mobile, via the shared compiler script — an Android TV build wants the
+# SAME two arguments (GLES3 is GLES3), tvOS wants -a metal.
+"$ROOT/native/scripts/build-materials.sh" "$MATC" "$OUTDIR" opengl mobile
 
 # --- 4. the module ----------------------------------------------------------
 emcmake cmake -S "$ROOT/native" -B "$BUILD" -G Ninja \
