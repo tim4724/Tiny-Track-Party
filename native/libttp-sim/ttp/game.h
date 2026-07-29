@@ -121,6 +121,16 @@ inline constexpr double STEER_SIGN = -1;
 void setSteerExpo(double v);
 double getSteerExpo();
 
+// That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies
+// its turn rate by. Sim-side this is one line of one function, so it lived
+// inline there until libttp-runtime's frame builder needed the SAME curve to
+// yaw the front wheels by (a wheel on the raw input leads the car everywhere
+// but the two ends). A second spelling of it in the frame builder would be a
+// rule written twice that only shows up as wheels quietly disagreeing with the
+// car, so it is a function instead. Not inline: the shape must not depend on
+// which translation unit asks.
+double steerShape(double s);
+
 // The item vocabulary a box can yield, in ROLL-TABLE order: index i is the item
 // ITEM_PLACE_TABLE's column i weights, and `roll` walks the two together.
 //

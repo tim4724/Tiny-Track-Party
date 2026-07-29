@@ -7433,7 +7433,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // Wheel cosmetics (SceneRenderer's readability numbers): roll from
             // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE 0.4 —
             // the marshalled spd is NORMALIZED and can't drive it), fronts yaw
-            // ±0.5 rad with steer. Teleport-sized jumps don't spin the wheels.
+            // ±0.5 rad with steerYaw. Teleport-sized jumps don't spin the wheels.
             if (mCarWheels.size() > i) {
                 constexpr float WHEEL_TURN_MAX = 0.5f;
                 constexpr float WHEEL_SPIN_SCALE = 0.4f;
@@ -7464,7 +7464,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // half-turn is ITSELF about Y — so unlike the roll axis, this
                 // one is NOT flipped and takes the JS's angle as-is. Negating
                 // it steered the front wheels the wrong way.
-                const float yaw = c.steer * WHEEL_TURN_MAX;
+                // The angle comes off `steerYaw`, not `steer`: the sim turns by
+                // |s|^STEER_EXPO, so the raw tilt has the wheels leading the car
+                // everywhere but the two ends. Full lock is untouched (both are
+                // 1 there); this only takes the slack out of the middle.
+                // ttp_render.h has why the ANGLE itself stays exaggerated.
+                const float yaw = c.steerYaw * WHEEL_TURN_MAX;
                 const mat4f rollM = mat4f::rotation(w.roll * w.rollSign, float3{ 1, 0, 0 });
                 const mat4f steerRoll = mat4f::rotation(yaw, float3{ 0, 1, 0 }) * rollM;
                 // MonsterRig strips the car's own wheels (and any exposed axle

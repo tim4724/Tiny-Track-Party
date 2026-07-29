@@ -375,8 +375,10 @@ private:
     // Scene-membership state for the pools that spend most of a race idle
     // (setInstanceInScene / setAssetInScene are edge-triggered on these).
     std::vector<uint8_t> mCarGhostIn, mMonsterIn, mMonsterGhostIn, mBananaIn;
-    // Wheel cosmetics (SceneRenderer setCarPose): front wheels yaw with steer
-    // (±WHEEL_TURN_MAX) and all four roll at WHEEL_SPIN_SCALE × v/r.
+    // Wheel cosmetics (SceneRenderer setCarPose): front wheels yaw with
+    // steerYaw (±WHEEL_TURN_MAX — the expo-shaped steer, so the deflection
+    // tracks the car's yaw RATE rather than the raw tilt) and all four roll at
+    // WHEEL_SPIN_SCALE × v/r.
     struct CarWheels {
         utils::Entity fl, fr, bl, br;
         filament::math::float3 flT, frT, blT, brT; // original local translations

@@ -76,6 +76,9 @@ void setSteerExpo(double v) {
   if (std::isfinite(v)) g_steerExpo = js_max(0.5, js_min(3.0, v));  // Game.js: clamp [0.5,3]
 }
 double getSteerExpo() { return g_steerExpo; }
+double steerShape(double s) {
+  return js_sign(s) * dmath::pow(std::fabs(s), g_steerExpo);
+}
 
 const char* const ITEM_IDS[4] = {"boost", "banana", "rocket", "monster"};
 static const int ITEM_PLACE_TABLE[8][4] = {
@@ -756,7 +759,7 @@ void Game::update(double dtMs) {
     bool boosting = c.boostMul > 1;
     double brakeEff = boosting ? 0 : c.brake;
     double steerEff = spinning ? 0 : c.steer;
-    double steerIn = js_sign(steerEff) * dmath::pow(std::fabs(steerEff), g_steerExpo);
+    double steerIn = steerShape(steerEff);
     double scrubEff = boosting ? 0 : STEER_SCRUB * steerIn * steerIn;
     double vmaxEff = c.monsterT > 0 ? c.vmax * MONSTER_VMAX_MUL : c.vmax;
     double targetV = vmaxEff * c.boostMul * (1 - brakeEff) * (1 - scrubEff);

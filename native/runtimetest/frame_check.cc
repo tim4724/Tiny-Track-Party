@@ -41,10 +41,12 @@
 #include <vector>
 
 #include "ttp/camera.h"
+#include "ttp/dmath.h"
 #include "ttp/frame_builder.h"
 #include "ttp/framing.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
+#include "ttp/jsmath.h"
 #include "ttp/roster.h"
 #include "ttp/race_track.h"
 #include "ttp/showcase.h"
@@ -148,6 +150,22 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
   check(sameVec(o.up, c.pose.up), what + ".up");
   checkF(o.spd, c.vmax != 0 ? (float)(c.v / c.vmax) : 0.0f, what + ".spd");
   checkF(o.steer, (float)(ttp::STEER_SIGN * c.steer), what + ".steer");
+  // steerYaw is the same input on the SIM'S curve — what the front wheels yaw
+  // by (ttp_render.h). Deliberately SPELLED OUT rather than routed through
+  // ttp::steerShape: the builder calls that function, so asking it the answer
+  // would only prove the builder called it. This is the independent statement
+  // of what the curve must be, and changing the shaping should turn it red.
+  checkF(o.steerYaw,
+         (float)(ttp::STEER_SIGN * ttp::js_sign(c.steer)
+                 * ttp::dmath::pow(std::fabs(c.steer), ttp::getSteerExpo())),
+         what + ".steerYaw");
+  // …and the PROPERTY behind it, which is what actually catches a revert to the
+  // raw tilt: expo > 1 pulls every interior point toward centre, so a shaped
+  // wheel is always inside the tilt that produced it.
+  if (c.steer != 0 && std::fabs(c.steer) < 1) {
+    check(std::fabs(o.steerYaw) < std::fabs(o.steer),
+          what + ".steerYaw is SHAPED — the wheels must not lead the car mid-range");
+  }
   checkF(o.brake, (float)c.brake, what + ".brake");
   checkF(o.boostMul, (float)c.boostMul, what + ".boostMul");
   checkF(o.monster, c.monsterT > 0 ? 1.0f : 0.0f, what + ".monster");
@@ -316,7 +334,7 @@ void testAtRest() {
   c.pos = {1.5f, 2.25f, -3.75f};
   c.forward = {0.5f, 0.0f, 0.5f};
   c.up = {0.0f, 1.0f, 0.0f};
-  c.spd = 0.8f; c.steer = -0.4f; c.brake = 0.6f; c.boostMul = 1.9f;
+  c.spd = 0.8f; c.steer = -0.4f; c.steerYaw = -0.3f; c.brake = 0.6f; c.boostMul = 1.9f;
   c.monster = 1.0f; c.spin = 2.5f; c.scrub = 1.0f;
 
   rt::atRest(c);
@@ -325,6 +343,7 @@ void testAtRest() {
   check(c.forward.x == 0.5f && c.up.y == 1.0f, "atRest keeps the orientation");
   checkF(c.spd, 0.0f, "atRest zeroes spd");
   checkF(c.steer, 0.0f, "atRest zeroes steer");
+  checkF(c.steerYaw, 0.0f, "atRest zeroes steerYaw — a held car's wheels centre too");
   checkF(c.brake, 0.0f, "atRest zeroes brake");
   checkF(c.spin, 0.0f, "atRest zeroes spin");
   checkF(c.scrub, 0.0f, "atRest zeroes scrub");

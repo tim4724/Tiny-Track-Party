@@ -13,7 +13,7 @@ namespace rt {
 
 // Drop every motion cue but keep the pose — what "held" means (ttp_display_hold).
 void atRest(TtpCarInput& c) {
-    c.spd = c.steer = c.brake = c.spin = c.scrub = 0;
+    c.spd = c.steer = c.steerYaw = c.brake = c.spin = c.scrub = 0;
     c.boostMul = 1;
 }
 
@@ -154,6 +154,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // is the one thing that wants the raw value — it mirrors phone tilt,
             // which is why it reads `steerInput` off the snapshot instead.
             o.steer = (float) (ttp::STEER_SIGN * c->steer);
+            // …and the same input on the sim's own curve, which is what the
+            // front wheels yaw by. `steerShape` is the sim's, not a copy of it:
+            // it is the very factor Game::update multiplies its turn rate by, so
+            // the wheels cannot drift from the car by a retyped exponent or by a
+            // ulp of some other leg's pow.
+            o.steerYaw = (float) (ttp::STEER_SIGN * ttp::steerShape(c->steer));
             o.brake = (float) c->brake;
             o.boostMul = (float) c->boostMul;
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;

@@ -53,6 +53,28 @@ typedef struct TtpVec3 { float x, y, z; } TtpVec3;
 typedef struct TtpCarInput {
     TtpVec3 pos, forward, up; /* contract pose (world units) */
     float spd, steer, brake, boostMul; /* spd NORMALIZED v/vmax (0..~2 under boost) */
+    /* The same steer shaped by the sim's OWN exponent — sign(s)*|s|^STEER_EXPO,
+     * with STEER_SIGN applied, exactly the `steerIn` Game::update multiplies its
+     * turn rate by. So this is proportional to the car's yaw rate and `steer` is
+     * not, which is the whole reason it exists: the front wheels yaw with THIS.
+     *
+     * They yawed with `steer` until 2026-07-29 and so LED the car through the
+     * entire mid-range, where players actually live — at half tilt the wheels
+     * showed half lock while the car was turning at 0.42 of full rate. Note the
+     * fix is the CURVE, never the magnitude: a physically correct front-wheel
+     * angle is atan(wheelbase * yawRate / v), which is ~3-6 degrees at racing
+     * speed against the ±0.5 rad the renderer draws, and it shrinks as speed
+     * rises. That would delete the input-acknowledged cue precisely when the
+     * player is steering hardest, and slam to full lock at a standstill.
+     *
+     * `authority` (0.4..1 with speed) is deliberately NOT folded in either: real
+     * wheels at rest DO turn to full lock while the car fails to rotate, which
+     * is the thing authority models.
+     *
+     * `steer` keeps the raw curve because its other two consumers want it — the
+     * body lean, and the skid slip threshold whose authored 0.815 saturation
+     * point is written against that curve. */
+    float steerYaw;
     float monster;  /* 1 = monster-truck transform active */
     float spin;     /* spin-out whirl angle (rad) — cosmetic body yaw + skid scribbles */
     float scrub;    /* 1 = grinding the wall/curb (snapshot onWall) — full-strength skids */
