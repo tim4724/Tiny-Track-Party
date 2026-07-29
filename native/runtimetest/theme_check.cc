@@ -24,11 +24,14 @@
 //   assetDir is public/assets/toycar (the scenery GLBs the tint maps key on).
 
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
 
 #include "corpus_diff.h"
+#include "ttp/json_parse.h"
+#include "ttp/showcase.h"
 #include "ttp/theme.h"
 
 using namespace ttp;
@@ -279,6 +282,10 @@ int main(int argc, char** argv) {
              diff_val(*root.find("resolved"), themeOf(t), "resolved"));
 
     } else if (std::string(kind) == "tints") {
+      // The corpus recorded each model under its own home biome, back when the
+      // table was keyed by both. Tints resolve from the MODEL now, so the
+      // recorded biome no longer reaches the call — it stays in the label, and
+      // the every-biome invariant below is what replaces it.
       const char* biome = str(root.find("biome"));
       const char* model = str(root.find("model"));
       const std::vector<uint8_t> glb = readFile(assetDir + "/" + model + ".glb");
@@ -287,7 +294,7 @@ int main(int argc, char** argv) {
         return 2;
       }
       const std::vector<rt::MatTint> pairs =
-          rt::resolve_model_tints(biome, model, glb.data(), glb.size());
+          rt::resolve_model_tints(model, glb.data(), glb.size());
       Value got = Value::Arr();
       for (const rt::MatTint& p : pairs) {
         Value e = Value::Arr();
@@ -301,6 +308,60 @@ int main(int argc, char** argv) {
     } else {
       std::fprintf(stderr, "unknown corpus case '%s'\n", kind);
       return 2;
+    }
+  }
+
+  // ---- Beyond the corpus: every untextured model the game plants is tinted --
+  //
+  // NOT corpus evidence — the corpus can only replay the eleven (biome, model)
+  // pairs the JS oracle happened to record, each under its own home biome. This
+  // is the claim those cases cannot make: that NOTHING the game stages falls
+  // through the tint table into the kit's raw authored colours.
+  //
+  // It is derived from the ASSETS, not from a list, which is the point. A model
+  // carrying a colormap texture is correct by construction and needs no entry; a
+  // model without one has nothing but its baseColorFactor, and for the four
+  // Nature Kit props that factor is Kenney's turquoise `leafsGreen` — a real
+  // colour, deliberately authored, and not one this game's biomes want. So
+  // "untextured and untinted" is precisely the bug: it is what the asset gallery
+  // drew in five biomes out of six while the table was keyed by biome, and it is
+  // what a newly vendored kit model would draw if someone forgot a row.
+  //
+  // The model list is the SHOWCASE's, because that is the union of everything
+  // every biome plants — checking the shipping biomes one at a time would miss a
+  // model only the gallery stages, which is the case that actually broke.
+  const auto untextured = [](const std::vector<uint8_t>& glb) {
+    if (glb.size() < 20) return false;
+    uint32_t jsonLen = 0;
+    std::memcpy(&jsonLen, glb.data() + 12, 4);
+    if (jsonLen == 0 || (size_t) jsonLen + 20 > glb.size()) return false;
+    bool ok = false;
+    const Value doc =
+        ttp::json::parse(std::string((const char*) glb.data() + 20, jsonLen).c_str(), &ok);
+    if (!ok) return false;
+    const Value* mats = doc.find("materials");
+    if (!mats || mats->type != Value::ARR) return false;
+    for (const Value& m : mats->arr) {
+      const Value* pbr = m.find("pbrMetallicRoughness");
+      if (pbr && pbr->find("baseColorTexture")) return false;
+    }
+    return true;
+  };
+  for (const std::string& model : rt::showcase_models()) {
+    const std::vector<uint8_t> glb = readFile(assetDir + "/" + model + ".glb");
+    if (glb.empty()) {
+      std::fprintf(stderr, "missing asset %s/%s.glb\n", assetDir.c_str(), model.c_str());
+      return 2;
+    }
+    if (!untextured(glb)) continue;
+    cases++;
+    if (!rt::resolve_model_tints(model, glb.data(), glb.size()).empty()) {
+      passed++;
+    } else {
+      std::fprintf(stderr,
+                   "FAIL untinted %s: untextured, so it draws in the kit's own authored\n"
+                   "  colours. Add a row to kModelTints in theme.cc (see the note there).\n",
+                   model.c_str());
     }
   }
 

@@ -366,24 +366,37 @@ const BiomeEntry* findBiome(const char* name) {
 // part's AUTHORED colour, as the six lowercase hex digits of its sRGB value.
 struct TintPair { const char* key; uint32_t rgb; };
 struct ModelTintDef {
-  const char* biome;
   const char* model;
   bool scalar;
   uint32_t rgb;              // scalar only
   const TintPair* pairs;     // map only
   int nPairs;
 };
-// The tint maps recolour the Nature Kit's authored teal fronds / peach trunk to
-// tropical green / sun-bleached tan (palms), and pick the cacti's dusty sage
-// green. Colormap-TEXTURED kit models ignore tints, which is why the grass,
-// sunset and snow palettes carry none.
+// The tint maps recolour the Nature Kit's authored colours to this game's
+// palette: turquoise fronds / terracotta trunk to tropical green / sun-bleached
+// tan (palms), and the same turquoise to a dusty sage (cacti). Those authored
+// colours are KENNEY'S OWN and not export damage — the Nature Kit is a
+// flat-material kit that ships no colormap at all (its .mtl states
+// `Kd 0.1607843 0.7882353 0.6705883`, and the kit's own render shows a
+// turquoise palm), so this table is art direction rather than asset repair.
+// Colormap-TEXTURED kit models have nothing to recolour, which is why no entry
+// here names one.
+//
+// KEYED BY MODEL ALONE, deliberately. It used to carry a biome column, which
+// read as "beach palms are green" but never actually meant it: no model appears
+// under two biomes, so the column restated what the model name already said. It
+// only ever DID something in the one place a model is staged outside its home
+// biome — the asset gallery (ttp/showcase.h), which unions every biome's
+// vocabulary into one scene and so drew untinted turquoise palms and cacti in
+// five biomes out of six. A recolour is a property of the MODEL, so it resolves
+// from the model.
 const TintPair kPalmTall[] = { { "70e6d6", 0x4fae6b }, { "f2be9e", 0xc09a72 } };
 const TintPair kPalmBend[] = { { "70e6d6", 0x54b573 }, { "f2be9e", 0xb8926c } };
 const ModelTintDef kModelTints[] = {
-  { "beach", "palm-tall", false, 0, kPalmTall, 2 },
-  { "beach", "palm-bend", false, 0, kPalmBend, 2 },
-  { "canyon", "cactus-tall", true, 0x6da85c, nullptr, 0 },
-  { "canyon", "cactus-short", true, 0x7cb464, nullptr, 0 },
+  { "palm-tall", false, 0, kPalmTall, 2 },
+  { "palm-bend", false, 0, kPalmBend, 2 },
+  { "cactus-tall", true, 0x6da85c, nullptr, 0 },
+  { "cactus-short", true, 0x7cb464, nullptr, 0 },
 };
 
 // glTF baseColorFactor is LINEAR; the theme's keys are authored as sRGB hex.
@@ -451,14 +464,12 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   return t;
 }
 
-std::vector<MatTint> resolve_model_tints(const char* biomeName, const std::string& model,
+std::vector<MatTint> resolve_model_tints(const std::string& model,
                                          const uint8_t* glb, size_t len) {
   std::vector<MatTint> out;
-  const BiomeEntry* b = findBiome(biomeName);
-  const char* biome = b ? b->name : "grass";
   const ModelTintDef* def = nullptr;
   for (const ModelTintDef& d : kModelTints) {
-    if (std::strcmp(d.biome, biome) == 0 && model == d.model) { def = &d; break; }
+    if (model == d.model) { def = &d; break; }
   }
   if (!def || !glb || len < 20) return out;
 

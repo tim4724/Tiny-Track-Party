@@ -246,17 +246,21 @@ const char* biome_for_track(const char* trackId);
 // days) and the shoreline seed.
 Theme resolve_theme(const char* biomeName, const char* trackId);
 
-// The recolour table this biome applies to `model`, resolved against that
-// model's own authored glTF materials.
+// The recolour table for `model`, resolved against that model's own authored
+// glTF materials.
 //
 // buildScenery baked `tint` into vertex colours for UNTEXTURED models: a plain
 // hex repaints the whole model, a map is keyed by each part's AUTHORED colour (a
 // palm's fronds and trunk differ). `glb` is the model's raw GLB bytes, whose
 // JSON chunk names the materials and their linear baseColorFactors; the theme's
 // keys are authored as sRGB hex, so the factors convert before the lookup.
-// Returns empty when the biome does not tint that model, or the bytes are
+// Returns empty when nothing tints that model, or the bytes are
 // missing/unparseable (which simply renders it in its authored colours).
-std::vector<MatTint> resolve_model_tints(const char* biomeName, const std::string& model,
+//
+// NO BIOME ARGUMENT, and that is the point: a recolour belongs to the model, so
+// the same model looks the same wherever it is planted. See theme.cc's table for
+// what the biome key used to cost the asset gallery.
+std::vector<MatTint> resolve_model_tints(const std::string& model,
                                          const uint8_t* glb, size_t len);
 
 }  // namespace rt
