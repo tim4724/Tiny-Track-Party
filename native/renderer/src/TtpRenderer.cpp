@@ -2201,15 +2201,58 @@ const mat4f rotXm(float a) { return mat4f::rotation(a, float3{ 1, 0, 0 }); }
 const mat4f rotYm(float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); }
 const mat4f rotZm(float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); }
 
+// ---- the wind-up train's stadium ------------------------------------------
+// Two straights along local X at z = ±TRAIN_RT, joined by half-circles at
+// x = ±TRAIN_LT/2, run counter-clockwise.
+//
+// ONE definition of it, and that is the point of these being here. The RAILS
+// are laid from this at scene build and the LOCO is driven round it every
+// frame, from code eight thousand lines apart — and sleepers spaced along a
+// path that disagreed by a hair with the one the train takes is a toy train
+// running beside its own track. The two used to share nothing but a pair of
+// retyped constants and a comment.
+constexpr float TRAIN_RT = 5.0f, TRAIN_LT = 7.0f;
+// THE GAUGE IS THE LOCO'S OWN WHEEL TRACK (buildTrainModel puts the tyres at
+// x = ±0.58). It was 0.32 — barely half that — so the wheels ran outside the
+// rails, which nobody could see while the "track" was two thin brown lines
+// lying in the grass. A ladder of sleepers makes it obvious in one glance, and
+// that is the general shape of what laying real track flushed out.
+constexpr float TRAIN_GAUGE = 0.58f;      // rail centres, either side of the line
+constexpr float TRAIN_SLEEPER_Y = 0.055f; // sleeper top
+constexpr float TRAIN_RAIL_Y = 0.10f;     // rail axis, sitting on the sleepers
+constexpr float TRAIN_RAIL_R = 0.045f;
+// What the loco's wheels stand on: the top of the railhead, not its centre.
+constexpr float TRAIN_RIDE_Y = TRAIN_RAIL_Y + TRAIN_RAIL_R;
+
+struct TrainAt { float x, z, dx, dz; };
+inline float trainPerim() { return 2 * TRAIN_LT + 2 * (float) M_PI * TRAIN_RT; }
+inline TrainAt trainAt(float s) {
+    const float R = TRAIN_RT, L = TRAIN_LT, ARC = (float) M_PI * R;
+    if (s < L) return { -L / 2 + s, -R, 1, 0 };                 // near straight, +X
+    if (s < L + ARC) {                                          // right end
+        const float u = (s - L) / R;
+        return { L / 2 + std::sin(u) * R, -std::cos(u) * R, std::cos(u), std::sin(u) };
+    }
+    if (s < 2 * L + ARC) {                                      // far straight, -X
+        return { L / 2 - (s - L - ARC), R, -1, 0 };
+    }
+    const float u = (s - 2 * L - ARC) / R;                      // left end
+    return { -L / 2 - std::sin(u) * R, std::cos(u) * R, -std::cos(u), -std::sin(u) };
+}
+
 // ---- rocket ---------------------------------------------------------------
-// Ship scale is TINY — the body is 0.2 world units, about the size of a fist —
-// so detail here only pays if it changes the SILHOUETTE. Panel lines and
-// rivets would be invisible; a swept fin and a flared bell are not.
+// Ship scale is TINY — the body is 0.2 world units, about the size of a fist,
+// and it is only ever seen in flight — so the useful direction here is DOWN.
+// The first pass went the other way (a flared bell, two bands, a porthole,
+// four swept fins, thirteen prims) and it was wrong: at the size this is drawn
+// none of it resolves, so all the extra parts buy is a busier, muddier blob.
+// Both alternatives below are therefore SIMPLER than the elaborate ones they
+// replaced, and one of them is simpler than what shipped.
 void buildRocketModel(const PartFn& part, int variant) {
-    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f,
-                       STEEL = 0x2b313c, GOLD = 0xf2c14e, GLASS = 0x7fd4e8;
+    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f;
     if (variant <= 0) {
-        // v0 — what shipped: a tube, a cone and three upright tabs.
+        // v0 — what shipped: a tube, a cone and three upright tabs. The tabs
+        // are the weak part: square, radial, and read as specks.
         part(primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, RED, 1.0f);
         part(primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, CREAM, 1.0f);
         for (int i = 0; i < 3; i++) {
@@ -2220,40 +2263,32 @@ void buildRocketModel(const PartFn& part, int variant) {
         return;
     }
     if (variant == 1) {
-        // v1 "finned" — the same missile read properly: a flared bell, a
-        // shouldered body under two bands, a porthole and four swept fins.
-        part(primCylinder(0.058f, 0.086f, 0.055f, 14), 0, -0.155f, 0, STEEL, 1.0f);
-        part(primCylinder(0.088f, 0.096f, 0.045f, 16), 0, -0.118f, 0, DARK, 1.0f);
-        part(primCylinder(0.080f, 0.090f, 0.175f, 18), 0, -0.010f, 0, RED, 1.0f);
-        part(primCylinder(0.0885f, 0.0895f, 0.028f, 18), 0, -0.055f, 0, CREAM, 1.0f);
-        part(primCylinder(0.0828f, 0.0838f, 0.020f, 18), 0, 0.045f, 0, CREAM, 1.0f);
-        part(primCylinder(0.058f, 0.080f, 0.048f, 18), 0, 0.1015f, 0, RED, 1.0f);
-        part(primCone(0.058f, 0.135f, 18), 0, 0.193f, 0, CREAM, 1.0f);
-        part(primSphere(0.017f, 8, 6), 0, 0.258f, 0, RED, 1.0f);
-        part(applyPre(primCylinder(0.030f, 0.030f, 0.014f, 12), rotXm((float) M_PI / 2)),
-                0, 0.020f, 0.086f, CREAM, 1.0f);
-        part(applyPre(primCylinder(0.021f, 0.021f, 0.018f, 10), rotXm((float) M_PI / 2)),
-                0, 0.020f, 0.088f, GLASS, 1.0f);
-        const Prim fin = primPlate({ { 0.020f, 0.070f }, { -0.100f, 0.070f },
-                                     { -0.145f, 0.148f }, { -0.048f, 0.140f } }, 0.013f);
-        for (int i = 0; i < 4; i++) {
-            part(applyPre(fin, rotYm((float) i * (float) M_PI / 2)), 0, 0, 0, DARK, 1.0f);
+        // v1 "clean" — the same five-part rocket with the three things that
+        // actually carry at distance fixed: a body that tapers, ONE cream band
+        // instead of a bare tube, and fins that are swept triangles rather than
+        // square tabs. Six prims against v0's five, and no colour it did not
+        // already have.
+        part(primCylinder(0.068f, 0.090f, 0.195f, 14), 0, 0, 0, RED, 1.0f);
+        part(primCylinder(0.0745f, 0.0765f, 0.030f, 14), 0, 0.045f, 0, CREAM, 1.0f);
+        part(primCone(0.068f, 0.155f, 14), 0, 0.175f, 0, CREAM, 1.0f);
+        const Prim fin = primPlate({ { -0.020f, 0.062f }, { -0.098f, 0.062f },
+                                     { -0.128f, 0.130f }, { -0.052f, 0.126f } }, 0.014f);
+        for (int i = 0; i < 3; i++) {
+            part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
         }
         return;
     }
-    // v2 "stubby" — a different silhouette rather than a busier one: a fat
-    // firework with a domed nose and three big fins, which is what actually
-    // reads at 40 metres on a TV.
-    part(primCylinder(0.070f, 0.100f, 0.050f, 12), 0, -0.135f, 0, STEEL, 1.0f);
-    part(primCylinder(0.104f, 0.098f, 0.160f, 16), 0, -0.030f, 0, RED, 1.0f);
-    part(primCylinder(0.108f, 0.108f, 0.042f, 16), 0, -0.030f, 0, CREAM, 1.0f);
-    part(primCylinder(0.107f, 0.107f, 0.016f, 16), 0, 0.042f, 0, GOLD, 1.0f);
-    part(primSphere(0.104f, 16, 11), 0, 0.055f, 0, RED, 1.0f);
-    part(primSphere(0.028f, 8, 6), 0, 0.168f, 0, GOLD, 1.0f);
-    const Prim fin = primPlate({ { 0.010f, 0.098f }, { -0.110f, 0.098f },
-                                 { -0.132f, 0.180f }, { -0.016f, 0.168f } }, 0.018f);
+    // v2 "minimal" — the fewest parts that still say rocket: a tapered body, a
+    // ROUNDED nose instead of a cone, and three small fins. Four prims and TWO
+    // colours, which at this size is the whole argument — a shape with one
+    // silhouette and one highlight is legible at a glance in a way a
+    // three-tone one is not.
+    part(primCylinder(0.076f, 0.092f, 0.215f, 14), 0, -0.010f, 0, RED, 1.0f);
+    part(primSphere(0.076f, 14, 10), 0, 0.098f, 0, CREAM, 1.0f);
+    const Prim fin = primPlate({ { -0.030f, 0.070f }, { -0.105f, 0.070f },
+                                 { -0.125f, 0.125f } }, 0.016f);
     for (int i = 0; i < 3; i++) {
-        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
+        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, RED, 0.72f);
     }
 }
 
@@ -3531,7 +3566,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     }
 
     if (has(16)) { // train — a wind-up loco trundling a slow oval on the floor
-        constexpr float RT = 5, LT = 7;             // end radius + straight length
+        constexpr float RT = TRAIN_RT, LT = TRAIN_LT;
         constexpr float OM = RT + LT / 2 + 1.5f;    // footprint kept clear
         Spot sp = findSpotMid(OM);                  // the middle of the floor first
         if (!sp.ok) sp = findSpot(40, OM + 2, OM);
@@ -3541,16 +3576,39 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const float ao = sp.yaw;
             const float co = std::cos(ao), so = std::sin(ao);
             const Spot rail{ sp.x, sp.z, ao, true };
-            for (const float rr : { RT - 0.32f, RT + 0.32f }) {
+            // THE TRACK, which used to be two brown hoops lying in the grass at
+            // y 0.03 — the same thin cylinder for the straights and the bends,
+            // no sleepers, and a loco whose wheels passed straight through it.
+            // A model railway is read by its LADDER: cross-ties at a regular
+            // beat, with the rails proud on top of them.
+            //
+            // Sleepers walk the shared stadium path (trainAt) at a fixed
+            // spacing, so they follow the ends round instead of stopping at the
+            // straights, and so they cannot drift from the line the loco takes.
+            constexpr float TIE_STEP = 0.62f;
+            const float perim = trainPerim();
+            const int ties = (int) std::round(perim / TIE_STEP);
+            for (int i = 0; i < ties; i++) {
+                const TrainAt t = trainAt((float) i * (perim / (float) ties));
+                const float head = std::atan2(t.dx, t.dz);
+                part(applyPre(primBox(TRAIN_GAUGE * 2 + 0.34f, TRAIN_SLEEPER_Y, 0.2f),
+                            rotY(head)),
+                        t.x, TRAIN_SLEEPER_Y / 2, t.z, rail, 0x9a7b52, 1.0f);
+            }
+            // Rails: STEEL now, not wood, and sitting on the ties rather than in
+            // the grass. Same two-piece construction as before (a cylinder per
+            // straight, a half-torus per end) because it costs four prims for
+            // the whole loop where a swept ribbon would cost hundreds.
+            for (const float rr : { RT - TRAIN_GAUGE, RT + TRAIN_GAUGE }) {
                 for (const float zs : { -rr, rr }) { // two straights
-                    part(applyPre(primCylinder(0.05f, 0.05f, LT, 6),
+                    part(applyPre(primCylinder(TRAIN_RAIL_R, TRAIN_RAIL_R, LT, 8),
                                 rotZ((float) M_PI / 2)),
-                            0, 0.03f, zs, rail, 0x8a6f4d, 0.9f);
+                            0, TRAIN_RAIL_Y, zs, rail, 0x8d949e, 1.0f);
                 }
                 for (const int es : { 1, -1 }) {     // two half-torus ends
-                    part(applyPre(primTorusArc(rr, 0.05f, 6, 24, (float) M_PI),
+                    part(applyPre(primTorusArc(rr, TRAIN_RAIL_R, 8, 30, (float) M_PI),
                                 rotY(es * ((float) M_PI / 2))),
-                            es * (LT / 2), 0.03f, 0, rail, 0x8a6f4d, 0.9f);
+                            es * (LT / 2), TRAIN_RAIL_Y, 0, rail, 0x8d949e, 1.0f);
                 }
             }
             // The loco (and its winding key) are their own meshes — the render
@@ -3573,7 +3631,11 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                     uint32_t hex, float shade) { lp(mTrainKey, p, lx, ly, lz, hex, shade); }, tv);
             accumulateNormals(mTrainKey);
             buildMesh(mTrainKey);
-            mTrainCentre = { sp.x, gy, sp.z };
+            // ON the rails, not through them: the loco's wheels stand at y 0,
+            // so the whole thing rides at the rail head. Before the ties went in
+            // the track was a decal under a train sitting on the grass, and the
+            // difference did not show; now it would.
+            mTrainCentre = { sp.x, gy + TRAIN_RIDE_Y, sp.z };
             mTrainCos = co;
             mTrainSin = so;
             mHasTrain = true;
@@ -7526,23 +7588,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // The wind-up train trundles its stadium oval (two straights along local X
     // at z = ±RT, run CCW), nose along the tangent, key winding as it goes.
     if (mHasTrain) {
-        constexpr float RT = 5, LT = 7;
-        const float PERIM = 2 * LT + 2 * (float) M_PI * RT;
-        const float s = std::fmod(mTime * 1.9f, PERIM); // ~1.9 u/s
-        float lpx, lpz, dx, dz;
-        if (s < LT) {                                   // near straight, heading +X
-            lpx = -LT / 2 + s; lpz = -RT; dx = 1; dz = 0;
-        } else if (s < LT + (float) M_PI * RT) {        // right end
-            const float u = (s - LT) / RT;
-            lpx = LT / 2 + std::sin(u) * RT; lpz = -std::cos(u) * RT;
-            dx = std::cos(u); dz = std::sin(u);
-        } else if (s < 2 * LT + (float) M_PI * RT) {    // far straight, heading -X
-            lpx = LT / 2 - (s - LT - (float) M_PI * RT); lpz = RT; dx = -1; dz = 0;
-        } else {                                        // left end
-            const float u = (s - 2 * LT - (float) M_PI * RT) / RT;
-            lpx = -LT / 2 - std::sin(u) * RT; lpz = std::cos(u) * RT;
-            dx = -std::cos(u); dz = -std::sin(u);
-        }
+        // The path is trainAt()'s, which is also what the sleepers were laid
+        // along — see the note there. This used to be a second copy of the same
+        // piecewise walk, with its own RT and LT.
+        const TrainAt t = trainAt(std::fmod(mTime * 1.9f, trainPerim())); // ~1.9 u/s
+        const float lpx = t.x, lpz = t.z, dx = t.dx, dz = t.dz;
         const float co = mTrainCos, so = mTrainSin;
         const mat4f pose = mat4f::translation(float3{
                     mTrainCentre.x + lpx * co + lpz * so, mTrainCentre.y,

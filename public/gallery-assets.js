@@ -25,20 +25,25 @@ const state = Gallery.loadState();
 // AUTHORED HERE and nowhere else on this side: these are captions for a human
 // choosing between shapes, and the shapes themselves are
 // native/renderer/src/TtpRenderer.cpp's buildRocketModel / buildGnomeModel /
-// buildTrainModel. Index in the array IS the variant number the ABI takes, and
-// index 0 is always what the game currently ships — so "keep what we have" is
-// the first option on every row rather than a thing you have to know to ask for.
+// buildTrainModel. Index in the array IS the variant number the ABI takes.
+//
+// `ships` mirrors TtpRenderer.h's mModelVariant defaults — the variant the game
+// draws when nobody has picked one. It is a CAPTION, so it is a copy, and the
+// only thing it can get wrong is which entry this page labels; the scene itself
+// always comes from the C++ default. Index 0 is the pre-bench geometry on every
+// row and is kept whether or not it won, because a comparison with no "what we
+// had" in it is not a comparison.
 const BENCH_MODELS = [
-  { id: 'rocket', label: 'Rocket', scale: '9x (it ships at 0.2 units)',
-    variants: ['0 · shipping — tube, cone, three tabs',
-               '1 · finned — flared bell, banded body, porthole, four swept fins',
-               '2 · stubby — fat firework, domed nose, three big fins'] },
-  { id: 'gnome', label: 'Garden gnome', scale: null,
-    variants: ['0 · shipping — cone, ball, beard, hat',
+  { id: 'rocket', label: 'Rocket', ships: 1, scale: '9x (it ships at 0.2 units)',
+    variants: ['0 · original — tube, cone, three square tabs',
+               '1 · clean — tapered body, one band, three swept fins',
+               '2 · minimal — rounded nose, three fins, two colours'] },
+  { id: 'gnome', label: 'Garden gnome', ships: 1, scale: null,
+    variants: ['0 · original — cone, ball, beard, hat',
                '1 · detailed — belt, arms, face, layered beard, brimmed hat',
                '2 · storybook — v1 plus a floppy hat, a lantern and a toadstool'] },
-  { id: 'train', label: 'Wind-up train', scale: null,
-    variants: ['0 · shipping — seven boxes and a cylinder',
+  { id: 'train', label: 'Wind-up train', ships: 1, scale: null,
+    variants: ['0 · original — seven boxes and a cylinder',
                '1 · classic — smokebox, boiler bands, cowcatcher, lamp, rods',
                '2 · chunky — shorter and rounder, spoked wheels, big funnel'] }
 ];

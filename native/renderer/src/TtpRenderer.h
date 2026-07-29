@@ -564,7 +564,15 @@ private:
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
     // (rocket, gnome, train). Sized by hand because that enum lives beside the
     // builders it names; a static_assert in the .cpp holds the two together.
-    int mModelVariant[3] = { 0, 0, 0 };
+    //
+    // THESE DEFAULTS ARE WHAT THE GAME DRAWS. Variant 1 of each was chosen off
+    // the model bench (/gallery-assets.html): the clean rocket, the detailed
+    // gnome, the classic loco. Variant 0 is still the pre-bench geometry and is
+    // kept — a bench with no "what we have today" in it is not a comparison —
+    // but it is no longer the default, so a shell that never calls
+    // setModelVariant now gets the picked set rather than the old one.
+    // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
+    int mModelVariant[3] = { 1, 1, 1 };
     int mBenchModel = -1;
 
     filament::math::float3 mTrainCentre{};
