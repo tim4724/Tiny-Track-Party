@@ -267,9 +267,22 @@ export const JS_MUTATIONS = [
     name: 'display/name-clamp-dropped',
     kind: 'stop re-clamping an untrusted HELLO name',
     file: 'public/display/Net.js',
-    find: '        if (p && data.name) p.name = cleanName(data.name);',
-    replace: '        if (p && data.name) p.name = String(data.name);',
+    find: '          const name = cleanName(data.name);',
+    replace: '          const name = String(data.name);',
     expect: 'an emoji name is the ONE place C++ loses data',
+  },
+  {
+    // The seat-EXISTED test is the whole of what tells a rename from a first
+    // hello, and getting it wrong is silent in both directions: without it every
+    // join raises a rename (and a shell that repaints a race surface on the
+    // signal does it for a player who has no car), and the test that would notice
+    // is the one asserting the signal stays quiet on a join.
+    name: 'display/rename-fires-on-join',
+    kind: 'let a first HELLO count as a rename',
+    file: 'public/display/Net.js',
+    find: '          const renamed = seated && name !== p.name;',
+    replace: '          const renamed = name !== p.name;',
+    expect: 'a live rename republishes the roster AND raises the rename signal',
   },
   {
     name: 'names/codepoint-slice',

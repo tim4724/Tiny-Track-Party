@@ -525,6 +525,42 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   cy.net.disconnect();
 });
 
+test('wire: a live rename republishes the roster AND raises the rename signal', async () => {
+  // ControllerNet.rename re-HELLOs — the launcher's setName (§2 of the Couch
+  // Games contract), and a plain browser reaches the same path by backing out and
+  // rejoining. TWO things have to come of that and only one of them is bytes: the
+  // retained snapshot carries the new name, and DisplayNet raises onPlayerRenamed.
+  // That signal is the ONLY thing the copies a RACE froze at its start can move
+  // by — the cell name chip Stage wrote when the car was added, and the
+  // `currentField` every standings board is composed from (main.js renamePlayer).
+  //
+  // WHAT THIS BREAKS AT A REAL PARTY: a rename that raises nothing leaves a
+  // racing player's chip and results row reading their old name for the whole
+  // race, while their phone and the lobby show the new one — and a first HELLO
+  // that also counted as a rename would fire it on every single join.
+  const renamed = [];
+  const { relay, room } = await bringUpRealDisplay({}, {
+    onPlayerRenamed: (peerIndex, name) => renamed.push({ peerIndex, name }),
+  });
+  const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'rn-1' });
+  assert.deepEqual(renamed, [], 'a JOIN is not a rename, however new the name is');
+
+  ada.net.rename('Zephyr');
+  await H.flush();
+  assert.deepEqual(renamed, [{ peerIndex: ada.net.peerIndex, name: 'Zephyr' }],
+    'the re-HELLO raised the signal ONCE, carrying the seat and the new name');
+  assert.equal(lastLobby(ada).players.find((p) => p.peerIndex === ada.net.peerIndex).name,
+    'Zephyr', 'and the snapshot every phone reads was republished with it');
+
+  // An unchanged name is not an event: phones re-introduce themselves whenever
+  // they see the display return, and that must not look like a rename.
+  ada.net.rename('Zephyr');
+  await H.flush();
+  assert.equal(renamed.length, 1, 'a re-HELLO carrying the same name raises nothing');
+
+  ada.net.disconnect();
+});
+
 test('wire: a control character in a name stays ESCAPED all the way round', async () => {
   // Names are the only free-text field on the wire and nothing strips control
   // characters from them (cleanName trims and truncates, that is all). A TAB

@@ -644,6 +644,7 @@ const net = new DisplayNet({
   onRosterChange: renderRoster,
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
+  onPlayerRenamed: renamePlayer,        // live rename: move the copies a race froze
   // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
   // phone drops back into the race); one without is a late joiner (the phone
   // waits in its lobby — they get a car when the next race builds its field).
@@ -762,6 +763,21 @@ function rekeyCarPlayer(oldId, newId) {
   // a shell-side query runs relative to them.
   const rekeyed = !!(session && session.rekeyCar(oldId, newId));
   perform(flow.rekeyCarPlayer(!!series, rekeyed, oldId, newId).effects);
+}
+
+// A seated player renamed themselves. The lobby needs nothing — its seat grid is
+// re-read off the room handle on the same _announce that delivered this — but a
+// RACE freezes copies of the name at its start, and each has to be moved by hand:
+// the cell chip Stage wrote when the car was added, and `currentField`, which
+// every standings board is composed from. A no-op for a seat with no car, since a
+// late joiner is in neither.
+function renamePlayer(peerIndex, name) {
+  for (const p of currentField) if (p.peerIndex === peerIndex) p.name = name;
+  scene.setCarName(peerIndex, name);
+  // currentField only reaches the phones on the board's NEXT push — mid-race the
+  // next car to cross, on the podium never. So re-push the board already out, at
+  // the same `over` it went out with; never a first one (see net.hasStandings).
+  if (net.hasStandings()) broadcastStandings(raceEnded);
 }
 
 // Every race runs a full grid: seats no human took are filled by AI ("CPU")

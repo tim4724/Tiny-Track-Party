@@ -404,6 +404,23 @@ export class Stage {
     return true;
   }
 
+  // A seated player changed their name (DisplayNet's onPlayerRenamed). Moves the
+  // cell chip, which is DOM. It does NOT move the rear name plate: that is
+  // geometry the renderer baked from the build roster (ttp_display_build), so the
+  // car keeps the name it launched under until the next scene build — which
+  // writing `c.name` is exactly what makes it pick up, since _roster() reads this
+  // field and the change therefore lands in _rebuild's signature instead of being
+  // skipped as a no-op.
+  setCarName(id, name) {
+    const c = this.cars.get(id);
+    if (!c) return false;
+    c.name = name;
+    // Re-queried rather than cached as a leaf the way setCarHud's are: those are
+    // re-read at ~6 Hz forever, this a handful of times a party.
+    if (c.label) c.label.querySelector('.cell-label__name').textContent = name || ('P' + id);
+    return true;
+  }
+
   // Show (el) or clear (null) a dropped player's reconnect card, centred in
   // their split-screen cell by _loop — same placement as the FINISHED card.
   // No-op for a car with no cell, so reconnect cards only show in-race.

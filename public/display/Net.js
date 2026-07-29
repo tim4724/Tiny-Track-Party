@@ -106,6 +106,11 @@ export class DisplayNet extends GameNet {
     // (oldId, newId) so the game layer can re-key their still-racing car onto the
     // new slot. A same-device reconnect keeps its id and never needs this.
     this.onPlayerRekey = opts.onPlayerRekey || (() => {});
+    // Fired when a SEATED player changes their name: (peerIndex, name). A rename
+    // arrives as a re-HELLO — the launcher's setName, or a back-out and rejoin —
+    // and the seat grid and the phones both recover from the snapshot _announce
+    // republishes, so this exists for the surfaces a RACE froze at its start.
+    this.onPlayerRenamed = opts.onPlayerRenamed || (() => {});
     // Asked per WELCOME: does this seat have a car in the live race? Lets a
     // mid-race WELCOME distinguish a rejoin (drop back into the race) from a
     // brand-new late joiner (wait in the lobby for the next race). The game
@@ -453,9 +458,18 @@ export class DisplayNet extends GameNet {
         this._claimReconnect(from, data);
         // A HELLO from a peer we never seated (the relay knows them, we don't —
         // e.g. this tab reloaded and missed their peer_joined): seat them now.
-        if (!this.flow.has(from)) this._addPeer(from);
+        // Whether the seat EXISTED is also what tells a rename from a first
+        // hello: a fresh seat's placeholder name is always "changed" by the one
+        // the HELLO carries, and that is a join.
+        const seated = this.flow.has(from);
+        if (!seated) this._addPeer(from);
         const p = this.flow.get(from);
-        if (p && data.name) p.name = cleanName(data.name);
+        if (p && data.name) {
+          const name = cleanName(data.name);
+          const renamed = seated && name !== p.name;
+          p.name = name;
+          if (renamed) this.onPlayerRenamed(from, name);
+        }
         // No unicast reply: the phone recovers its whole state from the retained
         // room snapshot (_announce republishes it, and the relay replayed it right
         // after `joined`). onPlayerWelcomed only relights the per-owner ITEM.
@@ -783,6 +797,12 @@ export class DisplayNet extends GameNet {
     this._standings = board || null;
     this._publishLobby();
   }
+
+  // Is a board currently in the retained snapshot? A live rename refreshes the
+  // one that is out (it carries player NAMES) but must never publish the first:
+  // phones raise their results overlay on a non-null standings, so a board pushed
+  // before anyone has crossed the line pops an empty one over every wheel.
+  hasStandings() { return this._standings != null; }
 
   // Public nudge for the game layer to republish the snapshot when a field it owns
   // changes without a roster/state event (manual pause, mid-race car forfeit/rekey).

@@ -4,7 +4,7 @@
 // window.CouchGames.setName (§2) / window.CouchGamesHost.gameEnded (§3). These specs
 // drive a shell-mode phone against the same display + hermetic relay stub the rest
 // of the suite uses, asserting the shell touchpoints end to end.
-const { test, expect, openDisplay, visible } = require('./helpers');
+const { test, expect, openDisplay, startRace, waitForRacing, visible } = require('./helpers');
 
 // A phone launched by the shell: a fresh context (own localStorage) with the
 // launcher's JS interface stubbed in BEFORE any page script runs, joined via the
@@ -61,6 +61,27 @@ test('launcher setName renames the player live on the phone and the display', as
   await expect(page.locator('#players')).not.toContainText('Zoe');
   // Still not persisted — a live rename is launcher identity, same as the join name.
   expect(await zoe.evaluate(() => localStorage.getItem('tinytrack_name'))).toBeNull();
+});
+
+test('a setName MID-RACE moves the display cell chip, not just the lobby seat', async ({ page, browser }) => {
+  // The lobby case above is the easy half: its seat grid is re-read off the room
+  // handle on every announce, so it cannot go stale. A RACE is where a name gets
+  // COPIED — the cell chip is written once when the car is added — and the launcher
+  // can be used to rename at any moment, not only before the flag.
+  const roomCode = await openDisplay(page);
+  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  await zoe.waitForSelector(visible('#lobby'));
+
+  await startRace(zoe, []);
+  await waitForRacing(page);
+  const chip = page.locator('.cell-label__name');   // one human, so one cell
+  await expect(chip).toHaveText('Zoe');
+
+  await zoe.evaluate(() => window.CouchGames.setName('Zephyr'));
+  await expect(chip).toHaveText('Zephyr');
+  // The car's REAR NAME PLATE is not asserted and does not follow: it is baked
+  // into the scene's geometry at build time, so it keeps the name the car
+  // launched under until the next build (Stage.setCarName says why).
 });
 
 test('a rejected join reports gameEnded(room_not_found) to the launcher', async ({ page, browser }) => {
