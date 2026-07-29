@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Asset Gallery — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+</head>
+<body class="stage-page">
+<header>
+  <h1>TINY TRACK · ASSETS</h1>
+
+  <div class="group">
+    <select id="asset-biome" aria-label="Biome"></select>
+  </div>
+
+  <div class="group">
+    <select id="asset-item" aria-label="Item roulette">
+      <option value="">Item: roulette</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <label class="checkbox-label" for="asset-drive">
+      <input type="checkbox" id="asset-drive">
+      Drive
+    </label>
+  </div>
+
+  <div class="group">
+    <label class="checkbox-label" for="asset-legend">
+      <input type="checkbox" id="asset-legend" checked>
+      Legend
+    </label>
+  </div>
+
+  <!-- In a .group so the mobile header collapses it behind ⚙ with the rest. -->
+  <div class="group">
+    <button class="ctrl" id="asset-home">Back to the cars</button>
+  </div>
+
+  <button class="ctrl options-toggle" id="options-toggle" aria-expanded="false" aria-label="Options">⚙</button>
+
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-assets.html" class="active">Assets</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html">Music</a>
+    <a href="/gallery-bake.html">Baked A/B</a>
+  </nav>
+</header>
+
+<section class="stage">
+  <!-- The real display page in showroom mode. Full-bleed and INTERACTIVE, unlike
+       every other gallery's cards: the camera is the point here, so the frame
+       takes the pointer rather than passing it through to the page. -->
+  <iframe id="asset-stage" title="Asset showroom"
+          src="/?scenario=assets&track=showroom"></iframe>
+  <aside class="legend" id="asset-legend-panel" hidden>
+    <p class="legend__hint">Drag to look · scroll to fly · WASD · Q/E</p>
+    <div id="asset-legend-lists"></div>
+  </aside>
+</section>
+
+<script src="/shared/protocol.js?v=__APP_V__"></script>
+<script src="/gallery-common.js"></script>
+<script type="module" src="/gallery-assets.js"></script>
+</body>
+</html>

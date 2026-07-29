@@ -32,6 +32,7 @@
 #include "ttp/race_track.h"
 #include "ttp/roster.h"
 #include "ttp/scalar_id.h"
+#include "ttp/showcase.h"
 #include "ttp/theme.h"
 #include "ttp/trackbuilder.h"
 #include "ttp_render.h"
@@ -58,6 +59,10 @@ struct Display : ttp::rt::DisplayState {
     TtpRenderer* renderer = nullptr;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context = 0;
     bool built = false;
+    // The asset gallery's showroom (ttp_display_showcase). Latched beside
+    // `biome` because it is the same kind of thing: what the next build
+    // RESOLVES, not what a frame draws.
+    bool showcase = false;
 };
 
 Display* g_disp = nullptr;
@@ -159,6 +164,10 @@ void ttp_display_biome(const char* name) {
     g_disp->biome = (name && ttp::rt::has_biome(name)) ? name : "";
 }
 
+void ttp_display_showcase(int on) {
+    if (g_disp) g_disp->showcase = on != 0;
+}
+
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     if (!g_disp) return 1;
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
@@ -176,7 +185,11 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // the inspector override forced one.
     const char* biome = g_disp->biome.empty() ? ttp::rt::biome_for_track(trackId)
                                               : g_disp->biome.c_str();
-    ttp::rt::Theme theme = ttp::rt::resolve_theme(biome, trackId);
+    // The gallery's showroom resolves through showcase_theme instead: the SAME
+    // palette this line would have produced, carrying every biome's vocabulary
+    // (ttp_display_showcase). Nothing on the shipping path takes that branch.
+    ttp::rt::Theme theme = g_disp->showcase ? ttp::rt::showcase_theme(biome, trackId)
+                                            : ttp::rt::resolve_theme(biome, trackId);
     // The one part of the palette that cannot be resolved from data alone: a
     // scenery recolour keyed by AUTHORED colour has to read the model's own glTF
     // materials. Those bytes are already here — the shell provided them as

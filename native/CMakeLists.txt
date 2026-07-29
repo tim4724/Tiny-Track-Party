@@ -594,6 +594,11 @@ add_library(libttp_runtime STATIC
   # rendering: it was authored in the browser (public/shared/themes.js +
   # render/trackPayload.js) until the shells stopped being one.
   libttp-runtime/ttp/theme.cc
+  # The ASSET GALLERY's world — one biome's palette carrying every biome's
+  # vocabulary. Beside theme.cc rather than inside it because that file is held
+  # to a frozen JS-recorded corpus and this is new data with no JS twin: a
+  # gallery must not be able to move a number the shipping game draws with.
+  libttp-runtime/ttp/showcase.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -795,6 +800,19 @@ add_test(NAME theme
     ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
 )
 
+# ---- Behavioural: the asset gallery's world ---------------------------------
+# NOT conformance evidence and no corpus — showcase_theme stages a scene that
+# has never existed in play, so there is no oracle to record against. What this
+# holds is the four claims showcase.h makes about the biome tables as they
+# stand: everything is staged, the scenery slot order does not depend on the
+# biome, the picked palette survives untouched, and the scatter spec is
+# well-formed. The completeness half is what makes "a new biome joins the
+# gallery automatically" a checked property rather than a hope.
+add_executable(showcase_check runtimetest/showcase_check.cc)
+target_link_libraries(showcase_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(showcase_check)
+add_test(NAME showcase COMMAND showcase_check)
+
 # ---- libttp-renderer --------------------------------------------------------
 # The Filament renderer, platform-free (no emscripten includes): the same code
 # ships on tvOS and Android TV, where the shell hands init() a CAMetalLayer or
@@ -888,7 +906,12 @@ if(EMSCRIPTEN)
     # is COMPILED, not linked against libttp_runtime, so a source added to the
     # library alone leaves this module unlinkable and no ctest target notices.
     libttp-runtime/ttp/audio.cc
-    libttp-runtime/ttp/theme.cc)
+    libttp-runtime/ttp/theme.cc
+    # The asset gallery's world. Outside the renderer gate with the biome ABI it
+    # is reached through (ttp_theme_showcase_models is a fetch list, which is a
+    # shell's job with or without a renderer in the build), and in this list for
+    # the same trap as every line above it.
+    libttp-runtime/ttp/showcase.cc)
   if(TARGET ttp_renderer)
     list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
   endif()

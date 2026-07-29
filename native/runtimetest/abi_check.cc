@@ -1210,6 +1210,25 @@ void themeThroughAbi() {
         "grass stamps two scenery models, the bush donor sharing the oak's slot");
   check(std::strcmp(ttp_theme_scenery_models("playroom"), "[]") == 0,
         "the playroom stamps no scenery models — no trees indoors");
+
+  // The gallery's showroom (ttp_display_showcase). The `showcase` ctest holds
+  // the layer itself; what only this boundary can say is that the marshalled
+  // list is one list, whichever biome is about to be built — the shell fetches
+  // it BEFORE the build picks a look, and slot i must be the same model on both
+  // sides of that gap. The playroom is the case that would catch a
+  // biome-dependent answer here, since its own list is empty.
+  const std::string showModels = ttp_theme_showcase_models();
+  check(showModels.find("\"tree\"") != std::string::npos
+                && showModels.find("\"cactus-tall\"") != std::string::npos
+                && showModels.find("\"tree-snow-c\"") != std::string::npos,
+        "the showcase model list spans every biome's scenery");
+  check(showModels != ttp_theme_scenery_models("playroom"),
+        "…and does not collapse to the picked biome's own list");
+  check(showModels == ttp_theme_showcase_models(), "it is stable across calls");
+  const std::string inventory = ttp_showcase_inventory_json();
+  check(inventory.rfind("{\"clutter\":", 0) == 0, "the legend is canonical JSON");
+  check(inventory.find("\"wind-up train\"") != std::string::npos,
+        "…and names the kinds no single biome carries");
 }
 
 // ---------------------------------------------------------------------------

@@ -143,13 +143,21 @@ function isFramed() {
 // (you can't comfortably drag a thumbnail). Returns true when it took over the camera.
 function enableFreeCamIfStandalone(scene) {
   if (isFramed()) return false;
+  enableFreeCam(scene);
+  return true;
+}
+
+// The same camera, unconditionally, from `start` (see Stage.enableUserCamera).
+// The asset gallery takes this branch: there the preview IS the page — one
+// full-bleed frame you are meant to fly, not a thumbnail in a grid — so the
+// iframe test above says nothing useful about whether a viewer can drag it.
+function enableFreeCam(scene, start) {
   scene.setFog(false); // flying around the scene: no haze clipping the far track
   // #race is a transparent z-2 overlay over the canvas; let pointer events fall
   // through to it so the drag handler can listen (see .cam-free in display.css).
   document.documentElement.classList.add('cam-free');
-  scene.enableUserCamera();
+  scene.enableUserCamera(start);
   showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
-  return true;
 }
 
 // One-time control legend for the free camera — the drag/WASD controls are
@@ -379,6 +387,124 @@ export function runDisplayScenario(opts, ctx) {
         }
       };
       holdFrame(true); // gallery: hold the turntable on a still frame; the card's ▶ orbits it
+    }
+    return;
+  }
+
+  // ---- asset showroom (used by the asset gallery, /gallery-assets.html) ----
+  // Everything the game draws, in one scene, under a camera you fly yourself.
+  //
+  // Three pieces do the work and none of them is new machinery: the SHOWROOM
+  // track (shared/devTracks.js) is a stadium oval whose exhibition straight the
+  // renderer lines its hero landmarks along; the SHOWCASE theme (set in main.js
+  // for this scenario) unions every biome's scenery, clutter and fliers into
+  // whichever biome is being shown; and the field is a bare session left UNRUN,
+  // so the cars sit parked on the grid — one per model, in the liveries — which
+  // is the shot the gallery opens on.
+  //
+  // The only thing here the other previews do not do is stay INTERACTIVE: the
+  // camera is the viewer's, and window.__showroom lets the gallery's own chrome
+  // drive the biome, the field and the item roulette without reloading the page
+  // (a reload would re-fetch the wasm and every GLB to change a dropdown).
+  if (scenario === 'assets') {
+    show('race');
+    el('results').classList.add('hidden');
+    ready().then(() => setupShowroom()).catch((e) => console.warn('[TestHarness] showroom failed to start', e));
+
+    function setupShowroom() {
+      const { scene, track } = ctx;
+      const MODELS = window.CAR_MODELS || [];
+      const MODEL_NAMES = window.CAR_NAMES || [];
+      // Facing the grid from up the road, so the opening frame is the cars —
+      // their fronts, their liveries and their name plates — with the exhibition
+      // straight running away behind the camera. Fitted to the showroom's own
+      // geometry (the line is at world origin, the road runs +x, the grid sits
+      // behind it), which is why it is authored here rather than solved: this
+      // scenario builds exactly one track.
+      const START_CAM = { eye: { x: -12, y: 2, z: -7.5 }, yaw: 0.75, pitch: -0.12 };
+      enableFreeCam(scene, START_CAM);
+
+      // One seat per LIVERY, cycling the models — eight cars covers every model
+      // twice over, and no model is represented by only one paint job. Each
+      // wears its model's own name on the rear plate, which makes the lineup
+      // self-labelling.
+      const ids = [];
+      for (let i = 0; i < COLORS.length; i++) ids.push(i);
+      const modelOf = (i) => (MODELS.length ? i % MODELS.length : 0);
+      const statsFor = window.carStats || (() => undefined);
+      const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(modelOf(i)) }));
+
+      let forceItem = null;   // the roulette override the gallery's picker sets
+      let engine = null;
+      let driving = false;
+      const newSession = () => {
+        if (engine) engine.dispose();
+        engine = bareSession(field, track, { bots: botSpecs(ids), forceItem });
+        window.__engine = engine;
+        scene.bindSession(engine.h);
+        scene.hold(!driving);
+      };
+      newSession();
+
+      for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+      // cell:false — no split-screen: one camera over the whole showroom, which
+      // is the one this page hands to the viewer.
+      ids.forEach((i) => scene.addCar(i, i, MODEL_NAMES[modelOf(i)] || `Car ${i + 1}`,
+                                      { cell: false, carIndex: modelOf(i) }));
+
+      // Spending the held item from out here rather than on the bot's own hold,
+      // so a forced roulette actually SHOWS the thing on a loop (the rocket's
+      // flight and burst, the monster truck's grow-in) instead of once a lap.
+      // The car furthest back fires, which is both the most dramatic and what
+      // the catch-up items are for. Lifted from the race previews above.
+      let useSeq = 0, fireCd = 1.2;
+      function spendHeldItem(snap, dt) {
+        fireCd -= dt;
+        if (fireCd > 0) return;
+        if (forceItem === 'monster' && snap.cars.some((c) => c.monster)) return;
+        const armed = snap.cars.filter((c) => c.item && !c.finished);
+        if (!armed.length) return;
+        armed.sort((a, b) => a.totalS - b.totalS);
+        engine.processInput(armed[0].id, { u: ++useSeq });
+        fireCd = forceItem === 'monster' ? 1.6 : 1.3;
+      }
+
+      scene.onFrame = (dt) => {
+        if (!driving) return;   // parked: the renderer holds the grid at rest
+        engine.update(dt * 1000);
+        const snap = engine.getSnapshot();
+        if (forceItem) spendHeldItem(snap, dt);
+        if (raceOver(snap)) newSession();   // endless: back to the grid, lap again
+      };
+
+      // The gallery chrome's control surface. Same-origin, so the page reaches
+      // it through the iframe's contentWindow rather than through postMessage.
+      window.__showroom = {
+        // Park the field back on the grid, or let the AI drive it out — the only
+        // way to see the moving half of the kit (skids, dust, items in flight).
+        drive(on) {
+          driving = on !== false;
+          if (driving) scene.hold(false);
+          else { newSession(); }   // parked means back ON the grid, not stopped mid-corner
+          return driving;
+        },
+        driving: () => driving,
+        // Every box rolls this item, so the demo above can spend it on a loop.
+        // null hands the roulette back.
+        item(id) { forceItem = id || null; newSession(); return forceItem; },
+        heldItem: () => forceItem,
+        // Repaint the world. A biome is a scene REBUILD (the palette is baked
+        // into the meshes), so this awaits the new scene and rebinds the field.
+        async biome(name) {
+          scene.biomeOverride = name || null;
+          await scene.setTrack(track);
+          scene.bindSession(engine.h);
+          return scene.biome();
+        },
+        // Where the camera is, and how to put it back on the cars.
+        camera: () => scene._free && { ...scene._free.eye },
+        home() { if (scene._free) Object.assign(scene._free, { eye: { ...START_CAM.eye }, yaw: START_CAM.yaw, pitch: START_CAM.pitch }); }
+      };
     }
     return;
   }

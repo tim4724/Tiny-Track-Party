@@ -214,6 +214,16 @@ export class Stage {
   // The biome this track is being drawn in — the race-music pool key.
   biome() { return this._biome; }
 
+  // Draw every scene from here on as the ASSET GALLERY's showroom: this biome's
+  // palette carrying every biome's vocabulary (ttp_display_showcase). The
+  // gallery is the only caller; nothing in play sets it.
+  //
+  // Takes effect at the next build, so a caller flipping it on a live scene
+  // asks for one — the same contract as biomeOverride. Held here and pushed in
+  // _rebuild rather than pushed now, because the gallery sets it at module
+  // scope, before boot() has a display to latch it on.
+  showcase(on) { this._showcase = on !== false; }
+
   // The roster the renderer bakes models and liveries into, in SLOT order: cars
   // that own a cell first, in cell order, then the rest of the field. Every
   // frame then finds a car's slot by its id, so this order only has to be
@@ -252,10 +262,16 @@ export class Stage {
         while (this._dirty) {
           this._dirty = false;
           const roster = this._roster();
-          const sig = JSON.stringify(roster);
-          if (sig === this._rosterSig) continue; // a seat edit the renderer can't see
+          // Every INPUT to the build, not just the roster: the look is one too.
+          // Re-picking a biome on a settled field (the asset gallery's picker)
+          // leaves the seats identical, and on a roster-only signature that
+          // rebuild was silently skipped — the scene kept the old palette and
+          // the caller's await resolved as if it had not.
+          const sig = JSON.stringify([this._biome, !!this._showcase, roster]);
+          if (sig === this._rosterSig) continue; // nothing the renderer can see
           this._rosterSig = sig;
           try {
+            this.display.showcase(!!this._showcase); // latched; see showcase()
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
           } catch (e) {
             this._rosterSig = null; // let the next change retry
@@ -608,7 +624,14 @@ export class Stage {
   // This is ~60 lines of pointer and key handling rather than a controls library
   // because all it produces is an eye and a look target, which is exactly what
   // ttp_display_look takes.
-  enableUserCamera() {
+  //
+  // `start` overrides where it opens ({ eye: {x,y,z}, yaw, pitch }, any subset).
+  // A surface that knows what it wants looked at says so — the asset gallery
+  // opens on the parked cars rather than on the iso overview, which on its long
+  // showroom oval would be a distant view of nothing in particular. It is the
+  // SHELL's to decide because the free cam is the shell's: TTP_CAM_FREE is the
+  // one mode where C++ draws whatever pose it is handed.
+  enableUserCamera(start) {
     if (this._free) return this._free;
     this.orbit = false;
     this.bboxOrbit = false;
@@ -617,6 +640,11 @@ export class Stage {
     // track centre. Yaw/pitch are then driven by the drag.
     const f = { eye: { x: 60, y: 45, z: 60 }, yaw: Math.PI * 1.25, pitch: -0.5,
                 keys: new Set(), fly: 40 };
+    if (start) {
+      if (start.eye) f.eye = { ...f.eye, ...start.eye };
+      if (Number.isFinite(start.yaw)) f.yaw = start.yaw;
+      if (Number.isFinite(start.pitch)) f.pitch = start.pitch;
+    }
     this._free = f;
     if (this.display) this.display.camera(CAM.FREE);
 

@@ -1636,6 +1636,53 @@ constexpr BananaDef kBananas_gym[] = {
   { 0x1.6666666666666p-1, 0x1.ccccccccccccdp-1 },
 };
 
+constexpr WptDef kW_showroom[] = {
+  { 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.ep+5, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.6a66666666666p+6, 0x1.199999999999ap+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.7cp+6, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.6a66666666666p+6, 0x1.999999999999ap+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+6, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.ep+5, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+5, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x1.4p+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { 0x0p+0, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.8p+4, 0x1.ep+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.14ccccccccccdp+5, 0x1.999999999999ap+4, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.38p+5, 0x1.ep+3, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.14ccccccccccdp+5, 0x1.199999999999ap+2, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.8p+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+  { -0x1.8p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
+};
+constexpr FurnDef kOils_showroom[] = {
+  { 0x1p-1, 0x0p+0, false, 0x0p+0 },
+  { 0x1.0f5c28f5c28f6p-1, -0x1p+0, false, 0x0p+0 },
+};
+constexpr FurnDef kPads_showroom[] = {
+  { 0x1.3333333333333p-4, -0x1.ccccccccccccdp-1, false, 0x0p+0 },
+  { 0x1.3333333333333p-4, 0x1.ccccccccccccdp-1, false, 0x0p+0 },
+};
+constexpr FurnDef kBoxes_showroom[] = {
+  { 0x1.47ae147ae147bp-6, 0x0p+0, false, 0x0p+0 },
+  { 0x1.70a3d70a3d70ap-5, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
+  { 0x1.70a3d70a3d70ap-5, -0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.70a3d70a3d70ap-5, 0x1.6666666666666p-2, false, 0x0p+0 },
+  { 0x1.70a3d70a3d70ap-5, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
+};
+constexpr FurnDef kPoles_showroom[] = {
+  { 0x1.428f5c28f5c29p-1, -0x1p+0, false, 0x0p+0 },
+  { 0x1.428f5c28f5c29p-1, 0x1p+0, false, 0x0p+0 },
+  { 0x1.51eb851eb851fp-1, 0x0p+0, false, 0x0p+0 },
+};
+constexpr BananaDef kBananas_showroom[] = {
+  { 0x1.1eb851eb851ecp-1, 0x0p+0 },
+  { 0x1.2666666666666p-1, -0x1.ccccccccccccdp-1 },
+  { 0x1.2e147ae147ae1p-1, 0x1.ccccccccccccdp-1 },
+};
+
 constexpr TrackDef TTP_TRACKS[] = {
   { "tidepool", "Tidepool", "beach", 1, true, nullptr, 0, kW_tidepool, 52, 0x1.4p+1, 0x0p+0, kOils_tidepool, 1, kPads_tidepool, 2, kBoxes_tidepool, 8, nullptr, 0, nullptr, 0 },
   { "cove", "Cove", "beach", 1, true, nullptr, 0, kW_cove, 49, 0x1.4p+1, 0x0p+0, kOils_cove, 1, kPads_cove, 2, kBoxes_cove, 8, nullptr, 0, nullptr, 0 },
@@ -1659,11 +1706,12 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "skyline", "Skyline", "rooftop", 4, false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, 2, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1 },
   { "gym", "Gym", nullptr, 1, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3 },
+  { "showroom", "Showroom", nullptr, 2, true, nullptr, 0, kW_showroom, 19, 0x1.4p+1, 0x0p+0, kOils_showroom, 2, kPads_showroom, 2, kBoxes_showroom, 5, kPoles_showroom, 3, kBananas_showroom, 3 },
 };
 // The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).
 constexpr int TTP_TRACK_COUNT = 20;
 // Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.
-constexpr int TTP_TRACK_TOTAL = 22;
+constexpr int TTP_TRACK_TOTAL = 23;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is the AUTHORED

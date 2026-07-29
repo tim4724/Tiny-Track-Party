@@ -11,6 +11,7 @@
 #include <string>
 
 #include "ttp/canonical.h"
+#include "ttp/showcase.h"
 #include "ttp/theme.h"
 
 namespace {
@@ -58,6 +59,18 @@ const char* ttp_theme_scenery_models(const char* biomeName) {
   ttp::Value a = ttp::Value::Arr();
   for (const std::string& m : t.scenery.models) a.push(ttp::Value::Str(m));
   ttp::canonical_stringify_into(a, scratch());
+  return scratch().c_str();
+}
+
+const char* ttp_theme_showcase_models(void) {
+  ttp::Value a = ttp::Value::Arr();
+  for (const std::string& m : ttp::rt::showcase_models()) a.push(ttp::Value::Str(m));
+  ttp::canonical_stringify_into(a, scratch());
+  return scratch().c_str();
+}
+
+const char* ttp_showcase_inventory_json(void) {
+  scratch() = ttp::rt::showcase_inventory_json();
   return scratch().c_str();
 }
 

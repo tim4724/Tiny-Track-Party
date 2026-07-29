@@ -83,5 +83,61 @@ export const DEV_TRACKS = {
     bananas: [
       { u: 0.63, lat: 0 }, { u: 0.665, lat: -0.9 }, { u: 0.70, lat: 0.9 }
     ]
+  },
+  // The ASSET GALLERY's stage (/gallery-assets.html). Not a driving surface: a
+  // stadium oval whose only job is to give every drawn thing somewhere to stand,
+  // where a free camera can walk past all of it.
+  //
+  // The shape is load-bearing, and it is the LANDMARK PLACER that sets it. The
+  // renderer places its hero set-pieces by walking the centreline from a
+  // per-kind starting arclength (buildLandmarks' findSpot, s0 = 30 .. 130 world
+  // units) and taking the first clear spot beside the road. So the EXHIBITION
+  // STRAIGHT is 160 world units long: every one of the seventeen kinds lands
+  // along it, on alternating sides, instead of being scattered around a circuit
+  // you would have to fly a lap of. The back straight then carries the road
+  // furniture (boxes, pads, slicks + their cones, dropped bananas, a pole gate),
+  // and the run-in is collinear with the exhibition straight so the parked grid
+  // — the gallery's opening shot — sits on a straight rather than mid-corner.
+  //
+  // The VOCABULARY is not here. What stands trackside is the showcase theme's
+  // job (native/libttp-runtime/ttp/showcase.h): it unions every biome's scenery,
+  // landmarks, clutter and fliers into whichever biome the gallery is showing,
+  // so one lap of this oval is the whole kit rather than one cup's corner of it.
+  showroom: {
+    name: 'Showroom', difficulty: 'Dev',
+    waypoints: [
+      // exhibition straight — 80 authored units (160 world) of landmark frontage
+      { x: 0, z: 0 }, { x: 20, z: 0 }, { x: 40, z: 0 }, { x: 60, z: 0 }, { x: 80, z: 0 },
+      // right U-turn (centre 80,15 · r 15)
+      { x: 90.6, z: 4.4 }, { x: 95, z: 15 }, { x: 90.6, z: 25.6 },
+      // back straight — the furniture run
+      { x: 80, z: 30 }, { x: 60, z: 30 }, { x: 40, z: 30 }, { x: 20, z: 30 },
+      { x: 0, z: 30 }, { x: -24, z: 30 },
+      // left U-turn (centre -24,15 · r 15)
+      { x: -34.6, z: 25.6 }, { x: -39, z: 15 }, { x: -34.6, z: 4.4 },
+      // run-in to the line, collinear with the exhibition straight (grid straight)
+      { x: -24, z: 0 }, { x: -12, z: 0 }
+    ],
+    // u = fraction of the lap (built length ≈ 603 world units). The exhibition
+    // straight is u 0 .. 0.265; the back straight u 0.42 .. 0.76.
+    boxes: [
+      { u: 0.02, lat: 0 },                                          // the lone box, right off the line
+      { u: 0.045, lat: -1.05 }, { u: 0.045, lat: -0.35 },           // the standard 4-lane row
+      { u: 0.045, lat: 0.35 }, { u: 0.045, lat: 1.05 }
+    ],
+    pads: [
+      { u: 0.075, lat: -0.9 }, { u: 0.075, lat: 0.9 }               // a pair of boost discs
+    ],
+    oils: [
+      { u: 0.50, lat: 0 },                                          // slick + its ring of cones
+      { u: 0.53, lat: -1.0 }                                        // (wet-floor signs in a water biome)
+    ],
+    bananas: [
+      { u: 0.56, lat: 0 }, { u: 0.575, lat: -0.9 }, { u: 0.59, lat: 0.9 }
+    ],
+    poles: [
+      { u: 0.63, lat: -1.0 }, { u: 0.63, lat: 1.0 },                // a pillar gate
+      { u: 0.66, lat: 0 }                                           // one dead centre
+    ]
   }
 };

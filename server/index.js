@@ -167,9 +167,14 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
     return;
   }
-  // Manifest of the Kenney kit's GLBs, so the asset-world viewer
-  // (/assets-viewer.html) stays in sync with the directory instead of a
+  // Manifest of the Kenney kit's GLBs, so the asset gallery
+  // (/gallery-assets.html) stays in sync with the directory instead of a
   // hand-maintained list. Read-only listing of one fixed asset folder.
+  //
+  // What that page does with it is the point: it diffs the directory against
+  // what the showroom actually stages, so a model sitting in the kit that
+  // nothing draws is VISIBLE rather than being absent from a list nobody
+  // cross-checks.
   if (urlPath === '/api/assets' && req.method === 'GET') {
     fs.readdir(path.join(PUBLIC_DIR, 'assets', 'toycar'), (err, files) => {
       if (err) { sendJson(res, 500, { error: 'asset listing failed' }); return; }

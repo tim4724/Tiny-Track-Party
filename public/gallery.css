@@ -174,6 +174,58 @@ button.card-btn { padding: 2px 6px; min-height: 20px; font-size: 11px; line-heig
 .sound-speed { width: 90px; }
 input[type="range"] { accent-color: #5060c0; }
 
+/* Asset gallery (gallery-assets.html): ONE live scene, not a grid of frozen
+   thumbnails. The frame fills everything under the header and keeps its own
+   pointer events — the camera is the page — so this is the one gallery whose
+   iframe is not pointer-events:none. */
+/* A column, so the stage takes whatever the header leaves — the header's height
+   varies with wrapping and doubles on the mobile layout, so any fixed offset
+   here would be wrong on some screen. */
+body.stage-page {
+  display: flex; flex-direction: column;
+  height: 100vh; padding-bottom: 0; overflow: hidden;
+}
+body.stage-page > header { position: static; }
+section.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000;
+}
+section.stage iframe {
+  display: block;
+  width: 100%; height: 100%;
+  border: 0;
+}
+.legend {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 232px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(6, 6, 15, 0.82);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 11px; line-height: 1.5;
+  /* Takes the pointer, unlike every other overlay in this stylesheet: the list
+     is longer than the panel and has to be scrollable. The cost is that a drag
+     STARTED over it does not turn the camera — which is what a UI panel over a
+     3D view does everywhere, and the rest of the frame is a drag surface. */
+  pointer-events: auto;
+}
+.legend__hint { color: #8b93b8; margin-bottom: 10px; }
+.legend__group { margin-bottom: 10px; }
+.legend__group h2 {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #9aa3c7; margin-bottom: 3px;
+}
+.legend__group ul { list-style: none; }
+.legend__group li { color: #d5d5ee; }
+.legend__note { color: #6f7699; margin-top: 6px; }
+
 /* Mobile: one card per row + compact, touch-friendly header.
    - Header becomes a 3-col grid: title spans the top row, and Display /
      Controller / ⚙ share the row beneath. Option groups hide behind the

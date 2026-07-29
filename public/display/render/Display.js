@@ -29,6 +29,13 @@ export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vpoint', 'vground', 'vdecal',
                    'vpresent', 'vesm', 'vblur', 'vburst', 'voverlay'];
 
+// The GLBs every scene needs whatever the track and the biome are: the track's
+// own furniture, and the truck a monster item turns a car into. Exported because
+// it is also the honest answer to "what does the game draw?" — the asset gallery
+// lists it rather than keeping a second copy that could fall behind this one.
+// (The scenery models are NOT here: those are the biome's, and C++ names them.)
+export const PROP_MODELS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
+
 // cellRects' "no cells" answer, so the caller's loop is the same shape either way.
 const EMPTY_RECTS = new Float32Array(0);
 // hud()'s, for the same reason.
@@ -70,6 +77,7 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
+    this._showcase = false;  // the asset gallery's showroom; see showcase()
     // The roster ids handed to ttp_display_build, in SLOT order. The HUD block
     // comes back indexed by slot and carries no car id (ttp_hud.h's slot
     // identity note), so this list — the one this class authored — is what maps
@@ -82,6 +90,7 @@ export class Display {
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
+      showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -138,6 +147,15 @@ export class Display {
     this._fn.resize(w, h);
   }
 
+  // Build every scene from here on as the ASSET GALLERY's showroom: the picked
+  // biome's palette carrying every biome's vocabulary (ttp_display_showcase).
+  // Latched, and set before setTrack — it changes both what the build resolves
+  // and which scenery bytes this class has to fetch.
+  showcase(on) {
+    this._showcase = on !== false;
+    this._fn.showcase(this._showcase ? 1 : 0);
+  }
+
   // Build (or REBUILD) the scene for a track. Every race start comes through
   // here — a Grand Prix chains four tracks, and even a restart wants the skid
   // ribbons, kicked cones and collected boxes back at their opening state.
@@ -166,7 +184,11 @@ export class Display {
     // instanced props by that index, and the biome's recolour — which keys on
     // each model's own authored material colours — reads these same bytes back
     // out on the C++ side.
-    const scModels = (await loadBiomes()).sceneryModels(biome);
+    //
+    // In SHOWCASE mode the list is the union of every biome's (the same one for
+    // all of them, which is why it takes no biome argument) — see showcase().
+    const b = await loadBiomes();
+    const scModels = this._showcase ? b.showcaseModels() : b.sceneryModels(biome);
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 
@@ -193,7 +215,7 @@ export class Display {
         this.provide(`car${i}.glb`, bytes);
         this.provide(`car${i}-ghost.glb`, ghostGlb(bytes));
       }),
-      ...['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'].map(async (name) => {
+      ...PROP_MODELS.map(async (name) => {
         const bytes = await assets.glb(name);
         if (!bytes) return;
         this.provide(`${name}.glb`, bytes);

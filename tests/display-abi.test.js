@@ -46,7 +46,7 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'cells', 'cell_rects', 'cell_cards', 'dividers', 'ui_scale',
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'profile', 'profile_names',
-                      'biome']) {
+                      'biome', 'showcase']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }
@@ -176,6 +176,52 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
   assert.equal(hill('playroom', 0) >>> 0, 0xe66a5a, "the playroom's swatch colour");
   const models = M.cwrap('ttp_theme_scenery_models', 'string', ['string']);
   assert.deepEqual(JSON.parse(models('beach')), ['palm-tall', 'palm-bend']);
+});
+
+// ---- the asset gallery stages every model in the kit -------------------------
+// The showcase layer's own gate is native/ (the `showcase` ctest, which holds it
+// to the biome tables); what only this file can see is the two things that meet
+// OUTSIDE C++ — the shipped artifact exporting these entry points, and the union
+// they answer with against the GLBs actually sitting in public/assets/toycar.
+//
+// That second half is the point of /gallery-assets.html itself, and it is worth
+// having as a test rather than only as a panel someone looks at: a kit model
+// nothing plants is either dead weight or a wiring job left unfinished, and
+// neither announces itself.
+test('the asset showroom stages every scenery GLB in the kit', async () => {
+  const M = await load();
+  for (const name of ['ttp_theme_showcase_models', 'ttp_showcase_inventory_json']) {
+    assert.equal(typeof M[`_${name}`], 'function',
+      `_${name} is not exported — gallery-assets.js would fail at the cwrap call`);
+  }
+  const staged = JSON.parse(M.cwrap('ttp_theme_showcase_models', 'string', [])());
+
+  // Every biome's own list, unioned by hand here rather than trusted from the
+  // same function under test.
+  const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
+  const models = M.cwrap('ttp_theme_scenery_models', 'string', ['string']);
+  const want = new Set();
+  for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
+    for (const m of JSON.parse(models(nameAt(i)))) want.add(m);
+  }
+  assert.deepEqual([...want].filter((m) => !staged.includes(m)), [],
+    'a biome plants a model the asset gallery never shows');
+
+  // And the directory: everything under the kit is either a car, a prop the
+  // renderer always loads, or one of the staged scenery models.
+  const CARS = ['vehicle-racer-low', 'vehicle-speedster', 'vehicle-racer', 'vehicle-vintage-racer'];
+  const PROPS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
+  const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
+    .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
+  const drawnBy = new Set([...CARS, ...PROPS, ...staged]);
+  assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
+    'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
+
+  const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', [])());
+  assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
+  assert.equal(inv.landmarks.length, 17, 'every hero landmark kind is staged');
+  assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
+    'the legend spans kinds no single biome carries');
 });
 
 // ---- the CPU roster is one table ---------------------------------------------

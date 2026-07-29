@@ -66,6 +66,23 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * it wants to tell the user their spelling was wrong. */
 TTP_ABI void ttp_display_biome(const char* name);
 
+/* Build every scene from here on as the ASSET GALLERY's showroom
+ * (ttp/showcase.h): the resolved biome's palette carrying the UNION of every
+ * biome's vocabulary — all nine scenery models, all seventeen hero landmarks,
+ * all ten clutter kinds and every flier rig — so one scene holds everything the
+ * renderer draws rather than one cup's share of it.
+ *
+ * A LATCHED FLAG, like ttp_display_biome, and for the same reason: it changes
+ * what the next ttp_display_build resolves, so it cannot be an argument to the
+ * frame and must not be a mode the renderer has to keep two versions of.
+ *
+ * Off by default and reached by nothing on the shipping path — the gallery
+ * (/gallery-assets.html) is its only caller. A shell in showcase mode must fetch
+ * its scenery bytes from ttp_theme_showcase_models() rather than
+ * ttp_theme_scenery_models(): the slot list is longer, and it is the same list
+ * for every biome. */
+TTP_ABI void ttp_display_showcase(int on);
+
 /* Build the scene for `trackId` from the GLBs/textures the resolved biome names
  * and the roster handed over here.
  *

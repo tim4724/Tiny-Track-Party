@@ -31,6 +31,8 @@ export async function loadBiomes() {
   const boostIcon = m.cwrap('ttp_theme_boost_icon', 'number', ['string']);
   const hill = m.cwrap('ttp_theme_hill_color', 'number', ['string', 'number']);
   const models = m.cwrap('ttp_theme_scenery_models', 'string', ['string']);
+  const showModels = m.cwrap('ttp_theme_showcase_models', 'string', []);
+  const inventory = m.cwrap('ttp_showcase_inventory_json', 'string', []);
   // The name list is fixed for the life of the module, and its ORDER is
   // user-visible (the ?biome= dropdown), so it is read across once.
   const names = [];
@@ -51,6 +53,13 @@ export async function loadBiomes() {
     // to the renderer as scenery<i>.glb, and it binds its instanced props by
     // that index.
     sceneryModels: (biome) => JSON.parse(models(biome)),
+    // The same list for the ASSET GALLERY's showroom (ttp_display_showcase):
+    // every biome's scenery at once, and deliberately not a function of the
+    // biome — these bytes are fetched before the build picks a look.
+    showcaseModels: () => JSON.parse(showModels()),
+    // What that showroom holds, for the gallery's legend. Captions, not ids:
+    // the layer that stages the world is the one that says what it staged.
+    showcaseInventory: () => JSON.parse(inventory()),
   };
   return api;
 }

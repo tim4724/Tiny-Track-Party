@@ -73,6 +73,37 @@ TTP_ABI uint32_t ttp_theme_hill_color(const char* biomeName, int index);
  * Points at a static scratch buffer valid until the next call. */
 TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
 
+/* ---- the asset gallery ---------------------------------------------------
+ *
+ * The SHOWCASE world (ttp/showcase.h): one biome's palette carrying every
+ * biome's vocabulary, which is what /gallery-assets.html builds so a viewer can
+ * walk past everything the renderer draws instead of one cup's corner of it.
+ * Reached with ttp_display_showcase(1) before a build.
+ *
+ * These two are here — rather than beside it in the Filament-gated display ABI —
+ * for this header's own reason: the tables are plain data, and both answers are
+ * things the SHELL does (fetching bytes, drawing a legend) with no renderer
+ * needed to ask. */
+
+/* The scenery GLBs a showcase build stages, same JSON array and same slot
+ * contract as ttp_theme_scenery_models — and deliberately NOT a function of the
+ * biome. A shell fetches these BEFORE the build picks a look, so the list has to
+ * be the same one whichever biome is then built, or slot 3 is a palm in the
+ * shell's hand and a cactus in the renderer's. */
+TTP_ABI const char* ttp_theme_showcase_models(void);
+
+/* What that world holds, as JSON, for the gallery's legend:
+ *
+ *   {"clutter":[…],"fliers":[…],"landmarks":[…],"scenery":[…]}
+ *
+ * HUMAN-READABLE captions, not ids: nothing resolves by them. They come from
+ * here because the layer that decides what is staged should be the one that says
+ * what it staged — three shells will draw this legend, and a caption list kept
+ * by hand in each is the drift this ABI's manifest rule exists to stop.
+ *
+ * Static scratch, valid until the next call (the ttp_theme_scenery_models rule). */
+TTP_ABI const char* ttp_showcase_inventory_json(void);
+
 #ifdef __cplusplus
 }
 #endif

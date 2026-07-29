@@ -88,7 +88,14 @@ const colorPalette = CAR_COLORS.slice();
 // gallery). `track` always holds valid geometry (the pick, or the first track as
 // a render default) so the scene + gallery always have something to draw.
 const _trackParams = new URLSearchParams(location.search);
-const _qTrack = _trackParams.get('track');
+// The ASSET SHOWROOM has one stage and only one (shared/devTracks.js's
+// `showroom`), so ?scenario=assets names it for you: the gallery passes it
+// explicitly, and someone typing the URL by hand gets the scene rather than an
+// arbitrary catalogue track with none of the exhibition frontage on it. An
+// explicit ?track= still wins — flying the showcase vocabulary around a real
+// circuit is a fair thing to want.
+const _qTrack = _trackParams.get('track')
+  || (_trackParams.get('scenario') === 'assets' ? 'showroom' : null);
 
 // Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
 // the live lobby attract demo must stay out of their way — guard every demo entry on it.
@@ -239,6 +246,12 @@ const sceneBooted = scene.boot().catch((e) => {
 // (compare any track in any biome). Off by default; an unknown name is ignored (cup decides).
 const _qBiome = _trackParams.get('biome');
 if (_biomes.has(_qBiome)) scene.biomeOverride = _qBiome;
+
+// ?scenario=assets — the asset gallery's SHOWROOM look: the biome above (or the
+// track's own) carrying every biome's vocabulary, so one scene holds the whole
+// kit. Set here, before the first scene build, because it changes what that
+// build resolves AND which scenery bytes the shell fetches for it.
+if (_trackParams.get('scenario') === 'assets') scene.showcase(true);
 
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
@@ -1684,6 +1697,11 @@ window.__sceneReady = scenePromise; // awaited by E2E before starting a race (st
 // sample() hands back the same numbers it prints — which is how a scripted GPU
 // budget sweep across the catalogue reads a track: show(), race it, sample().
 window.__perf = scene.perf;
+// The bound biome ABI (shared/biomes.js). Here for the ASSET GALLERY, which
+// hosts this page in a frame and draws its own biome picker and legend from it:
+// reaching into the frame costs nothing, where importing the module in the
+// parent would stand up a second wasm instance to read two lists.
+window.__biomes = _biomes;
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
@@ -1697,7 +1715,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'countdown', 'racing', 'results', 'intermission', 'podium']
+    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

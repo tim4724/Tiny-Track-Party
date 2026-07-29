@@ -35,6 +35,9 @@ env, injected into each page as the `relay-url` `<meta>` (read by
 `expect` from `tests/e2e/helpers.js` (it reaps leaked phone contexts). The
 suite needs `npx playwright install chromium` once. `/gallery.html` is a manual
 no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`).
+`/gallery-assets.html` is the odd one out: not a grid of frozen thumbnails but
+ONE live scene you fly — every model, landmark, clutter kind and flier the
+renderer draws, staged at once. See the SHOWCASE rule below.
 
 ## Key Rules
 
@@ -156,6 +159,32 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   fetch, and two colours for the two 2D widgets the renderer does not draw — the
   HUD boost chip's stroke and the music gallery's swatch. Wanting a third getter
   means the look is being rebuilt in the DOM; put it in the renderer instead.
+- The ASSET GALLERY (`/gallery-assets.html`) is the one scene that holds the
+  WHOLE kit, and it is built from data rather than from a list. Three pieces,
+  none of them a second copy of anything:
+  the SHOWCASE THEME (`native/libttp-runtime/ttp/showcase.{h,cc}`, reached by
+  `ttp_display_showcase` / `ttp_theme_showcase_models`) takes the picked biome's
+  PALETTE unchanged and merges in every OTHER biome's VOCABULARY — all nine
+  scenery models, all seventeen landmark kinds, all ten clutter kinds and every
+  flier rig — first-appearance-wins over the `?biome=` order, so a biome added to
+  `theme.cc` joins the gallery on the same commit and the `showcase` ctest says
+  so (it also pins that the palette survives untouched, and that the scenery SLOT
+  order does not depend on the biome — the shell fetches those bytes before the
+  build picks a look). The SHOWROOM track (`shared/devTracks.js`) is shaped by
+  the landmark placer: `buildLandmarks` walks the centreline from a per-kind
+  arclength of 30–130, so the exhibition straight is 160 world units and every
+  hero lands along it instead of scattered round a circuit. And the field is a
+  bare session left UNRUN — the cars park on the grid, which is the opening shot
+  — until the gallery's Drive toggle lets the AI out (`window.__showroom`, the
+  frame's control surface: biome, forced item, drive, camera home).
+  It is DEV-ONLY and reached by nothing on the shipping path: `ttp_display_showcase`
+  is latched off, and `showcase.cc` sits beside `theme.cc` rather than inside it
+  precisely so a gallery can never move a number the shipping game draws with
+  (theme.cc is held to a frozen JS-recorded corpus; this has no JS twin and never
+  had one, so its gate is behavioural).
+  `tests/display-abi.test.js` diffs what is staged against the GLBs actually in
+  `public/assets/toycar` — a kit model nothing plants is either dead weight or an
+  unfinished wiring job, and the gallery's legend says so in the browser.
 - AUDIO IS TWO HALVES, and only one of them is going native. The DECISIONS —
   which cue, at what gain, which sustained voice at what level, the `audibility()`
   distance curve, the shared curb-scrub throttle, the rocket jet lifecycle, the
@@ -365,7 +394,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (47 tests, the SAME 47 on every leg —
+  replayed by `native/` ctest (48 tests, the SAME 48 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
