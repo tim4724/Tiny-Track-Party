@@ -2310,11 +2310,13 @@ void buildRocketModel(const PartFn& part, int variant) {
         part(applyPre(primSphere(0.078f, 18, 12),
                     mat4f::scaling(float3{ 1.0f, 1.9f, 1.0f })), 0, 0.120f, 0, TRIM, 1.0f);
         part(primCylinder(0.078f, 0.056f, 0.055f, 18), 0, -0.1475f, 0, DEEP, 1.0f);
-        // Bigger than the clipped fins they replace — a wing is a thing you can
-        // see, and three of them at 120 degrees is still rotationally symmetric
-        // enough that the 9 rad/s roll reads as a still object.
-        const Prim wing = primPlate({ { -0.020f, 0.070f }, { -0.170f, 0.070f },
-                                      { -0.178f, 0.172f }, { -0.086f, 0.158f } }, 0.013f);
+        // Kept SMALL: they sit on the back third of the body and reach about
+        // half a body-radius past it, which is enough to read as wings without
+        // becoming the widest thing about the object. Three at 120 degrees is
+        // rotationally symmetric enough that the 9 rad/s roll reads as a still
+        // object rather than a propeller.
+        const Prim wing = primPlate({ { -0.052f, 0.068f }, { -0.164f, 0.068f },
+                                      { -0.170f, 0.130f }, { -0.100f, 0.122f } }, 0.012f);
         for (int i = 0; i < 3; i++) {
             part(applyPre(wing, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0,
                     TRIM, 1.0f);
@@ -4915,37 +4917,26 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             tcm2.setTransform(tcm2.getInstance(m.entity),
                     mat4f::translation(float3{ 0, -1000, 0 }));
             if (mBlendMaterial) {
-                // TWO CONES, not one. The old flame was a single 0.09-long cone
-                // at 0.7 alpha and it barely registered: at the size a rocket
-                // reads on a TV it was a smudge the same width as the boat-tail
-                // it hung off, so the thing that says "this is under power" was
-                // the one part of the model nobody could see.
-                //
-                // A HALO and a CORE instead — a wide soft orange outer cone with
-                // a short bright near-opaque one inside it. That is how a flame
-                // reads at any size: the core carries the brightness, the halo
-                // carries the length, and the two together survive both a pale
-                // sky and a dark deck where one flat cone survives neither.
+                // ONE cone, one colour. It was a 0.09-long orange smudge no
+                // wider than the boat-tail it hung off, which made the one part
+                // of the model that says "under power" the part nobody could
+                // see; a halo-and-core pair fixed that and was more flame than
+                // the object needed. What actually did the work was the SIZE,
+                // so keep the size and drop the second cone and the second hue.
                 // Still STEADY, not pulsing (see the note above): the jitter the
-                // JS had was noise at this scale, and more flame is not more
-                // reason to flicker it.
+                // JS had was noise at this scale.
                 Mesh& fm = mRocketFlames[r];
-                const mat4f aft = mat4f::rotation((float) M_PI, float3{ 1, 0, 0 });
-                const auto cone = [&](float r0, float h, float y0, uint32_t hex,
-                        float alpha) {
-                    const uint32_t c = packLinear(srgbToLinear(hex), 1.0f, alpha);
-                    const uint32_t base = (uint32_t) fm.verts.size();
-                    const Prim p = applyPre(primCone(r0, h, 14), aft);
-                    for (const float3& v : p.v) {
-                        fm.verts.push_back({ v.x * 1.12f, (v.y + y0 - h / 2) * 1.12f,
-                                             v.z * 1.12f, c });
-                    }
-                    for (const uint32_t i : p.i) fm.idx.push_back(base + i);
-                };
-                // y0 is where the cone's MOUTH sits — the tail of the body —
-                // and each runs back (-Y) from there.
-                cone(0.076f, 0.230f, -0.165f, 0xff6a2a, 0.55f); // halo
-                cone(0.044f, 0.150f, -0.165f, 0xffe07a, 0.92f); // core
+                // The mouth sits at the tail of the body and the cone runs back
+                // (-Y) from there.
+                constexpr float FR = 0.062f, FH = 0.200f, FY0 = -0.165f;
+                const uint32_t fc = packLinear(srgbToLinear(0xffd23f), 1.0f, 0.88f);
+                const Prim flame = applyPre(primCone(FR, FH, 14),
+                        mat4f::rotation((float) M_PI, float3{ 1, 0, 0 }));
+                for (const float3& v : flame.v) {
+                    fm.verts.push_back({ v.x * 1.12f, (v.y + FY0 - FH / 2) * 1.12f,
+                                         v.z * 1.12f, fc });
+                }
+                for (const uint32_t i : flame.i) fm.idx.push_back(i);
                 if (!buildMesh(fm, true, mBlendMaterial->getDefaultInstance())) break;
                 tcm2.setTransform(tcm2.getInstance(fm.entity),
                         mat4f::translation(float3{ 0, -1000, 0 }));
