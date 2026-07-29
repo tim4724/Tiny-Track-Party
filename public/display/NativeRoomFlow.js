@@ -32,6 +32,23 @@ import { loadNativeRuntime } from './nativeRuntime.js';
 let M = null;   // the instantiated emscripten module (shared with the sim ABI)
 let fn = null;  // cwrap'd party ABI
 
+// The record cache's invalidation clock (see NativeRoomFlow._record). Bumped by
+// EVERY ABI call that is not a pure read, and the wrapping below is why it is
+// module-level rather than per-room: a counter that a method has to remember to
+// advance is a counter that goes stale the first time someone adds a method. A
+// second room only over-invalidates, which costs a readback and never a wrong
+// answer.
+let gen = 0;
+
+// The ABI calls that cannot change a record. Everything absent from this set is
+// wrapped to bump `gen` — the safe default, since a missed mutator serves stale
+// data while a needless bump only re-reads.
+const PURE_READS = new Set([
+  'state', 'allDisc', 'hasLateJoiners', 'lateJoiners', 'host', 'isHost', 'size',
+  'connectedCount', 'list', 'has', 'isDisconnected', 'get', 'events',
+  'lowestFreeSlot', 'version'
+]);
+
 export async function init() {
   if (M) return;
   M = await loadNativeRuntime();
@@ -72,6 +89,10 @@ export async function init() {
     lowestFreeSlot: c('ttp_room_lowest_free_slot', 'number', ['string', 'number']),
     version: c('ttp_party_version', 'string', [])
   };
+  for (const [name, f] of Object.entries(fn)) {
+    if (PURE_READS.has(name)) continue;
+    fn[name] = (...a) => { gen++; return f(...a); };
+  }
   console.info(`[native:party] ${fn.version()}`);
 }
 
@@ -133,10 +154,23 @@ export class NativeRoomFlow {
   // ---- live record view (see header note 2) ---------------------------------
   // Reads pass through to wasm so the record never goes stale; writes route to
   // ttp_room_set_field so the wasm roster stays the single source of truth.
+  //
+  // ONE READBACK PER GENERATION, not per property. ttp_room_get_json serializes
+  // the WHOLE record, so an unmemoized proxy charged a full serialize + parse
+  // (~1.6 us) for every `p.ready` — and `{...p}` pays it twice more via ownKeys
+  // and getOwnPropertyDescriptor. The cache is keyed on the room's mutation
+  // counter rather than on time, so it is exactly as live as the uncached
+  // version was: anything that can move a record bumps _gen and the next read
+  // re-fetches. Writes bump it too, so `p.ready = true; p.ready` still reads
+  // back through wasm and cannot observe a value the C++ refused.
   _record(peerIndex) {
     const pj = idJson(peerIndex);
     const h = this._h;
-    const snap = () => JSON.parse(fn.get(h, pj));
+    let cachedGen = -1, cached = null;
+    const snap = () => {
+      if (cachedGen !== gen) { cached = JSON.parse(fn.get(h, pj)); cachedGen = gen; }
+      return cached;
+    };
     return new Proxy({}, {
       get: (_t, key) => {
         if (key === 'toJSON') return () => snap();

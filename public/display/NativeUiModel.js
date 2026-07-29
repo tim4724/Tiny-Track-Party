@@ -232,9 +232,14 @@ export function seriesInfo(input) {
   })));
 }
 
-// The board the TV and every phone render. Its KEY ORDER is the wire's, and it
-// survives JSON.parse here (JS objects keep insertion order for these keys), so
-// the bytes the relay carries are the ones the C++ wrote.
+// The board the TV and every phone render.
+//
+// ITS KEY ORDER IS NOT THE WIRE'S — see the note on lobbySnapshot in
+// NativeSessionModel.js. This board reaches phones inside the retained room
+// snapshot, and ttp_party.cc canonicalizes every outbound frame, so the order
+// ttp_ui_standings_json writes is sorted away before it leaves. The ordered
+// emitter is pinned by abi_check at the ABI boundary and by the frozen ui
+// corpus; it is not a wire guarantee.
 export function standingsPayload({ results, field, cup, lateJoiners, hostPeerIndex, over }) {
   return JSON.parse(fn.standings(J({
     results: results.map((r) => ({ playerId: r.playerId, finished: !!r.finished, time: r.time == null ? null : r.time })),

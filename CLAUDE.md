@@ -276,12 +276,21 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   — player, cup and track names — so there is nothing to pack the way
   `ttp_hud.h`/`ttp_audio.h` pack their per-frame numbers; the precedent that fits
   is `ttp_room_events_json`'s. And the standings board's answer IS a JSON
-  message, handed straight to the relay. That last point is why `ttp_ui.h` is the
-  ONE ABI whose returns are not canonical: keys come out in the model's own
-  order, because the board's key order is the order the phones have always
-  received it in. `libttp-json`'s `ordered_stringify` is that emitter (one walk
-  shared with `canonical_stringify`, differing only in the sort);
-  `canonical_stringify` keeps its sort and its evidence-only job. The catalogue
+  message, handed straight to the relay. `ttp_ui.h` is the ONE ABI whose returns
+  are not canonical: keys come out in the model's own order.
+  `libttp-json`'s `ordered_stringify` is that emitter (one walk shared with
+  `canonical_stringify`, differing only in the sort); `canonical_stringify` keeps
+  its sort and its evidence-only job.
+  WHAT THAT ORDER IS NOT is a wire guarantee, and the older wording here claimed
+  it was ("the order the phones have always received it in"). It is not:
+  `ttp_party.cc`'s `put` runs `canonical_stringify` over EVERY outbound frame —
+  `encode_set_state`, `encode_broadcast`, `encode_send_to` alike — so the
+  retained snapshot and the standings board inside it reach phones SORTED, and
+  always have. What `ordered_stringify` actually earns is fidelity at the ABI
+  boundary: `abi_check` asserts those exact bytes, and the frozen corpora
+  recorded them off a JS oracle that emitted insertion order, so a re-emission
+  has to reproduce them. Keep it for that. Do not spend anything defending a
+  key order the wire discards. The catalogue
   is the one piece of ABI state (`ttp_ui_configure`, set once at boot) —
   `ui_model.cc` itself stays catalogue-agnostic, which is what lets the corpus
   carry a synthetic world. `abi_check` replays the whole ui corpus through the C

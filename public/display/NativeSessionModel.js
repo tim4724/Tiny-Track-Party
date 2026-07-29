@@ -41,7 +41,6 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
-    rosterRows: c('ttp_net_roster_rows_json', 'string', ['string', 'string']),
     lobbySnapshot: c('ttp_net_lobby_snapshot_json', 'string', ['string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
@@ -83,15 +82,23 @@ export function configure({ cars, colors, tracks }) {
 }
 
 // ---- the retained room snapshot --------------------------------------------
-// `roster` is RoomFlow's own list and `inRace` a parallel array of the game
-// layer's answers, so nothing crosses as a callback.
-export function rosterRows(roster, inRace) {
-  return JSON.parse(fn.rosterRows(J(roster), J(inRace)));
-}
-
-// The whole LOBBY_UPDATE object, chooser included. Its KEY ORDER is the wire's
-// and survives JSON.parse here (JS objects keep insertion order for these keys),
-// so the bytes the relay retains are the ones the C++ wrote.
+// NO rosterRows WRAPPER, deliberately. ttp_net_roster_rows_json still exists
+// (the session corpus covers it, and a shell that wants the projection WITHOUT
+// publishing has it), but this display always wants both: lobbySnapshot below
+// composes the same rows, byte for byte, inside the snapshot it is already
+// building. Asking twice cost a second roster readback and a second compose.
+//
+// The whole LOBBY_UPDATE object, chooser included.
+//
+// ITS KEY ORDER IS NOT THE WIRE'S, whatever the shape of the emitter suggests.
+// ttp_net_lobby_snapshot_json writes the model's own order, and JSON.parse here
+// preserves it, but the frame encoder downstream does not: ttp_party.cc's `put`
+// runs canonical_stringify over EVERY outbound frame, so what the relay retains
+// and replays is the SORTED object. Same for broadcast and sendTo. The ordered
+// emitter earns its keep at the ABI boundary — abi_check pins these bytes, and
+// the frozen corpora recorded them from a JS oracle that emitted insertion
+// order — but nothing below this line preserves it, so do not spend anything to
+// protect it.
 export function lobbySnapshot(input) {
   return JSON.parse(fn.lobbySnapshot(J(input)));
 }

@@ -273,18 +273,16 @@ export class DisplayNet extends GameNet {
   // Echo roster state everywhere it's consumed: the retained snapshot every
   // phone sees (LOBBY_UPDATE) and the display's own UI. Called on any
   // roster/host/ready/car change.
+  //
+  // ONE PROJECTION, not two. The snapshot's own `players` array IS the roster
+  // the UI renders — ttp_net_lobby_snapshot_json composes it with the very
+  // rule ttp_net_roster_rows_json applies, and the two are byte-identical. This
+  // used to publish and then ask a SECOND time, which pulled the roster out of
+  // the wasm twice and re-composed the same rows twice (~74 us and four
+  // crossings of a ~640-byte roster per announce, on every join, rename, car
+  // pick, ready toggle and host change). Read it off the snapshot instead.
   _announce() {
-    this._publishLobby();
-    this.onRosterChange(this.roster(), this.flow.host);
-  }
-  // The LOBBY_UPDATE `players` projection. The composition is the session
-  // model's; this only supplies the roster and the game layer's per-seat answer
-  // to "does this seat hold a car in the live race" — which is what lets a
-  // (re)joining phone route itself (true = drop back into the race, false
-  // mid-race = wait for the next one).
-  roster() {
-    const list = this.flow.list();
-    return session.rosterRows(list, list.map((p) => !!this.inRace(p.peerIndex)));
+    this.onRosterChange(this._publishLobby().players, this.flow.host);
   }
 
   // ---- the active participant order ----
@@ -745,10 +743,14 @@ export class DisplayNet extends GameNet {
   // fit the relay's 16 KiB set_state cap). The chooser content itself was handed
   // over once at construction. This side supplies the room's live fields and
   // puts the answer on the relay.
+  //
+  // RETURNS the snapshot, because _announce needs its `players` and composing
+  // that array twice is composing it once too often. Built even with no socket
+  // (boot and teardown, where the roster still has to reach our own UI); only
+  // the send is gated.
   _publishLobby() {
-    if (!this.party) return;
     const list = this.flow.list();
-    this.party.setState(session.lobbySnapshot({
+    const snapshot = session.lobbySnapshot({
       hostPeerIndex: this.flow.host,
       roomState: this.roomState,
       paused: !!this.isPaused(),
@@ -759,7 +761,9 @@ export class DisplayNet extends GameNet {
       randomRaces: this.randomRaces, // 'random' run length (0 = endless)
       trackId: this.trackId,         // resolved concrete track
       standings: this._standings      // results board (playing/results), else null
-    }));
+    });
+    if (this.party) this.party.setState(snapshot);
+    return snapshot;
   }
 
   // Mirror the latest standings board into the snapshot (display drives this on
