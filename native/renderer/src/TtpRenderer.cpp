@@ -2191,7 +2191,7 @@ enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_COUNT =
 // SHAPE", and that needs as many entries as there are shapes worth arguing
 // about. A single count for all three would either starve one row or pad the
 // others with a duplicate.
-inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 5 : 3; }
+inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 4 : 3; }
 
 // Model ids are a URL param and a dropdown value, so they are spelled, not
 // numbered. Unknown names answer -1 (the caller leaves the bench off).
@@ -2248,29 +2248,37 @@ inline TrainAt trainAt(float s) {
 }
 
 // ---- rocket ---------------------------------------------------------------
-// Ship scale is TINY — the body is 0.2 world units — and it is only ever seen
-// crossing the screen at speed. Two rounds of this changed the wrong thing
-// (trim on one silhouette), and a third changed the profile but stayed inside
-// one archetype: an upright rocket standing on tail fins. Tube-and-cone, slim
-// tube-and-cone, teardrop, wide-tailed tube-and-cone. Four hats on one head.
+// SLEEK AND MODERN, decided after four rounds of toy shapes were turned down.
+// The three below share a palette and a rule rather than a silhouette: cool
+// white, one mid grey, one graphite, and NO BANDS. That last part is doing more
+// work than any of the geometry did — the red-and-cream banding every earlier
+// attempt inherited from v0 is why so many of them read as a traffic cone or a
+// lighthouse. It was a palette problem being solved as a shape problem for four
+// rounds.
 //
-// These four are different OBJECTS. Each still costs three to six prims — the
-// "keep it simple" call stands.
+// Colour zones are LARGE and there are never more than three: nose, body, tail.
+// A stripe is what a toy has; a change of material is what a machine has.
 //
-// ONE CONSTRAINT SHAPES ALL OF THEM, and it should have been driving this from
-// the first attempt: TtpRenderer::render whizz-rolls a rocket about its travel
-// axis at 9 rad/s. Anything that is not rotationally symmetric WHIRLS. Three
-// fins at 120 degrees read as a still object because the eye cannot tell one
-// blade from the next; a pair of wings, a winding key or a stripe down one side
-// reads as a propeller. So every feature below is either on the axis, or
-// three-fold, or a full ring — and one of them (the pinwheel) makes the roll
-// the point instead of fighting it.
+// ONE CONSTRAINT STILL SHAPES ALL OF THEM: TtpRenderer::render whizz-rolls a
+// rocket about its travel axis at 9 rad/s, so anything not rotationally
+// symmetric WHIRLS. Fins at 90 or 120 degrees read as a still object because
+// the eye cannot tell one blade from the next; a pair of wings or a stripe down
+// one side reads as a propeller. Everything here is on the axis, three-fold or
+// four-fold.
+//
+// Ship scale is 0.2 world units and it is only ever seen crossing the screen at
+// speed, so VALUE is the other thing that matters: the body stays near-white on
+// all three, because the thing it flies over is dark asphalt and a mid-grey
+// missile disappears into it.
 void buildRocketModel(const PartFn& part, int variant) {
-    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f,
-                       WOOD = 0x8a6f4d, GOLD = 0xf2c14e;
+    constexpr uint32_t SHELL = 0xeef1f5,   // cool near-white — the body, always
+                       GREY = 0x9aa3b0,    // mid, for the second zone
+                       GRAPHITE = 0x3d4453;// dark, for tails and blades
+    constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f;
     // Nose is local +Y; the renderer lays that along the direction of travel.
     if (variant <= 0) {
-        // v0 — the original, kept as the thing to argue against.
+        // v0 — the original toy rocket, kept as the thing to argue against and
+        // as the only place that red-and-cream survives.
         part(primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, RED, 1.0f);
         part(primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, CREAM, 1.0f);
         for (int i = 0; i < 3; i++) {
@@ -2281,58 +2289,50 @@ void buildRocketModel(const PartFn& part, int variant) {
         return;
     }
     if (variant == 1) {
-        // v1 "firework" — not a missile at all: a PARTY ROCKET. A paper tube
-        // with a wrapper band, a conical cap and a long balance stick trailing
-        // out the back. The stick is the whole idea — nothing else in the game
-        // has a thin trailing line, so the silhouette is unmistakable even
-        // small, and it is on the axis so the roll leaves it alone. Four prims.
-        part(primCylinder(0.078f, 0.078f, 0.20f, 14), 0, 0.020f, 0, CREAM, 1.0f);
-        part(primCylinder(0.084f, 0.084f, 0.055f, 14), 0, 0.020f, 0, RED, 1.0f);
-        part(primCone(0.078f, 0.125f, 14), 0, 0.182f, 0, RED, 1.0f);
-        part(primCylinder(0.013f, 0.013f, 0.34f, 6), 0, -0.250f, 0, WOOD, 1.0f);
-        return;
-    }
-    if (variant == 2) {
-        // v2 "ring-tail" — a tube and a cone, and then a HOOP where the fins
-        // would be, held off the body on three struts. A closed ring is the one
-        // shape that looks identical however far the roll has turned it, so
-        // this is the only entry here that is completely still in flight. It
-        // also gives the outline a hole in it, which nothing else in the kit
-        // has. Six prims.
-        part(primCylinder(0.062f, 0.074f, 0.22f, 14), 0, 0.010f, 0, RED, 1.0f);
-        part(primCone(0.062f, 0.130f, 14), 0, 0.185f, 0, CREAM, 1.0f);
-        part(primTorusArc(0.108f, 0.022f, 8, 22, 2.0f * (float) M_PI),
-                0, -0.115f, 0, DARK, 1.0f);
-        for (int i = 0; i < 3; i++) {
-            const float a = (float) i * (2.0f * (float) M_PI / 3);
-            part(applyPre(primBox(0.052f, 0.020f, 0.020f), rotYm(-a)),
-                    std::cos(a) * 0.062f, -0.115f, std::sin(a) * 0.062f, DARK, 1.0f);
+        // v1 "cruise" — the archetype done cleanly. A parallel white body, a
+        // smooth OGIVE nose (a stretched sphere, so there is no crease where a
+        // cone would meet the tube), a graphite boat-tail and four small
+        // clipped-delta fins. Nothing decorative on it at all: every part is a
+        // part a missile has.
+        part(primCylinder(0.078f, 0.078f, 0.240f, 18), 0, 0, 0, SHELL, 1.0f);
+        part(applyPre(primSphere(0.078f, 18, 12),
+                    mat4f::scaling(float3{ 1.0f, 1.9f, 1.0f })), 0, 0.120f, 0, GREY, 1.0f);
+        part(primCylinder(0.078f, 0.056f, 0.055f, 18), 0, -0.1475f, 0, GRAPHITE, 1.0f);
+        const Prim fin = primPlate({ { -0.055f, 0.068f }, { -0.166f, 0.068f },
+                                     { -0.172f, 0.126f }, { -0.104f, 0.126f } }, 0.011f);
+        for (int i = 0; i < 4; i++) {
+            part(applyPre(fin, rotYm((float) i * (float) M_PI / 2)), 0, 0, 0, GRAPHITE, 1.0f);
         }
         return;
     }
-    if (variant == 3) {
-        // v3 "capsule" — the fewest parts of anything tried: a rounded head, a
-        // body that widens downwards, and a big flared SKIRT. No fins at all.
-        // A bell, essentially — and a bell is a strong dark-against-sky
-        // outline at any size, where fins are the first thing to disappear.
-        // Three prims, and the only one with no thin feature anywhere on it.
-        part(primSphere(0.076f, 14, 10), 0, 0.112f, 0, CREAM, 1.0f);
-        part(primCylinder(0.076f, 0.100f, 0.200f, 16), 0, 0.012f, 0, RED, 1.0f);
-        part(primCylinder(0.100f, 0.158f, 0.100f, 16), 0, -0.138f, 0, DARK, 1.0f);
+    if (variant == 2) {
+        // v2 "stealth" — the same class of object built out of FLAT PLANES
+        // instead of curves: six-sided body and nose, so it catches the light in
+        // facets rather than a smooth gradient, with three hard angular blades.
+        // The difference from v1 is entirely geometric — same palette, same
+        // proportions, no curve anywhere.
+        part(primCylinder(0.072f, 0.090f, 0.235f, 6), 0, 0, 0, SHELL, 1.0f);
+        part(primCone(0.072f, 0.175f, 6), 0, 0.205f, 0, GRAPHITE, 1.0f);
+        part(primCylinder(0.090f, 0.066f, 0.050f, 6), 0, -0.1425f, 0, GREY, 1.0f);
+        const Prim fin = primPlate({ { -0.030f, 0.076f }, { -0.150f, 0.086f },
+                                     { -0.168f, 0.170f } }, 0.014f);
+        for (int i = 0; i < 3; i++) {
+            part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0,
+                    GRAPHITE, 1.0f);
+        }
         return;
     }
-    // v4 "pinwheel" — the roll made deliberate. A stubby body under a gold
-    // nose, with three vanes CANTED like turbine blades instead of set flat, so
-    // the spin the renderer already applies reads as the thing driving it
-    // rather than as an artefact. The only entry whose look depends on being in
-    // motion, which is also the only state it is ever seen in. Five prims.
-    part(primCylinder(0.086f, 0.086f, 0.170f, 14), 0, 0, 0, RED, 1.0f);
-    part(primCone(0.086f, 0.120f, 14), 0, 0.145f, 0, GOLD, 1.0f);
-    const Prim vane = primPlate({ { 0.055f, 0.070f }, { -0.075f, 0.070f },
-                                  { -0.075f, 0.165f }, { 0.055f, 0.165f } }, 0.016f);
-    for (int i = 0; i < 3; i++) {
-        const float a = (float) i * (2.0f * (float) M_PI / 3);
-        part(applyPre(vane, rotYm(a) * rotZm(0.62f)), 0, -0.020f, 0, CREAM, 1.0f);
+    // v3 "lance" — long and slender, and finned along its LENGTH rather than at
+    // the tail: four narrow strakes running most of the body. That puts the
+    // widest part of the outline in the middle instead of at one end, which is
+    // the one proportion none of the eleven shapes before this had.
+    part(primCylinder(0.060f, 0.070f, 0.300f, 16), 0, 0, 0, SHELL, 1.0f);
+    part(primCone(0.060f, 0.175f, 16), 0, 0.2375f, 0, GRAPHITE, 1.0f);
+    part(primCylinder(0.070f, 0.052f, 0.045f, 16), 0, -0.1725f, 0, GRAPHITE, 1.0f);
+    const Prim strake = primPlate({ { 0.105f, 0.062f }, { -0.135f, 0.068f },
+                                    { -0.135f, 0.101f }, { 0.088f, 0.079f } }, 0.010f);
+    for (int i = 0; i < 4; i++) {
+        part(applyPre(strake, rotYm((float) i * (float) M_PI / 2)), 0, 0, 0, GREY, 1.0f);
     }
 }
 

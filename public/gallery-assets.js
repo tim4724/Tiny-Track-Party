@@ -34,15 +34,15 @@ const state = Gallery.loadState();
 // row and is kept whether or not it won, because a comparison with no "what we
 // had" in it is not a comparison.
 const BENCH_MODELS = [
-  // Five, and they are five OBJECTS rather than five detail levels. Earlier
-  // rounds offered variations on one archetype (an upright rocket standing on
-  // tail fins) and were turned down as a set, twice.
-  { id: 'rocket', label: 'Rocket', ships: 2, scale: '9x (it ships at 0.2 units)',
-    variants: ['0 · original — straight tube, stubby cone, square tabs',
-               '1 · firework — paper tube, wrapper band, long trailing stick',
-               '2 · ring-tail — a hoop on three struts where the fins would be',
-               '3 · capsule — rounded head, flared skirt, no fins at all',
-               '4 · pinwheel — three canted vanes, so the spin reads as the drive'] },
+  // SLEEK AND MODERN, chosen after four rounds of toy shapes were turned down.
+  // 1..3 share a palette (cool white, one grey, one graphite, NO BANDS) and
+  // differ only in form. The banding is the part that matters most: it is what
+  // made half the earlier attempts read as a traffic cone.
+  { id: 'rocket', label: 'Rocket', ships: 1, scale: '9x (it ships at 0.2 units)',
+    variants: ['0 · original — the toy rocket, red and cream, kept to compare against',
+               '1 · cruise — parallel body, smooth ogive nose, four clipped fins',
+               '2 · stealth — the same object in flat facets, three angular blades',
+               '3 · lance — long and slender, strakes down its length, not tail fins'] },
   { id: 'gnome', label: 'Garden gnome', ships: 1, scale: null,
     variants: ['0 · original — cone, ball, beard, hat',
                '1 · detailed — belt, arms, face, layered beard, brimmed hat',
