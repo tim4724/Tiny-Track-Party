@@ -51,23 +51,24 @@ using namespace filament::math;
 
 namespace {
 
-// "track.bin" v17 layout (little-endian), written by public/shared/trackBin.js.
-//
-// NO GEOMETRY, AND NO THEME. Up to v15 this payload carried the whole built
-// track — samples, furniture, pillars, berms — serialized by a second, JS
+// THERE IS NO SCENE PAYLOAD ANY MORE, and the way that happened is worth
+// keeping. Up to v15 a "track.bin" buffer carried the whole built track —
+// samples, furniture, pillars, berms — serialized by a second, JS
 // implementation of the track builder that ran in the browser on every race.
 // v16 dropped that (the renderer meshes from the ttp::RaceTrack the sim itself
 // is racing on — see fillGeometry) but still carried the resolved biome, which
-// the browser authored. v17 drops that too: the palette is C++ data now
-// (libttp-runtime/ttp/theme.h), resolved from the track's own cup, so what
-// crosses is only what the SHELL genuinely supplies — who is in this race, and
-// what their cars look like:
-//   u32 version(=17), u32 carCount, u32 carColorsABGR[carCount],
-//   char carNames[carCount][8], f32 carPlateY[carCount] (<0 = auto).
+// the browser authored. v17 dropped that too (the palette is C++ data now,
+// libttp-runtime/ttp/theme.h, resolved from the track's own cup), leaving one
+// version-stamped byte layout for the last thing the shell genuinely supplies:
+// who is in this race and what their cars look like.
 //
-// Everything the biome dresses arrives instead as a ttp::rt::Theme handed to
-// buildScene, and applyTheme below is where it lands on the parsed payload.
-constexpr uint32_t TRACK_BIN_VERSION = 17;
+// That last remnant is gone as well. It was a hand-rolled encoder in JS and a
+// hand-rolled parser here, agreeing by comment, which every future shell would
+// have had to reimplement byte for byte — and no fixture in the tree could see
+// a disagreement, because nothing ever recorded a track.bin. The roster arrives
+// as TtpRosterCar structs (ttp_render.h), parsed once by libttp-runtime, and
+// the biome as a ttp::rt::Theme; buildScene takes both. applyRoster and
+// applyTheme below are where each lands on TrackBin.
 
 // Bare-asphalt margin either side of a launch strip, so the road's dashes and
 // edge lines stop clear of the chevrons rather than grazing them.
@@ -152,9 +153,9 @@ uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
 } // namespace
 
 // Everything one scene is built from, in one struct: the roster's liveries
-// (parsed from "track.bin"), the biome (copied in from a resolved
-// ttp::rt::Theme) and the geometry (taken off the built ttp::RaceTrack). All
-// three used to arrive serialized; two of them no longer do.
+// (copied off the shell's TtpRosterCar slots), the biome (copied in from a
+// resolved ttp::rt::Theme) and the geometry (taken off the built
+// ttp::RaceTrack). All three used to arrive serialized; none of them does now.
 struct TtpRenderer::TrackBin {
     struct Sample {
         float3 pos, lat, up;
@@ -590,27 +591,22 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     m.local = {};
 }
 
-bool TtpRenderer::parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out) {
-    const auto rdU32 = [&](size_t o) { uint32_t v; std::memcpy(&v, bin.data() + o, 4); return v; };
-    const auto rdF32 = [&](size_t o) { float v; std::memcpy(&v, bin.data() + o, 4); return v; };
-    if (bin.size() < 8 || rdU32(0) != TRACK_BIN_VERSION) return false;
-    const uint32_t carCount = rdU32(4);
-    size_t off = 8;
-    if (bin.size() < off + carCount * 4) return false;
-    out.carColors.resize(carCount);
-    for (uint32_t i = 0; i < carCount; i++, off += 4) out.carColors[i] = rdU32(off);
-    if (bin.size() < off + carCount * 8) return false;
-    out.carNames.resize(carCount);
-    for (uint32_t i = 0; i < carCount; i++, off += 8) {
-        const char* p = (const char*) bin.data() + off;
-        size_t len = 0;
-        while (len < 8 && p[len]) len++;
-        out.carNames[i].assign(p, len);
+// The roster half of TrackBin, copied off the slots the shell handed over.
+//
+// This used to be a byte parser over "track.bin" — a version word, three
+// parallel arrays and four length checks, mirrored by a writer in JS. The
+// liveries arrive as plain structs now (libttp-runtime's parseRoster does the
+// colour arithmetic and the plate table once), so what is left is a copy.
+void TtpRenderer::applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster) {
+    const size_t n = roster.size();
+    out.carColors.resize(n);
+    out.carNames.resize(n);
+    out.carPlateY.resize(n);
+    for (size_t i = 0; i < n; i++) {
+        out.carColors[i] = roster[i].colorABGR;
+        out.carNames[i] = roster[i].name; // NUL-terminated, 8 chars max
+        out.carPlateY[i] = roster[i].plateY;
     }
-    if (bin.size() < off + carCount * 4) return false;
-    out.carPlateY.resize(carCount);
-    for (uint32_t i = 0; i < carCount; i++, off += 4) out.carPlateY[i] = rdF32(off);
-    return true;
 }
 
 // The biome half of TrackBin, taken straight off the resolved theme.
@@ -3681,10 +3677,10 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     }
 }
 
-bool TtpRenderer::buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo,
-        const ttp::rt::Theme& theme) {
+bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
+        const ttp::RaceTrack& geo, const ttp::rt::Theme& theme) {
     TrackBin tb;
-    if (!parseTrackBin(bin, tb)) return false;
+    applyRoster(tb, roster);
     applyTheme(tb, theme);
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
@@ -6191,7 +6187,8 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
     }
 }
 
-bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme) {
+bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
+        const std::vector<TtpRosterCar>& roster) {
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
@@ -6265,8 +6262,11 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .build(*mEngine);
     }
     ensureSceneTarget(); // between frames — the material only lands now
-    const auto track = mAssets.find("track.bin");
-    if (track == mAssets.end()) return false; // no scene without a track payload
+    // No "track.bin" gate here any more, and nothing replaces it: the scene is
+    // a function of `geo` and `theme`, both of which the caller HAS (they are
+    // C++ objects, not payloads that might be missing). An empty roster is a
+    // legal scene — it is what the lobby's track preview is before any car
+    // joins it.
     mHasTrack = true;
     // Sky: flat daylight blue behind the gradient dome (which the fog dissolves
     // into) — a backstop for the sliver the dome doesn't cover.
@@ -6274,7 +6274,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
             .color(float4{ 0.53f, 0.78f, 0.92f, 1.0f })
             .build(*mEngine);
     mScene->setSkybox(mSkybox);
-    return buildTrackScene(track->second, geo, theme);
+    return buildTrackScene(roster, geo, theme);
 }
 
 // Filament's exponential fog standing in for a three.js LINEAR ramp [near,

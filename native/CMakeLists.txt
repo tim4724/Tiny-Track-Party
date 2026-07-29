@@ -130,7 +130,8 @@ add_library(libttp_track STATIC
   # independence from libttp-json.
   libttp-track/ttp/race_track_json.cc
   # The top-down schematic + its snapshot codec (public/display/trackSchematic.js
-  # ported). Here rather than in libttp-runtime because it reads a built
+  # ported; that JS is retired now, and tests/fixtures/schematic-corpus.jsonl is
+  # the frozen record of what it produced). Here rather than in libttp-runtime because it reads a built
   # ttp::RaceTrack and nothing else — no Game, no cameras, no renderer — and
   # because the browser reaches it through the TRACK half of the ABI.
   libttp-track/ttp/schematic.cc
@@ -472,7 +473,7 @@ add_test(NAME fastlane
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
-  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_net.cc)
+  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_race.cc runtime/ttp_net.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the
@@ -495,6 +496,7 @@ add_test(NAME abi
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/raceflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl
@@ -503,7 +505,8 @@ add_test(NAME abi
 # ---- libttp-runtime: the platform-free half of the display runtime ----------
 # Cameras (the spring chase per split-screen cell), the overview/lobby framing
 # and fog solve, and the per-frame TtpFrameInput built straight off the live
-# Game. All of it used to sit in runtime/ttp_display.cc, BEHIND the Filament
+# Game. All of it used to sit in runtime/ttp_display.cc (since DELETED — git
+# history has it), BEHIND the Filament
 # gate — so it compiled on exactly one machine configuration in the world (a dev
 # box with the Filament fork) and no ctest on any of the four legs ever saw a
 # line of it. Nothing in here names a platform API, a renderer or emscripten, so
@@ -519,6 +522,12 @@ add_library(libttp_runtime STATIC
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
+  # The roster, parsed once: who is in this race and what their cars look like,
+  # which is the last thing about a race that only the SHELL knows. It used to
+  # cross as "track.bin", a byte format with a writer in JS and a reader in the
+  # renderer; the colour arithmetic and the per-model plate table are here now,
+  # so a second shell inherits them instead of reimplementing them.
+  libttp-runtime/ttp/roster.cc
   # The per-player HUD block the shell reads back, which is uiModel.js's
   # hudRows ported. Beside the frame builder because it reads the same live
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
@@ -532,6 +541,15 @@ add_library(libttp_runtime STATIC
   # AND executes it. The back-stack TRAVERSAL is NOT here — that is the History
   # API wearing a C hat, and each shell owns its own.
   libttp-runtime/ttp/ui_model.cc
+  # The RACE ORCHESTRATION — public/display/raceFlow.js ported. ui_model.cc above
+  # holds the predicates this layer calls (allRacersReady, canPause, raceFlow,
+  # autoPause); this is the state machine that calls them IN ORDER, and the order
+  # is what it exists to hold. Every entry point returns an ordered effect list
+  # rather than a verdict, so the four ordering constraints in race_flow.h's
+  # header are DATA a corpus can replay instead of prose a second shell
+  # re-derives. Same reason as its neighbours for living here: no platform API,
+  # so every leg compiles AND executes it.
+  libttp-runtime/ttp/race_flow.cc
   # The audio DECISIONS — public/display/audio/decide.js ported. Here rather
   # than in a library of its own because it is the same thing the two files
   # above are: a display rule that names no platform API, so every leg compiles
@@ -575,6 +593,54 @@ add_test(NAME record_runtime
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 # (record_roundtrip.cmake invokes "<cli> --record <fixture> --out=<f>"; the cases
 # are compiled in, so the check accepts and ignores that positional.)
+
+
+# ---- Re-record roundtrips for the four JS-RECORDED corpora ------------------
+# These four differ in KIND from record_catalogue_sweep / record_<trace> /
+# record_runtime above, and the difference is worth stating because it is the
+# repo's central evidence rule:
+#
+#   * those are C++-AUTHORED fixtures, and --record is how new ones are made.
+#   * these four were written by the JS oracles (uiModel.js, audio/decide.js,
+#     sessionModel.js and the trackSchematics.js bake). --record here RE-EMITS
+#     the committed file from the port using the fixture's OWN recorded inputs —
+#     it cannot invent a case, because the scenarios are read off the file.
+#
+# So byte identity proves the port reproduces every recorded answer and its exact
+# JSON spelling (key set, null-vs-absent, every number through
+# js_number_to_string) — strictly more than the structural replays assert. It
+# does NOT prove the port matches the JS; the committed bytes carry that, and the
+# JS wrote them. If one of these ever fails, the committed file is right and the
+# C++ is wrong. See tests/fixtures/traces/README.md.
+add_test(NAME record_ui
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:ui_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/ui-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+add_test(NAME record_audio
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:audio_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/audio-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/audio-corpus.jsonl
+    -DEXTRA=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+add_test(NAME record_session
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:session_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/session-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
+add_test(NAME record_schematic
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:schematic_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/schematic-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/schematic-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
 # ---- Behaviour: the per-frame TtpFrameInput builder -------------------------
 # runtime_check above pins the cameras, the framing solve and the grid, but it
@@ -635,6 +701,26 @@ target_link_libraries(ui_check PRIVATE libttp_runtime libttp_party ttp_testsuppo
 ttp_emscripten_cli(ui_check)
 add_test(NAME ui_model
   COMMAND ui_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
+)
+
+# ---- Conformance: the race orchestration ------------------------------------
+# JS-RECORDED evidence again: tests/fixtures/raceflow-corpus.jsonl was recorded
+# off the live public/display/raceFlow.js before ttp/race_flow.cc existed, so it
+# settles whether the state machine was ported right.
+#
+# It checks TWO things per step and needs both. `out` is the answer; `state` is
+# the shell state the generator's driver threads, rebuilt here by walking each
+# effect list in order. `out` alone would pass a port that emits exactly the
+# right effects in the WRONG ORDER — which is the one failure this layer exists
+# to prevent, and the one that is silent in a running game.
+#
+# Like ui_check it links libttp_party for the ROOM_STATE mirror assertion it
+# inherits through ui_model.h, and for the same layering reason.
+add_executable(raceflow_check runtimetest/raceflow_check.cc)
+target_link_libraries(raceflow_check PRIVATE libttp_runtime libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(raceflow_check)
+add_test(NAME raceflow
+  COMMAND raceflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/raceflow-corpus.jsonl
 )
 
 # ---- Conformance: the audio decisions ---------------------------------------
@@ -734,6 +820,10 @@ if(EMSCRIPTEN)
     libttp-runtime/ttp/camera.cc
     libttp-runtime/ttp/framing.cc
     libttp-runtime/ttp/frame_builder.cc
+    # The roster parse ttp_display_build calls. Outside the Filament gate on
+    # purpose: it turns the shell's JSON into slots and touches no renderer type
+    # beyond the plain TtpRosterCar, so CI's SDK-less leg still compiles it.
+    libttp-runtime/ttp/roster.cc
     # The packed HUD block ttp_display_hud answers with. Outside the gate with
     # the rest of libttp-runtime, and for the extra reason that it is what the
     # SHELL reads rather than what the renderer draws: a Filament-less leg still
@@ -748,6 +838,12 @@ if(EMSCRIPTEN)
     # ... and the ABI over it. JSON in, JSON out: this layer answers once per
     # event and half of what it answers is text, so there is nothing to pack.
     runtime/ttp_ui.cc
+    # The race ORCHESTRATION and its ABI — the state machine that calls the
+    # predicates above in order. Same trap as every line in this list: COMPILED
+    # here, not linked from libttp_runtime, so a source that lands only in the
+    # library target leaves this module unlinkable and no ctest says so.
+    libttp-runtime/ttp/race_flow.cc
+    runtime/ttp_race.cc
     # The session-policy ABI over libttp-party's ttp::session — the room
     # snapshot the display puts on the relay, the seat rules and the guards
     # behind it. Same trap as every line in this list: it is COMPILED here, not

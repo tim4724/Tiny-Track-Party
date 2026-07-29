@@ -16,7 +16,7 @@
 //
 // unpack is here for completeness and for the round-trip gate, NOT because a
 // shell needs it: phones stay on the JS controller on all three TV platforms, so
-// public/display/trackSchematic.js's unpackSchematic is the one that ships to a
+// public/shared/schematicCodec.js's unpackSchematic is the one that ships to a
 // player. The display's half — pack — is what moved.
 //
 // FLOATING POINT. The projection is JS Number arithmetic and rounds through

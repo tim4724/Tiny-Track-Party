@@ -21,7 +21,7 @@ const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 // scripts/gen-track-schematics.js) — then ROUND-TRIP them through the exact same
 // pack→unpack the wire uses, so the gallery shows precisely the fidelity a phone
 // gets (corner detail + quantization), not a flattering full-res map. The
-// controller stays Three-free (trackSchematic.js is pure math, no Three).
+// controller stays Three-free (the schematic codec is pure math, no Three).
 const PREVIEW_TRACKS = TRACK_LIST.map((t) => ({
   id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
   svg: unpackSchematic(packSchematic(TRACK_SCHEMATICS[t.id]))

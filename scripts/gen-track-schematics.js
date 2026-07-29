@@ -5,8 +5,13 @@
 // without building a track: that needs TrackBuilder, but the
 // resulting SVG path is just data.
 //
-// In a live game the display computes these at runtime (trackSchematic) and ships
-// them to phones in WELCOME — this file is only for surfaces that have no display.
+// The projection is NATIVE (libttp-track's ttp::schematic, via
+// scripts/native-track.mjs over the shipped wasm). The JS twin it replaced
+// (public/display/trackSchematic.js) was the oracle
+// tests/fixtures/schematic-corpus.jsonl was recorded off, and was retired once
+// that corpus had frozen its output for all 20 tracks — so the bytes below are
+// still the ones the JS wrote, and the `schematic` ctest is what holds the
+// native projection to them.
 //
 // Run after editing any track layout:  node scripts/gen-track-schematics.js
 // (tests/track.test.js fails if this file drifts from the live geometry.)
@@ -14,13 +19,12 @@ const fs = require('fs');
 const path = require('path');
 
 (async () => {
-  const { init, buildTrack } = await import('../scripts/native-track.mjs');
+  const { init, trackSchematic } = await import('../scripts/native-track.mjs');
   await init();
   const { TRACK_LIST } = await import('../public/shared/tracks.js');
-  const { trackSchematic } = await import('../public/display/trackSchematic.js');
 
   const body = TRACK_LIST
-    .map((t) => `  ${t.id}: ${JSON.stringify(trackSchematic(buildTrack(t)))}`)
+    .map((t) => `  ${t.id}: ${JSON.stringify(trackSchematic(t.id))}`)
     .join(',\n');
 
   const out =

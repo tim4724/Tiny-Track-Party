@@ -50,6 +50,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "corpus_record.h"
 #include "ttp/game.h"        // ITEM_IDS — the sim's own roll table
 #include "ttp/hud.h"         // hudSlot — the P6 half of this same JS module
 #include "ttp/protocol.h"    // ROOM_STATE — the vocabulary ui_model.h mirrors
@@ -750,10 +751,47 @@ bool checkHeader(const Value& h, const std::vector<ui::Cup>& cups,
 
 }  // namespace
 
+// Re-emit the corpus from the port: same driver, same shell threading, the
+// comparison replaced by a write.
+int recordCorpus(const std::string& fixture, const std::string& outPath,
+                 const std::vector<ui::Cup>& cups, const std::vector<ui::CatalogEntry>& catalog) {
+  Shell st;
+  const int rc = corpus::record(fixture, outPath, [&](const Value& root) {
+    const Value* kind = root.find("case");
+    if (!kind) return Value();                       // UNDEF: copy the header through
+    if (kind->str == "scenario") { st.reset(root.find("screen")); return Value(); }
+    if (kind->str != "step") return Value();
+    const Value* opV = root.find("op");
+    const Value* inV = root.find("in");
+    const Value empty = Value::Obj();
+    const Value got = applyOp(st, opV ? opV->str : std::string(),
+                              inV && inV->type == Value::OBJ ? *inV : empty, cups, catalog);
+    // The generator's key SET; canonical_stringify sorts them.
+    Value line = Value::Obj();
+    line.set("case", Value::Str("step"));
+    const Value* nm = root.find("name");
+    line.set("name", nm ? *nm : Value::Str("?"));
+    const Value* sn = root.find("step");
+    line.set("step", sn ? *sn : Value::Num(0));
+    line.set("op", opV ? *opV : Value::Str(""));
+    line.set("in", inV ? *inV : empty);
+    line.set("out", got);
+    line.set("state", st.toValue());
+    return line;
+  });
+  return rc;
+}
+
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    std::fprintf(stderr, "usage: ui_check <ui-corpus.jsonl>\n");
+  if (argc < 2) {
+    std::fprintf(stderr, "usage: ui_check <ui-corpus.jsonl>\n"
+                         "       ui_check --record <corpus> --out=<file>\n");
     return 2;
+  }
+  {
+    std::string fixture, outPath;
+    if (corpus::wants_record(argc, argv, &fixture, &outPath))
+      return recordCorpus(fixture, outPath, makeCups(), makeCatalog());
   }
   std::ifstream in(argv[1]);
   if (!in) {

@@ -11,6 +11,8 @@ ctest --test-dir native/build     # Native conformance (configure/build native/ 
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js  # A single E2E spec
 node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
+ctest --test-dir native/build -R raceflow   # Race-orchestration conformance
+ctest --test-dir native/build -R "^record_" # Re-record roundtrips (byte identity)
 node scripts/wire-mutate.mjs      # Prove the wire gate bites: break the C++ 14 ways,
                                   # rebuild the wasm, require the named test to go red
 node scripts/wire-relay-contract.mjs  # Re-freeze the relay model's contract from a
@@ -36,7 +38,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - The sim is display-authoritative: the car simulation runs in the browser (as wasm — see the NATIVE rule below), not the server. `server/index.js` serves static files + JSON endpoints only — no game logic, no WebSocket.
 - Browser code is ES modules. Modules Node imports directly via dynamic `import()` (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`, `engine/contract.js`) must stay dependency-free so they load in both browser and Node.
 - CSP headers in `server/index.js` — update when adding external resources. There is no nonce and no inline script: every script is a same-origin file, so `script-src` is `'self' 'wasm-unsafe-eval'`.
-- Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals). It is also the MANIFEST for numbers two layers share: `CAR_STATS`, `STEER` (the tilt→steer contract: `EXPO` in the C++ sim, `ROLL_LOCK_DEG`/`DEADZONE`/`SMOOTH` on the phone, `GATE_THRESHOLD` on the wire) and `LIVENESS` (the presence contract: `PING_INTERVAL_MS` on the phone, `TIMEOUT_MS`/`TICK_MS`/`HEARTBEAT_DEAD_MS`/`ABANDONED_RACE_GRACE_MS`/`CREATE_TIMEOUT_MS` on the display — "a seat silent past 3 s is dropped" is only true against a 1 Hz ping, and those two numbers lived in two files with a prose comment between them). `MSG.HEARTBEAT` (`_heartbeat`, display → its own slot) is in the vocabulary for the same reason: it was a bare literal inside `display/Net.js`, so a TV shell reimplementing the display's own liveness had nothing to copy. Nothing may re-declare a manifest number silently — `tests/config-drift.test.js` pins `TiltInput`/`InputGate`/`controller/Net.js`/`display/Net.js`/`sessionModel.js` to it, re-runs InputGate's dead-band derivation, checks the presence windows still describe one design, and reads `EXPO` back out of the shipped wasm; the protocol corpus + `protocol` ctest carry the whole block to `native/libttp-party/ttp/protocol.h`, and that check also asserts `getSteerExpo()` equals it, which is what binds `game.cc`.
+- Relay/STUN URLs and the message vocabulary live in `public/shared/protocol.js` (game-side config, injected into the partyplug kit at construction — the kit reads no game globals). It is also the MANIFEST for numbers two layers share: `CAR_STATS`, `STEER` (the tilt→steer contract: `EXPO` in the C++ sim, `ROLL_LOCK_DEG`/`DEADZONE`/`SMOOTH` on the phone, `GATE_THRESHOLD` on the wire) and `LIVENESS` (the presence contract: `PING_INTERVAL_MS` on the phone, `TIMEOUT_MS`/`TICK_MS`/`HEARTBEAT_DEAD_MS`/`ABANDONED_RACE_GRACE_MS`/`CREATE_TIMEOUT_MS` on the display — "a seat silent past 3 s is dropped" is only true against a 1 Hz ping, and those two numbers lived in two files with a prose comment between them). `MSG.HEARTBEAT` (`_heartbeat`, display → its own slot) is in the vocabulary for the same reason: it was a bare literal inside `display/Net.js`, so a TV shell reimplementing the display's own liveness had nothing to copy. Nothing may re-declare a manifest number silently — `tests/config-drift.test.js` pins `TiltInput`/`InputGate`/`controller/Net.js`/`display/Net.js` to it (it used to pin `sessionModel.js` too; that file was the session oracle and went with the port, and the C++ it became reads the windows out of `protocol.h`), re-runs InputGate's dead-band derivation, checks the presence windows still describe one design, and reads `EXPO` back out of the shipped wasm; the protocol corpus + `protocol` ctest carry the whole block to `native/libttp-party/ttp/protocol.h`, and that check also asserts `getSteerExpo()` equals it, which is what binds `game.cc`.
 - Design tokens are DATA as well as CSS. `public/shared/theme.css`'s `:root` stays the authored source (comments and all); `scripts/gen-design-tokens.mjs` bakes it to `public/shared/design-tokens.json` — typed, aliases resolved — for the TV shells architecture.md accepts a second/third implementation of the sticker look for. `tests/codegen-freshness.test.js` keeps the bake current, `tests/design-tokens.test.js` proves it faithful (independent scrape) and enforces two rules the CSS can only state in prose: `--btn-sink < --btn-drop`, and chrome roles resolving to chrome colours only.
 - Game events (display → relay → controllers) flow over the WebSocket relay. Controller input (`CONTROL`) rides the low-latency WebRTC fastlane (`partyplug/PartyFastlane.js`, signalled over the relay) when its DataChannel is open, and falls back to the relay otherwise. The wiring lives in `public/shared/GameNet.js` (`_initFastlane`/`_isSignal`) with `display/Net.js` opening it as the input sink and `controller/Net.js` enqueuing over it; `protocol.js` provides `STUN_URL` and `FASTLANE_TYPES = { control: true }`. The lobby roster (`LOBBY_UPDATE`) is not a fanout: the display publishes it as the relay's retained host snapshot (`PartyConnection.setState`), pushed live to controllers (`onState`) and replayed to each (re)joiner right after `joined`.
 - Disconnects: the relay fires `peer_left` only on a real socket close. The display additionally runs 1 Hz liveness (phones ping at 1 Hz; a seat silent past 3 s is dropped mid-game, same path as `peer_left`, any traffic restores it — every window is `protocol.js`'s `LIVENESS` block) — detection is RoomFlow's nowMs-injected `liveness` engine (`onSeen`/`expiredPeers`), the self-heartbeat's state machine is `ttp::session::heartbeat_tick` (an IN-FLIGHT FLAG, never an echo age, so a throttled background tab cannot misread its own starvation as a dead link), and `display/Net.js` owns only the `setInterval` and the two calls the tick asks for. The ABANDONED-RACE policy rides that same tick and is also RoomFlow's (`graceTick` — every participant gone while someone waits, arm `graceMs`, fire once; `display/Net.js` polls it and reports `onRaceAbandoned`). Its participant set is C++ too and is derived from the LIVE RACE: `ttp_room_sync_active_order(roomHandle, sessionHandle)` (`RoomFlow::syncActiveOrder`) reads the session's cars through the `ttp_session.h` seam and keeps "every seat holding a car, plus every dropped seat" — a shell passes a session handle and nothing else, and no car id is ever serialized out and handed back. What falls outside that set — `hasLateJoiners`/`lateJoiners` — is exactly a connected, car-less seat: one definition behind the policy, the standings' `joining` rows AND the display's silent auto-pause (`net.allParticipantsDisconnected()`, never re-counted in JS). Syncing it is load-bearing: the kit's own COUNTDOWN snapshot would count a DROPPED late joiner as someone waiting and yank a blipped party's race back to the lobby. That unfiltered kit semantics is pinned by the frozen corpus (adding a connected filter to `hasLateJoiners` turns `roomflow` red) — fix the SET, never the C++.
@@ -104,8 +106,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - The TRACK BUILDER is native too, and there is no JS twin. `ttp_display_build`
   takes a trackId and runs `ttp::build_race_track` itself, so the renderer meshes
   from the SAME `ttp::RaceTrack` the sim races on; the browser holds no centerline,
-  no samples, no furniture. `public/shared/trackBin.js` is down to the roster's
-  liveries (track.bin v17 — no geometry, no theme), and the lobby's
+  no samples, no furniture. NOTHING ABOUT A SCENE IS SERIALIZED any more, and
+  `public/shared/trackBin.js` is GONE with the last of it: the "track.bin" byte
+  payload shrank from the whole built track (v15) to the biome (v16) to the
+  roster's liveries (v17), and then stopped being bytes. The roster crosses as
+  `ttp_display_build`'s second argument — `[{id, name, carIndex, color}]`, in
+  slot order — and `native/libttp-runtime/ttp/roster.{h,cc}` is its only reader,
+  so the livery's ABGR word and the per-model name-plate table are written ONCE
+  for three shells instead of once per shell in a hand-rolled encoder that no
+  fixture in the tree could ever have caught drifting (`parseRoster` is gated by
+  `frame_check` on all four legs). The lobby's
   mini-maps come from the prebaked `shared/trackSchematics.js` (`npm run
   gen:schematics`). The MAP CODEC behind that bake is native too
   (`native/libttp-track/ttp/schematic.{h,cc}`, gated by the `schematic` ctest
@@ -116,10 +126,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   runs it: `public/shared/schematicCodec.js` is `pack`/`unpackSchematic`, and it
   is SHARED because the PHONE unpacks — phones stay on the JS controller on all
   three TV platforms, so that half is permanent browser code with no native twin.
-  `public/display/trackSchematic.js` is the PROJECTION alone, and ships to
-  nobody: it is only the oracle the corpus was recorded from. (They were one file
-  under `display/`, which made `controller/main.js` import from the directory
-  three native shells replace.) Note the projection rounds
+  The PROJECTION half is RETIRED: `public/display/trackSchematic.js` was the
+  oracle the corpus was recorded from and shipped to nobody, and it went once
+  `schematic-corpus.jsonl` had frozen its output for all 20 tracks. The bake is
+  native now — `scripts/gen-track-schematics.js` reads
+  `ttp_track_schematic_json` through `scripts/native-track.mjs` and reproduces
+  the committed `shared/trackSchematics.js` BYTE-IDENTICALLY (the historical
+  `proj` key order is respelled in `native-track.mjs` for exactly that reason,
+  since the ABI emits canonical JSON). (The two halves were one file under
+  `display/`, which made `controller/main.js` import from the directory three
+  native shells replace.) Note the projection rounds
   through `Number.prototype.toFixed`, which printf cannot reproduce; the port
   routes it through double-conversion's `ToFixed` (V8's own).
   Node reads geometry through `scripts/native-track.mjs` over the
@@ -165,18 +181,22 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   an opaque interned SUBJECT, so no car id is handed back and a rocket's
   sequence number can no longer collide with a peer index; a picked song is an
   INDEX resolved once per race through `ttp_audio_song_json`.
-  `public/display/audio/decide.js` STAYS, and its header says why: it is the
-  ORACLE the corpus was recorded from (plus the music catalogue, which the
-  galleries, `tests/credits.test.js` and `tests/display-abi.test.js` import from
-  it DIRECTLY — `Audio.js` used to re-export those four constants, which put the
+  `public/display/audio/decide.js` is RETIRED — it was the oracle the corpus was
+  recorded from, and it went with `gen-audio-corpus.mjs` once the port was
+  conformance-proven. The MUSIC CATALOGUE it also held moved to
+  `public/display/audio/musicCatalogue.js`, which is pure data: the galleries,
+  `tests/credits.test.js` and `tests/display-abi.test.js` import it from there
+  (they used to import it from the oracle DIRECTLY — `Audio.js` used to re-export those four constants, which put the
   whole oracle on the shipped display page's import graph for tables the race
   path never reads; the device half holds no table at all now, and even the
   monster engine's timbre arrives as numbers on a voice command).
-  A disagreement between the two is a bug in
-  the C++, never in the corpus, and the JS must keep answering exactly as
-  recorded rather than tracking whatever the port does next — `tests/audio-abi.test.js`
-  is what holds them to that at RUNTIME: it races the shipped wasm and the
-  oracle side by side for 3600 frames and demands the same command stream.
+  `audio-corpus.jsonl` is now FROZEN, held by the `audio` ctest (replay) and
+  `record_audio` (a byte-identical re-emission). What went with the oracle is
+  named in `tests/audio-abi.test.js`: it used to race the shipped wasm and the
+  JS side by side for 3600 frames, and that was the only check anywhere running
+  the SHIPPED artifact against a second implementation at runtime. The decisions,
+  the world they read and the ABI wiring are each still gated; their ASSEMBLY
+  inside `ttp_runtime.wasm` is not.
   Two things that check pins are worth knowing before touching either side: the
   distance metric must be `sqrt(dx*dx+dy*dy+dz*dz)` and never `hypot` (one ULP
   flips a knee of the curve and changes the command outright), and the music
@@ -191,8 +211,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   are `native/libttp-runtime/ttp/ui_model.{h,cc}`, pure functions of plain data,
   reached from the browser through `native/runtime/ttp_ui.h` and the adapter
   `public/display/NativeUiModel.js`. The JS twin they were ported from
-  (`public/display/uiModel.js`) imports nothing, touches no DOM/clock/RNG/history
-  and is loadable in Node — see the port note below.
+  (`public/display/uiModel.js`) is RETIRED — see the port note below.
   `main.js` and `lobbySeats.js` RENDER from it and decide nothing; the shell keeps
   the three pieces of state the model threads (current screen, which reconnect
   cards actually attached, what each phone was last told its item was). Strings
@@ -212,11 +231,14 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the copy tables can stay in each shell. `native/runtimetest/ui_check.cc`
   replays EVERY step of the corpus through it on all four legs, `out` and the
   threaded shell state alike; a disagreement is a bug in the C++, never in the
-  fixture. The JS twin STAYS in `uiModel.js` — it is the ORACLE'S SOURCE, the
-  standing `decide.js` has — but nothing that ships imports it: the WEB shell
-  renders from the port too now, and tvOS/Android TV will read the same ABI
+  fixture. The JS twin is GONE: `uiModel.js` and `gen-ui-corpus.mjs` went once
+  the port was conformance-proven, so `ui-corpus.jsonl` is FROZEN — held by
+  `ui_check` (replay) and `record_ui` (a byte-identical re-emission). The WEB
+  shell renders from the port, and tvOS/Android TV will read the same ABI
   through shells of their own, which is exactly the two-implementation shape the
-  corpus exists to hold together.
+  corpus exists to hold together. What a frozen corpus costs is that it can
+  never GROW: a new UI scenario can only be authored from C++, which proves
+  nothing about the JS it replaced.
   THE ABI IS JSON, and deliberately: this layer answers ONCE PER EVENT (a join,
   a pick, a car crossing the line) and half of what it answers is unbounded TEXT
   — player, cup and track names — so there is nothing to pack the way
@@ -236,6 +258,21 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   TRAVERSAL (the table did, the walk did not) and `ROOM_STATE`, which
   `ui_model.h` MIRRORS rather than import, so libttp-runtime never gains an edge
   on the party layer — `ui_check` pins the copy to `protocol.h`.
+  THE CATALOGUE IS NO LONGER AN ARGUMENT. `ttp_ui_configure` takes the two field
+  sizes and, with no `cups`/`catalog`, installs the world this build SHIPS:
+  `gen-track-defs-header.mjs` carries each track's display NAME and difficulty
+  LEVEL and the whole `CUPS` table into `track_defs.h` (it already carried
+  `cup`), and `ui_model.cc`'s `shippedCups`/`shippedCatalog`/`cupTendency` build
+  the lists from there. The tendency — a rounded mean of the tracks' levels, or
+  the cup's own override — was a RULE every shell had to re-implement, and the
+  ~2 KB of names was data the wasm already held. Passing the two lists still
+  OVERRIDES, which is what the corpus's synthetic world rides, and is why the
+  layer stays catalogue-agnostic. `ttp_ui_catalogue_json` reads the shipped
+  tables back for the things a shell DRAWS (the cup picker, the chooser
+  payload's track names) and deliberately ignores any override. `main.js` no
+  longer imports `shared/tracks.js` at all; `tests/ui-model.test.js` is the
+  drift gate, being the only place that sees both the authored JS and the wasm.
+
   A held item crosses as a CODE, not a string — `TTP_ITEM_*`, pinned to the
   browser's `ITEM_IDS` mirror through `ttp_item_id` by
   `tests/display-abi.test.js`, because nothing else can see those two lists at
@@ -250,10 +287,11 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   SET_READY guards, the phase-flip effects and the host-promotion ready-clear,
   the self-heartbeat state machine, the cross-device seat claim, and the
   post-reload reconciliation against the relay's peer list. Reached through
-  `native/runtime/ttp_net.h` and `public/display/NativeSessionModel.js`; the JS
-  twin `public/display/sessionModel.js` survives ONLY as the oracle
-  `tests/fixtures/session-corpus.jsonl` was recorded from (nothing that ships
-  imports it), and the `session` ctest replays every step on all four legs.
+  `native/runtime/ttp_net.h` and `public/display/NativeSessionModel.js`. The JS
+  twin `public/display/sessionModel.js` is RETIRED along with
+  `gen-session-corpus.mjs`; `tests/fixtures/session-corpus.jsonl` is FROZEN, and
+  the `session` ctest replays every step on all four legs while `record_session`
+  holds a byte-identical re-emission.
   It holds NO RoomFlow handle and mutates nothing — every function is pure over
   plain data — which is what lets the corpus replay with no room machine at all.
   Same two ABI conventions as `ttp_ui.h`: JSON returns in the MODEL'S key order
@@ -273,6 +311,48 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   the display's own slot and never appears on the roster. Do not tidy it; the
   corpus pins both answers, and the ABI takes the whole HELLO (not the token) so
   absent and null stay distinguishable.
+- THE RACE ORCHESTRATION IS A LAYER TOO, and it was the last thing in the
+  display a second shell had to re-derive from prose. The state machine `main.js`
+  used to run inline — `startRace`/`launchRace`, the countdown beats, `endRace`,
+  `advanceSeriesRace`, `returnToLobby`, the AI field composition (`buildField`/
+  `cpuSeats`, persona assignment, per-bot seeding), `forfeitCar`,
+  `rekeyCarPlayer`, the auto-pause effects and `broadcastStandings` — is
+  `native/libttp-runtime/ttp/race_flow.{h,cc}`, reached through
+  `native/runtime/ttp_race.h` and the adapter `public/display/NativeRaceFlow.js`.
+  `ttp_ui.h` took the PREDICATES (`allRacersReady`, `canPause`, `raceFlow`,
+  `autoPause`); this is the machine that calls them IN ORDER.
+  EVERY ANSWER IS AN ORDERED EFFECT LIST, and that is the whole design — nothing
+  returns a verdict for a shell to sequence, because the sequencing is the part
+  that is load-bearing AND silent when wrong. Four constraints live in the order
+  alone: COUNTDOWN is published only after the session exists (else every racer's
+  `inRace` reads false and phones flash "you're in the next race"); the post-GO
+  auto-pause re-check is DEFERRED off the launch stack (it runs inside
+  `session.update()`, whose no-seats-left branch tears the session down under the
+  caller); cup points are banked BEFORE the final board goes out; the session is
+  disposed BEFORE the flow flips to LOBBY. `main.js`'s `perform()` walks the array
+  and may not reorder, batch or skip — an op it cannot perform throws rather than
+  being dropped.
+  `tests/fixtures/raceflow-corpus.jsonl` was recorded off the live
+  `public/display/raceFlow.js` before the port existed; `raceflow_check.cc`
+  replays every step on all four legs and checks BOTH the answer and the shell
+  state its driver threads, because `out` alone would pass a port that emits
+  exactly the right effects in the wrong order. `abi_check` replays the same
+  corpus through the C boundary. raceFlow.js survives as the oracle's source and
+  ships to nobody.
+  A DRAW CANNOT BE PUT BACK, which is why `startRace` and `returnToLobby` are each
+  asked TWICE: once with no draws, read for the verdict only, and again with
+  exactly `ttp_race_draws_needed` draws once the answer is "launch". Pre-drawing
+  for a start that is then rejected advances the shuffle bag for a race that never
+  happened, so "random" repeats sooner and silently skips a track nobody saw.
+  The PERSONA TABLE is single-sourced now: `ttp_race_personas_json` hands out
+  libttp-sim's own `ttp::AI_PERSONALITIES` and the shell configures it straight
+  back. `public/display/aiPersonas.js` used to be a hand-synced copy held together
+  by a prose "keep in sync" comment — the exact drift the manifest rule exists to
+  stop — and survives only for the test surfaces that need it synchronously.
+  What deliberately did NOT cross: the shuffle BAG (page RNG, not sim state), the
+  host's mode pick, `LobbyDemo`, and the performing itself (sockets, timers, the
+  History API, the AudioContext, scene objects).
+
 - Still JS BY DESIGN: the HUD/screens RENDERING (`main.js`, `Stage.js` — the
   decisions behind them are `ttp_ui.h`, above), the track
   DESCRIPTORS (`shared/tracks.js`, `shared/devTracks.js` — authored data, codegen'd
@@ -282,7 +362,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   native fastlane SUBCLASSES the kit class to inherit its WebRTC handshake, and the
   controller uses both directly.
 - Conformance is the frozen corpora + golden traces under `tests/fixtures/`,
-  replayed by `native/` ctest (42 tests, the SAME 42 on every leg —
+  replayed by `native/` ctest (47 tests, the SAME 47 on every leg —
   linux/macOS/wasm/tvOS-sim — because each leg just runs `ctest`; the tvOS leg
   drives the simulator through the `CMAKE_CROSSCOMPILING_EMULATOR` shim
   `native/scripts/tvos-sim-spawn.sh`, exactly as the wasm leg runs under node).
@@ -295,39 +375,53 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `gen-math-corpus.mjs` and `gen-theme-corpus.mjs` (6 biomes x 22 tracks, plus the
   cup/track resolution, the biome-name order and every boostShades shade). Each header names the `git show` that restores its twin if
   the oracle must be re-derived; `npm run revive:js-oracle` does the whole set.
-  `gen-audio-corpus.mjs`, `gen-ui-corpus.mjs`, `gen-session-corpus.mjs` and
-  `gen-schematic-corpus.mjs` are the four recorded AHEAD of
-  their port and are therefore still RENEWABLE — every input they read is
-  committed, and `tests/{audio,ui,session}-corpus.test.js` plus
-  `tests/codegen-freshness.test.js` re-run each generator
-  in-process and demand the committed bytes back. Keep those green: the day one
-  goes red because an input rotted is the day that oracle stops being
-  re-derivable, and the ports delete the JS that can produce it. The audio one reads
+  Four more were recorded AHEAD of their port. THREE ARE NOW FROZEN TOO:
+  `gen-audio-corpus.mjs`, `gen-ui-corpus.mjs` and `gen-session-corpus.mjs` are
+  deleted with the JS twins they read, so those corpora can never be re-derived
+  and `tests/{audio,ui,session}-corpus.test.js` are gone with them. What replaced
+  the freshness obligation is the `record_*` roundtrip (below). Still RENEWABLE:
+  `gen-schematic-corpus.mjs` (its inputs — the committed bake and
+  `display/trackSchematic.js` — both survive, and `tests/codegen-freshness.test.js`
+  re-derives it) and `gen-raceflow-corpus.mjs`. The audio one reads
   the golden traces, the shipped wasm and `audio/decide.js`; it replays five of
   the eight traces — skysnake and tidepool-schedule need `stageRocket`/`giveItem`/
   `useItem`/`setCarStats`, which the C ABI does not export (only `replay_cli`,
   calling C++ directly, can drive them), and tidepool-ailive is the same race as
   tidepool-4bots. What those would have covered is covered by scripted cases
-  instead, which carry their own inputs and need no wasm at all. The UI one reads
-  `display/uiModel.js` and NOTHING else — its scenarios carry a SYNTHETIC
-  catalogue on purpose, so a new track is never a corpus re-record; whether the
+  instead, which carry their own inputs and need no wasm at all. The UI one READ
+  `display/uiModel.js` and nothing else — its scenarios carry a SYNTHETIC
+  catalogue on purpose, so a new track was never a corpus re-record; whether the
   SHIPPED cups/tracks still flow through the model is `tests/ui-model.test.js`,
-  which is free to change with the data. The SESSION one reads
-  `display/sessionModel.js` and nothing else, on the same synthetic-world
-  principle; it exists mostly FOR the branches nothing else in the tree covers —
+  which drives the shipped wasm now and is free to change with the data. The
+  SESSION one READ `display/sessionModel.js` and nothing else, on the same
+  synthetic-world principle; it exists mostly FOR the branches nothing else in
+  the tree covers —
   every SET_CAR/SET_READY REJECTION (wire-compat covers the accepted paths only),
   the claim URL, the rejoinToken normalizer and the cross-device seat claim, none
   of which had a single test anywhere before it. The SCHEMATIC one is the odd
   member: its per-track expectations are the committed
-  `public/shared/trackSchematics.js` bake, which `tests/track.test.js` already
-  holds to the live geometry, so the C++ check rebuilds each track through the
-  native TrackBuilder and has to reproduce bytes the JS wrote.
+  `public/shared/trackSchematics.js` bake, so the C++ check rebuilds each track
+  through the native TrackBuilder and has to reproduce bytes the JS wrote.
+  ALL THREE OF THOSE GENERATORS ARE DELETED with the twins they read, along with
+  `gen-audio-corpus.mjs`; the four corpora are frozen and the `record_*`
+  roundtrips replaced their freshness checks.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,
   `runtime_check --record`) is regression evidence only: it proves the sim/cameras
   still do what they did, never that the port was right. All three re-record via a
-  `record_*` ctest holding byte identity. See `tests/fixtures/traces/README.md`.
+  `record_*` ctest holding byte identity.
+  `--record` NOW EXISTS ON BOTH CLASSES AND MEANS DIFFERENT THINGS, which is the
+  one thing to get right here. On a class-2 fixture it AUTHORS: hand it a header
+  and it produces a new fixture. On a class-1 fixture (`ui_check`,
+  `audio_check`, `session_check`, `schematic_check` — gated by `record_ui`,
+  `record_audio`, `record_session`, `record_schematic`) it only RE-EMITS: each
+  line's own recorded INPUT is fed back through the port and the answers are
+  written out again, so the scenarios are read off the committed file and can
+  never be invented. Byte identity there proves the port reproduces every
+  recorded answer and its exact JSON spelling — strictly more than the structural
+  replays assert, and still NOT parity evidence. If one of those four ever
+  differs, THE COMMITTED FILE IS RIGHT. See `tests/fixtures/traces/README.md`.
   `runtime-camera-corpus.jsonl` is the one QUANTIZED fixture in the tree, and has
   to be: the camera math is cosmetic float calling the PLATFORM's
   expf/tanf/atan2f, not the vendored fdlibm, and the four legs' libms agree to a

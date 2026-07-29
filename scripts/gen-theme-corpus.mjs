@@ -10,6 +10,11 @@
 //                                    > public/display/render/trackPayload.js
 //   git show 758a0d5:public/shared/trackBin.js          > public/shared/trackBin.js
 //
+// All three are RESTORES now, not overwrites: trackBin.js was the last of them
+// still shipping, and it went when the roster stopped crossing as bytes
+// (native/libttp-runtime/ttp/roster.h). Nothing in public/ is disturbed by the
+// recipe any more.
+//
 // Those three restore, and they are the whole recipe: `node scripts/gen-theme-
 // corpus.mjs --check` then reproduces the committed corpus byte for byte. The
 // fourth input, resolveTheme, is INLINED BELOW because no commit can restore it

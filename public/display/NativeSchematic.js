@@ -1,6 +1,6 @@
 // NativeSchematic — the display's edge of the track-map CODEC, which is C++.
 //
-// public/display/trackSchematic.js's display half, backed by ttp_schematic_pack
+// The display half of the track-map codec, backed by ttp_schematic_pack
 // (and ttp_track_schematic_json for a shell with no baked maps) over
 // native/libttp-track/ttp/schematic.cc.
 //
@@ -16,7 +16,7 @@
 //                        wraps: the reduced maps that ride the room snapshot.
 //   * unpackSchematic()  is the PHONE's, and phones stay on the JS controller on
 //                        all three TV platforms — so public/display/
-//                        trackSchematic.js keeps shipping to players and stays
+//                        the shared codec keeps shipping to players and stays
 //                        the oracle tests/fixtures/schematic-corpus.jsonl was
 //                        recorded from.
 

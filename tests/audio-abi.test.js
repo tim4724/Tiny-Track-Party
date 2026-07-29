@@ -122,11 +122,11 @@ test('the song catalogue is one table, in one order', async () => {
   const M = await load();
   const songJson = M.cwrap('ttp_audio_song_json', 'string', ['number']);
   // A music command carries an INDEX; NativeAudio.js resolves it through this
-  // call. The JS table survives for the music gallery and the credits test, so
-  // the two exist at once and this is the only place they meet — index for
-  // index, field for field, including the authored LUFS trims that
-  // audio-corpus.jsonl records as a level.
-  const { RACE_MUSIC } = await imp('public/display/audio/decide.js');
+  // call. The JS table survives as DATA (audio/musicCatalogue.js — the music
+  // gallery and the credits test read it), so the two exist at once and this is
+  // the only place they meet: index for index, field for field, including the
+  // authored LUFS trims that audio-corpus.jsonl records as a level.
+  const { RACE_MUSIC } = await imp('public/display/audio/musicCatalogue.js');
   const flat = [];
   for (const biome of ['beach', 'playroom', 'snow', 'grass', 'canyon']) {
     for (const song of RACE_MUSIC[biome]) flat.push(song);
@@ -162,191 +162,25 @@ test('the audio bus is a safe no-op with nothing bound', async () => {
   bind(0);
 });
 
-// ---- the wiring, against the oracle -----------------------------------------
-test('the native bus decides a live race exactly as the JS oracle does', async () => {
-  const M = await load();
-  const { AudioDecider } = await imp('public/display/audio/decide.js');
-
-  const c = (n, r, a) => M.cwrap(n, r, a);
-  const abi = {
-    begin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
-    addHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
-    addBot: c('ttp_add_bot', null, ['number', 'string', 'number', 'number', 'number', 'string']),
-    start: c('ttp_session_start', null, ['number', 'number']),
-    update: c('ttp_update', null, ['number', 'number']),
-    input: c('ttp_process_input', null, ['number', 'string', 'number', 'number', 'number', 'number']),
-    snapshot: c('ttp_snapshot_json', 'string', ['number']),
-    events: c('ttp_events_json', 'string', ['number']),
-    carWorldPos: c('ttp_car_world_pos', 'number', ['number', 'string', 'number']),
-    trackPoint: c('ttp_track_point', 'number', ['number', 'number', 'number', 'number']),
-    dispose: c('ttp_dispose', null, ['number']),
-    bind: c('ttp_audio_bind', null, ['number']),
-    frame: c('ttp_audio_frame', null, ['number'])
-  };
-  const vecPtr = M._malloc(3 * 8);
-  const vec = () => ({
-    x: M.HEAPF64[vecPtr >> 3], y: M.HEAPF64[(vecPtr >> 3) + 1], z: M.HEAPF64[(vecPtr >> 3) + 2]
-  });
-
-  const CUE_CODES = ['pickup', 'roulette', 'banana_drop', 'monster_inflate', 'monster_deflate',
-    'banana_slip', 'rocket_hit', 'screech', 'lap', 'join', 'countdown',
-    'boost', 'corner', 'brake', 'engine_putt', 'rocket_fire'];
-
-  // ONE decider for the whole test, on both sides: the native bus is a
-  // singleton whose state outlives a race (the lap/screech spacing clocks, the
-  // live-voice set), so a second race that agreed only because both sides were
-  // freshly constructed would prove nothing.
-  const dec = new AudioDecider({ rng: () => { throw new Error('this race draws no randomness'); } });
-  let nowMs = 0;
-  const seen = { beat: 0, cue: 0, voice: 0, stop: 0, mod: 0, jet: 0, boom: 0 };
-  // subject -> the car/rocket id the oracle used. Interning is the native
-  // side's own bookkeeping (ttp_audio.h: no car id crosses), so the streams can
-  // only be compared through a consistent bijection — which is itself the thing
-  // worth checking about it. Valid within a STOP_ALL epoch, which is exactly
-  // when both sides forget every voice they had.
-  let subjectOf = new Map();
-  let idOf = new Map();
-  const sameSubject = (subject, id, where) => {
-    if (subjectOf.has(id)) {
-      assert.equal(subjectOf.get(id), subject, `${where}: ${id} kept its subject`);
-    } else {
-      assert.ok(!idOf.has(subject), `${where}: subject ${subject} is not reused for ${id}`);
-      subjectOf.set(id, subject);
-      idOf.set(subject, id);
-    }
-  };
-
-  // Compare one batch of native commands against the oracle's, in order.
-  const agree = (got, want, at) => {
-    assert.equal(got.length, want.length,
-      `${at}: ${got.length} native commands vs ${want.length} from the oracle\n`
-      + `  native ${JSON.stringify(got)}\n  oracle ${JSON.stringify(want)}`);
-    got.forEach((g, i) => {
-      const w = want[i];
-      const where = `${at} cmd ${i}`;
-      if (w.voices === 'stop-all') {
-        assert.equal(g.kind, CMD.STOP_ALL, `${where}: stop every voice`);
-        subjectOf = new Map();
-        idOf = new Map();
-      } else if (w.voices === 'stop-car') {
-        assert.equal(g.kind, CMD.STOP_CAR, `${where}: stop one car's voices`);
-        sameSubject(g.subject, w.id, where);
-      } else if (w.cue === 'countdown') {
-        seen.beat++;
-        assert.equal(g.kind, CMD.COUNTDOWN, `${where}: a countdown beat`);
-        assert.equal(!!(g.flags & F_GO), w.part === 'go', `${where}: ${w.part}`);
-      } else if (w.cue !== undefined) {
-        seen.cue++;
-        if (w.cue === 'rocket_hit') seen.boom++;
-        assert.equal(g.kind, CMD.CUE, `${where}: a one-shot`);
-        assert.equal(CUE_CODES[g.code - 1], w.cue, `${where}: cue id`);
-        assert.equal(g.level, w.gain, `${where}: ${w.cue} gain`);
-      } else if (w.voice !== undefined && w.stop) {
-        seen.stop++;
-        assert.equal(g.kind, CMD.VOICE_STOP, `${where}: a voice stop`);
-        assert.equal(CUE_CODES[g.code - 1], w.voice, `${where}: voice id`);
-        sameSubject(g.subject, w.id, where);
-      } else if (w.voice !== undefined) {
-        seen.voice++;
-        if (w.voice === 'rocket_fire') seen.jet++;
-        if (w.mod) seen.mod++;
-        assert.equal(g.kind, CMD.VOICE, `${where}: a voice level`);
-        assert.equal(CUE_CODES[g.code - 1], w.voice, `${where}: voice id`);
-        assert.equal(g.level, w.level, `${where}: ${w.voice} level`);
-        assert.deepEqual(g.mod, w.mod || null, `${where}: ${w.voice} timbre`);
-        sameSubject(g.subject, w.id, where);
-      } else {
-        assert.fail(`${where}: the oracle emitted ${JSON.stringify(w)} — unexpected here`);
-      }
-    });
-  };
-
-  // Two humans and two bots, so the AI/human split is load-bearing on both
-  // sides: a CPU car is neither a listener nor a voice, and the native side
-  // works that out from the sim's own bot list rather than being told.
-  const AI = new Set(['ai-1', 'ai-2']);
-  const race = (label, forceItem, frames) => {
-    const h = abi.begin('tidepool', 42, 3, forceItem);
-    assert.ok(h, `${label}: the session opened`);
-    abi.addHuman(h, '0', null);
-    abi.addHuman(h, '1', null);
-    abi.addBot(h, '"ai-1"', 1, 0, 7, null);
-    abi.addBot(h, '"ai-2"', 0.9, 0.3, 11, null);
-    abi.bind(h);
-    abi.start(h, 3);
-
-    const listeners = () => {
-      const out = [];
-      for (const car of JSON.parse(abi.snapshot(h)).cars) {
-        if (AI.has(car.id)) continue;
-        if (abi.carWorldPos(h, JSON.stringify(car.id), vecPtr)) out.push(vec());
-      }
-      return out;
-    };
-
-    for (let f = 0; f < frames; f++) {
-      // The humans have to actually DRIVE, or none of the interesting arms are
-      // ever reached: this game has no lateral grip, so a car handed a constant
-      // steer walls itself in three seconds and spends the race scrubbing along
-      // a barrier at a quarter speed, never touching a box. A proportional pull
-      // back to the centre line keeps them racing, grabbing and firing — while
-      // still leaning hard enough into the corners to squeal, and still finding
-      // the odd wall. `u` has to CHANGE to count as a press, hence the
-      // alternation.
-      for (const car of JSON.parse(abi.snapshot(h)).cars) {
-        if (AI.has(car.id)) continue;
-        const steer = Math.max(-1, Math.min(1, -car.lat * 1.2));
-        abi.input(h, JSON.stringify(car.id), 7, steer,
-          car.id === 0 && f % 211 === 0 ? 1 : 0, f % 37 === 0 ? 1 : 0);
-      }
-      abi.update(h, 1000 / 60);
-      nowMs += 1000 / 60;
-
-      // ---- the oracle, driven the way main.js drove it ----
-      const want = [];
-      for (const e of JSON.parse(abi.events(h))) {
-        if (e.type === '_countdown') { want.push(...dec.countdown(e.n)); continue; }
-        if (e.type === '_raceStart' || e.type === '_raceEnd') continue;
-        let pos = null;
-        if (e.type === 'rocket_expire') pos = abi.trackPoint(h, e.s, e.lat, vecPtr) ? vec() : null;
-        else if (e.id != null) pos = abi.carWorldPos(h, JSON.stringify(e.id), vecPtr) ? vec() : null;
-        want.push(...dec.event(e, { pos, humanPositions: listeners(), aiIds: AI, nowMs }));
-      }
-      const snap = JSON.parse(abi.snapshot(h));
-      want.push(...dec.frame({
-        cars: snap.cars,
-        rockets: (snap.rockets || []).map((r) => ({
-          id: r.id, pos: abi.trackPoint(h, r.s, r.lat, vecPtr) ? vec() : null
-        })),
-        aiIds: AI,
-        nowMs
-      }));
-
-      // ---- the native bus ----
-      abi.frame(nowMs);
-      agree(drain(M), want, `${label} frame ${f}`);
-    }
-
-    // Race over, the way the shell ends one.
-    M._ttp_audio_stop_voices();
-    agree(drain(M), dec.stopVoices(), `${label} teardown`);
-    abi.bind(0);
-    abi.dispose(h);
-  };
-
-  // Every box rolls a rocket: jets, booms and the spins they cause. Then every
-  // box rolls a monster truck, which is the one command that carries a TIMBRE.
-  race('rockets', 'rocket', 1800);
-  race('monsters', 'monster', 1800);
-
-  // A race that decided nothing would pass every assertion above.
-  assert.ok(seen.beat >= 8, `the countdown was heard, twice (${seen.beat} beats)`);
-  assert.ok(seen.voice > 1500, `the state voices ran (${seen.voice} level commands)`);
-  assert.ok(seen.stop > 0, `voices died on their falling edge (${seen.stop})`);
-  assert.ok(seen.cue > 0, `one-shot cues fired (${seen.cue})`);
-  assert.ok(seen.jet > 0, `rockets were voiced in flight (${seen.jet})`);
-  assert.ok(seen.boom > 0, `and landed (${seen.boom} impacts)`);
-  assert.ok(seen.mod > 0, `the monster-truck timbre crossed (${seen.mod} modified voices)`);
-
-  M._free(vecPtr);
-});
+// ---- the wiring, and what used to be here -----------------------------------
+// A test called "the native bus decides a live race exactly as the JS oracle
+// does" stood here: it raced one field twice at once — through the native bus,
+// and through AudioDecider driven the way main.js used to drive it — and
+// required 3600 frames of identical commands. It went with decide.js when the
+// audio oracle was retired, because it WAS the oracle running.
+//
+// Be clear about what that cost, because it is not nothing: it was the only
+// check anywhere that ran the SHIPPED wasm against a second implementation at
+// RUNTIME. What still covers the same ground, and what does not:
+//
+//   * the DECISIONS are covered as well as ever — tests/fixtures/audio-corpus.jsonl
+//     is unchanged (the JS wrote it), the `audio` ctest replays all 6397 cases on
+//     four legs, and `record_audio` now also holds a C++ re-emission of it
+//     byte-identical.
+//   * the WORLD those decisions read is covered by the corpus's 5900 trace
+//     frames: audio_check re-races the golden trace and asserts the snapshot
+//     hash per frame, so a wrong listener set or event point fails there.
+//   * the ABI wiring is covered by abi_check's audio pass.
+//   * what is NOT covered any more is the composition of all three inside the
+//     shipped artifact, on a live race. The pieces are each gated; their
+//     assembly in ttp_runtime.wasm is not.

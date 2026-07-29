@@ -7,7 +7,15 @@
 // live geometry by tests/track.test.js. This binary rebuilds each track through
 // libttp-track's own TrackBuilder and has to reproduce those bytes exactly — the
 // projection, the toFixed rounding, the path spelling, the RDP survivors and the
-// base64. It is not C++ agreeing with C++, and there is no --record mode.
+// base64. It is not C++ agreeing with C++.//
+// --record RE-EMITS, IT DOES NOT REGENERATE. `--record <fixture> --out=<f>`
+// rebuilds each case from its recorded id/path and writes the corpus back with
+// the C++'s answers; record_schematic holds the result byte-identical. It cannot
+// invent a case — the track ids and codec paths are read off the committed file
+// — so what it proves is that the port reproduces every recorded answer and its
+// exact JSON spelling. It is NOT parity evidence: the committed bytes carry
+// that, and the JS bake wrote them. If a re-record ever differs, the committed
+// file is right.
 //
 // Line 1 is a header. Then:
 //   {case:"track", id, schematic:{viewBox,d,start,proj}, packed, unpacked}
@@ -22,6 +30,7 @@
 #include <string>
 
 #include "corpus_diff.h"
+#include "corpus_record.h"
 #include "generated/track_defs.h"
 #include "ttp/canonical.h"
 #include "ttp/schematic.h"
@@ -86,10 +95,54 @@ bool report(const char* label, const std::string& who, const Value& exp, const V
 
 }  // namespace
 
+// Re-emit the corpus from the port: each track is rebuilt through libttp-track's
+// own TrackBuilder and re-projected, each codec case re-packed from its path.
+int recordCorpus(const std::string& fixture, const std::string& outPath) {
+  bool bad = false;
+  const int rc = corpus::record(fixture, outPath, [&](const Value& rec) {
+    const std::string kind = strOf(rec, "case");
+    if (kind == "track") {
+      const std::string id = strOf(rec, "id");
+      const TrackDef* def = findDef(id);
+      if (!def) { std::fprintf(stderr, "--record: no such track %s\n", id.c_str()); bad = true; return Value(); }
+      const RaceTrack rt = build_race_track(*def, 3, 1);
+      const sch::Schematic sc = sch::build(rt);
+      const std::string packed = sch::pack(sc.d);
+      Value line = Value::Obj();
+      line.set("case", Value::Str("track"));
+      line.set("id", Value::Str(id));
+      line.set("schematic", schematicValue(sc));
+      line.set("packed", Value::Str(packed));
+      line.set("unpacked", schematicValue(sch::unpack(packed)));
+      return line;
+    }
+    if (kind == "codec") {
+      const std::string d = strOf(rec, "d");
+      const double eps = numOf(rec, "eps");
+      const std::string packed = sch::pack(d, eps > 0 ? eps : sch::EPS);
+      Value line = Value::Obj();
+      line.set("case", Value::Str("codec"));
+      line.set("name", Value::Str(strOf(rec, "name")));
+      line.set("d", Value::Str(d));
+      if (rec.find("eps")) line.set("eps", Value::Num(eps));
+      line.set("packed", Value::Str(packed));
+      line.set("unpacked", schematicValue(sch::unpack(packed)));
+      return line;
+    }
+    return Value();   // UNDEF: the header, copied through
+  });
+  return (rc == 0 && !bad) ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: schematic_check <schematic-corpus.jsonl>\n");
+    std::fprintf(stderr, "usage: schematic_check <schematic-corpus.jsonl>\n"
+                         "       schematic_check --record <corpus> --out=<file>\n");
     return 2;
+  }
+  {
+    std::string fixture, outPath;
+    if (corpus::wants_record(argc, argv, &fixture, &outPath)) return recordCorpus(fixture, outPath);
   }
   std::ifstream f(argv[1]);
   if (!f) {

@@ -5,11 +5,12 @@
 //
 // The scene is built from three things the caller already holds: the built
 // track (ttp::RaceTrack — the one the sim races on), the resolved biome
-// (ttp::rt::Theme), and the roster's liveries, which are the only part still
-// serialized ("track.bin"). From those come the road ribbon swept from the
+// (ttp::rt::Theme), and the roster's liveries (TtpRosterCar). NONE of them is
+// serialized any more — "track.bin", the last byte payload, went when the
+// roster started crossing typed. From those come the road ribbon swept from the
 // centerline, ground/sky/hills, scenery and furniture, cars from provided GLBs,
-// and 2×2 split-screen with per-cell cameras from FrameInput.views. buildScene()
-// fails without the liveries payload.
+// and 2×2 split-screen with per-cell cameras from FrameInput.views. An EMPTY
+// roster is a legal scene: it is what the lobby's track preview draws.
 #pragma once
 
 #include "ttp_render.h"
@@ -97,13 +98,15 @@ public:
     const std::vector<uint8_t>* asset(const char* name) const;
     // `geo` is the built track this scene is meshed from — the SAME ttp::RaceTrack
     // the sim races on, handed straight over rather than serialized; `theme` is
-    // the resolved biome, likewise a live object rather than a payload. Both are
-    // C++ data the caller already has, so what is left in "track.bin" is only
-    // what the SHELL supplies: the roster's liveries.
-    bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme);
+    // the resolved biome, likewise a live object rather than a payload; `roster`
+    // is the one thing the SHELL supplies, in slot order, and it too is now
+    // plain structs rather than the "track.bin" byte buffer it used to be.
+    // NOTHING about a scene is serialized any more.
+    bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
+            const std::vector<TtpRosterCar>& roster);
     // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
     // material instances — and reset the per-scene state, so buildScene() can
-    // run again on a new track.bin (a Grand Prix chains four of them) or a new
+    // run again on a new track (a Grand Prix chains four of them) or a new
     // roster. The engine, views, materials and provided asset bytes survive.
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
@@ -118,11 +121,11 @@ public:
     // How wide a racing cell is allowed to get before the sides are bars.
     //
     // A cell's camera locks its PIXEL SCALE to the single-player reference
-    // (cellFov in ttp_display.cc), so this does NOT set how big the car is —
-    // that is fixed in every layout by construction, and stays fixed whatever
-    // this is. Nor does it set the vertical fov, which works out to depend only
-    // on the cell's HEIGHT against the screen's. What it sets is how much width
-    // of world a cell shows, and what that width costs to rasterize.
+    // (cellFov, libttp-runtime/ttp/frame_builder.h), so this does NOT set how
+    // big the car is — that is fixed in every layout by construction, and stays
+    // fixed whatever this is. Nor does it set the vertical fov, which works out
+    // to depend only on the cell's HEIGHT against the screen's. What it sets is
+    // how much width of world a cell shows, and what that costs to rasterize.
     //
     // So the trade here is peripheral view against fill, and 21:9 is a shape
     // people read as a picture rather than a slot. On a 16:9 screen it gives a
@@ -194,7 +197,7 @@ private:
         bool inScene = false;
     };
 
-    struct TrackBin; // parsed "track.bin" payload (defined in the .cpp)
+    struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
     filament::Engine* mEngine = nullptr;
     filament::SwapChain* mSwapChain = nullptr;
@@ -648,11 +651,10 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
-    bool buildTrackScene(const std::vector<uint8_t>& bin, const ttp::RaceTrack& geo,
+    bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme);
-    // The theme/roster half of the payload. Geometry does not come through here
-    // any more — see fillGeometry.
-    bool parseTrackBin(const std::vector<uint8_t>& bin, TrackBin& out);
+    // The roster half of TrackBin — a copy now that the liveries arrive typed.
+    static void applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster);
     static void applyTheme(TrackBin& out, const ttp::rt::Theme& theme);
     // The geometry half, copied (and float-narrowed) straight off the built
     // track. Also derives what used to be computed JS-side from the geometry:

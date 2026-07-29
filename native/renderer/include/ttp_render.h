@@ -23,6 +23,26 @@ extern "C" {
 #endif
 
 /*
+ * One car's SLOT in the scene: the only thing about a race the shell genuinely
+ * knows, which is who is in it and what their car looks like. Handed over once
+ * per scene build, in slot order; the renderer bakes each entry into its slot
+ * and every later frame puts a car back in ITS slot by identity.
+ *
+ * This used to be "track.bin" — a hand-rolled, version-stamped byte buffer that
+ * public/shared/trackBin.js wrote and TtpRenderer.cpp parsed. Both halves are
+ * gone. The format cost every shell a byte-exact encoder for a layout documented
+ * in a comment, which is the same shape of silent divergence the effect-list
+ * ABIs exist to prevent; the roster crosses the ttp_display_build boundary as
+ * JSON now and libttp-runtime's parseRoster (ttp/roster.h) fills this struct,
+ * so the colour arithmetic and the per-model plate table are written once.
+ */
+typedef struct TtpRosterCar {
+    uint32_t colorABGR;   /* livery, premultiplied-alpha-free 0xAABBGGRR */
+    char name[9];         /* rear name plate: 8 chars + NUL, 0-padded */
+    float plateY;         /* plate height on this model's back panel; < 0 = auto */
+} TtpRosterCar;
+
+/*
  * One frame of everything that moves. Built by libttp-runtime's frame builder
  * straight off the live Game — it never leaves the process, so "plain data"
  * here buys layout stability for the tvOS/Android shells and a serializable
@@ -114,7 +134,7 @@ typedef struct TtpCellHudInput {
  * baked token table so the two languages cannot drift apart silently.
  *
  * Only these two. A third would mean the look is being rebuilt here rather than
- * quoted — the livery colour arrives as roster data (track.bin), and every
+ * quoted — the livery colour arrives as roster data (TtpRosterCar), and every
  * other surface in view is drawn by the renderer from the biome palette. */
 #define TTP_HUD_INK     0x2A2735u
 #define TTP_HUD_SURFACE 0xFFFFFFu

@@ -1,7 +1,8 @@
 // vecmath — the cosmetic float vectors the display layer runs on, plus the one
 // camera world matrix it hands the renderer.
 //
-// Lifted VERBATIM out of runtime/ttp_display.cc, which sits behind the Filament
+// Lifted VERBATIM out of runtime/ttp_display.cc (DELETED — git history has it;
+// runtime/ttp_display_web.cc is the web shell that survived it), which sat behind the Filament
 // gate and therefore compiled on exactly one machine configuration and was
 // exercised by none of the ctests. Nothing in libttp-runtime knows what a
 // renderer, a canvas or an emscripten context is; it is compiled and tested on

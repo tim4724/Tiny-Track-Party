@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 
 let RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS, ASSET_CREDITS, MUSIC_ATTRIBUTION_LINE, creditsFor;
 test.before(async () => {
-  ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/decide.js'));
+  ({ RACE_MUSIC, MUSIC_FALLBACK, MUSIC_TARGET_LUFS } = await import('../public/display/audio/musicCatalogue.js'));
   ({ ASSET_CREDITS, MUSIC_ATTRIBUTION_LINE, creditsFor } = await import('../public/shared/credits.js'));
 });
 
@@ -36,7 +36,7 @@ test('every song carries a loudness measurement and an attenuating gain', () => 
   }
 });
 
-// decide.js bakes each `gain` as a LITERAL instead of evaluating
+// musicCatalogue.js bakes each `gain` as a LITERAL instead of evaluating
 // `10 ** ((MUSIC_TARGET_LUFS - lufs) / 20)` at load, because `**` is V8's pow —
 // implementation-approximated, disagreeing with the fdlibm the C++ port links on 2
 // of the 23 shipped trims — and this number is recorded into audio-corpus.jsonl,

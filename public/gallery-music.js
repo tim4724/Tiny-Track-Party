@@ -13,7 +13,7 @@ import { loadBiomes, cssHex } from '/shared/biomes.js';
 // Straight from the audio ORACLE, which is where the catalogue is authored.
 // Audio.js used to re-export it, which put the oracle on the shipped display
 // page's import graph; this page is a dev surface and is free to read it.
-import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/decide.js';
+import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/musicCatalogue.js';
 
 const biomes = await loadBiomes();
 

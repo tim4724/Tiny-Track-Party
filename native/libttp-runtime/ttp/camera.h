@@ -1,5 +1,5 @@
 // camera — the per-player spring chase rig, lifted verbatim out of
-// runtime/ttp_display.cc. The tuning comments here are the reference
+// runtime/ttp_display.cc (DELETED — git history has it). The tuning comments here are the reference
 // documentation for every constant; they came across untouched.
 #pragma once
 

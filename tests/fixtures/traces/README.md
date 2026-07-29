@@ -49,14 +49,50 @@ fixtures can be authored from C++: write a header JSON and record from it. Such 
 fixture proves "the sim still does what it did when this was recorded" and says
 NOTHING about JS parity.
 
+**`--record` on a class-1 fixture means something different, and the difference
+is the whole rule.** `ui_check`, `audio_check`, `session_check` and
+`schematic_check` each take `--record <fixture> --out=<f>` too, gated by
+`record_ui` / `record_audio` / `record_session` / `record_schematic`. Those do
+NOT regenerate a corpus: they RE-EMIT the committed one, feeding each line's own
+recorded INPUT back through the port and writing the answers out again. The
+scenarios — which ops, in which order, with which arguments, sweeps included —
+are read off the committed file, never rebuilt, so a re-record cannot invent a
+case.
+
+What that buys is real but bounded: byte identity proves the port reproduces
+every recorded answer AND its exact JSON spelling (key set, null-vs-absent, every
+number through `js_number_to_string`), which is strictly more than the structural
+replays assert. It is NOT parity evidence. The committed bytes carry that, and
+the JS wrote them. **If a re-record ever differs from the committed file, the
+committed file is right.** Do not overwrite it to make the gate green.
+
 Class 1 also has members that are not traces at all. `session-corpus.jsonl` (the
-display's room policy, recorded off `public/display/sessionModel.js`) and
-`schematic-corpus.jsonl` (the top-down track map, whose per-track expectations are
-the committed `public/shared/trackSchematics.js` bake) join `ui-corpus.jsonl` and
-`audio-corpus.jsonl` as oracles recorded AHEAD of their port. All four are still
-RENEWABLE — `tests/codegen-freshness.test.js` re-derives each one and demands the
-committed bytes back — and each stops being renewable the day its JS is deleted.
-That is the whole reason they were recorded before the port rather than after.
+display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
+`raceflow-corpus.jsonl` (the race orchestration) were each recorded off live JS
+AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
+expectations being the committed `public/shared/trackSchematics.js` bake.
+
+**Four of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
+`audio/decide.js` and `trackSchematic.js` were deleted once their ports were
+conformance-proven, and their generators went with them: those four corpora can
+never be re-derived, exactly like the traces above, and the `record_*`
+roundtrips are what replaced the freshness checks. Only
+`raceflow-corpus.jsonl` is still RENEWABLE (`public/display/raceFlow.js`
+survives).
+
+The schematic one is worth a note, because retiring its twin also moved a
+SHIPPING codegen path onto C++: `scripts/gen-track-schematics.js` bakes
+`public/shared/trackSchematics.js` from `ttp_track_schematic_json` now. That is
+licensed by this corpus and by the bake reproducing BYTE-IDENTICALLY — the
+committed file is still the bytes the JS wrote, and the `schematic` ctest holds
+the native projection to them for all 20 tracks. What no longer has JS evidence
+is a track added AFTER the recording; `tests/track.test.js` covers those against
+the live geometry, but as C++ agreeing with C++.
+
+The consequence is the one the ratchet always had: a frozen corpus can be
+replayed and re-emitted forever, but it can never GROW. A new scenario for the
+UI, session or audio layers can only be authored from C++, which proves nothing
+about the JS it replaced.
 
 `tests/fixtures/catalogue-sweep-corpus.jsonl` and
 `tests/fixtures/runtime-camera-corpus.jsonl` are the other members of this class —

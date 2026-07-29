@@ -20,7 +20,7 @@
 // drift from the C++ one), a voice's subject is an opaque token, and a picked
 // song is an INDEX resolved once per race through ttp_audio_song_json.
 //
-// public/display/audio/decide.js stays in the tree, and stays the ORACLE:
+// public/display/audio/decide.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/audio-corpus.jsonl was recorded off it, and
 // native/runtimetest/audio_check.cc replays all 6397 cases of it through the
 // C++ on every leg. A disagreement between the two is a bug in the port, never

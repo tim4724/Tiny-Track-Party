@@ -23,7 +23,6 @@
 // dividers latched in _loop and pushed only when they change.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
-import { rosterEntry } from '../shared/trackBin.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
 
@@ -219,13 +218,24 @@ export class Stage {
   // that own a cell first, in cell order, then the rest of the field. Every
   // frame then finds a car's slot by its id, so this order only has to be
   // stable within one build, not to mean anything to the sim.
+  //
+  // A slot is four fields, and the split between them is the whole contract:
+  // id/name/carIndex/colour go to C++ verbatim (ttp_display_build parses them —
+  // the livery arithmetic and the name-plate height are ITS business, not this
+  // file's), while `model` never crosses at all. It names the GLB to FETCH,
+  // which is the one part of a scene build that is a platform job.
   _roster() {
     const seen = new Set(this._order.filter((id) => this.cars.has(id)));
     const all = [...seen, ...[...this.cars.keys()].filter((id) => !seen.has(id))];
+    const models = window.CAR_MODELS || [];
     return all.map((id) => {
       const c = this.cars.get(id);
-      return rosterEntry(id, c.name || '', c.carIndex ?? 0,
-          this.colors[(c.colorIndex ?? 0) % this.colors.length], window.CAR_MODELS);
+      const carIndex = c.carIndex ?? 0;
+      return {
+        id, name: c.name || '', carIndex,
+        color: this.colors[(c.colorIndex ?? 0) % this.colors.length],
+        model: models[carIndex % (models.length || 1)] || null
+      };
     });
   }
 

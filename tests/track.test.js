@@ -58,7 +58,14 @@ test.before(async () => {
   // surfaces (devTracks.js — the Gym). Suites about what SHIPS (schematics, the grid
   // rule) iterate TRACK_LIST instead.
   ALL_TRACKS = { ...TRACKS, ...DEV_TRACKS };
-  trackSchematic = (await import('../public/display/trackSchematic.js')).trackSchematic;
+  // The projection is NATIVE now (libttp-track's ttp::schematic, read through
+  // the shipped wasm). The JS twin was the oracle
+  // tests/fixtures/schematic-corpus.jsonl was recorded off and is retired; that
+  // corpus, replayed by the `schematic` ctest on all four legs, is what holds
+  // this projection to the bytes the JS wrote. What the two tests below still
+  // add is the link to the LIVE catalogue, which the frozen corpus cannot have:
+  // a track added or re-laid out after the recording is only covered here.
+  trackSchematic = (await import('../scripts/native-track.mjs')).trackSchematic;
   // The transport codec is shared/ now — the phone unpacks it, and phones stay
   // on the JS controller on every TV platform.
   const codec = await import('../public/shared/schematicCodec.js');
@@ -345,7 +352,7 @@ test('TRACK_SCHEMATICS is in sync with the track geometry', () => {
   assert.equal(Object.keys(TRACK_SCHEMATICS).length, TRACK_LIST.length,
     'TRACK_SCHEMATICS has a different track count than the catalogue — regenerate: node scripts/gen-track-schematics.js');
   for (const t of TRACK_LIST) {
-    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(buildTrack(t)),
+    assert.deepEqual(TRACK_SCHEMATICS[t.id], trackSchematic(t.id),
       `schematic for "${t.id}" is stale — regenerate: node scripts/gen-track-schematics.js`);
   }
 });
@@ -376,7 +383,7 @@ test('packSchematic round-trips, simplifies, and preserves the silhouette', () =
 
   let totalBytes = 0, worst = 0;
   for (const t of TRACK_LIST) {
-    const full = trackSchematic(buildTrack(t));
+    const full = trackSchematic(t.id);
     const packed = packSchematic(full);
     const back = unpackSchematic(packed);
     const pts = packedPoints(packed);

@@ -38,7 +38,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRACKS, CUPS } from '../public/shared/tracks.js';
+import { TRACKS, CUPS, DIFF_LEVEL } from '../public/shared/tracks.js';
 import { DEV_TRACKS } from '../public/shared/devTracks.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,6 +52,27 @@ const ROAD_WIDTH = 2.5; // TrackBuilder ROAD_WIDTH — the descriptor-width fall
 // to no cup and emits nullptr, which resolves to the grass fallback.
 const CUP_OF = {};
 for (const c of CUPS) for (const id of c.tracks) CUP_OF[id] = c.id;
+
+// Per-track difficulty as a LEVEL. The catalogue authors it as a word and the
+// only thing that reads it is the cup TENDENCY (a rounded mean, resolved in C++
+// by ttp::rt::ui::cupTendency), so the word is resolved here rather than
+// carried across.
+//
+// DIFF_LEVEL is IMPORTED, not re-typed. The JS read it as `DIFF_LEVEL[w] || 2`,
+// which turned a typo into a silent middling 2 — and once the level is codegen'd
+// there is no second reader left to notice, because tests/ui-model.test.js
+// compares this bake against the same word table. So a CATALOGUE track's word
+// must be one this table knows, and an unknown one fails the build. Dev ranges
+// author things like 'Dev' and belong to no cup, so they keep the old fallback.
+const diffLevel = (id, desc) => {
+  if (desc.difficulty != null && DIFF_LEVEL[desc.difficulty] != null) return DIFF_LEVEL[desc.difficulty];
+  if (id in TRACKS) {
+    fail(`track "${id}" has difficulty ${JSON.stringify(desc.difficulty)}, `
+      + `which is not one of ${Object.keys(DIFF_LEVEL).join('/')} — a catalogue track's `
+      + `difficulty feeds its cup's tendency and may not silently default`);
+  }
+  return 2;
+};
 
 // ---- exact double -> C++ hex-float literal ----
 // A hex float (0x1.<52-bit mantissa>p<exp>) names the binary64 value EXACTLY —
@@ -201,7 +222,8 @@ for (const id of [...trackIds, ...devIds]) {
 
   // Field order MUST match TrackDef in trackbuilder.h.
   const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
-  perTrack.push(`  { ${JSON.stringify(id)}, ${cup}, ${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
+  perTrack.push(`  { ${JSON.stringify(id)}, ${JSON.stringify(desc.name || id)}, ${cup}, ${diffLevel(id, desc)}, `
+    + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
     + `${D(trackWidth)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
     + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n} }`);
@@ -214,6 +236,37 @@ out.push('// The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).');
 out.push(`constexpr int TTP_TRACK_COUNT = ${trackIds.length};`);
 out.push('// Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.');
 out.push(`constexpr int TTP_TRACK_TOTAL = ${trackIds.length + devIds.length};`);
+out.push('');
+
+// ---- the cups ---------------------------------------------------------------
+// CUPS is the catalogue's ORDERING as well as its grouping, and the shipped
+// arrangement is what every shell's picker draws. It used to cross the ttp_ui.h
+// boundary as ~2 KB of JSON that the browser assembled out of this same file —
+// which meant a tvOS shell had to carry its own copy of the cup names and its
+// own implementation of the tendency rule below. Carried here for exactly the
+// reason `cup` above is: the catalogue is where this is authored, so one source.
+out.push('// The shipped CUPS, in the catalogue\'s own order — which IS the difficulty');
+out.push('// ladder and the order every picker draws. `difficulty` is the AUTHORED');
+out.push('// override or 0 for "derive from the tracks" (ttp::rt::ui::cupTendency).');
+for (const c of CUPS) {
+  const sym = c.id.replace(/[^A-Za-z0-9]/g, '_');
+  out.push(`constexpr const char* kCupTracks_${sym}[] = { ${c.tracks.map((t) => JSON.stringify(t)).join(', ')} };`);
+}
+out.push('constexpr CupDef TTP_CUPS[] = {');
+for (const c of CUPS) {
+  const sym = c.id.replace(/[^A-Za-z0-9]/g, '_');
+  // 0 is the "derive from the tracks" sentinel, so an authored 0 would collapse
+  // into it silently. JS distinguished them (`c.difficulty != null`); the C++
+  // cannot, so the codegen refuses the ambiguous value rather than pick one.
+  if (c.difficulty != null && !(Number.isInteger(c.difficulty) && c.difficulty >= 1 && c.difficulty <= 4)) {
+    fail(`cup "${c.id}" pins difficulty ${JSON.stringify(c.difficulty)}; an override must be an integer 1..4 `
+      + `(0 is the sentinel for "derive it from the tracks")`);
+  }
+  out.push(`  { ${JSON.stringify(c.id)}, ${JSON.stringify(c.name)}, kCupTracks_${sym}, `
+    + `${c.tracks.length}, ${c.difficulty != null ? c.difficulty : 0} },`);
+}
+out.push('};');
+out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);
 out.push('');
 out.push('}  // namespace ttp');
 out.push('');

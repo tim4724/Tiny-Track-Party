@@ -235,7 +235,7 @@ TTP_ABI const char* ttp_schematic_pack(const char* pathD, double eps);
 // {viewBox, d, start}. Straight segments between the kept points, no spline (a
 // spline IMPOSES a rounded look the original does not have). Phones stay on the
 // JS controller on all three TV platforms, so this is not on a shipping path —
-// public/display/trackSchematic.js's unpackSchematic is what a player runs.
+// public/shared/schematicCodec.js's unpackSchematic is what a player runs.
 TTP_ABI const char* ttp_schematic_unpack_json(const char* b64);
 
 // The item vocabulary, by CODE: the id a box roll can yield for TTP_ITEM_BOOST

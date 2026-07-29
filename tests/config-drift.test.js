@@ -174,15 +174,16 @@ test("InputGate's dead-band derivation still closes over the manifest", () => {
 //
 // Four links, and the first three are here:
 //   1. controller/Net.js + display/Net.js == the manifest   (source text)
-//   2. sessionModel.js's restated constants == the manifest (source text)
-//   3. the windows are internally consistent               (arithmetic)
-//   4. protocol.h == protocol.js                (protocol-corpus + `protocol` ctest)
+//   2. the windows are internally consistent               (arithmetic)
+//   3. protocol.h == protocol.js                (protocol-corpus + `protocol` ctest)
+// There used to be a fourth, pinning sessionModel.js's restated constants to the
+// manifest. That file was the session oracle and went with the port; the C++ it
+// became reads the windows out of protocol.h, which link 3 already gates.
 // The source-text guards are literal on purpose: a reformat fails them loudly
 // rather than silently matching nothing.
 // ---------------------------------------------------------------------------
 const CTRL_NET = path.join(ROOT, 'public/controller/Net.js');
 const DISPLAY_NET = path.join(ROOT, 'public/display/Net.js');
-const SESSION_MODEL = path.join(ROOT, 'public/display/sessionModel.js');
 
 test('the two shells read their presence windows off the manifest', () => {
   const ctrl = fs.readFileSync(CTRL_NET, 'utf8');
@@ -202,20 +203,6 @@ test('the two shells read their presence windows off the manifest', () => {
   // manifest number rather than a second declaration of one.
   assert.match(disp, /const ABANDONED_RACE_GRACE_MS = window\.__abandonGraceMs \|\| LIVENESS\.ABANDONED_RACE_GRACE_MS;/,
     'display/Net.js: the abandoned-race grace must fall back to the manifest');
-});
-
-test('sessionModel.js restates only what it must, and restates it correctly', () => {
-  const src = fs.readFileSync(SESSION_MODEL, 'utf8');
-  // It may import nothing (session-corpus.test.js enforces that), so the one
-  // window it spends and the heartbeat's wire type are literals — held here.
-  const dead = /const HEARTBEAT_DEAD_MS = (\d+);/.exec(src);
-  assert.ok(dead, 'sessionModel.js still declares HEARTBEAT_DEAD_MS');
-  assert.equal(Number(dead[1]), protocol.LIVENESS.HEARTBEAT_DEAD_MS,
-    'sessionModel.js HEARTBEAT_DEAD_MS drifted from protocol.LIVENESS.HEARTBEAT_DEAD_MS');
-  const type = /const HEARTBEAT_TYPE = '([^']+)';/.exec(src);
-  assert.ok(type, 'sessionModel.js still declares HEARTBEAT_TYPE');
-  assert.equal(type[1], protocol.MSG.HEARTBEAT,
-    'sessionModel.js HEARTBEAT_TYPE drifted from protocol.MSG.HEARTBEAT');
 });
 
 test('the presence windows still describe one design', () => {
