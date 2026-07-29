@@ -24,8 +24,6 @@ const state = Gallery.loadState();
 const frame = document.getElementById('asset-stage');
 const biomeSel = document.getElementById('asset-biome');
 const itemSel = document.getElementById('asset-item');
-const driveBox = document.getElementById('asset-drive');
-const legendBox = document.getElementById('asset-legend');
 const legendPanel = document.getElementById('asset-legend-panel');
 const legendLists = document.getElementById('asset-legend-lists');
 const homeBtn = document.getElementById('asset-home');
@@ -70,12 +68,13 @@ Gallery.bindCheckbox(state, 'asset-drive', 'assetDrive', () => {
   if (s) s.drive(!!state.assetDrive);
 });
 
-// The legend is chrome, not scene state — it never touches the frame.
+// The legend is chrome, not scene state — it never touches the frame. Defaulted
+// ON before binding, since bindCheckbox reads the box's state FROM `state` (an
+// unset key would open the page with the legend hidden and the toggle ticked).
+if (state.assetLegend === undefined) state.assetLegend = true;
 Gallery.bindCheckbox(state, 'asset-legend', 'assetLegend', () => {
   legendPanel.hidden = !state.assetLegend;
 });
-if (state.assetLegend === undefined) state.assetLegend = true;
-legendBox.checked = !!state.assetLegend;
 legendPanel.hidden = !state.assetLegend;
 
 homeBtn.addEventListener('click', () => {
@@ -182,7 +181,6 @@ whenReady((s) => {
   s.biome(state.assetBiome);
   if (state.assetItem) s.item(state.assetItem);
   if (state.assetDrive) s.drive(true);
-  driveBox.checked = !!state.assetDrive;
 });
 
 Gallery.initMobileOptionsToggle();

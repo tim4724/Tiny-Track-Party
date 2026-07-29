@@ -187,8 +187,8 @@ export class Display {
     //
     // In SHOWCASE mode the list is the union of every biome's (the same one for
     // all of them, which is why it takes no biome argument) — see showcase().
-    const b = await loadBiomes();
-    const scModels = this._showcase ? b.showcaseModels() : b.sceneryModels(biome);
+    const biomes = await loadBiomes();
+    const scModels = this._showcase ? biomes.showcaseModels() : biomes.sceneryModels(biome);
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 

@@ -151,13 +151,16 @@ function enableFreeCamIfStandalone(scene) {
 // The asset gallery takes this branch: there the preview IS the page — one
 // full-bleed frame you are meant to fly, not a thumbnail in a grid — so the
 // iframe test above says nothing useful about whether a viewer can drag it.
+// Hands back the camera's own state, which is what a caller that wants to move
+// it later (the gallery's "back to the cars") holds on to.
 function enableFreeCam(scene, start) {
   scene.setFog(false); // flying around the scene: no haze clipping the far track
   // #race is a transparent z-2 overlay over the canvas; let pointer events fall
   // through to it so the drag handler can listen (see .cam-free in display.css).
   document.documentElement.classList.add('cam-free');
-  scene.enableUserCamera(start);
+  const cam = scene.enableUserCamera(start);
   showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
+  return cam;
 }
 
 // One-time control legend for the free camera — the drag/WASD controls are
@@ -415,14 +418,15 @@ export function runDisplayScenario(opts, ctx) {
       const { scene, track } = ctx;
       const MODELS = window.CAR_MODELS || [];
       const MODEL_NAMES = window.CAR_NAMES || [];
-      // Facing the grid from up the road, so the opening frame is the cars —
-      // their fronts, their liveries and their name plates — with the exhibition
-      // straight running away behind the camera. Fitted to the showroom's own
-      // geometry (the line is at world origin, the road runs +x, the grid sits
-      // behind it), which is why it is authored here rather than solved: this
-      // scenario builds exactly one track.
+      // Three-quarters behind the grid, at car height: the opening frame is the
+      // parked lineup wearing its liveries and rear name plates, with the gantry
+      // and then the whole exhibition straight receding past it — the cars, and
+      // where to fly next, in one shot. Fitted to the showroom's own geometry
+      // (the line is at world origin, the road runs +x, the grid sits behind
+      // it), which is why it is authored rather than solved: this scenario
+      // builds exactly one track.
       const START_CAM = { eye: { x: -12, y: 2, z: -7.5 }, yaw: 0.75, pitch: -0.12 };
-      enableFreeCam(scene, START_CAM);
+      const cam = enableFreeCam(scene, START_CAM);
 
       // One seat per LIVERY, cycling the models — eight cars covers every model
       // twice over, and no model is represented by only one paint job. Each
@@ -485,7 +489,7 @@ export function runDisplayScenario(opts, ctx) {
         drive(on) {
           driving = on !== false;
           if (driving) scene.hold(false);
-          else { newSession(); }   // parked means back ON the grid, not stopped mid-corner
+          else newSession();   // parked means back ON the grid, not stopped mid-corner
           return driving;
         },
         driving: () => driving,
@@ -501,9 +505,15 @@ export function runDisplayScenario(opts, ctx) {
           scene.bindSession(engine.h);
           return scene.biome();
         },
-        // Where the camera is, and how to put it back on the cars.
-        camera: () => scene._free && { ...scene._free.eye },
-        home() { if (scene._free) Object.assign(scene._free, { eye: { ...START_CAM.eye }, yaw: START_CAM.yaw, pitch: START_CAM.pitch }); }
+        // Where the camera is, and how to put it back on the cars. `cam` is the
+        // free cam's own state (enableFreeCam hands it back), so this moves the
+        // camera the same way a drag does.
+        camera: () => ({ ...cam.eye }),
+        home() {
+          cam.eye = { ...START_CAM.eye };
+          cam.yaw = START_CAM.yaw;
+          cam.pitch = START_CAM.pitch;
+        }
       };
     }
     return;

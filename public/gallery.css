@@ -177,10 +177,11 @@ input[type="range"] { accent-color: #5060c0; }
 /* Asset gallery (gallery-assets.html): ONE live scene, not a grid of frozen
    thumbnails. The frame fills everything under the header and keeps its own
    pointer events — the camera is the page — so this is the one gallery whose
-   iframe is not pointer-events:none. */
-/* A column, so the stage takes whatever the header leaves — the header's height
-   varies with wrapping and doubles on the mobile layout, so any fixed offset
-   here would be wrong on some screen. */
+   iframe is not pointer-events:none.
+
+   Laid out as a COLUMN so the stage takes whatever the header leaves: the
+   header's height varies with wrapping and doubles on the mobile layout, so any
+   fixed offset here would be wrong on some screen. */
 body.stage-page {
   display: flex; flex-direction: column;
   height: 100vh; padding-bottom: 0; overflow: hidden;

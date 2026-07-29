@@ -19,15 +19,6 @@ namespace {
 // of "everything we draw" that rots the first time it is not updated.
 // ---------------------------------------------------------------------------
 
-// The showcase reads a biome's own resolved theme, so every default, preset and
-// per-track patch is already folded in (theme.h's "what resolved means"). The
-// track goes with it: the snow cup patches its flake cloud per track, and the
-// gallery's showroom is not in that cup, so this is only ever the base value —
-// but reading it any other way would be a second resolution rule.
-Theme resolvedFor(int index, const char* trackId) {
-  return resolve_theme(biome_name(index), trackId);
-}
-
 void addTree(std::vector<TreeSpec>& into, const TreeSpec& t) {
   for (const TreeSpec& seen : into) if (seen.model == t.model) return;
   into.push_back(t);
@@ -108,10 +99,10 @@ constexpr float kMixBush = 0.86f;
 const std::vector<std::string>& showcase_models() {
   // Built once: the tables behind it are constant for the life of the process,
   // and the shell asks for this on every scene build.
-  static const std::vector<std::string> models = [] {
-    Theme t = showcase_theme(biome_name(0), "");
-    return t.scenery.models;
-  }();
+  // Any biome answers the same list — that is the invariant, and showcase_check
+  // holds it for all six — so the first one is as good as a special case.
+  static const std::vector<std::string> models =
+      showcase_theme(biome_name(0), "").scenery.models;
   return models;
 }
 
@@ -129,7 +120,11 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
   std::vector<TreeSpec> trees;
   std::vector<ClutterSpec> clutter;
   for (int i = 0; i < biome_count(); i++) {
-    const Theme o = resolvedFor(i, trackId);
+    // Each biome's own RESOLVED theme, so every default, preset and per-track
+    // patch is already folded in (theme.h's "what resolved means"). The track
+    // goes with it: the snow cup patches its flake cloud per track, and reading
+    // it any other way here would be a second resolution rule.
+    const Theme o = resolve_theme(biome_name(i), trackId);
     for (const TreeSpec& tr : o.scenery.trees) addTree(trees, tr);
     for (const ClutterSpec& c : o.scenery.clutter) addClutter(clutter, c);
     for (uint32_t k : o.landmarks) addLandmark(t.landmarks, k);
