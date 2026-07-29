@@ -7793,6 +7793,23 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             for (int k : INK) v[k].abgr = (v[k].abgr & 0x00ffffffu) | (au << 24);
             dirty = true;
         }
+        // YES, THIS RE-UPLOADS THE WHOLE POOL — 4096 slots x 8 verts x 16 B =
+        // 512 KB — and refreshBounds rescans all 73,728 indices behind it, on
+        // essentially every frame of a race (any mark laid in the last SKID_LIFE
+        // seconds keeps `dirty` set). It looks like the obvious thing to make
+        // incremental, so: MEASURED BEFORE BELIEVING IT, in the browser at the
+        // 4-player cap with bots laying real rubber, off ttp_display_profile's
+        // own kProfSkids — 0.2 ms, inside a 0.9 ms CPU frame, against a 16.7 ms
+        // budget. That is 1.2% of the budget, with zero dropped vsyncs.
+        //
+        // So a min/max touched range here would buy back well under 1% of a
+        // frame, in the one file in this tree that no ctest compiles and no
+        // fixture covers. Not worth it. If that trade ever changes — a much
+        // slower TV part, a bigger pool, or skids landing on the same frame as
+        // something else expensive — the shape to reach for is tracking the
+        // lowest and highest slot touched this frame and passing a byteOffset
+        // to setBufferAt; the writes are already slot-indexed, so it is a small
+        // change. Re-measure first.
         if (dirty) {
             mSkids.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                     mSkids.verts.data(), mSkids.verts.size() * sizeof(Vertex), nullptr));
