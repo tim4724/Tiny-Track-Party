@@ -228,6 +228,36 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   the exhibition straight, not with the road furniture half a lap away, because
   they first shipped there and nobody could find them. `frame_check` holds the
   mode rule, `showcase_check` holds the placement.
+  THE MODEL BENCH is the gallery's other half, and it exists because some of
+  what the renderer draws is PROCEDURAL GEOMETRY authored in C++ (the gnome,
+  the wind-up train, the rocket): there is no file to open and no modelling
+  tool in the loop, so the only way to argue about one of those shapes is to
+  build two and look at them. `buildGnomeModel`/`buildTrainModel`/
+  `buildRocketModel` (TtpRenderer.cpp) each emit through a `part` callback in
+  the model's OWN frame, which is what lets a second caller exist:
+  `ttp_display_bench` stands EVERY variant of one model in a row on the verge
+  with no other landmarks at all (a doghouse behind the middle gnome is a thumb
+  on the scale), and `ttp_display_model_variant` picks which one later scenes
+  are meshed with. Both latched like `ttp_display_biome`. VARIANT 0 IS THE
+  PRE-BENCH GEOMETRY on every row and is kept — a bench with no "what we have
+  today" in it is not a comparison — but `mModelVariant`'s DEFAULTS are the
+  picks, so a shell that calls neither draws the chosen set. Counts and row
+  spacing are per model (`modelVariantCount`). Three things the row gets right
+  that cost a rebuild each to find: it is laid out BACKWARDS along the track
+  (the models face the road, so the only side they can be read from has the
+  track running right to left), the train carries a presentation YAW (a loco
+  seen nose-on is a dark rectangle with every new detail edge-on), and the
+  gallery flies you there — a bench you have to search for gets used once.
+  WHAT THE BENCH ACTUALLY TAUGHT, over five rounds of rejected rocket shapes,
+  was that it was a PALETTE problem being solved as a shape problem: the
+  red-and-cream BANDING inherited from the original is why attempt after
+  attempt read as a traffic cone whatever silhouette it was given. The rule
+  that fixed it is NO BANDS — the hue changes where the OBJECT changes (nose,
+  body, tail, wings), never across one part. The other standing constraint is
+  that `render()` whizz-rolls a rocket about its travel axis at 9 rad/s, so
+  anything not three-fold, four-fold or on the axis WHIRLS: wings, a winding
+  key or a stripe down one side read as a propeller. Both are written down
+  beside the builders, because both were rediscovered the expensive way.
   It is DEV-ONLY and reached by nothing on the shipping path: `ttp_display_showcase`
   is latched off, and `showcase.cc` sits beside `theme.cc` rather than inside it
   precisely so a gallery can never move a number the shipping game draws with

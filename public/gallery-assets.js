@@ -131,7 +131,7 @@ function syncVariantOptions() {
     // Just the name in the dropdown; the header is one row and a full sentence
     // in it pushes every other control off a laptop screen. What each variant
     // actually IS is the legend's job, and the legend is beside it.
-    o.textContent = `In use: ${label.split(' — ')[0]}`;
+    o.textContent = `In use: ${label.split(' — ')[0]}${i === m.ships ? ' ✓' : ''}`;
     variantSel.appendChild(o);
   });
   variantSel.value = String((state.assetVariants || {})[m.id] || 0);
@@ -214,10 +214,11 @@ async function buildLegend() {
     // The bench first when it is on, because when it is on it IS the scene —
     // the row replaces the landmark set, so a legend still leading with the
     // seventeen kinds would be describing a scene that is not there.
-    benched && list(`Bench · ${benched.label}`, benched.variants,
+    benched && list(`Bench · ${benched.label}`,
+        benched.variants.map((v, i) => (i === benched.ships ? `${v}  ← in the game` : v)),
         'Listed left to right as the camera lands on them. '
         + (benched.scale ? `Staged at ${benched.scale}. ` : '')
-        + '"In use" picks which one the game is actually built with, so the '
+        + '"In use" picks which one the scene is actually built with, so the '
         + 'winner can be checked where it belongs before anyone commits to it.'),
     list('Cars', models.map((m, i) => `${names[i] || m} · ${m}`),
          'Parked on the grid, one seat per livery.'),
