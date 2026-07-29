@@ -34,10 +34,14 @@ const state = Gallery.loadState();
 // row and is kept whether or not it won, because a comparison with no "what we
 // had" in it is not a comparison.
 const BENCH_MODELS = [
-  { id: 'rocket', label: 'Rocket', ships: 1, scale: '9x (it ships at 0.2 units)',
-    variants: ['0 · original — tube, cone, three square tabs',
-               '1 · clean — tapered body, one band, three swept fins',
-               '2 · minimal — rounded nose, three fins, two colours'] },
+  // Four, and they are four SHAPES rather than four detail levels — the row
+  // that was three variations on "a tube with a cone on it" answered a question
+  // nobody had asked.
+  { id: 'rocket', label: 'Rocket', ships: 3, scale: '9x (it ships at 0.2 units)',
+    variants: ['0 · original — straight tube, stubby cone, square tabs',
+               '1 · dart — long and thin, mostly nose, fins swept hard back',
+               '2 · teardrop — rounded head into a point, no straight edge',
+               '3 · toy rocket — widest at the tail, tripod fins, tapers to a point'] },
   { id: 'gnome', label: 'Garden gnome', ships: 1, scale: null,
     variants: ['0 · original — cone, ball, beard, hat',
                '1 · detailed — belt, arms, face, layered beard, brimmed hat',

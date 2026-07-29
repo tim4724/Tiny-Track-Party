@@ -2184,7 +2184,14 @@ Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
 using PartFn = std::function<void(const Prim&, float, float, float, uint32_t, float)>;
 
 enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_COUNT = 3 };
-constexpr int MODEL_VARIANTS = 3;
+
+// How many takes each model has. PER MODEL, because they are not all being
+// asked the same question: the gnome and the train were asked "how much
+// detail", which two answers bracket, while the rocket is being asked "what
+// SHAPE", and that needs as many entries as there are shapes worth arguing
+// about. A single count for all three would either starve one row or pad the
+// others with a duplicate.
+inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 4 : 3; }
 
 // Model ids are a URL param and a dropdown value, so they are spelled, not
 // numbered. Unknown names answer -1 (the caller leaves the bench off).
@@ -2241,18 +2248,22 @@ inline TrainAt trainAt(float s) {
 }
 
 // ---- rocket ---------------------------------------------------------------
-// Ship scale is TINY — the body is 0.2 world units, about the size of a fist,
-// and it is only ever seen in flight — so the useful direction here is DOWN.
-// The first pass went the other way (a flared bell, two bands, a porthole,
-// four swept fins, thirteen prims) and it was wrong: at the size this is drawn
-// none of it resolves, so all the extra parts buy is a busier, muddier blob.
-// Both alternatives below are therefore SIMPLER than the elaborate ones they
-// replaced, and one of them is simpler than what shipped.
+// Ship scale is TINY — the body is 0.2 world units — and it is only ever seen
+// crossing the screen at speed. So the only thing that carries is the OUTLINE,
+// and the first two passes at this both missed that in the same way: they kept
+// changing the trim on one silhouette. v0's tube-with-a-cone, a tidier
+// tube-with-a-cone, a tube with a rounded cone. Three answers to a question
+// nobody asked.
+//
+// These are three different SHAPES. Each is still four to six prims and two or
+// three colours — the "keep it simple" call from the last round stands, and a
+// silhouette argument is not a parts-count argument.
 void buildRocketModel(const PartFn& part, int variant) {
     constexpr uint32_t RED = 0xe6492d, CREAM = 0xfff3e0, DARK = 0x37414f;
+    // Nose is local +Y; the renderer lays that along the direction of travel.
     if (variant <= 0) {
-        // v0 — what shipped: a tube, a cone and three upright tabs. The tabs
-        // are the weak part: square, radial, and read as specks.
+        // v0 — the original, kept as the thing to argue against: a straight
+        // tube, a stubby cone and three square tabs.
         part(primCylinder(0.07f, 0.085f, 0.2f, 14), 0, 0, 0, RED, 1.0f);
         part(primCone(0.07f, 0.17f, 14), 0, 0.185f, 0, CREAM, 1.0f);
         for (int i = 0; i < 3; i++) {
@@ -2263,32 +2274,50 @@ void buildRocketModel(const PartFn& part, int variant) {
         return;
     }
     if (variant == 1) {
-        // v1 "clean" — the same five-part rocket with the three things that
-        // actually carry at distance fixed: a body that tapers, ONE cream band
-        // instead of a bare tube, and fins that are swept triangles rather than
-        // square tabs. Six prims against v0's five, and no colour it did not
-        // already have.
-        part(primCylinder(0.068f, 0.090f, 0.195f, 14), 0, 0, 0, RED, 1.0f);
-        part(primCylinder(0.0745f, 0.0765f, 0.030f, 14), 0, 0.045f, 0, CREAM, 1.0f);
-        part(primCone(0.068f, 0.155f, 14), 0, 0.175f, 0, CREAM, 1.0f);
-        const Prim fin = primPlate({ { -0.020f, 0.062f }, { -0.098f, 0.062f },
-                                     { -0.128f, 0.130f }, { -0.052f, 0.126f } }, 0.014f);
+        // v1 "dart" — LONG AND THIN, and pointed. Half again the length of v0
+        // on two thirds the width, with a nose that is most of the model and
+        // fins swept hard back at the very tail. The outline says thrown
+        // weapon; the thing it is least likely to be mistaken for is an item
+        // box. Five prims.
+        part(primCylinder(0.052f, 0.070f, 0.26f, 12), 0, 0, 0, RED, 1.0f);
+        part(primCylinder(0.070f, 0.050f, 0.05f, 12), 0, -0.155f, 0, DARK, 1.0f);
+        part(primCone(0.052f, 0.20f, 12), 0, 0.23f, 0, CREAM, 1.0f);
+        const Prim fin = primPlate({ { -0.020f, 0.060f }, { -0.130f, 0.068f },
+                                     { -0.150f, 0.112f } }, 0.013f);
         for (int i = 0; i < 3; i++) {
             part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
         }
         return;
     }
-    // v2 "minimal" — the fewest parts that still say rocket: a tapered body, a
-    // ROUNDED nose instead of a cone, and three small fins. Four prims and TWO
-    // colours, which at this size is the whole argument — a shape with one
-    // silhouette and one highlight is legible at a glance in a way a
-    // three-tone one is not.
-    part(primCylinder(0.076f, 0.092f, 0.215f, 14), 0, -0.010f, 0, RED, 1.0f);
-    part(primSphere(0.076f, 14, 10), 0, 0.098f, 0, CREAM, 1.0f);
-    const Prim fin = primPlate({ { -0.030f, 0.070f }, { -0.105f, 0.070f },
-                                 { -0.125f, 0.125f } }, 0.016f);
+    if (variant == 2) {
+        // v2 "teardrop" — no straight edge anywhere and no cone at all: a
+        // rounded head running back into a taper that ends in a point, like a
+        // water drop travelling nose-first. The one shape here with a soft
+        // outline, which at 0.2 units may well be the one that reads at speed
+        // when a spiky one just aliases. Three fins kept tiny and low so it
+        // still says projectile rather than pebble. Four prims, two colours.
+        part(primSphere(0.090f, 16, 11), 0, 0.055f, 0, CREAM, 1.0f);
+        part(primCylinder(0.090f, 0.014f, 0.30f, 16), 0, -0.095f, 0, RED, 1.0f);
+        const Prim fin = primPlate({ { -0.070f, 0.052f }, { -0.190f, 0.020f },
+                                     { -0.150f, 0.098f } }, 0.014f);
+        for (int i = 0; i < 3; i++) {
+            part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, RED, 0.72f);
+        }
+        return;
+    }
+    // v3 "toy rocket" — the storybook one: WIDEST AT THE TAIL, tapering the
+    // whole way to a point, standing on three big tripod fins. A triangle
+    // rather than a tube, which is the most distinct outline of the four and
+    // the one that matches the rest of the kit — everything else in this scene
+    // is a soft plastic toy, and this is the shape a toy rocket is. Six prims.
+    part(primCylinder(0.098f, 0.118f, 0.060f, 14), 0, -0.145f, 0, DARK, 1.0f);
+    part(primCylinder(0.062f, 0.100f, 0.220f, 14), 0, -0.005f, 0, RED, 1.0f);
+    part(primCylinder(0.089f, 0.095f, 0.026f, 14), 0, -0.050f, 0, CREAM, 1.0f);
+    part(primCone(0.062f, 0.170f, 14), 0, 0.190f, 0, CREAM, 1.0f);
+    const Prim fin = primPlate({ { 0.040f, 0.070f }, { -0.175f, 0.100f },
+                                 { -0.180f, 0.200f } }, 0.016f);
     for (int i = 0; i < 3; i++) {
-        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, RED, 0.72f);
+        part(applyPre(fin, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0, DARK, 1.0f);
     }
 }
 
@@ -2734,7 +2763,8 @@ static_assert(MODEL_COUNT == 3, "TtpRenderer::mModelVariant is sized to ModelId"
 void TtpRenderer::setModelVariant(const char* model, int variant) {
     const int id = modelIdByName(model);
     if (id < 0) return;
-    mModelVariant[id] = variant < 0 ? 0 : (variant >= MODEL_VARIANTS ? MODEL_VARIANTS - 1 : variant);
+    const int n = modelVariantCount(id);
+    mModelVariant[id] = variant < 0 ? 0 : (variant >= n ? n - 1 : variant);
 }
 
 void TtpRenderer::setModelBench(const char* model) { mBenchModel = modelIdByName(model); }
@@ -2859,13 +2889,14 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         // the boiler bands, the rods, the wheels, the cab — is edge-on to the
         // viewer. Three quarters is the angle a toy train is photographed at.
         const float present = mBenchModel == MODEL_TRAIN ? 0.85f : 0.0f;
-        for (int v = 0; v < MODEL_VARIANTS; v++) {
+        const int nv = modelVariantCount(mBenchModel);
+        for (int v = 0; v < nv; v++) {
             // LAID OUT BACKWARDS ALONG THE TRACK, on purpose. The row faces the
             // road, so the only place it can be read from is the far verge —
             // and from there the track runs right to left. Placing v0 at the
             // FAR end puts it on the left of the one shot this whole mode
             // exists to produce, which is the order the legend lists them in.
-            const float s = BENCH_S0 + (float) (MODEL_VARIANTS - 1 - v) * BENCH_STEP;
+            const float s = BENCH_S0 + (float) (nv - 1 - v) * BENCH_STEP;
             if (s > tb.length - 10) break;
             const TrackBin::Sample f = tb.frameAt(s);
             const float lat = f.width / 2 + BENCH_OFF;

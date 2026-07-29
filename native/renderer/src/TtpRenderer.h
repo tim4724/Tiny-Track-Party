@@ -99,9 +99,11 @@ public:
     // the usual landmark set. Both are latched, like the biome override: they
     // change what the next buildScene meshes, not what a frame draws.
     //
-    // Variant 0 is what the game ships, so the default state of both of these
-    // is exactly the scene that existed before they were added. Unknown names
-    // are ignored (the bench turns off); "" also turns the bench off.
+    // Variant 0 is the ORIGINAL geometry of each, kept as the thing the others
+    // are argued against; what actually ships is mModelVariant's defaults, see
+    // there. An out-of-range variant clamps to that model's own count (they
+    // differ). Unknown names are ignored — for the bench that means off, which
+    // "" also means.
     void setModelVariant(const char* model, int variant);
     void setModelBench(const char* model);
 
@@ -565,14 +567,19 @@ private:
     // (rocket, gnome, train). Sized by hand because that enum lives beside the
     // builders it names; a static_assert in the .cpp holds the two together.
     //
-    // THESE DEFAULTS ARE WHAT THE GAME DRAWS. Variant 1 of each was chosen off
-    // the model bench (/gallery-assets.html): the clean rocket, the detailed
-    // gnome, the classic loco. Variant 0 is still the pre-bench geometry and is
-    // kept — a bench with no "what we have today" in it is not a comparison —
-    // but it is no longer the default, so a shell that never calls
-    // setModelVariant now gets the picked set rather than the old one.
+    // THESE DEFAULTS ARE WHAT THE GAME DRAWS. The gnome and the train are the
+    // picks off the model bench (/gallery-assets.html) — the detailed gnome,
+    // the classic loco. The ROCKET is 3, the toy-rocket silhouette, and that
+    // one is a standing recommendation rather than a settled pick: its four
+    // variants are four different SHAPES, not four detail levels, and the
+    // choice between them is a taste call nobody has made yet.
+    //
+    // Variant 0 is the pre-bench geometry on every row and is kept — a bench
+    // with no "what we have today" in it is not a comparison — but it is no
+    // longer any model's default, so a shell that never calls setModelVariant
+    // now gets the picked set rather than the original one.
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
-    int mModelVariant[3] = { 1, 1, 1 };
+    int mModelVariant[3] = { 3, 1, 1 };
     int mBenchModel = -1;
 
     filament::math::float3 mTrainCentre{};

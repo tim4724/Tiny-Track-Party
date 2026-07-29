@@ -527,12 +527,16 @@ export function runDisplayScenario(opts, ctx) {
           await scene.setTrack(track);
           scene.bindSession(engine.h);
           if (model) {
-            // Offset up-track and pulled back so all three clear the legend
-            // panel, which is the right quarter of the frame whenever the
-            // gallery is showing one.
-            cam.eye = { x: 31.5, y: model === 'rocket' ? 4.6 : 2.6, z: -10.5 };
+            // Offset up-track and pulled back so the whole row clears the
+            // legend panel, which is the right quarter of the frame whenever
+            // the gallery is showing one. The ROCKET row is one entry longer
+            // (four SHAPES, not three detail levels) and is staged at 9x, so
+            // it needs both a wider shot and more height than the other two.
+            const wide = model === 'rocket';
+            cam.eye = { x: wide ? 35.0 : 31.5, y: wide ? 5.2 : 2.6,
+                        z: wide ? -17.0 : -10.5 };
             cam.yaw = 0;
-            cam.pitch = model === 'rocket' ? -0.03 : -0.05;
+            cam.pitch = -0.05;
           } else {
             this.home();
           }
