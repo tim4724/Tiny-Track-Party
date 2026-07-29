@@ -40,10 +40,10 @@ const load = () => (modPromise = modPromise
 
 const imp = (p) => import(pathToFileURL(path.join(ROOT, p)).href);
 
-// TtpAudioCmd.kind / .flags — the reader's constants, kept here rather than
-// imported so a change to NativeAudio.js cannot quietly move this gate with it.
-const CMD = { CUE: 1, COUNTDOWN: 2, VOICE: 3, VOICE_STOP: 4, STOP_ALL: 5, STOP_CAR: 6, MUSIC: 7 };
-const F_GO = 1;
+// TtpAudioCmd.flags — the reader's constant, kept here rather than imported so a
+// change to NativeAudio.js cannot quietly move this gate with it. (The kind codes
+// and the countdown's GO flag sat beside it until the parity test that read them
+// went with the audio oracle — see the note at the foot of this file.)
 const F_MOD = 2;
 const HEADER_BYTES = 16;
 const BLOCK_VERSION = 1;

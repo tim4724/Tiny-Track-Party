@@ -8,9 +8,10 @@
 // here as a stream of COMMANDS that apply() performs. NativeAudio.js decodes the
 // packed block into the plain objects below; the vocabulary is unchanged from
 // when the rules were JS, which is why nothing in this file moved when they
-// went. audio/decide.js survives as the ORACLE the port is pinned to — and as
-// the music catalogue the galleries and the credits test read, re-exported
-// below.
+// went. The JS twin (audio/decide.js) is GONE — it was the oracle
+// tests/fixtures/audio-corpus.jsonl was recorded from, and it went once the port
+// was conformance-proven; the music catalogue it also held is now the pure-data
+// audio/musicCatalogue.js, which this file does not read either (see below).
 //
 // What is left here is exactly what names a platform API: the AudioContext, the
 // master bus + limiter, the variant picks, the <audio> element streaming the
@@ -41,8 +42,8 @@ const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 // It used to re-export four constants from audio/decide.js so the music gallery
 // and the credits test had an address for them. That pulled the whole 495-line
 // ORACLE onto the shipped display page's import graph for tables nothing on the
-// race path reads. Those two surfaces import decide.js directly now — it is the
-// oracle, they are the only readers of its data, and neither ships.
+// race path reads. Those surfaces import audio/musicCatalogue.js directly now —
+// the catalogue outlived the oracle it was carved out of, as data.
 
 export class RaceAudio {
   constructor() {
@@ -221,8 +222,9 @@ export class RaceAudio {
   // limiter and volume slider apply; if MediaElementSource isn't available it
   // falls back to the element's own volume scaled by the master level.
   //
-  // WHICH song and at WHAT level is decided in audio/decide.js (pool by biome,
-  // no-repeat shuffle, per-song LUFS trim) and arrives as a 'start' command.
+  // WHICH song and at WHAT level is decided in native/libttp-runtime/ttp/audio.cc
+  // (pool by biome, no-repeat shuffle, per-song LUFS trim) and arrives as a
+  // 'start' command.
   _startMusic(song, level) {
     if (!this.ready) return;
     this.nowPlaying = song;

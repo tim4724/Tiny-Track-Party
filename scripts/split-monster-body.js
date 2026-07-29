@@ -173,7 +173,7 @@ out.writeUInt32LE(0x4e4f534a, o); o += 4;   // 'JSON'
 jsonChunk.copy(out, o); o += jsonChunk.length;
 out.writeUInt32LE(binChunk.length, o); o += 4;
 out.writeUInt32LE(0x004e4942, o); o += 4;   // 'BIN\0'
-binChunk.copy(out, o); o += binChunk.length;
+binChunk.copy(out, o);                      // last chunk — the cursor ends at `total`
 
 fs.writeFileSync(file, out);
 console.log(`  wrote ${file} (${raw.length} -> ${out.length} bytes): body -> 'chassis' + 'cab' node[${cabNodeIdx}] + 'chassis-trim' node[${trimNodeIdx}]`);

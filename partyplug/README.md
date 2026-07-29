@@ -22,9 +22,9 @@ It ships as a versioned package (`partyplug/package.json`, currently `0.1.0`)
 with hand-written `.d.ts` types per module and its own co-located test suite
 (`partyplug/tests/`). The runtime is CommonJS/UMD; a native-ESM build is a
 deliberate future step (see below). There is **no default export** — import each
-module by subpath (`require('partyplug/RoomFlow')`, or `/partyplug/RoomFlow.js`
-in the browser), as the `exports` map declares; a bare `require('partyplug')`
-intentionally resolves nothing.
+module by subpath (`require('partyplug/PartyConnection')`, or
+`/partyplug/PartyConnection.js` in the browser), as the `exports` map declares; a
+bare `require('partyplug')` intentionally resolves nothing.
 
 ## Mental model
 
@@ -43,7 +43,7 @@ intentionally resolves nothing.
 | --- | --- |
 | `PartyConnection.js` | WebSocket client for the Party Sockets relay. Stable `clientId` bearer token for reconnect. |
 | `PartyFastlane.js` | Optional P2P WebRTC DataChannel layer (low-latency input). Piggybacks on the connection for signaling, falls back to it. |
-| `RoomFlow.js` | Headless room/lobby/host state machine: room state, roster, sticky-host election, presence. |
+| `RoomFlow.js` | Headless room/lobby/host state machine: room state, roster, sticky-host election, presence. **Not in this fork** (see the note above) — the C++ port implements it, and `RoomFlow.d.ts` remains as that interface. |
 
 The transport modules read **no** game globals: deployment config (relay URL,
 STUN server) is injected at construction, so the kit never depends on the game.

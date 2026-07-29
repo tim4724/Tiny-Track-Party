@@ -18,8 +18,6 @@ import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-// The monster engine's timbre, from the audio ORACLE. This is a gallery-only
-// surface — it fires cues directly, with no decision stream behind them — so it
 // The monster demo's engine timbre. It used to be imported from decide.js, the
 // retired audio oracle; the race path never read it that way — a transformed
 // car's growl arrives as numbers on a voice command from the C++ decision layer
@@ -132,16 +130,19 @@ function buildMinimap(parent, trackId, colors) {
   };
 }
 
+// In a gallery iframe, or our own tab? A cross-origin top throws on access, so a
+// throw IS the framed answer. Both readers below want that same reading.
+function isFramed() {
+  try { return window.self !== window.top; } catch (_) { return true; }
+}
+
 // Standalone inspector camera. When a preview page is opened on its OWN (not in a
 // gallery iframe), hand the overview camera to the viewer — drag to look, scroll to
 // fly, WASD to glide, Q/E to drop/rise — so the scene can be inspected up close. In
 // the gallery grid each card is an iframe → leave the scenario's own framing alone
-// (you can't comfortably drag a thumbnail). A cross-origin frame throws on
-// window.top, so treat that as framed. Returns true when it took over the camera.
+// (you can't comfortably drag a thumbnail). Returns true when it took over the camera.
 function enableFreeCamIfStandalone(scene) {
-  let inIframe = true;
-  try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
-  if (inIframe) return false;
+  if (isFramed()) return false;
   scene.setFog(false); // flying around the scene: no haze clipping the far track
   // #race is a transparent z-2 overlay over the canvas; let pointer events fall
   // through to it so the drag handler can listen (see .cam-free in display.css).
@@ -194,10 +195,8 @@ export function runDisplayScenario(opts, ctx) {
   // click itself. A standalone tab (own window) ignores all this and runs freely: you
   // opened it to watch or to fly the free-cam. Call holdFrame AFTER the scene's first
   // state is set, so the held frame shows that state.
-  // In a gallery iframe, or our own tab? (Reused by setupRace's audio gate below.)
-  // A cross-origin top throws → treat as framed.
-  let inIframe = true;
-  try { inIframe = window.self !== window.top; } catch (_) { inIframe = true; }
+  // Read once here (reused by setupRace's audio gate below).
+  const inIframe = isFramed();
   function holdFrame(live) {
     if (!inIframe) return;                // own tab → keep running (watch / inspect)
     ctx.scene.pauseAfterFrame();          // paint the state just set, then idle

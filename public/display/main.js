@@ -446,9 +446,9 @@ function demoSig(field, trackId) { return flow.demoSig(field, trackId); }
 //   audioDecide  the DECISIONS — which cue, how loud, which voice at what level.
 //                NATIVE (native/runtime/ttp_audio.h over libttp-runtime/ttp/
 //                audio.cc), reached through NativeAudio.js, which hands back the
-//                same command stream the JS layer used to. The JS twin survives
-//                as the ORACLE audio-corpus.jsonl was recorded from, nothing
-//                more (public/display/audio/decide.js).
+//                same command stream the JS layer used to. The JS twin
+//                (audio/decide.js) was the ORACLE audio-corpus.jsonl was
+//                recorded from, and is now retired — git history has it.
 //   audio        the DEVICE — the AudioContext, the cue palette, the song
 //                element. It performs the command stream and decides nothing.
 // Race events and countdown beats are decided inside the wasm as the sim fires
@@ -499,7 +499,6 @@ const _lastItem = new Map();
 // decision layer reads the sim's own bot list, which is the same set by
 // construction (the layer's buildField registers exactly these as bot personas).
 let aiCarIds = new Set();
-let nativeBotSpecs = []; // persona specs for the in-wasm bots (the layer's 'set-field')
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
@@ -847,10 +846,12 @@ function applyEffect(e, ctx) {
   switch (e.op) {
     case 'set-track-seed': track.seed = e.seed; break;
     case 'stop-lobby-demo': lobbyDemo.stop(); break;
+    // `e.bots` (the persona specs) is deliberately dropped: the wasm gets them on
+    // 'create-session', which carries its own copy. The shell kept a second one
+    // here for a while and never read it.
     case 'set-field':
       currentField = e.field;
       aiCarIds = new Set(e.aiIds);
-      nativeBotSpecs = e.bots;
       break;
     case 'clear-item-cache': _lastItem.clear(); break;
     case 'show-screen': show(e.screen); break;
@@ -920,7 +921,7 @@ function applyEffect(e, ctx) {
     case 'dispose-session':
       if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
       break;
-    case 'clear-field': aiCarIds = new Set(); currentField = []; nativeBotSpecs = []; break;
+    case 'clear-field': aiCarIds = new Set(); currentField = []; break;
     case 'fade-to-lobby':
       fadeBackdrop(() => {
         for (const c of scene.cars.keys()) scene.removeCar(c);
