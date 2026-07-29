@@ -7630,6 +7630,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         constexpr float SKID_SEG_MIN = 0.25f, SKID_SEG_MAX = 1.5f;
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
         constexpr float SKID_LAUNCH_MIN = 0.5f;
+        constexpr float SKID_ATTACK = 0.1f;  // s from nothing to full strength
         constexpr float SKID_RELEASE = 0.4f; // s from full strength to nothing
         // Edge softening, as a fraction of the half-width. Small on purpose: the
         // mark is meant to read as an even band of rubber that happens not to
@@ -7697,13 +7698,24 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                             * (1.0f - spd / 0.5f) * 0.6f : 0.0f;
             const float raw = (scrub || spinning) ? 1.0f
                     : std::min(1.0f, std::max(slip * 1.3f, std::max(brakeBite, launch)));
-            // Attack instantly, release over SKID_RELEASE (SkidMarks.js). A
-            // scuff that stops dead leaves a DASH: bots weaving down a bendy
-            // stretch cross the scuff threshold every few frames and clip the
-            // curb in between, and every dip detaches the ribbon (below) so the
-            // fresh unjoined rear edges stack into dark bars. Holding the
-            // strength through the dips keeps one trail that fades instead.
-            cw.skidHold = std::max(raw, cw.skidHold - input.dt / SKID_RELEASE);
+            // Attack over SKID_ATTACK, release over the slower SKID_RELEASE
+            // (SkidMarks.js released only — it attacked in a single frame).
+            // The release side is load-bearing: a scuff that stops dead leaves a
+            // DASH, because bots weaving down a bendy stretch cross the scuff
+            // threshold every few frames and clip the curb in between, and every
+            // dip detaches the ribbon (below) so the fresh unjoined rear edges
+            // stack into dark bars. Holding the strength through the dips keeps
+            // one trail that fades instead.
+            // The attack side is why a mark now READS as being laid down. Going
+            // from nothing to peak ink in one frame made every scuff arrive
+            // fully formed — the phone's brake is a BINARY 0/1, so `brakeBite`
+            // was never anything but exactly 1.0, and `slip * 1.3` saturates at
+            // a steer input of 0.815, which any real corner passes. Ramping over
+            // ~a tenth of a second spends the first car length or so getting
+            // dark, so the eye can see where the tyre let go.
+            cw.skidHold = raw > cw.skidHold
+                    ? std::min(raw, cw.skidHold + input.dt / SKID_ATTACK)
+                    : std::max(raw, cw.skidHold - input.dt / SKID_RELEASE);
             const float strength = cw.skidHold;
             // Wheel contact patches from the posed wheel nodes (whirl included,
             // lean/dive not — JS wheels are children of the yawed car, not the
@@ -7745,7 +7757,20 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 if (dist > SKID_SEG_MAX) { detach(st); st.last = gp; st.hasEdge = false; continue; }
                 if (strength <= 0.02f) {
                     detach(st);
-                    if (dist >= SKID_SEG_MIN) { st.last = gp; st.hasEdge = false; }
+                    // NOT marking: the anchor stays AT the contact patch, every
+                    // frame. It used to advance only once the wheel had moved
+                    // SKID_SEG_MIN, which parked it up to a quarter unit behind
+                    // the tyre — and since the next scuff's first stamp spans
+                    // `last`→`gp`, the whole gap was written in ONE frame at
+                    // full ink. A brake tap POPPED a mark a fifth of a car long
+                    // into existence (measured: 0.19 u against 0.075 u of travel
+                    // that frame) instead of drawing one from where the pedal
+                    // went down. The joint edge goes with it: a trail whose
+                    // strength has fully decayed past SKID_RELEASE has ENDED, so
+                    // there is nothing left to rejoin, and keeping the stale
+                    // edge would put the gap straight back.
+                    st.last = gp;
+                    st.hasEdge = false;
                     continue;
                 }
                 if (dist < 1e-4f) continue;
