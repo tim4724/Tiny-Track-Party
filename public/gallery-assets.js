@@ -151,9 +151,10 @@ async function buildLegend() {
   // staged BY THE PARKED STATE (native/libttp-runtime/ttp/showcase.h) and go
   // away again under Drive, which is otherwise a surprise.
   foot.textContent = 'Cones become wet-floor signs in a water biome, and oil slicks '
-    + 'become ice in the snow. Parked, the showroom stands the monster truck on the '
-    + 'back row of the grid, and dropped bananas and a pair of rockets down the '
-    + 'furniture straight. Skids, dust and item bursts still need Drive.';
+    + 'become ice in the snow. Parked, the showroom stands all four monster trucks on '
+    + 'the back half of the grid and a pair of rockets just past the boost pads ahead '
+    + 'of you; the slicks, cones, pillars and dropped bananas are down the back '
+    + 'straight. Skids, dust and item bursts still need Drive.';
   legendLists.appendChild(foot);
 }
 

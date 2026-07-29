@@ -432,6 +432,13 @@ export function runDisplayScenario(opts, ctx) {
       // twice over, and no model is represented by only one paint job. Each
       // wears its model's own name on the rear plate, which makes the lineup
       // self-labelling.
+      //
+      // TWO PER MODEL, CYCLING IN SLOT ORDER is load-bearing beyond the paint:
+      // the parked showroom puts the monster rig on the BACK HALF of the grid
+      // (showcase_monster_from, native/libttp-runtime/ttp/showcase.h), and a rig
+      // is the kit chassis seating that slot's own body — so a lineup of this
+      // shape is what makes those four rigs one of each of the four trucks
+      // rather than the same one four times.
       const ids = [];
       for (let i = 0; i < COLORS.length; i++) ids.push(i);
       const modelOf = (i) => (MODELS.length ? i % MODELS.length : 0);

@@ -214,20 +214,26 @@ std::string showcase_inventory_json() {
 }
 
 const std::vector<ShowcaseRocket>& showcase_rockets() {
-  // On the showroom's BACK STRAIGHT (u 0.42 .. 0.76), past the pillar gate at
-  // u 0.63/0.66, so the furniture run reads as a sequence a viewer flies along:
-  // slick, bananas, pillars, rockets. Staggered across the road like the
-  // bananas above them rather than paired, which shows the whizz-roll from two
-  // sides at once without either exhibit hiding the other.
+  // ON THE EXHIBITION STRAIGHT, in among the ITEM RUN the showroom track already
+  // authors there: the lone box at u 0.02, the four-lane row at 0.045, the boost
+  // pads at 0.075. That is 40-odd world units straight ahead of the opening
+  // camera, which is the whole point of moving them here — they first stood at
+  // u 0.70 with the road furniture, 420 units away round two corners, and a
+  // gallery exhibit nobody can find is not an exhibit. The slicks, cones,
+  // pillars and dropped bananas stay on the back straight: those are HAZARDS
+  // laid into the road, and a viewer meets them by flying the lap.
+  //
+  // Staggered across the road rather than paired, so the whizz-roll reads from
+  // two sides at once and neither exhibit hides the other.
   static const std::vector<ShowcaseRocket> rockets = {
-      { 0.700f, -0.9f },
-      { 0.725f, 0.9f },
+      { 0.060f, -0.9f },
+      { 0.090f, 0.9f },
   };
   return rockets;
 }
 
-int showcase_monster_slot(int rosterSize) {
-  return rosterSize > 0 ? rosterSize - 1 : -1;
+int showcase_monster_from(int rosterSize) {
+  return rosterSize > 0 ? rosterSize / 2 : -1;
 }
 
 }  // namespace rt

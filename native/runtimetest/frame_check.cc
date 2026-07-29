@@ -787,7 +787,10 @@ void testShowcaseExhibits(const GameTrack& track) {
            who + " is its lap fraction of THIS track's length");
     checkF(ttp_frame_rockets(h)[i].lat, want[i].lat, who + " keeps its lateral offset");
   }
-  check(monsters(h) == "011", "the last roster slot wears the rig, and only it");
+  // Three seats, so the back half is slots 1 and 2 — and slot 1 was already
+  // wearing the sim's own, which is the case that catches a stage that CLEARS
+  // rather than sets.
+  check(monsters(h) == "011", "the back half of the grid wears the rigs");
   check(d.held.size() == 3 && d.held[2].monster == 0.0f,
         "the rig is not written into the held field");
   check(d.held[1].monster == 1.0f, "…while the sim's own monster is");
@@ -834,6 +837,25 @@ void testShowcaseExhibits(const GameTrack& track) {
   h = rt::buildFrame(n, nullptr, DT, caseAspect(n), caseWidthFrac(n));
   checkU(h->rocketCount, 0, "an unbound showroom stands nothing");
   check(monsters(h) == "000", "…and dresses nobody");
+
+  // THE SHOWROOM'S OWN SHAPE, which is the case the rule was chosen for: eight
+  // seats, two per car model, so the back half is four rigs and one of them is
+  // each of the four trucks. The three-seat cases above cannot see that — they
+  // would pass just as happily on "the last slot only".
+  std::vector<PlayerDesc> eight;
+  std::vector<ScalarId> lineup;
+  for (int i = 0; i < 8; i++) {
+    const Id id = Id::Num(i);
+    eight.push_back(PlayerDesc{id, false, Stats{}});
+    lineup.push_back(id);
+  }
+  Game full(eight, track, nullptr);
+  DisplayState s = freshState();
+  s.showcase = true;
+  s.hold = true;
+  s.roster = lineup;
+  h = rt::buildFrame(s, &full, DT, caseAspect(s), caseWidthFrac(s));
+  check(monsters(h) == "00001111", "the showroom's eight-seat lineup stands four trucks");
 }
 
 // ---------------------------------------------------------------------------

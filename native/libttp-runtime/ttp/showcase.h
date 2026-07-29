@@ -81,19 +81,29 @@ std::string showcase_inventory_json();
 // decisions sit in one dev-only file that the shipping path cannot reach.
 // ---------------------------------------------------------------------------
 
-// A rocket stood on the showroom's furniture straight: its track position as a
-// LAP FRACTION (the unit a track descriptor places furniture in) and a lateral
+// A rocket stood on the showroom's ITEM RUN: its track position as a LAP
+// FRACTION (the unit a track descriptor places furniture in) and a lateral
 // offset in the same units a banana's is. The renderer hovers and whizz-rolls
 // it exactly as it does one in flight, so the exhibit IS the in-race object and
 // not a still of it.
 struct ShowcaseRocket { float u, lat; };
 const std::vector<ShowcaseRocket>& showcase_rockets();
 
-// Which roster slot wears the monster rig while the field is parked, or -1 for
-// a field with no slot to spare. The LAST one, which on a grid is the back row:
-// where a catch-up item belongs, and behind the lineup shot the gallery opens
-// on rather than in the middle of it.
-int showcase_monster_slot(int rosterSize);
+// The first roster slot that wears the monster rig while the field is parked;
+// every slot from there to the end wears one too, and -1 is a field with none.
+// The BACK HALF of the grid, which is a rule about the picture: the front rows
+// stay the lineup shot the gallery opens on, and the rows behind them are the
+// trucks.
+//
+// It is also how all FOUR trucks get staged, and that part leans on the shell.
+// The rig is a transform of a car — the kit chassis seating that car's own body
+// — so there are exactly as many distinct trucks as there are car models, and
+// the showroom's lineup is TWO SEATS PER MODEL cycling in slot order
+// (display/TestHarness.js). The back half of a 2n lineup is therefore one of
+// each. A lineup that stopped cycling, or one sized to something other than a
+// whole multiple of the models, would still get rigs here — just not one of
+// every truck, which is a thing to look at rather than a thing that breaks.
+int showcase_monster_from(int rosterSize);
 
 }  // namespace rt
 }  // namespace ttp

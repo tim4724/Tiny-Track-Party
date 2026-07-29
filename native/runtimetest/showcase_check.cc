@@ -22,10 +22,12 @@
 //      biome must survive the union byte for byte.
 //   4. THE SCATTER IS WELL-FORMED. Weights sum to one, the roll thresholds
 //      stay ordered, the densities meet their floors.
-//   5. THE STANDING EXHIBITS ARE PLACEABLE. The rocket the parked showroom
-//      stands is on the road and inside one lap, and the monster rig lands on
-//      the back of the grid rather than in the lineup. (WHEN they are staged is
-//      frame_check's — the exhibits are the parked field's, not the race's.)
+//   5. THE STANDING EXHIBITS ARE PLACEABLE, AND FINDABLE. The rockets the
+//      parked showroom stands are on the road, inside one lap and up at the
+//      head of the exhibition straight where the camera opens; the monster rigs
+//      take the back half of the grid rather than the lineup. (WHEN they are
+//      staged is frame_check's — the exhibits are the parked field's, not the
+//      race's.)
 //
 // Usage: showcase_check   (no arguments — the tables are compiled in)
 
@@ -236,11 +238,23 @@ void testExhibits() {
   }
   check(left && right, "the rockets are staggered across the road, not paired");
 
-  // The monster slot: the LAST one, so the lineup shot the gallery opens on is
-  // the eight liveries and the truck is behind them.
-  check(rt::showcase_monster_slot(8) == 7, "a field of eight wears the rig on the back row");
-  check(rt::showcase_monster_slot(1) == 0, "a field of one still shows the truck");
-  check(rt::showcase_monster_slot(0) == -1, "an empty field has no slot to spare");
+  // The rockets stand in among the ITEM RUN the showroom authors at the head of
+  // the exhibition straight (boxes u 0.02/0.045, pads u 0.075), not out with the
+  // road furniture half a lap away — which is where they were, and where nobody
+  // found them. The bound is deliberately generous: this is watching for an
+  // exhibit drifting back round the circuit, not pinning it to a number.
+  for (const rt::ShowcaseRocket& r : rockets) {
+    check(r.u < 0.2f, "an exhibit rocket is on the exhibition straight, near the grid");
+  }
+
+  // The monster rigs: the BACK HALF of the grid, so the front rows stay the
+  // lineup shot and every truck is behind them. Eight seats is the showroom's
+  // own lineup — two per car model — so four is one of each.
+  check(rt::showcase_monster_from(8) == 4, "a field of eight wears rigs on its back half");
+  check(8 - rt::showcase_monster_from(8) == 4, "…which is one truck per car model");
+  check(rt::showcase_monster_from(4) == 2, "a field of four splits the same way");
+  check(rt::showcase_monster_from(1) == 0, "a field of one still shows a truck");
+  check(rt::showcase_monster_from(0) == -1, "an empty field has no slot to spare");
 }
 
 }  // namespace

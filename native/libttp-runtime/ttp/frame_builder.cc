@@ -171,19 +171,20 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         d.held.assign(outCars, outCars + cars.size());
     }
 
-    // The showroom's monster truck. The rig is a TRANSFORM of a car and not a
+    // The showroom's monster trucks. The rig is a TRANSFORM of a car and not a
     // prop — the kit chassis with its cab dropped, seating the car's own body —
-    // so the only way to stand one still is to put a parked car in it. Applied
-    // to `outCars` and deliberately NOT to `d.held`: the exhibit belongs to the
+    // so the only way to stand one still is to put a parked car in it, and the
+    // only way to show all FOUR of them is to put four cars in four. Applied to
+    // `outCars` and deliberately NOT to `d.held`: the exhibit belongs to the
     // gallery's parked state, not to the field, so lifting the hold drops it
     // without anything having to remember to.
     if (staged) {
-        const int slot = showcase_monster_slot((int) cars.size());
-        // A slot with no live car behind it was memset above, so its pose is
-        // the origin with a zero forward — a rig grafted onto that is a truck
-        // standing in the middle of nothing.
-        if (slot >= 0 && (fromHeld || cars[(size_t) slot])) {
-            outCars[slot].monster = 1.0f;
+        const int from = showcase_monster_from((int) cars.size());
+        for (size_t i = from >= 0 ? (size_t) from : cars.size(); i < cars.size(); i++) {
+            // A slot with no live car behind it was memset above, so its pose is
+            // the origin with a zero forward — a rig grafted onto that is a truck
+            // standing in the middle of nothing.
+            if (fromHeld || cars[i]) outCars[i].monster = 1.0f;
         }
     }
 

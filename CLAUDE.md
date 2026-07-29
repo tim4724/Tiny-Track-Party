@@ -216,12 +216,18 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   an authored banana respawns, so it is live from frame zero); a ROCKET is a
   homing projectile and the MONSTER TRUCK is a transform of a car, so neither
   can be authored into a descriptor at all. Those two are `showcase_rockets()` /
-  `showcase_monster_slot()`, staged by `buildFrame` while `showcase && hold` —
+  `showcase_monster_from()`, staged by `buildFrame` while `showcase && hold` —
   the exhibits are the PARKED state's, so Drive hands the scene back to the sim
-  rather than leaving a truck welded to the last car. The rig is written to the
+  rather than leaving trucks welded to the field. The rig is written to the
   outgoing frame and never into `held`, and the exhibit rockets take the FRONT of
-  the array (the renderer's pool is four). `frame_check` holds the mode rule,
-  `showcase_check` holds the placement.
+  the array (the renderer's pool is four). The rigs take the BACK HALF of the
+  grid, which is how all FOUR trucks get staged rather than one: a rig is the kit
+  chassis seating that slot's own body, so there are as many trucks as car
+  models, and the lineup is two seats per model cycling in slot order — that
+  coupling is named at both ends. The rockets sit in the ITEM RUN at the head of
+  the exhibition straight, not with the road furniture half a lap away, because
+  they first shipped there and nobody could find them. `frame_check` holds the
+  mode rule, `showcase_check` holds the placement.
   It is DEV-ONLY and reached by nothing on the shipping path: `ttp_display_showcase`
   is latched off, and `showcase.cc` sits beside `theme.cc` rather than inside it
   precisely so a gallery can never move a number the shipping game draws with
