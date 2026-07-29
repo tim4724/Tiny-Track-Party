@@ -20,7 +20,6 @@
 
 import { loadNativeRuntime } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
-import { buildTrackBin } from '../../shared/trackBin.js';
 import { ITEM_IDS } from '../engine/contract.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
@@ -162,7 +161,6 @@ export class Display {
     // The look, before anything is fetched: the scenery model list is a
     // function of it, and so is the scene the build call will produce.
     this._fn.biome(biome);
-    this.provide('track.bin', buildTrackBin(roster));
 
     // Scenery GLBs, in the slot order C++ named them in: the renderer binds its
     // instanced props by that index, and the biome's recolour — which keys on
@@ -209,8 +207,17 @@ export class Display {
       })
     ]);
 
+    // The roster goes across whole — id, name, carIndex and livery, in slot
+    // order. `model` stays here: it named the GLBs fetched above, which is the
+    // only part of a slot this side has any business knowing. Everything else
+    // about it (the livery's ABGR word, the name plate's 8 chars, how high that
+    // plate sits on this model's back panel) is decided by ttp/roster.h — it
+    // used to be a byte buffer this file packed by hand.
     const ids = (roster || []).map((r) => r.id);
-    if (this._fn.build(trackId, JSON.stringify(ids))) throw new Error(`ttp_display_build(${trackId}) failed`);
+    const slots = (roster || []).map((r) => ({
+      id: r.id, name: r.name || '', carIndex: r.carIndex ?? 0, color: r.color || ''
+    }));
+    if (this._fn.build(trackId, JSON.stringify(slots))) throw new Error(`ttp_display_build(${trackId}) failed`);
     this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
   }

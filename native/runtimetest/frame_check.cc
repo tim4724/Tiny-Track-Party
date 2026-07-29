@@ -1,4 +1,5 @@
-// frame_check — buildFrame, buildHud, atRest and parseIds, driven directly.
+// frame_check — buildFrame, buildHud, atRest, parseIds and parseRoster,
+// driven directly.
 //
 // WHY IT EXISTS. runtime_check pins the cameras, the framing/fog solve and the
 // split-screen grid, but it calls those three primitives itself: it never runs
@@ -44,6 +45,7 @@
 #include "ttp/framing.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
+#include "ttp/roster.h"
 #include "ttp/race_track.h"
 #include "ttp/util.h"
 #include "ttp/vecmath.h"
@@ -247,6 +249,60 @@ void testParseIds() {
     check(ids[2] == Id::Num(0), "parseIds: 0 is an id, not an absence");
     check(!(ids[1] == Id::Num(0)), "parseIds keeps string and number identities distinct");
   }
+}
+
+// ---------------------------------------------------------------------------
+// 1b. parseRoster — ttp_display_build's roster argument.
+//
+//     THIS IS THE GATE THAT REPLACED A FORMAT. The liveries used to reach the
+//     renderer as "track.bin", packed by public/shared/trackBin.js and unpacked
+//     by TtpRenderer.cpp, and NOTHING in the tree could see the two disagree —
+//     no corpus recorded a track.bin, and the renderer compiles on one machine
+//     configuration. The arithmetic lives in libttp-runtime now precisely so a
+//     ctest on every leg can run it, and this is that ctest.
+//
+//     A behavioural gate, like its neighbours: these assertions encode what the
+//     JS writer did, transcribed from it, and are not parity evidence.
+// ---------------------------------------------------------------------------
+void testParseRoster() {
+  check(rt::parseRoster(nullptr).ids.empty(), "parseRoster(nullptr) is empty");
+  check(rt::parseRoster("not json").ids.empty(), "parseRoster ignores unparseable text");
+  check(rt::parseRoster("[]").ids.empty(), "an empty roster is legal — it is the lobby preview");
+  check(rt::parseRoster("[{\"name\":\"Ada\"}]").ids.empty(),
+        "a slot with no id is dropped: it could never be matched to a car");
+
+  // The livery: '#rrggbb' -> 0xAABBGGRR, opaque.
+  check(rt::liveryABGR("#ff8000") == 0xFF0080FFu, "livery: red/green/blue land in the right bytes");
+  check(rt::liveryABGR("") == 0xFF888888u, "an ABSENT colour is the grey the JS default was");
+  check(rt::liveryABGR("#zzzzzz") == 0xFF000000u,
+        "an UNPARSEABLE colour is opaque black — parseInt's NaN through the old bit-ops");
+
+  // The plate table wraps, exactly as the shell's own modulo did.
+  check(rt::plateY(0) == 0.157f && rt::plateY(1) == 0.245f, "plateY is per MODEL");
+  check(rt::plateY(4) == rt::plateY(0), "plateY wraps past the last model");
+  check(rt::plateY(-1) == rt::plateY(3), "…and a negative index wraps forward, never off the front");
+
+  const rt::Roster r = rt::parseRoster(
+      "[{\"id\":2,\"name\":\"Ada\",\"carIndex\":1,\"color\":\"#112233\"},"
+      " {\"id\":\"ai-0\",\"name\":\"Bartholomew\",\"carIndex\":0,\"color\":\"#445566\"},"
+      " {\"id\":7}]");
+  check(r.ids.size() == 3 && r.cars.size() == 3, "ids and cars are the same list, in slot order");
+  if (r.ids.size() == 3 && r.cars.size() == 3) {
+    check(r.ids[0] == Id::Num(2) && r.ids[1] == Id::Str("ai-0"),
+          "a slot id keeps its JSON-scalar identity");
+    check(std::string(r.cars[0].name) == "Ada", "a short name fills the plate and stops");
+    check(std::string(r.cars[1].name) == "Bartholo", "a long name is cut to the plate's 8 chars");
+    check(r.cars[0].plateY == rt::plateY(1), "the plate height follows the car's MODEL");
+    check(r.cars[2].colorABGR == 0xFF888888u && std::string(r.cars[2].name).empty(),
+          "a slot with only an id still builds — grey, no plate text, first model");
+  }
+
+  // The plate is filled from UTF-16 code UNITS, which is what charCodeAt gave
+  // the retired JS writer. It matters for exactly one input: an astral
+  // character is two units, and the low one masks to NUL, ending the plate.
+  const rt::Roster emoji = rt::parseRoster("[{\"id\":1,\"name\":\"\\ud83d\\ude00ab\"}]");
+  check(emoji.cars.size() == 1 && std::string(emoji.cars[0].name) == "=",
+        "an emoji eats two plate slots and terminates it, as it always has");
 }
 
 // ---------------------------------------------------------------------------
@@ -899,6 +955,7 @@ int main() {
   }
 
   testParseIds();
+  testParseRoster();
   testAtRest();
   testCarsAndRoster(bt.game);
   testHold(bt.game);

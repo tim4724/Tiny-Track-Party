@@ -30,6 +30,7 @@
 #include "ttp/game.h"
 #include "ttp/hud.h"
 #include "ttp/race_track.h"
+#include "ttp/roster.h"
 #include "ttp/scalar_id.h"
 #include "ttp/theme.h"
 #include "ttp/trackbuilder.h"
@@ -158,10 +159,13 @@ void ttp_display_biome(const char* name) {
     g_disp->biome = (name && ttp::rt::has_biome(name)) ? name : "";
 }
 
-int ttp_display_build(const char* trackId, const char* rosterIdsJson) {
+int ttp_display_build(const char* trackId, const char* rosterJson) {
     if (!g_disp) return 1;
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
     if (!def) return 1;
+    // Parsed BEFORE anything is torn down: a malformed roster is still a legal
+    // scene (an empty one), but the parse must not straddle the release below.
+    const ttp::rt::Roster roster = ttp::rt::parseRoster(rosterJson);
     if (g_disp->built) g_disp->renderer->releaseScene();
     g_disp->built = false;
     // laps and seed do not reach the geometry — build_race_track only stamps them
@@ -185,9 +189,9 @@ int ttp_display_build(const char* trackId, const char* rosterIdsJson) {
                                                glb->data(), glb->size())
                 : std::vector<ttp::rt::MatTint>());
     }
-    if (!g_disp->renderer->buildScene(geo, theme)) return 1;
+    if (!g_disp->renderer->buildScene(geo, theme, roster.cars)) return 1;
     g_disp->built = true;
-    g_disp->roster = parseIds(rosterIdsJson);
+    g_disp->roster = roster.ids;
     // A rebuild is a new track or a new field; either way the springs must not
     // drag the old frame's camera into it.
     g_disp->chase.clear();

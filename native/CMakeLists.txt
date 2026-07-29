@@ -521,6 +521,12 @@ add_library(libttp_runtime STATIC
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
+  # The roster, parsed once: who is in this race and what their cars look like,
+  # which is the last thing about a race that only the SHELL knows. It used to
+  # cross as "track.bin", a byte format with a writer in JS and a reader in the
+  # renderer; the colour arithmetic and the per-model plate table are here now,
+  # so a second shell inherits them instead of reimplementing them.
+  libttp-runtime/ttp/roster.cc
   # The per-player HUD block the shell reads back, which is uiModel.js's
   # hudRows ported. Beside the frame builder because it reads the same live
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
@@ -813,6 +819,10 @@ if(EMSCRIPTEN)
     libttp-runtime/ttp/camera.cc
     libttp-runtime/ttp/framing.cc
     libttp-runtime/ttp/frame_builder.cc
+    # The roster parse ttp_display_build calls. Outside the Filament gate on
+    # purpose: it turns the shell's JSON into slots and touches no renderer type
+    # beyond the plain TtpRosterCar, so CI's SDK-less leg still compiles it.
+    libttp-runtime/ttp/roster.cc
     # The packed HUD block ttp_display_hud answers with. Outside the gate with
     # the rest of libttp-runtime, and for the extra reason that it is what the
     # SHELL reads rather than what the renderer draws: a Filament-less leg still

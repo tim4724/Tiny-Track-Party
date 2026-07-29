@@ -66,8 +66,8 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * it wants to tell the user their spelling was wrong. */
 TTP_ABI void ttp_display_biome(const char* name);
 
-/* Build the scene for `trackId` from the assets provided so far — "track.bin"
- * (the roster's liveries) and the GLBs/textures the resolved biome names.
+/* Build the scene for `trackId` from the GLBs/textures the resolved biome names
+ * and the roster handed over here.
  *
  * NEITHER THE GEOMETRY NOR THE PALETTE is among them. This runs the native
  * TrackBuilder on trackId and meshes from the result, which is the same
@@ -77,15 +77,28 @@ TTP_ABI void ttp_display_biome(const char* name);
  * of the C++ palette tables, so the look is not authored per shell either.
  * Returns 1 on an unknown trackId.
  *
- * rosterIdsJson is that roster's car ids as a JSON array, in slot order. The
- * renderer bakes a car's model and livery into its slot at build time, so this
- * is what lets every later frame put each car back in ITS slot by identity
- * rather than by position in some separately-maintained list.
+ * rosterJson is the field in SLOT order — the ONE thing about a race that only
+ * the shell knows, since the sim's cars carry no livery and no display name:
+ *
+ *   [{"id": <scalar>, "name": "…", "carIndex": <n>, "color": "#rrggbb"}, …]
+ *
+ * The renderer bakes each car's model and livery into its slot here, so this is
+ * what lets every later frame put each car back in ITS slot by identity rather
+ * than by position in some separately-maintained list. An empty array is legal
+ * and is what the lobby's track preview builds with.
+ *
+ * IT USED TO BE TWO THINGS: the ids came through here and the liveries arrived
+ * as a "track.bin" asset — a version-stamped byte buffer with a writer in JS and
+ * a parser in the renderer, agreeing by comment. Every shell owed that format a
+ * byte-exact encoder, and no fixture in the tree could ever have caught the two
+ * drifting. Now one argument carries the roster and libttp-runtime's parseRoster
+ * (ttp/roster.h) is its only reader, so the colour arithmetic and the per-model
+ * name-plate table are written once for three shells.
  *
  * Every race start comes through here, since a Grand Prix chains four tracks
  * and even a restart wants the skid ribbons, kicked cones and collected boxes
  * back at their opening state. Returns 0 on success. */
-TTP_ABI int ttp_display_build(const char* trackId, const char* rosterIdsJson);
+TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
 
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */

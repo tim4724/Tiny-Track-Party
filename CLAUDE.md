@@ -106,8 +106,16 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
 - The TRACK BUILDER is native too, and there is no JS twin. `ttp_display_build`
   takes a trackId and runs `ttp::build_race_track` itself, so the renderer meshes
   from the SAME `ttp::RaceTrack` the sim races on; the browser holds no centerline,
-  no samples, no furniture. `public/shared/trackBin.js` is down to the roster's
-  liveries (track.bin v17 — no geometry, no theme), and the lobby's
+  no samples, no furniture. NOTHING ABOUT A SCENE IS SERIALIZED any more, and
+  `public/shared/trackBin.js` is GONE with the last of it: the "track.bin" byte
+  payload shrank from the whole built track (v15) to the biome (v16) to the
+  roster's liveries (v17), and then stopped being bytes. The roster crosses as
+  `ttp_display_build`'s second argument — `[{id, name, carIndex, color}]`, in
+  slot order — and `native/libttp-runtime/ttp/roster.{h,cc}` is its only reader,
+  so the livery's ABGR word and the per-model name-plate table are written ONCE
+  for three shells instead of once per shell in a hand-rolled encoder that no
+  fixture in the tree could ever have caught drifting (`parseRoster` is gated by
+  `frame_check` on all four legs). The lobby's
   mini-maps come from the prebaked `shared/trackSchematics.js` (`npm run
   gen:schematics`). The MAP CODEC behind that bake is native too
   (`native/libttp-track/ttp/schematic.{h,cc}`, gated by the `schematic` ctest
