@@ -1,6 +1,6 @@
 // framing — the overview/lobby camera rigs and the fog bands, solved once per
 // scene build from the track's bounding box. Lifted verbatim out of
-// runtime/ttp_display.cc.
+// runtime/ttp_display.cc (DELETED — git history has it).
 #pragma once
 
 #include "ttp/vecmath.h"

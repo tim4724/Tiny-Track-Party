@@ -338,7 +338,12 @@ export const CUPS = [
 // the rounded mean of its tracks' levels (Easy=1 … Expert=4), or an explicit `difficulty`
 // on the cup to pin it. The picker shows this as a 4-pip meter on the cup header; tracks
 // are NOT badged individually. Recomputes as tracks join a cup.
-const DIFF_LEVEL = { Easy: 1, Medium: 2, Hard: 3, Expert: 4 };
+// EXPORTED because it is codegen'd into the wasm: gen-track-defs-header.mjs
+// resolves each catalogue track's word to a level and carries the number, so the
+// C++ cup tendency needs no word table. Exporting it is what keeps that ONE
+// table — the codegen re-typing these four pairs would be the drift this file's
+// manifest rule exists to stop.
+export const DIFF_LEVEL = { Easy: 1, Medium: 2, Hard: 3, Expert: 4 };
 const cupTendency = (c) => c.difficulty != null ? c.difficulty
   : Math.round(c.tracks.reduce((sum, id) => sum + (DIFF_LEVEL[TRACKS[id].difficulty] || 2), 0) / c.tracks.length);
 

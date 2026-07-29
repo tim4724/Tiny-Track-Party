@@ -9,7 +9,12 @@ namespace rt {
 namespace {
 
 // Per-model plate height (world Y on the rear face), indexed by CAR_MODELS
-// position: racer, speedster, racer-low, vintage-racer.
+// position (protocol.js): racer-low, speedster, racer, vintage-racer.
+//
+// The VALUES are trackBin.js's, unchanged. Its comment listed the models in the
+// wrong order (racer and racer-low swapped, ~1 mm apart, so nothing ever
+// noticed); this table is the single source three shells read now, so the label
+// is corrected here rather than carried across with the numbers.
 constexpr float PLATE_Y[] = { 0.157f, 0.245f, 0.156f, 0.134f };
 constexpr int PLATE_Y_COUNT = (int) (sizeof(PLATE_Y) / sizeof(PLATE_Y[0]));
 

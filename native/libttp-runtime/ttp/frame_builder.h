@@ -7,7 +7,8 @@
 // the renderer share a heap, so the frame is assembled from `Game::cars()` in
 // place and the boundary is one call with a dt.
 //
-// Lifted verbatim out of runtime/ttp_display.cc. What did NOT come with it is
+// Lifted verbatim out of runtime/ttp_display.cc (DELETED — git history has it;
+// its platform half is runtime/ttp_display_web.cc). What did NOT come with it is
 // everything that names a platform: the GL context, the TtpRenderer handle and
 // the session-handle lookup all stay in the ABI shim beside the extern "C"
 // surface. The shim's Display DERIVES from DisplayState, so the state fields

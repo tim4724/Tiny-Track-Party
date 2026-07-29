@@ -108,8 +108,15 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
   assert.deepEqual(got.catalog.map((t) => t.id), CUPS.flatMap((c) => c.tracks),
     'the catalogue is CUPS order flattened');
   // Dev ranges are in the wasm's track table (id lookup) but belong to no cup,
-  // so they can never reach a player-visible list.
-  assert.ok(!got.catalog.some((t) => t.id === 'gym'), 'no dev track is in the catalogue');
+  // so they can never reach a player-visible list. Asserted over the whole dev
+  // catalogue rather than one id: the invariant is "no dev track", and naming
+  // one leaves the next one added covered by nothing.
+  const { DEV_TRACKS } = await load('public/shared/devTracks.js');
+  const ids = new Set(got.catalog.map((t) => t.id));
+  for (const dev of Object.keys(DEV_TRACKS)) {
+    assert.ok(!ids.has(dev), `dev track "${dev}" must not appear in the catalogue`);
+  }
+  assert.ok(Object.keys(DEV_TRACKS).length > 0, 'premise: there are dev tracks to exclude');
 });
 
 test('every board acts on back, and only the root swallows', async () => {

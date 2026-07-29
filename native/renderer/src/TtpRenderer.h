@@ -121,11 +121,11 @@ public:
     // How wide a racing cell is allowed to get before the sides are bars.
     //
     // A cell's camera locks its PIXEL SCALE to the single-player reference
-    // (cellFov in ttp_display.cc), so this does NOT set how big the car is —
-    // that is fixed in every layout by construction, and stays fixed whatever
-    // this is. Nor does it set the vertical fov, which works out to depend only
-    // on the cell's HEIGHT against the screen's. What it sets is how much width
-    // of world a cell shows, and what that width costs to rasterize.
+    // (cellFov, libttp-runtime/ttp/frame_builder.h), so this does NOT set how
+    // big the car is — that is fixed in every layout by construction, and stays
+    // fixed whatever this is. Nor does it set the vertical fov, which works out
+    // to depend only on the cell's HEIGHT against the screen's. What it sets is
+    // how much width of world a cell shows, and what that costs to rasterize.
     //
     // So the trade here is peripheral view against fill, and 21:9 is a shape
     // people read as a picture rather than a slot. On a 16:9 screen it gives a

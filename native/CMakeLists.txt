@@ -505,7 +505,8 @@ add_test(NAME abi
 # ---- libttp-runtime: the platform-free half of the display runtime ----------
 # Cameras (the spring chase per split-screen cell), the overview/lobby framing
 # and fog solve, and the per-frame TtpFrameInput built straight off the live
-# Game. All of it used to sit in runtime/ttp_display.cc, BEHIND the Filament
+# Game. All of it used to sit in runtime/ttp_display.cc (since DELETED — git
+# history has it), BEHIND the Filament
 # gate — so it compiled on exactly one machine configuration in the world (a dev
 # box with the Filament fork) and no ctest on any of the four legs ever saw a
 # line of it. Nothing in here names a platform API, a renderer or emscripten, so

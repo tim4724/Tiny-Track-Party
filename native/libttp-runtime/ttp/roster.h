@@ -54,7 +54,14 @@ Roster parseRoster(const char* json);
 // The rear name plate's height on a model's back panel, in world Y, indexed by
 // the car's position in CAR_MODELS. Hand-tuned per model because the plate sits
 // on a flat rear surface the renderer cannot raycast for the way a scene graph
-// could. Out-of-range indices wrap, matching the shell's own modulo.
+// could.
+//
+// TOTAL over int: an index past the last model wraps, matching the shell's own
+// modulo, and a NEGATIVE one wraps forward rather than falling through. That
+// last part is a small, deliberate divergence from the retired JS, where
+// `PLATE_Y[i % 4] ?? null` handed a negative index the -1 "auto" fallback. A
+// carIndex is a seat's chosen car (0..3), so neither answer is reachable; this
+// one is stated because frame_check pins it.
 float plateY(int carIndex);
 
 // '#rrggbb' -> the 0xAABBGGRR word the renderer wants, opaque.

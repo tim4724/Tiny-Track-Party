@@ -9,7 +9,8 @@
 // golden traces can settle a parity question, and they never reach this code.
 //
 // WHY IT EXISTS. Until libttp-runtime, every line under test here lived in
-// runtime/ttp_display.cc, behind the Filament gate: ~500 lines of camera,
+// runtime/ttp_display.cc (since DELETED — git history has it), behind the
+// Filament gate: ~500 lines of camera,
 // framing and frame-assembly logic that names no platform API, compiled on
 // exactly one machine configuration in the world and exercised by none of the
 // ctests on any of the four legs.

@@ -179,10 +179,23 @@ await Promise.all([_room.init(), _conn.init(), _lane.init(), _sess.init(), _sche
 // The reduced maps the phones' picker renders: the baked full-res schematic,
 // RDP-simplified and uint8-packed by the native codec so the whole catalogue
 // fits the relay's 16 KiB set_state cap.
-trackChooser = TRACK_LIST.map((t) => ({
-  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: _schem.pack(TRACK_SCHEMATICS[t.id].d)
-}));
+// A track with no baked schematic loses its mini-map and nothing else. The two
+// lists cannot disagree in a shipped build — TRACK_LIST comes from the wasm's
+// codegen'd catalogue and the bake comes from the same shared/tracks.js, and
+// tests/ui-model.test.js plus native-artifact gate the pair — but they are two
+// artifacts now rather than one module, so a dev mid-rebuild can hold a wasm
+// the bake has not caught up with. That should cost a picture, not the page.
+trackChooser = TRACK_LIST.flatMap((t) => {
+  const baked = TRACK_SCHEMATICS[t.id];
+  if (!baked) {
+    console.error(`[display] no baked schematic for "${t.id}" — run npm run gen:schematics`);
+    return [];
+  }
+  return [{
+    id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+    svg: _schem.pack(baked.d)
+  }];
+});
 const _nativeParty = {
   RoomFlowImpl: _room.NativeRoomFlow,
   PartyConnectionImpl: _conn.NativePartyConnection,
