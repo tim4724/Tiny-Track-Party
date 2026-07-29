@@ -7651,6 +7651,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             t.seeded = false;
             t.hasEdge = false;
         };
+        // The ribbon has ENDED: release the slot and re-anchor on the contact
+        // patch, so whatever is drawn next starts from where the tyre is NOW.
+        // The joint edge goes with it — there is no trail left to rejoin, and
+        // keeping a stale edge would stretch the next stamp back to it.
+        const auto restart = [&](WheelTrail& t, const float3& gp) {
+            detach(t);
+            t.last = gp;
+            t.hasEdge = false;
+        };
         // Positions + peak alpha for slot q: 4 columns per edge (L 0 | l peak |
         // r peak | R 0), rear edge → front edge. The inner pair sits
         // SKID_FEATHER in from the tyre's edge, so everything between them is
@@ -7700,19 +7709,18 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     : std::min(1.0f, std::max(slip * 1.3f, std::max(brakeBite, launch)));
             // Attack over SKID_ATTACK, release over the slower SKID_RELEASE
             // (SkidMarks.js released only — it attacked in a single frame).
-            // The release side is load-bearing: a scuff that stops dead leaves a
+            // The RELEASE is load-bearing: a scuff that stops dead leaves a
             // DASH, because bots weaving down a bendy stretch cross the scuff
             // threshold every few frames and clip the curb in between, and every
             // dip detaches the ribbon (below) so the fresh unjoined rear edges
             // stack into dark bars. Holding the strength through the dips keeps
             // one trail that fades instead.
-            // The attack side is why a mark now READS as being laid down. Going
-            // from nothing to peak ink in one frame made every scuff arrive
-            // fully formed — the phone's brake is a BINARY 0/1, so `brakeBite`
-            // was never anything but exactly 1.0, and `slip * 1.3` saturates at
-            // a steer input of 0.815, which any real corner passes. Ramping over
-            // ~a tenth of a second spends the first car length or so getting
-            // dark, so the eye can see where the tyre let go.
+            // The ATTACK is what makes a mark read as being LAID DOWN, because
+            // `raw` is all but binary in practice: the phone's brake is a 0/1,
+            // so `brakeBite` is only ever exactly 1.0, and `slip * 1.3`
+            // saturates at a steer input of 0.815 that any real corner passes.
+            // Unramped, every scuff arrived at peak ink already formed. A tenth
+            // of a second is roughly the first car length getting dark.
             cw.skidHold = raw > cw.skidHold
                     ? std::min(raw, cw.skidHold + input.dt / SKID_ATTACK)
                     : std::max(raw, cw.skidHold - input.dt / SKID_RELEASE);
@@ -7754,23 +7762,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 if (!st.seeded) { st.last = gp; st.seeded = true; st.hasEdge = false; continue; }
                 const float3 seg = gp - st.last;
                 const float dist = length(seg);
-                if (dist > SKID_SEG_MAX) { detach(st); st.last = gp; st.hasEdge = false; continue; }
+                if (dist > SKID_SEG_MAX) { restart(st, gp); continue; }
                 if (strength <= 0.02f) {
-                    detach(st);
-                    // NOT marking: the anchor stays AT the contact patch, every
-                    // frame. It used to advance only once the wheel had moved
-                    // SKID_SEG_MIN, which parked it up to a quarter unit behind
-                    // the tyre — and since the next scuff's first stamp spans
-                    // `last`→`gp`, the whole gap was written in ONE frame at
-                    // full ink. A brake tap POPPED a mark a fifth of a car long
-                    // into existence (measured: 0.19 u against 0.075 u of travel
-                    // that frame) instead of drawing one from where the pedal
-                    // went down. The joint edge goes with it: a trail whose
-                    // strength has fully decayed past SKID_RELEASE has ENDED, so
-                    // there is nothing left to rejoin, and keeping the stale
-                    // edge would put the gap straight back.
-                    st.last = gp;
-                    st.hasEdge = false;
+                    // Re-anchor EVERY frame while not marking, not just once the
+                    // wheel has moved SKID_SEG_MIN: that parked `last` up to a
+                    // quarter unit behind the tyre, and since the next scuff's
+                    // first stamp spans last→gp the whole gap was written in ONE
+                    // frame at full ink. A brake tap POPPED a mark 0.19 u long
+                    // out of 0.075 u of travel, on a car 0.88 u long.
+                    restart(st, gp);
                     continue;
                 }
                 if (dist < 1e-4f) continue;
