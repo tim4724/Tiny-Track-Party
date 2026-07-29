@@ -12,13 +12,17 @@ import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 // The UI MODEL is C++ too (ttp_ui.h over libttp-runtime/ttp/ui_model.cc). Every
 // screen decision below — which seats, which race card, which rows, whether the
-// field may freeze — is ITS answer; this file renders and decides nothing. The
-// JS twin (uiModel.js) survives only as the oracle ui-corpus.jsonl was recorded
-// from, exactly as decide.js does for the audio.
+// field may freeze — is ITS answer; this file renders and decides nothing.
+//
+// THE CATALOGUE COMES OUT OF IT TOO. shared/tracks.js is not imported here: the
+// cups, their display names, every track name and the cup-difficulty tendency
+// are codegen'd into the wasm (generated/track_defs.h), so this page asks for
+// them rather than bundling a copy — which is also what stops a second shell
+// from having to carry one. What still comes from a JS module is DEV_TRACKS,
+// below, because a dev range is a debug surface and never reaches a picker.
 import * as ui from './NativeUiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { makeShuffleBag } from './shuffleBag.js';
-import { CUPS, TRACK_LIST } from '../shared/tracks.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
@@ -58,11 +62,9 @@ function show(name) {
 function trackEntry(t) {
   return { ...t, trackId: t.id, totalLaps: TOTAL_LAPS, seed: 1 };
 }
-const built = new Map(TRACK_LIST.map((t) => [t.id, trackEntry(t)]));
-const trackCatalog = TRACK_LIST.map((t) => ({
-  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: TRACK_SCHEMATICS[t.id]
-}));
+// Filled from the wasm's own catalogue once it is up (see the boot block below).
+// `let` rather than `const` for that reason alone — neither is written twice.
+let CUPS, TRACK_LIST, built, trackCatalog;
 
 // The controller is a dumb renderer driven entirely off the relay's retained room
 // snapshot (set_state) — so all the chooser CONTENT it needs travels the wire, not
@@ -126,7 +128,25 @@ await Promise.all([_nativeSim.init(), _nativeSeries.init(), _nativeAudio.init(),
 // it changes when the game ships, not while it runs — so it is set here rather
 // than re-sent with every pick. Before ANY render below (the gallery harness
 // grids seats off it too).
-ui.configure({ cups: CUPS, catalog: trackCatalog, maxPlayers: MAX_PLAYERS, carCount: CAR_MODELS.length });
+// The two field sizes the seat grid needs. The WORLD is not passed: it is
+// codegen'd into the wasm, so this is the point where the page stops having an
+// opinion about which tracks exist. Before ANY render below (the gallery
+// harness grids seats off it too).
+ui.configure({ maxPlayers: MAX_PLAYERS, carCount: CAR_MODELS.length });
+// ...and read straight back, because the SHELL still has to draw the picker and
+// name the tracks in the phones' chooser payload. `catalog` is CUPS order
+// flattened. cupName is derived here rather than carried: the model answers with
+// a cup ID per track, and the cup NAMES are one lookup away in the same answer.
+({ cups: CUPS, catalog: TRACK_LIST } = ui.catalogue());
+{
+  const nameOf = new Map(CUPS.map((c) => [c.id, c.name]));
+  TRACK_LIST = TRACK_LIST.map((t) => ({ ...t, cupName: nameOf.get(t.cup) || null }));
+}
+built = new Map(TRACK_LIST.map((t) => [t.id, trackEntry(t)]));
+trackCatalog = TRACK_LIST.map((t) => ({
+  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
+  svg: TRACK_SCHEMATICS[t.id]
+}));
 // The same once-at-boot handover for the orchestration layer's world. Two things
 // about it are worth knowing:
 //   * the PERSONA table is read back out of the wasm (libttp-sim's own

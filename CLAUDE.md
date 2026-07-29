@@ -258,6 +258,21 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   TRAVERSAL (the table did, the walk did not) and `ROOM_STATE`, which
   `ui_model.h` MIRRORS rather than import, so libttp-runtime never gains an edge
   on the party layer — `ui_check` pins the copy to `protocol.h`.
+  THE CATALOGUE IS NO LONGER AN ARGUMENT. `ttp_ui_configure` takes the two field
+  sizes and, with no `cups`/`catalog`, installs the world this build SHIPS:
+  `gen-track-defs-header.mjs` carries each track's display NAME and difficulty
+  LEVEL and the whole `CUPS` table into `track_defs.h` (it already carried
+  `cup`), and `ui_model.cc`'s `shippedCups`/`shippedCatalog`/`cupTendency` build
+  the lists from there. The tendency — a rounded mean of the tracks' levels, or
+  the cup's own override — was a RULE every shell had to re-implement, and the
+  ~2 KB of names was data the wasm already held. Passing the two lists still
+  OVERRIDES, which is what the corpus's synthetic world rides, and is why the
+  layer stays catalogue-agnostic. `ttp_ui_catalogue_json` reads the shipped
+  tables back for the things a shell DRAWS (the cup picker, the chooser
+  payload's track names) and deliberately ignores any override. `main.js` no
+  longer imports `shared/tracks.js` at all; `tests/ui-model.test.js` is the
+  drift gate, being the only place that sees both the authored JS and the wasm.
+
   A held item crosses as a CODE, not a string — `TTP_ITEM_*`, pinned to the
   browser's `ITEM_IDS` mirror through `ttp_item_id` by
   `tests/display-abi.test.js`, because nothing else can see those two lists at

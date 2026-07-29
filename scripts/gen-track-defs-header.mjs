@@ -53,6 +53,15 @@ const ROAD_WIDTH = 2.5; // TrackBuilder ROAD_WIDTH — the descriptor-width fall
 const CUP_OF = {};
 for (const c of CUPS) for (const id of c.tracks) CUP_OF[id] = c.id;
 
+// Per-track difficulty as a LEVEL. The catalogue authors it as a word and the
+// only thing that reads it is the cup TENDENCY (the rounded mean below), so the
+// word is resolved here rather than carried: a track with no level, or one
+// spelt in a way this table does not know, is the same middling 2 that the JS
+// `DIFF_LEVEL[...] || 2` meant. Dev tracks ('Dev') land there too, and never
+// reach a cup anyway.
+const DIFF_LEVEL = { Easy: 1, Medium: 2, Hard: 3, Expert: 4 };
+const diffLevel = (desc) => DIFF_LEVEL[desc.difficulty] || 2;
+
 // ---- exact double -> C++ hex-float literal ----
 // A hex float (0x1.<52-bit mantissa>p<exp>) names the binary64 value EXACTLY —
 // no decimal formatting or parsing on either side, same guarantee the old uint64
@@ -201,7 +210,8 @@ for (const id of [...trackIds, ...devIds]) {
 
   // Field order MUST match TrackDef in trackbuilder.h.
   const cup = CUP_OF[id] ? JSON.stringify(CUP_OF[id]) : 'nullptr';
-  perTrack.push(`  { ${JSON.stringify(id)}, ${cup}, ${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
+  perTrack.push(`  { ${JSON.stringify(id)}, ${JSON.stringify(desc.name || id)}, ${cup}, ${diffLevel(desc)}, `
+    + `${B(isSpline)}, ${segsRef}, ${nSegs}, ${wptsRef}, ${nWpts}, `
     + `${D(trackWidth)}, ${D(startU)}, `
     + `${oils.ref}, ${oils.n}, ${pads.ref}, ${pads.n}, ${boxes.ref}, ${boxes.n}, `
     + `${poles.ref}, ${poles.n}, ${bananas.ref}, ${bananas.n} }`);
@@ -214,6 +224,30 @@ out.push('// The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).');
 out.push(`constexpr int TTP_TRACK_COUNT = ${trackIds.length};`);
 out.push('// Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.');
 out.push(`constexpr int TTP_TRACK_TOTAL = ${trackIds.length + devIds.length};`);
+out.push('');
+
+// ---- the cups ---------------------------------------------------------------
+// CUPS is the catalogue's ORDERING as well as its grouping, and the shipped
+// arrangement is what every shell's picker draws. It used to cross the ttp_ui.h
+// boundary as ~2 KB of JSON that the browser assembled out of this same file —
+// which meant a tvOS shell had to carry its own copy of the cup names and its
+// own implementation of the tendency rule below. Carried here for exactly the
+// reason `cup` above is: the catalogue is where this is authored, so one source.
+out.push('// The shipped CUPS, in the catalogue\'s own order — which IS the difficulty');
+out.push('// ladder and the order every picker draws. `difficulty` is the AUTHORED');
+out.push('// override or 0 for "derive from the tracks" (ttp::rt::ui::cupTendency).');
+for (const c of CUPS) {
+  const sym = c.id.replace(/[^A-Za-z0-9]/g, '_');
+  out.push(`constexpr const char* kCupTracks_${sym}[] = { ${c.tracks.map((t) => JSON.stringify(t)).join(', ')} };`);
+}
+out.push('constexpr CupDef TTP_CUPS[] = {');
+for (const c of CUPS) {
+  const sym = c.id.replace(/[^A-Za-z0-9]/g, '_');
+  out.push(`  { ${JSON.stringify(c.id)}, ${JSON.stringify(c.name)}, kCupTracks_${sym}, `
+    + `${c.tracks.length}, ${c.difficulty != null ? c.difficulty : 0} },`);
+}
+out.push('};');
+out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);
 out.push('');
 out.push('}  // namespace ttp');
 out.push('');

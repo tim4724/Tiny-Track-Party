@@ -50,6 +50,13 @@
 #include "ttp/scalar_id.h"
 
 namespace ttp {
+// The codegen'd cup table's row type (libttp-track/ttp/trackbuilder.h). Forward
+// declared rather than included: this header is plain data by design, and only
+// the .cc — which reads generated/track_defs.h — needs the definition.
+struct CupDef;
+}  // namespace ttp
+
+namespace ttp {
 namespace rt {
 namespace ui {
 
@@ -182,6 +189,37 @@ struct CatalogEntry {
   OptStr cup;              // null for a track in no cup
   OptNum cupDifficulty;
 };
+
+// ---- the SHIPPED catalogue --------------------------------------------------
+// Everything above is catalogue-AGNOSTIC on purpose: the model looks ids up in
+// whatever lists it is handed, which is what lets the conformance corpus carry
+// a synthetic world of two cups and nine circuits. These two functions are the
+// other half of that arrangement — they answer with the world this build
+// actually ships, read straight out of the codegen'd tables.
+//
+// WHY THEY EXIST. The shipped cups and their display names used to cross the
+// ttp_ui.h boundary as ~2 KB of JSON the browser assembled out of
+// public/shared/tracks.js. That made the catalogue an ARGUMENT, so every shell
+// owed it a copy of the names AND its own spelling of the tendency rule below,
+// for data the wasm already held (generated/track_defs.h has carried each
+// track's cup since the biomes moved). A shell configures nothing now, and asks
+// for the names it needs to draw a picker.
+
+// Cup "tendency" difficulty, 1..4: a LEAN for a whole cup, not a per-track
+// label. The rounded mean of its tracks' levels, unless the cup pins one.
+//
+// ROUNDING IS JS `Math.round` — half goes UP, toward +infinity, which for the
+// positive values here is what std::lround does anyway. Spelt out because a
+// cup of {Easy, Medium, Hard, Expert} means exactly 2.5 and no shipped cup
+// currently lands on a tie, so nothing would notice the day one did.
+int cupTendency(const CupDef& cup);
+
+// The shipped cups, in the catalogue's own order (which IS the difficulty
+// ladder), and the shipped tracks flattened in that same order — the
+// arrangement every picker draws. Each catalogue entry carries its cup's
+// resolved tendency, so a shell never recomputes one.
+std::vector<Cup> shippedCups();
+std::vector<CatalogEntry> shippedCatalog();
 
 enum class PickMode { NONE, CUP, TRACK, RANDOM };
 PickMode pickModeOf(const OptStr& mode);

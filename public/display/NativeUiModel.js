@@ -43,6 +43,7 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_ui_configure', 'number', ['string']),
+    catalogue: c('ttp_ui_catalogue_json', 'string', []),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string']),
     rosterSeats: c('ttp_ui_roster_seats_json', 'string', ['string', 'string']),
@@ -71,24 +72,39 @@ const id = (x) => J(x === undefined ? null : x);   // a JSON-scalar identity
 const ids = (set) => J([...set]);
 const b = (x) => (x ? 1 : 0);
 
-// The world every id in this ABI resolves against, plus the two field sizes the
-// seat grid needs. Set ONCE at boot: it is authored data (shared/tracks.js's
-// CUPS + TRACK_LIST, MAX_PLAYERS, the car roster) that changes when the game
-// ships, not while it runs, so re-sending it on every rename would be ~2 KB of
-// parse for nothing. The C++ layer itself stays catalogue-agnostic, which is
-// what lets the corpus carry a synthetic world of its own.
-export function configure({ cups, catalog, maxPlayers, carCount }) {
-  const ok = fn.configure(J({
-    maxPlayers, carCount,
-    cups: cups.map((c) => ({ id: c.id, name: c.name, tracks: c.tracks })),
-    catalog: catalog.map((t) => ({
+// The two field sizes the seat grid needs, and NOTHING ELSE. The world every id
+// in this ABI resolves against — the cups, their names, the track names and the
+// cup-tendency rule — is codegen'd into the wasm from shared/tracks.js
+// (generated/track_defs.h), so this side no longer assembles ~2 KB of JSON out
+// of a catalogue it would otherwise have to carry.
+//
+// The layer itself stays catalogue-AGNOSTIC: it looks ids up in whatever list it
+// holds, which is what lets the conformance corpus install a synthetic world.
+// That path is the OPTIONAL `cups`/`catalog` override, used by tests and by
+// nothing that ships.
+export function configure({ maxPlayers, carCount, cups, catalog }) {
+  const world = { maxPlayers, carCount };
+  if (cups && catalog) {
+    world.cups = cups.map((c) => ({ id: c.id, name: c.name, tracks: c.tracks }));
+    world.catalog = catalog.map((t) => ({
       id: t.id, name: t.name,
       cup: t.cup == null ? null : t.cup,
       cupDifficulty: t.cupDifficulty == null ? null : t.cupDifficulty
-    }))
-  }));
+    }));
+  }
+  const ok = fn.configure(J(world));
   if (!ok) throw new Error('[ui] the catalogue was rejected by the native UI model');
 }
+
+// The shipped catalogue as DATA, for the things a shell has to draw itself: the
+// lobby's cup picker and the track names in the phones' chooser payload. Always
+// the shipped tables, never a configured override.
+//
+//   { cups: [{id, name, tracks:[id]}], catalog: [{id, name, cup, cupDifficulty}] }
+//
+// `catalog` is CUPS order flattened, which is the order every picker draws and
+// the order the model's own contract depends on.
+export function catalogue() { return JSON.parse(fn.catalogue()); }
 
 // ---- screens ---------------------------------------------------------------
 // >0 = a forward step, <0 = a retreat, 0 = same level. WALKING the stack is the

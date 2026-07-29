@@ -45,7 +45,7 @@ std::vector<ui::CatalogEntry> g_catalog;
 // the next call") is per handle, and this ABI has none.
 std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
-    g_bufBoard, g_bufView;
+    g_bufBoard, g_bufView, g_bufCatalogue;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -252,6 +252,25 @@ int ttp_ui_configure(const char* json) {
   g_cups.clear();
   g_catalog.clear();
   const Value* cups = c.find("cups");
+  const Value* cat = c.find("catalog");
+  // NEITHER LIST GIVEN = the world this build ships. The cups, their display
+  // names, the track names and the tendency rule are all codegen'd into the
+  // wasm (generated/track_defs.h), so a shell that just wants the real game
+  // hands over the two field sizes and stops — it does not owe this ABI ~2 KB
+  // of JSON assembled out of a copy of the catalogue it would have to carry.
+  //
+  // Given, they OVERRIDE, and that is what the conformance corpus rides: its
+  // synthetic two-cup world is exactly the case that proves ui_model.cc looks
+  // ids up in whatever list it is handed rather than in the shipped one.
+  //
+  // Both-or-neither is deliberate. A cups list with no catalog (or the reverse)
+  // is a half-configured world where one lookup resolves and its neighbour
+  // misses, which is worse than either whole answer.
+  if (!cups && !cat) {
+    g_cups = ui::shippedCups();
+    g_catalog = ui::shippedCatalog();
+    return 1;
+  }
   if (cups && cups->type == Value::ARR) {
     for (const Value& v : cups->arr) {
       ui::Cup cup;
@@ -266,7 +285,6 @@ int ttp_ui_configure(const char* json) {
       g_cups.push_back(std::move(cup));
     }
   }
-  const Value* cat = c.find("catalog");
   if (cat && cat->type == Value::ARR) {
     for (const Value& v : cat->arr) {
       ui::CatalogEntry e;
@@ -278,6 +296,32 @@ int ttp_ui_configure(const char* json) {
     }
   }
   return 1;
+}
+
+const char* ttp_ui_catalogue_json(void) {
+  Value out = Value::Obj();
+  Value cups = Value::Arr();
+  for (const ui::Cup& c : ui::shippedCups()) {
+    Value v = Value::Obj();
+    v.set("id", Value::Str(c.id));
+    v.set("name", Value::Str(c.name));
+    Value tracks = Value::Arr();
+    for (const std::string& t : c.tracks) tracks.push(Value::Str(t));
+    v.set("tracks", std::move(tracks));
+    cups.push(std::move(v));
+  }
+  Value cat = Value::Arr();
+  for (const ui::CatalogEntry& e : ui::shippedCatalog()) {
+    Value v = Value::Obj();
+    v.set("id", Value::Str(e.id));
+    v.set("name", Value::Str(e.name));
+    v.set("cup", e.cup.has ? Value::Str(e.cup.v) : Value::Null());
+    v.set("cupDifficulty", e.cupDifficulty.has ? Value::Num(e.cupDifficulty.v) : Value::Null());
+    cat.push(std::move(v));
+  }
+  out.set("cups", std::move(cups));
+  out.set("catalog", std::move(cat));
+  return put(g_bufCatalogue, out);
 }
 
 // ---- screens -----------------------------------------------------------------

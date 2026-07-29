@@ -79,13 +79,41 @@ extern "C" {
  *    "cups":    [{"id","name","tracks":["id",...]}, ...],
  *    "catalog": [{"id","name","cup": "id"|null, "cupDifficulty": n|null}, ...]}
  *
- * The catalogue must be in CUPS order — a cup's difficulty is read off its
- * FIRST entry, which is public/shared/tracks.js's own arrangement.
+ * OMIT BOTH LISTS AND YOU GET THE SHIPPED GAME. The cups, their display names,
+ * every track name and the cup-tendency rule are codegen'd into this build
+ * (generated/track_defs.h), so a shell that wants the real catalogue passes the
+ * two field sizes and nothing else. It used to have to send ~2 KB of JSON
+ * assembled out of its own copy of the catalogue — which meant every shell
+ * carried the names and re-implemented the tendency, for data the wasm already
+ * held. Read it back with ttp_ui_catalogue_json if you need to draw a picker.
+ *
+ * Given, the two lists OVERRIDE, and that is what the conformance corpus rides:
+ * a synthetic two-cup world is the case that proves ui_model.cc looks ids up in
+ * whatever list it is handed. Both or neither — a cups list with no catalog
+ * would leave one lookup resolving while its neighbour missed.
+ *
+ * An overriding catalogue must be in CUPS order — a cup's difficulty is read
+ * off its FIRST entry, which is public/shared/tracks.js's own arrangement.
  *
  * Returns 1 when the text parsed, 0 otherwise (the previous catalogue then
- * stands). Unset, every lookup simply misses: a cup slot resolves no name, a
- * seat grid pads to nothing. */
+ * stands). Never called at all, every lookup simply misses: a cup slot resolves
+ * no name, a seat grid pads to nothing. */
 TTP_ABI int ttp_ui_configure(const char* json);
+
+/* The SHIPPED catalogue, in the shape ttp_ui_configure takes it:
+ *
+ *   {"cups": [...], "catalog": [...]}
+ *
+ * This is data, not a decision, and it is here because a shell has to DRAW the
+ * thing — the lobby's mode picker is a list of cup names with a difficulty
+ * meter on each, and the phones' chooser payload is a list of track names. What
+ * it deliberately does not carry is anything the shell already knows (the field
+ * sizes) or anything only the renderer needs (geometry, palette).
+ *
+ * Always the shipped tables, never whatever ttp_ui_configure last installed:
+ * the override exists for a synthetic conformance world, and answering with one
+ * here would let a test's fiction reach a picker. */
+TTP_ABI const char* ttp_ui_catalogue_json(void);
 
 /* ---- screens ------------------------------------------------------------- */
 

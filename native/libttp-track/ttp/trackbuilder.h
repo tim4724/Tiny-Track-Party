@@ -57,12 +57,23 @@ struct BananaDef { double u, lat; };
 
 struct TrackDef {
   const char* id;
-  // The CUP this track belongs to (public/shared/tracks.js CUPS), or nullptr
-  // for a dev-only surface that no cup lists. Not builder input — nothing here
-  // reads it — but it is the tag the biome resolves from
-  // (libttp-runtime/ttp/theme.h), and the catalogue is where a track's cup is
-  // authored, so carrying it here is what keeps that a single source.
+  // THE THREE FIELDS BELOW ARE NOT BUILDER INPUT. Nothing in this library reads
+  // any of them; they ride along because the catalogue is where each is
+  // AUTHORED, and carrying them here is what keeps one source for three shells.
+  // The alternative — and what the tree did until they were added — is every
+  // shell bundling its own copy of the display names and its own spelling of
+  // the tendency rule, which is the drift the codegen exists to stop.
+
+  // Display name (public/shared/tracks.js `name`), for pickers and boards.
+  const char* name;
+  // The CUP this track belongs to (CUPS), or nullptr for a dev-only surface
+  // that no cup lists. The tag the biome resolves from
+  // (libttp-runtime/ttp/theme.h).
   const char* cup;
+  // Difficulty as a LEVEL, 1 (Easy) .. 4 (Expert), 2 for anything unlabelled.
+  // The catalogue authors a word; the codegen resolves it, because the only
+  // reader is the cup tendency (ttp::rt::ui::cupTendency) and it wants a number.
+  int difficulty;
   bool isSpline;
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;
@@ -73,6 +84,19 @@ struct TrackDef {
   const FurnDef* boxes; int nBoxes;
   const FurnDef* poles; int nPoles;
   const BananaDef* bananas; int nBananas;
+};
+
+// A CUP: a curated, ordered set of tracks, and the catalogue's own arrangement.
+// Populated by generated/track_defs.h like TrackDef, and read by nothing in
+// this library for the same reason — cups are a UI grouping, not builder input.
+// It lives beside TrackDef because it is authored in the same file
+// (public/shared/tracks.js CUPS) and codegen'd by the same script.
+struct CupDef {
+  const char* id;
+  const char* name;
+  const char* const* tracks; int nTracks;  // ids, easiest -> hardest
+  // An AUTHORED tendency override, or 0 for "derive it from the tracks".
+  int difficulty;
 };
 
 // ---- built-track OUTPUT (the augmented race-track object) --------------------

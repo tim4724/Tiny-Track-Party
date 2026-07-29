@@ -1635,6 +1635,54 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in) {
   return out;
 }
 
+// The catalogue fallback and its getter — the ABI half of "a shell configures
+// nothing and gets the shipped game". The DATA is checked in
+// tests/ui-model.test.js, which is the one place that can see both
+// shared/tracks.js and the wasm; what is checked here is the wiring, on every
+// leg: that omitting the lists installs a world rather than an empty one, that
+// giving them still overrides, and that the getter ignores the override.
+void uiShippedCatalogue() {
+  check(ttp_ui_configure("{\"maxPlayers\":4,\"carCount\":6}") == 1,
+        "configure with no lists is accepted");
+  const std::string shipped = ttp_ui_catalogue_json();
+  bool ok = false;
+  const Value cat = json::parse(shipped.c_str(), &ok);
+  check(ok && cat.type == Value::OBJ, "the catalogue getter answers an object");
+  const Value* cups = cat.find("cups");
+  const Value* list = cat.find("catalog");
+  check(cups && cups->type == Value::ARR && !cups->arr.empty(),
+        "omitting the lists installs the SHIPPED cups, not an empty world");
+  check(list && list->type == Value::ARR && !list->arr.empty(),
+        "…and the shipped catalogue with them");
+  if (cups && list && !cups->arr.empty() && !list->arr.empty()) {
+    // Every catalogue entry names a cup and carries that cup's tendency: the
+    // getter's whole job is that a shell never resolves either itself.
+    size_t inCups = 0;
+    for (const Value& c : cups->arr) {
+      const Value* t = c.find("tracks");
+      if (t && t->type == Value::ARR) inCups += t->arr.size();
+    }
+    check(inCups == list->arr.size(), "the catalogue is exactly the cups, flattened");
+    bool everyEntryResolved = true;
+    for (const Value& e : list->arr) {
+      const Value* cup = e.find("cup");
+      const Value* diff = e.find("cupDifficulty");
+      const Value* name = e.find("name");
+      if (!cup || cup->type != Value::STR || !diff || diff->type != Value::NUM ||
+          !name || name->type != Value::STR || name->str.empty()) {
+        everyEntryResolved = false;
+      }
+    }
+    check(everyEntryResolved, "every entry carries a name, its cup and that cup's tendency");
+  }
+
+  // The override still overrides — and the getter still answers SHIPPED, so a
+  // synthetic conformance world can never reach a picker through it.
+  check(ttp_ui_configure(UI_WORLD) == 1, "the synthetic world still overrides");
+  check(std::string(ttp_ui_catalogue_json()) == shipped,
+        "the getter ignores whatever was configured");
+}
+
 void uiCorpusThroughAbi(const char* path) {
   std::ifstream in(path);
   if (!in) { fail(std::string("cannot open ") + path); return; }
@@ -2046,6 +2094,7 @@ int main(int argc, char** argv) {
   fastlaneThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
+  uiShippedCatalogue();
   uiCorpusThroughAbi(argv[4]);
   sessionCorpusThroughAbi(argv[5]);
   raceCorpusThroughAbi(argv[6]);

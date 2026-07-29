@@ -48,19 +48,19 @@ function ui_() {
       resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
       autoPauseAsks: c('ttp_ui_auto_pause_asks', 'number', ['string']),
       autoPause: c('ttp_ui_auto_pause_json', 'string', ['string', 'number']),
-      seriesInfo: c('ttp_ui_series_info_json', 'string', ['string'])
+      seriesInfo: c('ttp_ui_series_info_json', 'string', ['string']),
+      catalogue: c('ttp_ui_catalogue_json', 'string', [])
     };
     const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
     const protocol = require('../public/shared/protocol.js');
+    // NO CATALOGUE IS PASSED, on purpose. The cups, the names and the tendency
+    // rule are codegen'd into this artifact, so the two field sizes are the
+    // whole of what a shell owes it. What tracks.js is still used for here is
+    // the OPPOSITE direction — checking that what came out matches what was
+    // authored (see the first test below).
     raw.configure(J({
       maxPlayers: protocol.MAX_PLAYERS,
-      carCount: protocol.CAR_MODELS.length,
-      cups: CUPS,
-      catalog: TRACK_LIST.map((t) => ({
-        id: t.id, name: t.name,
-        cup: t.cup == null ? null : t.cup,
-        cupDifficulty: t.cupDifficulty == null ? null : t.cupDifficulty
-      }))
+      carCount: protocol.CAR_MODELS.length
     }));
     // The autoPause pair takes Sets in the shell; the ABI takes arrays.
     const apArg = ({ hasSession, raceEnded, roomState, carIds, aiIds, seatedIds }) => J({
@@ -69,6 +69,7 @@ function ui_() {
     });
     return {
       CUPS, TRACK_LIST, protocol,
+      catalogue: () => JSON.parse(raw.catalogue()),
       backEffect: (s) => raw.backEffect(s),
       screenStep: (a, b) => raw.screenStep(a, b),
       cupSlot: (x) => JSON.parse(raw.cupSlot(J(x))),
@@ -81,6 +82,35 @@ function ui_() {
     };
   })());
 }
+
+// THE DRIFT GATE FOR THE CODEGEN'D CATALOGUE, and the only place that can be
+// one: shared/tracks.js is the authored source and generated/track_defs.h is
+// what the wasm ships, and nothing else in the tree sees both at once. Before
+// the display half was codegen'd this could not drift — the browser sent the
+// catalogue in — so the check is the price of the shell no longer carrying it.
+//
+// It compares the answer to the JS the codegen read, including cupTendency,
+// which is a RULE (a rounded mean, or the cup's own override) rather than data.
+// tracks.js still spells it in JS; a shell no longer has to.
+test('the shipped catalogue in the wasm is the one shared/tracks.js authors', async () => {
+  const u = await ui_();
+  const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
+  const got = u.catalogue();
+
+  assert.deepEqual(got.cups, CUPS.map((c) => ({ id: c.id, name: c.name, tracks: c.tracks })),
+    'cups, their display names and their track order come out as authored');
+  assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
+    id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
+  })), 'every track name, its cup and its cup TENDENCY come out as authored');
+
+  // The order is load-bearing twice over: ttp_ui.h reads a cup's difficulty off
+  // its FIRST catalogue entry, and this list is what a picker draws.
+  assert.deepEqual(got.catalog.map((t) => t.id), CUPS.flatMap((c) => c.tracks),
+    'the catalogue is CUPS order flattened');
+  // Dev ranges are in the wasm's track table (id lookup) but belong to no cup,
+  // so they can never reach a player-visible list.
+  assert.ok(!got.catalog.some((t) => t.id === 'gym'), 'no dev track is in the catalogue');
+});
 
 test('every board acts on back, and only the root swallows', async () => {
   const u = await ui_();
