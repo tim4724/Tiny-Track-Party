@@ -18,13 +18,24 @@ const RELAY_PORT = Number(process.env.PW_RELAY_PORT || PORT + 1);
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
-  // One worker: the display page rasterizes the full Filament scene through
-  // SwiftShader in headless — parallel displays just starve each other. CI scales
-  // the suite by SHARDING across runners instead (.github/workflows/test.yml).
-  workers: 1,
-  // Shard granularity, NOT in-machine parallelism: with workers: 1 every test
-  // still runs one at a time, locally and on CI. What this changes is how
-  // --shard splits the suite. Left off, Playwright shards whole FILES, so
+  // ONE worker on CI, three locally, and the split is measured rather than
+  // reasoned about. The display page rasterizes the full Filament scene through
+  // SwiftShader in headless, so a worker is a CPU-hungry software rasterizer:
+  // on a 2-core CI runner parallel displays genuinely starve each other, and CI
+  // scales by SHARDING across runners instead (.github/workflows/test.yml).
+  //
+  // A dev box is not that machine. The serial suite used 2.4 of 10 cores here,
+  // and the whole 25-test run measures:
+  //     workers 1 -> 213 s      workers 3 -> 79 s      workers 5 -> 103 s
+  // All three passed; 5 is past the knee (same ~475 s of user CPU as 3, so 3
+  // already saturates) and its contention stretched one test to 46 s against
+  // the 120 s timeout — margin worth keeping. Hence 3, not "half the cores":
+  // this scales with the rasterizer's appetite, not with the core count.
+  workers: process.env.CI ? 1 : 3,
+  // Shard granularity as well as in-machine parallelism. On CI (workers: 1) it
+  // is ONLY the former — every test still runs one at a time there, and what
+  // this changes is how --shard splits the suite. Left off, Playwright shards
+  // whole FILES, so
   // cup-series.spec.js (5 tests, ~3m49s on CI) is one atomic lump and the
   // shards came out 2:19/3:54/6:01/2:50 against a 3:46 perfect split — the
   // slowest shard set the whole workflow's wall clock. Per-test sharding lets

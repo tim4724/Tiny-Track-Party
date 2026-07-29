@@ -34,8 +34,7 @@ const PROBE = path.join(ROOT, 'native/build/probe_cli');
 if (!fs.existsSync(PROBE)) {
   console.error(`probe_cli not built at ${path.relative(ROOT, PROBE)}\n` +
     'build it with:\n' +
-    '  cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release && ' +
-    'cmake --build native/build --target probe_cli --parallel');
+    '  node scripts/build-probe.mjs      (or just run `npm run probe:difficulty`)');
   process.exit(2);
 }
 

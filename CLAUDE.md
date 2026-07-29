@@ -5,6 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+npm run setup                     # Make a FRESH WORKTREE ready: deps + native/build.
+                                  # Idempotent, ~1 s, and it reports what is missing
+                                  # (ninja, ccache, the Playwright browser).
 npm test                          # Unit tests (node:test) — track, ABI, partyplug
 node --test tests/track.test.js   # A single unit test
 ctest --test-dir native/build     # Native conformance (configure/build native/ first)
@@ -548,4 +551,26 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   `clientWaitSync` poll is worse (9.6 ms measured against a real 3.4 ms frame —
   it times `setTimeout` clamping). The rAF cadence alone measures neither: it is
   a vsync plateau, so it can only ever show DROPS.
+- WORKTREE DEV LOOP. This tree is worked in many git worktrees at once, and
+  `node_modules` + `native/build` are per-worktree and gitignored — so the cold
+  cost is paid over and over. `npm run setup` is the one command a fresh
+  worktree needs (deps + a configured `native/build`, ~1 s, idempotent), and it
+  reports what is missing rather than letting you find out from a failure.
+  Three things make the difference, each measured rather than assumed:
+  CCACHE (wired into `native/CMakeLists.txt`, so CI and hand-typed cmake get it
+  too) takes a from-scratch `native/build` from 14.0 s to 0.63 s. It needs
+  `CCACHE_BASEDIR`/`CCACHE_NOHASHDIR`, which the CMake sets — WITHOUT them
+  ccache hashes the absolute source path and two worktrees share nothing
+  (measured 0/160 hits, i.e. the cache is pure overhead). A ccache-populated
+  build reproduces the committed `ttp_runtime.wasm` byte for byte, which is the
+  check that makes `basedir` acceptable in a tree this conformance-bound.
+  NINJA is preferred by `scripts/lib/native-cmake.mjs` on a fresh build dir
+  (9.8 s vs Make's 14.0 s) — the generator is fixed for the life of the
+  directory, so it can only be chosen once. E2E runs `workers: 3` off CI
+  (213 s → 79 s; see `playwright.config.js` for why not more).
+  The steady state is `npm test` ~5 s, `ctest` ~6 s, E2E ~80 s, and a one-file
+  engine change ~9 s through `build-runtime-web.sh` (of which ~5 s is the emcc
+  link, which no cache can help). Anything much worse than that is a
+  regression worth chasing — `npm test` was 18.5 s until one audit ABI stopped
+  rebuilding its track per call.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).

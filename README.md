@@ -17,7 +17,7 @@ The display browser is authoritative: it runs the race sim (Three.js) and broadc
 ## Quick Start
 
 ```bash
-npm install
+npm run setup      # deps + a configured native/build; safe to re-run
 npm start          # serves on http://localhost:4000
 ```
 
