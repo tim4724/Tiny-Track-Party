@@ -407,17 +407,15 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   roundtrips replaced their freshness checks.
   A SYNTHETIC WORLD RIDES IN THE CORPUS, never in the C++. A generator that
   invents cups, a catalogue, personas, stats or caps writes them into the
-  FIXTURE, and every replayer configures itself from what it reads — the ui
-  corpus carries its world in the header's `world` (`ui_check.cc` builds the
-  model's types from it, `abi_check.cc` hands the same object to
-  `ttp_ui_configure`, and `record_ui` re-emits from it), the session corpus
-  resolves its world into every step. Transcribing it instead is a number that
-  must be edited in N places and silently rots in N-1 of them: ONE corpus has
-  several replayers (two in C++ today, a tvOS/Android shell tomorrow). This
-  binds hardest on `gen-raceflow-corpus.mjs`, the one generator still RENEWABLE
-  — the others are frozen, so their worlds can no longer move, but a stale
-  transcription of one can also no longer be caught by regenerating. If you are
-  typing a constant that also exists in a `.mjs`, put it in the fixture instead.
+  FIXTURE and every replayer configures itself from what it reads: the ui and
+  raceflow corpora carry theirs in the header's `world` (each check builds its
+  layer's types from it, `abi_check.cc` hands the same object to
+  `ttp_ui_configure` / `ttp_race_configure`, and `record_ui` re-emits from it),
+  the session corpus resolves its world into every step. Transcribing it instead
+  is a number that must be edited in N places and silently rots in N-1 of them:
+  ONE corpus has several replayers (two in C++ today, a tvOS/Android shell
+  tomorrow). If you are typing a constant that also exists in a `.mjs`, put it in
+  the fixture instead.
 - TWO CLASSES OF FIXTURE, and only one settles parity questions. JS-recorded
   (the 8 traces + every `gen-*-corpus` file) is cross-implementation evidence.
   C++-AUTHORED (`replay_cli --record <header>`, `catalogue_sweep_check --record`,

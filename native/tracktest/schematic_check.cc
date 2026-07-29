@@ -92,9 +92,9 @@ bool report(const char* label, const std::string& who, const Value& exp, const V
 int recordCorpus(const std::string& fixture, const std::string& outPath) {
   bool bad = false;
   const int rc = corpus::record(fixture, outPath, [&](const Value& rec) {
-    const std::string kind = strOf(rec, "case");
+    const std::string kind = json::str_field(rec, "case");
     if (kind == "track") {
-      const std::string id = strOf(rec, "id");
+      const std::string id = json::str_field(rec, "id");
       const TrackDef* def = findDef(id);
       if (!def) { std::fprintf(stderr, "--record: no such track %s\n", id.c_str()); bad = true; return Value(); }
       const RaceTrack rt = build_race_track(*def, 3, 1);
@@ -109,12 +109,12 @@ int recordCorpus(const std::string& fixture, const std::string& outPath) {
       return line;
     }
     if (kind == "codec") {
-      const std::string d = strOf(rec, "d");
-      const double eps = numOf(rec, "eps");
+      const std::string d = json::str_field(rec, "d");
+      const double eps = json::num_field(rec, "eps");
       const std::string packed = sch::pack(d, eps > 0 ? eps : sch::EPS);
       Value line = Value::Obj();
       line.set("case", Value::Str("codec"));
-      line.set("name", Value::Str(strOf(rec, "name")));
+      line.set("name", Value::Str(json::str_field(rec, "name")));
       line.set("d", Value::Str(d));
       if (rec.find("eps")) line.set("eps", Value::Num(eps));
       line.set("packed", Value::Str(packed));

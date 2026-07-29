@@ -164,8 +164,10 @@ So the ui corpus carries its world in the header:
 straight to `ttp_ui_configure` — which makes the configure export's own contract
 part of what the replay proves — and `record_ui` copies the header through
 verbatim and configures from it, so the re-emit and the replay cannot disagree
-about which world they are in. A corpus with no `world` is refused rather than
-replayed against an empty catalogue.
+about which world they are in. `raceflow_check` and `abi_check` read
+`raceflow-corpus.jsonl`'s world the same way, through `ttp_race_configure`. A
+corpus with no `world` is refused rather than replayed against an empty
+catalogue.
 
 Two shapes satisfy the rule, and either is fine:
 
@@ -177,11 +179,13 @@ Two shapes satisfy the rule, and either is fine:
 What is *not* fine is a `const` in the check that the generator also spells. If
 you are typing a number that also exists in a `.mjs`, put it in the fixture.
 
-**Where this still bites.** `gen-raceflow-corpus.mjs` is the only RENEWABLE
-generator left, so it is the only place a world can still move under a
-transcription. The frozen four cannot move — but a stale copy of one of their
-worlds can no longer be caught by regenerating either, which is the same argument
-pointing the same way.
+`raceflow-corpus.jsonl` carries its world the same way, and it is the one where
+this still MOVES: `gen-raceflow-corpus.mjs` is the only renewable generator left,
+so its personas, stat rows, cups and sizes can still change under a replayer.
+(The frozen four cannot move — but a stale copy of one of their worlds can no
+longer be caught by regenerating either, which is the same argument pointing the
+same way.) `tests/codegen-freshness.test.js` is what keeps it re-derivable; an
+entry missing from that list is not a weaker gate, it is no gate.
 
 ## Blind spots these traces structurally cannot cover
 

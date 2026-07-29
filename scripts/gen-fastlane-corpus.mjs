@@ -281,6 +281,15 @@ for (const s of scripts) lines.push(canonicalStringify(runScript(s)));
 // --stdout emits instead of writing, so tests/codegen-freshness.test.js can
 // re-derive this corpus and byte-compare without touching the working copy.
 const text = lines.join('\n') + '\n';
-if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
-fs.writeFileSync(OUT, text);
-console.log(`wrote ${OUT}: ${scripts.length} scripts, TTL_MS=${constants.TTL_MS}`);
+// --stdout goes to a PIPE, and `process.exit()` right after a write to one
+// TRUNCATES it: the write is asynchronous, exit does not flush, and the loss is
+// silent at exactly the 64 KiB pipe buffer. Nothing under that size ever
+// noticed. So the branch just ends here and the process exits on its own —
+// gen-track-defs-header.mjs has always been written this way, which is why its
+// 134 KB header survived the same test path.
+if (process.argv.includes('--stdout')) {
+  process.stdout.write(text);
+} else {
+  fs.writeFileSync(OUT, text);
+  console.log(`wrote ${OUT}: ${scripts.length} scripts, TTL_MS=${constants.TTL_MS}`);
+}

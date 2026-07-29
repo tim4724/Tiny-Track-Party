@@ -217,6 +217,15 @@ const doc = {
 };
 
 const text = JSON.stringify(doc, null, 2) + '\n';
-if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
-fs.writeFileSync(OUT, text);
-console.log(`wrote ${OUT}: ${tokens.length} tokens in ${groups.length} groups`);
+// --stdout goes to a PIPE, and `process.exit()` right after a write to one
+// TRUNCATES it: the write is asynchronous, exit does not flush, and the loss is
+// silent at exactly the 64 KiB pipe buffer. Nothing under that size ever
+// noticed. So the branch just ends here and the process exits on its own —
+// gen-track-defs-header.mjs has always been written this way, which is why its
+// 134 KB header survived the same test path.
+if (process.argv.includes('--stdout')) {
+  process.stdout.write(text);
+} else {
+  fs.writeFileSync(OUT, text);
+  console.log(`wrote ${OUT}: ${tokens.length} tokens in ${groups.length} groups`);
+}

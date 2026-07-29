@@ -75,6 +75,9 @@ const CAR_STATS = [
   { accel: 1.0, top: 0.9, turn: 1.0, weight: 1.2 }
 ];
 
+// raceFlow.js's own default; named here because the world in the header must
+// be complete enough for a replayer to configure from it alone.
+const AI_PREFIX = 'ai-';
 const FIELD_SIZE = 4;
 const CAR_COUNT = 6;
 const COLOR_COUNT = 8;
@@ -541,8 +544,18 @@ function buildCorpus() {
   const header = canonicalStringify({
     kind: 'raceflow-corpus', version: 1,
     scenarios: SCRIPTS.length, steps,
-    fieldSize: FIELD_SIZE, carCount: CAR_COUNT, colorCount: COLOR_COUNT,
-    personas: PERSONAS.length, carStats: CAR_STATS.length,
+    // The header CARRIES the world, it does not summarize it. Every scenario
+    // below was recorded against these personas, stat rows, cups and sizes, so
+    // a replayer that guessed them differently would replay into a world the
+    // recorded answers were never produced in. Shipping it here means a port
+    // CONFIGURES ITSELF FROM THE CORPUS — `raceflow_check.cc` builds the
+    // layer's types from it and `abi_check.cc` hands it straight to
+    // `ttp_race_configure` — instead of transcribing this file into C++ twice.
+    // See tests/fixtures/traces/README.md, "A corpus carries its own world".
+    world: {
+      fieldSize: FIELD_SIZE, carCount: CAR_COUNT, colorCount: COLOR_COUNT,
+      aiPrefix: AI_PREFIX, personas: PERSONAS, carStats: CAR_STATS, cups: CUPS
+    },
     intermissionMs: INTERMISSION_MS, resultsFailsafeMs: RESULTS_FAILSAFE_MS,
     countdownSeconds: COUNTDOWN_SECONDS
   });
@@ -551,21 +564,27 @@ function buildCorpus() {
 
 // The synthetic world, so tests/raceflow-corpus.test.js can replay a committed
 // line through the same driver it was recorded with.
-export { CUPS, PERSONAS, CAR_STATS, FIELD_SIZE, CAR_COUNT, COLOR_COUNT, INTERMISSION_MS, RESULTS_FAILSAFE_MS };
+export { CUPS, PERSONAS, CAR_STATS, AI_PREFIX, FIELD_SIZE, CAR_COUNT, COLOR_COUNT, INTERMISSION_MS, RESULTS_FAILSAFE_MS };
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const { text, scenarios: nScn, steps } = buildCorpus();
-  if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
-  if (process.argv.includes('--check')) {
+  // --stdout goes to a PIPE, and `process.exit()` right after a write to one
+  // TRUNCATES it: the write is asynchronous, exit does not flush, and the loss
+  // is silent at exactly the 64 KiB pipe buffer. This corpus is 223 KB, so it
+  // was the first one big enough to notice — the branch ends here instead and
+  // the process exits on its own.
+  if (process.argv.includes('--stdout')) {
+    process.stdout.write(text);
+  } else if (process.argv.includes('--check')) {
     const have = fs.readFileSync(OUT, 'utf8');
     if (have !== text) {
       console.error(`${OUT}: re-derived corpus differs from the committed one`);
       process.exit(1);
     }
     console.log(`${OUT}: reproduced byte-identically (${nScn} scenarios, ${steps} steps)`);
-    process.exit(0);
+  } else {
+    fs.mkdirSync(path.dirname(OUT), { recursive: true });
+    fs.writeFileSync(OUT, text);
+    console.log(`${OUT}: ${steps} steps over ${nScn} scenarios`);
   }
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, text);
-  console.log(`${OUT}: ${steps} steps over ${nScn} scenarios`);
 }

@@ -1804,24 +1804,12 @@ void uiCorpusThroughAbi(const char* path) {
 // lowestFreeSlot and cpuSeats are internals reached through buildField, and the
 // shell never calls them across the boundary — so they are skipped here and
 // covered by raceflow_check alone.
-const char* RACE_WORLD =
-    "{\"fieldSize\":4,\"carCount\":6,\"colorCount\":8,\"aiPrefix\":\"ai-\","
-    "\"personas\":["
-    "{\"name\":\"Alpha\",\"caution\":1.1,\"laneBias\":-0.5},"
-    "{\"name\":\"Beta\",\"caution\":1,\"laneBias\":0.5},"
-    "{\"name\":\"Gamma\",\"caution\":0.95,\"laneBias\":-0.2},"
-    "{\"name\":\"Delta\",\"caution\":0.9,\"laneBias\":0.2}],"
-    "\"carStats\":["
-    "{\"accel\":1,\"top\":1,\"turn\":1,\"weight\":1},"
-    "{\"accel\":1.1,\"top\":0.95,\"turn\":1.05,\"weight\":0.9},"
-    "{\"accel\":0.9,\"top\":1.1,\"turn\":0.95,\"weight\":1.1},"
-    "{\"accel\":1.05,\"top\":1,\"turn\":0.9,\"weight\":1},"
-    "{\"accel\":0.95,\"top\":1.05,\"turn\":1.1,\"weight\":0.95},"
-    "{\"accel\":1,\"top\":0.9,\"turn\":1,\"weight\":1.2}],"
-    "\"cups\":["
-    "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"a1\",\"a2\",\"a3\",\"a4\"]},"
-    "{\"id\":\"cup-b\",\"name\":\"Thunder\",\"tracks\":[\"b1\",\"b2\",\"b3\",\"b4\"]},"
-    "{\"id\":\"cup-empty\",\"name\":\"Hollow\",\"tracks\":[]}]}";
+// gen-raceflow-corpus.mjs's synthetic world is READ OUT OF THE CORPUS HEADER,
+// not transcribed here: it arrives in exactly ttp_race_configure's shape, so
+// the ABI is configured by handing the header's `world` straight back across
+// the boundary — which makes the configure export's own contract part of what
+// this replay proves. raceflow_check.cc reads the same object. See
+// tests/fixtures/traces/README.md, "A corpus carries its own world".
 
 // The corpus's `in` is already the ABI's input shape for most ops, so the step
 // mostly re-stringifies it. Returns UNDEF for an op with no export.
@@ -1916,7 +1904,6 @@ Value raceStep(const std::string& op, const Value& in) {
 void raceCorpusThroughAbi(const char* path) {
   std::ifstream in(path);
   if (!in) { fail(std::string("cannot open ") + path); return; }
-  check(ttp_race_configure(RACE_WORLD) == 1, "the synthetic race world configured");
 
   std::string line, scenario;
   int steps = 0, skipped = 0;
@@ -1930,13 +1917,14 @@ void raceCorpusThroughAbi(const char* path) {
     if (!kind) {
       if (header) continue;
       header = true;
-      const auto n = [&root](const char* k) {
-        const Value* v = root.find(k);
-        return (v && v->type == Value::NUM) ? v->num : -1.0;
-      };
-      check(n("fieldSize") == 4 && n("carCount") == 6 && n("colorCount") == 8 &&
-                n("personas") == 4 && n("carStats") == 6,
-            "raceflow corpus recorded against abi_check's synthetic world");
+      const Value* world = root.find("world");
+      if (!world || world->type != Value::OBJ) {
+        fail("the raceflow corpus header carries no `world` — regenerate it: "
+             "node scripts/gen-raceflow-corpus.mjs");
+        return;
+      }
+      check(ttp_race_configure(canonical_stringify(*world).c_str()) == 1,
+            "the corpus's own world configured through ttp_race_configure");
       continue;
     }
     if (kind->str == "scenario") {

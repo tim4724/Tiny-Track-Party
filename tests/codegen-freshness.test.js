@@ -23,9 +23,22 @@
 //     MAX_PLAYERS from 4 to 6 passed everything, with the phone allowing six
 //     players and the display's party layer capping at four.
 //
-// The frozen generators (gen-roomflow-corpus, gen-grandprix-corpus) are
-// deliberately NOT covered: CLAUDE.md marks them frozen because their JS twins
-// are gone, so re-deriving them is impossible by design.
+//   raceflow-corpus     <- public/display/raceFlow.js
+//     The last RENEWABLE oracle. The other four (ui, session, audio, schematic)
+//     were retired with their ports, so their corpora are frozen and the
+//     `record_*` roundtrips took over; this one's JS survives, so it keeps the
+//     original obligation and belongs here.
+//
+// The FROZEN generators are deliberately NOT covered — gen-roomflow-corpus,
+// gen-grandprix-corpus, gen-trackbuilder-corpus, gen-track-sampler-corpus,
+// gen-math-corpus, gen-theme-corpus, and now gen-ui-corpus / gen-session-corpus
+// / gen-audio-corpus / gen-schematic-corpus, whose twins went with the port.
+// Re-deriving those is impossible by design.
+//
+// WHAT MUST NOT HAPPEN HERE, because it already did once: an entry being dropped
+// while its generator is still live. This list is the only thing that runs these
+// generators, so a missing entry is not a smaller gate — it is no gate, and the
+// comment above still reads as coverage.
 //
 // Regenerating is only step one: the refreshed corpus is what then turns the C++
 // ctest red, which is what forces the C++ constant to follow.
@@ -38,6 +51,42 @@ const { execFileSync } = require('node:child_process');
 const ROOT = path.join(__dirname, '..');
 
 const DERIVED = [
+  {
+    what: 'native/libttp-track/generated/track_defs.h',
+    from: 'public/shared/{tracks,devTracks}.js',
+    gen: 'scripts/gen-track-defs-header.mjs',
+    then: 'node scripts/gen-trackbuilder-corpus.mjs && native/scripts/build-runtime-web.sh',
+  },
+  {
+    what: 'tests/fixtures/protocol-corpus.jsonl',
+    from: 'public/shared/protocol.js',
+    gen: 'scripts/gen-protocol-corpus.mjs',
+    then: 'ctest --test-dir native/build -R protocol   # then match native/libttp-party/ttp/protocol.h',
+  },
+  {
+    what: 'tests/fixtures/framing-corpus.jsonl',
+    from: 'partyplug/PartyConnection.js',
+    gen: 'scripts/gen-framing-corpus.mjs',
+    then: 'ctest --test-dir native/build -R framing    # then match native/libttp-party/ttp/relay_framing.cc',
+  },
+  {
+    what: 'tests/fixtures/fastlane-corpus.jsonl',
+    from: 'partyplug/PartyFastlane.js',
+    gen: 'scripts/gen-fastlane-corpus.mjs',
+    then: 'ctest --test-dir native/build -R fastlane   # then match native/libttp-party/ttp/fastlane.cc',
+  },
+  {
+    // The race orchestration, and the LAST renewable oracle in the tree. The
+    // other four were retired with their ports and their corpora frozen; this
+    // one still has its JS (public/display/raceFlow.js), so it still carries the
+    // obligation the frozen ones were released from — keep it green, because the
+    // day it goes red for a rotted input is the day the corpus can no longer be
+    // re-derived and the ratchet closes on the last one.
+    what: 'tests/fixtures/raceflow-corpus.jsonl',
+    from: 'public/display/raceFlow.js',
+    gen: 'scripts/gen-raceflow-corpus.mjs',
+    then: 'ctest --test-dir native/build -R raceflow   # then match native/libttp-runtime/ttp/race_flow.cc',
+  },
   // Not a C++ input (yet): the design tokens as data, for the tvOS/Android TV
   // shells architecture.md accepts three implementations of the sticker look
   // for. Same failure mode though — theme.css is the authored source, the JSON

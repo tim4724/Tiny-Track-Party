@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "ttp/json_read.h"
 #include "ttp/canonical.h"
 #include "ttp/race_flow.h"
 
@@ -61,81 +62,85 @@ void report(const std::string& what, const Diff& d) {
 }
 
 // ---- the generator's synthetic world ----------------------------------------
-// scripts/gen-raceflow-corpus.mjs's PERSONAS / CAR_STATS / CUPS and the four
-// sizes, transcribed. Deliberately NOT the shipped tables: the layer only ever
+// Read from the corpus header, never transcribed. gen-raceflow-corpus.mjs writes
+// its PERSONAS / CAR_STATS / CUPS and the three sizes into line 1 verbatim, and
+// this check configures itself from them — because ONE corpus has several
+// replayers (this one, runtimetest/abi_check.cc, a tvOS or Android shell later)
+// and a hand-copied world is a number that has to be edited in each and rots in
+// the rest. It is deliberately NOT the shipped tables: the layer only ever
 // indexes them, so a synthetic world proves that and keeps a persona retune or a
 // new track from being a corpus re-record.
-const int FIELD_SIZE = 4;
-const int CAR_COUNT = 6;
-const int COLOR_COUNT = 8;
-
-std::vector<race::Persona> makePersonas() {
-  return {{"Alpha", 1.10, -0.5}, {"Beta", 1.00, 0.5},
-          {"Gamma", 0.95, -0.2}, {"Delta", 0.90, 0.2}};
-}
-
+//
 // The stat rows are OPAQUE to the layer — it copies whichever one the wrap
-// selects and never reads inside it — so they are built as Values here, exactly
-// as the ABI would hand them over.
-std::vector<Value> makeCarStats() {
-  const auto row = [](double accel, double top, double turn, double weight) {
-    Value v = Value::Obj();
-    v.set("accel", Value::Num(accel));
-    v.set("top", Value::Num(top));
-    v.set("turn", Value::Num(turn));
-    v.set("weight", Value::Num(weight));
-    return v;
-  };
-  return {row(1.0, 1.0, 1.0, 1.0),   row(1.1, 0.95, 1.05, 0.9),
-          row(0.9, 1.1, 0.95, 1.1),  row(1.05, 1.0, 0.9, 1.0),
-          row(0.95, 1.05, 1.1, 0.95), row(1.0, 0.9, 1.0, 1.2)};
-}
+// selects and never reads inside it — so they stay Values, exactly as the ABI
+// hands them over.
+struct World {
+  int fieldSize = 0;
+  int carCount = 0;
+  int colorCount = 0;
+  std::string aiPrefix;
+  std::vector<race::Persona> personas;
+  std::vector<Value> carStats;
+  std::vector<race::Cup> cups;
+};
 
-std::vector<race::Cup> makeCups() {
-  return {{"cup-a", "Sunrise", {"a1", "a2", "a3", "a4"}},
-          {"cup-b", "Thunder", {"b1", "b2", "b3", "b4"}},
-          {"cup-empty", "Hollow", {}}};
-}
+// One per process: the replay reaches for it from most ops. Filled from the
+// header before step 1, and a corpus without one is refused rather than replayed
+// against an empty world.
+World g_world;
 
 // ---- Value -> the model's plain types ----------------------------------------
 
-race::Id idOf(const Value* v) {
-  if (!v) return race::Id::None();
-  if (v->type == Value::NUM) return race::Id::Num(v->num);
-  if (v->type == Value::STR) return race::Id::Str(v->str);
-  return race::Id::None();
-}
-race::OptNum numOf(const Value* v) {
-  return (v && v->type == Value::NUM) ? race::OptNum::Of(v->num) : race::OptNum::None();
-}
-race::OptStr strOf(const Value* v) {
-  return (v && v->type == Value::STR) ? race::OptStr::Of(v->str) : race::OptStr::None();
-}
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && !(v->num != v->num);
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
+// The three that name this layer's option types; everything else a corpus field
+// needs read out of it is ttp/json_read.h, shared with runtime/ttp_race.cc.
+race::Id idOf(const Value* v) { return json::id_of<race::Id>(v); }
+race::OptNum numOf(const Value* v) { return json::opt_num<race::OptNum>(v); }
+race::OptStr strOf(const Value* v) { return json::opt_str<race::OptStr>(v); }
+
+// ---- the header's world, into the layer's types ------------------------------
+// The one place this check learns what it is replaying against.
+bool loadWorld(const Value& header, World& w) {
+  const Value* wv = header.find("world");
+  if (!wv || wv->type != Value::OBJ) {
+    std::fprintf(stderr,
+                 "the corpus header carries no `world`. Regenerate it: "
+                 "node scripts/gen-raceflow-corpus.mjs — this check configures "
+                 "itself from the fixture and has no world of its own.\n");
+    return false;
   }
-}
-double numField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::NUM) ? v->num : 0.0;
-}
-std::string strField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
+  w.fieldSize = static_cast<int>(json::num_field(*wv, "fieldSize"));
+  w.carCount = static_cast<int>(json::num_field(*wv, "carCount"));
+  w.colorCount = static_cast<int>(json::num_field(*wv, "colorCount"));
+  w.aiPrefix = json::str_field(*wv, "aiPrefix");
+  for (const Value& p : json::arr_field(*wv, "personas").arr) {
+    race::Persona persona;
+    persona.name = json::str_field(p, "name");
+    persona.caution = json::num_field(p, "caution");
+    persona.laneBias = json::num_field(p, "laneBias");
+    w.personas.push_back(std::move(persona));
+  }
+  // Opaque to the layer: kept as Values, exactly as the ABI hands them over.
+  for (const Value& r : json::arr_field(*wv, "carStats").arr) w.carStats.push_back(r);
+  for (const Value& c : json::arr_field(*wv, "cups").arr) {
+    race::Cup cup;
+    cup.id = json::str_field(c, "id");
+    cup.name = json::str_field(c, "name");
+    cup.tracks = json::str_list(c, "tracks");
+    w.cups.push_back(std::move(cup));
+  }
+  if (w.fieldSize <= 0 || w.carCount <= 0 || w.colorCount <= 0 ||
+      w.personas.empty() || w.carStats.empty() || w.cups.empty()) {
+    std::fprintf(stderr, "the corpus header's `world` is not a world\n");
+    return false;
+  }
+  return true;
 }
 
 race::Human humanOf(const Value& v) {
   race::Human h;
   h.peerIndex = idOf(v.find("peerIndex"));
-  h.name = strField(v, "name");
-  h.colorIndex = static_cast<int>(numField(v, "colorIndex"));
+  h.name = json::str_field(v, "name");
+  h.colorIndex = static_cast<int>(json::num_field(v, "colorIndex"));
   h.carIndex = numOf(v.find("carIndex"));
   return h;
 }
@@ -153,11 +158,12 @@ std::vector<std::string> strListOf(const Value* arr) {
 
 race::FieldWorld worldOf(const Value& in) {
   race::FieldWorld w;
-  w.fieldSize = FIELD_SIZE;
-  w.carCount = CAR_COUNT;
-  w.colorCount = COLOR_COUNT;
-  w.personas = makePersonas();
-  w.carStats = makeCarStats();
+  w.fieldSize = g_world.fieldSize;
+  w.carCount = g_world.carCount;
+  w.colorCount = g_world.colorCount;
+  w.aiPrefix = g_world.aiPrefix;
+  w.personas = g_world.personas;
+  w.carStats = g_world.carStats;
   w.botCap = numOf(in.find("botCap"));
   return w;
 }
@@ -482,20 +488,20 @@ Value digest(const Shell& s) {
 // Returns the answer in the shape the generator recorded.
 Value runStep(Shell& s, const std::string& op, const Value& in) {
   if (op == "carStatsAt") {
-    return race::carStatsAt(makeCarStats(), numOf(in.find("carIndex")));
+    return race::carStatsAt(g_world.carStats, numOf(in.find("carIndex")));
   }
   if (op == "lowestFreeSlot") {
     std::vector<int> used;
     const Value* u = in.find("used");
     if (u && u->type == Value::ARR)
       for (const Value& e : u->arr) used.push_back(static_cast<int>(e.num));
-    return Value::Num(race::lowestFreeSlot(used, static_cast<int>(numField(in, "count"))));
+    return Value::Num(race::lowestFreeSlot(used, static_cast<int>(json::num_field(in, "count"))));
   }
   if (op == "cpuSeats") {
     return arrOf(race::cpuSeats(humansOf(in.find("humans")), worldOf(in)), seatVal);
   }
   if (op == "buildField") {
-    race::BuiltField b = race::buildField(humansOf(in.find("humans")), numField(in, "seed"), worldOf(in));
+    race::BuiltField b = race::buildField(humansOf(in.find("humans")), json::num_field(in, "seed"), worldOf(in));
     Value v = Value::Obj();
     v.set("field", arrOf(b.field, fieldVal));
     v.set("bots", arrOf(b.bots, botVal));
@@ -512,21 +518,21 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     if (arr && arr->type == Value::ARR) {
       for (const Value& e : arr->arr) {
         race::DemoEntry d;
-        d.id = strField(e, "id");
-        d.colorIndex = static_cast<int>(numField(e, "colorIndex"));
+        d.id = json::str_field(e, "id");
+        d.colorIndex = static_cast<int>(json::num_field(e, "colorIndex"));
         d.carIndex = numOf(e.find("carIndex"));
         f.push_back(std::move(d));
       }
     }
-    return Value::Str(race::demoSig(f, strField(in, "trackId")));
+    return Value::Str(race::demoSig(f, json::str_field(in, "trackId")));
   }
   if (op == "drawsNeeded") {
-    return Value::Num(race::drawsNeeded(strField(in, "mode"), numField(in, "randomRaces")));
+    return Value::Num(race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces")));
   }
   if (op == "seriesForStart") {
     race::SeriesForStart r = race::seriesForStart(
-        strField(in, "mode"), strOf(in.find("cupId")), strField(in, "trackId"),
-        numField(in, "randomRaces"), makeCups(), strListOf(in.find("draws")));
+        json::str_field(in, "mode"), strOf(in.find("cupId")), json::str_field(in, "trackId"),
+        json::num_field(in, "randomRaces"), g_world.cups, strListOf(in.find("draws")));
     Value v = Value::Obj();
     v.set("series", planVal(r));
     v.set("drawsUsed", Value::Num(r.drawsUsed));
@@ -534,15 +540,15 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   }
   if (op == "startRace") {
     race::StartInput si;
-    si.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-    si.sceneReady = truthy(in.find("sceneReady"));
+    si.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+    si.sceneReady = json::truthy(in.find("sceneReady"));
     si.selectedTrackId = strOf(in.find("selectedTrackId"));
     si.players = humansOf(in.find("players"));
-    si.mode = strField(in, "mode");
+    si.mode = json::str_field(in, "mode");
     si.cupId = strOf(in.find("cupId"));
-    si.trackId = strField(in, "trackId");
-    si.randomRaces = numField(in, "randomRaces");
-    si.cups = makeCups();
+    si.trackId = json::str_field(in, "trackId");
+    si.randomRaces = json::num_field(in, "randomRaces");
+    si.cups = g_world.cups;
     si.draws = strListOf(in.find("draws"));
     race::StartResult r = race::startRace(si);
     Value v = Value::Obj();
@@ -561,9 +567,9 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   if (op == "launchRace") {
     race::LaunchInput li;
     li.players = humansOf(in.find("players"));
-    li.seed = numField(in, "seed");
-    li.trackId = strField(in, "trackId");
-    li.countdownSeconds = numField(in, "countdownSeconds");
+    li.seed = json::num_field(in, "seed");
+    li.trackId = json::str_field(in, "trackId");
+    li.countdownSeconds = json::num_field(in, "countdownSeconds");
     li.forceItem = strOf(in.find("forceItem"));
     li.world = worldOf(in);
     race::LaunchResult r = race::launchRace(li);
@@ -576,14 +582,14 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     return v;
   }
   if (op == "countdownTick") {
-    race::Effects es = race::countdownTick(numField(in, "n"));
+    race::Effects es = race::countdownTick(json::num_field(in, "n"));
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));
     return v;
   }
   if (op == "raceStart") {
-    race::Effects es = race::raceStart(strField(in, "biome"), truthy(in.find("audioReady")));
+    race::Effects es = race::raceStart(json::str_field(in, "biome"), json::truthy(in.find("audioReady")));
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));
@@ -594,16 +600,16 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     const Value* e = in.find("event");
     if (e && e->type == Value::OBJ) {
       ev.present = true;
-      ev.type = strField(*e, "type");
+      ev.type = json::str_field(*e, "type");
       ev.id = idOf(e->find("id"));
-      ev.item = strField(*e, "item");
-      ev.cause = strField(*e, "cause");
-      ev.finished = truthy(e->find("finished"));
-      ev.s = numField(*e, "s");
-      ev.lat = numField(*e, "lat");
+      ev.item = json::str_field(*e, "item");
+      ev.cause = json::str_field(*e, "cause");
+      ev.finished = json::truthy(e->find("finished"));
+      ev.s = json::num_field(*e, "s");
+      ev.lat = json::num_field(*e, "lat");
     }
-    race::Effects es = race::raceEvent(ev, truthy(in.find("fastForwarding")),
-                                       truthy(in.find("humansAllDone")));
+    race::Effects es = race::raceEvent(ev, json::truthy(in.find("fastForwarding")),
+                                       json::truthy(in.find("humansAllDone")));
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));
@@ -611,11 +617,11 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   }
   if (op == "endRace") {
     race::EndRaceInput ei;
-    ei.hasSeries = truthy(in.find("hasSeries"));
-    ei.seriesFinished = truthy(in.find("seriesFinished"));
-    ei.intermissionMs = numField(in, "intermissionMs");
-    ei.nowMs = numField(in, "nowMs");
-    ei.resultsFailsafeMs = numField(in, "resultsFailsafeMs");
+    ei.hasSeries = json::truthy(in.find("hasSeries"));
+    ei.seriesFinished = json::truthy(in.find("seriesFinished"));
+    ei.intermissionMs = json::num_field(in, "intermissionMs");
+    ei.nowMs = json::num_field(in, "nowMs");
+    ei.resultsFailsafeMs = json::num_field(in, "resultsFailsafeMs");
     race::Effects es = race::endRace(ei);
     applyAll(s, es);
     Value v = Value::Obj();
@@ -624,10 +630,10 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   }
   if (op == "advanceSeriesRace") {
     race::AdvanceInput ai;
-    ai.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-    ai.hasSeries = truthy(in.find("hasSeries"));
-    ai.seriesFinished = truthy(in.find("seriesFinished"));
-    ai.sceneReady = truthy(in.find("sceneReady"));
+    ai.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+    ai.hasSeries = json::truthy(in.find("hasSeries"));
+    ai.seriesFinished = json::truthy(in.find("seriesFinished"));
+    ai.sceneReady = json::truthy(in.find("sceneReady"));
     ai.players = humansOf(in.find("players"));
     race::AdvanceResult r = race::advanceSeriesRace(ai);
     applyAll(s, r.effects);
@@ -638,11 +644,11 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   }
   if (op == "returnToLobby") {
     race::ReturnInput ri;
-    ri.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-    ri.mode = strField(in, "mode");
+    ri.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+    ri.mode = json::str_field(in, "mode");
     ri.cupId = strOf(in.find("cupId"));
     ri.trackId = strOf(in.find("trackId"));
-    ri.cups = makeCups();
+    ri.cups = g_world.cups;
     ri.draws = strListOf(in.find("draws"));
     race::ReturnResult r = race::returnToLobby(ri);
     applyAll(s, r.effects);
@@ -655,14 +661,14 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     return v;
   }
   if (op == "forfeitCar") {
-    race::Effects es = race::forfeitCar(truthy(in.find("removed")), idOf(in.find("peerIndex")));
+    race::Effects es = race::forfeitCar(json::truthy(in.find("removed")), idOf(in.find("peerIndex")));
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));
     return v;
   }
   if (op == "rekeyCarPlayer") {
-    race::Effects es = race::rekeyCarPlayer(truthy(in.find("hasSeries")), truthy(in.find("rekeyed")),
+    race::Effects es = race::rekeyCarPlayer(json::truthy(in.find("hasSeries")), json::truthy(in.find("rekeyed")),
                                             idOf(in.find("oldId")), idOf(in.find("newId")));
     applyAll(s, es);
     Value v = Value::Obj();
@@ -674,8 +680,8 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     const Value* dv = in.find("decision");
     if (dv && dv->type == Value::OBJ) {
       d.present = true;
-      d.action = strField(*dv, "action");
-      d.autoPaused = truthy(dv->find("autoPaused"));
+      d.action = json::str_field(*dv, "action");
+      d.autoPaused = json::truthy(dv->find("autoPaused"));
     }
     race::Effects es = race::autoPauseEffects(d);
     applyAll(s, es);
@@ -709,24 +715,14 @@ int main(int argc, char** argv) {
     }
     if (header) {
       header = false;
-      if (strField(v, "kind") != "raceflow-corpus") {
+      if (json::str_field(v, "kind") != "raceflow-corpus") {
         std::fprintf(stderr, "%s: not a raceflow corpus\n", file);
         return 1;
       }
-      // The sizes the scenarios were recorded against are compiled in above; a
-      // corpus recorded at different ones would replay green against the wrong
-      // world, so refuse it rather than trust the transcription.
-      if (static_cast<int>(numField(v, "fieldSize")) != FIELD_SIZE ||
-          static_cast<int>(numField(v, "carCount")) != CAR_COUNT ||
-          static_cast<int>(numField(v, "colorCount")) != COLOR_COUNT) {
-        std::fprintf(stderr, "FAIL: corpus world (%g/%g/%g) != this check's (%d/%d/%d)\n",
-                     numField(v, "fieldSize"), numField(v, "carCount"),
-                     numField(v, "colorCount"), FIELD_SIZE, CAR_COUNT, COLOR_COUNT);
-        return 1;
-      }
+      if (!loadWorld(v, g_world)) return 1;
       continue;
     }
-    const std::string kind = strField(v, "case");
+    const std::string kind = json::str_field(v, "case");
     if (kind == "scenario") {
       scenarios++;
       shell = Shell();   // each scenario starts from a cold shell
@@ -734,9 +730,9 @@ int main(int argc, char** argv) {
     }
     if (kind != "step") continue;
 
-    const std::string name = strField(v, "name");
-    const std::string op = strField(v, "op");
-    const double idx = numField(v, "step");
+    const std::string name = json::str_field(v, "name");
+    const std::string op = json::str_field(v, "op");
+    const double idx = json::num_field(v, "step");
     const Value* in = v.find("in");
     shell.ops.clear();
     Value got = runStep(shell, op, in ? *in : Value::Obj());

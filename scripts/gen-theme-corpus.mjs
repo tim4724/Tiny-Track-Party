@@ -398,7 +398,12 @@ for (const name of BIOME_NAMES) {
 }
 
 const text = lines.join('\n') + '\n';
-if (process.argv.includes('--stdout')) { process.stdout.write(text); process.exit(0); }
+// --stdout goes to a PIPE, and `process.exit()` right after a write to one
+// TRUNCATES it silently at the 64 KiB pipe buffer (this corpus is 264 KB). The
+// branch ends here instead; the `--check` path below is guarded on it.
+if (process.argv.includes('--stdout')) {
+  process.stdout.write(text);
+} else
 // Proof (1). The corpus is frozen evidence, so re-deriving it is a CHECK by
 // default of intent: --check re-runs the whole recording and requires the
 // committed bytes back, which is what makes the inlined resolver above the same

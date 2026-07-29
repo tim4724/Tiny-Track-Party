@@ -242,13 +242,13 @@ int recordCorpus(const std::string& fixture, const std::string& outPath) {
   Shell st;
   bool bad = false;
   const int rc = corpus::record(fixture, outPath, [&](const Value& rec) {
-    const std::string kind = strOf(rec, "case");
+    const std::string kind = json::str_field(rec, "case");
     if (kind == "scenario") { st = Shell{}; return Value(); }   // UNDEF: copy through
     if (kind != "step") return Value();
     const Value* in = field(rec, "in");
     Value out;
     std::string why;
-    if (!applyOp(st, strOf(rec, "op"), in ? *in : Value::Obj(), out, why)) {
+    if (!applyOp(st, json::str_field(rec, "op"), in ? *in : Value::Obj(), out, why)) {
       std::fprintf(stderr, "--record: %s\n", why.c_str());
       bad = true;
       return Value();
@@ -256,9 +256,9 @@ int recordCorpus(const std::string& fixture, const std::string& outPath) {
     // The same key SET the generator wrote; canonical_stringify sorts them.
     Value line = Value::Obj();
     line.set("case", Value::Str("step"));
-    line.set("name", Value::Str(strOf(rec, "name")));
-    line.set("step", Value::Num(numOf(rec, "step")));
-    line.set("op", Value::Str(strOf(rec, "op")));
+    line.set("name", Value::Str(json::str_field(rec, "name")));
+    line.set("step", Value::Num(json::num_field(rec, "step")));
+    line.set("op", Value::Str(json::str_field(rec, "op")));
     line.set("in", in ? *in : Value::Obj());
     line.set("out", out);
     line.set("state", shellState(st));

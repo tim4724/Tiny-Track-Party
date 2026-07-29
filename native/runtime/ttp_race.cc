@@ -23,6 +23,7 @@
 #include "ttp/ai_driver.h"
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/race_flow.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
@@ -53,51 +54,21 @@ const char* put(std::string& buf, const Value& v) {
 }
 
 // ---- Value readers -----------------------------------------------------------
-Value parseOr(const char* json, Value fallback) {
-  if (!json || !*json) return fallback;
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  return ok ? v : fallback;
-}
-race::Id idOf(const Value* v) {
-  if (!v) return race::Id::None();
-  if (v->type == Value::NUM) return race::Id::Num(v->num);
-  if (v->type == Value::STR) return race::Id::Str(v->str);
-  return race::Id::None();
-}
-race::OptNum numOf(const Value* v) {
-  return (v && v->type == Value::NUM) ? race::OptNum::Of(v->num) : race::OptNum::None();
-}
-race::OptStr strOf(const Value* v) {
-  return (v && v->type == Value::STR) ? race::OptStr::Of(v->str) : race::OptStr::None();
-}
-bool truthy(const Value* v) {
-  if (!v) return false;
-  switch (v->type) {
-    case Value::BOOL: return v->b;
-    case Value::NUM: return v->num != 0 && !(v->num != v->num);
-    case Value::STR: return !v->str.empty();
-    case Value::ARR:
-    case Value::OBJ: return true;
-    default: return false;
-  }
-}
-double numField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::NUM) ? v->num : 0.0;
-}
-std::string strField(const Value& o, const char* k) {
-  const Value* v = o.find(k);
-  return (v && v->type == Value::STR) ? v->str : std::string();
-}
+// The three that name this layer's option types; everything else is
+// ttp/json_read.h, shared with the other ABIs and with the checks that replay
+// them.
+race::Id idOf(const Value* v) { return json::id_of<race::Id>(v); }
+race::OptNum numOf(const Value* v) { return json::opt_num<race::OptNum>(v); }
+race::OptStr strOf(const Value* v) { return json::opt_str<race::OptStr>(v); }
+
 std::vector<race::Human> humansOf(const Value* arr) {
   std::vector<race::Human> out;
   if (!arr || arr->type != Value::ARR) return out;
   for (const Value& e : arr->arr) {
     race::Human h;
     h.peerIndex = idOf(e.find("peerIndex"));
-    h.name = strField(e, "name");
-    h.colorIndex = static_cast<int>(numField(e, "colorIndex"));
+    h.name = json::str_field(e, "name");
+    h.colorIndex = static_cast<int>(json::num_field(e, "colorIndex"));
     h.carIndex = numOf(e.find("carIndex"));
     out.push_back(std::move(h));
   }
@@ -114,7 +85,7 @@ std::vector<std::string> strListOf(const Value* arr) {
 race::FieldWorld worldWithCap(const char* botCapJson) {
   race::FieldWorld w = g_world;
   w.botCap = numOf(nullptr);
-  Value cap = parseOr(botCapJson, Value::Null());
+  Value cap = json::parse_or(botCapJson, Value::Null());
   if (cap.type == Value::NUM) w.botCap = race::OptNum::Of(cap.num);
   return w;
 }
@@ -300,18 +271,18 @@ int ttp_race_configure(const char* json) {
   if (!ok || v.type != Value::OBJ) return 0;
 
   race::FieldWorld w;
-  w.fieldSize = static_cast<int>(numField(v, "fieldSize"));
-  w.carCount = static_cast<int>(numField(v, "carCount"));
-  w.colorCount = static_cast<int>(numField(v, "colorCount"));
-  const std::string prefix = strField(v, "aiPrefix");
+  w.fieldSize = static_cast<int>(json::num_field(v, "fieldSize"));
+  w.carCount = static_cast<int>(json::num_field(v, "carCount"));
+  w.colorCount = static_cast<int>(json::num_field(v, "colorCount"));
+  const std::string prefix = json::str_field(v, "aiPrefix");
   if (!prefix.empty()) w.aiPrefix = prefix;
   if (const Value* ps = v.find("personas")) {
     if (ps->type == Value::ARR) {
       for (const Value& p : ps->arr) {
         race::Persona x;
-        x.name = strField(p, "name");
-        x.caution = numField(p, "caution");
-        x.laneBias = numField(p, "laneBias");
+        x.name = json::str_field(p, "name");
+        x.caution = json::num_field(p, "caution");
+        x.laneBias = json::num_field(p, "laneBias");
         w.personas.push_back(std::move(x));
       }
     }
@@ -326,8 +297,8 @@ int ttp_race_configure(const char* json) {
     if (cv->type == Value::ARR) {
       for (const Value& c : cv->arr) {
         race::Cup cup;
-        cup.id = strField(c, "id");
-        cup.name = strField(c, "name");
+        cup.id = json::str_field(c, "id");
+        cup.name = json::str_field(c, "name");
         if (const Value* t = c.find("tracks")) cup.tracks = strListOf(t);
         cups.push_back(std::move(cup));
       }
@@ -355,7 +326,7 @@ const char* ttp_race_personas_json(void) {
 
 const char* ttp_race_build_field_json(const char* playersJson, double seed,
                                       const char* botCapJson) {
-  Value players = parseOr(playersJson, Value::Arr());
+  Value players = json::parse_or(playersJson, Value::Arr());
   race::BuiltField b = race::buildField(humansOf(&players), seed, worldWithCap(botCapJson));
   Value v = Value::Obj();
   v.set("field", arrOf(b.field, fieldVal));
@@ -365,19 +336,19 @@ const char* ttp_race_build_field_json(const char* playersJson, double seed,
 }
 
 const char* ttp_race_build_demo_field_json(const char* playersJson, const char* botCapJson) {
-  Value players = parseOr(playersJson, Value::Arr());
+  Value players = json::parse_or(playersJson, Value::Arr());
   return put(g_bufDemo,
              arrOf(race::buildDemoField(humansOf(&players), worldWithCap(botCapJson)), demoVal));
 }
 
 const char* ttp_race_demo_sig(const char* demoFieldJson, const char* trackId) {
-  Value arr = parseOr(demoFieldJson, Value::Arr());
+  Value arr = json::parse_or(demoFieldJson, Value::Arr());
   std::vector<race::DemoEntry> f;
   if (arr.type == Value::ARR) {
     for (const Value& e : arr.arr) {
       race::DemoEntry d;
-      d.id = strField(e, "id");
-      d.colorIndex = static_cast<int>(numField(e, "colorIndex"));
+      d.id = json::str_field(e, "id");
+      d.colorIndex = static_cast<int>(json::num_field(e, "colorIndex"));
       d.carIndex = numOf(e.find("carIndex"));
       f.push_back(std::move(d));
     }
@@ -389,19 +360,19 @@ const char* ttp_race_demo_sig(const char* demoFieldJson, const char* trackId) {
 // ---- start / launch ----------------------------------------------------------
 
 const char* ttp_race_start_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::StartInput si;
-  si.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-  si.sceneReady = truthy(in.find("sceneReady"));
+  si.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+  si.sceneReady = json::truthy(in.find("sceneReady"));
   si.selectedTrackId = strOf(in.find("selectedTrackId"));
   {
     const Value* p = in.find("players");
     si.players = humansOf(p);
   }
-  si.mode = strField(in, "mode");
+  si.mode = json::str_field(in, "mode");
   si.cupId = strOf(in.find("cupId"));
-  si.trackId = strField(in, "trackId");
-  si.randomRaces = numField(in, "randomRaces");
+  si.trackId = json::str_field(in, "trackId");
+  si.randomRaces = json::num_field(in, "randomRaces");
   si.cups = g_cups;
   si.draws = strListOf(in.find("draws"));
 
@@ -420,17 +391,17 @@ const char* ttp_race_start_json(const char* inputJson) {
 }
 
 int ttp_race_draws_needed(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
-  return race::drawsNeeded(strField(in, "mode"), numField(in, "randomRaces"));
+  Value in = json::parse_or(inputJson, Value::Obj());
+  return race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces"));
 }
 
 const char* ttp_race_launch_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::LaunchInput li;
   li.players = humansOf(in.find("players"));
-  li.seed = numField(in, "seed");
-  li.trackId = strField(in, "trackId");
-  li.countdownSeconds = numField(in, "countdownSeconds");
+  li.seed = json::num_field(in, "seed");
+  li.trackId = json::str_field(in, "trackId");
+  li.countdownSeconds = json::num_field(in, "countdownSeconds");
   li.forceItem = strOf(in.find("forceItem"));
   {
     const Value* cap = in.find("botCap");
@@ -457,44 +428,44 @@ const char* ttp_race_start_beat_json(const char* biome, int audioReady) {
 // ---- the finish --------------------------------------------------------------
 
 const char* ttp_race_event_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::RaceEvent ev;
   if (const Value* e = in.find("event")) {
     if (e->type == Value::OBJ) {
       ev.present = true;
-      ev.type = strField(*e, "type");
+      ev.type = json::str_field(*e, "type");
       ev.id = idOf(e->find("id"));
-      ev.item = strField(*e, "item");
-      ev.cause = strField(*e, "cause");
-      ev.finished = truthy(e->find("finished"));
-      ev.s = numField(*e, "s");
-      ev.lat = numField(*e, "lat");
+      ev.item = json::str_field(*e, "item");
+      ev.cause = json::str_field(*e, "cause");
+      ev.finished = json::truthy(e->find("finished"));
+      ev.s = json::num_field(*e, "s");
+      ev.lat = json::num_field(*e, "lat");
     }
   }
-  return put(g_bufEvent, wrapEffects(race::raceEvent(ev, truthy(in.find("fastForwarding")),
-                                                     truthy(in.find("humansAllDone")))));
+  return put(g_bufEvent, wrapEffects(race::raceEvent(ev, json::truthy(in.find("fastForwarding")),
+                                                     json::truthy(in.find("humansAllDone")))));
 }
 
 const char* ttp_race_end_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::EndRaceInput ei;
-  ei.hasSeries = truthy(in.find("hasSeries"));
-  ei.seriesFinished = truthy(in.find("seriesFinished"));
-  ei.intermissionMs = numField(in, "intermissionMs");
-  ei.nowMs = numField(in, "nowMs");
-  ei.resultsFailsafeMs = numField(in, "resultsFailsafeMs");
+  ei.hasSeries = json::truthy(in.find("hasSeries"));
+  ei.seriesFinished = json::truthy(in.find("seriesFinished"));
+  ei.intermissionMs = json::num_field(in, "intermissionMs");
+  ei.nowMs = json::num_field(in, "nowMs");
+  ei.resultsFailsafeMs = json::num_field(in, "resultsFailsafeMs");
   return put(g_bufEnd, wrapEffects(race::endRace(ei)));
 }
 
 // ---- the cup chain / the way out ---------------------------------------------
 
 const char* ttp_race_advance_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::AdvanceInput ai;
-  ai.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-  ai.hasSeries = truthy(in.find("hasSeries"));
-  ai.seriesFinished = truthy(in.find("seriesFinished"));
-  ai.sceneReady = truthy(in.find("sceneReady"));
+  ai.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+  ai.hasSeries = json::truthy(in.find("hasSeries"));
+  ai.seriesFinished = json::truthy(in.find("seriesFinished"));
+  ai.sceneReady = json::truthy(in.find("sceneReady"));
   ai.players = humansOf(in.find("players"));
   race::AdvanceResult r = race::advanceSeriesRace(ai);
   Value v = Value::Obj();
@@ -504,10 +475,10 @@ const char* ttp_race_advance_json(const char* inputJson) {
 }
 
 const char* ttp_race_return_json(const char* inputJson) {
-  Value in = parseOr(inputJson, Value::Obj());
+  Value in = json::parse_or(inputJson, Value::Obj());
   race::ReturnInput ri;
-  ri.roomState = ttp::rt::ui::roomStateOf(strField(in, "roomState"));
-  ri.mode = strField(in, "mode");
+  ri.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+  ri.mode = json::str_field(in, "mode");
   ri.cupId = strOf(in.find("cupId"));
   ri.trackId = strOf(in.find("trackId"));
   ri.cups = g_cups;
@@ -538,12 +509,12 @@ const char* ttp_race_rekey_json(int hasSeries, int rekeyed, const char* oldIdJso
 }
 
 const char* ttp_race_auto_pause_json(const char* decisionJson) {
-  Value d = parseOr(decisionJson, Value::Null());
+  Value d = json::parse_or(decisionJson, Value::Null());
   race::AutoPauseDecision dec;
   if (d.type == Value::OBJ) {
     dec.present = true;
-    dec.action = strField(d, "action");
-    dec.autoPaused = truthy(d.find("autoPaused"));
+    dec.action = json::str_field(d, "action");
+    dec.autoPaused = json::truthy(d.find("autoPaused"));
   }
   return put(g_bufAutoPause, wrapEffects(race::autoPauseEffects(dec)));
 }
