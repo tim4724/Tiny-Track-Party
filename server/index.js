@@ -2,7 +2,7 @@
 
 // Tiny Track Party static host. Like HexStacker, this server runs NO game logic and NO
 // WebSocket: it serves static files + a few JSON endpoints. Realtime multiplayer
-// runs off-box through the Party-Server relay (wss://ws.couch-games.com) plus the
+// runs off-box through the Party-Server relay (wss://ws.couchpad.games) plus the
 // optional WebRTC fastlane. The display browser is authoritative; phones are
 // thin controllers. See public/shared/protocol.js for the relay config.
 
@@ -139,7 +139,7 @@ function cspHeader(frameAncestors) {
     "font-src 'self'",
     // RELAY_URL (env) widens connect-src to exactly the configured relay —
     // the E2E suite points pages at its local stub this way.
-    "connect-src 'self' wss://ws.couch-games.com https://ws.couch-games.com" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
+    "connect-src 'self' wss://ws.couchpad.games https://ws.couchpad.games" + (RELAY_URL_OVERRIDE ? ' ' + RELAY_URL_OVERRIDE : ''),
     "img-src 'self' data:",
     "object-src 'none'",
     "frame-src 'self'",

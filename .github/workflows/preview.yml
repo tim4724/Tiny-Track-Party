@@ -50,10 +50,10 @@ jobs:
           set -euo pipefail
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
           NS="tinytrack-${SAFE_BRANCH}"
-          # All preview hosts sit under *.couch-games.com (covered by the
+          # All preview hosts sit under *.couchpad.games (covered by the
           # existing wildcard TLS + DNS). main deploys to tinytrack-main,
           # branches to tinytrack-<branch>.
-          HOST="tinytrack-${SAFE_BRANCH}.couch-games.com"
+          HOST="tinytrack-${SAFE_BRANCH}.couchpad.games"
 
           kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
@@ -120,15 +120,15 @@ jobs:
               - protocol: TCP
           NETPOL
 
-          # Copy the *.couch-games.com wildcard TLS into the preview namespace.
-          TLS_CRT=$(kubectl get secret couch-games-wildcard-tls -n default -o jsonpath='{.data.tls\.crt}')
-          TLS_KEY=$(kubectl get secret couch-games-wildcard-tls -n default -o jsonpath='{.data.tls\.key}')
+          # Copy the *.couchpad.games wildcard TLS into the preview namespace.
+          TLS_CRT=$(kubectl get secret couchpad-wildcard-tls -n default -o jsonpath='{.data.tls\.crt}')
+          TLS_KEY=$(kubectl get secret couchpad-wildcard-tls -n default -o jsonpath='{.data.tls\.key}')
 
           cat <<EOS | kubectl apply -n "$NS" -f -
           apiVersion: v1
           kind: Secret
           metadata:
-            name: couch-games-wildcard-tls
+            name: couchpad-wildcard-tls
           type: kubernetes.io/tls
           data:
             tls.crt: ${TLS_CRT}
@@ -199,7 +199,7 @@ jobs:
                   - name: tinytrack
                     port: 4000
             tls:
-              secretName: couch-games-wildcard-tls
+              secretName: couchpad-wildcard-tls
           ---
           apiVersion: traefik.io/v1alpha1
           kind: IngressRoute
@@ -228,7 +228,7 @@ jobs:
           BRANCH_RAW: ${{ github.ref_name }}
         run: |
           SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
-          HOST="tinytrack-${SAFE_BRANCH}.couch-games.com"
+          HOST="tinytrack-${SAFE_BRANCH}.couchpad.games"
           {
             echo "### Preview"
             echo "- URL: https://${HOST}"

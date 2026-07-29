@@ -4,7 +4,7 @@ Multiplayer toy-car racing where phones become tilt controllers and a shared scr
 
 ![4-player split-screen](artwork/splitscreen-4p.png)
 
-**▶ [Play it live](https://tinytrack.couch-games.com/)** · **[UI gallery](https://tinytrack.couch-games.com/gallery.html)**
+**▶ [Play it live](https://tinytrack.couchpad.games/)** · **[UI gallery](https://tinytrack.couchpad.games/gallery.html)**
 
 ## Overview
 

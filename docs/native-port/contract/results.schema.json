@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tinytrack.couch-games.com/contract/results.schema.json",
+  "$id": "https://tinytrack.couchpad.games/contract/results.schema.json",
   "title": "Race results",
   "description": "The object returned by Game.getResults() (public/display/engine/Game.js). All plain data, fresh objects. Rows are sorted by race order: finished cars first by finish time, then live cars by race position. Removed (forfeited) cars are absent entirely. Consumed by the standings/results boards and Grand Prix points. See docs/native-port/contract.md.",
   "type": "object",

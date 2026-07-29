@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tinytrack.couch-games.com/contract/track.schema.json",
+  "$id": "https://tinytrack.couchpad.games/contract/track.schema.json",
   "title": "Built track",
   "description": "The geometry half of a built track, from either a segment-DSL list or a {waypoints} spline descriptor (both share the same finalize step). Produced by the native TrackBuilder (native/libttp-track); the retired JS twin this was recorded from is in git history. All coordinates are world units, right-handed, +Y up. The centerline is a live class instance whose DATA shape is described here (see the `centerline` property); the host later AUGMENTS this object with game-side fields (cup, trackId, hazards, pads, boxes, poles, bananas, totalLaps, seed) that are a separate layer documented in docs/native-port/contract.md.",
   "type": "object",

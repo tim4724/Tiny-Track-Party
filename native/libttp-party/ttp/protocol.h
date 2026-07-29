@@ -53,8 +53,8 @@ inline const std::vector<std::pair<std::string, std::string>> ROOM_STATE = {
     {"PLAYING", "playing"}, {"RESULTS", "results"},
 };
 
-inline const std::string RELAY_URL = "wss://ws.couch-games.com";
-inline const std::string STUN_URL = "stun:stun.couch-games.com:3478";
+inline const std::string RELAY_URL = "wss://ws.couchpad.games";
+inline const std::string STUN_URL = "stun:stun.couchpad.games:3478";
 
 inline constexpr int MAX_PLAYERS = 4;
 inline constexpr int TOTAL_LAPS = 3;

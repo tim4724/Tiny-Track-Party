@@ -8,7 +8,7 @@
 // ============================================================================
 
 // Party-Server relay URL (signaling + game-event fallback).
-var RELAY_URL = 'wss://ws.couch-games.com';
+var RELAY_URL = 'wss://ws.couchpad.games';
 // Dev/test override: the server injects its RELAY_URL env into each page's
 // <meta name="relay-url"> (see server/index.js), which also widens the CSP to
 // exactly that origin — the E2E suite points pages at its hermetic stub
@@ -23,9 +23,9 @@ if (typeof document !== 'undefined') {
 // cross-network peers connect when host candidates aren't reachable. STUN is
 // UDP and not subject to CSP connect-src (browsers ignore the `stun:` scheme
 // there). On the same LAN, host candidates work even without STUN.
-// TODO(confirm): verify stun.couch-games.com:3478 exists; the connection glue
+// TODO(confirm): verify stun.couchpad.games:3478 exists; the connection glue
 // also lists a public STUN fallback so cross-network play degrades gracefully.
-var STUN_URL = 'stun:stun.couch-games.com:3478';
+var STUN_URL = 'stun:stun.couchpad.games:3478';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.

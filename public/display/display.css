@@ -76,7 +76,7 @@ html, body {
 /* The URL must stay readable in full — it's the type-it-in fallback for anyone
    who can't scan. So it WRAPS rather than truncating: an ellipsis eats the tail,
    and the tail is the room code (preview hosts like
-   tinytrack-<branch>.couch-games.com are long enough to lose it entirely).
+   tinytrack-<branch>.couchpad.games are long enough to lose it entirely).
    `anywhere` because a host has no spaces to break at. */
 .ticket__url {
   max-width: 100%;

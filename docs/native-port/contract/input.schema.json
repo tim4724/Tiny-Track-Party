@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tinytrack.couch-games.com/contract/input.schema.json",
+  "$id": "https://tinytrack.couchpad.games/contract/input.schema.json",
   "title": "Control input",
   "description": "The per-frame driving input consumed by Game.processInput(id, msg). On the wire it is the CONTROL message {type:'control', s, b, u} (public/shared/protocol.js), sent at ~25 Hz by the phone controller, AI bots, and the trace tooling; the engine sees the {s, b, u} triple. Every field is level-coded (an absolute value a later frame supersedes), which makes delivery over a lossy-but-ordered channel safe: a dropped frame just re-delivers the same values ~40 ms later. Each field is applied independently and only when present with the right type, so partial messages are valid; production senders always include all three. Inputs are rejected wholesale for unknown or finished cars. See docs/native-port/contract.md.",
   "type": "object",

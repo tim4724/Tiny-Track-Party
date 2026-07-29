@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tinytrack.couch-games.com/contract/snapshot.schema.json",
+  "$id": "https://tinytrack.couchpad.games/contract/snapshot.schema.json",
   "title": "Game snapshot",
   "description": "The plain-data tree returned by Game.getSnapshot() (public/display/engine/Game.js). Fresh objects per call, JSON-serializable throughout, no live references into the engine. All positions/lengths are world units (VMAX = 9 units/s, lap ~350-480 units); all times are seconds of simulated race time. Coordinates are right-handed, +Y up (three.js convention). See docs/native-port/contract.md.",
   "type": "object",

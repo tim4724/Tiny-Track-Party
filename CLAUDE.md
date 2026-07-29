@@ -733,4 +733,4 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   inside the shared script so the tvOS/Android legs inherit it.
   The suite's wall clock is no longer any one test, so a jump is worth reading
   rather than assuming.
-- Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).
+- Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couchpad.games` (see `.github/workflows/preview.yml`).

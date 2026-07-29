@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tinytrack.couch-games.com/contract/events.schema.json",
+  "$id": "https://tinytrack.couchpad.games/contract/events.schema.json",
   "title": "Game race event",
   "description": "Payloads delivered synchronously to the onEvent callback from inside Game.update() (public/display/engine/Game.js). All plain data. `id` is the car id in every event except rocket_expire, where it is the ROCKET's id. Exactly seven kinds. See docs/native-port/contract.md.",
   "oneOf": [

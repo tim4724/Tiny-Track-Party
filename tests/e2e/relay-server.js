@@ -3,7 +3,7 @@
 // Hermetic Party-Server relay stub for the E2E suite — implements just the
 // protocol subset partyplug/PartyConnection.js documents, so the display +
 // controller pages run their REAL transport against localhost instead of the
-// production relay (wss://ws.couch-games.com). Pages are pointed here via the
+// production relay (wss://ws.couchpad.games). Pages are pointed here via the
 // app server's RELAY_URL env (injected as the relay-url <meta>; see
 // shared/protocol.js); playwright.config.js boots both servers.
 //

@@ -21,7 +21,7 @@ jobs:
               .replace(/[^a-z0-9-]/g, '-')
               .slice(0, 50)
               .replace(/-+$/, '');
-            const base = `https://tinytrack-${safeBranch}.couch-games.com`;
+            const base = `https://tinytrack-${safeBranch}.couchpad.games`;
             // Hidden marker so re-runs find and update this comment in place,
             // even if the URL format changes later.
             const marker = '<!-- tinytrack-preview-comment -->';
