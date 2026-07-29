@@ -28,7 +28,7 @@ const SOLO_ID = 1;
 const NULL_PARTY = {
   sendTo() {}, broadcast() {}, connect() {}, join() {}, create() {},
   pinInstance() {}, resetReconnectCount() {}, closeAll() {}, close() {},
-  setState() {}, // _publishLobby pushes the retained roster snapshot on every roster change
+  setStateFrame() {}, // _publishLobby pushes the retained roster snapshot on every roster change
 };
 
 // Keys we own — preventDefault stops arrows/Space from scrolling the page.
