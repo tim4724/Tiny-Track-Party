@@ -1,32 +1,60 @@
 #!/usr/bin/env node
-// Turn vehicle-vintage-racer.glb around. ONE-SHOT, already applied — kept so the
-// edit to a vendored kit asset is reproducible from the pristine download.
+// Turn vehicle-vintage-racer.glb around. NOT CURRENTLY APPLIED — applied in
+// 6a79eb3 and reverted on 2026-07-29 by the call recorded below. Kept because
+// this is where the whole argument is written down, and because "Rumble drives
+// backwards" is a report that will come round again.
 //
-// Every other Kenney car in the roster is modelled nose-toward −Z: the racer,
+// WHICH WAY ROUND THE SHIPPED ASSET IS, and why that was a judgement call:
+// three checks say the kit model needs this flip, and one taste call says ship
+// it unflipped anyway. The flip is NOT applied, so the shipped car is the
+// pristine Kenney orientation.
+//
+//   FOR the flip (the evidence, all reproducible):
+//     - The kit DECLARES its convention in the node names: on all five vehicles
+//       wheel-fr/wheel-fl sit at NEGATIVE z and wheel-br/wheel-bl at positive
+//       (-0.250/+0.250, bar the speedster's -0.1875/+0.3125), so front = -Z,
+//       which is what the renderer's base half-turn assumes.
+//     - Seat behind glass. Unflipped, the cockpit (colormap band 0.21875,0.800,
+//       z -0.375..-0.125) sits on the -Z side of the windscreen (0.84375,*,
+//       z -0.125..-0.025), so the driver faces +Z while the wheels named front
+//       are at -Z. The two disagree.
+//     - The thumbnail strip's own camera (capture-car-thumbs.js, yaw 305 + f*15,
+//       camera on +Z, so frame 6 puts the model's +Z end on the RIGHT): the
+//       speedster shows its WING there, the vintage racer shows its BONNET.
+//
+//   AGAINST (the call that won): the tail is bare grey chassis with an exposed
+//   wheel and axle, which reads like a radiator end from three-quarters on. The
+//   flip makes the model self-consistent but does not make the nose obvious, and
+//   the unflipped car was judged to read better on the grid. Orientation here is
+//   a look decision, not a correctness one — nothing downstream breaks either
+//   way, because the renderer only ever uses -Z and the wheel NAMES, and this
+//   script keeps those two in step whichever way it is run.
+//
+// To put it back: `node scripts/flip-vintage-racer.mjs`, then re-bake the
+// thumbnails (`npm run thumbs:car -- --name vehicle-vintage-racer`). The run is
+// guarded by asset.extras.ttpYawFlip, so it cannot double-apply.
+//
+// For context on the convention the checks above appeal to: the racer,
 // racer-low and speedster all put their low nose at z = −0.438 and their tall
 // tail (spoiler, wing, engine cover) at +0.438, and the renderer's base
 // half-turn (TtpRenderer's FLIP) is built on that — model −Z becomes the car's
-// direction of travel. The VINTAGE RACER is the odd one out: its long bonnet is
-// at +Z and its boat tail at −Z, while its wheel NODES still follow the kit's
-// naming (wheel-f* at −Z). So the game drove it backwards — tail first, bonnet
-// trailing, the rear name plate stuck on the radiator face — and the steering
-// yaw went to the wheels under the tail.
+// direction of travel. The vintage racer is the one whose BODY does not follow
+// it, while its wheel NODES do.
 //
-// Verified against the thumbnail bake's own camera (capture-car-thumbs.js frames
-// the model at yaw 305° + f·15° with the camera on +Z, so at frame 6 the model's
-// +Z end is the one on the RIGHT): at that frame the speedster shows its wing on
-// the right and the vintage racer shows its BONNET there.
-//
-// The fix bakes a 180° yaw into the geometry rather than adding a per-model
-// rotation hook, so the asset simply matches the convention the whole renderer
+// What a run does — a 180° yaw baked into the geometry rather than a per-model
+// rotation hook, so the asset matches the convention the whole renderer
 // (wheels, skids, plates, silhouettes, thumbnails) already assumes:
 //   - POSITION / NORMAL / TANGENT: negate x and z (a yaw of π; determinant +1,
 //     so triangle winding is untouched)
 //   - node translations: negate x and z
 //   - wheel node + mesh names: the flip maps fl→br, fr→bl, bl→fr, br→fl
+// The name swap is why running this is safe in EITHER direction: it keeps the
+// wheel naming pointing at the same physical end as the body it just turned.
 //
-// Idempotent by refusing to run twice: a flipped file is detected by the bonnet
-// (the long unbroken deck) having moved to −Z.
+// The guard is a STAMP (asset.extras.ttpYawFlip), not a shape test. The node
+// names cannot answer "has this run?" — they followed the kit convention before
+// the flip too, which was the whole bug — and neither can the bonnet's sign,
+// since that is exactly what a caller is trying to change.
 //
 //   node scripts/flip-vintage-racer.mjs [file]
 import { readFileSync, writeFileSync } from 'node:fs';
