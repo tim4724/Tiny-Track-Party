@@ -15,6 +15,11 @@ test-results/
 public/assets/audio/_stk-audition/
 public/assets/audio/_engine-audition/
 public/assets/audio/_music-pool/
+# Race-music MASTERS — the 256-320 kbps incompetech downloads the shipped VBR
+# files are encoded from (~164 MB). They are re-fetchable from the URL + sha256
+# in public/assets/audio/music/SOURCES.json, so the bytes are a cache, not a
+# source: `npm run fetch:music` fills this and re-encodes.
+.cache/
 # Local-only Claude Code state — keeps the .claude/ root committable for shared
 # project settings/hooks while excluding per-user runtime files (worktrees,
 # local settings, scheduler lock).

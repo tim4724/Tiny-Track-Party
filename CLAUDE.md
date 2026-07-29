@@ -268,6 +268,32 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   flips a knee of the curve and changes the command outright), and the music
   trims are AUTHORED LITERALS — deriving them with the vendored `pow` turns the
   corpus red on the very first pick.
+- THE AUDIO FILES ARE ARTIFACTS, and the two kinds have different sources. The
+  CUES are GENERATED: `scripts/bake-cues.mjs` is the source, the WAVs are baked
+  from it. The MUSIC is ACQUIRED, so its source is a URL — the shipped mp3s are
+  incompetech downloads re-encoded to ~130 kbps VBR, and the 256-320 kbps
+  masters are deliberately NOT in the tree. What stands in for them is
+  `public/assets/audio/music/SOURCES.json` (per song: download URL, master
+  sha256, byte count) plus the recorded encode; `npm run fetch:music` rebuilds
+  every shipped file from scratch and `--verify` just re-checks the hashes.
+  A checked-in master would be a backup, not a generator, and git already has
+  one. This is what took `public/assets` from 170 MB to 87 MB, nearly all of it
+  the preview deploy image (the songs STREAM one at a time through an `<audio>`
+  element, so it was never a per-player download cost).
+  MP3 IS NOT A QUALITY CHOICE HERE, which is the trap. Opus/AAC at 96k are
+  smaller and better per bit (~55 MB for the catalogue), but `audio.cc`'s SONG
+  table bakes the path INCLUDING the extension and `audio-corpus.jsonl` froze
+  those strings — and that corpus can never be re-recorded, its JS oracle is
+  deleted. Changing the extension turns `audio_check` and `record_audio` red on
+  all four legs. Moving off MP3 means making `Song::file` a stem and letting
+  each shell append its own extension: an ABI and corpus change, not an encode.
+  RE-ENCODE WITH NO FILTERS. The per-song gains are frozen literals derived from
+  each file's integrated loudness, so an `-af loudnorm` would silently
+  invalidate the whole trim table — the corpus would still pass, because it only
+  knows the literal. `npm run check:music-loudness` is the only thing in the
+  tree that would notice (measured LUFS vs the catalogue's, plus the baked
+  duration and a cover-art check). It shells out to ffmpeg, so it is a script
+  rather than a `npm test` entry; run it after anything that touches the files.
 - THE UI MODEL IS A LAYER, not a pile of render functions. The DECISIONS behind
   the 2D screens — the seat grid (padding, the car-pick fallback), the lobby
   readiness rule, the lobby race card, the per-player race HUD values, the

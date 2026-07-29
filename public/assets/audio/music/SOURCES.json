@@ -1,0 +1,213 @@
+{
+  "_readme": [
+    "SOURCES.json — where the shipped race music CAME FROM, and how to rebuild it.",
+    "",
+    "WHY THIS FILE EXISTS. The .mp3s beside it are ARTIFACTS, not masters: they are",
+    "the incompetech downloads re-encoded to VBR (see `encode` below). The masters",
+    "are ~164 MB of 256-320 kbps CBR and are deliberately NOT in the working tree —",
+    "for an ACQUIRED asset the reproducible source is a URL plus a hash plus an",
+    "encode recipe, which is this file, not the bytes. (Contrast the CUES, which are",
+    "GENERATED: their source is scripts/bake-cues.mjs and the artifacts are baked",
+    "from it. Same principle, different kind of source.)",
+    "",
+    "`npm run fetch:music` rebuilds every shipped file from scratch: download the",
+    "master, check it against `sha256`, run `encode`, write it here. `--verify` does",
+    "the download and hash check only.",
+    "",
+    "THE HASH IS ON THE MASTER, NEVER ON THE OUTPUT. LAME is deterministic for a",
+    "given version and settings, but two LAME versions do not agree byte for byte,",
+    "so a re-encode on another machine is not reproducible AS BYTES and must not be",
+    "gated as if it were. What IS gated is that the input is the same file",
+    "(`sha256`) and that the result still sits at the loudness the catalogue trims",
+    "it to (`npm run check:music-loudness`).",
+    "",
+    "NO NUMBER HERE IS ALSO SOMEWHERE ELSE. Titles, durations and the LUFS trims are",
+    "public/display/audio/musicCatalogue.js (and, ported, native/libttp-runtime/ttp/",
+    "audio.cc); the biome pools and the attribution text are CREDITS.txt. This file",
+    "joins to those on `file` and re-declares none of it — CLAUDE.md manifest rule."
+  ],
+  "license": {
+    "holder": "Kevin MacLeod",
+    "license": "CC-BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "source": "https://incompetech.com/music/royalty-free/music.html",
+    "note": "Attribution is REQUIRED. See CREDITS.txt; the render-ready data is shared/credits.js."
+  },
+  "encode": {
+    "tool": "ffmpeg",
+    "args": [
+      "-vn",
+      "-map",
+      "0:a",
+      "-c:a",
+      "libmp3lame",
+      "-q:a",
+      "5"
+    ],
+    "recordedWith": "ffmpeg 8.1.2 / libmp3lame",
+    "note": [
+      "-q:a 5 is ~130 kbps VBR: 164 MB of catalogue becomes ~80 MB, which is most of",
+      "the preview deploy image. Songs STREAM one at a time through an <audio>",
+      "element, so this is a deploy/clone cost rather than a per-player one.",
+      "-vn strips the embedded cover art four of the masters carry.",
+      "NO FILTERS, EVER. The per-song gains in musicCatalogue.js and audio.cc are",
+      "AUTHORED LITERALS frozen against tests/fixtures/audio-corpus.jsonl, so an",
+      "-af loudnorm here would silently invalidate the whole trim table. A plain",
+      "re-encode holds integrated loudness to within ~0.1 LU, which is why the",
+      "trims survived this one unchanged.",
+      "MP3 IS NOT A QUALITY CHOICE. Opus/AAC at 96k are smaller and better per bit",
+      "(~55 MB), but audio.cc bakes the path INCLUDING the extension into its SONG",
+      "table and audio-corpus.jsonl froze those strings. That corpus can never be",
+      "re-recorded (its JS oracle is deleted), so changing the extension turns",
+      "audio_check and record_audio red on all four legs. Moving off MP3 means",
+      "making Song::file a stem and letting each shell append its own extension —",
+      "an ABI and corpus change, and a separate decision."
+    ]
+  },
+  "songs": [
+    {
+      "file": "arroz_con_pollo.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Arroz%20Con%20Pollo.mp3",
+      "sha256": "d6bccb2e92bc596bfc14eb0de5b76bcc0a573a7fc573cc2c405feb49bb293fb6",
+      "bytes": 5188298
+    },
+    {
+      "file": "bama_country.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Bama%20Country.mp3",
+      "sha256": "aa9336421148cf25707da80431cb371e5e020ebe5a00dde151977d94839f5bde",
+      "bytes": 8536896
+    },
+    {
+      "file": "beachfront_celebration.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Beachfront%20Celebration.mp3",
+      "sha256": "73ffcea8277780253b4e42dcbc3c5b3c50ba8ad343023372726a8678f43cc68e",
+      "bytes": 7494135
+    },
+    {
+      "file": "bit_shift.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Bit%20Shift.mp3",
+      "sha256": "0d76175482b0d1742b43922624e3a3ecb8f5d43f1d6f7bb8b84abae186aeb589",
+      "bytes": 6147900
+    },
+    {
+      "file": "chipper_doodle_v2.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Chipper%20Doodle%20v2.mp3",
+      "sha256": "addaad1315a5b1d3dd37ff22690941b1ca2575a7769d25fc2fa6e6b95a4d364a",
+      "bytes": 6892257
+    },
+    {
+      "file": "cloud_dancer.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cloud%20Dancer.mp3",
+      "sha256": "d329666f15f516b8742532d9dc45309e2019cc1505d4636fdadb7bf6000a8d5c",
+      "bytes": 7040022
+    },
+    {
+      "file": "delightful_d.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Delightful%20D.mp3",
+      "sha256": "6ab6575d9650dfa931d3b06040ba452051887a08f01ff91e9830e4095df519ed",
+      "bytes": 5892100
+    },
+    {
+      "file": "desert_of_lost_souls.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Desert%20of%20Lost%20Souls.mp3",
+      "sha256": "b12d7157a5917b44a5d830fff47e6d72b94223d4f17a6fa2d122fd176dbda9ec",
+      "bytes": 5792672
+    },
+    {
+      "file": "digital_lemonade.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Digital%20Lemonade.mp3",
+      "sha256": "be9f665efd035dea23a1e9539c534ba905f44144f7dda05a0a663ccecda1ab21",
+      "bytes": 5764221
+    },
+    {
+      "file": "feelin_good.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Feelin%20Good.mp3",
+      "sha256": "9272fee6c1ad8e36d4ae8d4694a0ef3574076b096033b4b26d486b04a41bfd58",
+      "bytes": 9158402
+    },
+    {
+      "file": "glitter_blast.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Glitter%20Blast.mp3",
+      "sha256": "6d24390bfe0dba5107b04d643c2e36e13dae8048a382d465f0b575397f01b89b",
+      "bytes": 7116717
+    },
+    {
+      "file": "happy_bee.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Happy%20Bee.mp3",
+      "sha256": "06f7dfd763a0bcc33fdf29ecf904c23753deaf392c8c7686902bfb943ba99576",
+      "bytes": 12082281
+    },
+    {
+      "file": "happy_happy_game_show.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Happy%20Happy%20Game%20Show.mp3",
+      "sha256": "640d808993c49165d9e7a88ff1925312220317b75ba847b74e664e9f01a87db6",
+      "bytes": 5079647
+    },
+    {
+      "file": "hyperfun.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Hyperfun.mp3",
+      "sha256": "ac3dcc688f183717cf3001a3250c2625ccaa2e97676aa9ab5cb3a8583b8611e1",
+      "bytes": 7468630
+    },
+    {
+      "file": "island_meet_and_greet.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Island%20Meet%20and%20Greet.mp3",
+      "sha256": "366f5a5a816cff01bc102cb7fcf112f8780163bc392c3d64d94658cf0a73df39",
+      "bytes": 8683019
+    },
+    {
+      "file": "itty_bitty_8_bit.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Itty%20Bitty%208%20Bit.mp3",
+      "sha256": "abae7e4d020499466e3840643385c8ec608ba7bb8b62b16e1d9d7bda5e622416",
+      "bytes": 7755086
+    },
+    {
+      "file": "new_friendly.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/New%20Friendly.mp3",
+      "sha256": "218c16ae19cae3770452a7ba1c32d0976778fc5061616141a6dcbf7f96684c33",
+      "bytes": 6864453
+    },
+    {
+      "file": "paradise_found.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Paradise_Found.mp3",
+      "sha256": "7ea20dd113983ecaab67f774da1f0699114b3a6f93a386c202b977a2cb9e00a2",
+      "bytes": 3751848
+    },
+    {
+      "file": "still_pickin.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Still%20Pickin.mp3",
+      "sha256": "12e9061971fb64798468d54c27b3a0b762bda15a8898b8b5b7ee9efa706f5db3",
+      "bytes": 12041331
+    },
+    {
+      "file": "surf_shimmy.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Surf%20Shimmy.mp3",
+      "sha256": "932424252801c51a6385c1339ebb57571cee76eda6431eaa338dcacb677c4d94",
+      "bytes": 3934390
+    },
+    {
+      "file": "tiki_bar_mixer.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Tiki%20Bar%20Mixer.mp3",
+      "sha256": "9d5fc06a1cc784c9cf35c5dc5059e5d54b2a192bfecf897c5f41ade14bdc2512",
+      "bytes": 6800113
+    },
+    {
+      "file": "vivacity.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Vivacity.mp3",
+      "sha256": "6d487ee0acf018137edc1f41ecab23e721165577382a6c8d68072e7174360fcb",
+      "bytes": 7413482
+    },
+    {
+      "file": "voice_over_under.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voice%20Over%20Under.mp3",
+      "sha256": "11662d206275949f8fcd3555b8448c00c9c952cf5eb9c0698a853a23b0e78265",
+      "bytes": 6319297
+    },
+    {
+      "file": "wallpaper.mp3",
+      "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3",
+      "sha256": "9fa810e5193c88f1b360537366f210f16c2588106d5292f0659e9957fa274f96",
+      "bytes": 8804339
+    }
+  ]
+}

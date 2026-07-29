@@ -53,4 +53,14 @@ picks randomly from its biome's pool, never repeating the previous song):
   surf_shimmy.mp3             Canyon    "Surf Shimmy"
   bama_country.mp3            Canyon    "Bama Country"
 
-No changes were made to any track (looped only).
+CHANGES MADE. The audio content of every track is unaltered — no edits, no
+filters, no loudness normalisation baked into the file (the per-song trim is
+applied at PLAYBACK, from musicCatalogue.js). What we did change is the
+ENCODING: each track ships re-encoded from the incompetech download to ~130
+kbps VBR MP3, and the embedded cover art four of them carried is stripped.
+Tracks are looped in game.
+
+CC-BY 4.0 asks that modifications be indicated, so this note is the indication
+and must stay accurate. The masters are NOT in this repo — SOURCES.json beside
+this file records each track's download URL and the sha256 of the master it was
+encoded from, and `npm run fetch:music` rebuilds the whole set from them.
