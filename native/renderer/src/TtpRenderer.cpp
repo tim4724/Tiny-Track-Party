@@ -4926,10 +4926,20 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 // Still STEADY, not pulsing (see the note above): the jitter the
                 // JS had was noise at this scale.
                 Mesh& fm = mRocketFlames[r];
-                // The mouth sits at the tail of the body and the cone runs back
-                // (-Y) from there.
-                constexpr float FR = 0.062f, FH = 0.200f, FY0 = -0.165f;
-                const uint32_t fc = packLinear(srgbToLinear(0xffd23f), 1.0f, 0.88f);
+                // SMALL, and set back past the boat-tail. It reached forward to
+                // the body at full width and the wings are the same gold, so the
+                // two ran together into one yellow mass at the back of the
+                // rocket. Two things separate them now: the mouth starts BEHIND
+                // the boat-tail, so a ring of deep red sits between the wing
+                // roots and the fire, and it is narrower than the tail it comes
+                // out of rather than as wide as the body.
+                //
+                // The hue is still yellow, one shade brighter than the wings'
+                // gold — they now differ by VALUE where before they differed by
+                // nothing, which is what stops them merging when the rocket is
+                // small and moving.
+                constexpr float FR = 0.046f, FH = 0.135f, FY0 = -0.182f;
+                const uint32_t fc = packLinear(srgbToLinear(0xffe86b), 1.0f, 0.90f);
                 const Prim flame = applyPre(primCone(FR, FH, 14),
                         mat4f::rotation((float) M_PI, float3{ 1, 0, 0 }));
                 for (const float3& v : flame.v) {
