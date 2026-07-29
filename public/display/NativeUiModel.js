@@ -250,7 +250,7 @@ export function seriesInfo(input) {
 
 // The board the TV and every phone render.
 //
-// ITS KEY ORDER IS NOT THE WIRE'S — see the note on lobbySnapshot in
+// ITS KEY ORDER IS NOT THE WIRE'S — see the key-order note on lobbyFrame in
 // NativeSessionModel.js. This board reaches phones inside the retained room
 // snapshot, and ttp_party.cc canonicalizes every outbound frame, so the order
 // ttp_ui_standings_json writes is sorted away before it leaves. The ordered

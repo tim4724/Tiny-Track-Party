@@ -34,14 +34,19 @@ struct Value;
 // this seam additive — nothing below it learns a new input shape.
 ttp::Value ttp_room_roster_value(int roomHandle);
 
-// The GAME's answer to "does this seat hold a car in the live race", per seat,
-// in roster order — the parallel array session::roster_rows composes against,
-// read off ttp_session_engine's Game rather than gathered by a shell.
+// The GAME's answer to "does this seat hold a car in the live race", one flag
+// per entry of `roster`, in its order — the parallel array
+// session::roster_rows composes against, read off ttp_session_engine's Game
+// rather than gathered by a shell.
+//
+// TAKES THE ROSTER rather than fetching it, so a caller that needs both halves
+// (ttp_net_lobby_frame does) builds the roster Value ONCE. Fetching it here too
+// would be the same compose-it-twice this seam exists to stop, one layer down.
 //
 // sessionHandle 0 (or unknown/disposed) means NO LIVE RACE, so every seat
 // answers false. That is the lobby's own case, and it is what a phone reads as
 // "wait for the next race".
-ttp::Value ttp_room_in_race_flags(int roomHandle, int sessionHandle);
+ttp::Value ttp_room_in_race_flags(const ttp::Value& roster, int sessionHandle);
 
 // The effective host (the getter fallback chain), as the same JSON scalar
 // ttp_room_host_json returns, or null. Null for an unknown handle.

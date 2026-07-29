@@ -205,13 +205,10 @@ Value ttp_room_roster_value(int roomHandle) {
   return rh ? rh->flow->listValue() : Value::Arr();
 }
 
-Value ttp_room_in_race_flags(int roomHandle, int sessionHandle) {
-  RoomHandle* rh = room(roomHandle);
+Value ttp_room_in_race_flags(const Value& roster, int sessionHandle) {
   Value flags = Value::Arr();
-  if (!rh) return flags;
-  Game* g = ttp_session_engine(sessionHandle);
-  const Value roster = rh->flow->listValue();
   if (roster.type != Value::ARR) return flags;
+  Game* g = ttp_session_engine(sessionHandle);
   for (const Value& seat : roster.arr) {
     const Id id = json::id_of<Id>(seat.find("peerIndex"));
     flags.push(Value::Bool(g && !id.isNull() && g->hasCar(id)));

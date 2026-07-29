@@ -53,18 +53,23 @@ export const CPP_MUTATIONS = [
   },
   {
     // The frame builder chooses the ORDER the seats are published in (the model
-    // projects the rows it is handed, one for one). Reversing the roster also
-    // misaligns the parallel inRace array, which is exactly what a caller that
-    // sorted its own list would do.
+    // projects the rows it is handed, one for one), and join order is what the
+    // lobby and every phone read the roster in.
+    //
+    // It used to be able to misalign the parallel inRace array too. It cannot
+    // any more, and that is a property worth keeping: inRace is derived FROM
+    // this very roster Value, so a caller that reorders gets its flags reordered
+    // with it. Reversing here is now purely an ORDER break, which is the half
+    // that can still go wrong.
     name: 'display/roster-order-reversed',
     kind: 'publish the roster in a different order than the model was told',
     file: 'native/runtime/ttp_net.cc',
-    find: '  input.set("roster", ttp_room_roster_value(roomHandle));',
-    // Spelled with only what the file already includes, so the mutation is a
-    // one-line swap and never drags a header in behind it.
-    replace: '  { Value r_ = ttp_room_roster_value(roomHandle), rev_ = Value::Arr();\n'
-      + '    for (size_t i_ = r_.arr.size(); i_ > 0; i_--) rev_.push(r_.arr[i_ - 1]);\n'
-      + '    input.set("roster", rev_); }',
+    find: '  Value roster = ttp_room_roster_value(roomHandle);',
+    // Spelled with only what the file already includes, so the mutation never
+    // drags a header in behind it.
+    replace: '  Value roster = Value::Arr();\n'
+      + '  { Value r_ = ttp_room_roster_value(roomHandle);\n'
+      + '    for (size_t i_ = r_.arr.size(); i_ > 0; i_--) roster.push(r_.arr[i_ - 1]); }',
     expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {

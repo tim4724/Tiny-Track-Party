@@ -41,7 +41,6 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
-    lobbySnapshot: c('ttp_net_lobby_snapshot_json', 'string', ['string']),
     lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
@@ -83,37 +82,32 @@ export function configure({ cars, colors, tracks }) {
 }
 
 // ---- the retained room snapshot --------------------------------------------
-// NO rosterRows WRAPPER, deliberately. ttp_net_roster_rows_json still exists
-// (the session corpus covers it, and a shell that wants the projection WITHOUT
-// publishing has it), but this display always wants both: lobbySnapshot below
-// composes the same rows, byte for byte, inside the snapshot it is already
-// building. Asking twice cost a second roster readback and a second compose.
+// ONE WRAPPER, not three. ttp_net_roster_rows_json and
+// ttp_net_lobby_snapshot_json both still exist — the frozen session corpus
+// replays them, and a shell whose roster does NOT live in this wasm needs the
+// plain-data spellings — but this display reaches the snapshot only one way, so
+// wrapping the other two here would be surface nothing calls.
 //
-// The whole LOBBY_UPDATE object, chooser included.
+// THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
+// handles and the six fields only the game knows.
 //
-// ITS KEY ORDER IS NOT THE WIRE'S, whatever the shape of the emitter suggests.
-// ttp_net_lobby_snapshot_json writes the model's own order, and JSON.parse here
-// preserves it, but the frame encoder downstream does not: ttp_party.cc's `put`
-// runs canonical_stringify over EVERY outbound frame, so what the relay retains
-// and replays is the SORTED object. Same for broadcast and sendTo. The ordered
-// emitter earns its keep at the ABI boundary — abi_check pins these bytes, and
-// the frozen corpora recorded them from a JS oracle that emitted insertion
-// order — but nothing below this line preserves it, so do not spend anything to
-// protect it.
-export function lobbySnapshot(input) {
-  return JSON.parse(fn.lobbySnapshot(J(input)));
-}
-
-// THE SAME SNAPSHOT, ALREADY FRAMED — the publish path, and the shell's whole
-// part in it is two handles and the six fields only the game knows.
-//
-// What it replaces is a round trip: lobbySnapshot() above serialized the whole
-// snapshot, this side parsed it, PartyConnection.setState re-serialized it and
+// What it replaces is a round trip: the snapshot came back as text, this side
+// parsed it, PartyConnection.setState re-serialized it and
 // ttp_framing_encode_set_state parsed it BACK. The roster made the same trip one
 // layer earlier — pulled out of the room as JSON only to be handed straight
 // back. Now nothing about a seat is serialized out at all: ttp_net_lobby_frame
 // reads the roster off the room handle and every seat's inRace off the live
 // Game. Measured in the browser at the 4-player cap: 169.6 us -> 44.4 us.
+//
+// KEY ORDER IS NOT THE WIRE'S, whatever the shape of the ABI suggests.
+// ttp_net_lobby_snapshot_json and ttp_ui_standings_json write the model's own
+// order, but the frame encoder downstream does not preserve it: ttp_party.cc's
+// `put` runs canonical_stringify over EVERY outbound frame — set_state,
+// broadcast and sendTo alike — so what the relay retains and replays is the
+// SORTED object, and always has been. The ordered emitter earns its keep at the
+// ABI boundary, where abi_check pins those bytes and the frozen corpora
+// recorded them off a JS oracle that emitted insertion order. Below this line
+// nothing preserves it, so do not spend anything protecting it.
 //
 // The size is the chooser, not the party: ~5.9 KB of the ~7 KB snapshot is the
 // `tracks` payload, set once at boot and never read by anything above the wire.

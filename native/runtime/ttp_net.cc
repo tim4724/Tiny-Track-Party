@@ -15,6 +15,7 @@
 #include "ttp_net.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ttp/canonical.h"
@@ -121,9 +122,11 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   if (input.type != Value::OBJ) input = Value::Obj();
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
-  // corpus-pinned rule and not a variant of it.
-  input.set("roster", ttp_room_roster_value(roomHandle));
-  input.set("inRace", ttp_room_in_race_flags(roomHandle, sessionHandle));
+  // corpus-pinned rule and not a variant of it. The roster is built ONCE and
+  // the flags are derived from that copy.
+  Value roster = ttp_room_roster_value(roomHandle);
+  input.set("inRace", ttp_room_in_race_flags(roster, sessionHandle));
+  input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
   // Canonical, like every other frame encoder: g_bufFrame is framed output, not

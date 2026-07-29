@@ -167,7 +167,7 @@ export class NativeRoomFlow {
   // (~1.6 us) for every `p.ready` — and `{...p}` pays it twice more via ownKeys
   // and getOwnPropertyDescriptor. The cache is keyed on the room's mutation
   // counter rather than on time, so it is exactly as live as the uncached
-  // version was: anything that can move a record bumps _gen and the next read
+  // version was: anything that can move a record bumps `gen` and the next read
   // re-fetches. Writes bump it too, so `p.ready = true; p.ready` still reads
   // back through wasm and cannot observe a value the C++ refused.
   _record(peerIndex) {
