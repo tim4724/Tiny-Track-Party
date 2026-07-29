@@ -2249,15 +2249,19 @@ inline TrainAt trainAt(float s) {
 
 // ---- rocket ---------------------------------------------------------------
 // SLEEK AND MODERN, decided after four rounds of toy shapes were turned down.
-// The three below share a palette and a rule rather than a silhouette: cool
-// white, one mid grey, one graphite, and NO BANDS. That last part is doing more
-// work than any of the geometry did — the red-and-cream banding every earlier
-// attempt inherited from v0 is why so many of them read as a traffic cone or a
-// lighthouse. It was a palette problem being solved as a shape problem for four
-// rounds.
+// v1 "cruise" is the one that was picked and is what ships; 2 and 3 are the
+// other two readings of the same brief, kept for comparison.
 //
-// Colour zones are LARGE and there are never more than three: nose, body, tail.
-// A stripe is what a toy has; a change of material is what a machine has.
+// THE RULE IS "NO BANDS", not "no colour", and that distinction is the whole
+// lesson of this file. Every attempt before these inherited red-and-cream
+// BANDING from v0, and banding is why so many of them read as a traffic cone or
+// a lighthouse whatever shape they were given — it was a palette problem being
+// solved as a shape problem for four rounds. The picked one is red and yellow
+// and still reads as a machine, because the colour changes where the OBJECT
+// changes: nose, body, tail, wings. A stripe is what a toy has; a change of
+// part is what a machine has.
+//
+// Colour zones are LARGE and there are never more than three hues on one model.
 //
 // ONE CONSTRAINT STILL SHAPES ALL OF THEM: TtpRenderer::render whizz-rolls a
 // rocket about its travel axis at 9 rad/s, so anything not rotationally
@@ -2289,19 +2293,31 @@ void buildRocketModel(const PartFn& part, int variant) {
         return;
     }
     if (variant == 1) {
-        // v1 "cruise" — the archetype done cleanly. A parallel white body, a
-        // smooth OGIVE nose (a stretched sphere, so there is no crease where a
-        // cone would meet the tube), a graphite boat-tail and four small
-        // clipped-delta fins. Nothing decorative on it at all: every part is a
-        // part a missile has.
-        part(primCylinder(0.078f, 0.078f, 0.240f, 18), 0, 0, 0, SHELL, 1.0f);
+        // v1 "cruise" — THE PICK, and now in the game's own colours: a red
+        // parallel body, a yellow OGIVE nose (a stretched sphere, so there is
+        // no crease where a cone would meet the tube), a deep-red boat-tail and
+        // THREE swept wings.
+        //
+        // Red and yellow rather than the grey it was drawn in, and the no-bands
+        // rule is what keeps that from sliding back into the traffic cone every
+        // earlier attempt turned into: these are four PARTS in two hues, not
+        // stripes painted across one shape. The wings are yellow because they
+        // are the thinnest thing on it and the first to be lost against a dark
+        // deck; the nose is yellow because that is the end you want to read
+        // when it is coming at you.
+        constexpr uint32_t HULL = 0xe6492d, TRIM = 0xf2c14e, DEEP = 0xa8382a;
+        part(primCylinder(0.078f, 0.078f, 0.240f, 18), 0, 0, 0, HULL, 1.0f);
         part(applyPre(primSphere(0.078f, 18, 12),
-                    mat4f::scaling(float3{ 1.0f, 1.9f, 1.0f })), 0, 0.120f, 0, GREY, 1.0f);
-        part(primCylinder(0.078f, 0.056f, 0.055f, 18), 0, -0.1475f, 0, GRAPHITE, 1.0f);
-        const Prim fin = primPlate({ { -0.055f, 0.068f }, { -0.166f, 0.068f },
-                                     { -0.172f, 0.126f }, { -0.104f, 0.126f } }, 0.011f);
-        for (int i = 0; i < 4; i++) {
-            part(applyPre(fin, rotYm((float) i * (float) M_PI / 2)), 0, 0, 0, GRAPHITE, 1.0f);
+                    mat4f::scaling(float3{ 1.0f, 1.9f, 1.0f })), 0, 0.120f, 0, TRIM, 1.0f);
+        part(primCylinder(0.078f, 0.056f, 0.055f, 18), 0, -0.1475f, 0, DEEP, 1.0f);
+        // Bigger than the clipped fins they replace — a wing is a thing you can
+        // see, and three of them at 120 degrees is still rotationally symmetric
+        // enough that the 9 rad/s roll reads as a still object.
+        const Prim wing = primPlate({ { -0.020f, 0.070f }, { -0.170f, 0.070f },
+                                      { -0.178f, 0.172f }, { -0.086f, 0.158f } }, 0.013f);
+        for (int i = 0; i < 3; i++) {
+            part(applyPre(wing, rotYm((float) i * (2.0f * (float) M_PI / 3))), 0, 0, 0,
+                    TRIM, 1.0f);
         }
         return;
     }
@@ -4899,16 +4915,37 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             tcm2.setTransform(tcm2.getInstance(m.entity),
                     mat4f::translation(float3{ 0, -1000, 0 }));
             if (mBlendMaterial) {
+                // TWO CONES, not one. The old flame was a single 0.09-long cone
+                // at 0.7 alpha and it barely registered: at the size a rocket
+                // reads on a TV it was a smudge the same width as the boat-tail
+                // it hung off, so the thing that says "this is under power" was
+                // the one part of the model nobody could see.
+                //
+                // A HALO and a CORE instead — a wide soft orange outer cone with
+                // a short bright near-opaque one inside it. That is how a flame
+                // reads at any size: the core carries the brightness, the halo
+                // carries the length, and the two together survive both a pale
+                // sky and a dark deck where one flat cone survives neither.
+                // Still STEADY, not pulsing (see the note above): the jitter the
+                // JS had was noise at this scale, and more flame is not more
+                // reason to flicker it.
                 Mesh& fm = mRocketFlames[r];
-                const uint32_t fc = packLinear(srgbToLinear(0xffb33b), 1.0f, 0.7f);
-                Prim flame = applyPre(primCone(0.045f, 0.09f, 12),
-                        mat4f::rotation((float) M_PI, float3{ 1, 0, 0 }));
-                const uint32_t base = 0;
-                for (const float3& v : flame.v) {
-                    fm.verts.push_back({ v.x * 1.12f, (v.y - 0.145f) * 1.12f,
-                                         v.z * 1.12f, fc });
-                }
-                for (const uint32_t i : flame.i) fm.idx.push_back(base + i);
+                const mat4f aft = mat4f::rotation((float) M_PI, float3{ 1, 0, 0 });
+                const auto cone = [&](float r0, float h, float y0, uint32_t hex,
+                        float alpha) {
+                    const uint32_t c = packLinear(srgbToLinear(hex), 1.0f, alpha);
+                    const uint32_t base = (uint32_t) fm.verts.size();
+                    const Prim p = applyPre(primCone(r0, h, 14), aft);
+                    for (const float3& v : p.v) {
+                        fm.verts.push_back({ v.x * 1.12f, (v.y + y0 - h / 2) * 1.12f,
+                                             v.z * 1.12f, c });
+                    }
+                    for (const uint32_t i : p.i) fm.idx.push_back(base + i);
+                };
+                // y0 is where the cone's MOUTH sits — the tail of the body —
+                // and each runs back (-Y) from there.
+                cone(0.076f, 0.230f, -0.165f, 0xff6a2a, 0.55f); // halo
+                cone(0.044f, 0.150f, -0.165f, 0xffe07a, 0.92f); // core
                 if (!buildMesh(fm, true, mBlendMaterial->getDefaultInstance())) break;
                 tcm2.setTransform(tcm2.getInstance(fm.entity),
                         mat4f::translation(float3{ 0, -1000, 0 }));

@@ -40,7 +40,7 @@ const BENCH_MODELS = [
   // made half the earlier attempts read as a traffic cone.
   { id: 'rocket', label: 'Rocket', ships: 1, scale: '9x (it ships at 0.2 units)',
     variants: ['0 · original — the toy rocket, red and cream, kept to compare against',
-               '1 · cruise — parallel body, smooth ogive nose, four clipped fins',
+               '1 · cruise — PICKED: red hull, yellow ogive nose, three swept wings',
                '2 · stealth — the same object in flat facets, three angular blades',
                '3 · lance — long and slender, strakes down its length, not tail fins'] },
   { id: 'gnome', label: 'Garden gnome', ships: 1, scale: null,
