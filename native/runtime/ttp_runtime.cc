@@ -1276,7 +1276,7 @@ static const TrackCache* track_by_id_or_descriptor(const char* arg) {
     rt = build_race_track(*def, 3, 1u);
   }
   cache.rt = std::move(rt);
-  cache.cl.reset(new Centerline(centerline_of(cache.rt)));
+  cache.cl = std::make_unique<Centerline>(centerline_of(cache.rt));
   key = arg;
   valid = true;
   return &cache;

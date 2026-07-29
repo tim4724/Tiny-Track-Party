@@ -568,7 +568,7 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   (9.8 s vs Make's 14.0 s) — the generator is fixed for the life of the
   directory, so it can only be chosen once. E2E runs `workers: 3` off CI
   (213 s → 79 s; see `playwright.config.js` for why not more).
-  The steady state is `npm test` ~5 s, `ctest` ~6 s, E2E ~80 s, and a one-file
+  The steady state is `npm test` ~5 s, `ctest` ~6 s, E2E ~90 s, and a one-file
   engine change ~9 s through `build-runtime-web.sh` (of which ~5 s is the emcc
   link, which no cache can help). Anything much worse than that is a
   regression worth chasing — `npm test` was 18.5 s until one audit ABI stopped

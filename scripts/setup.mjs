@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { configureNative, has as which } from './lib/native-cmake.mjs';
+import { configureNative, hasBin } from './lib/native-cmake.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const has = (p) => fs.existsSync(path.join(ROOT, p));
@@ -36,15 +36,13 @@ const step = (label, fn) => {
     process.exitCode = 1;
   }
 };
-const run = (cmd, args, opts = {}) =>
-  execFileSync(cmd, args, { cwd: ROOT, stdio: 'pipe', encoding: 'utf8', ...opts });
 
 console.log(`\nTiny Track Party — worktree setup\n  ${ROOT}\n`);
 
 // ---- 1. node dependencies ---------------------------------------------------
 step('npm dependencies', () => {
   if (has('node_modules')) return 'already installed';
-  run('npm', ['install', '--no-audit', '--no-fund']);
+  execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: ROOT, stdio: 'pipe' });
   return 'installed';
 });
 
@@ -55,19 +53,27 @@ step('npm dependencies', () => {
 // depends on what you are doing, and the configure is the part that is pure
 // setup.
 step('native/build (cmake)', () => {
-  if (!which('cmake')) {
+  if (!hasBin('cmake')) {
     notes.push('cmake is not installed — `ctest`, the probes and the wasm build are unavailable.');
     return 'skipped (no cmake)';
   }
-  const result = configureNative(ROOT);
-  if (!which('ninja')) notes.push('ninja is not installed — cmake fell back to Make (~40% slower builds).');
-  return result;
+  // Only warn when this run actually settled for Make. An existing tree made
+  // that choice at some earlier point and cannot be talked out of it now.
+  const made = configureNative(ROOT);
+  if (made === 'make') {
+    notes.push('ninja is not installed — cmake fell back to Make (14.0 s vs 9.8 s per cold build),'
+      + ' and the generator is fixed for the life of native/build.');
+  }
+  return { kept: 'already configured', ninja: 'configured (Ninja)', make: 'configured (Make)' }[made];
 });
 
 // ---- 3. report what the tree can and cannot do ------------------------------
-if (!which('ccache')) {
-  notes.push('ccache is not installed — a fresh worktree rebuilds from scratch (12 s vs 0.6 s).'
-    + ' `brew install ccache` and re-run; native/CMakeLists.txt picks it up automatically.');
+if (!hasBin('ccache')) {
+  // The launcher is baked into CMakeCache.txt at configure time, so installing
+  // ccache later does nothing until the build tree is re-made — say so, rather
+  // than leaving someone to wonder why nothing got faster.
+  notes.push('ccache is not installed — a from-scratch native/build costs 14.0 s instead of 0.63 s.'
+    + ' `brew install ccache`, then `rm -rf native/build && npm run setup` to pick it up.');
 }
 if (!has('public/display/engine/native/ttp_runtime.wasm')) {
   notes.push('the engine wasm is missing from the checkout — nothing that loads the display will run.');
@@ -82,7 +88,7 @@ if (!fs.existsSync(pwCache) && !fs.existsSync(path.join(process.env.HOME || '', 
 console.log('\nReady:');
 console.log('  npm test                        unit + wire-compat  (~5 s)');
 console.log('  ctest --test-dir native/build   native conformance, 47 tests  (~6 s, after a build)');
-console.log('  npm run test:e2e                Playwright  (~80 s)');
+console.log('  npm run test:e2e                Playwright  (~90 s)');
 console.log('  npm run dev                     the server, watching');
 console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk:');
 console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts');

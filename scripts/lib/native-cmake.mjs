@@ -13,24 +13,25 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const has = (bin) => spawnSync('which', [bin], { encoding: 'utf8' }).status === 0;
+export const hasBin = (bin) => spawnSync('which', [bin], { encoding: 'utf8' }).status === 0;
 
-// Configure native/build if it is not already configured. Returns a short
-// description of what happened, for the caller to print.
+// Configure native/build if it is not already configured. Returns what happened
+// — 'kept' | 'ninja' | 'make' — for the caller to word as it likes. A caller
+// that wants to warn about the Make fallback needs to know the difference
+// between choosing it and merely finding a tree that already made the choice.
 //
 // The generator is only ever passed on a FRESH directory: handing `-G Ninja` to
 // an existing Make tree is a hard cmake error, and worktrees predating this
 // script have exactly that tree.
 export function configureNative(root, { buildDir = 'native/build' } = {}) {
-  if (!has('cmake')) throw new Error('cmake is not installed');
-  const abs = path.join(root, buildDir);
-  if (fs.existsSync(path.join(abs, 'CMakeCache.txt'))) return 'already configured';
-  const ninja = has('ninja');
+  if (!hasBin('cmake')) throw new Error('cmake is not installed');
+  if (fs.existsSync(path.join(root, buildDir, 'CMakeCache.txt'))) return 'kept';
+  const ninja = hasBin('ninja');
   execFileSync('cmake', [
     '-S', 'native', '-B', buildDir, '-DCMAKE_BUILD_TYPE=Release',
     ...(ninja ? ['-G', 'Ninja'] : []),
   ], { cwd: root, stdio: 'pipe' });
-  return ninja ? 'configured (Ninja)' : 'configured (Make)';
+  return ninja ? 'ninja' : 'make';
 }
 
 export function buildTarget(root, target, { buildDir = 'native/build' } = {}) {
