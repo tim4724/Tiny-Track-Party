@@ -86,7 +86,7 @@ if (!fs.existsSync(pwCache) && !fs.existsSync(path.join(process.env.HOME || '', 
 }
 
 console.log('\nReady:');
-console.log('  npm test                        unit + wire-compat  (~5 s)');
+console.log('  npm test                        unit + wire-compat  (~11 s)');
 console.log('  ctest --test-dir native/build   native conformance, 47 tests  (~6 s, after a build)');
 console.log('  npm run test:e2e                Playwright  (~90 s)');
 console.log('  npm run dev                     the server, watching');

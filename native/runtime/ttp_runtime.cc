@@ -1236,7 +1236,7 @@ static Centerline centerline_of(const RaceTrack& rt) {
 // tests/track.test.js samples four shipped tracks every frame of a 3000-frame
 // race, so rebuilding per call was 15.4 s of an 18.5 s `npm test` — against
 // 0.15 s of actual simulation. scripts/track-gen.mjs has the same shape,
-// asking one candidate for a sweep, a frame and a frame list in a row. One
+// asking one candidate for a sweep and then a frame list in a row. One
 // entry is the right depth: the hot pattern is a run of calls about one track,
 // and a seed scan walking thousands of DISTINCT descriptors would only thrash a
 // bigger cache (the same reasoning as scripts/native-track.mjs's MEMO_MAX).

@@ -568,9 +568,12 @@ no-relay preview surface (driven by the per-page TestHarness via `?scenario=…`
   (9.8 s vs Make's 14.0 s) — the generator is fixed for the life of the
   directory, so it can only be chosen once. E2E runs `workers: 3` off CI
   (213 s → 79 s; see `playwright.config.js` for why not more).
-  The steady state is `npm test` ~5 s, `ctest` ~6 s, E2E ~90 s, and a one-file
+  The steady state is `npm test` ~11 s, `ctest` ~6 s, E2E ~90 s, and a one-file
   engine change ~9 s through `build-runtime-web.sh` (of which ~5 s is the emcc
   link, which no cache can help). Anything much worse than that is a
   regression worth chasing — `npm test` was 18.5 s until one audit ABI stopped
-  rebuilding its track per call.
+  rebuilding its track per call. Of the ~11 s, ~10.6 s is
+  `codegen-freshness.test.js` alone, which re-derives the track bake: that one
+  is real work and not a regression, but it does mean the suite's wall clock is
+  now ONE test, so read a jump there before suspecting anything else.
 - Preview deploys: every push builds and deploys to `https://tinytrack-<branch>.couch-games.com` (see `.github/workflows/preview.yml`).
