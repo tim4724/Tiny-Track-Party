@@ -567,12 +567,12 @@ private:
     // (rocket, gnome, train). Sized by hand because that enum lives beside the
     // builders it names; a static_assert in the .cpp holds the two together.
     //
-    // THESE DEFAULTS ARE WHAT THE GAME DRAWS. The gnome and the train are the
-    // picks off the model bench (/gallery-assets.html) — the detailed gnome,
-    // the classic loco. The ROCKET is 1, the cruise missile: SLEEK AND MODERN
-    // was the direction chosen after four rounds of toy shapes were turned
-    // down, and 1..3 are three readings of it. Which of the three is a taste
-    // call still open.
+    // THESE DEFAULTS ARE WHAT THE GAME DRAWS, and all three are settled picks
+    // off the model bench (/gallery-assets.html): the detailed gnome, the
+    // classic loco, and the cruise missile. The rocket took five rounds to
+    // land, and 2..3 are the two unpicked readings of the same brief, kept
+    // because the bench is worth more with them in it than the source is
+    // shorter without.
     //
     // Variant 0 is the pre-bench geometry on every row and is kept — a bench
     // with no "what we have today" in it is not a comparison — but it is no

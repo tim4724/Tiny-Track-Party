@@ -516,12 +516,13 @@ export function runDisplayScenario(opts, ctx) {
         // verge, instead of the usual landmark set. Same rebuild shape as the
         // biome pick above — the geometry is baked into the scene's meshes, so
         // there is nothing to toggle on a live one.
-        // Flies you there too. The row is 30 units up the exhibition straight,
-        // on the far verge, facing the road — findable, but only if you already
-        // know it is there, and a bench you have to search for is a bench that
-        // gets used once. Authored from the showroom's own geometry for the
-        // same reason START_CAM is: this scenario builds exactly one track.
-        // BENCH_CAM.y lifts for the rocket, whose row is staged at 9x.
+        //
+        // It FLIES YOU THERE too. The row starts 26 units up the exhibition
+        // straight on the far verge, facing the road: findable, but only if you
+        // already know it is there, and a bench you have to search for is a
+        // bench that gets used once. The viewpoint is authored from the
+        // showroom's own geometry for the same reason START_CAM is — this
+        // scenario builds exactly one track.
         async bench(model) {
           scene.bench(model || '');
           await scene.setTrack(track);
@@ -530,8 +531,8 @@ export function runDisplayScenario(opts, ctx) {
             // Offset up-track and pulled back so the whole row clears the
             // legend panel, which is the right quarter of the frame whenever
             // the gallery is showing one. The ROCKET row is one entry longer
-            // (four SHAPES, not three detail levels) and is staged at 9x, so
-            // it needs both a wider shot and more height than the other two.
+            // than the other two and is staged at 9x, so it needs both a wider
+            // shot and more height.
             const wide = model === 'rocket';
             cam.eye = { x: wide ? 37.0 : 31.5, y: wide ? 5.4 : 2.6,
                         z: wide ? -19.0 : -10.5 };

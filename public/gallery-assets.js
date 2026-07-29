@@ -35,9 +35,12 @@ const state = Gallery.loadState();
 // had" in it is not a comparison.
 const BENCH_MODELS = [
   // SLEEK AND MODERN, chosen after four rounds of toy shapes were turned down.
-  // 1..3 share a palette (cool white, one grey, one graphite, NO BANDS) and
-  // differ only in form. The banding is the part that matters most: it is what
-  // made half the earlier attempts read as a traffic cone.
+  // 1..3 are three readings of it and share a RULE rather than a palette: no
+  // bands, the hue changing where the object changes. That is the part that
+  // mattered most — banding is what made half the earlier attempts read as a
+  // traffic cone whatever silhouette they were given. 2 and 3 are still in the
+  // grey they were drawn in; the picked one wears the game's red and yellow and
+  // reads as a machine anyway, which is the rule doing its job.
   { id: 'rocket', label: 'Rocket', ships: 1, scale: '9x (it ships at 0.2 units)',
     variants: ['0 · original — the toy rocket, red and cream, kept to compare against',
                '1 · cruise — PICKED: red hull, yellow ogive nose, three swept wings',

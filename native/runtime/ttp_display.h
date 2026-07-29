@@ -77,12 +77,13 @@ TTP_ABI void ttp_display_biome(const char* name);
  * frame and must not be a mode the renderer has to keep two versions of.
  *
  * It also puts the showroom's STANDING EXHIBITS on every frame drawn while the
- * field is parked (ttp_display_hold): a pair of rockets on the furniture
- * straight, and the monster rig on the back of the grid. Those two are the only
- * things the renderer draws that a track descriptor cannot author — a rocket is
- * a homing projectile, the monster truck is a transform of a car — so without
- * this a gallery could show them only by running a race. Lifting the hold drops
- * them and hands the scene back to the sim.
+ * field is parked (ttp_display_hold): a pair of rockets in the item run at the
+ * head of the exhibition straight, and a monster rig on every slot in the back
+ * half of the grid. Those two are the only things the renderer draws that a
+ * track descriptor cannot author — a rocket is a homing projectile, the monster
+ * truck is a transform of a car — so without this a gallery could show them
+ * only by running a race. Lifting the hold drops them and hands the scene back
+ * to the sim.
  *
  * Off by default and reached by nothing on the shipping path — the gallery
  * (/gallery-assets.html) is its only caller. A shell in showcase mode must fetch
@@ -100,9 +101,11 @@ TTP_ABI void ttp_display_showcase(int on);
  * them, which is what these two latches are for.
  *
  * ttp_display_model_variant picks which take on `model` ("rocket", "gnome",
- * "train") every scene from here on is built with. VARIANT 0 IS WHAT SHIPS, so
- * a shell that never calls this draws exactly what it drew before. An unknown
- * name is ignored; an out-of-range variant clamps.
+ * "train") every scene from here on is built with. A shell that never calls it
+ * draws the PICKED set, which is the C++ default (TtpRenderer.h) and not
+ * variant 0 — variant 0 is each model's pre-bench geometry, kept so the bench
+ * has something to argue against. An unknown name is ignored; an out-of-range
+ * variant clamps to that model's own count, which differs per model.
  *
  * ttp_display_bench turns the next build into a MODEL BENCH for `model`: every
  * variant of it standing in a row on the verge, all facing the road, and NO

@@ -2161,7 +2161,7 @@ Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
 }
 
 // ---------------------------------------------------------------------------
-// MODEL VARIANTS — three takes on each of the props worth looking at closely.
+// MODEL VARIANTS — the takes on each of the props worth looking at closely.
 //
 // WHY THESE ARE FUNCTIONS AND NOT INLINE IN buildLandmarks. Two callers need
 // the same geometry from different frames: the landmark placer, which stands
@@ -2176,9 +2176,10 @@ Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
 // body centre for the rocket, whose +y is its nose). Placement, yaw and world
 // offset are the caller's.
 //
-// VARIANT 0 IS ALWAYS WHAT SHIPPED BEFORE, byte for byte. That is what makes
-// the bench a decision rather than a fait accompli: the row's first entry is
-// the thing being argued against, and picking it is a legitimate outcome.
+// VARIANT 0 IS ALWAYS THE PRE-BENCH GEOMETRY, byte for byte. That is what
+// makes the bench a decision rather than a fait accompli: the row's first entry
+// is the thing being argued against, and picking it was always a legitimate
+// outcome. It is not what ships — the picks are mModelVariant's defaults.
 // ---------------------------------------------------------------------------
 
 using PartFn = std::function<void(const Prim&, float, float, float, uint32_t, float)>;
@@ -2905,16 +2906,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     // Every variant of one model, in a row on the verge, all facing the road.
     // The row replaces the landmark set entirely: this is a scene for judging
     // one thing, and a doghouse behind the middle gnome is a thumb on the
-    // scale. Stand on the road opposite the middle entry and the three are
+    // scale. Stand on the road opposite the middle of it and the whole row is
     // side by side at near-equal distance, which is the only way a shape
     // argument gets settled.
     if (mBenchModel >= 0 && mBenchModel < MODEL_COUNT) {
         constexpr float BENCH_S0 = 26, BENCH_OFF = 4.2f;
-        // Spacing is per model for the same reason the COUNT is: the rocket row
-        // is five entries of a narrow object, and at the gnome's spacing it
-        // would run 28 units up the straight and have to be viewed from so far
-        // back that the shapes stop resolving — which is the one thing a bench
-        // may not do.
+        // Spacing is per model for the same reason the COUNT is: the rocket
+        // row is one entry longer than the others AND is a narrow object, so at
+        // the gnome's spacing it would run far enough up the straight to have
+        // to be viewed from a distance where the shapes stop resolving — which
+        // is the one thing a bench may not do.
         const float BENCH_STEP = mBenchModel == MODEL_ROCKET ? 5.6f : 7.0f;
         // The ROCKET ships at 0.2 world units — a fist. Judged at that size a
         // bench tells you nothing but which one is a dot, so its row is blown

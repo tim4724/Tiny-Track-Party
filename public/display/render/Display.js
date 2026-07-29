@@ -160,9 +160,10 @@ export class Display {
 
   // DEV. Which take on a procedural prop ("rocket" | "gnome" | "train") later
   // scenes are meshed with, and the asset gallery's MODEL BENCH — every variant
-  // of one prop in a row instead of the usual landmarks. Variant 0 ships, and a
-  // null/"" bench is the normal scene, so leaving both alone is the status quo.
-  // Latched like showcase(): they change what the next setTrack meshes.
+  // of one prop in a row instead of the usual landmarks. Calling NEITHER is the
+  // shipping scene: the picked variants are C++ defaults (TtpRenderer.h), and a
+  // null/"" bench is the normal one. Latched like showcase(): they change what
+  // the next setTrack meshes, not what a frame draws.
   modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
   bench(model) { this._fn.bench(model || ''); }
 
