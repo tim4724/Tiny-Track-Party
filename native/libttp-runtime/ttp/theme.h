@@ -257,9 +257,8 @@ Theme resolve_theme(const char* biomeName, const char* trackId);
 // Returns empty when nothing tints that model, or the bytes are
 // missing/unparseable (which simply renders it in its authored colours).
 //
-// NO BIOME ARGUMENT, and that is the point: a recolour belongs to the model, so
-// the same model looks the same wherever it is planted. See theme.cc's table for
-// what the biome key used to cost the asset gallery.
+// NO BIOME ARGUMENT: a recolour belongs to the model, so the same model looks
+// the same wherever it is planted. theme.cc's table says what that costs.
 std::vector<MatTint> resolve_model_tints(const std::string& model,
                                          const uint8_t* glb, size_t len);
 

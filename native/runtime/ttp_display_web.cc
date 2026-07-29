@@ -193,10 +193,8 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // The one part of the palette that cannot be resolved from data alone: a
     // scenery recolour keyed by AUTHORED colour has to read the model's own glTF
     // materials. Those bytes are already here — the shell provided them as
-    // scenery<i>.glb, i being the model's index in this same list. The biome is
-    // deliberately NOT passed: a recolour is the model's, so the showroom above
-    // (which stages every biome's models at once) gets the same palm the beach
-    // does rather than the kit's raw turquoise.
+    // scenery<i>.glb, i being the model's index in this same list. Resolved per
+    // MODEL, so the showroom above gets the same palm the beach does.
     for (size_t i = 0; i < theme.scenery.models.size(); i++) {
         const std::vector<uint8_t>* glb =
                 g_disp->renderer->asset(("scenery" + std::to_string(i) + ".glb").c_str());

@@ -20,6 +20,11 @@
 // in the DOM from `icon` — and the scenery recolours, resolved against the
 // shipped GLBs' own authored material colours.
 //
+// ONE CLAIM HERE IS NOT THE CORPUS'S, and is reported separately for that
+// reason: that no untextured model the game stages falls through the tint table
+// (see "Beyond the corpus" below). It is behavioural, derived from the shipped
+// GLBs, and free to change with the assets — everything above it is frozen.
+//
 // Usage: theme_check <theme-corpus.jsonl> <assetDir>
 //   assetDir is public/assets/toycar (the scenery GLBs the tint maps key on).
 
@@ -311,25 +316,26 @@ int main(int argc, char** argv) {
     }
   }
 
+  std::printf("theme corpus: %d/%d cases passed\n", passed, cases);
+
   // ---- Beyond the corpus: every untextured model the game plants is tinted --
   //
-  // NOT corpus evidence — the corpus can only replay the eleven (biome, model)
-  // pairs the JS oracle happened to record, each under its own home biome. This
-  // is the claim those cases cannot make: that NOTHING the game stages falls
-  // through the tint table into the kit's raw authored colours.
+  // The corpus can only replay the eleven (biome, model) pairs the JS oracle
+  // recorded, each under its own home biome — the one case a model-keyed and a
+  // biome-keyed table agree on, which is why it could not catch the gallery
+  // drawing untinted palms in five biomes out of six. This is the claim it
+  // cannot make: that nothing the game stages falls through kModelTints.
   //
-  // It is derived from the ASSETS, not from a list, which is the point. A model
-  // carrying a colormap texture is correct by construction and needs no entry; a
-  // model without one has nothing but its baseColorFactor, and for the four
-  // Nature Kit props that factor is Kenney's turquoise `leafsGreen` — a real
-  // colour, deliberately authored, and not one this game's biomes want. So
-  // "untextured and untinted" is precisely the bug: it is what the asset gallery
-  // drew in five biomes out of six while the table was keyed by biome, and it is
-  // what a newly vendored kit model would draw if someone forgot a row.
+  // Derived from the ASSETS rather than a list, so a newly vendored kit model
+  // with no row fails here instead of quietly drawing the kit's own colours. A
+  // colormap-TEXTURED model is correct by construction and is skipped; an
+  // untextured one has nothing but its baseColorFactor. The model list is the
+  // SHOWCASE's, that being the union of what every biome plants — walking the
+  // shipping biomes one at a time would miss a model only the gallery stages.
   //
-  // The model list is the SHOWCASE's, because that is the union of everything
-  // every biome plants — checking the shipping biomes one at a time would miss a
-  // model only the gallery stages, which is the case that actually broke.
+  // Re-walks the GLB header that resolve_model_tints also walks (chunk 0 is
+  // JSON, its length at offset 12). Four lines, against widening theme.h with a
+  // predicate only a test wants.
   const auto untextured = [](const std::vector<uint8_t>& glb) {
     if (glb.size() < 20) return false;
     uint32_t jsonLen = 0;
@@ -347,6 +353,7 @@ int main(int argc, char** argv) {
     }
     return true;
   };
+  int tintable = 0, tinted = 0;
   for (const std::string& model : rt::showcase_models()) {
     const std::vector<uint8_t> glb = readFile(assetDir + "/" + model + ".glb");
     if (glb.empty()) {
@@ -354,9 +361,9 @@ int main(int argc, char** argv) {
       return 2;
     }
     if (!untextured(glb)) continue;
-    cases++;
+    tintable++;
     if (!rt::resolve_model_tints(model, glb.data(), glb.size()).empty()) {
-      passed++;
+      tinted++;
     } else {
       std::fprintf(stderr,
                    "FAIL untinted %s: untextured, so it draws in the kit's own authored\n"
@@ -364,7 +371,7 @@ int main(int argc, char** argv) {
                    model.c_str());
     }
   }
+  std::printf("untextured models tinted: %d/%d\n", tinted, tintable);
 
-  std::printf("theme corpus: %d/%d cases passed\n", passed, cases);
-  return passed == cases ? 0 : 1;
+  return (passed == cases && tinted == tintable) ? 0 : 1;
 }
