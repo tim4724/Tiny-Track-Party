@@ -211,6 +211,17 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   bare session left UNRUN — the cars park on the grid, which is the opening shot
   — until the gallery's Drive toggle lets the AI out (`window.__showroom`, the
   frame's control surface: biome, forced item, drive, camera home).
+  THREE THINGS EXIST ONLY WHILE CARS ARE RACING, and the parked showroom stands
+  them anyway. The bananas need nothing (the showroom track authors three, and
+  an authored banana respawns, so it is live from frame zero); a ROCKET is a
+  homing projectile and the MONSTER TRUCK is a transform of a car, so neither
+  can be authored into a descriptor at all. Those two are `showcase_rockets()` /
+  `showcase_monster_slot()`, staged by `buildFrame` while `showcase && hold` —
+  the exhibits are the PARKED state's, so Drive hands the scene back to the sim
+  rather than leaving a truck welded to the last car. The rig is written to the
+  outgoing frame and never into `held`, and the exhibit rockets take the FRONT of
+  the array (the renderer's pool is four). `frame_check` holds the mode rule,
+  `showcase_check` holds the placement.
   It is DEV-ONLY and reached by nothing on the shipping path: `ttp_display_showcase`
   is latched off, and `showcase.cc` sits beside `theme.cc` rather than inside it
   precisely so a gallery can never move a number the shipping game draws with

@@ -47,6 +47,7 @@
 #include "ttp/hud.h"
 #include "ttp/roster.h"
 #include "ttp/race_track.h"
+#include "ttp/showcase.h"
 #include "ttp/util.h"
 #include "ttp/vecmath.h"
 #include "ttp_display.h"
@@ -728,6 +729,114 @@ void testProps(const BuiltRaceTrack& base) {
 }
 
 // ---------------------------------------------------------------------------
+// 8. The asset gallery's STANDING EXHIBITS (ttp/showcase.h).
+//
+//    WHAT they are and WHERE they stand is showcase_check's; this is the rule
+//    that lives here, and it is a rule about a MODE rather than about a number:
+//    an exhibit is on the frame only while the showroom is in showcase mode AND
+//    the field is parked. Both halves matter and neither is visible from the
+//    other file. Drop the showcase half and every shipping race grows two
+//    rockets nobody fired. Drop the parked half and the gallery's Drive toggle
+//    hands the scene back to the sim with a truck welded to the last car and a
+//    pair of rockets hanging over the road it is driving down.
+//
+//    The monster rig carries a third rule with no natural home either: it is
+//    written to the OUTGOING frame and never into `held`. The held field is the
+//    real one, kept so a hold has something to hold; baking a gallery decision
+//    into it would leave the truck standing on the grid after the hold lifted,
+//    with nothing left that knew to take it off.
+// ---------------------------------------------------------------------------
+void testShowcaseExhibits(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);   // car P1 is mid-monster in the SIM, which must read through
+  const double len = game.length();
+  const std::vector<rt::ShowcaseRocket>& want = rt::showcase_rockets();
+  check(!want.empty(), "premise: the showcase stands at least one rocket");
+
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+
+  const auto monsters = [](const TtpFrameInput* h) {
+    std::string s;
+    for (uint32_t i = 0; i < h->carCount; i++) {
+      s += ttp_frame_cars(h)[i].monster > 0.5f ? '1' : '0';
+    }
+    return s;
+  };
+
+  // Off, which is every shell but the gallery.
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
+  checkU(h->rocketCount, 0, "a shipping display stands no rockets");
+  check(monsters(h) == "010", "premise: only the sim's own monster is up");
+
+  // Showcase, but DRIVING: the gallery let the AI out, so the scene is the
+  // sim's again and an exhibit would be the one rocket nobody fired.
+  d.showcase = true;
+  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
+  checkU(h->rocketCount, 0, "a driving showroom stands no rockets");
+  check(monsters(h) == "010", "…and stages no rig");
+
+  // Parked. This first held frame still goes down the LIVE branch (`held` is
+  // empty), which is the arm that also has to carry the exhibits.
+  d.hold = true;
+  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
+  checkU(h->rocketCount, (uint32_t) want.size(), "the parked showroom stands its rockets");
+  for (size_t i = 0; i < want.size(); i++) {
+    const std::string who = "exhibit rocket " + std::to_string(i);
+    checkF(ttp_frame_rockets(h)[i].s, (float) ttp::wrap_s(want[i].u * len, len),
+           who + " is its lap fraction of THIS track's length");
+    checkF(ttp_frame_rockets(h)[i].lat, want[i].lat, who + " keeps its lateral offset");
+  }
+  check(monsters(h) == "011", "the last roster slot wears the rig, and only it");
+  check(d.held.size() == 3 && d.held[2].monster == 0.0f,
+        "the rig is not written into the held field");
+  check(d.held[1].monster == 1.0f, "…while the sim's own monster is");
+
+  // The second parked frame comes off `held` (the memcpy arm) and must carry it
+  // just the same — this is the frame the gallery actually sits on.
+  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
+  check(monsters(h) == "011", "a held frame carries the rig too");
+
+  // Live traffic goes BEHIND the exhibits: the renderer's rocket pool is four,
+  // so the array's order is what keeps an exhibit in the picture.
+  game.stageRocket(12.5, 0.4, 9.0, P0);
+  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseWidthFrac(d));
+  checkU(h->rocketCount, (uint32_t) want.size() + 1, "a live rocket joins the exhibits");
+  checkF(ttp_frame_rockets(h)[0].lat, want[0].lat, "the exhibits keep the front of the array");
+  checkF(ttp_frame_rockets(h)[want.size()].lat, 0.4f, "…and the live rocket falls in behind");
+
+  // A seat whose car is not in the field was memset to the origin with a zero
+  // forward. A rig grafted onto that is a truck standing in the middle of
+  // nothing, pointing nowhere.
+  DisplayState g = freshState();
+  g.showcase = true;
+  g.hold = true;
+  g.roster = {P0, P1, GHOST};
+  h = rt::buildFrame(g, &game, DT, caseAspect(g), caseWidthFrac(g));
+  check(monsters(h) == "010", "an empty slot is not put in a monster truck");
+
+  // And an empty roster has no slot to spare, which must not be slot -1.
+  DisplayState e = freshState();
+  e.showcase = true;
+  e.hold = true;
+  h = rt::buildFrame(e, &game, DT, caseAspect(e), caseWidthFrac(e));
+  checkU(h->carCount, 0, "an empty roster stages no rig");
+  // The rockets do not depend on the field at all (the +1 is the live one still
+  // in flight from the ordering case above).
+  checkU(h->rocketCount, (uint32_t) want.size() + 1, "…but still stands its rockets");
+
+  // No session bound: an exhibit's `u` is a fraction of a lap length there is
+  // nothing to ask for.
+  DisplayState n = freshState();
+  n.showcase = true;
+  n.hold = true;
+  n.roster = {P0, P1, P2};
+  h = rt::buildFrame(n, nullptr, DT, caseAspect(n), caseWidthFrac(n));
+  checkU(h->rocketCount, 0, "an unbound showroom stands nothing");
+  check(monsters(h) == "000", "…and dresses nobody");
+}
+
+// ---------------------------------------------------------------------------
 // 9. The cell overlay — the steer bar's per-cell block (TtpCellHudInput).
 //
 //    This is the one place a HUD value is assembled in C++ at all, and the two
@@ -1096,6 +1205,7 @@ int main() {
   testCellHud(bt.game);
   testHud(bt.game);
   testProps(bt);
+  testShowcaseExhibits(bt.game);
 
   std::printf("frame builder check: %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

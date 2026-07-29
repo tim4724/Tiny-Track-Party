@@ -59,5 +59,41 @@ Theme showcase_theme(const char* biomeName, const char* trackId);
 // that drew its own list would be maintaining a second copy of what is staged.
 std::string showcase_inventory_json();
 
+// ---------------------------------------------------------------------------
+// THE STANDING EXHIBITS.
+//
+// Three of the things the renderer draws exist ONLY while cars are racing: a
+// rocket in flight, the monster truck, and a dropped banana. A gallery that can
+// show them only under its Drive toggle is showing them the way a race does,
+// which is to say briefly and from behind.
+//
+// The BANANAS need nothing here — the showroom track authors three of them
+// (shared/devTracks.js) and an authored banana respawns, so it is live from the
+// first frame. The other two cannot be authored into a track descriptor at all:
+// a rocket is a homing projectile with an owner and a fuse, and the monster
+// truck is a TRANSFORM OF A CAR rather than a prop. So they are staged at frame
+// time instead (frame_builder.cc), and only while the field is PARKED. The
+// moment Drive lets the AI out, what is on screen should be what the sim
+// actually produced.
+//
+// Here rather than in the frame builder for the same reason the theme union is
+// here: this is the gallery deciding what to exhibit, and the gallery's
+// decisions sit in one dev-only file that the shipping path cannot reach.
+// ---------------------------------------------------------------------------
+
+// A rocket stood on the showroom's furniture straight: its track position as a
+// LAP FRACTION (the unit a track descriptor places furniture in) and a lateral
+// offset in the same units a banana's is. The renderer hovers and whizz-rolls
+// it exactly as it does one in flight, so the exhibit IS the in-race object and
+// not a still of it.
+struct ShowcaseRocket { float u, lat; };
+const std::vector<ShowcaseRocket>& showcase_rockets();
+
+// Which roster slot wears the monster rig while the field is parked, or -1 for
+// a field with no slot to spare. The LAST one, which on a grid is the back row:
+// where a catch-up item belongs, and behind the lineup shot the gallery opens
+// on rather than in the middle of it.
+int showcase_monster_slot(int rosterSize);
+
 }  // namespace rt
 }  // namespace ttp

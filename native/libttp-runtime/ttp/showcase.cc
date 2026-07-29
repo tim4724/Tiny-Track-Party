@@ -213,5 +213,22 @@ std::string showcase_inventory_json() {
   return canonical_stringify(o);
 }
 
+const std::vector<ShowcaseRocket>& showcase_rockets() {
+  // On the showroom's BACK STRAIGHT (u 0.42 .. 0.76), past the pillar gate at
+  // u 0.63/0.66, so the furniture run reads as a sequence a viewer flies along:
+  // slick, bananas, pillars, rockets. Staggered across the road like the
+  // bananas above them rather than paired, which shows the whizz-roll from two
+  // sides at once without either exhibit hiding the other.
+  static const std::vector<ShowcaseRocket> rockets = {
+      { 0.700f, -0.9f },
+      { 0.725f, 0.9f },
+  };
+  return rockets;
+}
+
+int showcase_monster_slot(int rosterSize) {
+  return rosterSize > 0 ? rosterSize - 1 : -1;
+}
+
 }  // namespace rt
 }  // namespace ttp

@@ -59,10 +59,6 @@ struct Display : ttp::rt::DisplayState {
     TtpRenderer* renderer = nullptr;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context = 0;
     bool built = false;
-    // The asset gallery's showroom (ttp_display_showcase). Latched beside
-    // `biome` because it is the same kind of thing: what the next build
-    // RESOLVES, not what a frame draws.
-    bool showcase = false;
 };
 
 Display* g_disp = nullptr;

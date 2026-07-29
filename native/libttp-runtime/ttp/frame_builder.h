@@ -83,6 +83,15 @@ struct DisplayState {
     // all three read the same field.
     std::string biome;
 
+    // The asset gallery's showroom (ttp_display_showcase). Latched beside
+    // `biome` because it is mostly the same kind of thing — what the next BUILD
+    // resolves its theme through (ttp/showcase.h) — but it is read here too:
+    // while the field is PARKED (`hold`) the frame carries the showroom's
+    // standing exhibits, the two things a race would otherwise have to produce
+    // before anyone could look at them (a rocket, the monster rig). Off
+    // everywhere on the shipping path.
+    bool showcase = false;
+
     int camMode = CAM_STILL;
     V3 freeEye, freeTarget;
     bool fog = true;

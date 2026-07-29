@@ -4,8 +4,8 @@
 // corpus and not conformance evidence. The showcase theme has no JS twin and
 // never had one: it stages a scene that has never existed in play, so there is
 // nothing to record against and nothing here says whether a port was right.
-// What it does say is that the four claims showcase.h makes are true of the
-// tables as they stand TODAY, which is the only thing that can rot:
+// What it does say is that the claims showcase.h makes are true of the tables
+// as they stand TODAY, which is the only thing that can rot:
 //
 //   1. COMPLETENESS. Every landmark kind, every clutter kind and every scenery
 //      GLB any biome plants is staged. This is the whole point of the gallery,
@@ -22,6 +22,10 @@
 //      biome must survive the union byte for byte.
 //   4. THE SCATTER IS WELL-FORMED. Weights sum to one, the roll thresholds
 //      stay ordered, the densities meet their floors.
+//   5. THE STANDING EXHIBITS ARE PLACEABLE. The rocket the parked showroom
+//      stands is on the road and inside one lap, and the monster rig lands on
+//      the back of the grid rather than in the lineup. (WHEN they are staged is
+//      frame_check's — the exhibits are the parked field's, not the race's.)
 //
 // Usage: showcase_check   (no arguments — the tables are compiled in)
 
@@ -205,6 +209,40 @@ void testInventory() {
   check(t.landmarks.size() == (size_t) (rt::LM_TRAIN + 1), "every landmark kind is staged once");
 }
 
+// The standing exhibits. Placement is TASTE and nothing here judges it; what is
+// checked is that each one is somewhere a viewer can reach and the renderer can
+// place — on the road, inside one lap, and not stacked on top of each other.
+// The frame builder turns these into the same TtpRocketInput a fired rocket
+// produces, and it is `frame_check` that holds the parked-only rule.
+void testExhibits() {
+  const std::vector<rt::ShowcaseRocket>& rockets = rt::showcase_rockets();
+  check(!rockets.empty(), "the showroom stands at least one rocket");
+  bool left = false, right = false;
+  for (size_t i = 0; i < rockets.size(); i++) {
+    const rt::ShowcaseRocket& r = rockets[i];
+    const std::string who = "rocket " + std::to_string(i);
+    // u is a LAP FRACTION, and the builder's u2s wraps — so a value outside
+    // [0,1) would silently land somewhere else entirely rather than fail.
+    check(r.u >= 0.0f && r.u < 1.0f, who + " is a fraction of one lap");
+    // Bananas sit at ±0.9 and the road runs to ±1: past that an exhibit is off
+    // the deck, hovering over whatever the scatter planted.
+    check(std::fabs(r.lat) <= 1.0f, who + " stands on the road");
+    if (r.lat < 0) left = true;
+    if (r.lat > 0) right = true;
+    for (size_t j = 0; j < i; j++) {
+      check(std::fabs(rockets[j].u - r.u) > 1e-3f || std::fabs(rockets[j].lat - r.lat) > 1e-3f,
+            who + " does not stand inside another");
+    }
+  }
+  check(left && right, "the rockets are staggered across the road, not paired");
+
+  // The monster slot: the LAST one, so the lineup shot the gallery opens on is
+  // the eight liveries and the truck is behind them.
+  check(rt::showcase_monster_slot(8) == 7, "a field of eight wears the rig on the back row");
+  check(rt::showcase_monster_slot(1) == 0, "a field of one still shows the truck");
+  check(rt::showcase_monster_slot(0) == -1, "an empty field has no slot to spare");
+}
+
 }  // namespace
 
 int main() {
@@ -213,6 +251,7 @@ int main() {
   testPaletteUntouched();
   testScatter();
   testInventory();
+  testExhibits();
 
   std::printf("showcase check: %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

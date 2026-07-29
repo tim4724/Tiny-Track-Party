@@ -76,6 +76,14 @@ TTP_ABI void ttp_display_biome(const char* name);
  * what the next ttp_display_build resolves, so it cannot be an argument to the
  * frame and must not be a mode the renderer has to keep two versions of.
  *
+ * It also puts the showroom's STANDING EXHIBITS on every frame drawn while the
+ * field is parked (ttp_display_hold): a pair of rockets on the furniture
+ * straight, and the monster rig on the back of the grid. Those two are the only
+ * things the renderer draws that a track descriptor cannot author — a rocket is
+ * a homing projectile, the monster truck is a transform of a car — so without
+ * this a gallery could show them only by running a race. Lifting the hold drops
+ * them and hands the scene back to the sim.
+ *
  * Off by default and reached by nothing on the shipping path — the gallery
  * (/gallery-assets.html) is its only caller. A shell in showcase mode must fetch
  * its scenery bytes from ttp_theme_showcase_models() rather than

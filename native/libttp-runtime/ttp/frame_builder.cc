@@ -5,6 +5,7 @@
 
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
+#include "ttp/showcase.h"
 #include "ttp/util.h"
 
 namespace ttp {
@@ -97,8 +98,17 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             ? cellAspect
             : (float) d.width / (float) (d.height ? d.height : 1);
 
+    // The asset gallery's STANDING EXHIBITS (ttp/showcase.h): a rocket and the
+    // monster rig, which a race is otherwise the only way to see. Staged only
+    // while the field is PARKED — the gallery's Drive toggle hands the scene
+    // back to the sim, and an exhibit left standing through that would be the
+    // one rocket on screen that no car fired. Needs `eng` for nothing but the
+    // lap length an exhibit's `u` is a fraction of.
+    const bool staged = d.showcase && d.hold && eng;
+
     const size_t nBananas = eng ? eng->bananas().size() : 0;  // filtered below
-    const size_t nRockets = eng ? eng->rockets().size() : 0;
+    const size_t nRockets = (eng ? eng->rockets().size() : 0)
+            + (staged ? showcase_rockets().size() : 0);
     const size_t nBoxes = eng ? eng->boxes().size() : 0;
 
     // A cell overlay per cell, but only once the cells are REAL: the no-car
@@ -124,7 +134,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     if (d.dividers) head->flags |= TTP_FRAME_DIVIDERS;
 
     auto* outCars = const_cast<TtpCarInput*>(ttp_frame_cars(head));
-    if (d.hold && d.held.size() == cars.size()) {
+    const bool fromHeld = d.hold && d.held.size() == cars.size();
+    if (fromHeld) {
         std::memcpy(outCars, d.held.data(), cars.size() * sizeof(TtpCarInput));
     } else {
         for (size_t i = 0; i < cars.size(); i++) {
@@ -158,6 +169,22 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         // Keep this frame's field, so a hold taken mid-race has something to
         // hold — ttp_display_hold zeroes the motion cues on the way in.
         d.held.assign(outCars, outCars + cars.size());
+    }
+
+    // The showroom's monster truck. The rig is a TRANSFORM of a car and not a
+    // prop — the kit chassis with its cab dropped, seating the car's own body —
+    // so the only way to stand one still is to put a parked car in it. Applied
+    // to `outCars` and deliberately NOT to `d.held`: the exhibit belongs to the
+    // gallery's parked state, not to the field, so lifting the hold drops it
+    // without anything having to remember to.
+    if (staged) {
+        const int slot = showcase_monster_slot((int) cars.size());
+        // A slot with no live car behind it was memset above, so its pose is
+        // the origin with a zero forward — a rig grafted onto that is a truck
+        // standing in the middle of nothing.
+        if (slot >= 0 && (fromHeld || cars[(size_t) slot])) {
+            outCars[slot].monster = 1.0f;
+        }
     }
 
     auto* outViews = const_cast<TtpViewInput*>(ttp_frame_views(head));
@@ -237,14 +264,27 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     head->bananaCount = nb;
 
     auto* outRockets = const_cast<TtpRocketInput*>(ttp_frame_rockets(head));
+    uint32_t nr = 0;
     if (eng) {
-        const auto& rockets = eng->rockets();
-        for (size_t i = 0; i < rockets.size(); i++) {
-            outRockets[i].s = (float) ttp::wrap_s(rockets[i].s, eng->length());
-            outRockets[i].lat = (float) rockets[i].lat;
+        // The gallery's standing rockets go FIRST. The renderer's rocket pool
+        // is four, so a full sky of live ones would otherwise be able to push
+        // an exhibit out of the picture — nothing fires while the field is
+        // parked, but the ORDER is what makes that a property rather than a
+        // coincidence of the toggle nobody has flipped yet.
+        if (staged) {
+            for (const ShowcaseRocket& r : showcase_rockets()) {
+                outRockets[nr].s = (float) ttp::wrap_s(r.u * eng->length(), eng->length());
+                outRockets[nr].lat = r.lat;
+                nr++;
+            }
         }
-        head->rocketCount = (uint32_t) rockets.size();
+        for (const auto& rk : eng->rockets()) {
+            outRockets[nr].s = (float) ttp::wrap_s(rk.s, eng->length());
+            outRockets[nr].lat = (float) rk.lat;
+            nr++;
+        }
     }
+    head->rocketCount = nr;
 
     auto* outBursts = const_cast<TtpBurstInput*>(ttp_frame_bursts(head));
     for (size_t i = 0; i < d.bursts.size(); i++) outBursts[i] = d.bursts[i];

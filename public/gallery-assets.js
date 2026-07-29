@@ -144,11 +144,16 @@ async function buildLegend() {
   } catch (_) { /* the legend is worth having without the diff */ }
   const foot = document.createElement('p');
   foot.className = 'legend__note';
-  // The two things a single frame genuinely cannot show, said plainly rather
-  // than left as a gap someone has to notice: the slick markers swap with the
-  // biome, and the moving half of the kit only exists while cars are running.
+  // What a single frame genuinely cannot show, said plainly rather than left as
+  // a gap someone has to notice: the slick markers swap with the biome, and the
+  // moving half of the kit only exists while cars are running. The three things
+  // a race used to be the only way to see are named here because they are
+  // staged BY THE PARKED STATE (native/libttp-runtime/ttp/showcase.h) and go
+  // away again under Drive, which is otherwise a surprise.
   foot.textContent = 'Cones become wet-floor signs in a water biome, and oil slicks '
-    + 'become ice in the snow. Skids, dust, item bursts and the monster truck need Drive.';
+    + 'become ice in the snow. Parked, the showroom stands the monster truck on the '
+    + 'back row of the grid, and dropped bananas and a pair of rockets down the '
+    + 'furniture straight. Skids, dust and item bursts still need Drive.';
   legendLists.appendChild(foot);
 }
 
