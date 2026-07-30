@@ -252,8 +252,10 @@ export class PerfHud {
     if (f) f.cpu = ms;
   }
 
-  // Cell count for the header — GPU cost scales with it (and with pixels), so a
-  // number without them is not comparable to any other number.
+  // Cell count. NOT in the readout — a human looking at the TV can already see
+  // how many cells are on it. It stays in sample() because a SCRIPTED sweep
+  // cannot: GPU cost scales with cells (and with pixels), so a logged number
+  // without both is not comparable to any other logged number.
   setCells(n) { this._cells = n | 0; }
 
   // ---- GPU timer --------------------------------------------------------------
@@ -372,9 +374,8 @@ export class PerfHud {
     const gpuPart = s.gpuTimer === 'ext' ? `gpu ${p(s.gpuUsed)}`
         : `gpu ${s.gpuTimer === 'unavailable' ? 'no timer ext' : s.gpuTimer}`;
     this._text.textContent = [
-      `${s.fps} fps · ${s.drops} drop${s.drops === 1 ? '' : 's'}`,
-      `${gpuPart} · cpu ${p(s.cpuUsed)}`,
-      `${s.pixels[0]}×${s.pixels[1]} · ${this._cells || 'no'} cell${this._cells === 1 ? '' : 's'}`
+      `${s.pixels[0]}×${s.pixels[1]} · ${s.fps} fps · ${s.drops} drop${s.drops === 1 ? '' : 's'}`,
+      `${gpuPart} · cpu ${p(s.cpuUsed)}`
     ].join('\n');
     // Health: the rate against the bar, dropped budgets, and the GPU's p95 —
     // the p95 is what you feel, the p50 printed above is what you tune against.
