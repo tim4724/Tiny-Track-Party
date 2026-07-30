@@ -1011,6 +1011,14 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
                 default: cb = ASPHALT; break;
             }
             const uint32_t ringIdx[6] = { i, i, ni, i, ni, ni };
+            // uv0's arclength must NOT wrap with the ring index. ringIdx uses
+            // ni = (i+1) % N, so on the last strip it is 0 and u would sweep from
+            // ~L back to 0 across one 0.48u band — which crosses EVERY decal's
+            // arclength and painted a thin line of each, right at the start line,
+            // on every track. Carry the UNWRAPPED index for u instead: the last
+            // strip runs to exactly L, and the shader's periodic distance already
+            // treats L and 0 as the same place.
+            const uint32_t uIdx[6] = { i, i, i + 1, i, i + 1, i + 1 };
             const auto stripNormal = [&](uint32_t ring) {
                 const float3 across = pointAt(ring, st.b) - pointAt(ring, st.a);
                 const float3 n = cross(across, tans[ring]);
@@ -1037,7 +1045,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
                 // the same half-width, and where the road narrows the fixed
                 // cross-section offsets divided by a small half push deck vertices
                 // past 1 anyway. Raw lat has no second quantity to agree with.
-                mRoad.uvs.push_back({ (float) ri / N * L,
+                mRoad.uvs.push_back({ (float) uIdx[v] / N * L,
                         P[pt].sign * halfAt(ri) + P[pt].off });
             }
         }
@@ -4169,7 +4177,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     const float3 OILC = srgbToLinear(wet ? tb.waterShallow : ice ? tb.iceSheet : 0x161425);
     const float oilA = wet ? 0.55f : ice ? 0.45f : 0.7f;
     for (const TrackBin::Oil& o : tb.oils) {
-        push(o.s, o.lat, o.radius, o.radius, OILC, oilA, 0.88f, 1.0f, true, 0);
+        push(o.s, o.lat, o.radius, o.radius, OILC, oilA, 0.96f, 1.0f, true, 0);
     }
 
     // Boost pads (were mPads at 0.01). The disc's radial gradient is its profile;
@@ -4178,8 +4186,9 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
     for (const TrackBin::Pad& pad : tb.pads) {
         if (pad.kind == 1) {
+            // 3 across x 2 along, not one chevron stretched over the full lane.
             push(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip), 1.0f,
-                    0.98f, 1.0f, /*ellipse=*/false, /*chevrons=*/5);
+                    0.99f, 1.0f, /*ellipse=*/false, /*chevrons=*/32);
         } else {
             // FLAT PAINT, NOT A GLOW. The mesh drew a radial gradient (light core,
             // base at 0.7, dark rim) and reproducing that as a soft profile came
@@ -4189,7 +4198,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
             // 0.9 and then falls off over a tenth of its radius, which is an
             // antialiased edge rather than a feather.
             push(pad.s, pad.lat, pad.p0, pad.p0, srgbToLinear(boost.base), 1.0f,
-                    0.9f, 1.0f, /*ellipse=*/true, /*chevrons=*/3);
+                    0.97f, 1.0f, /*ellipse=*/true, /*chevrons=*/13);
         }
     }
 }

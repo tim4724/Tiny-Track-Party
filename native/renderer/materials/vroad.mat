@@ -141,30 +141,42 @@ fragment {
                     : knee * (1.0 - (d - inner) / max(1.0 - inner, 1e-4));
             base = mix(base, col.rgb, clamp(col.a * prof, 0.0, 1.0));
 
-            // CHEVRONS, in the decal's own normalised frame: apex toward travel,
-            // evenly spaced along it. Cream, the same 0xfdf3cf the stroked
-            // geometry used, and hard-edged rather than feathered because that is
-            // what reads as paint.
-            int nc = int(shape.w + 0.5);
-            if (nc > 0) {
-                const float HALF = 0.62, CHEV = 0.30, LW = 0.085;
+            // CHEVRONS, as a GRID in the decal's own normalised frame: cols
+            // ACROSS the lane and rows ALONG travel, packed as cols*10 + rows.
+            // A launch strip is 3 x 2 — one chevron stretched over a five-metre
+            // lane reads as a single arrow rather than as chevron paint, which is
+            // what a full-width row looked like. A pad disc is 1 x 3.
+            int packed = int(shape.w + 0.5);
+            int cols = packed / 10, rows = packed - cols * 10;
+            if (rows > 0) {
+                float colW = 2.0 / float(cols), rowH = 2.0 / float(rows);
+                // The wing half-span is capped as well as scaled: a single-column
+                // decal (the pad disc) has colW = 2, and 0.34 of that reaches the
+                // rim, so the chevrons ran into the edge instead of sitting inside
+                // it. The cap is what keeps a disc's chevrons clear of its border
+                // while a strip's still fill their columns with a gap between.
+                float HALF = min(colW * 0.34, 0.52);
+                float CHEV = rowH * 0.34, LW = min(colW, rowH) * 0.13;
                 float best = 1e9;
-                for (int c = 0; c < 8; c++) {
-                    if (c >= nc) break;
-                    float y = -0.62 + (float(c) + 0.5) * (1.24 / float(nc));
-                    // The APEX LEADS. q.x grows with arclength, so travel is +x
-                    // here and the wings must trail: apex at y, wings at y - CHEV.
-                    // Getting this backwards points every chevron against the
-                    // direction of travel, which reads as a brake marking.
-                    vec2 apex = vec2(y + CHEV, 0.0);
-                    vec2 wingL = vec2(y, -HALF), wingR = vec2(y, HALF);
-                    best = min(best, min(segDist(q, apex, wingL), segDist(q, apex, wingR)));
+                for (int rr = 0; rr < 4; rr++) {
+                    if (rr >= rows) break;
+                    float x = -1.0 + (float(rr) + 0.5) * rowH - CHEV * 0.5;
+                    for (int cc = 0; cc < 6; cc++) {
+                        if (cc >= cols) break;
+                        float y = -1.0 + (float(cc) + 0.5) * colW;
+                        // The APEX LEADS: q.x grows with arclength, so the wings
+                        // trail. Built the other way round every chevron points
+                        // against travel and reads as a brake marking.
+                        vec2 apex = vec2(x + CHEV, y);
+                        best = min(best, min(segDist(q, apex, vec2(x, y - HALF)),
+                                             segDist(q, apex, vec2(x, y + HALF))));
+                    }
                 }
-                // Fade the paint out with the decal's own rim so a chevron never
-                // ends in mid-air past the disc's edge.
-                float edge = 1.0 - smoothstep(0.88, 0.99, d);
+                // Fade with the decal's own rim so a chevron never ends in mid-air
+                // past the edge of the disc or strip it belongs to.
+                float edge = 1.0 - smoothstep(0.90, 0.995, d);
                 base = mix(base, vec3(0.9911, 0.9137, 0.6105),
-                        clamp((1.0 - smoothstep(LW * 0.7, LW, best)) * edge, 0.0, 1.0));
+                        clamp((1.0 - smoothstep(LW * 0.65, LW, best)) * edge, 0.0, 1.0));
             }
         }
         return base;
