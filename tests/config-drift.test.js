@@ -206,6 +206,27 @@ test('the two shells read their presence windows off the manifest', () => {
     'display/Net.js: the abandoned-race grace must fall back to the manifest');
 });
 
+test('the RANDOM run length is read off the manifest by both ends', () => {
+  // Two numbers the phone's picker and the display's resolver have to agree on,
+  // and they were TWO PRIVATE COPIES with nothing between them —
+  // `RANDOM_DEFAULT_RACES = 4` declared once in shared/trackPicker.js and again
+  // in display/Net.js. That is the arrangement this file exists to catch, and it
+  // sat there because neither copy was ever named here.
+  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
+  const picker = fs.readFileSync(path.join(ROOT, 'public/shared/trackPicker.js'), 'utf8');
+
+  for (const [src, where] of [[disp, 'display/Net.js'], [picker, 'shared/trackPicker.js']]) {
+    assert.doesNotMatch(src, /RANDOM_(DEFAULT|MAX)_RACES\s*=\s*\d/,
+      `${where}: a literal run length — read it from the manifest's RANDOM_RACES`);
+    assert.match(src, /RANDOM_RACES/, `${where}: must read the manifest block`);
+  }
+
+  // ZERO IS A LEGAL LENGTH and means ENDLESS, so the clamp is a ceiling and not
+  // a range check. A falsy test there silently turns endless into four races.
+  assert.match(disp, /Number\.isInteger\(n\) && n >= 0 && n <= RANDOM_RACES\.MAX/,
+    'display/Net.js: normRandomRaces must admit 0 explicitly and clamp against MAX');
+});
+
 test('the presence windows still describe one design', () => {
   const L = protocol.LIVENESS;
   // The drop window must swallow at least two missed pings, or one dropped

@@ -72,6 +72,11 @@ Value manifest() {
   liveness.set("CREATE_TIMEOUT_MS", Value::Num(LIVENESS_CREATE_TIMEOUT_MS));
   m.set("LIVENESS", std::move(liveness));
 
+  Value randomRaces = Value::Obj();
+  randomRaces.set("DEFAULT", Value::Num(RANDOM_RACES_DEFAULT));
+  randomRaces.set("MAX", Value::Num(RANDOM_RACES_MAX));
+  m.set("RANDOM_RACES", std::move(randomRaces));
+
   Value colors = Value::Arr();
   for (const auto& c : CAR_COLORS) colors.push(Value::Str(c));
   m.set("CAR_COLORS", std::move(colors));

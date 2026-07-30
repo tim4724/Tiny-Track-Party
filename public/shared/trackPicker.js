@@ -60,16 +60,45 @@ const NEUTRAL_COLOR = '#8C8398';
 // endless (no last race; only a lobby return ends it), any other count is a
 // fixed card drawn up front, which means points, a final race and a podium —
 // a Grand Prix out of tracks nobody chose.
-export const RANDOM_LENGTHS = [
-  { randomRaces: 4, label: '4 races', sub: 'then a podium' },
-  { randomRaces: 0, label: 'Endless', sub: 'no last race' }
-];
 // What the tile means on its own — a 4-race card, matching every cup beside it.
 // Random used to mean ENDLESS, but a run with no finish line is a strange thing
 // to hand a host who just tapped a tile: nothing on screen promises an end, and
 // leaving one is a deliberate act. A card ends by itself, on a podium, and the
 // panel is one tap away for the party that wants to keep going.
-export const RANDOM_DEFAULT_RACES = 4;
+// The MANIFEST's (protocol.js RANDOM_RACES.DEFAULT), not a literal: this and
+// display/Net.js are the two ends of one number, and they were two copies with
+// nothing between them.
+//
+// A FUNCTION rather than a const, because this module is imported by Node too —
+// `gen-track-defs-header.mjs` and `tests/ui-model.test.js` read the cup colours
+// out of it — and protocol.js is a classic script that publishes onto `window`,
+// which those importers do not have. Read at RENDER time it is browser-only by
+// construction, and a missing manifest says so instead of yielding undefined.
+const randomDefaultRaces = () => {
+  const m = globalThis.RANDOM_RACES;
+  if (!m) throw new Error('trackPicker: protocol.js must be loaded before the picker renders');
+  return m.DEFAULT;
+};
+
+//
+// THE FINITE LENGTH IS THE MANIFEST'S, and its LABEL is built from the same
+// number. It was a bare `4` here while `randomDefaultRaces()` below read
+// `RANDOM_RACES.DEFAULT` — the two ends of one value in ONE file, disagreeing
+// the moment the manifest moved: a host tapping Random would get the manifest's
+// length, while the tile beside it still said "4 races" and set 4 on tap.
+// Deriving it is what makes "a manifest number, not private copies" true rather
+// than aspirational.
+//
+// A FUNCTION for the same reason `randomDefaultRaces` is one: this module is
+// imported by Node (the track-defs codegen, ui-model.test.js) for its cup
+// colours, and those importers have no `window` for protocol.js to publish on.
+export const randomLengths = () => {
+  const n = randomDefaultRaces();
+  return [
+    { randomRaces: n, label: `${n} races`, sub: 'then a podium' },
+    { randomRaces: 0, label: 'Endless', sub: 'no last race' }
+  ];
+};
 const randomSub = (n) => (n ? `${n} races` : 'endless');
 
 // How much colour a surface wears; `pct` is how much survives a mix with white.
@@ -235,7 +264,7 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   // default, so 0 has to be tested for rather than falsy-checked — it's endless,
   // not "unset".
   const randomRaces = sel.mode === 'random' && Number.isInteger(sel.randomRaces)
-    ? sel.randomRaces : RANDOM_DEFAULT_RACES;
+    ? sel.randomRaces : randomDefaultRaces();
 
   const grid = document.createElement('div');
   grid.className = 'modepick';
@@ -280,7 +309,7 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
     panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
     const opts = document.createElement('div');
     opts.className = 'modepick__opts';
-    for (const o of RANDOM_LENGTHS) {
+    for (const o of randomLengths()) {
       opts.appendChild(modeTile({
         label: o.label, sub: o.sub,
         mine: randomRaces === o.randomRaces,
