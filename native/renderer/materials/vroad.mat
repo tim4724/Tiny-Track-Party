@@ -77,10 +77,11 @@ material {
         //   y = SHAPE: 0 rectangle, 1 ellipse
         //   z = alpha at the inner knee (the profile is two straight segments,
         //       1 -> knee across 0..inner, then knee -> 0 out to the rim)
-        //   w = CHEVRON count. 0 for a plain decal; >0 overlays that many cream
-        //       chevrons, which is what makes a boost pad or launch strip
-        //       expressible without a texture: a chevron is two line segments and
-        //       a distance to a segment is four instructions.
+        //   w = CHEVRON grid, packed as cols*10 + rows (cols ACROSS the lane,
+        //       rows ALONG travel). 0 for a plain decal; anything else overlays
+        //       that grid in cream, which is what makes a boost pad or launch
+        //       strip expressible without a texture: a chevron is two line
+        //       segments and a distance to a segment is four instructions.
         { type : float4[32], name : decalShape }
     ]
 }
@@ -132,7 +133,8 @@ fragment {
             if (abs(dl) >= r.w) continue;
             vec2 q = vec2(ds / r.z, dl / r.w);
             vec4 shape = materialParams.decalShape[i];
-            float d = shape.y > 0.5 ? length(q) : max(abs(q.x), abs(q.y));
+            bool ell = shape.y > 0.5;
+            float d = ell ? length(q) : max(abs(q.x), abs(q.y));
             if (d >= 1.0) continue;
             vec4 col = materialParams.decalColor[i];
             // Two straight segments: 1 -> knee across 0..inner, then knee -> 0
@@ -144,35 +146,67 @@ fragment {
                     : knee * (1.0 - (d - inner) / max(1.0 - inner, 1e-4));
             base = mix(base, col.rgb, clamp(col.a * prof, 0.0, 1.0));
 
-            // CHEVRONS, as a GRID in the decal's own normalised frame: cols
-            // ACROSS the lane and rows ALONG travel, packed as cols*10 + rows.
-            // A launch strip is 3 x 2 — one chevron stretched over a five-metre
-            // lane reads as a single arrow rather than as chevron paint, which is
-            // what a full-width row looked like. A pad disc is 1 x 3.
+            // CHEVRONS, laid out in the decal's normalised frame and MEASURED in
+            // world units: cols ACROSS the lane and rows ALONG travel, packed as
+            // cols*10 + rows. That is what makes a boost pad or a launch strip
+            // expressible without a texture — a chevron is two line segments and
+            // a distance to a segment is four instructions. The counts belong to
+            // buildStaticDeckDecals; the caps below are 4 rows and 6 cols, and
+            // packing more silently draws fewer than the fallback mesh does.
             int packed = int(shape.w + 0.5);
             int cols = packed / 10, rows = packed - cols * 10;
             if (rows > 0) {
-                float colW = 2.0 / float(cols), rowH = 2.0 / float(rows);
-                // The wing half-span is capped as well as scaled: a single-column
-                // decal (the pad disc) has colW = 2, and 0.34 of that reaches the
-                // rim, so the chevrons ran into the edge instead of sitting inside
-                // it. The cap is what keeps a disc's chevrons clear of its border
-                // while a strip's still fill their columns with a gap between.
-                float HALF = min(colW * 0.34, 0.52);
-                float CHEV = rowH * 0.34, LW = min(colW, rowH) * 0.13;
+                // A MARGIN PLUS A PACKED RUN, not one chevron per grid cell.
+                // Cell centres put more air BETWEEN the marks than AROUND them:
+                // the disc's three sat two of their own depths apart with the
+                // rearmost running its wing tips past the rim, and the strip's
+                // outer columns ran off the paint. Here the gap is a fraction of
+                // a mark's own size and the margin is whatever is left of the
+                // box, which with these numbers leaves the margin comfortably
+                // the larger (0.14 against a 0.083 gap across the strip).
+                //
+                // THE STROKE IS A WORLD WIDTH, which is why the distance below is
+                // taken in world units (ds, dl) rather than in q. The normalised
+                // frame is anisotropic — a launch strip is 2.2 along travel and
+                // 5.0 across — so one width in q is a different width on the road
+                // for every line ANGLE: measured at the wings' own angle, the
+                // strip's chevrons came out 1.8x the disc's weight out of the
+                // same expression (2.8x for a segment straight along travel).
+                float LW = 0.09 * min(r.z, r.w);
+                // The box the run fills. An ELLIPSE gets the smaller one because
+                // its corners clear a RIM rather than a bounding edge: the
+                // rearmost wing tips sit at (BX, BY), and sqrt(BX^2 + BY^2) + LW
+                // has to stay inside the 0.9 the edge fade below starts at. A
+                // RECTANGLE only has to keep its outermost stroke off that same
+                // 0.9 — a rule, not a number, and worth deriving: it comes to
+                // 0.86 for the 1.1 x 2.5 strip that ships, and frozen at that it
+                // would clip the outer columns on any narrower one.
+                float BX = ell ? 0.64 : 0.50;
+                float BY = ell ? 0.46 : (0.90 - LW / r.w);
+                float GAP_S = 0.24, GAP_L = 0.30;   // of a mark's own size
+                float CHEV = 2.0 * BX / (float(rows) + float(rows - 1) * GAP_S);
+                float WIDE = 2.0 * BY / (float(cols) + float(cols - 1) * GAP_L);
+                // Premultiplied into world ONCE: the loop is then plain world
+                // arithmetic, rather than three vec2 multiplies per chevron per
+                // fragment — ten of them on a strip, on the hottest path here.
+                float X0 = -BX * r.z, SX = CHEV * r.z;
+                float PX = CHEV * (1.0 + GAP_S) * r.z;
+                float Y0 = (-BY + WIDE * 0.5) * r.w, HY = WIDE * 0.5 * r.w;
+                float PY = WIDE * (1.0 + GAP_L) * r.w;
+                vec2 wq = vec2(ds, dl);
                 float best = 1e9;
                 for (int rr = 0; rr < 4; rr++) {
                     if (rr >= rows) break;
-                    float x = -1.0 + (float(rr) + 0.5) * rowH - CHEV * 0.5;
+                    float x = X0 + float(rr) * PX;
                     for (int cc = 0; cc < 6; cc++) {
                         if (cc >= cols) break;
-                        float y = -1.0 + (float(cc) + 0.5) * colW;
+                        float y = Y0 + float(cc) * PY;
                         // The APEX LEADS: q.x grows with arclength, so the wings
                         // trail. Built the other way round every chevron points
                         // against travel and reads as a brake marking.
-                        vec2 apex = vec2(x + CHEV, y);
-                        best = min(best, min(segDist(q, apex, vec2(x, y - HALF)),
-                                             segDist(q, apex, vec2(x, y + HALF))));
+                        vec2 apex = vec2(x + SX, y);
+                        best = min(best, min(segDist(wq, apex, vec2(x, y - HY)),
+                                             segDist(wq, apex, vec2(x, y + HY))));
                     }
                 }
                 // Fade with the decal's own rim so a chevron never ends in mid-air

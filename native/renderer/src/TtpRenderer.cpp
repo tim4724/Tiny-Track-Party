@@ -4240,9 +4240,13 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
     for (const TrackBin::Pad& pad : tb.pads) {
         if (pad.kind == 1) {
-            // 3 across x 2 along, not one chevron stretched over the full lane.
+            // 5 across x 2 along, not one chevron stretched over the full lane.
+            // Three columns over a five-metre lane made each mark two and a half
+            // times wider than it was deep, so the pair read as two flat waves
+            // rather than as chevron paint; five brings it to 1.4, and is what
+            // the stroked fallback mesh below draws too.
             push(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip), 1.0f,
-                    0.99f, 1.0f, /*ellipse=*/false, /*chevrons=*/32);
+                    0.99f, 1.0f, /*ellipse=*/false, /*chevrons=*/52);
         } else {
             // FLAT PAINT, NOT A GLOW. The mesh drew a radial gradient (light core,
             // base at 0.7, dark rim) and reproducing that as a soft profile came
@@ -6445,6 +6449,10 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
     const float3 STRIP_BODY = srgbToLinear(boost.strip);  // flat strip body
     const float3 CREAM = srgbToLinear(0xfdf3cf);
     const float LIFT = 0.014f;
+    // The chevron layout, vroad.mat's numbers verbatim — a margin plus a packed
+    // run, gaps as a fraction of a mark's own size, and a stroke that is a WORLD
+    // width. Each block below turns them into its own canvas's units.
+    constexpr float GAP_S = 0.24f, GAP_L = 0.30f, STROKE_FRAC = 0.09f;
 
     const auto push = [&](const float3& p, uint32_t c) {
         mPads.verts.push_back({ p.x, p.y, p.z, c });
@@ -6512,9 +6520,28 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
                 }
             }
             // 5×2 grid of cream chevrons, apex toward canvas-top = travel.
+            // THE LAYOUT IS vroad.mat's, in canvas units: a packed run of
+            // ROWS_C chevrons inside ±BX along travel and COLS_C inside ±BY
+            // across. Spelling it as the same fractions rather than as four
+            // hand-placed pixel counts is what keeps the fallback mesh and the
+            // shipped shader drawing one piece of art — they were 5×2 and 3×2
+            // before this. HS/HL are the canvas half-extents, so a normalised
+            // coordinate times one of them is a canvas one; note WIDEN is a FULL
+            // width where WING is a half.
             constexpr int COLS_C = 5, ROWS_C = 2;
-            constexpr float CW = 320.0f / COLS_C, GAP = 26, CHEV = 22;
-            constexpr float HALF = CW * 0.32f, Y0 = (128 - ((ROWS_C - 1) * GAP + CHEV)) / 2;
+            constexpr float HS = 64, HL = 160;   // half of the 128 x 320 canvas
+            constexpr float BX = 0.50f;
+            // The shader's world stroke, in this canvas's along-travel px, and
+            // its BY rule: keep the outermost stroke off the 0.9 edge fade.
+            const float SW = 2 * STROKE_FRAC * std::min(halfL, halfW) * (HS / halfL);
+            const float BY = 0.90f - STROKE_FRAC * std::min(halfL, halfW) / halfW;
+            constexpr float CHEVN = 2 * BX / (ROWS_C + (ROWS_C - 1) * GAP_S);
+            const float WIDEN = 2 * BY / (COLS_C + (COLS_C - 1) * GAP_L);
+            constexpr float CHEV = CHEVN * HS, PITCH_S = CHEVN * (1 + GAP_S) * HS;
+            constexpr float Y0 = (1 - BX) * HS;
+            const float WING = WIDEN * 0.5f * HL;
+            const float CX0 = (1 - BY + WIDEN * 0.5f) * HL;
+            const float PITCH_L = WIDEN * (1 + GAP_L) * HL;
             const auto lift = [&](const float2& q) {
                 const float d = (0.5f - q.y / 128.0f) * 2 * halfL;
                 const TrackBin::Sample f = tb.frameAt(pad.s + d);
@@ -6522,11 +6549,11 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
                         + f.up * (LIFT + 0.002f);
             };
             for (int c2 = 0; c2 < COLS_C; c2++) {
-                const float cx = (c2 + 0.5f) * CW;
+                const float cx = CX0 + c2 * PITCH_L;
                 for (int r2 = 0; r2 < ROWS_C; r2++) {
-                    const float y = Y0 + r2 * GAP;
-                    stroke({ { cx - HALF, y + CHEV }, { cx, y }, { cx + HALF, y + CHEV } },
-                            9.0f, lift, CREAM);
+                    const float y = Y0 + r2 * PITCH_S;
+                    stroke({ { cx - WING, y + CHEV }, { cx, y }, { cx + WING, y + CHEV } },
+                            SW, lift, CREAM);
                 }
             }
         } else {
@@ -6581,13 +6608,22 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
                 return f.pos + f.lat * (pad.lat + (q.x / 64.0f - 0.5f) * 2 * r)
                         + f.up * (LIFT + 0.002f);
             };
+            // vroad.mat's ellipse layout in canvas units — see the strip above.
+            // The disc's box is the smaller of the two because its corners have
+            // a RIM to clear: the rearmost wing tips sit at (BX, BY).
             constexpr int N = 3;
-            constexpr float GAP = 13, CHEV = 10, WING = 16;
-            constexpr float Y0 = (64 - ((N - 1) * GAP + CHEV)) / 2;
+            constexpr float HD = 32;   // half of the 64 x 64 canvas
+            constexpr float BX = 0.64f, BY = 0.46f;
+            constexpr float CHEVN = 2 * BX / (N + (N - 1) * GAP_S);
+            constexpr float CHEV = CHEVN * HD, PITCH_S = CHEVN * (1 + GAP_S) * HD;
+            constexpr float WING = BY * HD, Y0 = (1 - BX) * HD;
+            // The shader's world stroke is 2*STROKE_FRAC*r wide at HD/r canvas px
+            // per world unit, so the disc's radius cancels out of it entirely.
+            constexpr float SW = 2 * STROKE_FRAC * HD;
             for (int j = 0; j < N; j++) {
-                const float y = Y0 + j * GAP;
-                stroke({ { 32 - WING, y + CHEV }, { 32, y }, { 32 + WING, y + CHEV } },
-                        6.0f, lift, CREAM);
+                const float y = Y0 + j * PITCH_S;
+                stroke({ { HD - WING, y + CHEV }, { HD, y }, { HD + WING, y + CHEV } },
+                        SW, lift, CREAM);
             }
         }
     }

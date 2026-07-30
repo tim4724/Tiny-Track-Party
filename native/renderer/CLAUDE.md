@@ -108,11 +108,26 @@ must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
 reproducing the old mesh's radial gradient came out as an emissive saucer, the
 exact read this tree rejected before.
 
+Their grid is **a margin plus a packed run**, never one chevron per grid cell:
+cells put more air between the marks than around them, so the outermost of them
+crowd the decal's edge while the middle goes slack. Gaps are a fraction of a
+mark's own size and the margin is what is left of the box. The **stroke is a
+world width** while the layout stays normalised — that frame is anisotropic, so
+one width in it is a different width on the road for every line ANGLE, and the
+same expression gave a strip and a disc visibly different weights. The
+rectangle's box height is **derived** from that stroke rather than frozen, or a
+narrower strip clips its outer columns.
+
 **What is still a mesh:** the car's contact shadow (a baked silhouette, not a
 falloff) and the hazard cones, which are not flat. Every stamped decal also keeps
 its mesh as the fallback for a shell served no `vroad.filamat`, and those fallback
 lifts are sized for the road's CONCAVE bulge — a chord over a dip sits above the
 true surface, so a coarser road eats a conformed decal's lift.
+
+**The fallback and the shader are two copies of one piece of art**, and the pad
+chevrons drifted to different grids once — invisibly, because nothing in the tree
+renders the fallback. Both grids are pinned in the decal audit's `MIRRORED` list,
+which is the only place they can be compared.
 
 `npm run audit:decals` measures those fallback meshes. **The fast gate is a
 screen, not a proof:** it samples curvature extremes along a few curves, and a

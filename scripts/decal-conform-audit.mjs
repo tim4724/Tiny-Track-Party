@@ -92,6 +92,16 @@ export const MIRRORED = [
   // track space, so left on it returns 1 - lat and every stamped decal lands by
   // the far kerb. That cost a long debugging round — pin it.
   { name: 'road uv flip off', value: false, in: 'vroad', find: 'flipUV : false,' },
+  // LOAD-BEARING for the same reason. A boost pad's chevron grid is written down
+  // TWICE — once as the packed cols*10+rows the shader reads, once as the
+  // fallback mesh's own loop bounds — and the two silently drifted to 5x2 and
+  // 3x2, because the mesh only draws for a shell served no vroad.filamat and
+  // nothing in the tree renders it. Pinning both makes an edit to either side
+  // land here, which is the only place they can be compared.
+  { name: 'pad chevron grid (strip)', value: '5x2', find: '/*chevrons=*/52' },
+  { name: 'pad chevron grid (disc)',  value: '1x3', find: '/*chevrons=*/13' },
+  { name: 'pad chevron mesh (strip)', value: '5x2', find: 'constexpr int COLS_C = 5, ROWS_C = 2;' },
+  { name: 'pad chevron mesh (disc)',  value: '1x3', find: 'constexpr int N = 3;' },
   { name: 'car blob lift',   value: 0.013, find: 'carS, carLat, sx, sz, 0.013f,' },
   // Item shadows are stamped too now; this pins the fallback mesh's lift.
   { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.013f, 1.0f);' },
