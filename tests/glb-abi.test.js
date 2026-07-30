@@ -22,21 +22,23 @@
 // every model in this tree and fail on the first localized asset — which is
 // exactly why the length is asserted here rather than trusted.
 
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync, readdirSync } = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TOYCAR = join(ROOT, 'public/assets/toycar');
+const ROOT = path.join(__dirname, '..');
+const TOYCAR = path.join(ROOT, 'public/assets/toycar');
 
 const GLB_MAGIC = 0x46546c67;
 const CHUNK_JSON = 0x4e4f534a;
 
 async function loadRuntime() {
+  // pathToFileURL, not a bare path: an absolute POSIX path is a valid specifier
+  // by luck rather than by rule, and it is not one on Windows.
   const mod = await import(
-    join(ROOT, 'public/display/engine/native/ttp_runtime.mjs')
+    pathToFileURL(path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs')).href
   );
   return mod.default();
 }
@@ -95,7 +97,7 @@ test('ttp_glb_ghost: every kit model survives the transform', async () => {
   assert.ok(MODELS.length >= 17, `expected the whole kit, saw ${MODELS.length}`);
 
   for (const name of MODELS) {
-    const src = new Uint8Array(readFileSync(join(TOYCAR, name)));
+    const src = new Uint8Array(readFileSync(path.join(TOYCAR, name)));
     const out = ghost(src);
     assert.ok(out, `${name}: no ghost produced`);
 
@@ -134,7 +136,7 @@ test('ttp_glb_ghost: RGB survives, only alpha moves', async () => {
   const m = await loadRuntime();
   const { ghost } = bind(m);
   for (const name of MODELS) {
-    const src = new Uint8Array(readFileSync(join(TOYCAR, name)));
+    const src = new Uint8Array(readFileSync(path.join(TOYCAR, name)));
     const before = jsonChunk(src).doc.materials || [];
     const after = jsonChunk(ghost(src)).doc.materials || [];
     assert.equal(after.length, before.length, `${name}: material count changed`);
@@ -166,7 +168,7 @@ test('ttp_glb_image_uris: the scenery models name the textures the shell must pr
   // half a shell has to satisfy before gltfio runs.
   const seen = new Set();
   for (const name of MODELS) {
-    const list = uris(new Uint8Array(readFileSync(join(TOYCAR, name))));
+    const list = uris(new Uint8Array(readFileSync(path.join(TOYCAR, name))));
     assert.ok(Array.isArray(list), `${name}: not an array`);
     for (const u of list) {
       assert.equal(typeof u, 'string');

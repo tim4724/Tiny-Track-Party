@@ -19,19 +19,27 @@
 // by code point disagrees with the phone about what the player is called, and
 // the disagreement only shows up on names nobody tests with.
 
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-import { cleanName, NAME_MAX } from '../public/shared/names.js';
+const ROOT = path.join(__dirname, '..');
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-
+// names.js is an ES module and stays one — it loads in both browsers and Node,
+// which is the property that lets the wire suite drive the REAL producer. So it
+// arrives here the way every other CommonJS test in this tree reaches shared/:
+// a dynamic import, resolved once.
+let names;
 let clean;
+async function load() {
+  names ??= await import(pathToFileURL(path.join(ROOT, 'public/shared/names.js')).href);
+  return names;
+}
 async function abi() {
   if (clean) return clean;
-  const mod = await import(join(ROOT, 'public/display/engine/native/ttp_runtime.mjs'));
+  const mod = await import(
+    pathToFileURL(path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs')).href);
   const M = await mod.default();
   const fn = M.cwrap('ttp_net_clean_name', 'string', ['string']);
   // The ABI takes the RAW JSON value, because a HELLO's `name` is untrusted and
@@ -70,6 +78,7 @@ const CASES = [
 test('NAME_MAX is 16 in both spellings', async () => {
   // The C++ constant is not exported, so it is checked BEHAVIOURALLY: a 17-unit
   // name must come back 16 long.
+  const { NAME_MAX } = await load();
   assert.equal(NAME_MAX, 16);
   const c = await abi();
   assert.equal([...(await c('abcdefghijklmnopq'))].length, 16);
@@ -77,6 +86,7 @@ test('NAME_MAX is 16 in both spellings', async () => {
 
 for (const [label, input] of CASES) {
   test(`the C++ mirror agrees with names.js: ${label}`, async () => {
+    const { cleanName } = await load();
     const c = await abi();
     assert.equal(c(input), cleanName(input),
       `names.js said ${JSON.stringify(cleanName(input))}, ` +
@@ -94,6 +104,7 @@ test('a cut that halves an emoji lands where the WIRE already lands', async () =
   // time a display sees it (`tests/wire-compat.test.js` pins that path end to
   // end). Asserting raw equality instead would be asserting that C++ can hold a
   // lone surrogate, which is not a property anything wants.
+  const { cleanName } = await load();
   const c = await abi();
   const js = cleanName('abcdefghijklmno\u{1F3CE}');
   assert.equal(js.charCodeAt(15), 0xd83c, 'the JS cut really does orphan a surrogate');

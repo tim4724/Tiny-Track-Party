@@ -21,19 +21,20 @@
 //     "nothing to apply", indistinguishable from a shell that lost the fields.
 //     The list of shells below grows as each one lands.
 
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.join(__dirname, '..');
 
 // A short bare race with one human, steering held hard over, read back through
 // the snapshot. Bare (`countdownSeconds < 0`) so it is racing from frame 0 and
 // three seconds of frames is enough to separate the two answers.
 async function driveWithMask(mask) {
-  const mod = await import(join(ROOT, 'public/display/engine/native/ttp_runtime.mjs'));
+  const mod = await import(
+    pathToFileURL(path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs')).href);
   const M = await mod.default();
   const c = (n, r, a) => M.cwrap(n, r, a);
 
@@ -85,7 +86,7 @@ test('every shell DERIVES the mask from the fields, and reads no `mask` key', ()
   // The web shell today; each TV shell adds its own file here as it lands.
   const sources = {
     'public/display/NativeRaceSession.js': readFileSync(
-      join(ROOT, 'public/display/NativeRaceSession.js'), 'utf8')
+      path.join(ROOT, 'public/display/NativeRaceSession.js'), 'utf8')
   };
 
   // Whole-file scope on purpose: `mask` appears in exactly one place in each of
