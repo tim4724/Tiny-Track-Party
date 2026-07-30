@@ -165,51 +165,50 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   grid is centred, so testing against 0 drew a rule down the picture's left side
   on the ordinary 2-player pair. E2E's divider check counts full-WIDTH scanlines,
   so it never saw it.
-  EVERY FLAT DECAL ON THE DECK CONFORMS — a frame per vertex, never one hoisted
-  `frameAt`. The road is swept as rings ~0.24u apart and is a CHORD between them,
-  so a decal is a second chord approximation of the same curve; where it sags
-  further from the true surface than the road does, the deck stands above it and
-  pokes through, and the decal's small lift is the whole budget. The ladder, and
-  every rung is its own measured sag rather than one shared number: skid 0.006,
-  box blob 0.004, pad 0.01, car blob 0.010, slick 0.012, boost aura 0.013, prop
-  blob 0.010. THE TWO FAILURE
-  MODES ARE OPPOSITE IN SIGN and that is the diagnosis: a FLAT decal fails on
-  CONCAVE deck (loops, dips — the surface rises above its plane, unbounded by the
-  lift, measured 0.175u), a CONFORMED one on CONVEX deck (crests — its chords sag
-  below the road's finer ones, bounded and small once vertex spacing is sane). So
-  conforming is not optional and a lift is not a substitute for it. VERTEX
-  SPACING is the other half: a bare centre-to-rim fan spans the whole radius and
-  sags ~0.010 on its own, which is why the slick, the pad disc and the boost disk
-  all carry interior rings. SUBDIVIDE THE WIDEST CHORD, NOT THE MIDDLE — the aura
-  went from 3 rings to 4 by splitting its inner region and the sag did not move
-  (0.0116 -> 0.0117), because the binding chord was the OUTER band 0.72 -> 1.0,
-  0.44u wide at full boost; the ring that paid was 0.86. Past that it becomes an
-  ANGULAR problem (32 segments would reach 0.0061), not a radial one.
-  RENDER ORDER IS PART OF THIS and bit once: every deck decal must sit BELOW the
-  cars' default priority 4, or its plane wins the depth test across the bottom of
-  each tyre and paints a band there — which is what a viewer reads as the decal
-  hovering. The stack is wet 1, water/skid/car-blob 2, aura 3, pads/oils/cars 4,
-  streaks 5.
+  FLAT DECALS ARE SHADED INTO THE ROAD, not laid over it. The boost aura, the
+  item shadows, the boost pads, launch strips, oil slicks and item-box contact
+  shadows are handed to `vroad.mat` as TRACK-SPACE rectangles and painted by the
+  road's own fragment shader, so a decal's fragment IS a road fragment at the
+  road's own depth: no lift, no chord sag, no polygon offset and no render order.
+  The road carries (s, lat) in uv0 — arclength and RAW world lateral — which is
+  also why loops work, since a fragment knows its own arclength where one (x, z)
+  has two. `ttp_display_debug_decals` reads the packed floats back; use it rather
+  than inferring shader state from pixels.
+  THREE THINGS COST A DEBUGGING ROUND EACH and are pinned in the audit's mirror.
+  Filament FLIPS V by default and uv0 here is not an image coordinate, so
+  `flipUV : false` or every decal lands by the far kerb. A THRESHOLD ON v IS NOT
+  A DECK MASK — as lat/half it excluded real road where the track narrows, as raw
+  lat it clipped decals to the middle 2u; a decal's own extent is its mask, and a
+  full-width decal would need a per-vertex deck FLAG. And a MaterialInstance from
+  `sceneInstance()` is scene-scoped, so a member holding one must be nulled in
+  `releaseScene()`.
+  CHEVRONS ARE SDFs, which is what let the pads move without a texture atlas: a
+  chevron is two line segments and `segDist` is four instructions. The apex must
+  LEAD (q.x grows with arclength) or every chevron reads as a brake marking. And
+  a pad is FLAT PAINT — solid to 0.9 of its radius then a tenth-radius edge;
+  reproducing the old mesh's radial gradient came out as an emissive saucer, the
+  exact read this tree rejected before.
+  WHAT IS STILL A MESH: the car's own contact shadow, because its shape is a
+  BAKED PER-CAR SILHOUETTE texture rather than a falloff, and the hazard cones,
+  which are not flat. Every stamped decal also keeps its mesh as the FALLBACK for
+  a shell served no vroad.filamat, which is what the lift ladder below still
+  protects (pad 0.014, car blob 0.013, box blob 0.013, oil 0.016, aura 0.017).
+  Those lifts are sized for the road's CONCAVE bulge: a chord over a dip sits
+  ABOVE the true surface, so a coarser road eats a conformed decal's lift — the
+  mirror of the crest case, and what the 0.48 ring step below cost them.
+  THE ROAD'S RING STEP IS 0.48u, not the 0.24 it was hard-capped at — the cap was
+  half what the paint derivation beside it asks for, and the dashes are counted in
+  RINGS so the pattern is identical either way. Halved skyline's road from 47,616
+  to 23,808 triangles. It is only affordable BECAUSE the flat decals are shaded in
+  now and no longer have a second mesh to disagree with.
   `scripts/decal-conform-audit.mjs` (`npm run audit:decals`, `:sweep` to relocate
-  one decal along every metre) measures it against the road's own mesh, and
+  one decal along every metre) measures the FALLBACK meshes against the road, and
   `tests/decal-conform.test.js` runs the fast half with the retired flat slick as
   a negative control. THE FAST GATE IS A SCREEN, NOT A PROOF: it picks curvature
   extremes along a few offset curves, and a decal is a SHEET, so the true worst
   position need not be one of them — measured, it reported a 43% margin where the
-  sweep found 35%. The sweep is the authority and CI runs it on every push
-  (`npm run audit:decals:sweep`, ~15 s, exits nonzero under 25% margin). Quote the
-  sweep's numbers, never the screen's.
-  That audit MIRRORS the renderer's tessellation in JS — TtpRenderer.cpp needs the
-  Filament SDK so no ctest can reach the real geometry — and its `MIRRORED` table
-  pins every constant it copied back to the line it came from, so a lift or a
-  segment count that moves in C++ fails the gate instead of silently invalidating
-  it. Change one and update the audit in the SAME commit.
-  WHAT THIS RETIRED: the JS renderer clipped these decals OUT of the road ribbon
-  for exact coplanarity at zero lift (`RoadDecal.js`, deleted with three.js), and
-  `buildOils` carried a "real RoadDecal clipping later" TODO. Measured, the
-  conformed decals disagree with the deck by at most 0.0005u — 5% of their lift —
-  so clipping buys no depth correctness. It is a look/architecture option now, not
-  an owed fix. Do not reach for it to solve a z-fight; check conforming first.
+  sweep found 35%. The sweep is the authority, CI runs it on every push, and it
+  exits nonzero under 25% margin. Quote the sweep's numbers, never the screen's.
   BOOST SHADES ARE `ttp::rt::boost_shades`, inline in libttp-runtime's theme.h
   precisely so the renderer can call it without linking that library (neither
   may link the other). The renderer kept its own float copy of `mixHex` plus four

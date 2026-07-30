@@ -2,7 +2,7 @@
 // under the deck's own mesh, on every catalogue track?
 //
 // WHAT GOES WRONG. The road is swept as N evenly-spaced rings (buildRoadMesh
-// targets 0.24u) and each ring's points come from frameAt(s_i), so the road
+// targets 0.48u) and each ring's points come from frameAt(s_i), so the road
 // surface BETWEEN rings is a chord. Every decal is likewise a chord mesh at its
 // own vertex spacing, and two chord approximations of one curve at different
 // steps do not agree. Where the decal's surface sags further from the true deck
@@ -64,15 +64,15 @@ const SOURCES = {
 // `find` is matched against TtpRenderer.cpp verbatim. Keep each one narrow
 // enough that it can only match the line it names.
 export const MIRRORED = [
-  { name: 'pad lift',        value: 0.01,  find: 'const float LIFT = 0.01f;' },
-  { name: 'pad chevron lift',value: 0.012, find: '(LIFT + 0.002f)' },
+  { name: 'pad lift',        value: 0.014, find: 'const float LIFT = 0.014f;' },
+  { name: 'pad chevron lift',value: 0.016, find: '(LIFT + 0.002f)' },
   { name: 'pad disc segs',   value: 24,    find: 'const int SEG = 24;   // PAD_DISC_SEG' },
   { name: 'pad disc rings',  value: 3,     find: 'static const float DISC_RINGS[3] = { 0.35f, 0.7f, 1.0f };' },
-  { name: 'oil lift',        value: 0.012, find: 'const float3 ctr = at(0, 0, 0.012f);' },
-  { name: 'oil rim lift',    value: 0.014, find: 'o.radius, 0.014f);' },
+  { name: 'oil lift',        value: 0.016, find: 'const float3 ctr = at(0, 0, 0.016f);' },
+  { name: 'oil rim lift',    value: 0.018, find: 'o.radius, 0.018f);' },
   { name: 'oil segs',        value: 24,    find: 'constexpr int SEG = 24;' },
   { name: 'oil rings',       value: 3,     find: 'static const float RINGS[3] = { 0.35f, 0.7f, 1.0f };' },
-  { name: 'box blob lift',   value: 0.004, find: 'f.up * 0.004f;' },
+  { name: 'box blob lift',   value: 0.013, find: 'f.up * 0.013f;' },
   { name: 'box blob segs',   value: 20,    find: 'constexpr int SEG = 20;' },
   { name: 'box blob radius', value: 0.3,   find: 'constexpr float R = 0.3f;' },
   { name: 'boost disk segs', value: 24,    find: 'const int SEG = 24; // BOOST_DISK_SEG' },
@@ -87,16 +87,16 @@ export const MIRRORED = [
   // with margin, so 0.013 and 0.010.
   // The aura is SHADED INTO the road now (vroad.mat) and carries no lift at all;
   // this pins the fallback mesh a shell without vroad.filamat still draws.
-  { name: 'boost aura fallback lift', value: 0.013, find: 'outerR, outerR,\n                            0.013f, alpha);' },
+  { name: 'boost aura fallback lift', value: 0.013, find: 'outerR, outerR,\n                            0.017f, alpha);' },
   // LOAD-BEARING. Filament flips V by default for image conventions; uv0 here is
   // track space, so left on it returns 1 - lat and every stamped decal lands by
   // the far kerb. That cost a long debugging round — pin it.
   { name: 'road uv flip off', value: false, in: 'vroad', find: 'flipUV : false,' },
-  { name: 'car blob lift',   value: 0.010, find: 'carS, carLat, sx, sz, 0.010f,' },
+  { name: 'car blob lift',   value: 0.013, find: 'carS, carLat, sx, sz, 0.013f,' },
   // Item shadows are stamped too now; this pins the fallback mesh's lift.
-  { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.010f, 1.0f);' },
+  { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.013f, 1.0f);' },
   { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
-  { name: 'road ring target', value: 0.24, find: 'std::lround(L / std::min(0.24f' },
+  { name: 'road ring target', value: 0.48, find: 'std::lround(L / std::min(0.48f' },
   // RENDER ORDER, and it is correctness rather than taste. Both must stay BELOW
   // the cars' default priority of 4. The boost aura was 5 — drawn after the cars
   // — so its plane, 0.02 above the deck, won the depth test across the bottom
@@ -116,9 +116,9 @@ export function verifyMirrors() {
 }
 
 // ---- constants, mirrored (see MIRRORED) ------------------------------------
-const PAD_LIFT = 0.01, OIL_LIFT = 0.012, BOX_LIFT = 0.004;
+const PAD_LIFT = 0.014, OIL_LIFT = 0.016, BOX_LIFT = 0.013;
 // Per-frame decals each carry the lift their own sag needs (see MIRRORED).
-const AURA_LIFT = 0.013, BLOB_LIFT = 0.010;
+const AURA_LIFT = 0.017, BLOB_LIFT = 0.013;
 const PAD_DISC_SEG = 24, OIL_SEG = 24, BOX_SEG = 20, DISK_SEG = 24;
 const OIL_RINGS = [0.35, 0.7, 1.0];
 // 0.72 is the alpha knee; 0.86 halves the OUTER band, which is the chord
@@ -137,7 +137,7 @@ export const diskOuterR = (k, pulse = 0.9) =>
 
 // buildRoadMesh's ring count, verbatim.
 export function ringCount(L) {
-  const step = Math.min(0.24, Math.max(0.06, Math.min(2.0, 5.76 * 0.25) / 3));
+  const step = Math.min(0.48, Math.max(0.06, Math.min(2.0, 5.76 * 0.25) / 3));
   let N = Math.min(4000, Math.max(8, Math.round(L / step)));
   const dashCycles = Math.max(2, Math.round(L / 5.76));
   let rpc = Math.max(4, Math.round(N / dashCycles));

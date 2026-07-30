@@ -863,7 +863,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     if (nSrc < 2 || L <= 0 || !tb.closed) return false;
 
     // Arclength interpolation over the serialized samples (they're the contract
-    // centerline samples, unevenly spaced ~0.4–1.5u; the paint needs ~0.24u).
+    // centerline samples, unevenly spaced ~0.4–1.5u).
     // Catmull-Rom via TrackBin::frameAt — the JS sweep samples the same cubic.
     const auto frameAt = [&](float s) { return tb.frameAt(s); };
 
@@ -875,9 +875,23 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     const float stripeLen = 2.0f, dashW = 0.18f;
     const float DASH_PERIOD = 5.76f, DASH_FRAC = 0.25f;
 
+    // RING STEP. This was hard-capped at 0.24u, which is HALF what the paint
+    // derivation beside it asks for (minBand/3 = 0.48) — so the cap, not the
+    // paint, set the road's density and skyline carried 47,616 triangles.
+    //
+    // The dashes do not care. They are counted in RINGS (dashRingsOn of
+    // ringsPerCycle), and the rings are evenly spaced, so at 0.48 every dash is
+    // still exactly 25% duty and exactly the same length as its neighbours — the
+    // pattern is identical, only its edges are placed on a coarser grid. What
+    // does change is the road's own chord sag, and that got CHEAPER to accept
+    // rather than dearer: the flat decals are shaded into the deck now instead of
+    // floating over it, so a coarser road no longer has anything to disagree with.
+    // Measured on a 3.5u loop the extra sag is 0.008u, well under a tenth of a
+    // kerb's height. Verified by pixel A/B over road, dashes, both kerbs and a
+    // curve, and by the catalogue decal sweep.
     const float minBand = std::min(stripeLen, DASH_PERIOD * DASH_FRAC);
     uint32_t N = (uint32_t) std::min(4000L, std::max(8L,
-            std::lround(L / std::min(0.24f, std::max(0.06f, minBand / 3)))));
+            std::lround(L / std::min(0.48f, std::max(0.06f, minBand / 3)))));
     const uint32_t dashCycles = (uint32_t) std::max(2L, std::lround(L / DASH_PERIOD));
     uint32_t ringsPerCycle = std::max(4u, (uint32_t) std::lround((double) N / dashCycles));
     if (ringsPerCycle * dashCycles > 4000) ringsPerCycle = std::max(4u, 4000u / dashCycles);
@@ -4697,7 +4711,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             constexpr float R = 0.3f;
             const auto at = [&](float rx, float rz) {
                 const TrackBin::Sample f = tb.frameAt(b.s + rz);
-                return f.pos + f.lat * (b.lat + rx) + f.up * 0.004f;
+                return f.pos + f.lat * (b.lat + rx) + f.up * 0.013f;
             };
             const uint32_t base = (uint32_t) mPropShadows.verts.size();
             const float3 c0 = at(0, 0);
@@ -6340,7 +6354,7 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
     const float3 PAD_DARK = srgbToLinear(boost.dark);     // disc rim
     const float3 STRIP_BODY = srgbToLinear(boost.strip);  // flat strip body
     const float3 CREAM = srgbToLinear(0xfdf3cf);
-    const float LIFT = 0.01f;
+    const float LIFT = 0.014f;
 
     const auto push = [&](const float3& p, uint32_t c) {
         mPads.verts.push_back({ p.x, p.y, p.z, c });
@@ -6659,7 +6673,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                 return f.pos + f.lat * (o.lat + latOff) + f.up * lift;
             };
             const uint32_t base = (uint32_t) mOils.verts.size();
-            const float3 ctr = at(0, 0, 0.012f);
+            const float3 ctr = at(0, 0, 0.016f);
             mOils.verts.push_back({ ctr.x, ctr.y, ctr.z, c });
             for (const float rr : RINGS) {
                 for (int j = 0; j <= SEG; j++) {
@@ -6689,7 +6703,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
                 const float a = (float) j / SEG * 2.0f * (float) M_PI;
                 for (const float rr : { 0.82f, 1.0f }) {
                     const float3 p = at(std::cos(a) * rr * o.radius,
-                                        std::sin(a) * rr * o.radius, 0.014f);
+                                        std::sin(a) * rr * o.radius, 0.018f);
                     mOils.verts.push_back({ p.x, p.y, p.z, rimC });
                 }
             }
@@ -7866,7 +7880,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // (measured 0.0022, needing 0.0034). It stays clear of the skid marks
             // at 0.006 so the depth sort keeps putting the shadow over them, and
             // below the aura's 0.013 so the aura still paints over the shadow.
-            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.010f,
+            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.013f,
                     1.0f + (0.08f / 0.55f) * load);
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
@@ -7967,7 +7981,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                             mat4f::translation(float3{ 0, -1000, 0 }));
                 } else {
                     conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR,
-                            0.013f, alpha);
+                            0.017f, alpha);
                 }
             } else {
                 tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity), PARKED);
@@ -8351,7 +8365,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 tcm.setTransform(tcm.getInstance(mPropBlobs[slot].entity), PARK);
             } else {
                 conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r,
-                        0.010f, 1.0f);
+                        0.013f, 1.0f);
             }
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
