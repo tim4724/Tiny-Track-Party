@@ -1017,9 +1017,14 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
                 // floated over it — the fragment already knows where it is on the
                 // track, so nothing has to be conformed and a loop's two stacked
                 // arclengths never collide.
-                const float half = halfAt(ri);
+                // v is RAW WORLD LAT. It was lat/half at first, so the deck could
+                // be masked with |v| <= 1 — and that normalisation cost several
+                // debugging rounds: it needs the decal side to divide by exactly
+                // the same half-width, and where the road narrows the fixed
+                // cross-section offsets divided by a small half push deck vertices
+                // past 1 anyway. Raw lat has no second quantity to agree with.
                 mRoad.uvs.push_back({ (float) ri / N * L,
-                        (P[pt].sign * half + P[pt].off) / std::max(half, 1e-4f) });
+                        P[pt].sign * halfAt(ri) + P[pt].off });
             }
         }
     }
@@ -4111,6 +4116,35 @@ MaterialInstance* TtpRenderer::roadInstance() {
     return mRoadInst;
 }
 
+void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
+        const float3& linCol, float alpha, float inner, float kneeAlpha, bool ellipse) {
+    if ((int) mDeckDecals.size() >= kMaxDeckDecals) return;
+    mDeckDecals.push_back({
+            float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
+            float4{ linCol.x, linCol.y, linCol.z, alpha },
+            float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f } });
+}
+
+void TtpRenderer::uploadDeckDecals() {
+    mDeckDecalsLast = mDeckDecals;   // debug snapshot, before the queue is cleared
+    if (!mRoadInst) { mDeckDecals.clear(); return; }
+    const int n = (int) mDeckDecals.size();
+    if (n > 0) {
+        float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+        for (int i = 0; i < n; i++) {
+            rect[i] = mDeckDecals[i].rect;
+            col[i] = mDeckDecals[i].color;
+            shape[i] = mDeckDecals[i].shape;
+        }
+        mRoadInst->setParameter("decalRect", rect, (size_t) n);
+        mRoadInst->setParameter("decalColor", col, (size_t) n);
+        mRoadInst->setParameter("decalShape", shape, (size_t) n);
+        mRoadInst->setParameter("trackLength", mTrack ? mTrack->length : 0.0f);
+    }
+    mRoadInst->setParameter("decalCount", n);
+    mDeckDecals.clear();
+}
+
 MaterialInstance* TtpRenderer::litShadowInstance() {
     if (!mLitShadowInst && mLitMaterial) {
         mLitShadowInst = sceneInstance(mLitMaterial);
@@ -5330,6 +5364,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // road per frame (a flat disc clipped through every bend).
         mBoostDisks.resize(carCount);
         const float3 TEALC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
+        mBoostDiskLin = TEALC;
         for (uint32_t c = 0; c < carCount; c++) {
             Mesh& m = mBoostDisks[c];
             // SEG and the 0.36 ring are a TESSELLATION fix, not a look change.
@@ -7850,13 +7885,27 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // This is the LARGEST decal on the deck (outerR reaches 1.56u at
                 // full boost, wider than an oil slick), which is why it needs more
                 // headroom than the car's own shadow at 0.010.
-                conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR, 0.013f,
-                        std::min(0.85f, 0.7f + k * 0.3f) * pulse);
+                const float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+                // SHADED INTO THE ROAD when the deck material is available: the
+                // aura's fragment IS a road fragment, at the road's own depth, so
+                // there is no lift, no chord sag to clear and no render order to
+                // get wrong. The disc mesh stays as the fallback for a shell that
+                // was served no vroad.filamat.
+                addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
+                        0.72f, 0.94f, true);
+                if (mRoadInst) {
+                    tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity),
+                            mat4f::translation(float3{ 0, -1000, 0 }));
+                } else {
+                    conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR,
+                            0.013f, alpha);
+                }
             } else {
                 tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity), PARKED);
             }
         }
     }
+    uploadDeckDecals();
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
 
     // Clouds drift slowly east, wrapping outside the playfield. The JS drifts
@@ -8924,6 +8973,7 @@ void TtpRenderer::releaseScene() {
     mSceneMatInstances.clear();
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
+    mDeckDecals.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     mPadMat = nullptr;
     for (utils::Entity e : { mSun, mFill }) {

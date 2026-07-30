@@ -54,6 +54,11 @@ import { init, buildTrack, trackFrames, trackSweep } from './native-track.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDERER = path.join(ROOT, 'native/renderer/src/TtpRenderer.cpp');
+// Some pinned constants live in the deck material rather than the renderer.
+const SOURCES = {
+  renderer: RENDERER,
+  vroad: path.join(ROOT, 'native/renderer/materials/vroad.mat'),
+};
 
 // ---- the mirror ------------------------------------------------------------
 // `find` is matched against TtpRenderer.cpp verbatim. Keep each one narrow
@@ -80,7 +85,13 @@ export const MIRRORED = [
   // largest decal on the deck (outerR to 1.56u) and sags 0.0081, the car shadow's
   // 10x14 grid and the tiny prop blobs sag 0.0022. A lift has to clear its own sag
   // with margin, so 0.013 and 0.010.
-  { name: 'boost aura lift', value: 0.013, find: 'carS, carLat, outerR, outerR, 0.013f,' },
+  // The aura is SHADED INTO the road now (vroad.mat) and carries no lift at all;
+  // this pins the fallback mesh a shell without vroad.filamat still draws.
+  { name: 'boost aura fallback lift', value: 0.013, find: 'outerR, outerR,\n                            0.013f, alpha);' },
+  // LOAD-BEARING. Filament flips V by default for image conventions; uv0 here is
+  // track space, so left on it returns 1 - lat and every stamped decal lands by
+  // the far kerb. That cost a long debugging round — pin it.
+  { name: 'road uv flip off', value: false, in: 'vroad', find: 'flipUV : false,' },
   { name: 'car blob lift',   value: 0.010, find: 'carS, carLat, sx, sz, 0.010f,' },
   { name: 'prop blob lift',  value: 0.010, find: 'f.s, lat, r, r, 0.010f, 1.0f);' },
   { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
@@ -97,8 +108,9 @@ export const MIRRORED = [
 ];
 
 export function verifyMirrors() {
-  const src = fs.readFileSync(RENDERER, 'utf8');
-  const missing = MIRRORED.filter((m) => !src.includes(m.find));
+  const cache = {};
+  const read = (key) => (cache[key] ??= fs.readFileSync(SOURCES[key], 'utf8'));
+  const missing = MIRRORED.filter((m) => !read(m.in || 'renderer').includes(m.find));
   return { ok: missing.length === 0, missing };
 }
 

@@ -304,6 +304,13 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
 TTP_ABI const double* ttp_display_profile(void);
 TTP_ABI const char* ttp_display_profile_names(void);
 
+/* DEBUG: the deck decals packed for the road material last frame, as JSON
+ * [{s,lat,halfS,halfLat,r,g,b,a,inner,ellipse,knee}]. Exists because a wrong
+ * lateral coordinate survived several rounds of colour-coded shader probes —
+ * reading the actual floats and comparing them against the car's own position
+ * is one arithmetic check instead of a guess. */
+TTP_ABI const char* ttp_display_debug_decals(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -89,6 +89,7 @@ export class Display {
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
+      debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
@@ -464,6 +465,8 @@ export class Display {
   }
 
   // Last frame's per-section wall clock, as { section: ms }.
+  debugDecals() { return JSON.parse(this._fn.debugDecals() || '[]'); }
+
   profile() {
     const ptr = this.m._ttp_display_profile();
     if (!ptr) return null;

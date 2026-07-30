@@ -256,6 +256,15 @@ private:
     // case the road falls back to vlit and stamps nothing.
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
+    static constexpr int kMaxDeckDecals = 16;
+    struct DeckDecal {
+        filament::math::float4 rect;   // s, lat, halfS, halfLat — ALL world units
+        filament::math::float4 color;  // linear rgb, peak alpha
+        filament::math::float4 shape;  // innerFrac, isEllipse, kneeAlpha, spare
+    };
+    std::vector<DeckDecal> mDeckDecals;   // gathered per frame
+    std::vector<DeckDecal> mDeckDecalsLast; // kept for the debug accessor
+    filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
     // the hills and the scenery opt out — so the receivers get this instance and
@@ -780,6 +789,17 @@ private:
     // road material is absent). Separate from litShadowInstance because that
     // one is shared with the structures and berms, which must not stamp.
     filament::MaterialInstance* roadInstance();
+    void addDeckDecal(float s, float lat, float halfS, float halfLat,
+            const filament::math::float3& linCol, float alpha,
+            float inner, float kneeAlpha, bool ellipse);
+    void uploadDeckDecals();
+public:
+    // DEBUG: what was actually packed for the road last frame. Exists so the
+    // decal numbers can be read and compared against the car's own position
+    // instead of inferred from pixels — which is how a wrong lateral coordinate
+    // survived several rounds of colour-coded shader probes.
+    const std::vector<DeckDecal>& debugDeckDecals() const { return mDeckDecalsLast; }
+private:
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
     // rewritten in WORLD space every frame — the conformed decals, the skid
     // ribbons, the billboards — outlives its build-time bounds, so only meshes

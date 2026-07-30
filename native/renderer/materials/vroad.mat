@@ -39,6 +39,12 @@ material {
     shadingModel : unlit,
     culling : none,
     doubleSided : true,
+    // uv0 IS NOT A TEXTURE COORDINATE HERE, it is track space (s, lat), and
+    // Filament flips V by default for the usual image-origin reason. Left on,
+    // getUV0().y comes back as 1 - lat, which is not obviously wrong at a glance
+    // and quietly puts every decal in the wrong place: the match lands where
+    // 1 - lat equals the decal's lat, i.e. over by the far kerb. Off.
+    flipUV : false,
     parameters : [
         // — shading, identical to vlit's and filled by the same bindShadowMap —
         { type : sampler2d, name : shadowMap, precision : high },
@@ -118,18 +124,17 @@ fragment {
         highp vec3 n = getWorldGeometricNormalVector();
         vec3 base = getColor().rgb;
 
-        // THE DECK ONLY, and the bound is 0.995 rather than 1.0 on purpose. The
-        // kerb tops and skirts sit outside |v| = 1 and are excluded by any bound;
-        // the kerb's vertical INNER face is the awkward one, because both its top
-        // and bottom edges are at l = ±half, so the whole face interpolates to
-        // exactly |v| = 1 and a strict compare would be at the mercy of
-        // interpolation rounding. Stopping a whisker short excludes it for
-        // certain, and costs a full-width decal half a percent of its reach —
-        // which is nothing, and beats paint smeared up the kerb.
+        // NO DECK MASK. A threshold on v was in here twice and was wrong both
+        // times. While v was lat/half it EXCLUDED REAL ROAD — the fixed
+        // cross-section offsets divided by a small half push deck vertices past 1
+        // where the track narrows — and once v became raw world lat the same
+        // constant silently clipped every decal to the middle 2u of a 5u road,
+        // which reads as a wedge cut out of the aura rather than as a missing
+        // mask. A decal's own extent is its mask: the boost aura is ~1.2u across
+        // and cannot reach a kerb. A FULL-WIDTH decal (the launch strips, if they
+        // ever move here) needs a per-vertex deck FLAG, not a threshold on v.
         vec2 tc = getUV0();
-        if (materialParams.decalCount > 0 && abs(tc.y) <= 0.995) {
-            base = deckDecals(base, tc);
-        }
+        if (materialParams.decalCount > 0) base = deckDecals(base, tc);
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(ttpMatteShade(base, n), 0.0);
