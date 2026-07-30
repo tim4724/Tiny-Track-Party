@@ -267,6 +267,7 @@ Value wrapEffects(const race::Effects& es) {
 // ---- the world ---------------------------------------------------------------
 
 int ttp_race_configure(const char* json) {
+  ttp::clear_error();
   bool ok = false;
   Value v = json::parse(json ? json : "", &ok);
   if (!ok || v.type != Value::OBJ) {

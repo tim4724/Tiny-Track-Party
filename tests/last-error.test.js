@@ -37,6 +37,7 @@ function abi() {
     const c = (n, r, a) => M.cwrap(n, r, a);
     return {
       lastError: c('ttp_last_error', 'string', []),
+      gpCreate: c('ttp_gp_create', 'number', ['string', 'number']),
       begin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
       uiConfigure: c('ttp_ui_configure', 'number', ['string']),
       netConfigure: c('ttp_net_configure', 'number', ['string']),
@@ -102,4 +103,34 @@ test('the shell surfaces the reason rather than composing its own', async () => 
   const err = nativeError('starting a race');
   assert.match(err.message, /starting a race/, 'what the shell was doing');
   assert.match(err.message, /definitely-not-a-track/, "and the engine's reason");
+});
+
+test('a failure never reports an EARLIER, unrelated one', async () => {
+  // THE TRAP THIS FEATURE COULD HAVE BECOME. Every instrumented export clears
+  // the slot on entry, so a call that refuses without explaining itself leaves
+  // "" rather than whatever somebody else left behind.
+  //
+  // Without that clearing, a shell wrapping `if (!h) throw` around a call whose
+  // refusal paths are not instrumented reports a confident, plausible and
+  // completely wrong cause — which is precisely the failure ttp_last_error
+  // exists to remove, wearing a nicer wrapper.
+  const a = await abi();
+  a.begin('typo-track', 1, 3, null);
+  assert.match(a.lastError(), /typo-track/, 'premise: an unrelated failure is in the slot');
+
+  assert.equal(a.gpCreate(JSON.stringify({ id: 'x', name: 'X', tracks: [] }), 0), 0);
+  const why = a.lastError();
+  assert.doesNotMatch(why, /typo-track/, 'the cup failure must not inherit the track failure');
+  assert.match(why, /ttp_gp_create/);
+});
+
+test('a SUCCESSFUL call leaves the slot empty', async () => {
+  // So "empty" reliably means "this call did not explain itself", not "nothing
+  // has ever failed" — which is what makes the previous test's guarantee hold
+  // for a call that succeeds between two failures.
+  const a = await abi();
+  a.begin('no-such-track', 1, 3, null);
+  assert.ok(a.lastError().length > 0, 'premise');
+  assert.ok(a.gpCreate(JSON.stringify({ id: 'x', name: 'X', tracks: ['a'] }), 0) > 0);
+  assert.equal(a.lastError(), '');
 });

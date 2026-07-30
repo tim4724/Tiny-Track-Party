@@ -14,6 +14,8 @@ namespace ttp {
 
 void set_error(std::string why) { g_lastError = std::move(why); }
 
+void clear_error() { g_lastError.clear(); }
+
 std::string error_excerpt(const char* json, size_t max) {
   if (!json) return "(null)";
   if (!*json) return "(empty)";

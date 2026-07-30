@@ -27,11 +27,28 @@
 //     if (!ttp_session_begin(id, seed, laps, nullptr))
 //         log(ttp_last_error());          // read it IMMEDIATELY
 //
-// It is only meaningful straight after a call that reported failure. There is no
-// clearing, no error codes and no severity — a string a human reads, in the same
-// spirit as the `reason` above. Keeping it that small is deliberate: an error
-// system that a shell has to interpret is another contract to get wrong, and
-// this exists to remove one.
+// A string a human reads, in the same spirit as the `reason` above. No error
+// codes and no severity: an error system a shell has to INTERPRET is another
+// contract to get wrong, and this exists to remove one.
+//
+// ONLY THESE CALLS POPULATE IT, and the list is exhaustive on purpose:
+//
+//     ttp_session_begin      ttp_gp_create        ttp_display_build
+//     ttp_ui_configure       ttp_net_configure    ttp_race_configure
+//
+// Each CLEARS it on entry, so a success leaves it empty and a failure leaves its
+// own reason — never an older one. That clearing is the difference between a
+// diagnostic and a trap: without it, a call with no instrumentation that returns
+// 0 hands the shell whatever an unrelated failure left behind minutes ago, and
+// the shell reports a confident, plausible, completely wrong cause. Which is
+// precisely the failure this file exists to remove, so it must not reintroduce
+// it in a nicer wrapper.
+//
+// A SHELL MUST THEREFORE NOT surface this for a call outside that list. Reading
+// it after, say, ttp_room_create (which has no refusal path at all) can only
+// ever report something else's problem. Adding a call to the list means adding
+// clear_error() on entry and set_error() on every branch that refuses — both, or
+// neither.
 #ifndef TTP_ERROR_H
 #define TTP_ERROR_H
 
@@ -59,6 +76,11 @@ namespace ttp {
 // path that already knows what it is returning, and threading a value through
 // would only invite `return ttp_fail(...)` at sites whose failure value differs.
 void set_error(std::string why);
+
+// Drop any previous reason. Called on ENTRY by every instrumented export, so
+// "empty" reliably means "this call did not refuse, or did not say why" rather
+// than "nothing has ever failed".
+void clear_error();
 
 // The offending input, quoted and BOUNDED, for a message that has to name what
 // arrived. A chooser payload is ~7 KB and a rejected one is usually wrong in its

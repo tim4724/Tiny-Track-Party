@@ -174,6 +174,7 @@ void ttp_display_bench(const char* model) {
 }
 
 int ttp_display_build(const char* trackId, const char* rosterJson) {
+    ttp::clear_error();
     // The two ways this refuses are unrelated and read identically from outside:
     // a shell that never created a surface, and one that named a track nobody
     // ships. Both used to be a bare 1.

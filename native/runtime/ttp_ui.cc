@@ -215,6 +215,7 @@ ui::AutoPauseInput autoPauseInputOf(const Value& in) {
 // ---- the catalogue -----------------------------------------------------------
 
 int ttp_ui_configure(const char* json) {
+  ttp::clear_error();
   bool ok = false;
   Value c = json::parse(json && *json ? json : "", &ok);
   if (!ok || c.type != Value::OBJ) {

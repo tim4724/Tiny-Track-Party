@@ -34,8 +34,11 @@ export function loadNativeRuntime() {
 // inventing three.
 //
 // `what` is what the shell was DOING; the reason is what the engine says about
-// it. Read immediately after a failing call (ttp_error.h states that contract);
-// stale text is not possible here because nothing else runs in between.
+// it. USE THIS ONLY for the calls ttp_error.h lists as populating the slot —
+// each of those clears it on entry, so an empty reason means "this call did not
+// explain itself" and never "an older failure is still sitting there". For any
+// other call a plain Error is correct: routing one through here could only
+// report somebody else's problem, wearing this call's description.
 export function nativeError(what) {
   const why = lastError ? lastError() : '';
   return new Error(why ? `${what}: ${why}` : `${what} (the engine gave no reason)`);

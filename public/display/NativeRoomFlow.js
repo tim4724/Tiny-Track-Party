@@ -27,7 +27,7 @@
 //    lobby would show stale names/car picks. list() returns plain snapshots —
 //    it is a read-only path (roster announce, colour scan).
 
-import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
+import { loadNativeRuntime } from './nativeRuntime.js';
 
 let M = null;   // the instantiated emscripten module (shared with the sim ABI)
 let fn = null;  // cwrap'd party ABI
@@ -113,7 +113,11 @@ export class NativeRoomFlow {
       if (opts.liveness.enabledProvider) cfg.liveness.useEnabledProvider = true;
     }
     this._h = fn.create(JSON.stringify(cfg));
-    if (!this._h) throw nativeError('creating the room machine');
+    // NOT nativeError: ttp_room_create has no refusal path (the handle counter
+    // only ever increments), so there is no reason for it to have recorded and
+    // reading one could only surface an unrelated failure. Kept as a guard
+    // because a 0 here would mean the ABI changed under us.
+    if (!this._h) throw new Error('ttp_room_create returned no handle');
     this._listeners = {};
     // Providers are read LIVE in JS (the C++ side holds settable values), so
     // mirror them across before each op that can consult them.

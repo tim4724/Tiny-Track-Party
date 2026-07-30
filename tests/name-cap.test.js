@@ -61,6 +61,27 @@ const CASES = [
   ['tabs and newlines', '\t\nAda\r\n'],
   ['a NO-BREAK SPACE at each end', ' Ada '],
   ['a BOM at each end', '﻿Ada﻿'],
+  // THE WHOLE ECMA-262 WhiteSpace + LineTerminator SET, one case each.
+  //
+  // This list held only NBSP and the BOM, and that gap hid a real divergence:
+  // the C++ mirror reused a trim written for NUMBER parsing, which knows those
+  // two and nothing else — correct there (an unrecognised space and a stray
+  // letter both make NaN) and wrong here, where an unknown space simply STAYS in
+  // the name and the two halves disagree about what the player is called. A
+  // table with two entries could not see it.
+  ["OGHAM SPACE MARK", " Ada "],
+  ["EN QUAD (start of the U+2000 run)", " Ada "],
+  ["EM SPACE (middle of it)", " Ada "],
+  ["HAIR SPACE (end of the run)", " Ada "],
+  ["LINE SEPARATOR", " Ada "],
+  ["PARAGRAPH SEPARATOR", " Ada "],
+  ["NARROW NO-BREAK SPACE", " Ada "],
+  ["MEDIUM MATHEMATICAL SPACE", " Ada "],
+  ["IDEOGRAPHIC SPACE", "　Ada　"],
+  ["a mixed run of them", "　   Ada ﻿"],
+  // NOT whitespace, and must survive: U+200B ZERO WIDTH SPACE is not stripped
+  // by JS trim(). A mirror reaching for 'anything space-ish' would eat it.
+  ["ZERO WIDTH SPACE is NOT trimmed", "​Ada​"],
   ['whitespace only', '   \t  '],
   ['trim happens BEFORE the cut', '   abcdefghijklmnop   '],
   ['a well-formed emoji inside the cap', 'Ada \u{1F3CE}'],

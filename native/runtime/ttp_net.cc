@@ -95,6 +95,7 @@ Value seatValue(const ns::SeatDefaults& d) {
 // ---- the chooser -------------------------------------------------------------
 
 int ttp_net_configure(const char* chooserJson) {
+  ttp::clear_error();
   if (!chooserJson || !*chooserJson) {
     g_chooser = Value::Obj();
     return 1;

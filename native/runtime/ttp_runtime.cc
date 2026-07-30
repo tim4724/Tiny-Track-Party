@@ -723,6 +723,7 @@ const char* ttp_audio_song_json(int index) {
 extern "C" {
 
 int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* forceItemOrNull) {
+  ttp::clear_error();
   if (!trackId || !*trackId) {
     ttp::set_error("ttp_session_begin: no trackId");
     return 0;
@@ -1065,17 +1066,30 @@ static Id gpIdFrom(const Value& v) {
 }  // namespace
 
 int ttp_gp_create(const char* cupJson, int endless) {
+  ttp::clear_error();
   bool ok = false;
   Value c = cupJson && *cupJson ? json::parse(cupJson, &ok) : Value::Null();
-  if (!ok || c.type != Value::OBJ) return 0;
+  if (!ok || c.type != Value::OBJ) {
+    ttp::set_error("ttp_gp_create: expected a cup object {id, name, tracks:[…]}, got "
+                   + ttp::error_excerpt(cupJson));
+    return 0;
+  }
   GpCup cup;
   if (const Value* x = c.find("id")) cup.id = x->str;
   if (const Value* x = c.find("name")) cup.name = x->str;
   if (const Value* x = c.find("tracks")) {
-    if (x->type != Value::ARR) return 0;
+    if (x->type != Value::ARR) {
+      ttp::set_error("ttp_gp_create: `tracks` must be an array of track ids");
+      return 0;
+    }
     for (const Value& t : x->arr) cup.tracks.push_back(t.str);
   }
-  if (cup.tracks.empty()) return 0;
+  // Both spellings of "no races" land here: an absent `tracks` and an empty one.
+  if (cup.tracks.empty()) {
+    ttp::set_error("ttp_gp_create: a cup needs at least one track; `tracks` was "
+                   + std::string(c.find("tracks") ? "empty" : "absent"));
+    return 0;
+  }
 
   auto gh = std::make_unique<GpHandle>();
   GpHandle* raw = gh.get();
