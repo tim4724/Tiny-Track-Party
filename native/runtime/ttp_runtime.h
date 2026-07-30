@@ -231,6 +231,33 @@ TTP_ABI const char* ttp_track_schematic_json(const char* trackId, int laps, uint
 // because rounding first would jitter straights by ±0.5 and defeat it.
 TTP_ABI const char* ttp_schematic_pack(const char* pathD, double eps);
 
+// The side of the square every schematic is projected into — 256, and the same
+// number the pack step's uint8 range is (a coordinate IS a byte).
+//
+// It exists because the projection also answers a `viewBox` STRING, "0 0 256
+// 256", which is an SVG attribute a browser assigns and is done with. That
+// string is CONSTANT: no track, lap count or seed changes it. So a shell that
+// parses it has written a parser for a literal — and then, inevitably, a
+// fallback constant for when the parse fails, which is the same 256 written a
+// second time. Ask for the number.
+//
+// The string stays in the projection's answer: it is a frozen corpus field and
+// the web assigns it directly.
+TTP_ABI int ttp_schematic_view_size(void);
+
+// A schematic path's POINTS, as [[x,y], ...] — the reader `pack` already runs
+// over a path, exposed so a shell does not write a second one.
+//
+// The projection hands out `d` as an SVG path STRING, which is a web-shaped
+// interchange format: a browser assigns it to an attribute and is finished,
+// while every other platform has to parse it before it can stroke anything.
+// The tvOS shell duly grew its own splitter, which is a parser's worth of
+// duplication per shell for a function the library already had.
+//
+// The spelling is fixed and narrow — `path_of` writes "M x y L x y … Z" and
+// nothing else — so this is not a general SVG reader and must not become one.
+TTP_ABI const char* ttp_schematic_points_json(const char* pathD);
+
 // The phone's half, for completeness and for the round-trip gate: back to
 // {viewBox, d, start}. Straight segments between the kept points, no spline (a
 // spline IMPOSES a rounded look the original does not have). Phones stay on the

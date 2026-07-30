@@ -159,7 +159,25 @@ void testPaletteUntouched() {
     check(base.hasWater == show.hasWater && base.water.shoreSeed == show.water.shoreSeed,
           who + " water");
     check(base.hasIce == show.hasIce && base.ice.sheet == show.ice.sheet, who + " ice");
-    check(std::memcmp(&base.road, &show.road, sizeof base.road) == 0, who + " road palette");
+    // FIELD BY FIELD, and never memcmp. RoadPalette is 37 bytes of members in a
+    // 40-byte struct — seven uint32_t, two float, one bool — so three PADDING
+    // bytes ride along after `edgeLines`. Padding is not part of the value: it
+    // holds whatever was in that memory, and comparing it makes the answer
+    // depend on what the allocator handed out rather than on the palette.
+    //
+    // This was a real intermittent, not a theoretical one. All six biomes
+    // failed together (they share a construction pattern, so they share the
+    // garbage) on roughly two runs in three, on both linux and macOS, for
+    // several days — long enough to read as "CI is flaky" rather than as a
+    // test bug. Every other assertion around this one already compares
+    // members; this was the only one that did not.
+    check(base.road.asphalt == show.road.asphalt && base.road.line == show.road.line
+                  && base.road.dash == show.road.dash && base.road.kerbA == show.road.kerbA
+                  && base.road.kerbB == show.road.kerbB && base.road.skirt == show.road.skirt
+                  && base.road.shoulder == show.road.shoulder
+                  && base.road.kerbW == show.road.kerbW && base.road.kerbH == show.road.kerbH
+                  && base.road.edgeLines == show.road.edgeLines,
+          who + " road palette");
     check(base.gantry.pylon == show.gantry.pylon && base.gantry.finial == show.gantry.finial,
           who + " gantry");
     check(base.scenery.rocks == show.scenery.rocks, who + " boulder tints");

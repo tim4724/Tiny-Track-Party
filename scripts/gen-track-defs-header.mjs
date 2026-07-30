@@ -39,6 +39,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TRACKS, CUPS, DIFF_LEVEL } from '../public/shared/tracks.js';
+// The cup PAPER COLOURS. Authored in the picker because the PHONE imports that
+// file and a phone has no wasm to ask; carried across here so a native shell
+// does not retype five hex literals (the first one did). trackPicker.js has no
+// imports of its own, so reading it from Node costs nothing.
+import { CUP_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } from '../public/shared/trackPicker.js';
 import { DEV_TRACKS } from '../public/shared/devTracks.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,6 +55,14 @@ const ROAD_WIDTH = 2.5; // TrackBuilder ROAD_WIDTH — the descriptor-width fall
 // (native/libttp-runtime/ttp/theme.h), and cup membership is authored in CUPS,
 // so carrying it across here keeps one source for it. A dev-only track belongs
 // to no cup and emits nullptr, which resolves to the grass fallback.
+// "#E0C070" -> 0xE0C070. Refuses anything else rather than emitting a 0 that
+// would render as black and read as a deliberate choice.
+const hexColor = (css) => {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(String(css).trim());
+  if (!m) fail(`cup colour ${JSON.stringify(css)} is not a #RRGGBB literal`);
+  return `0x${m[1].toUpperCase()}`;
+};
+
 const CUP_OF = {};
 for (const c of CUPS) for (const id of c.tracks) CUP_OF[id] = c.id;
 
@@ -248,6 +261,8 @@ out.push('');
 out.push('// The shipped CUPS, in the catalogue\'s own order — which IS the difficulty');
 out.push('// ladder and the order every picker draws. `difficulty` is the AUTHORED');
 out.push('// override or 0 for "derive from the tracks" (ttp::rt::ui::cupTendency).');
+out.push('// `color` is the cup\'s PAPER tint (public/shared/trackPicker.js CUP_COLOR),');
+out.push('// packed 0xRRGGBB — the picker\'s surface colour, not the biome\'s.');
 for (const c of CUPS) {
   const sym = c.id.replace(/[^A-Za-z0-9]/g, '_');
   out.push(`constexpr const char* kCupTracks_${sym}[] = { ${c.tracks.map((t) => JSON.stringify(t)).join(', ')} };`);
@@ -262,11 +277,21 @@ for (const c of CUPS) {
     fail(`cup "${c.id}" pins difficulty ${JSON.stringify(c.difficulty)}; an override must be an integer 1..4 `
       + `(0 is the sentinel for "derive it from the tracks")`);
   }
+  // A cup with no authored colour is a build error rather than a silent
+  // fallback: the fallback exists for a cup-LESS selection (Random), not for a
+  // cup somebody forgot to paint.
+  if (!CUP_COLOR[c.id]) fail(`cup "${c.id}" has no CUP_COLOR in public/shared/trackPicker.js`);
   out.push(`  { ${JSON.stringify(c.id)}, ${JSON.stringify(c.name)}, kCupTracks_${sym}, `
-    + `${c.tracks.length}, ${c.difficulty != null ? c.difficulty : 0} },`);
+    + `${c.tracks.length}, ${c.difficulty != null ? c.difficulty : 0}, ${hexColor(CUP_COLOR[c.id])} },`);
 }
 out.push('};');
 out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);
+out.push('');
+out.push('// The tint a cup-LESS selection wears (Random belongs to no cup), and how much');
+out.push('// of a cup colour survives the mix with white on a schematic field. Both are');
+out.push('// public/shared/trackPicker.js\'s.');
+out.push(`constexpr uint32_t TTP_CUP_COLOR_FALLBACK = ${hexColor(CUP_COLOR_FALLBACK)};`);
+out.push(`constexpr int TTP_CUP_FIELD_TINT_PCT = ${FIELD_TINT};`);
 out.push('');
 out.push('}  // namespace ttp');
 out.push('');

@@ -267,7 +267,7 @@ export const JS_MUTATIONS = [
     name: 'display/name-clamp-dropped',
     kind: 'stop re-clamping an untrusted HELLO name',
     file: 'public/display/Net.js',
-    find: '          const name = cleanName(data.name);',
+    find: '          const name = session.cleanName(data.name);',
     replace: '          const name = String(data.name);',
     expect: 'an emoji name is the ONE place C++ loses data',
   },

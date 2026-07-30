@@ -177,11 +177,30 @@ bool allRacersReady(const std::vector<RosterEntry>& roster, const Id& hostPeerIn
 // into `roster`, valid while it is.
 std::vector<const RosterEntry*> connectedPlayers(const std::vector<RosterEntry>& roster);
 
+// ---- cup paper colours -------------------------------------------------------
+
+// How much of a cup's colour survives the mix with white on a schematic field.
+// public/shared/trackPicker.js's FIELD_TINT, carried across so the phone's
+// picker and every TV lobby wash the same map to the same shade.
+int cupFieldTintPct();
+
+// A cup's colour mixed `pct` of the way toward white, packed 0xRRGGBB. An
+// unknown or absent cup gets the fallback (Random belongs to no cup).
+//
+// THE MIX IS IN sRGB, on the ENCODED values — a straight per-channel lerp. That
+// is what CSS `color-mix(in srgb, …)` does, and it is the whole reason this is
+// shared rather than left to each shell: mixing the same pair in LINEAR light is
+// a one-line change that comes out visibly darker, and nothing would catch it.
+uint32_t cupTintRgb(const OptStr& cupId, double pct);
+
 // ---- the lobby's race card --------------------------------------------------
 struct Cup {
   std::string id;
   std::string name;
   std::vector<std::string> tracks;
+  // The cup's PAPER colour, packed 0xRRGGBB. See CupDef::color — it is the
+  // picker's surface tint and deliberately not the biome's.
+  uint32_t color = 0;
 };
 struct CatalogEntry {
   std::string id;

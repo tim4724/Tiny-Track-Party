@@ -12,6 +12,7 @@
 // KEY ORDER IS OUTPUT for the snapshot: it is emitted with ordered_stringify so
 // the bytes the relay retains are the ones the phones have always parsed. See
 // ttp_net.h's deviation note.
+#include "ttp_error.h"
 #include "ttp_net.h"
 
 #include <string>
@@ -94,13 +95,18 @@ Value seatValue(const ns::SeatDefaults& d) {
 // ---- the chooser -------------------------------------------------------------
 
 int ttp_net_configure(const char* chooserJson) {
+  ttp::clear_error();
   if (!chooserJson || !*chooserJson) {
     g_chooser = Value::Obj();
     return 1;
   }
   bool ok = false;
   Value v = json::parse(chooserJson, &ok);
-  if (!ok || v.type != Value::OBJ) return 0;
+  if (!ok || v.type != Value::OBJ) {
+    ttp::set_error("ttp_net_configure: the chooser must be a JSON object "
+                   "(cars/colors/tracks), got " + ttp::error_excerpt(chooserJson));
+    return 0;
+  }
   g_chooser = std::move(v);
   return 1;
 }
@@ -159,6 +165,12 @@ const char* ttp_net_norm_index_json(const char* valueJson) {
 }
 
 // ---- seats --------------------------------------------------------------------
+
+const char* ttp_net_clean_name(const char* valueJson) {
+  static std::string out;
+  out = ns::clean_name_json(valueJson ? valueJson : "null");
+  return out.c_str();
+}
 
 const char* ttp_net_seat_defaults_json(double colorIndex) {
   return put(g_bufSeat, seatValue(ns::seat_defaults(colorIndex)));

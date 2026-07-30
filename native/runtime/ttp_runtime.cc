@@ -6,6 +6,7 @@
 // onRaceEnd callbacks funnel into one ordered event queue that ttp_events_json
 // drains. Bots are driven inside ttp_update, mirroring the live render loop.
 
+#include "ttp_error.h"
 #include "ttp_runtime.h"
 #include "ttp_audio.h"
 #include "ttp_session.h"
@@ -722,9 +723,20 @@ const char* ttp_audio_song_json(int index) {
 extern "C" {
 
 int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* forceItemOrNull) {
-  if (!trackId) return 0;
+  ttp::clear_error();
+  if (!trackId || !*trackId) {
+    ttp::set_error("ttp_session_begin: no trackId");
+    return 0;
+  }
   auto rs = std::make_unique<RuntimeSession>();
-  if (!buildTrack(*rs, trackId, laps, seed)) return 0;
+  if (!buildTrack(*rs, trackId, laps, seed)) {
+    // The two ways this fails read identically from outside, and a shell that
+    // is told only "failed" cannot tell a typo from a bad lap count.
+    ttp::set_error(std::string("ttp_session_begin: no track \"") + trackId
+                   + "\" in this build (catalogue or dev), or laps=" + std::to_string(laps)
+                   + " was refused");
+    return 0;
+  }
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
   int h = g_next++;
   rs->handle = h;
@@ -1054,17 +1066,30 @@ static Id gpIdFrom(const Value& v) {
 }  // namespace
 
 int ttp_gp_create(const char* cupJson, int endless) {
+  ttp::clear_error();
   bool ok = false;
   Value c = cupJson && *cupJson ? json::parse(cupJson, &ok) : Value::Null();
-  if (!ok || c.type != Value::OBJ) return 0;
+  if (!ok || c.type != Value::OBJ) {
+    ttp::set_error("ttp_gp_create: expected a cup object {id, name, tracks:[…]}, got "
+                   + ttp::error_excerpt(cupJson));
+    return 0;
+  }
   GpCup cup;
   if (const Value* x = c.find("id")) cup.id = x->str;
   if (const Value* x = c.find("name")) cup.name = x->str;
   if (const Value* x = c.find("tracks")) {
-    if (x->type != Value::ARR) return 0;
+    if (x->type != Value::ARR) {
+      ttp::set_error("ttp_gp_create: `tracks` must be an array of track ids");
+      return 0;
+    }
     for (const Value& t : x->arr) cup.tracks.push_back(t.str);
   }
-  if (cup.tracks.empty()) return 0;
+  // Both spellings of "no races" land here: an absent `tracks` and an empty one.
+  if (cup.tracks.empty()) {
+    ttp::set_error("ttp_gp_create: a cup needs at least one track; `tracks` was "
+                   + std::string(c.find("tracks") ? "empty" : "absent"));
+    return 0;
+  }
 
   auto gh = std::make_unique<GpHandle>();
   GpHandle* raw = gh.get();
@@ -1444,6 +1469,21 @@ const char* ttp_schematic_pack(const char* pathD, double eps) {
   static std::string out;
   out = ttp::schematic::pack(pathD ? pathD : "",
                              eps > 0 ? eps : ttp::schematic::EPS);
+  return out.c_str();
+}
+
+int ttp_schematic_view_size(void) { return ttp::schematic::VIEW; }
+
+const char* ttp_schematic_points_json(const char* pathD) {
+  static std::string out;
+  Value v = Value::Arr();
+  for (const ttp::schematic::Point& p : ttp::schematic::points_of(pathD ? pathD : "")) {
+    Value pair = Value::Arr();
+    pair.push(Value::Num(p.x));
+    pair.push(Value::Num(p.y));
+    v.push(std::move(pair));
+  }
+  out = canonical_stringify(v);
   return out.c_str();
 }
 

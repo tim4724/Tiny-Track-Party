@@ -157,6 +157,29 @@ void copyKey(Value& dst, const Value& src, const char* key) {
   if (v) dst.set(key, *v);
 }
 
+
+// ECMA-262 WhiteSpace + LineTerminator, in FULL — what String.prototype.trim
+// actually strips, and what clean_name_json needs.
+//
+// It is NOT `isJsSpaceAt` above, and the difference is the point. That one
+// handles the three forms "that actually turn up in the wild" because its caller
+// is jsStringToNumber, where an unrecognised space and a stray letter reach the
+// same answer: NaN. A NAME has no such luck — a space this does not know stays
+// in the string, so the display keeps a name the phone already trimmed away and
+// the two halves disagree about what the player is called.
+//
+// Widening isJsSpaceAt instead would have been the tidier-looking fix and the
+// wrong one: it feeds norm_index, which the FROZEN session corpus pins.
+bool jsSpaceUnit(uint16_t u) {
+  switch (u) {
+    case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x20:
+    case 0xA0: case 0x1680: case 0x2028: case 0x2029: case 0x202F:
+    case 0x205F: case 0x3000: case 0xFEFF: return true;
+    // U+2000..U+200A, the en/em quad family.
+    default: return u >= 0x2000 && u <= 0x200A;
+  }
+}
+
 }  // namespace
 
 RoomState room_state_of(const std::string& name) {
@@ -467,6 +490,105 @@ const char* key(HeartbeatAct a) {
     case HeartbeatAct::WAIT: return "wait";
   }
   return "idle";
+}
+
+std::string clean_name_json(const std::string& valueJson) {
+  const Value v = json::parse_or(valueJson.c_str(), Value());
+  // `n == null` catches null AND undefined (an absent key), both -> "". Anything
+  // else goes through the file's OWN JS String().
+  //
+  // NOT trimmed here: the trim happens on the UTF-16 units below, because that
+  // is the domain both halves of this rule are defined in (the cut is by unit,
+  // and a space is a code point).
+  const std::string s =
+      (v.type == Value::NUL || v.type == Value::UNDEF) ? std::string() : jsToString(v);
+
+  // Decode to UTF-16 code units, because the cut is defined on them (header).
+  std::vector<uint16_t> units;
+  for (size_t i = 0; i < s.size();) {
+    uint32_t cp = 0;
+    unsigned char c = static_cast<unsigned char>(s[i]);
+    size_t len = 1;
+    if (c < 0x80) { cp = c; }
+    else if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; len = 2; }
+    else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; len = 3; }
+    else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; len = 4; }
+    else { cp = 0xFFFD; len = 1; }   // a bare continuation byte, or 0xF5..0xFF
+    // VALIDATED, not assumed. This is a public ABI over UNTRUSTED input: the one
+    // caller today hands it a JS string (which cannot be malformed UTF-8), but a
+    // native shell can hand it anything a peer sent. An unchecked continuation
+    // byte does not overrun — the bound below is correct either way — it just
+    // decodes to a character nobody typed, which then gets stored as a name.
+    if (i + len > s.size()) { cp = 0xFFFD; len = s.size() - i; }
+    else {
+      uint32_t acc = cp;
+      bool wellFormed = true;
+      for (size_t k = 1; k < len; ++k) {
+        const unsigned char cc = static_cast<unsigned char>(s[i + k]);
+        if ((cc & 0xC0) != 0x80) { wellFormed = false; break; }
+        acc = (acc << 6) | (cc & 0x3F);
+      }
+      // Overlongs and anything past the Unicode range are not characters either.
+      if (!wellFormed || acc > 0x10FFFF
+          || (len == 2 && acc < 0x80) || (len == 3 && acc < 0x800)
+          || (len == 4 && acc < 0x10000)) {
+        cp = 0xFFFD;
+        len = 1;   // resynchronise one byte at a time, as a decoder should
+      } else {
+        cp = acc;
+      }
+    }
+    i += len;
+    if (cp > 0xFFFF) {
+      cp -= 0x10000;
+      units.push_back(static_cast<uint16_t>(0xD800 + (cp >> 10)));
+      units.push_back(static_cast<uint16_t>(0xDC00 + (cp & 0x3FF)));
+    } else {
+      units.push_back(static_cast<uint16_t>(cp));
+    }
+  }
+
+  // TRIM, THEN CUT — that order is the rule (names.js: `.trim().slice(0, 16)`),
+  // and reversing it would clip 16 units of mostly-whitespace down to a shorter
+  // name than the phone shows.
+  size_t b = 0;
+  size_t e = units.size();
+  while (b < e && jsSpaceUnit(units[b])) ++b;
+  while (e > b && jsSpaceUnit(units[e - 1])) --e;
+  if (e - b > static_cast<size_t>(NAME_MAX_UNITS)) e = b + NAME_MAX_UNITS;
+
+  // Back to UTF-8. A cut that orphans a surrogate emits U+FFFD, which is what
+  // the WIRE already does to a JS-sliced name (json_parse writes the escaped
+  // lone surrogate as WTF-8 and the decoder replaces it) — so a hostile
+  // over-long name and an honestly-sliced one land on the same string.
+  std::string out;
+  for (size_t i = b; i < e; ++i) {
+    uint32_t cp = units[i];
+    if (cp >= 0xD800 && cp <= 0xDBFF) {
+      if (i + 1 < e && units[i + 1] >= 0xDC00 && units[i + 1] <= 0xDFFF) {
+        cp = 0x10000 + ((cp - 0xD800) << 10) + (units[++i] - 0xDC00);
+      } else {
+        cp = 0xFFFD;
+      }
+    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+      cp = 0xFFFD;
+    }
+    if (cp < 0x80) out += static_cast<char>(cp);
+    else if (cp < 0x800) {
+      out += static_cast<char>(0xC0 | (cp >> 6));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+      out += static_cast<char>(0xE0 | (cp >> 12));
+      out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+      out += static_cast<char>(0xF0 | (cp >> 18));
+      out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+      out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+  }
+  return out;
 }
 
 }  // namespace session

@@ -161,6 +161,20 @@ TTP_ABI const char* ttp_net_norm_index_json(const char* valueJson);
  * The car model defaults to the LIVERY slot so everyone starts on a distinct
  * car. The name is a KEY plus its number, never the composed sentence — the copy
  * table is the shell's, next to the element it fills. */
+/* The display-name cap, applied to a HELLO's `name` — trim, then cut to 16
+ * UTF-16 code UNITS. Takes the RAW JSON value, not a string, because this is
+ * untrusted peer input and JS stringifies rather than rejecting: a number, a
+ * bool and an array all have a defined spelling, and a shell using its own
+ * language's "describe" would clamp a different string than the phone sent.
+ *
+ * `public/shared/names.js` stays the AUTHORED source (both browser pages import
+ * it, and the phone half is permanent JS). This is the mirror every native
+ * shell reads instead of restating the arithmetic — the same relationship
+ * protocol.h has with protocol.js, and `tests/name-cap.test.js` is the one
+ * place that can see both. It shipped as a hand-copy in the tvOS shell with a
+ * comment predicting that a third shell would type it a third time. */
+TTP_ABI const char* ttp_net_clean_name(const char* valueJson);
+
 TTP_ABI const char* ttp_net_seat_defaults_json(double colorIndex);
 
 /* peer_joined, or a HELLO from someone we never seated. `colorIndex` is

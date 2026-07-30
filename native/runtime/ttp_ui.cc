@@ -14,6 +14,7 @@
 // the JS object literal was written in and emitted with ordered_stringify, so
 // the standings board comes out as the bytes the phones have always received.
 // See ttp_ui.h's deviation note.
+#include "ttp_error.h"
 #include "ttp_ui.h"
 
 #include <string>
@@ -214,9 +215,14 @@ ui::AutoPauseInput autoPauseInputOf(const Value& in) {
 // ---- the catalogue -----------------------------------------------------------
 
 int ttp_ui_configure(const char* json) {
+  ttp::clear_error();
   bool ok = false;
   Value c = json::parse(json && *json ? json : "", &ok);
-  if (!ok || c.type != Value::OBJ) return 0;
+  if (!ok || c.type != Value::OBJ) {
+    ttp::set_error("ttp_ui_configure: expected a JSON object with maxPlayers and carCount, got "
+                   + ttp::error_excerpt(json));
+    return 0;
+  }
   g_maxPlayers = (int) json::num_field(c, "maxPlayers");
   g_carCount = (int) json::num_field(c, "carCount");
   g_cups.clear();
@@ -268,6 +274,14 @@ int ttp_ui_configure(const char* json) {
   return 1;
 }
 
+uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct) {
+  ui::OptStr id;
+  if (cupIdOrNull && *cupIdOrNull) { id.has = true; id.v = cupIdOrNull; }
+  return ui::cupTintRgb(id, pct);
+}
+
+int ttp_ui_cup_field_tint_pct(void) { return ui::cupFieldTintPct(); }
+
 const char* ttp_ui_catalogue_json(void) {
   Value out = Value::Obj();
   Value cups = Value::Arr();
@@ -278,6 +292,10 @@ const char* ttp_ui_catalogue_json(void) {
     Value tracks = Value::Arr();
     for (const std::string& t : c.tracks) tracks.push(Value::Str(t));
     v.set("tracks", std::move(tracks));
+    // Packed 0xRRGGBB as a NUMBER, not "#RRGGBB": every shell turns it into its
+    // own colour type and none of them wants to parse a string to do it. The
+    // web is the exception and already has the authored table on the page.
+    v.set("color", Value::Num((double) c.color));
     cups.push(std::move(v));
   }
   Value cat = Value::Arr();

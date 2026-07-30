@@ -23,7 +23,7 @@
     "revive:js-oracle": "node scripts/revive-js-oracle.mjs",
     "setup": "node scripts/setup.mjs",
     "start": "node server/index.js",
-    "test": "node --test tests/*.test.js partyplug/tests/*.test.js",
+    "test": "npm run lint && node --test tests/*.test.js partyplug/tests/*.test.js",
     "test:native": "node scripts/test-native.mjs",
     "test:e2e": "playwright test",
     "thumbs:car": "node scripts/capture-car-thumbs.js"

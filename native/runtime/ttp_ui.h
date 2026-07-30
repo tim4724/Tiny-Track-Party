@@ -63,6 +63,8 @@
 #ifndef TTP_UI_H
 #define TTP_UI_H
 
+#include <stdint.h>   /* the cup tint answers a packed 0xRRGGBB */
+
 #include "ttp_abi.h"
 
 #ifdef __cplusplus
@@ -114,6 +116,28 @@ TTP_ABI int ttp_ui_configure(const char* json);
  * the override exists for a synthetic conformance world, and answering with one
  * here would let a test's fiction reach a picker. */
 TTP_ABI const char* ttp_ui_catalogue_json(void);
+
+/* ---- cup paper colours ------------------------------------------------------
+ *
+ * The picker's five surface colours. They are AUTHORED — not derived from the
+ * biome, which was tried and broke on two cups of five (a colour picked for a 3D
+ * horizon is not legible as a pale paper wash; public/shared/trackPicker.js
+ * records which two and how). So do not reach for ttp_theme.h to rebuild them.
+ *
+ * The catalogue above carries each cup's `color` as packed 0xRRGGBB. These two
+ * exist so that no shell re-implements the WASH:
+ *
+ * `pct` is how much of the colour survives a mix with white. The mix is in sRGB
+ * on the ENCODED values — a straight per-channel lerp, which is what CSS
+ * `color-mix(in srgb, …)` does. Mixing the same pair in linear light is a
+ * one-line difference that comes out visibly darker and would match nothing
+ * else on screen. A null/empty cup id gets the cup-less fallback, which is what
+ * Random wears. */
+TTP_ABI uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct);
+
+/* FIELD_TINT: how much colour a schematic's field keeps. Shared so the phone's
+ * picker and every TV lobby wash the same map to the same shade. */
+TTP_ABI int ttp_ui_cup_field_tint_pct(void);
 
 /* ---- screens ------------------------------------------------------------- */
 

@@ -33,7 +33,7 @@
 // byte-identical re-emission from the port). If any of those ever disagrees with
 // the corpus, the corpus is right.
 
-import { loadNativeRuntime } from './nativeRuntime.js';
+import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
 let fn = null;
 
@@ -94,7 +94,7 @@ export function configure({ maxPlayers, carCount, cups, catalog }) {
     }));
   }
   const ok = fn.configure(J(world));
-  if (!ok) throw new Error('[ui] the catalogue was rejected by the native UI model');
+  if (!ok) throw nativeError('configuring the UI model');
 }
 
 // The shipped catalogue as DATA, for the things a shell has to draw itself: the

@@ -27,7 +27,18 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 // lightness cap, and *still* left playroom pink and nearly on top of canyon — two
 // hacks to launder colours that were never meant for this job. So we author five
 // instead, one per cup, each the paper-legible relative of what that biome looks like:
-const CUP_COLOR = {
+//
+// EXPORTED, AND CODEGEN'D. This file is the AUTHORED source and stays so: the
+// PHONE imports it and a phone has no wasm, so these cannot come from the ABI at
+// runtime. But a native shell has no way to reach a JS module either, so
+// `scripts/gen-track-defs-header.mjs` carries this table into `track_defs.h` and
+// `ttp_ui_catalogue_json` hands each cup its colour — the same relationship
+// `protocol.h` has with `protocol.js`. `tests/ui-model.test.js` is the drift
+// gate, being the one place that can see the table and the wasm at once.
+//
+// Before that, the first TV shell simply retyped all five, under a comment
+// saying nothing in the tree watched the two lists. It was right.
+export const CUP_COLOR = {
   beach:    '#E0C070',  // wet sand
   snow:     '#7FB2DC',  // ice blue — the biome's own white can't survive a paper mix
   backyard: '#7FBF63',  // lawn green
@@ -38,7 +49,8 @@ const CUP_COLOR = {
   // the one surface that does show them in sequence (the display's cup slot).
   rooftop:  '#F5842B'
 };
-const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;  // cup-less catalog: the old default green
+// Cup-less catalogue: the old default green. Exported for the same reason.
+export const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;
 // Random belongs to no cup, so it has no colour to turn up — a warm grey stands in,
 // which is honest: "any biome" isn't one of them.
 const NEUTRAL_COLOR = '#8C8398';
