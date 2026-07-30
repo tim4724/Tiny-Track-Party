@@ -15,13 +15,11 @@
 // instance to EVERY mesh that carries normals (hills, structures, berms, scenery,
 // props), so requiring uv0 there would mean a UV buffer on all of them.
 //
-// THE COORDINATES ARE (s, lat/half), written by buildRoadMesh into uv0:
-//   u = arclength along the centreline, in world units, 0..length
-//   v = lateral offset NORMALISED by that ring's half-width, so the drivable
-//       deck is exactly |v| <= 1 and the kerb tops and skirts fall outside it.
-// Normalising v is what makes the deck mask a comparison instead of needing the
-// per-ring width passed in. A decal's own lateral extent is in world units, so it
-// is converted with the half-width uniform below.
+// THE COORDINATES ARE (s, lat), written by buildRoadMesh into uv0, both in WORLD
+// units: arclength along the centreline, and lateral offset from it. Nothing is
+// normalised — v was lat/half at first so the deck could be masked with |v| <= 1,
+// and that needed two independently-computed half-widths to agree. See the mask
+// note in material() for how that failed.
 //
 // Track space is also why this handles the geometry the old approach could not:
 // a fragment carries its OWN s, so a loop — where one (x, z) has two different
@@ -33,7 +31,7 @@ material {
         color,
         // the world normal the Lambert term needs (getWorldGeometricNormalVector)
         tangents,
-        // (s, lat/half) — see above
+        // (s, lat) in world units — see above
         uv0
     ],
     shadingModel : unlit,
@@ -68,14 +66,9 @@ material {
         { type : float, name : invTrackLength },
         { type : float, name : chunkMid },
         // Per decal, in track space:
-        //   x = centre arclength, WORLD units;  y = centre lat, NORMALISED
-        //   z = half-extent along s, WORLD;     w = half-extent across, NORMALISED
-        // Lateral values are normalised by the half-width at the decal's own s,
-        // converted by the shell when it packs these. That is what lets the
-        // fragment compare directly against uv0.y without needing this ring's
-        // half-width, which is not available per fragment. The half-width varies
-        // slowly, so a decal spanning a width change is off by a fraction of a
-        // percent — far below anything visible at these sizes.
+        //   xy = centre (s, lat), zw = half-extents — ALL world units, matching
+        // uv0 exactly, EXCEPT that x arrives relative to this chunk's centre
+        // (see chunkMid) so the loop needs no per-decal lap wrap.
         { type : float4[32], name : decalRect },
         //   rgb = colour, a = peak alpha
         { type : float4[32], name : decalColor },

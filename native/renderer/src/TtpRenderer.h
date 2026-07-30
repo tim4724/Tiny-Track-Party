@@ -250,7 +250,7 @@ private:
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
     // The road deck only: mLitMaterial's shading (shared via ttp_shade.inc)
-    // plus a uv0 channel carrying (s, lat/half), so flat deck decals are
+    // plus a uv0 channel carrying track space (s, lat), so flat deck decals are
     // SHADED INTO the road rather than laid over it — no lift, no z-fight,
     // no render order. Null if the shell served no vroad.filamat, in which
     // case the road falls back to vlit and stamps nothing.
@@ -262,7 +262,8 @@ private:
         filament::math::float4 color;  // linear rgb, peak alpha
         filament::math::float4 shape;  // innerFrac, isEllipse, kneeAlpha, spare
     };
-    std::vector<DeckDecal> mDeckDecals;   // gathered per frame
+    std::vector<DeckDecal> mDeckDecals;      // gathered per frame
+    std::vector<DeckDecal> mDeckDecalsLast;  // last frame's, for debugDeckDecals()
     // Decals that never move — boost pads, launch strips, oil slicks, item-box
     // contact shadows. Resolved once at track build and re-queued each frame,
     // which is cheaper than it sounds (a memcpy of a handful of float4s) and
@@ -279,7 +280,6 @@ private:
         float sMin, sMax;   // arclength covered, before the decal margin
     };
     std::vector<RoadChunk> mRoadChunks;
-    std::vector<DeckDecal> mDeckDecalsLast; // kept for the debug accessor
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,

@@ -1032,19 +1032,17 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
                 const float3 p = pointAt(ri, pt);
                 mRoad.verts.push_back({ p.x, p.y, p.z, packLinear(cb, AO[pt]) });
                 mRoad.normals.push_back(ri == i ? nA : nB);
-                // TRACK SPACE, for vroad.mat: u is arclength, v is the lateral
-                // offset NORMALISED by this ring's half-width, so the drivable
-                // deck is exactly |v| <= 1 whatever the road does with its width.
-                // This is what lets a decal be shaded into the deck instead of
-                // floated over it — the fragment already knows where it is on the
-                // track, so nothing has to be conformed and a loop's two stacked
+                // TRACK SPACE, for vroad.mat: u is arclength, v is RAW WORLD
+                // LAT. This is what lets a decal be shaded into the deck instead
+                // of floated over it — the fragment already knows where it is on
+                // the track, so nothing is conformed and a loop's two stacked
                 // arclengths never collide.
-                // v is RAW WORLD LAT. It was lat/half at first, so the deck could
-                // be masked with |v| <= 1 — and that normalisation cost several
-                // debugging rounds: it needs the decal side to divide by exactly
-                // the same half-width, and where the road narrows the fixed
-                // cross-section offsets divided by a small half push deck vertices
-                // past 1 anyway. Raw lat has no second quantity to agree with.
+                // v was lat/half at first, so the deck could be masked with
+                // |v| <= 1, and that normalisation cost several debugging rounds:
+                // it needs the decal side to divide by exactly the same
+                // half-width, and where the road narrows the fixed cross-section
+                // offsets divided by a small half push deck vertices past 1
+                // anyway. Raw lat has no second quantity to agree with.
                 mRoad.uvs.push_back({ (float) uIdx[v] / N * L,
                         P[pt].sign * halfAt(ri) + P[pt].off });
             }
@@ -4253,51 +4251,39 @@ void TtpRenderer::uploadDeckDecals() {
     // handing each chunk its own short list is what keeps the loop off the 99% of
     // the deck that has nothing on it. Most chunks end up with decalCount 0 and
     // skip the whole thing.
-    if (!mRoadChunks.empty()) {
+    const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan) {
         float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+        int n = 0;
+        for (const DeckDecal& d : mDeckDecals) {
+            if (n >= kMaxDeckDecals) break;
+            // Overlap on a PERIODIC arclength, measured the short way round: a
+            // decal is in range if its own footprint reaches this span. Folding
+            // it here is also what lets the shader skip the wrap per decal — x
+            // goes over as the offset from `mid`, not as an absolute arclength.
+            float ds = d.rect.x - mid;
+            if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
+            if (std::fabs(ds) > halfSpan + d.rect.z) continue;
+            rect[n] = d.rect; rect[n].x = ds;
+            col[n] = d.color; shape[n] = d.shape; n++;
+        }
+        if (n > 0) {
+            mi->setParameter("decalRect", rect, (size_t) n);
+            mi->setParameter("decalColor", col, (size_t) n);
+            mi->setParameter("decalShape", shape, (size_t) n);
+            mi->setParameter("trackLength", L);
+            mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
+            mi->setParameter("chunkMid", mid);
+        }
+        mi->setParameter("decalCount", n);
+    };
+    if (!mRoadChunks.empty()) {
         for (const RoadChunk& ch : mRoadChunks) {
-            int n = 0;
-            for (const DeckDecal& d : mDeckDecals) {
-                if (n >= kMaxDeckDecals) break;
-                // Overlap test on a PERIODIC arclength: a decal is in range if its
-                // footprint reaches the chunk's span, measured the short way round.
-                const float half = (ch.sMax - ch.sMin) * 0.5f + d.rect.z;
-                const float mid = (ch.sMin + ch.sMax) * 0.5f;
-                float ds = d.rect.x - mid;
-                if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
-                if (std::fabs(ds) > half) continue;
-                // x becomes the offset from this chunk's centre, already folded
-                // the short way round, so the shader needs no per-decal wrap.
-                rect[n] = d.rect; rect[n].x = ds;
-                col[n] = d.color; shape[n] = d.shape; n++;
-            }
-            if (n > 0) {
-                ch.mi->setParameter("decalRect", rect, (size_t) n);
-                ch.mi->setParameter("decalColor", col, (size_t) n);
-                ch.mi->setParameter("decalShape", shape, (size_t) n);
-                ch.mi->setParameter("trackLength", L);
-                ch.mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
-                ch.mi->setParameter("chunkMid", (ch.sMin + ch.sMax) * 0.5f);
-            }
-            ch.mi->setParameter("decalCount", n);
+            uploadTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
         }
     } else if (mRoadInst) {
-        const int n = std::min((int) mDeckDecals.size(), kMaxDeckDecals);
-        if (n > 0) {
-            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
-            for (int i = 0; i < n; i++) {
-                rect[i] = mDeckDecals[i].rect;
-                col[i] = mDeckDecals[i].color;
-                shape[i] = mDeckDecals[i].shape;
-            }
-            mRoadInst->setParameter("decalRect", rect, (size_t) n);
-            mRoadInst->setParameter("decalColor", col, (size_t) n);
-            mRoadInst->setParameter("decalShape", shape, (size_t) n);
-            mRoadInst->setParameter("trackLength", L);
-            mRoadInst->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
-            mRoadInst->setParameter("chunkMid", 0.0f);   // decals keep absolute s here
-        }
-        mRoadInst->setParameter("decalCount", n);
+        // Degenerate: the deck material exists but the chunk pass produced
+        // nothing. One "chunk" spanning the whole lap keeps the decals drawing.
+        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
     }
     mDeckDecals.clear();
 }
