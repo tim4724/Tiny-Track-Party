@@ -1190,10 +1190,10 @@ float TtpRenderer::maxOrbitDist(float radius, float height) const {
 // are one definition rather than copies that can disagree about where a cell is;
 // the reasoning lives with it there.
 //
-// Both counts together because both callers want the pair: cellRect tiles with
-// them and cellLens crops by `rows`. Handing back the columns alone left the
-// `(n + cols - 1) / cols` beside each caller, which is the shape of copy this
-// grid has already drifted through once.
+// Both counts together because a caller wants the pair: cellRect tiles with
+// them. Handing back the columns alone left the `(n + cols - 1) / cols` beside
+// each caller, which is the shape of copy this grid has already drifted through
+// once.
 TtpRenderer::GridDims TtpRenderer::gridDims(uint32_t n) const {
     const uint32_t cols = ttp_grid_cols(n, mWidth, mHeight);
     return { cols, (n + cols - 1) / cols };
@@ -1235,33 +1235,22 @@ TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
              (int32_t) (mHeight - y0 - (row + 1) * ch), cw, ch };
 }
 
-// The projection inputs for an n-cell layout: the cell's aspect, and the share of
-// the authored VERTICAL view it gets — which is its share of the grid's height,
-// so a row of cells shows 1/rows of it and a single cell shows all of it.
+// The projection input for an n-cell layout: the shape of the rect a cell really
+// renders into, which is the fitted one and never the raw tile.
 //
-// THE REFERENCE IS THE GRID, NOT THE SINGLE-CELL PICTURE, and that distinction is
-// the whole of this function. Both spellings agree on a 16:9 surface, where the
-// grid IS the picture. Off it they do not, because the two are letterboxed by
-// different rules: the single-cell picture is held to the base aspect, so past
-// 16:9 its height stops tracking the surface and follows the WIDTH, while a
-// stacked cell's height keeps taking its row's share of whatever the surface has.
-// Dividing one by the other imported the bar into the lens — the leftover height
-// the single-player view refuses is height the split view spends, so the fov grew
-// with it and the picture RE-FRAMED as the window resized instead of scaling.
-// Measured at 1600 wide with two players: dragging the bottom edge 900 -> 1400 px
-// swung the vertical fov 29.2 -> 44.1 degrees, the car receding the whole way,
-// while single player over the same drag did not change at all. Referencing the
-// grid holds it at 29.2 and lets the picture grow, which is what the surface
-// gaining pixels should mean.
-//
-// So the fov is a function of the LAYOUT alone. It can only change when the grid
-// does — a player joining, or a reshape crossing a column-count boundary — and
-// never by a pixel of bar.
-TtpRenderer::CellLens TtpRenderer::cellLens(uint32_t n) const {
-    const uint32_t cells = n ? n : 1;
-    const CellRect r = cellRect(cells, 0);
-    const float w = (float) r.w, h = (float) (r.h ? r.h : 1u);
-    return { w / h, 1.0f / (float) gridDims(cells).rows };
+// THE VERTICAL VIEW IS NOT A FUNCTION OF THE LAYOUT AT ALL, which is what this
+// used to return a second number for. Every cell gets the rig's authored fov, so
+// the only thing a split can do to the picture is widen it within the band, and
+// the difference between a stacked pair and a side-by-side one is exactly the
+// difference between two window shapes at one player. Three spellings of a
+// height fraction shipped before that one: the cell against the SURFACE (the
+// picture re-framed as a window resized), the cell against the SINGLE-CELL
+// picture (same, once a letterbox bar existed to import), and the cell against
+// the GRID (stable under resize, but it made the 2-player stack and the
+// 2-player row two different cameras). See buildFrame.
+float TtpRenderer::cellAspect(uint32_t n) const {
+    const CellRect r = cellRect(n ? n : 1, 0);
+    return (float) r.w / (float) (r.h ? r.h : 1u);
 }
 
 TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {

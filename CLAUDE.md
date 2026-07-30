@@ -110,31 +110,32 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   it on both axes, and that is what the cameras actually render into. Whatever the
   band trims is a bar; that is a RENDERING decision and no part of the column
   scoring, which picks the layout this then shapes.
-  THE LENS IS SOLVED FROM THE CELL'S SHARE OF THE GRID'S HEIGHT
-  (`TtpRenderer::cellLens` -> `cellFov`), and aspect never enters it. So each ROW
-  gets 1/rows of the authored vertical view, and WIDTH PAST 16:9 ONLY REVEALS more
-  world at the sides — a wide cell is not the base picture stretched or pushed
-  back, and the base is a CROP of what a wide one shows. That is also why the floor
-  is hard (narrower would HIDE world) and the cap is only taste. It gives the
-  authored `BASE_FOV` at one player on any surface shape, so resizing SCALES and
-  splitting CROPS.
-  DO NOT REFERENCE THE LENS TO A WIDTH. Two versions did, and each had to
-  sacrifice one of those: against the surface's height it cropped the world as a
-  window narrowed, against the single cell's width it shrank the car (which reads
-  as the car driving away). Height unties the cell's shape from the car's size.
-  DO NOT REFERENCE IT TO THE SINGLE-CELL PICTURE EITHER, which is the subtler
-  version of the same mistake and shipped for a day. `cellRect(1,0)` and the grid
-  are the same box on a 16:9 surface and different boxes on every other one: the
-  single-cell picture is held to the base aspect, so past 16:9 its height stops
-  tracking the surface and follows the WIDTH, while a stacked cell keeps taking its
-  row's share of whatever height there is. Dividing one by the other put the
-  LETTERBOX BAR in the lens — height the single-player view refuses is height the
-  split view spends — so at 1600 wide with two players, dragging the bottom edge
-  900 -> 1400 px swung the vertical fov 29.2 -> 44.1 degrees with the car receding
-  the whole way, while single player over that same drag did not change at all.
-  The fov must be a function of the LAYOUT alone: it may change when a player joins
-  or the column count flips, never by a pixel of bar. Both spellings agree on 16:9,
-  which is why no fixture and no TV would ever have shown this.
+  A CELL IS A SMALL SCREEN, NOT A CROP OF A BIG ONE. The vertical fov is the
+  rig's own authored one in EVERY layout — `TtpRenderer::cellAspect` hands the
+  frame builder one number and it is the cell's SHAPE — so the only thing a split
+  may do to the picture is widen it inside the 16:9..21:9 band. WIDTH PAST 16:9
+  ONLY REVEALS more world at the sides: a wide cell is not the base picture
+  stretched or pushed back, and the base is a CROP of what a wide one shows. That
+  is why the floor is hard (narrower would HIDE world) and the cap is only taste.
+  Splitting therefore does exactly what shrinking the window does, which is what a
+  player reads it as.
+  THREE HEIGHT FRACTIONS SHIPPED BEFORE THAT, and knowing why each failed is the
+  reason not to reach for a fourth. `cellFov` scaled `tan(vFov/2)` by the cell's
+  share of some height, so a row of cells saw 1/rows of the authored view and the
+  car held its PIXEL size across a split. Against the SURFACE's height, and later
+  against the SINGLE-CELL picture (`cellRect(1,0)`, which is the grid on a 16:9
+  surface and a different box on every other one), the letterbox bar landed in the
+  lens: at 1600 wide with two players, dragging the bottom edge 900 -> 1400 px
+  swung the vertical fov 29.2 -> 44.1 degrees with the car receding the whole way,
+  while single player over that same drag did not move. Against the GRID's height
+  that was fixed — the fov became a function of the LAYOUT alone — but the layout
+  is the wrong thing for it to be a function of at all: a 2-player pair is STACKED
+  on a 16:9 surface (2 rows, half the fov) and SIDE BY SIDE on an ultrawide (1 row,
+  all of it), so the same two players got two cameras depending on the window, the
+  car filling its cell in one and sitting small in the other. All three spellings
+  agree at one player on a 16:9 surface, which is why no fixture and no TV would
+  ever have shown any of it; `frame_check`'s `testSplitLensIsLayoutInvariant`
+  drives 1..3 cells across four surface shapes and is what does.
   ANYTHING PLACING CHROME wants `cellRectTopLeft` — the one
   `ttp_display_cell_rects` returns, so the shell's chips and the renderer's steer
   bar cannot land on different grids. drawOverlay used the raw grid until 2026-07-29: measured at

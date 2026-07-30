@@ -18,7 +18,20 @@ namespace rt {
 // Close chase sitting LOW and just behind the car with a fairly tight lens, so
 // the camera stays comfortable to drive rather than steeply top-down.
 // ---------------------------------------------------------------------------
-constexpr float CHASE_DIST = 1.35f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.5f;
+// DIST came in from 1.35 and HEIGHT deliberately did NOT follow it. A true
+// dolly would scale both and keep the elevation, but the height is what sees
+// OVER the car: dropping it to hold the angle buys nothing and hides the road
+// the player is about to drive. Holding it moves the eye 21% nearer the car
+// (hypot 1.494 -> 1.187, so the car draws ~26% bigger) for 1.4 degrees of extra
+// view pitch, which reads as nothing.
+//
+// 1.0 IS ABOUT THE FLOOR for moving the eye ALONE, and the reason is the look
+// point: it stays a fixed CHASE_LOOK ahead of the car, so pulling in past here
+// stops framing more car and starts framing less ROAD. The eye-to-target
+// baseline is down to 2.5 from 2.85 and the elevation over the car is 32.6
+// degrees against the 25.4 it was authored at — still the low chase above, but
+// with less margin than it had. Anything nearer wants CHASE_LOOK to come in too.
+constexpr float CHASE_DIST = 1.0f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.5f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
 constexpr float CAM_POS_RATE = 7.0f, CAM_TGT_RATE = 13.0f;  // damping (1/s)
 // The position spring lags the car by ~velocity/rate, so the faster you go the

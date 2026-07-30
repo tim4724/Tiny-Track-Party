@@ -62,22 +62,15 @@ using ttp::rt::Framing;
 using ttp::rt::V3;
 
 // The renderer measures the cell rect on the shipping path; this check has no
-// renderer, so it reproduces the two numbers off the raw grid instead. The rects
+// renderer, so it reproduces the aspect off the raw grid instead. The rects
 // differ (the renderer fits its grid to an aspect band), but the wiring these
-// cases assert does not care which pair it is handed.
-static void caseCell(const rt::DisplayState& d, float* aspect, float* heightFrac) {
+// cases assert does not care which number it is handed.
+static float caseAspect(const rt::DisplayState& d) {
   const uint32_t n = d.cells.empty() ? 1u : (uint32_t) d.cells.size();
   const uint32_t cols = ttp_grid_cols(n, d.width, d.height);
   const uint32_t rows = (n + cols - 1) / cols;
   const uint32_t w = d.width / cols, h = d.height / rows;
-  *aspect = (float) w / (float) (h ? h : 1);
-  *heightFrac = (float) h / (float) (d.height ? d.height : 1);
-}
-static float caseAspect(const rt::DisplayState& d) {
-  float a = 1, hf = 1; caseCell(d, &a, &hf); return a;
-}
-static float caseHeightFrac(const rt::DisplayState& d) {
-  float a = 1, hf = 1; caseCell(d, &a, &hf); return hf;
+  return (float) w / (float) (h ? h : 1);
 }
 
 
@@ -369,7 +362,7 @@ void testCarsAndRoster(const GameTrack& track) {
 
 
 
-  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
   const TtpCarInput* cars = ttp_frame_cars(h);
 
   checkU(h->version, TTP_FRAME_INPUT_VERSION, "header version");
@@ -396,7 +389,7 @@ void testCarsAndRoster(const GameTrack& track) {
   // No bound session: every slot empty, no props, still exactly one view.
   DisplayState e = freshState();
   e.roster = {P0, P1};
-  const TtpFrameInput* n = rt::buildFrame(e, nullptr, DT, caseAspect(e), caseHeightFrac(e));
+  const TtpFrameInput* n = rt::buildFrame(e, nullptr, DT, caseAspect(e));
   checkU(n->carCount, 2, "an unbound display still emits a slot per roster entry");
   checkU(n->boxCount, 0, "an unbound display has no boxes");
   checkU(n->bananaCount, 0, "an unbound display has no bananas");
@@ -420,7 +413,7 @@ void testHold(const GameTrack& track) {
   DisplayState d = freshState();
   d.roster = {P0, P1, GHOST, P2};
 
-  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
   std::vector<TtpCarInput> live(ttp_frame_cars(h), ttp_frame_cars(h) + h->carCount);
   check(d.held.size() == 4, "a live frame keeps the field, so a later hold has something to hold");
 
@@ -432,7 +425,7 @@ void testHold(const GameTrack& track) {
   a.spin = 3.0;
 
   d.hold = true;
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checks++;
   if (std::memcmp(ttp_frame_cars(h), live.data(), live.size() * sizeof(TtpCarInput)) != 0) {
     failures++;
@@ -442,7 +435,7 @@ void testHold(const GameTrack& track) {
   // A seat expires mid-pause: its car is forfeit and the scene rebuilds with a
   // shorter roster, so the sizes no longer match.
   d.roster = {P0, P1, P2};
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   const TtpCarInput* held = ttp_frame_cars(h);
   checkU(h->carCount, 3, "the shortened roster is what the frame carries");
   check(sameVec(held[0].pos, a.pose.pos),
@@ -457,7 +450,7 @@ void testHold(const GameTrack& track) {
 
   // Releasing the hold goes straight back to the live read.
   d.hold = false;
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkCar(ttp_frame_cars(h)[0], a, "released hold, slot 0");
 }
 
@@ -477,7 +470,7 @@ void testOverviewViews(const GameTrack& track) {
   {
     d.camMode = TTP_CAM_STILL;
     const float before = d.orbitAngle;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     float want[16];
     rt::lookAtWorld(want, f.center + f.ovOffset, f.center, V3{0, 1, 0});
     checkView(ttp_frame_views(h)[0], want, rt::OVERVIEW_FOV, aspect, rt::OV_NEAR, rt::OV_FAR,
@@ -489,7 +482,7 @@ void testOverviewViews(const GameTrack& track) {
   {
     d.camMode = TTP_CAM_ORBIT;
     const float want_angle = d.orbitAngle + rt::LOBBY_ORBIT_SPEED * DT;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkF(d.orbitAngle, want_angle, "orbit advances by LOBBY_ORBIT_SPEED * dt");
     const V3 eye = {f.center.x + std::cos(want_angle) * f.ovRadius, f.center.y + f.ovHeight,
                     f.center.z + std::sin(want_angle) * f.ovRadius};
@@ -503,7 +496,7 @@ void testOverviewViews(const GameTrack& track) {
   {
     d.camMode = TTP_CAM_BBOX;
     const float want_angle = d.orbitAngle + rt::BBOX_ORBIT_SPEED * DT;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkF(d.orbitAngle, want_angle, "bbox advances by BBOX_ORBIT_SPEED * dt");
     const V3 eye = {f.center.x + std::cos(want_angle) * f.bbAx, f.center.y + f.bbHeight,
                     f.center.z + std::sin(want_angle) * f.bbAz};
@@ -521,7 +514,7 @@ void testOverviewViews(const GameTrack& track) {
     d.freeEye = {40.0f, 18.0f, -5.5f};
     d.freeTarget = {12.5f, 1.5f, -30.25f};
     const float before = d.orbitAngle;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     float want[16];
     rt::lookAtWorld(want, d.freeEye, d.freeTarget, V3{0, 1, 0});
     checkView(ttp_frame_views(h)[0], want, rt::OVERVIEW_FOV, aspect, rt::FREE_NEAR, rt::OV_FAR,
@@ -534,7 +527,7 @@ void testOverviewViews(const GameTrack& track) {
   {
     d.camMode = TTP_CAM_BBOX;
     d.fog = false;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkF(ttp_frame_views(h)[0].fogNear, 0.0f, "fog off: near");
     checkF(ttp_frame_views(h)[0].fogFar, 0.0f, "fog off: far");
     d.fog = true;
@@ -545,7 +538,7 @@ void testOverviewViews(const GameTrack& track) {
     d.camMode = TTP_CAM_STILL;
     d.width = 800;
     d.height = 0;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkF(ttp_frame_views(h)[0].aspect, 800.0f, "a zero-height surface falls back to height 1");
   }
 }
@@ -568,14 +561,12 @@ void testRaceViews(const GameTrack& track) {
   const uint32_t cols = ttp_grid_cols(2, d.width, d.height);
   const uint32_t rows = (2 + cols - 1) / cols;
   const float cellAspect = (float)(d.width / cols) / (float)(d.height / rows);
-  const float cellHeightFrac =
-      (float)(d.height / rows) / (float)(d.height ? d.height : 1);
 
   // The reference rig: the same spring, fed the same poses in the same order.
   ChaseCam refA, refC;
   const TtpFrameInput* h = nullptr;
   for (int frame = 0; frame < 4; frame++) {
-    h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    h = rt::buildFrame(d, &game, DT, caseAspect(d));
     refA.update(c0.pose, carSpd(c0), DT);
     refC.update(c2.pose, carSpd(c2), DT);
 
@@ -584,9 +575,10 @@ void testRaceViews(const GameTrack& track) {
     float wantA[16], wantC[16];
     rt::lookAtWorld(wantA, refA.pos, refA.target, rt::v3(c0.pose.up));
     rt::lookAtWorld(wantC, refC.pos, refC.target, rt::v3(c2.pose.up));
-    checkView(views[0], wantA, rt::cellFov(refA.fov, cellHeightFrac), cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
+    // The rig's own fov, UNMODIFIED: a split does not re-frame (see buildFrame).
+    checkView(views[0], wantA, refA.fov, cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 0");
-    checkView(views[1], wantC, rt::cellFov(refC.fov, cellHeightFrac), cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
+    checkView(views[1], wantC, refC.fov, cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 1");
   }
   check(refA.pos.x != 0 || refA.pos.z != 0, "premise: the chase rig actually moved off the origin");
@@ -597,7 +589,7 @@ void testRaceViews(const GameTrack& track) {
   // each cell keeps its own spring across the swap (keyed by car id).
   {
     d.cells = {P2, P0};
-    h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    h = rt::buildFrame(d, &game, DT, caseAspect(d));
     refA.update(c0.pose, carSpd(c0), DT);
     refC.update(c2.pose, carSpd(c2), DT);
     float wantC[16];
@@ -613,15 +605,13 @@ void testRaceViews(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, P2};
     m.cells = {P0, Id::Str("stranger")};
-    const TtpFrameInput* f = rt::buildFrame(m, &game, DT, caseAspect(m), caseHeightFrac(m));
+    const TtpFrameInput* f = rt::buildFrame(m, &game, DT, caseAspect(m));
     checkU(f->viewCount, 2, "an unknown cell still occupies its cell");
     ChaseCam unseeded;
     float want[16];
     rt::lookAtWorld(want, unseeded.pos, unseeded.target, V3{0, 1, 0});
     checkMat(ttp_frame_views(f)[1].world, want, "an unknown cell gets the unseeded rig");
-    checkF(ttp_frame_views(f)[1].fov,
-         rt::cellFov(rt::BASE_FOV, caseHeightFrac(m)),
-         "…at the base FOV, through the cell lens");
+    checkF(ttp_frame_views(f)[1].fov, rt::BASE_FOV, "…at the base FOV");
   }
 
   // …but if NO cell has a car in this scene, fall back to the overview
@@ -631,7 +621,7 @@ void testRaceViews(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, GHOST};
     m.cells = {GHOST};
-    const TtpFrameInput* f = rt::buildFrame(m, &game, DT, caseAspect(m), caseHeightFrac(m));
+    const TtpFrameInput* f = rt::buildFrame(m, &game, DT, caseAspect(m));
     checkU(f->viewCount, 1, "a cell list with no car in the field falls back to the overview");
     checkF(ttp_frame_views(f)[0].fov, rt::OVERVIEW_FOV, "…which is the overview rig");
     checkF(ttp_frame_views(f)[0].fogNear, m.framing.ovFogNear, "…on the overview fog band");
@@ -713,7 +703,7 @@ void testProps(const BuiltRaceTrack& base) {
   d.bursts.push_back(TtpBurstInput{-1, 42.5f, 0.5f});
   d.bursts.push_back(TtpBurstInput{2, 0.0f, 0.0f});
 
-  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
 
   checkU(h->boxCount, (uint32_t)wantBoxes.size(), "boxCount");
   const uint32_t* boxes = ttp_frame_box_states(h);
@@ -742,7 +732,7 @@ void testProps(const BuiltRaceTrack& base) {
   check(d.bursts.empty(), "the burst queue is drained by the frame that carries it");
 
   checkF(h->sceneT, DT, "the scene clock starts at the first dt");
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->burstCount, 0, "a drained queue does not repeat itself");
   checkF(h->sceneT, DT + DT, "the scene clock accumulates");
 }
@@ -784,21 +774,21 @@ void testShowcaseExhibits(const GameTrack& track) {
   };
 
   // Off, which is every shell but the gallery.
-  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->rocketCount, 0, "a shipping display stands no rockets");
   check(monsters(h) == "010", "premise: only the sim's own monster is up");
 
   // Showcase, but DRIVING: the gallery let the AI out, so the scene is the
   // sim's again and an exhibit would be the one rocket nobody fired.
   d.showcase = true;
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->rocketCount, 0, "a driving showroom stands no rockets");
   check(monsters(h) == "010", "…and stages no rig");
 
   // Parked. This first held frame still goes down the LIVE branch (`held` is
   // empty), which is the arm that also has to carry the exhibits.
   d.hold = true;
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->rocketCount, (uint32_t) want.size(), "the parked showroom stands its rockets");
   for (size_t i = 0; i < want.size(); i++) {
     const std::string who = "exhibit rocket " + std::to_string(i);
@@ -816,13 +806,13 @@ void testShowcaseExhibits(const GameTrack& track) {
 
   // The second parked frame comes off `held` (the memcpy arm) and must carry it
   // just the same — this is the frame the gallery actually sits on.
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   check(monsters(h) == "011", "a held frame carries the rig too");
 
   // Live traffic goes BEHIND the exhibits: the renderer's rocket pool is four,
   // so the array's order is what keeps an exhibit in the picture.
   game.stageRocket(12.5, 0.4, 9.0, P0);
-  h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+  h = rt::buildFrame(d, &game, DT, caseAspect(d));
   checkU(h->rocketCount, (uint32_t) want.size() + 1, "a live rocket joins the exhibits");
   checkF(ttp_frame_rockets(h)[0].lat, want[0].lat, "the exhibits keep the front of the array");
   checkF(ttp_frame_rockets(h)[want.size()].lat, 0.4f, "…and the live rocket falls in behind");
@@ -834,14 +824,14 @@ void testShowcaseExhibits(const GameTrack& track) {
   g.showcase = true;
   g.hold = true;
   g.roster = {P0, P1, GHOST};
-  h = rt::buildFrame(g, &game, DT, caseAspect(g), caseHeightFrac(g));
+  h = rt::buildFrame(g, &game, DT, caseAspect(g));
   check(monsters(h) == "010", "an empty slot is not put in a monster truck");
 
   // And an empty roster has no slot to spare, which must not be slot -1.
   DisplayState e = freshState();
   e.showcase = true;
   e.hold = true;
-  h = rt::buildFrame(e, &game, DT, caseAspect(e), caseHeightFrac(e));
+  h = rt::buildFrame(e, &game, DT, caseAspect(e));
   checkU(h->carCount, 0, "an empty roster stages no rig");
   // The rockets do not depend on the field at all (the +1 is the live one still
   // in flight from the ordering case above).
@@ -853,7 +843,7 @@ void testShowcaseExhibits(const GameTrack& track) {
   n.showcase = true;
   n.hold = true;
   n.roster = {P0, P1, P2};
-  h = rt::buildFrame(n, nullptr, DT, caseAspect(n), caseHeightFrac(n));
+  h = rt::buildFrame(n, nullptr, DT, caseAspect(n));
   checkU(h->rocketCount, 0, "an unbound showroom stands nothing");
   check(monsters(h) == "000", "…and dresses nobody");
 
@@ -873,7 +863,7 @@ void testShowcaseExhibits(const GameTrack& track) {
   s.showcase = true;
   s.hold = true;
   s.roster = lineup;
-  h = rt::buildFrame(s, &full, DT, caseAspect(s), caseHeightFrac(s));
+  h = rt::buildFrame(s, &full, DT, caseAspect(s));
   check(monsters(h) == "00001111", "the showroom's eight-seat lineup stands four trucks");
 }
 
@@ -907,7 +897,7 @@ void testCellHud(const GameTrack& track) {
   d.cells = {P0, P2};
 
   {
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(h->hudCount, 2, "one cell overlay per cell");
     checkF(h->uiScale, 2.0f, "uiScale reaches the frame");
@@ -925,7 +915,7 @@ void testCellHud(const GameTrack& track) {
   // goes, and ONLY that cell's — the mask is per cell, in cell order.
   {
     d.cardMask = 0x2;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(hud[0].flags, TTP_HUD_STEER_BAR, "a card over cell 1 leaves cell 0 alone");
     checkU(hud[1].flags, 0, "a card over cell 1 takes cell 1's bar");
@@ -938,7 +928,7 @@ void testCellHud(const GameTrack& track) {
   // the pause glass says the player is steering, which they are not.
   {
     d.hold = true;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkF(hud[0].steer, 0.0f, "a held field centres its bars");
     checkU(hud[0].flags, TTP_HUD_STEER_BAR, "…without hiding them");
@@ -949,7 +939,7 @@ void testCellHud(const GameTrack& track) {
   // ?dividers=0 — the seams go, the bars stay.
   {
     d.dividers = false;
-    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d), caseHeightFrac(d));
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkU(h->flags & TTP_FRAME_DIVIDERS, 0, "the divider flag follows the toggle");
     checkU(h->hudCount, 2, "…and takes nothing else with it");
     d.dividers = true;
@@ -961,7 +951,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, P2};
     m.cells = {P0, Id::Str("stranger")};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseHeightFrac(m));
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(h->hudCount, 2, "an unknown cell still occupies its cell");
     check(hud[1].car < 0, "…with no roster slot behind it");
@@ -976,7 +966,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, GHOST};
     m.cells = {P0, GHOST};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseHeightFrac(m));
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     check(hud[1].car == 1, "a car-less roster seat still names its slot");
     checkF(hud[1].steer, 0.0f, "…and reads centred");
@@ -989,7 +979,7 @@ void testCellHud(const GameTrack& track) {
     DisplayState m = freshState();
     m.roster = {P0, P1, GHOST};
     m.cells = {GHOST};
-    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m), caseHeightFrac(m));
+    const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m));
     checkU(h->viewCount, 1, "premise: this is the overview fallback");
     checkU(h->hudCount, 0, "the overview carries no cell overlays");
   }
@@ -1095,14 +1085,17 @@ void testHud(const GameTrack& track) {
 }
 
 // ---------------------------------------------------------------------------
-// The camera basis and the split-screen lens, as PROPERTIES.
+// The camera basis, as a PROPERTY.
 //
-// Everything else in this file that touches lookAtWorld/cellFov builds its
-// `want` by calling lookAtWorld/cellFov — so those assertions pin the WIRING
-// (that a view got the eye and target the rig chose) and say nothing whatever
-// about the functions themselves. Measured: reversing the camera's Z basis,
-// changing FRAME_LOCK leaves the whole 48-test suite
-// green. Two functions on the steady-state race frame, with no oracle anywhere.
+// Everything else in this file that touches lookAtWorld builds its `want` by
+// calling lookAtWorld — so those assertions pin the WIRING (that a view got the
+// eye and target the rig chose) and say nothing whatever about the function
+// itself. Measured: reversing the camera's Z basis left the whole suite green.
+// One function on the steady-state race frame, with no oracle anywhere.
+//
+// The lens used to be the other half of this. It is no longer a function: the
+// view gets the rig's authored fov whatever the layout, so testRaceViews and
+// testSplitLensIsLayoutInvariant pin it against BASE_FOV directly.
 //
 // There is no JS left to record against — SceneRenderer went with the JS
 // renderer — so the oracle here is the DEFINITION rather than a recording: one
@@ -1186,35 +1179,55 @@ void testCameraMath() {
     check(std::fabs(rt::dot(x, z)) < 1e-3f, "degenerate up: x still perpendicular to z");
     check(std::fabs(rt::dot(y, z)) < 1e-3f, "degenerate up: y still perpendicular to z");
   }
+}
 
-  // cellFov scales the VERTICAL fov with the cell's height, which is what holds
-  // pixel scale fixed across a split. FRAME_LOCK is the only constant in it and
-  // nothing else pins that.
-  {
-    // A full-height cell is the identity. Approximate, not exact — the round trip
-    // is atan(tan(x)) in float, which lands a ulp or two out (38 comes back as
-    // 37.9999962). A ulp is not what this watches for.
-    const auto identity = [&](float fov) {
-      const float got = rt::cellFov(fov, 1.0f);
-      check(std::fabs(got - fov) < 1e-3f,
-            "cellFov: a full-height cell is the fov it was given ("
-                + std::to_string(fov) + " -> " + std::to_string(got) + ")");
-    };
-    identity(60.0f);
-    identity(38.0f);
+// ---------------------------------------------------------------------------
+// THE LENS IS INVARIANT UNDER THE LAYOUT, which is the whole of the split-screen
+// camera rule and the one thing three shipped spellings of it each got wrong in
+// a different place. A player joining, a column count flipping, or a window
+// reshaping may change a cell's SHAPE and nothing else about the picture.
+//
+// The pair that matters most is the 2-player one: it is STACKED on a 16:9
+// surface and SIDE BY SIDE on an ultrawide, so under the old crop-by-rows lens
+// the same two players got two different cameras depending on the window. Both
+// must now read BASE_FOV.
+//
+// caseAspect is deliberately NOT used here — the point is that the answer does
+// not depend on it, so every case is driven at the raw grid's own shape.
+// ---------------------------------------------------------------------------
+void testSplitLensIsLayoutInvariant(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
 
-    // The relation itself: with FRAME_LOCK == 1 the half-height tangent scales
-    // LINEARLY with heightFrac. Squaring it moves this for every heightFrac but 1.
-    const auto tanHalf = [](float fovDeg) {
-      return std::tan(fovDeg * (float) M_PI / 360.0f);
-    };
-    struct Case { float fov, hf; };
-    for (const Case& c : { Case{ 60, 1.0f }, Case{ 60, 0.5f },
-                           Case{ 45, 0.25f }, Case{ 72, 0.5f } }) {
-      const float got = tanHalf(rt::cellFov(c.fov, c.hf));
-      const float want = tanHalf(c.fov) * c.hf;
-      check(std::fabs(got - want) < 1e-4f * want,
-            "cellFov: tan(half) == tan(half authored) * heightFrac");
+  const std::vector<Id> all = {P0, P1, P2};
+  // What each cell's rig answers with no layout term anywhere: one fresh spring,
+  // one update, that car's own speed kick. Every layout below must reproduce it.
+  float want[3];
+  for (uint32_t i = 0; i < 3; i++) {
+    ChaseCam ref;
+    ref.update(game.cars()[i]->pose, carSpd(*game.cars()[i]), DT);
+    want[i] = ref.fov;
+  }
+  check(want[0] != rt::BASE_FOV, "premise: the speed kick has moved the rig off BASE_FOV");
+
+  struct Surface { uint32_t w, h; const char* what; };
+  for (const Surface& s : { Surface{ 1920, 1080, "16:9" },
+                            Surface{ 3840, 1080, "ultrawide" },
+                            Surface{ 1000, 1400, "portrait" },
+                            Surface{ 1600, 1400, "squarish" } }) {
+    for (uint32_t n = 1; n <= 3; n++) {
+      DisplayState d = freshState();
+      d.width = s.w;
+      d.height = s.h;
+      d.roster = all;
+      d.cells.assign(all.begin(), all.begin() + n);
+      const TtpFrameInput* f = rt::buildFrame(d, &game, DT, caseAspect(d));
+      checkU(f->viewCount, n, std::string("one view per cell on ") + s.what);
+      for (uint32_t i = 0; i < n; i++) {
+        checkF(ttp_frame_views(f)[i].fov, want[i],
+               std::string("cell ") + std::to_string(i) + " of " + std::to_string(n)
+                   + " on " + s.what + " is the rig's own fov");
+      }
     }
   }
 }
@@ -1237,6 +1250,7 @@ int main() {
   testHold(bt.game);
   testOverviewViews(bt.game);
   testRaceViews(bt.game);
+  testSplitLensIsLayoutInvariant(bt.game);
   testCellHud(bt.game);
   testHud(bt.game);
   testProps(bt);

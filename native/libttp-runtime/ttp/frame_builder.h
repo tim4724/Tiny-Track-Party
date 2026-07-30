@@ -129,27 +129,30 @@ std::vector<ScalarId> parseIds(const char* json);
 // what let drawOverlay place two HUD elements on the raw surface grid for as
 // long as it did, with a comment claiming they came from the shell's rects.
 
-// The chase lens for one cell: BASE_FOV is authored VERTICAL, so a shorter cell
-// would draw the car smaller. This solves the fov that CROPS instead, giving each
-// row its share of the authored view whatever the surface measures. Exposed
-// because it is part of the shared camera model — the tvOS and Android shells
-// frame with it too.
-float cellFov(float fovV, float heightFrac);
-
 // Assemble one frame into d.frame and return its header, which is followed
 // CONTIGUOUSLY by the arrays (ttp_render.h). `eng` is the bound session's live
 // Game, or nullptr for an empty track. Never returns null; the pointer is valid
 // until the next buildFrame on the same state.
 //
-// `aspect` and `heightFrac` describe the CELL the race cameras render into, and
-// come from the renderer because only it knows the grid (it fits it as one piece).
-// heightFrac is the cell's share of the grid's HEIGHT — 1/rows — and NOT its
-// height against the single-cell picture, which is the same number on a 16:9
-// surface and a bar-dependent one everywhere else. The two do different jobs:
-// heightFrac sets the CROP, aspect sets how much is REVEALED beside it. Both are
-// ignored when no car owns a cell; the overview sets its own fov.
-TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
-                          float aspect, float heightFrac);
+// `aspect` describes the CELL the race cameras render into, and comes from the
+// renderer because only it knows the grid (it fits it as one piece). It is
+// ignored when no car owns a cell; the overview measures the whole surface.
+//
+// A CELL IS A SMALL SCREEN, NOT A CROP OF A BIG ONE — the whole camera story is
+// that one line, and the vertical fov is therefore the rig's authored one in
+// every layout. What varies between cells is only their SHAPE, held to
+// TtpRenderer's 16:9..21:9 band, and aspect enters at the projection alone: a
+// wider cell reveals more world at the sides and changes nothing else.
+//
+// It used to CROP instead, scaling tan(vFov/2) by the cell's share of the grid's
+// height, so a row of cells saw 1/rows of the authored view and the car held its
+// PIXEL size across a split. Two layouts of the same player count then framed the
+// car completely differently: a 2-player pair is STACKED on a 16:9 surface (2
+// rows, half the fov) and SIDE BY SIDE on an ultrawide (1 row, all of it), so the
+// car filled its cell in one and sat small in the other — while single player,
+// resized through both shapes, never moved. Splitting now does what shrinking the
+// window does, which is what a player reads it as.
+TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt, float aspect);
 
 }  // namespace rt
 }  // namespace ttp

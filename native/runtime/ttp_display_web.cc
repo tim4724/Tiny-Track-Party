@@ -357,13 +357,12 @@ int ttp_display_frame(double dtSeconds) {
     // copy of it back from the shell.
     const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
     // Match the renderer's own viewport exactly, or the projection disagrees with
-    // the rect it lands in. Both numbers come from the renderer (cellLens) rather
-    // than being worked out here: they are functions of the LETTERBOXED grid, and
-    // a shell deriving them would be a copy of it that could drift.
+    // the rect it lands in. The number comes from the renderer (cellAspect)
+    // rather than being worked out here: it is a function of the LETTERBOXED
+    // grid, and a shell deriving it would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
-    const TtpRenderer::CellLens lens = d.renderer->cellLens(nCells);
     const TtpFrameInput* head =
-            ttp::rt::buildFrame(d, eng, dt, lens.aspect, lens.heightFrac);
+            ttp::rt::buildFrame(d, eng, dt, d.renderer->cellAspect(nCells));
     return d.renderer->render(*head) ? 1 : 0;
 }
 

@@ -152,29 +152,28 @@ public:
     // drawOverlay.
     TtpCellRect cellRectTopLeft(uint32_t n, uint32_t i) const;
 
-    // The two numbers a cell's projection needs, for an n-cell layout on this
-    // surface: the cell's ASPECT, and its share of the grid's HEIGHT (1/rows).
-    // Only the second reaches ttp::rt::cellFov — the first is handed to the
-    // projection, where it decides how much is revealed.
+    // The ONE number a cell's projection needs, for an n-cell layout on this
+    // surface: the cell's ASPECT. It is handed to the projection, where it
+    // decides how much is revealed beside the authored vertical view.
     //
-    // heightFrac is deliberately a function of the LAYOUT and not of the rect:
-    // measuring it against the single-cell picture put the letterbox bar in the
-    // lens, so resizing re-framed the view. See cellLens.
+    // There is no second number. A cell used to also get its share of the grid's
+    // HEIGHT, and the vertical fov was cropped by it (ttp::rt::cellFov); see
+    // buildFrame's note for why splitting no longer re-frames.
     //
     // It lives with the rects rather than in each shell because it is a pure
     // function of the same grid, and a shell that derived it would be a fourth
-    // copy of it. tvOS and Android call this and pass the pair straight through.
-    struct CellLens { float aspect, heightFrac; };
-    CellLens cellLens(uint32_t n) const;
+    // copy of it. tvOS and Android call this and pass it straight through.
+    float cellAspect(uint32_t n) const;
 
-    // A cell's shape is held in this band. 16:9 is the BASE — the authored
+    // A cell's shape is held in this band, and the band is the ONLY thing about
+    // the picture a layout may change. 16:9 is the BASE — the authored
     // composition, and the floor a too-tall tile is letterboxed up to. 21:9 caps
     // how far past it a wide tile may go before the sides become bars.
     //
-    // Width past the base only REVEALS: the lens is solved from the cell's height
-    // (cellFov) and aspect never enters it, so a wider cell is the base picture
-    // with more world at the sides, at the same scale. Narrower would HIDE world,
-    // which is why the base is a hard floor and the cap is only taste.
+    // Width past the base only REVEALS: the vertical fov is the rig's authored
+    // one in every layout, so a wider cell is the base picture with more world at
+    // the sides. Narrower would HIDE world, which is why the base is a hard floor
+    // and the cap is only taste.
     static constexpr float CELL_BASE_ASPECT = 16.0f / 9.0f;
     static constexpr float CELL_MAX_ASPECT = 21.0f / 9.0f;
 
@@ -345,8 +344,7 @@ private:
     // the mipmapped generic rounded-rect fallback.
     void setBlobMask(filament::MaterialInstance* mi, filament::Texture* mask, bool baked);
     // The split-screen grid for n cells — SceneRenderer's bestGrid, so the 3D
-    // cells land where the DOM HUD puts its labels. cellRect tiles with it and
-    // cellLens crops by its rows.
+    // cells land where the DOM HUD puts its labels. cellRect tiles with it.
     struct GridDims { uint32_t cols, rows; };
     GridDims gridDims(uint32_t n) const;
     // MonsterRig's gunmetal frame: repaint the chassis primitive only, since
