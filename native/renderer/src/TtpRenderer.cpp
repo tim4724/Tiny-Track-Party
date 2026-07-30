@@ -1184,13 +1184,19 @@ float TtpRenderer::maxOrbitDist(float radius, float height) const {
     return worst;
 }
 
-// Split-screen column count. The scoring — including the hard landscape
-// preference — lives in ttp_grid_cols (renderer/include/ttp_render.h) so that
-// the renderer's viewport split and the runtime's per-cell camera aspect are one
-// definition rather than copies that can disagree about where a cell is; the
-// reasoning lives with it there.
-uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
-    return ttp_grid_cols(n, mWidth, mHeight);
+// The split-screen grid for n cells. The column scoring — including the hard
+// landscape preference — lives in ttp_grid_cols (renderer/include/ttp_render.h)
+// so that the renderer's viewport split and the runtime's per-cell camera aspect
+// are one definition rather than copies that can disagree about where a cell is;
+// the reasoning lives with it there.
+//
+// Both counts together because both callers want the pair: cellRect tiles with
+// them and cellLens crops by `rows`. Handing back the columns alone left the
+// `(n + cols - 1) / cols` beside each caller, which is the shape of copy this
+// grid has already drifted through once.
+TtpRenderer::GridDims TtpRenderer::gridDims(uint32_t n) const {
+    const uint32_t cols = ttp_grid_cols(n, mWidth, mHeight);
+    return { cols, (n + cols - 1) / cols };
 }
 
 // Where cell i is drawn: its tile brought into the aspect band, with what that
@@ -1210,8 +1216,8 @@ uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
 // Bottom-left origin, because GL viewports are; row 0 is the TOP row, as the
 // DOM HUD lays it out (Stage.js has the same rules, pinned to these).
 TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
-    const uint32_t cols = bestGridCols(n);
-    const uint32_t rows = (n + cols - 1) / cols;
+    const GridDims g = gridDims(n);
+    const uint32_t cols = g.cols, rows = g.rows;
     uint32_t cw = mWidth / cols, ch = mHeight / rows;
     const uint32_t capW = (uint32_t) std::lround((float) ch * CELL_MAX_ASPECT);
     if (capW < cw) {
@@ -1253,11 +1259,9 @@ TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
 // never by a pixel of bar.
 TtpRenderer::CellLens TtpRenderer::cellLens(uint32_t n) const {
     const uint32_t cells = n ? n : 1;
-    const uint32_t cols = bestGridCols(cells);
-    const uint32_t rows = (cells + cols - 1) / cols;
     const CellRect r = cellRect(cells, 0);
     const float w = (float) r.w, h = (float) (r.h ? r.h : 1u);
-    return { w / h, 1.0f / (float) rows };
+    return { w / h, 1.0f / (float) gridDims(cells).rows };
 }
 
 TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {

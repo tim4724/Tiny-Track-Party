@@ -45,8 +45,8 @@ std::vector<ScalarId> parseIds(const char* json) {
 // Narrower would hide some, which is why a cell's shape has a floor at
 // TtpRenderer::CELL_BASE_ASPECT.
 //
-// FRAME_LOCK: 1 holds the crop, 0 holds the fov and lets the car shrink with its
-// cell. Single player is the fixed point either way (heightFrac 1).
+// FRAME_LOCK: 1 takes the whole crop, 0 takes none of it and lets the car shrink
+// with its cell. Single player is the fixed point either way (heightFrac 1).
 constexpr float FRAME_LOCK = 1.0f;
 float cellFov(float fovV, float heightFrac) {
     return std::atan(std::tan(fovV * (float) M_PI / 360.0f)

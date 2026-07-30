@@ -162,8 +162,8 @@ public:
     // lens, so resizing re-framed the view. See cellLens.
     //
     // It lives with the rects rather than in each shell because it is a pure
-    // function of them and a shell that derived it would be a fourth copy of the
-    // grid. tvOS and Android call this and pass the pair straight through.
+    // function of the same grid, and a shell that derived it would be a fourth
+    // copy of it. tvOS and Android call this and pass the pair straight through.
     struct CellLens { float aspect, heightFrac; };
     CellLens cellLens(uint32_t n) const;
 
@@ -344,9 +344,11 @@ private:
     // that came out of bakeSilhouette (single level, already blurred); false is
     // the mipmapped generic rounded-rect fallback.
     void setBlobMask(filament::MaterialInstance* mi, filament::Texture* mask, bool baked);
-    // Split-screen column count for n cells — SceneRenderer's bestGrid, so the
-    // 3D cells land where the DOM HUD puts its labels.
-    uint32_t bestGridCols(uint32_t n) const;
+    // The split-screen grid for n cells — SceneRenderer's bestGrid, so the 3D
+    // cells land where the DOM HUD puts its labels. cellRect tiles with it and
+    // cellLens crops by its rows.
+    struct GridDims { uint32_t cols, rows; };
+    GridDims gridDims(uint32_t n) const;
     // MonsterRig's gunmetal frame: repaint the chassis primitive only, since
     // the whole truck shares one material and the tyres must keep their colour.
     void recolourMonsterChassis(filament::gltfio::FilamentAsset* asset,
