@@ -69,14 +69,19 @@ material {
         // half-width, which is not available per fragment. The half-width varies
         // slowly, so a decal spanning a width change is off by a fraction of a
         // percent — far below anything visible at these sizes.
-        { type : float4[16], name : decalRect },
+        { type : float4[32], name : decalRect },
         //   rgb = colour, a = peak alpha
-        { type : float4[16], name : decalColor },
+        { type : float4[32], name : decalColor },
         //   x = inner radius fraction held at full alpha, beyond which it
         //       feathers to nothing at 1.0 (the boost aura's 0.72 profile)
-        //   y = 1 for an elliptical falloff, 0 for a rectangle (launch strips)
-        //   zw = spare
-        { type : float4[16], name : decalShape }
+        //   y = SHAPE: 0 rectangle, 1 ellipse
+        //   z = alpha at the inner knee (the profile is two straight segments,
+        //       1 -> knee across 0..inner, then knee -> 0 out to the rim)
+        //   w = CHEVRON count. 0 for a plain decal; >0 overlays that many cream
+        //       chevrons, which is what makes a boost pad or launch strip
+        //       expressible without a texture: a chevron is two line segments and
+        //       a distance to a segment is four instructions.
+        { type : float4[32], name : decalShape }
     ]
 }
 
@@ -91,8 +96,27 @@ fragment {
     // The loop is bounded by decalCount, a uniform, so it is uniform-coherent:
     // every fragment in a draw takes the same number of iterations and the
     // branch costs nothing beyond the work it skips.
+    // Distance from p to the segment ab. Four instructions, and it is what lets
+    // a boost pad's chevrons be drawn without a texture: the art the mesh used to
+    // stroke is two segments per chevron, and the shader can measure them.
+    float segDist(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a, ba = b - a;
+        float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+        return length(pa - ba * h);
+    }
+
+    // Everything a deck decal contributes at this fragment, composited in the
+    // order the array is given — which is the order the shell packs them, so a
+    // pad's chevrons sit over its disc and the aura sits over a contact shadow
+    // exactly as they did when these were separate meshes at different render
+    // priorities.
+    //
+    // The loop is bounded by decalCount, a uniform, so it is uniform-coherent,
+    // and the first thing each iteration does is reject on |ds| — most decals on
+    // a track are nowhere near any given fragment, so the common path is one
+    // subtract and one compare.
     vec3 deckDecals(vec3 base, vec2 tc) {
-        int n = min(materialParams.decalCount, 16);
+        int n = min(materialParams.decalCount, 32);
         for (int i = 0; i < n; i++) {
             highp vec4 r = materialParams.decalRect[i];
             // Shortest signed distance along a PERIODIC arclength: without the
@@ -100,17 +124,48 @@ fragment {
             highp float L = materialParams.trackLength;
             highp float ds = tc.x - r.x;
             if (L > 0.0) ds -= L * floor(ds / L + 0.5);
-            // Both sides normalised (see decalRect), so this is a direct compare.
+            if (abs(ds) >= r.z) continue;               // cheap reject
             float dl = tc.y - r.y;
-            vec2 q = vec2(ds / max(r.z, 1e-4), dl / max(r.w, 1e-4));
+            if (abs(dl) >= r.w) continue;
+            vec2 q = vec2(ds / r.z, dl / r.w);
             vec4 shape = materialParams.decalShape[i];
-            // Elliptical decals measure radially; strips measure per axis.
             float d = shape.y > 0.5 ? length(q) : max(abs(q.x), abs(q.y));
             if (d >= 1.0) continue;
             vec4 col = materialParams.decalColor[i];
-            // Solid out to `inner`, then a linear feather to nothing at the rim.
-            float a = col.a * (1.0 - smoothstep(shape.x, 1.0, d));
-            base = mix(base, col.rgb, clamp(a, 0.0, 1.0));
+            // Two straight segments: 1 -> knee across 0..inner, then knee -> 0
+            // out to the rim. That is the profile the meshes baked into their
+            // vertex alpha, reproduced exactly rather than approximated.
+            float inner = shape.x, knee = shape.z;
+            float prof = d <= inner
+                    ? mix(1.0, knee, inner > 0.0 ? d / inner : 0.0)
+                    : knee * (1.0 - (d - inner) / max(1.0 - inner, 1e-4));
+            base = mix(base, col.rgb, clamp(col.a * prof, 0.0, 1.0));
+
+            // CHEVRONS, in the decal's own normalised frame: apex toward travel,
+            // evenly spaced along it. Cream, the same 0xfdf3cf the stroked
+            // geometry used, and hard-edged rather than feathered because that is
+            // what reads as paint.
+            int nc = int(shape.w + 0.5);
+            if (nc > 0) {
+                const float HALF = 0.62, CHEV = 0.30, LW = 0.085;
+                float best = 1e9;
+                for (int c = 0; c < 8; c++) {
+                    if (c >= nc) break;
+                    float y = -0.62 + (float(c) + 0.5) * (1.24 / float(nc));
+                    // The APEX LEADS. q.x grows with arclength, so travel is +x
+                    // here and the wings must trail: apex at y, wings at y - CHEV.
+                    // Getting this backwards points every chevron against the
+                    // direction of travel, which reads as a brake marking.
+                    vec2 apex = vec2(y + CHEV, 0.0);
+                    vec2 wingL = vec2(y, -HALF), wingR = vec2(y, HALF);
+                    best = min(best, min(segDist(q, apex, wingL), segDist(q, apex, wingR)));
+                }
+                // Fade the paint out with the decal's own rim so a chevron never
+                // ends in mid-air past the disc's edge.
+                float edge = 1.0 - smoothstep(0.88, 0.99, d);
+                base = mix(base, vec3(0.9911, 0.9137, 0.6105),
+                        clamp((1.0 - smoothstep(LW * 0.7, LW, best)) * edge, 0.0, 1.0));
+            }
         }
         return base;
     }

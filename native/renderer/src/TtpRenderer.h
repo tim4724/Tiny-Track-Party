@@ -256,13 +256,18 @@ private:
     // case the road falls back to vlit and stamps nothing.
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
-    static constexpr int kMaxDeckDecals = 16;
+    static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
     struct DeckDecal {
         filament::math::float4 rect;   // s, lat, halfS, halfLat — ALL world units
         filament::math::float4 color;  // linear rgb, peak alpha
         filament::math::float4 shape;  // innerFrac, isEllipse, kneeAlpha, spare
     };
     std::vector<DeckDecal> mDeckDecals;   // gathered per frame
+    // Decals that never move — boost pads, launch strips, oil slicks, item-box
+    // contact shadows. Resolved once at track build and re-queued each frame,
+    // which is cheaper than it sounds (a memcpy of a handful of float4s) and
+    // keeps ONE code path for compositing order.
+    std::vector<DeckDecal> mStaticDeckDecals;
     std::vector<DeckDecal> mDeckDecalsLast; // kept for the debug accessor
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
@@ -793,6 +798,9 @@ private:
             const filament::math::float3& linCol, float alpha,
             float inner, float kneeAlpha, bool ellipse);
     void uploadDeckDecals();
+    // Resolve the decals that never move — pads, launch strips, oil slicks and
+    // item-box contact shadows — into mStaticDeckDecals, once per track.
+    void buildStaticDeckDecals(const TrackBin& tb);
 public:
     // DEBUG: what was actually packed for the road last frame. Exists so the
     // decal numbers can be read and compared against the car's own position

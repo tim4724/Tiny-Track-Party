@@ -4125,7 +4125,69 @@ void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
             float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f } });
 }
 
+// The deck's fixed furniture, as stamps. These used to be three separate meshes
+// (mPads, mOils, mPropShadows) floating 0.004 to 0.014 above the road; shading
+// them into it removes the lift and the meshes both. Each keeps the profile its
+// mesh baked into vertex alpha, so nothing about the look is re-derived here.
+void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
+    mStaticDeckDecals.clear();
+    const auto push = [&](float s, float lat, float halfS, float halfLat,
+            const float3& col, float alpha, float inner, float knee,
+            bool ellipse, int chevrons) {
+        if ((int) mStaticDeckDecals.size() >= kMaxDeckDecals) return;
+        mStaticDeckDecals.push_back({
+                float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
+                float4{ col.x, col.y, col.z, alpha },
+                float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons } });
+    };
+
+    // Item-box contact shadows (were mPropShadows at 0.004): 1 -> 0.82 at 0.55r.
+    const float3 BOXSH = srgbToLinear(0x1c1a18);
+    for (const TrackBin::Box& b : tb.boxes) {
+        push(b.s, b.lat, 0.3f, 0.3f, BOXSH, 0.4f, 0.55f, 0.82f, true, 0);
+    }
+
+    // Oil slicks (were mOils at 0.012). The biome reskin is the mesh's exactly:
+    // a turquoise puddle on the beach, a pale glacial sheet on snow, the dark
+    // film everywhere else. The rim ring the mesh drew as a second annulus is
+    // folded into the profile — it was always just a brighter edge.
+    const bool wet = tb.hasWater, ice = tb.hasIce;
+    const float3 OILC = srgbToLinear(wet ? tb.waterShallow : ice ? tb.iceSheet : 0x161425);
+    const float oilA = wet ? 0.55f : ice ? 0.45f : 0.7f;
+    for (const TrackBin::Oil& o : tb.oils) {
+        push(o.s, o.lat, o.radius, o.radius, OILC, oilA, 0.88f, 1.0f, true, 0);
+    }
+
+    // Boost pads (were mPads at 0.01). The disc's radial gradient is its profile;
+    // the three cream chevrons ride the shader's segment distance instead of the
+    // stroked geometry they used to be.
+    const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
+    for (const TrackBin::Pad& pad : tb.pads) {
+        if (pad.kind == 1) {
+            push(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip), 1.0f,
+                    0.98f, 1.0f, /*ellipse=*/false, /*chevrons=*/5);
+        } else {
+            // FLAT PAINT, NOT A GLOW. The mesh drew a radial gradient (light core,
+            // base at 0.7, dark rim) and reproducing that as a soft profile came
+            // out as an emissive saucer — which is the exact read this tree
+            // already rejected once: a marker on the road grounds itself with a
+            // flat fill and a hard edge, not a gradient. So the disc is solid to
+            // 0.9 and then falls off over a tenth of its radius, which is an
+            // antialiased edge rather than a feather.
+            push(pad.s, pad.lat, pad.p0, pad.p0, srgbToLinear(boost.base), 1.0f,
+                    0.9f, 1.0f, /*ellipse=*/true, /*chevrons=*/3);
+        }
+    }
+}
+
 void TtpRenderer::uploadDeckDecals() {
+    // Statics FIRST: the array is composited in order, so a car's aura and its
+    // contact shadow land over the pad or slick they are crossing, which is the
+    // order the separate meshes used to get from their render priorities.
+    if (!mStaticDeckDecals.empty()) {
+        mDeckDecals.insert(mDeckDecals.begin(),
+                mStaticDeckDecals.begin(), mStaticDeckDecals.end());
+    }
     mDeckDecalsLast = mDeckDecals;   // debug snapshot, before the queue is cleared
     if (!mRoadInst) { mDeckDecals.clear(); return; }
     const int n = (int) mDeckDecals.size();
@@ -4313,6 +4375,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     const float groundY = tb.groundY;
 
     if (!buildRoadMesh(tb)) return false;
+    // The deck's fixed furniture becomes stamps on the road we just built. When
+    // there is no vroad material the three meshes below still draw instead.
+    if (mRoadMaterial) buildStaticDeckDecals(tb);
     buildRoadGrid(); // ground-conform probe accelerator (see roadHitY)
 
     // Ground sheet at groundY with the lawn's mowing stripes as vertex-colour
@@ -4654,6 +4719,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mBoxShadowRest.reserve(mPropShadows.verts.size());
         for (const Vertex& v : mPropShadows.verts) mBoxShadowRest.push_back(v.abgr);
         mBoxShadowFade.assign(tb.boxes.size(), 255);
+        // Stamped into the road when the deck material is present; this mesh is
+        // the fallback. Clearing it rather than skipping the fill keeps
+        // mBoxShadowStride/mBoxShadowRest consistent for the fade-on-collect path.
+        if (mRoadMaterial) { mPropShadows.verts.clear(); mPropShadows.idx.clear(); }
         if (!mPropShadows.verts.empty()) {
             MaterialInstance* mi = sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f);
@@ -4811,10 +4880,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
                 math::float4{ chassis, 1.0f });
     }
-    buildPadsMesh(tb);
+    if (!mRoadMaterial) buildPadsMesh(tb);   // stamped into the road otherwise
     buildWater(tb);
     buildFliers(tb);
-    buildOils(tb);
+    buildOils(tb);   // the cones are always meshes; the slick itself is stamped
     buildStructures(tb);
     buildScenery(tb);
     buildLandmarks(tb);
@@ -6550,7 +6619,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
 // still a legitimate thing to want, but as a look/architecture call, not a bug.
 void TtpRenderer::buildOils(const TrackBin& tb) {
     if ((tb.oils.empty() && tb.poles.empty())) return;
-    if (!tb.oils.empty() && mBlendMaterial) {
+    if (!tb.oils.empty() && mBlendMaterial && !mRoadMaterial) {
         // The slick reskins per biome: a turquoise puddle on the beach, a pale
         // glacial sheet on the snow, the dark oil film everywhere else — each
         // with a foam/frost rim ring so it reads as a feature with an edge.
