@@ -16,7 +16,8 @@
 // are the STEER BAR and the CELL DIVIDERS: cell-anchored and textless, so they
 // need none of the UI toolkit the rest of the HUD is written against and must
 // not be laid out a second time. Everything crossing for them is here —
-// uiScale, cellCards, dividers — and it is three latched setters, not a stream.
+// cellCards and dividers — and it is two latched setters, not a stream. No size
+// crosses: both size themselves off the cell, which C++ already owns.
 
 import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
@@ -100,7 +101,6 @@ export class Display {
       cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
-      uiScale: mod.cwrap('ttp_display_ui_scale', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
@@ -412,13 +412,6 @@ export class Display {
     }
     return rows;
   }
-
-  // Physical pixels per CSS pixel — devicePixelRatio, capped by Stage. The
-  // renderer needs it for the one thing it draws whose size is authored in the
-  // UI's units rather than the world's: the steer bar (34 CSS px tall, 4 px
-  // border). Points on tvOS and density on Android are the same idea, which is
-  // why this number can cross where a CSS pixel could not.
-  uiScale(k) { this._fn.uiScale(k); }
 
   // Which cells have a centred card over them (bit i = cell i), which is where
   // the steer bar must not be. The card itself stays in the DOM — it carries

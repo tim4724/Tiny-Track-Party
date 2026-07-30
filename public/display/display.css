@@ -458,10 +458,21 @@ html.cam-free #race { pointer-events: none; }
 /* The per-cell steer indicator is NOT here any more, and neither are the ink
    rules between cells: both are cell-anchored and textless, so the RENDERER
    draws them (native/renderer/materials/voverlay.mat), from the same cell
-   rectangles this file's chrome is placed on. The sizes moved with them —
-   width clamp(190px, 16.5vw, 270px), height 34, border 4, pill radius, ink
-   border on --surface with a 40% centre tick and a --c fill — and are quoted
-   there in the same CSS pixels, converted by ttp_display_ui_scale.
+   rectangles this file's chrome is placed on. The composition moved with them —
+   270 x 34 with a 4px border, pill radius, ink on --surface with a 40% centre
+   tick and a --c fill, 20 clear of the bottom — but the UNITS did not: every
+   number scales with a DAMPED SHARE OF SCREEN HEIGHT now — the geometric mean
+   of the cell's height and the screen's, over 1080, times the renderer's
+   BAR_SCALE (1.7). A split takes height away so each bar shrinks, but by the
+   square root of the share, not proportionally: 459 x 58 at one player, 325 x 41
+   at every split. No CSS pixel is left for the renderer to convert,
+   deliberately: a TV shell cannot supply a points-per-pixel scale, knowing
+   neither the panel's size nor the couch's distance.
+
+   NOTE THE ASYMMETRY, since it is a live design question: .cell-label and
+   .cell-rank below are still sized in CSS pixels and do NOT scale with the
+   split at all, so a 2x2 cell mixes one element that shrinks with the split
+   against three that hold their size.
 
    The line, so this does not become a habit: cell-anchored AND textless goes to
    the renderer; anything carrying type or sticker chrome stays right here. */

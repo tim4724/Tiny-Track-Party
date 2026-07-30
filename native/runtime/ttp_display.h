@@ -38,20 +38,14 @@ TTP_ABI int ttp_display_create(const char* surface, uint32_t width, uint32_t hei
 TTP_ABI void ttp_display_resize(uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_destroy(void);
 
-/* Physical pixels per UI point on this surface: devicePixelRatio on web,
- * UIScreen.nativeScale on tvOS, density on Android. Defaults to 1.
- *
- * This is the ONE unit conversion the C side is told about, and it exists
- * because the renderer now draws two pieces of chrome (see
- * ttp_display_cell_rects) whose sizes are authored in the UI's units — a 34 pt
- * bar with a 4 pt border — rather than in the world's. Everything else here
- * stays in the surface's own physical pixels, so a shell that never calls this
- * is still correct everywhere except the size of those two elements.
- *
- * NOT devicePixelRatio by another name: points and density are the same idea on
- * all three platforms, which is why it can cross the boundary when a CSS pixel
- * could not. <= 0 is ignored. */
-TTP_ABI void ttp_display_ui_scale(double scale);
+/* NO ttp_display_ui_scale. There was one — physical pixels per UI point, so the
+ * renderer's chrome could be sized in the CSS pixels display.css authored it in.
+ * A shell porting from an older revision should delete its call, not look for a
+ * replacement: a UI point needs the panel's physical size and a viewing
+ * distance, and a TV shell has neither, so every platform's honest value was
+ * just its buffer-resolution ratio. The overlay sizes itself off the cell now
+ * (TtpRenderer::drawOverlay), and every number crossing this ABI is back in the
+ * surface's own physical pixels. */
 
 /* ---- scene -------------------------------------------------------------- */
 

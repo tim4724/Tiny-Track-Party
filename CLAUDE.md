@@ -225,12 +225,34 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   second whether anyone has crossed the line. A steady-state race frame is one
   `ttp_display_frame(dt)`, one `ttp_audio_frame(now)` and a packed
   `cellRects` read. Anything tempted onto the per-frame path needs to be
-  something that actually CHANGES per frame. They are
-  the only thing the C side is ever told a UI SCALE for
-  (`ttp_display_ui_scale`) — their sizes are authored in CSS pixels, everything
-  else stays in the surface's physical ones — and the only place `--ink` /
-  `--surface` are written down twice (`TTP_HUD_*` in `ttp_render.h`, held to the
-  tokens by `tests/design-tokens.test.js`).
+  something that actually CHANGES per frame. They SIZE THEMSELVES OFF THE CELL
+  and take NO unit from the shell: the bar is the authored 270 x 34 shape (4
+  border, 3 tick, 20 clear of the bottom) scaled by `BAR_SCALE` times the
+  GEOMETRIC MEAN of its cell's height and the SCREEN's, over 1080. That is a
+  DAMPED share of screen height — a split takes height away, so each bar gets
+  smaller, but by the square root of the share rather than proportionally. At
+  1080p: 459 x 58 for one player, 325 x 41 for every split (a stacked cell and a
+  2x2 cell are both half the screen's height, so both land there). Straight
+  proportion made the one-player bar 648 wide, which read oversized on a full
+  screen while the split bars were right.
+  BOTH heights are load-bearing. Drop the screen term and a sqrt over the cell's
+  raw pixels halves the bar on a 4K panel — the devicePixelRatio trap this layer
+  already refuses once. Drop the cell term and a split stops mattering. Written
+  as a geometric mean it is resolution-independent by construction: double the
+  panel's pixels and every bar doubles. `BAR_SCALE` is 1.7 and is the ONE knob.
+  Note the surrounding cell chrome (name chip, place badge, lap pill) is
+  shell-drawn in CSS pixels and does NOT scale with the split at all; that
+  asymmetry is the open design question.
+  There WAS a `ttp_display_ui_scale` and a `TtpFrameInput.uiScale` carrying
+  devicePixelRatio, because those sizes were authored in display.css's pixels;
+  both are gone (frame ABI v11) and a shell porting from an older revision should
+  delete the call, not look for a replacement — a UI point needs the panel's
+  physical size and a viewing distance, and a TV shell has neither.
+  The DIVIDERS are the one exception and keep a canvas-relative weight (4/1080 of
+  the surface height, floored at 1 px), because their SPAN is the canvas too.
+  They are also the only place `--ink` / `--surface` are written down twice
+  (`TTP_HUD_*` in `ttp_render.h`, held to the tokens by
+  `tests/design-tokens.test.js`).
   `public/display/render/Display.js` is the browser's whole edge of it, and
   `Stage.js` owns the canvas, the DOM HUD and the rAF loop. Three.js is GONE
   (git history has it); it survives only as a TEST-ONLY devDependency, used by the

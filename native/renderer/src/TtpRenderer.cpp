@@ -7456,9 +7456,12 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     const uint32_t before = mOverlayUsed;
     mOverlayUsed = 0;
     if (mOverlayMaterial && input.hudCount && mWidth && mHeight) {
-        // Physical pixels per UI point. Every size below is the CSS number out
-        // of display.css, so this is the only place the two units meet.
-        const float s = input.uiScale > 0 ? input.uiScale : 1.0f;
+        // Every size here is a fraction of something this function can measure:
+        // the cell and the canvas for the bar, the canvas alone for the rules.
+        // No UI unit crosses the
+        // ABI — a TV shell cannot supply one honestly, knowing neither the
+        // panel's size nor the couch's distance, so the ttp_display_ui_scale
+        // this used to take was only ever devicePixelRatio under another name.
         const float4 ink{ hudRgb(TTP_HUD_INK), 1.0f };
         const float3 surface = hudRgb(TTP_HUD_SURFACE);
         const uint32_t n = input.hudCount;
@@ -7467,7 +7470,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         // sides, SPANNING THE WHOLE CANVAS, deduplicated exactly as the DOM's
         // loop was: one rule per distinct cell edge, not one per cell.
         //
-        // The seam positions come from cellRectTopLeft, the letterboxed grid the
+        // The seam positions come from cellRectTopLeft, the band-fitted grid the
         // shell is also handed. For every layout this game can produce that is
         // the same number ttp_grid_cell gave (a 2-column seam is at W/2 either
         // way, and 3+ columns needs 5 players), so this is about being derived
@@ -7505,9 +7508,13 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             }
             // rgba(42, 39, 53, 0.88) — the ink, let through by the tiniest bit.
             const float4 rule{ ink.xyz, 0.88f };
+            // Weight off the CANVAS, like the span: the rule belongs to the
+            // whole surface, not to one cell. The floor is rasterization — a
+            // sub-pixel rule fades out rather than thinning.
+            const float ruleW = std::max(1.0f, (float) mHeight * (4.0f / 1080.0f));
             for (uint32_t k = 0; k < nx; k++) {
-                if (MaterialInstance* mi =
-                            overlayQuad(xs[k] - 2 * s, 0, 4 * s, (float) mHeight)) {
+                if (MaterialInstance* mi = overlayQuad(xs[k] - ruleW * 0.5f, 0,
+                            ruleW, (float) mHeight)) {
                     mi->setParameter("shape", float3{ 0, 0, 0 });
                     mi->setParameter("fill", float3{ 0, 0, 0 });
                     mi->setParameter("ink", rule);
@@ -7516,8 +7523,8 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
                 }
             }
             for (uint32_t k = 0; k < ny; k++) {
-                if (MaterialInstance* mi =
-                            overlayQuad(0, ys[k] - 2 * s, (float) mWidth, 4 * s)) {
+                if (MaterialInstance* mi = overlayQuad(0, ys[k] - ruleW * 0.5f,
+                            (float) mWidth, ruleW)) {
                     mi->setParameter("shape", float3{ 0, 0, 0 });
                     mi->setParameter("fill", float3{ 0, 0, 0 });
                     mi->setParameter("ink", rule);
@@ -7527,20 +7534,37 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             }
         }
 
-        // .cell-steer — width clamp(190px, 16.5vw, 270px), height 34, border 4,
-        // pill radius, bottom-anchored 61 above the cell's bottom edge and
-        // centred on it. The viewport the 16.5vw measures is this SURFACE: a TV
-        // shell has no second viewport behind its canvas, and taking one from
-        // the browser would put a web idea back into the contract.
-        const float barW = std::max(190 * s, std::min(0.165f * mWidth, 270 * s));
-        const float barH = 34 * s, border = 4 * s;
-        const float innerW = barW - 2 * border, innerH = barH - 2 * border;
+        // .cell-steer — display.css's composition (270 x 34, 4 border, 3 tick,
+        // 20 clear of the bottom) against a 1080-line panel, times BAR_SCALE.
+        // BAR_SCALE is the only knob: scale the shape, never re-proportion the
+        // numbers.
+        static constexpr float BAR_SCALE = 1.7f;
         const TtpCellHudInput* hud = ttp_frame_hud(&input);
         for (uint32_t i = 0; i < n; i++) {
             if (!(hud[i].flags & TTP_HUD_STEER_BAR)) continue;
             const TtpCellRect cell = cellRectTopLeft(n, i);
+            // A SHARE OF THE SCREEN'S HEIGHT, damped by how much of that height
+            // this cell owns. Height because that is what a split actually takes
+            // away: stack two players and each gets half the screen, so each
+            // bar should be smaller — but not HALF as small. Straight proportion
+            // made the one-player bar twice the split one, which read oversized
+            // on a full screen while the split bars were right.
+            //
+            // The geometric mean of the two heights is that damping (sqrt of the
+            // cell's share) written so it stays RESOLUTION-INDEPENDENT: double
+            // the panel's pixels and every bar doubles with it. A sqrt over the
+            // cell's absolute pixels would not — it would quietly halve the bar
+            // on a 4K set, which is the devicePixelRatio trap this layer already
+            // refuses once.
+            //
+            // cellRectTopLeft is the band-fitted grid, never the raw tile.
+            const float unit = BAR_SCALE
+                    * std::sqrt((float) cell.h * (float) mHeight) / 1080.0f;
+            const float barW = 270 * unit, barH = 34 * unit;
+            const float border = 4 * unit, tick = 3 * unit, clear = 20 * unit;
+            const float innerW = barW - 2 * border, innerH = barH - 2 * border;
             MaterialInstance* mi = overlayQuad(cell.x + (cell.w - barW) * 0.5f,
-                    cell.y + cell.h - 61 * s, barW, barH);
+                    cell.y + cell.h - clear - barH, barW, barH);
             if (!mi) continue;
             // The livery this cell's car wears, straight off the roster the
             // renderer baked its model from — the shell never restates it.
@@ -7554,7 +7578,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             // .cell-steer__fill: half the interior wide, centred, translated by
             // 50 % of ITS OWN width per unit of tilt — so full lock puts the
             // fill's edge on the interior's edge and never past it.
-            mi->setParameter("shape", float3{ barH * 0.5f, border, 3 * s });
+            mi->setParameter("shape", float3{ barH * 0.5f, border, tick });
             mi->setParameter("fill",
                     float3{ border + innerW * (0.25f + 0.25f * hud[i].steer),
                             innerW * 0.5f, innerH * 0.5f });

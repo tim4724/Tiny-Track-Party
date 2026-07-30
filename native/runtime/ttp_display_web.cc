@@ -136,10 +136,6 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
     g_disp->renderer->resize(g_disp->width, g_disp->height);
 }
 
-void ttp_display_ui_scale(double scale) {
-    if (g_disp && scale > 0) g_disp->uiScale = (float) scale;
-}
-
 void ttp_display_destroy(void) {
     if (!g_disp) return;
     delete g_disp->renderer;
@@ -225,6 +221,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // A rebuild is a new track or a new field; either way the springs must not
     // drag the old frame's camera into it.
     g_disp->chase.clear();
+    g_disp->steerBar.clear();
     g_disp->sceneT = 0;
     g_disp->bursts.clear();
     solveFraming(*g_disp);
@@ -240,6 +237,7 @@ void ttp_display_release(void) {
     g_disp->built = false;
     g_disp->roster.clear();
     g_disp->chase.clear();
+    g_disp->steerBar.clear();
     g_disp->held.clear();  // a field belongs to the scene it was read from
 }
 
@@ -252,6 +250,7 @@ void ttp_display_bind(int session) {
     // A new session is a new field: the springs must not drag the last race's
     // camera into it, and a hold taken at the old race's finish is spent.
     g_disp->chase.clear();
+    g_disp->steerBar.clear();
     g_disp->hold = false;
     g_disp->held.clear();
     g_disp->session = session;

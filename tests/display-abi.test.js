@@ -43,7 +43,7 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   // Every name Display.js cwraps. cwrap('missing') does not throw until the
   // call, so check the exports themselves.
   for (const name of ['create', 'asset', 'resize', 'build', 'release', 'bind',
-                      'cells', 'cell_rects', 'cell_cards', 'dividers', 'ui_scale',
+                      'cells', 'cell_rects', 'cell_cards', 'dividers',
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'profile', 'profile_names',
                       'biome', 'showcase']) {
@@ -58,7 +58,6 @@ test('the cell-overlay setters are a safe no-op with no display', async () => {
   // pushes these from _loop, which starts running before boot() has resolved a
   // display for it. ttp_abi.h says an absent singleton is a no-op, not a trap.
   assert.doesNotThrow(() => {
-    M.cwrap('ttp_display_ui_scale', null, ['number'])(2);
     M.cwrap('ttp_display_cell_cards', null, ['number'])(0x3);
     M.cwrap('ttp_display_dividers', null, ['number'])(0);
   });

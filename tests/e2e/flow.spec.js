@@ -134,12 +134,16 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // Both halves are DIFFERENCE tests, taken against the same frame with the two
   // elements suppressed through their own shipped flags (cellCards hides a bar
   // the way a FINISHED card does; dividers is the ?dividers=0 toggle). That is
-  // what keeps them honest at this suite's 0.25 DPR, where the bar is 8 device
+  // what keeps them honest at this suite's 0.25 DPR, where the bar is ~9 device
   // pixels tall and the ink rule is one: a fixed colour threshold would be
   // measuring the antialiasing and a fixed pixel budget would be measuring
-  // SwiftShader. It is also what makes them catch the swap's real risk — the bar
-  // is sized in CSS pixels and drawn in device ones, so a missing or doubled
-  // ttp_display_ui_scale moves it clean out of the box sampled here.
+  // SwiftShader.
+  //
+  // It used to catch the CSS→device conversion (a missing ttp_display_ui_scale
+  // moved the bar out of the sampled box). That unit is gone, so what it pins
+  // now is that the bar measures against the band-fitted rect cellRectTopLeft
+  // returns: sizing or centring off the raw surface grid puts it outside the box
+  // below on exactly the stacked pair this test runs.
   //
   // The wait is for the RENDERER: launchRace kicks the scene rebuild off without
   // awaiting it, so under software GL the build can outlive the countdown, and
@@ -155,12 +159,17 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
     for (let i = 0; i + 3 < packed.length; i += 4) {
       cells.push({ x: packed[i], y: packed[i + 1], w: packed[i + 2], h: packed[i + 3] });
     }
-    // display.css's own numbers for .cell-steer, converted to device pixels by
-    // the same uiScale the renderer was handed.
-    const barW = Math.max(190 * k, Math.min(0.165 * W, 270 * k)), barH = 34 * k;
-    const boxes = cells.map((c) => ({
-      x: c.x + (c.w - barW) / 2, y: c.y + c.h - 61 * k, w: barW, h: barH,
-    }));
+    // drawOverlay's own geometry: the authored 270 x 34 shape sitting 20 clear
+    // of the bottom edge, scaled by the geometric mean of the CELL's height and
+    // the SCREEN's — a damped share of the screen height, not the cell's raw
+    // pixels. Both heights matter: dropping the screen term would make the bar
+    // resolution-dependent, dropping the cell term would ignore the split.
+    const boxes = cells.map((c) => {
+      const u = 1.7 * Math.sqrt(c.h * H) / 1080;   // BAR_SCALE, per cell
+      const barW = 270 * u, barH = 34 * u;
+      return { x: c.x + (c.w - barW) / 2, y: c.y + c.h - 20 * u - barH,
+               w: barW, h: barH };
+    });
     const grab = () => s.snapshot().getContext('2d').getImageData(0, 0, W, H).data;
     const on = grab();
     s.display.cellCards(0xff); s.display.dividers(false); s.display.frame(0);
@@ -187,24 +196,27 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
     }
     return {
       barsChanged: boxes.map(boxFrac),
-      // A band the bar must NOT reach into: the same box, one and a half bar
-      // heights higher. A bar drawn at CSS scale would land in it.
-      abovesChanged: boxes.map((b) => boxFrac({ ...b, y: b.y - b.h * 1.5 })),
-      // The rule is CENTRED on the seam and 4 CSS px thick, which at this DPR is
-      // ONE device row landing on one side of the boundary or the other — so ask
+      // A band the bar must NOT reach into: the same box two bar heights up, so
+      // a full bar height of clearance sits between them. Any less and at 0.25
+      // DPR this measures the quad's antialiased edge rather than the bar.
+      abovesChanged: boxes.map((b) => boxFrac({ ...b, y: b.y - b.h * 2 })),
+      // The rule is CENTRED on the seam and 4/1080 of the surface thick, which
+      // at this DPR is ONE device row landing on one side of the boundary or the
+      // other — so ask
       // which rows near the seam carry it, not which exact one.
       seamY: cells[1].y,
       seamRows: [-2, -1, 0, 1, 2].map((d) => rows[Math.round(cells[1].y) + d]),
       wideRows: rows.map((f, y) => [y, f]).filter(([, f]) => f > 0.5).map(([y]) => y),
       boxes: boxes.map((b) => [b.x / k, b.y / k, b.w / k, b.h / k]),
       cssCells: cells.map((c) => [c.x / k, c.y / k, c.w / k, c.h / k]),
+      cssH: H / k,   // the bar's scale reads the SCREEN's height as well as its cell's
     };
   });
-  // A bar in every cell, covering most of the box display.css puts it in…
+  // A bar in every cell, covering most of the box its own cell fraction puts it in…
   expect(paint.barsChanged).toHaveLength(2);
   for (const frac of paint.barsChanged) expect(frac).toBeGreaterThan(0.5);
-  // …and nothing a bar-and-a-half higher up, which is where a bar drawn without
-  // the CSS→device conversion would sit.
+  // …and nothing clear of it, which is where a bar sized or centred off the raw
+  // surface grid instead of the band-fitted cell would sit.
   for (const frac of paint.abovesChanged) expect(frac).toBe(0);
   // The ink rule runs the full width at the one interior seam…
   expect(Math.max(...paint.seamRows)).toBeGreaterThan(0.9);
@@ -213,11 +225,21 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // SEAM, or one measured in the wrong units, shows up here as an extra row.
   expect(paint.wideRows.length).toBeGreaterThan(0);
   for (const y of paint.wideRows) expect(Math.abs(y - paint.seamY)).toBeLessThanOrEqual(2);
-  // The box those pixels were sampled in is the CSS geometry the DOM bar had:
-  // centred on its cell, 34 tall, 61 above the cell's bottom edge.
-  expect(paint.boxes.map((b) => `${b[0] + b[2] / 2},${b[1]}`).sort())
-    .toEqual(paint.cssCells.map((c) => `${c[0] + c[2] / 2},${c[1] + c[3] - 61}`).sort());
-  expect(paint.boxes.every((b) => b[3] === 34)).toBe(true);
+  // The box those pixels were sampled in is the geometry drawOverlay derives:
+  // centred on its cell, and sized off the geometric mean of the cell's height
+  // and the screen's. The DOM bar's old 270 / 34 / 27 survive only as ratios — there
+  // is no CSS pixel and no devicePixelRatio anywhere in the chain now, which is
+  // why this compares the bar against its own cell rather than against a
+  // constant. Per index, not sorted: both arrays are built from `cells` in cell
+  // order, so a bar landing in the wrong cell should fail rather than sort away.
+  for (const [i, b] of paint.boxes.entries()) {
+    const c = paint.cssCells[i];
+    const u = 1.7 * Math.sqrt(c[3] * paint.cssH) / 1080;
+    expect(b[0] + b[2] / 2).toBeCloseTo(c[0] + c[2] / 2, 4);   // centred on the cell
+    expect(b[2]).toBeCloseTo(270 * u, 4);                      // cell height AND
+    expect(b[3]).toBeCloseTo(34 * u, 4);                       // screen height
+    expect(b[1] + b[3]).toBeCloseTo(c[1] + c[3] - 20 * u, 4);
+  }
 
   // Any phone can pause; the overlay raises on every screen.
   await bob.click('#pause-btn');

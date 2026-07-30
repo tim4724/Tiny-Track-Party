@@ -19,8 +19,9 @@
 // bar was also the ONLY per-frame element in the HUD — everything left here is
 // written from a ~6 Hz poll, which is a far cleaner contract for three shells
 // than each writing its own 60 Hz animation over a GL surface. What crosses for
-// them now is three setters and no stream: uiScale once at boot, cellCards and
-// dividers latched in _loop and pushed only when they change.
+// them now is two setters and no stream: cellCards and dividers, latched in
+// _loop and pushed only when they change. No size and no unit — both elements
+// size themselves off the cell, which is already a C++ answer.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
@@ -153,11 +154,6 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
-    // The renderer draws two pieces of chrome now (the steer bar and the cell
-    // dividers), and their sizes are authored in CSS pixels. This is the one
-    // number that converts them — the same _dpr the canvas was sized by and
-    // that _cellRects divides the answer back out with.
-    this.display.uiScale(this._dpr);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
@@ -582,8 +578,9 @@ export class Stage {
 
   // Push what the renderer's own cell overlay needs, on change only. Two latched
   // values, neither of them per-frame state: which cells have a centred card
-  // over them (so the steer bar under it goes), and the divider toggle. The
-  // third, uiScale, is a constant and goes across once in boot().
+  // over them (so the steer bar under it goes), and the divider toggle. That is
+  // the whole of it — no size and no unit, since both elements measure
+  // themselves against the cell rects C++ already owns.
   //
   // The rules themselves are NOT computed here any more. They used to be built
   // from the CSS-pixel rects — one per distinct cell edge — and the renderer now

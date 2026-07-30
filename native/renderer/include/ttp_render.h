@@ -133,10 +133,12 @@ typedef struct TtpCellHudInput {
      * so the bar wears the same livery the model does. < 0 = no car (nothing to
      * draw). NOT a car id: no identity crosses this boundary. */
     int32_t car;
-    /* RAW steer input, -1..1 — the phone's tilt as the player produced it.
+    /* Where to draw the fill, -1..1: the phone's RAW tilt, eased toward over
+     * ~50 ms (STEER_BAR_TAU) so the bar does not step at the packet rate.
      * Deliberately NOT TtpCarInput.steer, which carries STEER_SIGN because the
      * VISUAL cues (front-wheel yaw, body lean) have to turn the way the car
-     * turns. The bar mirrors the phone's own bar, so it wants the raw value. */
+     * turns. The bar mirrors the phone's own bar, so it wants the raw value —
+     * and the phone eases its own by the same 50 ms. */
     float steer;
     uint32_t flags; /* TTP_HUD_STEER_BAR */
 } TtpCellHudInput;
@@ -201,18 +203,15 @@ typedef struct TtpFrameInput {
                         * its scene booted) — phase source for every wall-clock
                         * cosmetic (box bob/spin, cloud drift, balloon lap, rocket
                         * roll), so both renderers animate in the SAME phase */
-    /* Physical pixels per UI point — devicePixelRatio on web, UIScreen
-     * nativeScale on tvOS, density on Android. The overlay is the first thing
-     * the renderer draws whose size is authored in the UI's units rather than
-     * the world's (34 pt tall, 4 pt border), so this is the one number that
-     * converts them. Everything ELSE the C side is told stays in the surface's
-     * own physical pixels, which is why this is a frame field rather than a
-     * second unit system running through the whole layer. <= 0 reads as 1. */
-    float uiScale;
+    /* NO UI SCALE. A uiScale lived here until v11 (removed with
+     * ttp_display_ui_scale — see it for why a TV cannot supply one). The cell
+     * overlay measures itself against the cell and the surface now, so every
+     * number crossing this boundary is in the surface's own physical pixels. Do
+     * not add a second unit system back. */
 } TtpFrameInput;
 
 
-#define TTP_FRAME_INPUT_VERSION 10u
+#define TTP_FRAME_INPUT_VERSION 11u
 
 static inline const TtpCarInput* ttp_frame_cars(const TtpFrameInput* f) {
     return (const TtpCarInput*) (f + 1);

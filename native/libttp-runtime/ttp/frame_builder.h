@@ -51,19 +51,28 @@ enum CamMode : int {
 static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3,
               "CamMode carries the frozen TTP_CAM_* ABI values — do not renumber");
 
+// How fast a steer bar chases the tilt behind it, as an exponential time
+// constant in seconds. 50 ms is what the phone puts on its OWN bar
+// (controller.css), so the two ends of the same reading lag alike.
+constexpr float STEER_BAR_TAU = 0.05f;
+
 // Everything the display owns that is not the renderer or the platform surface.
 struct DisplayState {
+    // The surface, in its own physical pixels — the only unit this struct
+    // speaks. A uiScale lived here until frame ABI v11; see TtpFrameInput.
     uint32_t width = 1, height = 1;
-
-    // Physical pixels per UI point (TtpFrameInput.uiScale). The one place the
-    // display is told about the shell's unit system, and only because the cell
-    // overlay's sizes are authored in it.
-    float uiScale = 1;
 
     int session = 0;                    // bound session handle (0 = draw an empty track)
     std::vector<ScalarId> roster;       // slot order, fixed at build
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
+
+    // Where each cell car's steer bar is actually DRAWN, eased toward the live
+    // tilt (STEER_BAR_TAU). Keyed and cleared exactly like `chase`, and for the
+    // same reason: it is smoothing state, so a new track or field must not drag
+    // the last one's value in. Absent reads as 0, which is the centred bar a
+    // car starts at.
+    std::map<std::string, float> steerBar;
 
     // Cell overlay state (TtpCellHudInput). `cardMask` bit i = a centred card
     // owns cell i (finished, or dropped and showing the reconnect QR), which is

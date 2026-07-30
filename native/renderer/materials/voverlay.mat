@@ -32,10 +32,12 @@
 // vpresent grade it would blend in LINEAR instead, which is a visibly different
 // answer: ink at 40 % over white is 0.67 in sRGB and 0.81 in linear.
 //
-// Units are DEVICE pixels throughout, scaled from CSS/point sizes by the
-// frame's uiScale. Every px-valued parameter and the varying carry it at high
-// precision: a mediump float has ~4 px of slack at 4 K, which would smear a
-// 4 px rule.
+// Units are DEVICE pixels throughout, with no UI unit anywhere: drawOverlay
+// derives the bar from the cell's and the screen's heights, and the rules'
+// weight from the canvas,
+// so nothing here needs a scale from the shell. Every px-valued parameter and
+// the varying carry it at high precision: a mediump float has ~4 px of slack at
+// 4 K, which would smear a 4 px rule.
 material {
     name : TtpVoverlay,
     parameters : [

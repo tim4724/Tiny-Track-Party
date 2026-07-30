@@ -374,7 +374,6 @@ void testCarsAndRoster(const GameTrack& track) {
   checkU(h->flags & TTP_FRAME_DIVIDERS, TTP_FRAME_DIVIDERS,
          "the cell dividers are on unless a shell says otherwise");
   checkU(h->hudCount, 0, "no cells means no cell overlays");
-  checkF(h->uiScale, 1.0f, "uiScale defaults to 1, so a shell that never sets it still draws");
   checkF(h->sceneT, DT, "sceneT accumulates dt");
 
   checkCar(cars[0], c2, "slot 0 (cpu-bolt)");
@@ -891,7 +890,6 @@ void testCellHud(const GameTrack& track) {
   check(c0.steer != 0 && c2.steer != 0, "premise: both cells' cars are steering");
 
   DisplayState d = freshState();
-  d.uiScale = 2.0f;
   // Cell order and roster order deliberately disagree, and the roster carries a
   // seat with no car: cell 0 is roster slot 1, cell 1 is roster slot 0.
   d.roster = {P2, P0, GHOST, P1};
@@ -901,15 +899,53 @@ void testCellHud(const GameTrack& track) {
     const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     const TtpCellHudInput* hud = ttp_frame_hud(h);
     checkU(h->hudCount, 2, "one cell overlay per cell");
-    checkF(h->uiScale, 2.0f, "uiScale reaches the frame");
     check(hud[0].car == 1, "cell 0's car is its ROSTER SLOT, not its cell index");
     check(hud[1].car == 0, "cell 1's car is its roster slot");
-    checkF(hud[0].steer, (float)c0.steer, "the bar carries RAW tilt");
-    checkF(hud[1].steer, (float)c2.steer, "…for every cell");
+    // The bar EASES toward the tilt, so one frame from centred is a fraction of
+    // the way there — same sign, strictly short of it (DT is well under the
+    // 50 ms constant). What it must never be is the car cue's signed value.
+    const float a = DT / rt::STEER_BAR_TAU;
+    checkF(hud[0].steer, (float)c0.steer * a, "the bar eases toward RAW tilt");
+    checkF(hud[1].steer, (float)c2.steer * a, "…in every cell");
     check(hud[0].steer != ttp_frame_cars(h)[1].steer,
           "the bar's steer is NOT the car cue's — that one carries STEER_SIGN");
     checkU(hud[0].flags, TTP_HUD_STEER_BAR, "the bar is drawn by default");
     checkU(hud[1].flags, TTP_HUD_STEER_BAR, "…in every cell");
+  }
+
+  // The easing itself: hold the tilt still and the bar converges on it, from the
+  // same side, without overshooting. A bar written straight from the packet rate
+  // steps instead, which is what this replaced.
+  {
+    DisplayState m = freshState();
+    m.roster = {P0};
+    m.cells = {P0};
+    const float target = (float)game.cars()[0]->steer;
+    check(target != 0, "premise: the car is steering");
+    float prev = 0;
+    for (int f = 0; f < 40; f++) {
+      const TtpFrameInput* h = rt::buildFrame(m, &game, DT, caseAspect(m));
+      const float now = ttp_frame_hud(h)[0].steer;
+      check(std::fabs(now) <= std::fabs(target) + 1e-6f, "the bar never overshoots the tilt");
+      check(std::fabs(now) >= std::fabs(prev), "…and only ever closes the gap");
+      prev = now;
+    }
+    // Tolerance, not checkF: easing is asymptotic, so it arrives to within a
+    // float's noise rather than landing on the value exactly.
+    check(std::fabs(prev - target) < 1e-6f, "40 frames of a held tilt lands the bar on it");
+    // One time constant in, an exponential is ~63% of the way. Pinning the shape
+    // rather than just the endpoint is what would catch a snap or a linear ramp
+    // wearing the same constant.
+    DisplayState q = freshState();
+    q.roster = {P0};
+    q.cells = {P0};
+    float shown = 0;
+    for (float t = 0; t < rt::STEER_BAR_TAU - 1e-6f; t += DT) {
+      const TtpFrameInput* h = rt::buildFrame(q, &game, DT, caseAspect(q));
+      shown = ttp_frame_hud(h)[0].steer;
+    }
+    check(shown / target > 0.5f && shown / target < 0.75f,
+          "one time constant in, the bar is about two thirds of the way");
   }
 
   // A centred card (FINISHED, or the reconnect QR) owns a cell: that cell's bar

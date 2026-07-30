@@ -100,7 +100,6 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     head->boxCount = (uint32_t) nBoxes;
     head->burstCount = (uint32_t) d.bursts.size();
     head->hudCount = hudCount;
-    head->uiScale = d.uiScale;
     if (d.dividers) head->flags |= TTP_FRAME_DIVIDERS;
     // …and which rect the renderer is to draw the view into, on the same
     // predicate `aspect` above already turns on: an overview measures the WHOLE
@@ -277,8 +276,14 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     d.bursts.clear();
 
     // Cell overlays. The steer bar mirrors the PHONE's own bar, so it carries
-    // `Car::steer` untouched — the raw tilt — where the car cues twenty lines up
-    // carry STEER_SIGN * steer for the opposite reason.
+    // `Car::steer` — the raw tilt — where the car cues twenty lines up carry
+    // STEER_SIGN * steer for the opposite reason.
+    //
+    // EASED, not stepped: tilt arrives at the phone's packet rate, so a bar
+    // written straight from it holds still and then jumps, several frames apart.
+    // One time constant, matching the 50 ms transition the phone puts on its own
+    // bar (controller.css .steer #steer-fill), so both ends lag the same.
+    const float steerAlpha = dt > 0 ? (dt < STEER_BAR_TAU ? dt / STEER_BAR_TAU : 1.0f) : 0.0f;
     auto* outHud = const_cast<TtpCellHudInput*>(ttp_frame_hud(head));
     for (uint32_t i = 0; i < hudCount; i++) {
         TtpCellHudInput& o = outHud[i];
@@ -288,9 +293,14 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         for (size_t j = 0; j < d.roster.size(); j++) {
             if (d.roster[j] != d.cells[i]) continue;
             o.car = (int32_t) j;
+            float& shown = d.steerBar[d.cells[i].key()];
             // A held field is at rest, so its bars are centred with it — the
-            // pause overlay must not show a car steering it is not doing.
-            if (cars[j] && !d.hold) o.steer = (float) cars[j]->steer;
+            // pause overlay must not show a car steering it is not doing. That
+            // one SNAPS: easing would leave the bar the only thing still moving
+            // in a frozen scene.
+            if (!cars[j] || d.hold) shown = 0;
+            else shown += ((float) cars[j]->steer - shown) * steerAlpha;
+            o.steer = shown;
             break;
         }
     }
