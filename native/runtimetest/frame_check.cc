@@ -211,6 +211,24 @@ std::vector<PlayerDesc> threePlayers() {
           PlayerDesc{P2, false, Stats{}}};
 }
 
+// THE DEFAULT camMode, asserted where nothing else can see it.
+//
+// `freshState` below force-sets it, and so does every other builder in this
+// file — deliberately, because a test that wants ORBIT should say ORBIT. The
+// consequence is that the DEFAULT-CONSTRUCTED value was exercised by nothing in
+// the tree: flipping it back to CAM_STILL left all 48 ctests green.
+//
+// That matters more than a default usually would. Its whole job is to protect a
+// shell that has NOT found `ttp_display_camera` — the web pushes a mode on the
+// first cell-less frame and never reads it — so the only thing standing between
+// a new platform and a lobby preview that is a still photograph is this one
+// initialiser, and it was unguarded.
+void testCameraDefault() {
+  const DisplayState fresh;
+  check(fresh.camMode == TTP_CAM_BBOX,
+        "DisplayState default camMode is TTP_CAM_BBOX (the lobby's bbox sweep)");
+}
+
 DisplayState freshState() {
   DisplayState d;
   d.width = 1920;
@@ -1361,6 +1379,7 @@ int main() {
     return 2;
   }
 
+  testCameraDefault();
   testParseIds();
   testParseRoster();
   testCameraMath();

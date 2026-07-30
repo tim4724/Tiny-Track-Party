@@ -237,7 +237,14 @@ TTP_ABI const TtpHudBlock* ttp_display_hud(void);
  * A/B'd at a party. */
 TTP_ABI void ttp_display_dividers(int enabled);
 
-/* Camera mode for a surface with no cells (ttp_display_cells empty). */
+/* Camera mode for a surface with no cells (ttp_display_cells empty).
+ *
+ * DEFAULTS TO TTP_CAM_BBOX — the lobby preview's sweep — because that is the
+ * only one of the four the shipping game ever wants; the other three belong to
+ * gallery and inspector surfaces, which all push a mode explicitly. A shell
+ * that never calls this therefore gets a moving preview rather than a frozen
+ * one, which is the difference between forgetting the call and shipping a
+ * lobby that looks like a still photograph of a correct render. */
 #define TTP_CAM_STILL  0  /* the fitted whole-track iso view, held still */
 #define TTP_CAM_ORBIT  1  /* turntable: circle the track at the overview radius */
 #define TTP_CAM_BBOX   2  /* lobby: sweep an ellipse hugging the track's bbox */
