@@ -268,6 +268,14 @@ int ttp_ui_configure(const char* json) {
   return 1;
 }
 
+uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct) {
+  ui::OptStr id;
+  if (cupIdOrNull && *cupIdOrNull) { id.has = true; id.v = cupIdOrNull; }
+  return ui::cupTintRgb(id, pct);
+}
+
+int ttp_ui_cup_field_tint_pct(void) { return ui::cupFieldTintPct(); }
+
 const char* ttp_ui_catalogue_json(void) {
   Value out = Value::Obj();
   Value cups = Value::Arr();
@@ -278,6 +286,10 @@ const char* ttp_ui_catalogue_json(void) {
     Value tracks = Value::Arr();
     for (const std::string& t : c.tracks) tracks.push(Value::Str(t));
     v.set("tracks", std::move(tracks));
+    // Packed 0xRRGGBB as a NUMBER, not "#RRGGBB": every shell turns it into its
+    // own colour type and none of them wants to parse a string to do it. The
+    // web is the exception and already has the authored table on the page.
+    v.set("color", Value::Num((double) c.color));
     cups.push(std::move(v));
   }
   Value cat = Value::Arr();

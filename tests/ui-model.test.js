@@ -49,7 +49,9 @@ function ui_() {
       autoPauseAsks: c('ttp_ui_auto_pause_asks', 'number', ['string']),
       autoPause: c('ttp_ui_auto_pause_json', 'string', ['string', 'number']),
       seriesInfo: c('ttp_ui_series_info_json', 'string', ['string']),
-      catalogue: c('ttp_ui_catalogue_json', 'string', [])
+      catalogue: c('ttp_ui_catalogue_json', 'string', []),
+      cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
+      cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', [])
     };
     const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
     const protocol = require('../public/shared/protocol.js');
@@ -78,7 +80,9 @@ function ui_() {
       resultsView: (board, o) => JSON.parse(raw.resultsView(J(board), o.intermissionMs)),
       autoPauseAsksParticipants: (x) => !!raw.autoPauseAsks(apArg(x)),
       autoPause: (x) => JSON.parse(raw.autoPause(apArg(x), x.allParticipantsDisconnected ? 1 : 0)),
-      seriesInfo: (x) => JSON.parse(raw.seriesInfo(J(x)))
+      seriesInfo: (x) => JSON.parse(raw.seriesInfo(J(x))),
+      cupTintRgb: (cupId, pct) => raw.cupTintRgb(cupId == null ? '' : cupId, pct) >>> 0,
+      cupFieldTintPct: () => raw.cupFieldTintPct()
     };
   })());
 }
@@ -97,8 +101,14 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
   const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
   const got = u.catalogue();
 
-  assert.deepEqual(got.cups, CUPS.map((c) => ({ id: c.id, name: c.name, tracks: c.tracks })),
-    'cups, their display names and their track order come out as authored');
+  // `color` joins the same deepEqual rather than being stripped out of it: a
+  // cup's paper colour is authored data like its name, and the cheapest way for
+  // it to rot is to be excluded from the check that already covers the row.
+  const { CUP_COLOR } = await load('public/shared/trackPicker.js');
+  assert.deepEqual(got.cups, CUPS.map((c) => ({
+    id: c.id, name: c.name, tracks: c.tracks,
+    color: parseInt(CUP_COLOR[c.id].slice(1), 16)
+  })), 'cups, their display names, track order and paper colour come out as authored');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
   })), 'every track name, its cup and its cup TENDENCY come out as authored');
@@ -280,4 +290,69 @@ test('the seat grid never shrinks below the field that races', async () => {
       assert.ok(protocol.CAR_MODELS[g.modelIndex], `seat car ${g.modelIndex} is not in CAR_MODELS`);
     }
   }
+});
+
+// ---- the cup paper colours --------------------------------------------------
+//
+// public/shared/trackPicker.js authors them and stays the source: the PHONE
+// imports that file, and a phone has no wasm to ask. The codegen carries the
+// table into the wasm so a native shell does not retype it — the first TV shell
+// did exactly that, under a comment noting nothing in the tree watched the two
+// lists. This is that watch, and it is the only place that can see both.
+
+test('every shipped cup carries the colour trackPicker.js authors', async () => {
+  const u = await ui_();
+  const { CUP_COLOR } = await load('public/shared/trackPicker.js');
+  const cups = u.catalogue().cups;
+
+  // Both directions. Left to right catches a cup the codegen mispainted; right
+  // to left catches a colour authored for a cup that no longer ships, which is
+  // dead weight rather than a bug but is exactly how the table rots.
+  assert.deepEqual(
+    Object.fromEntries(cups.map((c) => [c.id, '#' + c.color.toString(16).toUpperCase().padStart(6, '0')])),
+    Object.fromEntries(Object.entries(CUP_COLOR).map(([k, v]) => [k, v.toUpperCase()])),
+    'the wasm catalogue and trackPicker.js paint different cups');
+});
+
+test('the field tint is one number, not two', async () => {
+  const u = await ui_();
+  const { FIELD_TINT } = await load('public/shared/trackPicker.js');
+  assert.equal(u.cupFieldTintPct(), FIELD_TINT);
+});
+
+test('the cup wash is an sRGB lerp toward white, and Random gets the fallback', async () => {
+  const u = await ui_();
+  const { CUP_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } = await load('public/shared/trackPicker.js');
+
+  // Re-derived here rather than read from the source under test: `color-mix(in
+  // srgb, C pct%, #fff)` is a per-channel lerp on the ENCODED values. Doing it
+  // in linear light instead is a one-line change that comes out visibly darker
+  // and would still pass a test that only compared the C++ to itself.
+  const mix = (hex, pct) => {
+    const k = pct / 100;
+    const ch = (i) => {
+      const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+      return Math.round(c * k + 255 * (1 - k));
+    };
+    return (ch(0) << 16) | (ch(1) << 8) | ch(2);
+  };
+
+  for (const [id, hex] of Object.entries(CUP_COLOR)) {
+    for (const pct of [0, FIELD_TINT, 45, 72, 100]) {
+      assert.equal(u.cupTintRgb(id, pct), mix(hex, pct) >>> 0,
+        `${id} at ${pct}% disagrees with an sRGB lerp`);
+    }
+  }
+  // Random belongs to no cup, so it washes the fallback rather than black.
+  assert.equal(u.cupTintRgb(null, FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
+  assert.equal(u.cupTintRgb('', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
+  assert.equal(u.cupTintRgb('no-such-cup', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
+});
+
+test('a pct outside 0..100 is clamped, not wrapped', async () => {
+  // It arrives from a shell. Wrapping the channel arithmetic would produce a
+  // colour nobody authored, and it would look deliberate.
+  const u = await ui_();
+  assert.equal(u.cupTintRgb('beach', -50), u.cupTintRgb('beach', 0));
+  assert.equal(u.cupTintRgb('beach', 500), u.cupTintRgb('beach', 100));
 });

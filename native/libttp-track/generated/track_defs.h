@@ -1716,18 +1716,26 @@ constexpr int TTP_TRACK_TOTAL = 23;
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is the AUTHORED
 // override or 0 for "derive from the tracks" (ttp::rt::ui::cupTendency).
+// `color` is the cup's PAPER tint (public/shared/trackPicker.js CUP_COLOR),
+// packed 0xRRGGBB — the picker's surface colour, not the biome's.
 constexpr const char* kCupTracks_beach[] = { "tidepool", "cove", "driftwood", "riptide" };
 constexpr const char* kCupTracks_snow[] = { "powder", "flurry", "glacier", "avalanche" };
 constexpr const char* kCupTracks_backyard[] = { "ribbon", "pretzel", "tangle", "cloverleaf" };
 constexpr const char* kCupTracks_canyon[] = { "wash", "gulch", "crag", "sidewinder" };
 constexpr const char* kCupTracks_rooftop[] = { "skysnake", "skyline", "helix", "gauntlet" };
 constexpr CupDef TTP_CUPS[] = {
-  { "beach", "Beach Cup", kCupTracks_beach, 4, 0 },
-  { "snow", "Snow Cup", kCupTracks_snow, 4, 0 },
-  { "backyard", "Backyard Cup", kCupTracks_backyard, 4, 0 },
-  { "canyon", "Canyon Cup", kCupTracks_canyon, 4, 0 },
-  { "rooftop", "Playroom Cup", kCupTracks_rooftop, 4, 0 },
+  { "beach", "Beach Cup", kCupTracks_beach, 4, 0, 0xE0C070 },
+  { "snow", "Snow Cup", kCupTracks_snow, 4, 0, 0x7FB2DC },
+  { "backyard", "Backyard Cup", kCupTracks_backyard, 4, 0, 0x7FBF63 },
+  { "canyon", "Canyon Cup", kCupTracks_canyon, 4, 0, 0xC4713F },
+  { "rooftop", "Playroom Cup", kCupTracks_rooftop, 4, 0, 0xF5842B },
 };
 constexpr int TTP_CUP_COUNT = 5;
+
+// The tint a cup-LESS selection wears (Random belongs to no cup), and how much
+// of a cup colour survives the mix with white on a schematic field. Both are
+// public/shared/trackPicker.js's.
+constexpr uint32_t TTP_CUP_COLOR_FALLBACK = 0x7FBF63;
+constexpr int TTP_CUP_FIELD_TINT_PCT = 26;
 
 }  // namespace ttp

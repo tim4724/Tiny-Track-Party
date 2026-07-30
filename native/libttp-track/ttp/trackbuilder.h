@@ -91,12 +91,23 @@ struct TrackDef {
 // this library for the same reason — cups are a UI grouping, not builder input.
 // It lives beside TrackDef because it is authored in the same file
 // (public/shared/tracks.js CUPS) and codegen'd by the same script.
+// ADDING A FIELD HERE MEANS REGENERATING:  node scripts/gen-track-defs-header.mjs
+// generated/track_defs.h is COMMITTED, and deliberately not a build step — a C++
+// build has no other reason to need node, and a platform that had to install one
+// to compile the game would be paying for a convenience the web already has. The
+// cost is this note: a stale header shows up as `missing field initializer` on
+// the TTP_CUPS rows, which names the symptom and not the cure.
 struct CupDef {
   const char* id;
   const char* name;
   const char* const* tracks; int nTracks;  // ids, easiest -> hardest
   // An AUTHORED tendency override, or 0 for "derive it from the tracks".
   int difficulty;
+  // The cup's PAPER colour, packed 0xRRGGBB — the picker's surface tint, and
+  // NOT the biome's. The two were the same source once and it did not survive
+  // contact: a colour chosen for a 3D horizon is not legible as a pale wash
+  // (public/shared/trackPicker.js records which two cups broke and how).
+  uint32_t color;
 };
 
 // ---- built-track OUTPUT (the augmented race-track object) --------------------

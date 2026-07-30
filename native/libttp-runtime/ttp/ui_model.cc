@@ -616,8 +616,32 @@ std::vector<Cup> shippedCups() {
     Cup cup;
     cup.id = c.id;
     cup.name = c.name;
+    cup.color = c.color;
     for (int t = 0; t < c.nTracks; t++) cup.tracks.push_back(c.tracks[t]);
     out.push_back(std::move(cup));
+  }
+  return out;
+}
+
+int cupFieldTintPct() { return TTP_CUP_FIELD_TINT_PCT; }
+
+uint32_t cupTintRgb(const OptStr& cupId, double pct) {
+  uint32_t base = TTP_CUP_COLOR_FALLBACK;
+  if (cupId.has) {
+    for (int i = 0; i < TTP_CUP_COUNT; i++) {
+      if (cupId.v == TTP_CUPS[i].id) { base = TTP_CUPS[i].color; break; }
+    }
+  }
+  // Clamped rather than trusted: `pct` comes from a shell, and a value outside
+  // 0..100 would wrap the channel arithmetic into a colour nobody authored.
+  const double k = (pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100.0;
+  uint32_t out = 0;
+  for (int shift = 16; shift >= 0; shift -= 8) {
+    const double c = (double) ((base >> shift) & 0xFF);
+    // The other side of the mix is white, so the complement is 255 * (1 - k).
+    const double mixed = c * k + 255.0 * (1.0 - k);
+    const long v = std::lround(mixed);
+    out |= ((uint32_t) (v < 0 ? 0 : v > 255 ? 255 : v)) << shift;
   }
   return out;
 }
