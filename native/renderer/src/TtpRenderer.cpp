@@ -1057,7 +1057,39 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
     // at 160 rings for exactly this.) The CPU-side soup in mRoad.verts is
     // untouched: the ground-conform probes still read the whole ribbon.
-    return buildMesh(mRoad, true, roadInstance(), 4, 2500);
+    constexpr uint32_t kRoadChunkTris = 2500;
+    if (!buildMesh(mRoad, true, roadInstance(), 4, kRoadChunkTris)) return false;
+
+    // Per-chunk material instances. Each ring contributes 16 strips of 2
+    // triangles, so a chunk's triangle range maps straight back to an arclength
+    // range, and uploadDeckDecals can hand each chunk only what overlaps it.
+    mRoadChunks.clear();
+    if (mRoadMaterial) {
+        auto& rcm = mEngine->getRenderableManager();
+        const uint32_t trisPerRing = 16 * 2;
+        const size_t triCount = mRoad.idx.size() / 3;
+        const size_t perChunk = std::min<size_t>(kRoadChunkTris, triCount);
+        size_t k = 0;
+        for (size_t t0 = 0; t0 < triCount; t0 += perChunk, k++) {
+            const size_t n = std::min(perChunk, triCount - t0);
+            const utils::Entity e = (k == 0) ? mRoad.entity
+                    : (k - 1 < mRoad.chunks.size() ? mRoad.chunks[k - 1] : utils::Entity{});
+            if (e.isNull()) break;
+            auto ri = rcm.getInstance(e);
+            if (!ri) continue;
+            MaterialInstance* mi = sceneInstance(mRoadMaterial);
+            mi->setParameter("shadowTexel", 0.0f);
+            mi->setParameter("decalCount", 0);
+            mi->setParameter("trackLength", 0.0f);
+            mi->setParameter("invTrackLength", 0.0f);
+            mi->setParameter("chunkMid", 0.0f);
+            rcm.setMaterialInstanceAt(ri, 0, mi);
+            mRoadChunks.push_back({ mi,
+                    (float) (t0 / trisPerRing) / N * L,
+                    (float) ((t0 + n) / trisPerRing + 1) / N * L });
+        }
+    }
+    return true;
 }
 
 // Colour of the ground sheet at world x — the band the tiled canvas would put
@@ -4134,6 +4166,8 @@ MaterialInstance* TtpRenderer::roadInstance() {
         mRoadInst->setParameter("shadowTexel", 0.0f);
         mRoadInst->setParameter("decalCount", 0);
         mRoadInst->setParameter("trackLength", 0.0f);
+        mRoadInst->setParameter("invTrackLength", 0.0f);
+        mRoadInst->setParameter("chunkMid", 0.0f);
     }
     return mRoadInst;
 }
@@ -4211,22 +4245,60 @@ void TtpRenderer::uploadDeckDecals() {
         mDeckDecals.insert(mDeckDecals.begin(),
                 mStaticDeckDecals.begin(), mStaticDeckDecals.end());
     }
-    mDeckDecalsLast = mDeckDecals;   // debug snapshot, before the queue is cleared
-    if (!mRoadInst) { mDeckDecals.clear(); return; }
-    const int n = (int) mDeckDecals.size();
-    if (n > 0) {
+    mDeckDecalsLast = mDeckDecals;
+    const float L = mTrack ? mTrack->length : 0.0f;
+
+    // PER CHUNK, not per road. A fragment only ever needs the decals near its own
+    // arclength, and the road is already split into ~35u chunks for culling, so
+    // handing each chunk its own short list is what keeps the loop off the 99% of
+    // the deck that has nothing on it. Most chunks end up with decalCount 0 and
+    // skip the whole thing.
+    if (!mRoadChunks.empty()) {
         float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
-        for (int i = 0; i < n; i++) {
-            rect[i] = mDeckDecals[i].rect;
-            col[i] = mDeckDecals[i].color;
-            shape[i] = mDeckDecals[i].shape;
+        for (const RoadChunk& ch : mRoadChunks) {
+            int n = 0;
+            for (const DeckDecal& d : mDeckDecals) {
+                if (n >= kMaxDeckDecals) break;
+                // Overlap test on a PERIODIC arclength: a decal is in range if its
+                // footprint reaches the chunk's span, measured the short way round.
+                const float half = (ch.sMax - ch.sMin) * 0.5f + d.rect.z;
+                const float mid = (ch.sMin + ch.sMax) * 0.5f;
+                float ds = d.rect.x - mid;
+                if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
+                if (std::fabs(ds) > half) continue;
+                // x becomes the offset from this chunk's centre, already folded
+                // the short way round, so the shader needs no per-decal wrap.
+                rect[n] = d.rect; rect[n].x = ds;
+                col[n] = d.color; shape[n] = d.shape; n++;
+            }
+            if (n > 0) {
+                ch.mi->setParameter("decalRect", rect, (size_t) n);
+                ch.mi->setParameter("decalColor", col, (size_t) n);
+                ch.mi->setParameter("decalShape", shape, (size_t) n);
+                ch.mi->setParameter("trackLength", L);
+                ch.mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
+                ch.mi->setParameter("chunkMid", (ch.sMin + ch.sMax) * 0.5f);
+            }
+            ch.mi->setParameter("decalCount", n);
         }
-        mRoadInst->setParameter("decalRect", rect, (size_t) n);
-        mRoadInst->setParameter("decalColor", col, (size_t) n);
-        mRoadInst->setParameter("decalShape", shape, (size_t) n);
-        mRoadInst->setParameter("trackLength", mTrack ? mTrack->length : 0.0f);
+    } else if (mRoadInst) {
+        const int n = std::min((int) mDeckDecals.size(), kMaxDeckDecals);
+        if (n > 0) {
+            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+            for (int i = 0; i < n; i++) {
+                rect[i] = mDeckDecals[i].rect;
+                col[i] = mDeckDecals[i].color;
+                shape[i] = mDeckDecals[i].shape;
+            }
+            mRoadInst->setParameter("decalRect", rect, (size_t) n);
+            mRoadInst->setParameter("decalColor", col, (size_t) n);
+            mRoadInst->setParameter("decalShape", shape, (size_t) n);
+            mRoadInst->setParameter("trackLength", L);
+            mRoadInst->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
+            mRoadInst->setParameter("chunkMid", 0.0f);   // decals keep absolute s here
+        }
+        mRoadInst->setParameter("decalCount", n);
     }
-    mRoadInst->setParameter("decalCount", n);
     mDeckDecals.clear();
 }
 
@@ -5661,6 +5733,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // The deck is on its own instance now, and it is the main RECEIVER — without
     // this the road alone would render unshadowed under every loop and overpass.
     if (mRoadInst) bindShadowMap(mRoadInst);
+    for (const RoadChunk& ch : mRoadChunks) bindShadowMap(ch.mi);
     // ...and the ground, so an elevated deck lays its shape on the floor below.
     if (mGroundInst) bindShadowMap(mGroundInst);
     // Every other vlit instance still needs its sampler resolved, but with
@@ -9075,6 +9148,7 @@ void TtpRenderer::releaseScene() {
     mSceneMatInstances.clear();
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
+    mRoadChunks.clear();      // and so is every per-chunk instance
     mDeckDecals.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     mPadMat = nullptr;

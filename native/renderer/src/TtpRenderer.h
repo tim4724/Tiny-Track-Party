@@ -268,6 +268,17 @@ private:
     // which is cheaper than it sounds (a memcpy of a handful of float4s) and
     // keeps ONE code path for compositing order.
     std::vector<DeckDecal> mStaticDeckDecals;
+    // ONE MATERIAL INSTANCE PER ROAD CHUNK, each told only the decals that
+    // overlap its own stretch of track. The road is already chunked for frustum
+    // culling, and a chunk covers a contiguous arclength range because the ribbon
+    // is built ring by ring — so the same split culls decals for free. Without
+    // it every road fragment tested every decal on the lap: measured 0.358 ms of
+    // a 0.949 ms frame, against 0.591 ms with the loop compiled out.
+    struct RoadChunk {
+        filament::MaterialInstance* mi;
+        float sMin, sMax;   // arclength covered, before the decal margin
+    };
+    std::vector<RoadChunk> mRoadChunks;
     std::vector<DeckDecal> mDeckDecalsLast; // kept for the debug accessor
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set

@@ -60,6 +60,13 @@ material {
         // Lap length, for the wrap: s is periodic, so a decal near the lap line
         // must still reach fragments on the other side of it.
         { type : float, name : trackLength },
+        // 1/trackLength, and the arclength this chunk is centred on. Together
+        // they take the lap wrap OUT of the per-decal loop: the fragment folds
+        // its own arclength into the chunk's local frame ONCE, and each decal is
+        // then a plain subtract. The wrap was a divide and a floor per decal per
+        // fragment, which is the single most expensive thing that loop did.
+        { type : float, name : invTrackLength },
+        { type : float, name : chunkMid },
         // Per decal, in track space:
         //   x = centre arclength, WORLD units;  y = centre lat, NORMALISED
         //   z = half-extent along s, WORLD;     w = half-extent across, NORMALISED
@@ -117,13 +124,16 @@ fragment {
     // subtract and one compare.
     vec3 deckDecals(vec3 base, vec2 tc) {
         int n = min(materialParams.decalCount, 32);
+        // ONE wrap for the whole loop: fold this fragment's arclength into the
+        // chunk's local frame, the short way round the lap. Every decal's x is
+        // already stored relative to the same centre, so the per-decal test is a
+        // subtract and a compare.
+        highp float L = materialParams.trackLength;
+        highp float sLocal = tc.x - materialParams.chunkMid;
+        if (L > 0.0) sLocal -= L * floor(sLocal * materialParams.invTrackLength + 0.5);
         for (int i = 0; i < n; i++) {
             highp vec4 r = materialParams.decalRect[i];
-            // Shortest signed distance along a PERIODIC arclength: without the
-            // wrap a decal sitting across the lap line would be clipped in half.
-            highp float L = materialParams.trackLength;
-            highp float ds = tc.x - r.x;
-            if (L > 0.0) ds -= L * floor(ds / L + 0.5);
+            highp float ds = sLocal - r.x;
             if (abs(ds) >= r.z) continue;               // cheap reject
             float dl = tc.y - r.y;
             if (abs(dl) >= r.w) continue;
