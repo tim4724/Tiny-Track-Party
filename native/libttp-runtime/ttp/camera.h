@@ -18,43 +18,47 @@ namespace rt {
 // Close chase sitting LOW and just behind the car with a fairly tight lens, so
 // the camera stays comfortable to drive rather than steeply top-down.
 // ---------------------------------------------------------------------------
-// DIST came in from 1.35 and HEIGHT deliberately did NOT follow it. A true
-// dolly would scale both and keep the elevation, but the height is what sees
-// OVER the car: dropping it to hold the angle buys nothing and hides the road
-// the player is about to drive. Holding it moves the eye 21% nearer the car —
-// hypot 1.494 -> 1.187, so the car draws ~26% bigger.
+// DIST SETS THE PARKED SHOT ALONE, because the spring's lag is ~v/rate and so
+// is zero at a standstill. A notch here moves the grid and the race together and
+// never the gap between them; that gap is CAM_POS_RATE's.
 //
-// LOOK THEN WENT THE OTHER WAY, to 1.85, and the pair is why this comment is
-// long: DIST and LOOK are the two ends of ONE baseline. The view pitch is
-// atan((HEIGHT - TGT_UP) / (LOOK + DIST)) — the drop is fixed at 0.53, so only
-// the SUM steers the aim. Pulling the eye in to 1.0 alone shortened it 2.85 ->
-// 2.50 and tipped the view 10.5 -> 12.0 degrees nose-down: the horizon climbed,
-// the near tarmac grew, and the track the player is about to reach shrank.
-// Pushing the look point out to 1.85 restores the sum, so the camera aims where
-// it always did while sitting closer. That is the whole trick — LOOK buys back
-// the AIM, and cannot buy back the elevation over the car (atan(HEIGHT/DIST),
-// now 32.6 degrees against the authored 25.4), which is DIST and HEIGHT's
-// alone. It leaves the car lower in frame with more road above it, which is the
-// right way round for a closer chase.
-//
-// SO DO NOT MOVE ONE WITHOUT THE OTHER. Nearer wants LOOK further out by the
-// same amount, or the picture goes nose-down again.
-constexpr float CHASE_DIST = 1.0f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.85f;
+// DIST AND LOOK ARE ONE BASELINE: the pitch is
+// atan((HEIGHT - TGT_UP) / (LOOK + DIST)), so only the SUM (2.85) steers the
+// aim. Move one alone and the picture noses over — at DIST 1.0 the pitch went
+// 10.5 -> 12.0 degrees. HEIGHT is in that numerator but is not the lever for it:
+// it is what sees over the car, and trading it away hides the road ahead.
+constexpr float CHASE_DIST = 1.35f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.5f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
-constexpr float CAM_POS_RATE = 7.0f, CAM_TGT_RATE = 13.0f;  // damping (1/s)
+// 7 -> 32. This one constant decides both how far back the camera sits while
+// racing and how far that is from the parked shot, which never lags at all: the
+// eye went 1.97 -> 1.73 racing with the grid unmoved at 1.49. It cost the swing —
+// at 30% throttle the lag is 0.08 where it was 0.33, leaving the spd² shaping
+// below a trim on a large base rather than the main event.
+constexpr float CAM_POS_RATE = 32.0f, CAM_TGT_RATE = 13.0f;  // damping (1/s)
 // The position spring lags the car by ~velocity/rate, so the faster you go the
 // further back the camera sits. The follow rate therefore climbs with spd²:
 // fast straights and boosts tighten and stay glued (the car stays big), while
-// slow corners keep the base rate and its loose swing-behind.
+// slow corners keep the base rate and its looser swing-behind.
 constexpr float CAM_POS_RATE_SPD = 13.0f;
-constexpr float CAM_RATE_SPD_MAX = 1.6f;   // cap, so a future >1.6 boost can't go rigid
+// How far past flat-out ANY overspeed cue tracks: the rate above and the boost
+// lens below. Monster + boost reaches spd 1.875 and neither should follow it out
+// there.
+constexpr float CAM_RATE_SPD_MAX = 1.6f;
 constexpr float BASE_FOV = 55.0f;
-// Sense of speed, no shake: FOV widens and the chase stretches back with speed.
-// `spd` is normalised to the car's own vmax and a boost pushes it past 1, so
-// both cues over-extend exactly as much as the car actually overspeeds. The FOV
-// response is asymmetric — it kicks wide fast (a boost lands as a hit) and eases
-// back slow (running out of boost is a taper, not a snap).
+// Sense of speed, no shake: the FOV widens with speed. Asymmetric — it kicks
+// wide fast (a boost lands as a hit) and eases back slow (running out of boost
+// is a taper, not a snap).
+//
+// TWO GAINS. `spd` is normalised to the car's own vmax, so ordinary driving is
+// 0..1 and only a boost or the monster truck passes it: FOV_GAIN rides all of
+// `spd` and stays small, since every degree of it is variation in NORMAL
+// driving, while FOV_BOOST_GAIN rides the OVERSPEED alone and is zero until
+// then. The lens carries the boost by itself because the chase cannot —
+// CAM_POS_RATE_SPD makes the follow rate climb faster than the car does, so a
+// boost TIGHTENS the spring (lag 0.200 flat out, 0.220 boosting) rather than
+// stretching it. 12 puts an item boost at 67 degrees against 59.
 constexpr float FOV_GAIN = 4.0f, FOV_RISE = 9.0f, FOV_FALL = 3.0f;
+constexpr float FOV_BOOST_GAIN = 12.0f;
 constexpr float CHASE_DIST_GAIN = 0.06f;
 constexpr float CAM_NEAR = 0.1f, CAM_FAR = 600.0f;
 

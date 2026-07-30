@@ -219,12 +219,18 @@ struct Leg {
   double fx, fy, fz;          // heading (normalised below)
   double ux, uy, uz;          // body up (normalised below)
 };
+// `corner` at 0.88 and `halfrate` at 0.32 are unround on purpose: each keeps a
+// recorded value off a rounding boundary (WARN_FRAC above). The effect is never
+// local to its own row — `pos` and the camera state carry ACROSS legs, and any
+// change to a camera constant reshuffles every recorded value at once. So after
+// touching those, re-record and sweep a SPEED here until the recorder stops
+// warning, rather than editing the fixture.
 const Leg LEGS[] = {
   {"standing",   40, 1.0f / 60, 0.00f,  1.0, 0.0, 0.0,     0.0,  1.0, 0.0},
   {"cruise",     40, 1.0f / 60, 0.60f,  1.0, 0.0, 0.0,     0.0,  1.0, 0.0},
-  {"corner",     40, 1.0f / 60, 0.85f,  0.6, 0.05, 0.8,    0.08, 1.0, 0.03},
+  {"corner",     40, 1.0f / 60, 0.88f,  0.6, 0.05, 0.8,    0.08, 1.0, 0.03},
   {"boost",      40, 1.0f / 60, 1.90f,  0.0, 0.1, 1.0,    -0.05, 1.0, 0.0},
-  {"halfrate",   40, 1.0f / 30, 0.30f, -0.7, 0.0, 0.7,     0.0,  1.0, 0.12},
+  {"halfrate",   40, 1.0f / 30, 0.32f, -0.7, 0.0, 0.7,     0.0,  1.0, 0.12},
   {"rollingOut", 40, 1.0f / 60, 0.05f, -1.0, 0.0, 0.0,     0.0,  1.0, 0.0},
 };
 
