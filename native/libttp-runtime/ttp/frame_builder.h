@@ -130,9 +130,10 @@ std::vector<ScalarId> parseIds(const char* json);
 // long as it did, with a comment claiming they came from the shell's rects.
 
 // The chase lens for one cell: BASE_FOV is authored VERTICAL, so a shorter cell
-// would draw the car smaller. This solves the fov that holds PIXEL SCALE instead,
-// making every cell a true crop of the single-player view. Exposed because it is
-// part of the shared camera model — the tvOS and Android shells frame with it too.
+// would draw the car smaller. This solves the fov that CROPS instead, giving each
+// row its share of the authored view whatever the surface measures. Exposed
+// because it is part of the shared camera model — the tvOS and Android shells
+// frame with it too.
 float cellFov(float fovV, float heightFrac);
 
 // Assemble one frame into d.frame and return its header, which is followed
@@ -141,11 +142,12 @@ float cellFov(float fovV, float heightFrac);
 // until the next buildFrame on the same state.
 //
 // `aspect` and `heightFrac` describe the CELL the race cameras render into, and
-// come from the renderer because only it knows the rect (it fits the grid as one
-// piece). heightFrac is the cell's height against a single cell's on the same
-// surface. The two do different jobs: heightFrac sets the SCALE, aspect sets how
-// much is REVEALED beside it. Both are ignored when no car owns a cell; the
-// overview sets its own fov.
+// come from the renderer because only it knows the grid (it fits it as one piece).
+// heightFrac is the cell's share of the grid's HEIGHT — 1/rows — and NOT its
+// height against the single-cell picture, which is the same number on a 16:9
+// surface and a bar-dependent one everywhere else. The two do different jobs:
+// heightFrac sets the CROP, aspect sets how much is REVEALED beside it. Both are
+// ignored when no car owns a cell; the overview sets its own fov.
 TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                           float aspect, float heightFrac);
 

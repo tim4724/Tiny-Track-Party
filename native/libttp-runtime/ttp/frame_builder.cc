@@ -32,23 +32,21 @@ std::vector<ScalarId> parseIds(const char* json) {
 
 // A split-screen cell is not a small screen. It is a CROP of one.
 //
-// BASE_FOV is authored VERTICAL, so the car's on-screen size is a function of the
-// cell's HEIGHT alone — the chase camera never moves (CHASE_DIST is a fixed 1.35
-// world units in every layout), so this is pixels per world unit and the lever is
-// the lens. Scaling tan(vFov/2) by the cell's height against the single-cell
-// reference holds
-//
-//     renderedHeight / (2*tan(vFov/2))  ==  referenceHeight / (2*tan(vRef/2))
-//
-// however the screen is carved up.
+// BASE_FOV is authored VERTICAL, and heightFrac is the cell's share of the grid's
+// height (TtpRenderer::cellLens: 1/rows), so scaling tan(vFov/2) by it hands each
+// ROW that share of the authored view — all of it at one player, half of it
+// stacked, and the crop is the same on every surface shape. The chase camera never
+// moves (CHASE_DIST is a fixed 1.35 world units in every layout), so the lens is
+// the only lever there is; what a bigger surface buys is PIXELS for the same
+// world, which is the difference between resizing and re-framing.
 //
 // ASPECT IS DELIBERATELY ABSENT: the horizontal fov falls out of (vFov, aspect)
 // at the projection, so a wider cell reveals more world and changes nothing else.
 // Narrower would hide some, which is why a cell's shape has a floor at
 // TtpRenderer::CELL_BASE_ASPECT.
 //
-// FRAME_LOCK: 1 holds the pixel scale, 0 holds the fov and lets the car shrink
-// with its cell. Single player is the fixed point either way (heightFrac 1).
+// FRAME_LOCK: 1 holds the crop, 0 holds the fov and lets the car shrink with its
+// cell. Single player is the fixed point either way (heightFrac 1).
 constexpr float FRAME_LOCK = 1.0f;
 float cellFov(float fovV, float heightFrac) {
     return std::atan(std::tan(fovV * (float) M_PI / 360.0f)

@@ -1229,19 +1229,35 @@ TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
              (int32_t) (mHeight - y0 - (row + 1) * ch), cw, ch };
 }
 
-// The projection inputs for an n-cell layout: the cell's aspect, and its HEIGHT
-// against the picture one cell gets on this surface.
+// The projection inputs for an n-cell layout: the cell's aspect, and the share of
+// the authored VERTICAL view it gets — which is its share of the grid's height,
+// so a row of cells shows 1/rows of it and a single cell shows all of it.
 //
-// Height is the reference because it alone sets pixels-per-world-unit. So one
-// cell is heightFrac 1 and the authored lens on any surface shape (resizing
-// scales), a half-height cell gets half the fov (splitting keeps the car's size),
-// and width is left free to reveal. Referencing a WIDTH instead ties the cell's
-// shape to the car's size: two versions did, and each had to sacrifice one.
+// THE REFERENCE IS THE GRID, NOT THE SINGLE-CELL PICTURE, and that distinction is
+// the whole of this function. Both spellings agree on a 16:9 surface, where the
+// grid IS the picture. Off it they do not, because the two are letterboxed by
+// different rules: the single-cell picture is held to the base aspect, so past
+// 16:9 its height stops tracking the surface and follows the WIDTH, while a
+// stacked cell's height keeps taking its row's share of whatever the surface has.
+// Dividing one by the other imported the bar into the lens — the leftover height
+// the single-player view refuses is height the split view spends, so the fov grew
+// with it and the picture RE-FRAMED as the window resized instead of scaling.
+// Measured at 1600 wide with two players: dragging the bottom edge 900 -> 1400 px
+// swung the vertical fov 29.2 -> 44.1 degrees, the car receding the whole way,
+// while single player over the same drag did not change at all. Referencing the
+// grid holds it at 29.2 and lets the picture grow, which is what the surface
+// gaining pixels should mean.
+//
+// So the fov is a function of the LAYOUT alone. It can only change when the grid
+// does — a player joining, or a reshape crossing a column-count boundary — and
+// never by a pixel of bar.
 TtpRenderer::CellLens TtpRenderer::cellLens(uint32_t n) const {
-    const CellRect r = cellRect(n ? n : 1, 0);
-    const CellRect one = cellRect(1, 0);
+    const uint32_t cells = n ? n : 1;
+    const uint32_t cols = bestGridCols(cells);
+    const uint32_t rows = (cells + cols - 1) / cols;
+    const CellRect r = cellRect(cells, 0);
     const float w = (float) r.w, h = (float) (r.h ? r.h : 1u);
-    return { w / h, h / (float) (one.h ? one.h : 1u) };
+    return { w / h, 1.0f / (float) rows };
 }
 
 TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {

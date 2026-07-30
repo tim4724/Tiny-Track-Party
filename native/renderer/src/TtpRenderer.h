@@ -153,9 +153,13 @@ public:
     TtpCellRect cellRectTopLeft(uint32_t n, uint32_t i) const;
 
     // The two numbers a cell's projection needs, for an n-cell layout on this
-    // surface: the cell's ASPECT, and its HEIGHT against the picture a SINGLE
-    // cell gets HERE. Only the second reaches ttp::rt::cellFov — the first is
-    // handed to the projection, where it decides how much is revealed.
+    // surface: the cell's ASPECT, and its share of the grid's HEIGHT (1/rows).
+    // Only the second reaches ttp::rt::cellFov — the first is handed to the
+    // projection, where it decides how much is revealed.
+    //
+    // heightFrac is deliberately a function of the LAYOUT and not of the rect:
+    // measuring it against the single-cell picture put the letterbox bar in the
+    // lens, so resizing re-framed the view. See cellLens.
     //
     // It lives with the rects rather than in each shell because it is a pure
     // function of them and a shell that derived it would be a fourth copy of the
