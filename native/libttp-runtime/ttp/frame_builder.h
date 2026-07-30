@@ -101,7 +101,17 @@ struct DisplayState {
     // everywhere on the shipping path.
     bool showcase = false;
 
-    int camMode = CAM_STILL;
+    // THE SHIPPING GAME'S RIG, not "no rig". With no cells the only surface
+    // this library draws is the LOBBY PREVIEW, and its answer is the bbox
+    // sweep; STILL, ORBIT and FREE belong to the gallery and the inspector, and
+    // every one of those surfaces pushes what it wants explicitly.
+    //
+    // It defaulted to CAM_STILL, a mode the game never asks for, and that fails
+    // INVISIBLY: a shell that has not found `ttp_display_camera` renders the
+    // circuit perfectly and never moves it, so a lobby preview is a photograph
+    // and nothing anywhere reports a problem. A default that is one of the real
+    // answers costs nothing to override and removes the whole class.
+    int camMode = CAM_BBOX;
     V3 freeEye, freeTarget;
     bool fog = true;
     Framing framing;

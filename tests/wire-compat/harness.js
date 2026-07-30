@@ -191,6 +191,10 @@ function installBrowserGlobals() {
   // "a seat silent past 3 s is dropped" only means anything against a 1 Hz ping,
   // and this suite is where the two ends actually meet.
   globalThis.window.LIVENESS = proto.LIVENESS;
+  // The run length a RANDOM pick settles on. `_applyMode` clamps an incoming
+  // SELECT_MODE against it, and this suite is the only place a real phone's
+  // message meets the real display's resolver.
+  globalThis.window.RANDOM_RACES = proto.RANDOM_RACES;
 }
 
 function kit() {

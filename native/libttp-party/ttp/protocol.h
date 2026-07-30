@@ -74,6 +74,15 @@ inline constexpr double LIVENESS_HEARTBEAT_DEAD_MS = 6000;
 inline constexpr double LIVENESS_ABANDONED_RACE_GRACE_MS = 15000;
 inline constexpr double LIVENESS_CREATE_TIMEOUT_MS = 8000;
 
+// ---- the random run length (protocol.js RANDOM_RACES) -----------------------
+// The picker's only finite run length, and the ceiling the display clamps an
+// incoming SELECT_MODE against. 0 is a legal length and means ENDLESS, so MAX
+// is a ceiling rather than half of a range. Mirrored here for the same reason
+// LIVENESS is: a shell that invents its own default advertises a run the host
+// cannot pick, which is exactly what the first TV shell did with 1.
+inline constexpr double RANDOM_RACES_DEFAULT = 4;
+inline constexpr double RANDOM_RACES_MAX = 8;
+
 // ---- the steering contract (protocol.js STEER) ------------------------------
 // Five numbers the phone and the display's sim must agree on; see the JS block
 // for what each one does and why they only mean anything together. Only STEER_

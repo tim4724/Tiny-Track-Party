@@ -101,6 +101,25 @@ var MAX_PLAYERS = 4;
 var TOTAL_LAPS = 3;
 var COUNTDOWN_SECONDS = 3;
 
+// ---- The RANDOM run length (host picks it, the display clamps it) ----
+// Two numbers the phone's picker and the display's pick resolver must agree on.
+// The picker offers exactly two run lengths — DEFAULT races, or 0 for endless —
+// and the display normalises whatever arrives on the wire against MAX, because
+// SELECT_MODE is a message from a device we do not control.
+//
+// They lived as two private copies, one in `shared/trackPicker.js` and one in
+// `display/Net.js`, with nothing between them; the first TV shell then invented
+// a third and defaulted it to 1, so a fresh lobby advertised "Random, 1 race" —
+// a run length the picker cannot produce and the host cannot get back to.
+var RANDOM_RACES = {
+  // What a bare `random` tap means, and the only finite length the picker
+  // offers. A card ends by itself, on a podium.
+  DEFAULT: 4,
+  // The widest run the display will accept from the wire. 0 is legal and means
+  // ENDLESS, so this is a ceiling and not a range check: see normRandomRaces.
+  MAX: 8
+};
+
 // ---- The presence contract (phone pings -> display drops) ----
 // Six numbers that, like STEER above, only mean anything TOGETHER and are read
 // by two files in two roles: the phone's ping cadence (controller/Net.js) and
@@ -260,7 +279,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, STEER, LIVENESS,
+    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, STEER, LIVENESS, RANDOM_RACES,
     CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
     CAR_STATS, carStats
   };

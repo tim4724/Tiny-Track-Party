@@ -93,7 +93,21 @@ fragment {
         // THAT, with a modest k (see kShadowEsmK), puts the crossing where the
         // occluder holds roughly half the kernel — its bulk, an average over
         // many texels — and the contour is a smooth curve.
-        float occ = texture(materialParams_shadowMap, uv.xy).r;
+        // THROUGH uvToRenderTargetUV, and it is not decoration. The map is an
+        // OFFSCREEN RENDER TARGET, and the texel a render target's uv v = 0 names is
+        // the FIRST ROW IN MEMORY — the bottom of the picture on OpenGL and the top on
+        // Metal, Vulkan and WebGPU. `shadowFromWorld` produces a GL-style uv (y up: the
+        // bias matrix is +0.5y + 0.5 out of NDC), so a raw sample reads the map
+        // MIRRORED on those backends. Filament's own ShadowMap.cpp carries the same
+        // correction, as its `Mf` term.
+        //
+        // It is the IDENTITY on GL, which is why this shipped: the web is the OpenGL
+        // leg and looked right throughout. On a Metal shell it put a large,
+        // hard-edged, uniformly darker QUADRILATERAL across the ground of every track
+        // — the shadow frustum's own footprint, cut along the line where the flat
+        // ground's mirrored depth crosses its real one. It reads as a texturing
+        // mistake rather than as a shadow, which is what made it hard to place.
+        float occ = texture(materialParams_shadowMap, uvToRenderTargetUV(uv.xy)).r;
         highp float dOcc = -log(max(occ, 1e-30)) / materialParams.shadowK;
         highp float raw = uv.z - dOcc;
         // Two floors on the transition width. The first is a fixed WORLD

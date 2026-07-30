@@ -26,7 +26,8 @@ import * as session from './NativeSessionModel.js';
 // used to build that string by hand eleven lines above asking C++ for it.
 import { pinUrl } from './NativePartyConnection.js';
 
-const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS, LIVENESS } = window;
+const { PartyConnection, MSG, ROOM_STATE, RELAY_URL, MAX_PLAYERS, CAR_MODELS, CAR_COLORS, LIVENESS,
+  RANDOM_RACES } = window;
 
 const enc = encodeURIComponent;
 
@@ -60,9 +61,12 @@ const CREATE_TIMEOUT_MS = LIVENESS.CREATE_TIMEOUT_MS;
 // made: the host's MODE PICK needs a track catalogue and a game-owned shuffle
 // bag, which makes it a cup-series concern wearing a session hat. The length is
 // part of that pick, so it travels with it.
-const RANDOM_MAX_RACES = 8;
-const RANDOM_DEFAULT_RACES = 4;
-const normRandomRaces = (n) => (Number.isInteger(n) && n >= 0 && n <= RANDOM_MAX_RACES ? n : RANDOM_DEFAULT_RACES);
+// The two numbers are the MANIFEST's (protocol.js RANDOM_RACES) — they were a
+// private pair here and a second private copy in shared/trackPicker.js, which
+// is exactly the shape the manifest rule exists to stop. 0 is a legal length
+// and means endless, so MAX is a ceiling and not half of a range.
+const normRandomRaces = (n) =>
+  (Number.isInteger(n) && n >= 0 && n <= RANDOM_RACES.MAX ? n : RANDOM_RACES.DEFAULT);
 
 // sessionStorage key for the live room — a crash-recovery fallback. A page
 // exit normally ends the party (pagehide → shutdown → close_room), so on a
