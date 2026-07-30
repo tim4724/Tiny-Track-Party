@@ -7,14 +7,14 @@
        the visible strip instead of leaving the name input under the keys.
        iOS ignores it — #name:focus-within (controller.css) covers that. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-  <!-- Couch Games launcher theming hints (contract §4): the host tints its floating
+  <!-- CouchPad launcher theming hints (contract §4): the host tints its floating
        chrome to match. theme-color = the warm paper the page art fades into behind
-       the status bar; cg-accent-color = the launcher accents (name chip, spinner,
+       the status bar; cp-accent-color = the launcher accents (name chip, spinner,
        rename sheet) — main.js retints it live to the player's livery colour. Pure
-       cosmetics: a plain browser ignores cg-accent-color and honours theme-color as
+       cosmetics: a plain browser ignores cp-accent-color and honours theme-color as
        the standard PWA meta, so both are harmless outside the shell. -->
   <meta name="theme-color" content="#FFF6EB" />
-  <meta name="cg-accent-color" content="#2bb673" />
+  <meta name="cp-accent-color" content="#2bb673" />
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track</title>
@@ -44,7 +44,7 @@
        player roster). -->
   <section id="lobby" class="hidden">
     <!-- your identity, up top — name in your livery colour (no dot needed). Hidden
-         wholesale inside the Couch Games shell (the launcher shows the name in its
+         wholesale inside the CouchPad shell (the launcher shows the name in its
          own chip), where the row collapses to nothing. -->
     <div class="lobby-me">
       <span id="me-name" class="lobby-me__name"></span>
@@ -166,7 +166,7 @@
         <span class="chev chev--l" aria-hidden="true"></span>
         <!-- The demo phone previews the REAL driving screen in miniature: an island
              bar and the player's own name (livery-tinted, centred beneath it, the way
-             the Couch Games launcher renders it — plain text, no chip), a steer strip
+             the CouchPad launcher renders it — plain text, no chip), a steer strip
              that fills with the lean, over the two buttons in their live positions
              (ITEM purple LEFT, BRAKE red RIGHT). The phone leans side to side
              (doodle-jump rotateY) and the strip slides in step. #phone-name is

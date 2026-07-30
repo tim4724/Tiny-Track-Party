@@ -2,19 +2,19 @@
    Tokens + reusable bits live in /shared/theme.css. --car is the player's
    livery colour, set at runtime by controller/main.js (applyLivery). */
 
-/* Safe zone (Couch Games contract §5). The launcher hosts us edge-to-edge with
+/* Safe zone (CouchPad contract §5). The launcher hosts us edge-to-edge with
    its chrome (status bar + LEAVE bar) floating on top, and publishes its extent
-   two ways: the authoritative --cg-safe-* vars on <html> AND a synthetic display
+   two ways: the authoritative --cp-safe-* vars on <html> AND a synthetic display
    cutout via env(safe-area-inset-*). We fold both together per the contract's
    recommended pattern — max(var, env) — so keeping interactive UI inside these
    insets is correct in the shell AND in a plain browser (where the var is unset
    and env() covers real notches; the var wins ties and survives WebView cutout
    regressions). Every fixed/edge element pads against these, never bare env(). */
 :root {
-  --safe-top:    max(var(--cg-safe-top,    0px), env(safe-area-inset-top,    0px));
-  --safe-right:  max(var(--cg-safe-right,  0px), env(safe-area-inset-right,  0px));
-  --safe-bottom: max(var(--cg-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
-  --safe-left:   max(var(--cg-safe-left,   0px), env(safe-area-inset-left,   0px));
+  --safe-top:    max(var(--cp-safe-top,    0px), env(safe-area-inset-top,    0px));
+  --safe-right:  max(var(--cp-safe-right,  0px), env(safe-area-inset-right,  0px));
+  --safe-bottom: max(var(--cp-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  --safe-left:   max(var(--cp-safe-left,   0px), env(safe-area-inset-left,   0px));
 
   /* Screen margin = the safe inset, floored at a small design gutter. A plain
      12px edge (never the old 7vh/8vw, which read as a huge margin on tall
@@ -306,7 +306,7 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Couch Games shell: the launcher owns identity and shows the player's name in
+/* CouchPad shell: the launcher owns identity and shows the player's name in
    its native top-bar chip, so our own copies are duplicates — drop them (lobby
    identity, in-race HUD). The whole lobby identity row collapses (the `?` now lives
    in the car card, not this row); .hud-top keeps its min-height so the HUD's top
@@ -314,8 +314,8 @@ input[type=text]:disabled { opacity: 0.6; }
    copy of the launcher's chip, it's a PICTURE of it — the illustration is of the
    player's phone running the app, so inside the shell it's the accurate thing to
    draw, not a duplicate. */
-.cg-shell .lobby-me,
-.cg-shell .hud-name { display: none; }
+.cp-shell .lobby-me,
+.cp-shell .hud-name { display: none; }
 
 .steer { margin-top: auto; }
 .steer__track {
@@ -635,7 +635,7 @@ input[type=text]:disabled { opacity: 0.6; }
   background: #0E1218;
 }
 /* The player's own name, centred just under the island — livery-tinted (var(--car))
-   plain text with no chip, which is how the Couch Games launcher renders it. That
+   plain text with no chip, which is how the CouchPad launcher renders it. That
    makes the preview read as "your phone, in the app". Taken out of the flow so the
    steer strip + buttons stay grouped at the bottom of the screen. */
 .phone-name {

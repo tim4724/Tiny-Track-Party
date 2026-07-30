@@ -38,7 +38,7 @@ async function openDisplay(page) {
   // runs every spec with the room state machine on the C++ party layer (add
   // sim=native to also race on the native engine). Unset — the default, and what
   // CI runs — this is plain '/' and the JS kit. The few specs that navigate
-  // themselves (device-chooser, couchgames-shell, welcome) are shell tests and
+  // themselves (device-chooser, couchpad-shell, welcome) are shell tests and
   // stay on the default path.
   const flags = process.env.TTP_DISPLAY_FLAGS || '';
   await page.goto(flags ? `/?${flags}` : '/');

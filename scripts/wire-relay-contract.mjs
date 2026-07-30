@@ -71,7 +71,7 @@ const closeCodes = {
 if (!/\.close\(4000, "replaced"\)/.test(src)) fail.push('MISSING: the literal close(4000, "replaced")');
 
 // Every error string the relay can put on the wire. This is the set the phone's
-// onStatus('error', message) has to survive, and in the Couch Games shell all but
+// onStatus('error', message) has to survive, and in the CouchPad shell all but
 // two of them end the session — so a NEW one appearing here is a product event,
 // not a refactor.
 const errors = [...new Set([...src.matchAll(/type: "error", message: (?:"([^"]*)"|`([^`]*)`)/g)]

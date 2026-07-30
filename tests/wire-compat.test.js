@@ -81,7 +81,7 @@ test('wire: the relay model matches its frozen Party-Sockets contract', () => {
   // The model's error surface must be EXACTLY prod's, in both directions.
   //
   // Superset would mean the model invents a message the phone has never seen —
-  // and in the Couch Games shell all but two error strings end the session, so an
+  // and in the CouchPad shell all but two error strings end the session, so an
   // invented one is an invented teardown. SUBSET is the sharper half and the one
   // this check used to miss: an error string that disappears from this file is a
   // guard that stopped being enforced, and a permissive model is the exact defect
@@ -803,7 +803,7 @@ test('wire: only slot 0 may publish the room snapshot, and a phone that tries is
   //
   // WHAT THIS BREAKS AT A REAL PARTY: a phone (or a shell reusing the kit for a
   // second screen) that calls setState gets an error string outside the two the
-  // Couch Games launcher survives, so the WebView is torn down.
+  // CouchPad launcher survives, so the WebView is torn down.
   const { relay, net, room } = await bringUpRealDisplay();
   const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'host-only' });
   const retained = relay.rooms.get(room).state;
@@ -897,7 +897,7 @@ test('asym: prod answers a send to a vanished slot with an error the phone treat
   // WHAT THIS BREAKS AT A REAL PARTY: phones PING slot 0 at 1 Hz. Any window
   // where the display's socket is gone produces exactly this frame. The phone
   // routes EVERY error string through onStatus('error', message)
-  // (controller/Net.js:93), and inside the Couch Games shell anything other than
+  // (controller/Net.js, onProtocol's 'error' branch), and inside the CouchPad shell anything other than
   // 'Room not found'/'Room is full' maps to endSession('game_ended') — the
   // launcher tears down the WebView. Structurally unreachable in E2E: the stub
   // has no such error at all.
@@ -918,7 +918,7 @@ test('asym: prod answers a send to a vanished slot with an error the phone treat
   // mapping — it lives in the launcher — so this test pins the INPUT to it.
   const SHELL_SURVIVABLE = new Set(['Room not found', 'Room is full']);
   assert.equal(SHELL_SURVIVABLE.has(err.info), false,
-    'this is the class of error that ends a Couch Games session');
+    'this is the class of error that ends a CouchPad session');
 
   net.disconnect();
 });
@@ -959,7 +959,7 @@ test('asym: a returning owner can be told the room is full', async () => {
   //
   // WHAT THIS BREAKS AT A REAL PARTY: the phone shows "Room is full" on a
   // reconnect the player believes is theirs. It is one of only two error strings
-  // the Couch Games shell survives, which is not an accident — but nothing in
+  // the CouchPad shell survives, which is not an accident — but nothing in
   // this repo ever produced it before this test.
   const { relay, room } = await bringUpDisplay({}, { maxClients: 2 });
   const a = await bringUpPhone(relay, room, { name: 'A', clientKey: 'own-A' });
@@ -981,7 +981,7 @@ test('asym: replacing a live socket fires NO peer_joined, so phones never re-HEL
   //
   // WHAT THIS BREAKS AT A REAL PARTY: the display's crash-recovery path replaces
   // its own still-live socket. On prod the phones see nothing, so
-  // controller/Net.js:98's re-HELLO never runs, and a display that lost its
+  // controller/Net.js's peer_joined-0 re-HELLO never runs, and a display that lost its
   // roster (a reload) never recovers anyone's name — every seat shows blank.
   const { relay, room } = await bringUpDisplay();
   const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'p' });
@@ -1088,7 +1088,7 @@ test('asym: the hostless grace is the most likely real-party ending and has no E
 
   // AND — the finding this test exists for. Every one of those 119 pings targeted
   // a vacant slot 0, so prod answered every one with "Target peer not found".
-  // The phone routes each through onStatus('error'), and in the Couch Games shell
+  // The phone routes each through onStatus('error'), and in the CouchPad shell
   // anything outside {Room not found, Room is full} ends the session. So on prod
   // the WebView is torn down about one second after the TV goes away — the room's
   // two-minute grace, and the reconnect it exists to allow, is dead code from the

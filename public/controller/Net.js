@@ -71,10 +71,19 @@ export class ControllerNet extends GameNet {
     // one; the default is the shipping policy.
     this.gate = opts.gate || new InputGate();
     this._srtt = 0;
+    // §7 lifecycle state. _suspended: the link was dropped by suspend() and is
+    // ours to rebuild on return. _terminal: the relay finished this session for
+    // good (4000/4001) — redialling would only bounce, so suspend/resume stay out
+    // of it. Set where onClose already classifies those two, so the rule isn't
+    // written down twice.
+    this._suspended = false;
+    this._terminal = false;
   }
 
   connect(playerName) {
     this.playerName = playerName || this.playerName;
+    this._suspended = false;
+    this._terminal = false;   // a fresh dial: whatever finished the last socket no longer applies
     if (this.party) this.party.close();
     if (this.fastlane) this.fastlane.closeAll();
     const url = RELAY_URL + '/' + enc(this.roomCode) + (this.instance ? '?instance=' + enc(this.instance) : '');
@@ -121,12 +130,12 @@ export class ControllerNet extends GameNet {
     this.party.onClose = (attempt, max, meta) => {
       this._stopPing();
       this.gate.reset(); // link down: what the display holds is no longer knowable
-      if (meta && meta.replaced) { this.onStatus('replaced'); return; }
+      if (meta && meta.replaced) { this._terminal = true; this.onStatus('replaced'); return; }
       // The room itself is gone (the display closed it, or the relay's hostless
       // grace expired after the big screen vanished). Terminal — a retry would
       // only bounce off "Room not found" — so it gets its own status, distinct
       // from 'lost' whose seat may still be reclaimable on the big screen.
-      if (meta && meta.roomClosed) { this.onStatus('room_closed'); return; }
+      if (meta && meta.roomClosed) { this._terminal = true; this.onStatus('room_closed'); return; }
       // attempt > max: PartyConnection has stopped retrying — the link is down for
       // good until the player acts. Surface a distinct 'lost' so the UI can offer a
       // retry (and point at the big screen's reconnect QR).
@@ -142,18 +151,55 @@ export class ControllerNet extends GameNet {
   // socket closes; the display no-ops it once the seat's already gone.) Used when
   // the player backs out of the room to the name screen.
   disconnect() {
-    this._stopPing();
+    this._suspended = false;   // an intentional back-out is never resumed
     try { if (this.party) this.party.sendTo(0, { type: MSG.LEAVE }); } catch (_) {}
+    this._dropLink();
+  }
+
+  // Everything the two INTENTIONAL endings have in common: stop the ping, drop
+  // the fastlane, close the socket, forget the slot. What differs is only what
+  // each says on the way out — disconnect() announces LEAVE, suspend() goes quiet
+  // — and whether it expects to come back.
+  _dropLink() {
+    this._stopPing();
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
     if (this.party) { this.party.close(); this.party = null; }
     this.peerIndex = null;
+  }
+
+  // Drop the link while the page is backgrounded (CONTRACT §7, and any real
+  // pagehide). Without this the display keeps a ZOMBIE SEAT: the socket outlives
+  // the running page and keeps answering the relay, so no peer_left fires and the
+  // display's 1 Hz liveness never expires us — on iOS indefinitely (WKWebView's
+  // network stack is out-of-process and survives suspension), on Android whenever
+  // the OS gets round to freezing the cached process.
+  //
+  // Deliberately NOT disconnect(): backgrounding is not a back-out, so no LEAVE
+  // goes out and the display holds the seat as a droppable one (reconnect QR)
+  // rather than freeing it outright. party.close() detaches the socket handlers,
+  // so our own close can't come back through onClose and flash 'Reconnecting…'
+  // over a page nobody is looking at.
+  suspend() {
+    if (!this.party || this._terminal) return;
+    this.gate.reset();   // link down: what the display holds is no longer knowable
+    this._dropLink();
+    this._suspended = true;
+  }
+
+  // Back in the foreground. §7 has no synthetic counterpart to pagehide — the
+  // engine fires the standard visibilitychange, and we redial there. Same
+  // clientId, so the relay returns the same slot and our HELLO restores the seat:
+  // exactly the path the reconnect button takes. No-op unless suspend() ran, so a
+  // tab merely being hidden and shown again costs nothing.
+  resume() {
+    if (this._suspended) this.connect();   // connect() clears _suspended
   }
 
   // Live rename: adopt the new name and re-introduce ourselves to the display so
   // it updates our seat and re-broadcasts the roster (LOBBY_UPDATE) to everyone —
   // the same HELLO path used on join and on display-return, so a fresh display
   // also restores the new name. No-op until we've joined (peerIndex set); the name
-  // still rides the next HELLO. Used by the Couch Games launcher's setName (§2).
+  // still rides the next HELLO. Used by the CouchPad launcher's setName (§2).
   rename(name) {
     this.playerName = name || this.playerName;
     if (this.party && this.peerIndex != null) {

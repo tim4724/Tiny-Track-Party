@@ -372,7 +372,7 @@ test('fastlane: the RTT the phone shows comes from C++ echoing the phone\'s own 
 
 test('asym: the C++ Link has NO maxRing, so a native sender would ship ~6x the payload', async () => {
   // The kit's cap is load-bearing and the controller sets it to 1 on purpose
-  // (controller/Net.js:206): CONTROL is absolute state, so the newest packet
+  // (controller/Net.js, _openFastlane's maxRing): CONTROL is absolute state, so the newest packet
   // already describes the world and the older copies riding with it are dead
   // weight. fastlane::Link has no cap at all, and gen-fastlane-corpus.mjs never
   // sets maxRing — so the frozen oracle cannot see the gap.

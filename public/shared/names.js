@@ -1,7 +1,7 @@
 // The display-name cap: the one wire limit that is NOT the relay's.
 //
 // A name is the only free-text field on the wire. It is authored on the phone
-// (the name form, the Couch Games launcher's cgName, a live rename) and
+// (the name form, the CouchPad launcher's cpName, a live rename) and
 // re-clamped on the display, where a HELLO from any peer is untrusted input.
 // Both sides used to state the cap themselves — controller/main.js sliced to 16,
 // display/Net.js sliced to 16 again, without the trim — so this module is the

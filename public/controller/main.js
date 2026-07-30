@@ -16,41 +16,42 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // shared/names.js — one function, imported by both pages and driven directly by
 // tests/wire-compat.test.js. Returns '' for blank input; callers that need a
 // seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
-// missing cgName falls back to the name screen).
+// missing cpName falls back to the name screen).
 import { cleanName } from '../shared/names.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
-// ---- Couch Games launcher shell (CONTRACT.md) ----
-// The launcher (native Android app hosting this page in a WebView) appends
-// ?cgv=<version>&cgName=<name> to the join URL. Its presence means "running
-// inside the Couch Games shell"; ALL shell behaviour is gated on it, so the same
+// ---- CouchPad launcher shell (CONTRACT.md) ----
+// The launcher (the native Android app hosting this page in a WebView, or the iOS
+// app in a WKWebView — they behave identically here) appends
+// ?cpv=<version>&cpName=<name> to the join URL. Its presence means "running
+// inside the CouchPad shell"; ALL shell behaviour is gated on it, so the same
 // deployed controller keeps working untouched in a plain browser. We accept any
-// cgv value (forward-compat: an unknown higher version is still "shell present").
-const _cgParams = new URLSearchParams(location.search);
-const inShell = _cgParams.has('cgv');
+// cpv value (forward-compat: an unknown higher version is still "shell present").
+const _cpParams = new URLSearchParams(location.search);
+const inShell = _cpParams.has('cpv');
 // The launcher's name gate guarantees non-blank ≤16 chars; we still sanitize
 // defensively (trim/truncate) exactly as the standalone name form does.
-const shellName = inShell ? cleanName(_cgParams.get('cgName')) : '';
+const shellName = inShell ? cleanName(_cpParams.get('cpName')) : '';
 // Flag the shell on <html> so CSS can drop our own name labels: the launcher
 // already shows the player's name in its native top-bar chip, so the in-game
 // copies (lobby identity, in-race HUD, how-to-drive demo) are redundant there.
-// Gated on cgv like every other shell behaviour, so the plain browser is unchanged.
-document.documentElement.classList.toggle('cg-shell', inShell);
+// Gated on cpv like every other shell behaviour, so the plain browser is unchanged.
+document.documentElement.classList.toggle('cp-shell', inShell);
 
 // Report a TERMINAL session end to the launcher (§3), feature-detected + fire-once.
 // Terminal = the session cannot continue (room gone/closed, join rejected, seat
-// taken over). The launcher tears down the WebView and returns home with a message,
+// taken over). The launcher tears down the web view and returns home with a message,
 // so we must NOT also navigate. Returns true once it has signalled (caller stops);
 // false when there's no host to signal (plain browser / shell without the interface)
 // so the caller falls back to its normal in-game handling.
 let _sessionEnded = false;
 function endSession(reason) {
-  if (!(window.CouchGamesHost && window.CouchGamesHost.gameEnded)) return false;
+  if (!(window.CouchPadHost && window.CouchPadHost.gameEnded)) return false;
   if (_sessionEnded) return true;  // fire-once on our side too; extra calls are ignored anyway
   _sessionEnded = true;
-  window.CouchGamesHost.gameEnded(reason);
+  window.CouchPadHost.gameEnded(reason);
   return true;
 }
 
@@ -452,7 +453,7 @@ function applyLivery() {
   // what the launcher's observer watches; a plain browser ignores it. Guarded on
   // a real colour so we don't advertise the grey placeholder before livery lands.
   if (myColorIndex != null) {
-    const meta = document.querySelector('meta[name="cg-accent-color"]');
+    const meta = document.querySelector('meta[name="cp-accent-color"]');
     if (meta) meta.setAttribute('content', c);
   }
 }
@@ -643,6 +644,25 @@ window.addEventListener('popstate', () => {
   if (inShell) return;   // shell owns leaving (§1) — we never pushed, and don't self-leave
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
+
+// ---- app lifecycle: hand the seat back while backgrounded (§7) ----
+// The launcher dispatches a SYNTHETIC persisted `pagehide` when the player leaves
+// the app (home, app switch, lock); a plain browser fires the real one on
+// navigation or a bfcache freeze. Either way the page stops running while the
+// relay socket would not, which is what leaves a zombie player on the big screen
+// (see ControllerNet.suspend). There is no synthetic counterpart on return — the
+// standard visibilitychange → visible is the signal, and net.resume() redials
+// onto the same slot. Both are ordinary web events, so this is NOT gated on
+// inShell: the handling is equally right in a plain browser, and net.suspend()
+// no-ops when we never joined (the name screen has no link to drop).
+window.addEventListener('pagehide', () => net.suspend());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) net.resume(); });
+// pageshow is the second half of a belt-and-braces pair, and it earns its place
+// because the pagehide above closes the socket in a PLAIN BROWSER too: a bfcache
+// restore that didn't also flip visibility would strand a live-looking lobby on a
+// link we deliberately dropped. It is the guaranteed counterpart of the event the
+// teardown hangs on, and resume() no-ops unless suspend() actually ran.
+window.addEventListener('pageshow', () => net.resume());
 
 // Join the room under `name`. `persist` saves it as this device's default for the
 // standalone name form; the shell passes false — the launcher owns identity and its
@@ -901,12 +921,12 @@ function setHeldItem(item) {
 
 // Live rename from the launcher (§2). The game implements, the launcher calls it
 // when the player edits their name in the in-game bar (and re-asserts it on every
-// load, belt-and-suspenders with the cgName param). Only meaningful in the shell —
+// load, belt-and-suspenders with the cpName param). Only meaningful in the shell —
 // a plain browser renames via the name screen. Applies locally (the labels that
 // carry the name) AND broadcasts to the display via a re-HELLO, exactly like a
 // join. We do NOT persist it (§1): the injected identity must not leak into the
 // game's own name storage.
-window.CouchGames = {
+window.CouchPad = {
   setName(name) {
     if (!inShell) return;
     const n = cleanName(name) || 'Racer';
@@ -921,7 +941,7 @@ window.CouchGames = {
 // Boot. In the shell the launcher owns identity: skip the name screen entirely
 // and join straight away with the injected name (never persisted). Otherwise land
 // on the name screen and wait for the player to pick a name. (Scenario/gallery
-// mode below never connects and always carries no cgv, so it's unaffected.)
+// mode below never connects and always carries no cpv, so it's unaffected.)
 if (inShell && shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
   // front and go straight to joining. The launcher's own joining spinner floats
