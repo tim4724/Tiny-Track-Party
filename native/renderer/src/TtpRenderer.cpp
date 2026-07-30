@@ -8477,7 +8477,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         ensureSceneTarget();
         ensureCells(input.viewCount);
         for (uint32_t i = 0; i < input.viewCount; i++) {
-            const CellRect rect = cellRect(input.viewCount, i);
+            // A CELL gets its tile of the fitted grid; an OVERVIEW gets the
+            // surface entire. The frame says which (TTP_FRAME_OVERVIEW) rather
+            // than this guessing from viewCount, which is 1 for both.
+            const CellRect rect = (input.flags & TTP_FRAME_OVERVIEW)
+                    ? CellRect{ 0, 0, mWidth, mHeight }
+                    : cellRect(input.viewCount, i);
             View* v = mCellViews[i];
             Camera* cam = mCellCameras[i];
             // Every cell into the one scene buffer, each in its own sub-rect.

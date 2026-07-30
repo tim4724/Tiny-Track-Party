@@ -371,7 +371,8 @@ void testCarsAndRoster(const GameTrack& track) {
   checkU(h->viewCount, 1, "no cells means one overview view");
   checkU(h->boxCount, (uint32_t)game.boxes().size(), "boxCount");
   checkU(h->burstCount, 0, "no bursts queued");
-  checkU(h->flags, TTP_FRAME_DIVIDERS, "the cell dividers are on unless a shell says otherwise");
+  checkU(h->flags & TTP_FRAME_DIVIDERS, TTP_FRAME_DIVIDERS,
+         "the cell dividers are on unless a shell says otherwise");
   checkU(h->hudCount, 0, "no cells means no cell overlays");
   checkF(h->uiScale, 1.0f, "uiScale defaults to 1, so a shell that never sets it still draws");
   checkF(h->sceneT, DT, "sceneT accumulates dt");
@@ -1232,6 +1233,88 @@ void testSplitLensIsLayoutInvariant(const GameTrack& track) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// TTP_FRAME_OVERVIEW — which of the two rects the single view is drawn into.
+//
+// The renderer cannot infer it: one cell and one overview are both viewCount 1,
+// and the two want opposite answers (the fitted 16:9..21:9 tile, or the whole
+// surface). So the flag is the whole binding, and it has to agree with the
+// `aspect` the view already carries — an overview measures the SURFACE, so it
+// must land on the surface. Only the flag is reachable from here; the rect it
+// picks is TtpRenderer's, which no ctest compiles.
+//
+// Every case is driven at surfaces OUTSIDE the aspect band on purpose. Inside
+// it, the fitted rect IS the surface and the bug this pins was invisible — which
+// is exactly why it survived: 1920x1080 is what every other fixture measures.
+// ---------------------------------------------------------------------------
+void testOverviewOwnsTheSurface(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+
+  struct Surface { uint32_t w, h; const char* what; };
+  const Surface SURFACES[] = { { 1920, 1080, "16:9" },       // inside the band
+                               { 1920, 1200, "16:10" },      // letterboxed
+                               { 2560, 720, "ultrawide" },   // pillarboxed
+                               { 1000, 1000, "square" } };
+
+  const auto on = [](const Surface& s) {
+    DisplayState d = freshState();
+    d.width = s.w;
+    d.height = s.h;
+    d.roster = {P0, P1, P2};
+    return d;
+  };
+
+  for (const Surface& s : SURFACES) {
+    const float surfaceAspect = (float) s.w / (float) s.h;
+
+    for (int mode : {TTP_CAM_STILL, TTP_CAM_ORBIT, TTP_CAM_BBOX, TTP_CAM_FREE}) {
+      DisplayState d = on(s);  // …and no cells, so nothing owns a view
+      d.camMode = mode;
+      const TtpFrameInput* f = rt::buildFrame(d, &game, DT, caseAspect(d));
+      const std::string what = std::string("mode ") + std::to_string(mode) + " on " + s.what;
+      checkU(f->viewCount, 1, what + ": one overview view");
+      check((f->flags & TTP_FRAME_OVERVIEW) != 0, what + ": flagged as an overview");
+      checkF(ttp_frame_views(f)[0].aspect, surfaceAspect,
+             what + ": …projected at the whole surface, which is the rect it lands in");
+    }
+
+    // Racing cells are the other answer, at every layout the game can produce.
+    for (uint32_t n = 1; n <= 3; n++) {
+      DisplayState d = on(s);
+      d.cells.assign(d.roster.begin(), d.roster.begin() + n);
+      const TtpFrameInput* f = rt::buildFrame(d, &game, DT, caseAspect(d));
+      check((f->flags & TTP_FRAME_OVERVIEW) == 0,
+            std::to_string(n) + " racing cells on " + s.what
+                + " are cells, not an overview — they keep the fitted grid");
+    }
+
+    // The no-car fallback collapses to the overview, so it takes the flag with
+    // it: the cells are set but the scene holding them has not built yet, and a
+    // view drawn into a tile of a grid nobody is racing on is the same bug.
+    {
+      DisplayState d = on(s);
+      d.roster = {P0, P1, GHOST};
+      d.cells = {GHOST};
+      const TtpFrameInput* f = rt::buildFrame(d, &game, DT, caseAspect(d));
+      check((f->flags & TTP_FRAME_OVERVIEW) != 0,
+            std::string("the no-car fallback on ") + s.what + " is an overview");
+      checkF(ttp_frame_views(f)[0].aspect, surfaceAspect,
+             std::string("…measured against the whole surface on ") + s.what);
+    }
+
+    // The two flags are independent BITS, not a mode: an overview carries
+    // whatever the divider toggle says, so a shell reading either must mask.
+    {
+      DisplayState d = on(s);
+      d.dividers = false;
+      const TtpFrameInput* f = rt::buildFrame(d, &game, DT, caseAspect(d));
+      check((f->flags & TTP_FRAME_OVERVIEW) != 0,
+            std::string("?dividers=0 does not take the overview bit with it on ") + s.what);
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -1251,6 +1334,7 @@ int main() {
   testOverviewViews(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
+  testOverviewOwnsTheSurface(bt.game);
   testCellHud(bt.game);
   testHud(bt.game);
   testProps(bt);

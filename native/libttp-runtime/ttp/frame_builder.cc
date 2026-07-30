@@ -102,6 +102,13 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     head->hudCount = hudCount;
     head->uiScale = d.uiScale;
     if (d.dividers) head->flags |= TTP_FRAME_DIVIDERS;
+    // …and which rect the renderer is to draw the view into, on the same
+    // predicate `aspect` above already turns on: an overview measures the WHOLE
+    // SURFACE, so it has to land on the whole surface too (ttp_render.h). The
+    // renderer cannot work it out for itself — one cell and one overview are
+    // both viewCount 1 — and reading it off hudCount would make a HUD count
+    // decide a camera's framing.
+    if (!raceCams) head->flags |= TTP_FRAME_OVERVIEW;
 
     auto* outCars = const_cast<TtpCarInput*>(ttp_frame_cars(head));
     const bool fromHeld = d.hold && d.held.size() == cars.size();

@@ -149,6 +149,27 @@ typedef struct TtpCellHudInput {
 
 /* TtpFrameInput.flags */
 #define TTP_FRAME_DIVIDERS 1u /* draw the ink rules on the split-screen seams */
+/* The single view is a whole-SURFACE overview — the lobby's perimeter orbit, the
+ * gallery turntable, a track preview, the free inspector cam — and not a
+ * split-screen cell. It renders into the surface ENTIRE, never into the grid
+ * fitted to TtpRenderer's 16:9..21:9 band.
+ *
+ * The band is a statement about a CELL: 16:9 is the authored chase composition,
+ * a narrower tile would HIDE world, so a short tile is letterboxed up to it. An
+ * overview has no authored composition to protect — it frames whatever track it
+ * is given — and buildFrame already measures its projection against the whole
+ * surface. Sending it through the fitted rect was therefore wrong twice over on
+ * any display outside the band: it letterboxed a picture that wanted the screen,
+ * AND it aimed a projection at a shape it was not drawn into. Measured in the
+ * browser at 1280x800: a 1.6 projection rendered into a 1.778 rect, so the lobby
+ * stretched 11% horizontally inside 40 px bars. A 2560x720 ultrawide is the same
+ * arithmetic taken further — squeezed to 66%, inside 440 px ones. Nothing pinned
+ * it because a 16:9 surface is the one shape where the fitted rect IS the
+ * surface, and that is what every fixture measures.
+ *
+ * No version bump: the bit is additive and the layout is unchanged, so a renderer
+ * built without it letterboxes as before rather than rejecting the frame. */
+#define TTP_FRAME_OVERVIEW 2u
 
 /* Chrome colours for the overlay, as 0xRRGGBB. These are `--ink` and
  * `--surface` from public/shared/theme.css, which is the authored source for

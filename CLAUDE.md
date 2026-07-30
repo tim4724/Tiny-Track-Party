@@ -107,9 +107,21 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   trap to know about here. `ttp_grid_cell` (ttp_render.h) tiles the RAW surface;
   `TtpRenderer::cellRect` fits the grid into the
   `CELL_BASE_ASPECT`..`CELL_MAX_ASPECT` band (16:9..21:9) as one piece and CENTRES
-  it on both axes, and that is what the cameras actually render into. Whatever the
-  band trims is a bar; that is a RENDERING decision and no part of the column
+  it on both axes, and that is what the RACE cameras actually render into. Whatever
+  the band trims is a bar; that is a RENDERING decision and no part of the column
   scoring, which picks the layout this then shapes.
+  THE BAND IS A CELL'S RULE AND ONLY A CELL'S. An OVERVIEW — the lobby's perimeter
+  orbit, the gallery turntable, a track preview, the free inspector cam — takes the
+  surface ENTIRE, and says so with `TTP_FRAME_OVERVIEW`; the renderer cannot work it
+  out for itself, since one cell and one overview are both `viewCount` 1. It went
+  through the fitted rect until 2026-07-30, which was wrong twice at once: the lobby
+  was letterboxed AND its projection (which has always measured the whole surface)
+  was aimed at a shape it was not drawn into — 11% of horizontal stretch inside
+  40 px bars, measured at 1280x800. 16:9 is the one surface where the fitted rect IS
+  the surface, and 1920x1080 is what every fixture measures, which is why nothing
+  caught it; `frame_check`'s `testOverviewOwnsTheSurface` drives four shapes for
+  exactly that reason. Only the FLAG is reachable from a ctest — the rect it picks
+  is `TtpRenderer`'s, which no leg compiles.
   A CELL IS A SMALL SCREEN, NOT A CROP OF A BIG ONE. The vertical fov is the
   rig's own authored one in EVERY layout — `TtpRenderer::cellAspect` hands the
   frame builder one number and it is the cell's SHAPE — so the only thing a split
