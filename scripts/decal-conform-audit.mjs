@@ -93,7 +93,8 @@ export const MIRRORED = [
   // the far kerb. That cost a long debugging round — pin it.
   { name: 'road uv flip off', value: false, in: 'vroad', find: 'flipUV : false,' },
   { name: 'car blob lift',   value: 0.010, find: 'carS, carLat, sx, sz, 0.010f,' },
-  { name: 'prop blob lift',  value: 0.010, find: 'f.s, lat, r, r, 0.010f, 1.0f);' },
+  // Item shadows are stamped too now; this pins the fallback mesh's lift.
+  { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.010f, 1.0f);' },
   { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
   { name: 'road ring target', value: 0.24, find: 'std::lround(L / std::min(0.24f' },
   // RENDER ORDER, and it is correctness rather than taste. Both must stay BELOW

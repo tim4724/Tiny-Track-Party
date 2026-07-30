@@ -8269,11 +8269,21 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float r = 0.3f * scale;
             // f came from frameAt(item.s), so the arclength is already exact —
             // no need to project the resulting world point back onto the curve.
-            // LIFT 0.010, down from 0.02, for the same reason as the car's own
-            // shadow: this footprint is TINY (r is 0.3 x the 0.7/0.95 scale, so
-            // 0.21 to 0.285) and a chord's sag goes as its span squared, so it
-            // barely sags — measured 0.0022, needing 0.0034.
-            conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r, 0.010f, 1.0f);
+            //
+            // SHADED INTO THE ROAD like the boost aura, so a banana's or rocket's
+            // contact shadow has no lift either. Its falloff is the same shape the
+            // mesh baked into vertex alpha (makeBlobShadowTexture: 1 -> 0.82 at
+            // 0.55 of the radius -> 0 at the rim), which is exactly what the
+            // stamp's inner/knee pair describes. The mesh remains the fallback for
+            // a shell served no vroad.filamat.
+            if (mRoadInst) {
+                addDeckDecal(f.s, lat, r, r, srgbToLinear(0x1c1a18), 0.4f,
+                        /*inner=*/0.55f, /*kneeAlpha=*/0.82f, /*ellipse=*/true);
+                tcm.setTransform(tcm.getInstance(mPropBlobs[slot].entity), PARK);
+            } else {
+                conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r,
+                        0.010f, 1.0f);
+            }
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
         for (uint32_t j = 0; j < (uint32_t) mBananaInstances.size(); j++) {
