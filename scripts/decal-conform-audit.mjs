@@ -71,10 +71,19 @@ export const MIRRORED = [
   { name: 'box blob segs',   value: 20,    find: 'constexpr int SEG = 20;' },
   { name: 'box blob radius', value: 0.3,   find: 'constexpr float R = 0.3f;' },
   { name: 'boost disk segs', value: 24,    find: 'const int SEG = 24; // BOOST_DISK_SEG' },
-  { name: 'boost disk rings',value: 3,     find: 'constexpr int NR = 3;' },
+  { name: 'boost disk rings',value: 5,     find: 'constexpr int NR = 5;' },
   { name: 'car blob grid',   value: '10x14', find: 'constexpr int GW = 10, GL = 14;' },
   { name: 'car blob overscan', value: 1.45, find: 'fw * 1.45f, L = fl * 1.45f;' },
-  { name: 'dynamic lift',    value: 0.02,  find: 'carS, carLat, outerR, outerR, 0.02f,' },
+  // The three per-frame conformed decals each carry the lift its OWN chord sag
+  // needs, rather than one shared 0.02 (which they all had until 2026-07-30).
+  // Measured by the FULL SWEEP, which is the only authority here: the aura is the
+  // largest decal on the deck (outerR to 1.56u) and sags 0.0081, the car shadow's
+  // 10x14 grid and the tiny prop blobs sag 0.0022. A lift has to clear its own sag
+  // with margin, so 0.013 and 0.010.
+  { name: 'boost aura lift', value: 0.013, find: 'carS, carLat, outerR, outerR, 0.013f,' },
+  { name: 'car blob lift',   value: 0.010, find: 'carS, carLat, sx, sz, 0.010f,' },
+  { name: 'prop blob lift',  value: 0.010, find: 'f.s, lat, r, r, 0.010f, 1.0f);' },
+  { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
   { name: 'road ring target', value: 0.24, find: 'std::lround(L / std::min(0.24f' },
   // RENDER ORDER, and it is correctness rather than taste. Both must stay BELOW
   // the cars' default priority of 4. The boost aura was 5 — drawn after the cars
@@ -94,10 +103,14 @@ export function verifyMirrors() {
 }
 
 // ---- constants, mirrored (see MIRRORED) ------------------------------------
-const PAD_LIFT = 0.01, OIL_LIFT = 0.012, BOX_LIFT = 0.004, DYN_LIFT = 0.02;
+const PAD_LIFT = 0.01, OIL_LIFT = 0.012, BOX_LIFT = 0.004;
+// Per-frame decals each carry the lift their own sag needs (see MIRRORED).
+const AURA_LIFT = 0.013, BLOB_LIFT = 0.010;
 const PAD_DISC_SEG = 24, OIL_SEG = 24, BOX_SEG = 20, DISK_SEG = 24;
 const OIL_RINGS = [0.35, 0.7, 1.0];
-const DISK_RINGS = [0.36, 0.72, 1.0];
+// 0.72 is the alpha knee; 0.86 halves the OUTER band, which is the chord
+// that actually binds the disc's sag (splitting the inner region did nothing).
+const DISK_RINGS = [0.24, 0.48, 0.72, 0.86, 1.0];
 const BOX_R = 0.3, BOX_RINGS = [0.55, 1.0];
 const PAD_DISC_RINGS = [0.35, 0.7, 1.0];
 const GW = 10, GL = 14, OVERSCAN = 1.45, FOOT_W = 0.95, FOOT_L = 2.0;
@@ -218,20 +231,20 @@ export const DECALS = {
                   BOX_RINGS, BOX_SEG),
   }),
   boostDisk: (s0, lat0, outerR = diskOuterR(0.6)) => ({
-    kind: 'boost-disk', lift: DYN_LIFT, conformed: true,
-    ...ringedDisc((ca, sa) => conf(s0 + sa * outerR, lat0 + ca * outerR, DYN_LIFT),
+    kind: 'boost-disk', lift: AURA_LIFT, conformed: true,
+    ...ringedDisc((ca, sa) => conf(s0 + sa * outerR, lat0 + ca * outerR, AURA_LIFT),
                   DISK_RINGS, DISK_SEG),
   }),
   carBlob: (s0, lat0) => {
     const W = FOOT_W * OVERSCAN, L = FOOT_L * OVERSCAN, verts = [], tris = [];
     for (let j = 0; j <= GL; j++) for (let i = 0; i <= GW; i++) {
-      verts.push(conf(s0 + (j / GL - 0.5) * L, lat0 + (i / GW - 0.5) * W, DYN_LIFT));
+      verts.push(conf(s0 + (j / GL - 0.5) * L, lat0 + (i / GW - 0.5) * W, BLOB_LIFT));
     }
     for (let j = 0; j < GL; j++) for (let i = 0; i < GW; i++) {
       const b = j * (GW + 1) + i, n = b + GW + 1;
       tris.push([b, n, b + 1], [b + 1, n, n + 1]);
     }
-    return { kind: 'car-blob', lift: DYN_LIFT, conformed: true, verts, tris };
+    return { kind: 'car-blob', lift: BLOB_LIFT, conformed: true, verts, tris };
   },
 };
 
@@ -316,17 +329,43 @@ export function shippedDecals(t) {
 // Curvature is the second difference of position projected on the local up, off
 // one uniform sweep. Extremes are de-clustered by `minGap` so k positions are
 // k distinct features rather than k samples of one crest.
-export function extremeCurvaturePositions(id, k = 12, minGap = 6) {
+// OFFSET CURVES MATTER, and leaving them out made this miss badly. A decal is a
+// sheet, not a point: the boost aura reaches 1.56u to each side, and out there
+// the deck's height is bent by the BANK changing as well as by the centreline
+// going over a crest. Sampling curvature only at lat 0 reported a sag of 0.0078
+// for a disc whose true worst is 0.0117 — a 33% under-read, which is enough to
+// wave through a lift with almost no margin left. So the extremes are taken over
+// the union of several lateral offsets, which costs nothing extra: trackSweep
+// already hands back `lateral` and `up` per station, and the offset curve is
+// just pos + lat*lateral. Verified against a stratified every-8u sweep of the
+// whole lap: both now find the same tightest margin, and this stays ~1 s where
+// that costs ~15 s.
+export function extremeCurvaturePositions(id, k = 12, minGap = 6,
+    lats = [0, 1.6, -1.6]) {
   const sw = trackSweep(id, 0.2);
   const pts = [];
   for (let i = 1; i + 1 < sw.length; i++) {
     const a = sw[i - 1], b = sw[i], c = sw[i + 1];
     const h = (c.s - a.s) / 2;
     if (h <= 0) continue;
-    const d2 = { x: a.pos.x - 2 * b.pos.x + c.pos.x,
-                 y: a.pos.y - 2 * b.pos.y + c.pos.y,
-                 z: a.pos.z - 2 * b.pos.z + c.pos.z };
-    pts.push({ s: b.s, k: dot(d2, b.up) / (h * h) });
+    // Most extreme over every offset curve, keeping the SIGN (convex vs concave
+    // decide which failure mode applies, so they must not cancel).
+    let kMin = Infinity, kMax = -Infinity;
+    for (const lat of lats) {
+      const pa = add(a.pos, mul(a.lateral, lat));
+      const pb = add(b.pos, mul(b.lateral, lat));
+      const pc = add(c.pos, mul(c.lateral, lat));
+      const d2 = { x: pa.x - 2 * pb.x + pc.x,
+                   y: pa.y - 2 * pb.y + pc.y,
+                   z: pa.z - 2 * pb.z + pc.z };
+      const kk = dot(d2, b.up) / (h * h);
+      if (kk < kMin) kMin = kk;
+      if (kk > kMax) kMax = kk;
+    }
+    // Two candidates per station so a crest on one side and a dip on the other
+    // both survive into the pick below.
+    pts.push({ s: b.s, k: kMin });
+    pts.push({ s: b.s, k: kMax });
   }
   const pick = (cmp) => {
     const out = [];
@@ -434,10 +473,30 @@ if (isMain) {
     }
     console.log('-'.repeat(12 + 15 * names.length));
     console.log('\nCatalogue-wide:');
+    const MIN_MARGIN_FRAC = 0.25; // of the decal's own lift
+    const fails = [];
     for (const [n, a] of agg) {
+      const marginFrac = -a.worst / a.lift;
       console.log(`  ${pad(n, 12)} lift ${a.lift.toFixed(3)}  ${padl(a.over + '/' + a.n, 11)} unsafe ` +
         `(${padl((100 * a.over / a.n).toFixed(1) + '%', 6)})  worst ${padl(a.worst.toFixed(4), 9)}` +
-        `  = ${(a.worst / a.lift).toFixed(1)}x lift`);
+        `  margin ${padl((100 * marginFrac).toFixed(0) + '%', 5)} of lift`);
+      if (a.over > 0) {
+        fails.push(`${n}: the deck pokes through at ${a.over}/${a.n} positions `
+          + `(worst ${a.worst.toFixed(4)}u above it)`);
+      } else if (marginFrac < MIN_MARGIN_FRAC) {
+        // Not yet wrong, but a decal running this close to its lift is one track
+        // edit from wrong — and a thin margin is exactly what the fast gate in
+        // tests/decal-conform.test.js cannot see, which is why it is failed here.
+        fails.push(`${n}: clears by only ${(100 * marginFrac).toFixed(0)}% of its `
+          + `${a.lift} lift (want >= ${100 * MIN_MARGIN_FRAC}%) — subdivide its widest chord`);
+      }
+    }
+    if (fails.length) {
+      console.error('\nFAIL:');
+      for (const f of fails) console.error('  ' + f);
+      process.exitCode = 1;
+    } else {
+      console.log('\nOK — every decal kind clears the deck at every position swept.');
     }
   }
 }

@@ -169,8 +169,10 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   `frameAt`. The road is swept as rings ~0.24u apart and is a CHORD between them,
   so a decal is a second chord approximation of the same curve; where it sags
   further from the true surface than the road does, the deck stands above it and
-  pokes through, and the decal's small lift (0.004 the box blob, 0.01 the pads,
-  0.012 the slick, 0.02 the per-frame ones) is the whole budget. THE TWO FAILURE
+  pokes through, and the decal's small lift is the whole budget. The ladder, and
+  every rung is its own measured sag rather than one shared number: skid 0.006,
+  box blob 0.004, pad 0.01, car blob 0.010, slick 0.012, boost aura 0.013, prop
+  blob 0.010. THE TWO FAILURE
   MODES ARE OPPOSITE IN SIGN and that is the diagnosis: a FLAT decal fails on
   CONCAVE deck (loops, dips — the surface rises above its plane, unbounded by the
   lift, measured 0.175u), a CONFORMED one on CONVEX deck (crests — its chords sag
@@ -178,10 +180,25 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   conforming is not optional and a lift is not a substitute for it. VERTEX
   SPACING is the other half: a bare centre-to-rim fan spans the whole radius and
   sags ~0.010 on its own, which is why the slick, the pad disc and the boost disk
-  all carry an interior ring. `scripts/decal-conform-audit.mjs` (`npm run
-  audit:decals`, `--sweep` to relocate one decal along every metre) measures it
-  against the road's own mesh, and `tests/decal-conform.test.js` gates it at each
-  track's curvature extremes with the retired flat slick as a negative control.
+  all carry interior rings. SUBDIVIDE THE WIDEST CHORD, NOT THE MIDDLE — the aura
+  went from 3 rings to 4 by splitting its inner region and the sag did not move
+  (0.0116 -> 0.0117), because the binding chord was the OUTER band 0.72 -> 1.0,
+  0.44u wide at full boost; the ring that paid was 0.86. Past that it becomes an
+  ANGULAR problem (32 segments would reach 0.0061), not a radial one.
+  RENDER ORDER IS PART OF THIS and bit once: every deck decal must sit BELOW the
+  cars' default priority 4, or its plane wins the depth test across the bottom of
+  each tyre and paints a band there — which is what a viewer reads as the decal
+  hovering. The stack is wet 1, water/skid/car-blob 2, aura 3, pads/oils/cars 4,
+  streaks 5.
+  `scripts/decal-conform-audit.mjs` (`npm run audit:decals`, `:sweep` to relocate
+  one decal along every metre) measures it against the road's own mesh, and
+  `tests/decal-conform.test.js` runs the fast half with the retired flat slick as
+  a negative control. THE FAST GATE IS A SCREEN, NOT A PROOF: it picks curvature
+  extremes along a few offset curves, and a decal is a SHEET, so the true worst
+  position need not be one of them — measured, it reported a 43% margin where the
+  sweep found 35%. The sweep is the authority and CI runs it on every push
+  (`npm run audit:decals:sweep`, ~15 s, exits nonzero under 25% margin). Quote the
+  sweep's numbers, never the screen's.
   That audit MIRRORS the renderer's tessellation in JS — TtpRenderer.cpp needs the
   Filament SDK so no ctest can reach the real geometry — and its `MIRRORED` table
   pins every constant it copied back to the line it came from, so a lift or a

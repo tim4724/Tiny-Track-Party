@@ -5332,9 +5332,36 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             };
             m.verts.push_back({ 0, 0, 0, packLinear(TEALC, 1.0f, 1.0f) });
             m.local.push_back({ 0, 0, 255 });
-            constexpr int NR = 3;
-            ringVert(0.36f, 0.97f);
+            // FIVE RINGS, and 0.72 MUST remain one of them: that is the knee
+            // where the profile stops being solid and starts feathering, so a
+            // ring set that straddles it would interpolate the knee away and
+            // soften the disc's whole edge. Every other ring sits ON one of the
+            // two straight segments the profile already described (1 -> 0.94
+            // across 0 -> 0.72, then 0.94 -> 0 out to the rim), so the alphas
+            // here are exact and the look does not move: 0.24 -> 0.98,
+            // 0.48 -> 0.96, and 0.86 -> 0.47 (halfway down the feather).
+            //
+            // WHICH RING YOU ADD IS THE WHOLE POINT, and it is easy to get
+            // wrong. Splitting the INNER region does nothing: going from
+            // .36/.72/1 to .24/.48/.72/1 left the worst chord sag at 0.0117
+            // (from 0.0116), because both sets share the same OUTER band, 0.72
+            // to 1.0, and at outerR 1.56u that band spans 0.44u — the widest
+            // chord on the disc and the one that actually binds. Adding 0.86 to
+            // halve it takes the sag to 0.0081, which is what pays for the 0.013
+            // lift below. Going further is an ANGULAR problem, not a radial one:
+            // 32 segments would reach 0.0061.
+            //
+            // MEASURE THIS WITH THE FULL SWEEP (`npm run audit:decals:sweep`),
+            // never with the gate's curvature-extremes sampling. The extremes
+            // are picked from the CENTRELINE's vertical curvature, and a disc
+            // this wide samples the deck 1.56u out to each side where the bank
+            // is also changing, so the extremes miss its worst case badly — they
+            // reported 0.0078 for a tessellation whose true sag is 0.0117.
+            constexpr int NR = 5;
+            ringVert(0.24f, 0.98f);
+            ringVert(0.48f, 0.96f);
             ringVert(0.72f, 0.94f);
+            ringVert(0.86f, 0.47f);
             ringVert(1.0f, 0.0f);
             const uint32_t r0 = 1;
             for (int j = 0; j < SEG; j++) {
@@ -5359,10 +5386,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // bottom of every wheel. The eye reads that band as the disc sitting
             // above the road, because it is visibly not at the height where the
             // wheels touch. The car's own blob shadow never had the bug — it was
-            // already priority 3. Ordering is the whole fix: the 0.02 lift stays,
-            // because that is the headroom the disc's chords need on a crest (see
-            // the tessellation note above), and with the car drawn over the top
-            // the lift has nothing left to give away.
+            // already priority 3. Ordering was the whole fix; the lift is only
+            // ever headroom for the chord sag, and it came down to 0.013 once the
+            // fourth ring shrank that sag (see the conform call below).
             if (!buildMesh(m, true, mi, 3)) return false;
         }
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
@@ -7690,7 +7716,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // decals hang off the same origin and the same road frame.
             mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
             haveCarS = true;
-            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.02f,
+            // LIFT 0.010, down from 0.02. Every lift on the deck is headroom for
+            // ONE thing — how far this decal's chords sag below the road's own
+            // finer chords on a crest — and this is the finest-tessellated decal
+            // in the scene: a 10x14 grid over 1.38 x 2.90 is 0.207u along travel,
+            // FINER than the road's 0.24u rings, so it barely sags at all
+            // (measured 0.0022, needing 0.0034). It stays clear of the skid marks
+            // at 0.006 so the depth sort keeps putting the shadow over them, and
+            // below the aura's 0.013 so the aura still paints over the shadow.
+            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.010f,
                     1.0f + (0.08f / 0.55f) * load);
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
@@ -7770,7 +7804,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     mTrack->project(m[3].xyz, m[1].xyz, carS, carLat);
                     haveCarS = true;
                 }
-                conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR, 0.02f,
+                // LIFT 0.013, down from 0.02, and it is the FOURTH RING above
+                // that paid for it: the disc's worst chord sag went 0.0116 ->
+                // 0.0078, and a lift has to clear its own sag with margin or the
+                // deck stands through the decal on a crest. 0.02 was not
+                // arbitrary — it was near the minimum the 3-ring disc could use.
+                // This is the LARGEST decal on the deck (outerR reaches 1.56u at
+                // full boost, wider than an oil slick), which is why it needs more
+                // headroom than the car's own shadow at 0.010.
+                conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR, 0.013f,
                         std::min(0.85f, 0.7f + k * 0.3f) * pulse);
             } else {
                 tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity), PARKED);
@@ -8140,7 +8182,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float r = 0.3f * scale;
             // f came from frameAt(item.s), so the arclength is already exact —
             // no need to project the resulting world point back onto the curve.
-            conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r, 0.02f, 1.0f);
+            // LIFT 0.010, down from 0.02, for the same reason as the car's own
+            // shadow: this footprint is TINY (r is 0.3 x the 0.7/0.95 scale, so
+            // 0.21 to 0.285) and a chord's sag goes as its span squared, so it
+            // barely sags — measured 0.0022, needing 0.0034.
+            conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r, 0.010f, 1.0f);
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
         for (uint32_t j = 0; j < (uint32_t) mBananaInstances.size(); j++) {
