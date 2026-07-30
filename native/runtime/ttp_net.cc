@@ -160,6 +160,12 @@ const char* ttp_net_norm_index_json(const char* valueJson) {
 
 // ---- seats --------------------------------------------------------------------
 
+const char* ttp_net_clean_name(const char* valueJson) {
+  static std::string out;
+  out = ns::clean_name_json(valueJson ? valueJson : "null");
+  return out.c_str();
+}
+
 const char* ttp_net_seat_defaults_json(double colorIndex) {
   return put(g_bufSeat, seatValue(ns::seat_defaults(colorIndex)));
 }

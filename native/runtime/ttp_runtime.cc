@@ -1447,6 +1447,19 @@ const char* ttp_schematic_pack(const char* pathD, double eps) {
   return out.c_str();
 }
 
+const char* ttp_schematic_points_json(const char* pathD) {
+  static std::string out;
+  Value v = Value::Arr();
+  for (const ttp::schematic::Point& p : ttp::schematic::points_of(pathD ? pathD : "")) {
+    Value pair = Value::Arr();
+    pair.push(Value::Num(p.x));
+    pair.push(Value::Num(p.y));
+    v.push(std::move(pair));
+  }
+  out = canonical_stringify(v);
+  return out.c_str();
+}
+
 const char* ttp_schematic_unpack_json(const char* b64) {
   static std::string out;
   Value v;

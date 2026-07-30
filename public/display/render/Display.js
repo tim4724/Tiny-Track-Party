@@ -107,7 +107,15 @@ export class Display {
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
       frame: mod.cwrap('ttp_display_frame', 'number', ['number']),
       burst: mod.cwrap('ttp_display_burst', null, ['string', 'number', 'number']),
-      profileNames: mod.cwrap('ttp_display_profile_names', 'string', [])
+      profileNames: mod.cwrap('ttp_display_profile_names', 'string', []),
+      // The two GLB container reads (native/runtime/ttp_glb.h). They were JS
+      // right here until the shells stopped being one: deriving a translucent
+      // clone and listing a model's texture URIs names no platform API, so by
+      // the placement rule they belong where all three shells reach them. The
+      // ghost's chunk padding in particular is a trap that stays invisible until
+      // cgltf rejects a whole model, and it is not worth having three times.
+      glbGhost: mod.cwrap('ttp_glb_ghost', 'number', ['number', 'number', 'number']),
+      glbImageUris: mod.cwrap('ttp_glb_image_uris', 'string', ['number', 'number'])
     };
   }
 
@@ -141,6 +149,52 @@ export class Display {
     const rc = this._fn.asset(name, ptr, bytes.length);
     m._free(ptr);
     if (rc) throw new Error(`ttp_display_asset(${name}) failed`);
+  }
+
+  // Run `bytes` through one of the ttp_glb_* readers. Both take (ptr, len) and
+  // answer out of C-owned scratch, so the shape is the same: copy in, call, copy
+  // out before anything else can touch that buffer.
+  _withGlb(bytes, fn) {
+    const m = this.m;
+    const ptr = m._malloc(bytes.length);
+    m.HEAPU8.set(bytes, ptr);
+    try {
+      return fn(ptr, bytes.length);
+    } finally {
+      m._free(ptr);
+    }
+  }
+
+  // A 50%-alpha clone, for the fade instances (car ghosts, the monster's
+  // occlusion twin, the item box's collect fade). Empty when the container is
+  // unparseable, which the caller treats as "provide nothing" exactly as the old
+  // try/catch did.
+  _ghost(bytes) {
+    return this._withGlb(bytes, (ptr, len) => {
+      const m = this.m;
+      const lenPtr = m._malloc(4);
+      try {
+        const out = this._fn.glbGhost(ptr, len, lenPtr);
+        const n = m.HEAPU32[lenPtr >> 2];
+        // slice(), not subarray(): the scratch is C-owned and the NEXT ghost
+        // overwrites it, so a view would silently become the wrong model.
+        return out ? m.HEAPU8.slice(out, out + n) : null;
+      } finally {
+        m._free(lenPtr);
+      }
+    });
+  }
+
+  // Every images[].uri the container references. These have to be provided
+  // BEFORE the renderer parses the model, which is why they are read here rather
+  // than asked of the loaded asset.
+  _imageUris(bytes) {
+    const json = this._withGlb(bytes, (ptr, len) => this._fn.glbImageUris(ptr, len));
+    try {
+      return JSON.parse(json || '[]');
+    } catch {
+      return [];
+    }
   }
 
   resize(w, h) {
@@ -203,14 +257,11 @@ export class Display {
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 
+    // An unparseable model answers with an empty list and just renders
+    // untextured, which is what the try/catch here used to buy.
     const texUris = new Set();
     for (const bytes of scBytes) {
-      if (!bytes) continue;
-      try {
-        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + dv.getUint32(12, true))));
-        for (const img of json.images || []) if (img.uri) texUris.add(img.uri);
-      } catch { /* an unparseable model just renders untextured */ }
+      if (bytes) for (const uri of this._imageUris(bytes)) texUris.add(uri);
     }
     texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette
     await Promise.all([...texUris].map(async (uri) => {
@@ -224,19 +275,24 @@ export class Display {
         const bytes = await assets.glb(r.model);
         if (!bytes) return;
         this.provide(`car${i}.glb`, bytes);
-        this.provide(`car${i}-ghost.glb`, ghostGlb(bytes));
+        const ghost = this._ghost(bytes);
+        if (ghost) this.provide(`car${i}-ghost.glb`, ghost);
       }),
       ...PROP_MODELS.map(async (name) => {
         const bytes = await assets.glb(name);
         if (!bytes) return;
         this.provide(`${name}.glb`, bytes);
-        if (name === 'vehicle-monster-truck') this.provide('monster-ghost.glb', ghostGlb(bytes));
         // A BLEND clone of the box, for the collect fade. The kit material is
         // OPAQUE, so the solid instance cannot be faded at all — the renderer
-        // hands the grab over to this one and ramps its alpha down. ghostGlb's
-        // 0.5 never shows: the renderer writes the alpha on every frame a box
-        // is dissolving, and parks these instances the rest of the time.
-        if (name === 'item-box') this.provide('item-box-fade.glb', ghostGlb(bytes));
+        // hands the grab over to this one and ramps its alpha down. The clone's
+        // baked 0.5 never shows: the renderer writes the alpha on every frame a
+        // box is dissolving, and parks these instances the rest of the time.
+        const ghostName = name === 'vehicle-monster-truck' ? 'monster-ghost.glb'
+                        : name === 'item-box' ? 'item-box-fade.glb' : null;
+        if (ghostName) {
+          const ghost = this._ghost(bytes);
+          if (ghost) this.provide(ghostName, ghost);
+        }
       })
     ]);
 
@@ -424,41 +480,6 @@ export class Display {
     const i = this._profileNames().indexOf('total');
     return i < 0 ? null : this.m.HEAPF64[(ptr >> 3) + i];
   }
-}
-
-// A 50%-alpha clone of a GLB, for the monster's occlusion fade. GLB layout:
-// 12-byte header, then chunks (JSON first).
-function ghostGlb(bytes) {
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const jsonLen = dv.getUint32(12, true);
-  const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLen)));
-  for (const mat of json.materials || []) {
-    mat.alphaMode = 'BLEND';
-    mat.doubleSided = false;
-    const pbr = (mat.pbrMetallicRoughness = mat.pbrMetallicRoughness || {});
-    const f = pbr.baseColorFactor || [1, 1, 1, 1];
-    pbr.baseColorFactor = [f[0], f[1], f[2], 0.5];
-  }
-  // Pad the chunk to a 4-byte boundary, measured in BYTES rather than UTF-16
-  // units — a non-ASCII material name encodes wider than it measures, and a
-  // misaligned JSON chunk makes cgltf reject the whole file.
-  let jsonBytes = new TextEncoder().encode(JSON.stringify(json));
-  if (jsonBytes.length % 4) {
-    const padded = new Uint8Array(jsonBytes.length + 4 - (jsonBytes.length % 4));
-    padded.set(jsonBytes);
-    padded.fill(0x20, jsonBytes.length); // trailing spaces, per the GLB spec
-    jsonBytes = padded;
-  }
-  const rest = bytes.subarray(20 + jsonLen);
-  const out = new Uint8Array(20 + jsonBytes.length + rest.length);
-  out.set(bytes.subarray(0, 12), 0);
-  const odv = new DataView(out.buffer);
-  odv.setUint32(8, out.length, true);
-  odv.setUint32(12, jsonBytes.length, true);
-  odv.setUint32(16, 0x4e4f534a, true); // 'JSON'
-  out.set(jsonBytes, 20);
-  out.set(rest, 20 + jsonBytes.length);
-  return out;
 }
 
 // Fetch-and-cache for the GLBs and textures the renderer needs. It wants the

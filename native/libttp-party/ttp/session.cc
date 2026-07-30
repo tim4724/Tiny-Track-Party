@@ -469,5 +469,75 @@ const char* key(HeartbeatAct a) {
   return "idle";
 }
 
+std::string clean_name_json(const std::string& valueJson) {
+  const Value v = json::parse_or(valueJson.c_str(), Value());
+  // `n == null` catches null AND undefined (an absent key), both -> "". Anything
+  // else goes through the file's OWN JS String() and trim — reusing them rather
+  // than adding a second pair is the whole point of putting this here.
+  const std::string s =
+      (v.type == Value::NUL || v.type == Value::UNDEF) ? std::string() : jsTrim(jsToString(v));
+
+  // Decode to UTF-16 code units, because the cut is defined on them (header).
+  std::vector<uint16_t> units;
+  for (size_t i = 0; i < s.size();) {
+    uint32_t cp = 0;
+    unsigned char c = static_cast<unsigned char>(s[i]);
+    size_t len = 1;
+    if (c < 0x80) { cp = c; }
+    else if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; len = 2; }
+    else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; len = 3; }
+    else { cp = c & 0x07; len = 4; }
+    if (i + len > s.size()) { cp = 0xFFFD; len = s.size() - i; }
+    else {
+      for (size_t k = 1; k < len; ++k) cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3F);
+    }
+    i += len;
+    if (cp > 0xFFFF) {
+      cp -= 0x10000;
+      units.push_back(static_cast<uint16_t>(0xD800 + (cp >> 10)));
+      units.push_back(static_cast<uint16_t>(0xDC00 + (cp & 0x3FF)));
+    } else {
+      units.push_back(static_cast<uint16_t>(cp));
+    }
+  }
+
+  const size_t b = 0;
+  size_t e = units.size();
+  if (e > static_cast<size_t>(NAME_MAX_UNITS)) e = NAME_MAX_UNITS;
+
+  // Back to UTF-8. A cut that orphans a surrogate emits U+FFFD, which is what
+  // the WIRE already does to a JS-sliced name (json_parse writes the escaped
+  // lone surrogate as WTF-8 and the decoder replaces it) — so a hostile
+  // over-long name and an honestly-sliced one land on the same string.
+  std::string out;
+  for (size_t i = b; i < e; ++i) {
+    uint32_t cp = units[i];
+    if (cp >= 0xD800 && cp <= 0xDBFF) {
+      if (i + 1 < e && units[i + 1] >= 0xDC00 && units[i + 1] <= 0xDFFF) {
+        cp = 0x10000 + ((cp - 0xD800) << 10) + (units[++i] - 0xDC00);
+      } else {
+        cp = 0xFFFD;
+      }
+    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+      cp = 0xFFFD;
+    }
+    if (cp < 0x80) out += static_cast<char>(cp);
+    else if (cp < 0x800) {
+      out += static_cast<char>(0xC0 | (cp >> 6));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+      out += static_cast<char>(0xE0 | (cp >> 12));
+      out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+      out += static_cast<char>(0xF0 | (cp >> 18));
+      out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+      out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+  }
+  return out;
+}
+
 }  // namespace session
 }  // namespace ttp

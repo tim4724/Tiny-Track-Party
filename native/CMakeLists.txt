@@ -599,6 +599,12 @@ add_library(libttp_runtime STATIC
   # to a frozen JS-recorded corpus and this is new data with no JS twin: a
   # gallery must not be able to move a number the shipping game draws with.
   libttp-runtime/ttp/showcase.cc
+  # The two GLB container reads a SHELL does before it can provide the renderer
+  # its bytes — the translucent ghost clone and the texture-URI scan. They were
+  # browser JS (render/Display.js) until the shells stopped being one, and they
+  # are here for the same reason roster.cc is: no platform API, and the ghost's
+  # padding rule is a trap that stays invisible until cgltf rejects a model.
+  libttp-runtime/ttp/glb.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -892,7 +898,13 @@ set(TTP_APP_SOURCES
   # The asset gallery's world. Dev-only and latched off, but compiled
   # everywhere: ttp_theme_showcase_models is a fetch list, which is a shell's job
   # with or without a renderer in the build.
-  libttp-runtime/ttp/showcase.cc)
+  libttp-runtime/ttp/showcase.cc
+  # The GLB container reads and their ABI. Outside the renderer gate on purpose:
+  # deriving a ghost clone and listing a model's texture URIs is asset
+  # PREPARATION, which a shell does with or without a Filament SDK in the build,
+  # and keeping them here is what lets abi_check cover them on every leg.
+  libttp-runtime/ttp/glb.cc
+  runtime/ttp_glb.cc)
 
 # ---- Browser module: the whole game --------------------------------------
 # Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"

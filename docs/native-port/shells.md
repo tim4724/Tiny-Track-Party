@@ -120,3 +120,61 @@ on, and a new platform should extend both rather than inventing a third:
   two LANGUAGES agree on bytes at runtime. Phones stay on the JS controller on
   all three TV platforms, so this suite is permanent and your sender belongs
   in it.
+
+## The ABI is a PROTOCOL, and that is where a shell actually breaks
+
+Everything above is about ARTIFACTS — what to write, what to link, what to
+bundle. The first TV shell got all of that right and still shipped six bugs,
+every one of them in the same place: the ~245 hand-written call sites that
+invoke rules the C++ had already got right. Not one was a game rule. The sim,
+the room machine and the UI model were correct on the first run and stayed
+correct.
+
+**This boundary fails silently by construction.** A 0 presence-mask is a legal
+"nothing to apply". A misspelled key reads as absent, and absent is legal
+almost everywhere. An unhandled event is dropped. None of it throws, none of it
+logs, and no type system helps: the returns are JSON on one side and prose on
+the other. The six, as a checklist for the next shell:
+
+1. **Read the documented key, not the one that reads well.**
+   `ttp_race_start_json` answers `{"action":"launch"}` — a `launch` key does not
+   exist, and `verdict["launch"] as? Bool` is nil on every answer there has
+   ever been, so the guard rejected every start.
+2. **Some answers are a VERDICT, not a plan.** A start carries no `effects`;
+   the shell must then stand up the series and call `ttp_race_launch_json`
+   itself. `ttp_race_advance_json`'s header says "the shell runs
+   ttp_race_launch_json next" and means it literally.
+3. **Index-returning exports must be resolved against your own array.**
+   `ttp_ui_connected_players_json` and `ttp_ui_reconnect_diff_json` answer with
+   INDICES. Passing them on as `players` launches a race for a field of bare
+   numbers.
+4. **Three sim events are LIFECYCLE and have their own entry points.**
+   `_countdown` → `ttp_race_countdown_tick_json`, `_raceStart` →
+   `ttp_race_start_beat_json`, `_raceEnd` → your end-of-race path. Feed them to
+   `ttp_race_event_json` (which filters ORDINARY events) and they vanish: the
+   countdown never beats and the room sits in COUNTDOWN forever.
+5. **Bitmask parameters are PRESENCE, not value.** `ttp_process_input`'s mask is
+   derived by you from which fields arrived; the wire carries none.
+6. **Go through the seam, not around it.** `PartyNet.allParticipantsDisconnected`
+   exists because it syncs the active order BEFORE asking. Calling
+   `ttp_room_all_participants_disconnected` directly answers off a stale set.
+
+And one that is not an ABI call at all: **a method nothing invokes reads as
+implemented.** A room teardown shipped complete, documented as running "on
+termination", and called by nobody, so every exit leaked a room. Swift warns
+about an unused `private` func and says nothing about an `internal` one; the
+equivalent hole exists in Kotlin. A shell should gate its own transport and
+coordinator against having orphaned methods — the one written for tvOS found a
+second instance on its first run.
+
+**The only detector for this class is an end-to-end test with a real peer.** A
+headless phone driven through a real party — join, HELLO, pick, ready, start,
+race, leave — against the real app over the real relay found four of the six,
+and no corpus, screenshot or unit test found any of them. That harness lands
+with the first TV shell (`scripts/lib/phone.mjs` is the platform-free half); a
+new shell should point it at itself before it trusts anything else.
+
+**And a screenshot harness must not bypass the real entry points.** The first
+shell's shots reached `ttp_race_launch_json` directly, so fifteen race screens
+photographed perfectly for a build whose Start button had never worked once. A
+harness may fabricate its INPUTS; it must not own a second copy of the road.

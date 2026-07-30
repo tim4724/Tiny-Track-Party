@@ -84,6 +84,29 @@ Value roster_rows(const Value& roster, const Value& inRace);
 // silent re-spelling of a shipped message. Emit with ordered_stringify.
 Value lobby_snapshot(const Value& input, const Value& chooser);
 
+// ---- the display-name cap ---------------------------------------------------
+
+// The one wire limit that is not the relay's: trim, then cut to NAME_MAX UTF-16
+// code UNITS. `public/shared/names.js` is the authored source and stays so (both
+// browser pages import it, and the phone half is permanent JS); this is the
+// MIRROR every native shell reads instead of restating the arithmetic, exactly
+// as protocol.h mirrors protocol.js. `tests/name-cap.test.js` is the drift gate
+// that can see both.
+//
+// THE CUT IS BY UTF-16 CODE UNIT and therefore halves a trailing emoji. That is
+// pinned CURRENT behaviour, not desired behaviour — `tests/wire-compat.test.js`
+// drives the real producer and asserts what the orphaned surrogate becomes on
+// the display. Cutting by code POINT here would be a silent wire change.
+//
+// The input is taken as JSON so a non-string survives the trip: this runs on
+// whatever a peer put in a HELLO, and JS stringifies rather than rejecting.
+// null/undefined answer "".
+// Spelled NAME_MAX_UNITS, not NAME_MAX: <sys/syslimits.h> defines NAME_MAX as a
+// MACRO, so the plain name does not survive a namespace on any Apple or Linux
+// build. The "_UNITS" also says what it counts.
+inline constexpr int NAME_MAX_UNITS = 16;
+std::string clean_name_json(const std::string& valueJson);
+
 // ---- URLs -------------------------------------------------------------------
 
 // The join URL on the QR and the lobby ticket. The INSTANCE rides the FRAGMENT
