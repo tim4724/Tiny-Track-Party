@@ -34,12 +34,25 @@ fi
 # change the output of an untouched material, and a stale blob is the kind of bug
 # you chase in the renderer for an hour. -nt covers both. The OUTDIR is per
 # backend, so the metal and opengl blobs never gate each other.
+#
+# SO ARE THE .inc FILES. matc resolves #include relative to the .mat, and the
+# shading vlit and vroad share lives in ttp_shade.inc — so an edit there changes
+# the output of materials whose own mtime never moved. Rather than parse each
+# material's includes, any .inc newer than a blob rebuilds it: there are two or
+# three of them, they change rarely, and the failure this prevents (editing the
+# shared shading and rendering with the old one) is silent.
 mkdir -p "$OUTDIR"
+newest_inc=""
+for inc in "$MATDIR"/*.inc; do
+    [ -f "$inc" ] || continue
+    if [ -z "$newest_inc" ] || [ "$inc" -nt "$newest_inc" ]; then newest_inc="$inc"; fi
+done
 built=0 kept=0
 for mat in "$MATDIR"/*.mat; do
     name="$(basename "${mat%.mat}")"
     out="$OUTDIR/$name.filamat"
-    if [ ! -f "$out" ] || [ "$mat" -nt "$out" ] || [ "$MATC" -nt "$out" ]; then
+    if [ ! -f "$out" ] || [ "$mat" -nt "$out" ] || [ "$MATC" -nt "$out" ] \
+            || { [ -n "$newest_inc" ] && [ "$newest_inc" -nt "$out" ]; }; then
         "$MATC" -a "$API" -p "$PLATFORM" -o "$out" "$mat"
         built=$((built + 1))
     else

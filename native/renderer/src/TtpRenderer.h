@@ -249,6 +249,13 @@ private:
     filament::Skybox* mSkybox = nullptr;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
+    // The road deck only: mLitMaterial's shading (shared via ttp_shade.inc)
+    // plus a uv0 channel carrying (s, lat/half), so flat deck decals are
+    // SHADED INTO the road rather than laid over it — no lift, no z-fight,
+    // no render order. Null if the shell served no vroad.filamat, in which
+    // case the road falls back to vlit and stamps nothing.
+    filament::Material* mRoadMaterial = nullptr;
+    filament::MaterialInstance* mRoadInst = nullptr;
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
     // the hills and the scenery opt out — so the receivers get this instance and
@@ -769,6 +776,10 @@ private:
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
     filament::MaterialInstance* litShadowInstance();
+    // The deck's instance of mRoadMaterial (or litShadowInstance() when the
+    // road material is absent). Separate from litShadowInstance because that
+    // one is shared with the structures and berms, which must not stamp.
+    filament::MaterialInstance* roadInstance();
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
     // rewritten in WORLD space every frame — the conformed decals, the skid
     // ribbons, the billboards — outlives its build-time bounds, so only meshes

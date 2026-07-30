@@ -1006,9 +1006,20 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
             const float3 nA = stripNormal(i), nB = stripNormal(ni);
             for (int v = 0; v < 6; v++) {
                 const int pt = VSEQ_PT[v] ? st.b : st.a;
-                const float3 p = pointAt(ringIdx[v], pt);
+                const uint32_t ri = ringIdx[v];
+                const float3 p = pointAt(ri, pt);
                 mRoad.verts.push_back({ p.x, p.y, p.z, packLinear(cb, AO[pt]) });
-                mRoad.normals.push_back(ringIdx[v] == i ? nA : nB);
+                mRoad.normals.push_back(ri == i ? nA : nB);
+                // TRACK SPACE, for vroad.mat: u is arclength, v is the lateral
+                // offset NORMALISED by this ring's half-width, so the drivable
+                // deck is exactly |v| <= 1 whatever the road does with its width.
+                // This is what lets a decal be shaded into the deck instead of
+                // floated over it — the fragment already knows where it is on the
+                // track, so nothing has to be conformed and a loop's two stacked
+                // arclengths never collide.
+                const float half = halfAt(ri);
+                mRoad.uvs.push_back({ (float) ri / N * L,
+                        (P[pt].sign * half + P[pt].off) / std::max(half, 1e-4f) });
             }
         }
     }
@@ -1019,7 +1030,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
     // at 160 rings for exactly this.) The CPU-side soup in mRoad.verts is
     // untouched: the ground-conform probes still read the whole ribbon.
-    return buildMesh(mRoad, true, litShadowInstance(), 4, 2500);
+    return buildMesh(mRoad, true, roadInstance(), 4, 2500);
 }
 
 // Colour of the ground sheet at world x — the band the tiled canvas would put
@@ -4086,6 +4097,20 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
 
 // The shared receiver instance, created on first use so the road (built before
 // the bake) can already reference it; bindShadowMap fills it in afterwards.
+// The deck's own instance. It exists so the road can carry decal uniforms that
+// the structures and berms — which share litShadowInstance() — must not see, and
+// so the road can require a uv0 channel they do not have.
+MaterialInstance* TtpRenderer::roadInstance() {
+    if (!mRoadMaterial) return litShadowInstance();  // no vroad served
+    if (!mRoadInst) {
+        mRoadInst = sceneInstance(mRoadMaterial);
+        mRoadInst->setParameter("shadowTexel", 0.0f);
+        mRoadInst->setParameter("decalCount", 0);
+        mRoadInst->setParameter("trackLength", 0.0f);
+    }
+    return mRoadInst;
+}
+
 MaterialInstance* TtpRenderer::litShadowInstance() {
     if (!mLitShadowInst && mLitMaterial) {
         mLitShadowInst = sceneInstance(mLitMaterial);
@@ -5506,6 +5531,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // the materials that sample it.
     bakeShadowMap(tb);
     bindShadowMap(litShadowInstance());
+    // The deck is on its own instance now, and it is the main RECEIVER — without
+    // this the road alone would render unshadowed under every loop and overpass.
+    if (mRoadInst) bindShadowMap(mRoadInst);
     // ...and the ground, so an elevated deck lays its shape on the floor below.
     if (mGroundInst) bindShadowMap(mGroundInst);
     // Every other vlit instance still needs its sampler resolved, but with
@@ -6918,6 +6946,16 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mLitMaterial && vlit != mAssets.end()) {
         mLitMaterial = Material::Builder()
                 .package(vlit->second.data(), vlit->second.size())
+                .build(*mEngine);
+    }
+    // The road deck's own material: vlit's shading (they share ttp_shade.inc)
+    // plus a uv0 channel carrying track space, so deck decals can be shaded INTO
+    // the road instead of laid over it. Optional — a shell whose asset set
+    // predates it falls back to vlit and simply gets no stamped decals.
+    const auto vroad = mAssets.find("vroad.filamat");
+    if (!mRoadMaterial && vroad != mAssets.end()) {
+        mRoadMaterial = Material::Builder()
+                .package(vroad->second.data(), vroad->second.size())
                 .build(*mEngine);
     }
     const auto vground = mAssets.find("vground.filamat");
@@ -8885,6 +8923,7 @@ void TtpRenderer::releaseScene() {
     for (auto* mi : mSceneMatInstances) mEngine->destroy(mi);
     mSceneMatInstances.clear();
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
+    mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     mPadMat = nullptr;
     for (utils::Entity e : { mSun, mFill }) {
@@ -9034,6 +9073,7 @@ TtpRenderer::~TtpRenderer() {
     if (mOverlayMaterial) mEngine->destroy(mOverlayMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
+    if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {
         mEngine->destroy(mCellViews[i]);
         mEngine->destroyCameraComponent(mCellCameraEntities[i]);

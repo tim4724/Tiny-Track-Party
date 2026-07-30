@@ -1,0 +1,137 @@
+// The road deck: vlit's shading exactly, plus TRACK-SPACE coordinates and the
+// flat decals that used to be laid over the road as separate geometry.
+//
+// WHY THE ROAD NEEDS ITS OWN MATERIAL. Every deck decal — the boost aura, a car's
+// contact shadow, a banana's blob, and in time the pads, launch strips and oil
+// slicks — used to be a second mesh floating a hair above the deck. That hair is
+// unavoidable for a separate mesh: the road is a chord approximation of a curved
+// surface and so is the decal, at a different vertex spacing, so the two do not
+// coincide and whichever sags further loses. Shading the decal INTO the road
+// removes the question rather than tuning it: the decal fragment IS a road
+// fragment, at the road's own depth. No lift, no sag, no polygon offset, and no
+// render-order to get wrong.
+//
+// vlit could not simply grow a uv0 channel: buildMesh hands vlit's default
+// instance to EVERY mesh that carries normals (hills, structures, berms, scenery,
+// props), so requiring uv0 there would mean a UV buffer on all of them.
+//
+// THE COORDINATES ARE (s, lat/half), written by buildRoadMesh into uv0:
+//   u = arclength along the centreline, in world units, 0..length
+//   v = lateral offset NORMALISED by that ring's half-width, so the drivable
+//       deck is exactly |v| <= 1 and the kerb tops and skirts fall outside it.
+// Normalising v is what makes the deck mask a comparison instead of needing the
+// per-ring width passed in. A decal's own lateral extent is in world units, so it
+// is converted with the half-width uniform below.
+//
+// Track space is also why this handles the geometry the old approach could not:
+// a fragment carries its OWN s, so a loop — where one (x, z) has two different
+// arclengths stacked above each other — is unambiguous, and a decal follows every
+// crest, dip and bank without anything being conformed to anything.
+material {
+    name : TtpVroad,
+    requires : [
+        color,
+        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        tangents,
+        // (s, lat/half) — see above
+        uv0
+    ],
+    shadingModel : unlit,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        // — shading, identical to vlit's and filled by the same bindShadowMap —
+        { type : sampler2d, name : shadowMap, precision : high },
+        { type : mat4, name : shadowFromWorld, precision : high },
+        { type : float, name : shadowTexel },
+        { type : float, name : shadowK },
+        { type : float, name : shadowDepthScale },
+
+        // — deck decals —
+        // How many of the arrays below are live. 0 makes this material identical
+        // to vlit, which is how it ships until the decal pass is wired up.
+        { type : int, name : decalCount },
+        // Lap length, for the wrap: s is periodic, so a decal near the lap line
+        // must still reach fragments on the other side of it.
+        { type : float, name : trackLength },
+        // Per decal, in track space:
+        //   x = centre arclength, WORLD units;  y = centre lat, NORMALISED
+        //   z = half-extent along s, WORLD;     w = half-extent across, NORMALISED
+        // Lateral values are normalised by the half-width at the decal's own s,
+        // converted by the shell when it packs these. That is what lets the
+        // fragment compare directly against uv0.y without needing this ring's
+        // half-width, which is not available per fragment. The half-width varies
+        // slowly, so a decal spanning a width change is off by a fraction of a
+        // percent — far below anything visible at these sizes.
+        { type : float4[16], name : decalRect },
+        //   rgb = colour, a = peak alpha
+        { type : float4[16], name : decalColor },
+        //   x = inner radius fraction held at full alpha, beyond which it
+        //       feathers to nothing at 1.0 (the boost aura's 0.72 profile)
+        //   y = 1 for an elliptical falloff, 0 for a rectangle (launch strips)
+        //   zw = spare
+        { type : float4[16], name : decalShape }
+    ]
+}
+
+fragment {
+    #include "ttp_shade.inc"
+
+    // Everything a deck decal contributes at this fragment, composited in the
+    // order the array is given — which is the order the shell packs them, so the
+    // aura still paints over the contact shadow exactly as it did when the two
+    // were separate meshes at different render priorities.
+    //
+    // The loop is bounded by decalCount, a uniform, so it is uniform-coherent:
+    // every fragment in a draw takes the same number of iterations and the
+    // branch costs nothing beyond the work it skips.
+    vec3 deckDecals(vec3 base, vec2 tc) {
+        int n = min(materialParams.decalCount, 16);
+        for (int i = 0; i < n; i++) {
+            highp vec4 r = materialParams.decalRect[i];
+            // Shortest signed distance along a PERIODIC arclength: without the
+            // wrap a decal sitting across the lap line would be clipped in half.
+            highp float L = materialParams.trackLength;
+            highp float ds = tc.x - r.x;
+            if (L > 0.0) ds -= L * floor(ds / L + 0.5);
+            // Both sides normalised (see decalRect), so this is a direct compare.
+            float dl = tc.y - r.y;
+            vec2 q = vec2(ds / max(r.z, 1e-4), dl / max(r.w, 1e-4));
+            vec4 shape = materialParams.decalShape[i];
+            // Elliptical decals measure radially; strips measure per axis.
+            float d = shape.y > 0.5 ? length(q) : max(abs(q.x), abs(q.y));
+            if (d >= 1.0) continue;
+            vec4 col = materialParams.decalColor[i];
+            // Solid out to `inner`, then a linear feather to nothing at the rim.
+            float a = col.a * (1.0 - smoothstep(shape.x, 1.0, d));
+            base = mix(base, col.rgb, clamp(a, 0.0, 1.0));
+        }
+        return base;
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
+        // former so nothing else in the pipeline touches it.
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+        highp vec3 n = getWorldGeometricNormalVector();
+        vec3 base = getColor().rgb;
+
+        // THE DECK ONLY, and the bound is 0.995 rather than 1.0 on purpose. The
+        // kerb tops and skirts sit outside |v| = 1 and are excluded by any bound;
+        // the kerb's vertical INNER face is the awkward one, because both its top
+        // and bottom edges are at l = ±half, so the whole face interpolates to
+        // exactly |v| = 1 and a strict compare would be at the mercy of
+        // interpolation rounding. Stopping a whisker short excludes it for
+        // certain, and costs a full-width decal half a percent of its reach —
+        // which is nothing, and beats paint smeared up the kerb.
+        vec2 tc = getUV0();
+        if (materialParams.decalCount > 0 && abs(tc.y) <= 0.995) {
+            base = deckDecals(base, tc);
+        }
+
+        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
+        material.emissive = vec4(ttpMatteShade(base, n), 0.0);
+    }
+}
