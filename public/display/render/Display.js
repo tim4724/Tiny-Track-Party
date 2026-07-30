@@ -18,7 +18,7 @@
 // not be laid out a second time. Everything crossing for them is here —
 // uiScale, cellCards, dividers — and it is three latched setters, not a stream.
 
-import { loadNativeRuntime } from '../nativeRuntime.js';
+import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
 import { ITEM_IDS } from '../engine/contract.js';
 
@@ -306,7 +306,8 @@ export class Display {
     const slots = (roster || []).map((r) => ({
       id: r.id, name: r.name || '', carIndex: r.carIndex ?? 0, color: r.color || ''
     }));
-    if (this._fn.build(trackId, JSON.stringify(slots))) throw new Error(`ttp_display_build(${trackId}) failed`);
+    // The reason is the engine's: no surface, or a track this build does not have.
+    if (this._fn.build(trackId, JSON.stringify(slots))) throw nativeError(`building the scene for '${trackId}'`);
     this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
   }

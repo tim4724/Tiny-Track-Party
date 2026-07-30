@@ -18,7 +18,7 @@
 //   (the ABI's begin/add/start split); every pre-start passthrough answers
 //   from the roster.
 
-import { loadNativeRuntime } from './nativeRuntime.js';
+import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
 let M = null;            // the instantiated emscripten module (shared)
 let fn = null;           // cwrap'd ABI
@@ -88,7 +88,9 @@ export class NativeRaceSession {
     this._racingCache = false;
 
     this.h = fn.begin(track.trackId, (track.seed ?? 1) >>> 0, track.totalLaps || 3, opts.forceItem || null);
-    if (!this.h) throw new Error(`ttp_session_begin failed for track '${track.trackId}'`);
+    // The REASON is the engine's — unknown track, refused lap count — rather
+    // than this file guessing from the one bit it was handed.
+    if (!this.h) throw nativeError(`starting a race on '${track.trackId}'`);
 
     const bots = new Map((opts.bots || []).map((b) => [b.peerIndex, b]));
     for (const p of players) {

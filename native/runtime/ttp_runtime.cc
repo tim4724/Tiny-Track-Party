@@ -6,6 +6,7 @@
 // onRaceEnd callbacks funnel into one ordered event queue that ttp_events_json
 // drains. Bots are driven inside ttp_update, mirroring the live render loop.
 
+#include "ttp_error.h"
 #include "ttp_runtime.h"
 #include "ttp_audio.h"
 #include "ttp_session.h"
@@ -722,9 +723,19 @@ const char* ttp_audio_song_json(int index) {
 extern "C" {
 
 int ttp_session_begin(const char* trackId, uint32_t seed, int laps, const char* forceItemOrNull) {
-  if (!trackId) return 0;
+  if (!trackId || !*trackId) {
+    ttp::set_error("ttp_session_begin: no trackId");
+    return 0;
+  }
   auto rs = std::make_unique<RuntimeSession>();
-  if (!buildTrack(*rs, trackId, laps, seed)) return 0;
+  if (!buildTrack(*rs, trackId, laps, seed)) {
+    // The two ways this fails read identically from outside, and a shell that
+    // is told only "failed" cannot tell a typo from a bad lap count.
+    ttp::set_error(std::string("ttp_session_begin: no track \"") + trackId
+                   + "\" in this build (catalogue or dev), or laps=" + std::to_string(laps)
+                   + " was refused");
+    return 0;
+  }
   rs->forceItem = forceItemOrNull ? forceItemOrNull : "";
   int h = g_next++;
   rs->handle = h;

@@ -12,6 +12,7 @@
 // KEY ORDER IS OUTPUT for the snapshot: it is emitted with ordered_stringify so
 // the bytes the relay retains are the ones the phones have always parsed. See
 // ttp_net.h's deviation note.
+#include "ttp_error.h"
 #include "ttp_net.h"
 
 #include <string>
@@ -100,7 +101,11 @@ int ttp_net_configure(const char* chooserJson) {
   }
   bool ok = false;
   Value v = json::parse(chooserJson, &ok);
-  if (!ok || v.type != Value::OBJ) return 0;
+  if (!ok || v.type != Value::OBJ) {
+    ttp::set_error("ttp_net_configure: the chooser must be a JSON object "
+                   "(cars/colors/tracks), got " + ttp::error_excerpt(chooserJson));
+    return 0;
+  }
   g_chooser = std::move(v);
   return 1;
 }

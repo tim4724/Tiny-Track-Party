@@ -8,8 +8,11 @@
 // Room state is owned by the RoomFlow machine (see the `roomState` getter).
 import { GameNet } from '../shared/GameNet.js';
 // The name cap is the phone's rule, applied again here because a HELLO from any
-// peer is untrusted input. Shared so the two halves cannot drift (shared/names.js).
-import { cleanName } from '../shared/names.js';
+// peer is untrusted input. Taken from the ENGINE (ttp_net_clean_name) rather
+// than from shared/names.js: the display is a shell, and a shell reads the rule
+// instead of re-running it. names.js remains the authored source and still ships
+// to the PHONE, which has no wasm to ask — tests/name-cap.test.js pins the two
+// together.
 // The SESSION POLICY is C++ too (ttp_net.h over libttp-party/ttp/session.cc).
 // Every room decision below — what the retained snapshot contains, what a new
 // seat starts as, what a drop or a LEAVE means in each phase, which picks are
@@ -465,7 +468,7 @@ export class DisplayNet extends GameNet {
         if (!seated) this._addPeer(from);
         const p = this.flow.get(from);
         if (p && data.name) {
-          const name = cleanName(data.name);
+          const name = session.cleanName(data.name);
           const renamed = seated && name !== p.name;
           p.name = name;
           if (renamed) this.onPlayerRenamed(from, name);

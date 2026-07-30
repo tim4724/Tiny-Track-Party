@@ -507,7 +507,8 @@ add_test(NAME fastlane
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
-  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_race.cc runtime/ttp_net.cc)
+  runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_race.cc runtime/ttp_net.cc
+  runtime/ttp_error.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the
@@ -884,6 +885,7 @@ set(TTP_APP_SOURCES
   # ... and the ABI over it. JSON in, JSON out: this layer answers once per
   # event and half of what it answers is text, so there is nothing to pack.
   runtime/ttp_ui.cc
+  runtime/ttp_error.cc
   # The race ORCHESTRATION and its ABI — the state machine that calls the
   # predicates above IN ORDER.
   libttp-runtime/ttp/race_flow.cc

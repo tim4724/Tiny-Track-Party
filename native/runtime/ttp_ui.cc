@@ -14,6 +14,7 @@
 // the JS object literal was written in and emitted with ordered_stringify, so
 // the standings board comes out as the bytes the phones have always received.
 // See ttp_ui.h's deviation note.
+#include "ttp_error.h"
 #include "ttp_ui.h"
 
 #include <string>
@@ -216,7 +217,11 @@ ui::AutoPauseInput autoPauseInputOf(const Value& in) {
 int ttp_ui_configure(const char* json) {
   bool ok = false;
   Value c = json::parse(json && *json ? json : "", &ok);
-  if (!ok || c.type != Value::OBJ) return 0;
+  if (!ok || c.type != Value::OBJ) {
+    ttp::set_error("ttp_ui_configure: expected a JSON object with maxPlayers and carCount, got "
+                   + ttp::error_excerpt(json));
+    return 0;
+  }
   g_maxPlayers = (int) json::num_field(c, "maxPlayers");
   g_carCount = (int) json::num_field(c, "carCount");
   g_cups.clear();

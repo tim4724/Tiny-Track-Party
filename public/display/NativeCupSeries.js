@@ -14,7 +14,7 @@
 // under the golden traces — plus this adapter's draw-gating being asserted where
 // it is decided, below.
 
-import { loadNativeRuntime } from './nativeRuntime.js';
+import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
 let M = null;
 let fn = null;
@@ -51,7 +51,7 @@ export class NativeCupSeries {
     this._h = fn.create(JSON.stringify({
       id: cup.id, name: cup.name, tracks: cup.tracks
     }), this.drawNext ? 1 : 0);
-    if (!this._h) throw new Error('NativeCupSeries: ttp_gp_create failed');
+    if (!this._h) throw nativeError('creating a cup series');
   }
 
   get endless() { return fn.endless(this._h) === 1; }

@@ -31,7 +31,7 @@
 // file calls. A disagreement between them is a bug in the port, never in the
 // corpus. Nothing that ships imports it.
 
-import { loadNativeRuntime } from './nativeRuntime.js';
+import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
 let fn = null;
 
@@ -41,6 +41,7 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
+    cleanName: c('ttp_net_clean_name', 'string', ['string']),
     lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
@@ -76,9 +77,23 @@ function seatName(d) { return (SEAT_NAME[d.nameKey] || ((n) => String(n)))(d.nam
 // the bulky reduced track schematics lobby-only. Opaque to the model, set ONCE
 // because it is authored data that changes when the game ships, not while it
 // runs.
+// The display-name cap, THROUGH THE ABI rather than through names.js.
+//
+// public/shared/names.js is still the authored source and still ships — the
+// PHONE imports it, and a phone has no wasm to ask. But the DISPLAY half is a
+// shell like any other, and a shell reads the rule rather than re-running it.
+// Routing the browser through the same export tvOS uses is what keeps that
+// export honest: if it drifts, the web breaks first and loudest.
+//
+// The RAW JSON crosses, not a string, because a HELLO's `name` is untrusted and
+// the rule is JS's — a number, a bool and an array each have a defined spelling.
+export function cleanName(value) {
+  return fn.cleanName(JSON.stringify(value === undefined ? null : value));
+}
+
 export function configure({ cars, colors, tracks }) {
   const ok = fn.configure(J({ cars: cars || [], colors: colors || [], tracks: tracks || [] }));
-  if (!ok) throw new Error('[net] the chooser payload was rejected by the native session model');
+  if (!ok) throw nativeError('configuring the chooser payload');
 }
 
 // ---- the retained room snapshot --------------------------------------------

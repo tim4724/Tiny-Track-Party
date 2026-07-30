@@ -16,6 +16,7 @@
 // context is here. They are not written yet, and an empty stub would only be a
 // guess at APIs nobody has run.
 
+#include "ttp_error.h"
 #include "ttp_display.h"
 
 #include <emscripten/emscripten.h>
@@ -173,9 +174,19 @@ void ttp_display_bench(const char* model) {
 }
 
 int ttp_display_build(const char* trackId, const char* rosterJson) {
-    if (!g_disp) return 1;
+    // The two ways this refuses are unrelated and read identically from outside:
+    // a shell that never created a surface, and one that named a track nobody
+    // ships. Both used to be a bare 1.
+    if (!g_disp) {
+        ttp::set_error("ttp_display_build: no display — ttp_display_create was not called");
+        return 1;
+    }
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
-    if (!def) return 1;
+    if (!def) {
+        ttp::set_error(std::string("ttp_display_build: no track \"")
+                       + (trackId ? trackId : "") + "\" in this build (catalogue or dev)");
+        return 1;
+    }
     // Parsed BEFORE anything is torn down: a malformed roster is still a legal
     // scene (an empty one), but the parse must not straddle the release below.
     const ttp::rt::Roster roster = ttp::rt::parseRoster(rosterJson);

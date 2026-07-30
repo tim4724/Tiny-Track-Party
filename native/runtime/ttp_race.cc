@@ -15,6 +15,7 @@
 // the JS object literal was written in and emitted with ordered_stringify. And
 // key PRESENCE is contract: see ttp_race.h. An `if` that adds a key only on one
 // branch is deliberate everywhere it appears.
+#include "ttp_error.h"
 #include "ttp_race.h"
 
 #include <string>
@@ -268,7 +269,11 @@ Value wrapEffects(const race::Effects& es) {
 int ttp_race_configure(const char* json) {
   bool ok = false;
   Value v = json::parse(json ? json : "", &ok);
-  if (!ok || v.type != Value::OBJ) return 0;
+  if (!ok || v.type != Value::OBJ) {
+    ttp::set_error("ttp_race_configure: expected a JSON object (fieldSize, carCount, personas, "
+                   "carStats, cups), got " + ttp::error_excerpt(json));
+    return 0;
+  }
 
   race::FieldWorld w;
   w.fieldSize = static_cast<int>(json::num_field(v, "fieldSize"));
