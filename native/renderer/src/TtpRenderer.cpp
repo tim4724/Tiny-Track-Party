@@ -934,6 +934,24 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     const float AO[16] = { 0.55f, 0.65f, 0.90f, 1.0f, 0.70f, 0.90f, 1.0f, 1.0f,
                            1.0f, 1.0f, 0.90f, 0.70f, 1.0f, 0.90f, 0.65f, 0.55f };
 
+    // THE DECK FLAG. The section above is a CLOSED ring, so its last strip —
+    // P[15] back to P[0] — is the road's UNDERSIDE, spanning the deck's whole lat
+    // range from +half+cw to -half-cw. A decal is placed in track space alone, so
+    // every one of them matched that quad as readily as the deck: on a LOOP,
+    // where the back of the road is in shot, a boosting car's aura was painted on
+    // the OUTSIDE of the loop as well as under the car. A flat track hides it,
+    // because nothing ever sees the underside.
+    // The mask cannot be a threshold on v — that was tried twice and was wrong
+    // both times, see vroad.mat's material() — so track space is written only
+    // where it means anything: the strips with BOTH endpoints at y == 0. The
+    // kerbs, the outer skirts and the underside get an out-of-band v no decal's
+    // half-extent can reach. DERIVED from the profile rather than tagged onto
+    // STRIPS by hand, so it cannot drift when the section changes; and the sweep
+    // is unindexed soup, so it is a per-quad constant with nothing to interpolate
+    // across. A FULL-WIDTH decal is safe now too: a launch strip may fill the
+    // deck edge to edge without climbing a kerb.
+    constexpr float OFF_DECK_LAT = 1000.0f;
+
     const auto pointAt = [&](uint32_t i, int j) {
         const TrackBin::Sample& f = frames[i];
         const float l = P[j].sign * halfAt(i) + P[j].off;
@@ -1001,6 +1019,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
         const float3 colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
         const bool bare = bareAsphalt(i);
         for (const Strip& st : STRIPS) {
+            const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
             float3 cb;
             switch (st.kind) {
                 case K_KERB: cb = st.side > 0 ? colR : colL; break;
@@ -1043,8 +1062,11 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
                 // half-width, and where the road narrows the fixed cross-section
                 // offsets divided by a small half push deck vertices past 1
                 // anyway. Raw lat has no second quantity to agree with.
+                // Off the deck, v is the out-of-band sentinel instead — see the
+                // DECK FLAG note above.
                 mRoad.uvs.push_back({ (float) uIdx[v] / N * L,
-                        P[pt].sign * halfAt(ri) + P[pt].off });
+                        onDeck ? P[pt].sign * halfAt(ri) + P[pt].off
+                               : OFF_DECK_LAT });
             }
         }
     }

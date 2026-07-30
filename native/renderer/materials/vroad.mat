@@ -194,15 +194,21 @@ fragment {
         highp vec3 n = getWorldGeometricNormalVector();
         vec3 base = getColor().rgb;
 
-        // NO DECK MASK. A threshold on v was in here twice and was wrong both
-        // times. While v was lat/half it EXCLUDED REAL ROAD — the fixed
-        // cross-section offsets divided by a small half push deck vertices past 1
-        // where the track narrows — and once v became raw world lat the same
-        // constant silently clipped every decal to the middle 2u of a 5u road,
-        // which reads as a wedge cut out of the aura rather than as a missing
-        // mask. A decal's own extent is its mask: the boost aura is ~1.2u across
-        // and cannot reach a kerb. A FULL-WIDTH decal (the launch strips, if they
-        // ever move here) needs a per-vertex deck FLAG, not a threshold on v.
+        // THE DECK MASK IS A PER-VERTEX FLAG, NOT A THRESHOLD. One was in this
+        // shader twice and was wrong both times. While v was lat/half it EXCLUDED
+        // REAL ROAD — the fixed cross-section offsets divided by a small half push
+        // deck vertices past 1 where the track narrows — and once v became raw
+        // world lat the same constant silently clipped every decal to the middle
+        // 2u of a 5u road, which reads as a wedge cut out of the aura rather than
+        // as a missing mask.
+        //
+        // A mask is needed all the same: the road's section is a CLOSED ring, so
+        // its underside carries the deck's own lat range and took every decal with
+        // it (on a LOOP, a boost aura stuck to the outside). So buildRoadMesh
+        // writes an out-of-band v on every vertex that is NOT the flat top
+        // surface, and the per-decal |dl| reject above drops it for free — which
+        // is also what makes a FULL-WIDTH decal (the launch strips, if they ever
+        // move here) safe.
         vec2 tc = getUV0();
         if (materialParams.decalCount > 0) base = deckDecals(base, tc);
 

@@ -178,8 +178,12 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   Filament FLIPS V by default and uv0 here is not an image coordinate, so
   `flipUV : false` or every decal lands by the far kerb. A THRESHOLD ON v IS NOT
   A DECK MASK — as lat/half it excluded real road where the track narrows, as raw
-  lat it clipped decals to the middle 2u; a decal's own extent is its mask, and a
-  full-width decal would need a per-vertex deck FLAG. And a MaterialInstance from
+  lat it clipped decals to the middle 2u — so the mask is a per-vertex FLAG,
+  written by `buildRoadMesh` into v itself: the section is a CLOSED ring, so the
+  road's UNDERSIDE carries the deck's own lat range and took every decal with it
+  (invisible on a flat track; on a LOOP, a boosting car's aura stuck to the
+  outside). Only strips with both endpoints at y == 0 carry track space. And a
+  MaterialInstance from
   `sceneInstance()` is scene-scoped, so a member holding one must be nulled in
   `releaseScene()`.
   CHEVRONS ARE SDFs, which is what let the pads move without a texture atlas: a
