@@ -22,6 +22,10 @@ node scripts/wire-mutate.mjs      # Prove the wire gate bites: break the C++ 14 
                                   # rebuild the wasm, require the named test to go red
 node scripts/wire-relay-contract.mjs  # Re-freeze the relay model's contract from a
                                   # Party-Sockets checkout (--check to just verify)
+npm run audit:decals              # Do the flat on-deck decals (boost pads, slicks,
+                                  # blob shadows, the boost aura) stay UNDER the
+                                  # road's own mesh? `:sweep` relocates one of each
+                                  # along every metre of every track (~17 s)
 npm start                         # Run the server (node server/index.js)
 npm run dev                       # Run with --watch (auto-restart)
 native/scripts/build-runtime-web.sh  # The whole engine (sim + party + Filament
@@ -161,6 +165,34 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   grid is centred, so testing against 0 drew a rule down the picture's left side
   on the ordinary 2-player pair. E2E's divider check counts full-WIDTH scanlines,
   so it never saw it.
+  EVERY FLAT DECAL ON THE DECK CONFORMS — a frame per vertex, never one hoisted
+  `frameAt`. The road is swept as rings ~0.24u apart and is a CHORD between them,
+  so a decal is a second chord approximation of the same curve; where it sags
+  further from the true surface than the road does, the deck stands above it and
+  pokes through, and the decal's small lift (0.004 the box blob, 0.01 the pads,
+  0.012 the slick, 0.02 the per-frame ones) is the whole budget. THE TWO FAILURE
+  MODES ARE OPPOSITE IN SIGN and that is the diagnosis: a FLAT decal fails on
+  CONCAVE deck (loops, dips — the surface rises above its plane, unbounded by the
+  lift, measured 0.175u), a CONFORMED one on CONVEX deck (crests — its chords sag
+  below the road's finer ones, bounded and small once vertex spacing is sane). So
+  conforming is not optional and a lift is not a substitute for it. VERTEX
+  SPACING is the other half: a bare centre-to-rim fan spans the whole radius and
+  sags ~0.010 on its own, which is why the slick, the pad disc and the boost disk
+  all carry an interior ring. `scripts/decal-conform-audit.mjs` (`npm run
+  audit:decals`, `--sweep` to relocate one decal along every metre) measures it
+  against the road's own mesh, and `tests/decal-conform.test.js` gates it at each
+  track's curvature extremes with the retired flat slick as a negative control.
+  That audit MIRRORS the renderer's tessellation in JS — TtpRenderer.cpp needs the
+  Filament SDK so no ctest can reach the real geometry — and its `MIRRORED` table
+  pins every constant it copied back to the line it came from, so a lift or a
+  segment count that moves in C++ fails the gate instead of silently invalidating
+  it. Change one and update the audit in the SAME commit.
+  WHAT THIS RETIRED: the JS renderer clipped these decals OUT of the road ribbon
+  for exact coplanarity at zero lift (`RoadDecal.js`, deleted with three.js), and
+  `buildOils` carried a "real RoadDecal clipping later" TODO. Measured, the
+  conformed decals disagree with the deck by at most 0.0005u — 5% of their lift —
+  so clipping buys no depth correctness. It is a look/architecture option now, not
+  an owed fix. Do not reach for it to solve a z-fight; check conforming first.
   BOOST SHADES ARE `ttp::rt::boost_shades`, inline in libttp-runtime's theme.h
   precisely so the renderer can call it without linking that library (neither
   may link the other). The renderer kept its own float copy of `mixHex` plus four

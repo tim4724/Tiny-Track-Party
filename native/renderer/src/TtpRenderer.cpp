@@ -5300,7 +5300,19 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const float3 TEALC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
         for (uint32_t c = 0; c < carCount; c++) {
             Mesh& m = mBoostDisks[c];
-            const int SEG = 16; // BOOST_DISK_SEG
+            // SEG and the 0.36 ring are a TESSELLATION fix, not a look change.
+            // This disc is conformed per frame, so its vertices land on the deck
+            // and only the chords BETWEEN them can sag under it — which makes the
+            // vertex spacing the whole story. At full boost outerR reaches 1.56u
+            // (see the per-frame sizing below), so 16 segments with a bare
+            // centre-to-0.72 fan spanned ~1.1u against the road's own 0.24u
+            // rings, and measured 0.026u proud of the deck on the crest-heavy
+            // tracks — 1.3x the 0.02 lift, i.e. asphalt through the aura.
+            // 24 segments plus one interior ring take the widest chord to ~0.56u.
+            // The alpha profile is UNTOUCHED: it is linear 1 -> 0.94 across
+            // 0 -> 0.72, so the split ring's 0.97 is exactly on the line it
+            // already described, and the feather past 0.72 is unchanged.
+            const int SEG = 24; // BOOST_DISK_SEG
             const auto ringVert = [&](float rad, float alpha) {
                 const uint32_t col = packLinear(TEALC, 1.0f, alpha);
                 const uint8_t a8 = (uint8_t) std::lround(alpha * 255.0f);
@@ -5313,14 +5325,22 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             };
             m.verts.push_back({ 0, 0, 0, packLinear(TEALC, 1.0f, 1.0f) });
             m.local.push_back({ 0, 0, 255 });
+            constexpr int NR = 3;
+            ringVert(0.36f, 0.97f);
             ringVert(0.72f, 0.94f);
             ringVert(1.0f, 0.0f);
-            const uint32_t ring0 = 1, ring1 = ring0 + SEG + 1;
+            const uint32_t r0 = 1;
             for (int j = 0; j < SEG; j++) {
-                const uint32_t i1 = ring0 + (uint32_t) j, i2 = i1 + 1;
-                const uint32_t o1 = ring1 + (uint32_t) j, o2 = o1 + 1;
-                m.idx.insert(m.idx.end(), { 0, i1, i2 });
-                m.idx.insert(m.idx.end(), { i1, o1, o2, i1, o2, i2 });
+                m.idx.insert(m.idx.end(),
+                        { 0, r0 + (uint32_t) j, r0 + (uint32_t) j + 1 });
+            }
+            for (int r = 0; r + 1 < NR; r++) {
+                const uint32_t a0 = r0 + (uint32_t) r * (SEG + 1), b0 = a0 + SEG + 1;
+                for (int j = 0; j < SEG; j++) {
+                    m.idx.insert(m.idx.end(),
+                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
+                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
+                }
             }
             MaterialInstance* mi = sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f); // conformed, but never z-fight
@@ -6238,26 +6258,41 @@ void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
                 const TrackBin::Sample f = tb.frameAt(pad.s + d);
                 return f.pos + f.lat * (pad.lat + (q.x / 64.0f - 0.5f) * 2 * r) + f.up * LIFT;
             };
-            const int SEG = 24;
+            const int SEG = 24;   // PAD_DISC_SEG
+            // The 0.35 ring is a TESSELLATION fix, like the boost disk's: a bare
+            // centre-to-0.7 fan spans 0.63u against the road's own 0.24u rings,
+            // and measured 0.004u proud of the deck at 8 lap positions across the
+            // catalogue — all on the crest-heavy tracks (cloverleaf, wash, crag,
+            // pretzel, sidewinder). COLOUR IS UNCHANGED: the GPU already
+            // interpolated PAD_LIGHT -> PAD_BASE linearly across that span, so
+            // the midpoint colour at the midpoint radius is exactly on the line
+            // it was already drawing.
+            static const float DISC_RINGS[3] = { 0.35f, 0.7f, 1.0f };
             const uint32_t cCore = packLinear(PAD_LIGHT, 1.0f);
+            const uint32_t cHalf = packLinear((PAD_LIGHT + PAD_BASE) * 0.5f, 1.0f);
             const uint32_t cMid = packLinear(PAD_BASE, 1.0f);
             const uint32_t cRim = packLinear(PAD_DARK, 1.0f);
             const uint32_t base = (uint32_t) mPads.verts.size();
             push(toWorld({ 32, 32 }), cCore);
-            for (const float rr : { 0.7f, 1.0f }) {
+            for (int r = 0; r < 3; r++) {
+                const float rr = DISC_RINGS[r];
+                const uint32_t col = r == 0 ? cHalf : r == 1 ? cMid : cRim;
                 for (int j = 0; j <= SEG; j++) {
                     const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                    push(toWorld({ 32 + std::cos(a) * 32 * rr, 32 + std::sin(a) * 32 * rr }),
-                            rr < 1.0f ? cMid : cRim);
+                    push(toWorld({ 32 + std::cos(a) * 32 * rr, 32 + std::sin(a) * 32 * rr }), col);
                 }
             }
-            const uint32_t ring0 = base + 1, ring1 = ring0 + SEG + 1;
-            for (int j = 0; j < SEG; j++) {
+            for (int j = 0; j < SEG; j++) { // centre fan to the innermost ring
                 mPads.idx.insert(mPads.idx.end(),
-                        { base, ring0 + (uint32_t) j, ring0 + (uint32_t) j + 1 });
-                mPads.idx.insert(mPads.idx.end(),
-                        { ring0 + (uint32_t) j, ring1 + (uint32_t) j, ring1 + (uint32_t) j + 1,
-                          ring0 + (uint32_t) j, ring1 + (uint32_t) j + 1, ring0 + (uint32_t) j + 1 });
+                        { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
+            }
+            for (int r = 0; r + 1 < 3; r++) { // one quad band per ring gap
+                const uint32_t a0 = base + 1 + (uint32_t) r * (SEG + 1), b0 = a0 + SEG + 1;
+                for (int j = 0; j < SEG; j++) {
+                    mPads.idx.insert(mPads.idx.end(),
+                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
+                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
+                }
             }
             const auto lift = [&](const float2& q) {
                 const float d = (0.5f - q.y / 64.0f) * 2 * r;
@@ -6390,9 +6425,21 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
 }
 
 // Oil slicks + warning cones. The slick is TrackProps' dark translucent disc
-// (0x161425 @ 0.7, real RoadDecal clipping later); the cones ring it exactly
-// like _buildHazards (n on radius×1.05, half-step offset, clamped inside the
-// kerb). (Authored poles are concrete posts — see buildStructures.)
+// (0x161425 @ 0.7); the cones ring it exactly like _buildHazards (n on
+// radius×1.05, half-step offset, clamped inside the kerb). (Authored poles are
+// concrete posts — see buildStructures.)
+//
+// The JS this came from clipped every flat on-deck decal OUT of the road ribbon
+// (the retired public/display/render/RoadDecal.js, Sutherland–Hodgman in the
+// road's tangent frame) so it was exactly coplanar with zero lift, and this
+// comment used to promise that port as "real RoadDecal clipping later". It is
+// deliberately NOT owed any more. Measured across all 20 catalogue tracks
+// against the road's own mesh, the conformed decals disagree with the deck by at
+// most 0.0005u — 5% of their lift — so clipping would buy no depth correctness
+// here; what was actually broken was this function not conforming at all, which
+// no amount of lift can fix. See scripts/decal-conform-audit.mjs for the
+// numbers and tests/decal-conform.test.js for the gate. Zero-lift clipping is
+// still a legitimate thing to want, but as a look/architecture call, not a bug.
 void TtpRenderer::buildOils(const TrackBin& tb) {
     if ((tb.oils.empty() && tb.poles.empty())) return;
     if (!tb.oils.empty() && mBlendMaterial) {
@@ -6406,31 +6453,66 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
         const bool hasRim = tb.hasWater || tb.hasIce;
         const uint32_t rimC = packLinear(
                 srgbToLinear(tb.hasWater ? tb.waterFoam : tb.iceFrost), 1.0f, 0.5f);
+        // THE SLICK CONFORMS, and until 2026-07-30 it did not. It took ONE
+        // frameAt(o.s) and swept that frame's lat/tangent, so a 2u-wide disc was
+        // a flat plane in the centre's tangent frame while the deck bent away
+        // underneath it. Measured against the road's own mesh: 0.175u out on a
+        // loop and 0.090u on a crest-only track, against a 0.012 lift — 14.6x
+        // the budget, which is asphalt standing proud through the middle of the
+        // slick. It read as fine only because no shipped oil happens to sit on
+        // curvature (placeFurniture penalises grade and elevation, not vertical
+        // curvature), so 11.3% of catalogue positions were a furniture reshuffle
+        // away from showing it. A flat decal fails on CONCAVE deck, where the
+        // road rises above it; a conformed one fails on CONVEX deck, where its
+        // chords sag below the road's finer ones. Only the second is bounded by
+        // the lift, which is why this is worth conforming rather than lifting.
+        //
+        // RADIAL RINGS ARE PART OF THE FIX, not tidying. Conforming alone leaves
+        // a centre-to-rim fan spanning the full radius, which still sags ~0.010
+        // at the catalogue's tightest crest — 84% of the lift, on its own. Three
+        // rings hold the widest chord to ~0.35u. The body is a single flat
+        // colour, so subdividing it is invisible.
+        constexpr int SEG = 24;                                   // was 16
+        static const float RINGS[3] = { 0.35f, 0.7f, 1.0f };
         for (const TrackBin::Oil& o : tb.oils) {
-            const TrackBin::Sample f = tb.frameAt(o.s);
-            const float3 tanv = f.tangent();
-            const float3 ctr = f.pos + f.lat * o.lat + f.up * 0.012f;
+            // The canvas-free twin of buildPadsMesh's toWorld: an offset along
+            // travel picks its OWN frame, which is what follows the road.
+            const auto at = [&](float latOff, float dAlong, float lift) {
+                const TrackBin::Sample f = tb.frameAt(o.s + dAlong);
+                return f.pos + f.lat * (o.lat + latOff) + f.up * lift;
+            };
             const uint32_t base = (uint32_t) mOils.verts.size();
+            const float3 ctr = at(0, 0, 0.012f);
             mOils.verts.push_back({ ctr.x, ctr.y, ctr.z, c });
-            const int SEG = 16;
-            for (int j = 0; j <= SEG; j++) {
-                const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                const float3 p = ctr + f.lat * (std::cos(a) * o.radius)
-                        + tanv * (std::sin(a) * o.radius);
-                mOils.verts.push_back({ p.x, p.y, p.z, c });
+            for (const float rr : RINGS) {
+                for (int j = 0; j <= SEG; j++) {
+                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
+                    const float3 p = at(std::cos(a) * rr * o.radius,
+                                        std::sin(a) * rr * o.radius, 0.012f);
+                    mOils.verts.push_back({ p.x, p.y, p.z, c });
+                }
             }
-            for (int j = 0; j < SEG; j++) {
+            for (int j = 0; j < SEG; j++) { // centre fan to the innermost ring
                 mOils.idx.insert(mOils.idx.end(),
                         { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
             }
+            for (int r = 0; r + 1 < 3; r++) { // one quad band per ring gap
+                const uint32_t a0 = base + 1 + (uint32_t) r * (SEG + 1);
+                const uint32_t b0 = a0 + SEG + 1;
+                for (int j = 0; j < SEG; j++) {
+                    mOils.idx.insert(mOils.idx.end(),
+                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
+                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
+                }
+            }
             if (!hasRim) continue;
-            // Rim annulus (0.82 r → r), painted over the coplanar disc.
+            // Rim annulus (0.82 r → r), painted over the disc it sits on.
             const uint32_t rb = (uint32_t) mOils.verts.size();
             for (int j = 0; j <= SEG; j++) {
                 const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                for (const float rr : { o.radius * 0.82f, o.radius }) {
-                    const float3 p = ctr + f.lat * (std::cos(a) * rr)
-                            + tanv * (std::sin(a) * rr) + f.up * 0.002f;
+                for (const float rr : { 0.82f, 1.0f }) {
+                    const float3 p = at(std::cos(a) * rr * o.radius,
+                                        std::sin(a) * rr * o.radius, 0.014f);
                     mOils.verts.push_back({ p.x, p.y, p.z, rimC });
                 }
             }
