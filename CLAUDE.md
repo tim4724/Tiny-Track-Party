@@ -105,17 +105,35 @@ renderer draws, staged at once. See the SHOWCASE rule below.
   the FINISHED card and the reconnect QR.
   THERE ARE TWO GRIDS AND ONLY ONE OF THEM IS WHERE THE PICTURE IS, which is the
   trap to know about here. `ttp_grid_cell` (ttp_render.h) tiles the RAW surface;
-  `TtpRenderer::cellRect` letterboxes the grid to `CELL_MAX_ASPECT` as one piece
-  and CENTRES it, and that is what the cameras actually render into. Anything
-  placing chrome wants `cellRectTopLeft` — the one `ttp_display_cell_rects`
-  returns, so the shell's chips and the renderer's steer bar cannot land on
-  different grids. drawOverlay used the raw grid until 2026-07-29: measured at
+  `TtpRenderer::cellRect` fits the grid into the
+  `CELL_BASE_ASPECT`..`CELL_MAX_ASPECT` band (16:9..21:9) as one piece and CENTRES
+  it on both axes, and that is what the cameras actually render into. Whatever the
+  band trims is a bar; that is a RENDERING decision and no part of the column
+  scoring, which picks the layout this then shapes.
+  THE LENS IS SOLVED FROM THE CELL'S HEIGHT (`TtpRenderer::cellLens` ->
+  `cellFov`), and aspect never enters it. So height alone sets
+  pixels-per-world-unit, and WIDTH PAST 16:9 ONLY REVEALS more world at the sides
+  — a wide cell is not the base picture stretched or pushed back, and the base is
+  a CROP of what a wide one shows. That is also why the floor is hard (narrower
+  would HIDE world) and the cap is only taste. It gives the authored `BASE_FOV`
+  at one player on any surface shape, so resizing SCALES and splitting CROPS.
+  DO NOT REFERENCE THE LENS TO A WIDTH. Two versions did, and each had to
+  sacrifice one of those: against the surface's height it cropped the world as a
+  window narrowed, against the single cell's width it shrank the car (which reads
+  as the car driving away). Height unties the cell's shape from the car's size.
+  ANYTHING PLACING CHROME wants `cellRectTopLeft` — the one
+  `ttp_display_cell_rects` returns, so the shell's chips and the renderer's steer
+  bar cannot land on different grids. drawOverlay used the raw grid until 2026-07-29: measured at
   2560x720 with four cells, every steer bar sat a fifth of a cell off, under a
   car that was not there. It bites in ordinary play, not just on an ultrawide —
-  the 2-PLAYER layout is STACKED, so its cells are 3.56:1 and past the cap. The
+  the 2-PLAYER layout is STACKED, so its tiles are 3.56:1 and get fitted. The
   DIVIDER span is the deliberate exception: it stays the whole canvas (E2E's
   `flow.spec.js` samples that seam row), because a rule between two views that
-  stopped at the picture's edge would read as a gap.
+  stopped at the picture's edge would read as a gap. WHICH edges get a rule is a
+  separate question: "cells on both sides", never "away from the border" — the
+  grid is centred, so testing against 0 drew a rule down the picture's left side
+  on the ordinary 2-player pair. E2E's divider check counts full-WIDTH scanlines,
+  so it never saw it.
   BOOST SHADES ARE `ttp::rt::boost_shades`, inline in libttp-runtime's theme.h
   precisely so the renderer can call it without linking that library (neither
   may link the other). The renderer kept its own float copy of `mixHex` plus four

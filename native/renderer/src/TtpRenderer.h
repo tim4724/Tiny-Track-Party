@@ -129,8 +129,8 @@ public:
 
     // The rect view i actually RENDERS into, in GL viewport terms (bottom-left
     // origin) — a tile of the split-screen grid, after that grid has been
-    // letterboxed to CELL_MAX_ASPECT as one piece. The runtime asks for it to
-    // size its projection to what is really drawn.
+    // fitted to the aspect band as one piece. The runtime asks for it to size
+    // its projection to what is really drawn.
     struct CellRect { int32_t x, y; uint32_t w, h; };
     CellRect cellRect(uint32_t n, uint32_t i) const;
 
@@ -140,8 +140,8 @@ public:
     //
     // It exists because those two had drifted apart. drawOverlay used
     // ttp_grid_cell — the RAW surface tiled edge to edge — while the picture is
-    // letterboxed to CELL_MAX_ASPECT and centred, so wherever the cap bites the
-    // two disagree about where a cell is. Measured at 2560x720 with four cells:
+    // fitted to the aspect band and centred, so wherever a bar appears the two
+    // disagree about where a cell is. Measured at 2560x720 with four cells:
     // the steer bars sat at x 640 and 1920, the raw grid's cell centres, while
     // their cells were actually centred at 860 and 1700 — each bar a fifth of a
     // cell out, hugging the wrong side, under a car that was not there. The
@@ -152,22 +152,26 @@ public:
     // drawOverlay.
     TtpCellRect cellRectTopLeft(uint32_t n, uint32_t i) const;
 
-    // How wide a racing cell is allowed to get before the sides are bars.
+    // The two numbers a cell's projection needs, for an n-cell layout on this
+    // surface: the cell's ASPECT, and its HEIGHT against the picture a SINGLE
+    // cell gets HERE. Only the second reaches ttp::rt::cellFov — the first is
+    // handed to the projection, where it decides how much is revealed.
     //
-    // A cell's camera locks its PIXEL SCALE to the single-player reference
-    // (cellFov, libttp-runtime/ttp/frame_builder.h), so this does NOT set how
-    // big the car is — that is fixed in every layout by construction, and stays
-    // fixed whatever this is. Nor does it set the vertical fov, which works out
-    // to depend only on the cell's HEIGHT against the screen's. What it sets is
-    // how much width of world a cell shows, and what that costs to rasterize.
+    // It lives with the rects rather than in each shell because it is a pure
+    // function of them and a shell that derived it would be a fourth copy of the
+    // grid. tvOS and Android call this and pass the pair straight through.
+    struct CellLens { float aspect, heightFrac; };
+    CellLens cellLens(uint32_t n) const;
+
+    // A cell's shape is held in this band. 16:9 is the BASE — the authored
+    // composition, and the floor a too-tall tile is letterboxed up to. 21:9 caps
+    // how far past it a wide tile may go before the sides become bars.
     //
-    // So the trade here is peripheral view against fill, and 21:9 is a shape
-    // people read as a picture rather than a slot. On a 16:9 screen it gives a
-    // stacked 2-player cell a 1260 px picture with 330 px bars, ~18% off the
-    // scene's GPU cost at 4K.
-    //
-    // Anything at or under 16:9 — every 1, 3 and 4-player cell — never reaches
-    // this and is drawn whole.
+    // Width past the base only REVEALS: the lens is solved from the cell's height
+    // (cellFov) and aspect never enters it, so a wider cell is the base picture
+    // with more world at the sides, at the same scale. Narrower would HIDE world,
+    // which is why the base is a hard floor and the cap is only taste.
+    static constexpr float CELL_BASE_ASPECT = 16.0f / 9.0f;
     static constexpr float CELL_MAX_ASPECT = 21.0f / 9.0f;
 
     // What the built track measures, for the runtime's overview cameras and fog

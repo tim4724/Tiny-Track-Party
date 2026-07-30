@@ -119,8 +119,9 @@ std::vector<ScalarId> parseIds(const char* json);
 // the opposite — that the rects are a pure function of the surface and the cell
 // list, so the body belonged in libttp-runtime where a ctest could reach it. It
 // had no definition and no caller, and the premise was wrong: the grid is
-// LETTERBOXED to CELL_MAX_ASPECT as one piece and centred (TtpRenderer::
-// cellRect), so the rect depends on a constant only the renderer holds. What
+// fitted to an aspect band as one piece and centred (TtpRenderer::cellRect), so
+// the rect depends on constants only the renderer holds — a cell's SHAPE is a
+// rendering decision, where the grid that placed it is a layout one. What
 // ships is ttp_display_cell_rects -> TtpRenderer::cellRectTopLeft, and the
 // renderer's own steer bar and dividers read the same function.
 //
@@ -128,24 +129,25 @@ std::vector<ScalarId> parseIds(const char* json);
 // what let drawOverlay place two HUD elements on the raw surface grid for as
 // long as it did, with a comment claiming they came from the shell's rects.
 
-// Assemble one frame into d.frame and return its header, which is followed
-// CONTIGUOUSLY by the arrays (ttp_render.h). `eng` is the bound session's live
-// Game, or nullptr for an empty track. Never returns null; the pointer is valid
-// until the next buildFrame on the same state.
 // The chase lens for one cell: BASE_FOV is authored VERTICAL, so a shorter cell
 // would draw the car smaller. This solves the fov that holds PIXEL SCALE instead,
 // making every cell a true crop of the single-player view. Exposed because it is
 // part of the shared camera model — the tvOS and Android shells frame with it too.
-float cellFov(float fovV, float aspect, float widthFrac);
+float cellFov(float fovV, float heightFrac);
 
-// `aspect` and `widthFrac` describe the CELL the race cameras render into, and
-// are passed in rather than derived because only the renderer knows the rect: it
-// letterboxes the grid as ONE piece, so a cell is a tile of the capped picture,
-// not of the raw surface. widthFrac is that picture's width against a 16:9 view
-// OF THE SAME HEIGHT — the reference the lens is solved against. Both are ignored
-// when no car owns a cell; the overview sets its own fov.
+// Assemble one frame into d.frame and return its header, which is followed
+// CONTIGUOUSLY by the arrays (ttp_render.h). `eng` is the bound session's live
+// Game, or nullptr for an empty track. Never returns null; the pointer is valid
+// until the next buildFrame on the same state.
+//
+// `aspect` and `heightFrac` describe the CELL the race cameras render into, and
+// come from the renderer because only it knows the rect (it fits the grid as one
+// piece). heightFrac is the cell's height against a single cell's on the same
+// surface. The two do different jobs: heightFrac sets the SCALE, aspect sets how
+// much is REVEALED beside it. Both are ignored when no car owns a cell; the
+// overview sets its own fov.
 TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
-                          float aspect, float widthFrac);
+                          float aspect, float heightFrac);
 
 }  // namespace rt
 }  // namespace ttp

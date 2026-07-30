@@ -1193,38 +1193,55 @@ uint32_t TtpRenderer::bestGridCols(uint32_t n) const {
     return ttp_grid_cols(n, mWidth, mHeight);
 }
 
-// Where cell i is drawn: its tile in a GRID that is letterboxed as one piece.
+// Where cell i is drawn: its tile brought into the aspect band, with what that
+// trims becoming a bar. Only one end can bind. Past the cap loses WIDTH; under
+// the base loses HEIGHT, so a short cell still shows the base picture.
 //
-// A cell wider than CELL_MAX_ASPECT is width the camera declines to use, so it
-// is not drawn — but the bars that leaves belong at the SCREEN's edges, never
-// between two pictures. Letterboxing each cell on its own would put a gutter
-// down the middle of a 2x2 on an ultrawide (two 330px half-bars meeting as one
-// 660px band) while the edges got half as much: the same pixels saved, arranged
-// as a seam through the layout. So cap the width of the whole grid instead and
-// tile it edge to edge inside that, and every bar ends up on the outside.
+// The grid is fitted AS ONE PIECE and centred, so bars land on the screen's outer
+// edges. Fitting each cell alone would put a gutter down the middle of a 2x2 on
+// an ultrawide — the same pixels, arranged as a seam through the layout. Bars
+// cost nothing to draw: the clear colour is black and the scene target is cleared
+// whole by the frame's first view.
 //
-// The bars cost nothing to draw: the clear colour is black (setClearOptions in
-// init) and the scene target is cleared whole by the first view of the frame.
-// And they cost nothing to LOSE, either — no pixel the camera would have shown
-// is dropped. Any grid whose cells are already at or under the cap (all of 1, 2,
-// 3 and 4 players on a 16:9 screen but the stacked pair) is untouched.
+// Rounds rather than truncates: 16.0f/9.0f is 1.77777779, so a true 16:9 tile
+// measures 1280 / BASE == 719.99997, and truncating would shave a row off every
+// 16:9 display to satisfy a shape it already had.
 //
 // Bottom-left origin, because GL viewports are; row 0 is the TOP row, as the
 // DOM HUD lays it out (Stage.js has the same rules, pinned to these).
 TtpRenderer::CellRect TtpRenderer::cellRect(uint32_t n, uint32_t i) const {
     const uint32_t cols = bestGridCols(n);
     const uint32_t rows = (n + cols - 1) / cols;
-    const uint32_t ch = mHeight / rows;
-    uint32_t stageW = mWidth;
-    const uint32_t capped = (uint32_t) ((float) ch * CELL_MAX_ASPECT * (float) cols);
-    if (capped < stageW) stageW = capped;
-    const uint32_t cw = stageW / cols;
-    // Centre what the columns actually cover, so integer division can't drift
-    // the grid off-centre by up to cols-1 pixels.
+    uint32_t cw = mWidth / cols, ch = mHeight / rows;
+    const uint32_t capW = (uint32_t) std::lround((float) ch * CELL_MAX_ASPECT);
+    if (capW < cw) {
+        cw = capW;
+    } else {
+        const uint32_t baseH = (uint32_t) std::lround((float) cw / CELL_BASE_ASPECT);
+        if (baseH < ch) ch = baseH;
+    }
+    // Centre what the columns and rows actually cover, so integer division can't
+    // drift the grid off-centre by up to cols-1 (rows-1) pixels.
     const uint32_t x0 = (mWidth - cw * cols) / 2;
+    const uint32_t y0 = (mHeight - ch * rows) / 2;
     const uint32_t col = i % cols, row = i / cols;
     return { (int32_t) (x0 + col * cw),
-             (int32_t) (mHeight - (row + 1) * ch), cw, ch };
+             (int32_t) (mHeight - y0 - (row + 1) * ch), cw, ch };
+}
+
+// The projection inputs for an n-cell layout: the cell's aspect, and its HEIGHT
+// against the picture one cell gets on this surface.
+//
+// Height is the reference because it alone sets pixels-per-world-unit. So one
+// cell is heightFrac 1 and the authored lens on any surface shape (resizing
+// scales), a half-height cell gets half the fov (splitting keeps the car's size),
+// and width is left free to reveal. Referencing a WIDTH instead ties the cell's
+// shape to the car's size: two versions did, and each had to sacrifice one.
+TtpRenderer::CellLens TtpRenderer::cellLens(uint32_t n) const {
+    const CellRect r = cellRect(n ? n : 1, 0);
+    const CellRect one = cellRect(1, 0);
+    const float w = (float) r.w, h = (float) (r.h ? r.h : 1u);
+    return { w / h, h / (float) (one.h ? one.h : 1u) };
 }
 
 TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {
@@ -7099,20 +7116,32 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         // The SPAN stays the canvas, and that is deliberate rather than an
         // oversight: clipping the rules to the picture is visibly wrong on the
         // STACKED PAIR, which is not an exotic layout but the ordinary 2-player
-        // one — a 16:9 surface splits into two 3.56:1 cells, which is past
+        // one — a 16:9 surface splits into two 3.56:1 tiles, each capped back to
         // CELL_MAX_ASPECT, so the picture is inset with bars either side and the
         // rule between the two views would stop short of the screen edges.
         // tests/e2e/flow.spec.js samples that seam row and holds this.
+        //
+        // An edge is a seam when it has cells on BOTH sides, which is not the
+        // same as "away from the border": the grid is centred, so column 0
+        // starts past 0 whenever there are side bars. Testing `> 0` drew a rule
+        // down the picture's left edge on the ordinary 2-player pair. The grid is
+        // uniform, so "has a cell to its left" is just "is not the smallest x".
         if (input.flags & TTP_FRAME_DIVIDERS) {
             uint32_t xs[8], ys[8], nx = 0, ny = 0;
+            uint32_t x0 = UINT32_MAX, y0 = UINT32_MAX;
+            for (uint32_t i = 0; i < n; i++) {
+                const TtpCellRect r = cellRectTopLeft(n, i);
+                if (r.x < x0) x0 = r.x;
+                if (r.y < y0) y0 = r.y;
+            }
             for (uint32_t i = 0; i < n; i++) {
                 const TtpCellRect r = cellRectTopLeft(n, i);
                 bool seen = false;
                 for (uint32_t k = 0; k < nx; k++) seen = seen || xs[k] == r.x;
-                if (r.x > 0 && !seen && nx < 8) xs[nx++] = r.x;
+                if (r.x > x0 && !seen && nx < 8) xs[nx++] = r.x;
                 seen = false;
                 for (uint32_t k = 0; k < ny; k++) seen = seen || ys[k] == r.y;
-                if (r.y > 0 && !seen && ny < 8) ys[ny++] = r.y;
+                if (r.y > y0 && !seen && ny < 8) ys[ny++] = r.y;
             }
             // rgba(42, 39, 53, 0.88) — the ink, let through by the tiniest bit.
             const float4 rule{ ink.xyz, 0.88f };

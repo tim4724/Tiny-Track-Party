@@ -356,17 +356,14 @@ int ttp_display_frame(double dtSeconds) {
     // reads the bound session's live Game instead of being handed a serialized
     // copy of it back from the shell.
     const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
-    // Match the renderer's own viewport exactly, or the projection disagrees
-    // with the rect it lands in. cellRect is a tile of the LETTERBOXED grid, so
-    // this is the aspect of what is actually drawn; widthFrac measures that
-    // picture against a 16:9 view of the same height, which is the reference the
-    // chase lens is solved against. Only the renderer knows either number.
+    // Match the renderer's own viewport exactly, or the projection disagrees with
+    // the rect it lands in. Both numbers come from the renderer (cellLens) rather
+    // than being worked out here: they are functions of the LETTERBOXED grid, and
+    // a shell deriving them would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
-    const TtpRenderer::CellRect r = d.renderer->cellRect(nCells ? nCells : 1, 0);
-    const float cellAspect = (float) r.w / (float) (r.h ? r.h : 1);
-    const float widthFrac =
-            (float) r.w / ((16.0f / 9.0f) * (float) (d.height ? d.height : 1));
-    const TtpFrameInput* head = ttp::rt::buildFrame(d, eng, dt, cellAspect, widthFrac);
+    const TtpRenderer::CellLens lens = d.renderer->cellLens(nCells);
+    const TtpFrameInput* head =
+            ttp::rt::buildFrame(d, eng, dt, lens.aspect, lens.heightFrac);
     return d.renderer->render(*head) ? 1 : 0;
 }
 

@@ -87,8 +87,8 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   });
   // Two racers, two cells, same size, tiling a grid that starts at the TOP of
   // the drawing buffer and is centred across it. Not `x: 0`: a stacked pair is
-  // the one small-party grid whose cells are wider than CELL_MAX_ASPECT, so the
-  // renderer letterboxes the grid as ONE piece (TtpRenderer::cellRect) and the
+  // the one small-party grid whose tiles fall outside the aspect band, so the
+  // renderer fits the grid as ONE piece (TtpRenderer::cellRect) and the
   // bars it leaves land at the screen's two edges rather than as a seam through
   // the layout. Assert THAT — equal bars, whole-pixel remainder — instead of an
   // origin, so this reads the same on a surface where nothing is capped.

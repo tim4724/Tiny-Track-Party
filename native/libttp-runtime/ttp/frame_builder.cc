@@ -32,36 +32,32 @@ std::vector<ScalarId> parseIds(const char* json) {
 
 // A split-screen cell is not a small screen. It is a CROP of one.
 //
-// BASE_FOV is authored VERTICAL, which quietly makes the car's on-screen size a
-// function of the cell's HEIGHT: a cell half as tall draws the car half as big,
-// and a two-player 32:9 strip also opened the lens to 123 degrees and pushed it
-// further away still. The chase camera never moved — CHASE_DIST is a fixed 1.35
-// world units in every layout — so this is not distance, it is pixels per world
-// unit, and the lever for it is the lens.
+// BASE_FOV is authored VERTICAL, so the car's on-screen size is a function of the
+// cell's HEIGHT alone — the chase camera never moves (CHASE_DIST is a fixed 1.35
+// world units in every layout), so this is pixels per world unit and the lever is
+// the lens. Scaling tan(vFov/2) by the cell's height against the single-cell
+// reference holds
 //
-// So lock the pixel scale instead of the angle. Solve each cell's fov so that
+//     renderedHeight / (2*tan(vFov/2))  ==  referenceHeight / (2*tan(vRef/2))
 //
-//     renderedWidth / (2*tan(hFov/2))  ==  referenceWidth / (2*tan(hRef/2))
+// however the screen is carved up.
 //
-// and a world unit at the car covers the same number of pixels no matter how the
-// screen is carved up. Every cell is then a genuine CROP of the single-player
-// view: same scale, no distortion, just less of the world. What you give up is
-// peripheral view, and that is the unavoidable half of the trade.
+// ASPECT IS DELIBERATELY ABSENT: the horizontal fov falls out of (vFov, aspect)
+// at the projection, so a wider cell reveals more world and changes nothing else.
+// Narrower would hide some, which is why a cell's shape has a floor at
+// TtpRenderer::CELL_BASE_ASPECT.
 //
-// FRAME_LOCK is how much of the shrink gets paid back: 0 holds the HORIZONTAL
-// fov at the reference, 1 holds the pixel scale outright. Single player is the
-// fixed point — its cell is the whole picture, so the vertical fov comes back
-// exactly as authored on any display shape.
-constexpr float REF_ASPECT = 16.0f / 9.0f;
+// FRAME_LOCK: 1 holds the pixel scale, 0 holds the fov and lets the car shrink
+// with its cell. Single player is the fixed point either way (heightFrac 1).
 constexpr float FRAME_LOCK = 1.0f;
-float cellFov(float fovV, float aspect, float widthFrac) {
-    const float tanH = std::tan(fovV * (float) M_PI / 360.0f) * REF_ASPECT;
-    return std::atan(tanH * std::pow(widthFrac, FRAME_LOCK) / aspect)
+float cellFov(float fovV, float heightFrac) {
+    return std::atan(std::tan(fovV * (float) M_PI / 360.0f)
+                   * std::pow(heightFrac, FRAME_LOCK))
             * 360.0f / (float) M_PI;
 }
 
 TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
-                          float cellAspect, float widthFrac) {
+                          float cellAspect, float heightFrac) {
     // Cars, in ROSTER order: the renderer baked each slot's model and livery at
     // build time, so slot i must keep carrying the car the roster named. Ids,
     // not indices — `cars()` is insertion order and the roster is cell order.
@@ -90,10 +86,10 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
     const bool raceCams = anyCellCar;
     uint32_t viewCount = raceCams ? (uint32_t) d.cells.size() : 1;
-    // The renderer owns the rect — it letterboxes the grid as ONE piece, so a
-    // cell is a tile of the capped picture and not of the raw surface. The caller
-    // measured it; deriving it here would be a second implementation that could
-    // disagree with the viewport the cell actually lands in.
+    // The renderer owns the rect — it fits the grid as ONE piece, so a cell is a
+    // tile of the fitted picture and not of the raw surface. The caller measured
+    // it; deriving it here would be a second implementation that could disagree
+    // with the viewport the cell actually lands in.
     const float aspect = raceCams
             ? cellAspect
             : (float) d.width / (float) (d.height ? d.height : 1);
@@ -213,7 +209,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             if (c) cam.update(c->pose, c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
             TtpViewInput& v = outViews[i];
             lookAtWorld(v.world, cam.pos, cam.target, c ? v3(c->pose.up) : V3{ 0, 1, 0 });
-            v.fov = cellFov(cam.fov, aspect, widthFrac);
+            v.fov = cellFov(cam.fov, heightFrac);
             v.aspect = aspect;
             v.nearZ = CAM_NEAR;
             v.farZ = CAM_FAR;
