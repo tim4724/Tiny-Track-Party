@@ -76,6 +76,15 @@ export const MIRRORED = [
   { name: 'car blob overscan', value: 1.45, find: 'fw * 1.45f, L = fl * 1.45f;' },
   { name: 'dynamic lift',    value: 0.02,  find: 'carS, carLat, outerR, outerR, 0.02f,' },
   { name: 'road ring target', value: 0.24, find: 'std::lround(L / std::min(0.24f' },
+  // RENDER ORDER, and it is correctness rather than taste. Both must stay BELOW
+  // the cars' default priority of 4. The boost aura was 5 — drawn after the cars
+  // — so its plane, 0.02 above the deck, won the depth test across the bottom
+  // 0.02 of every tyre and painted a bright band there; that band is what read as
+  // the aura hovering, because it sits visibly above where the wheels touch. The
+  // blob shadow sits one below the aura so the aura still paints over it. Nothing
+  // geometric in this audit can see a priority, so they are pinned here.
+  { name: 'car blob priority',   value: 2, find: 'if (!buildMesh(m, true, mi, 2)) return false;' },
+  { name: 'boost disk priority', value: 3, find: 'if (!buildMesh(m, true, mi, 3)) return false;' },
 ];
 
 export function verifyMirrors() {

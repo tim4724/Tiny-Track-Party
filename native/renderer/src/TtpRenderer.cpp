@@ -5133,7 +5133,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             } else {
                 m.uvs.clear(); // vblend has no uv0 attribute
             }
-            if (!buildMesh(m, true, mi, 3)) return false;
+            // PRIORITY 2, one below the boost aura's 3, so the aura still paints
+            // over the contact shadow exactly as it did when the two were 3 and 5
+            // — the aura only moved down to get BELOW the cars, and this keeps
+            // their relative order deterministic rather than distance-sorted.
+            // Sharing 2 with the sea ring is harmless: that starts at radius 135
+            // and a blob is on the road, so they never overlap, and neither
+            // writes depth.
+            if (!buildMesh(m, true, mi, 2)) return false;
         }
         // Rear name plates (makePlate): a livery rounded-rect sticker with a
         // white feathered rim and the player's name, fixed to the car's rear
@@ -5344,7 +5351,19 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             }
             MaterialInstance* mi = sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f); // conformed, but never z-fight
-            if (!buildMesh(m, true, mi, 5)) return false;
+            // PRIORITY 3, BEFORE THE CARS (default 4) — this was 5 until
+            // 2026-07-30, i.e. drawn AFTER them, and that is what made the aura
+            // read as hovering. The disc is a plane 0.02 above the deck, so it
+            // slices each tyre 0.02 up from its contact patch; drawing after the
+            // car meant it WON there and painted a bright green band across the
+            // bottom of every wheel. The eye reads that band as the disc sitting
+            // above the road, because it is visibly not at the height where the
+            // wheels touch. The car's own blob shadow never had the bug — it was
+            // already priority 3. Ordering is the whole fix: the 0.02 lift stays,
+            // because that is the headroom the disc's chords need on a crest (see
+            // the tessellation note above), and with the car drawn over the top
+            // the lift has nothing left to give away.
+            if (!buildMesh(m, true, mi, 3)) return false;
         }
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
         // along X, facing +Y) carrying makeStreakTexture — an ellipse

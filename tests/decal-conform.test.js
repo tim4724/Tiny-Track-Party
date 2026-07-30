@@ -51,7 +51,7 @@ test('the audit still describes the renderer it mirrors', () => {
   const { ok, missing } = A.verifyMirrors();
   assert.ok(ok, 'these constants moved in TtpRenderer.cpp but not in '
     + `scripts/decal-conform-audit.mjs:\n  ${missing.map((m) => `${m.name}: ${m.find}`).join('\n  ')}`);
-  assert.ok(A.MIRRORED.length >= 16, 'the mirror lost entries');
+  assert.ok(A.MIRRORED.length >= 19, 'the mirror lost entries');
 });
 
 test('shipped furniture clears the deck on every catalogue track', () => {
