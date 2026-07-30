@@ -781,6 +781,29 @@ export class Stage {
   // 60fps; the held frame renders fully, so resuming picks up seamlessly.
   pauseAfterFrame() { if (this._running) this._idleAfterFrame = true; }
 
+  // DEBUG resolution scale: re-point the drawing buffer at n x the layout size,
+  // live. ?dpr= picks the value at boot and is the normal way to set it; this is
+  // for the one caller that needs to CHANGE it mid-session — scripts/capture-artwork.js,
+  // which races at a cheap scale (the artwork rig raster is software GL: full-res
+  // 4K measures 0.58 fps, and since _loop clamps dt to 50 ms per frame a slow
+  // frame rate stops the sim advancing, so a hero shot at full scale throughout
+  // is 20 s of wall clock for 0.6 s of race) and then lifts it for the shot alone.
+  //
+  // Clamped to the renderer's pixel-ratio cap of 2, but NOT to devicePixelRatio
+  // the way the ctor is: a caller naming a scale is asking for a buffer size, and
+  // on a DPR-1 screen 2 means supersample, which is exactly what the capture wants.
+  //
+  // _onResize is the whole of it. The renderer's two chrome pieces used to need
+  // the new scale pushed after it (uiScale), and no longer do — they size
+  // themselves off the cell rects, which are C++'s own answer and move with the
+  // surface. So nothing here has to stay in step with a second copy of the size.
+  setRenderScale(n) {
+    const v = parseFloat(n);
+    this._dpr = Number.isFinite(v) && v > 0 ? Math.min(v, 2) : 1;
+    this._onResize();
+    return this._dpr;
+  }
+
   _loop(t) {
     if (!this._running) return;
     const rawMs = t - this._last; // true rAF cadence (pre-clamp) for the FPS meter
