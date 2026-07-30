@@ -14,10 +14,12 @@
 // world point is, what order beats come out in. The corpus pins the function;
 // this pins the arguments.
 //
-// So the last test races one field twice at once: through the native bus, and
-// through the JS oracle driven the way main.js used to drive it (a snapshot per
-// frame, an event queue, world points asked for over the boundary one call at a
-// time). Command for command, they must agree.
+// So what is here is the seam and nothing else: the exports the shell binds to,
+// the two lookups its tables come from, the catalogue's one order, and that the
+// bus is inert with nothing bound. A test that raced the native bus against the
+// JS oracle for 3600 frames used to sit at the bottom of this file; it went with
+// decide.js, because it WAS the oracle running. See the note below its slot for
+// what that cost and what still covers the same ground.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
