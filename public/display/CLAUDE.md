@@ -27,11 +27,12 @@ correctness constraints live in that order alone.
 peer message, socket close, liveness tick, drained room event) is ONE walk into
 `ttp_net.h`, which mutates the room inside the wasm and answers an ordered
 effect list; `_performNetEffect` holds the same no-reorder/no-skip contract.
-What stays in the file is the socket, the three timers, sessionStorage, the
-shuffle bag (a random pick answers `needDraw` and the shell draws) and the pick
-mirror the game layer reads — written only by the `set-pick` effect. Walks go
-through `flow.runWalk`, which keeps NativeRoomFlow's provider/drain/record-cache
-discipline around a mutation the class's own methods didn't make.
+What stays in the file is the socket, the three timers, sessionStorage and the
+shuffle bag (a random pick answers `needDraw` and the shell draws). The pick
+itself is STORED behind the room handle (`ttp_net_pick_json`) — no mirror; the
+game layer asks `net.pick` when it needs one. Walks go through `flow.runWalk`,
+which keeps NativeRoomFlow's provider/drain/record-cache discipline around a
+mutation the class's own methods didn't make.
 
 ## Boot and the back stack
 
