@@ -134,6 +134,11 @@ const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.le
 // (?bots=0 = race alone) instead of topping the grid up to a full field.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
+// ?bootdelay=<ms> — DEBUG: hold the engine boot this long, so the pre-boot NEW
+// GAME path (the caught click held pressed, then the lobby reveal and the
+// ticket's QR/URL fade) can be watched by hand instead of racing a fast machine.
+const _qBootDelay = parseInt(_trackParams.get('bootdelay'), 10) || 0;
+if (_qBootDelay) await new Promise((r) => setTimeout(r, _qBootDelay));
 // ---- the native engine ------------------------------------------------------
 // The C++ stack is the ONLY engine: the sim, the cup-series layer above it, and
 // the party layer's decisions (room state, relay framing, fastlane netcode). The
