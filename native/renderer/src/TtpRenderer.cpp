@@ -2827,15 +2827,18 @@ Prim primPlate(const std::vector<std::pair<float, float>>& yz, float t) {
 
 using PartFn = std::function<void(const Prim&, float, float, float, uint32_t, float)>;
 
-enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_COUNT = 3 };
+enum ModelId { MODEL_ROCKET = 0, MODEL_GNOME = 1, MODEL_TRAIN = 2, MODEL_STARFISH = 3,
+               MODEL_COUNT = 4 };
 
 // How many takes each model has. PER MODEL, because they are not all being
 // asked the same question: the gnome and the train were asked "how much
-// detail", which two answers bracket, while the rocket is being asked "what
-// SHAPE", and that needs as many entries as there are shapes worth arguing
-// about. A single count for all three would either starve one row or pad the
-// others with a duplicate.
-inline int modelVariantCount(int id) { return id == MODEL_ROCKET ? 4 : 3; }
+// detail", which two answers bracket, while the rocket and the starfish are
+// being asked "what SHAPE", and that needs as many entries as there are shapes
+// worth arguing about. A single count for all would either starve one row or
+// pad the others with a duplicate.
+inline int modelVariantCount(int id) {
+    return id == MODEL_STARFISH ? 5 : id == MODEL_ROCKET ? 4 : 3;
+}
 
 // Model ids are a URL param and a dropdown value, so they are spelled, not
 // numbered. Unknown names answer -1 (the caller leaves the bench off).
@@ -2845,6 +2848,7 @@ int modelIdByName(const char* name) {
     if (n == "rocket") return MODEL_ROCKET;
     if (n == "gnome") return MODEL_GNOME;
     if (n == "train") return MODEL_TRAIN;
+    if (n == "starfish") return MODEL_STARFISH;
     return -1;
 }
 
@@ -3220,6 +3224,152 @@ void buildTrainKeyModel(const PartFn& part, int variant) {
         part(primBox(0.34f, 0.10f, 0.075f), sd * 0.17f, 0.70f, 0, GOLD, 0.95f);
     }
 }
+
+// ---- starfish -------------------------------------------------------------
+// Beach clutter. Origin on the ground at the hub's centre, unit scale — the
+// clutter site applies its own random yaw and 0.8..1.3 size, the bench its
+// presentation scale. The tint comes from the theme's clutter entry, so unlike
+// the builders above the hue is an argument, not a constexpr.
+void buildStarfishModel(const PartFn& part, int variant, uint32_t hex) {
+    // NOT "PI2": buildTrainModel's PI2 is a quarter turn, and these builders
+    // get copy-pasted between.
+    const float TAU = 2.0f * (float) M_PI;
+    if (variant <= 0) {
+        // v0 — what shipped: a pentagon hub and five squashed cone spikes.
+        part(primCylinder(0.11f, 0.13f, 0.09f, 5), 0, 0.045f, 0, hex, 1.0f);
+        for (int k = 0; k < 5; k++) {
+            part(applyPre(primCone(0.1f, 0.44f, 5),
+                        rotYm(((float) k / 5) * TAU)
+                                * mat4f::translation(float3{ 0, 0.045f, 0.28f })
+                                * mat4f::scaling(float3{ 1, 0.45f, 1 })
+                                * rotXm((float) M_PI / 2)),
+                    0, 0, 0, hex, 0.94f + (k % 2) * 0.08f);
+        }
+        return;
+    }
+    if (variant == 1) {
+        // v1 "plump" — the soft-toy read: a domed centre and five fat rounded
+        // arms, ellipsoids overlapping the dome so there is no gap at the hub,
+        // each tipped a touch nose-up like a cushion's corner.
+        part(applyPre(primSphere(0.20f, 12, 8), mat4f::scaling(float3{ 1, 0.55f, 1 })),
+                0, 0.10f, 0, hex, 1.06f);
+        for (int k = 0; k < 5; k++) {
+            part(applyPre(primSphere(0.16f, 10, 7),
+                        rotYm(((float) k / 5) * TAU)
+                                * mat4f::translation(float3{ 0, 0.095f, 0.30f })
+                                * rotXm(-0.15f)
+                                * mat4f::scaling(float3{ 0.72f, 0.42f, 1.75f })),
+                    0, 0, 0, hex, 1.0f);
+        }
+        return;
+    }
+    if (variant == 2) {
+        // v2 "sea star" — the real animal resting: arms taper from a wide root
+        // and curl up at the tip, with a row of lighter freckle bumps down each
+        // arm's back. The most parts on the row.
+        part(applyPre(primSphere(0.19f, 12, 8), mat4f::scaling(float3{ 1, 0.5f, 1 })),
+                0, 0.085f, 0, hex, 1.04f);
+        for (int k = 0; k < 5; k++) {
+            const mat4f armF = rotYm(((float) k / 5) * TAU);
+            // The arm: a frustum lying along z, squashed flat, bowed up so the
+            // tip leaves the sand.
+            part(applyPre(primCylinder(0.035f, 0.13f, 0.52f, 7),
+                        armF * mat4f::translation(float3{ 0, 0.09f, 0.30f })
+                                * rotXm((float) M_PI / 2 - 0.22f)
+                                * mat4f::scaling(float3{ 1, 1, 0.5f })),
+                    0, 0, 0, hex, 0.98f + (k % 2) * 0.04f);
+            // The upturned tip.
+            part(applyPre(primSphere(0.048f, 8, 6),
+                        armF * mat4f::translation(float3{ 0, 0.155f, 0.545f })),
+                    0, 0, 0, hex, 1.02f);
+            // Freckles along the back.
+            for (int b = 0; b < 2; b++) {
+                part(applyPre(primSphere(0.026f, 6, 5),
+                            armF * mat4f::translation(
+                                    float3{ 0, 0.115f + b * 0.012f, 0.17f + b * 0.15f })),
+                        0, 0, 0, hex, 1.18f);
+            }
+        }
+        return;
+    }
+    if (variant == 4) {
+        // v4 "smooth" — the pick: the original's five-arm silhouette with the
+        // hub removed, blunt tips, and the whole thing a flat low slab on the
+        // sand. ONE soup prim on purpose: five overlapping frustum arms were
+        // tried first and their coincident top surfaces creased the centre —
+        // a single extruded outline has no surface to fight.
+        Prim p;
+        constexpr int ARMS = 5, PTS = ARMS * 4; // 3-point blunt tip + 1 valley
+        constexpr float H = 0.06f, INSET = 0.9f;
+        float ox[PTS], oz[PTS];
+        for (int k = 0; k < ARMS; k++) {
+            const float a = (float) k / ARMS * TAU;
+            const float ta[4] = { a - 0.14f, a, a + 0.14f, a + (float) M_PI / ARMS };
+            const float tr[4] = { 0.43f, 0.47f, 0.43f, 0.18f };
+            for (int j = 0; j < 4; j++) {
+                ox[k * 4 + j] = std::cos(ta[j]) * tr[j];
+                oz[k * 4 + j] = std::sin(ta[j]) * tr[j];
+            }
+        }
+        // Wall vertex pairs, wrap-duplicated like primCylinder's — same axis
+        // convention and winding, so the two can be compared line for line.
+        for (int j = 0; j <= PTS; j++) {
+            const int i = j % PTS;
+            p.v.push_back({ ox[i], 0, oz[i] });
+            p.v.push_back({ ox[i] * INSET, H, oz[i] * INSET });
+        }
+        for (int j = 0; j < PTS; j++) {
+            const uint32_t a = j * 2, b = a + 1, c2 = a + 2, d = a + 3;
+            p.i.insert(p.i.end(), { a, c2, b, b, c2, d });
+        }
+        // Flat top: its own rim verts so the edge stays crisp, fanned from the
+        // centroid at the same height — no peak, per the pick.
+        const uint32_t capBase = (uint32_t) p.v.size();
+        for (int j = 0; j <= PTS; j++) {
+            const int i = j % PTS;
+            p.v.push_back({ ox[i] * INSET, H, oz[i] * INSET });
+        }
+        const uint32_t mid = (uint32_t) p.v.size();
+        p.v.push_back({ 0, H, 0 });
+        for (int j = 0; j < PTS; j++)
+            p.i.insert(p.i.end(), { mid, capBase + (uint32_t) j + 1, capBase + (uint32_t) j });
+        part(p, 0, 0, 0, hex, 1.0f);
+        return;
+    }
+    // v3 "die-cut" — the Sticker Bash read: one chunky five-point star, a flat
+    // extrusion whose top ring pulls in and rises to a low peak, so it shades
+    // like a puffy sticker. A lighter centre dot echoes the animal's disc.
+    {
+        Prim p;
+        constexpr int N = 10; // outer/inner points, alternating
+        constexpr float RO = 0.5f, RI = 0.235f, H = 0.12f, INSET = 0.76f, APEX = 0.17f;
+        // Wall vertex pairs (bottom, top), wrap-duplicated like primCylinder so
+        // the top edge stays crisp against its own cap.
+        for (int j = 0; j <= N; j++) {
+            const float a = (float) (j % N) / N * TAU;
+            const float r = (j % 2 == 0) ? RO : RI;
+            p.v.push_back({ std::cos(a) * r, 0, std::sin(a) * r });
+            p.v.push_back({ std::cos(a) * r * INSET, H, std::sin(a) * r * INSET });
+        }
+        for (int j = 0; j < N; j++) {
+            const uint32_t a = j * 2, b = a + 1, c2 = a + 2, d = a + 3;
+            p.i.insert(p.i.end(), { a, c2, b, b, c2, d });
+        }
+        const uint32_t capBase = (uint32_t) p.v.size();
+        for (int j = 0; j <= N; j++) {
+            const float a = (float) (j % N) / N * TAU;
+            const float r = ((j % 2 == 0) ? RO : RI) * INSET;
+            p.v.push_back({ std::cos(a) * r, H, std::sin(a) * r });
+        }
+        const uint32_t apex = (uint32_t) p.v.size();
+        p.v.push_back({ 0, APEX, 0 });
+        for (int j = 0; j < N; j++)
+            p.i.insert(p.i.end(), { apex, capBase + (uint32_t) j + 1, capBase + (uint32_t) j });
+        part(p, 0, 0, 0, hex, 1.0f);
+    }
+    part(applyPre(primSphere(0.085f, 10, 7), mat4f::scaling(float3{ 1, 0.5f, 1 })),
+            0, 0.165f, 0, hex, 1.14f);
+}
 } // namespace
 
 // Near-field ground clutter — the flower patches, on their own rand2 stream
@@ -3289,19 +3439,18 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                                 pick(entry), 0.96f + (float) rnd() * 0.1f);
                         break;
                     }
-                    case 2: { // starfish — five flattened arms off a small hub
+                    case 2: { // starfish — benched; buildStarfishModel holds the takes
                         const uint32_t hex = pick(entry);
                         const float a0 = (float) rnd() * 2.0f * (float) M_PI;
                         const float sc = 0.8f + (float) rnd() * 0.5f;
-                        put(primCylinder(0.11f * sc, 0.13f * sc, 0.09f * sc, 5),
-                                T(x, gy + 0.045f * sc, z), hex, 1.0f);
-                        for (int k = 0; k < 5; k++) {
-                            put(applyPre(primCone(0.1f * sc, 0.44f * sc, 5),
-                                        mat4f::rotation((float) M_PI / 2, float3{ 1, 0, 0 })),
-                                    T(x, gy, z) * RY(a0 + ((float) k / 5) * 2.0f * (float) M_PI)
-                                            * T(0, 0.045f * sc, 0.28f * sc) * SC(1, 0.45f, 1),
-                                    hex, 0.94f + (k % 2) * 0.08f);
-                        }
+                        const PartFn emit = [&](const Prim& p, float lx, float ly,
+                                float lz, uint32_t h2, float shade) {
+                            Prim s2 = p;
+                            for (auto& q : s2.v) q *= sc;
+                            put(s2, T(x, gy, z) * RY(a0)
+                                    * T(lx * sc, ly * sc, lz * sc), h2, shade);
+                        };
+                        buildStarfishModel(emit, mModelVariant[MODEL_STARFISH], hex);
                         break;
                     }
                     case 3: { // driftwood — two thin rods, kinked where they meet
@@ -3436,7 +3585,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
 
 // Grass-biome landmarks — verbatim placement streams (seed 51966-FNV) and the
 // track.js builders' numbers: the gnome, the doghouse, the picnic spread.
-static_assert(MODEL_COUNT == 3, "TtpRenderer::mModelVariant is sized to ModelId");
+static_assert(MODEL_COUNT == 4, "TtpRenderer::mModelVariant is sized to ModelId");
 
 void TtpRenderer::setModelVariant(const char* model, int variant) {
     const int id = modelIdByName(model);
@@ -3562,11 +3711,16 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         // the gnome's spacing it would run far enough up the straight to have
         // to be viewed from a distance where the shapes stop resolving — which
         // is the one thing a bench may not do.
-        const float BENCH_STEP = mBenchModel == MODEL_ROCKET ? 5.6f : 7.0f;
+        const float BENCH_STEP = mBenchModel == MODEL_ROCKET ? 5.6f
+                : mBenchModel == MODEL_STARFISH ? 4.6f : 7.0f;
         // The ROCKET ships at 0.2 world units — a fist. Judged at that size a
         // bench tells you nothing but which one is a dot, so its row is blown
-        // up and the legend says by how much. Nothing else is rescaled.
-        const float scale = mBenchModel == MODEL_ROCKET ? 9.0f : 1.0f;
+        // up and the legend says by how much. The STARFISH is clutter-sized
+        // (about a unit across) and flat on the ground besides, so it gets the
+        // same treatment at 3x — the row's viewpoint, not a lift, handles the
+        // flatness. Nothing else is rescaled.
+        const float scale = mBenchModel == MODEL_ROCKET ? 9.0f
+                : mBenchModel == MODEL_STARFISH ? 3.0f : 1.0f;
         const float lift = mBenchModel == MODEL_ROCKET ? 3.1f : 0.0f;
         // A PRESENTATION YAW off square, per model, because "facing the road"
         // is not the same as "the angle this shape reads at". A gnome is a
@@ -3597,6 +3751,8 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             };
             if (mBenchModel == MODEL_ROCKET) buildRocketModel(emit, v);
             else if (mBenchModel == MODEL_GNOME) buildGnomeModel(emit, v);
+            else if (mBenchModel == MODEL_STARFISH)
+                buildStarfishModel(emit, v, 0xe4784f); // the beach theme's first tint
             else {
                 buildTrainModel(emit, v);
                 // The key rides behind the loco rather than on it, which is

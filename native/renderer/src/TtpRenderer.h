@@ -725,22 +725,24 @@ private:
     // The wind-up train: loco + key, driven round a stadium oval each frame.
     Mesh mTrain, mTrainKey;
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
-    // (rocket, gnome, train). Sized by hand because that enum lives beside the
-    // builders it names; a static_assert in the .cpp holds the two together.
+    // (rocket, gnome, train, starfish). Sized by hand because that enum lives
+    // beside the builders it names; a static_assert in the .cpp holds the two
+    // together.
     //
-    // THESE DEFAULTS ARE WHAT THE GAME DRAWS, and all three are settled picks
+    // THESE DEFAULTS ARE WHAT THE GAME DRAWS, and all four are settled picks
     // off the model bench (/gallery-assets.html): the detailed gnome, the
-    // classic loco, and the cruise missile. The rocket took five rounds to
-    // land, and 2..3 are the two unpicked readings of the same brief, kept
-    // because the bench is worth more with them in it than the source is
-    // shorter without.
+    // classic loco, the cruise missile, and the smooth flat starfish (the
+    // original's five arms, hub removed, blunt and flat on the sand). The
+    // rocket took five rounds and the starfish two; each row's unpicked
+    // readings are kept because the bench is worth more with them in it than
+    // the source is shorter without.
     //
     // Variant 0 is the pre-bench geometry on every row and is kept — a bench
     // with no "what we have today" in it is not a comparison — but it is no
     // longer any model's default, so a shell that never calls setModelVariant
     // now gets the picked set rather than the original one.
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
-    int mModelVariant[3] = { 1, 1, 1 };
+    int mModelVariant[4] = { 1, 1, 1, 4 };
     int mBenchModel = -1;
 
     filament::math::float3 mTrainCentre{};

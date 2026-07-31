@@ -598,21 +598,31 @@ export function runDisplayScenario(opts, ctx) {
         // bench that gets used once. The viewpoint is authored from the
         // showroom's own geometry for the same reason START_CAM is — this
         // scenario builds exactly one track.
-        async bench(model) {
+        async bench(model, view) {
           scene.bench(model || '');
           await scene.setTrack(track);
           scene.bindSession(engine.h);
-          if (model) {
+          if (model && view) {
+            // Scripted close-ups: a caller that knows where it wants to stand
+            // (screenshot sweeps) skips the authored row viewpoint.
+            if (view.eye) cam.eye = { ...view.eye };
+            cam.yaw = view.yaw ?? 0;
+            cam.pitch = view.pitch ?? -0.05;
+          } else if (model) {
             // Offset up-track and pulled back so the whole row clears the
             // legend panel, which is the right quarter of the frame whenever
             // the gallery is showing one. The ROCKET row is one entry longer
             // than the other two and is staged at 9x, so it needs both a wider
             // shot and more height.
             const wide = model === 'rocket';
-            cam.eye = { x: wide ? 37.0 : 31.5, y: wide ? 5.4 : 2.6,
-                        z: wide ? -19.0 : -10.5 };
+            // The starfish row lies flat on the sand, so the shared eye reads
+            // it nearly edge-on — it gets a higher, steeper viewpoint.
+            const flat = model === 'starfish';
+            cam.eye = { x: wide ? 37.0 : flat ? 35.2 : 31.5,
+                        y: wide ? 5.4 : flat ? 5.8 : 2.6,
+                        z: wide ? -19.0 : flat ? -9.2 : -10.5 };
             cam.yaw = 0;
-            cam.pitch = -0.05;
+            cam.pitch = flat ? -0.5 : -0.05;
           } else {
             this.home();
           }

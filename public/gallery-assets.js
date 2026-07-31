@@ -26,8 +26,9 @@ const state = Gallery.loadState();
 // The procedural props with more than one take on them, and what each take is.
 // AUTHORED HERE and nowhere else on this side: these are captions for a human
 // choosing between shapes, and the shapes themselves are
-// native/renderer/src/TtpRenderer.cpp's buildRocketModel / buildGnomeModel /
-// buildTrainModel. Index in the array IS the variant number the ABI takes.
+// native/renderer/src/TtpRenderer.cpp's build<Model>Model builders (rocket,
+// gnome, train, starfish). Index in the array IS the variant number the ABI
+// takes.
 //
 // `ships` mirrors TtpRenderer.h's mModelVariant defaults — the variant the game
 // draws when nobody has picked one. It is a CAPTION, so it is a copy, and the
@@ -55,7 +56,14 @@ const BENCH_MODELS = [
   { id: 'train', label: 'Wind-up train', ships: 1, scale: null,
     variants: ['0 · original — seven boxes and a cylinder',
                '1 · classic — smokebox, boiler bands, cowcatcher, lamp, rods',
-               '2 · chunky — shorter and rounder, spoked wheels, big funnel'] }
+               '2 · chunky — shorter and rounder, spoked wheels, big funnel'] },
+  { id: 'starfish', label: 'Starfish (beach clutter)', ships: 4,
+    scale: '3x (it ships at beach-clutter size, under a half unit)',
+    variants: ['0 · original — pentagon hub, five squashed cone spikes',
+               '1 · plump — domed centre, five fat rounded arms, the soft-toy read',
+               '2 · sea star — tapered arms, curled-up tips, freckle bumps',
+               '3 · die-cut — one chunky extruded star, sticker-flat, centre dot',
+               '4 · smooth — PICKED: the original minus the hub, blunt arms, flat on the sand'] }
 ];
 
 const frame = document.getElementById('asset-stage');
