@@ -44,41 +44,30 @@ let gen = 0;
 // wrapped to bump `gen` — the safe default, since a missed mutator serves stale
 // data while a needless bump only re-reads.
 const PURE_READS = new Set([
-  'state', 'allDisc', 'hasLateJoiners', 'lateJoiners', 'host', 'isHost', 'size',
-  'connectedCount', 'list', 'has', 'isDisconnected', 'get', 'events',
-  'lowestFreeSlot', 'version'
+  'state', 'host', 'size', 'connectedCount', 'list', 'has', 'isDisconnected',
+  'get', 'events', 'version'
 ]);
 
 export async function init() {
   if (M) return;
   M = await loadNativeRuntime();
   const c = (name, ret, args) => M.cwrap(name, ret, args);
+  // ONLY what this shell still calls. The C ABI keeps the full ttp_party.h
+  // surface (the walks call it internally, the corpora replay it, and tests
+  // bind it raw); a wrapper here with no caller is a wrapper the next shell
+  // copies for nothing — sixteen of them went when the walks landed.
   fn = {
     create: c('ttp_room_create', 'number', ['string']),
     dispose: c('ttp_room_dispose', null, ['number']),
-    reset: c('ttp_room_reset', null, ['number']),
     addPlayer: c('ttp_room_add_player', 'string', ['number', 'string', 'string']),
-    removePlayer: c('ttp_room_remove_player', null, ['number', 'string']),
     rekey: c('ttp_room_rekey', 'number', ['number', 'string', 'string']),
     setField: c('ttp_room_set_field', 'number', ['number', 'string', 'string', 'string']),
-    markDisc: c('ttp_room_mark_disconnected', null, ['number', 'string']),
-    markReconn: c('ttp_room_mark_reconnected', null, ['number', 'string']),
-    clearDisc: c('ttp_room_clear_disconnected', null, ['number', 'number', 'number']),
     transitionTo: c('ttp_room_transition_to', 'number', ['number', 'string']),
     state: c('ttp_room_state', 'string', ['number']),
-    setActiveOrder: c('ttp_room_set_active_order', null, ['number', 'string']),
-    syncActiveOrder: c('ttp_room_sync_active_order', null, ['number', 'number']),
     onSeen: c('ttp_room_on_seen', null, ['number', 'string', 'number']),
-    isExpired: c('ttp_room_is_expired', 'number', ['number', 'string', 'number']),
-    expiredPeers: c('ttp_room_expired_peers_json', 'string', ['number', 'number']),
-    allDisc: c('ttp_room_all_participants_disconnected', 'number', ['number']),
-    hasLateJoiners: c('ttp_room_has_late_joiners', 'number', ['number']),
-    lateJoiners: c('ttp_room_late_joiners_json', 'string', ['number']),
-    graceTick: c('ttp_room_grace_tick', 'number', ['number', 'number']),
     setMaster: c('ttp_room_set_master', null, ['number', 'string']),
     setLivenessEnabled: c('ttp_room_set_liveness_enabled', null, ['number', 'number']),
     host: c('ttp_room_host_json', 'string', ['number']),
-    isHost: c('ttp_room_is_host', 'number', ['number', 'string']),
     size: c('ttp_room_size', 'number', ['number']),
     connectedCount: c('ttp_room_connected_count', 'number', ['number']),
     list: c('ttp_room_list_json', 'string', ['number']),
@@ -86,7 +75,6 @@ export async function init() {
     isDisconnected: c('ttp_room_is_disconnected', 'number', ['number', 'string']),
     get: c('ttp_room_get_json', 'string', ['number', 'string']),
     events: c('ttp_room_events_json', 'string', ['number']),
-    lowestFreeSlot: c('ttp_room_lowest_free_slot', 'number', ['string', 'number']),
     version: c('ttp_party_version', 'string', [])
   };
   for (const [name, f] of Object.entries(fn)) {
@@ -229,34 +217,11 @@ export class NativeRoomFlow {
     return rec === 'null' ? null : this._record(peerIndex);
   }
 
-  removePlayer(peerIndex) {
-    this._syncProviders();
-    fn.removePlayer(this._h, idJson(peerIndex));
-    this._drain();
-  }
-
   rekey(oldId, newId) {
     this._syncProviders();
     const ok = fn.rekey(this._h, idJson(oldId), idJson(newId)) === 1;
     this._drain();
     return ok;
-  }
-
-  markDisconnected(peerIndex) {
-    this._syncProviders();
-    fn.markDisc(this._h, idJson(peerIndex));
-    this._drain();
-  }
-
-  markReconnected(peerIndex) {
-    this._syncProviders();
-    fn.markReconn(this._h, idJson(peerIndex));
-    this._drain();
-  }
-
-  clearDisconnected(nowMs) {
-    fn.clearDisc(this._h, nowMs === undefined ? 0 : 1, nowMs ?? 0);
-    this._drain();
   }
 
   // ---- lifecycle ------------------------------------------------------------
@@ -267,45 +232,14 @@ export class NativeRoomFlow {
     return ok;
   }
 
-  endGame() { return this.transitionTo('results'); }
   returnToLobby() { return this.transitionTo('lobby'); }
 
-  setActiveOrder(peerIndices) {
-    fn.setActiveOrder(this._h, JSON.stringify(peerIndices || []));
-    this._drain();
-  }
-
-  // Not a kit method: the participant set of a LIVE RACE, computed in C++ off a
-  // session handle (cars + dropped seats). No car id crosses the boundary — the
-  // argument is the handle, not a roster. 0 = no session (lobby).
-  syncActiveOrder(sessionHandle) {
-    fn.syncActiveOrder(this._h, sessionHandle | 0);
-    this._drain();
-  }
-
-  reset() {
-    fn.reset(this._h);
-    this._drain();
-  }
-
-  // ---- liveness (pure predicates — nothing to drain) ------------------------
+  // ---- liveness (a pure stamp — nothing to drain) ---------------------------
   onSeen(peerIndex, nowMs) { fn.onSeen(this._h, idJson(peerIndex), nowMs); }
 
-  isExpired(peerIndex, nowMs) {
-    this._syncProviders();
-    return fn.isExpired(this._h, idJson(peerIndex), nowMs) === 1;
-  }
-
-  expiredPeers(nowMs) {
-    this._syncProviders();
-    return JSON.parse(fn.expiredPeers(this._h, nowMs));
-  }
-
-  allParticipantsDisconnected() { return fn.allDisc(this._h) === 1; }
-  hasLateJoiners() { return fn.hasLateJoiners(this._h) === 1; }
-  // Plain snapshots, like list() — a read-only path (the standings' "joining" rows).
-  lateJoiners() { return JSON.parse(fn.lateJoiners(this._h)); }
-  graceTick(nowMs) { return fn.graceTick(this._h, nowMs) === 1; }
+  // (The rest of the roster/liveness surface — remove/mark/expire/grace/
+  // active-order and the participants predicate — has no wrapper anymore: the
+  // walks and the ui twins run those rules inside the wasm.)
 
   // ---- reads ---------------------------------------------------------------
   // `host`, `state`, `size`, `connectedCount` are GETTERS in the kit contract.
@@ -314,7 +248,6 @@ export class NativeRoomFlow {
   get size() { return fn.size(this._h); }
   get connectedCount() { return fn.connectedCount(this._h); }
 
-  isHost(peerIndex) { return fn.isHost(this._h, idJson(peerIndex)) === 1; }
   list() { return JSON.parse(fn.list(this._h)); }
   has(peerIndex) { return fn.has(this._h, idJson(peerIndex)) === 1; }
   isDisconnected(peerIndex) { return fn.isDisconnected(this._h, idJson(peerIndex)) === 1; }
@@ -327,13 +260,4 @@ export class NativeRoomFlow {
   dispose() {
     if (this._h) { fn.dispose(this._h); this._h = 0; }
   }
-
-  // Static parity with the kit (display/Net.js calls RoomFlow.lowestFreeSlot).
-  static lowestFreeSlot(used, max) {
-    const arr = used instanceof Set ? [...used] : Array.from(used || []);
-    return fn.lowestFreeSlot(JSON.stringify(arr), max);
-  }
-
-  // (No STATES table here: the room-state vocabulary is protocol.js
-  // ROOM_STATE, and nothing read the copy this class used to carry.)
 }
