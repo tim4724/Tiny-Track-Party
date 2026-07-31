@@ -27,10 +27,11 @@
 // tap handler). HTTPS is required for sensors.
 //
 // Steering can also come from BUTTONS instead of the sensor (setScheme). LEFT and
-// RIGHT are held like a d-pad and steer FULL LOCK the instant they are pressed —
-// no ramp, no waiting for the next sample (see BRAKE_LEVEL's neighbouring note and
-// _flush). Holding BOTH is the brake: the two cancel to centre, so the pair reads
-// as "stop", not "steer nowhere".
+// RIGHT are held like a d-pad and RAMP the steer linearly toward full lock, so
+// hold time is the analog axis: a tap is a partial correction, a hold is a full
+// turn (see the BTN_RAMP_MS note). The press edge still reaches the wire without
+// waiting for the next sample (_flush). Holding BOTH is the brake: the two cancel
+// to centre, so the pair reads as "stop", not "steer nowhere".
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -65,17 +66,20 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // an unfiltered stream would chatter packets from a phone lying still.
 export const SMOOTH = 0.5;
 
-// Button steering has NO ramp at all: press = full lock, that instant. It must not
-// borrow SMOOTH — that filter is sized against SENSOR NOISE (it halves the raw
-// DeviceOrientation wobble, which is what lets the send gate's dead-band sit where
-// it does) and a button has none; what a one-pole filter does have is an infinite
-// tail, 133 ms to reach 90% of a step and as long again to let go, which on a
-// control that is strictly on or off reads as lag rather than as smoothing. A
-// gentler linear ramp was tried too and rejected for the same reason: any ramp at
-// all is felt. So the press edge writes ±1 straight through, and _flush carries it
-// without waiting for the sampler — the whole path from touch to wire is one hop.
-// The trade is deliberate: a tap can no longer be a small correction, because
-// there is no small. Steering is full lock or centre.
+// Button steering ramps: a held button walks the steer LINEARLY to full lock over
+// BTN_RAMP_MS, and letting go walks it back to centre in the faster BTN_RELEASE_MS.
+// It must not borrow SMOOTH — that filter is sized against SENSOR NOISE (it halves
+// the raw DeviceOrientation wobble, which is what lets the send gate's dead-band
+// sit where it does) and a button has none; a one-pole's infinite tail (133 ms to
+// 90% of a step, as long again to let go) reads as lag, not smoothing. Linear
+// instead makes hold time itself the analog axis: constant progress from the first
+// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a ~2/3-lock
+// correction instead of slamming full. Release is twice as fast because letting go
+// must never feel sticky — the attack/release asymmetry every d-pad racing scheme
+// uses. The ramp is WALL-CLOCK based (see _tick): _flush inserts extra ticks
+// between the 25 Hz beats, and a per-tick step would fast-forward through them.
+const BTN_RAMP_MS = 150;    // press → full lock
+const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
@@ -111,6 +115,7 @@ export class TiltInput {
     this._keyL = false; this._keyR = false;
     this._tiltOn = true;   // sensor steering (off in the button schemes — see setScheme)
     this._btnL = false; this._btnR = false;  // on-screen LEFT/RIGHT steer buttons
+    this._btnTickMs = 0;   // last button-path tick, for the wall-clock ramp dt
     this.extraAngle = 0;   // degrees the LAYOUT is rotated on top of the OS (see setScheme)
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
@@ -235,11 +240,15 @@ export class TiltInput {
     return (((Math.round(so / 90) * 90 + this.extraAngle) % 360) + 360) % 360;
   }
 
+  // the ramp's clock — an instance method so the headless suites can stub time
+  _now() { return performance.now(); }
+
   _tick() {
-    // Two steer sources, each handled the way it deserves. The sensor is a
+    // Two steer sources, each with the ramp it actually wants. The sensor is a
     // continuous signal carrying noise, so it gets the dead-zone and the one-pole
-    // SMOOTH. The buttons are a clean step, so they get NOTHING between the press
-    // and the wire: no dead-zone (±1 and 0 are already exact) and no ramp.
+    // SMOOTH. The buttons are a clean step with no noise to filter, so they get
+    // the linear wall-clock ramp instead — no dead-zone (±1 and 0 are exact) and
+    // no exponential tail. See BTN_RAMP_MS.
     if (this._tiltOn) {
       let target = this._sensorSteer();
       // dead-zone the centre, then re-expand so full lock still reaches ±1
@@ -254,7 +263,18 @@ export class TiltInput {
       // so full lock and a released centre are values that actually occur.
       if (Math.abs(target - this._steer) < 0.01) this._steer = target;
     } else {
-      this._steer = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);  // both held = 0, the brake pose
+      // Walk the steer toward the held direction (both held = 0, the brake pose)
+      // at the two linear rates above. dt is clamped to one-and-a-bit beats so the
+      // first tick after a stall or a scheme switch can't jump the whole ramp.
+      const target = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
+      const now = this._now();
+      const dt = Math.min(now - this._btnTickMs, 50);
+      this._btnTickMs = now;
+      const d = target - this._steer;
+      // any move that shrinks |steer| is a release; growing it is the ramp
+      const releasing = this._steer !== 0 && Math.sign(d) !== Math.sign(this._steer);
+      const step = dt / (releasing ? BTN_RELEASE_MS : BTN_RAMP_MS);
+      this._steer += Math.abs(d) <= step ? d : Math.sign(d) * step;
     }
 
     const s = clamp1(this._steer + this._key);
