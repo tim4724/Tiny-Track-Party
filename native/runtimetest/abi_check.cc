@@ -1991,6 +1991,8 @@ Value raceStep(const std::string& op, const Value& in) {
   if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
   if (op == "returnDrawsNeeded") return Value::Num(ttp_race_return_draws_needed(J(in).c_str()));
   if (op == "endParty") return jsonOf(ttp_race_end_party_json());
+  if (op == "pauseRace") return jsonOf(ttp_race_pause_json(J(in).c_str()));
+  if (op == "resumeRace") return jsonOf(ttp_race_resume_json(J(in).c_str()));
   if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
   if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
   if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));

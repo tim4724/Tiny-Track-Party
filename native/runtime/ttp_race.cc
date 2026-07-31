@@ -47,6 +47,7 @@ std::vector<race::Cup> g_cups;
 // first's pointer.
 std::string g_bufPersonas, g_bufField, g_bufDemo, g_bufSig, g_bufStart, g_bufLaunch,
     g_bufTick, g_bufBeat, g_bufEvent, g_bufEnd, g_bufAdvance, g_bufReturn, g_bufEndParty,
+    g_bufPause, g_bufResume,
     g_bufForfeit, g_bufRekey, g_bufAutoPause;
 
 const char* put(std::string& buf, const Value& v) {
@@ -434,6 +435,32 @@ const char* ttp_race_countdown_tick_json(double n) {
 
 const char* ttp_race_end_party_json(void) {
   return put(g_bufEndParty, wrapEffects(race::endParty()));
+}
+
+static race::PauseInput pauseInputOf(const char* inputJson) {
+  Value in = json::parse_or(inputJson, Value::Obj());
+  race::PauseInput pi;
+  pi.hasSession = json::truthy(in.find("hasSession"));
+  pi.paused = json::truthy(in.find("paused"));
+  pi.autoPaused = json::truthy(in.find("autoPaused"));
+  pi.raceEnded = json::truthy(in.find("raceEnded"));
+  pi.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+  return pi;
+}
+
+static Value pauseValue(const race::PauseResult& r) {
+  Value v = Value::Obj();
+  v.set("action", Value::Str(race::key(r.action)));
+  v.set("effects", effectsVal(r.effects));
+  return v;
+}
+
+const char* ttp_race_pause_json(const char* inputJson) {
+  return put(g_bufPause, pauseValue(race::pauseRace(pauseInputOf(inputJson))));
+}
+
+const char* ttp_race_resume_json(const char* inputJson) {
+  return put(g_bufResume, pauseValue(race::resumeRace(pauseInputOf(inputJson))));
 }
 
 double ttp_race_intermission_ms(void) { return race::INTERMISSION_MS; }

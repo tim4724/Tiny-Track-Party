@@ -49,6 +49,8 @@ export async function init() {
     drawsNeeded: c('ttp_race_draws_needed', 'number', ['string']),
     returnDrawsNeeded: c('ttp_race_return_draws_needed', 'number', ['string']),
     endParty: c('ttp_race_end_party_json', 'string', []),
+    pauseRace: c('ttp_race_pause_json', 'string', ['string']),
+    resumeRace: c('ttp_race_resume_json', 'string', ['string']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
     resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
     launch: c('ttp_race_launch_json', 'string', ['string']),
@@ -92,6 +94,8 @@ export function demoSig(field, trackId) { return fn.demoSig(J(field), trackId ||
 export function drawsNeeded(input) { return fn.drawsNeeded(J(input)); }
 export function returnDrawsNeeded(input) { return fn.returnDrawsNeeded(J(input)); }
 export function endParty() { return JSON.parse(fn.endParty()); }
+export function pauseRace(input) { return JSON.parse(fn.pauseRace(J(input))); }
+export function resumeRace(input) { return JSON.parse(fn.resumeRace(J(input))); }
 export function intermissionMs() { return fn.intermissionMs(); }
 export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
 export function startRace(input) { return P(fn.start(J(input))); }

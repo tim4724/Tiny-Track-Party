@@ -423,6 +423,26 @@ ReturnResult returnToLobby(const ReturnInput& in);
 // Was the one lifecycle path written outside the effect walk.
 Effects endParty();
 
+// The manual overlay pause and its resume, as walks. The verdicts are
+// ui_model's (canPause/canResume, called here); the ORDER is the contract —
+// flag first, then the freeze sync, the republish, the overlay, the chrome.
+// autoPaused/raceEnded pass through untouched: this walk owns neither.
+enum class PauseAction { NONE, PAUSE, RESUME };
+const char* key(PauseAction a);
+struct PauseInput {
+  bool hasSession = false;
+  bool paused = false;
+  bool autoPaused = false;
+  bool raceEnded = false;
+  RoomState roomState = RoomState::LOBBY;  // read by the pause verdict only
+};
+struct PauseResult {
+  PauseAction action = PauseAction::NONE;
+  Effects effects;
+};
+PauseResult pauseRace(const PauseInput& in);
+PauseResult resumeRace(const PauseInput& in);
+
 // The two game-timing budgets endRace takes as inputs. They live HERE — the
 // layer that arms the timers' effects — and shells read them through the ABI
 // (main.js used to own both numbers, which made them the only game timings a

@@ -1387,23 +1387,17 @@ function endParty() {
 // ---- pause ----
 // Any player's controller (or the on-screen pause button) can freeze the race;
 // the display is authoritative, so it owns `paused` and tells the controllers.
-// "New game" routes through returnToLobby (a full reset), so it isn't handled here.
+// "New game" routes through returnToLobby (a full reset), so it isn't handled
+// here. The verdict AND the five-step order are the walk's
+// (ttp_race_pause_json / resume_json); these two only hand in the shell's
+// latches and perform.
 function pauseRace() {
-  if (!ui.canPause({ hasSession: !!session, paused, roomState: net.roomState })) return;
-  paused = true;
-  syncSessionFrozen();
-  net.syncState();  // paused is snapshot state — the republish is what tells the phones
-  setPauseOverlay(true);
-  holdRaceChrome(); // the overlay is a mouse target — cursor + buttons stay put while it's up
+  perform(flow.pauseRace({ hasSession: !!session, paused, autoPaused, raceEnded,
+                           roomState: net.roomState }).effects);
 }
 
 function resumeRace() {
-  if (!ui.canResume({ hasSession: !!session, paused })) return;
-  paused = false;
-  syncSessionFrozen();
-  net.syncState();  // paused cleared — the republish is what tells the phones
-  setPauseOverlay(false);
-  revealRaceChrome(); // racing again — re-arm the fade (this click already hid the overlay)
+  perform(flow.resumeRace({ hasSession: !!session, paused, autoPaused, raceEnded }).effects);
 }
 
 // The sim is frozen while EITHER pause is set (manual overlay pause OR the

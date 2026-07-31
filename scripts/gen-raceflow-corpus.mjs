@@ -235,6 +235,20 @@ const OPS = {
     for (const e of out.effects) applyEffect(s, e);
     return { in: a, out };
   },
+  pauseRace: (s, a) => {
+    const input = { hasSession: s.hasSession, paused: s.paused, autoPaused: s.autoPaused,
+      raceEnded: s.raceEnded, roomState: s.roomState, ...a };
+    const out = rf.pauseRace(input);
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: input, out };
+  },
+  resumeRace: (s, a) => {
+    const input = { hasSession: s.hasSession, paused: s.paused, autoPaused: s.autoPaused,
+      raceEnded: s.raceEnded, ...a };
+    const out = rf.resumeRace(input);
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: input, out };
+  },
   seriesForStart: (s, a) => {
     const input = { ...a, cups: CUPS };
     return { in: a, out: rf.seriesForStart(input) };
@@ -505,6 +519,25 @@ SCRIPTS.push({
     ['launchRace', { players: [P(1, 'Ann', 0, 0)], seed: 11, trackId: 'a1' }],
     ['returnToLobby', { mode: 'exact', trackId: 'a1' }],
     ['endParty', {}]
+  ]
+});
+
+// The manual pause/resume walk: refused from the lobby, taken mid-race,
+// idempotent-refused when already in the target state, and composing with the
+// silent auto-pause (the flags pass through untouched).
+SCRIPTS.push({
+  name: 'pause-resume',
+  steps: [
+    ['pauseRace', {}],                                     // lobby: refused
+    ['resumeRace', {}],                                    // not paused: refused
+    ['launchRace', { players: [P(1, 'Ann', 0, 0)], seed: 21, trackId: 'a1' }],
+    ['pauseRace', {}],                                     // countdown: allowed
+    ['pauseRace', {}],                                     // already paused: refused
+    ['resumeRace', {}],
+    ['raceStart', { biome: 'meadow', audioReady: false }],
+    ['pauseRace', { autoPaused: true }],                   // over a silent freeze
+    ['resumeRace', { autoPaused: true }],                  // manual lifts, silent stays
+    ['returnToLobby', { mode: 'exact', trackId: 'a1' }]
   ]
 });
 

@@ -55,8 +55,6 @@ export async function init() {
     itemPushes: c('ttp_ui_item_pushes_json', 'string', ['string', 'string', 'string']),
     welcomeItem: c('ttp_ui_welcome_item_json', 'string', ['string']),
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
-    canPause: c('ttp_ui_can_pause', 'number', ['number', 'number', 'string']),
-    canResume: c('ttp_ui_can_resume', 'number', ['number', 'number']),
     autoPauseLive: c('ttp_ui_auto_pause_live_json', 'string', ['number', 'number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
@@ -205,12 +203,8 @@ export function raceFlow(sessionHandle, roomHandle) {
 }
 
 // ---- pause arbitration -----------------------------------------------------
-export function canPause({ hasSession, paused, roomState }) {
-  return !!fn.canPause(b(hasSession), b(paused), roomState || '');
-}
-export function canResume({ hasSession, paused }) {
-  return !!fn.canResume(b(hasSession), b(paused));
-}
+// (canPause/canResume have no JS wrappers anymore: the pause/resume walks ask
+// them inside ttp_race_pause_json / resume_json.)
 
 // The whole silent-freeze arbitration off the two live handles: C++ gathers
 // the input, asks its own consult rule, and reads the party layer through the

@@ -603,6 +603,45 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   return r;
 }
 
+const char* key(PauseAction a) {
+  switch (a) {
+    case PauseAction::PAUSE: return "pause";
+    case PauseAction::RESUME: return "resume";
+    case PauseAction::NONE: break;
+  }
+  return "none";
+}
+
+PauseResult pauseRace(const PauseInput& in) {
+  PauseResult r;
+  if (!ui::canPause(in.hasSession, in.paused, in.roomState)) return r;
+  r.action = PauseAction::PAUSE;
+  Effect e = mk(Op::SET_RACE_FLAGS);
+  e.paused = true; e.autoPaused = in.autoPaused; e.raceEnded = in.raceEnded;
+  r.effects.push_back(e);
+  r.effects.push_back(mk(Op::SYNC_FROZEN));
+  r.effects.push_back(mk(Op::SYNC_STATE));
+  e = mk(Op::SET_PAUSE_OVERLAY); e.on = true; r.effects.push_back(e);
+  // the overlay is a mouse target — cursor + buttons stay put while it's up
+  r.effects.push_back(mk(Op::HOLD_CHROME));
+  return r;
+}
+
+PauseResult resumeRace(const PauseInput& in) {
+  PauseResult r;
+  if (!ui::canResume(in.hasSession, in.paused)) return r;
+  r.action = PauseAction::RESUME;
+  Effect e = mk(Op::SET_RACE_FLAGS);
+  e.paused = false; e.autoPaused = in.autoPaused; e.raceEnded = in.raceEnded;
+  r.effects.push_back(e);
+  r.effects.push_back(mk(Op::SYNC_FROZEN));
+  r.effects.push_back(mk(Op::SYNC_STATE));
+  e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; r.effects.push_back(e);
+  // racing again — re-arm the chrome fade
+  r.effects.push_back(mk(Op::REVEAL_CHROME));
+  return r;
+}
+
 Effects endParty() {
   Effects out;
   // The room closes FIRST — phones bail to their party-over overlay before the

@@ -552,6 +552,21 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     v.set("effects", effectsVal(es));
     return v;
   }
+  if (op == "pauseRace" || op == "resumeRace") {
+    race::PauseInput pi;
+    pi.hasSession = json::truthy(in.find("hasSession"));
+    pi.paused = json::truthy(in.find("paused"));
+    pi.autoPaused = json::truthy(in.find("autoPaused"));
+    pi.raceEnded = json::truthy(in.find("raceEnded"));
+    pi.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+    const race::PauseResult r =
+        op == "pauseRace" ? race::pauseRace(pi) : race::resumeRace(pi);
+    applyAll(s, r.effects);
+    Value v = Value::Obj();
+    v.set("action", Value::Str(race::key(r.action)));
+    v.set("effects", effectsVal(r.effects));
+    return v;
+  }
   if (op == "drawsNeeded") {
     return Value::Num(race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces")));
   }

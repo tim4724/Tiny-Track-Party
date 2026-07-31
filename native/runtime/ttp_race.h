@@ -235,6 +235,16 @@ TTP_ABI const char* ttp_race_return_json(const char* inputJson);
  * it). Takes nothing: a party end has no mode. */
 TTP_ABI const char* ttp_race_end_party_json(void);
 
+/* The manual overlay pause / resume, as walks.
+ *   {"hasSession":bool,"paused":bool,"autoPaused":bool,"raceEnded":bool,
+ *    "roomState":str}   (roomState read by the pause verdict only)
+ *   -> {"action":"none"|"pause"|"resume","effects":[...]}
+ * The verdicts (ttp_ui_can_pause / can_resume) are asked INSIDE, and the
+ * five-op order is the contract — a shell performs, it does not sequence.
+ * autoPaused/raceEnded ride through into the set-race-flags effect untouched. */
+TTP_ABI const char* ttp_race_pause_json(const char* inputJson);
+TTP_ABI const char* ttp_race_resume_json(const char* inputJson);
+
 /* The two game-timing budgets (race_flow.h INTERMISSION_MS /
  * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
 TTP_ABI double ttp_race_intermission_ms(void);
