@@ -33,7 +33,10 @@ test('closing the room bails every phone terminally and re-opens the display on 
 
   // The display self-heals into a FRESH room: new code, joinable again.
   await page.waitForFunction(
-    (old) => window.__net.roomCode && window.__net.roomCode !== old,
+    // Guarded like helpers' own roomCode wait: a poll can land while the page
+    // is still booting (no __net yet), and an unguarded read THROWS, which
+    // fails the wait outright instead of retrying.
+    (old) => window.__net && window.__net.roomCode && window.__net.roomCode !== old,
     roomCode, { timeout: 15000 }
   );
   const newCode = await page.evaluate(() => window.__net.roomCode);
@@ -58,7 +61,9 @@ test('the display tab exiting (pagehide) ends the party on every phone', async (
   // The rebooted display finds its saved room dead ("Room not found") and falls
   // back to a FRESH one: the party is over, the next party is ready to join.
   await page.waitForFunction(
-    (old) => window.__net.roomCode && window.__net.roomCode !== old,
+    // Guarded (see above): this one polls ACROSS the reload, so early polls
+    // race the module tail that sets __net on every slow boot.
+    (old) => window.__net && window.__net.roomCode && window.__net.roomCode !== old,
     roomCode, { timeout: 20000 }
   );
 });
