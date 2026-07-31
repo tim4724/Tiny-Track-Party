@@ -4768,15 +4768,23 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
         push(b.s, b.lat, 0.3f, 0.3f, BOXSH, kBlobShadowAlpha, 0.55f, 0.82f, true, 0);
     }
 
-    // Oil slicks. The biome reskin is the retired mesh's exactly:
-    // a turquoise puddle on the beach, a pale glacial sheet on snow, the dark
-    // film everywhere else. The rim ring the mesh drew as a second annulus is
-    // folded into the profile — it was always just a brighter edge.
+    // Oil slicks. A dark-blue water puddle on the beach (ONE flat disc — the
+    // shallow-cyan fill and a banded mini-sea were both rejected), a pale
+    // glacial sheet on snow, the dark film everywhere else. The rim ring the
+    // mesh drew as a second annulus is folded into the profile — it was always
+    // just a brighter edge.
+    // The slick is FULLY OPAQUE: the tint is pre-blended against the asphalt
+    // here at what used to be the stamp's alpha (the shader mixes in linear
+    // too), so ice and asphalt keep their old on-screen shade — the beach
+    // values are the newer dark-blue call, not a preserved shade — while
+    // lines and wear no longer ghost through.
     const bool wet = tb.hasWater, ice = tb.hasIce;
-    const float3 OILC = srgbToLinear(wet ? tb.waterShallow : ice ? tb.iceSheet : 0x161425);
-    const float oilA = wet ? 0.55f : ice ? 0.45f : 0.7f;
+    const float3 oilTint = wet ? srgbToLinear(tb.waterDeep) * 0.35f
+            : srgbToLinear(ice ? tb.iceSheet : 0x161425);
+    const float oilMix = wet ? 0.9f : ice ? 0.45f : 0.7f;
+    const float3 OILC = mix(srgbToLinear(tb.pal[0]), oilTint, oilMix);
     for (const TrackBin::Oil& o : tb.oils) {
-        push(o.s, o.lat, o.radius, o.radius, OILC, oilA, 0.96f, 1.0f, true, 0);
+        push(o.s, o.lat, o.radius, o.radius, OILC, 1.0f, 0.96f, 1.0f, true, 0);
     }
 
     // Boost pads. The disc's radial gradient is its profile;
