@@ -2,9 +2,9 @@
 // silhouette (bakeSilhouette).
 //
 // Same reasoning as vesm.mat, for a different texture. The silhouette comes out
-// of its render target hard-edged, and vdecal used to rebuild the penumbra with
-// a 5x5 = 25-tap gaussian in every fragment, every frame, for four cars in four
-// cells. The mask never changes, so that work belongs here: blur it once at load
+// of its render target hard-edged, and the retired overlay decal material used
+// to rebuild the penumbra with a 5x5 = 25-tap gaussian in every fragment, every
+// frame, for four cars in four cells. The mask never changes, so that work belongs here: blur it once at load
 // and the draw is a single bilinear tap.
 //
 // It also fixes the LOOK, which is why it is worth doing beyond the taps. A

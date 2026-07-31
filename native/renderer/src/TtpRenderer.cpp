@@ -730,17 +730,17 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         utils::Entity e = utils::EntityManager::get().create();
         RenderableManager::Builder(1)
                 .boundingBox(boundsOf(t0 * 3, n * 3))
-                // Blend-pass draw order (default 4). The flat road decals stack
-                // in a fixed order — skids under the ground shadow, both under
-                // the boost aura — instead of by an arbitrary depth sort.
+                // Blend-pass draw order (default 4), for the few blended
+                // sheets that must stack deterministically instead of by an
+                // arbitrary depth sort.
                 .priority(priority)
                 .material(0, mi)
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         m.vb, m.ib, t0 * 3, n * 3)
                 // Frustum culling for everything. The bounds are real now, and
                 // the few meshes that rewrite their vertices in world space
-                // every frame (the conformed decals, the skid pool, the ambient
-                // band) refresh theirs in the same breath — see refreshBounds.
+                // every frame (the skid pool, the ambient band) refresh theirs
+                // in the same breath — see refreshBounds.
                 // Pointing the camera at empty sky used to still cost 69 draw
                 // calls; per-draw GPU cost is ~18 µs, so that was over a
                 // millisecond of drawing nothing.
@@ -1351,8 +1351,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     };
     // (The launch strip used to be painted INTO the ribbon here as full-width
     // Vs — too coarse: the drivable profile has only ~8 vertex columns across
-    // the lane, while makePadStripTexture lays a 5×2 GRID of chevrons. It's now
-    // real stroked geometry in buildPadsMesh.)
+    // the lane, while the pad stamp lays a 5×2 GRID of chevrons. It's now SDF
+    // chevrons in vroad.mat.)
 
     // ANALYTIC normals (the JS lesson: computing normals on unindexed soup
     // flat-shades per face and bands every vertical curve): a strip's normal
@@ -1746,22 +1746,19 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
     }
 }
 
-// The car's ground-shadow mask: a superellipse footprint with the JS bake's
-// penumbra, at a resolution that can actually hold it.
+// The generic ground-shadow mask (the decalMask array's fallback layer): a
+// superellipse footprint with the JS bake's penumbra.
 //
 // SceneRenderer renders each car model top-down into a 128-wide target and
 // blurs the result by round(128 × 0.022) ≈ 3 px — "a crisp shadow edge near the
 // loop's hard cast shadow, not a wide soft ring", as the source puts it. That
-// is ~5% of the half-width, so the shape has to come from a texture; a vertex
-// falloff on the conform grid could only ever be a smudge.
+// is ~5% of the half-width, so the shape has to come from a texture.
 //
 // The one thing this does NOT reproduce is the outline: three's is the model's
 // real silhouette (cabin narrow, wheels poking out), ours a superellipse fitted
 // to the same footprint. Same size, same softness, rounder corners.
-// The generic mask's pixels, at any resolution: a superellipse over 1/1.45 of
-// the frame (SHADOW_OVERSCAN) with the JS bake's blur. Shared by the mesh
-// fallback's texture and the decalMask array's generic layer, so the two are
-// one formula.
+// The pixels, at any resolution: a superellipse over 1/1.45 of the frame
+// (SHADOW_OVERSCAN) with the JS bake's blur.
 static std::vector<float> superellipseMaskPixels(int TW, int TH) {
     std::vector<float> a((size_t) TW * TH, 0.0f);
     // Footprint occupies 1/1.45 of the quad (SHADOW_OVERSCAN), leaving the rest
@@ -1795,29 +1792,6 @@ static std::vector<float> superellipseMaskPixels(int TW, int TH) {
     return a;
 }
 
-Texture* TtpRenderer::buildShadowMask() {
-    constexpr int TW = 128, TH = 160; // ~ the footprint's 1:1.25 aspect
-    const std::vector<float> a = superellipseMaskPixels(TW, TH);
-    // White RGB so blurring the edge fades ALPHA only — a dark fringe otherwise
-    // (the JS forces the same).
-    auto* px = new std::vector<uint8_t>((size_t) TW * TH * 4, 255);
-    for (size_t i = 0; i < a.size(); i++) {
-        (*px)[i * 4 + 3] = (uint8_t) std::lround(std::min(1.0f, std::max(0.0f, a[i])) * 255.0f);
-    }
-    Texture* tex = Texture::Builder()
-            .width(TW).height(TH).levels(8)
-            .format(Texture::InternalFormat::SRGB8_A8)
-            .sampler(Texture::Sampler::SAMPLER_2D)
-            .usage(Texture::Usage::DEFAULT | Texture::Usage::GEN_MIPMAPPABLE)
-            .build(*mEngine);
-    if (!tex) { delete px; return nullptr; }
-    tex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
-            px->data(), px->size(), Texture::Format::RGBA, Texture::Type::UBYTE,
-            [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, px));
-    tex->generateMipmaps(*mEngine);
-    return tex;
-}
-
 // The silhouette store for the road-shader shadow decals: one array layer per
 // car slot, one for the monster, one generic. Engine-lifetime (layers are
 // rebaked per scene — mMaskLayerBakedBits says which hold the current scene's
@@ -1835,9 +1809,9 @@ Texture* TtpRenderer::ensureDecalMaskArray() {
                     | Texture::Usage::UPLOADABLE)
             .build(*mEngine);
     if (!mDecalMaskArray) return nullptr;
-    // The generic layer, same formula as the mesh fallback's texture at the
-    // cell's own resolution. The other layers stay unwritten until a bake
-    // lands; nothing samples a layer whose baked bit is clear.
+    // The generic layer, at the cell's own resolution. The other layers stay
+    // unwritten until a bake lands; nothing samples a layer whose baked bit
+    // is clear.
     const std::vector<float> a = superellipseMaskPixels(kMaskCellW, kMaskCellH);
     auto* px = new std::vector<uint8_t>((size_t) kMaskCellW * kMaskCellH * 4, 255);
     for (size_t i = 0; i < a.size(); i++) {
@@ -1854,24 +1828,11 @@ Texture* TtpRenderer::ensureDecalMaskArray() {
     return mDecalMaskArray;
 }
 
-// Both blob masks arrive PRE-BLURRED — the baked silhouette through vblur, the
-// generic rounded-rect fallback by construction — so the decal samples once and
-// does no filtering of its own. Only the fallback carries mips.
-void TtpRenderer::setBlobMask(MaterialInstance* mi, Texture* mask, bool baked) {
-    if (!mi || !mask) return;
-    TextureSampler smp(baked ? TextureSampler::MinFilter::LINEAR
-                             : TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
-            TextureSampler::MagFilter::LINEAR);
-    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    mi->setParameter("albedo", mask, smp);
-}
-
 // The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
 // puts an orthographic camera over the model, renders a flat white mask on
 // transparent, and reads it back for the blur; the same picture here comes from
-// an offscreen RenderTarget rendered with renderStandaloneView (there is no
-// readback on this side, so the blur moved into vdecal.mat instead).
+// an offscreen RenderTarget rendered with renderStandaloneView (no readback on
+// this side, so the blur is a second render pass instead).
 //
 // The framing is the JS's: footprint × SHADOW_OVERSCAN, so the silhouette lands
 // at footprint scale inside a quad with room for the penumbra tail. The camera
@@ -1882,16 +1843,25 @@ void TtpRenderer::setBlobMask(MaterialInstance* mi, Texture* mask, bool baked) {
 // Alpha is the coverage channel — opaque glTF materials write 1.0 there and the
 // clear leaves 0 — which is why the bake needs no lights and doesn't care that
 // an unlit car in an empty scene renders black.
-Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
+void TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
         const float3& bbMin, const float3& bbMax, int maskLayer) {
-    if (!asset) return nullptr;
-    return bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax,
+    if (!asset) return;
+    bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax,
             maskLayer);
 }
 
-Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
+void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
         const float3& bbMin, const float3& bbMax, int maskLayer) {
-    if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
+    if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return;
+    // The bake only has one consumer now — the road shader's masked decal —
+    // so a slot outside the array, a missing road material or a missing blur
+    // material all mean there is nothing to bake into: the decal rides the
+    // generic layer instead.
+    if (maskLayer < 0 || maskLayer >= kMaskLayers || !mRoadMaterial
+            || !mBlurMaterial || !mPresentVB || !mPresentIB
+            || !ensureDecalMaskArray()) {
+        return;
+    }
     // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
     // gaussian resolves its edge in about five quantised steps, and those steps
     // are the banding in the blob's gradient. 256 plus the bake-time blur below
@@ -1900,14 +1870,14 @@ Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count
     constexpr int TW = 256;
     const float hw = (bbMax.x - bbMin.x) * 0.5f * 1.45f;
     const float hl = (bbMax.z - bbMin.z) * 0.5f * 1.45f;
-    if (hw <= 0 || hl <= 0) return nullptr;
+    if (hw <= 0 || hl <= 0) return;
     const int TH = std::max(16, (int) std::lround(TW * (hl / hw)));
     Texture* tex = Texture::Builder()
             .width((uint32_t) TW).height((uint32_t) TH).levels(1)
             .format(Texture::InternalFormat::RGBA8)
             .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
             .build(*mEngine);
-    if (!tex) return nullptr;
+    if (!tex) return;
     RenderTarget* rt = RenderTarget::Builder()
             .texture(RenderTarget::AttachmentPoint::COLOR, tex)
             .build(*mEngine);
@@ -1942,90 +1912,66 @@ Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count
     mEngine->destroy(scene);
 
     // Blur it ONCE, here, instead of rebuilding the penumbra with a 25-tap
-    // gaussian in every fragment of every frame (see vblur.mat).
-    if (mBlurMaterial && mPresentVB && mPresentIB) {
-        Texture* soft = Texture::Builder()
-                .width((uint32_t) TW).height((uint32_t) TH).levels(1)
-                .format(Texture::InternalFormat::RGBA8)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
-                .build(*mEngine);
-        if (soft) {
-            RenderTarget* brt = RenderTarget::Builder()
-                    .texture(RenderTarget::AttachmentPoint::COLOR, soft)
-                    .build(*mEngine);
-            MaterialInstance* bmi = mBlurMaterial->createInstance();
-            TextureSampler ssmp(TextureSampler::MinFilter::LINEAR,
-                    TextureSampler::MagFilter::LINEAR);
-            ssmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-            ssmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-            bmi->setParameter("src", tex, ssmp);
-            bmi->setParameter("texel",
-                    math::float2{ 1.0f / (float) TW, 1.0f / (float) TH });
-            bmi->setParameter("radius", 0.9f); // kernel spacing in source texels
-            utils::Entity bq = utils::EntityManager::get().create();
-            RenderableManager::Builder(1)
-                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-                    .material(0, bmi)
-                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                            mPresentVB, mPresentIB, 0, 3)
-                    .culling(false).castShadows(false).receiveShadows(false)
-                    .build(*mEngine, bq);
-            Scene* bs = mEngine->createScene();
-            bs->addEntity(bq);
-            utils::Entity bcamEnt = utils::EntityManager::get().create();
-            Camera* bcam = mEngine->createCamera(bcamEnt);
-            bcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
-            View* bv = mEngine->createView();
-            bv->setScene(bs);
-            bv->setCamera(bcam);
-            bv->setViewport({ 0, 0, (uint32_t) TW, (uint32_t) TH });
-            bv->setRenderTarget(brt);
-            bv->setPostProcessingEnabled(false);
-            bv->setShadowingEnabled(false);
-            bv->setFrustumCullingEnabled(false);
-            bv->setBlendMode(View::BlendMode::TRANSLUCENT); // the mask IS alpha
-            Renderer::ClearOptions bco{};
-            bco.clear = true;
-            bco.clearColor = { 0, 0, 0, 0 };
-            const Renderer::ClearOptions bprev = mRenderer->getClearOptions();
-            mRenderer->setClearOptions(bco);
-            mRenderer->renderStandaloneView(bv);
-            // The SAME blur, once more, into the decalMask array layer the
-            // road-shader shadow decal will sample. The cell is a fixed
-            // kMaskCellW x kMaskCellH, so the bake stretches into it and the
-            // decal stretches it back onto the footprint rect — net identity,
-            // exactly how the mesh maps the standalone texture onto its quad.
-            RenderTarget* art = nullptr;
-            if (maskLayer >= 0 && maskLayer < kMaskLayers && mRoadMaterial
-                    && ensureDecalMaskArray()) {
-                art = RenderTarget::Builder()
-                        .texture(RenderTarget::AttachmentPoint::COLOR, mDecalMaskArray)
-                        .layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) maskLayer)
-                        .build(*mEngine);
-                if (art) {
-                    bv->setViewport({ 0, 0, (uint32_t) kMaskCellW, (uint32_t) kMaskCellH });
-                    bv->setRenderTarget(art);
-                    mRenderer->setClearOptions(bco);
-                    mRenderer->renderStandaloneView(bv);
-                    mMaskLayerBakedBits |= (uint16_t) (1u << maskLayer);
-                }
-            }
-            mRenderer->setClearOptions(bprev);
-            mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
-            mEngine->destroy(bv);
-            if (art) mEngine->destroy(art);
-            mEngine->destroy(brt);
-            mEngine->destroy(bs);
-            mEngine->destroy(bq);
-            utils::EntityManager::get().destroy(bq);
-            mEngine->destroyCameraComponent(bcamEnt);
-            utils::EntityManager::get().destroy(bcamEnt);
-            mEngine->destroy(bmi);
-            mEngine->destroy(tex);
-            return soft;
-        }
+    // gaussian in every fragment of every frame (see vblur.mat) — straight
+    // into the decalMask array layer the road-shader shadow decal samples.
+    // The cell is a fixed kMaskCellW x kMaskCellH, so the bake stretches into
+    // it and the decal stretches it back onto the footprint rect — net
+    // identity.
+    RenderTarget* art = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, mDecalMaskArray)
+            .layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) maskLayer)
+            .build(*mEngine);
+    if (art) {
+        MaterialInstance* bmi = mBlurMaterial->createInstance();
+        TextureSampler ssmp(TextureSampler::MinFilter::LINEAR,
+                TextureSampler::MagFilter::LINEAR);
+        ssmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        ssmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        bmi->setParameter("src", tex, ssmp);
+        bmi->setParameter("texel",
+                math::float2{ 1.0f / (float) TW, 1.0f / (float) TH });
+        bmi->setParameter("radius", 0.9f); // kernel spacing in source texels
+        utils::Entity bq = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                .material(0, bmi)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mPresentVB, mPresentIB, 0, 3)
+                .culling(false).castShadows(false).receiveShadows(false)
+                .build(*mEngine, bq);
+        Scene* bs = mEngine->createScene();
+        bs->addEntity(bq);
+        utils::Entity bcamEnt = utils::EntityManager::get().create();
+        Camera* bcam = mEngine->createCamera(bcamEnt);
+        bcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
+        View* bv = mEngine->createView();
+        bv->setScene(bs);
+        bv->setCamera(bcam);
+        bv->setViewport({ 0, 0, (uint32_t) kMaskCellW, (uint32_t) kMaskCellH });
+        bv->setRenderTarget(art);
+        bv->setPostProcessingEnabled(false);
+        bv->setShadowingEnabled(false);
+        bv->setFrustumCullingEnabled(false);
+        bv->setBlendMode(View::BlendMode::TRANSLUCENT); // the mask IS alpha
+        Renderer::ClearOptions bco{};
+        bco.clear = true;
+        bco.clearColor = { 0, 0, 0, 0 };
+        const Renderer::ClearOptions bprev = mRenderer->getClearOptions();
+        mRenderer->setClearOptions(bco);
+        mRenderer->renderStandaloneView(bv);
+        mMaskLayerBakedBits |= (uint16_t) (1u << maskLayer);
+        mRenderer->setClearOptions(bprev);
+        mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
+        mEngine->destroy(bv);
+        mEngine->destroy(art);
+        mEngine->destroy(bs);
+        mEngine->destroy(bq);
+        utils::EntityManager::get().destroy(bq);
+        mEngine->destroyCameraComponent(bcamEnt);
+        utils::EntityManager::get().destroy(bcamEnt);
+        mEngine->destroy(bmi);
     }
-    return tex;
+    mEngine->destroy(tex);
 }
 
 // ── Ground-conform probe ─────────────────────────────────────────────────────
@@ -4705,9 +4651,14 @@ void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
             float4{ 0, 0, 0, 0 }, {}, {}, {} });
 }
 
+// A prop contact blob's ink and rest opacity (makeBlobShadowTexture), shared
+// by the item-box stamps below, the box collect fade, and the banana/rocket
+// stamps in the render loop.
+static constexpr float kBlobShadowAlpha = 0.4f;
+
 // The deck's fixed furniture, as stamps. These used to be three separate meshes
-// (mPads, mOils, mPropShadows) floating 0.004 to 0.014 above the road; shading
-// them into it removes the lift and the meshes both. Each keeps the profile its
+// (pads, oils, box blobs) floating 0.004 to 0.014 above the road; shading them
+// into it removes the lift and the meshes both. Each keeps the profile its
 // mesh baked into vertex alpha, so nothing about the look is re-derived here.
 void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     mStaticDeckDecals.clear();
@@ -4722,13 +4673,15 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
                 float4{ 0, 0, 0, 0 }, {}, {}, {} });
     };
 
-    // Item-box contact shadows (were mPropShadows at 0.004): 1 -> 0.82 at 0.55r.
+    // Item-box contact shadows: 1 -> 0.82 at 0.55r. FIRST, one per box in box
+    // order — the collect fade in render() rewrites entry i's alpha in place,
+    // so box i must stay decal i.
     const float3 BOXSH = srgbToLinear(0x1c1a18);
     for (const TrackBin::Box& b : tb.boxes) {
-        push(b.s, b.lat, 0.3f, 0.3f, BOXSH, 0.4f, 0.55f, 0.82f, true, 0);
+        push(b.s, b.lat, 0.3f, 0.3f, BOXSH, kBlobShadowAlpha, 0.55f, 0.82f, true, 0);
     }
 
-    // Oil slicks (were mOils at 0.012). The biome reskin is the mesh's exactly:
+    // Oil slicks. The biome reskin is the retired mesh's exactly:
     // a turquoise puddle on the beach, a pale glacial sheet on snow, the dark
     // film everywhere else. The rim ring the mesh drew as a second annulus is
     // folded into the profile — it was always just a brighter edge.
@@ -4739,7 +4692,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
         push(o.s, o.lat, o.radius, o.radius, OILC, oilA, 0.96f, 1.0f, true, 0);
     }
 
-    // Boost pads (were mPads at 0.01). The disc's radial gradient is its profile;
+    // Boost pads. The disc's radial gradient is its profile;
     // the three cream chevrons ride the shader's segment distance instead of the
     // stroked geometry they used to be.
     const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
@@ -4748,8 +4701,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
             // 5 across x 2 along, not one chevron stretched over the full lane.
             // Three columns over a five-metre lane made each mark two and a half
             // times wider than it was deep, so the pair read as two flat waves
-            // rather than as chevron paint; five brings it to 1.4, and is what
-            // the stroked fallback mesh below draws too.
+            // rather than as chevron paint; five brings it to 1.4.
             push(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip), 1.0f,
                     0.99f, 1.0f, /*ellipse=*/false, /*chevrons=*/52);
         } else {
@@ -5013,8 +4965,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     const float groundY = tb.groundY;
 
     if (!buildRoadMesh(tb)) return false;
-    // The deck's fixed furniture becomes stamps on the road we just built. When
-    // there is no vroad material the three meshes below still draw instead.
+    // The deck's fixed furniture becomes stamps on the road we just built.
+    // Without a vroad material there are no stamps: the deck draws bare.
     if (mRoadMaterial) buildStaticDeckDecals(tb);
     buildRoadGrid(); // ground-conform probe accelerator (see roadHitY)
 
@@ -5296,84 +5248,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     for (auto* inst : mBoxFadeInstances) collectGlow(inst);
     mBananaAsset = loadInstancedProp("item-banana.glb", 8, mBananaInstances);
     mBananaIn.assign(mBananaInstances.size(), 1);
-    // Contact blobs for the FLOATING props (TrackProps' _boxShadow): a box's
-    // real sun shadow lands raked off to one side, so a soft smudge is painted
-    // on the deck directly beneath it as the position cue. makeBlobShadowTexture
-    // falls off 1 → 0.82 at 0.55r → 0 at the rim, tinted 0x1c1a18 at 0.4.
-    // Boxes are static (baked here); bananas and rockets carry a pooled blob
-    // conformed per frame (scaled 0.7 and 0.95, as in the JS).
-    if (mBlendMaterial) {
-        const float3 SH = srgbToLinear(0x1c1a18);
-        const uint32_t A0 = packLinear(SH, 1.0f, 0.4f);
-        const uint32_t A1 = packLinear(SH, 1.0f, 0.4f * 0.82f);
-        const uint32_t A2 = packLinear(SH, 1.0f, 0.0f);
-        constexpr int SEG = 20;
-        const auto ring = [&](Mesh& m, uint32_t base) {
-            const uint32_t r0 = base + 1, r1 = r0 + SEG + 1;
-            for (int j = 0; j < SEG; j++) {
-                m.idx.insert(m.idx.end(), { base, r0 + (uint32_t) j, r0 + (uint32_t) j + 1 });
-                m.idx.insert(m.idx.end(), { r0 + (uint32_t) j, r1 + (uint32_t) j, r1 + (uint32_t) j + 1,
-                        r0 + (uint32_t) j, r1 + (uint32_t) j + 1, r0 + (uint32_t) j + 1 });
-            }
-        };
-        for (const TrackBin::Box& b : tb.boxes) { // baked onto the deck
-            constexpr float R = 0.3f;
-            const auto at = [&](float rx, float rz) {
-                const TrackBin::Sample f = tb.frameAt(b.s + rz);
-                return f.pos + f.lat * (b.lat + rx) + f.up * 0.013f;
-            };
-            const uint32_t base = (uint32_t) mPropShadows.verts.size();
-            const float3 c0 = at(0, 0);
-            mPropShadows.verts.push_back({ c0.x, c0.y, c0.z, A0 });
-            for (const float rr : { 0.55f, 1.0f }) {
-                for (int j = 0; j <= SEG; j++) {
-                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                    const float3 p = at(std::cos(a) * R * rr, std::sin(a) * R * rr);
-                    mPropShadows.verts.push_back({ p.x, p.y, p.z, rr < 1.0f ? A1 : A2 });
-                }
-            }
-            ring(mPropShadows, base);
-        }
-        // Each box owns an equal, contiguous slice of the baked mesh — that is
-        // what lets the reconcile fade one box's blob out when it is collected.
-        mBoxShadowStride = tb.boxes.empty() ? 0
-                : (uint32_t) (mPropShadows.verts.size() / tb.boxes.size());
-        mBoxShadowRest.clear();
-        mBoxShadowRest.reserve(mPropShadows.verts.size());
-        for (const Vertex& v : mPropShadows.verts) mBoxShadowRest.push_back(v.abgr);
-        mBoxShadowFade.assign(tb.boxes.size(), 255);
-        // Stamped into the road when the deck material is present; this mesh is
-        // the fallback. Clearing it rather than skipping the fill keeps
-        // mBoxShadowStride/mBoxShadowRest consistent for the fade-on-collect path.
-        if (mRoadMaterial) { mPropShadows.verts.clear(); mPropShadows.idx.clear(); }
-        if (!mPropShadows.verts.empty()) {
-            MaterialInstance* mi = sceneInstance(mBlendMaterial);
-            mi->setPolygonOffset(-2.0f, -2.0f);
-            buildMesh(mPropShadows, true, mi);
-        }
-        // Pooled unit blobs for the dynamic props (conformed + scaled per frame).
-        mPropBlobs.resize(mBananaInstances.size() + 4);
-        for (Mesh& m : mPropBlobs) {
-            m.verts.push_back({ 0, 0, 0, A0 });
-            m.local.push_back({ 0, 0, (uint8_t) std::lround(0.4f * 255.0f) });
-            for (const float rr : { 0.55f, 1.0f }) {
-                for (int j = 0; j <= SEG; j++) {
-                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                    const float x = std::cos(a) * rr, z = std::sin(a) * rr;
-                    m.verts.push_back({ x, 0, z, rr < 1.0f ? A1 : A2 });
-                    m.local.push_back({ x, z, (uint8_t) (rr < 1.0f
-                            ? std::lround(0.4f * 0.82f * 255.0f) : 0) });
-                }
-            }
-            ring(m, 0);
-            MaterialInstance* mi = sceneInstance(mBlendMaterial);
-            mi->setPolygonOffset(-2.0f, -2.0f);
-            if (!buildMesh(m, true, mi)) return false;
-            auto& tcmB = mEngine->getTransformManager();
-            tcmB.setTransform(tcmB.getInstance(m.entity),
-                    mat4f::translation(float3{ 0, -1000, 0 }));
-        }
-    }
+    // Contact blobs for the FLOATING props (TrackProps' _boxShadow) are all
+    // road-shader stamps now: the boxes' in buildStaticDeckDecals, the
+    // bananas' and rockets' in the render loop.
     // Monster chassis pool (one per car): the kit monster truck with its cab
     // node collapsed — the transformed player's own car body seats the slot
     // per frame (MonsterRig's graft; gunmetal recolour is later polish).
@@ -5423,7 +5300,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // frame is what takes them out of the scene). One bake serves every
             // car — the truck under them all is the same truck.
             if (!mMonsterInstances.empty() && mMonsterInstances[0]) {
-                mMonsterSilhouette = bakeSilhouette(mMonsterInstances[0]->getEntities(),
+                bakeSilhouette(mMonsterInstances[0]->getEntities(),
                         mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max,
                         kMaskLayerMonster);
             }
@@ -5504,10 +5381,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
                 math::float4{ chassis, 1.0f });
     }
-    if (!mRoadMaterial) buildPadsMesh(tb);   // stamped into the road otherwise
     buildWater(tb);
     buildFliers(tb);
-    buildOils(tb);   // the cones are always meshes; the slick itself is stamped
+    buildOils(tb);   // the cones and signs; the slick itself is a road stamp
     buildStructures(tb);
     // Landmarks FIRST: their spots carve flat clearings into the terrain field
     // (mTerrainFlats), which the scatter and the ground mesh then sample. The
@@ -5935,33 +5811,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 mat4f::translation(float3{ 0, -1000, 0 }));
     }
 
-    // Per-car ground blobs (the frozen sun never sees cars — they carry a
-    // contact shadow instead, the JS renderer's `ao` plane). The JS shadow is
-    // a BAKED top-down car silhouette with a ~2% blur, tinted UNDER_AO_COLOR
-    // 0x171513, on a footprint × SHADOW_OVERSCAN 1.45 quad so the feather lands
-    // beyond the wheels.
-    //
-    // The OPACITY is the one thing here that is not the JS's. Blocking the sun
-    // leaves a surface its ambient, which on these rigs is about 65% of lit —
-    // so a real cast shadow is a 35% dip, and painting one wants roughly that
-    // opacity. The JS's UNDER_AO_OPACITY 0.55 was a 56% dip, picked when cast
-    // shadows were a vague haze; against a sharp one the car looked pressed
-    // into a hole. 0.35 is measured against the deck (34% dip on skysnake) and
-    // is close enough on every biome — the rigs only span 32% to 36%. It also
-    // puts the car back between its siblings, the prop blobs at 0.40 and the
-    // lawn discs at 0.30.
-    //
-    // It's a GRID, like the JS's (which is why a shadow can hug a bending deck
-    // at all): the conform lands each vertex on the road and the quads between
-    // them are chords, so a fan spanning half the car cut straight through a
-    // crest. The silhouette is a rounded-rect falloff evaluated per vertex.
+    // Boost aura colour: boostShades.disk (accent +15%). The disc itself is a
+    // road-shader stamp sized per frame in render().
+    mBoostDiskLin = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
     if (mBlendMaterial) {
-        mCarBlobs.resize(carCount);
-        mCarBlobMats.assign(carCount, nullptr);
-        mCarBlobMasks.assign(carCount, nullptr);
-        for (uint32_t c = 0; c < carCount; c++) {
-            if (!buildCarBlob(c)) return false;
-        }
         // Rear name plates (makePlate): a livery rounded-rect sticker with a
         // white feathered rim and the player's name, fixed to the car's rear
         // — the chase cam reads the plate of whoever it's chasing. The face is
@@ -5970,102 +5823,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mPlates.resize(carCount);
         for (uint32_t c = 0; c < carCount; c++) {
             if (!buildCarPlate(tb, c)) return false;
-        }
-        // Boost aura: the teal pool under a boosting car (SceneRenderer's
-        // boostDisk). Colour = boostShades.disk (accent +15%), profile =
-        // makeBoostDiskTexture's falloff — SOLID to 0.72 of the radius (alpha
-        // 1 → 0.94) then a linear feather to 0 at the rim, which the two
-        // concentric rings reproduce exactly. Unit radius; conformed onto the
-        // road per frame (a flat disc clipped through every bend).
-        mBoostDisks.resize(carCount);
-        const float3 TEALC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
-        mBoostDiskLin = TEALC;
-        for (uint32_t c = 0; c < carCount; c++) {
-            Mesh& m = mBoostDisks[c];
-            // SEG and the 0.36 ring are a TESSELLATION fix, not a look change.
-            // This disc is conformed per frame, so its vertices land on the deck
-            // and only the chords BETWEEN them can sag under it — which makes the
-            // vertex spacing the whole story. At full boost outerR reaches 1.56u
-            // (see the per-frame sizing below), so 16 segments with a bare
-            // centre-to-0.72 fan spanned ~1.1u against the road's own 0.24u
-            // rings, and measured 0.026u proud of the deck on the crest-heavy
-            // tracks — 1.3x the 0.02 lift, i.e. asphalt through the aura.
-            // 24 segments plus one interior ring take the widest chord to ~0.56u.
-            // The alpha profile is UNTOUCHED: it is linear 1 -> 0.94 across
-            // 0 -> 0.72, so the split ring's 0.97 is exactly on the line it
-            // already described, and the feather past 0.72 is unchanged.
-            const int SEG = 24; // BOOST_DISK_SEG
-            const auto ringVert = [&](float rad, float alpha) {
-                const uint32_t col = packLinear(TEALC, 1.0f, alpha);
-                const uint8_t a8 = (uint8_t) std::lround(alpha * 255.0f);
-                for (int j = 0; j <= SEG; j++) {
-                    const float ang = (float) j / SEG * 2.0f * (float) M_PI;
-                    const float x = std::cos(ang) * rad, z = std::sin(ang) * rad;
-                    m.verts.push_back({ x, 0, z, col });
-                    m.local.push_back({ x, z, a8 });
-                }
-            };
-            m.verts.push_back({ 0, 0, 0, packLinear(TEALC, 1.0f, 1.0f) });
-            m.local.push_back({ 0, 0, 255 });
-            // FIVE RINGS, and 0.72 MUST remain one of them: that is the knee
-            // where the profile stops being solid and starts feathering, so a
-            // ring set that straddles it would interpolate the knee away and
-            // soften the disc's whole edge. Every other ring sits ON one of the
-            // two straight segments the profile already described (1 -> 0.94
-            // across 0 -> 0.72, then 0.94 -> 0 out to the rim), so the alphas
-            // here are exact and the look does not move: 0.24 -> 0.98,
-            // 0.48 -> 0.96, and 0.86 -> 0.47 (halfway down the feather).
-            //
-            // WHICH RING YOU ADD IS THE WHOLE POINT, and it is easy to get
-            // wrong. Splitting the INNER region does nothing: going from
-            // .36/.72/1 to .24/.48/.72/1 left the worst chord sag at 0.0117
-            // (from 0.0116), because both sets share the same OUTER band, 0.72
-            // to 1.0, and at outerR 1.56u that band spans 0.44u — the widest
-            // chord on the disc and the one that actually binds. Adding 0.86 to
-            // halve it takes the sag to 0.0081, which is what pays for the 0.013
-            // lift below. Going further is an ANGULAR problem, not a radial one:
-            // 32 segments would reach 0.0061.
-            //
-            // MEASURE THIS WITH THE FULL SWEEP (`npm run audit:decals:sweep`),
-            // never with the gate's curvature-extremes sampling. The extremes
-            // are picked from the CENTRELINE's vertical curvature, and a disc
-            // this wide samples the deck 1.56u out to each side where the bank
-            // is also changing, so the extremes miss its worst case badly — they
-            // reported 0.0078 for a tessellation whose true sag is 0.0117.
-            constexpr int NR = 5;
-            ringVert(0.24f, 0.98f);
-            ringVert(0.48f, 0.96f);
-            ringVert(0.72f, 0.94f);
-            ringVert(0.86f, 0.47f);
-            ringVert(1.0f, 0.0f);
-            const uint32_t r0 = 1;
-            for (int j = 0; j < SEG; j++) {
-                m.idx.insert(m.idx.end(),
-                        { 0, r0 + (uint32_t) j, r0 + (uint32_t) j + 1 });
-            }
-            for (int r = 0; r + 1 < NR; r++) {
-                const uint32_t a0 = r0 + (uint32_t) r * (SEG + 1), b0 = a0 + SEG + 1;
-                for (int j = 0; j < SEG; j++) {
-                    m.idx.insert(m.idx.end(),
-                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
-                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
-                }
-            }
-            MaterialInstance* mi = sceneInstance(mBlendMaterial);
-            mi->setPolygonOffset(-2.0f, -2.0f); // conformed, but never z-fight
-            // PRIORITY 3, one above the contact shadow's 2, so on a fallback
-            // shell the aura still paints over the shadow — between two blended
-            // sheets, priority IS the draw order. It does NOT order this sheet
-            // against the opaque cars: Filament's pass bits outrank renderable
-            // priority (RenderPass.h), so every blended sheet draws after every
-            // car, and a plane lifted above the deck wins the depth test across
-            // the bottom slice of any tyre it crosses and paints a band there.
-            // That band — measured on the shadow sheet 2026-07-31, whatever its
-            // priority — is why the LIVE path for both sheets is the road
-            // shader, where the decal has no plane at all. The lift below is
-            // headroom for the fallback mesh's own chord sag (see the conform
-            // call below).
-            if (!buildMesh(m, true, mi, 3)) return false;
         }
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
         // along X, facing +Y) carrying makeStreakTexture — an ellipse
@@ -6177,7 +5934,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // therefore stay opted out. Off-screen scenery was being drawn in full, in
     // every cell: a 4-way split paid for the whole circuit four times.
     for (Mesh* m : { &mStructures, &mBerms, &mGantry, &mBoulders, &mLandmarks,
-                     &mClutter, &mPropShadows, &mPads, &mOils, &mWater, &mWet,
+                     &mClutter, &mWater, &mWet,
                      &mBalloon, &mWindmill, &mTrain, &mTrainKey }) {
         setMeshCulling(*m, true);
     }
@@ -6595,11 +6352,9 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.footL = bb.max.z - bb.min.z;
         w.bbMin = bb.min;
         w.bbMax = bb.max;
-        // Ground-shadow silhouette, off THIS model, while it still sits at rest.
-        // The same bake also lands in decalMask layer `index` for the
-        // road-shader shadow decal.
-        if (mCarSilhouettes.size() <= index) mCarSilhouettes.resize(index + 1, nullptr);
-        mCarSilhouettes[index] = bakeSilhouette(asset, bb.min, bb.max,
+        // Ground-shadow silhouette, off THIS model, while it still sits at
+        // rest — into decalMask layer `index` for the road-shader shadow decal.
+        bakeSilhouette(asset, bb.min, bb.max,
                 index < (uint32_t) kMaskLayerMonster ? (int) index : -1);
     }
     // Tyre-contact width for the skid ribbons: min(0.24, max(0.06,
@@ -6661,106 +6416,30 @@ bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
     return buildMesh(m);
 }
 
-// One car's contact-shadow sheet. See the long note where buildTrackScene
-// calls it for why it is a GRID and why the shape lives in a mask texture.
-// The shadow's ink (the JS UNDER_AO_COLOR) and base opacity, shared by the
-// masked road-shader decal and the mesh fallback so the two render as ONE
-// shadow. 0.35 is the measured 35% ambient dip — see the opacity note where
-// the blobs are built for the scene.
+// The car ground shadow's ink (the JS UNDER_AO_COLOR) and base opacity, for
+// the masked road-shader decal. 0.35 is the measured 35% ambient dip: blocking
+// the sun leaves a surface its ambient, which on these rigs spans 32% to 36%
+// of lit (34% measured on skysnake). The JS's UNDER_AO_OPACITY 0.55 was a 56%
+// dip, picked when cast shadows were a vague haze; against a sharp one the car
+// looked pressed into a hole. It also sits the car between its siblings, the
+// prop blobs at 0.40 and the lawn discs at 0.30.
 static const float3 kCarBlobInk = srgbToLinear(0x171513);
 static constexpr float kCarBlobAO = 0.35f;
 
-bool TtpRenderer::buildCarBlob(uint32_t c) {
-    if (!mBlendMaterial || mCarBlobs.size() <= c) return true;
-    Mesh& m = mCarBlobs[c];
-    destroyMesh(m); // a re-dress refits the grid to the new model's footprint
-    const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
-    const float fl = (mCarWheels.size() > c) ? mCarWheels[c].footL : 2.0f;
-    const float W = fw * 1.45f, L = fl * 1.45f;   // SHADOW_OVERSCAN quad
-    // The SHAPE lives in a texture (buildShadowMask): the silhouette's
-    // penumbra is too tight for a falloff evaluated on a 10×14 grid. The
-    // grid stays so the sheet can CONFORM to a curving deck.
-    constexpr int GW = 10, GL = 14;               // grid segments
-    for (int j = 0; j <= GL; j++) {
-        for (int i = 0; i <= GW; i++) {
-            const float x = ((float) i / GW - 0.5f) * W;
-            const float z = ((float) j / GL - 0.5f) * L;
-            m.verts.push_back({ x, 0.02f, z, packLinear(kCarBlobInk, 1.0f, kCarBlobAO) });
-            m.uvs.push_back({ (float) i / GW, (float) j / GL });
-            m.local.push_back({ x, z, (uint8_t) std::lround(kCarBlobAO * 255.0f) });
-        }
-    }
-    for (int j = 0; j < GL; j++) {
-        for (int i = 0; i < GW; i++) {
-            const uint32_t b = (uint32_t) (j * (GW + 1) + i);
-            const uint32_t n = b + (uint32_t) (GW + 1);
-            m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-        }
-    }
-    // On a re-dress the slot's scene-scoped instance is reused rather than
-    // minting another: sceneInstance() records every instance until the
-    // scene is released, so a lobby of car-cycling players would pile them up.
-    MaterialInstance* mi = (mCarBlobMats.size() > c && mCarBlobMats[c])
-            ? mCarBlobMats[c]
-            : (mDecalMaterial ? sceneInstance(mDecalMaterial)
-                              : sceneInstance(mBlendMaterial));
-    mi->setPolygonOffset(-2.0f, -2.0f); // never z-fight the deck it hugs
-    if (mDecalMaterial) {
-        // The car's own outline when we could bake it; the generic
-        // rounded-rect only when a car has no GLB (box marker).
-        Texture* mask = (mCarSilhouettes.size() > c) ? mCarSilhouettes[c] : nullptr;
-        bool baked = mask != nullptr;
-        if (!mask) {
-            if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
-            mask = mShadowMaskTex;
-        }
-        if (mask) {
-            setBlobMask(mi, mask, baked);
-            mCarBlobMasks[c] = mask;
-        }
-        mCarBlobMats[c] = mi; // the monster swaps this mask per frame
-    } else {
-        m.uvs.clear(); // vblend has no uv0 attribute
-    }
-    // PRIORITY 2, one below the boost aura's 3, so the aura still paints
-    // over the contact shadow — see the ordering note on the aura's build.
-    if (!buildMesh(m, true, mi, 2)) return false;
-    // With the deck material the shadow is a road-shader decal and this mesh is
-    // only the no-vroad fallback: keep it out of the scene from the start, or
-    // its unconformed grid flashes at the origin before the first frame.
-    if (mRoadMaterial) setMeshInScene(m, false);
-    return true;
-}
-
-// The inverse of buildCarSlot + buildCarGhost + buildCarPlate + buildCarBlob,
+// The inverse of buildCarSlot + buildCarGhost + buildCarPlate,
 // for one slot of a LIVE scene (reroster). Sizes are left alone — the field's
 // shape is the scene's, and a re-roster never changes it.
 void TtpRenderer::destroyCarSlot(uint32_t c) {
     if (mCarAssets.size() > c) dropAsset(mCarAssets[c]);
     if (mCarGhostAssets.size() > c) dropAsset(mCarGhostAssets[c]);
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
-    if (mCarSilhouettes.size() > c && mCarSilhouettes[c]) {
-        // The blob's material may still sample it — point that back at the
-        // generic mask until buildCarBlob rebinds the new bake.
-        if (mCarBlobMats.size() > c && mCarBlobMats[c]
-                && mCarBlobMasks.size() > c && mCarBlobMasks[c] == mCarSilhouettes[c]) {
-            if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
-            if (mShadowMaskTex) {
-                setBlobMask(mCarBlobMats[c], mShadowMaskTex, false);
-                mCarBlobMasks[c] = mShadowMaskTex;
-            }
-        }
-        mEngine->destroy(mCarSilhouettes[c]);
-        mCarSilhouettes[c] = nullptr;
-        // The decalMask layer holds the OLD car until the re-dress rebakes it;
-        // clearing the bit sends the shadow decal to the generic layer meanwhile.
-        if (c < (uint32_t) kMaskLayerMonster) {
-            mMaskLayerBakedBits &= (uint16_t) ~(1u << c);
-        }
+    // The decalMask layer holds the OLD car until the re-dress rebakes it;
+    // clearing the bit sends the shadow decal to the generic layer meanwhile.
+    if (c < (uint32_t) kMaskLayerMonster) {
+        mMaskLayerBakedBits &= (uint16_t) ~(1u << c);
     }
     if (mCars.size() > c) destroyMesh(mCars[c]);
     if (mPlates.size() > c) destroyMesh(mPlates[c]);
-    if (mCarBlobs.size() > c) destroyMesh(mCarBlobs[c]);
     if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};
     if (mMonsterViews.size() > c) mMonsterViews[c] = MonsterView{};
 }
@@ -6777,7 +6456,6 @@ bool TtpRenderer::reroster(const std::vector<TtpRosterCar>& roster,
         pumpTextures(); // bind the body's decodes before the ghost queues its own
         buildCarGhost(c);
         if (!buildCarPlate(*mTrack, c)) return false;
-        if (!buildCarBlob(c)) return false;
     }
     for (uint32_t c : redress) {
         if (c >= roster.size()) return false;
@@ -7041,53 +6719,6 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
     return asset;
 }
 
-void TtpRenderer::conformDecalAt(Mesh& mesh, const mat4f& basis, float s0, float lat0,
-        float sx, float sz, float lift, float alphaScale) {
-    if (!mTrack || mesh.entity.isNull() || !mesh.vb || mesh.local.empty()) return;
-    const TrackBin::Sample f0 = mTrack->frameAt(s0);
-    const float3 tan0 = f0.tangent();
-    const float3 rightW = basis[0].xyz, fwdW = basis[2].xyz;
-    const float3 origin = basis[3].xyz;
-    for (size_t k = 0; k < mesh.local.size() && k < mesh.verts.size(); k++) {
-        const Mesh::Local& t = mesh.local[k];
-        const float3 v = rightW * (t.x * sx) + fwdW * (t.z * sz);
-        // The JS lays the decal FLAT in the car's tangent plane and raycasts
-        // each vertex down the surface normal, so a curving deck shortens or
-        // stretches the sheet as it falls onto it. Carrying the offset as
-        // arclength instead wrapped the full length around a loop, which is
-        // what made the shadow balloon there. Two Newton steps slide (s, lat)
-        // until the road point sits under the flat point.
-        const float3 q = origin + v;
-        float s = s0 + dot(v, tan0);
-        float lat = lat0 + dot(v, f0.lat);
-        TrackBin::Sample f = mTrack->frameAt(s);
-        for (int it = 0; it < 2; it++) {
-            const float3 d = (f.pos + f.lat * lat) - q;
-            s -= dot(d, f.tangent());
-            lat -= dot(d, f.lat);
-            f = mTrack->frameAt(s);
-        }
-        const float3 p = f.pos + f.lat * lat + f.up * lift;
-        Vertex& o = mesh.verts[k];
-        o.px = p.x; o.py = p.y; o.pz = p.z;
-        const uint32_t a = (uint32_t) std::lround(
-                std::min(255.0f, std::max(0.0f, t.a * alphaScale)));
-        o.abgr = (o.abgr & 0x00ffffffu) | (a << 24);
-    }
-    mesh.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-            mesh.verts.data(), mesh.verts.size() * sizeof(Vertex), nullptr));
-    refreshBounds(mesh); // the sheet just moved; its box has to follow
-    // The verts are world-space now — clear any parking transform.
-    auto& tcm = mEngine->getTransformManager();
-    tcm.setTransform(tcm.getInstance(mesh.entity), mat4f{});
-}
-
-// Boost pads as painted overlays: the chevron DISC (makePadTexture) or the
-// loop-mouth launch STRIP (makePadStripTexture), drawn just above the deck with
-// polygon offset. Both are built as GEOMETRY in the source textures' own canvas
-// coordinates — the chevrons are the canvas polylines STROKED (round caps and
-// joins, same lineWidth), not the cross-bands this first shipped with, and each
-// canvas point maps through frameAt so the art follows the road's curve.
 // The sea ring (theme.water): a flat ring around the play field whose radial
 // vertex-colour bands sell the read — a bright foam line at the shore, then
 // turquoise shallows deepening to blue out past the fog — plus the wet-sand
@@ -7224,7 +6855,7 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
 void TtpRenderer::buildFliers(const TrackBin& tb) {
     if (!mBlendMaterial) return;
     // Round-capped polyline stroke in CANVAS pixels, mapped into the quad by
-    // `toLocal` — the same idiom buildPadsMesh uses for the pad chevrons.
+    // `toLocal`.
     const auto stroke = [&](Mesh& m, const std::vector<float2>& pts, float halfW,
             uint32_t col, const std::function<float3(float2)>& toLocal) {
         const auto push = [&](float2 p) {
@@ -7330,199 +6961,6 @@ void TtpRenderer::buildFliers(const TrackBin& tb) {
         accumulateNormals(mPlane);
         buildMesh(mPlane);
     }
-}
-
-void TtpRenderer::buildPadsMesh(const TrackBin& tb) {
-    if (tb.pads.empty()) return;
-    // boostShades(theme.boost) — one accent per biome drives every surface.
-    const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
-    const float3 PAD_LIGHT = srgbToLinear(boost.light);   // disc core
-    const float3 PAD_BASE = srgbToLinear(boost.base);     // disc mid stop (0.7)
-    const float3 PAD_DARK = srgbToLinear(boost.dark);     // disc rim
-    const float3 STRIP_BODY = srgbToLinear(boost.strip);  // flat strip body
-    const float3 CREAM = srgbToLinear(0xfdf3cf);
-    const float LIFT = 0.014f;
-    // The chevron layout, vroad.mat's numbers verbatim — a margin plus a packed
-    // run, gaps as a fraction of a mark's own size, and a stroke that is a WORLD
-    // width. Each block below turns them into its own canvas's units.
-    constexpr float GAP_S = 0.24f, GAP_L = 0.30f, STROKE_FRAC = 0.09f;
-
-    const auto push = [&](const float3& p, uint32_t c) {
-        mPads.verts.push_back({ p.x, p.y, p.z, c });
-    };
-    const auto quadIdx = [&](uint32_t base) {
-        mPads.idx.insert(mPads.idx.end(),
-                { base, base + 2, base + 1, base + 1, base + 2, base + 3 });
-    };
-    // Stroke a canvas-space polyline with round caps + joins (the 2D context's
-    // lineCap/lineJoin 'round'), mapped to the deck by `toWorld`.
-    const auto stroke = [&](const std::vector<float2>& pts, float lw,
-            const std::function<float3(const float2&)>& toWorld, const float3& col) {
-        const uint32_t cc = packLinear(col, 1.0f);
-        const float hw = lw / 2;
-        for (size_t k = 0; k + 1 < pts.size(); k++) {
-            const float2 d = pts[k + 1] - pts[k];
-            const float len = std::sqrt(d.x * d.x + d.y * d.y);
-            if (len < 1e-5f) continue;
-            const float2 n = { -d.y / len * hw, d.x / len * hw };
-            const uint32_t base = (uint32_t) mPads.verts.size();
-            push(toWorld(pts[k] + n), cc);
-            push(toWorld(pts[k] - n), cc);
-            push(toWorld(pts[k + 1] + n), cc);
-            push(toWorld(pts[k + 1] - n), cc);
-            quadIdx(base);
-        }
-        for (const float2& q : pts) { // round cap / join
-            const int SEG = 8;
-            const uint32_t base = (uint32_t) mPads.verts.size();
-            push(toWorld(q), cc);
-            for (int j = 0; j <= SEG; j++) {
-                const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                push(toWorld(q + float2{ std::cos(a) * hw, std::sin(a) * hw }), cc);
-            }
-            for (int j = 0; j < SEG; j++) {
-                mPads.idx.insert(mPads.idx.end(),
-                        { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
-            }
-        }
-    };
-
-    for (const TrackBin::Pad& pad : tb.pads) {
-        if (pad.kind == 1) {
-            // ---- launch strip: makePadStripTexture on a 320×128 canvas, u
-            // across the lane and v along travel (the JS decal's UVs).
-            const float halfL = pad.p0, halfW = pad.p1;
-            const auto toWorld = [&](const float2& q) {
-                const float d = (0.5f - q.y / 128.0f) * 2 * halfL;
-                const TrackBin::Sample f = tb.frameAt(pad.s + d);
-                return f.pos + f.lat * (pad.lat + (q.x / 320.0f - 0.5f) * 2 * halfW)
-                        + f.up * LIFT;
-            };
-            const uint32_t body = packLinear(STRIP_BODY, 1.0f);
-            constexpr int ROWS = 16, COLS = 4; // follow the deck's curve
-            for (int r = 0; r < ROWS; r++) {
-                for (int cc2 = 0; cc2 < COLS; cc2++) {
-                    const float y0 = r * (128.0f / ROWS), y1 = (r + 1) * (128.0f / ROWS);
-                    const float x0 = cc2 * (320.0f / COLS), x1 = (cc2 + 1) * (320.0f / COLS);
-                    const uint32_t base = (uint32_t) mPads.verts.size();
-                    push(toWorld({ x0, y0 }), body);
-                    push(toWorld({ x1, y0 }), body);
-                    push(toWorld({ x0, y1 }), body);
-                    push(toWorld({ x1, y1 }), body);
-                    quadIdx(base);
-                }
-            }
-            // 5×2 grid of cream chevrons, apex toward canvas-top = travel.
-            // THE LAYOUT IS vroad.mat's, in canvas units: a packed run of
-            // ROWS_C chevrons inside ±BX along travel and COLS_C inside ±BY
-            // across. Spelling it as the same fractions rather than as four
-            // hand-placed pixel counts is what keeps the fallback mesh and the
-            // shipped shader drawing one piece of art — they were 5×2 and 3×2
-            // before this. HS/HL are the canvas half-extents, so a normalised
-            // coordinate times one of them is a canvas one; note WIDEN is a FULL
-            // width where WING is a half.
-            constexpr int COLS_C = 5, ROWS_C = 2;
-            constexpr float HS = 64, HL = 160;   // half of the 128 x 320 canvas
-            constexpr float BX = 0.50f;
-            // The shader's world stroke, in this canvas's along-travel px, and
-            // its BY rule: keep the outermost stroke off the 0.9 edge fade.
-            const float SW = 2 * STROKE_FRAC * std::min(halfL, halfW) * (HS / halfL);
-            const float BY = 0.90f - STROKE_FRAC * std::min(halfL, halfW) / halfW;
-            constexpr float CHEVN = 2 * BX / (ROWS_C + (ROWS_C - 1) * GAP_S);
-            const float WIDEN = 2 * BY / (COLS_C + (COLS_C - 1) * GAP_L);
-            constexpr float CHEV = CHEVN * HS, PITCH_S = CHEVN * (1 + GAP_S) * HS;
-            constexpr float Y0 = (1 - BX) * HS;
-            const float WING = WIDEN * 0.5f * HL;
-            const float CX0 = (1 - BY + WIDEN * 0.5f) * HL;
-            const float PITCH_L = WIDEN * (1 + GAP_L) * HL;
-            const auto lift = [&](const float2& q) {
-                const float d = (0.5f - q.y / 128.0f) * 2 * halfL;
-                const TrackBin::Sample f = tb.frameAt(pad.s + d);
-                return f.pos + f.lat * (pad.lat + (q.x / 320.0f - 0.5f) * 2 * halfW)
-                        + f.up * (LIFT + 0.002f);
-            };
-            for (int c2 = 0; c2 < COLS_C; c2++) {
-                const float cx = CX0 + c2 * PITCH_L;
-                for (int r2 = 0; r2 < ROWS_C; r2++) {
-                    const float y = Y0 + r2 * PITCH_S;
-                    stroke({ { cx - WING, y + CHEV }, { cx, y }, { cx + WING, y + CHEV } },
-                            SW, lift, CREAM);
-                }
-            }
-        } else {
-            // ---- chevron disc: makePadTexture on a 64×64 canvas, the disc
-            // inscribed in it (CircleGeometry UVs) — radial gradient light →
-            // base (0.7) → dark rim, then 3 stroked chevrons.
-            const float r = pad.p0;
-            const auto toWorld = [&](const float2& q) {
-                const float d = (0.5f - q.y / 64.0f) * 2 * r;
-                const TrackBin::Sample f = tb.frameAt(pad.s + d);
-                return f.pos + f.lat * (pad.lat + (q.x / 64.0f - 0.5f) * 2 * r) + f.up * LIFT;
-            };
-            const int SEG = 24;   // PAD_DISC_SEG
-            // The 0.35 ring is a TESSELLATION fix, like the boost disk's: a bare
-            // centre-to-0.7 fan spans 0.63u against the road's own 0.24u rings,
-            // and measured 0.004u proud of the deck at 8 lap positions across the
-            // catalogue — all on the crest-heavy tracks (cloverleaf, wash, crag,
-            // pretzel, sidewinder). COLOUR IS UNCHANGED: the GPU already
-            // interpolated PAD_LIGHT -> PAD_BASE linearly across that span, so
-            // the midpoint colour at the midpoint radius is exactly on the line
-            // it was already drawing.
-            static const float DISC_RINGS[3] = { 0.35f, 0.7f, 1.0f };
-            const uint32_t cCore = packLinear(PAD_LIGHT, 1.0f);
-            const uint32_t cHalf = packLinear((PAD_LIGHT + PAD_BASE) * 0.5f, 1.0f);
-            const uint32_t cMid = packLinear(PAD_BASE, 1.0f);
-            const uint32_t cRim = packLinear(PAD_DARK, 1.0f);
-            const uint32_t base = (uint32_t) mPads.verts.size();
-            push(toWorld({ 32, 32 }), cCore);
-            for (int r = 0; r < 3; r++) {
-                const float rr = DISC_RINGS[r];
-                const uint32_t col = r == 0 ? cHalf : r == 1 ? cMid : cRim;
-                for (int j = 0; j <= SEG; j++) {
-                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                    push(toWorld({ 32 + std::cos(a) * 32 * rr, 32 + std::sin(a) * 32 * rr }), col);
-                }
-            }
-            for (int j = 0; j < SEG; j++) { // centre fan to the innermost ring
-                mPads.idx.insert(mPads.idx.end(),
-                        { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
-            }
-            for (int r = 0; r + 1 < 3; r++) { // one quad band per ring gap
-                const uint32_t a0 = base + 1 + (uint32_t) r * (SEG + 1), b0 = a0 + SEG + 1;
-                for (int j = 0; j < SEG; j++) {
-                    mPads.idx.insert(mPads.idx.end(),
-                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
-                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
-                }
-            }
-            const auto lift = [&](const float2& q) {
-                const float d = (0.5f - q.y / 64.0f) * 2 * r;
-                const TrackBin::Sample f = tb.frameAt(pad.s + d);
-                return f.pos + f.lat * (pad.lat + (q.x / 64.0f - 0.5f) * 2 * r)
-                        + f.up * (LIFT + 0.002f);
-            };
-            // vroad.mat's ellipse layout in canvas units — see the strip above.
-            // The disc's box is the smaller of the two because its corners have
-            // a RIM to clear: the rearmost wing tips sit at (BX, BY).
-            constexpr int N = 3;
-            constexpr float HD = 32;   // half of the 64 x 64 canvas
-            constexpr float BX = 0.64f, BY = 0.46f;
-            constexpr float CHEVN = 2 * BX / (N + (N - 1) * GAP_S);
-            constexpr float CHEV = CHEVN * HD, PITCH_S = CHEVN * (1 + GAP_S) * HD;
-            constexpr float WING = BY * HD, Y0 = (1 - BX) * HD;
-            // The shader's world stroke is 2*STROKE_FRAC*r wide at HD/r canvas px
-            // per world unit, so the disc's radius cancels out of it entirely.
-            constexpr float SW = 2 * STROKE_FRAC * HD;
-            for (int j = 0; j < N; j++) {
-                const float y = Y0 + j * PITCH_S;
-                stroke({ { HD - WING, y + CHEV }, { HD, y }, { HD + WING, y + CHEV } },
-                        SW, lift, CREAM);
-            }
-        }
-    }
-    mPadMat = sceneInstance(mMaterial);
-    mPadMat->setPolygonOffset(-3.0f, -3.0f);
-    buildMesh(mPads, true, mPadMat);
 }
 
 // Support structures + berms — track.js buildPoles / buildPillars /
@@ -7643,102 +7081,10 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
 // radius×1.05, half-step offset, clamped inside the kerb). (Authored poles are
 // concrete posts — see buildStructures.)
 //
-// The JS this came from clipped every flat on-deck decal OUT of the road ribbon
-// (the retired public/display/render/RoadDecal.js, Sutherland–Hodgman in the
-// road's tangent frame) so it was exactly coplanar with zero lift, and this
-// comment used to promise that port as "real RoadDecal clipping later". It is
-// deliberately NOT owed any more. Measured across all 20 catalogue tracks
-// against the road's own mesh, the conformed decals disagree with the deck by at
-// most 0.0005u — 5% of their lift — so clipping would buy no depth correctness
-// here; what was actually broken was this function not conforming at all, which
-// no amount of lift can fix. See scripts/decal-conform-audit.mjs for the
-// numbers and tests/decal-conform.test.js for the gate. Zero-lift clipping is
-// still a legitimate thing to want, but as a look/architecture call, not a bug.
+// The slick itself is a road-shader stamp (buildStaticDeckDecals); this builds
+// its 3D markers only.
 void TtpRenderer::buildOils(const TrackBin& tb) {
     if ((tb.oils.empty() && tb.poles.empty())) return;
-    if (!tb.oils.empty() && mBlendMaterial && !mRoadMaterial) {
-        // The slick reskins per biome: a turquoise puddle on the beach, a pale
-        // glacial sheet on the snow, the dark oil film everywhere else — each
-        // with a foam/frost rim ring so it reads as a feature with an edge.
-        const uint32_t c = tb.hasWater
-                ? packLinear(srgbToLinear(tb.waterShallow), 1.0f, 0.55f)
-                : tb.hasIce ? packLinear(srgbToLinear(tb.iceSheet), 1.0f, 0.45f)
-                            : packLinear(srgbToLinear(0x161425), 1.0f, 0.7f);
-        const bool hasRim = tb.hasWater || tb.hasIce;
-        const uint32_t rimC = packLinear(
-                srgbToLinear(tb.hasWater ? tb.waterFoam : tb.iceFrost), 1.0f, 0.5f);
-        // THE SLICK CONFORMS, and until 2026-07-30 it did not. It took ONE
-        // frameAt(o.s) and swept that frame's lat/tangent, so a 2u-wide disc was
-        // a flat plane in the centre's tangent frame while the deck bent away
-        // underneath it. Measured against the road's own mesh: 0.175u out on a
-        // loop and 0.090u on a crest-only track, against a 0.012 lift — 14.6x
-        // the budget, which is asphalt standing proud through the middle of the
-        // slick. It read as fine only because no shipped oil happens to sit on
-        // curvature (placeFurniture penalises grade and elevation, not vertical
-        // curvature), so 11.3% of catalogue positions were a furniture reshuffle
-        // away from showing it. A flat decal fails on CONCAVE deck, where the
-        // road rises above it; a conformed one fails on CONVEX deck, where its
-        // chords sag below the road's finer ones. Only the second is bounded by
-        // the lift, which is why this is worth conforming rather than lifting.
-        //
-        // RADIAL RINGS ARE PART OF THE FIX, not tidying. Conforming alone leaves
-        // a centre-to-rim fan spanning the full radius, which still sags ~0.010
-        // at the catalogue's tightest crest — 84% of the lift, on its own. Three
-        // rings hold the widest chord to ~0.35u. The body is a single flat
-        // colour, so subdividing it is invisible.
-        constexpr int SEG = 24;                                   // was 16
-        static const float RINGS[3] = { 0.35f, 0.7f, 1.0f };
-        for (const TrackBin::Oil& o : tb.oils) {
-            // The canvas-free twin of buildPadsMesh's toWorld: an offset along
-            // travel picks its OWN frame, which is what follows the road.
-            const auto at = [&](float latOff, float dAlong, float lift) {
-                const TrackBin::Sample f = tb.frameAt(o.s + dAlong);
-                return f.pos + f.lat * (o.lat + latOff) + f.up * lift;
-            };
-            const uint32_t base = (uint32_t) mOils.verts.size();
-            const float3 ctr = at(0, 0, 0.016f);
-            mOils.verts.push_back({ ctr.x, ctr.y, ctr.z, c });
-            for (const float rr : RINGS) {
-                for (int j = 0; j <= SEG; j++) {
-                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                    const float3 p = at(std::cos(a) * rr * o.radius,
-                                        std::sin(a) * rr * o.radius, 0.012f);
-                    mOils.verts.push_back({ p.x, p.y, p.z, c });
-                }
-            }
-            for (int j = 0; j < SEG; j++) { // centre fan to the innermost ring
-                mOils.idx.insert(mOils.idx.end(),
-                        { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
-            }
-            for (int r = 0; r + 1 < 3; r++) { // one quad band per ring gap
-                const uint32_t a0 = base + 1 + (uint32_t) r * (SEG + 1);
-                const uint32_t b0 = a0 + SEG + 1;
-                for (int j = 0; j < SEG; j++) {
-                    mOils.idx.insert(mOils.idx.end(),
-                            { a0 + (uint32_t) j, b0 + (uint32_t) j, b0 + (uint32_t) j + 1,
-                              a0 + (uint32_t) j, b0 + (uint32_t) j + 1, a0 + (uint32_t) j + 1 });
-                }
-            }
-            if (!hasRim) continue;
-            // Rim annulus (0.82 r → r), painted over the disc it sits on.
-            const uint32_t rb = (uint32_t) mOils.verts.size();
-            for (int j = 0; j <= SEG; j++) {
-                const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                for (const float rr : { 0.82f, 1.0f }) {
-                    const float3 p = at(std::cos(a) * rr * o.radius,
-                                        std::sin(a) * rr * o.radius, 0.018f);
-                    mOils.verts.push_back({ p.x, p.y, p.z, rimC });
-                }
-            }
-            for (int j = 0; j < SEG; j++) {
-                const uint32_t q = rb + (uint32_t) j * 2;
-                mOils.idx.insert(mOils.idx.end(), { q, q + 1, q + 2, q + 1, q + 3, q + 2 });
-            }
-        }
-        MaterialInstance* mi = sceneInstance(mBlendMaterial);
-        mi->setPolygonOffset(-2.0f, -2.0f);
-        buildMesh(mOils, true, mi);
-    }
     // Cones: hazard rings + gate poles, one instanced pool.
     struct ConeSpot { float s, lat; };
     std::vector<ConeSpot> spots;
@@ -8122,12 +7468,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mGroundMaterial && vground != mAssets.end()) {
         mGroundMaterial = Material::Builder()
                 .package(vground->second.data(), vground->second.size())
-                .build(*mEngine);
-    }
-    const auto vdecal = mAssets.find("vdecal.filamat");
-    if (!mDecalMaterial && vdecal != mAssets.end()) {
-        mDecalMaterial = Material::Builder()
-                .package(vdecal->second.data(), vdecal->second.size())
                 .build(*mEngine);
     }
     const auto vpoint = mAssets.find("vpoint.filamat");
@@ -8702,7 +8042,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
         carPosW[i] = carPos;
         float carS = 0, carLat = 0;   // this car's spot on the ribbon, projected once
-        bool haveCarS = false;
         const mat4f m{ float4{ right, 0 }, float4{ up, 0 }, float4{ fwd, 0 },
                        float4{ carPos, 1 } };
         if (mCarAssets.size() > i && mCarAssets[i]) {
@@ -8935,11 +8274,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         } else if (!mCars[i].entity.isNull()) {
             tcm.setTransform(tcm.getInstance(mCars[i].entity), m);
         }
-        // Ground blob rides the road-aligned pose basis (it conforms to
-        // whatever the car drives — bank, hill, loop deck), spun by the
-        // spin-out whirl so the silhouette tracks the car (the JS shadow's
-        // rotated right/forward axes). A monster swaps to its own footprint.
-        if (mCarBlobs.size() > i && !mCarBlobs[i].entity.isNull()) {
+        // Ground shadow: a MASKED road-shader decal riding the road-aligned
+        // pose basis (it follows whatever the car drives — bank, hill, loop
+        // deck), spun by the spin-out whirl so the silhouette tracks the car
+        // (the JS shadow's rotated right/forward axes). A monster swaps to its
+        // own footprint.
+        {
             const mat4f bm = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 })
                     : m;
@@ -8961,7 +8301,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // decals hang off the same origin and the same road frame.
             if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
             mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat, &mDecalProjHint[i]);
-            haveCarS = true;
             if (mRoadInst && mDecalMaskArray
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
                 // SHADED INTO THE ROAD, like the aura below: the shadow's
@@ -8970,8 +8309,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // paints across every wheel from a low camera, because ALL
                 // blended geometry draws after ALL opaque geometry (Filament's
                 // pass bits outrank renderable priority) and the sheet wins
-                // the depth test in front of the tyre's bottom 0.014u.
-                setMeshInScene(mCarBlobs[i], false);
+                // the depth test in front of the tyre's bottom slice.
                 const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 // The blob quad's halves in the CAR's frame: forward in rect.z,
@@ -9005,36 +8343,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         float4{ bm[3].x, bm[3].y, bm[3].z, 0 },
                         float4{ wF.x, wF.y, wF.z, 0 },
                         float4{ wR.x, wR.y, wR.z, 0 } });
-            } else {
-                // The conformed-mesh fallback, for a shell served no
-                // vroad.filamat.
-                // …and to the RIG's OUTLINE, not just its size. Scaling the
-                // little car's silhouette up to truck dimensions painted a
-                // car-shaped smudge under a chassis whose four fat tyres are
-                // the only things touching the road. Edge-triggered:
-                // setParameter rebinds a sampler.
-                if (mCarBlobMats.size() > i && mCarBlobMats[i]) { // sized with mCarBlobMasks
-                    Texture* want = monsterBlob && mMonsterSilhouette
-                            ? mMonsterSilhouette
-                            : (mCarSilhouettes.size() > i && mCarSilhouettes[i])
-                                    ? mCarSilhouettes[i] : mShadowMaskTex;
-                    if (want && want != mCarBlobMasks[i]) {
-                        setBlobMask(mCarBlobMats[i], want, want != mShadowMaskTex);
-                        mCarBlobMasks[i] = want;
-                    }
-                }
-                setMeshInScene(mCarBlobs[i], true);
-                // LIFT 0.010, down from 0.02. Every lift on the deck is headroom
-                // for ONE thing — how far this decal's chords sag below the
-                // road's own finer chords on a crest — and this is the finest-
-                // tessellated decal in the scene: a 10x14 grid over 1.38 x 2.90
-                // is 0.207u along travel, FINER than the road's 0.24u rings, so
-                // it barely sags at all (measured 0.0022, needing 0.0034). It
-                // stays clear of the skid marks at 0.006 so the depth sort keeps
-                // putting the shadow over them, and below the aura's 0.013 so
-                // the aura still paints over the shadow.
-                conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.013f,
-                        1.0f + (0.08f / 0.55f) * load);
             }
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
@@ -9103,57 +8411,23 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             }
         }
         // Boost pool: the JS breathes both the opacity (min(0.85, 0.7 + k·0.3)
-        // × pulse) and the radius ((footW+footL)/2 × (1.25 + k·1.4) × 0.5),
-        // then CONFORMS every ring vertex onto the deck.
-        if (mBoostDisks.size() > i && !mBoostDisks[i].entity.isNull()) {
-            if (c.boostMul > 1.001f) {
-                const float k = c.boostMul - 1.0f;
-                const float pulse = 0.9f + 0.1f * std::sin(mTime * 11.0f);
-                const float sc = (1.25f + k * 1.4f) * (0.94f + 0.08f * pulse);
-                const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
-                const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
-                const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
-                if (!haveCarS) {
-                    if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
-                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat,
-                            &mDecalProjHint[i]);
-                    haveCarS = true;
-                }
-                // LIFT 0.013, down from 0.02, and it is the FOURTH RING above
-                // that paid for it: the disc's worst chord sag went 0.0116 ->
-                // 0.0078, and a lift has to clear its own sag with margin or the
-                // deck stands through the decal on a crest. 0.02 was not
-                // arbitrary — it was near the minimum the 3-ring disc could use.
-                // This is the LARGEST decal on the deck (outerR reaches 1.56u at
-                // full boost, wider than an oil slick), which is why it needs more
-                // headroom than the car's own shadow at 0.010.
-                const float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
-                // SHADED INTO THE ROAD when the deck material is available: the
-                // aura's fragment IS a road fragment, at the road's own depth, so
-                // there is no lift, no chord sag to clear and no render order to
-                // get wrong. The disc mesh stays as the fallback for a shell that
-                // was served no vroad.filamat.
-                // Into the held-back aura list (see auraDecals above), so every
-                // aura composites over every car shadow.
-                addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
-                        0.72f, 0.94f, true, &auraDecals);
-                // The disc mesh only draws on a shell served no vroad.filamat;
-                // with the deck material it never enters the scene at all.
-                setMeshInScene(mBoostDisks[i], !mRoadInst);
-                if (!mRoadInst) {
-                    conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR,
-                            0.017f, alpha);
-                }
-            } else {
-                setMeshInScene(mBoostDisks[i], false);
-            }
+        // × pulse) and the radius ((footW+footL)/2 × (1.25 + k·1.4) × 0.5).
+        // SHADED INTO THE ROAD: the aura's fragment IS a road fragment, at the
+        // road's own depth, so there is no lift, no chord sag to clear and no
+        // render order to get wrong. Into the held-back aura list (see
+        // auraDecals above), so every aura composites over every car shadow.
+        if (c.boostMul > 1.001f) {
+            const float k = c.boostMul - 1.0f;
+            const float pulse = 0.9f + 0.1f * std::sin(mTime * 11.0f);
+            const float sc = (1.25f + k * 1.4f) * (0.94f + 0.08f * pulse);
+            const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
+            const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
+            const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
+            const float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+            addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
+                    0.72f, 0.94f, true, &auraDecals);
         }
     }
-    for (const DeckDecal& d : auraDecals) {
-        if ((int) mDeckDecals.size() >= kMaxDeckDecals) break;
-        mDeckDecals.push_back(d);
-    }
-    uploadDeckDecals();
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
 
     // Clouds drift slowly east, wrapping outside the playfield. The JS drifts
@@ -9439,7 +8713,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // instead of a box inflating in the road. The old `pop` tail is gone
         // with it: it only ever existed to stand in for this alpha.
         constexpr float POOF = 0.2f;
-        bool shadowsDirty = false;
         for (uint32_t i = 0; i < nBoxes; i++) {
             auto inst = tcm.getInstance(mBoxInstances[i]->getRoot());
             gltfio::FilamentInstance* fadeInst =
@@ -9486,55 +8759,26 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         * mat4f::rotation(mTime * 1.6f, float3{ 0, 1, 0 })
                         * mat4f::scaling(float3{ mBoxScale }));
             }
-            const uint8_t fade = (uint8_t) std::lround(alpha * 255.0f);
-            if (i < mBoxShadowFade.size() && mBoxShadowFade[i] != fade) {
-                mBoxShadowFade[i] = fade;
-                shadowsDirty = true;
+            // The box's contact-shadow stamp fades with it. buildStaticDeckDecals
+            // pushes one decal per box FIRST and in box order, so entry i is box
+            // i's stamp; rewriting its alpha in place dirties the chunk's memcmp
+            // only while a poof is actually running.
+            if (i < mStaticDeckDecals.size() && i < (uint32_t) kMaxDeckDecals) {
+                mStaticDeckDecals[i].color.w = kBlobShadowAlpha * alpha;
             }
         }
-        // One re-upload of the whole baked blob mesh, only on a state change —
-        // a box collect or respawn, so a handful of frames per race.
-        if (shadowsDirty && mPropShadows.vb && mBoxShadowStride) {
-            for (size_t i = 0; i < mBoxShadowFade.size(); i++) {
-                const size_t v0 = i * mBoxShadowStride;
-                const size_t v1 = std::min(v0 + mBoxShadowStride, mPropShadows.verts.size());
-                for (size_t v = v0; v < v1; v++) {
-                    const uint32_t rest = mBoxShadowRest[v];
-                    const uint32_t a = ((rest >> 24) * mBoxShadowFade[i] + 127) / 255;
-                    mPropShadows.verts[v].abgr = (a << 24) | (rest & 0x00ffffffu);
-                }
-            }
-            mPropShadows.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                    mPropShadows.verts.data(),
-                    mPropShadows.verts.size() * sizeof(Vertex), nullptr));
-        }
-        // Ground blob under each dynamic prop (TrackProps shares one blob geo,
-        // scaled 0.7 for a banana and 0.95 for a rocket).
-        const auto placeBlob = [&](size_t slot, const TrackBin::Sample& f, float lat,
-                float scale, bool live) {
-            if (mPropBlobs.size() <= slot || mPropBlobs[slot].entity.isNull()) return;
-            // The blob mesh draws only for a live item on a shell served no
-            // vroad.filamat — scene membership, not an underground park (see
-            // setMeshInScene).
-            setMeshInScene(mPropBlobs[slot], live && !mRoadInst);
-            if (!live) return;
+        // Ground blob under each dynamic prop (TrackProps shares one blob
+        // shape, scaled 0.7 for a banana and 0.95 for a rocket): a road-shader
+        // stamp like the boost aura, so it has no lift either. Its falloff is
+        // the shape the JS baked into its texture (makeBlobShadowTexture:
+        // 1 -> 0.82 at 0.55 of the radius -> 0 at the rim), which is exactly
+        // what the stamp's inner/knee pair describes. f came from
+        // frameAt(item.s), so the arclength is already exact — no need to
+        // project the world point back onto the curve.
+        const auto placeBlob = [&](const TrackBin::Sample& f, float lat, float scale) {
             const float r = 0.3f * scale;
-            // f came from frameAt(item.s), so the arclength is already exact —
-            // no need to project the resulting world point back onto the curve.
-            //
-            // SHADED INTO THE ROAD like the boost aura, so a banana's or rocket's
-            // contact shadow has no lift either. Its falloff is the same shape the
-            // mesh baked into vertex alpha (makeBlobShadowTexture: 1 -> 0.82 at
-            // 0.55 of the radius -> 0 at the rim), which is exactly what the
-            // stamp's inner/knee pair describes. The mesh remains the fallback for
-            // a shell served no vroad.filamat.
-            if (mRoadInst) {
-                addDeckDecal(f.s, lat, r, r, srgbToLinear(0x1c1a18), 0.4f,
-                        /*inner=*/0.55f, /*kneeAlpha=*/0.82f, /*ellipse=*/true);
-            } else {
-                conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r,
-                        0.013f, 1.0f);
-            }
+            addDeckDecal(f.s, lat, r, r, srgbToLinear(0x1c1a18), kBlobShadowAlpha,
+                    /*inner=*/0.55f, /*kneeAlpha=*/0.82f, /*ellipse=*/true);
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
         for (uint32_t j = 0; j < (uint32_t) mBananaInstances.size(); j++) {
@@ -9542,12 +8786,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             if (mBananaIn.size() > j) {
                 setInstanceInScene(mBananaInstances[j], mBananaIn[j], live);
             }
-            if (!live) {
-                placeBlob(j, {}, 0, 0.7f, false);
-                continue;
-            }
+            if (!live) continue;
             const TrackBin::Sample bf = mTrack->frameAt(bananas[j].s);
-            placeBlob(j, bf, bananas[j].lat, 0.7f, true);
+            placeBlob(bf, bananas[j].lat, 0.7f);
             tcm.setTransform(tcm.getInstance(mBananaInstances[j]->getRoot()),
                     bf.basis(bananas[j].lat));
         }
@@ -9561,14 +8802,13 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             if (j >= input.rocketCount) {
                 setMeshInScene(mRockets[j], false);
                 if (haveFlame) setMeshInScene(mRocketFlames[j], false);
-                placeBlob(mBananaInstances.size() + j, {}, 0, 0.95f, false);
                 continue;
             }
             setMeshInScene(mRockets[j], true);
             // Nose (local +Y) along the travel tangent, ROCKET_HOVER 0.32
             // above the deck, whizz-rolling about its axis at 9 rad/s.
             const TrackBin::Sample f = mTrack->frameAt(rockets[j].s);
-            placeBlob(mBananaInstances.size() + j, f, rockets[j].lat, 0.95f, true);
+            placeBlob(f, rockets[j].lat, 0.95f);
             const float3 tanv = f.tangent();
             const float3 p = f.pos + f.lat * rockets[j].lat + f.up * 0.32f;
             nowRockets.push_back(p);
@@ -9694,6 +8934,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
     }
 
+    // Auras LAST (over every shadow and blob — the layering the meshes used to
+    // get from their render priorities), then the frame's one decal upload.
+    // This sits after the world block so a banana's or rocket's stamp lands on
+    // the frame its prop appears, not one frame late.
+    for (const DeckDecal& d : auraDecals) {
+        if ((int) mDeckDecals.size() >= kMaxDeckDecals) break;
+        mDeckDecals.push_back(d);
+    }
+    uploadDeckDecals();
     mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];
 
     // Skid trails — SkidMarks.js layTrails + step, ported. Each marking wheel
@@ -10214,18 +9463,14 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mHills);
     destroyMesh(mBalloon);
     for (auto& m : mCars) destroyMesh(m);
-    destroyMesh(mPads);
     destroyMesh(mGantry);
-    for (auto& m : mCarBlobs) destroyMesh(m);
     for (auto& m : mStreakMeshes) destroyMesh(m);
     for (auto& m : mPlates) destroyMesh(m);
-    for (auto& m : mBoostDisks) destroyMesh(m);
     for (auto& m : mClouds) destroyMesh(m);
     destroyMesh(mBoulders);
     destroyMesh(mLandmarks);
     destroyMesh(mGroundShadows);
     destroyMesh(mClutter);
-    destroyMesh(mOils);
     destroyMesh(mStructures);
     destroyMesh(mBerms);
     for (auto& m : mHaze) destroyMesh(m);
@@ -10239,8 +9484,6 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
-    destroyMesh(mPropShadows);
-    for (auto& m : mPropBlobs) destroyMesh(m);
     destroyMesh(mSkids);
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
@@ -10248,11 +9491,9 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mCarAssets) dropAsset(a);
-    // Baked per-car silhouettes die with the roster that produced them. The
-    // decalMask layers keep their stale images but lose their baked bits, so
-    // the next scene's shadow decals ride the generic layer until they rebake.
-    for (Texture*& t : mCarSilhouettes) { if (t) mEngine->destroy(t); t = nullptr; }
-    mCarSilhouettes.clear();
+    // The decalMask layers die with the roster that produced them: they keep
+    // their stale images but lose their baked bits, so the next scene's shadow
+    // decals ride the generic layer until they rebake.
     mMaskLayerBakedBits &= (uint16_t) (1u << kMaskLayerGeneric);
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
@@ -10272,7 +9513,6 @@ void TtpRenderer::releaseScene() {
     mRoadInstLast.clear();
     mDeckDecals.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
-    mPadMat = nullptr;
     for (utils::Entity e : { mSun, mFill }) {
         if (!e.isNull()) {
             mScene->remove(e);
@@ -10305,9 +9545,6 @@ void TtpRenderer::releaseScene() {
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
-    mBoxShadowRest.clear();
-    mBoxShadowFade.clear();
-    mBoxShadowStride = 0;
     mCarGhostIn.clear();
     mMonsterIn.clear();
     mMonsterGhostIn.clear();
@@ -10317,18 +9554,12 @@ void TtpRenderer::releaseScene() {
     mBoxGlowMats.clear(); // the box assets own them (dropAsset above) — handles only
     mConeStates.clear();
     mSignMeshes.clear();
-    mCarBlobs.clear();
-    // Scene-scope instances (sceneInstance owns them) — drop the handles only.
-    mCarBlobMats.clear();
-    mCarBlobMasks.clear();
     mPlates.clear();
-    mBoostDisks.clear();
     mStreaks.clear();
     mStreakMeshes.clear();
     mStreakSeed.clear();
     mCarBasis.clear();
     mCarBasisInv.clear();
-    mPropBlobs.clear();
     mRockets.clear();
     mRocketFlames.clear();
     mPrevRockets.clear();
@@ -10368,7 +9599,6 @@ void TtpRenderer::releaseScene() {
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;
-    if (mMonsterSilhouette) { mEngine->destroy(mMonsterSilhouette); mMonsterSilhouette = nullptr; }
     mBoxScale = 1.0f;
 }
 
@@ -10382,10 +9612,8 @@ TtpRenderer::~TtpRenderer() {
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
-    if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
-    if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
     delete mResourceLoader;

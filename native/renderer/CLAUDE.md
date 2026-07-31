@@ -135,27 +135,22 @@ silhouette in curvilinear (s, lat) instead bends it around every corner, and
 the per-triangle kinks of the interpolated uv0 field ripple through its sharp
 edge as the car crosses rings — shadow-edge shimmer on bends, flat on
 straights. A layer whose bake hasn't landed falls back to the generic
-superellipse — never to an unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
-Every stamped decal also keeps its mesh as the fallback for a shell served no
-`vroad.filamat`, and those fallback lifts are sized for the road's CONCAVE
-bulge — a chord over a dip sits above the true surface, so a coarser road eats
-a conformed decal's lift. A lifted sheet also tints whatever crosses its plane:
-ALL blended geometry draws after ALL opaque geometry (Filament's pass bits
-outrank renderable priority), so the shadow sheet painted the bottom slice of
-every tyre from a low camera — that band, not the lift itself, is why the
-shadow moved into the shader.
+superellipse — never to an unbaked layer.
 
-**The fallback and the shader are two copies of one piece of art**, and the pad
-chevrons drifted to different grids once — invisibly, because nothing in the tree
-renders the fallback. Both grids are pinned in the decal audit's `MIRRORED` list,
-which is the only place they can be compared.
-
-`npm run audit:decals` measures those fallback meshes. **The fast gate is a
-screen, not a proof:** it samples curvature extremes along a few curves, and a
-decal is a sheet, so the true worst position need not be among them — it reports a
-healthier margin than the sweep finds. The sweep is the authority, CI runs it on
-every push, and it exits nonzero below the margin floor. **Quote the sweep's
-numbers, never the screen's.**
+**The shader path is the ONLY path — do not bring back overlay meshes.** A
+separate mesh over the deck cannot be flat: road and decal are two chord
+approximations of one curve at different vertex spacings, so one always pokes
+through and a lift epsilon is the whole (tunable, auditable, wrong-on-some-
+track) budget. A lifted sheet also tints whatever crosses its plane: ALL
+blended geometry draws after ALL opaque geometry (Filament's pass bits outrank
+renderable priority), so a shadow sheet painted the bottom slice of every tyre
+from a low camera. The conformed-mesh fallbacks (for a shell served no
+`vroad.filamat`) were deleted 2026-07-31 along with the JS audit that kept
+their duplicated art honest; a shell without `vroad.filamat` now simply draws
+a bare deck, and materials are a mandatory step in the shells ledger anyway.
+**What is still a mesh:** the hazard cones and wet-floor signs (not flat), and
+the skid ribbons (unbounded count, so they stay a pooled mesh with a
+curvature-scaled lift — see the skid block in `render()`).
 
 ## The per-frame budget
 

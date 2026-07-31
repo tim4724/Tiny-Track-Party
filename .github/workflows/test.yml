@@ -30,9 +30,8 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    # The sweep below alone is minutes of CPU (it grew with the terrain-relief
-    # ground), and a cold checkout has been observed to take 2m+ on GitHub's
-    # side — a 5-minute budget had zero headroom and flaked on exactly that.
+    # A cold checkout has been observed to take 2m+ on GitHub's side — a
+    # 5-minute budget had zero headroom and flaked on exactly that.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -46,17 +45,6 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm test
-      # THE EXHAUSTIVE DECAL SWEEP, which deliberately does not run in `npm test`.
-      # tests/decal-conform.test.js screens each track's curvature extremes in ~3 s
-      # and that is what belongs in a 5 s local suite, but it is a SCREEN: the
-      # extremes are chosen by curvature along a few offset curves, and a decal is a
-      # sheet, so the true worst position is not always one of them (measured: the
-      # screen reported 43% margin where the full sweep found 35%). This relocates
-      # one decal of every kind along every metre of all 20 tracks and is the
-      # authority. Minutes of CPU since the heightfield ground landed — still
-      # cheaper than an E2E shard, and the authoritative answer.
-      - name: Decal conformance, every metre of every track
-        run: npm run audit:decals:sweep
 
   # SHARDED across runners, which is not the same knob as playwright's `workers`.
   # The runner has no GPU, so every display page rasterizes a full Filament scene

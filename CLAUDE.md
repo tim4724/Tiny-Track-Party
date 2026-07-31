@@ -27,7 +27,6 @@ node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
-npm run audit:decals              # Flat on-deck decals vs the road mesh (`:sweep` is the slow, authoritative form)
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 ```

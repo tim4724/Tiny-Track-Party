@@ -435,22 +435,16 @@ private:
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
-    filament::Texture* buildShadowMask();
-    // Top-down alpha coverage of a loaded car, at the blob quad's exact framing.
+    // Top-down alpha coverage of a loaded car, blurred into decalMask array
+    // layer `maskLayer` for the road-shader shadow decal (see uploadDeckDecals).
     // The entity overload is what the INSTANCED monster rig needs: gltfio hands
     // an instanced asset's renderables to the FilamentInstance, not the asset.
-    // maskLayer >= 0 additionally blurs the same bake into that decalMask array
-    // layer, for the road-shader shadow decal (see uploadDeckDecals).
-    filament::Texture* bakeSilhouette(filament::gltfio::FilamentAsset* asset,
+    void bakeSilhouette(filament::gltfio::FilamentAsset* asset,
             const filament::math::float3& bbMin, const filament::math::float3& bbMax,
-            int maskLayer = -1);
-    filament::Texture* bakeSilhouette(const utils::Entity* entities, size_t count,
+            int maskLayer);
+    void bakeSilhouette(const utils::Entity* entities, size_t count,
             const filament::math::float3& bbMin, const filament::math::float3& bbMax,
-            int maskLayer = -1);
-    // Point a ground blob's decal instance at a mask. `baked` = a silhouette
-    // that came out of bakeSilhouette (single level, already blurred); false is
-    // the mipmapped generic rounded-rect fallback.
-    void setBlobMask(filament::MaterialInstance* mi, filament::Texture* mask, bool baked);
+            int maskLayer);
     // The split-screen grid for n cells — SceneRenderer's bestGrid, so the 3D
     // cells land where the DOM HUD puts its labels. cellRect tiles with it.
     struct GridDims { uint32_t cols, rows; };
@@ -541,8 +535,7 @@ private:
     std::vector<MonsterView> mMonsterViews;
 
     // Track furniture: item boxes (static anchors, availability from the
-    // snapshot) and dropped bananas (dynamic pool), both instanced kit GLBs;
-    // boost pads are painted overlays (mPads, polygon-offset material).
+    // snapshot) and dropped bananas (dynamic pool), both instanced kit GLBs.
     std::unique_ptr<TrackBin> mTrack; // kept for render-time banana placement
     filament::gltfio::FilamentAsset* mBoxAsset = nullptr;
     filament::gltfio::FilamentAsset* mBoxFadeAsset = nullptr; // BLEND twin, collect fade
@@ -561,19 +554,8 @@ private:
     // load — the throb retints these instead of string-probing every material of
     // every instance per frame.
     std::vector<filament::MaterialInstance*> mBoxGlowMats;
-    // Every box's contact blob is baked into the ONE mPropShadows mesh, so a
-    // collected box's blob can only be hidden by rewriting its slice of the
-    // vertex alphas: `mBoxShadowRest` is the baked colour to scale, and
-    // `mBoxShadowFade` what is currently uploaded (re-upload only on a change).
-    std::vector<uint32_t> mBoxShadowRest;
-    std::vector<uint8_t> mBoxShadowFade;
-    uint32_t mBoxShadowStride = 0;             // verts per box in mPropShadows
     Mesh mStructures;             // pillars / poles / loop shafts (matte concrete)
     Mesh mBerms;                  // grass lofted under a raised, non-pillared deck
-    Mesh mPropShadows;            // baked contact blobs under the item boxes
-    std::vector<Mesh> mPropBlobs; // pooled blobs for bananas + rockets (per frame)
-    Mesh mPads;
-    filament::MaterialInstance* mPadMat = nullptr;
     float mTime = 0; // idle-animation clock (accumulated FrameInput.dt)
 
     // Translucent bits (vblend material, vertex alpha): per-car ground blobs.
@@ -597,10 +579,6 @@ private:
     // after bakeShadowMap runs (it is created well before that).
     filament::MaterialInstance* mGroundInst = nullptr;
     filament::Texture* mWhiteTex = nullptr;  // 1×1, neutralises a glTF base-colour map
-    // Textured translucent decals (vdecal): the car's conformed ground shadow,
-    // whose penumbra is far too tight to carry in vertex alpha.
-    filament::Material* mDecalMaterial = nullptr;
-    filament::Texture* mShadowMaskTex = nullptr;
     // The frozen sun shadow map and the matrix that puts a world position in
     // its [0,1] texture space (see bakeShadowMap).
     filament::Texture* mShadowMap = nullptr;
@@ -627,16 +605,7 @@ private:
     // Normalised shadow depth per WORLD unit (1 / the ortho depth range), so the
     // slope-scaled bias in vlit/vground means the same distance on every track.
     float mShadowDepthScale = 0.0f;
-    // Per-car ground-shadow silhouette, rendered top-down off the real model
-    // (SceneRenderer._bakeCarShadow's trick). Null falls back to mShadowMaskTex.
-    std::vector<filament::Texture*> mCarSilhouettes;
-    std::vector<Mesh> mCarBlobs;
-    // Each blob's own decal instance, kept so the mask can be swapped for the
-    // monster rig's outline while the truck is up (edge-triggered on blobMask).
-    std::vector<filament::MaterialInstance*> mCarBlobMats;
-    std::vector<filament::Texture*> mCarBlobMasks; // which mask each blob wears now
     std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
-    std::vector<Mesh> mBoostDisks; // teal aura while boostMul > 1
     // Boost wind streaks (SceneRenderer STREAK_*): 4 thin axial-billboard
     // quads per car slicing past the body while boosting.
     struct Streak {
@@ -734,7 +703,6 @@ private:
     Mesh mBalloon;   // hot-air balloon (theme.balloon — grass/sunset hero)
     float mBalloonY = 44, mBalloonSize = 6; // theme.balloon orbit height + scale
     float mHillSf = 1; // hill-ring push-out factor (balloon orbit radius scales with it)
-    Mesh mOils;      // authored slick hazards (overlay discs)
     filament::gltfio::FilamentAsset* mConeAsset = nullptr;
     std::vector<filament::gltfio::FilamentInstance*> mConeInstances;
     // Kickable-cone state — TrackProps._stepCones verbatim (cosmetic; the sim
@@ -780,10 +748,6 @@ private:
     std::vector<MonsterWheels> mMonsterWheels;
     float mMonsterWheelRadius = 0; // measured off a rear tyre (JS: bbox.y / 2)
     float mMonsterSkidWidth = 0;   // the rig's tyre-contact width (fat = fat marks)
-    // The RIG's top-down outline, for the ground blob while the truck is up —
-    // painting the little car's silhouette under a lifted four-wheeled chassis
-    // put a car-shaped smudge between tyres that were nowhere near it.
-    filament::Texture* mMonsterSilhouette = nullptr;
     std::vector<Mesh> mRockets;      // in-flight toy rockets (pool of 4)
     std::vector<Mesh> mRocketFlames; // per-rocket blend tail flames
     // Impact bursts: expanding rings where a rocket vanished (hit or whiff).
@@ -875,8 +839,7 @@ private:
     bool buildCarSlot(const TrackBin& tb, uint32_t c);   // GLB via loadCarAsset, else box marker
     void buildCarGhost(uint32_t c);                      // 50%-alpha occlusion twin (+ decode pump)
     bool buildCarPlate(const TrackBin& tb, uint32_t c);  // rear name plate (GLB cars only)
-    bool buildCarBlob(uint32_t c);                       // contact-shadow grid, mask from the silhouette
-    void destroyCarSlot(uint32_t c);                     // the inverse of the four above
+    void destroyCarSlot(uint32_t c);                     // the inverse of the three above
     void dropAsset(filament::gltfio::FilamentAsset*& a);
     // Attach finished texture decodes: the async queue only binds on a pump, so
     // every batch of loads ends with one (see the note in buildTrackScene).
@@ -891,7 +854,6 @@ private:
     filament::gltfio::FilamentAsset* loadInstancedProp(const char* assetName,
             size_t count, std::vector<filament::gltfio::FilamentInstance*>& out,
             bool shareMaterials = true);
-    void buildPadsMesh(const TrackBin& tb);
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
@@ -952,14 +914,6 @@ private:
     void setMeshInScene(Mesh& m, bool on);
     void setInstanceInScene(filament::gltfio::FilamentInstance* inst, uint8_t& state, bool on);
     void setAssetInScene(filament::gltfio::FilamentAsset* asset, uint8_t& state, bool on);
-    // Drop a flat car-local decal (boost aura, ground blob) onto the deck at a
-    // known (s, lat): every template vertex is re-expressed as (arclength,
-    // lateral) about the car's foot and re-placed by frameAt, so the sheet
-    // BENDS over crests, banks and loop walls. The JS raycasts each vertex
-    // onto the rendered road for the same result; a single flat quad clipped
-    // through curving decks.
-    void conformDecalAt(Mesh& mesh, const filament::math::mat4f& basis,
-            float s0, float lat0, float sx, float sz, float lift, float alphaScale);
     void buildOils(const TrackBin& tb);
     void ensureCells(uint32_t count);
 };

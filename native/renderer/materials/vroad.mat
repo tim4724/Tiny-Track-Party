@@ -103,8 +103,7 @@ material {
         { type : float4[32], name : decalWRight },
         // One 2D-array texture, one silhouette per layer: 0..7 the cars in
         // slot order, 8 the monster rig, 9 the generic superellipse. Baked
-        // and pre-blurred by bakeSilhouette, so this samples ONCE, exactly
-        // like the mesh fallback's vdecal does.
+        // and pre-blurred by bakeSilhouette, so this samples ONCE.
         { type : sampler2dArray, name : decalMask }
     ]
 }
@@ -173,9 +172,8 @@ fragment {
                 float pr = dot(rel, materialParams.decalWRight[i].xyz);
                 vec2 q = vec2(pf / r.z, pr / r.w);
                 if (max(abs(q.x), abs(q.y)) >= 1.0) continue;
-                // MESH UV PARITY (see the blob mesh in buildCarBlob): u runs
-                // ACROSS the car (+right), v ALONG it (+forward). Pinned by
-                // the decal audit's MIRRORED list against the mesh fallback.
+                // u runs ACROSS the car (+right), v ALONG it (+forward) —
+                // the handedness bakeSilhouette's up-looking camera bakes.
                 vec2 uv = q.yx * 0.5 + 0.5;
                 float m = texture(materialParams_decalMask, vec3(uv, trot.z)).a;
                 vec4 mcol = materialParams.decalColor[i];
@@ -203,7 +201,7 @@ fragment {
             // expressible without a texture — a chevron is two line segments and
             // a distance to a segment is four instructions. The counts belong to
             // buildStaticDeckDecals; the caps below are 4 rows and 6 cols, and
-            // packing more silently draws fewer than the fallback mesh does.
+            // packing more silently draws fewer.
             int packed = int(shape.w + 0.5);
             int cols = packed / 10, rows = packed - cols * 10;
             if (rows > 0) {

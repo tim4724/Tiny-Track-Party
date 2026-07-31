@@ -5,8 +5,6 @@
   "main": "server/index.js",
   "scripts": {
     "artwork": "node scripts/capture-artwork.js",
-    "audit:decals": "node scripts/decal-conform-audit.mjs",
-    "audit:decals:sweep": "node scripts/decal-conform-audit.mjs --sweep",
     "bake:cues": "node scripts/bake-cues.mjs",
     "check:artifact": "node --test tests/native-artifact.test.js",
     "check:music-loudness": "node scripts/check-music-loudness.mjs",
