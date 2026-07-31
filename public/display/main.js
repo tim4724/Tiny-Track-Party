@@ -35,12 +35,14 @@ const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') }
 // the plan's non-goal). Test/gallery/solo surfaces drive screens directly and
 // get no history entries (gallery lives in iframes; solo has no welcome).
 let currentScreen = null;
+let updateSoundHint = () => {}; // rebound below once the audio pill is wired
 let suppressPopstate = false;   // the history.back() below is ours — its popstate must not act
 let popstateNavigating = false; // this show() IS a popstate retreat — don't pop again (set/cleared by the handler)
 function show(name) {
   const prev = currentScreen;
   currentScreen = name;
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+  updateSoundHint();
   if (_isTestMode || _isDebugSolo) return;
   const step = ui.screenStep(prev, name);
   if (step > 0) history.pushState({ screen: name }, '');
@@ -512,6 +514,18 @@ const _lastItem = new Map();
 // decision layer reads the sim's own bot list, which is the same set by
 // construction (the layer's buildField registers exactly these as bot personas).
 let aiCarIds = new Set();
+
+// Reconcile every phone's held-item light against the engine's HUD block.
+// The DECISION (who gets an ITEM message, only on change, AIs filtered) is
+// C++'s ui.itemPushes; this only chooses WHEN to ask. Called from the slow
+// HUD tick as the steady-state net, and from the 'item-pickup' effect so the
+// light + pickup haptic land at the event instead of up to a HUD tick later.
+const pushHeldItems = (rows) => {
+  for (const { id, item } of ui.itemPushes(rows, aiCarIds, _lastItem)) {
+    _lastItem.set(id, item);
+    net.sendTo(id, { type: MSG.ITEM, item });
+  }
+};
 let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
@@ -608,10 +622,7 @@ scene.onFrame = (dt) => {
     // resolves to null and the phone's button stays dark — the same degradation
     // the drawn slot takes, and reachable only if ITEM_IDS has drifted from the
     // sim's roll table, which tests/display-abi.test.js exists to prevent.
-    for (const { id, item } of ui.itemPushes(rows, aiCarIds, _lastItem)) {
-      _lastItem.set(id, item);
-      net.sendTo(id, { type: MSG.ITEM, item });
-    }
+    pushHeldItems(rows);
   }
 };
 
@@ -928,7 +939,7 @@ function applyEffect(e, ctx) {
     case 'stop-music': sfx(audioDecide.stopMusic()); break;
     case 'show-music-credit': showMusicCredit(e.on); break;
     case 'stop-voices': sfx(audioDecide.stopVoices()); break;
-    case 'item-pickup': scene.itemPickup(e.id, e.item); break;
+    case 'item-pickup': scene.itemPickup(e.id, e.item); pushHeldItems(scene.hudRows()); break;
     case 'rocket-impact': scene.rocketImpact(e.id); break;
     case 'rocket-expire': scene.rocketExpire(e.s, e.lat); break;
     case 'broadcast-standings': broadcastStandings(e.over, ctx.results); break;
@@ -1485,7 +1496,7 @@ for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
 // Unlock audio on the first real gesture (pointermove is not a user activation,
 // so it can't resume a suspended AudioContext — only clicks/keys count).
 for (const ev of ['pointerdown', 'keydown']) {
-  window.addEventListener(ev, () => audio.resume(), { passive: true });
+  window.addEventListener(ev, () => { audio.resume(); updateSoundHint(); }, { passive: true });
 }
 // Until that gesture happens the page is silently muted — surface it, or a solo
 // auto-race / an untouched TV reads as "the game has no sound". The pill shows
@@ -1497,7 +1508,14 @@ for (const ev of ['pointerdown', 'keydown']) {
 // IS the unlocking gesture — the pill would nag about a problem already solved.
 const _audioSupported = !!(window.AudioContext || window.webkitAudioContext);
 if (!_isTestMode && _audioSupported) {
-  setInterval(() => el('sound-hint').classList.toggle('hidden', audio.ready || currentScreen === 'welcome'), 500);
+  // Both inputs are events, so no poll: screens change in show() (which calls
+  // this) and readiness flips on the context's own statechange, hooked after
+  // each unlock gesture (idempotent — resume() reuses the one context).
+  updateSoundHint = () => {
+    el('sound-hint').classList.toggle('hidden', audio.ready || currentScreen === 'welcome');
+    if (audio.ctx) audio.ctx.onstatechange = () => updateSoundHint();
+  };
+  updateSoundHint();
 }
 
 // ---- fullscreen ----

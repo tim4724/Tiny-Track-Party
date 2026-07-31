@@ -115,9 +115,10 @@ export function makeNativePartyFastlane(Base) {
 
     _scheduleNativeTick(peer, peerIdx) {
       if (peer.sendTimer) clearTimeout(peer.sendTimer);
-      // TICK_MS is the kit's resend cadence; the Link mirrors the same constant
+      // The kit's resend cadence; the C++ Link mirrors the same constant
       // (asserted against the corpus header by fastlane_check).
-      peer.sendTimer = setTimeout(() => this._sendDataPacket(peer, peerIdx), 50);
+      peer.sendTimer = setTimeout(() => this._sendDataPacket(peer, peerIdx),
+        this.constructor.TICK_MS);
     }
 
     _sendIdleHeartbeat(peer, peerIdx) {

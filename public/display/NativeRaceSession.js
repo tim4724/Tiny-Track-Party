@@ -45,7 +45,6 @@ export async function init() {
     carFinished: c('ttp_car_finished', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
     carWorldPos: c('ttp_car_world_pos', 'number', ['number', 'string', 'number']),
-    trackPoint: c('ttp_track_point', 'number', ['number', 'number', 'number', 'number']),
     removeCar: c('ttp_force_remove_car', 'number', ['number', 'string']),
     rekeyCar: c('ttp_rekey_car', 'number', ['number', 'string', 'string']),
     forceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
@@ -168,7 +167,6 @@ export class NativeRaceSession {
   hasCar(id) { return !!fn.hasCar(this.h, idJson(id)); }
   carFinished(id) { return fn.carFinished(this.h, idJson(id)) === 1; } // -1 = unknown car, must read false
   carWorldPos(id) { return fn.carWorldPos(this.h, idJson(id), vecPtr) ? vec() : null; }
-  trackPoint(s, lat) { return fn.trackPoint(this.h, s, lat, vecPtr) ? vec() : null; }
 
   dispose() {
     this._ended = true;
@@ -177,7 +175,11 @@ export class NativeRaceSession {
   }
 
   _drain() {
-    const evs = JSON.parse(fn.events(this.h));
+    // Called every frame; the queue is empty on almost all of them, and the
+    // wasm returns the shared "[]" constant for that case — skip the parse.
+    const raw = fn.events(this.h);
+    if (raw === '[]') return;
+    const evs = JSON.parse(raw);
     for (const e of evs) {
       if (e.type === '_countdown') this._onCountdownTick(e.n);
       else if (e.type === '_raceStart') { this._racingCache = true; this._onRaceStart(); }

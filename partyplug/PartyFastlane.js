@@ -569,6 +569,10 @@
     if (this.onPeerClosed) this.onPeerClosed(peerIdx);
   };
 
+  // Expose the resend cadence: subclasses that run their own tick (the native
+  // display link) must not re-type the number.
+  PartyFastlane.TICK_MS = TICK_MS;
+
   if (typeof window !== 'undefined') window.PartyFastlane = PartyFastlane;
   if (typeof module !== 'undefined' && module.exports) module.exports = PartyFastlane;
 })();
