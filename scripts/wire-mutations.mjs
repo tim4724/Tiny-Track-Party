@@ -212,6 +212,71 @@ export const CPP_MUTATIONS = [
     // a fully-acked event resent forever at 20 Hz with the suite green.
     expect: 'a C++ SENDER stops resending what the ack covered',
   },
+
+  // ---- the choreography walks (ttp_net.cc's second section) ----------------
+  // THESE FOUR USED TO BE JS MUTATIONS against Net.js. The peer switch moved
+  // into the wasm with the walk layer, so the hazards moved here with the code
+  // — same break, same assertion, one language over (the second time this file
+  // has followed a move across the boundary; see the ROSTER block above).
+  {
+    // Storing a mutation without republishing it. The room is RIGHT and every
+    // phone is stale — the classic shell bug, and invisible to anything that
+    // only reads the display's own state.
+    name: 'net/ready-not-republished',
+    kind: 'store a roster change without publishing it',
+    file: 'native/runtime/ttp_net.cc',
+    find: '        flow->setField(from, "ready", Value::Bool(want));\n'
+      + '        pushOp(effects, "announce");',
+    replace: '        flow->setField(from, "ready", Value::Bool(want));',
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
+  },
+  {
+    name: 'net/name-clamp-dropped',
+    kind: 'stop re-clamping an untrusted HELLO name',
+    file: 'native/runtime/ttp_net.cc',
+    find: '        const std::string name = ns::clean_name_json(canonical_stringify(*nameV));',
+    replace: '        const std::string name = nameV->type == Value::STR '
+      + '? nameV->str : canonical_stringify(*nameV);',
+    expect: 'an emoji name is the ONE place C++ loses data',
+  },
+  {
+    // The seat-EXISTED test is the whole of what tells a rename from a first
+    // hello, and getting it wrong is silent in both directions: without it every
+    // join raises a rename (and a shell that repaints a race surface on the
+    // signal does it for a player who has no car), and the test that would notice
+    // is the one asserting the signal stays quiet on a join.
+    name: 'net/rename-fires-on-join',
+    kind: 'let a first HELLO count as a rename',
+    file: 'native/runtime/ttp_net.cc',
+    find: '        const bool renamed =\n'
+      + '            seated && !(cur && cur->type == Value::STR && cur->str == name);',
+    replace: '        const bool renamed =\n'
+      + '            !(cur && cur->type == Value::STR && cur->str == name);',
+    expect: 'a live rename republishes the roster AND raises the rename signal',
+  },
+  {
+    // The PONG is a SEND the walk layer now composes (it was a JS object
+    // literal in Net.js). The phone ignores a PONG whose `t` is missing (typeof
+    // check), so a dropped echo reads as "no signal" — the RTT chip just dies.
+    name: 'net/pong-drops-t',
+    kind: 'drop the echoed field a new C++-composed send carries',
+    file: 'native/runtime/ttp_net.cc',
+    find: '      if (const Value* tv = mfind(msg, "t")) data.set("t", *tv);',
+    replace: '      if (const Value* tv = mfind(msg, "t")) { (void)tv; }',
+    expect: "the C++-composed PONG closes the phone's RTT loop",
+  },
+  {
+    // The self-heartbeat is the walk layer's other new SEND. A respelled type
+    // never routes back as 'self-heartbeat', the in-flight flag never clears,
+    // and the display force-reconnects a healthy socket once the dead window
+    // elapses — all silent until a real party's display starts flapping.
+    name: 'net/heartbeat-respelled',
+    kind: 'respell a C++-composed frame type against the manifest',
+    file: 'native/runtime/ttp_net.cc',
+    find: '    data.set("type", Value::Str(msgOf("HEARTBEAT")));',
+    replace: '    data.set("type", Value::Str("heartbeat"));',
+    expect: 'the self-heartbeat the display composes echoes home',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -241,17 +306,6 @@ export const CPP_MUTATIONS = [
 // ---------------------------------------------------------------------------
 export const JS_MUTATIONS = [
   {
-    // Storing a mutation without republishing it. The room is RIGHT and every
-    // phone is stale — the classic shell bug, and invisible to anything that
-    // only reads the display's own state.
-    name: 'display/ready-not-republished',
-    kind: 'store a roster change without publishing it',
-    file: 'public/display/Net.js',
-    find: '          p.ready = !!data.ready;\n          this._announce();',
-    replace: '          p.ready = !!data.ready;',
-    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
-  },
-  {
     // The chooser catalogue is the shell's to plug in, and it is handed over ONCE
     // at construction. Never plugging it in leaves every phone's car picker empty
     // — including the late joiner's, mid-race, which is the case the always-on
@@ -264,25 +318,16 @@ export const JS_MUTATIONS = [
     expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {
-    name: 'display/name-clamp-dropped',
-    kind: 'stop re-clamping an untrusted HELLO name',
+    // What is left mutable on the JS side of the walk layer: the shell may not
+    // reorder, batch or SKIP an effect, and dropping one is precisely the bug a
+    // hand-written performer produces. Skipping `announce` keeps the room right
+    // and every phone stale, from every trigger at once.
+    name: 'display/announce-skipped',
+    kind: 'perform an effect list with one op dropped',
     file: 'public/display/Net.js',
-    find: '          const name = session.cleanName(data.name);',
-    replace: '          const name = String(data.name);',
-    expect: 'an emoji name is the ONE place C++ loses data',
-  },
-  {
-    // The seat-EXISTED test is the whole of what tells a rename from a first
-    // hello, and getting it wrong is silent in both directions: without it every
-    // join raises a rename (and a shell that repaints a race surface on the
-    // signal does it for a player who has no car), and the test that would notice
-    // is the one asserting the signal stays quiet on a join.
-    name: 'display/rename-fires-on-join',
-    kind: 'let a first HELLO count as a rename',
-    file: 'public/display/Net.js',
-    find: '          const renamed = seated && name !== p.name;',
-    replace: '          const renamed = name !== p.name;',
-    expect: 'a live rename republishes the roster AND raises the rename signal',
+    find: "      case 'announce': this._announce(); break;",
+    replace: "      case 'announce': break;",
+    expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {
     name: 'names/codepoint-slice',

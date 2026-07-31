@@ -21,9 +21,16 @@ the model, bar the rule that tracks ride the LOBBY snapshot only.
 
 **Deliberately did not cross:** the transport and its timers, the QR bitmap (the
 URL composition is shared, the bitmap is three platform one-liners), the reconnect
-card's DOM, identity generation (no rules, just entropy), and the host's mode pick
-— that needs a catalogue and a game-owned shuffle bag, making it a cup-series
-concern wearing a session hat.
+card's DOM, identity generation (no rules, just entropy), and the random pick's
+shuffle bag (page RNG — the select-mode walk answers `needDraw` and the shell
+draws). The mode pick's RULES did cross, but into the walk layer above this one
+(`runtime/ttp_net.cc`): they read the configured chooser as their catalogue,
+which this layer keeps opaque.
+
+**The sequencing of these rules is C++ too** — the walk entry points in
+`runtime/ttp_net.h` drive the live RoomFlow and answer effect lists — but it
+lives in the ABI shim, not here: this library stays pure over plain data, which
+is what keeps the frozen corpus replayable with no room machine at all.
 
 **`norm_index` carries a frozen, security-adjacent quirk.** It is JS
 `Number(value)`, so a HELLO with an explicit null rejoin token claims seat 0 while

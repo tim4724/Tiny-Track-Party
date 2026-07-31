@@ -17,7 +17,7 @@ Every one of these is C++ behind a C ABI, conformance-gated on four legs
 |---|---|---|
 | Physics, AI, items, ranking, race lifecycle | `libttp-sim` | `ttp_runtime.h` |
 | Track geometry, sampling, schematic projection | `libttp-track` | `ttp_runtime.h` (`ttp_track_*`) |
-| Room state, relay framing, fastlane codec, session policy | `libttp-party` | `ttp_party.h`, `ttp_net.h` |
+| Room state, relay framing, fastlane codec, session policy AND its choreography (the net effect lists) | `libttp-party` + the ABI shim | `ttp_party.h`, `ttp_net.h` |
 | Cameras, cell layout, fog, the per-frame builder | `libttp-runtime` | `ttp_display.h` |
 | Race orchestration (the effect lists) | `libttp-runtime` | `ttp_race.h` |
 | Every 2D screen's DECISIONS, as keys + data | `libttp-runtime` | `ttp_ui.h` |
@@ -64,9 +64,17 @@ Three properties of that surface matter more than the list:
 5. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
    relay-only is a legitimate launch. The framing and packet codecs are already
-   C++; what you write is the socket. When your shell gains a SEND path, add a
-   case to `scripts/wire-mutations.mjs` — that was the suite's one historical
-   blind spot.
+   C++, and so is the CHOREOGRAPHY: every inbound trigger (protocol frame, peer
+   message, close, the liveness tick, a drained room event) is one call into
+   `ttp_net.h`'s walk entry points, which mutate the room in C++ and answer an
+   ordered effect list. What you write is the socket, three timers, a small
+   storage read/write, and the effect switch that performs the ops — never the
+   walk itself (`public/display/Net.js` `_performNetEffect` is the reference
+   performer, and hand-writing the walk is where all six of the first shell's
+   launch bugs lived). Drain the room's event queue before performing a walk's
+   effects. When your shell gains a SEND path, add a case to
+   `scripts/wire-mutations.mjs` — that was the suite's one historical blind
+   spot.
 6. **The audio device.** A sample player over the command stream. There is no
    DSP to port: `public/assets/audio/cues/` holds 28 pre-baked WAVs plus a
    manifest carrying each cue's detune spread (see `scripts/bake-cues.mjs` for

@@ -145,6 +145,25 @@ export class NativeRoomFlow {
     if (i >= 0) arr.splice(i, 1);
   }
 
+  // Run a ttp_net choreography walk (DisplayNet's entry points) against THIS
+  // room. The walk mutates the roster inside the wasm, so the class's own
+  // discipline has to wrap it: providers pushed first, the record-cache clock
+  // bumped (the walk is not in this file's fn table, so the automatic wrapping
+  // cannot see it), and the queued events re-fired — BEFORE the caller performs
+  // the walk's effects, which reproduces the old inline order (the announce a
+  // mutation used to fire mid-walk lands before the walk's trailing sends).
+  runWalk(call) {
+    this._syncProviders();
+    const raw = call();
+    this.walkMutated();
+    return raw;
+  }
+
+  // The bookkeeping half of runWalk, on its own for the one caller that runs
+  // the walk first and only pays this when the answer proves something moved
+  // (DisplayNet._seen's hot path).
+  walkMutated() { gen++; this._drain(); }
+
   // Drain the ABI queue and re-fire in emission order. Called after every
   // mutating op; a no-op when nothing was emitted.
   _drain() {

@@ -399,8 +399,9 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // roster shuffles the seat order under everyone; a dropped `ready` freezes the
   // host's Start button.
   const { MSG, ROOM_STATE } = H.kit().protocol;
-  // drawRandomTrack is the game layer's shuffle bag (main.js owns it — the mode
-  // pick deliberately never crossed into C++). Random mode is refused outright
+  // drawRandomTrack is the game layer's shuffle bag (main.js owns it — the pick
+  // RULES crossed into C++ with the walk layer, the bag deliberately did not:
+  // C++ answers needDraw and the shell draws). Random mode is refused outright
   // without one, so the run-length assertions below need it stubbed.
   const { relay, net, room } = await bringUpRealDisplay({}, { drawRandomTrack: () => 'tidepool' });
   const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'lu-a' });
@@ -458,8 +459,9 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   //     0 is endless and any other value is a race count, so a length that
   //     crossed as "4", or that C++ dropped because lobby_snapshot never learned
   //     the key, would silently turn a 4-race card into an endless run nobody
-  //     can leave. The display clamps it (Net.js normRandomRaces) and C++ copies
-  //     it through; this is the only place both halves are exercised at once.
+  //     can leave. The clamp is the select-mode walk's (ttp_net.cc, off the
+  //     manifest's RANDOM_RACES); this is the only place a real phone's message
+  //     meets it over a real wire.
   //     Driven the way a real party does it: the HOST's phone sends SELECT_MODE
   //     over the wire, the display validates and clamps, C++ re-emits.
   ada.net.send(MSG.SELECT_MODE, { mode: 'random', randomRaces: 4 });
@@ -559,6 +561,60 @@ test('wire: a live rename republishes the roster AND raises the rename signal', 
   assert.equal(renamed.length, 1, 'a re-HELLO carrying the same name raises nothing');
 
   ada.net.disconnect();
+});
+
+test('wire: the C++-composed PONG closes the phone\'s RTT loop', async () => {
+  // The PONG used to be a JS object literal in Net.js; the peer-message walk
+  // composes it in C++ now (type off the manifest, `t` echoed verbatim), so a
+  // second language owns bytes the phone's RTT chip depends on. The phone
+  // ignores a PONG whose `t` is not a number (typeof gate in _handlePong), so
+  // a dropped or retyped echo is SILENT: the chip just never updates.
+  //
+  // Driven end to end: a real phone's ping through the real display's walk,
+  // asserting the phone's own onRtt fired — the only observable that proves
+  // `t` survived, not just that a frame moved.
+  const { relay, room } = await bringUpRealDisplay();
+  const phone = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'rtt-1' });
+  const before = phone.seen.rtt.length;
+  phone.net.send('ping', { t: Date.now() - 42 });
+  await H.flush();
+  assert.ok(phone.seen.rtt.length > before, 'the PONG came back and carried a numeric t');
+  assert.equal(phone.seen.rtt.at(-1).viaFastlane, false, 'over the relay, not the fastlane');
+  assert.ok(phone.seen.rtt.at(-1).ms >= 21, 'the RTT reading is derived from the echoed t');
+
+  // And a ping with NO t answers a PONG with no t — absent stays absent, so the
+  // phone's typeof gate skips it instead of reading Date.now() - undefined.
+  const count = phone.seen.rtt.length;
+  phone.net.send('ping', {});
+  await H.flush();
+  assert.equal(phone.seen.rtt.length, count, 'a t-less PONG raises no reading');
+  phone.net.disconnect();
+});
+
+test('wire: the self-heartbeat the display composes echoes home through slot 0', async () => {
+  // The display's own-socket canary — sendTo(0, HEARTBEAT) — is the walk
+  // layer's other new C++-composed SEND. Its type must round-trip through the
+  // relay AND route back as 'self-heartbeat' (ttp::session::inbound_route), or
+  // the in-flight flag never clears and the display force-reconnects a healthy
+  // socket once the dead window elapses.
+  const { MSG } = H.kit().protocol;
+  const { relay, net } = await bringUpRealDisplay();
+  const hbFrames = () => relay.log.filter((e) => e.dir === 'c2s' && e.text.includes('"' + MSG.HEARTBEAT + '"'));
+
+  net._livenessTick();   // in-room, nothing in flight → the walk answers SEND
+  await H.flush();
+  const first = hbFrames();
+  assert.equal(first.length, 1, 'the canary frame reached the relay');
+  const frame = JSON.parse(first[0].text);
+  assert.equal(frame.type, 'send');
+  assert.equal(frame.to, 0, 'addressed to our own slot');
+  assert.equal(frame.data.type, MSG.HEARTBEAT, 'spelled off the manifest, both sides');
+
+  // The echo already came home (synchronous relay), so the next tick SENDS
+  // again instead of waiting out the window or reconnecting.
+  net._livenessTick();
+  await H.flush();
+  assert.equal(hbFrames().length, 2, 'the echo cleared the in-flight flag — the canary re-arms');
 });
 
 test('wire: a control character in a name stays ESCAPED all the way round', async () => {

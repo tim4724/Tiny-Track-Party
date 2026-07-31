@@ -216,7 +216,9 @@ test('the two shells read their presence windows off the manifest', () => {
     [ctrl, 'controller/Net.js', 'PONG_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
     [disp, 'display/Net.js', 'LIVENESS_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
     [disp, 'display/Net.js', 'LIVENESS_TICK_MS', 'LIVENESS.TICK_MS'],
-    [disp, 'display/Net.js', 'CREATE_TIMEOUT_MS', 'LIVENESS.CREATE_TIMEOUT_MS'],
+    // CREATE_TIMEOUT_MS no longer appears here: the create watchdog's delay
+    // rides the arm-create-watchdog effect, read from protocol.h's
+    // LIVENESS_CREATE_TIMEOUT_MS inside the wasm — which link 3 gates.
   ];
   for (const [src, where, name, expr] of pairs) {
     assert.match(src, new RegExp(`const ${name} = ${expr.replace('.', '\\.')};`),
@@ -234,19 +236,24 @@ test('the RANDOM run length is read off the manifest by both ends', () => {
   // `RANDOM_DEFAULT_RACES = 4` declared once in shared/trackPicker.js and again
   // in display/Net.js. That is the arrangement this file exists to catch, and it
   // sat there because neither copy was ever named here.
-  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
+  //
+  // The display's half moved into the wasm with the mode pick (ttp_net.cc's
+  // normRandomRaces reads protocol.h's RANDOM_RACES_*, which link 3 pins to the
+  // manifest), so the JS check now covers the picker alone and the C++ source
+  // text is pinned below the same way the game.cc constants are above.
   const picker = fs.readFileSync(path.join(ROOT, 'public/shared/trackPicker.js'), 'utf8');
-
-  for (const [src, where] of [[disp, 'display/Net.js'], [picker, 'shared/trackPicker.js']]) {
-    assert.doesNotMatch(src, /RANDOM_(DEFAULT|MAX)_RACES\s*=\s*\d/,
-      `${where}: a literal run length — read it from the manifest's RANDOM_RACES`);
-    assert.match(src, /RANDOM_RACES/, `${where}: must read the manifest block`);
-  }
+  assert.doesNotMatch(picker, /RANDOM_(DEFAULT|MAX)_RACES\s*=\s*\d/,
+    'shared/trackPicker.js: a literal run length — read it from the manifest\'s RANDOM_RACES');
+  assert.match(picker, /RANDOM_RACES/, 'shared/trackPicker.js: must read the manifest block');
 
   // ZERO IS A LEGAL LENGTH and means ENDLESS, so the clamp is a ceiling and not
   // a range check. A falsy test there silently turns endless into four races.
-  assert.match(disp, /Number\.isInteger\(n\) && n >= 0 && n <= RANDOM_RACES\.MAX/,
-    'display/Net.js: normRandomRaces must admit 0 explicitly and clamp against MAX');
+  const netCc = fs.readFileSync(path.join(ROOT, 'native/runtime/ttp_net.cc'), 'utf8');
+  assert.match(netCc,
+    /v->num >= 0 && v->num <= protocol::RANDOM_RACES_MAX/,
+    'ttp_net.cc: normRandomRaces must admit 0 explicitly and clamp against the manifest MAX');
+  assert.doesNotMatch(netCc, /RANDOM_RACES_(DEFAULT|MAX)\s*=\s*\d/,
+    'ttp_net.cc: a literal run length — read protocol.h');
 });
 
 test('the presence windows still describe one design', () => {

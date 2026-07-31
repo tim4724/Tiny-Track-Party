@@ -69,9 +69,20 @@ or do not quote a number.**
 rule, it only GATHERS what a shell used to gather, so the only statement of
 correctness is byte-for-byte agreement with the two-call path. The `abi` ctest
 computes the expected value the old way in the same run, never a second copy of
-the wire format. **Add a case there for every new handle-taking export** — the
-handle-taking exports and their JSON twins are `ttp_room_sync_active_order`,
-`ttp_net_lobby_frame` and `ttp_ui_roster_seats_room_json`.
+the wire format. **Add a case there for every new handle-taking export** — see
+`handlePathsMatchJsonPaths` for the read-only gathers (`ttp_room_sync_active_order`,
+`ttp_net_lobby_frame`, `ttp_ui_roster_seats_room_json`) and
+`netWalksMatchMultiCallPath` for the choreography walks.
+
+**The choreography walks (`ttp_net.h`'s second section) go one step further:**
+they SEQUENCE the fine-grained session rules against the live room and answer
+ordered effect lists, so a shell performs platform ops instead of hand-writing
+the walk (where all six of the first TV shell's launch bugs lived). They mutate
+the room through `ttp_room_flow` — the one place the machine itself crosses the
+seam, reserved for the walks; anything that only DESCRIBES a room keeps using
+the Value accessors. Same gating logic: no rule of their own, so the `abi`
+ctest replays each scenario through the old multi-call sequence in the same run
+and demands identical rosters, event streams and effects.
 
 ## Platform shells
 

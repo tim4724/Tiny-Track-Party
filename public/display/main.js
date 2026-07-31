@@ -656,13 +656,10 @@ const net = new DisplayNet({
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
   onPlayerRenamed: renamePlayer,        // live rename: move the copies a race froze
-  // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
-  // phone drops back into the race); one without is a late joiner (the phone
-  // waits in its lobby — they get a car when the next race builds its field).
-  inRace: (peerIndex) => !!(session && session.hasCar(peerIndex)),
   // The live race itself, as a native handle: the party layer works out its own
-  // participant order (cars + dropped seats) from it in C++ rather than being
-  // fed a set from here. 0 between races.
+  // participant order (cars + dropped seats), each seat's inRace flag AND the
+  // welcome-item routing from it in C++ rather than being fed answers from
+  // here. 0 between races.
   sessionHandle: () => (session ? session.h : 0),
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
@@ -673,10 +670,13 @@ const net = new DisplayNet({
   // A (re)joining phone recovers all room/results state from the snapshot replay,
   // but its held item is per-owner and rides ITEM (sent only on change) — so
   // relight it here, once, or a reconnecting driver's USE button stays dark until
-  // their next pickup. No-op for a seat with no live car (lobby / late joiner).
+  // their next pickup. Fired by the welcome-item effect, which C++ emits only
+  // when the live race holds this seat's car — the lobby / late-joiner filter
+  // this callback used to apply itself lives behind the session handle now.
   onPlayerWelcomed: (peerIndex) => {
-    if (!session || !session.hasCar(peerIndex)) return;
+    if (!session) return; // the handle the effect was decided on is being torn down
     const c = session.getSnapshot().cars.find((x) => x.id === peerIndex);
+    if (!c) return;
     const item = ui.welcomeItem(c);
     _lastItem.set(peerIndex, item);
     net.sendTo(peerIndex, { type: MSG.ITEM, item });
