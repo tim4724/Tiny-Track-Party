@@ -7580,6 +7580,16 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mGlbFadeMaterial = Material::Builder()
                 .package(vglbfade->second.data(), vglbfade->second.size())
                 .build(*mEngine);
+        // PREWARM. Every other material draws on the first frame after build,
+        // which compiles its programs while the lobby is still up. This one's
+        // first draw is the first item-box poof (the fade twin enters the
+        // scene only then), and on Metal that first-use compile was a felt
+        // hitch mid-race — once per run, on whichever car collected first.
+        // compile() is async on a driver-side queue, so build-time is all
+        // headroom; the flush below starts it immediately.
+        if (mGlbFadeMaterial) {
+            mGlbFadeMaterial->compile(Material::CompilerPriorityQueue::HIGH);
+        }
     }
     const auto vground = mAssets.find("vground.filamat");
     if (!mGroundMaterial && vground != mAssets.end()) {
@@ -7598,6 +7608,11 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mBurstMaterial = Material::Builder()
                 .package(vburst->second.data(), vburst->second.size())
                 .build(*mEngine);
+        // Same deferred-first-draw prewarm as vglbfade: this one's first draw
+        // is the first rocket blast.
+        if (mBurstMaterial) {
+            mBurstMaterial->compile(Material::CompilerPriorityQueue::HIGH);
+        }
     }
     const auto vblur = mAssets.find("vblur.filamat");
     if (!mBlurMaterial && vblur != mAssets.end()) {
@@ -7628,7 +7643,14 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mOverlayMaterial = Material::Builder()
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
+        // Same deferred-first-draw prewarm: hudCount stays 0 until the race
+        // cams go live, so this one's first draw is the first race frame —
+        // the compile stall would land right on the countdown.
+        if (mOverlayMaterial) {
+            mOverlayMaterial->compile(Material::CompilerPriorityQueue::HIGH);
+        }
     }
+    mEngine->flush(); // start any prewarm compiles queued above immediately
     ensureSceneTarget(); // between frames — the material only lands now
     // No "track.bin" gate here any more, and nothing replaces it: the scene is
     // a function of `geo` and `theme`, both of which the caller HAS (they are
