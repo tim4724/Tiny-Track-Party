@@ -141,6 +141,11 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;
             o.spin = (float) c->spin;
             o.scrub = c->onWall ? 1.0f : 0.0f;
+            // The sim's own footprint scale, so the kick rectangle grows with
+            // the monster transform exactly as the collision footprint does.
+            const double fpMul = eng->footprintMul(*c);
+            o.halfLen = (float) (c->halfLen * fpMul);
+            o.halfWid = (float) (c->halfWid * fpMul);
         }
         // A hold that OUTLIVED the field it was taken on lands here, because the
         // memcpy above only fires while the sizes still match: a seat expiring

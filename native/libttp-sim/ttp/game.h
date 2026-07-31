@@ -214,6 +214,10 @@ class Game {
   const std::vector<RocketRt>& rockets() const { return rockets_; }
   // cars in insertion order (Map iteration order).
   const std::vector<std::unique_ptr<Car>>& cars() const { return cars_; }
+  // The collision footprint's current scale (monster growth). Public so the
+  // frame builder can hand the renderer the same rectangle the sim collides
+  // with, rather than a retyped multiplier.
+  double footprintMul(const Car& c) const;
 
  private:
   Car* find(const Id& id) const;
@@ -231,7 +235,6 @@ class Game {
   double colYaw(const Car& c) const;
   struct FP { double along, side, restSide; };
   FP footprint(const Car& c) const;
-  double footprintMul(const Car& c) const;
   void clampCurb(Car& c, double dt);
   bool enterZonesOil(Car& c);
   bool enterZonesPads(Car& c);

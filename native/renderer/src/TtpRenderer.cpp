@@ -8667,12 +8667,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 mWindmillBase * mat4f::rotation(mTime * 0.85f, float3{ 0, 0, 1 }));
     }
 
-    // Kickable cones — TrackProps._stepCones. A car centre inside CONE_KICK_R
-    // (on the SAME deck) punts the cone away from itself; it arcs, tumbles,
-    // bounces off the local road surface with friction, is shoved back inside
-    // the kerbs, and on settling topples onto its side and stays down.
+    // Kickable cones — TrackProps._stepCones, with the kick test upgraded from
+    // that port's car-centre disc (r 0.7, which punted signs ~0.4 u off the
+    // door panels) to the car's own oriented collision rectangle. A marker
+    // standing within KICK_MARGIN of the body (on the SAME deck) is punted
+    // away from the contact point; it arcs, tumbles, bounces off the local
+    // road surface with friction, is shoved back inside the kerbs, and on
+    // settling topples onto its side and stays down.
     if (!mConeStates.empty() && mTrack) {
-        constexpr float KICK_R = 0.7f, KICK_Y = 1.0f, KICK_MIN = 2.5f, KICK_GAIN = 6.0f;
+        constexpr float KICK_MARGIN = 0.15f, KICK_Y = 1.0f, KICK_MIN = 2.5f, KICK_GAIN = 6.0f;
         constexpr float KICK_UP = 2.6f, GRAVITY = 16.0f, RESTITUTION = 0.42f;
         constexpr float FRICTION = 0.6f, SETTLE = 0.4f, TOPPLE = 7.0f;
         constexpr float EDGE_MARGIN = 0.35f, WALL_RESTITUTION = 0.5f;
@@ -8734,18 +8737,31 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     const TtpCarInput& c = cars[i];
                     if (c.spd < 0.05f) continue; // a stationary car doesn't kick
                     const float dx = cs.pos.x - carPosW[i].x, dz = cs.pos.z - carPosW[i].z;
-                    const float d2 = dx * dx + dz * dz;
-                    if (d2 >= KICK_R * KICK_R) continue;
                     if (std::fabs(cs.pos.y - carPosW[i].y) >= KICK_Y) continue; // same deck only
+                    // Marker origin in the car's body frame (XZ yaw only), then
+                    // the closest point on its collision rectangle — the same
+                    // clamp construction the sim's collidePole runs in reverse.
+                    const float fl = std::sqrt(c.forward.x * c.forward.x
+                            + c.forward.z * c.forward.z);
+                    const float fn = fl > 1e-6f ? fl : 1.0f;
+                    const float fx = c.forward.x / fn, fz = c.forward.z / fn;
+                    const float lx = dx * fx + dz * fz;   // along the body
+                    const float ly = -dx * fz + dz * fx;  // across it
+                    const float qx = std::max(-c.halfLen, std::min(c.halfLen, lx));
+                    const float qy = std::max(-c.halfWid, std::min(c.halfWid, ly));
+                    const float ex = lx - qx, ey = ly - qy;
+                    const float e2 = ex * ex + ey * ey;
+                    if (e2 >= KICK_MARGIN * KICK_MARGIN) continue;
                     float dirx, dirz;
-                    if (d2 < 1e-4f) {
-                        const float fl = std::sqrt(c.forward.x * c.forward.x
-                                + c.forward.z * c.forward.z);
-                        const float n = fl > 1e-6f ? fl : 1.0f;
-                        dirx = c.forward.x / n; dirz = c.forward.z / n;
+                    if (e2 < 1e-4f) {
+                        // Origin inside the body: punt straight along the travel.
+                        dirx = fx; dirz = fz;
                     } else {
-                        const float len = std::sqrt(d2);
-                        dirx = dx / len; dirz = dz / len;
+                        // Away from the contact point, so a nose hit punts
+                        // forward and a side-swipe shoves sideways.
+                        const float len = std::sqrt(e2);
+                        dirx = (ex * fx - ey * fz) / len;
+                        dirz = (ex * fz + ey * fx) / len;
                     }
                     const float power = KICK_MIN + KICK_GAIN * c.spd;
                     cs.vel = { dirx * power, KICK_UP, dirz * power };

@@ -164,6 +164,19 @@ void checkCar(const TtpCarInput& o, const Car& c, const std::string& what) {
   checkF(o.monster, c.monsterT > 0 ? 1.0f : 0.0f, what + ".monster");
   checkF(o.spin, (float)c.spin, what + ".spin");
   checkF(o.scrub, c.onWall ? 1.0f : 0.0f, what + ".scrub");
+  // The kick rectangle is the sim's CURRENT footprint. The monster
+  // multiplier's VALUE stays game.cc-private (only the accessor crossed the
+  // seam), so pin its PROPERTIES: a monster grows both extents by one uniform
+  // factor, everything else carries the rest stats untouched.
+  if (c.monsterT > 0) {
+    check(o.halfLen > (float)c.halfLen && o.halfWid > (float)c.halfWid,
+          what + ".halfLen/halfWid — the monster transform grows the kick footprint");
+    checkF(o.halfLen / (float)c.halfLen, o.halfWid / (float)c.halfWid,
+           what + " footprint scale is uniform");
+  } else {
+    checkF(o.halfLen, (float)c.halfLen, what + ".halfLen");
+    checkF(o.halfWid, (float)c.halfWid, what + ".halfWid");
+  }
 }
 
 void checkEmptyHudSlot(const TtpHudSlot& s, const std::string& what) {
