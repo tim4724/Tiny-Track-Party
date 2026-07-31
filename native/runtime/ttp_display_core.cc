@@ -39,6 +39,7 @@
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
 #include "ttp/trackbuilder.h"
+#include "ttp/wear.h"
 #include "ttp_render.h"
 #include "ttp_session.h"
 
@@ -169,7 +170,11 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
                                                glb->data(), glb->size())
                 : std::vector<ttp::rt::MatTint>());
     }
-    if (!g_disp->renderer->buildScene(geo, theme, roster.cars)) return 0;
+    // The road's wear — the asphalt patches — is planned HERE (the shim links
+    // libttp-runtime; the renderer only performs). Pure function of the same
+    // built track the sim races, like the theme.
+    const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo);
+    if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;
     g_disp->rosterCars = roster.cars; // ttp_display_reroster's diff base

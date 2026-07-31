@@ -4747,12 +4747,13 @@ static constexpr float kBlobShadowAlpha = 0.4f;
 // (pads, oils, box blobs) floating 0.004 to 0.014 above the road; shading them
 // into it removes the lift and the meshes both. Each keeps the profile its
 // mesh baked into vertex alpha, so nothing about the look is re-derived here.
-void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
+void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
+        const ttp::rt::WearPlan& wear) {
     mStaticDeckDecals.clear();
     const auto push = [&](float s, float lat, float halfS, float halfLat,
             const float3& col, float alpha, float inner, float knee,
             bool ellipse, int chevrons) {
-        if ((int) mStaticDeckDecals.size() >= kMaxDeckDecals) return;
+        if ((int) mStaticDeckDecals.size() >= kMaxStaticDeckDecals) return;
         mStaticDeckDecals.push_back({
                 float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
                 float4{ col.x, col.y, col.z, alpha },
@@ -4766,6 +4767,24 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     const float3 BOXSH = srgbToLinear(0x1c1a18);
     for (const TrackBin::Box& b : tb.boxes) {
         push(b.s, b.lat, 0.3f, 0.3f, BOXSH, kBlobShadowAlpha, 0.55f, 0.82f, true, 0);
+    }
+
+    // Asphalt patches (ttp/wear.h), directly after the boxes — the box fade's
+    // entry-i contract above is why nothing may come before them. A patch is
+    // the deck's own asphalt shifted a shade, FLAT with a hard edge like the
+    // pads: a repair is paint-adjacent, not a glow. The shade scales in sRGB
+    // space, not linear, on purpose: the authored 0.86/1.10 are PERCEPTUAL
+    // steps (a linear scale of the same factor darkens visibly harder), and
+    // the patch look was approved with exactly these values.
+    const auto shadeHex = [](uint32_t hex, float k) -> uint32_t {
+        const auto m = [&](uint32_t c) {
+            return (uint32_t) std::min(255.0f, std::round((float) c * k));
+        };
+        return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
+    };
+    for (const ttp::rt::WearMark& w : wear.marks) {
+        push(w.s, w.lat, w.halfS, w.halfLat, srgbToLinear(shadeHex(tb.pal[0], w.shade)),
+                1.0f, 0.96f, 1.0f, false, 0);
     }
 
     // Oil slicks. A dark-blue water puddle on the beach (ONE flat disc — the
@@ -5049,7 +5068,8 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 }
 
 bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
-        const ttp::RaceTrack& geo, const ttp::rt::Theme& theme) {
+        const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
+        const ttp::rt::WearPlan& wear) {
     TrackBin tb;
     applyRoster(tb, roster);
     applyTheme(tb, theme);
@@ -5062,7 +5082,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     if (!buildRoadMesh(tb)) return false;
     // The deck's fixed furniture becomes stamps on the road we just built.
     // Without a vroad material there are no stamps: the deck draws bare.
-    if (mRoadMaterial) buildStaticDeckDecals(tb);
+    if (mRoadMaterial) buildStaticDeckDecals(tb, wear);
     buildRoadGrid(); // ground-conform probe accelerator (see roadHitY)
 
     // Ground sheet at groundY with the lawn's mowing stripes as vertex-colour
@@ -7535,7 +7555,7 @@ void TtpRenderer::buildOils(const TrackBin& tb) {
 }
 
 bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
-        const std::vector<TtpRosterCar>& roster) {
+        const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear) {
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
@@ -7680,7 +7700,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .build(*mEngine);
     }
     mScene->setSkybox(mSkybox);
-    return buildTrackScene(roster, geo, theme);
+    return buildTrackScene(roster, geo, theme, wear);
 }
 
 // The fog colour to hand Filament, pre-graded.
@@ -8932,7 +8952,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // pushes one decal per box FIRST and in box order, so entry i is box
             // i's stamp; rewriting its alpha in place dirties the chunk's memcmp
             // only while a poof is actually running.
-            if (i < mStaticDeckDecals.size() && i < (uint32_t) kMaxDeckDecals) {
+            if (i < mStaticDeckDecals.size() && i < (uint32_t) kMaxStaticDeckDecals) {
                 mStaticDeckDecals[i].color.w = kBlobShadowAlpha * alpha;
             }
         }

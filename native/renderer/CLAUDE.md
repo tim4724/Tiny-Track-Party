@@ -114,7 +114,10 @@ inferring shader state from pixels.
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
 reproducing the old mesh's radial gradient came out as an emissive saucer, the
-exact read this tree rejected before.
+exact read this tree rejected before. The wear channel's asphalt patches
+(ttp/wear.h) enter `buildStaticDeckDecals` AFTER the item boxes (the collect
+fade rewrites entry i in place, so box i must stay decal i) and are capped by
+`kMaxStaticDeckDecals`, not the shader's per-chunk 32.
 
 Their grid is **a margin plus a packed run**, never one chevron per grid cell:
 cells put more air between the marks than around them, so the outermost of them

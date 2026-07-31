@@ -25,6 +25,7 @@
 // libttp-runtime must stay buildable (and ctested) on the legs that have no
 // Filament SDK.
 #include "ttp/theme.h"
+#include "ttp/wear.h"
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
@@ -120,8 +121,11 @@ public:
     // is the one thing the SHELL supplies, in slot order, and it too is now
     // plain structs rather than the "track.bin" byte buffer it used to be.
     // NOTHING about a scene is serialized any more.
+    // `wear` is the road-wear plan for the same track (ttp/wear.h) — computed
+    // by the CALLER (the display shim links libttp-runtime; this class only
+    // includes its headers): its patches join the static deck decals.
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
-            const std::vector<TtpRosterCar>& roster);
+            const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
     // count, camera state and cosmetic clocks untouched. `remodel` slots reload
     // their GLB (the shell re-provided car<slot>.glb first) plus ghost,
@@ -269,6 +273,11 @@ private:
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
     static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
+    // The STATIC list's own cap. The shader's 32 is a PER-CHUNK bound —
+    // uploadDeckDecals folds each ~35u chunk its own nearby subset — so the
+    // track-wide list can be larger: furniture plus the wear marks landed
+    // around 40 on the busiest catalogue track.
+    static constexpr int kMaxStaticDeckDecals = 96;
     // Kept POD with no padding: uploadDeckDecals memcmps these to skip a
     // chunk whose list hasn't changed.
     struct DeckDecal {
@@ -854,7 +863,7 @@ private:
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
-            const ttp::rt::Theme& theme);
+            const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);
     // The roster half of TrackBin — a copy now that the liveries arrive typed.
     static void applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster);
     static void applyTheme(TrackBin& out, const ttp::rt::Theme& theme);
@@ -936,7 +945,7 @@ private:
     void uploadDeckDecals();
     // Resolve the decals that never move — pads, launch strips, oil slicks and
     // item-box contact shadows — into mStaticDeckDecals, once per track.
-    void buildStaticDeckDecals(const TrackBin& tb);
+    void buildStaticDeckDecals(const TrackBin& tb, const ttp::rt::WearPlan& wear);
 public:
     // DEBUG: what was actually packed for the road last frame. Exists so the
     // decal numbers can be read and compared against the car's own position

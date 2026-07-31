@@ -35,13 +35,11 @@ inline const TrackDef* find_track_def(const std::string& id) {
   return nullptr;
 }
 
-// Returns false (with `err` set) on an unknown track id.
-inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_t seed,
-                                   BuiltRaceTrack& out, std::string& err) {
-  const TrackDef* def = find_track_def(trackId);
-  if (!def) { err = "unknown trackId '" + trackId + "'"; return false; }
-  RaceTrack rt = build_race_track(*def, laps, seed);
-
+// The built track's ring as the Centerline the sim navigates by. Split out of
+// build_race_track_by_id because it is the one conversion everyone needs (the
+// wear planner, wear_check) — a private copy per caller is the drift this
+// header exists to prevent.
+inline std::unique_ptr<Centerline> make_centerline(const RaceTrack& rt) {
   std::vector<Sample> samples;
   samples.reserve(rt.samples.size());
   for (const OutSample& s : rt.samples) {
@@ -50,7 +48,17 @@ inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_
     cs.width = s.width; cs.s = s.s;
     samples.push_back(cs);
   }
-  out.centerline = std::make_unique<Centerline>(std::move(samples), rt.length);
+  return std::make_unique<Centerline>(std::move(samples), rt.length);
+}
+
+// Returns false (with `err` set) on an unknown track id.
+inline bool build_race_track_by_id(const std::string& trackId, int laps, uint32_t seed,
+                                   BuiltRaceTrack& out, std::string& err) {
+  const TrackDef* def = find_track_def(trackId);
+  if (!def) { err = "unknown trackId '" + trackId + "'"; return false; }
+  RaceTrack rt = build_race_track(*def, laps, seed);
+
+  out.centerline = make_centerline(rt);
 
   GameTrack& g = out.game;
   g.centerline = out.centerline.get();

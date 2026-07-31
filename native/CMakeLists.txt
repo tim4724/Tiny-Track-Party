@@ -602,6 +602,11 @@ add_library(libttp_runtime STATIC
   # to a frozen JS-recorded corpus and this is new data with no JS twin: a
   # gallery must not be able to move a number the shipping game draws with.
   libttp-runtime/ttp/showcase.cc
+  # The asphalt-patch planner: the repairs a season of racing leaves on a
+  # deck, planned from the built track. Render-only data — the sim never
+  # reads it — but it lives here, not in the renderer, so wear_check
+  # executes it on every leg.
+  libttp-runtime/ttp/wear.cc
   # The two GLB container reads a SHELL does before it can provide the renderer
   # its bytes — the translucent ghost clone and the texture-URI scan. They were
   # browser JS (render/Display.js) until the shells stopped being one, and they
@@ -809,6 +814,15 @@ add_test(NAME theme
     ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
 )
 
+# ---- Behavioural: the asphalt-patch planner over the catalogue ---------------
+# Class-2, no corpus (wear never existed in JS). Pins determinism and the
+# planner's own placement rules: every patch on the deck and off the boost
+# pads. `wear_check --dump <trackId>` prints one plan.
+add_executable(wear_check runtimetest/wear_check.cc)
+target_link_libraries(wear_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(wear_check)
+add_test(NAME wear COMMAND wear_check)
+
 # ---- Behavioural: the asset gallery's world ---------------------------------
 # NOT conformance evidence and no corpus — showcase_theme stages a scene that
 # has never existed in play, so there is no oracle to record against. What this
@@ -899,6 +913,8 @@ set(TTP_APP_SOURCES
   # CoreAudio); nothing about which cue at what gain is.
   libttp-runtime/ttp/audio.cc
   libttp-runtime/ttp/theme.cc
+  # The road-wear planner ttp_display_build feeds the renderer from.
+  libttp-runtime/ttp/wear.cc
   # The asset gallery's world. Dev-only and latched off, but compiled
   # everywhere: ttp_theme_showcase_models is a fetch list, which is a shell's job
   # with or without a renderer in the build.

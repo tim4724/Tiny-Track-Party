@@ -108,6 +108,13 @@ name, the scenery list to fetch, and colours for the few 2D widgets the renderer
 does not draw. **Wanting another colour getter means the look is being rebuilt in
 the DOM; put it in the renderer instead.**
 
+`ttp/wear.{h,cc}` beside it plans the road's asphalt patches as plain
+track-space data the renderer stamps. Render-only (the sim never reads it),
+deterministic from the track, pinned by the `wear` ctest. Two siblings were
+built and removed by decision (git history has both): a pre-rubbered racing
+groove, and left/right turn chevrons — parked for a later revisit of how
+sharp turns announce themselves.
+
 ## The asset gallery and the model bench
 
 `/gallery-assets.html` holds the whole kit in one scene, built from data rather
