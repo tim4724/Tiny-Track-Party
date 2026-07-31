@@ -128,9 +128,14 @@ narrower strip clips its outer columns.
 
 The car's contact shadow is a **masked** decal: its shape is the baked
 silhouette, sampled from a small texture array (one layer per car slot, one for
-the monster, one generic), rotated to the car's heading in track space. A layer
-whose bake hasn't landed falls back to the generic superellipse — never to an
-unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
+the monster, one generic). The mask samples a **rigid planar projection of the
+fragment's world position onto the car's own axes** — track space only BOUNDS
+the stamp (that reject is what keeps a loop's other deck out). Painting the
+silhouette in curvilinear (s, lat) instead bends it around every corner, and
+the per-triangle kinks of the interpolated uv0 field ripple through its sharp
+edge as the car crosses rings — shadow-edge shimmer on bends, flat on
+straights. A layer whose bake hasn't landed falls back to the generic
+superellipse — never to an unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
 Every stamped decal also keeps its mesh as the fallback for a shell served no
 `vroad.filamat`, and those fallback lifts are sized for the road's CONCAVE
 bulge — a chord over a dip sits above the true surface, so a coarser road eats

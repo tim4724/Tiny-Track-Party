@@ -275,6 +275,19 @@ private:
         // masked decals (the car shadows) carry their heading rotation and the
         // silhouette layer, and rect.zw become the halves in the CAR's frame.
         filament::math::float4 texrot;
+        // Masked decals only (zero on profile decals): the car's world origin
+        // and axes. The MASK samples a rigid planar projection of the
+        // fragment's world position onto these — track space only BOUNDS the
+        // stamp (the |ds|/|dl| reject, which is what keeps a loop's other
+        // deck out). Painting the silhouette itself in curvilinear (s, lat)
+        // bent it around every bend, and the per-triangle kinks of the
+        // interpolated field made that wrap RIPPLE through the sharp-edged
+        // mask as the car crossed rings — the "shadow edges shimmer in
+        // corners" report. A plane has no kinks; the stamp is rigid, exactly
+        // what the mesh-sheet shadow drew before 3688c5b.
+        filament::math::float4 wpos;   // xyz world centre
+        filament::math::float4 wfwd;   // xyz car forward (unit)
+        filament::math::float4 wright; // xyz car right (unit)
     };
     std::vector<DeckDecal> mDeckDecals;      // gathered per frame
     std::vector<DeckDecal> mDeckDecalsLast;  // last frame's, for debugDeckDecals()

@@ -4784,15 +4784,20 @@ void TtpRenderer::uploadDeckDecals() {
         last.assign(sel, sel + n);
         if (n > 0) {
             float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
-                    trot[kMaxDeckDecals];
+                    trot[kMaxDeckDecals], wpos[kMaxDeckDecals], wfwd[kMaxDeckDecals],
+                    wright[kMaxDeckDecals];
             for (int i = 0; i < n; i++) {
                 rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
                 trot[i] = sel[i].texrot;
+                wpos[i] = sel[i].wpos; wfwd[i] = sel[i].wfwd; wright[i] = sel[i].wright;
             }
             mi->setParameter("decalRect", rect, (size_t) n);
             mi->setParameter("decalColor", col, (size_t) n);
             mi->setParameter("decalShape", shape, (size_t) n);
             mi->setParameter("decalTexRot", trot, (size_t) n);
+            mi->setParameter("decalWPos", wpos, (size_t) n);
+            mi->setParameter("decalWFwd", wfwd, (size_t) n);
+            mi->setParameter("decalWRight", wright, (size_t) n);
         }
         mi->setParameter("decalCount", n);
     };
@@ -8961,12 +8966,19 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         : ((i < (uint32_t) kMaskLayerMonster
                                 && ((mMaskLayerBakedBits >> i) & 1u))
                                 ? (int) i : kMaskLayerGeneric);
+                // The world anchor the mask projects onto — bm's own columns,
+                // normalized (spin included, so the silhouette still whirls).
+                const float3 wR = normalize(bm[0].xyz);
+                const float3 wF = normalize(bm[2].xyz);
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
                         float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
                                 kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
                         float4{ 0, 0, 0, 0 },
-                        float4{ sn, cs, (float) layer, 1.0f } });
+                        float4{ sn, cs, (float) layer, 1.0f },
+                        float4{ bm[3].x, bm[3].y, bm[3].z, 0 },
+                        float4{ wF.x, wF.y, wF.z, 0 },
+                        float4{ wR.x, wR.y, wR.z, 0 } });
             } else {
                 // The conformed-mesh fallback, for a shell served no
                 // vroad.filamat.
