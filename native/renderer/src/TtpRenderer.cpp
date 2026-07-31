@@ -415,8 +415,13 @@ struct TtpRenderer::TrackBin {
     // start). A car crosses a fraction of a ring per frame, so the scan is a
     // small window around the hint; the full sweep below runs only on the
     // first frame, after a respawn, or when the windowed winner looks wrong.
-    void project(const float3& p, const float3& up, float& outS, float& outLat,
-            int* hint = nullptr) const {
+    // `outDeck`, when given, receives the point ON THE RENDERED DECK under p
+    // (the exact-eval drop hit; the chord foot on the fallback path) — what a
+    // caller placing GEOMETRY against the road wants, where (outS, outLat)
+    // serve a caller talking to the road shader. `p` is BY VALUE so a caller
+    // may alias it with `outDeck` (the skid trails conform in place).
+    void project(float3 p, const float3& up, float& outS, float& outLat,
+            int* hint = nullptr, float3* outDeck = nullptr) const {
         const std::vector<Sample>& knots = rings.empty() ? samples : rings;
         const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
@@ -494,6 +499,7 @@ struct TtpRenderer::TrackBin {
         const float3 q = a.pos + (b.pos - a.pos) * t;
         const float3 latS = normalize(mix(a.lat, b.lat, t));
         outLat = dot(p - q, latS);
+        if (outDeck) *outDeck = q + latS * outLat;
         if (&knots != &rings || deckGap <= 0) return;
 
         // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
@@ -529,11 +535,13 @@ struct TtpRenderer::TrackBin {
         // weights of the hit. w[1] is the middle vertex's weight — its sign
         // against the A-C diagonal picks the triangle, as rasterization does.
         float w0, w1, w2;
+        float3 lastHit{};
         const auto dropBary = [&](const float3& T0, const float3& T1, const float3& T2) {
             const float3 nrm = cross(T1 - T0, T2 - T0);
             const float den = dot(upS, nrm);
             if (std::fabs(den) < 1e-7f) return false; // deck edge-on to up: keep the blend
             const float3 hit = p - upS * (dot(p - T0, nrm) / den);
+            lastHit = hit;
             const float3 v0 = T1 - T0, v1 = T2 - T0, v2 = hit - T0;
             const float d00 = dot(v0, v0), d01 = dot(v0, v1), d11 = dot(v1, v1);
             const float d20 = dot(v2, v0), d21 = dot(v2, v1);
@@ -548,9 +556,11 @@ struct TtpRenderer::TrackBin {
         if (w1 >= 0) {
             outS = (w0 + w1) * a.s + w2 * sB;
             outLat = w0 * bA[j] + w1 * bA[j + 1] + w2 * bB[j + 1];
+            if (outDeck) *outDeck = lastHit;
         } else if (dropBary(A, C, D)) {
             outS = w0 * a.s + (w1 + w2) * sB;
             outLat = w0 * bA[j] + w1 * bB[j + 1] + w2 * bB[j];
+            if (outDeck) *outDeck = lastHit;
         }
     }
 };
@@ -9811,7 +9821,24 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
                 float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
-                gp = gp - up * dot(gp - posW, up); // contact patch on the road plane
+                // Contact patch on the RENDERED DECK, not the car's tangent
+                // plane. The plane is exact on flat road but the deck curls
+                // away from it quadratically wherever the track bends
+                // VERTICALLY — inside a loop the deck at the front axle sits
+                // ~wheelbase²/2R ≈ 0.05u off the plane, an order past the
+                // 0.006 lift, so plane-projected stamps lay INSIDE the road
+                // and the deck clipped chunks out of them. Worst while
+                // steering in a loop, because scrub is what marks the FRONT
+                // wheels (the far-from-origin, most-buried ones) at all.
+                if (mTrack && !mTrack->rings.empty()) {
+                    if (st.projHint < 0 && mDecalProjHint.size() > i) {
+                        st.projHint = mDecalProjHint[i]; // seed from the car
+                    }
+                    float ws, wl;
+                    mTrack->project(gp, up, ws, wl, &st.projHint, &gp);
+                } else {
+                    gp = gp - up * dot(gp - posW, up); // no deck: the old plane
+                }
                 if (!st.seeded) { st.last = gp; st.seeded = true; st.hasEdge = false; continue; }
                 const float3 seg = gp - st.last;
                 const float dist = length(seg);

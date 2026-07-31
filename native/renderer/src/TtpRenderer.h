@@ -666,7 +666,8 @@ private:
     struct WheelTrail {
         filament::math::float3 last{}, dir{}, edgeL{}, edgeR{};
         bool hasEdge = false, seeded = false;
-        int slot = -1; // ring slot currently growing under this wheel
+        int slot = -1;     // ring slot currently growing under this wheel
+        int projHint = -1; // project()'s warm start for the deck drop
     };
     std::vector<WheelTrail> mWheelTrails; // carCount × 4 (fl fr bl br)
     std::vector<float> mSkidLife, mSkidPeak; // per ring slot
