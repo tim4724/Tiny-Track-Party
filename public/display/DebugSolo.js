@@ -47,7 +47,6 @@ export class DebugSolo {
     this.scenePromise = opts.scenePromise;
     this.startRace = opts.startRace;
     this.returnToLobby = opts.returnToLobby;
-    this.selectTrack = opts.selectTrack;
     this.defaultTrackId = opts.defaultTrackId;
     this.carIndex = opts.carIndex || 0;
 
@@ -65,8 +64,13 @@ export class DebugSolo {
     // Seat the one local human as host, exactly like a phone that just joined.
     this.net.flow.addPlayer(SOLO_ID, { name: 'You', colorIndex: 0, carIndex: this.carIndex });
 
-    // startRace() needs a track picked (and it drives the 3D preview).
-    this.selectTrack(this.defaultTrackId);
+    // Pick the track THROUGH THE ROOM WALK, exactly like a phone's pick. The
+    // pick lives behind the room handle (startRace's go/no-go reads it there
+    // and answers no-track otherwise); the walk's track-change effect is what
+    // swaps the 3D preview. Calling the display's selectTrack() directly only
+    // dressed the preview and left the room pickless — solo then sat in the
+    // lobby forever once the launch walk stopped trusting shell state.
+    this.net.setTrack(this.defaultTrackId);
 
     this._bindKeys();
     this._buildHint();

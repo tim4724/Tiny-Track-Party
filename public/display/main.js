@@ -1550,7 +1550,7 @@ if (_scenario) {
   import('./DebugSolo.js').then(({ DebugSolo }) => {
     debugSolo = new DebugSolo({
       net, scenePromise,
-      startRace, returnToLobby, selectTrack,
+      startRace, returnToLobby,
       defaultTrackId: selectedTrackId || TRACK_LIST[0].id,
       carIndex: _soloCar,
     });
