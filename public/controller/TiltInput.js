@@ -73,8 +73,8 @@ export const SMOOTH = 0.5;
 // sit where it does) and a button has none; a one-pole's infinite tail (133 ms to
 // 90% of a step, as long again to let go) reads as lag, not smoothing. Linear
 // instead makes hold time itself the analog axis: constant progress from the first
-// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a ~0.7
-// correction instead of slamming full. Release is faster because letting go must
+// tick, a crisp landing exactly on ±1, and a tap shorter than the ramp lands a
+// partial correction instead of slamming full. Release is faster because letting go must
 // never feel sticky — the attack/release asymmetry every d-pad racing scheme
 // uses. The ramp is WALL-CLOCK based (see _tick): _flush inserts extra ticks
 // between the 25 Hz beats, and a per-tick step would fast-forward through them.
@@ -87,7 +87,7 @@ export const SMOOTH = 0.5;
 // floor no matter how small, and the duration below is a pure feel choice, not
 // a wire constraint. Smoother than one value per 40 ms cannot come from the
 // phone at all; that would be display-side interpolation, a sim (C++) decision.
-const BTN_RAMP_MS = 200;    // press → full lock
+const BTN_RAMP_MS = 100;    // press → full lock
 const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
 // The press edge's head start: seed the ramp as if it had already run one send
 // floor (40 ms), so the flush the edge fires announces a real turn-in (a full
