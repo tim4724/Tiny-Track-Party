@@ -334,5 +334,6 @@ export class NativeRoomFlow {
     return fn.lowestFreeSlot(JSON.stringify(arr), max);
   }
 
-  static STATES = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', RESULTS: 'results' };
+  // (No STATES table here: the room-state vocabulary is protocol.js
+  // ROOM_STATE, and nothing read the copy this class used to carry.)
 }

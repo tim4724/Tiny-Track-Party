@@ -471,6 +471,7 @@ const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBe
 }
 
 double ttp_framing_backoff_ms(double attempt) { return framing::backoff_delay_ms(attempt); }
+double ttp_framing_max_reconnect_attempts(void) { return framing::MAX_RECONNECT_ATTEMPTS; }
 
 const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance) {
   g_bufPinUrl = framing::pin_instance_url(base ? base : "", room ? room : "",

@@ -423,6 +423,16 @@ ReturnResult returnToLobby(const ReturnInput& in);
 // Was the one lifecycle path written outside the effect walk.
 Effects endParty();
 
+// The two game-timing budgets endRace takes as inputs. They live HERE — the
+// layer that arms the timers' effects — and shells read them through the ABI
+// (main.js used to own both numbers, which made them the only game timings a
+// second shell had to re-author). The E2E overrides (__intermissionMs and
+// friends) stay shell-side overrides of these defaults; the raceflow corpus
+// header records the values it was driven with and raceflow_check pins it to
+// these, so the oracle and the layer cannot drift.
+inline constexpr double INTERMISSION_MS = 10000;       // auto-advance budget; the host can advance early
+inline constexpr double RESULTS_FAILSAFE_MS = 60000;   // players-all-left recovery net
+
 // ---- the roster-driven repairs ----------------------------------------------
 
 // Pull a player's car out of the live race. `removed` is whether the session

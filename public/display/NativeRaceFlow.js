@@ -49,6 +49,8 @@ export async function init() {
     drawsNeeded: c('ttp_race_draws_needed', 'number', ['string']),
     returnDrawsNeeded: c('ttp_race_return_draws_needed', 'number', ['string']),
     endParty: c('ttp_race_end_party_json', 'string', []),
+    intermissionMs: c('ttp_race_intermission_ms', 'number', []),
+    resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
     launch: c('ttp_race_launch_json', 'string', ['string']),
     countdownTick: c('ttp_race_countdown_tick_json', 'string', ['number']),
     startBeat: c('ttp_race_start_beat_json', 'string', ['string', 'number']),
@@ -90,6 +92,8 @@ export function demoSig(field, trackId) { return fn.demoSig(J(field), trackId ||
 export function drawsNeeded(input) { return fn.drawsNeeded(J(input)); }
 export function returnDrawsNeeded(input) { return fn.returnDrawsNeeded(J(input)); }
 export function endParty() { return JSON.parse(fn.endParty()); }
+export function intermissionMs() { return fn.intermissionMs(); }
+export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
 export function startRace(input) { return P(fn.start(J(input))); }
 export function launchRace(input) { return P(fn.launch(J(input))); }
 export function countdownTick(n) { return P(fn.countdownTick(n)); }

@@ -29,6 +29,10 @@ if (typeof document !== 'undefined') {
 // lists a public STUN fallback after this one, so a stun.* outage costs
 // cross-network play nothing.
 var STUN_URL = 'stun:stun.couchpad.games:3478';
+// The public fallback GameNet lists AFTER ours, so a stun.couchpad.games
+// outage costs cross-network play nothing. Part of the manifest so a TV shell
+// offers the same candidate set, in the same order.
+var STUN_FALLBACK_URL = 'stun:stun.l.google.com:19302';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.
@@ -103,6 +107,11 @@ var ROOM_STATE = {
 var MAX_PLAYERS = 4;
 var TOTAL_LAPS = 3;
 var COUNTDOWN_SECONDS = 3;
+// The schematic codec's max deviation (shared/schematicCodec.js SCHEMATIC_EPS,
+// native schematic.h EPS — both pinned to this line by tests). It lives here
+// because the display PACKS with it and the phone's mini-map DECODES what it
+// packed; see the codec for why 0.35 is a fidelity bound, not a size knob.
+var SCHEMATIC_EPS = 0.35;
 
 // ---- The RANDOM run length (host picks it, the display clamps it) ----
 // Two numbers the phone's picker and the display's pick resolver must agree on.
@@ -294,8 +303,8 @@ function carStats(carIndex) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
-    RELAY_URL, STUN_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, STEER, LIVENESS, RANDOM_RACES,
+    RELAY_URL, STUN_URL, STUN_FALLBACK_URL,
+    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
     CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
     CAR_STATS, carStats
   };

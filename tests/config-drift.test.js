@@ -53,6 +53,7 @@ async function loadAbi() {
     dispose: cw('ttp_dispose', 'void', ['number']),
     getSteerExpo: cw('ttp_get_steer_expo', 'number', []),
     manifest: cw('ttp_protocol_manifest_json', 'string', []),
+    maxReconnectAttempts: cw('ttp_framing_max_reconnect_attempts', 'number', []),
   };
 }
 
@@ -308,6 +309,28 @@ test('the live wasm ships the whole shared manifest, and it matches protocol.js'
   const { carStats, ...want } = protocol;  // carStats is a function, not a constant
   assert.deepEqual(got, want,
     'ttp_protocol_manifest_json drifted from public/shared/protocol.js — a port shell would read the stale side');
+});
+
+test('the schematic codec tolerance is the manifest number everywhere', () => {
+  // The codec module is loaded standalone by the phone, so it spells the value
+  // itself; this is the pin that makes that spelling safe. The C++ pair
+  // (schematic.h EPS == protocol.h SCHEMATIC_EPS) is abi_check's.
+  const codec = fs.readFileSync(path.join(ROOT, 'public/shared/schematicCodec.js'), 'utf8');
+  assert.match(codec, new RegExp(`export const SCHEMATIC_EPS = ${protocol.SCHEMATIC_EPS};`),
+    'schematicCodec.js SCHEMATIC_EPS drifted from the manifest');
+});
+
+test('both JS transports default to the wasm retry budget', { skip }, async () => {
+  const abi = await loadAbi();
+  const budget = abi.maxReconnectAttempts();
+  // The kit is a shared fork and keeps its own literal; the native adapter
+  // reads the wasm. One number, three spellings, one test.
+  const kit = fs.readFileSync(path.join(ROOT, 'partyplug/PartyConnection.js'), 'utf8');
+  assert.match(kit, new RegExp(`maxReconnectAttempts\\) \\|\\| ${budget};`),
+    'partyplug/PartyConnection.js retry default drifted from relay_framing.h');
+  const adapter = fs.readFileSync(path.join(ROOT, 'public/display/NativePartyConnection.js'), 'utf8');
+  assert.match(adapter, /\|\| fn\.maxReconnectAttempts\(\)/,
+    'NativePartyConnection must read the budget off the wasm, not re-type it');
 });
 
 test('the live wasm engine ships the manifest steering exponent', { skip }, async () => {

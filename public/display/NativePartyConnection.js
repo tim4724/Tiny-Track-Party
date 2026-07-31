@@ -35,6 +35,7 @@ export async function init() {
     classify: c('ttp_framing_classify', 'string', ['string']),
     closeOutcome: c('ttp_framing_close_outcome', 'string', ['number', 'number', 'number', 'number', 'number']),
     backoffMs: c('ttp_framing_backoff_ms', 'number', ['number']),
+    maxReconnectAttempts: c('ttp_framing_max_reconnect_attempts', 'number', []),
     pinUrl: c('ttp_framing_pin_url', 'string', ['string', 'string', 'string'])
   };
 }
@@ -60,7 +61,10 @@ export class NativePartyConnection {
     this.ws = null;
     this._reconnectTimer = null;
     this._shouldReconnect = true;
-    this.maxReconnectAttempts = (options && options.maxReconnectAttempts) || 5;
+    // The default budget is the wasm's (relay_framing.h) — an option can still
+    // override it, but nothing re-types the number.
+    this.maxReconnectAttempts = (options && options.maxReconnectAttempts)
+      || fn.maxReconnectAttempts();
     this.reconnectAttempt = 0;
 
     this.onOpen = null;

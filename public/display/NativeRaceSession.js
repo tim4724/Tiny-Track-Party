@@ -69,6 +69,9 @@ export function setNativeSteerExpo(x) { if (fn) fn.setSteerExpo(x); }
 export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
 
 const idJson = (id) => JSON.stringify(id);
+// ttp_session_start's "no countdown" sentinel (any negative — see its header):
+// racing from frame 0, bare-Game stepping.
+const BARE_COUNTDOWN = -1;
 const vec = () => ({ x: M.HEAPF64[vecPtr >> 3], y: M.HEAPF64[(vecPtr >> 3) + 1], z: M.HEAPF64[(vecPtr >> 3) + 2] });
 
 export class NativeRaceSession {
@@ -87,7 +90,8 @@ export class NativeRaceSession {
     // The whole construction — begin plus the one-pass over the field with bot
     // specs keyed by scalar id — is ttp_session_begin_field's. The persona and
     // seed defaults live there too, not at this call site.
-    this.h = fn.beginField(track.trackId, (track.seed ?? 1) >>> 0, track.totalLaps || 3,
+    this.h = fn.beginField(track.trackId, (track.seed ?? 1) >>> 0,
+      track.totalLaps || window.TOTAL_LAPS,  // the manifest's lap count, not a re-typed 3
       opts.forceItem || null,
       JSON.stringify(players.map((p) => ({ peerIndex: p.peerIndex, stats: p.stats || null }))),
       JSON.stringify(opts.bots || []));
@@ -110,7 +114,7 @@ export class NativeRaceSession {
   // scenarios, the lobby demo) want exactly that: a world that is already moving,
   // with no lobby lifecycle around it.
   startBare() {
-    fn.start(this.h, -1);
+    fn.start(this.h, BARE_COUNTDOWN);
     this._racingCache = true;
     this._drain();
   }

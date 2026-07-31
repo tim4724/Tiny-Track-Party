@@ -45,6 +45,9 @@ const VIEW = 256;   // viewBox square == the uint8 range: a coordinate IS a byte
 // points = closer to the original. We have the byte budget, so this sits low enough
 // (~74 pts/track avg) that straight segments reproduce the real shape — smoothing is
 // deliberately NOT applied (see unpackSchematic for why it distorts more than it helps).
+// The value is the manifest's (protocol.js SCHEMATIC_EPS, mirrored in
+// protocol.h and schematic.h; tests/config-drift.test.js pins this line to it).
+// Spelled here too because this module is loaded standalone by the phone.
 export const SCHEMATIC_EPS = 0.35;
 const VBOX = `0 0 ${VIEW} ${VIEW}`;
 

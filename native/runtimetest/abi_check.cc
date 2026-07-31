@@ -60,6 +60,7 @@
 // export's only claim is that it hands the library's own tables over unchanged,
 // and the sole way to state that is to hold the two side by side.
 #include "ttp/protocol.h"
+#include "ttp/schematic.h"
 #include "ttp_audio.h"
 #include "ttp_net.h"
 #include "ttp_party.h"
@@ -340,6 +341,13 @@ bool gpThroughAbi(const std::string& path) {
 // Part 3: the boundary + mutation exports.
 // ---------------------------------------------------------------------------
 void boundaryExports() {
+  // The codec tolerance and the retry budget are manifest numbers now; the
+  // C++ owners must BE those numbers (the getSteerExpo pattern).
+  check(ttp::schematic::EPS == ttp::protocol::SCHEMATIC_EPS,
+        "schematic.h EPS == the manifest's SCHEMATIC_EPS");
+  check(ttp_framing_max_reconnect_attempts() == 5,
+        "the retry budget the JS transports default to");
+
   // ---- error paths first: they must not need a valid handle.
   check(ttp_session_begin("no-such-track", 1u, 3, nullptr) == 0,
         "ttp_session_begin on an unknown trackId returns 0");

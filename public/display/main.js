@@ -797,7 +797,6 @@ function renamePlayer(peerIndex, name) {
 // `series` (GrandPrix.js), holds the room in RESULTS for an intermission, then
 // chains straight into the next race (advanceSeriesRace) — the lobby only
 // returns after the podium (or on any quit path, which cancels the series).
-const INTERMISSION_MS = 10000;  // auto-advance budget; the host can advance early
 let series = null;              // live CupSeries, or null (single race / no cup)
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
@@ -1201,8 +1200,9 @@ function standingsPayload(results, over) {
   });
 }
 
-// The intermission budget, with the E2E override (__intermissionMs) applied.
-function intermissionMs() { return window.__intermissionMs || INTERMISSION_MS; }
+// The intermission budget — the layer's number (race_flow.h), with the E2E
+// override (__intermissionMs) applied shell-side.
+function intermissionMs() { return window.__intermissionMs || flow.intermissionMs(); }
 
 function broadcastStandings(over, results) {
   if (!session) return;
@@ -1213,9 +1213,9 @@ function broadcastStandings(over, results) {
   net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
 }
 
-// The host ends the results screen with "New game" (RETURN_TO_LOBBY); this is
-// only a safety net so a room whose players all left mid-podium still recovers.
-const RESULTS_FAILSAFE_MS = 60000;
+// The host ends the results screen with "New game" (RETURN_TO_LOBBY); the
+// failsafe (the layer's number) is only a net so a room whose players all
+// left mid-podium still recovers.
 let endTimer = null;
 function endRace(results) {
   // `results` rides in the perform context: it is the callback's argument, so no
@@ -1228,7 +1228,7 @@ function endRace(results) {
     seriesFinished: !!(series && series.finished),
     intermissionMs: intermissionMs(),
     nowMs: Date.now(),
-    resultsFailsafeMs: RESULTS_FAILSAFE_MS
+    resultsFailsafeMs: flow.resultsFailsafeMs()
   }).effects, { results });
 }
 

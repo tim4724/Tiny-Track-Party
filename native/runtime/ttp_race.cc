@@ -436,6 +436,9 @@ const char* ttp_race_end_party_json(void) {
   return put(g_bufEndParty, wrapEffects(race::endParty()));
 }
 
+double ttp_race_intermission_ms(void) { return race::INTERMISSION_MS; }
+double ttp_race_results_failsafe_ms(void) { return race::RESULTS_FAILSAFE_MS; }
+
 const char* ttp_race_start_beat_json(const char* biome, int audioReady) {
   return put(g_bufBeat, wrapEffects(race::raceStart(biome ? biome : "", audioReady != 0)));
 }

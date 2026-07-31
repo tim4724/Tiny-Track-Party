@@ -235,6 +235,11 @@ TTP_ABI const char* ttp_race_return_json(const char* inputJson);
  * it). Takes nothing: a party end has no mode. */
 TTP_ABI const char* ttp_race_end_party_json(void);
 
+/* The two game-timing budgets (race_flow.h INTERMISSION_MS /
+ * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
+TTP_ABI double ttp_race_intermission_ms(void);
+TTP_ABI double ttp_race_results_failsafe_ms(void);
+
 /* ---- the roster-driven repairs ------------------------------------------- */
 
 /* Pull a player's car out of the live race (a clean LEAVE, or a dropped seat

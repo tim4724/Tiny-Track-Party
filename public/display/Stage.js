@@ -26,8 +26,10 @@ import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
+import { ITEM_IDS } from './engine/contract.js';
 
-const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
+// Labels are the vocabulary, shouted — derived, not re-typed.
+const ITEM_LABELS = Object.fromEntries(ITEM_IDS.map((id) => [id, id.toUpperCase()]));
 // The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
 // by _applyBoostShades, default teal for the pre-theme look). Takes a '#rrggbb'
 // stroke string. Two forward chevrons, apex-up (= travel), stacked and CENTRED on
@@ -47,7 +49,10 @@ const ITEM_ICONS = {
   // tyres). Inline SVG like boost/rocket, so no baked asset / CSP change is needed.
   monster: '<svg viewBox="0 0 24 24" fill="none" stroke="#3a3f47" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11.5h14l-1.3-3.2a1.6 1.6 0 0 0-1.5-1H7.8a1.6 1.6 0 0 0-1.5 1L5 11.5z" fill="#7b4fc0"/><path d="M3.5 11.5h17v2.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z" fill="#565b63"/><circle cx="7.2" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="16.8" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7.2" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/><circle cx="16.8" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/></svg>'
 };
-const ITEM_KEYS = Object.keys(ITEM_ICONS);
+// The roulette reel cycles the ROLL-TABLE order — deliberately (ITEM_IDS is
+// the one vocabulary, and the reel landing on the real item depends on every
+// id having an icon; a missing entry would flash an empty chip).
+const ITEM_KEYS = [...ITEM_IDS];
 
 // The race loop's SLOW TICK: everything on that loop which is not the frame
 // itself runs off this one guard — the HUD paint, the phones' ITEM push, and the

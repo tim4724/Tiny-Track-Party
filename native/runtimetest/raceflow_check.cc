@@ -133,6 +133,16 @@ bool loadWorld(const Value& header, World& w) {
     std::fprintf(stderr, "the corpus header's `world` is not a world\n");
     return false;
   }
+  // The layer OWNS the game-timing budgets now (race_flow.h); the recorder
+  // still writes the values it drove with, so a drift between the oracle
+  // script and the constants fails here instead of shipping.
+  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS ||
+      json::num_field(header, "resultsFailsafeMs") != race::RESULTS_FAILSAFE_MS) {
+    std::fprintf(stderr,
+                 "the corpus was recorded with different game-timing budgets "
+                 "than race_flow.h declares\n");
+    return false;
+  }
   return true;
 }
 
