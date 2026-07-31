@@ -1,20 +1,23 @@
 'use strict';
 // The CONTROL send gate (public/controller/InputGate.js). The gate decides which
-// of the 25 Hz samples reach the wire, so its failure modes are asymmetric: over-
-// sending only costs bandwidth, while over-FILTERING leaves the display steering
-// a car on stale input. The property test at the bottom is the one that matters —
-// it pins the guarantee (divergence bounded by the threshold, staleness by the
-// idle timeout) rather than any particular rule.
+// samples reach the wire, so its failure modes are asymmetric: over-sending
+// only costs bandwidth, while over-FILTERING leaves the display steering a car
+// on stale input. The property test at the bottom is the one that matters — it
+// pins the guarantees (a strong change waits only the send floor, sub-strong
+// news the baseline cadence, staleness the idle timeout, and no two sends ever
+// closer than the floor) rather than any particular rule.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS;
+let InputGate, DEFAULT_STEER_THRESHOLD, DEFAULT_STRONG_THRESHOLD,
+  DEFAULT_SEND_INTERVAL_MS, DEFAULT_SEND_MIN_INTERVAL_MS, SHADOW_THRESHOLDS;
 test.before(async () => {
-  ({ InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS } =
+  ({ InputGate, DEFAULT_STEER_THRESHOLD, DEFAULT_STRONG_THRESHOLD,
+    DEFAULT_SEND_INTERVAL_MS, DEFAULT_SEND_MIN_INTERVAL_MS, SHADOW_THRESHOLDS } =
     await import('../public/controller/InputGate.js'));
 });
 
-const TICK = 40; // the controller's 25 Hz sample period
+const TICK = 40; // a stand-in sample spacing for these tests — the real controller samples on sensor events, not a fixed interval
 const sample = (s, b = 0, u = 0) => ({ s, b, u });
 
 // Drive the gate the way ControllerNet does: decide, and on a send record it as
@@ -54,11 +57,48 @@ test('sub-threshold drift is filtered; crossing the threshold sends', () => {
   assert.deepEqual(seq.map((r) => r.why), ['change', null, null, 'change']);
 });
 
-test('a fast flick sends on the very next sample (no added latency)', () => {
+test('a fast flick is strong: it sends behind only the hard floor, never the cadence', () => {
   const gate = new InputGate({ steerThreshold: 0.03 });
   const seq = feed(gate, [sample(0), sample(0.9)]);
   assert.equal(seq[1].why, 'change');
-  assert.equal(seq[1].t, TICK, 'sent on the next 40 ms tick, not deferred');
+  assert.equal(seq[1].t, TICK, 'sent on the next 40 ms sample, not deferred to the 100 ms baseline');
+});
+
+test('sub-strong news rides the baseline cadence, not the floor', () => {
+  const gate = new InputGate();
+  // 0.05 is past the 0.03 news gate but under the 0.15 strong threshold, so it
+  // must wait out SEND_INTERVAL_MS (100) from the previous send — samples at 40
+  // and 80 defer, 120 goes. The value is not lost while it waits: CONTROL is
+  // absolute state, so the send at 120 carries the freshest sample.
+  const seq = feed(gate, [sample(0), sample(0.05), sample(0.05), sample(0.05)]);
+  assert.deepEqual(seq.map((r) => r.why), ['change', null, null, 'change']);
+});
+
+test('a rail (full lock / centre) always goes out, and urgently', () => {
+  // The tail of a flick: the display was last told 0.98, the filter snaps the
+  // stick to exactly 1.0. The 0.02 delta is under the 0.03 gate AND under the
+  // 0.15 strong threshold — but a rail has a face (the bar renders 100%), so it
+  // must send, and behind only the 40 ms floor, not the 100 ms baseline.
+  const gate = new InputGate({ idleMs: 10_000 });
+  gate.markAcked({ s: 0.98, b: 0, u: 0 });
+  gate.markSent({ s: 0.98, b: 0, u: 0 }, 0); gate.markAcked({ s: 0.98, b: 0, u: 0 });
+  assert.equal(gate.decide(sample(1), 40, 0), 'change', 'the landed flick reaches 100%');
+  gate.markSent(sample(1), 40); gate.markAcked(sample(1));
+  // Terminal: once the rail is acked, holding it is silence, not chatter.
+  assert.equal(gate.decide(sample(1), 80, 0), null);
+  // Centre behaves the same on release.
+  gate.markSent(sample(0.02), 120); gate.markAcked(sample(0.02));
+  assert.equal(gate.decide(sample(0), 160, 0), 'change', 'released centre reaches exactly 0');
+});
+
+test('a strong change interrupts the baseline but never the send floor', () => {
+  const gate = new InputGate({ idleMs: 10_000 });
+  gate.decide(sample(0), 0, 0);
+  gate.markSent(sample(0), 0); gate.markAcked(sample(0));
+  // 16 ms after a send (sensor-rate spacing): even a full flick must wait.
+  assert.equal(gate.decide(sample(0.9), 16, 0), null, 'inside the 40 ms floor');
+  // Once the floor has passed it goes immediately — no 100 ms baseline wait.
+  assert.equal(gate.decide(sample(0.9), 40, 0), 'change');
 });
 
 test('brake and the use-counter are never filtered, however small the steer delta', () => {
@@ -129,6 +169,7 @@ test('reset() drops confirmed state so the next sample re-establishes ground tru
 
 test('shadow counters cover every candidate threshold and are monotonic', () => {
   const gate = new InputGate({ steerThreshold: 0.03 });
+  gate.enableShadows(); // off by default — only the ?netstats=1 overlay turns them on
   // A noisy hold: ±0.02 wobble, the shape real sensor jitter takes.
   const samples = Array.from({ length: 200 }, (_, i) => sample(0.4 + (i % 2 ? 0.02 : -0.02)));
   feed(gate, samples);
@@ -149,6 +190,7 @@ test('shadow counters cover every candidate threshold and are monotonic', () => 
 
 test('the lossless shadow (threshold 0) only ever filters exact repeats', () => {
   const gate = new InputGate();
+  gate.enableShadows();
   const samples = [sample(0.1), sample(0.1), sample(0.100001), sample(0.1)];
   feed(gate, samples);
   const zero = gate.stats().shadows.find((s) => s.threshold === 0);
@@ -158,52 +200,70 @@ test('the lossless shadow (threshold 0) only ever filters exact repeats', () => 
 
 // --- the guarantee -----------------------------------------------------------
 
-test('PROPERTY: divergence stays within the threshold and staleness within the timeout', () => {
-  const THRESH = 0.03, IDLE = 500;
+test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () => {
+  const THRESH = 0.03, STRONG = 0.15, INTERVAL = 100, FLOOR = 40, IDLE = 500;
+  const SENSOR_TICK = 16; // drive at sensor rate — the gate is offered ~60 Hz
   // Deterministic pseudo-random walk — mixes slow drifts (the case the gate is
-  // allowed to delay) with flicks (the case it must never delay).
+  // allowed to pace) with flicks (the case that may only wait out the floor).
   let seed = 12345;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 
   const gate = new InputGate({ steerThreshold: THRESH, idleMs: IDLE });
-  let s = 0, displayHolds = null, lastChangeAt = 0, t = 0;
-  let worstErr = 0, worstStale = 0;
+  let s = 0, displayHolds = null, t = 0;
+  let newsSince = 0, strongSince = 0;   // when the current unsent divergence arose/escalated
+  let worstNewsWait = 0, worstStrongWait = 0, worstStale = 0, minGap = Infinity;
+  let lastSendAt = null, lastChangeAt = 0;
 
-  for (let i = 0; i < 5000; i++) {
-    // 3% of ticks are a flick, the rest a slow drift.
-    s = rnd() < 0.03 ? rnd() * 2 - 1 : Math.max(-1, Math.min(1, s + (rnd() - 0.5) * 0.02));
+  for (let i = 0; i < 8000; i++) {
+    // 2% of ticks are a flick, the rest a slow drift.
+    s = rnd() < 0.02 ? rnd() * 2 - 1 : Math.max(-1, Math.min(1, s + (rnd() - 0.5) * 0.01));
     const smp = sample(+s.toFixed(3));
 
-    const changedFromDisplay = displayHolds == null || Math.abs(smp.s - displayHolds) > 1e-9;
-    if (changedFromDisplay) lastChangeAt = Math.min(lastChangeAt || t, t);
+    const err = displayHolds == null ? Infinity : Math.abs(smp.s - displayHolds);
+    if (err >= THRESH && !newsSince) newsSince = t;
+    if (err < THRESH) newsSince = 0;
+    if (err >= STRONG && !strongSince) strongSince = t;
+    if (err < STRONG) strongSince = 0;
+    const changed = displayHolds == null || Math.abs(smp.s - displayHolds) > 1e-9;
+    if (changed && !lastChangeAt) lastChangeAt = t;
 
     const why = gate.decide(smp, t, 30);
     if (why) {
+      if (lastSendAt != null) minGap = Math.min(minGap, t - lastSendAt);
+      lastSendAt = t;
       gate.markSent(smp, t);
       gate.markAcked(smp);       // healthy link: confirmed immediately
       displayHolds = smp.s;
-      lastChangeAt = 0;
+      newsSince = 0; strongSince = 0; lastChangeAt = 0;
+    } else {
+      if (strongSince) worstStrongWait = Math.max(worstStrongWait, t - strongSince);
+      if (newsSince) worstNewsWait = Math.max(worstNewsWait, t - newsSince);
+      if (lastChangeAt && displayHolds != null) worstStale = Math.max(worstStale, t - lastChangeAt);
     }
-    if (displayHolds != null) {
-      worstErr = Math.max(worstErr, Math.abs(smp.s - displayHolds));
-      if (lastChangeAt) worstStale = Math.max(worstStale, t - lastChangeAt);
-    }
-    t += TICK;
+    t += SENSOR_TICK;
   }
 
-  // Bounded by the threshold plus one sample of drift (a value may cross the
-  // threshold between ticks and is sent on the next one).
-  assert.ok(worstErr <= THRESH + 0.02,
-    `display diverged by ${worstErr.toFixed(4)}, expected <= ${(THRESH + 0.02).toFixed(4)}`);
-  assert.ok(worstStale <= IDLE + TICK,
-    `stale for ${worstStale}ms, expected <= ${IDLE + TICK}ms`);
+  // A strong divergence may only ever be waiting out the floor (+1 sample of
+  // discretization); sub-strong news the baseline cadence; unsent micro-drift
+  // the idle bound. And no two sends may be closer than the floor — that is
+  // the provable <= 25 msgs/s the AirConsole budget needs.
+  assert.ok(worstStrongWait <= FLOOR + SENSOR_TICK,
+    `strong divergence waited ${worstStrongWait}ms, bound ${FLOOR + SENSOR_TICK}ms`);
+  assert.ok(worstNewsWait <= INTERVAL + SENSOR_TICK,
+    `sub-strong news waited ${worstNewsWait}ms, bound ${INTERVAL + SENSOR_TICK}ms`);
+  assert.ok(worstStale <= IDLE + SENSOR_TICK,
+    `stale for ${worstStale}ms, expected <= ${IDLE + SENSOR_TICK}ms`);
+  assert.ok(minGap >= FLOOR, `two sends only ${minGap}ms apart — the rate cap is broken`);
   // And it must actually be doing something, or the bounds are trivially met.
   const st = gate.stats();
   assert.ok(st.sent < st.produced, 'gate suppressed nothing — bounds are meaningless');
 });
 
-test('default threshold matches the documented sensor-noise derivation', () => {
+test('defaults match the manifest derivations and orderings', () => {
   assert.equal(DEFAULT_STEER_THRESHOLD, 0.03);
+  assert.equal(DEFAULT_STRONG_THRESHOLD, 0.15);
+  assert.equal(DEFAULT_SEND_INTERVAL_MS, 100);
+  assert.equal(DEFAULT_SEND_MIN_INTERVAL_MS, 40);
   assert.ok(SHADOW_THRESHOLDS.includes(0), 'the lossless case must be measurable');
   assert.ok(SHADOW_THRESHOLDS.includes(DEFAULT_STEER_THRESHOLD));
 });

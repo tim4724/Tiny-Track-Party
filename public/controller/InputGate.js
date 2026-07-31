@@ -1,31 +1,40 @@
-// InputGate — decides which of the 25 Hz control samples actually reach the wire.
+// InputGate — decides which control samples actually reach the wire.
 //
-// CONTROL is absolute state ({s,b,u}) resampled every 40 ms, not a stream of
-// discrete events. The display applies inputs on arrival straight into the sim's
+// CONTROL is absolute state ({s,b,u}) resampled on every sensor event and input
+// edge (25 Hz interval as the idle fallback), not a stream of discrete events.
+// The display applies inputs on arrival straight into the sim's
 // car fields and only steps physics from rAF, so it HOLDS the last value it was
 // given until a new one replaces it. That means a sample identical (or near
 // identical) to what the display already holds is a no-op on the wire: sending it
 // changes nothing anyone can observe.
 //
-// So instead of "transmit every sample", the rule is SEND UNTIL CONFIRMED:
+// So instead of "transmit every sample", the rule is SEND UNTIL CONFIRMED,
+// PACED BY URGENCY:
 //
 //   1. sample matches what the display confirmed  → skip, unless idleMs elapsed
-//   2. it differs (u or b at all, or |Δs| >= steerThreshold) → send
+//   2. it differs (u or b at all, or |Δs| >= steerThreshold) → send, paced:
+//      STRONG news (u or b changed, or |Δs| >= strongThreshold — a deliberate
+//      action, not drift) goes as soon as sendMinIntervalMs has passed since
+//      the last send; sub-strong news rides the sendIntervalMs baseline cadence
 //   3. ...except when an equivalent value is already IN FLIGHT and the resend
 //      cadence hasn't elapsed → skip and let the ack arrive
+//
+// Deferral is lossless: CONTROL is absolute latest-wins state, so a send that
+// waits out its window carries whatever is freshest when the window opens —
+// the sensor events keep re-offering the current sample until it goes.
 //
 // Note what falls out of rule 2: because the comparison is against the last
 // ACKED sample, an unconfirmed value keeps differing and so keeps being sent, all
 // by itself. "Resend until acknowledged" needs no rule of its own — it is what
 // gating on acknowledgement already means. The resend cadence therefore exists to
 // THROTTLE that (rule 3), not to drive it: without it, a value in flight would be
-// re-sent every 40 ms, and on a 100 ms link that is three copies where one would
-// do — burning exactly the bandwidth this gate exists to save.
+// re-sent on every sample, and on a 100 ms link that is many copies where one
+// would do — burning exactly the bandwidth this gate exists to save.
 //
 // Rule 3 overlaps the kit's own loss recovery, deliberately. PartyFastlane keeps
 // retransmitting the ring every TICK_MS (50 ms) until the ack lands, so on a
 // healthy link the two never both fire: half-RTT there runs ~15-30 ms, the value
-// is confirmed inside a single 40 ms sample, and neither retransmit is reached.
+// is confirmed well inside a sample interval, and neither retransmit is reached.
 // They only meet on a link sick enough that a duplicate is the least of it. The
 // gate's copy is worth keeping as the backstop because the kit's stops at TTL_MS
 // (300 ms) — past that the ring is empty and nothing but rule 3 would ever tell
@@ -44,11 +53,16 @@
 // silently throw away the fresher value, and only when the network was healthy
 // enough to deliver both. Re-sending means "enqueue the current sample again".
 //
-// GUARANTEE, and the thing the tests pin: divergence from the display is bounded
-// by steerThreshold, staleness is bounded by idleMs, and neither compounds. A fast
-// flick clears the threshold on the very next sample and goes out with no added
-// latency; a slow drift fires the moment it accumulates past the threshold. The
-// only thing ever delayed is a drift that never gets there.
+// GUARANTEE, and the thing the tests pin: a strong change reaches the wire
+// within sendMinIntervalMs of the previous send (a flick's first packet is
+// only ever behind the hard floor, never a cadence); an unsent sub-strong
+// divergence never outlives sendIntervalMs; staleness of confirmed state is
+// bounded by idleMs; and none of it compounds. In the other direction the rate
+// is bounded too: every tier's wait is at least sendMinIntervalMs (resend
+// floors at minResendMs, idle at idleMs, both larger), so no two sends are
+// ever closer than the floor and the wire rate is PROVABLY at most
+// 1000/sendMinIntervalMs messages a second — sized to the strictest platform
+// message budget in sight (AirConsole allows 25/s).
 //
 // Dependency-free so the Node tests can import it directly (see CLAUDE.md).
 
@@ -70,6 +84,23 @@
 // re-runs both bounds against the manifest, so tuning STEER_EXPO in the C++ sim
 // or ROLL_LOCK on the phone fails here instead of silently invalidating this.
 export const DEFAULT_STEER_THRESHOLD = 0.03;
+
+// A steer delta at or past this is a deliberate action rather than drift: 5x
+// the noise gate and past the DEADZONE re-expansion scale (0.06), yet small
+// enough that any real turn crosses it within a sample or two of starting.
+// Strong news may interrupt the baseline cadence; it waits only the hard send
+// floor. Must sit above the noise gate or every change is "strong" and the
+// baseline tier is dead — config-drift pins the ordering.
+export const DEFAULT_STRONG_THRESHOLD = 0.15;
+
+// Baseline cadence for sub-strong news: how long an unconfirmed sub-strong
+// steering change may wait before it must reach the wire.
+export const DEFAULT_SEND_INTERVAL_MS = 100;
+
+// Hard floor between ANY two sends — the rate cap. Every tier waits at least
+// this long since the last send, which is what makes the <= 25 msgs/s bound
+// provable rather than statistical (AirConsole's platform budget).
+export const DEFAULT_SEND_MIN_INTERVAL_MS = 40;
 
 // The FLOOR of the measured idle twitch (the "1-2 degrees" above). The floor, not
 // the ceiling: a threshold under the QUIETEST phone's surviving wobble never
@@ -93,10 +124,21 @@ export const RESEND_RTT_FACTOR = 1.5;
 // Thresholds the shadow counters evaluate alongside the live one, so a single
 // real session yields the whole suppression curve instead of one point. 0 is the
 // LOSSLESS case: it filters only exactly-identical samples, which the display
-// provably cannot distinguish, so it costs nothing in feel.
+// provably cannot distinguish, so it costs nothing in feel. Measurement
+// scaffolding, not gameplay: shadows are off until enableShadows() — only the
+// ?netstats=1 overlay (their sole consumer) turns them on.
 export const SHADOW_THRESHOLDS = [0, 0.01, 0.02, 0.03, 0.05, 0.08];
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+
+// The three steer values with a face: full lock either way, and dead centre.
+// They are terminal (a held flick or a released stick rests ON one), and the
+// display renders them as 100%/0%, so "off by under the threshold" is visible
+// there in a way it is nowhere else on the range — the bar reads 97% while the
+// stick is pinned. A rail therefore always differs from a non-rail acked value
+// and is always urgent; being terminal, it cannot chatter — once acked, the
+// ordinary rules hold it silent.
+const isRail = (s) => s === 1 || s === -1 || s === 0;
 
 // True when `a` differs from `b` enough that the display needs telling.
 // `u` and `b` are compared exactly: the use-counter is discrete (a missed change
@@ -107,6 +149,7 @@ function differs(a, b, steerThreshold) {
   if (num(a.u) !== num(b.u)) return true;
   if (num(a.b) !== num(b.b)) return true;
   const d = Math.abs(num(a.s) - num(b.s));
+  if (d > 0 && isRail(num(a.s))) return true; // rails land exactly (see isRail)
   // A threshold of 0 means LOSSLESS — filter only exact repeats. Testing
   // `d >= 0` would call every sample different and disable the gate entirely,
   // which is the opposite of what 0 should mean.
@@ -116,19 +159,30 @@ function differs(a, b, steerThreshold) {
 export class InputGate {
   constructor(opts = {}) {
     this.steerThreshold = opts.steerThreshold != null ? opts.steerThreshold : DEFAULT_STEER_THRESHOLD;
+    this.strongThreshold = opts.strongThreshold != null ? opts.strongThreshold : DEFAULT_STRONG_THRESHOLD;
+    this.sendIntervalMs = opts.sendIntervalMs != null ? opts.sendIntervalMs : DEFAULT_SEND_INTERVAL_MS;
+    this.sendMinIntervalMs = opts.sendMinIntervalMs != null ? opts.sendMinIntervalMs : DEFAULT_SEND_MIN_INTERVAL_MS;
     this.idleMs = opts.idleMs != null ? opts.idleMs : DEFAULT_IDLE_MS;
     this.minResendMs = opts.minResendMs != null ? opts.minResendMs : DEFAULT_MIN_RESEND_MS;
 
     this._acked = null;      // newest sample the display CONFIRMED applying
     this._sent = null;       // newest sample handed to the transport
-    this._sentAt = 0;        // when that happened
+    this._sentAt = -Infinity; // when that happened; never-sent means no pacing wait
     this._pending = false;   // that send is outstanding (sent, not yet acked)
 
-    // Live counters + one shadow counter per candidate threshold. Shadows track
-    // their own would-be acked state, because a different threshold would have
-    // sent at different moments and therefore have a different confirmed value.
+    // Live counters. Shadow counters (the per-threshold suppression curve) are
+    // only allocated by enableShadows(): they exist to measure, and the one
+    // consumer is the ?netstats=1 overlay.
     this.produced = 0;
     this.sent = 0;
+    this._shadows = null;
+  }
+
+  // Install one shadow counter per candidate threshold. Shadows track their own
+  // would-be acked state, because a different threshold would have sent at
+  // different moments and therefore have a different confirmed value.
+  enableShadows() {
+    if (this._shadows) return;
     this._shadows = SHADOW_THRESHOLDS.map((t) => ({ threshold: t, sent: 0, acked: null, sentAt: 0 }));
   }
 
@@ -143,7 +197,7 @@ export class InputGate {
   // or failed transmit doesn't get recorded as confirmed-in-flight.
   decide(sample, nowMs, srttMs) {
     this.produced += 1;
-    this._tickShadows(sample, nowMs);
+    if (this._shadows) this._tickShadows(sample, nowMs);
 
     // The display already holds an equivalent value: only the staleness bound
     // can justify spending a packet.
@@ -151,12 +205,23 @@ export class InputGate {
       return nowMs - this._sentAt >= this.idleMs ? 'idle' : null;
     }
     // It needs this value. If an equivalent one is already in flight, hold off
-    // until the resend cadence rather than re-sending on every 40 ms sample.
+    // until the resend cadence rather than re-sending on every sample.
     const inFlight = this._pending && !differs(sample, this._sent, this.steerThreshold);
     if (inFlight) {
       return nowMs - this._sentAt >= this._resendMs(srttMs) ? 'resend' : null;
     }
-    return 'change';
+    // Fresh news: how soon it may go depends on how big it is. Strong changes
+    // wait only the hard floor; sub-strong drift rides the baseline cadence.
+    const wait = this._isStrong(sample) ? this.sendMinIntervalMs : this.sendIntervalMs;
+    return nowMs - this._sentAt >= wait ? 'change' : null;
+  }
+
+  // A change worth interrupting the baseline cadence for: the same question as
+  // "does the display need telling", just held to the coarser strong threshold
+  // — so it IS differs(), at the other dead-band. One function carries the
+  // u/b/rail rules for both.
+  _isStrong(sample) {
+    return differs(sample, this._acked, this.strongThreshold);
   }
 
   // Record that `sample` was handed to the transport.
@@ -183,8 +248,8 @@ export class InputGate {
     this._acked = null;
     this._sent = null;
     this._pending = false;
-    this._sentAt = 0;
-    for (const sh of this._shadows) { sh.acked = null; sh.sentAt = 0; }
+    this._sentAt = -Infinity;
+    for (const sh of this._shadows || []) { sh.acked = null; sh.sentAt = 0; }
   }
 
   // Counters for the netstats overlay. `shadows` answers "what would we have
@@ -199,7 +264,7 @@ export class InputGate {
       suppressed,
       suppressedPct: this.produced ? (suppressed / this.produced) * 100 : 0,
       threshold: this.steerThreshold,
-      shadows: this._shadows.map((sh) => ({
+      shadows: (this._shadows || []).map((sh) => ({
         threshold: sh.threshold,
         sent: sh.sent,
         suppressedPct: this.produced ? ((this.produced - sh.sent) / this.produced) * 100 : 0,

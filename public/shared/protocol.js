@@ -43,7 +43,7 @@ var STUN_URL = 'stun:stun.couchpad.games:3478';
 var MSG = {
   // Controller -> Display (intents)
   HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
-  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, ~25Hz, fastlane
+  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, sensor-rate gated, fastlane
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
@@ -192,7 +192,20 @@ var STEER = {
   SMOOTH: 0.5,
   // WIRE. Steering deltas below this are "the display already holds this", so
   // the sample never goes out. Bounded on both sides by InputGate's derivation.
-  GATE_THRESHOLD: 0.03
+  GATE_THRESHOLD: 0.03,
+  // WIRE. A steer delta at or past this is a deliberate action rather than
+  // drift (5x the noise gate, past the DEADZONE scale): it may interrupt the
+  // baseline cadence and go as soon as SEND_MIN_INTERVAL_MS allows. Brake and
+  // the use-counter always count as strong — a press must not feel deferred.
+  STRONG_THRESHOLD: 0.15,
+  // WIRE. Baseline cadence for sub-strong news: an unconfirmed steering change
+  // never waits longer than this to reach the wire.
+  SEND_INTERVAL_MS: 100,
+  // WIRE. Hard floor between ANY two CONTROL sends. Every InputGate tier waits
+  // at least this long, so the wire rate is provably bounded at 1000/this
+  // msgs/s — sized to the strictest platform message budget in sight
+  // (AirConsole allows 25 messages/s).
+  SEND_MIN_INTERVAL_MS: 40
 };
 
 // Car livery palette, indexed by the dense color slot RoomFlow.lowestFreeSlot

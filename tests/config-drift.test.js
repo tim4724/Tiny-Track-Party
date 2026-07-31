@@ -134,8 +134,30 @@ test('TiltInput spends the manifest steering numbers', () => {
 });
 
 test('InputGate spends the manifest steering numbers', () => {
-  assert.equal(gate.DEFAULT_STEER_THRESHOLD, protocol.STEER.GATE_THRESHOLD,
+  const S = protocol.STEER;
+  assert.equal(gate.DEFAULT_STEER_THRESHOLD, S.GATE_THRESHOLD,
     'InputGate DEFAULT_STEER_THRESHOLD drifted from protocol.STEER.GATE_THRESHOLD');
+  assert.equal(gate.DEFAULT_STRONG_THRESHOLD, S.STRONG_THRESHOLD,
+    'InputGate DEFAULT_STRONG_THRESHOLD drifted from protocol.STEER.STRONG_THRESHOLD');
+  assert.equal(gate.DEFAULT_SEND_INTERVAL_MS, S.SEND_INTERVAL_MS,
+    'InputGate DEFAULT_SEND_INTERVAL_MS drifted from protocol.STEER.SEND_INTERVAL_MS');
+  assert.equal(gate.DEFAULT_SEND_MIN_INTERVAL_MS, S.SEND_MIN_INTERVAL_MS,
+    'InputGate DEFAULT_SEND_MIN_INTERVAL_MS drifted from protocol.STEER.SEND_MIN_INTERVAL_MS');
+});
+
+test('the send pacing tiers are ordered and respect the platform message cap', () => {
+  const S = protocol.STEER;
+  // The two-tier band has to be a band: strong above the news gate, or every
+  // change is "strong" and the baseline cadence never applies to anything.
+  assert.ok(S.STRONG_THRESHOLD > S.GATE_THRESHOLD,
+    `STRONG_THRESHOLD ${S.STRONG_THRESHOLD} must exceed GATE_THRESHOLD ${S.GATE_THRESHOLD}`);
+  // The floor is a floor: the urgent tier may not be slower than the baseline.
+  assert.ok(S.SEND_MIN_INTERVAL_MS <= S.SEND_INTERVAL_MS,
+    'SEND_MIN_INTERVAL_MS must not exceed SEND_INTERVAL_MS');
+  // The hard cap honours the strictest platform message budget in sight:
+  // AirConsole (a possible future platform) allows 25 messages a second.
+  assert.ok(1000 / S.SEND_MIN_INTERVAL_MS <= 25,
+    `SEND_MIN_INTERVAL_MS ${S.SEND_MIN_INTERVAL_MS} allows ${1000 / S.SEND_MIN_INTERVAL_MS}/s, over the 25/s platform cap`);
 });
 
 test("InputGate's dead-band derivation still closes over the manifest", () => {

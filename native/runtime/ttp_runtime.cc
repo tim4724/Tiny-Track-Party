@@ -903,6 +903,10 @@ const char* ttp_results_json(int h) {
 const char* ttp_events_json(int h) {
   RuntimeSession* rs = get(h);
   if (!rs) return EMPTY_ARR;
+  // Drained every frame, empty on almost all of them (events are countdown
+  // beats, pickups, laps, finishes) — skip the build/stringify/JS-string
+  // round trip for the common case. The shell short-circuits on "[]" too.
+  if (rs->outQueue.empty()) return EMPTY_ARR;
   Value arr = Value::Arr();
   for (auto& e : rs->outQueue) arr.push(std::move(e));
   rs->outQueue.clear();

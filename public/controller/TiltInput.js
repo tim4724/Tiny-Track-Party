@@ -32,7 +32,9 @@
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
 // Space/Down brake. Steer = roll + keys (so the loop is testable headlessly).
-// Emits {s,b} to onControl at ~25 Hz.
+// Emits {s,b,u} to onControl on every sensor sample and on every button/key
+// edge — the InputGate downstream decides what actually reaches the wire — with
+// a SEND_HZ interval kept as the idle heartbeat and the no-sensor fallback.
 
 const SEND_HZ = 25;
 
@@ -49,6 +51,12 @@ export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // Single light low-pass on the steer output: just enough to take the edge off
 // sensor jitter (raw DeviceOrientation twitches ~1-2° even held still) without
 // the lag of a heavier filter. Higher = snappier; set to 1 for fully raw.
+// Applied once per emitted sample; since samples follow the sensor events, the
+// filter converges at sensor rate (~24 ms to 50% at 60 Hz), while its per-sample
+// noise halving — the property the gate's dead-band is derived from — is a
+// function of the alpha alone and doesn't move with the event rate. It cannot be
+// dropped outright: raw wobble (1-2° over ROLL_LOCK) clears GATE_THRESHOLD, so
+// an unfiltered stream would chatter packets from a phone lying still.
 export const SMOOTH = 0.5;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
@@ -128,10 +136,20 @@ export class TiltInput {
     this._g.x = cb * sg;
     this._g.y = -sb;
     this._g.z = -cb * cg;
+
+    // Emit straight from the sensor event: a fresh sample used to sit up to
+    // 40 ms waiting for the interval tick, which was the single largest
+    // software-added stage of input-to-photon latency. The gate downstream
+    // filters sub-threshold wobble, so this raises the wire rate only while
+    // the phone is actually moving.
+    if (this._timer) this._tick();
   }
 
   start() {
     if (this._timer) return;
+    // Fallback cadence only: sensor events and button/key edges emit directly,
+    // so this interval matters just for keyboard-held steering and as the
+    // heartbeat that lets the gate's idle/resend rules fire on a still phone.
     const interval = 1000 / SEND_HZ;
     this._timer = setInterval(() => this._tick(), interval);
   }
@@ -177,6 +195,13 @@ export class TiltInput {
     if (Math.abs(target) < DEADZONE) target = 0;
     else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
     this._steer += (target - this._steer) * SMOOTH;
+    // Snap out of the EMA's asymptote: the filter halves the residual per
+    // sample, so it nears a held target but never lands on it — and the tail
+    // of a full flick then sits under the send gate's dead-band, reading as a
+    // steer bar stuck at ~97% until the idle resend. Once the residual is
+    // inside 0.01 (a third of the gate, invisible authority) converge exactly,
+    // so full lock and a released centre are values that actually occur.
+    if (Math.abs(target - this._steer) < 0.01) this._steer = target;
 
     const s = clamp1(this._steer + this._key);
     const b = Math.max(this._brakeBtn, this._brakeKey);
@@ -206,6 +231,7 @@ export class TiltInput {
       }
       else return;
       this._key = (this._keyR ? 1 : 0) - (this._keyL ? 1 : 0);
+      if (this._timer) this._tick(); // edge-driven, same as the sensor path
     };
     window.addEventListener('keydown', (e) => set(e, true));
     window.addEventListener('keyup', (e) => set(e, false));
@@ -218,7 +244,11 @@ export class TiltInput {
   }
 
   // On-screen BRAKE button: held → brake at the fixed BRAKE_LEVEL, released → 0.
-  pressBrake(on) { this._brakeBtn = on ? BRAKE_LEVEL : 0; }
+  // Emits on the edge — a brake press must not wait out the interval tick.
+  pressBrake(on) {
+    this._brakeBtn = on ? BRAKE_LEVEL : 0;
+    if (this._timer) this._tick();
+  }
 
   // Enable/disable ACTION — mirrors the held-item slot (main.js drives this from
   // setHeldItem). Gates BOTH input paths (on-screen button AND keyboard) so a press
@@ -226,7 +256,11 @@ export class TiltInput {
   setActionEnabled(on) { this._actionEnabled = !!on; }
 
   // ACTION button: one tap = one item use. Bump the wrapping counter on the press
-  // edge; the next _tick carries it and the display fires the held item once. No-op
-  // when no item is held (see setActionEnabled).
-  pressAction() { if (this._actionEnabled) this._useCount = (this._useCount + 1) & 255; }
+  // edge and emit immediately — the display fires the held item once per counter
+  // change. No-op when no item is held (see setActionEnabled).
+  pressAction() {
+    if (!this._actionEnabled) return;
+    this._useCount = (this._useCount + 1) & 255;
+    if (this._timer) this._tick();
+  }
 }

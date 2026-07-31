@@ -7865,8 +7865,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const mat4f base = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 }) * FLIP
                     : m * FLIP;
-            // Body lean + weight transfer — SceneRenderer setCarPose verbatim:
-            // lean target steer × LEAN_MAX (0.05), smoothed 0.2/frame; pitch
+            // Body lean + weight transfer — SceneRenderer setCarPose, with one
+            // deliberate departure: the JS smoothed lean 0.2/frame, which made
+            // the steering cue's wall-clock lag double at 30 fps; lean is now
+            // dt-based at 13.4/s (the same curve at 60 fps). Pitch
             // from d(spd)/dt of the NORMALIZED spd over PITCH_ACCEL_NORM 0.8,
             // dive gated on real brake (×3, saturates at 1/3 pedal), damped at
             // PITCH_RATE 6/s.
@@ -7885,7 +7887,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             mat4f popScale{};   // S: monster morph spring (uniform, commutes)
             if (mCarWheels.size() > i) {
                 CarWheels& w = mCarWheels[i];
-                w.lean += (c.steer * 0.05f - w.lean) * 0.2f;
+                w.lean += (c.steer * 0.05f - w.lean)
+                        * (1.0f - std::exp(-13.4f * input.dt));
                 const float dspd = (c.spd - w.prevSpd) / std::max(input.dt, 1e-3f);
                 w.prevSpd = c.spd;
                 const float pitchAmt = std::max(-1.0f, std::min(1.0f, dspd / 0.8f));

@@ -108,7 +108,13 @@ test('_tick dead-zones a centred lean to zero, but full lock still re-expands to
     assert.equal(out.at(-1).s, 0, 'a lean inside the dead-zone steers nothing');
     t._onOrient({ beta: 0, gamma: 75 }); // hard lock
     for (let i = 0; i < 12; i++) t._tick(); // SMOOTH=0.5 converges in a few ticks
-    assert.ok(out.at(-1).s > 0.99, `full lock re-expands to +1 (got ${out.at(-1).s})`);
+    assert.equal(out.at(-1).s, 1, 'full lock LANDS on exactly 1 (the snap kills the EMA asymptote)');
+    // ...and releasing to centre lands on exactly 0, for the same reason: the
+    // rails must be values that actually occur, or the send gate's dead-band
+    // leaves the display's steer bar stuck a few percent short.
+    t._onOrient({ beta: 0, gamma: 0 });
+    for (let i = 0; i < 12; i++) t._tick();
+    assert.equal(out.at(-1).s, 0, 'released centre lands on exactly 0');
   });
 });
 

@@ -218,7 +218,7 @@ function updateLatency(halfMs, viaFastlane) { applyLatencyChip(latencyEl, halfMs
 
 const tilt = new TiltInput({
   surface: el('game'),
-  // sendControl (not send) — the 25 Hz stream is gated down to what the display
+  // sendControl (not send) — the sensor-rate stream is gated down to what the display
   // doesn't already hold. See InputGate.js.
   onControl: (c) => net.sendControl(c)
 });
@@ -972,6 +972,7 @@ if (_scenario) {
 if (_params.get('netstats')) {
   const _thresh = parseFloat(_params.get('steerThresh'));
   if (isFinite(_thresh) && _thresh >= 0) net.gate.steerThreshold = _thresh;
+  net.gate.enableShadows(); // the suppression-curve counters exist for this overlay
   import('./NetStats.js').then(({ initNetStats }) => initNetStats(net.gate));
 }
 

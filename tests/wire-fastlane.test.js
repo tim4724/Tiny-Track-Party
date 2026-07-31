@@ -4,7 +4,7 @@
 // WIRE-COMPAT: the FASTLANE, C++ receiver against the real JS sender.
 //
 // This is the one place in the system where two languages run DIFFERENT
-// IMPLEMENTATIONS OF THE SAME RELIABILITY PROTOCOL at 25 Hz, and until this file
+// IMPLEMENTATIONS OF THE SAME RELIABILITY PROTOCOL at input rate, and until this file
 // existed nothing ever ran them against each other:
 //
 //   * tests/fixtures/fastlane-corpus.jsonl replays RECORDED JS. The C++ Link is
@@ -106,7 +106,7 @@ function pairAndOpen(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. The 25 Hz stream, end to end
+// 1. The gated control stream, end to end
 // ---------------------------------------------------------------------------
 
 test('fastlane: every CONTROL sample the phone sends is applied exactly once by C++', async () => {
@@ -114,10 +114,12 @@ test('fastlane: every CONTROL sample the phone sends is applied exactly once by 
   H.withFakeClock((clock) => {
     pairAndOpen(ctx);
 
-    // A real steer sweep at 25 Hz. E2E phones have no DeviceOrientation, so every
-    // live sample there is {s:0,b:0,u:0} and the gate collapses the stream to one
+    // A real steer sweep. E2E phones have no DeviceOrientation, so every live
+    // sample there is {s:0,b:0,u:0} and the gate collapses the stream to one
     // idle send per 500 ms — meaning a NON-ZERO steer has never crossed this
-    // boundary in any test, live or frozen.
+    // boundary in any test, live or frozen. Strong deltas (>= STRONG_THRESHOLD)
+    // ride the 40 ms floor; the shallower stretches of the sine pace down to
+    // the 100 ms baseline, so a 25-sample sweep sends most-but-not-all samples.
     const sent = [];
     for (let i = 0; i < 25; i++) {
       clock.advanceTo(i * 40);
@@ -125,7 +127,7 @@ test('fastlane: every CONTROL sample the phone sends is applied exactly once by 
       if (ctx.net.sendControl(sample, clock.now)) sent.push(sample);
     }
     clock.flush();   // let the last packet (and its ack) land
-    assert.ok(sent.length >= 20, `the gate should pass a moving stream (${sent.length}/25)`);
+    assert.ok(sent.length >= 15, `the gate should pass a moving stream (${sent.length}/25)`);
 
     // Every sample reached the sim side, in order, once.
     assert.deepEqual(ctx.applied.map((a) => ({ s: a.ev.s, b: a.ev.b, u: a.ev.u })), sent,
@@ -247,7 +249,7 @@ test('fastlane: the C++ ack is what drives the phone\'s send gate', async () => 
   // The ack is a C++ ENCODER whose only consumer is JS: `pa` prunes the phone's
   // ring and feeds InputGate.markAcked, `t` drives the RTT EWMA that sets the
   // resend cadence. A C++ host that got `pa` wrong would silently stall or
-  // duplicate the 25 Hz stream, and no live test would notice.
+  // duplicate the control stream, and no live test would notice.
   const ctx = await bringUpLink();
   H.withFakeClock((clock) => {
     const { phoneCh, displayCh } = pairAndOpen(ctx);
@@ -268,6 +270,11 @@ test('fastlane: the C++ ack is what drives the phone\'s send gate', async () => 
     // ...and a sub-threshold drift is filtered too, which is only safe BECAUSE the
     // ack was accurate.
     assert.equal(ctx.net.gate.decide({ s: 0.51, b: 0, u: 0 }, clock.now, 0), null);
+    // A sub-strong change (0.1 of authority) rides the 100 ms baseline cadence,
+    // so straight after the send it defers — and goes once the window opens.
+    assert.equal(ctx.net.gate.decide({ s: 0.6, b: 0, u: 0 }, clock.now, 0), null,
+      'sub-strong news inside the baseline window is deferred, not sent');
+    clock.advance(100);
     assert.equal(ctx.net.gate.decide({ s: 0.6, b: 0, u: 0 }, clock.now, 0), 'change');
   });
 });
@@ -379,7 +386,7 @@ test('asym: the C++ Link has NO maxRing, so a native sender would ship ~6x the p
   //
   // WHAT THIS BREAKS AT A REAL PARTY: the day a TV shell (or a wasm controller)
   // becomes a fastlane SENDER, every packet carries the whole 300 ms TTL window —
-  // six samples at 25 Hz instead of one — on the exact link the fastlane exists to
+  // several samples' worth instead of one — on the exact link the fastlane exists to
   // keep small.
   const abi = await H.loadAbi();
   const { PartyFastlane } = H.kit();

@@ -66,7 +66,7 @@ export class ControllerNet extends GameNet {
     this.playerName = '';
     this._pingTimer = null;
     this._lastPong = 0;
-    // Gates the 25 Hz CONTROL stream down to what the display doesn't already
+    // Gates the sensor-rate CONTROL stream down to what the display doesn't already
     // hold (see InputGate). opts.gate lets tests/measurement pass a configured
     // one; the default is the shipping policy.
     this.gate = opts.gate || new InputGate();
@@ -245,7 +245,7 @@ export class ControllerNet extends GameNet {
     this.gate.reset();
     this._initFastlane(this.peerIndex, {
       emitIdleHeartbeat: true,
-      // Latest-only: CONTROL is absolute state ({s,b,u}) resampled every 40 ms,
+      // Latest-only: CONTROL is absolute state ({s,b,u}) resampled at sensor rate,
       // not a stream of discrete events, so the kit's resend window can't help.
       // The display applies inputs on arrival, straight into the sim's car
       // fields, and only steps physics from rAF — so a recovered older event's
