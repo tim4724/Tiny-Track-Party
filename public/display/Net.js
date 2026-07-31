@@ -264,6 +264,13 @@ export class DisplayNet extends GameNet {
   // (auto-pause, standings) read it through the synced seam accessors in
   // ttp_room.h. This module holds no reader of its own anymore.
 
+  // The game-message verdict (start/series-next/pause/resume/new-game), with
+  // the host and all-ready gates inside — asked, never re-derived. CONTROL
+  // does not come through here; main.js short-circuits it (input path).
+  controllerAction(from, type) {
+    return session.controllerAction(this.flow.handle, this.sessionHandle(), from, type);
+  }
+
   // ---- connection ----
   _connect() {
     if (this.party) this.party.close(); // fresh-room fallback replaces the connection

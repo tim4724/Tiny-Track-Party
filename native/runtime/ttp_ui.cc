@@ -56,7 +56,7 @@ std::vector<ui::CatalogEntry> g_catalog;
 std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
     g_bufBoard, g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
-    g_bufSeriesGp, g_bufBoardLive;
+    g_bufSeriesGp, g_bufBoardLive, g_bufFreeze, g_bufResultsAction;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -597,6 +597,17 @@ const char* ttp_ui_freeze_transition(int paused, int autoPaused, int sessionPaus
   return ui::key(ui::freezeTransition(paused != 0, autoPaused != 0, sessionPaused != 0));
 }
 
+const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sessionPaused) {
+  const ui::FreezeMove m =
+      ui::freezeTransition(paused != 0, autoPaused != 0, sessionPaused != 0);
+  Value o = Value::Obj();
+  o.set("transition", Value::Str(ui::key(m)));
+  Value ops = Value::Arr();
+  for (const char* op : ui::freezePlan(m)) ops.push(Value::Str(op));
+  o.set("ops", ops);
+  return put(g_bufFreeze, o);
+}
+
 // ---- the Grand Prix chip -----------------------------------------------------
 
 const char* ttp_ui_series_info_json(const char* json) {
@@ -636,6 +647,12 @@ const char* ttp_ui_series_info_gp_json(int gpHandle, double autoAdvanceMs) {
   if (!gpHandle) return put(g_bufSeriesGp, Value::Null());
   return put(g_bufSeriesGp,
              seriesValue(ui::seriesInfo(seriesInputOfGp(gpHandle, autoAdvanceMs), g_catalog)));
+}
+
+const char* ttp_ui_results_action_json(int gpHandle) {
+  const bool advance = gpHandle && ttp_gp_finished(gpHandle) == 0;
+  return put(g_bufResultsAction,
+             Value::Str(advance ? "advance" : "return-to-lobby"));
 }
 
 // ---- the standings board -----------------------------------------------------

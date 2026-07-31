@@ -92,7 +92,8 @@ enum class Op {
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
-  RETURN_TO_LOBBY
+  RETURN_TO_LOBBY, CLOSE_ROOM, CLEAR_PICK, RENDER_LOBBY_PICK,
+  REFRESH_LOBBY_DEMO, UPDATE_BACKDROP
 };
 const char* key(Op op);
 
@@ -416,6 +417,11 @@ struct ReturnResult {
 // `trackSwap` re-aims the pick for the next lobby: random re-rolls every visit,
 // a cup rewinds to its race 1.
 ReturnResult returnToLobby(const ReturnInput& in);
+
+// Ending the PARTY, not just the race: the ordered teardown AFTER the shell's
+// own returnToLobby() call (which owns the race half and the draw protocol).
+// Was the one lifecycle path written outside the effect walk.
+Effects endParty();
 
 // ---- the roster-driven repairs ----------------------------------------------
 

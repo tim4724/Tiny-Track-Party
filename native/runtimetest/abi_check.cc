@@ -1982,6 +1982,7 @@ Value raceStep(const std::string& op, const Value& in) {
   }
   if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
   if (op == "returnDrawsNeeded") return Value::Num(ttp_race_return_draws_needed(J(in).c_str()));
+  if (op == "endParty") return jsonOf(ttp_race_end_party_json());
   if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
   if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
   if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));
@@ -2540,6 +2541,67 @@ void uiLiveTwinsMatchJsonPaths() {
                                    ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
         "needs_draw == the adapter's old spelling (after an advance)");
   check(ttp_gp_needs_draw(0) == 0, "needs_draw on handle 0 is 0");
+
+  // ---- the freeze plan ------------------------------------------------------
+  // The plan's transition must agree with the frozen-corpus-pinned rule over
+  // all eight inputs, and the two op lists are literal contracts.
+  for (int p = 0; p <= 1; p++)
+    for (int ap = 0; ap <= 1; ap++)
+      for (int sp = 0; sp <= 1; sp++) {
+        const Value plan = parseOrNull(ttp_ui_freeze_plan_json(p, ap, sp), "freeze plan");
+        check(plan.find("transition") &&
+                  plan.find("transition")->str == ttp_ui_freeze_transition(p, ap, sp),
+              "freeze plan transition == ttp_ui_freeze_transition");
+      }
+  check(std::string(ttp_ui_freeze_plan_json(1, 0, 0)) ==
+            "{\"transition\":\"freeze\",\"ops\":[\"pause-session\",\"stop-voices\","
+            "\"pause-music\",\"hold-cars\"]}",
+        "freeze ops, in order");
+  check(std::string(ttp_ui_freeze_plan_json(0, 0, 1)) ==
+            "{\"transition\":\"thaw\",\"ops\":[\"resume-session\",\"release-cars\","
+            "\"resume-music\"]}",
+        "thaw ops, in order — voices never restart");
+  check(std::string(ttp_ui_freeze_plan_json(0, 0, 0)) ==
+            "{\"transition\":\"none\",\"ops\":[]}",
+        "no transition, no ops");
+
+  // ---- the results button's action ------------------------------------------
+  check(std::string(ttp_ui_results_action_json(gp)) == "\"advance\"",
+        "mid-cup: the button advances");
+  check(std::string(ttp_ui_results_action_json(egp)) == "\"advance\"",
+        "endless: the button always advances");
+  check(std::string(ttp_ui_results_action_json(0)) == "\"return-to-lobby\"",
+        "no series: the button returns to the lobby");
+  {
+    const int fgp = ttp_gp_create("{\"id\":\"c\",\"name\":\"C\",\"tracks\":[\"tidepool\"]}", 0);
+    ttp_gp_apply_race(fgp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
+                      nullptr);
+    ttp_gp_advance(fgp);
+    check(ttp_gp_finished(fgp) == 1, "one-track cup is finished after its race");
+    check(std::string(ttp_ui_results_action_json(fgp)) == "\"return-to-lobby\"",
+          "finished cup: the button returns to the lobby");
+    ttp_gp_dispose(fgp);
+  }
+
+  // ---- the controller-message verdict ---------------------------------------
+  // Host is Ada (peer 1, earliest join). Bo (2) is not ready, so a start is
+  // refused even FROM the host; flipping Bo ready opens the gate.
+  const auto act = [&](const char* from, const char* type, int s) {
+    return std::string(ttp_net_controller_action(room, s, from, type));
+  };
+  check(act("1", "start_game", sess) == "none", "start: host but not all ready");
+  check(act("2", "start_game", sess) == "none", "start: not the host");
+  check(act("2", "series_next", sess) == "none", "series-next: not the host");
+  check(act("1", "series_next", sess) == "series-next", "series-next: the host");
+  check(act("1", "pause_game", sess) == "pause", "pause: any player");
+  check(act("3", "resume_game", sess) == "resume", "resume: any player");
+  check(act("3", "return_to_lobby", sess) == "return-to-lobby", "new game: any player");
+  check(act("1", "control", sess) == "control", "control: live race");
+  check(act("1", "control", 0) == "none", "control: no race, no input");
+  check(act("1", "no_such_type", sess) == "none", "unknown type is none");
+  ttp_room_set_field(room, "2", "ready", "true");
+  check(act("1", "start_game", sess) == "start-race", "start: host, everyone ready");
 
   ttp_gp_dispose(egp);
   ttp_gp_dispose(gp);

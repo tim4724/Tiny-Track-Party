@@ -228,6 +228,13 @@ TTP_ABI const char* ttp_race_advance_json(const char* inputJson);
  * rewinds to its race 1. */
 TTP_ABI const char* ttp_race_return_json(const char* inputJson);
 
+/* Ending the PARTY (back from the lobby): the ordered teardown effects AFTER
+ * the shell's own returnToLobby call — close-room, clear-pick,
+ * render-lobby-pick, refresh-lobby-demo, show-screen welcome,
+ * update-backdrop, in that order (the order is the contract; the corpus pins
+ * it). Takes nothing: a party end has no mode. */
+TTP_ABI const char* ttp_race_end_party_json(void);
+
 /* ---- the roster-driven repairs ------------------------------------------- */
 
 /* Pull a player's car out of the live race (a clean LEAVE, or a dropped seat

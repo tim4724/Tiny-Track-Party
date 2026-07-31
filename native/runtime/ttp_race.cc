@@ -46,7 +46,7 @@ std::vector<race::Cup> g_cups;
 // single buffer would hand the second call's bytes to a caller still holding the
 // first's pointer.
 std::string g_bufPersonas, g_bufField, g_bufDemo, g_bufSig, g_bufStart, g_bufLaunch,
-    g_bufTick, g_bufBeat, g_bufEvent, g_bufEnd, g_bufAdvance, g_bufReturn,
+    g_bufTick, g_bufBeat, g_bufEvent, g_bufEnd, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufForfeit, g_bufRekey, g_bufAutoPause;
 
 const char* put(std::string& buf, const Value& v) {
@@ -430,6 +430,10 @@ const char* ttp_race_launch_json(const char* inputJson) {
 
 const char* ttp_race_countdown_tick_json(double n) {
   return put(g_bufTick, wrapEffects(race::countdownTick(n)));
+}
+
+const char* ttp_race_end_party_json(void) {
+  return put(g_bufEndParty, wrapEffects(race::endParty()));
 }
 
 const char* ttp_race_start_beat_json(const char* biome, int audioReady) {

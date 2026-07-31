@@ -43,7 +43,10 @@ var STUN_URL = 'stun:stun.couchpad.games:3478';
 var MSG = {
   // Controller -> Display (intents)
   HELLO: 'hello',               // {name?, rejoinToken?} sent right after join — rejoinToken claims a dropped seat (cross-device reconnect, from the QR's ?claim=)
-  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, sensor-rate gated, fastlane
+  CONTROL: 'control',           // {s: steer[-1,1], b: brake[0,1], u: ACTION use-counter[0-255, wrapping]} — hot path, sensor-rate gated, fastlane.
+                                // The display derives ttp_process_input's presence MASK from which fields arrived (bit1 s:number,
+                                // bit2 b:number-or-boolean, bit4 u:number); the wire carries no mask. Derive from THIS line, not
+                                // from another shell's code. (A C++ seam for this path was measured and refuted — stays JS.)
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)

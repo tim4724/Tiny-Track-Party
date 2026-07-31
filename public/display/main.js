@@ -682,14 +682,20 @@ const net = new DisplayNet({
     net.sendTo(peerIndex, { type: MSG.ITEM, item });
   },
   onControllerMessage: (from, data) => {
-    if (data.type === MSG.CONTROL && session) session.processInput(from, data);
-    else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
-    // Host's "Next race" during a cup intermission (advanceSeriesRace re-checks room state).
-    else if (data.type === MSG.SERIES_NEXT && from === net.flow.host) advanceSeriesRace();
-    // Pause / resume / new game can come from any player's controller.
-    else if (data.type === MSG.PAUSE_GAME) pauseRace();
-    else if (data.type === MSG.RESUME_GAME) resumeRace();
-    else if (data.type === MSG.RETURN_TO_LOBBY) returnToLobby();
+    // CONTROL stays on its own short-circuit: it is the relay-fallback INPUT
+    // path (sensor-rate when the fastlane is down), and adding a crossing
+    // there was measured and refuted. Every button-press message routes
+    // through the verdict, gates (host, all-ready, live race) included.
+    if (data.type === MSG.CONTROL) { if (session) session.processInput(from, data); return; }
+    switch (net.controllerAction(from, data.type)) {
+      case 'start-race': startRace(); break;
+      // Host's "Next race" during a cup intermission (advanceSeriesRace
+      // re-checks room state).
+      case 'series-next': advanceSeriesRace(); break;
+      case 'pause': pauseRace(); break;
+      case 'resume': resumeRace(); break;
+      case 'return-to-lobby': returnToLobby(); break;
+    }
   }
 });
 
@@ -955,6 +961,17 @@ function applyEffect(e, ctx) {
     // covers the pop.
     case 'place-track': scene.setTrack(track); break;
     case 'set-track': net.setTrack(e.trackId); break;
+    // endParty's teardown — closeRoom bails every phone terminally while the
+    // display's own 4001 self-heals into a FRESH room (Net.js onClose
+    // {roomClosed}, which also clears the roster), so the next NEW GAME
+    // reveals a lobby already sitting on the new room's QR.
+    case 'close-room': net.closeRoom(); break;
+    // A fresh party starts clean: drop the ended party's pick so the welcome
+    // board and the next lobby sit on the paper diorama, cup slot empty.
+    case 'clear-pick': net.clearPick(); selectedTrackId = null; break;
+    case 'render-lobby-pick': renderLobbyPick(); break;
+    case 'refresh-lobby-demo': refreshLobbyDemo(); break;
+    case 'update-backdrop': updateBackdrop(); break;
     case 'dispose-session':
       if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
       break;
@@ -986,9 +1003,12 @@ function applyEffect(e, ctx) {
 // The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
 // beat, the banner fades over the next via .is-go). n < 0: banner gone. The
 // beat's SOUND is the wasm's — it taps the same tick — so there is no cue call.
+const CD_COPY = { go: 'GO!' };  // the GO beat's copy; numerals ride the effect
 function showCountdownBanner(e) {
   const cd = el('countdown');
-  cd.textContent = e.n > 0 ? e.n : e.n === 0 ? 'GO!' : '';
+  // `go` IS the beat semantics (the effect carries it); no third spelling of
+  // "n === 0 means GO" here.
+  cd.textContent = e.go ? CD_COPY.go : e.n > 0 ? String(e.n) : '';
   cd.classList.toggle('is-go', e.go);
   // slap each numeral in (re-add .slap around a reflow so the animation restarts
   // on the same element); GO! keeps its own is-go fade-out.
@@ -1004,9 +1024,6 @@ function showCountdownBanner(e) {
 // other player is ready (controller-side renderReadyFoot); re-checked here so
 // a stale or forged START_GAME can't jump the lobby. The host themselves never
 // readies — their start IS the commitment.
-function allRacersReady() {
-  return ui.allRacersReady(net.flow.list(), net.flow.host);
-}
 
 // The series behind a Random start, per the host's length pick (net.randomRaces).
 // Endless (0) is the original behaviour: one track on the card and a draw offered
@@ -1362,16 +1379,9 @@ function returnToLobby() {
 // the next NEW GAME reveals a lobby already sitting on the new room's QR.
 function endParty() {
   returnToLobby(); // no-op from the lobby; full race teardown from anywhere else
-  net.closeRoom();
-  // A fresh party starts clean: drop the ended party's pick so the welcome
-  // board and the next lobby sit on the paper diorama again, with an empty
-  // cup slot and no attract demo, exactly like a cold boot.
-  net.clearPick();
-  selectedTrackId = null;
-  renderLobbyPick();
-  refreshLobbyDemo();  // no pick → stops the attract demo
-  show('welcome');
-  updateBackdrop();    // fade the 3D preview back out to the diorama
+  // The teardown ORDER is the layer's (flow.endParty), corpus-pinned like
+  // every other lifecycle path — this was the one that ran outside perform().
+  perform(flow.endParty().effects);
 }
 
 // ---- pause ----
@@ -1403,16 +1413,21 @@ function resumeRace() {
 // combined state instead of letting each path drive pause()/resume() directly.
 function syncSessionFrozen() {
   if (!session) return;
-  const move = ui.freezeTransition({ paused, autoPaused, sessionPaused: session.paused });
-  if (move === 'freeze') {
-    session.pause();
-    sfx(audioDecide.stopVoices());       // frozen cars must not keep their wind/squeal going
-    sfx(audioDecide.pauseMusic());       // ... and the music holds where it was
-    freezeCars();                        // hold the field at rest behind the overlay
-  } else if (move === 'thaw') {
-    session.resume();
-    freezeCars(false);                   // back to reading the live engine
-    sfx(audioDecide.resumeMusic());
+  // What freeze/thaw MEAN — which member ops, in which order, thaw not being
+  // freeze reversed — is the plan's (ttp_ui_freeze_plan_json). This walk only
+  // performs; an op it cannot perform is a missing capability, same contract
+  // as the race-flow walk.
+  for (const op of ui.freezePlan(paused, autoPaused, session.paused).ops) {
+    switch (op) {
+      case 'pause-session': session.pause(); break;
+      case 'resume-session': session.resume(); break;
+      case 'stop-voices': sfx(audioDecide.stopVoices()); break;
+      case 'pause-music': sfx(audioDecide.pauseMusic()); break;
+      case 'resume-music': sfx(audioDecide.resumeMusic()); break;
+      case 'hold-cars': freezeCars(); break;
+      case 'release-cars': freezeCars(false); break;
+      default: throw new Error(`freeze op this build cannot perform: ${op}`);
+    }
   }
 }
 
@@ -1515,9 +1530,11 @@ el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseR
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit — cancels a cup too
 // On the results board the same button is "Next race ▸" during a cup
-// intermission and "New Game" otherwise (label swapped by showResults).
+// intermission and "New Game" otherwise (label swapped by showResults). The
+// ACTION behind the click is the model's too — label and branch can no longer
+// disagree.
 el('results-newgame').addEventListener('click', () => {
-  if (series && !series.finished) advanceSeriesRace();
+  if (ui.resultsAction(series ? series.handle : 0) === 'advance') advanceSeriesRace();
   else returnToLobby();
 });
 

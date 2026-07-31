@@ -49,7 +49,6 @@ export async function init() {
     rosterSeats: c('ttp_ui_roster_seats_json', 'string', ['string', 'string']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
-    allRacersReady: c('ttp_ui_all_racers_ready', 'number', ['string', 'string']),
     connectedPlayers: c('ttp_ui_connected_players_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
@@ -59,7 +58,8 @@ export async function init() {
     canPause: c('ttp_ui_can_pause', 'number', ['number', 'number', 'string']),
     canResume: c('ttp_ui_can_resume', 'number', ['number', 'number']),
     autoPauseLive: c('ttp_ui_auto_pause_live_json', 'string', ['number', 'number', 'number']),
-    freezeTransition: c('ttp_ui_freeze_transition', 'string', ['number', 'number', 'number']),
+    freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
+    resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
     seriesInfoGp: c('ttp_ui_series_info_gp_json', 'string', ['number', 'number']),
     standingsLive: c('ttp_ui_standings_live_json', 'string',
       ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
@@ -141,11 +141,8 @@ export function rosterSeats(roster, hostPeerIndex) {
 // size come from configure, not from a second copy on this side).
 export function seatGrid(seats) { return JSON.parse(fn.seatGrid(J(seats))); }
 
-export function allRacersReady(roster, hostPeerIndex) {
-  return !!fn.allRacersReady(J(roster.map((p) => ({
-    peerIndex: p.peerIndex, connected: !!p.connected, ready: !!p.ready
-  }))), id(hostPeerIndex));
-}
+// (allRacersReady has no JS wrapper anymore: the one shell reader was the
+// START_GAME gate, which ttp_net_controller_action now asks in C++.)
 
 // Connected seats only. The ABI answers with indices; the ENTRIES that come
 // back are the caller's own objects, because startRace hangs a whole race field
@@ -223,8 +220,16 @@ export function autoPause(sessionHandle, roomHandle, raceEnded) {
   return JSON.parse(fn.autoPauseLive(sessionHandle | 0, roomHandle | 0, b(raceEnded)));
 }
 
-export function freezeTransition({ paused, autoPaused, sessionPaused }) {
-  return fn.freezeTransition(b(paused), b(autoPaused), b(sessionPaused));
+// The transition AND its ordered member ops in one answer; the shell walks
+// `ops` and re-derives nothing (thaw is deliberately not freeze reversed).
+export function freezePlan(paused, autoPaused, sessionPaused) {
+  return JSON.parse(fn.freezePlan(b(paused), b(autoPaused), b(sessionPaused)));
+}
+
+// What the results board's one button does — the branch behind the click,
+// answered by the same layer that labels it (resultsView's newGameKey).
+export function resultsAction(gpHandle) {
+  return JSON.parse(fn.resultsAction(gpHandle | 0));
 }
 
 // ---- the Grand Prix chip + the standings board ------------------------------

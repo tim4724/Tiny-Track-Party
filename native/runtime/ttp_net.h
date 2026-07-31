@@ -209,6 +209,23 @@ TTP_ABI const char* ttp_net_inbound_route(double from, const char* type);
  * name is the game layer's. */
 TTP_ABI const char* ttp_net_message_action(const char* type);
 
+/* The verdict on a GAME message (what a `game-message` effect hands the
+ * coordinator): "start-race" | "series-next" | "pause" | "resume" |
+ * "return-to-lobby" | "control" | "none" — with the authorization inside.
+ * START_GAME must come from the host AND every other racer must be ready (the
+ * same ttp_ui_all_racers_ready gate the lobby button shows); SERIES_NEXT is
+ * host-only; pause/resume/new-game are any player's; CONTROL needs a live
+ * race. A shell dispatches on the verdict and re-derives none of the gates —
+ * the if-chain this replaces existed in two shells with the gates spelled
+ * twice.
+ *
+ * A shell MAY keep CONTROL on its own short-circuit ahead of this call (the
+ * web does): CONTROL is the relay-fallback INPUT path, sensor-rate when the
+ * fastlane is down, and adding a crossing there was measured and refuted —
+ * the verdict exists for the button-press messages. */
+TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
+                                              const char* fromJson, const char* type);
+
 /* SET_CAR: 1 to accept the pick. Four conjoined rules — a READY seat is locked
  * (ready survives race -> lobby, so the pick behind it must not shift), a RACER
  * is locked until the room is back in the lobby while a car-less late joiner may

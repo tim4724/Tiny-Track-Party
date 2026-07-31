@@ -449,6 +449,12 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::SERIES_REKEY:
     case race::Op::SYNC_FROZEN:
     case race::Op::RETURN_TO_LOBBY:
+    // endParty's ops: pure shell performances, pinned by the ops log alone.
+    case race::Op::CLOSE_ROOM:
+    case race::Op::CLEAR_PICK:
+    case race::Op::RENDER_LOBBY_PICK:
+    case race::Op::REFRESH_LOBBY_DEMO:
+    case race::Op::UPDATE_BACKDROP:
       break;
   }
 }
@@ -528,6 +534,13 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
   }
   if (op == "returnDrawsNeeded") {
     return Value::Num(race::returnDrawsNeeded(json::str_field(in, "mode")));
+  }
+  if (op == "endParty") {
+    race::Effects es = race::endParty();
+    applyAll(s, es);
+    Value v = Value::Obj();
+    v.set("effects", effectsVal(es));
+    return v;
   }
   if (op == "drawsNeeded") {
     return Value::Num(race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces")));

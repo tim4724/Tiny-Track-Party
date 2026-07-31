@@ -227,6 +227,27 @@ export function returnDrawsNeeded({ mode }) {
   return mode === 'random' ? 1 : 0;
 }
 
+// Ending the PARTY, not just the race: everything after the shell's own
+// returnToLobby() call (which owns the race teardown and the draw protocol).
+// A fresh party starts clean — the ended party's pick is dropped so the
+// welcome board and the next lobby sit on the paper diorama again, with an
+// empty cup slot and no attract demo, exactly like a cold boot. The ORDER is
+// the contract: the room closes first (phones bail to their party-over
+// overlay before the pick vanishes under them), the screen flips only once
+// the lobby is re-dressed, and the backdrop fades last, over the final state.
+export function endParty() {
+  return {
+    effects: [
+      { op: 'close-room' },
+      { op: 'clear-pick' },
+      { op: 'render-lobby-pick' },
+      { op: 'refresh-lobby-demo' },
+      { op: 'show-screen', screen: 'welcome' },
+      { op: 'update-backdrop' }
+    ]
+  };
+}
+
 // ---- start / launch --------------------------------------------------------
 
 // The START_GAME go/no-go. The host's "Start race" button is only enabled once

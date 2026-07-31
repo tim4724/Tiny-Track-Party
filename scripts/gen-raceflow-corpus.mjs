@@ -184,6 +184,10 @@ function applyEffect(s, e) {
     case 'set-auto-paused': s.autoPaused = e.on; break;
     case 'sync-frozen': break;
     case 'return-to-lobby': break;
+    // endParty's ops: pure shell performances, nothing the digest tracks —
+    // the recorded `ops` log alone pins their presence and order.
+    case 'close-room': case 'clear-pick': case 'render-lobby-pick':
+    case 'refresh-lobby-demo': case 'update-backdrop': break;
     default: throw new Error(`unknown effect op: ${e.op}`);
   }
 }
@@ -226,6 +230,11 @@ const OPS = {
   demoSig: (s, a) => ({ in: a, out: rf.demoSig(a.field, a.trackId) }),
   drawsNeeded: (s, a) => ({ in: a, out: rf.drawsNeeded(a) }),
   returnDrawsNeeded: (s, a) => ({ in: a, out: rf.returnDrawsNeeded(a) }),
+  endParty: (s, a) => {
+    const out = rf.endParty();
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: a, out };
+  },
   seriesForStart: (s, a) => {
     const input = { ...a, cups: CUPS };
     return { in: a, out: rf.seriesForStart(input) };
@@ -483,6 +492,19 @@ SCRIPTS.push({
     ['returnDrawsNeeded', { mode: 'random' }],
     ['returnDrawsNeeded', { mode: 'cup' }],
     ['returnDrawsNeeded', { mode: 'exact' }]
+  ]
+});
+
+// Ending the whole party (back from the lobby): the ordered teardown that used
+// to be the one lifecycle path written outside the effect walk. From the
+// lobby, and mid-race after the return the shell performs first.
+SCRIPTS.push({
+  name: 'end-party',
+  steps: [
+    ['endParty', {}],
+    ['launchRace', { players: [P(1, 'Ann', 0, 0)], seed: 11, trackId: 'a1' }],
+    ['returnToLobby', { mode: 'exact', trackId: 'a1' }],
+    ['endParty', {}]
   ]
 });
 

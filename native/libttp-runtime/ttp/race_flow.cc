@@ -66,6 +66,11 @@ const char* key(Op op) {
     case Op::SET_AUTO_PAUSED: return "set-auto-paused";
     case Op::SYNC_FROZEN: return "sync-frozen";
     case Op::RETURN_TO_LOBBY: return "return-to-lobby";
+    case Op::CLOSE_ROOM: return "close-room";
+    case Op::CLEAR_PICK: return "clear-pick";
+    case Op::RENDER_LOBBY_PICK: return "render-lobby-pick";
+    case Op::REFRESH_LOBBY_DEMO: return "refresh-lobby-demo";
+    case Op::UPDATE_BACKDROP: return "update-backdrop";
   }
   return "";
 }
@@ -596,6 +601,22 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   // race cars + restart the demo under cover so the reset doesn't pop.
   e = mk(Op::FADE_TO_LOBBY); e.placeTrack = r.trackSwap.has; r.effects.push_back(e);
   return r;
+}
+
+Effects endParty() {
+  Effects out;
+  // The room closes FIRST — phones bail to their party-over overlay before the
+  // pick vanishes under them — and the screen flips only once the lobby is
+  // re-dressed; the backdrop fades last, over the final state. The shell's own
+  // returnToLobby() runs BEFORE this list (it owns the race teardown and the
+  // draw protocol); from the lobby that call is a no-op.
+  out.push_back(mk(Op::CLOSE_ROOM));
+  out.push_back(mk(Op::CLEAR_PICK));
+  out.push_back(mk(Op::RENDER_LOBBY_PICK));
+  out.push_back(mk(Op::REFRESH_LOBBY_DEMO));
+  Effect e = mk(Op::SHOW_SCREEN); e.str = "welcome"; out.push_back(e);
+  out.push_back(mk(Op::UPDATE_BACKDROP));
+  return out;
 }
 
 // ---- the roster-driven repairs ----------------------------------------------

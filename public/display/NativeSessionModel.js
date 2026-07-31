@@ -46,6 +46,8 @@ export async function init() {
     onClose: c('ttp_net_on_close_json', 'string', ['number', 'number']),
     onPeerMessage: c('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'string', 'number', 'number']),
+    controllerAction: c('ttp_net_controller_action', 'string',
+      ['number', 'number', 'string', 'string']),
     selectModeDraw: c('ttp_net_select_mode_draw_json', 'string',
       ['number', 'string', 'string', 'string', 'string']),
     setTrack: c('ttp_net_set_track_json', 'string', ['number', 'string', 'string']),
@@ -132,6 +134,11 @@ export function onClose(roomHandle, roomClosed) {
 export function onPeerMessage(roomHandle, sessionHandle, from, msg, pick, isSignal, nowMs) {
   return fn.onPeerMessage(roomHandle | 0, sessionHandle | 0, idJson(from), J(msg || {}),
     J(pick), isSignal ? 1 : 0, nowMs);
+}
+// The verdict on a game message, gates included (host, all-ready, live race).
+// CONTROL never comes through here on this shell — see main.js's short-circuit.
+export function controllerAction(roomHandle, sessionHandle, from, type) {
+  return fn.controllerAction(roomHandle | 0, sessionHandle | 0, idJson(from), type || '');
 }
 export function selectModeDraw(roomHandle, from, msg, pick, drawnTrackId) {
   return fn.selectModeDraw(roomHandle | 0, idJson(from), J(msg || {}), J(pick),

@@ -46,6 +46,7 @@
 #include "ttp_party.h"  // ttp_room_sync_active_order — the one participant-set rule
 #include "ttp_room.h"
 #include "ttp_session.h"
+#include "ttp_ui.h"     // ttp_ui_all_racers_ready — the start gate, asked not re-spelled
 
 using namespace ttp;
 namespace ns = ttp::session;
@@ -223,6 +224,46 @@ const char* ttp_net_inbound_route(double from, const char* type) {
 
 const char* ttp_net_message_action(const char* type) {
   return ns::key(ns::message_action(strOr(type)));
+}
+
+// protocol.h's MSG table, by NAME — the wire spellings live there alone.
+static const std::string& msgType(const char* name) {
+  for (const auto& kv : protocol::MSG)
+    if (kv.first == name) return kv.second;
+  static const std::string none;
+  return none;
+}
+
+const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
+                                      const char* fromJson, const char* type) {
+  const std::string t = strOr(type);
+  const char* verdict = "none";
+  if (t == msgType("CONTROL")) {
+    if (ttp_session_engine(sessionHandle)) verdict = "control";
+  } else if (t == msgType("PAUSE_GAME")) {
+    verdict = "pause";
+  } else if (t == msgType("RESUME_GAME")) {
+    verdict = "resume";
+  } else if (t == msgType("RETURN_TO_LOBBY")) {
+    verdict = "return-to-lobby";
+  } else if (t == msgType("START_GAME") || t == msgType("SERIES_NEXT")) {
+    // Host-only, re-checked here so a stale or forged message cannot jump the
+    // lobby; a start additionally needs every other racer ready (the same gate
+    // that lights the host's button).
+    Value from = json::parse_or(fromJson, Value::Null());
+    const bool isHost = from.type != Value::NUL &&
+        canonical_stringify(from) == canonical_stringify(ttp_room_host_value(roomHandle));
+    if (isHost) {
+      if (t == msgType("SERIES_NEXT")) {
+        verdict = "series-next";
+      } else {
+        const std::string roster(ttp_room_list_json(roomHandle));
+        const std::string host = canonical_stringify(ttp_room_host_value(roomHandle));
+        if (ttp_ui_all_racers_ready(roster.c_str(), host.c_str())) verdict = "start-race";
+      }
+    }
+  }
+  return verdict;
 }
 
 int ttp_net_set_car(int ready, const char* roomState, int inRace,

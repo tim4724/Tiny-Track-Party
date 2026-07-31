@@ -344,6 +344,18 @@ TTP_ABI const char* ttp_ui_auto_pause_live_json(int sessionHandle, int roomHandl
  * overlay's authority. */
 TTP_ABI const char* ttp_ui_freeze_transition(int paused, int autoPaused, int sessionPaused);
 
+/* The transition AND what performing it means, in one answer:
+ *   -> {"transition":"freeze"|"thaw"|"none",
+ *       "ops":["pause-session","stop-voices","pause-music","hold-cars"]}   (freeze)
+ *       ops ["resume-session","release-cars","resume-music"]               (thaw)
+ *       ops []                                                             (none)
+ * THE ORDER OF ops IS THE CONTRACT, and thaw is not freeze reversed —
+ * deliberately (voices never restart on thaw; cars release before the music
+ * returns). A shell walks the list and performs each op; re-spelling the
+ * composition at the call site is how one shell already shipped frozen cars
+ * that kept squealing. */
+TTP_ABI const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sessionPaused);
+
 /* ---- the Grand Prix chip ------------------------------------------------- */
 
 /* The cup's progress chip carried on every standings board.
@@ -365,6 +377,13 @@ TTP_ABI const char* ttp_ui_series_info_json(const char* json);
  * (its E2E override lives there). gpHandle must be live — 0 is not a series
  * and answers "null". */
 TTP_ABI const char* ttp_ui_series_info_gp_json(int gpHandle, double autoAdvanceMs);
+
+/* What the results board's one button DOES: "advance" mid-cup, else
+ * "return-to-lobby". The LABEL for the same button is resultsView's
+ * newGameKey; this is the branch behind the click, which the shells used to
+ * re-derive from their series wrappers while the label came from here — the
+ * two could disagree. gpHandle 0 (no cup) returns to the lobby. */
+TTP_ABI const char* ttp_ui_results_action_json(int gpHandle);
 
 /* ---- the standings board ------------------------------------------------- */
 

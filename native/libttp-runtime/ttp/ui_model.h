@@ -411,6 +411,13 @@ enum class FreezeMove { NONE, FREEZE, THAW };
 const char* key(FreezeMove m);
 FreezeMove freezeTransition(bool paused, bool autoPaused, bool sessionPaused);
 
+// What performing that transition MEANS, as ordered member ops (static
+// strings). The order is a rule (see the .cc), and thaw is deliberately not
+// freeze reversed — a shell that walks this list cannot drift the way a shell
+// that re-spelled the composition already has once (frozen cars kept their
+// voices on tvOS).
+std::vector<const char*> freezePlan(FreezeMove m);
+
 // ---- the Grand Prix chip ----------------------------------------------------
 // The cup's progress chip on every standings board: which race of how many
 // (raceCount is null for endless random play — there is no "of N"), what is
