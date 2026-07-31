@@ -275,6 +275,19 @@ private:
         // masked decals (the car shadows) carry their heading rotation and the
         // silhouette layer, and rect.zw become the halves in the CAR's frame.
         filament::math::float4 texrot;
+        // Masked decals only (zero on profile decals): the car's world origin
+        // and axes. The MASK samples a rigid planar projection of the
+        // fragment's world position onto these — track space only BOUNDS the
+        // stamp (the |ds|/|dl| reject, which is what keeps a loop's other
+        // deck out). Painting the silhouette itself in curvilinear (s, lat)
+        // bent it around every bend, and the per-triangle kinks of the
+        // interpolated field made that wrap RIPPLE through the sharp-edged
+        // mask as the car crossed rings — the "shadow edges shimmer in
+        // corners" report. A plane has no kinks; the stamp is rigid, exactly
+        // what the mesh-sheet shadow drew before 3688c5b.
+        filament::math::float4 wpos;   // xyz world centre
+        filament::math::float4 wfwd;   // xyz car forward (unit)
+        filament::math::float4 wright; // xyz car right (unit)
     };
     std::vector<DeckDecal> mDeckDecals;      // gathered per frame
     std::vector<DeckDecal> mDeckDecalsLast;  // last frame's, for debugDeckDecals()
@@ -635,6 +648,9 @@ private:
     std::vector<Mesh> mStreakMeshes;           // carCount × 4 (vblend ellipses)
     std::vector<uint32_t> mStreakSeed;         // per-car respawn LCG
     std::vector<filament::math::mat4f> mCarBasis; // road-aligned pose per car (streak parent)
+    // project()'s warm start, per car: the ring segment the car's decal landed
+    // on last frame. Cleared with the track (ring indices die with it).
+    std::vector<int> mDecalProjHint;
     // ...and its inverse, cached because the streak billboards need it ONCE PER
     // CELL while the basis itself only changes once per car per frame. Inverting
     // it at the use site meant a general 4x4 inverse per streak per cell — 128 of
@@ -650,7 +666,9 @@ private:
     struct WheelTrail {
         filament::math::float3 last{}, dir{}, edgeL{}, edgeR{};
         bool hasEdge = false, seeded = false;
-        int slot = -1; // ring slot currently growing under this wheel
+        int slot = -1;         // ring slot currently growing under this wheel
+        int projHint = -1;     // project()'s warm start for the deck drop
+        float lastLift = 0.0f; // the lift `last` was anchored with (ridge-scaled)
     };
     std::vector<WheelTrail> mWheelTrails; // carCount × 4 (fl fr bl br)
     std::vector<float> mSkidLife, mSkidPeak; // per ring slot
@@ -837,7 +855,7 @@ private:
     // track. Also derives what used to be computed JS-side from the geometry:
     // the launch-strip blanking zones and the scenery/landmark/clutter seeds.
     static void fillGeometry(TrackBin& out, const ttp::RaceTrack& geo);
-    bool buildRoadMesh(const TrackBin& tb);
+    bool buildRoadMesh(TrackBin& tb); // also retains the ring polyline on the bin
     void buildRoadGrid();
     // Height of the road ribbon straight below (x, z), picking the deck nearest
     // `refY` (stacked strands) and keeping only near-horizontal faces — the
@@ -934,15 +952,12 @@ private:
     void setMeshInScene(Mesh& m, bool on);
     void setInstanceInScene(filament::gltfio::FilamentInstance* inst, uint8_t& state, bool on);
     void setAssetInScene(filament::gltfio::FilamentAsset* asset, uint8_t& state, bool on);
-    // Drop a flat car-local decal (boost aura, ground blob) onto the deck:
-    // every template vertex is re-expressed as (arclength, lateral) about the
-    // car's foot and re-placed by frameAt, so the sheet BENDS over crests,
-    // banks and loop walls. The JS raycasts each vertex onto the rendered road
-    // for the same result; a single flat quad clipped through curving decks.
-    void conformDecal(Mesh& mesh, const filament::math::mat4f& basis,
-            float sx, float sz, float lift, float alphaScale);
-    // Same, for a caller that already knows (s, lat) — skips project()'s linear
-    // scan of the whole centreline.
+    // Drop a flat car-local decal (boost aura, ground blob) onto the deck at a
+    // known (s, lat): every template vertex is re-expressed as (arclength,
+    // lateral) about the car's foot and re-placed by frameAt, so the sheet
+    // BENDS over crests, banks and loop walls. The JS raycasts each vertex
+    // onto the rendered road for the same result; a single flat quad clipped
+    // through curving decks.
     void conformDecalAt(Mesh& mesh, const filament::math::mat4f& basis,
             float s0, float lat0, float sx, float sz, float lift, float alphaScale);
     void buildOils(const TrackBin& tb);

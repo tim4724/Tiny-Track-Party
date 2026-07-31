@@ -199,6 +199,14 @@ struct TtpRenderer::TrackBin {
         }
     };
     std::vector<Sample> samples;
+    // The ring frames buildRoadMesh swept (uniform arclength step, closed),
+    // retained because project() must scan THESE chords — see its comment.
+    // deckGap/deckLine are the deck profile's gap and edge-line widths, set by
+    // buildRoadMesh from the SAME locals it sweeps with, so project() can
+    // reconstruct the deck strip boundaries without a second derivation.
+    std::vector<Sample> rings;
+    float deckGap = 0, deckLine = 0;
+    static constexpr float kDashW = 0.18f;
     std::vector<uint32_t> carColors;
     std::vector<std::string> carNames; // rear name plates
     std::vector<float> carPlateY;      // per-model plate height (PLATE_Y); <0 = auto
@@ -377,44 +385,199 @@ struct TtpRenderer::TrackBin {
         return r;
     }
 
-    // Foot of `p` on the centreline (Centerline.nearest): used to re-express a
-    // car-local point as (arclength, lateral) so flat decals can be CONFORMED
-    // to the deck — the JS raycasts the rendered road for the same result.
+    // Foot of `p` on the RENDERED road: used to re-express a car-local point
+    // as (arclength, lateral) so flat decals can be CONFORMED to the deck —
+    // the JS raycasts the rendered road for the same result.
     //
-    // Projects onto the closest SEGMENT, not the closest sample: the closest
-    // point on a polyline moves continuously with p, while a per-sample frame
-    // snaps as the nearest knot changes — which shifted the whole decal by a
-    // few mm several times a second (the shadow's jitter).
-    void project(const float3& p, const float3& up, float& outS, float& outLat) const {
-        const size_t n = samples.size();
+    // The answer must agree with what the RASTERIZER computes from uv0, or
+    // the difference oscillates under a driving car at knot-crossing rate —
+    // the shadow's jiggle, a few cm on the trick tracks. Three approximations
+    // were peeled off it in turn, each one visibly smaller and each still
+    // visible (measured on the playroom catalogue with points generated ON
+    // the mesh, truth by construction):
+    //
+    //  - WHICH CURVE: the raw contract samples are chords of a curve the
+    //    mesh never draws (it sweeps the cubic THROUGH those knots) — worst
+    //    0.043u at 1.6u off centre. Hence the ring polyline.
+    //  - WHICH FOOT: the deck's iso-arclength lines run parallel to the ring
+    //    cross-sections, which FAN on a bend; a perpendicular foot onto the
+    //    chord is exact on the centreline only — still 0.029u off centre.
+    //    Hence the ring-plane blend, d0/(d0−d1) with the ring tangents as
+    //    normals: exactly 0 and 1 AT the rings, continuous across them.
+    //  - WHICH FIELD: uv0 is interpolated linearly PER TRIANGLE, and the wide
+    //    road strips make skewed triangles whose field kinks at each diagonal
+    //    — even the plane blend is still ~0.02u off mid-strip. Hence the
+    //    exact evaluation at the end: same quad, same diagonal, same
+    //    barycentric interpolation as the GPU, zero at deck level by
+    //    construction.
+    //
+    // `hint` is the caller's ring index from its previous projection (-1 to
+    // start). A car crosses a fraction of a ring per frame, so the scan is a
+    // small window around the hint; the full sweep below runs only on the
+    // first frame, after a respawn, or when the windowed winner looks wrong.
+    // `outDeck`, when given, receives the point ON THE RENDERED DECK under p
+    // (the exact-eval drop hit; the chord foot on the fallback path) — what a
+    // caller placing GEOMETRY against the road wants, where (outS, outLat)
+    // serve a caller talking to the road shader. `p` is BY VALUE so a caller
+    // may alias it with `outDeck` (the skid trails conform in place).
+    //
+    // `outBulge` receives the local facet RIDGE height: on vertically curved
+    // deck the mesh is chords, and each facet's midline stands ~step²·κ/8
+    // proud of the inscribed curve. A sheet floating a FIXED height over the
+    // facets ducks behind those ridges wherever the camera grazes the deck —
+    // inside a loop, that is the whole rear view — and the ridge lines cut it
+    // into chunks. A caller placing a sheet lifts by AT LEAST this much.
+    void project(float3 p, const float3& up, float& outS, float& outLat,
+            int* hint = nullptr, float3* outDeck = nullptr,
+            float* outBulge = nullptr) const {
+        const std::vector<Sample>& knots = rings.empty() ? samples : rings;
+        const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
         float bestD = 1e30f, bestT = 0;
         size_t bestI = 0;
-        // Where the track crosses over itself — a loop, a bridge — the closest
-        // segment in space can be the OTHER deck, and the decal snaps between
-        // the two branches as the car drives. Only segments whose road normal
-        // agrees with the caller's rules them out.
-        for (int pass = 0; pass < 2 && bestD > 1e29f; pass++) {
-            for (size_t i = 0; i < n; i++) {
-                const Sample& a = samples[i];
-                if (pass == 0 && dot(a.up, up) < 0.3f) continue; // wrong branch
-                const float3 ab = samples[(i + 1) % n].pos - a.pos;
-                const float len2 = dot(ab, ab);
-                float t = len2 > 1e-12f ? dot(p - a.pos, ab) / len2 : 0.0f;
-                t = std::min(1.0f, std::max(0.0f, t));
-                const float3 d = p - (a.pos + ab * t);
-                const float dd = dot(d, d);
-                if (dd < bestD) { bestD = dd; bestI = i; bestT = t; }
+        const auto trySeg = [&](size_t i) {
+            const Sample& a = knots[i];
+            const float3 ab = knots[(i + 1) % n].pos - a.pos;
+            const float len2 = dot(ab, ab);
+            float t = len2 > 1e-12f ? dot(p - a.pos, ab) / len2 : 0.0f;
+            t = std::min(1.0f, std::max(0.0f, t));
+            const float3 d = p - (a.pos + ab * t);
+            const float dd = dot(d, d);
+            if (dd < bestD) { bestD = dd; bestI = i; bestT = t; }
+        };
+        // ±12 rings ≈ ±6u of track: an order of magnitude past what a car
+        // covers in a frame, cheap enough that widening it costs nothing.
+        constexpr long W = 12;
+        bool solved = false;
+        if (hint && *hint >= 0 && (size_t) *hint < n) {
+            for (long k = -W; k <= W; k++)
+                trySeg((size_t) ((((long) *hint + k) % (long) n + (long) n) % (long) n));
+            // Trust the window only if the winner sits strictly INSIDE it and
+            // within a deck's reach of the car (8u — clear of any jump apex):
+            // a respawn moves the car half a circuit in one frame, and a
+            // winner pressed against the window's edge means the true foot is
+            // likely beyond it.
+            long rel = (long) bestI - *hint;
+            if (rel > (long) n / 2) rel -= (long) n;
+            if (rel < -(long) n / 2) rel += (long) n;
+            solved = (rel < 0 ? -rel : rel) < W && bestD < 64.0f;
+        }
+        if (!solved) {
+            bestD = 1e30f;
+            // Where the track crosses over itself — a loop, a bridge — the
+            // closest segment in space can be the OTHER deck, and the decal
+            // snaps between the two branches as the car drives. Only segments
+            // whose road normal agrees with the caller's rules them out. (The
+            // windowed path needs no such filter: continuity with the last
+            // frame IS the branch choice, banked deck included.)
+            for (int pass = 0; pass < 2 && bestD > 1e29f; pass++) {
+                for (size_t i = 0; i < n; i++) {
+                    if (pass == 0 && dot(knots[i].up, up) < 0.3f) continue; // wrong branch
+                    trySeg(i);
+                }
             }
         }
-        const Sample& a = samples[bestI];
-        const Sample& b = samples[(bestI + 1) % n];
+        // The perpendicular pick is only the coarse locator. Resolve the quad
+        // by ring-plane SIDEDNESS: the ring planes (normal = ring tangent)
+        // contain the ring lines, so d0 >= 0 && d1 < 0 is exactly "between
+        // this quad's two edge lines". The nearest chord can disagree right
+        // at a ring, and evaluating the neighbour quad's (differently tilted)
+        // strip planes there is what threw the canyon hairpins off.
+        if (&knots == &rings) {
+            for (int walk = 0; walk < 4; walk++) {
+                const Sample& wa = knots[bestI];
+                const Sample& wb = knots[(bestI + 1) % n];
+                if (dot(p - wa.pos, wa.tangent()) < 0) bestI = (bestI + n - 1) % n;
+                else if (dot(p - wb.pos, wb.tangent()) >= 0) bestI = (bestI + 1) % n;
+                else break;
+            }
+        }
+        if (hint) *hint = (int) bestI;
+        const Sample& a = knots[bestI];
+        const Sample& b = knots[(bestI + 1) % n];
+        const float d0 = dot(p - a.pos, a.tangent());
+        const float d1 = dot(p - b.pos, b.tangent());
+        float t = (d0 - d1) != 0 ? d0 / (d0 - d1) : bestT;
+        t = std::min(1.0f, std::max(0.0f, t));
         float sB = b.s;
         if (sB < a.s) sB += length; // start/finish seam
-        outS = a.s + (sB - a.s) * bestT;
-        const float3 q = a.pos + (b.pos - a.pos) * bestT;
-        const float3 lat = normalize(mix(a.lat, b.lat, bestT));
-        outLat = dot(p - q, lat);
+        // Ring-plane blend: continuous everywhere, and the fallback answer
+        // when the exact evaluation below has nothing to stand on.
+        outS = a.s + (sB - a.s) * t;
+        const float3 q = a.pos + (b.pos - a.pos) * t;
+        const float3 latS = normalize(mix(a.lat, b.lat, t));
+        outLat = dot(p - q, latS);
+        if (outDeck) *outDeck = q + latS * outLat;
+        if (outBulge) {
+            // Sagitta of this segment's chord against the swept curve:
+            // step · angle-between-ring-tangents / 8. (`length` here is the
+            // LAP length member, hence the spelled-out norms.)
+            const float3 ab = b.pos - a.pos;
+            const float3 tc = cross(a.tangent(), b.tangent());
+            *outBulge = std::sqrt(dot(ab, ab)) * std::sqrt(dot(tc, tc)) * 0.125f;
+        }
+        if (&knots != &rings || deckGap <= 0) return;
+
+        // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
+        // PER TRIANGLE, and on a bend the wide road strips make skewed
+        // triangles whose field kinks at every diagonal — against that field
+        // even the plane blend is off by up to ~0.02u mid-strip (measured,
+        // playroom catalogue), a sawtooth at ring-crossing rate under a
+        // cornering car. So finish the way the GPU does: drop p onto the deck
+        // ALONG THE SMOOTH ROAD UP (per-triangle normals would turn ride
+        // height into a fresh per-triangle sawtooth), find the strip quad,
+        // split it by the same diagonal buildRoadMesh winds — (i,a)-(i+1,b) —
+        // and interpolate the corners' own uv0. Exact at deck level by
+        // construction; a ride height above it costs height x up-drift,
+        // smooth by construction.
+        const float3 upS = normalize(mix(a.up, b.up, t));
+        const float hA = a.width * 0.5f, hB = b.width * 0.5f;
+        const auto stripBounds = [&](float h, float* o) {
+            o[0] = -h; o[1] = -h + deckGap; o[2] = -h + deckGap + deckLine;
+            o[3] = -kDashW / 2; o[4] = kDashW / 2;
+            o[5] = h - deckGap - deckLine; o[6] = h - deckGap; o[7] = h;
+        };
+        float bA[8], bB[8];
+        stripBounds(hA, bA);
+        stripBounds(hB, bB);
+        const float l = std::min(bA[7] - 1e-4f, std::max(bA[0] + 1e-4f, outLat));
+        int j = 0;
+        while (j < 6 && l > bA[j + 1]) j++;
+        const float3 A = a.pos + a.lat * bA[j];
+        const float3 B = a.pos + a.lat * bA[j + 1];
+        const float3 C = b.pos + b.lat * bB[j + 1];
+        const float3 D = b.pos + b.lat * bB[j];
+        // Drop p along -upS onto the triangle's plane, then barycentric
+        // weights of the hit. w[1] is the middle vertex's weight — its sign
+        // against the A-C diagonal picks the triangle, as rasterization does.
+        float w0, w1, w2;
+        float3 lastHit{};
+        const auto dropBary = [&](const float3& T0, const float3& T1, const float3& T2) {
+            const float3 nrm = cross(T1 - T0, T2 - T0);
+            const float den = dot(upS, nrm);
+            if (std::fabs(den) < 1e-7f) return false; // deck edge-on to up: keep the blend
+            const float3 hit = p - upS * (dot(p - T0, nrm) / den);
+            lastHit = hit;
+            const float3 v0 = T1 - T0, v1 = T2 - T0, v2 = hit - T0;
+            const float d00 = dot(v0, v0), d01 = dot(v0, v1), d11 = dot(v1, v1);
+            const float d20 = dot(v2, v0), d21 = dot(v2, v1);
+            const float dn = d00 * d11 - d01 * d01;
+            if (std::fabs(dn) < 1e-9f) return false;
+            w1 = (d11 * d20 - d01 * d21) / dn;
+            w2 = (d00 * d21 - d01 * d20) / dn;
+            w0 = 1.0f - w1 - w2;
+            return true;
+        };
+        if (!dropBary(A, B, C)) return;
+        if (w1 >= 0) {
+            outS = (w0 + w1) * a.s + w2 * sB;
+            outLat = w0 * bA[j] + w1 * bA[j + 1] + w2 * bB[j + 1];
+            if (outDeck) *outDeck = lastHit;
+        } else if (dropBary(A, C, D)) {
+            outS = w0 * a.s + (w1 + w2) * sB;
+            outLat = w0 * bA[j] + w1 * bB[j + 1] + w2 * bB[j];
+            if (outDeck) *outDeck = lastHit;
+        }
     }
 };
 
@@ -1043,7 +1206,7 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
 // runs, bare asphalt under launch strips, and the same baked-AO gradients.
 // Unlit for now (the JS ribbon is Lambert; the matte-material family is later
 // work) — the AO carries most of the plastic-toy form.
-bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
+bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const size_t nSrc = tb.samples.size();
     const float L = tb.length;
     if (nSrc < 2 || L <= 0 || !tb.closed) return false;
@@ -1058,7 +1221,9 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
     const float cw = tb.kerbW, ch = tb.kerbH, deck = 0.34f;
     const float gap = std::min(0.07f, defHalf * 0.3f);
     const float lw = std::min(0.20f, defHalf * 0.5f - gap);
-    const float stripeLen = 2.0f, dashW = 0.18f;
+    const float stripeLen = 2.0f, dashW = TrackBin::kDashW;
+    tb.deckGap = gap;
+    tb.deckLine = lw; // with the rings: project()'s deck strip model
     const float DASH_PERIOD = 5.76f, DASH_FRAC = 0.25f;
 
     // RING STEP. This was hard-capped at 0.24u, which is HALF what the paint
@@ -1087,6 +1252,9 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
 
     std::vector<TrackBin::Sample> frames(N);
     for (uint32_t i = 0; i < N; i++) frames[i] = frameAt(((float) i / N) * L);
+    // Retained on the bin: uv0's track space is linear along exactly these
+    // chords, so project() must scan these and no others — see its comment.
+    tb.rings = frames;
     const auto halfAt = [&](uint32_t i) { return frames[i].width / 2; };
 
     // Palette (linear).
@@ -4534,7 +4702,7 @@ void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
             float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
             float4{ linCol.x, linCol.y, linCol.z, alpha },
             float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f },
-            float4{ 0, 0, 0, 0 } });
+            float4{ 0, 0, 0, 0 }, {}, {}, {} });
 }
 
 // The deck's fixed furniture, as stamps. These used to be three separate meshes
@@ -4551,7 +4719,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
                 float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
                 float4{ col.x, col.y, col.z, alpha },
                 float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons },
-                float4{ 0, 0, 0, 0 } });
+                float4{ 0, 0, 0, 0 }, {}, {}, {} });
     };
 
     // Item-box contact shadows (were mPropShadows at 0.004): 1 -> 0.82 at 0.55r.
@@ -4642,15 +4810,20 @@ void TtpRenderer::uploadDeckDecals() {
         last.assign(sel, sel + n);
         if (n > 0) {
             float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
-                    trot[kMaxDeckDecals];
+                    trot[kMaxDeckDecals], wpos[kMaxDeckDecals], wfwd[kMaxDeckDecals],
+                    wright[kMaxDeckDecals];
             for (int i = 0; i < n; i++) {
                 rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
                 trot[i] = sel[i].texrot;
+                wpos[i] = sel[i].wpos; wfwd[i] = sel[i].wfwd; wright[i] = sel[i].wright;
             }
             mi->setParameter("decalRect", rect, (size_t) n);
             mi->setParameter("decalColor", col, (size_t) n);
             mi->setParameter("decalShape", shape, (size_t) n);
             mi->setParameter("decalTexRot", trot, (size_t) n);
+            mi->setParameter("decalWPos", wpos, (size_t) n);
+            mi->setParameter("decalWFwd", wfwd, (size_t) n);
+            mi->setParameter("decalWRight", wright, (size_t) n);
         }
         mi->setParameter("decalCount", n);
     };
@@ -6159,6 +6332,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // assets' textures never bind and those cars render black).
     pumpTextures();
     mTrack = std::make_unique<TrackBin>(std::move(tb));
+    mDecalProjHint.clear(); // ring indices belong to the track just replaced
     return true;
 }
 
@@ -6865,21 +7039,6 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         }
     }
     return asset;
-}
-
-// Project the decal's origin onto the centreline, then conform. Callers that
-// already know where they are on the ribbon should use conformDecalAt directly:
-// project() is a linear scan over every centreline sample (twice, if the first
-// pass's normal test rejects everything), and the bananas, rockets and boost
-// discs all have the arclength in hand — the bananas and rockets straight from
-// FrameInput, the disc from the ground blob that was conformed six lines earlier
-// for the same car at the same pose.
-void TtpRenderer::conformDecal(Mesh& mesh, const mat4f& basis, float sx, float sz,
-        float lift, float alphaScale) {
-    if (!mTrack || mesh.entity.isNull() || !mesh.vb || mesh.local.empty()) return;
-    float s0 = 0, lat0 = 0;
-    mTrack->project(basis[3].xyz, basis[1].xyz, s0, lat0);
-    conformDecalAt(mesh, basis, s0, lat0, sx, sz, lift, alphaScale);
 }
 
 void TtpRenderer::conformDecalAt(Mesh& mesh, const mat4f& basis, float s0, float lat0,
@@ -8800,7 +8959,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     ? std::min(1.0f, std::fabs(mCarWheels[i].pitch) / 0.08f) : 0.0f;
             // One projection per car, shared with the boost disc below: both
             // decals hang off the same origin and the same road frame.
-            mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
+            if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
+            mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat, &mDecalProjHint[i]);
             haveCarS = true;
             if (mRoadInst && mDecalMaskArray
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
@@ -8832,12 +8992,19 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                         : ((i < (uint32_t) kMaskLayerMonster
                                 && ((mMaskLayerBakedBits >> i) & 1u))
                                 ? (int) i : kMaskLayerGeneric);
+                // The world anchor the mask projects onto — bm's own columns,
+                // normalized (spin included, so the silhouette still whirls).
+                const float3 wR = normalize(bm[0].xyz);
+                const float3 wF = normalize(bm[2].xyz);
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
                         float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
                                 kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
                         float4{ 0, 0, 0, 0 },
-                        float4{ sn, cs, (float) layer, 1.0f } });
+                        float4{ sn, cs, (float) layer, 1.0f },
+                        float4{ bm[3].x, bm[3].y, bm[3].z, 0 },
+                        float4{ wF.x, wF.y, wF.z, 0 },
+                        float4{ wR.x, wR.y, wR.z, 0 } });
             } else {
                 // The conformed-mesh fallback, for a shell served no
                 // vroad.filamat.
@@ -8947,7 +9114,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
                 if (!haveCarS) {
-                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat);
+                    if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
+                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat,
+                            &mDecalProjHint[i]);
                     haveCarS = true;
                 }
                 // LIFT 0.013, down from 0.02, and it is the FOURTH RING above
@@ -9565,9 +9734,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // patch, so whatever is drawn next starts from where the tyre is NOW.
         // The joint edge goes with it — there is no trail left to rejoin, and
         // keeping a stale edge would stretch the next stamp back to it.
-        const auto restart = [&](WheelTrail& t, const float3& gp) {
+        const auto restart = [&](WheelTrail& t, const float3& gp, float lift) {
             detach(t);
             t.last = gp;
+            t.lastLift = lift;
             t.hasEdge = false;
         };
         // Positions + peak alpha for slot q: 4 columns per edge (L 0 | l peak |
@@ -9668,11 +9838,40 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
                 float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
-                gp = gp - up * dot(gp - posW, up); // contact patch on the road plane
-                if (!st.seeded) { st.last = gp; st.seeded = true; st.hasEdge = false; continue; }
+                // Contact patch on the RENDERED DECK, not the car's tangent
+                // plane. The plane is exact on flat road but the deck curls
+                // away from it quadratically wherever the track bends
+                // VERTICALLY — inside a loop the deck at the front axle sits
+                // ~wheelbase²/2R ≈ 0.05u off the plane, an order past the
+                // 0.006 lift, so plane-projected stamps lay INSIDE the road
+                // and the deck clipped chunks out of them. Worst while
+                // steering in a loop, because scrub is what marks the FRONT
+                // wheels (the far-from-origin, most-buried ones) at all.
+                // The lift must clear the local facet RIDGES, not just the
+                // surface: on vertically curved deck the mesh's chords stand
+                // ~step²·κ/8 proud mid-facet, and inside a loop the camera
+                // grazes the deck — a sheet at a fixed 0.006 ducked behind
+                // every ridge and came out cut into chunks along the ring
+                // lines. Flat road keeps the old 0.006 exactly (bulge 0).
+                float liftW = 0.006f;
+                if (mTrack && !mTrack->rings.empty()) {
+                    if (st.projHint < 0 && mDecalProjHint.size() > i) {
+                        st.projHint = mDecalProjHint[i]; // seed from the car
+                    }
+                    float ws, wl, bulge = 0;
+                    mTrack->project(gp, up, ws, wl, &st.projHint, &gp, &bulge);
+                    liftW = std::min(0.035f, 0.006f + 3.0f * bulge);
+                } else {
+                    gp = gp - up * dot(gp - posW, up); // no deck: the old plane
+                }
+                if (!st.seeded) {
+                    st.last = gp; st.lastLift = liftW;
+                    st.seeded = true; st.hasEdge = false;
+                    continue;
+                }
                 const float3 seg = gp - st.last;
                 const float dist = length(seg);
-                if (dist > SKID_SEG_MAX) { restart(st, gp); continue; }
+                if (dist > SKID_SEG_MAX) { restart(st, gp, liftW); continue; }
                 if (strength <= 0.02f) {
                     // Re-anchor EVERY frame while not marking, not just once the
                     // wheel has moved SKID_SEG_MIN: that parked `last` up to a
@@ -9680,7 +9879,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     // first stamp spans last→gp the whole gap was written in ONE
                     // frame at full ink. A brake tap POPPED a mark 0.19 u long
                     // out of 0.075 u of travel, on a car 0.88 u long.
-                    restart(st, gp);
+                    restart(st, gp, liftW);
                     continue;
                 }
                 if (dist < 1e-4f) continue;
@@ -9692,13 +9891,16 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 const float3 Lv = cross(F, U) * halfW;
                 if (st.hasEdge && dot(st.dir, dir) < SKID_EDGE_DOT) st.hasEdge = false;
                 float3 rL, rR;
+                // Each edge carries the lift IT was anchored with (the joint
+                // reuses the frozen verts verbatim, so the trail stays
+                // watertight as the lift breathes with the deck's curvature).
                 if (st.hasEdge) { rL = st.edgeL; rR = st.edgeR; }
                 else {
-                    rL = st.last - Lv + U * 0.006f;
-                    rR = st.last + Lv + U * 0.006f;
+                    rL = st.last - Lv + U * st.lastLift;
+                    rR = st.last + Lv + U * st.lastLift;
                 }
-                const float3 fL = gp - Lv + U * 0.006f;
-                const float3 fR = gp + Lv + U * 0.006f;
+                const float3 fL = gp - Lv + U * liftW;
+                const float3 fR = gp + Lv + U * liftW;
                 if (st.slot < 0) {
                     st.slot = (int) (mSkidCursor % POOL);
                     mSkidCursor = (mSkidCursor + 1) % POOL;
@@ -9713,6 +9915,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     detach(st);
                     st.edgeL = fL; st.edgeR = fR; st.hasEdge = true;
                     st.last = gp;
+                    st.lastLift = liftW;
                 }
             }
         }

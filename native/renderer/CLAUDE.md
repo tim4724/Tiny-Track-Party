@@ -102,6 +102,14 @@ inferring shader state from pixels.
    car's aura to the outside of a loop.
 3. A `MaterialInstance` from `sceneInstance()` is scene-scoped, so a member holding
    one must be nulled in `releaseScene()`.
+4. A per-frame decal centre must agree with **what the rasterizer computes
+   from uv0** — nothing less settles. `project()` reproduces it stage by
+   stage: the road's own ring polyline (never the raw contract samples), the
+   ring-plane blend (never a perpendicular onto the chord), and finally the
+   exact per-triangle interpolation of the deck quad, because uv0 is linear
+   per triangle and kinks at every diagonal. Every cheaper approximation was
+   tried and each one still saw-toothed the shadow a few cm at ring-crossing
+   rate under a cornering car; `project()`'s comment has the measured ladder.
 
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
@@ -120,9 +128,14 @@ narrower strip clips its outer columns.
 
 The car's contact shadow is a **masked** decal: its shape is the baked
 silhouette, sampled from a small texture array (one layer per car slot, one for
-the monster, one generic), rotated to the car's heading in track space. A layer
-whose bake hasn't landed falls back to the generic superellipse — never to an
-unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
+the monster, one generic). The mask samples a **rigid planar projection of the
+fragment's world position onto the car's own axes** — track space only BOUNDS
+the stamp (that reject is what keeps a loop's other deck out). Painting the
+silhouette in curvilinear (s, lat) instead bends it around every corner, and
+the per-triangle kinks of the interpolated uv0 field ripple through its sharp
+edge as the car crosses rings — shadow-edge shimmer on bends, flat on
+straights. A layer whose bake hasn't landed falls back to the generic
+superellipse — never to an unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
 Every stamped decal also keeps its mesh as the fallback for a shell served no
 `vroad.filamat`, and those fallback lifts are sized for the road's CONCAVE
 bulge — a chord over a dip sits above the true surface, so a coarser road eats

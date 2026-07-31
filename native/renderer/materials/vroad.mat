@@ -86,10 +86,21 @@ material {
         // MASKED decals — the car ground shadows, whose shape is a baked
         // silhouette rather than a profile the shader could evaluate:
         //   x = sin, y = cos of the car's heading against the track tangent
-        //       (the whole rotation, spin-out whirl included)
+        //       (kept for the packed-float readback; the mask itself samples
+        //       the world-plane projection below)
         //   z = decalMask layer holding this car's silhouette
         //   w = 1 marks the decal masked; 0 is every profile decal above
         { type : float4[32], name : decalTexRot },
+        // The masked decal's WORLD anchor: the car's origin and unit axes.
+        // The mask samples a RIGID PLANAR projection of the fragment's world
+        // position onto these; track space only bounds the stamp. Painted in
+        // curvilinear (s, lat) instead, the silhouette bends around every
+        // corner and the per-triangle kinks of the interpolated field ripple
+        // through its sharp edge as the car crosses rings — edge shimmer on
+        // bends, gone flat. Zero on profile decals.
+        { type : float4[32], name : decalWPos },
+        { type : float4[32], name : decalWFwd },
+        { type : float4[32], name : decalWRight },
         // One 2D-array texture, one silhouette per layer: 0..7 the cars in
         // slot order, 8 the monster rig, 9 the generic superellipse. Baked
         // and pre-blurred by bakeSilhouette, so this samples ONCE, exactly
@@ -151,13 +162,15 @@ fragment {
             float dl = tc.y - r.y;
             if (abs(dl) >= (masked ? bound : r.w)) continue;
             if (masked) {
-                // Into the car's frame. With c = dot(tangent, fwd) and
-                // s = dot(latDir, fwd), and car right = up x fwd against
-                // lat = tan x up, the forward/right components come out as
-                //   pf =  c*ds + s*dl,   pr =  s*ds - c*dl
-                // — the handedness flip is folded into pr's signs.
-                float pf = trot.y * ds + trot.x * dl;
-                float pr = trot.x * ds - trot.y * dl;
+                // Into the car's frame via the WORLD plane, not track space:
+                // (s, lat) here only ran the bounds reject above. The user
+                // world position, NOT getWorldPosition() — Filament renders
+                // camera-relative, and the camera-offset flavour slides the
+                // stamp with the chase cam (ttp_shade.inc, same trap).
+                highp vec3 rel = getUserWorldPosition()
+                        - materialParams.decalWPos[i].xyz;
+                float pf = dot(rel, materialParams.decalWFwd[i].xyz);
+                float pr = dot(rel, materialParams.decalWRight[i].xyz);
                 vec2 q = vec2(pf / r.z, pr / r.w);
                 if (max(abs(q.x), abs(q.y)) >= 1.0) continue;
                 // MESH UV PARITY (see the blob mesh in buildCarBlob): u runs
