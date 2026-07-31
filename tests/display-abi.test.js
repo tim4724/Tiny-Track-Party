@@ -46,11 +46,17 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'release', 'bind',
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
                       'camera', 'look', 'fog', 'shadows',
-                      'hold', 'frame', 'burst', 'hud', 'profile', 'profile_names',
+                      'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
+                      'profile', 'profile_names',
                       'biome', 'showcase']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }
+});
+
+test('slot ids answer [] with no display — a HUD with no rows, not a crash', async () => {
+  const M = await load();
+  assert.equal(M.cwrap('ttp_display_slot_ids_json', 'string', [])(), '[]');
 });
 
 test('the cell-overlay setters are a safe no-op with no display', async () => {

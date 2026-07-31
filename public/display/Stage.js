@@ -54,6 +54,12 @@ const ITEM_ICONS = {
 // id having an icon; a missing entry would flash an empty chip).
 const ITEM_KEYS = [...ITEM_IDS];
 
+// A centred card (FINISHED banner or reconnect QR) owns this car's cell. ONE
+// spelling: it feeds both the renderer's per-cell mask (steer bar hides, one
+// layer down) and the DOM chrome around it — two consumers that must agree or
+// the bar shows under a card.
+const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
+
 // The race loop's SLOW TICK: everything on that loop which is not the frame
 // itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
 // finish check that triggers the fast-forward to results. Exported because the
@@ -624,7 +630,7 @@ export class Stage {
     let mask = 0;
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
-      if (c && (c.finished || c.reconnecting)) mask |= 1 << i;
+      if (c && cardOwnsCell(c)) mask |= 1 << i;
     });
     if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
     if (this._dividers !== this._divPushed) {
@@ -896,11 +902,10 @@ export class Stage {
         c.label.style.left = r.x + 'px';
         c.label.style.top = r.y + 'px';
       }
-      // place/lap is hidden while a centred card owns the cell — when the player
-      // has FINISHED or has dropped and is shown the reconnect QR. The steer bar
-      // goes with it, one layer down: same predicate, pushed as _syncOverlay's
-      // bitmask above.
-      const cardInCell = c.finished || c.reconnecting;
+      // place/lap is hidden while a centred card owns the cell; the steer bar
+      // goes with it, one layer down — cardOwnsCell is the one predicate both
+      // consumers read (pushed as _syncOverlay's bitmask above).
+      const cardInCell = cardOwnsCell(c);
       if (c.placeEl) {
         c.placeEl.style.display = cardInCell ? 'none' : 'block';
         c.placeEl.style.left = (r.x + r.w - 12) + 'px';
