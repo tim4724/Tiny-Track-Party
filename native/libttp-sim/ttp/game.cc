@@ -670,7 +670,8 @@ void Game::collidePair(Car& a, Car& b) {
 }
 
 void Game::resolveCollisions(double dt) {
-  std::vector<Car*> list;
+  std::vector<Car*>& list = carScratch_;
+  list.clear();
   for (const auto& c : cars_) if (!c->finished) list.push_back(c.get());
   for (size_t i = 0; i < list.size(); i++)
     for (size_t j = i + 1; j < list.size(); j++) collidePair(*list[i], *list[j]);
@@ -705,7 +706,8 @@ void Game::recomputePoses() {
 }
 
 void Game::rank() {
-  std::vector<Car*> arr;
+  std::vector<Car*>& arr = carScratch_;
+  arr.clear();
   for (const auto& c : cars_) arr.push_back(c.get());
   std::stable_sort(arr.begin(), arr.end(), raceLess);
   for (size_t i = 0; i < arr.size(); i++) arr[i]->rank = (int)i + 1;

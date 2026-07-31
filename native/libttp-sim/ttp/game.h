@@ -272,6 +272,9 @@ class Game {
   long rocketSeq_ = 0;
   Mulberry32 rng_{1};
   std::unique_ptr<RacingLine> racingLine_;
+  // Scratch reused by resolveCollisions() and rank() so the per-tick path
+  // allocates nothing steady-state.
+  std::vector<Car*> carScratch_;
 };
 
 }  // namespace ttp
