@@ -1602,13 +1602,6 @@ const char* ttp_schematic_points_json(const char* pathD) {
   return out.c_str();
 }
 
-const char* ttp_schematic_unpack_json(const char* b64) {
-  static std::string out;
-  Value v;
-  schematicInto(ttp::schematic::unpack(b64 ? b64 : ""), v);
-  out = canonical_stringify(v);
-  return out.c_str();
-}
 
 const char* ttp_item_id(int code) {
   // 1-based so TTP_ITEM_NONE can be 0 without a sentinel that looks like an
