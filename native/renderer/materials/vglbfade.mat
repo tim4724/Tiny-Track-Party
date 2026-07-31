@@ -1,0 +1,65 @@
+// vglb.mat with alpha: the GHOST TWINS, and nothing else.
+//
+// glb.cc's ghost_glb rewrites a kit GLB's materials to alphaMode BLEND with a
+// 0.5 base alpha, and the renderer swaps a car (or the monster rig) for its twin
+// while a truck is blocking someone's view. Filament bakes the blending mode
+// into the material, so a blended twin cannot be an instance of vglb — it has to
+// be a second material.
+//
+// IT EXISTS FOR CONSISTENCY, NOT SPEED. Without it the BLEND twins fall through
+// to gltfio's ubershader while their solid selves run vglb, so an object changes
+// SHADING MODEL halfway through a fade — PBR while translucent, matte once it
+// lands. The two agree to about 2/255 on this kit today, so the pop is small;
+// it is also the kind of thing that stays small only by accident, and it would
+// widen the moment either side's shading moved.
+//
+// THE PARAMETER BLOCK IS vglb.mat's, name for name — read that file's header for
+// why gltfio's AssetLoader makes those names a contract rather than a choice.
+// It is spelled out again here because matc resolves #include inside the shader
+// blocks and not inside the material header; the shared half that CAN be an
+// include is ttp_glb.inc.
+material {
+    name : TtpVglbFade,
+    requires : [
+        uv0,
+        tangents
+    ],
+    shadingModel : unlit,
+    // `fade`, which is what gltfio compiles its own BLEND ubershaders with (see
+    // build_ubershader in libs/gltfio/CMakeLists.txt) — so a ghost blends
+    // exactly as it did before this material existed.
+    blending : fade,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : baseColorMap },
+        { type : mat3, name : baseColorUvMatrix, precision : high },
+        { type : float4, name : baseColorFactor },
+        { type : float3, name : emissiveFactor },
+        { type : float, name : metallicFactor },
+        { type : float, name : roughnessFactor },
+        { type : float, name : normalScale },
+        { type : float, name : aoStrength }
+    ]
+}
+
+fragment {
+    #define TTP_NO_SUN_SHADOW
+    #include "ttp_shade.inc"
+    #include "ttp_glb.inc"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 base = ttpGlbBaseColor();
+        // THE ALPHA RIDES baseColor AND THE COLOUR RIDES emissive, which looks
+        // backwards until you read surface_shading_unlit.fs: under `fade` it
+        // multiplies emissive by baseColor.a before adding it, so writing the
+        // shaded colour in emissive and the coverage in baseColor.a produces
+        // PREMULTIPLIED output — exactly what Filament's ONE/ONE_MINUS_SRC_ALPHA
+        // wants, with no second multiply here.
+        material.baseColor = vec4(0.0, 0.0, 0.0, base.a);
+        material.emissive = vec4(ttpMatteShade(
+                base.rgb, getWorldGeometricNormalVector()), 0.0);
+    }
+}

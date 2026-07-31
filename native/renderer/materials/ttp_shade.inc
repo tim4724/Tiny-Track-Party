@@ -14,8 +14,18 @@
 // this file rebuilds all of them.
 //
 // Anything that reads materialParams must be declared by the INCLUDING material.
-// Both vlit.mat and vroad.mat declare the same five shadow parameters, and
-// TtpRenderer::bindShadowMap fills them by name on every instance of either.
+// vlit.mat, vroad.mat and vground.mat declare the same five shadow parameters,
+// and TtpRenderer::bindShadowMap fills them by name on every instance of any of
+// them.
+//
+// A material that defines TTP_NO_SUN_SHADOW before the #include declares NONE of
+// them and gets a sunVisibility that is the constant 1. That is vglb.mat, and it
+// is not an optimisation dressed as a rule: a kit GLB carries its own baked
+// contact blob and has never been in the sun map's RECEIVER set (under the
+// ubershader it could not read the map at all). Spelling that as a shadowTexel
+// left at its 0 default worked — the guard below early-outs — but it kept a
+// sampler bound per instance, on the one material family the whole point of
+// which was to stop binding samplers nothing reads.
 
 // Half-width of the shadow's soft edge, in world units. This is a FLOOR on
 // the transition, not its width — the bake blur (kPenumbraSigmaWorld) sets
@@ -51,6 +61,9 @@ const float kPenumbraWorld = 0.6;
 // lookup would slide across the map as the chase cam moves. The symptom is
 // a road uniformly in shadow, which reads as "the compare is inverted" and
 // is not.
+#ifdef TTP_NO_SUN_SHADOW
+float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) { return 1.0; }
+#else
 float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     if (materialParams.shadowTexel <= 0.0) return 1.0;
     // No normal offset: ESM's bias is inherent (equal depths give exp(0) = 1),
@@ -146,6 +159,7 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // sits at 0.98 and is untouched) and let it go where it does not.
     return mix(1.0, vis, smoothstep(0.05, 0.40, NoL));
 }
+#endif
 
 // Ambient + sun for a matte surface of colour `base` with world normal `n`.
 // Returns the value that goes into material.emissive — unlit ADDS emissive to

@@ -39,8 +39,8 @@
 #include <vector>
 
 namespace filament {
-class ColorGrading;
 struct ToneMapper;
+class ColorGrading;
 class Engine;
 class IndirectLight;
 class SwapChain;
@@ -404,9 +404,16 @@ private:
     std::function<float(float)> mShoreFn;
     std::vector<Mesh> mCars; // box markers — fallback when a car has no GLB
 
-    // Real car models (gltfio + ubershaders). mCarAssets[i] is null when car i
-    // fell back to its box marker; otherwise the asset root is posed per frame.
+    // Real car models (gltfio). mCarAssets[i] is null when car i fell back to
+    // its box marker; otherwise the asset root is posed per frame.
+    //
+    // mMatProvider is TtpGlbMaterials when the shell served vglb.filamat — the
+    // kit's own matte material for everything it can express, wrapped around an
+    // ubershader provider (which it owns) for the rest. Without vglb it IS the
+    // ubershader provider, which is what every shell had before. See vglb.mat.
     filament::gltfio::MaterialProvider* mMatProvider = nullptr;
+    filament::Material* mGlbMaterial = nullptr;
+    filament::Material* mGlbFadeMaterial = nullptr;
     filament::gltfio::AssetLoader* mAssetLoader = nullptr;
     filament::gltfio::ResourceLoader* mResourceLoader = nullptr;
     filament::gltfio::TextureProvider* mStbProvider = nullptr;
@@ -824,6 +831,11 @@ private:
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
     filament::MaterialInstance* litShadowInstance();
+    // The 1×1 white, made on first ask. Three callers want one for three
+    // reasons: it neutralises a glTF base-colour map, it stands in for the sun
+    // map on a track that baked none, and it fills vglb's base-colour sampler
+    // for a glTF material that carries no texture at all.
+    filament::Texture* whiteTexture();
     // The deck's instance of mRoadMaterial (or litShadowInstance() when the
     // road material is absent). Separate from litShadowInstance because that
     // one is shared with the structures and berms, which must not stamp.

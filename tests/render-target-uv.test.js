@@ -53,7 +53,12 @@ const RENDER_TARGET_SAMPLERS = new Set([
 const UPLOADED_SAMPLERS = new Set([
   // Ground canvas, car-shadow masks, baked silhouettes: `Texture::setImage`
   // or a GLB's own texture, never a render target.
-  'albedo'
+  'albedo',
+  // vglb's base colour: the kit's colormap atlas, decoded from the GLB's own
+  // PNG by gltfio's stb provider and bound by AssetLoader. An upload — and
+  // vglb goes further and turns Filament's uv flip OFF entirely (flipUV:false),
+  // because glTF hands its uv0 over in image orientation already.
+  'baseColorMap'
 ]);
 
 const materials = () => readdirSync(MATERIALS).filter((f) => /\.(mat|inc)$/.test(f));
@@ -139,12 +144,19 @@ test('every sampler is classified, so a new one cannot slip through', () => {
     + 'UPLOADED_SAMPLERS)?');
 });
 
-test('both shadow receivers are actually still here', () => {
+test('the sun map is sampled in exactly one place', () => {
   // The check above passes vacuously if the samplers get renamed, and this is
   // the one thing a source check cannot notice on its own.
+  //
+  // It used to name TWO files, because vground.mat carried its own transcription
+  // of the read-out and the uvToRenderTargetUV fix had to be applied to both.
+  // That copy is gone: every receiver now includes ttp_shade.inc, so there is
+  // ONE sample site to get right. A second name appearing here is a second copy
+  // appearing — treat it as the finding, not as a list to extend.
   const users = materials().filter((f) => /materialParams_shadowMap/.test(codeOf(f)));
-  assert.deepEqual(users.sort(), ['ttp_shade.inc', 'vground.mat'],
-    'the set of shadow receivers moved — update RENDER_TARGET_SAMPLERS with it');
+  assert.deepEqual(users.sort(), ['ttp_shade.inc'],
+    'the sun map is sampled outside ttp_shade.inc — that is a second copy of the '
+    + 'ESM read-out, which is what the shared include exists to prevent');
 });
 
 test('the bake\'s own passes wrap too, in their VERTEX stage', () => {

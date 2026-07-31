@@ -1,0 +1,118 @@
+// Every GLB in the kit, shaded like everything else in the scene.
+//
+// WHY THIS EXISTS. gltfio ships two material providers, and both were wrong for
+// this game. The JIT one composes GLSL at run time and needs libfilamat linked
+// into the wasm; the ubershader one (what we used) is a handful of pre-built
+// materials whose fragment shader carries the WHOLE glTF surface model —
+// metallic-roughness, clear coat, sheen, transmission, volume, specular — behind
+// uniform branches, with four or five samplers bound per instance whether the
+// asset uses them or not.
+//
+// The kit uses none of it. Every GLB under public/assets/toycar is one of three
+// shapes: a base-colour texture (the shared colormap atlas) with metallic 0, or a
+// flat baseColorFactor with no texture at all, and all of them OPAQUE. So the
+// ubershader was a PBR evaluation and four dead sampler binds per draw, in a
+// scene where nothing else is lit that way at all — the road, the hills, the
+// berms, the structures and the scenery meshes all run the matte Lambert in
+// ttp_shade.inc, and the cars, props and landmark GLBs were the one family
+// shaded by a different model. Measured at four players, the GLBs were 37% of
+// the frame's draw calls and 44% of its texture binds.
+//
+// This is that same matte shading with a base-colour texture in front of it. One
+// program for the whole kit, ONE sampler.
+//
+// WHAT IT BOUGHT, measured at four players on a 3200x1800 canvas, on the
+// countdown grid (a real race frame that holds still, so the reading is not
+// swamped by where an unseeded race happened to point the cameras): texture binds
+// 243 -> 97 per frame, CPU 3.40 -> 1.90 ms, uncapped throughput 295 -> 318 fps.
+// Draw calls, triangles and render passes did not move at all, and NEITHER DID
+// GPU TIME (2.87 -> 2.97, inside a baseline that itself ranged 2.79..3.14). That
+// is the same answer this renderer keeps giving and it is worth not
+// re-discovering: the frame is SUBMISSION-bound. What a sampler costs here is
+// Filament's per-draw descriptor work on the CPU, not bandwidth on the GPU —
+// which is why dropping the sun-map sampler (see TTP_NO_SUN_SHADOW) was worth
+// more than the whole PBR-to-Lambert switch, and why the win is bigger on a
+// weak-CPU TV box than these numbers suggest.
+//
+// MEASURE THIS ONE WITH THE FRAME-RATE LIMIT OFF. Under vsync the GPU is idle
+// four fifths of every frame, downclocks, and an identical build reads anywhere
+// across a 1.5 ms band: the first pass at this change read as a 35% REGRESSION
+// that way round, and the interleaved uncapped run showed the opposite.
+//
+// WHAT IT IS NOT. This does not replace gltfio's provider — TtpGlbMaterials (see
+// TtpRenderer.cpp) hands anything this material cannot express BACK to an
+// ubershader provider it keeps beside it: a blend or mask alpha mode, a normal /
+// metallic-roughness / emissive / occlusion map, a uv transform, or a base colour
+// on UV1. Nothing the kit ships takes that path except the GHOST twins
+// (glb.cc rewrites them to alphaMode BLEND), which are four assets that only
+// enter the scene while a monster truck is blocking someone's view.
+//
+// THE PARAMETER NAMES ARE A CONTRACT, not a choice. gltfio's AssetLoader fills
+// SIX of these BY NAME on every instance it creates, whatever the glTF material
+// actually carries — baseColorFactor, emissiveFactor, metallicFactor,
+// roughnessFactor, and (from the else branch of a texture test, which is easy to
+// miss when reading it) normalScale and aoStrength. Filament PANICS on
+// setParameter for a name the material does not declare, so all six are here.
+// Four are dead: this model has no metal, no roughness, no normal map and no
+// emissive. Declaring them is also what keeps TtpRenderer's own scenery pass —
+// which forces metallicFactor 0 / roughnessFactor 1 on every scenery instance —
+// working unchanged against either provider.
+//
+// baseColorUvMatrix is the same contract with a twist: gltfio sets it only when
+// the source declares KHR_texture_transform, and EVERY textured GLB in this kit
+// does, with an empty transform that names its own texcoord set and nothing
+// else. So the matrix is the identity in practice and the multiply below costs
+// six madds — but a provider that refused the flag outright (the first cut of
+// this) would have handed the WHOLE kit back to the ubershader and changed
+// nothing at all.
+material {
+    name : TtpVglb,
+    requires : [
+        // the base colour atlas coordinate
+        uv0,
+        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        tangents
+    ],
+    shadingModel : unlit,
+    // Declared two-sided so gltfio's per-instance setDoubleSided/setCullingMode
+    // can honour each glTF material's own flag — the kit's textured props are
+    // doubleSided, its palm and cactus foliage is not, and a ghost twin is
+    // explicitly single-sided so its 50% alpha is not laid over itself.
+    culling : none,
+    doubleSided : true,
+    // glTF uv0 is a real image coordinate and gltfio hands it over unflipped —
+    // base.mat.in (its own ubershader) says flipUV:false for the same reason.
+    // Left at Filament's default every kit texture samples upside down, which on
+    // an atlas is not a flip but a WRONG TILE: the cars come out wearing another
+    // car's paint band.
+    flipUV : false,
+    // NO SHADOW PARAMETERS, and none of ttp_shade.inc's sun lookup either — see
+    // TTP_NO_SUN_SHADOW there for why a kit GLB is not a shadow receiver.
+    parameters : [
+        // — what gltfio fills by name (see the header) —
+        { type : sampler2d, name : baseColorMap },
+        { type : mat3, name : baseColorUvMatrix, precision : high },
+        { type : float4, name : baseColorFactor },
+        { type : float3, name : emissiveFactor },
+        { type : float, name : metallicFactor },
+        { type : float, name : roughnessFactor },
+        { type : float, name : normalScale },
+        { type : float, name : aoStrength }
+    ]
+}
+
+fragment {
+    #define TTP_NO_SUN_SHADOW
+    #include "ttp_shade.inc"
+    #include "ttp_glb.inc"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
+        // former so nothing else in the pipeline touches it.
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
+        material.emissive = vec4(ttpMatteShade(
+                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector()), 0.0);
+    }
+}

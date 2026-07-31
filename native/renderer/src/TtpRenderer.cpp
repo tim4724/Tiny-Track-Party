@@ -100,6 +100,7 @@ float3 srgbToLinear(uint32_t rgb) {
              srgbChannel(((rgb >> 8) & 0xff) / 255.0f),
              srgbChannel((rgb & 0xff) / 255.0f) };
 }
+
 // Canvas `filter: blur(Npx)` is a Gaussian of stddev N. Both soft sprites the
 // JS bakes into textures (the cloud puff's five discs, the wind streak's
 // ellipse) are only a couple of sigma across, so the r ≫ sigma closed form is
@@ -1361,18 +1362,7 @@ TtpCellRect TtpRenderer::cellRectTopLeft(uint32_t n, uint32_t i) const {
 void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
         const std::vector<gltfio::FilamentInstance*>& instances, const math::float4& rgba) {
     if (!asset) return;
-    if (!mWhiteTex) {
-        static const uint8_t WHITE[4] = { 255, 255, 255, 255 };
-        mWhiteTex = Texture::Builder()
-                .width(1).height(1).levels(1)
-                .format(Texture::InternalFormat::SRGB8_A8)
-                .sampler(Texture::Sampler::SAMPLER_2D)
-                .build(*mEngine);
-        if (mWhiteTex) {
-            mWhiteTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
-                    WHITE, sizeof(WHITE), Texture::Format::RGBA, Texture::Type::UBYTE));
-        }
-    }
+    Texture* const white = whiteTexture();
     auto& rcm = mEngine->getRenderableManager();
     const TextureSampler smp(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
     for (gltfio::FilamentInstance* inst : instances) {
@@ -1391,8 +1381,8 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
                 if (own->getMaterial()->hasParameter("baseColorFactor")) {
                     own->setParameter("baseColorFactor", rgba);
                 }
-                if (mWhiteTex && own->getMaterial()->hasParameter("baseColorMap")) {
-                    own->setParameter("baseColorMap", mWhiteTex, smp);
+                if (white && own->getMaterial()->hasParameter("baseColorMap")) {
+                    own->setParameter("baseColorMap", white, smp);
                 }
                 mSceneMatInstances.push_back(own); // released with the scene
                 rcm.setMaterialInstanceAt(ri, p, own);
@@ -1895,7 +1885,8 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         seed = seed * 1664525u + 1013904223u;
         return (double) seed / 4294967296.0;
     };
-    const float defHalf = tb.roadWidth / 2;
+    // No default half-width here: isClear measures each SAMPLE's own width, so a
+    // track that narrows or widens is respected.
     const float MARGIN = 2.2f;
     const auto isClear = [&](float x, float z) {
         for (const auto& s : tb.samples) {
@@ -4322,11 +4313,8 @@ MaterialInstance* TtpRenderer::litShadowInstance() {
     return mLitShadowInst;
 }
 
-void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
-    if (!mi) return;
-    // A sampler must be bound even when a track baked no map (Filament draws
-    // with every sampler resolved), so keep the 1×1 white around for it.
-    if (!mShadowMap && !mWhiteTex) {
+Texture* TtpRenderer::whiteTexture() {
+    if (!mWhiteTex) {
         static const uint8_t WHITE[4] = { 255, 255, 255, 255 };
         mWhiteTex = Texture::Builder()
                 .width(1).height(1).levels(1)
@@ -4338,7 +4326,14 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
                     WHITE, sizeof(WHITE), Texture::Format::RGBA, Texture::Type::UBYTE));
         }
     }
-    Texture* tex = mShadowMap ? mShadowMap : mWhiteTex;
+    return mWhiteTex;
+}
+
+void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
+    if (!mi) return;
+    // A sampler must be bound even when a track baked no map (Filament draws
+    // with every sampler resolved), so keep the 1×1 white around for it.
+    Texture* tex = mShadowMap ? mShadowMap : whiteTexture();
     if (!tex) return;
     TextureSampler smp(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
     smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
@@ -5670,10 +5665,129 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     return true;
 }
 
+// gltfio's material provider, answered with the kit's OWN matte material — see
+// vglb.mat for what that buys, and for why the parameter names below are a
+// contract rather than a choice.
+//
+// It is an adapter, not a replacement: anything vglb cannot express goes to a
+// real ubershader provider held beside it, so an asset that grows a normal map
+// or a blend mode keeps rendering (just the old way). The kit's only regular
+// visitors to that path are the GHOST twins, which glb.cc rewrites to alphaMode
+// BLEND.
+//
+// It OWNS NEITHER MATERIAL. vglb is compiled by buildScene alongside every other
+// .filamat and destroyed with the renderer; the ubershader cache belongs to the
+// provider we delegate to. destroyMaterials/getMaterials therefore just forward,
+// and freeing this object frees nothing twice.
+namespace {
+
+class TtpGlbMaterials : public gltfio::MaterialProvider {
+public:
+    TtpGlbMaterials(Material* material, Material* fade, Texture* white,
+            gltfio::MaterialProvider* fallback)
+            : mMaterial(material), mFade(fade), mWhite(white), mFallback(fallback) {}
+    ~TtpGlbMaterials() override { delete mFallback; }
+
+    // Everything vglb.mat can be, in one place. A config outside this is not an
+    // error and not a warning — it is an asset that wants the full glTF surface
+    // model, and gltfio already has a provider for that.
+    // OUR MATERIAL FOR THIS CONFIG, or null to hand it to the ubershader. Both
+    // entry points below go through here rather than re-stating the two halves
+    // of the test, which would then have to be kept identical by inspection.
+    Material* resolve(const gltfio::MaterialKey& c, const gltfio::UvMap& uvmap) const {
+        Material* const m = pick(c);
+        return (m && expressible(c, uvmap)) ? m : nullptr;
+    }
+
+    // OPAQUE takes vglb, BLEND takes vglbfade, and MASK is the one alpha mode
+    // nothing in the kit uses — it would need an alpha-test material and a
+    // maskThreshold, so it goes to the ubershader like any other feature we do
+    // not have a material for.
+    Material* pick(const gltfio::MaterialKey& c) const {
+        if (c.alphaMode == gltfio::AlphaMode::OPAQUE) return mMaterial;
+        if (c.alphaMode == gltfio::AlphaMode::BLEND) return mFade;
+        return nullptr;
+    }
+
+    static bool expressible(const gltfio::MaterialKey& c, const gltfio::UvMap& uvmap) {
+        return !c.unlit && !c.useSpecularGlossiness
+                && !c.hasNormalTexture && !c.hasOcclusionTexture && !c.hasEmissiveTexture
+                && !c.hasMetallicRoughnessTexture
+                && !c.hasClearCoat && !c.hasSheen && !c.hasTransmission && !c.hasVolume
+                && !c.hasSpecular && !c.hasIOR && !c.enableDiagnostics
+                // vglb reads getUV0(), so a base colour parked on Filament's
+                // second uv set would sample the wrong channel silently.
+                && (!c.hasBaseColorTexture || uvmap[c.baseColorUV] == gltfio::UvSet::UV0);
+    }
+
+    Material* getMaterial(gltfio::MaterialKey* config, gltfio::UvMap* uvmap,
+            const char* label) override {
+        gltfio::constrainMaterial(config, uvmap);
+        if (Material* m = resolve(*config, *uvmap)) return m;
+        return mFallback->getMaterial(config, uvmap, label);
+    }
+
+    MaterialInstance* createMaterialInstance(gltfio::MaterialKey* config, gltfio::UvMap* uvmap,
+            const char* label, const char* extras) override {
+        gltfio::constrainMaterial(config, uvmap);
+        Material* const mat = resolve(*config, *uvmap);
+        if (!mat) {
+            return mFallback->createMaterialInstance(config, uvmap, label, extras);
+        }
+        // The label is the glTF MATERIAL name, and it has to survive: the
+        // scenery recolour matches theme tints against MaterialInstance::getName().
+        MaterialInstance* mi = mat->createInstance(label);
+        if (!mi) return nullptr;
+        mi->setDoubleSided(config->doubleSided);
+        mi->setCullingMode(config->doubleSided ? MaterialInstance::CullingMode::NONE
+                                               : MaterialInstance::CullingMode::BACK);
+        // The one sampler, resolved before the first draw — Filament draws with
+        // every sampler bound, and gltfio only overwrites this when the glTF
+        // material carries a texture at all.
+        const TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+                TextureSampler::MagFilter::LINEAR);
+        if (mWhite) mi->setParameter("baseColorMap", mWhite, smp);
+        // gltfio only writes this when the source declared a uv transform, and
+        // the shader multiplies by it unconditionally — so it has to start as
+        // something, and zero would collapse every uv to the atlas origin.
+        mi->setParameter("baseColorUvMatrix", math::mat3f());
+        return mi;
+    }
+
+    // vglb needs uv0 whether or not the primitive carries one; nothing here
+    // reads vertex colour, so a mesh that has none is not given a dummy.
+    bool needsDummyData(VertexAttribute attrib) const noexcept override {
+        return attrib == VertexAttribute::UV0 || mFallback->needsDummyData(attrib);
+    }
+
+    // Both of these are the cache's, and the cache is the fallback's — vglb is a
+    // renderer-scope material like vlit or vroad, not something a client may
+    // take ownership of here.
+    size_t getMaterialsCount() const noexcept override { return mFallback->getMaterialsCount(); }
+    const Material* const* getMaterials() const noexcept override {
+        return mFallback->getMaterials();
+    }
+    void destroyMaterials() override { mFallback->destroyMaterials(); }
+
+private:
+    Material* const mMaterial;   // opaque; null falls the whole kit back
+    Material* const mFade;       // alphaMode BLEND — the ghost twins
+    Texture* const mWhite;
+    gltfio::MaterialProvider* const mFallback;
+};
+
+}  // namespace
+
 void TtpRenderer::ensureAssetLoader() {
     if (mAssetLoader) return;
-    mMatProvider = gltfio::createUbershaderProvider(mEngine,
+    gltfio::MaterialProvider* uber = gltfio::createUbershaderProvider(mEngine,
             UBERARCHIVE_DEFAULT_DATA, UBERARCHIVE_DEFAULT_SIZE);
+    // vglb.filamat absent (an older asset set) leaves the ubershader in place on
+    // its own, which is what every shell did before this material existed.
+    mMatProvider = mGlbMaterial
+            ? (gltfio::MaterialProvider*) new TtpGlbMaterials(
+                    mGlbMaterial, mGlbFadeMaterial, whiteTexture(), uber)
+            : uber;
     gltfio::AssetConfiguration ac{};
     ac.engine = mEngine;
     ac.materials = mMatProvider;
@@ -7303,6 +7417,25 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mRoadMaterial && vroad != mAssets.end()) {
         mRoadMaterial = Material::Builder()
                 .package(vroad->second.data(), vroad->second.size())
+                .build(*mEngine);
+    }
+    // The kit's GLBs — cars, props, scenery, landmarks — shaded like the rest of
+    // the scene instead of through gltfio's PBR ubershader. Optional in the same
+    // way vroad is: without it ensureAssetLoader keeps the ubershader and the
+    // models render as they did before (see vglb.mat).
+    const auto vglb = mAssets.find("vglb.filamat");
+    if (!mGlbMaterial && vglb != mAssets.end()) {
+        mGlbMaterial = Material::Builder()
+                .package(vglb->second.data(), vglb->second.size())
+                .build(*mEngine);
+    }
+    // ...and the same material with alpha, for the ghost twins (see vglbfade.mat).
+    // Optional on its own: without it a BLEND twin falls back to the ubershader,
+    // which is what it did before this material existed.
+    const auto vglbfade = mAssets.find("vglbfade.filamat");
+    if (!mGlbFadeMaterial && vglbfade != mAssets.end()) {
+        mGlbFadeMaterial = Material::Builder()
+                .package(vglbfade->second.data(), vglbfade->second.size())
                 .build(*mEngine);
     }
     const auto vground = mAssets.find("vground.filamat");
@@ -9425,14 +9558,16 @@ TtpRenderer::~TtpRenderer() {
     if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
     if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
+    if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
+    if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
+    if (mColorGrading) mEngine->destroy(mColorGrading);
+    delete mToneMapper;
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);
     delete mNames; // outlives the loader: it holds the name components
     mNames = nullptr;
     if (mMatProvider) { mMatProvider->destroyMaterials(); delete mMatProvider; }
-    if (mColorGrading) mEngine->destroy(mColorGrading);
-    delete mToneMapper;
     destroySceneTarget();
     if (mPresentView) mEngine->destroy(mPresentView);
     if (mPresentScene) mEngine->destroy(mPresentScene);
