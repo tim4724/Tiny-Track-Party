@@ -8,8 +8,11 @@ material {
 }
 
 fragment {
+    #include "ttp_grade.inc"
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor();
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb);
     }
 }

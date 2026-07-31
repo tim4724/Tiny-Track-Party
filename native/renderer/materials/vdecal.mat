@@ -26,6 +26,8 @@ material {
 }
 
 fragment {
+    #include "ttp_grade.inc"
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         // ONE tap. The penumbra is baked into the mask now — the car silhouette
@@ -34,6 +36,7 @@ fragment {
         // car, per cell, rebuilding the same static blur every frame; and doing
         // it at draw over a 128-px source was also what made the gradient band.
         material.baseColor = getColor() * texture(materialParams_albedo, getUV0());
-        material.baseColor.rgb *= material.baseColor.a; // premultiplied, as vblend
+        // Graded, then premultiplied, as vblend (see ttp_grade.inc).
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
     }
 }

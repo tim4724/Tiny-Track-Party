@@ -39,8 +39,6 @@
 #include <vector>
 
 namespace filament {
-struct ToneMapper;
-class ColorGrading;
 class Engine;
 class IndirectLight;
 class SwapChain;
@@ -742,11 +740,6 @@ private:
     utils::Entity mSun;
     utils::Entity mFill;
     filament::IndirectLight* mAmbient = nullptr;
-    // Linear tonemap on the race cells: Three.js outputs linear→sRGB (its own
-    // grading lives in the present shader), so Filament's default ACES would
-    // shift every colour the parity diff is trying to judge.
-    filament::ToneMapper* mToneMapper = nullptr;
-    filament::ColorGrading* mColorGrading = nullptr;
 
     double mProfile[kProfCount] = {};
     uint32_t mWidth = 0;
@@ -831,6 +824,9 @@ private:
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
     filament::MaterialInstance* litShadowInstance();
+    // The fog colour to give Filament, pre-graded — see the definition for why
+    // the grade cannot stay in the shader for this one.
+    filament::math::float3 fogColorGraded(const filament::Camera* cam) const;
     // The 1×1 white, made on first ask. Three callers want one for three
     // reasons: it neutralises a glTF base-colour map, it stands in for the sun
     // map on a track that baked none, and it fills vglb's base-colour sampler

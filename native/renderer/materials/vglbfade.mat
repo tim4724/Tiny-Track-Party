@@ -47,6 +47,7 @@ material {
 fragment {
     #define TTP_NO_SUN_SHADOW
     #include "ttp_shade.inc"
+    #include "ttp_grade.inc"
     #include "ttp_glb.inc"
 
     void material(inout MaterialInputs material) {
@@ -59,7 +60,7 @@ fragment {
         // PREMULTIPLIED output — exactly what Filament's ONE/ONE_MINUS_SRC_ALPHA
         // wants, with no second multiply here.
         material.baseColor = vec4(0.0, 0.0, 0.0, base.a);
-        material.emissive = vec4(ttpMatteShade(
-                base.rgb, getWorldGeometricNormalVector()), 0.0);
+        material.emissive = vec4(ttpGrade(ttpMatteShade(
+                base.rgb, getWorldGeometricNormalVector())), 0.0);
     }
 }

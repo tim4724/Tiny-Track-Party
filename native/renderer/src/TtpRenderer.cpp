@@ -1,11 +1,10 @@
 #include "TtpRenderer.h"
 
 #include <filament/Camera.h>
-#include <filament/ColorGrading.h>
 #include <filament/Engine.h>
+#include <filament/Exposure.h>
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
-#include <filament/ToneMapper.h>
 #include <filament/IndexBuffer.h>
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
@@ -101,6 +100,23 @@ float3 srgbToLinear(uint32_t rgb) {
              srgbChannel((rgb & 0xff) / 255.0f) };
 }
 
+// THE GRADE, on the CPU. MIRRORED FROM ttp_grade.inc — read that file first; it
+// carries what moving the grade into the scene materials bought and what it
+// cost. Only two colours need this side of it, and both for the same reason:
+// they are written by shaders that are FILAMENT'S, not ours, so they cannot
+// include the shader half. The skybox (a flat colour behind the gradient dome)
+// and the fog (composited inside every surface shader, after material() has
+// already returned an sRGB value).
+constexpr float kGradeExposure = 1.1f;   // == ttp_grade.inc's TTP_GRADE_EXPOSURE
+float gradeChannel(float linear) {
+    const float c = std::max(linear * kGradeExposure, 0.0f);
+    const float s = c <= 0.0031308f ? c * 12.92f
+                                    : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+    return std::min(std::max(s, 0.0f), 1.0f);
+}
+float3 gradeSrgb(const float3& linear) {
+    return { gradeChannel(linear.x), gradeChannel(linear.y), gradeChannel(linear.z) };
+}
 // Canvas `filter: blur(Npx)` is a Gaussian of stddev N. Both soft sprites the
 // JS bakes into textures (the cloud puff's five discs, the wind streak's
 // ellipse) are only a couple of sigma across, so the r ≫ sigma closed form is
@@ -7495,11 +7511,44 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     mHasTrack = true;
     // Sky: flat daylight blue behind the gradient dome (which the fog dissolves
     // into) — a backstop for the sliver the dome doesn't cover.
-    mSkybox = Skybox::Builder()
-            .color(float4{ 0.53f, 0.78f, 0.92f, 1.0f })
-            .build(*mEngine);
+    //
+    // PRE-GRADED, because Filament's skybox material writes its constant colour
+    // straight out and cannot include ttp_grade.inc. Left linear it is the one
+    // surface in the frame that skips the encode, and it shows up as a band of
+    // the wrong blue along the horizon where the dome stops.
+    {
+        const float3 sky = gradeSrgb(float3{ 0.53f, 0.78f, 0.92f });
+        mSkybox = Skybox::Builder()
+                .color(float4{ sky, 1.0f })
+                .build(*mEngine);
+    }
     mScene->setSkybox(mSkybox);
     return buildTrackScene(roster, geo, theme);
+}
+
+// The fog colour to hand Filament, pre-graded.
+//
+// FOG IS NOT A POST PASS HERE — surface_main.fs composites it inside every
+// surface shader, right after material() returns — so with the grade moved into
+// the materials (ttp_grade.inc) the value it blends toward has to be sRGB too,
+// or every distant surface fades toward a colour that skipped the encode.
+//
+// The awkward part is the iblLuminance divide, and it is not avoidable: the
+// shader's last step before compositing is `fogColor *= iblLuminance`, so what
+// we hand over is the displayed colour PRE-DIVIDED by a scale Filament applies
+// on the other side. Both factors are Filament's own (IndirectLight::getIntensity
+// and Exposure::exposure of the camera), never a copy of its formula.
+//
+// What this CANNOT fix, and what a reader should know before judging a
+// screenshot: the composite itself is now a lerp in gamma space. Fog reaches
+// less far into the midtones than it did — around 0.05 sRGB at half opacity —
+// across every fogged surface in the frame. That is the visible price of the
+// move, and it is priced in the frame, not here.
+float3 TtpRenderer::fogColorGraded(const Camera* cam) const {
+    const float lum = (mAmbient && cam)
+            ? mAmbient->getIntensity() * Exposure::exposure(*cam) : 0.0f;
+    if (!(lum > 0.0f)) return gradeSrgb(mFogColor);
+    return gradeSrgb(mFogColor * lum) / lum;
 }
 
 // Filament's exponential fog standing in for a three.js LINEAR ramp [near,
@@ -7531,19 +7580,26 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
 // Filament's own post chain — an old asset set still renders, just slower.
 void TtpRenderer::ensureSceneTarget() {
     if (!mPresentMaterial || !mWidth || !mHeight || mSceneRT) return;
-    // R11F_G11F_B10F, LINEAR: four bytes a pixel, same as the RGBA8 three uses
-    // here, but floating point. Three can afford 8 bits because its banding is
-    // its OWN shading quantised; ours would be a DIFFERENT shading quantised,
-    // and a linear 8-bit step becomes a whole visible sRGB step once the
-    // present pass expands the darks — the parity diff rose measurably (4.0 →
-    // 4.5 mean |Δ| over the frame catalogue) purely from that. The float buffer
-    // is what Filament's own post chain used before we took it over, and it
-    // costs nothing extra to keep. No alpha channel: the view is OPAQUE and the
-    // present ignores it (blending reads source alpha, not destination).
+    // RGBA8, holding sRGB. THE FORMAT FOLLOWS THE CONTENT, and the content
+    // changed: the scene materials grade themselves now (ttp_grade.inc), so
+    // what lands here is displayed colour, not radiance.
+    //
+    // This was R11F_G11F_B10F while the buffer held LINEAR, for a real reason —
+    // a linear 8-bit step becomes a whole visible sRGB step once something
+    // expands the darks, and the parity diff rose 4.0 → 4.5 mean |Δ| over the
+    // frame catalogue purely from that. sRGB inverts the argument: eight bits
+    // spent in sRGB are eight bits spent where the eye is, exactly the
+    // quantisation the 8-bit canvas will apply anyway. Going the other way and
+    // keeping the float buffer would have been WORSE than either, since B10F
+    // carries a five-bit mantissa and an sRGB blue near 1.0 would step 4/255 —
+    // banding in every sky gradient.
+    //
+    // Still four bytes a pixel either way. No alpha is used: the view is OPAQUE
+    // and the present ignores it (blending reads source alpha, not destination).
     mSceneColor = Texture::Builder()
             .width(mWidth).height(mHeight).levels(1)
             .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
-            .format(Texture::InternalFormat::R11F_G11F_B10F)
+            .format(Texture::InternalFormat::RGBA8)
             .build(*mEngine);
     mSceneDepth = Texture::Builder()
             .width(mWidth).height(mHeight).levels(1)
@@ -7557,7 +7613,8 @@ void TtpRenderer::ensureSceneTarget() {
 
     if (!mPresentInstance) {
         mPresentInstance = mPresentMaterial->createInstance();
-        mPresentInstance->setParameter("exposure", 1.1f); // SceneRenderer DEF_EXPOSURE
+        // No exposure parameter any more — the grade is the scene materials'
+        // (kGradeExposure / ttp_grade.inc), and this pass only antialiases.
         // The fullscreen triangle, in clip space (vertexDomain:device), exactly
         // as Filament builds its own: one triangle, no camera, no transform.
         static const math::float4 verts[3] = {
@@ -7633,30 +7690,19 @@ void TtpRenderer::ensureCells(uint32_t count) {
         // once instead.
         v->setShadowingEnabled(false);
         v->setScreenSpaceRefractionEnabled(false);
-        if (mPresentMaterial) {
-            // Post OFF: the cells write plain linear colour into the shared
-            // scene buffer and vpresent grades + antialiases the lot in ONE
-            // pass, instead of two per cell (see vpresent.mat). Nothing is lost
-            // doing it ourselves — every material here is unlit and writes its
-            // own final colour, so Filament's tonemap had nothing to undo.
-            v->setPostProcessingEnabled(false);
-        } else {
-            // No vpresent.filamat provided: fall back to Filament's chain, with
-            // the linear tonemap + 1.1 exposure grade three's present applies.
-            if (!mColorGrading) {
-                mToneMapper = new LinearToneMapper();
-                mColorGrading = ColorGrading::Builder()
-                        .toneMapper(mToneMapper)
-                        .exposure(0.1375f) // stops: 2^0.1375 ≈ 1.1
-                        .build(*mEngine);
-            }
-            v->setPostProcessingEnabled(true);
-            View::RenderQuality rq{};
-            rq.hdrColorBuffer = View::QualityLevel::MEDIUM;
-            v->setRenderQuality(rq);
-            v->setColorGrading(mColorGrading);
-            v->setAntiAliasing(View::AntiAliasing::FXAA);
-        }
+        // Post OFF, always: the cells write their own graded sRGB into the
+        // shared scene buffer (ttp_grade.inc) and vpresent antialiases the lot
+        // in ONE pass, instead of Filament's two per cell (see vpresent.mat).
+        //
+        // THERE USED TO BE A FALLBACK HERE — no vpresent.filamat meant
+        // Filament's own chain with a linear tonemap and a 1.1 exposure — and
+        // moving the grade into the materials is what removed it, not a tidy-up.
+        // A shell serving these materials but not vpresent would now grade
+        // twice, and there is no sensible middle: the scene buffer either holds
+        // displayed colour or it does not. The whole .filamat set is produced by
+        // one build-materials.sh run and fetched by one list in Display.js, so a
+        // half-set was never a real configuration.
+        v->setPostProcessingEnabled(false);
         mCellViews.push_back(v);
         mCellCameras.push_back(cam);
         mCellCameraEntities.push_back(camEnt);
@@ -9216,7 +9262,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // Fog rides the VIEW: the race cells, the lobby's perimeter orbit
             // and the overview each run their own ramp, and the gallery runs
             // none (fogFar <= fogNear).
-            v->setFogOptions(fogFor(views[i].fogNear, views[i].fogFar, mFogColor));
+            v->setFogOptions(fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam)));
             // Per-cell monster fade: a truck looming in front of THIS cell's
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
@@ -9560,8 +9606,6 @@ TtpRenderer::~TtpRenderer() {
     if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
-    if (mColorGrading) mEngine->destroy(mColorGrading);
-    delete mToneMapper;
     delete mResourceLoader;
     delete mStbProvider;
     if (mAssetLoader) gltfio::AssetLoader::destroy(&mAssetLoader);

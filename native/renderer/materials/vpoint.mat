@@ -38,6 +38,8 @@ vertex {
 }
 
 fragment {
+    #include "ttp_grade.inc"
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor();
@@ -45,7 +47,7 @@ fragment {
         // makeSnowflakeTexture's stops: 1.0 at the centre, 0.9 at 0.4, 0 at 1.
         float a = d < 0.4 ? 1.0 - 0.25 * d : 0.9 * (1.0 - (d - 0.4) / 0.6);
         material.baseColor.a *= clamp(a, 0.0, 1.0);
-        // Premultiply, same as vblend (transparent blending expects it).
-        material.baseColor.rgb *= material.baseColor.a;
+        // Grade, then premultiply, same as vblend (see ttp_grade.inc).
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
     }
 }

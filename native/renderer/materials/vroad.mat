@@ -88,6 +88,7 @@ material {
 
 fragment {
     #include "ttp_shade.inc"
+    #include "ttp_grade.inc"
 
     // Everything a deck decal contributes at this fragment, composited in the
     // order the array is given — which is the order the shell packs them, so the
@@ -247,6 +248,6 @@ fragment {
         if (materialParams.decalCount > 0) base = deckDecals(base, tc);
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpMatteShade(base, n), 0.0);
+        material.emissive = vec4(ttpGrade(ttpMatteShade(base, n)), 0.0);
     }
 }

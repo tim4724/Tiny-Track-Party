@@ -55,6 +55,7 @@ material {
 
 fragment {
     #include "ttp_shade.inc"
+    #include "ttp_grade.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
@@ -63,8 +64,8 @@ fragment {
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         // The ground canvas is the biome's baked lawn/sand/snow texture; the
         // shading over it is vlit's, term for term.
-        material.emissive = vec4(ttpMatteShade(
+        material.emissive = vec4(ttpGrade(ttpMatteShade(
                 texture(materialParams_albedo, getUV0()).rgb,
-                getWorldGeometricNormalVector()), 0.0);
+                getWorldGeometricNormalVector())), 0.0);
     }
 }

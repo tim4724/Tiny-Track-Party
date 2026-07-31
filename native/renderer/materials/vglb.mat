@@ -104,6 +104,7 @@ material {
 fragment {
     #define TTP_NO_SUN_SHADOW
     #include "ttp_shade.inc"
+    #include "ttp_grade.inc"
     #include "ttp_glb.inc"
 
     void material(inout MaterialInputs material) {
@@ -112,7 +113,7 @@ fragment {
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpMatteShade(
-                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector()), 0.0);
+        material.emissive = vec4(ttpGrade(ttpMatteShade(
+                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector())), 0.0);
     }
 }

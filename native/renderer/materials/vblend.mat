@@ -10,6 +10,8 @@ material {
 }
 
 fragment {
+    #include "ttp_grade.inc"
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         // Filament's `transparent` blending expects PREMULTIPLIED alpha (see
@@ -19,6 +21,8 @@ fragment {
         // into a solid one: clouds rendered as flat white blobs, the boost aura
         // as a hard teal disc, and skid marks came out LIGHTER than the road.
         material.baseColor = getColor();
-        material.baseColor.rgb *= material.baseColor.a;
+        // Graded BEFORE the premultiply, so what gets scaled by alpha is the
+        // displayed colour — the scene buffer holds sRGB now (ttp_grade.inc).
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
     }
 }

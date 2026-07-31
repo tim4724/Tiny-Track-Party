@@ -57,11 +57,18 @@ vertex {
 }
 
 fragment {
+    #include "ttp_grade.inc"
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = getColor() * materialParams.tint;
         // Additive blending is ONE/ONE here, so the alpha has to be folded in
         // by hand — three's AdditiveBlending is SrcAlpha/One, i.e. exactly this.
-        material.baseColor.rgb *= material.baseColor.a;
+        //
+        // AND THE SUM IS NOW IN GAMMA SPACE, because the scene buffer holds sRGB
+        // (ttp_grade.inc). Two half-bright flashes over each other reach white
+        // here where in linear they reached about 0.7 — a blast blows out sooner
+        // than it used to. That is the visible price of moving the grade.
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
     }
 }
