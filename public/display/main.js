@@ -946,7 +946,9 @@ function applyEffect(e, ctx) {
       break;
     case 'clear-intermission': clearSeriesTimers(); break;
     case 'series-advance': series.advance(); break;
-    case 'clear-series': series = null; break;
+    // Dispose the wasm handle, not just the wrapper — leaving it was a leak
+    // (one orphaned GrandPrix per finished cup; the tvOS shell had this right).
+    case 'clear-series': if (series) series.dispose(); series = null; break;
     case 'set-track-from-series': net.setTrack(series.currentTrackId); break;
     // A chained start has no lobby step, so the new circuit is placed explicitly
     // (selectTrack outside the lobby skips the scene swap) — the results overlay

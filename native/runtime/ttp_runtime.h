@@ -37,6 +37,19 @@ TTP_ABI void ttp_add_human(int h, const char* idJson, const char* statsJsonOrNul
 TTP_ABI void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
                  uint32_t aiSeed, const char* statsJsonOrNull);
 
+// ttp_session_begin plus the whole field in ONE pass — the construction loop
+// every shell used to hand-write (bot specs keyed by scalar id, a field entry
+// with a spec becomes a bot, everything else a human, field order kept,
+// humans gridded before bots).
+//   fieldJson  [{"peerIndex":<scalar>,"stats":{..}|null, ...extra keys ignored}, ...]
+//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?}, ...]
+// Absent or null persona knobs take the engine defaults (caution 1, laneBias 0,
+// seed 1) — a spec spells only what it means. Same 0-on-failure contract as
+// ttp_session_begin.
+TTP_ABI int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
+                            const char* forceItemOrNull,
+                            const char* fieldJson, const char* botsJson);
+
 // Construct the RaceSession with all added players (humans first, then bots, in
 // add order — grid order matters) and begin the countdown.
 //  countdownSeconds >= 0 : normal countdown, racing flips on the GO beat.

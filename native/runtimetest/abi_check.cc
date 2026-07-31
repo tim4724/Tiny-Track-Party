@@ -2548,6 +2548,55 @@ void uiLiveTwinsMatchJsonPaths() {
 }
 
 // ---------------------------------------------------------------------------
+// ttp_session_begin_field against the begin + add loop it replaces. The
+// composite adds no rule — same buckets, same order, same defaults — so the
+// two constructions must produce bit-identical worlds under identical driving.
+// ---------------------------------------------------------------------------
+void beginFieldMatchesManualPath() {
+  const int a = ttp_session_begin_field(
+      "tidepool", 7u, 3, nullptr,
+      "[{\"peerIndex\":1,\"stats\":{\"accel\":1.05},\"name\":\"Ada\",\"colorIndex\":0},"
+      "{\"peerIndex\":\"ai-7\",\"stats\":null},"
+      "{\"peerIndex\":3}]",
+      "[{\"peerIndex\":\"ai-7\",\"caution\":0.9,\"laneBias\":0.2,\"seed\":42},"
+      "{\"peerIndex\":\"ai-9\"}]");   // a spec no field entry names is inert
+  if (a <= 0) { fail("begin_field: no handle"); return; }
+
+  // The manual path, spelled as the shells' one-pass loop spelled it —
+  // including the defaults the loop applied for an all-absent bot spec.
+  const int b = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  if (b <= 0) { fail("begin_field: manual twin got no handle"); return; }
+  ttp_add_human(b, "1", "{\"accel\":1.05}");
+  ttp_add_bot(b, "\"ai-7\"", 0.9, 0.2, 42u, nullptr);
+  ttp_add_human(b, "3", nullptr);
+
+  ttp_session_start(a, -1);
+  ttp_session_start(b, -1);
+  for (int i = 0; i < 30; i++) { ttp_update(a, 16.6667); ttp_update(b, 16.6667); }
+
+  check(std::string(ttp_car_ids_json(a)) == ttp_car_ids_json(b),
+        "begin_field: same grid as the manual loop");
+  check(std::string(ttp_snapshot_json(a)) == ttp_snapshot_json(b),
+        "begin_field: bit-identical world after 30 driven frames");
+  check(std::string(ttp_events_json(a)) == ttp_events_json(b),
+        "begin_field: same event stream");
+
+  // An absent-knob spec means the defaults, not zeros: a bot spelled {} must
+  // drive exactly like caution 1 / laneBias 0 / seed 1.
+  const int c = ttp_session_begin_field("tidepool", 7u, 3, nullptr,
+      "[{\"peerIndex\":\"ai-0\"}]", "[{\"peerIndex\":\"ai-0\"}]");
+  const int d = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  ttp_add_bot(d, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
+  ttp_session_start(c, -1);
+  ttp_session_start(d, -1);
+  for (int i = 0; i < 30; i++) { ttp_update(c, 16.6667); ttp_update(d, 16.6667); }
+  check(std::string(ttp_snapshot_json(c)) == ttp_snapshot_json(d),
+        "begin_field: {} spec == the engine defaults");
+
+  ttp_dispose(a); ttp_dispose(b); ttp_dispose(c); ttp_dispose(d);
+}
+
+// ---------------------------------------------------------------------------
 // The choreography walks (ttp_net.h's second section) against the multi-call
 // path they replace.
 //
@@ -3350,6 +3399,7 @@ int main(int argc, char** argv) {
   uiCorpusThroughAbi(argv[4]);
   handlePathsMatchJsonPaths();
   uiLiveTwinsMatchJsonPaths();
+  beginFieldMatchesManualPath();
   netWalksMatchMultiCallPath();
   sessionCorpusThroughAbi(argv[5]);
   raceCorpusThroughAbi(argv[6]);
