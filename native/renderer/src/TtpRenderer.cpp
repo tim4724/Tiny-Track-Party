@@ -415,21 +415,11 @@ struct TtpRenderer::TrackBin {
     // start). A car crosses a fraction of a ring per frame, so the scan is a
     // small window around the hint; the full sweep below runs only on the
     // first frame, after a respawn, or when the windowed winner looks wrong.
-    // `outDeck`, when given, receives the point ON THE RENDERED DECK under p
-    // (the exact-eval drop hit; the chord foot on the fallback path) — what a
-    // caller placing GEOMETRY against the road wants, where (outS, outLat)
-    // serve a caller talking to the road shader. `p` is BY VALUE so a caller
-    // may alias it with `outDeck` (the skid trails conform in place).
-    //
-    // `outBulge` receives the local facet RIDGE height: on vertically curved
-    // deck the mesh is chords, and each facet's midline stands ~step²·κ/8
-    // proud of the inscribed curve. A sheet floating a FIXED height over the
-    // facets ducks behind those ridges wherever the camera grazes the deck —
-    // inside a loop, that is the whole rear view — and the ridge lines cut it
-    // into chunks. A caller placing a sheet lifts by AT LEAST this much.
+    // (It used to also hand back the 3D deck point and the facet ridge
+    // height, for callers placing GEOMETRY against the road — every decal is
+    // road-shader paint now, so (outS, outLat) is the whole answer.)
     void project(float3 p, const float3& up, float& outS, float& outLat,
-            int* hint = nullptr, float3* outDeck = nullptr,
-            float* outBulge = nullptr) const {
+            int* hint = nullptr) const {
         const std::vector<Sample>& knots = rings.empty() ? samples : rings;
         const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
@@ -507,15 +497,6 @@ struct TtpRenderer::TrackBin {
         const float3 q = a.pos + (b.pos - a.pos) * t;
         const float3 latS = normalize(mix(a.lat, b.lat, t));
         outLat = dot(p - q, latS);
-        if (outDeck) *outDeck = q + latS * outLat;
-        if (outBulge) {
-            // Sagitta of this segment's chord against the swept curve:
-            // step · angle-between-ring-tangents / 8. (`length` here is the
-            // LAP length member, hence the spelled-out norms.)
-            const float3 ab = b.pos - a.pos;
-            const float3 tc = cross(a.tangent(), b.tangent());
-            *outBulge = std::sqrt(dot(ab, ab)) * std::sqrt(dot(tc, tc)) * 0.125f;
-        }
         if (&knots != &rings || deckGap <= 0) return;
 
         // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
@@ -551,13 +532,11 @@ struct TtpRenderer::TrackBin {
         // weights of the hit. w[1] is the middle vertex's weight — its sign
         // against the A-C diagonal picks the triangle, as rasterization does.
         float w0, w1, w2;
-        float3 lastHit{};
         const auto dropBary = [&](const float3& T0, const float3& T1, const float3& T2) {
             const float3 nrm = cross(T1 - T0, T2 - T0);
             const float den = dot(upS, nrm);
             if (std::fabs(den) < 1e-7f) return false; // deck edge-on to up: keep the blend
             const float3 hit = p - upS * (dot(p - T0, nrm) / den);
-            lastHit = hit;
             const float3 v0 = T1 - T0, v1 = T2 - T0, v2 = hit - T0;
             const float d00 = dot(v0, v0), d01 = dot(v0, v1), d11 = dot(v1, v1);
             const float d20 = dot(v2, v0), d21 = dot(v2, v1);
@@ -572,11 +551,9 @@ struct TtpRenderer::TrackBin {
         if (w1 >= 0) {
             outS = (w0 + w1) * a.s + w2 * sB;
             outLat = w0 * bA[j] + w1 * bA[j + 1] + w2 * bB[j + 1];
-            if (outDeck) *outDeck = lastHit;
         } else if (dropBary(A, C, D)) {
             outS = w0 * a.s + (w1 + w2) * sB;
             outLat = w0 * bA[j] + w1 * bB[j + 1] + w2 * bB[j];
-            if (outDeck) *outDeck = lastHit;
         }
     }
 };
@@ -739,7 +716,7 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
                         m.vb, m.ib, t0 * 3, n * 3)
                 // Frustum culling for everything. The bounds are real now, and
                 // the few meshes that rewrite their vertices in world space
-                // every frame (the skid pool, the ambient band) refresh theirs
+                // every frame (the ambient band) refresh theirs
                 // in the same breath — see refreshBounds.
                 // Pointing the camera at empty sky used to still cost 69 draw
                 // calls; per-draw GPU cost is ~18 µs, so that was over a
@@ -1462,6 +1439,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
             if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mi, arr);
+            bindSkidLayer(mi);
             rcm.setMaterialInstanceAt(ri, 0, mi);
             mRoadChunks.push_back({ mi, sMin, sMax, {} });
         }
@@ -1826,6 +1804,114 @@ Texture* TtpRenderer::ensureDecalMaskArray() {
                     px));
     mMaskLayerBakedBits |= (uint16_t) (1u << kMaskLayerGeneric);
     return mDecalMaskArray;
+}
+
+// The rubber layer's engine-lifetime half: ONE offscreen pass over the
+// per-track R8 accumulation texture, adding this frame's committed trail
+// segments. There is no decay pass — ink is permanent until the restart
+// wipe, which is a plain clear on this same pass. Everything is
+// vertexDomain:device — the camera exists only because a View requires one.
+bool TtpRenderer::ensureSkidLayer() {
+    if (mSkidStampView) return true;
+    if (!mEngine || !mRenderer || !mSkidMaterial) return false;
+    mSkidCamEnt = utils::EntityManager::get().create();
+    mSkidCam = mEngine->createCamera(mSkidCamEnt);
+
+    // The stamp buffers: a fixed pool of 4-column quads (the mesh pool's old
+    // feather profile — outer columns zero ink), fully rewritten on any frame
+    // that commits a segment. Unused slots stay all-zero, which is a
+    // zero-area quad the rasterizer never touches, so the index count can be
+    // the full capacity and nothing tracks a live range.
+    mSkidVerts.assign((size_t) kSkidQuadCap * 8, { 0, 0, 0, 0 });
+    mSkidVB = VertexBuffer::Builder()
+            .vertexCount(kSkidQuadCap * 8).bufferCount(1)
+            .attribute(VertexAttribute::POSITION, 0,
+                    VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
+            .attribute(VertexAttribute::COLOR, 0,
+                    VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
+            .normalized(VertexAttribute::COLOR)
+            .build(*mEngine);
+    auto* idx = new std::vector<uint32_t>((size_t) kSkidQuadCap * 18);
+    for (uint32_t q = 0; q < kSkidQuadCap; q++) {
+        const uint32_t b = q * 8;      // rear b..b+3, front b+4..b+7 (L→R)
+        uint32_t* dst = idx->data() + (size_t) q * 18;
+        for (uint32_t k = 0; k < 3; k++) { // one quad per column pair
+            const uint32_t r = b + k, f = b + 4 + k;
+            const uint32_t src[6] = { r, f + 1, r + 1, r, f, f + 1 };
+            std::copy(src, src + 6, dst + k * 6);
+        }
+    }
+    mSkidIB = IndexBuffer::Builder()
+            .indexCount((uint32_t) idx->size())
+            .bufferType(IndexBuffer::IndexType::UINT)
+            .build(*mEngine);
+    mSkidIB->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
+            idx->data(), idx->size() * sizeof(uint32_t),
+            [](void*, size_t, void* user) { delete (std::vector<uint32_t>*) user; },
+            idx));
+    mSkidStampMI = mSkidMaterial->createInstance();
+    mSkidStampEnt = utils::EntityManager::get().create();
+    RenderableManager::Builder(1)
+            .boundingBox({ { -1, -1, 0 }, { 1, 1, 1 } })
+            .material(0, mSkidStampMI)
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mSkidVB, mSkidIB, 0, kSkidQuadCap * 18)
+            .culling(false).castShadows(false).receiveShadows(false)
+            .build(*mEngine, mSkidStampEnt);
+    mSkidStampScene = mEngine->createScene();
+    mSkidStampScene->addEntity(mSkidStampEnt);
+
+    View* v = mEngine->createView();
+    v->setScene(mSkidStampScene);
+    v->setCamera(mSkidCam);
+    v->setPostProcessingEnabled(false);
+    v->setShadowingEnabled(false);
+    v->setFrustumCullingEnabled(false);
+    // BlendMode stays OPAQUE (the default). TRANSLUCENT looked like the
+    // "preserve the target" switch, but it also composites the view's draws
+    // as premultiplied SRC_OVER — overriding vskid's additive blend, so every
+    // stamp REPLACED the ink under its footprint (a light mark punched a hole
+    // through a dark one, and each stamp's zero-ink skirt gnawed the previous
+    // stamp's edge into a sawtooth). Preservation comes from ClearOptions
+    // (clear=false, discard=false) at the render call, not from the blend mode.
+    mSkidStampView = v;
+    return true;
+}
+
+// Bound to every vroad instance, because a declared sampler must be bound even
+// while no track (or no vskid material) gives it anything to hold — same rule
+// as the decal mask above. skidLatHalf 0 is what actually disables the tap.
+void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
+    if (!mSkidNullTex) {
+        mSkidNullTex = Texture::Builder()
+                .width(1).height(1).levels(1)
+                .format(Texture::InternalFormat::R8)
+                .build(*mEngine);
+        if (mSkidNullTex) {
+            auto* px = new uint8_t[1]{ 0 };
+            mSkidNullTex->setImage(*mEngine, 0,
+                    Texture::PixelBufferDescriptor(px, 1,
+                            Texture::Format::R, Texture::Type::UBYTE,
+                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                            nullptr));
+        }
+    }
+    Texture* t = mSkidTex ? mSkidTex : mSkidNullTex;
+    if (!t) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    // REPEAT along s carries the lap wrap; CLAMP across lat parks the kerbs'
+    // and underside's out-of-band v on an edge row the stamper never writes.
+    smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("skidLayer", t, smp);
+    mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
+    // rgb = the pool's SKID_COLOR, converted by the same srgbToLinear as
+    // everything else; a = the cap on summed ink — two crossing trails darken
+    // (1-(1-a)^2 composited to ~0.48 when they were meshes), a donut spot
+    // saturates there instead of going black.
+    mi->setParameter("skidColor",
+            math::float4{ srgbToLinear(0x241f1c), 0.48f });
 }
 
 // The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
@@ -4635,6 +4721,7 @@ MaterialInstance* TtpRenderer::roadInstance() {
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
         if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
+        bindSkidLayer(mRoadInst);
     }
     return mRoadInst;
 }
@@ -5496,42 +5583,72 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
     }
 
-    // Skid pool — SkidMarks.js port. SKID_POOL 4-column stamps (rear L/l/r/R,
-    // front L/l/r/R): the two INNER columns carry the full alpha and the outer
-    // pair sits SKID_FEATHER out at zero, so the rubber reads as one even band
-    // with a soft edge. (It was 3 columns reproducing the JS texture's 0→1→0
-    // linear gradient across the whole width — which painted a dark centre line
-    // with the tyre's edges fading to nothing, nothing like a tyre print.)
-    // Colour SKID_COLOR 0x241f1c; per-slot life/peak drive the SKID_LIFE fade
-    // down to the SKID_PATINA floor.
-    if (mBlendMaterial) {
-        constexpr uint32_t SKID_POOL = 4096;
-        const uint32_t ink0 = packLinear(srgbToLinear(0x241f1c), 1.0f, 0.0f);
-        mSkids.verts.assign(SKID_POOL * 8, { 0, -1000, 0, ink0 });
-        mSkids.idx.resize(SKID_POOL * 18);
-        for (uint32_t q = 0; q < SKID_POOL; q++) {
-            const uint32_t b = q * 8;      // rear b..b+3, front b+4..b+7 (L→R)
-            uint32_t* dst = &mSkids.idx[(size_t) q * 18];
-            for (uint32_t k = 0; k < 3; k++) { // one quad per column pair
-                const uint32_t r = b + k, f = b + 4 + k;
-                const uint32_t src[6] = { r, f + 1, r + 1, r, f, f + 1 };
-                std::copy(src, src + 6, dst + k * 6);
-            }
+    // The rubber layer — one RG8 accumulation texture in track space (s across
+    // the width, lat across the height), stamped by ensureSkidLayer's passes
+    // and sampled by every vroad instance. Per-track because its width is the
+    // lap length at a fixed texel density; the density is capped by the 8192
+    // universal texture-size floor, so a very long lap trades edge crispness,
+    // never correctness.
+    mWheelTrails.assign(carCount * 4, {});
+    mSkidQuadCount = 0;
+    if (ensureSkidLayer() && tb.length > 1.0f) {
+        float maxHalf = tb.roadWidth * 0.5f;
+        for (const TrackBin::Sample& r : tb.rings) {
+            maxHalf = std::max(maxHalf, r.width * 0.5f);
         }
-        MaterialInstance* mi = sceneInstance(mBlendMaterial);
-        mi->setPolygonOffset(-2.0f, -2.0f); // JS decal pull: never z-fight the road
-        // Chunked, because the pool is drawn whether or not it holds anything:
-        // 4096 slots is 24k triangles submitted in EVERY cell, every frame, and
-        // a fresh track has none of them alive. Chunks that hold only parked
-        // slots (y = -1000) fall outside every frustum and cull away; the ones
-        // that hold real marks are a stretch of track, so a cell only pays for
-        // the rubber it can actually see. refreshBounds re-fits them per frame.
-        buildMesh(mSkids, true, mi, 2, 1536);
-        mWheelTrails.assign(carCount * 4, {});
-        mSkidLife.assign(SKID_POOL, 0.0f);
-        mSkidPeak.assign(SKID_POOL, 0.0f);
-        mSkidOwner.assign(SKID_POOL, -1);
-        mSkidCursor = 0;
+        // +0.7: kerb reach plus margin, so the widest mark a wheel can lay
+        // still sits rows away from the CLAMP edge rows the shader relies on
+        // staying empty (see bindSkidLayer).
+        mSkidLatHalf = maxHalf + 0.7f;
+        // 80 texels/u along s — the SAME density as lat's 512 rows (~80/u),
+        // so on hardware whose real texture limit accommodates it the grid is
+        // ISOTROPIC and a diagonal mark resolves exactly like a straight one.
+        // The cap is the device's reported GL_MAX_TEXTURE_SIZE (16384 on
+        // ordinary desktop/recent-mobile GPUs, so a ~200u lap fits at full
+        // density); where it clamps, the angle-aware feather in the render
+        // block widens instead, so a long lap gets SOFTER diagonals, never
+        // blockier ones.
+        const uint32_t W = (uint32_t) std::min((float) mMaxTextureDim,
+                std::max(512.0f, std::round(tb.length * 80.0f)));
+        const uint32_t H = 512;
+        mSkidTexelS = tb.length / (float) W;
+        mSkidTexelLat = (2.0f * mSkidLatHalf) / (float) H;
+        mSkidTex = Texture::Builder()
+                .width(W).height(H).levels(1)
+                .format(Texture::InternalFormat::R8)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .build(*mEngine);
+        if (mSkidTex) {
+            mSkidRT = RenderTarget::Builder()
+                    .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
+                    .build(*mEngine);
+        }
+        if (mSkidRT) {
+            mSkidStampView->setViewport({ 0, 0, W, H });
+            mSkidStampView->setRenderTarget(mSkidRT);
+            // Zero the texture NOW, not via mSkidWipe on the first frame: a
+            // fresh render target holds garbage, and the frame loop's skid
+            // block only runs when the scene has wheel trails — the LOBBY
+            // preview has none, so a deferred wipe left its road speckled
+            // with uninitialized memory. The staging pool is all zeros here,
+            // so the pass draws nothing and only the clear lands.
+            const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+            Renderer::ClearOptions co{};
+            co.clear = true;
+            co.clearColor = { 0, 0, 0, 0 };
+            mRenderer->setClearOptions(co);
+            mRenderer->renderStandaloneView(mSkidStampView);
+            mRenderer->setClearOptions(prev);
+        } else {
+            if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
+            mSkidLatHalf = 0;
+        }
+        // The road instances bound the null texture while the road was built;
+        // now the real one exists, rebind them all.
+        if (mRoadInst) bindSkidLayer(mRoadInst);
+        for (RoadChunk& rc : mRoadChunks) {
+            if (rc.mi) bindSkidLayer(rc.mi);
+        }
     }
 
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's
@@ -7488,6 +7605,12 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vblur->second.data(), vblur->second.size())
                 .build(*mEngine);
     }
+    const auto vskid = mAssets.find("vskid.filamat");
+    if (!mSkidMaterial && vskid != mAssets.end()) {
+        mSkidMaterial = Material::Builder()
+                .package(vskid->second.data(), vskid->second.size())
+                .build(*mEngine);
+    }
     const auto vesm = mAssets.find("vesm.filamat");
     if (!mEsmMaterial && vesm != mAssets.end()) {
         mEsmMaterial = Material::Builder()
@@ -8827,23 +8950,17 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         }
         // A sim reset (fixture scrubbing) teleports every car — clear the
         // rocket trackers so the count drop can't fire a stale-position burst,
-        // and wipe the skid layer (the JS clears marks + patina on restart).
+        // and wipe the skid layer (the JS cleared marks + patina on restart;
+        // here the wipe is one unconditional clear).
         if (input.carCount > 0) {
             const float3 c0 = { cars[0].pos.x, cars[0].pos.y, cars[0].pos.z };
             if (length(c0 - mLastCar0) > 5.0f) {
                 mPrevRockets.clear();
                 mPrevRocketCount = 0;
                 for (Burst& b : mBursts) b.t = -1;
-                if (!mSkids.entity.isNull() && !mSkidLife.empty()) {
+                if (mSkidTex) {
                     for (WheelTrail& t : mWheelTrails) t = {};
-                    std::fill(mSkidLife.begin(), mSkidLife.end(), 0.0f);
-                    std::fill(mSkidPeak.begin(), mSkidPeak.end(), 0.0f);
-                    std::fill(mSkidOwner.begin(), mSkidOwner.end(), -1);
-                    mSkidCursor = 0;
-                    for (auto& v : mSkids.verts) { v.py = -1000; v.abgr &= 0x00ffffffu; }
-                    mSkids.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                            mSkids.verts.data(), mSkids.verts.size() * sizeof(Vertex), nullptr));
-                    refreshBounds(mSkids);
+                    mSkidWipe = true; // the next stamp pass clears the layer
                 }
             }
             mLastCar0 = c0;
@@ -8945,81 +9062,110 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     uploadDeckDecals();
     mProfile[kProfWorld] = ttpNowMs() - tMark; tMark += mProfile[kProfWorld];
 
-    // Skid trails — SkidMarks.js layTrails + step, ported. Each marking wheel
-    // grows a CONNECTED ribbon: the stamp under the wheel stretches to the
-    // contact point every frame, freezes at SKID_SEG_MIN and hands its leading
-    // edge to the next stamp (shared joint edges keep bends clean). Channels:
-    // slip past SKID_THRESH, curb scrub (all four wheels, full strength),
-    // spin-out scribbles, brake bite, launch scratch. Marks fade over
-    // SKID_LIFE to the SKID_PATINA floor and linger until recycled.
-    if (!mSkids.entity.isNull() && !mWheelTrails.empty()) {
+    // Skid trails — the SkidMarks.js channels (slip past SKID_THRESH, curb
+    // scrub, spin-out scribbles, brake bite, launch scratch) driving STAMPS
+    // into the track-space rubber texture instead of a pooled world mesh.
+    // Each marking wheel is projected to (s, lat), grows a connected ribbon
+    // there — the stamp's rear edge is the previous stamp's front edge — and
+    // commits a segment once it spans SKID_SEG_MIN. Ink is PERMANENT until
+    // the race-restart wipe — there is no decay pass, by decision: the layer's
+    // steady-state GPU cost is then just this pass's tiny quads plus vroad's
+    // one tap, and a racing line rubbers in over the laps like a real toy
+    // track.
+    //
+    // What the mesh pool had that this deliberately does not: the live stamp
+    // that stretched to the tyre every frame. Additive accumulation cannot
+    // rewrite, so a trail trails the tyre by up to SKID_SEG_MIN — which is
+    // why SEG_MIN is small. The pool's 0.25 was a RING-BUFFER budget
+    // (slots × length = seconds of rubber); no pool, no budget, and 0.25 cost
+    // the look twice over: arcs came out as quarter-unit straight facets
+    // (~10° corners on a donut), and marks popped in a visible chunk at a
+    // time behind the tyre. At 0.06 a marking wheel commits roughly every
+    // frame at speed, so the facets shrink to per-frame travel and the trail
+    // hugs the tyre. Per-frame stamp count is bounded by wheels, not by
+    // SEG_MIN, so this costs nothing.
+    if (mSkidTex && mTrack && !mWheelTrails.empty()) {
         constexpr float SKID_MAX_OPACITY = 0.28f, SKID_THRESH = 0.2f;
-        constexpr float SKID_LIFE = 1.2f, SKID_PATINA = 0.22f;
-        constexpr float SKID_SEG_MIN = 0.25f, SKID_SEG_MAX = 1.5f;
+        constexpr float SKID_SEG_MIN = 0.06f, SKID_SEG_MAX = 1.5f;
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
         constexpr float SKID_LAUNCH_MIN = 0.5f;
         constexpr float SKID_ATTACK = 0.1f;  // s from nothing to full strength
         constexpr float SKID_RELEASE = 0.4f; // s from full strength to nothing
-        // Edge softening, as a fraction of the half-width. Small on purpose: the
-        // mark is meant to read as an even band of rubber that happens not to
-        // have a razor edge, NOT as an airbrushed streak.
-        constexpr float SKID_FEATHER = 0.22f;
-        // The stamp's INNER columns — the only four of its eight vertices that
-        // carry ink. Both the write and the fade below reach for exactly these.
-        static constexpr int INK[] = { 1, 2, 5, 6 };
-        const uint32_t POOL = (uint32_t) mSkidLife.size();
-        bool dirty = false;
-        const auto detach = [&](WheelTrail& t) {
-            if (t.slot < 0) return;
-            mSkidOwner[t.slot] = -1;
-            t.slot = -1;
+        const float L = mTrack->length;
+        const auto wrapS = [&](float d) {
+            return (L > 0) ? d - L * std::round(d / L) : d;
         };
-        const auto resetWheel = [&](WheelTrail& t) {
-            detach(t);
-            t.seeded = false;
-            t.hasEdge = false;
-        };
-        // The ribbon has ENDED: release the slot and re-anchor on the contact
-        // patch, so whatever is drawn next starts from where the tyre is NOW.
-        // The joint edge goes with it — there is no trail left to rejoin, and
-        // keeping a stale edge would stretch the next stamp back to it.
-        const auto restart = [&](WheelTrail& t, const float3& gp, float lift) {
-            detach(t);
-            t.last = gp;
-            t.lastLift = lift;
-            t.hasEdge = false;
-        };
-        // Positions + peak alpha for slot q: 4 columns per edge (L 0 | l peak |
-        // r peak | R 0), rear edge → front edge. The inner pair sits
-        // SKID_FEATHER in from the tyre's edge, so everything between them is
-        // one flat tone and only the last sliver ramps off.
-        const auto writeSlot = [&](int q, const float3& rC, const float3& rHalf,
-                const float3& fC, const float3& fHalf, float strength) {
-            Vertex* v = &mSkids.verts[(size_t) q * 8];
-            const float3 rIn = rHalf * (1.0f - SKID_FEATHER);
-            const float3 fIn = fHalf * (1.0f - SKID_FEATHER);
-            const float3 pts[8] = { rC - rHalf, rC - rIn, rC + rIn, rC + rHalf,
-                                    fC - fHalf, fC - fIn, fC + fIn, fC + fHalf };
-            for (int k = 0; k < 8; k++) {
-                v[k].px = pts[k].x; v[k].py = pts[k].y; v[k].pz = pts[k].z;
+        // One committed segment → one 4-column stamp in DEVICE space over the
+        // rubber texture (x = s/L into [-1,1], y = lat/latHalf), plus a copy
+        // shifted one full lap so a segment straddling the start line lands on
+        // both sides. The copy is usually entirely off-viewport and clips for
+        // free. Corner s-values arrive RELATIVE to the segment's own centre so
+        // the lap wrap is taken once, not per corner.
+        const auto stamp = [&](float midS, const float2& rL, const float2& rR,
+                const float2& fL, const float2& fR, float strength) {
+            if (mSkidQuadCount + 2 > kSkidQuadCap) return;
+            const float peak = SKID_MAX_OPACITY * std::min(1.0f, strength);
+            const uint32_t rr = (uint32_t) std::lround(peak * 255.0f);
+            const uint32_t ink = 0xff000000u | rr;
+            const float u0 = (L > 0) ? (midS - L * std::floor(midS / L)) / L : 0.0f;
+            const float2 e[2][2] = { { rL, rR }, { fL, fR } };
+            // The outer columns ARE the tyre's contact width and the ink
+            // columns sit one small step inside, so the whole footprint —
+            // skirt included — is exactly the wheel and the flat core is most
+            // of it. The ramp is pure anti-aliasing, sized to the texel
+            // footprint ALONG THE MARK'S WIDTH DIRECTION: a straight mark's
+            // edges are resolved by the fine lat axis and stay crisp, while a
+            // slalom's diagonal segments alias against the coarser s axis and
+            // widen to what a smooth diagonal actually needs. One isotropic
+            // ramp was tried both ways first: sized to the coarse axis it
+            // smeared the straights, sized under a texel the diagonals came
+            // out as a staircase. (And the width itself is not the knob: a
+            // fraction-of-width feather ate the core into a smear, a skirt
+            // OUTSIDE the width read as marks wider than the wheels.)
+            const float2 rw{ rR.x - rL.x, rR.y - rL.y };
+            const float wlen = std::sqrt(rw.x * rw.x + rw.y * rw.y);
+            float ramp = 1.3f * mSkidTexelLat;
+            if (wlen > 1e-5f) {
+                const float ws = rw.x / wlen, wl = rw.y / wlen;
+                ramp = 1.3f * std::sqrt(ws * ws * mSkidTexelS * mSkidTexelS
+                        + wl * wl * mSkidTexelLat * mSkidTexelLat);
             }
-            const float peak = SKID_MAX_OPACITY * strength;
-            const uint32_t a = (uint32_t) std::lround(
-                    std::min(1.0f, std::max(0.0f, peak)) * 255.0f);
-            for (int k : INK) v[k].abgr = (v[k].abgr & 0x00ffffffu) | (a << 24);
-            mSkidLife[q] = SKID_LIFE;
-            mSkidPeak[q] = peak;
-            dirty = true;
+            Vertex* v = &mSkidVerts[(size_t) mSkidQuadCount * 8];
+            for (int ed = 0; ed < 2; ed++) {
+                const float2& a = e[ed][0];
+                const float2& b = e[ed][1];
+                float2 d{ b.x - a.x, b.y - a.y };
+                const float len = std::sqrt(d.x * d.x + d.y * d.y);
+                const float k2 = len > 1e-5f ? std::min(0.4f, ramp / len) : 0.0f;
+                d.x *= k2; d.y *= k2;
+                const float2 cols[4] = { a, { a.x + d.x, a.y + d.y },
+                                         { b.x - d.x, b.y - d.y }, b };
+                for (int k = 0; k < 4; k++) {
+                    Vertex& o = v[ed * 4 + k];
+                    o.px = (u0 + cols[k].x / std::max(L, 1e-3f)) * 2.0f - 1.0f;
+                    o.py = cols[k].y / mSkidLatHalf;
+                    o.pz = 0.0f;
+                    o.abgr = (k == 0 || k == 3) ? (ink & 0xff000000u) : ink;
+                }
+            }
+            Vertex* w = v + 8;
+            const float shift = (u0 > 0.5f) ? -2.0f : 2.0f;
+            for (int k = 0; k < 8; k++) {
+                w[k] = v[k];
+                w[k].px += shift;
+            }
+            mSkidQuadCount += 2;
         };
         for (uint32_t i = 0; i < nCars; i++) {
             const TtpCarInput& c = cars[i];
             if (mCarWheels.size() <= i) continue;
+            if (mWheelTrails.size() < (size_t) (i + 1) * 4) continue;
             CarWheels& cw = mCarWheels[i];
             WheelTrail* trails = &mWheelTrails[i * 4];
             const float spd = c.spd; // NORMALIZED v/vmax, like the JS snapshot
             const bool scrub = c.scrub > 0.5f;
             if (spd <= 0.05f && !scrub) {
-                for (int wi = 0; wi < 4; wi++) resetWheel(trails[wi]);
+                for (int wi = 0; wi < 4; wi++) trails[wi].seeded = false;
                 continue;
             }
             const float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
@@ -9040,10 +9186,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // (SkidMarks.js released only — it attacked in a single frame).
             // The RELEASE is load-bearing: a scuff that stops dead leaves a
             // DASH, because bots weaving down a bendy stretch cross the scuff
-            // threshold every few frames and clip the curb in between, and every
-            // dip detaches the ribbon (below) so the fresh unjoined rear edges
-            // stack into dark bars. Holding the strength through the dips keeps
-            // one trail that fades instead.
+            // threshold every few frames, and every dip would end the ribbon.
+            // Holding the strength through the dips keeps one trail that fades.
             // The ATTACK is what makes a mark read as being LAID DOWN, because
             // `raw` is all but binary in practice: the phone's brake is a 0/1,
             // so `brakeBite` is only ever exactly 1.0, and `slip * 1.3`
@@ -9056,7 +9200,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float strength = cw.skidHold;
             // Wheel contact patches from the posed wheel nodes (whirl included,
             // lean/dive not — JS wheels are children of the yawed car, not the
-            // leaning body), dropped onto the road plane under the car.
+            // leaning body). project() takes them to (s, lat); no deck drop and
+            // no ridge lift any more — the stamp is paint in the road's own
+            // shader, so there is nothing to hover above the facets.
             static const mat4f FLIP = mat4f::rotation(M_PI, float3{ 0, 1, 0 });
             const float3 right = normalize(cross(up, fwd));
             const mat4f m2{ float4{ right, 0 }, float4{ up, 0 }, float4{ fwd, 0 },
@@ -9081,126 +9227,94 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             cw.skidAllHold = (scrub || spinning) ? 1.0f
                     : std::max(0.0f, cw.skidAllHold - input.dt / SKID_RELEASE);
             const bool marksAll = cw.skidAllHold > 0.02f;
-            if (!marksAll) { resetWheel(trails[0]); resetWheel(trails[1]); }
+            if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
             const float halfW = (mwp && mMonsterSkidWidth > 0
                     ? mMonsterSkidWidth : cw.skidWidth) / 2;
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
-                float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
-                // Contact patch on the RENDERED DECK, not the car's tangent
-                // plane. The plane is exact on flat road but the deck curls
-                // away from it quadratically wherever the track bends
-                // VERTICALLY — inside a loop the deck at the front axle sits
-                // ~wheelbase²/2R ≈ 0.05u off the plane, an order past the
-                // 0.006 lift, so plane-projected stamps lay INSIDE the road
-                // and the deck clipped chunks out of them. Worst while
-                // steering in a loop, because scrub is what marks the FRONT
-                // wheels (the far-from-origin, most-buried ones) at all.
-                // The lift must clear the local facet RIDGES, not just the
-                // surface: on vertically curved deck the mesh's chords stand
-                // ~step²·κ/8 proud mid-facet, and inside a loop the camera
-                // grazes the deck — a sheet at a fixed 0.006 ducked behind
-                // every ridge and came out cut into chunks along the ring
-                // lines. Flat road keeps the old 0.006 exactly (bulge 0).
-                float liftW = 0.006f;
-                if (mTrack && !mTrack->rings.empty()) {
-                    if (st.projHint < 0 && mDecalProjHint.size() > i) {
-                        st.projHint = mDecalProjHint[i]; // seed from the car
-                    }
-                    float ws, wl, bulge = 0;
-                    mTrack->project(gp, up, ws, wl, &st.projHint, &gp, &bulge);
-                    liftW = std::min(0.035f, 0.006f + 3.0f * bulge);
-                } else {
-                    gp = gp - up * dot(gp - posW, up); // no deck: the old plane
+                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
+                if (st.projHint < 0 && mDecalProjHint.size() > i) {
+                    st.projHint = mDecalProjHint[i]; // seed from the car
                 }
+                float ws = 0, wl = 0;
+                mTrack->project(gp, up, ws, wl, &st.projHint);
+                const float2 cur{ ws, wl };
                 if (!st.seeded) {
-                    st.last = gp; st.lastLift = liftW;
-                    st.seeded = true; st.hasEdge = false;
+                    st.last = cur;
+                    st.seeded = true;
+                    st.hasEdge = false;
                     continue;
                 }
-                const float3 seg = gp - st.last;
-                const float dist = length(seg);
-                if (dist > SKID_SEG_MAX) { restart(st, gp, liftW); continue; }
-                if (strength <= 0.02f) {
-                    // Re-anchor EVERY frame while not marking, not just once the
-                    // wheel has moved SKID_SEG_MIN: that parked `last` up to a
-                    // quarter unit behind the tyre, and since the next scuff's
-                    // first stamp spans last→gp the whole gap was written in ONE
-                    // frame at full ink. A brake tap POPPED a mark 0.19 u long
-                    // out of 0.075 u of travel, on a car 0.88 u long.
-                    restart(st, gp, liftW);
+                const float2 seg{ wrapS(cur.x - st.last.x), cur.y - st.last.y };
+                const float dist = std::sqrt(seg.x * seg.x + seg.y * seg.y);
+                if (dist > SKID_SEG_MAX || strength <= 0.02f) {
+                    // Teleport, or not marking. Re-anchor on the wheel EVERY
+                    // frame while quiet, not just once it has moved a segment:
+                    // a parked `last` up to SEG_MIN behind the tyre made the
+                    // next scuff's first stamp span the whole gap in one frame
+                    // at full ink — at the pool era's SEG_MIN 0.25, a brake
+                    // tap POPPED a mark 0.19 u long out of 0.075 u of travel,
+                    // on a car 0.88 u long.
+                    st.last = cur;
+                    st.hasEdge = false;
                     continue;
                 }
-                if (dist < 1e-4f) continue;
-                const float3 dir = seg * (1.0f / dist);
-                const float3 U = normalize(up);
-                float3 F = dir - U * dot(dir, U);
-                if (dot(F, F) < 1e-9f) continue;
-                F = normalize(F);
-                const float3 Lv = cross(F, U) * halfW;
-                if (st.hasEdge && dot(st.dir, dir) < SKID_EDGE_DOT) st.hasEdge = false;
-                float3 rL, rR;
-                // Each edge carries the lift IT was anchored with (the joint
-                // reuses the frozen verts verbatim, so the trail stays
-                // watertight as the lift breathes with the deck's curvature).
-                if (st.hasEdge) { rL = st.edgeL; rR = st.edgeR; }
-                else {
-                    rL = st.last - Lv + U * st.lastLift;
-                    rR = st.last + Lv + U * st.lastLift;
+                if (dist < SKID_SEG_MIN) continue; // grows silently until commit
+                const float2 dir{ seg.x / dist, seg.y / dist };
+                if (st.hasEdge
+                        && st.dir.x * dir.x + st.dir.y * dir.y < SKID_EDGE_DOT) {
+                    st.hasEdge = false; // sharp bend: don't stretch back to it
                 }
-                const float3 fL = gp - Lv + U * liftW;
-                const float3 fR = gp + Lv + U * liftW;
-                if (st.slot < 0) {
-                    st.slot = (int) (mSkidCursor % POOL);
-                    mSkidCursor = (mSkidCursor + 1) % POOL;
-                    const int prev = mSkidOwner[st.slot];
-                    if (prev >= 0) mWheelTrails[prev].slot = -1;
-                    mSkidOwner[st.slot] = (int) (i * 4 + wi);
+                const float2 perp{ -dir.y * halfW, dir.x * halfW };
+                // The rear edge reuses the previous stamp's front edge verbatim
+                // (shared joint edges keep bends watertight); its s arrives
+                // relative to `cur` so the wrap is consistent across the joint.
+                float2 rL, rR;
+                if (st.hasEdge) {
+                    rL = st.edgeL;
+                    rR = st.edgeR;
+                } else {
+                    rL = { st.last.x - perp.x, st.last.y - perp.y };
+                    rR = { st.last.x + perp.x, st.last.y + perp.y };
                 }
-                writeSlot(st.slot, (rL + rR) * 0.5f, (rR - rL) * 0.5f,
-                        (fL + fR) * 0.5f, (fR - fL) * 0.5f, strength);
+                const float2 fL{ cur.x - perp.x, cur.y - perp.y };
+                const float2 fR{ cur.x + perp.x, cur.y + perp.y };
+                const auto rel = [&](const float2& p) {
+                    return float2{ wrapS(p.x - cur.x), p.y };
+                };
+                stamp(cur.x, rel(rL), rel(rR), rel(fL), rel(fR), strength);
+                st.edgeL = fL;
+                st.edgeR = fR;
+                st.hasEdge = true;
                 st.dir = dir;
-                if (dist >= SKID_SEG_MIN) {
-                    detach(st);
-                    st.edgeL = fL; st.edgeR = fR; st.hasEdge = true;
-                    st.last = gp;
-                    st.lastLift = liftW;
-                }
+                st.last = cur;
             }
         }
-        // Fade every live mark toward its patina floor (JS step()).
-        for (uint32_t q = 0; q < POOL; q++) {
-            if (mSkidLife[q] <= 0) continue;
-            mSkidLife[q] -= input.dt;
-            const float k = std::max(mSkidLife[q] / SKID_LIFE, 0.0f);
-            const float a = mSkidPeak[q] * (SKID_PATINA + (1.0f - SKID_PATINA) * k);
-            const uint32_t au = (uint32_t) std::lround(
-                    std::min(1.0f, std::max(0.0f, a)) * 255.0f);
-            Vertex* v = &mSkids.verts[(size_t) q * 8];
-            for (int k : INK) v[k].abgr = (v[k].abgr & 0x00ffffffu) | (au << 24);
-            dirty = true;
-        }
-        // YES, THIS RE-UPLOADS THE WHOLE POOL — 4096 slots x 8 verts x 16 B =
-        // 512 KB — and refreshBounds rescans all 73,728 indices behind it, on
-        // essentially every frame of a race (any mark laid in the last SKID_LIFE
-        // seconds keeps `dirty` set). It looks like the obvious thing to make
-        // incremental, so: MEASURED BEFORE BELIEVING IT, in the browser at the
-        // 4-player cap with bots laying real rubber, off ttp_display_profile's
-        // own kProfSkids — 0.2 ms, inside a 0.9 ms CPU frame, against a 16.7 ms
-        // budget. That is 1.2% of the budget, with zero dropped vsyncs.
-        //
-        // So a min/max touched range here would buy back well under 1% of a
-        // frame, in the one file in this tree that no ctest compiles and no
-        // fixture covers. Not worth it. If that trade ever changes — a much
-        // slower TV part, a bigger pool, or skids landing on the same frame as
-        // something else expensive — the shape to reach for is tracking the
-        // lowest and highest slot touched this frame and passing a byteOffset
-        // to setBufferAt; the writes are already slot-indexed, so it is a small
-        // change. Re-measure first.
-        if (dirty) {
-            mSkids.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                    mSkids.verts.data(), mSkids.verts.size() * sizeof(Vertex), nullptr));
-            refreshBounds(mSkids);
+        // The GPU pass — the ONLY recurring cost of the whole layer: a
+        // handful of tiny quads on frames that committed a segment, nothing
+        // at all otherwise. The restart wipe rides the same pass as a clear
+        // (the staging pool is zeroed after every draw, so a wipe with no
+        // fresh stamps clears and draws nothing).
+        if ((mSkidWipe || mSkidQuadCount > 0) && mSkidStampView && mSkidRT) {
+            const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+            Renderer::ClearOptions co{};
+            co.clear = mSkidWipe;
+            co.clearColor = { 0, 0, 0, 0 };
+            co.discard = false; // the whole point is what the target holds
+            mRenderer->setClearOptions(co);
+            if (mSkidQuadCount > 0) {
+                mSkidVB->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                        mSkidVerts.data(), mSkidVerts.size() * sizeof(Vertex),
+                        nullptr));
+            }
+            mRenderer->renderStandaloneView(mSkidStampView);
+            if (mSkidQuadCount > 0) {
+                std::memset(mSkidVerts.data(), 0,
+                        (size_t) mSkidQuadCount * 8 * sizeof(Vertex));
+                mSkidQuadCount = 0;
+            }
+            mSkidWipe = false;
+            mRenderer->setClearOptions(prev);
         }
     }
 
@@ -9484,7 +9598,14 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
-    destroyMesh(mSkids);
+    // The rubber texture is per-track; the pass machinery around it is
+    // engine-lifetime and just loses its target here.
+    if (mSkidStampView) mSkidStampView->setRenderTarget(nullptr);
+    if (mSkidRT) { mEngine->destroy(mSkidRT); mSkidRT = nullptr; }
+    if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
+    mSkidLatHalf = 0;
+    mSkidWipe = false;
+    mSkidQuadCount = 0;
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);
@@ -9581,10 +9702,6 @@ void TtpRenderer::releaseScene() {
     mAmbBase.clear();
     mAmbSpeed.clear();
     mWheelTrails.clear();
-    mSkidLife.clear();
-    mSkidPeak.clear();
-    mSkidOwner.clear();
-    mSkidCursor = 0;
     mRoadGrid.clear();
     mGroundBands.clear();
     mHillAnchors.clear();
@@ -9611,6 +9728,21 @@ TtpRenderer::~TtpRenderer() {
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
+    if (mSkidStampView) mEngine->destroy(mSkidStampView);
+    if (mSkidStampScene) mEngine->destroy(mSkidStampScene);
+    if (!mSkidStampEnt.isNull()) {
+        mEngine->destroy(mSkidStampEnt);
+        utils::EntityManager::get().destroy(mSkidStampEnt);
+    }
+    if (mSkidStampMI) mEngine->destroy(mSkidStampMI);
+    if (mSkidVB) mEngine->destroy(mSkidVB);
+    if (mSkidIB) mEngine->destroy(mSkidIB);
+    if (mSkidCam) {
+        mEngine->destroyCameraComponent(mSkidCamEnt);
+        utils::EntityManager::get().destroy(mSkidCamEnt);
+    }
+    if (mSkidNullTex) mEngine->destroy(mSkidNullTex);
+    if (mSkidMaterial) mEngine->destroy(mSkidMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);

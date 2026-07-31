@@ -148,9 +148,33 @@ from a low camera. The conformed-mesh fallbacks (for a shell served no
 `vroad.filamat`) were deleted 2026-07-31 along with the JS audit that kept
 their duplicated art honest; a shell without `vroad.filamat` now simply draws
 a bare deck, and materials are a mandatory step in the shells ledger anyway.
-**What is still a mesh:** the hazard cones and wet-floor signs (not flat), and
-the skid ribbons (unbounded count, so they stay a pooled mesh with a
-curvature-scaled lift — see the skid block in `render()`).
+**What is still a mesh:** the hazard cones and wet-floor signs — they are not
+flat.
+
+**`View::BlendMode::TRANSLUCENT` is a COMPOSITING mode, not a "keep the
+target" switch.** It composites the view's draws as premultiplied SRC_OVER,
+overriding the material's own blending — vskid's additive stamps silently
+became replace, so a light mark punched a hole through a dark one and every
+stamp's zero-ink skirt gnawed its neighbour's edge into a sawtooth. Target
+preservation comes from `Renderer::ClearOptions` (clear=false,
+discard=false) at the render call; the accumulation views stay on the
+default OPAQUE blend mode. bakeSilhouette keeps TRANSLUCENT because
+alpha-compositing is exactly what a mask bake wants.
+
+**Skid marks are the same road-shader paint, accumulated.** The transient
+decals above are re-packed every frame; rubber instead lands in a per-track
+R8 texture in track space (u = s / lap, v = lat across the deck) that
+`vroad` samples with one extra tap. ONE offscreen pass owns it
+(`ensureSkidLayer`): additive stamps (`vskid.mat`) for each committed trail
+segment. Ink is permanent until the race-restart wipe — a clear on that same
+pass — because a decay pass was the layer's whole recurring GPU cost
+(megatexels of read-modify-write) and permanence is also how a real toy
+track behaves; the racing line rubbers in over a race. Do not reintroduce a
+per-frame fullscreen pass here without measuring on the weakest shell. There is no pool, no budget and no
+lift; unbounded marks cost fixed memory. The tap reads through
+`uvToRenderTargetUV` (the layer is a render target — the suite audit
+enforces this), and the stamper keeps the texture's outer lat rows empty,
+which is what parks the kerbs' and underside's out-of-band v on zero ink.
 
 ## The per-frame budget
 

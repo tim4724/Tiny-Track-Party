@@ -80,6 +80,10 @@ public:
     // the shell already made the WebGL2 context current).
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
+    // The platform surface reports the device's GL_MAX_TEXTURE_SIZE here
+    // before init; unreported keeps the conservative 8192 floor. See
+    // mMaxTextureDim for what it buys the skid layer.
+    void setMaxTextureDim(uint32_t d) { if (d >= 2048) mMaxTextureDim = d; }
     void resize(uint32_t width, uint32_t height);
     // Skip the sun's shadow bake for every scene built from here on. The bake is
     // a 2048² depth pass over the whole circuit plus its ESM blur, once per
@@ -325,6 +329,11 @@ private:
     filament::Texture* mDecalMaskArray = nullptr;
     uint16_t mMaskLayerBakedBits = 0;
     filament::Texture* ensureDecalMaskArray();
+    // Engine-lifetime half of the rubber layer (views, scenes, stamp buffers,
+    // material instances, the 1x1 null texture). The per-track texture itself
+    // is made in buildTrackScene and dies in releaseScene.
+    bool ensureSkidLayer();
+    void bindSkidLayer(filament::MaterialInstance* mi);
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -558,7 +567,8 @@ private:
     Mesh mBerms;                  // grass lofted under a raised, non-pillared deck
     float mTime = 0; // idle-animation clock (accumulated FrameInput.dt)
 
-    // Translucent bits (vblend material, vertex alpha): per-car ground blobs.
+    // Translucent bits (vblend material, vertex alpha): baked ground shadows,
+    // name plates, the water glaze, tree canopies.
     filament::Material* mBlendMaterial = nullptr;
     // Round camera-facing sprites (vpoint): the ambient-particle cloud. The
     // billboard + the radial falloff both live in the shader — see vpoint.mat.
@@ -574,6 +584,9 @@ private:
     filament::Material* mEsmMaterial = nullptr;
     // Bake-time gaussian over the per-car silhouette mask (vblur.mat).
     filament::Material* mBlurMaterial = nullptr;
+    // The rubber layer's one pass: additive trail stamps (vskid.mat). The
+    // restart wipe is a clear on the same pass, not a material.
+    filament::Material* mSkidMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
     // The ground's own instance, kept so the baked sun map can be bound to it
     // after bakeShadowMap runs (it is created well before that).
@@ -626,22 +639,52 @@ private:
     // them a frame at the 4-player cap, all but 32 of which recomputed a matrix
     // that had not moved since the last cell.
     std::vector<filament::math::mat4f> mCarBasisInv;
-    // Skid trails — full SkidMarks.js port: per-wheel connected ribbons
-    // (shared joint edges), slip/scrub/spin/brake/launch channels, peak-alpha
-    // by strength, SKID_LIFE fade to the SKID_PATINA floor. One ring buffer of
-    // 3-column stamps (feathered width via vertex alpha: 0 | peak | 0).
-    Mesh mSkids;
-    uint32_t mSkidCursor = 0;
+    // Skid trails — the same per-wheel channels the SkidMarks.js port drove
+    // (slip/scrub/spin/brake/launch, attack/release strength), but committed
+    // segments are STAMPED into a track-space R8 accumulation texture that
+    // vroad.mat samples, instead of grown as a pooled world-space mesh. Ink
+    // is PERMANENT until the race-restart wipe (a clear on the stamp pass) —
+    // there is no decay pass, which is what makes the steady-state GPU cost
+    // a handful of tiny quads plus one tap the road already amortizes. The
+    // texture is per-track (sized by lap length); everything else here is
+    // engine-lifetime, built lazily by ensureSkidLayer().
+    filament::Texture* mSkidTex = nullptr;        // per-track, R8
+    filament::RenderTarget* mSkidRT = nullptr;    // per-track, colour-only
+    filament::Texture* mSkidNullTex = nullptr;    // 1x1 zero, binds when no track
+    filament::View* mSkidStampView = nullptr;
+    filament::Scene* mSkidStampScene = nullptr;
+    utils::Entity mSkidCamEnt;
+    filament::Camera* mSkidCam = nullptr;
+    filament::MaterialInstance* mSkidStampMI = nullptr;
+    utils::Entity mSkidStampEnt;
+    // Stamp capacity per frame. Worst case measured in intent, not in fear: 4
+    // cars x 4 wheels x a couple of commits a frame x the 2 lap-seam copies is
+    // ~64; the rest is headroom. Overflow drops the stamp (the trail's next
+    // segment covers the gap), it never grows the buffer.
+    static constexpr uint32_t kSkidQuadCap = 192;
+    filament::VertexBuffer* mSkidVB = nullptr;    // kSkidQuadCap quads, rewritten
+    filament::IndexBuffer* mSkidIB = nullptr;     // fixed 3-quads-per-stamp pattern
+    std::vector<Vertex> mSkidVerts;               // CPU staging for the stamp VB
+    uint32_t mSkidQuadCount = 0;   // quads staged this frame (2 per segment: mark + wrap copy)
+    float mSkidLatHalf = 0;                       // half the lat span the texture covers
+    // Texel edges in world units per axis. The stamp feather is sized from
+    // the texel footprint along the mark's own width direction, so straights
+    // (resolved by the fine lat axis) stay crisp while diagonal segments —
+    // which alias against the coarser s axis — get just enough ramp.
+    float mSkidTexelS = 0, mSkidTexelLat = 0;
+    // The device's real GL_MAX_TEXTURE_SIZE, set by the platform surface
+    // before init (8192 = the conservative floor when no shell reports one).
+    // At 16384 the skid texture reaches 80 texels/u along s on ordinary lap
+    // lengths — the same density as lat, so the grid is isotropic and a
+    // diagonal mark resolves exactly like a straight one.
+    uint32_t mMaxTextureDim = 8192;
+    bool mSkidWipe = false;    // clear the layer on the next stamp pass (race restart)
     struct WheelTrail {
-        filament::math::float3 last{}, dir{}, edgeL{}, edgeR{};
+        filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)
         bool hasEdge = false, seeded = false;
-        int slot = -1;         // ring slot currently growing under this wheel
-        int projHint = -1;     // project()'s warm start for the deck drop
-        float lastLift = 0.0f; // the lift `last` was anchored with (ridge-scaled)
+        int projHint = -1;     // project()'s warm start
     };
     std::vector<WheelTrail> mWheelTrails; // carCount × 4 (fl fr bl br)
-    std::vector<float> mSkidLife, mSkidPeak; // per ring slot
-    std::vector<int> mSkidOwner;             // slot → wheel index growing there (−1 free)
     float mMonsterFootW = 0, mMonsterFootL = 0; // monster asset footprint (blob swap)
     Mesh mGantry; // procedural start/finish gantry (FinishGate.js port)
     // The sea ring + its wet-sand glaze (theme.water), fitted to the track's
@@ -902,9 +945,9 @@ public:
     const std::vector<DeckDecal>& debugDeckDecals() const { return mDeckDecalsLast; }
 private:
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
-    // rewritten in WORLD space every frame — the conformed decals, the skid
-    // ribbons, the billboards — outlives its build-time bounds, so only meshes
-    // that stay put (or move by transform) may opt in.
+    // rewritten in WORLD space every frame — the billboards, the burst pools —
+    // outlives its build-time bounds, so only meshes that stay put (or move by
+    // transform) may opt in.
     void setMeshCulling(Mesh& m, bool enable);
     void refreshBounds(Mesh& m);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);

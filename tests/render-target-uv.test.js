@@ -46,7 +46,10 @@ const RENDER_TARGET_SAMPLERS = new Set([
   // RTs by vesm, then sampled per lit fragment (TtpRenderer::bakeShadowMap).
   'shadowMap',
   // vesm/vblur read the pass before them; vpresent reads the scene target.
-  'src', 'scene'
+  'src', 'scene',
+  // The rubber layer: vskid stamps into it, vroad samples it per deck
+  // fragment (TtpRenderer::ensureSkidLayer).
+  'skidLayer'
 ]);
 
 /** Samplers fed by an UPLOAD, which have no flip and must not be wrapped. */

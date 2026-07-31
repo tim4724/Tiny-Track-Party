@@ -112,7 +112,23 @@ material {
         // One 2D-array texture, one silhouette per layer: 0..7 the cars in
         // slot order, 8 the monster rig, 9 the generic superellipse. Baked
         // and pre-blurred by bakeSilhouette, so this samples ONCE.
-        { type : sampler2dArray, name : decalMask }
+        { type : sampler2dArray, name : decalMask },
+
+        // — the rubber layer —
+        // Skid marks accumulated in TRACK SPACE: an R8 texture the renderer
+        // stamps trail segments into (vskid.mat), mapped u = s / trackLength
+        // (REPEAT carries the lap wrap), v = lat across ±skidLatHalf. The
+        // channel is the mark's ALPHA already — strength and the old pool's
+        // SKID_MAX_OPACITY are folded in at stamp time — and it is PERMANENT
+        // until the race-restart wipe: no decay pass exists, on purpose.
+        { type : sampler2d, name : skidLayer },
+        // Half the lat span the texture covers. 0 disables the tap entirely,
+        // which is the no-track / torn-down state.
+        { type : float, name : skidLatHalf },
+        // rgb = SKID_COLOR in linear (srgbToLinear stays C++-side, one source),
+        // a = the cap on summed ink, so crossing trails darken but a donut spot
+        // cannot go pure black.
+        { type : float4, name : skidColor }
     ]
 }
 
@@ -301,6 +317,26 @@ fragment {
         // is also what makes a FULL-WIDTH decal (the launch strips, if they ever
         // move here) safe.
         highp vec2 tc = getUV0();
+        // Rubber first, decals over it: a contact shadow or an aura composites
+        // on top of laid rubber the way it would over the asphalt itself. The
+        // out-of-band v of kerbs and underside lands past the texture's lat
+        // span, clamps to an edge row the stamper never writes, and reads zero
+        // ink — the deck flag for free.
+        float lh = materialParams.skidLatHalf;
+        if (lh > 0.0) {
+            // highp for the same Metal-fp16 reason as the decal uniforms:
+            // u = s/L near 1.0 at half precision steps by ~0.0005 — half a
+            // texel of a 16k-wide layer — and mediump would smear the marks.
+            highp vec2 suv = vec2(tc.x * materialParams.invTrackLength,
+                    (tc.y + lh) / (2.0 * lh));
+            // The layer is an offscreen render target, so the read goes
+            // through uvToRenderTargetUV (identity on GL, the y-flip on
+            // Metal/Vulkan) — see tests/render-target-uv.test.js.
+            float ink = texture(materialParams_skidLayer,
+                    uvToRenderTargetUV(suv)).r;
+            vec4 sc = materialParams.skidColor;
+            base = mix(base, sc.rgb, min(ink, sc.a));
+        }
         if (materialParams.decalCount > 0) base = deckDecals(base, tc);
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
