@@ -420,8 +420,16 @@ struct TtpRenderer::TrackBin {
     // caller placing GEOMETRY against the road wants, where (outS, outLat)
     // serve a caller talking to the road shader. `p` is BY VALUE so a caller
     // may alias it with `outDeck` (the skid trails conform in place).
+    //
+    // `outBulge` receives the local facet RIDGE height: on vertically curved
+    // deck the mesh is chords, and each facet's midline stands ~step²·κ/8
+    // proud of the inscribed curve. A sheet floating a FIXED height over the
+    // facets ducks behind those ridges wherever the camera grazes the deck —
+    // inside a loop, that is the whole rear view — and the ridge lines cut it
+    // into chunks. A caller placing a sheet lifts by AT LEAST this much.
     void project(float3 p, const float3& up, float& outS, float& outLat,
-            int* hint = nullptr, float3* outDeck = nullptr) const {
+            int* hint = nullptr, float3* outDeck = nullptr,
+            float* outBulge = nullptr) const {
         const std::vector<Sample>& knots = rings.empty() ? samples : rings;
         const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
@@ -500,6 +508,14 @@ struct TtpRenderer::TrackBin {
         const float3 latS = normalize(mix(a.lat, b.lat, t));
         outLat = dot(p - q, latS);
         if (outDeck) *outDeck = q + latS * outLat;
+        if (outBulge) {
+            // Sagitta of this segment's chord against the swept curve:
+            // step · angle-between-ring-tangents / 8. (`length` here is the
+            // LAP length member, hence the spelled-out norms.)
+            const float3 ab = b.pos - a.pos;
+            const float3 tc = cross(a.tangent(), b.tangent());
+            *outBulge = std::sqrt(dot(ab, ab)) * std::sqrt(dot(tc, tc)) * 0.125f;
+        }
         if (&knots != &rings || deckGap <= 0) return;
 
         // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
@@ -4686,7 +4702,7 @@ void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
             float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
             float4{ linCol.x, linCol.y, linCol.z, alpha },
             float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f },
-            float4{ 0, 0, 0, 0 } });
+            float4{ 0, 0, 0, 0 }, {}, {}, {} });
 }
 
 // The deck's fixed furniture, as stamps. These used to be three separate meshes
@@ -4703,7 +4719,7 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
                 float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
                 float4{ col.x, col.y, col.z, alpha },
                 float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons },
-                float4{ 0, 0, 0, 0 } });
+                float4{ 0, 0, 0, 0 }, {}, {}, {} });
     };
 
     // Item-box contact shadows (were mPropShadows at 0.004): 1 -> 0.82 at 0.55r.
@@ -9718,9 +9734,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         // patch, so whatever is drawn next starts from where the tyre is NOW.
         // The joint edge goes with it — there is no trail left to rejoin, and
         // keeping a stale edge would stretch the next stamp back to it.
-        const auto restart = [&](WheelTrail& t, const float3& gp) {
+        const auto restart = [&](WheelTrail& t, const float3& gp, float lift) {
             detach(t);
             t.last = gp;
+            t.lastLift = lift;
             t.hasEdge = false;
         };
         // Positions + peak alpha for slot q: 4 columns per edge (L 0 | l peak |
@@ -9830,19 +9847,31 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // and the deck clipped chunks out of them. Worst while
                 // steering in a loop, because scrub is what marks the FRONT
                 // wheels (the far-from-origin, most-buried ones) at all.
+                // The lift must clear the local facet RIDGES, not just the
+                // surface: on vertically curved deck the mesh's chords stand
+                // ~step²·κ/8 proud mid-facet, and inside a loop the camera
+                // grazes the deck — a sheet at a fixed 0.006 ducked behind
+                // every ridge and came out cut into chunks along the ring
+                // lines. Flat road keeps the old 0.006 exactly (bulge 0).
+                float liftW = 0.006f;
                 if (mTrack && !mTrack->rings.empty()) {
                     if (st.projHint < 0 && mDecalProjHint.size() > i) {
                         st.projHint = mDecalProjHint[i]; // seed from the car
                     }
-                    float ws, wl;
-                    mTrack->project(gp, up, ws, wl, &st.projHint, &gp);
+                    float ws, wl, bulge = 0;
+                    mTrack->project(gp, up, ws, wl, &st.projHint, &gp, &bulge);
+                    liftW = std::min(0.035f, 0.006f + 3.0f * bulge);
                 } else {
                     gp = gp - up * dot(gp - posW, up); // no deck: the old plane
                 }
-                if (!st.seeded) { st.last = gp; st.seeded = true; st.hasEdge = false; continue; }
+                if (!st.seeded) {
+                    st.last = gp; st.lastLift = liftW;
+                    st.seeded = true; st.hasEdge = false;
+                    continue;
+                }
                 const float3 seg = gp - st.last;
                 const float dist = length(seg);
-                if (dist > SKID_SEG_MAX) { restart(st, gp); continue; }
+                if (dist > SKID_SEG_MAX) { restart(st, gp, liftW); continue; }
                 if (strength <= 0.02f) {
                     // Re-anchor EVERY frame while not marking, not just once the
                     // wheel has moved SKID_SEG_MIN: that parked `last` up to a
@@ -9850,7 +9879,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     // first stamp spans last→gp the whole gap was written in ONE
                     // frame at full ink. A brake tap POPPED a mark 0.19 u long
                     // out of 0.075 u of travel, on a car 0.88 u long.
-                    restart(st, gp);
+                    restart(st, gp, liftW);
                     continue;
                 }
                 if (dist < 1e-4f) continue;
@@ -9862,13 +9891,16 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 const float3 Lv = cross(F, U) * halfW;
                 if (st.hasEdge && dot(st.dir, dir) < SKID_EDGE_DOT) st.hasEdge = false;
                 float3 rL, rR;
+                // Each edge carries the lift IT was anchored with (the joint
+                // reuses the frozen verts verbatim, so the trail stays
+                // watertight as the lift breathes with the deck's curvature).
                 if (st.hasEdge) { rL = st.edgeL; rR = st.edgeR; }
                 else {
-                    rL = st.last - Lv + U * 0.006f;
-                    rR = st.last + Lv + U * 0.006f;
+                    rL = st.last - Lv + U * st.lastLift;
+                    rR = st.last + Lv + U * st.lastLift;
                 }
-                const float3 fL = gp - Lv + U * 0.006f;
-                const float3 fR = gp + Lv + U * 0.006f;
+                const float3 fL = gp - Lv + U * liftW;
+                const float3 fR = gp + Lv + U * liftW;
                 if (st.slot < 0) {
                     st.slot = (int) (mSkidCursor % POOL);
                     mSkidCursor = (mSkidCursor + 1) % POOL;
@@ -9883,6 +9915,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     detach(st);
                     st.edgeL = fL; st.edgeR = fR; st.hasEdge = true;
                     st.last = gp;
+                    st.lastLift = liftW;
                 }
             }
         }

@@ -108,7 +108,9 @@ export const MIRRORED = [
   { name: 'car blob lift',   value: 0.013, find: 'carS, carLat, sx, sz, 0.013f,' },
   // Item shadows are stamped too now; this pins the fallback mesh's lift.
   { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.013f, 1.0f);' },
-  { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
+  // Ridge-scaled: 0.006 on flat deck, growing with the local facet sagitta so
+  // grazing views inside a loop can't duck the trail behind the ring ridges.
+  { name: 'skid lift',       value: 0.006, find: 'liftW = std::min(0.035f, 0.006f + 3.0f * bulge);' },
   { name: 'road ring target', value: 0.48, find: 'std::lround(L / std::min(0.48f' },
   // FALLBACK RENDER ORDER. Both sheets only draw on a shell served no
   // vroad.filamat, and there the aura must still paint over the shadow — which
