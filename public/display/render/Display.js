@@ -299,6 +299,7 @@ export class Display {
     // used to be a byte buffer this file packed by hand.
     // The reason is the engine's: no surface, or a track this build does not have.
     if (this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
+    this._slotIdCache = null; // a build is the one thing that can change slot ids
     this.built = true;
   }
 
@@ -313,6 +314,8 @@ export class Display {
     // Model swaps need their GLBs re-provided first — fetching is this side's
     // one job in the exchange, exactly as at build.
     await this._provideCars(roster, assets);
+    // A re-dress keeps the id list by contract (C++ refuses id changes there),
+    // so the slot-id cache stands; a refusal falls back to build, which clears it.
     return !this._fn.reroster(JSON.stringify(this._slots(roster)));
   }
 
@@ -415,7 +418,11 @@ export class Display {
     const stride = u32[head + 2];
     // Slot i's car id, off the built scene's own roster (the one owner —
     // this side used to keep a copy and a drifted index was silently skipped).
-    const slotIds = JSON.parse(this._fn.slotIds());
+    // LATCHED per build: the list only changes when a scene is built (reroster
+    // refuses id changes), so the ~6 Hz HUD poll must not re-parse JSON that
+    // cannot have moved — that parse was the one JSON crossing left inside the
+    // packed-readback path.
+    const slotIds = this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
     const rows = [];
     for (let i = 0; i < count; i++) {
       const id = slotIds[i];

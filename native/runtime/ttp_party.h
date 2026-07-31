@@ -34,53 +34,28 @@ extern "C" {
 // nullptr / "null" / "{}" gives the defaults (no master provider, no liveness).
 TTP_ABI int ttp_room_create(const char* configJson);
 TTP_ABI void ttp_room_dispose(int h);
-TTP_ABI void ttp_room_reset(int h);
+
 
 // ---- roster -----------------------------------------------------------------
 
 // addPlayer: returns the resulting player record as canonical JSON (the kit-owned
 // keys peerIndex/joinedAt/connected plus the caller's fields), or "null".
 TTP_ABI const char* ttp_room_add_player(int h, const char* peerIdJson, const char* fieldsJsonOrNull);
-TTP_ABI void ttp_room_remove_player(int h, const char* peerIdJson);
-TTP_ABI int ttp_room_rekey(int h, const char* oldIdJson, const char* newIdJson);  // 1 on success
+
 // Write one opaque game field onto a live record — the ABI equivalent of the JS
 // kit's mutable-record write (`flow.get(p).ready = true`). Emits nothing, like
 // the assignment it replaces; kit-owned keys are refused. 1 on success.
 TTP_ABI int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const char* valueJson);
-TTP_ABI void ttp_room_mark_disconnected(int h, const char* peerIdJson);
-TTP_ABI void ttp_room_mark_reconnected(int h, const char* peerIdJson);
-// clearDisconnected(nowMs). hasNow=0 means the JS call with no argument.
-TTP_ABI void ttp_room_clear_disconnected(int h, int hasNow, double nowMs);
+
 
 // ---- lifecycle / state ------------------------------------------------------
 
 TTP_ABI int ttp_room_transition_to(int h, const char* stateName);  // 1 if accepted
 TTP_ABI const char* ttp_room_state(int h);                         // "lobby"|"countdown"|"playing"|"results"
-// setActiveOrder(peerIndices): peerIdsJson is a JSON array of peer-id scalars.
-TTP_ABI void ttp_room_set_active_order(int h, const char* peerIdsJson);
-// syncActiveOrder against a LIVE RACE: every seat holding a car, plus every
-// dropped seat (RoomFlow::syncActiveOrder). Takes a session handle rather than a
-// list of ids for two reasons: no shell has to define the participant set the
-// abandoned-race policy and the "joining" rows both read, and no car id is ever
-// serialized out to a shell only to be handed straight back.
-//
-// sessionHandle 0 / unknown / disposed means "no cars" (the lobby), which leaves
-// the dropped seats as the whole order — the same answer a shell with no session
-// would produce. Emits nothing, exactly like ttp_room_set_active_order.
-TTP_ABI void ttp_room_sync_active_order(int h, int sessionHandle);
+
 
 // ---- liveness (pure predicates; never mutate, never emit) -------------------
 
-TTP_ABI void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs);
-TTP_ABI int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs);
-TTP_ABI const char* ttp_room_expired_peers_json(int h, double nowMs);  // JSON array of peer ids
-TTP_ABI int ttp_room_all_participants_disconnected(int h);
-TTP_ABI int ttp_room_has_late_joiners(int h);
-// The late joiners themselves — a JSON array of player records (same shape and
-// order as ttp_room_list_json), i.e. the roster outside the active order. The
-// list form of ttp_room_has_late_joiners, for a shell that renders them.
-TTP_ABI const char* ttp_room_late_joiners_json(int h);
-TTP_ABI int ttp_room_grace_tick(int h, double nowMs);
 
 // ---- provider setters -------------------------------------------------------
 
@@ -90,13 +65,12 @@ TTP_ABI void ttp_room_set_liveness_enabled(int h, int enabled);
 // ---- read accessors ---------------------------------------------------------
 
 TTP_ABI const char* ttp_room_host_json(int h);   // effective host (getter fallback chain)
-TTP_ABI int ttp_room_is_host(int h, const char* peerIdJson);
-TTP_ABI int ttp_room_size(int h);
-TTP_ABI int ttp_room_connected_count(int h);
+
+
 TTP_ABI const char* ttp_room_list_json(int h);   // roster sorted by joinedAt
-TTP_ABI int ttp_room_has(int h, const char* peerIdJson);
-TTP_ABI int ttp_room_is_disconnected(int h, const char* peerIdJson);
-TTP_ABI const char* ttp_room_get_json(int h, const char* peerIdJson);  // one record, or "null"
+
+
+
 
 // Drain the emitted-event queue as a JSON array [{"type":...,"detail":{...}}, ...]
 // in emission order, then empty it.
@@ -170,9 +144,6 @@ TTP_ABI const char* ttp_link_stats_json(int h);
 
 // ---- statics ----------------------------------------------------------------
 
-// RoomFlow.lowestFreeSlot(used, max): lowest free dense slot in [0,max), or -1.
-// usedJson is a JSON array of slot values (never peer indices).
-TTP_ABI int ttp_room_lowest_free_slot(const char* usedJson, int max);
 
 // {"contractVersion":N,"layer":"party"} — the adapter's sanity check.
 TTP_ABI const char* ttp_party_version(void);

@@ -524,14 +524,16 @@ ttp_emscripten_cli(abi_check)
 # are pinned by a recorded hash instead of only by replay_cli calling C++ direct.
 # Only the SCHEDULE trace is unreplayable here: it scripts giveItem/useItem/
 # setCarStats, which the C ABI deliberately does not export.
+# The roomflow, session and raceflow corpora are NOT passed: the JSON-taking
+# spellings this check replayed them through are gone, and roomflow_check /
+# session_check / raceflow_check replay them against the decision layers on
+# every leg. The walks that replaced those spellings are gated by composing the
+# same C++ rules in the same run — see runtimetest/abi_check.cc's header.
 add_test(NAME abi
   COMMAND abi_check
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/grandprix-corpus.jsonl
-    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/framing-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/ui-corpus.jsonl
-    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/session-corpus.jsonl
-    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/raceflow-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-4bots-600f-seed42.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/helix-3bots-1human-500f-seed7.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/traces/tidepool-ailive-4bots-600f-seed42.jsonl

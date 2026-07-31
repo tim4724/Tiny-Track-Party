@@ -405,8 +405,8 @@ function refreshLobbyDemo() {
     lobbyDemo.stop();
     return;
   }
-  const field = buildDemoField(net.flow.list());
-  const sig = demoSig(field, selectedTrackId);
+  // The grid and its signature in one crossing, off the live room.
+  const { field, sig } = flow.demoLive(net.flow.handle, selectedTrackId, _qBots);
   if (lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
 
   // Same track + same set of cars, only the picks changed (a player switched their
@@ -443,18 +443,11 @@ function scheduleLobbyDemo() {
 }
 
 // The attract field and its signature are the ORCHESTRATION layer's
-// (ttp_race.h), like the race grid below: each connected human's PICKED car
-// (livery + model), plus CPU racers topping the grid up to a full field, every
-// car driven by the AI. The ids are namespaced so they never collide with the
-// integer phone slots a later real race uses (the race rebuilds its own field on
-// "GO"), and the persona goes by FINAL grid index so the four spread across the
-// whole field.
-//
-// The ?bots=<n> debug cap rides each call rather than the configured world: it
-// is a URL hook, not part of the game's shape.
-function buildDemoField(humans) { return flow.buildDemoField(humans, _qBots); }
-function demoSig(field, trackId) { return flow.demoSig(field, trackId); }
-
+// (ttp_race.h): each seated human's PICKED car (livery + model), plus CPU
+// racers topping the grid up to a full field, every car driven by the AI, read
+// straight off the room handle (flow.demoLive above). The ?bots=<n> debug cap
+// rides each call rather than the configured world: it is a URL hook, not part
+// of the game's shape.
 // ---- audio ----
 // Two halves, and the split is load-bearing (docs/native-port/shared-cpp-plan.md
 // P7 ported one of them to C++ and left the other per-platform):
@@ -540,6 +533,12 @@ scene.onFrame = (dt) => {
   // beats (this loop is the session's only clock); physics start at GO.
   if (debugSolo) debugSolo.drive(session); // DEBUG ?solo=1: feed the local keyboard car, same seam as the bots
   session.update(dt * 1000);
+  // Everything the update's events mean — countdown beats, GO, pickups,
+  // finishes, the race's end — is routed and decided in ONE crossing
+  // (ttp_race_events_live_json): the lifecycle routing table is not this
+  // shell's anymore. `results` rides the answer because no effect can carry
+  // endRace's callback argument.
+  drainRaceEvents();
   // One SLOW TICK drives everything below that isn't the frame itself: the
   // finish check here, and the HUD + ITEM push further down. Hoisted so the
   // ordering is unchanged (this check still runs before the audio drain) while
@@ -558,8 +557,8 @@ scene.onFrame = (dt) => {
   // move on discrete events — and asking it costs ~11 us against a ~15 us sim
   // tick: a car-ids readback, then two string-marshalled ABI calls PER CAR, then
   // a four-array JSON round trip. The moment it can actually flip is already
-  // covered synchronously by onRaceEvent's own humansAllDone() on the 'finish'
-  // beat, so what is left here is the SAFETY NET for the paths that carry no
+  // covered by the event drain's own finish handling (humans-all-done is read
+  // in C++ exactly when a finish asks), so what is left here is the SAFETY NET for the paths that carry no
   // finish event (a drop, a forfeit, a rekey). A net does not need 60 Hz; the
   // worst case is ~160 ms before a fast-forward that then resolves the whole
   // remaining race instantly.
@@ -579,7 +578,8 @@ scene.onFrame = (dt) => {
     // race (see the onFrame guard above).
     freezeCars();
     fastForwarding = true;
-    session.fastForwardToEnd(); // runs to raceOver, then fires endRace (sets raceEnded)
+    session.fastForwardToEnd(); // runs to raceOver, queueing the end events
+    drainRaceEvents();          // ...decided muted: the burst is skipping, not racing
     fastForwarding = false;
     return;                               // session ended; the results overlay covers the scene
   }
@@ -675,7 +675,9 @@ const net = new DisplayNet({
   // this callback used to apply itself lives behind the session handle now.
   onPlayerWelcomed: (peerIndex) => {
     if (!session) return; // the handle the effect was decided on is being torn down
-    const c = session.getSnapshot().cars.find((x) => x.id === peerIndex);
+    // Off the packed HUD rows, not a ~4 KB snapshot parse for one car: the row
+    // carries exactly what the rule reads (id, held item, finished).
+    const c = scene.hudRows().find((x) => x.id === peerIndex);
     // Belt only, not the gate: the walk emits welcome-item exclusively for a
     // seat whose car is in the live race (C++'s predicate, off the handle).
     if (!c) return;
@@ -706,10 +708,10 @@ const net = new DisplayNet({
 // brief mid-race disconnect does NOT come through here: the car is kept running
 // (camera stays on it) so a quick reconnect resumes driving.
 function forfeitCar(peerIndex) {
-  // Whether the session actually held that car is the SHELL's to answer (it owns
-  // the handle); what follows from the answer is the layer's.
-  const removed = !!(session && session.forceRemoveCar(peerIndex));
-  perform(flow.forfeitCar(removed, peerIndex).effects);
+  // The removal happens inside the walk, against the live session; a removal
+  // that ends the race queues its end events, which the next frame's drain
+  // decides.
+  perform(flow.forfeitCar(session ? session.h : 0, peerIndex).effects);
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 
@@ -747,12 +749,11 @@ window.addEventListener('pagehide', () => net.shutdown());
 // (ttp_room.h's synced seam) — never re-derived, which is what keeps the
 // silent freeze and that policy from ever disagreeing.
 function refreshAutoPause() {
-  // The input (roomState, carIds, aiIds, seatedIds), the consult rule and the
-  // synced participants read all happen behind the twin — one crossing where
-  // the shell used to make four over two ABIs. raceEnded is the one input
-  // that stays: it is this shell's results-overlay latch.
-  const d = ui.autoPause(session ? session.h : 0, net.flow.handle, raceEnded);
-  perform(flow.autoPauseEffects(d).effects);
+  // The input (roomState, carIds, aiIds, seatedIds), the consult rule, the
+  // synced participants read AND the effects are all one walk now — one
+  // crossing where the shell used to make four over two ABIs. raceEnded is the
+  // one input that stays: it is this shell's results-overlay latch.
+  perform(flow.autoPause(session ? session.h : 0, net.flow.handle, raceEnded).effects);
 }
 net.flow.on('rosterchange', refreshAutoPause);
 
@@ -760,17 +761,11 @@ net.flow.on('rosterchange', refreshAutoPause);
 // still-racing car — engine, render entry and results identity — onto the new
 // slot so that phone drives it and the camera keeps following the same car.
 function rekeyCarPlayer(oldId, newId) {
-  // ORDER NOTE: the session rekey happens HERE, before the series rekey the
-  // 'series-rekey' effect performs — the reverse of the pre-port shell, which
-  // moved the cup points first. Forced by the shape of the layer: it cannot ask
-  // a handle whether the car moved, so the shell answers that first and hands
-  // the boolean in. Safe because the two are independent wasm handles with no
-  // cross-reads (ttp_gp_rekey touches only the series' points table,
-  // ttp_rekey_car only the race session's cars), so nothing observes the order.
-  // Worth knowing anyway: the corpus pins the order of the EFFECTS, never when
-  // a shell-side query runs relative to them.
-  const rekeyed = !!(session && session.rekeyCar(oldId, newId));
-  perform(flow.rekeyCarPlayer(!!series, rekeyed, oldId, newId).effects);
+  // The session rekey happens inside the walk (before the series-rekey effect
+  // it emits — safe: the two are independent wasm handles with no cross-reads,
+  // and the corpus pins the order of the EFFECTS, never the query).
+  perform(flow.rekeyCarPlayer(session ? session.h : 0, series ? series.handle : 0,
+                              oldId, newId).effects);
 }
 
 // A seated player renamed themselves. The lobby needs nothing — its seat grid is
@@ -883,121 +878,138 @@ function perform(effects, ctx = {}) {
   for (const e of effects) applyEffect(e, ctx);
 }
 
+// The race walks' performers, one per op of ttp_race_effect_ops_json — a TABLE
+// rather than a switch so the coverage is checkable data: the boot assert below
+// holds it to the wasm's own vocabulary, turning a missing arm into a load
+// failure instead of a half-built race.
+const RACE_PERFORMERS = {
+  'set-track-seed': (e) => { track.seed = e.seed; },
+  'stop-lobby-demo': () => lobbyDemo.stop(),
+  // `e.bots` (the persona specs) is deliberately dropped: the wasm gets them on
+  // 'create-session', which carries its own copy. The shell kept a second one
+  // here for a while and never read it.
+  'set-field': (e) => {
+    currentField = e.field;
+    aiCarIds = new Set(e.aiIds);
+  },
+  'clear-item-cache': () => _lastItem.clear(),
+  'show-screen': (e) => show(e.screen),
+  'hide-results': () => el('results').classList.add('hidden'),
+  'set-race-flags': (e) => {
+    paused = e.paused; autoPaused = e.autoPaused; raceEnded = e.raceEnded;
+  },
+  'set-pause-overlay': (e) => setPauseOverlay(e.on),
+  'set-pause-button': (e) => el('pause-btn').classList.toggle('hidden', !e.shown),
+  'reveal-chrome': () => revealRaceChrome(),
+  'hold-chrome': () => holdRaceChrome(),
+  'reset-scene-cars': (e) => {
+    for (const c of [...scene.cars.keys()]) scene.removeCar(c);
+    for (const c of e.cars) scene.addCar(c.id, c.colorIndex, c.name, { cell: c.cell, carIndex: c.carIndex });
+    scene.rebuild();
+  },
+  'create-session': (e) => createSession(e),
+  'transition': (e) => net.flow.transitionTo(ROOM_STATE[e.to.toUpperCase()]),
+  // The renderer reads the grid poses (and then every frame) straight off the
+  // engine; the audio hears only the BOUND session, which is why the lobby's
+  // attract race is silent for free.
+  'bind-session': () => {
+    scene.bindSession(session.h);
+    audioDecide.bind(session.h);
+  },
+  // Off the packed HUD rows — the last snapshot parse on this path went with
+  // the welcome relight's.
+  'paint-initial-hud': () => {
+    for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
+  },
+  'start-countdown': (e) => session.startCountdown(e.seconds),
+  'show-countdown': (e) => showCountdownBanner(e),
+  'broadcast-countdown': (e) => net.broadcast({ type: MSG.COUNTDOWN, n: e.n }),
+  // DEFERRED off the calling stack on purpose — we are inside session.update()
+  // and the no-seats-left branch tears the session down. Performing this
+  // synchronously is the bug the flag exists to prevent.
+  'refresh-auto-pause': (e) => {
+    if (e.deferred) setTimeout(refreshAutoPause, 0); else refreshAutoPause();
+  },
+  'start-music': (e) => sfx(audioDecide.startMusic(e.biome)),
+  'stop-music': () => sfx(audioDecide.stopMusic()),
+  'show-music-credit': (e) => showMusicCredit(e.on),
+  'stop-voices': () => sfx(audioDecide.stopVoices()),
+  'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(scene.hudRows()); },
+  'rocket-impact': (e) => scene.rocketImpact(e.id),
+  'rocket-expire': (e) => scene.rocketExpire(e.s, e.lat),
+  'broadcast-standings': (e, ctx) => broadcastStandings(e.over, ctx.results),
+  'apply-race-points': (e, ctx) => series.applyRace(ctx.results.results, currentField),
+  'show-results': (e, ctx) => showResults(ctx.results),
+  'arm-results-failsafe': (e) => {
+    clearTimeout(endTimer);
+    endTimer = setTimeout(returnToLobby, e.ms);
+  },
+  'clear-results-failsafe': () => clearTimeout(endTimer),
+  'arm-intermission': (e) => {
+    seriesDeadline = e.deadline;
+    seriesTimer = setTimeout(advanceSeriesRace, e.ms);
+    intermissionTicker = setInterval(renderIntermissionCountdown, 500);
+  },
+  'clear-intermission': () => clearSeriesTimers(),
+  'series-advance': () => series.advance(),
+  // Dispose the wasm handle, not just the wrapper — leaving it was a leak
+  // (one orphaned GrandPrix per finished cup).
+  'clear-series': () => { if (series) series.dispose(); series = null; },
+  'set-track-from-series': () => net.setTrack(series.currentTrackId),
+  // A chained start has no lobby step, so the new circuit is placed explicitly
+  // (selectTrack outside the lobby skips the scene swap) — the results overlay
+  // covers the pop.
+  'place-track': () => scene.setTrack(track),
+  'set-track': (e) => net.setTrack(e.trackId),
+  // endParty's teardown — closeRoom bails every phone terminally while the
+  // display's own 4001 self-heals into a FRESH room (Net.js onClose
+  // {roomClosed}, which also clears the roster), so the next NEW GAME
+  // reveals a lobby already sitting on the new room's QR.
+  'close-room': () => net.closeRoom(),
+  // A fresh party starts clean: drop the ended party's pick so the welcome
+  // board and the next lobby sit on the paper diorama, cup slot empty.
+  'clear-pick': () => { net.clearPick(); selectedTrackId = null; },
+  'render-lobby-pick': () => renderLobbyPick(),
+  'refresh-lobby-demo': () => refreshLobbyDemo(),
+  'update-backdrop': () => updateBackdrop(),
+  'dispose-session': () => {
+    if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
+  },
+  'clear-field': () => { aiCarIds = new Set(); currentField = []; },
+  'fade-to-lobby': (e) => {
+    fadeBackdrop(() => {
+      for (const c of scene.cars.keys()) scene.removeCar(c);
+      if (e.placeTrack) scene.setTrack(track);   // the re-aimed pick (random re-roll / cup rewind)
+      refreshLobbyDemo();                        // AI back to driving the picked cars
+    });
+  },
+  'remove-scene-car': (e) => scene.removeCar(e.id),
+  'stop-car-audio': (e) => sfx(audioDecide.stopCar(e.id)),
+  'sync-state': () => net.syncState(),
+  'series-rekey': (e) => { if (series) series.rekey(e.oldId, e.newId); },
+  'rekey-scene-car': (e) => scene.rekeyCar(e.oldId, e.newId),
+  'rekey-field': (e) => {
+    for (const p of currentField) if (p.peerIndex === e.oldId) p.peerIndex = e.newId;
+  },
+  'set-auto-paused': (e) => { autoPaused = e.on; },
+  'sync-frozen': () => syncSessionFrozen(),
+  'return-to-lobby': () => returnToLobby()
+};
+
+// The boot proof: every op this build's race walks can emit has a performer.
+// Runs before any race can start, so a port that grew a new op fails its first
+// launch instead of dropping a step mid-race.
+{
+  const missing = flow.effectOps().filter((op) => !RACE_PERFORMERS[op]);
+  if (missing.length) throw new Error(`race effect ops with no performer: ${missing.join(', ')}`);
+}
+
 function applyEffect(e, ctx) {
-  switch (e.op) {
-    case 'set-track-seed': track.seed = e.seed; break;
-    case 'stop-lobby-demo': lobbyDemo.stop(); break;
-    // `e.bots` (the persona specs) is deliberately dropped: the wasm gets them on
-    // 'create-session', which carries its own copy. The shell kept a second one
-    // here for a while and never read it.
-    case 'set-field':
-      currentField = e.field;
-      aiCarIds = new Set(e.aiIds);
-      break;
-    case 'clear-item-cache': _lastItem.clear(); break;
-    case 'show-screen': show(e.screen); break;
-    case 'hide-results': el('results').classList.add('hidden'); break;
-    case 'set-race-flags':
-      paused = e.paused; autoPaused = e.autoPaused; raceEnded = e.raceEnded;
-      break;
-    case 'set-pause-overlay': setPauseOverlay(e.on); break;
-    case 'set-pause-button': el('pause-btn').classList.toggle('hidden', !e.shown); break;
-    case 'reveal-chrome': revealRaceChrome(); break;
-    case 'hold-chrome': holdRaceChrome(); break;
-    case 'reset-scene-cars':
-      for (const c of [...scene.cars.keys()]) scene.removeCar(c);
-      for (const c of e.cars) scene.addCar(c.id, c.colorIndex, c.name, { cell: c.cell, carIndex: c.carIndex });
-      scene.rebuild();
-      break;
-    case 'create-session': createSession(e); break;
-    case 'transition': net.flow.transitionTo(ROOM_STATE[e.to.toUpperCase()]); break;
-    case 'bind-session':
-      // The renderer reads the grid poses (and then every frame) straight off the
-      // engine; the audio hears only the BOUND session, which is why the lobby's
-      // attract race is silent for free.
-      scene.bindSession(session.h);
-      audioDecide.bind(session.h);
-      break;
-    case 'paint-initial-hud':
-      for (const c of session.getSnapshot().cars) scene.setCarHud(c.id, c);
-      break;
-    case 'start-countdown': session.startCountdown(e.seconds); break;
-    case 'show-countdown': showCountdownBanner(e); break;
-    case 'broadcast-countdown': net.broadcast({ type: MSG.COUNTDOWN, n: e.n }); break;
-    // DEFERRED off the calling stack on purpose — we are inside session.update()
-    // and the no-seats-left branch tears the session down. Performing this
-    // synchronously is the bug the flag exists to prevent.
-    case 'refresh-auto-pause':
-      if (e.deferred) setTimeout(refreshAutoPause, 0); else refreshAutoPause();
-      break;
-    case 'start-music': sfx(audioDecide.startMusic(e.biome)); break;
-    case 'stop-music': sfx(audioDecide.stopMusic()); break;
-    case 'show-music-credit': showMusicCredit(e.on); break;
-    case 'stop-voices': sfx(audioDecide.stopVoices()); break;
-    case 'item-pickup': scene.itemPickup(e.id, e.item); pushHeldItems(scene.hudRows()); break;
-    case 'rocket-impact': scene.rocketImpact(e.id); break;
-    case 'rocket-expire': scene.rocketExpire(e.s, e.lat); break;
-    case 'broadcast-standings': broadcastStandings(e.over, ctx.results); break;
-    case 'apply-race-points': series.applyRace(ctx.results.results, currentField); break;
-    case 'show-results': showResults(ctx.results); break;
-    case 'arm-results-failsafe':
-      clearTimeout(endTimer);
-      endTimer = setTimeout(returnToLobby, e.ms);
-      break;
-    case 'clear-results-failsafe': clearTimeout(endTimer); break;
-    case 'arm-intermission':
-      seriesDeadline = e.deadline;
-      seriesTimer = setTimeout(advanceSeriesRace, e.ms);
-      intermissionTicker = setInterval(renderIntermissionCountdown, 500);
-      break;
-    case 'clear-intermission': clearSeriesTimers(); break;
-    case 'series-advance': series.advance(); break;
-    // Dispose the wasm handle, not just the wrapper — leaving it was a leak
-    // (one orphaned GrandPrix per finished cup; the tvOS shell had this right).
-    case 'clear-series': if (series) series.dispose(); series = null; break;
-    case 'set-track-from-series': net.setTrack(series.currentTrackId); break;
-    // A chained start has no lobby step, so the new circuit is placed explicitly
-    // (selectTrack outside the lobby skips the scene swap) — the results overlay
-    // covers the pop.
-    case 'place-track': scene.setTrack(track); break;
-    case 'set-track': net.setTrack(e.trackId); break;
-    // endParty's teardown — closeRoom bails every phone terminally while the
-    // display's own 4001 self-heals into a FRESH room (Net.js onClose
-    // {roomClosed}, which also clears the roster), so the next NEW GAME
-    // reveals a lobby already sitting on the new room's QR.
-    case 'close-room': net.closeRoom(); break;
-    // A fresh party starts clean: drop the ended party's pick so the welcome
-    // board and the next lobby sit on the paper diorama, cup slot empty.
-    case 'clear-pick': net.clearPick(); selectedTrackId = null; break;
-    case 'render-lobby-pick': renderLobbyPick(); break;
-    case 'refresh-lobby-demo': refreshLobbyDemo(); break;
-    case 'update-backdrop': updateBackdrop(); break;
-    case 'dispose-session':
-      if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
-      break;
-    case 'clear-field': aiCarIds = new Set(); currentField = []; break;
-    case 'fade-to-lobby':
-      fadeBackdrop(() => {
-        for (const c of scene.cars.keys()) scene.removeCar(c);
-        if (e.placeTrack) scene.setTrack(track);   // the re-aimed pick (random re-roll / cup rewind)
-        refreshLobbyDemo();                        // AI back to driving the picked cars
-      });
-      break;
-    case 'remove-scene-car': scene.removeCar(e.id); break;
-    case 'stop-car-audio': sfx(audioDecide.stopCar(e.id)); break;
-    case 'sync-state': net.syncState(); break;
-    case 'series-rekey': if (series) series.rekey(e.oldId, e.newId); break;
-    case 'rekey-scene-car': scene.rekeyCar(e.oldId, e.newId); break;
-    case 'rekey-field':
-      for (const p of currentField) if (p.peerIndex === e.oldId) p.peerIndex = e.newId;
-      break;
-    case 'set-auto-paused': autoPaused = e.on; break;
-    case 'sync-frozen': syncSessionFrozen(); break;
-    case 'return-to-lobby': returnToLobby(); break;
-    // An op this build cannot perform is a MISSING CAPABILITY, not an optional
-    // step — say so loudly rather than dropping it and leaving a half-built race.
-    default: throw new Error(`raceFlow: unperformable effect ${e.op}`);
-  }
+  const perform = RACE_PERFORMERS[e.op];
+  // An op this build cannot perform is a MISSING CAPABILITY, not an optional
+  // step — say so loudly rather than dropping it and leaving a half-built race.
+  if (!perform) throw new Error(`raceFlow: unperformable effect ${e.op}`);
+  perform(e, ctx);
 }
 
 // The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
@@ -1057,42 +1069,32 @@ function seriesFromPlan(plan) {
   return new SeriesImpl(cup);
 }
 
-function startRace() {
-  // Only seat connected players — a dropped racer's seat lingers (dimmed, with a
-  // reconnect QR) but doesn't get a car until they're back.
-  const players = ui.connectedPlayers(net.flow.list());
-  // The go/no-go and what the Start commits to are both the orchestration
-  // layer's; a rejection comes back with its reason and nothing happens.
-  const pick = net.pick;   // the stored one, read where the walks keep it
-  const gate = { roomState: net.roomState, sceneReady, selectedTrackId, players, ...pick };
-  // ASKED TWICE, ON PURPOSE, and the draws are why. The first call is handed no
-  // draws and is read for its VERDICT only — so a start that is going to be
-  // rejected never touches the bag. Only once it is accepted do we pull exactly
-  // the number the pick needs and ask again for the real plan. The guard itself
-  // is never re-spelled here; both answers are the layer's.
-  if (flow.startRace({ ...gate, draws: [] }).action !== 'launch') return;
-  const d = flow.startRace({ ...gate, draws: offerDraws(flow.drawsNeeded(pick)) });
-  series = seriesFromPlan(d.series);
-  launchRace(players);
-}
-
-// The actual race launch, shared by the lobby start above and the series chain
-// (advanceSeriesRace) — everything from here down assumes the go/no-go guards
-// already passed and `track` is the circuit to race.
-function launchRace(players) {
-  // Fresh seed per race so item rolls (and AI lane wander) vary game-to-game.
-  // The display is the sole authority, so picking it here (with the page RNG)
-  // keeps the engine deterministic from the seed while the rolls aren't
-  // identical every game. It is the layer's FIRST effect, before the field is
-  // built, so the bots seed their wander from the same race seed.
-  const seed = (Math.random() * 0xffffffff) >>> 0;
-  perform(flow.launchRace({
-    players, seed, trackId: track.id,
-    // __countdownSeconds: E2E hook to shorten the countdown
+// The launch knobs the walks cannot know: a fresh seed per race (page RNG —
+// the display is the sole authority, so minting it here keeps the engine
+// deterministic from the seed while the rolls vary game-to-game), the E2E
+// countdown override, and the two URL debug hooks.
+function launchArgs() {
+  return {
+    seed: (Math.random() * 0xffffffff) >>> 0,
     countdownSeconds: window.__countdownSeconds || COUNTDOWN_SECONDS,
     forceItem: _qForceItem || null,   // ?item=<id>: every box rolls this (debug hook)
     botCap: _qBots
-  }).effects);
+  };
+}
+
+function startRace() {
+  // ONE walk: the go/no-go (room phase, scene, pick, connected players — all
+  // read off the room handle in C++), the series plan and the launch effects.
+  // A random pick answers {action:'draws'} first: pull exactly that many and
+  // finish — a start that is going to be rejected never touches the bag, and
+  // a draw can never be put back.
+  let d = flow.startRace(net.flow.handle, sceneReady, null, launchArgs());
+  if (d.action === 'draws') {
+    d = flow.startRace(net.flow.handle, sceneReady, offerDraws(d.drawsNeeded), launchArgs());
+  }
+  if (d.action !== 'launch') return;
+  series = seriesFromPlan(d.series);
+  perform(d.effects);
 }
 
 // The 'create-session' effect, performed. The session is the one thing an effect
@@ -1101,17 +1103,14 @@ function launchRace(players) {
 //
 // Fails loudly if the wasm module hasn't finished loading (boot races only).
 function createSession(e) {
+  // events:'external' — the race walk (drainRaceEvents) owns the queue and the
+  // lifecycle routing; the adapter must not touch it. Fail-safe note:
+  // RaceSession enforces MAX_RACE_MS internally so AFK/DNF cars can't hang the
+  // room forever. A clean 3-lap is ~50-80 s.
   session = new _nativeSim.NativeRaceSession(currentField, track, {
-    onRaceEvent,
+    events: 'external',
     forceItem: e.forceItem,
-    bots: e.bots,
-    onCountdownTick: (n) => perform(flow.countdownTick(n).effects),
-    // Fires on the "GO!" beat — physics are live and the GO! banner is still up
-    // (it clears on the next tick). Fail-safe note: RaceSession enforces
-    // MAX_RACE_MS internally so AFK/DNF cars can't hang the room forever. A
-    // clean 3-lap is ~50-80 s.
-    onRaceStart: () => perform(flow.raceStart(scene.biome(), audio.ready).effects),
-    onRaceEnd: endRace
+    bots: e.bots
   });
   // Debug escape hatch (free-cam inspection recipe, manual console poking). The
   // ONE sanctioned session.engine reach outside the sim path — everything else
@@ -1128,17 +1127,15 @@ function createSession(e) {
 // intermission.
 function advanceSeriesRace() {
   // Phones that sat out the last race on "you're in the next race!" flip to the
-  // wheel off the snapshot: launchRace's COUNTDOWN transition republishes it with
+  // wheel off the snapshot: the launch's COUNTDOWN transition republishes it with
   // their inRace now true (GAME_END never comes mid-cup, so this is their signal).
-  const players = ui.connectedPlayers(net.flow.list());
-  const d = flow.advanceSeriesRace({
-    roomState: net.roomState, hasSeries: !!series,
-    seriesFinished: !!(series && series.finished), sceneReady, players
-  });
+  const d = flow.advanceSeriesRace(net.flow.handle, series ? series.handle : 0, sceneReady);
   if (d.action === 'none') return;
   if (d.action === 'return-to-lobby') { returnToLobby(); return; } // everyone left mid-intermission
-  perform(d.effects);
-  launchRace(players); // COUNTDOWN statechange republishes the snapshot (joiners now inRace) — no re-welcome
+  perform(d.effects);   // series-advance + set-track-from-series re-aim the pick...
+  // ...so the launch walk reads the cup's next circuit and the connected
+  // players back off the handles.
+  perform(flow.launchRace(net.flow.handle, launchArgs()).effects);
 }
 
 function clearSeriesTimers() {
@@ -1147,27 +1144,20 @@ function clearSeriesTimers() {
 }
 
 // ---- race events ----
-// NO AUDIO HERE ANY MORE, and the deletion is the point. A pickup, a banana, a
-// spin, a lap chime and a countdown beat are decided into sound INSIDE the wasm
-// as the sim fires them (ttp_audio_bind names the session the room can hear), so
-// the shell no longer reads each event's world point, gathers every human's
-// position as the listener set, and hands all of it back over the boundary — a
-// pair of ABI calls per human per event, gone. The fast-forward burst stays
-// silent for the same reason it always did, decided in the same place: it is
-// skipping, not racing (ttp_fast_forward runs muted).
-function onRaceEvent(e) {
-  // As each car crosses the line, push the running standings so a finished
-  // player's phone flips to the results overlay and it fills in for everyone
-  // else as more cars finish. WHICH events do what — the victory-lap grab that
-  // spins no roulette, the rocket-strike burst, the intermediate board that is
-  // skipped when the last human is home — is the orchestration layer's.
-  perform(flow.raceEvent({
-    event: e || null,
-    fastForwarding,
-    // Only asked when it can matter: a finish is the one event that reads it,
-    // and raceFlow() costs a crossing per call.
-    humansAllDone: !!(e && e.type === 'finish' && !fastForwarding && humansAllDone())
-  }).effects);
+// The frame's one drain. WHICH events do what — the victory-lap grab that
+// spins no roulette, the rocket-strike burst, the countdown routing, the
+// intermediate board that is skipped when the last human is home, the whole
+// end-of-race order — is the orchestration layer's, decided inside the wasm
+// off the queued events and the three live handles. NO AUDIO HERE: the sounds
+// were decided as the sim fired the events (ttp_audio_bind).
+function drainRaceEvents() {
+  if (!session) return;
+  const d = flow.drainEvents(session.h, net.flow.handle, series ? series.handle : 0, {
+    biome: scene.biome(), audioReady: audio.ready, fastForwarding,
+    intermissionMs: intermissionMs(), nowMs: Date.now(),
+    resultsFailsafeMs: flow.resultsFailsafeMs()
+  });
+  if (d.effects.length) perform(d.effects, { results: d.results });
 }
 
 // The finish-moment pair, off one call: `allDone` is true once every CONNECTED
@@ -1179,7 +1169,6 @@ function onRaceEvent(e) {
 function raceFlow() {
   return ui.raceFlow(session ? session.h : 0, net.flow.handle);
 }
-function humansAllDone() { return raceFlow().allDone; }
 
 // Live standings for the controllers' results overlay. Pushed as each car
 // finishes (over=false) and once more at race end (over=true, so DNF/AFK cars
@@ -1216,22 +1205,10 @@ function broadcastStandings(over, results) {
 
 // The host ends the results screen with "New game" (RETURN_TO_LOBBY); the
 // failsafe (the layer's number) is only a net so a room whose players all
-// left mid-podium still recovers.
+// left mid-podium still recovers. The end-of-race walk itself rides the event
+// drain above — banking the points BEFORE the board goes out, and arming the
+// intermission only mid-cup, are the layer's order.
 let endTimer = null;
-function endRace(results) {
-  // `results` rides in the perform context: it is the callback's argument, so no
-  // effect can carry it and three of them (the board, the points, the overlay)
-  // need it. Everything else — including banking the points BEFORE the board
-  // goes out, and arming the intermission only mid-cup — is the layer's order.
-  // __intermissionMs is the E2E hook, like __countdownSeconds.
-  perform(flow.endRace({
-    hasSeries: !!series,
-    seriesFinished: !!(series && series.finished),
-    intermissionMs: intermissionMs(),
-    nowMs: Date.now(),
-    resultsFailsafeMs: flow.resultsFailsafeMs()
-  }).effects, { results });
-}
 
 // Tick the intermission's "starting in N…" against the auto-advance deadline
 // (a fresh ceil each beat instead of a decrementing counter, so it can't drift).
@@ -1363,14 +1340,13 @@ function renderPodium(wrap, top) {
 }
 
 function returnToLobby() {
-  // Asked twice for the same reason startRace is: a return spends a draw and a
-  // call that is already a no-op (we are in the lobby) must not advance the
-  // bag. The first call is read for its verdict only; how many draws the
-  // return will consume is the layer's answer (returnDrawsNeeded), never
-  // re-spelled here — this call site's own copy had drifted from startRace's.
-  const at = { roomState: net.roomState, ...net.pick };
-  if (flow.returnToLobby({ ...at, draws: [] }).action !== 'return') return;
-  perform(flow.returnToLobby({ ...at, draws: offerDraws(flow.returnDrawsNeeded(at)) }).effects);
+  // The same draws protocol as the start: the ask phase never touches the bag
+  // (a return that is already a no-op must not advance it), and a random pick
+  // re-rolls the next lobby's track with exactly the draws the walk asks for.
+  let d = flow.returnToLobby(net.flow.handle, null);
+  if (d.action === 'draws') d = flow.returnToLobby(net.flow.handle, offerDraws(d.drawsNeeded));
+  if (d.action !== 'return') return;
+  perform(d.effects);
 }
 
 // End the party and return to the title board (back from the lobby, or a
@@ -1393,12 +1369,13 @@ function endParty() {
 // (ttp_race_pause_json / resume_json); these two only hand in the shell's
 // latches and perform.
 function pauseRace() {
-  perform(flow.pauseRace({ hasSession: !!session, paused, autoPaused, raceEnded,
-                           roomState: net.roomState }).effects);
+  perform(flow.pauseRace(session ? session.h : 0, net.flow.handle,
+                         { paused, autoPaused, raceEnded }).effects);
 }
 
 function resumeRace() {
-  perform(flow.resumeRace({ hasSession: !!session, paused, autoPaused, raceEnded }).effects);
+  perform(flow.resumeRace(session ? session.h : 0, net.flow.handle,
+                          { paused, autoPaused, raceEnded }).effects);
 }
 
 // The sim is frozen while EITHER pause is set (manual overlay pause OR the

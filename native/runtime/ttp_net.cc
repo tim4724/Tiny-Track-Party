@@ -44,6 +44,7 @@
 #include "ttp/protocol.h"
 #include "ttp/room_flow.h"
 #include "ttp_party.h"  // ttp_room_sync_active_order — the one participant-set rule
+#include "ttp_live.h"
 #include "ttp_room.h"
 #include "ttp_session.h"
 #include "ttp_ui.h"     // ttp_ui_all_racers_ready — the start gate, asked not re-spelled
@@ -62,9 +63,18 @@ Value g_chooser = Value::Obj();
 // tick, and a single buffer would hand the second call's bytes to a caller still
 // holding the first's pointer. ttp_abi.h's "valid until the next call" rule is
 // per handle, and this ABI has none.
-std::string g_bufRows, g_bufSnapshot, g_bufJoin, g_bufClaimUrl, g_bufTemplate,
-    g_bufNorm, g_bufSeat, g_bufAddPeer, g_bufCard, g_bufState, g_bufHost,
-    g_bufTick, g_bufClaim, g_bufResync, g_bufFrame;
+std::string g_bufJoin, g_bufClaimUrl, g_bufTemplate, g_bufCard, g_bufFrame, g_bufOps;
+
+// The walks' effect vocabulary — every op an answer below can carry, in the
+// order ttp_net.h documents them. A new pushOp spelling joins this table in
+// the same commit; abi_check pins every emitted op to the export.
+const char* const NET_EFFECT_OPS[] = {
+    "clear-create-timer", "arm-create-watchdog", "join-room", "create-room",
+    "pin-instance", "save-room", "forget-room", "room-ready", "start-liveness",
+    "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
+    "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
+    "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
+    "game-message", "race-abandoned", "track-change", "clear-standings"};
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -114,43 +124,23 @@ void setPickFields(int roomHandle, Value& out) {
 }
 
 
-// A JSON text that may legitimately be "absent". NULL and "" mean JS
-// `undefined`; anything else parses, and a parse FAILURE is undefined too (a
-// malformed token is not a null). Returns nullptr for absent.
-const Value* parseOptional(const char* json, Value& storage) {
-  if (!json || !*json) return nullptr;
-  bool ok = false;
-  storage = json::parse(json, &ok);
-  return ok ? &storage : nullptr;
-}
 
-std::vector<double> numbersOf(const char* json) {
-  std::vector<double> out;
-  Value v = json::parse_or(json, Value::Arr());
-  if (v.type != Value::ARR) return out;
-  for (const Value& e : v.arr) {
-    if (e.type == Value::NUM) out.push_back(e.num);
-  }
-  return out;
-}
 
 std::string strOr(const char* s) { return s ? std::string(s) : std::string(); }
 
 ns::RoomState stateOf(const char* s) { return ns::room_state_of(strOr(s)); }
 
-Value seatValue(const ns::SeatDefaults& d) {
-  Value v = Value::Obj();
-  v.set("nameKey", Value::Str(d.nameKey));
-  v.set("nameArg", Value::Num(d.nameArg));
-  v.set("colorIndex", Value::Num(d.colorIndex));
-  v.set("carIndex", Value::Num(d.carIndex));
-  v.set("ready", Value::Bool(d.ready));
-  return v;
-}
 
 }  // namespace
 
 // ---- the chooser -------------------------------------------------------------
+
+const char* ttp_net_effect_ops_json(void) {
+  Value a = Value::Arr();
+  for (const char* op : NET_EFFECT_OPS) a.push(Value::Str(op));
+  ordered_stringify_into(a, g_bufOps);
+  return g_bufOps.c_str();
+}
 
 int ttp_net_configure(const char* chooserJson) {
   ttp::clear_error();
@@ -170,15 +160,6 @@ int ttp_net_configure(const char* chooserJson) {
 }
 
 // ---- the retained room snapshot ----------------------------------------------
-
-const char* ttp_net_roster_rows_json(const char* rosterJson, const char* inRaceJson) {
-  return put(g_bufRows, ns::roster_rows(json::parse_or(rosterJson, Value::Arr()),
-                                        json::parse_or(inRaceJson, Value::Arr())));
-}
-
-const char* ttp_net_lobby_snapshot_json(const char* inputJson) {
-  return put(g_bufSnapshot, ns::lobby_snapshot(json::parse_or(inputJson, Value::Obj()), g_chooser));
-}
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
@@ -218,13 +199,6 @@ const char* ttp_net_controller_url_template(const char* base) {
   return putStr(g_bufTemplate, std::move(out));
 }
 
-const char* ttp_net_norm_index_json(const char* valueJson) {
-  Value storage;
-  const Value* v = parseOptional(valueJson, storage);
-  double n = 0;
-  return put(g_bufNorm, ns::norm_index(v, &n) ? Value::Num(n) : Value::Null());
-}
-
 // ---- seats --------------------------------------------------------------------
 
 const char* ttp_net_clean_name(const char* valueJson) {
@@ -233,40 +207,11 @@ const char* ttp_net_clean_name(const char* valueJson) {
   return out.c_str();
 }
 
-const char* ttp_net_seat_defaults_json(double colorIndex) {
-  return put(g_bufSeat, seatValue(ns::seat_defaults(colorIndex)));
-}
-
-const char* ttp_net_add_peer_plan_json(int has, double size, double maxPlayers,
-                                       double colorIndex) {
-  const ns::AddPeerPlan plan = ns::add_peer_plan(has != 0, size, maxPlayers, colorIndex);
-  Value out = Value::Obj();
-  out.set("seat", plan.hasSeat ? seatValue(plan.seat) : Value::Null());
-  out.set("stamp", Value::Bool(plan.stamp));
-  return put(g_bufAddPeer, out);
-}
-
-const char* ttp_net_presence_action(const char* roomState) {
-  return ns::key(ns::presence_action(stateOf(roomState)));
-}
-
-const char* ttp_net_leave_action(const char* roomState) {
-  return ns::key(ns::leave_action(stateOf(roomState)));
-}
-
 const char* ttp_net_reconnect_card_json(const char* seatJson, const char* url) {
   return put(g_bufCard, ns::reconnect_card(json::parse_or(seatJson, Value::Obj()), strOr(url)));
 }
 
 // ---- controller messages ------------------------------------------------------
-
-const char* ttp_net_inbound_route(double from, const char* type) {
-  return ns::key(ns::inbound_route(from, strOr(type)));
-}
-
-const char* ttp_net_message_action(const char* type) {
-  return ns::key(ns::message_action(strOr(type)));
-}
 
 // protocol.h's MSG table, by NAME — the wire spellings live there alone.
 static const std::string& msgType(const char* name) {
@@ -299,89 +244,23 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
       if (t == msgType("SERIES_NEXT")) {
         verdict = "series-next";
       } else {
-        const std::string roster(ttp_room_list_json(roomHandle));
-        const std::string host = canonical_stringify(ttp_room_host_value(roomHandle));
-        if (ttp_ui_all_racers_ready(roster.c_str(), host.c_str())) verdict = "start-race";
+        // The same readiness rule the lobby's Start button shows, asked of the
+        // ui model directly over the live roster (ttp_live.h).
+        const Value hostV = ttp_room_host_value(roomHandle);
+        if (ttp::rt::ui::allRacersReady(ttp_live_roster_players(roomHandle, false),
+                                        json::id_of<ttp::rt::ui::Id>(&hostV)))
+          verdict = "start-race";
       }
     }
   }
   return verdict;
 }
 
-int ttp_net_set_car(int ready, const char* roomState, int inRace,
-                    const char* carIndexJson, double carCount) {
-  Value storage;
-  const Value* idx = parseOptional(carIndexJson, storage);
-  return ns::set_car_decision(ready != 0, stateOf(roomState), inRace != 0, idx, carCount) ? 1 : 0;
-}
-
-int ttp_net_set_ready(int isHost, const char* roomState, int ready, int current) {
-  return ns::set_ready_decision(isHost != 0, stateOf(roomState), ready != 0, current != 0) ? 1 : 0;
-}
-
 // ---- room-state transitions ----------------------------------------------------
-
-const char* ttp_net_state_change_json(const char* to) {
-  const ns::StateChangePlan plan = ns::state_change_plan(stateOf(to));
-  Value out = Value::Obj();
-  out.set("restampConnected", Value::Bool(plan.restampConnected));
-  out.set("freeDisconnected", Value::Bool(plan.freeDisconnected));
-  out.set("clearStandings", Value::Bool(plan.clearStandings));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufState, out);
-}
-
-const char* ttp_net_host_change_json(void) {
-  const ns::HostChangePlan plan = ns::host_change_plan();
-  Value out = Value::Obj();
-  out.set("clearReady", Value::Bool(plan.clearReady));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufHost, out);
-}
 
 // ---- liveness -------------------------------------------------------------------
 
-const char* ttp_net_heartbeat_tick_json(int inRoom, int hbPending, double hbSentAt, double now) {
-  const ns::HeartbeatTick t = ns::heartbeat_tick(inRoom != 0, hbPending != 0, hbSentAt, now);
-  Value out = Value::Obj();
-  out.set("act", Value::Str(ns::key(t.act)));
-  out.set("hbPending", Value::Bool(t.hbPending));
-  out.set("hbSentAt", Value::Num(t.hbSentAt));
-  out.set("sweep", Value::Bool(t.sweep));
-  return put(g_bufTick, out);
-}
-
 // ---- claims + reconciliation ------------------------------------------------------
-
-const char* ttp_net_claim_plan_json(const char* helloJson, double fromId, int hasOld,
-                                    int oldDisconnected) {
-  Value hello = json::parse_or(helloJson, Value::Obj());
-  // An ABSENT rejoinToken is JS undefined and an explicit null is not; find()
-  // answers nullptr for both absent and undefined, which is exactly the
-  // distinction claim_plan turns on.
-  const Value* token = hello.type == Value::OBJ ? hello.find("rejoinToken") : nullptr;
-  const ns::ClaimPlan plan = ns::claim_plan(fromId, token, hasOld != 0, oldDisconnected != 0);
-  Value out = Value::Obj();
-  out.set("claim", Value::Bool(plan.claim));
-  if (plan.claim) {
-    out.set("oldId", Value::Num(plan.oldId));
-    out.set("restamp", Value::Bool(plan.restamp));
-  }
-  return put(g_bufClaim, out);
-}
-
-const char* ttp_net_resync_plan_json(const char* rosterIdsJson, const char* relayPeersJson) {
-  const ns::ResyncPlan plan = ns::resync_plan(numbersOf(rosterIdsJson), numbersOf(relayPeersJson));
-  Value expire = Value::Arr();
-  for (double id : plan.expire) expire.push(Value::Num(id));
-  Value add = Value::Arr();
-  for (double id : plan.add) add.push(Value::Num(id));
-  Value out = Value::Obj();
-  out.set("expire", std::move(expire));
-  out.set("add", std::move(add));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufResync, out);
-}
 
 // ===========================================================================
 // THE CHOREOGRAPHY WALKS (ttp_net.h's second section).

@@ -21,7 +21,10 @@ they fill.
 
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several
-correctness constraints live in that order alone.
+correctness constraints live in that order alone. Both performer tables
+(main.js's race ops, Net.js's net ops) are asserted at boot against the wasm's
+own vocabulary exports (`ttp_race_effect_ops_json` / `ttp_net_effect_ops_json`),
+so a build whose walks grew an op this shell cannot perform fails on load.
 
 `Net.js` is the same shape one layer down: every inbound trigger (relay frame,
 peer message, socket close, liveness tick, drained room event) is ONE walk into
@@ -31,7 +34,7 @@ What stays in the file is the socket, the three timers, sessionStorage and the
 shuffle bag (a random pick answers `needDraw` and the shell draws). The pick
 itself is STORED behind the room handle (`ttp_net_pick_json`) — no mirror; the
 game layer asks `net.pick` when it needs one. Walks go through `flow.runWalk`,
-which keeps NativeRoomFlow's provider/drain/record-cache discipline around a
+which keeps NativeRoomFlow's provider-sync and event-drain discipline around a
 mutation the class's own methods didn't make.
 
 ## Boot and the back stack

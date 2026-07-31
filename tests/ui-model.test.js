@@ -22,6 +22,13 @@
 // of their own. ui_check.cc pins the first to ttp::protocol::ROOM_STATE and the
 // second to its own enum, on all four legs. What is still reachable from here —
 // the back EFFECT of each screen — is kept below.
+//
+// THE BOARD AND THE CHIP ARE DRIVEN OFF LIVE HANDLES. Their hand-assembled JSON
+// spellings are gone from the ABI: the standings board gathers its late joiners,
+// its host and (without an explicit results object) its result rows off the
+// session/room/gp handles in C++, and the cup chip's eight fields off the series.
+// So the questions below are asked the way the display asks them — a real room,
+// a real race, a real cup series, built here through the same shipped wasm.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -44,14 +51,24 @@ function ui_() {
       screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
       cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
       seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
-      standings: c('ttp_ui_standings_json', 'string', ['string']),
+      standingsLive: c('ttp_ui_standings_live_json', 'string',
+        ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
       resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
-      autoPauseAsks: c('ttp_ui_auto_pause_asks', 'number', ['string']),
-      autoPause: c('ttp_ui_auto_pause_json', 'string', ['string', 'number']),
-      seriesInfo: c('ttp_ui_series_info_json', 'string', ['string']),
+      seriesInfoLive: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
       catalogue: c('ttp_ui_catalogue_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
-      cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', [])
+      cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', []),
+      // The handles the two live twins read through. Same module, so the room,
+      // the race and the series the board gathers off are the ones built here.
+      roomCreate: c('ttp_room_create', 'number', ['string']),
+      roomAddPlayer: c('ttp_room_add_player', 'string', ['number', 'string', 'string']),
+      raceBegin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+      raceAddHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
+      raceStart: c('ttp_session_start', null, ['number', 'number']),
+      gpCreate: c('ttp_gp_create', 'number', ['string', 'number']),
+      gpApplyRace: c('ttp_gp_apply_race', null, ['number', 'string', 'string', 'string']),
+      gpAdvance: c('ttp_gp_advance', null, ['number']),
+      gpState: c('ttp_gp_state_json', 'string', ['number'])
     };
     const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
     const protocol = require('../public/shared/protocol.js');
@@ -64,11 +81,6 @@ function ui_() {
       maxPlayers: protocol.MAX_PLAYERS,
       carCount: protocol.CAR_MODELS.length
     }));
-    // The autoPause pair takes Sets in the shell; the ABI takes arrays.
-    const apArg = ({ hasSession, raceEnded, roomState, carIds, aiIds, seatedIds }) => J({
-      hasSession: !!hasSession, raceEnded: !!raceEnded, roomState: roomState || '',
-      carIds: [...carIds], aiIds: [...aiIds], seatedIds: [...seatedIds]
-    });
     return {
       CUPS, TRACK_LIST, protocol,
       catalogue: () => JSON.parse(raw.catalogue()),
@@ -76,13 +88,35 @@ function ui_() {
       screenStep: (a, b) => raw.screenStep(a, b),
       cupSlot: (x) => JSON.parse(raw.cupSlot(J(x))),
       seatGrid: (seats) => JSON.parse(raw.seatGrid(J(seats))),
-      standingsPayload: (x) => JSON.parse(raw.standings(J(x))),
       resultsView: (board, o) => JSON.parse(raw.resultsView(J(board), o.intermissionMs)),
-      autoPauseAsksParticipants: (x) => !!raw.autoPauseAsks(apArg(x)),
-      autoPause: (x) => JSON.parse(raw.autoPause(apArg(x), x.allParticipantsDisconnected ? 1 : 0)),
-      seriesInfo: (x) => JSON.parse(raw.seriesInfo(J(x))),
       cupTintRgb: (cupId, pct) => raw.cupTintRgb(cupId == null ? '' : cupId, pct) >>> 0,
-      cupFieldTintPct: () => raw.cupFieldTintPct()
+      cupFieldTintPct: () => raw.cupFieldTintPct(),
+
+      // ---- the live world the two twins gather off ----
+      // A room whose seats are named, and a race holding a car for each id in
+      // `driving`. A seat with no car is what the board draws as a joining row,
+      // so the two together are the whole of "who is in this race".
+      room: (seats) => {
+        const h = raw.roomCreate('{}');
+        for (const s of seats) raw.roomAddPlayer(h, J(s.peerIndex), J(s));
+        return h;
+      },
+      race: (driving) => {
+        const h = raw.raceBegin('tidepool', 42, 3, null);
+        for (const id of driving) raw.raceAddHuman(h, J(id), null);
+        raw.raceStart(h, 3);
+        return h;
+      },
+      cup: (cup) => raw.gpCreate(J(cup), 0),
+      applyRace: (gp, results, field) => raw.gpApplyRace(gp, J(results), J(field), null),
+      advance: (gp) => raw.gpAdvance(gp),
+      gpState: (gp) => JSON.parse(raw.gpState(gp)),
+
+      standings: ({ race = 0, room = 0, gp = 0, over, field, results = null,
+                    autoAdvanceMs = 10000 }) =>
+        JSON.parse(raw.standingsLive(race, room, gp, over ? 1 : 0, J(field),
+                                     results == null ? null : J(results), autoAdvanceMs)),
+      seriesInfo: (gp, autoAdvanceMs = 10000) => JSON.parse(raw.seriesInfoLive(gp, autoAdvanceMs))
     };
   })());
 }
@@ -175,17 +209,24 @@ test('the cup chip names the next race out of the shipped catalogue', async () =
   const ui = await ui_();
   const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
   const cup = CUPS[0];
-  const info = ui.seriesInfo({
-    cupId: cup.id, cupName: cup.name, endless: false, raceIndex: 1, raceCount: 4,
-    finished: false, nextTrackId: cup.tracks[2], catalog: TRACK_LIST, autoAdvanceMs: 10000
-  });
+  assert.ok(cup.tracks.length >= 3, 'premise: the cup has a race after next');
+
+  // A real series, driven the way a party drives it. The chip's fields are
+  // gathered off the handle in C++, so nothing here can hand it a cup id and a
+  // "finished" that disagree — which is exactly how the first TV shell shipped
+  // a podium that never said `final`.
+  const gp = ui.cup({ id: cup.id, name: cup.name, tracks: cup.tracks });
+  ui.advance(gp);                                   // race 2 of the cup is up
+  const info = ui.seriesInfo(gp);
   assert.equal(info.nextTrackId, cup.tracks[2]);
   assert.equal(info.nextTrackName, TRACK_LIST.find((t) => t.id === cup.tracks[2]).name);
   assert.equal(info.final, false);
-  const done = ui.seriesInfo({ ...{
-    cupId: cup.id, cupName: cup.name, endless: false, raceIndex: 3, raceCount: 4,
-    catalog: TRACK_LIST, autoAdvanceMs: 10000
-  }, finished: true, nextTrackId: cup.tracks[3] });
+
+  // Run it out. A cup finishes when its LAST race is applied, and the chip must
+  // follow: no next race queued, and the board it dresses is the podium.
+  while (ui.gpState(gp).raceIndex < cup.tracks.length - 1) ui.advance(gp);
+  ui.applyRace(gp, [{ playerId: 0, rank: 1, finished: true }], [{ peerIndex: 0, name: 'Ada' }]);
+  const done = ui.seriesInfo(gp);
   assert.equal(done.nextTrackId, null, 'a finished cup queues nothing');
   assert.equal(done.nextTrackName, null);
   assert.equal(done.final, true);
@@ -193,27 +234,32 @@ test('the cup chip names the next race out of the shipped catalogue', async () =
 
 test('the standings board keeps its wire key order', async () => {
   const ui = await ui_();
-  const board = ui.standingsPayload({
-    results: [{ playerId: 0, rank: 1, finished: true, time: 60 }],
-    field: [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }],
-    cup: null,
-    lateJoiners: [{ peerIndex: 1, name: 'Bo', colorIndex: 3 }],
-    hostPeerIndex: 0,
-    over: true
-  });
+  const field = [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }];
+  const results = { results: [{ playerId: 0, rank: 1, finished: true, time: 60 }] };
+
+  // Ada drives; Bo holds a seat with no car, which is the ONLY way to get a
+  // joining row now — the late-joiner list is subtracted from the live race
+  // inside C++ rather than handed in.
+  const race = ui.race([0]);
+  const room = ui.room([{ peerIndex: 0, name: 'Ada', colorIndex: 2 },
+                        { peerIndex: 1, name: 'Bo', colorIndex: 3 }]);
+  const board = ui.standings({ race, room, over: true, field, results });
+
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
   assert.deepEqual(Object.keys(board), ['over', 'hostPeerIndex', 'total', 'order']);
   assert.deepEqual(Object.keys(board.order[0]), ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time']);
   assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
   assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
+  // The joining row is dressed from the ROOM record, not from the field.
+  assert.deepEqual(board.order[1], { playerId: 1, name: 'Bo', colorIndex: 3, joining: true });
+  assert.equal(board.hostPeerIndex, 0, 'the host comes off the room election');
 
-  const cupBoard = ui.standingsPayload({
-    results: [{ playerId: 0, rank: 1, finished: true, time: 60 }],
-    field: [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }],
-    cup: { standings: [{ playerId: 0, points: 9, gained: 9 }], info: { cupId: 'c', final: false } },
-    lateJoiners: [], hostPeerIndex: 0, over: true
-  });
+  // The cup half is ONE nested object composed here, never two sibling keys.
+  const gp = ui.cup({ id: 'c', name: 'C', tracks: ['t1', 't2'] });
+  ui.applyRace(gp, [{ playerId: 0, rank: 1, finished: true }], field);
+  const seated = ui.room([{ peerIndex: 0, name: 'Ada', colorIndex: 2 }]);
+  const cupBoard = ui.standings({ race, room: seated, gp, over: true, field, results });
   assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
   assert.deepEqual(Object.keys(cupBoard.order[0]),
     ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'points', 'gained']);
@@ -221,19 +267,31 @@ test('the standings board keeps its wire key order', async () => {
 
 test('a live cup board stays in race order; only the final board re-sorts', async () => {
   const ui = await ui_();
-  const results = [
+  const field = [{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }];
+  const race = ui.race([0, 1]);
+  const room = ui.room([{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }]);
+
+  // Ada takes the first two races and Bo the third, so Ada leads the CUP while
+  // Bo won the RACE this board is showing — the one state where the two orders
+  // disagree, and the reason the board has two of them.
+  const gp = ui.cup({ id: 'c', name: 'C', tracks: ['t1', 't2', 't3', 't4'] });
+  for (const winner of [0, 0, 1]) {
+    ui.applyRace(gp, [{ playerId: winner, rank: 1, finished: true },
+                      { playerId: 1 - winner, rank: 2, finished: true }], field);
+    ui.advance(gp);
+  }
+  assert.deepEqual(ui.gpState(gp).standings.map((r) => r.playerId), [0, 1], 'premise: Ada leads the cup');
+
+  const results = { results: [
     { playerId: 1, rank: 1, finished: true, time: 60 },
     { playerId: 0, rank: 2, finished: true, time: 61 }
-  ];
-  const field = [{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }];
-  // Ada leads the CUP, Bo won this RACE.
-  const cup = { standings: [{ playerId: 0, points: 20, gained: 6 }, { playerId: 1, points: 12, gained: 9 }], info: {} };
+  ] };
 
-  const live = ui.standingsPayload({ results, field, cup, lateJoiners: [], hostPeerIndex: 0, over: false });
+  const live = ui.standings({ race, room, gp, over: false, field, results });
   assert.deepEqual(live.order.map((r) => r.playerId), [1, 0], 'mid-race the drama is who crossed the line');
   assert.ok(live.order.every((r) => r.gained === undefined), 'gains only appear on the final board');
 
-  const final = ui.standingsPayload({ results, field, cup, lateJoiners: [], hostPeerIndex: 0, over: true });
+  const final = ui.standings({ race, room, gp, over: true, field, results });
   assert.deepEqual(final.order.map((r) => r.playerId), [0, 1], 'the final board tells the cup story');
   assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
 });
@@ -257,24 +315,12 @@ test('the results overlay splits the podium from the list the frozen way', async
   assert.equal(v.newGameKey, 'new_game');
 });
 
-test('the auto-pause read is deferred to exactly the ticks that use it', async () => {
-  const ui = await ui_();
-  const base = { hasSession: true, raceEnded: false, carIds: [0, 'ai-0'], aiIds: new Set(['ai-0']), seatedIds: new Set([0]) };
-  // The party layer's answer is only consulted while PLAYING with a human seat
-  // still in the race — everywhere else the shell must not pay for the read.
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing' }), true);
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'countdown' }), false);
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'results' }), false);
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', seatedIds: new Set() }), false);
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', hasSession: false }), false);
-  assert.equal(ui.autoPauseAsksParticipants({ ...base, roomState: 'playing', raceEnded: true }), false);
-  // ... and when it is not consulted, passing it cannot change the answer.
-  for (const roomState of ['lobby', 'countdown', 'playing', 'results']) {
-    const a = ui.autoPause({ ...base, roomState, allParticipantsDisconnected: false });
-    const b = ui.autoPause({ ...base, roomState, allParticipantsDisconnected: true });
-    if (!a.asked) assert.deepEqual(a, b, `${roomState}: an unconsulted input changed the decision`);
-  }
-});
+// The auto-pause pair is gone from here with its ABI spelling. The consult rule
+// and the decision are one walk now (ttp_race_auto_pause_live_json), which reads
+// the participant set through the synced seam itself — there is no "did it ask"
+// for a shell to observe, which was the whole of what this asserted. The rule
+// stays gated in C++: runtimetest/ui_check.cc replays it against the frozen ui
+// corpus, and runtimetest/abi_check.cc holds the walk to it over live handles.
 
 test('the seat grid never shrinks below the field that races', async () => {
   const ui = await ui_();

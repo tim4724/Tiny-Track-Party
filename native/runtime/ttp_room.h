@@ -30,6 +30,12 @@ struct Value;
 class RoomFlow;
 }
 
+// syncActiveOrder against the LIVE RACE: every seat holding a car, plus every
+// dropped seat (RoomFlow::syncActiveOrder). Called by the net walks' liveness
+// sweep and folded into the *_synced reads below, so no caller can drop the
+// sync-then-read order. No-op for an unknown handle.
+void ttp_room_sync_active_order(int roomHandle, int sessionHandle);
+
 // The roster as RoomFlow hands it over — ttp_room_list_json's answer as a Value
 // instead of as text. Empty array for an unknown handle.
 //

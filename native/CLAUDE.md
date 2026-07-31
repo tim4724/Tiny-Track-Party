@@ -41,15 +41,20 @@ returns JSON, especially when half its answer is unbounded text. A layer drained
 per frame returns a packed block. The HUD and audio ABIs are the packed
 precedent; ui and session are the JSON one.
 
-**A JSON-taking spelling stays** even after a handle-taking twin exists: the JSON
-forms are what the frozen corpora replay, and a corpus carries a synthetic world
-with no room machine behind it. The JSON form is the conformance surface; the
-handle form is what ships.
+**The handle-taking walks are the ONLY spelling** (decided 2026-07-31, lifting
+the earlier keep-both rule): the superseded JSON-taking forms were deleted from
+the ABI, and the frozen corpora replay the DECISION LAYERS directly in ctest
+(ui_check, session_check, raceflow_check, roomflow_check) — a corpus carries a
+synthetic world and needs no room machine, so it never needed the ABI. The
+`abi` ctest gates the walks by composing the same C++ rules over the same live
+state in the same run and demanding byte-identical answers.
 
 **Not every C++ entry point is exported.** The item, rocket and car-stat mutators
 are reachable only from `replay_cli`, which calls C++ directly. A scenario needing
 them cannot be driven from JS or wasm — write it in C++ rather than hunting for
-the export.
+the export. The same restraint applies to reads: a rule two shims share crosses
+as an internal seam (`ttp_room.h`, `ttp_session.h`, `ttp_live.h`), never as a
+second export.
 
 ## Seams: cross-layer reads happen in C++
 
@@ -65,19 +70,13 @@ toggle. Node microbenchmarks under-read this badly because a hand-built snapshot
 has no chooser in it: **measure a publish path in the page with the real payload,
 or do not quote a number.**
 
-**A handle form is gated differently**, because no corpus can cover it. It adds no
-rule, it only GATHERS what a shell used to gather, so the only statement of
-correctness is byte-for-byte agreement with the two-call path. The `abi` ctest
-computes the expected value the old way in the same run, never a second copy of
-the wire format. **Add a case there for every new handle-taking export** — see
-`handlePathsMatchJsonPaths` for the read-only gathers (`ttp_room_sync_active_order`,
-`ttp_net_lobby_frame`, `ttp_ui_roster_seats_room_json`),
-`uiLiveTwinsMatchJsonPaths` for the ui model's live twins (race flow,
-auto-pause, series chip, standings board — each gathered off the session/room/
-gp handles against the assembly main.js used to spell), and
-`netWalksMatchMultiCallPath` for the choreography walks. A gather that the old
-shell path ORDERED (sync-then-read) keeps that order inside the seam accessor
-(`ttp_room.h`'s `*_synced` pair), so no caller can drop it.
+**A handle form is gated by agreement, not by corpus**: it adds no rule, it
+only GATHERS what a shell used to gather, so the only statement of correctness
+is byte-for-byte agreement with the same C++ decision functions composed over
+the same state in the same `abi` ctest run. **Add a case there for every new
+handle-taking export.** A gather that the old shell path ORDERED
+(sync-then-read) keeps that order inside the seam accessor (`ttp_room.h`'s
+`*_synced` pair and `ttp_room_sync_active_order`), so no caller can drop it.
 
 **The choreography walks (`ttp_net.h`'s second section) go one step further:**
 they SEQUENCE the fine-grained session rules against the live room and answer

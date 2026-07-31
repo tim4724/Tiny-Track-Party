@@ -6,12 +6,16 @@
  * the deviation ttp_ui.h states and this header inherits.
  *
  * WHAT IS BEHIND IT. libttp-runtime/ttp/race_flow.{h,cc} — public/display/
- * raceFlow.js ported. ttp_ui.h took the PREDICATES out of main.js
- * (allRacersReady, canPause, raceFlow, autoPause); this is the machine that
- * calls them in order, replayed step for step against
- * tests/fixtures/raceflow-corpus.jsonl (recorded off the live raceFlow.js) by
- * runtimetest/raceflow_check.cc on every leg. This header is only how a SHELL
- * reaches it.
+ * raceFlow.js ported, replayed step for step against
+ * tests/fixtures/raceflow-corpus.jsonl by runtimetest/raceflow_check.cc on
+ * every leg. This header is only how a SHELL reaches it — and it reaches it
+ * THE WAY ttp_net.h's walks do: every entry point takes the LIVE HANDLES
+ * (room, session, cup series) and gathers its own inputs off them in C++.
+ * Nothing about a roster, a pick or a race is serialized out of one layer by
+ * the shell only to be handed straight back into this one. The hand-assembled
+ * JSON spellings this surface used to carry are gone; the corpus replays the
+ * decision layer directly (raceflow_check), and the `abi` ctest holds each
+ * walk here to the same decision functions over the same state.
  *
  * EVERY ANSWER IS AN ORDERED EFFECT LIST, and that is the whole design. Nothing
  * here returns a verdict for a shell to sequence, because the sequencing is the
@@ -30,39 +34,26 @@
  *
  * So a shell WALKS the array in index order and performs each op. It may not
  * reorder, batch or skip. Anything it cannot perform is a missing capability,
- * not an optional step.
+ * not an optional step — and ttp_race_effect_ops_json below hands over the
+ * whole op vocabulary so a shell can prove its switch total AT BOOT instead of
+ * discovering a hole mid-race.
  *
- * WHY JSON. The same two reasons as ttp_ui.h. This layer answers ONCE PER EVENT
- * — a start, a beat, a car crossing the line, a cup chaining — never on the
- * frame path; and half of what it answers is TEXT of unbounded length (player
- * names, track ids, the opaque car-stats rows that pass straight through to the
- * sim). There is nothing to pack the way ttp_hud.h and ttp_audio.h pack their
- * per-frame numbers.
+ * WHAT STAYS WITH THE SHELL, deliberately: the page RNG (the per-race seed and
+ * the shuffle BAG — the walks ask for draws rather than owning randomness),
+ * the timers an effect names, the cup-series HANDLE (an effect says
+ * "series-advance"; the shell performs it against the ttp_gp_* handle it
+ * owns), and the E2E budget overrides (countdownSeconds / intermissionMs cross
+ * as arguments so a test can shrink them).
  *
- * KEY PRESENCE IS CONTRACT, not incidental. JSON.stringify drops undefined, so
- * several answers differ in WHICH keys exist: a rejected start carries `reason`
- * and no `series`, an accepted one carries `series`+`drawsUsed` and no
- * `reason`; a cup plan carries only {kind,cupId} while a random plan also
- * carries cupName and tracks; the no-op lobby return has no `trackSwap` at all.
- * Those are the bytes raceflow-corpus.jsonl recorded and abi_check replays.
- *
- * THE OPAQUE PASS-THROUGH. A car's `stats` row is copied from the configured
- * table into the field entry and never read. That is what keeps CAR_STATS out
- * of libttp-runtime and lets the corpus carry a synthetic world; a shell gets
- * back exactly the JSON it configured.
- *
- * STATELESS, WITH ONE EXCEPTION — the same shape as ttp_ui.h's. The WORLD
- * (ttp_race_configure: the field sizes, the persona table, the car-stats rows,
- * the cups) is authored data that changes when the game ships, not while it
- * runs, so a shell sets it once at boot. race_flow.cc itself stays
- * world-agnostic.
- *
- * PERSONAS ARE NOT DUPLICATED ANY MORE. The web shell used to keep
- * public/display/aiPersonas.js as a hand-synced copy of libttp-sim's
- * ttp::AI_PERSONALITIES, held together by a prose "keep in sync" comment —
- * exactly the drift CLAUDE.md's manifest rule exists to stop. A shell now reads
- * the table out of ttp_race_personas_json and configures it back, so there is
- * one table and the wasm owns it.
+ * THE DRAWS PROTOCOL. A shuffle-bag draw cannot be put back, so a walk that
+ * may spend draws (start, return-to-lobby) runs in two phases THROUGH THE SAME
+ * EXPORT: called with drawsJson NULL it answers the verdict — and, when the
+ * verdict needs randomness, {"action":"draws","drawsNeeded":n}. The shell
+ * draws exactly n and calls again with them; the walk re-checks its own gate.
+ * A pick that needs no draws completes on the first call. The old shape — a
+ * separate draws-needed export and a gate the shell called twice by
+ * convention — drifted at one call site and was transcribed wrongly by the
+ * first TV shell; the protocol is one export's contract now.
  *
  * IDS. A player id crosses as a JSON scalar, exactly as in ttp_party.h and
  * ttp_ui.h: the token `3` is the number 3 and `"3"` is the string "3", and they
@@ -103,147 +94,137 @@ TTP_ABI int ttp_race_configure(const char* json);
  * keeping a second copy. -> [{"name","caution","laneBias"}, ...] */
 TTP_ABI const char* ttp_race_personas_json(void);
 
-/* ---- the field ----------------------------------------------------------- */
+/* The effect vocabulary this build can emit, as a JSON array of op keys in a
+ * stable order. A shell walks it at boot and asserts its performer switch
+ * covers every op — the unperformable-op throw, moved from mid-race to
+ * startup. The same trick as ttp_audio_cue_id and ttp_item_id: the table
+ * lives here, the shell builds FROM it, and no mirror can drift. */
+TTP_ABI const char* ttp_race_effect_ops_json(void);
 
-/* The race grid: the connected humans plus CPU racers topping it up to
- * fieldSize. CPU seats take the lowest free livery, the model that livery maps
- * to, and a persona cycled by CPU index; their ids are strings ("ai-0"...) that
- * never collide with the integer phone slots.
- *
- *   players  [{"peerIndex":id,"name","colorIndex":n,"carIndex":n|null}, ...]
- *   seed     the race seed; each bot's wander seeds from seed + its NUMERIC
- *            index, so the bots differ from each other and from last race
- *   botCap   the ?bots=<n> debug cap as a JSON number, or "null" to fill
- *   ->  {"field":[{"peerIndex","name","colorIndex","carIndex","stats","ai"},...],
- *        "bots": [{"peerIndex","caution","laneBias","seed"}, ...],
- *        "aiIds":[id, ...]} */
-TTP_ABI const char* ttp_race_build_field_json(const char* playersJson, double seed,
-                                              const char* botCapJson);
+/* ---- the lobby attract demo ---------------------------------------------- */
 
-/* The lobby attract grid. Same CPU fill, different ids ("demo-<peer>",
- * "demo-cpu-<n>"), and one extra rule: persona by FINAL grid index so they
- * spread across the whole field, each CPU taking that persona's name.
- *   -> [{"id","name","colorIndex","carIndex","stats","persona"}, ...] */
-TTP_ABI const char* ttp_race_build_demo_field_json(const char* playersJson,
-                                                   const char* botCapJson);
-
-/* Cheap signature of what the attract demo renders, so a refresh can skip a
- * no-op rebuild: track + each car's id/livery/model. A rename alone will not
- * re-grid. Takes the array ttp_race_build_demo_field_json returned. */
-TTP_ABI const char* ttp_race_demo_sig(const char* demoFieldJson, const char* trackId);
+/* The lobby attract grid, off the live room: the seated players plus CPU
+ * racers topping the field up, demo ids ("demo-<peer>", "demo-cpu-<n>"),
+ * persona by FINAL grid index so they spread across the whole field — plus the
+ * cheap signature of what that grid renders (track + each car's
+ * id/livery/model), so a refresh can compare and skip a no-op rebuild. A
+ * rename alone will not re-grid.
+ *   -> {"field":[{"id","name","colorIndex","carIndex","stats","persona"},...],
+ *       "sig":"..."} */
+TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
+                                            const char* botCapJson);
 
 /* ---- start / launch ------------------------------------------------------ */
 
-/* The START_GAME go/no-go, re-checked here so a stale or forged START_GAME
- * cannot jump the lobby. The readiness rule itself is ttp_ui_all_racers_ready's.
+/* The lobby start, off the live room: the START_GAME go/no-go (re-checked here
+ * so a stale or forged START_GAME cannot jump the lobby), the series plan, and
+ * — once accepted — the full launch, in ONE walk. roomState, the connected
+ * players and the stored pick are read off roomHandle; the readiness rule
+ * itself is the ui model's.
  *
- *   {"roomState":"lobby"|..., "sceneReady":bool, "selectedTrackId":"id"|null,
- *    "players":[...], "mode":"cup"|"random"|..., "cupId":"id"|null,
- *    "trackId":"id", "randomRaces":n, "draws":["id",...]}
- *
- * `draws` is the shell's pre-pulled shuffle-bag output — the bag stays in the
- * shell on purpose (page RNG, not sim state), so this offers draws and reports
- * how many a rule actually took.
+ *   sceneReady        the shell's "the 3D scene is built" latch (only it knows)
+ *   drawsJson         NULL for the ask phase; a JSON array of drawn track ids
+ *                     for the launch phase (see THE DRAWS PROTOCOL above)
+ *   seed              the per-race seed (page RNG; the shell mints it)
+ *   countdownSeconds  protocol COUNTDOWN_SECONDS, or the E2E override
+ *   forceItemOrNull   ?item=<id> debug hook: every box rolls this
+ *   botCapJson        ?bots=<n> debug cap as a JSON number, or NULL to fill
  *
  *   -> {"action":"none","reason":"room-state"|"scene"|"no-track"|"no-players"}
- *    | {"action":"launch","series":null|{...},"drawsUsed":n}
- * where a series is {"kind":"cup","cupId"} or
- * {"kind":"random-endless"|"random-card","cupId","cupName","tracks":[...]}. */
-TTP_ABI const char* ttp_race_start_json(const char* inputJson);
-
-/* How many bag draws a start with these settings WOULD consume, without
- * deciding anything and without being handed any.
+ *    | {"action":"draws","drawsNeeded":n}
+ *    | {"action":"launch","series":null|{...},"drawsUsed":n,"effects":[...]}
  *
- * It exists because a draw cannot be put back. A shell that pre-draws for the
- * call above and is then told "none / no-players" has already advanced the
- * shuffle for a race that never happened — which makes "random" repeat sooner
- * and silently skip a track nobody saw. So a shell asks this FIRST, draws
- * exactly this many, and only then calls ttp_race_start_json.
+ * A launch's `series` is the plan the shell builds its cup-series handle from
+ * BEFORE performing the effects: null (single race), or
+ * {"kind":"cup","cupId"} — the shell already holds the cup — or
+ * {"kind":"random-endless"|"random-card","cupId","cupName","tracks":[...]},
+ * where random-endless is the one shape that keeps a live draw at every
+ * intermission. */
+TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
+                                             const char* drawsJson, double seed,
+                                             double countdownSeconds,
+                                             const char* forceItemOrNull,
+                                             const char* botCapJson);
+
+/* The launch alone, for the cup chain: after ttp_race_advance_live_json's
+ * effects are performed (the series advanced, the room's pick re-aimed at the
+ * cup's next track), this reads the connected players and the pick back off
+ * the handles and answers the launch effects. Same trailing arguments as the
+ * start walk. -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_launch_live_json(int roomHandle, double seed,
+                                              double countdownSeconds,
+                                              const char* forceItemOrNull,
+                                              const char* botCapJson);
+
+/* ---- the frame's event drain --------------------------------------------- */
+
+/* Drain the session's queued race events and answer everything a shell must DO
+ * about them, in fire order, as one effect list. The three LIFECYCLE beats the
+ * sim reconstructs (_countdown, _raceStart, _raceEnd) are routed INTERNALLY to
+ * the countdown, GO and end-of-race rules — the first TV shell fed them to the
+ * ordinary-event filter, where they vanish and the room sits in COUNTDOWN
+ * forever; that routing table is not a shell concern any more. Ordinary events
+ * run the finish/visuals rule, with humans-all-done read off the live handles
+ * exactly when a finish asks for it.
  *
- * Takes the same input object; reads only `mode` and `randomRaces`. */
-TTP_ABI int ttp_race_draws_needed(const char* inputJson);
-
-/* The lobby-return twin of the above: how many draws returnToLobby will consume
- * ({"mode":...} -> 1 only for "random"). Exists so no shell re-spells the mode
- * test at the call site — the display's own copy had already drifted from
- * startRace's once. */
-TTP_ABI int ttp_race_return_draws_needed(const char* inputJson);
-
-/* The launch itself, shared by the lobby start and the cup chain. Assumes the
- * guards above already passed.
+ *   biome             the built scene's biome (the GO beat's music pick)
+ *   audioReady        the device can play (a locked AudioContext picks no song)
+ *   fastForwarding    inside the AI-only fast-forward burst: visuals silenced
+ *   intermissionMs    ttp_race_intermission_ms(), or the E2E override
+ *   nowMs             the shell's clock (the intermission deadline is absolute)
+ *   resultsFailsafeMs ttp_race_results_failsafe_ms()
  *
- *   {"players":[...], "seed":n, "trackId":"id", "countdownSeconds":n,
- *    "forceItem":"id"|null, "botCap":n|null}
- *   -> {"effects":[...], "field":[...], "aiIds":[...], "bots":[...]}
+ *   -> {"effects":[...], "results": obj|null}
  *
- * THE EFFECT ORDER IS THE CONTRACT — see this header's opening. */
-TTP_ABI const char* ttp_race_launch_json(const char* inputJson);
-
-/* One countdown beat. n>0 is "3/2/1", n==0 is "GO!", n<0 is banner-gone. The
- * n<0 beat clears the LOCAL banner only and is deliberately never broadcast:
- * the phones' COUNTDOWN handler flips them onto the drive HUD, so a race that
- * ends within a second of GO would otherwise have this trailing beat land after
- * the final standings and yank their results board back to the wheel.
- *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_countdown_tick_json(double n);
-
-/* The "GO!" beat: physics live, banner still up. `audioReady` gates the music
- * pick — a device that cannot play yet picks no song at all.
- *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_start_beat_json(const char* biome, int audioReady);
-
-/* ---- the finish ---------------------------------------------------------- */
-
-/* A sim race event, filtered to what a shell must DO about it. No audio: a
- * pickup, a banana, a spin and a lap chime are decided into sound inside the
- * wasm as the sim fires them (ttp_audio.h). `fastForwarding` silences the
- * visuals for the same reason it silences the sound — the burst is skipping,
- * not racing.
- *   {"event":{"type","id","item","cause","finished","s","lat"}|null,
- *    "fastForwarding":bool, "humansAllDone":bool}
- *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_event_json(const char* inputJson);
-
-/* The race is over.
- *   {"hasSeries":bool,"seriesFinished":bool,"intermissionMs":n,"nowMs":n,
- *    "resultsFailsafeMs":n}
- *   -> {"effects":[...]}
- * Points are banked before the board goes out, and the intermission is armed
- * only mid-cup. */
-TTP_ABI const char* ttp_race_end_json(const char* inputJson);
+ * `results` is non-null exactly when the drain crossed the race's end: the
+ * ranked board endRace hands its callback, which three effects
+ * (apply-race-points, show-results, the final broadcast-standings) read as
+ * their context. No effect can carry it, so it rides the answer. */
+TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
+                                              int gpHandle, const char* biome,
+                                              int audioReady, int fastForwarding,
+                                              double intermissionMs, double nowMs,
+                                              double resultsFailsafeMs);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 
 /* Chain into the cup's next race straight from the intermission (RESULTS →
- * COUNTDOWN, no lobby between). The shell runs ttp_race_launch_json next.
- *   {"roomState","hasSeries","seriesFinished","sceneReady","players":[...]}
+ * COUNTDOWN, no lobby between). roomState and the connected players come off
+ * roomHandle; whether the series is live and finished off gpHandle (0 = no
+ * series). The shell performs the effects — series-advance and
+ * set-track-from-series among them — and then calls ttp_race_launch_live_json.
  *   -> {"action":"none"|"return-to-lobby"|"advance","effects":[...]} */
-TTP_ABI const char* ttp_race_advance_json(const char* inputJson);
+TTP_ABI const char* ttp_race_advance_live_json(int roomHandle, int gpHandle,
+                                               int sceneReady);
 
 /* Back to the lobby from anywhere; every exit route cancels a running cup.
- *   {"roomState","mode","cupId":"id"|null,"trackId":"id"|null,"draws":[...]}
+ * roomState and the pick are read off roomHandle. Runs the draws protocol
+ * (a random pick re-rolls the next lobby's track, and a call that is already
+ * a no-op must not advance the bag):
  *   -> {"action":"none","effects":[],"drawsUsed":0}
+ *    | {"action":"draws","drawsNeeded":n}
  *    | {"action":"return","effects":[...],"trackSwap":"id"|null,"drawsUsed":n}
  * `trackSwap` re-aims the next lobby's pick: random re-rolls every visit, a cup
  * rewinds to its race 1. */
-TTP_ABI const char* ttp_race_return_json(const char* inputJson);
+TTP_ABI const char* ttp_race_return_live_json(int roomHandle, const char* drawsJson);
 
 /* Ending the PARTY (back from the lobby): the ordered teardown effects AFTER
- * the shell's own returnToLobby call — close-room, clear-pick,
+ * the shell's own return-to-lobby walk — close-room, clear-pick,
  * render-lobby-pick, refresh-lobby-demo, show-screen welcome,
  * update-backdrop, in that order (the order is the contract; the corpus pins
  * it). Takes nothing: a party end has no mode. */
 TTP_ABI const char* ttp_race_end_party_json(void);
 
-/* The manual overlay pause / resume, as walks.
- *   {"hasSession":bool,"paused":bool,"autoPaused":bool,"raceEnded":bool,
- *    "roomState":str}   (roomState read by the pause verdict only)
- *   -> {"action":"none"|"pause"|"resume","effects":[...]}
- * The verdicts (ttp_ui_can_pause / can_resume) are asked INSIDE, and the
- * five-op order is the contract — a shell performs, it does not sequence.
- * autoPaused/raceEnded ride through into the set-race-flags effect untouched. */
-TTP_ABI const char* ttp_race_pause_json(const char* inputJson);
-TTP_ABI const char* ttp_race_resume_json(const char* inputJson);
+/* The manual overlay pause / resume, as walks. hasSession and roomState come
+ * off the handles; the three flags are the shell's own latches (the model
+ * threads them back through the set-race-flags effect, so the shell is their
+ * one writer). The verdicts are asked INSIDE, and the five-op order is the
+ * contract — a shell performs, it does not sequence.
+ *   -> {"action":"none"|"pause"|"resume","effects":[...]} */
+TTP_ABI const char* ttp_race_pause_live_json(int sessionHandle, int roomHandle,
+                                             int paused, int autoPaused, int raceEnded);
+TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
+                                              int paused, int autoPaused, int raceEnded);
 
 /* The two game-timing budgets (race_flow.h INTERMISSION_MS /
  * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
@@ -253,23 +234,25 @@ TTP_ABI double ttp_race_results_failsafe_ms(void);
 /* ---- the roster-driven repairs ------------------------------------------- */
 
 /* Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
- * whose reconnect grace elapsed). `removed` is whether the session actually
- * held that car — only the shell holds the handle, so it asks and passes the
- * answer in. -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_forfeit_json(int removed, const char* peerIdJson);
+ * whose reconnect grace elapsed). The removal itself happens HERE, against the
+ * live session — the shell no longer asks the engine and hands the answer
+ * back. sessionHandle 0 means no race: the no-car effects. -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_forfeit_live_json(int sessionHandle, const char* peerIdJson);
 
-/* A dropped player reconnected on a different device. Banked cup points follow
- * the PLAYER, so the series rekey happens even with no car to move.
- * -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_rekey_json(int hasSeries, int rekeyed,
-                                        const char* oldIdJson, const char* newIdJson);
+/* A dropped player reconnected on a different device. The session rekey
+ * happens HERE; banked cup points follow the PLAYER, so the series-rekey
+ * effect is emitted (for the shell to perform against its gp handle) even with
+ * no car to move. gpHandle 0 = no series. -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_rekey_live_json(int sessionHandle, int gpHandle,
+                                             const char* oldIdJson, const char* newIdJson);
 
-/* The auto-pause arbitration's EFFECT half. The RULE is ttp_ui_auto_pause_json's
- * — which seats count, when the freeze may apply, what an empty field means —
- * and its answer is handed straight back in here.
- *   {"action":"none"|"return-to-lobby"|...,"autoPaused":bool}|null
- *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_auto_pause_json(const char* decisionJson);
+/* The silent auto-pause, whole: the consult rule, the participant read through
+ * the synced seam, the decision AND its effects, off the two handles. raceEnded
+ * stays a parameter — it is the shell's results-overlay latch, a fact neither
+ * handle knows. Re-run on every roster change; the answer's effects are often
+ * empty. -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_auto_pause_live_json(int sessionHandle, int roomHandle,
+                                                  int raceEnded);
 
 #ifdef __cplusplus
 }

@@ -12,27 +12,33 @@
 // dropped null, an id parsed as the wrong JSON type) live exactly here and are
 // invisible to a check that talks to Game directly.
 //
-// Four parts:
-//   1. TRACE THROUGH THE ABI — replays golden traces via ttp_process_input /
-//      ttp_update and demands the recorded per-frame hash + events back out of
-//      ttp_snapshot_json / ttp_events_json. Same fixtures and recipe as the Node
-//      test, but it now runs on every platform leg (linux/macOS/wasm/tvOS).
-//   2. CUP SERIES THROUGH THE ABI — replays grandprix-corpus.jsonl through
-//      ttp_gp_*, so the JS-recorded scoring oracle also covers the marshalled
-//      path (standings JSON, the ""-means-null next track, JSON-scalar ids).
-//   3. BOUNDARY + MUTATION EXPORTS — the rest of ttp_runtime.h, each asserted
-//      against its documented contract.
-//   4. THE PARTY ABI (ttp_party.h) — the room corpus and the framing corpus
-//      through the C boundary, plus a fastlane plumbing pass. Same gap one file
-//      over: ttp_party.cc was emscripten-only too.
-//   5. THE UI ABI (ttp_ui.h) — ui-corpus.jsonl through the C boundary, so the
-//      screen decisions a native shell will consume are marshalled on every leg
-//      and the standings board's WIRE BYTES are asserted where they are made.
+// TWO KINDS OF GATE LIVE HERE, and which one a section can use follows from
+// what the export IS.
 //
-// Part 3 is a behavioural gate, not conformance evidence: no JS twin of the glue
-// survives to record an oracle from, so the assertions encode what the header
-// PROMISES. Where a promise is vague the check asserts self-consistency instead
-// of inventing a number.
+//   A CORPUS REPLAY, wherever a JSON-taking spelling still exists. The frozen
+//   fixture was recorded off the JS twin, so replaying it through the C
+//   boundary puts JS-recorded evidence on every platform leg: the golden
+//   traces (ttp_process_input/ttp_update), grandprix-corpus (ttp_gp_*),
+//   framing-corpus, and the surviving arms of ui-corpus.
+//
+//   AN EQUIVALENCE, wherever the export is a HANDLE WALK. A walk adds no rule —
+//   it GATHERS what a shell used to gather and SEQUENCES rules a shell used to
+//   sequence — so no corpus can cover it and none should be invented. The
+//   expected value is composed IN THE SAME RUN out of the C++ decision
+//   functions the walk calls (race::, ttp::rt::ui::, ttp::session::, RoomFlow)
+//   over the same state, and compared with the walk's answer. That keeps the
+//   gate true when a shape changes and stops it becoming a stale second copy
+//   of the wire format.
+//
+// THE JSON-TAKING SPELLINGS THAT DIED took their replays with them, and that is
+// a deliberate trade rather than lost coverage: the corpora they replayed are
+// still authoritative through the C++-level checks (roomflow_check,
+// session_check, raceflow_check, ui_check), which is where the RULES were
+// always proven. What is gone is the second, marshalling-level pass over the
+// same fixture — replaced here by the equivalences above.
+//
+// Nothing in this file re-records a corpus, and nothing here may become the
+// oracle for a rule: a rule's oracle is the frozen JS recording, always.
 
 #include <cmath>
 #include <cstdio>
@@ -61,8 +67,19 @@
 // and the sole way to state that is to hold the two side by side.
 #include "ttp/protocol.h"
 #include "ttp/schematic.h"
+// The DECISION LAYERS the handle walks sequence, reached directly so the
+// expected side of every equivalence is the rule itself rather than a
+// transcription of it. race_flow.h and ui_model.h are libttp-runtime's;
+// room_flow.h and session.h are libttp-party's. This check already links both
+// libraries and recompiles the shims, which is the same standing this file's
+// includes of ttp_room.h / ttp_session.h have.
+#include "ttp/race_flow.h"
+#include "ttp/room_flow.h"
+#include "ttp/session.h"
 #include "ttp_audio.h"
-#include "ttp_room.h"  // ttp_room_store_pick — staging the stored pick for the walk cases
+#include "ttp_live.h"     // the shared live gathers the race + ui walks compose over
+#include "ttp_room.h"     // the room seam: the pick slot, the machine, the synced reads
+#include "ttp_session.h"  // the session seam: the live Game, the cup series
 #include "ttp_net.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
@@ -73,6 +90,8 @@
 using namespace ttp;
 using namespace ttp::corpus;
 namespace ui = ttp::rt::ui;
+namespace race = ttp::rt::race;
+namespace ns = ttp::session;
 
 namespace {
 
@@ -127,6 +146,51 @@ std::string rehex(const Value& v) {
     default: return "null";
   }
 }
+
+// A peer id crosses the ABI as a JSON scalar — `3` and `"3"` are different peers.
+std::string idJson(const Value* v) {
+  if (!v || v->type == Value::UNDEF) return "null";
+  return canonical_stringify(*v);
+}
+
+Value parseOrNull(const char* text, const char* what) {
+  Value v;
+  std::string err;
+  if (!read_line(text ? text : "null", v, &err)) {
+    fail(std::string(what) + ": invalid JSON from the ABI (" + err + ")");
+    return Value::Null();
+  }
+  return v;
+}
+
+// One field of a parsed ABI answer, or a typed hole that diffs loudly rather
+// than defaulting into agreement.
+Value at(const Value& v, const char* key) {
+  const Value* f = v.find(key);
+  return f ? *f : Value::Str(std::string("<missing ") + key + ">");
+}
+
+// A roster (ttp_room_list_json's answer) as the ui model's entries. The
+// composed expectations run the rules over the SAME rows the walk reads, so
+// this is the one place a roster is turned into rule input here.
+std::vector<ui::RosterEntry> rosterEntriesOf(const Value& arr) {
+  std::vector<ui::RosterEntry> out;
+  if (arr.type != Value::ARR) return out;
+  for (const Value& p : arr.arr) {
+    ui::RosterEntry e;
+    e.peerIndex = json::id_of<ui::Id>(p.find("peerIndex"));
+    e.name = json::str_field(p, "name");
+    e.colorIndex = json::num_field(p, "colorIndex");
+    e.carIndex = json::opt_num<ui::OptNum>(p.find("carIndex"));
+    e.connected = json::truthy(p.find("connected"));
+    e.ready = json::truthy(p.find("ready"));
+    out.push_back(std::move(e));
+  }
+  return out;
+}
+
+Value optVal(const ui::OptNum& n) { return n.has ? Value::Num(n.v) : Value::Null(); }
+Value optVal(const ui::OptStr& s) { return s.has ? Value::Str(s.v) : Value::Null(); }
 
 // ---------------------------------------------------------------------------
 // Part 1: a golden trace, through the ABI.
@@ -304,21 +368,21 @@ bool gpThroughAbi(const std::string& path) {
                      canonical_stringify(*s.find("newId")).c_str());
       }
 
-      // Rebuild the recorded digest from the ABI's own getters.
+      // Rebuild the recorded digest from ONE state read. The digest's keys are
+      // the JS oracle's, so they are re-spelled off the state object rather
+      // than renamed in the fixture — `currentTrackId` for `currentTrack`, and
+      // `nextTrackId`, which the state answers as a REAL null where the retired
+      // getter spelled "".
+      const Value st = parseOrNull(ttp_gp_state_json(g), "gp state");
       Value got = Value::Obj();
-      got.set("raceIndex", Value::Num((double)ttp_gp_race_index(g)));
-      got.set("raceCount", Value::Num((double)ttp_gp_race_count(g)));
-      got.set("currentTrackId", Value::Str(ttp_gp_current_track(g)));
-      const std::string next = ttp_gp_next_track(g);
-      got.set("nextTrackId", next.empty() ? Value::Null() : Value::Str(next));
-      got.set("finished", Value::Bool(ttp_gp_finished(g) != 0));
-      got.set("endless", Value::Bool(ttp_gp_endless(g) != 0));
-      Value cupBack;
-      if (!read_line(ttp_gp_cup_json(g), cupBack, &err)) { fail("gp cup json: " + err); return false; }
-      got.set("tracks", cupBack.find("tracks") ? *cupBack.find("tracks") : Value::Arr());
-      Value standings;
-      if (!read_line(ttp_gp_standings_json(g), standings, &err)) { fail("gp standings: " + err); return false; }
-      got.set("standings", standings);
+      got.set("raceIndex", at(st, "raceIndex"));
+      got.set("raceCount", at(st, "raceCount"));
+      got.set("currentTrackId", at(st, "currentTrack"));
+      got.set("nextTrackId", at(st, "nextTrack"));
+      got.set("finished", at(st, "finished"));
+      got.set("endless", at(st, "endless"));
+      got.set("tracks", at(at(st, "cup"), "tracks"));
+      got.set("standings", at(st, "standings"));
 
       const Diff d = diff_val(*digest, got, "digest");
       if (d.differ) {
@@ -709,46 +773,24 @@ void boundaryExports() {
 }
 
 // ---------------------------------------------------------------------------
-// Part 4: the PARTY ABI (ttp_party.h) — the room state machine, the relay framing
-// and the fastlane netcode, all as C entry points.
+// Part 4: the PARTY ABI (ttp_party.h) — the room machine's remaining SHELL
+// SURFACE, the relay framing and the fastlane netcode, as C entry points.
 //
-// Same gap as the runtime ABI had, one file over: ttp_party.cc was compiled by the
-// emscripten target alone, so ctest never saw its 58 exports. tests/party-abi.test.js
-// covers them in Node against the shipped wasm, which is real coverage of the wasm the
-// browser loads — but it leaves the desktop and tvOS legs blind, and those legs are
-// exactly where a native shell would consume this ABI.
+// The room surface used to be 30-odd exports and this section replayed
+// roomflow-corpus through all of them. It is eleven now: create/dispose, one
+// mutator pair (add_player / set_field), transition_to, the three describe
+// reads (state / list / host), the event drain and the two provider setters.
+// Everything the corpus drove — remove, rekey, presence, the liveness
+// predicates, the active order — is reached by the choreography walks in C++,
+// so there is no ABI path left to replay it down.
 //
-// The room replay below is a port of that Node test's corpus walk. Both replaying the
-// SAME roomflow-corpus is the point: the JS-recorded oracle now reaches the C boundary
-// on every platform rather than on one.
+// The corpus did not lose a reader: partytest/roomflow_check.cc replays it
+// against RoomFlow itself on every leg, which is where the RULES always were.
+// What only the boundary can say is what this section says instead — that the
+// eleven survivors MARSHAL correctly. Hand-authored, so it is regression
+// evidence, never parity evidence.
 // ---------------------------------------------------------------------------
-
-// A peer id crosses the ABI as a JSON scalar — `3` and `"3"` are different peers.
-std::string idJson(const Value* v) {
-  if (!v || v->type == Value::UNDEF) return "null";
-  return canonical_stringify(*v);
-}
-
-Value parseOrNull(const char* text, const char* what) {
-  Value v;
-  std::string err;
-  if (!read_line(text ? text : "null", v, &err)) {
-    fail(std::string(what) + ": invalid JSON from the ABI (" + err + ")");
-    return Value::Null();
-  }
-  return v;
-}
-
-bool roomCorpusThroughAbi(const std::string& path) {
-  std::ifstream in(path);
-  if (!in) { fail("cannot open room corpus " + path); return false; }
-
-  std::string line;
-  if (!std::getline(in, line)) { fail("empty room corpus"); return false; }
-  Value header;
-  std::string err;
-  if (!read_line(line, header, &err)) { fail("room corpus header: " + err); return false; }
-
+void roomShellSurface() {
   {
     Value v = parseOrNull(ttp_party_version(), "ttp_party_version");
     const Value* layer = v.find("layer");
@@ -764,273 +806,316 @@ bool roomCorpusThroughAbi(const std::string& path) {
   check(ttp_protocol_manifest_json() == canonical_stringify(protocol::manifest()),
         "ttp_protocol_manifest_json is ttp::protocol::manifest() verbatim");
 
-  // Error paths first: no handle required, and a room getter must still answer.
-  check(ttp_room_state(0) != nullptr, "ttp_room_state on handle 0 returns a string, not null");
-  check(ttp_room_size(0) == 0, "ttp_room_size on handle 0 is 0");
+  // ---- error paths first: a room read must answer without a handle.
+  // "" — the same spelling the internal seam has always used, so both paths
+  // read identically (the old literal "null" forced a carve-out here).
+  check(std::strcmp(ttp_room_state(0), "") == 0,
+        "ttp_room_state on handle 0 spells the absent phase as \"\"");
   check(std::strcmp(ttp_room_list_json(0), "[]") == 0, "ttp_room_list_json on handle 0 is []");
+  check(std::strcmp(ttp_room_host_json(0), "null") == 0, "ttp_room_host_json on handle 0 is null");
+  check(std::strcmp(ttp_room_events_json(0), "[]") == 0, "ttp_room_events_json on handle 0 is []");
+  check(std::strcmp(ttp_room_add_player(0, "1", "{}"), "null") == 0,
+        "ttp_room_add_player on handle 0 is null");
+  check(ttp_room_set_field(0, "1", "ready", "true") == 0, "ttp_room_set_field on handle 0 fails");
+  check(ttp_room_transition_to(0, "lobby") == 0, "ttp_room_transition_to on handle 0 fails");
 
-  int scripts = 0, steps = 0, slotCases = 0, bad = 0;
-  while (std::getline(in, line)) {
-    if (line.empty()) continue;
-    Value rec;
-    if (!read_line(line, rec, &err)) { fail("room corpus: " + err); return false; }
-
-    // lowestFreeSlot lines are a static helper with no handle.
-    if (const Value* sc = rec.find("slotCase")) {
-      const std::string used = canonical_stringify(*sc->find("used"));
-      const int max = (int)sc->find("max")->num;
-      const int want = (int)sc->find("expect")->num;
-      if (ttp_room_lowest_free_slot(used.c_str(), max) != want) {
-        bad++;
-        fail("ttp_room_lowest_free_slot(" + used + ", " + std::to_string(max) + ") != " +
-             std::to_string(want));
-      }
-      slotCases++;
-      continue;
-    }
-
-    // Rebuild the room from the recorded config, mirroring the JS side: `master`
-    // present at all means a masterProvider exists; `liveness` absent disables it.
-    const Value* cfg = rec.find("config");
-    Value abiCfg = Value::Obj();
-    if (cfg) {
-      const Value* ump = cfg->find("useMasterProvider");
-      if (ump && ump->b) {
-        const Value* m = cfg->find("master");
-        abiCfg.set("master", m ? *m : Value::Null());
-      }
-      if (const Value* lv = cfg->find("liveness")) abiCfg.set("liveness", *lv);
-    }
-    const int h = ttp_room_create(canonical_stringify(abiCfg).c_str());
-    if (h <= 0) { fail("ttp_room_create returned " + std::to_string(h)); return false; }
-    scripts++;
-    const std::string name = rec.find("name") ? rec.find("name")->str : "?";
-
-    int si = 0;
-    for (const Value& step : rec.find("steps")->arr) {
-      const Value* op = step.find("op");
-      const std::string kind = op->find("op")->str;
-      const std::string p = idJson(op->find("p"));
-      Value ret;  // UNDEF unless this op returns something the corpus recorded
-
-      if (kind == "add") {
-        const Value* f = op->find("fields");
-        Value fields = f ? *f : Value::Obj();
-        ret = parseOrNull(ttp_room_add_player(h, p.c_str(),
-                                              canonical_stringify(fields).c_str()), "add_player");
-      } else if (kind == "remove") {
-        ttp_room_remove_player(h, p.c_str());
-      } else if (kind == "rekey") {
-        ret = Value::Bool(ttp_room_rekey(h, idJson(op->find("oldId")).c_str(),
-                                         idJson(op->find("newId")).c_str()) == 1);
-      } else if (kind == "markDisc") {
-        ttp_room_mark_disconnected(h, p.c_str());
-      } else if (kind == "markReconn") {
-        ttp_room_mark_reconnected(h, p.c_str());
-      } else if (kind == "clearDisc") {
-        const Value* t = op->find("t");
-        ttp_room_clear_disconnected(h, t ? 1 : 0, t ? t->num : 0.0);
-      } else if (kind == "transition") {
-        ret = Value::Bool(ttp_room_transition_to(h, op->find("to")->str.c_str()) == 1);
-      } else if (kind == "endGame") {
-        ret = Value::Bool(ttp_room_transition_to(h, "results") == 1);
-      } else if (kind == "returnToLobby") {
-        ret = Value::Bool(ttp_room_transition_to(h, "lobby") == 1);
-      } else if (kind == "setOrder") {
-        const Value* o = op->find("order");
-        Value order = o ? *o : Value::Arr();
-        ttp_room_set_active_order(h, canonical_stringify(order).c_str());
-      } else if (kind == "seen") {
-        ttp_room_on_seen(h, p.c_str(), op->find("t")->num);
-      } else if (kind == "isExpired") {
-        ret = Value::Bool(ttp_room_is_expired(h, p.c_str(), op->find("t")->num) == 1);
-      } else if (kind == "expiredPeers") {
-        ret = parseOrNull(ttp_room_expired_peers_json(h, op->find("t")->num), "expired_peers");
-      } else if (kind == "graceTick") {
-        ret = Value::Bool(ttp_room_grace_tick(h, op->find("t")->num) == 1);
-      } else if (kind == "setMaster") {
-        ttp_room_set_master(h, idJson(op->find("v")).c_str());
-      } else if (kind == "setLivenessEnabled") {
-        const Value* v = op->find("v");
-        ttp_room_set_liveness_enabled(h, (v && v->b) ? 1 : 0);
-      } else if (kind == "reset") {
-        ttp_room_reset(h);
-      } else if (kind == "setField") {
-        const Value* val = op->find("value");
-        const std::string key = op->find("key")->str;
-        const bool applied = ttp_room_set_field(h, p.c_str(), key.c_str(),
-                                                idJson(val).c_str()) == 1;
-        if (applied) {
-          Value back = parseOrNull(ttp_room_get_json(h, p.c_str()), "get_json");
-          const Value* got = back.type == Value::OBJ ? back.find(key) : nullptr;
-          ret = got ? *got : Value::Null();
-        } else {
-          ret = Value::Null();
-        }
-      } else {
-        fail(name + " step " + std::to_string(si) + ": unknown op '" + kind + "'");
-        return false;
-      }
-
-      // Events emitted during THIS op, in order — the queue drains per op, so
-      // ordering across the boundary is asserted, not just membership.
-      Value events = parseOrNull(ttp_room_events_json(h), "events_json");
-      if (const Value* want = step.find("events")) {
-        const Diff d = diff_val(*want, events, "events");
-        if (d.differ) {
-          bad++;
-          fail(name + " step " + std::to_string(si) + " (" + kind + ") events at " + d.path +
-               ": recorded " + d.expected + ", actual " + d.actual);
-        }
-      }
-      if (const Value* want = step.find("ret")) {
-        const Diff d = diff_val(*want, ret, "ret");
-        if (d.differ) {
-          bad++;
-          fail(name + " step " + std::to_string(si) + " (" + kind + ") ret at " + d.path +
-               ": recorded " + d.expected + ", actual " + d.actual);
-        }
-      }
-
-      if (const Value* d0 = step.find("digest")) {
-        Value got = Value::Obj();
-        got.set("state", Value::Str(ttp_room_state(h)));
-        got.set("host", parseOrNull(ttp_room_host_json(h), "host_json"));
-        got.set("size", Value::Num((double)ttp_room_size(h)));
-        got.set("connectedCount", Value::Num((double)ttp_room_connected_count(h)));
-        got.set("list", parseOrNull(ttp_room_list_json(h), "list_json"));
-        got.set("allDisconnected", Value::Bool(ttp_room_all_participants_disconnected(h) != 0));
-        got.set("hasLateJoiners", Value::Bool(ttp_room_has_late_joiners(h) != 0));
-        Value pp = Value::Arr();
-        if (const Value* recorded = d0->find("perPeer")) {
-          for (const Value& e : recorded->arr) {
-            const std::string pj = idJson(e.find("p"));
-            Value o = Value::Obj();
-            o.set("p", e.find("p") ? *e.find("p") : Value::Null());
-            o.set("has", Value::Bool(ttp_room_has(h, pj.c_str()) != 0));
-            o.set("isHost", Value::Bool(ttp_room_is_host(h, pj.c_str()) != 0));
-            o.set("disc", Value::Bool(ttp_room_is_disconnected(h, pj.c_str()) != 0));
-            pp.push(std::move(o));
-          }
-        }
-        got.set("perPeer", std::move(pp));
-
-        const Diff d = diff_val(*d0, got, "digest");
-        if (d.differ) {
-          bad++;
-          fail(name + " step " + std::to_string(si) + " (" + kind + ") digest at " + d.path +
-               ": recorded " + d.expected + ", actual " + d.actual);
-        }
-      }
-      steps++;
-      si++;
-    }
+  // ---- create parses its config, and the parse is OBSERVABLE through the
+  // master provider: with one configured the room's host is whatever the
+  // provider says, so a config the parser dropped shows up as an elected host.
+  {
+    const int h = ttp_room_create("{\"master\":2}");
+    if (h <= 0) { fail("room surface: ttp_room_create returned no handle"); return; }
+    ttp_room_add_player(h, "1", "{\"name\":\"Ada\"}");
+    ttp_room_add_player(h, "2", "{\"name\":\"Bo\"}");
+    check(std::strcmp(ttp_room_host_json(h), "2") == 0,
+          "a configured master provider is the effective host, so `master` parsed");
+    ttp_room_set_master(h, "null");
+    check(std::strcmp(ttp_room_host_json(h), "1") == 0,
+          "…and clearing it falls back to the elected host");
     ttp_room_dispose(h);
   }
+  {
+    // Junk config is the DEFAULTS, not a refusal: create has no failure return.
+    for (const char* cfg : {(const char*)nullptr, "", "null", "not json", "[]", "{}"}) {
+      const int h = ttp_room_create(cfg);
+      check(h > 0, std::string("ttp_room_create tolerates ") + (cfg ? cfg : "<null>"));
+      if (h > 0) {
+        check(std::strcmp(ttp_room_state(h), "lobby") == 0, "…and opens in the lobby");
+        ttp_room_dispose(h);
+      }
+    }
+  }
 
-  const Value* wantScripts = header.find("scripts");
-  const Value* wantSlots = header.find("slotCases");
-  check(!wantScripts || scripts == (int)wantScripts->num, "every corpus script replayed");
-  check(!wantSlots || slotCases == (int)wantSlots->num, "every lowestFreeSlot case replayed");
-  std::printf("  room corpus through the party ABI: %d scripts / %d steps / %d slot cases\n",
-              scripts, steps, slotCases);
-  return bad == 0;
+  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  if (h <= 0) { fail("room surface: ttp_room_create returned no handle"); return; }
+
+  // ---- add_player's answer: the three KIT-OWNED keys plus the caller's fields,
+  // and nothing invented. peerIndex keeps its JSON type.
+  {
+    Value rec = parseOrNull(
+        ttp_room_add_player(h, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":null}"),
+        "add_player");
+    check(rec.type == Value::OBJ, "add_player answers the player record");
+    check(canonical_stringify(at(rec, "peerIndex")) == "1",
+          "the record carries the peer index as the scalar it was given");
+    check(rec.has("joinedAt") && rec.find("joinedAt")->type == Value::NUM,
+          "…the kit's joinedAt");
+    check(json::truthy(rec.find("connected")), "…the kit's connected, true on arrival");
+    check(canonical_stringify(at(rec, "name")) == "\"Ada\"", "…and the caller's own fields");
+    check(rec.find("carIndex") && rec.find("carIndex")->type == Value::NUL,
+          "an explicit null field survives as null rather than being dropped");
+
+    // A STRING id is a different peer from the number, all the way through.
+    Value s = parseOrNull(ttp_room_add_player(h, "\"1\"", "{\"name\":\"Bo\"}"), "add_player str");
+    check(canonical_stringify(at(s, "peerIndex")) == "\"1\"",
+          "the string \"1\" seats a peer distinct from the number 1");
+    Value roster = parseOrNull(ttp_room_list_json(h), "list_json");
+    check(roster.arr.size() == 2, "…and both sit on the roster");
+
+    // A re-add of a live seat is the kit's same-device reconnect: no duplicate.
+    ttp_room_add_player(h, "1", "{\"name\":\"Ada II\"}");
+    check(parseOrNull(ttp_room_list_json(h), "list_json").arr.size() == 2,
+          "re-adding a seated peer does not seat them twice");
+    ttp_room_events_json(h);
+  }
+
+  // ---- set_field writes an opaque game field and REFUSES the kit's own keys.
+  {
+    check(ttp_room_set_field(h, "1", "ready", "true") == 1, "set_field writes a game field");
+    Value roster = parseOrNull(ttp_room_list_json(h), "list_json");
+    check(json::truthy(roster.arr[0].find("ready")), "…and the roster shows it");
+    for (const char* kitKey : {"peerIndex", "joinedAt", "connected"}) {
+      check(ttp_room_set_field(h, "1", kitKey, "99") == 0,
+            std::string("set_field refuses the kit-owned key ") + kitKey);
+    }
+    roster = parseOrNull(ttp_room_list_json(h), "list_json");
+    check(canonical_stringify(at(roster.arr[0], "peerIndex")) == "1",
+          "…and the refused write left the record alone");
+    check(ttp_room_set_field(h, "404", "ready", "true") == 0, "set_field misses an unseated peer");
+    check(ttp_room_set_field(h, "1", "ready", "not json") == 0,
+          "a value that is not JSON is refused rather than stored as text");
+    check(ttp_room_set_field(h, "1", nullptr, "true") == 0, "a null key is refused");
+    // Emits nothing, exactly like the JS record assignment it replaces.
+    check(std::strcmp(ttp_room_events_json(h), "[]") == 0, "set_field emits no event");
+  }
+
+  // ---- transition_to accepts the four phases and refuses anything else.
+  {
+    for (const char* to : {"countdown", "playing", "results", "lobby"}) {
+      check(ttp_room_transition_to(h, to) == 1, std::string("transition to ") + to);
+      check(std::strcmp(ttp_room_state(h), to) == 0, "…and the state reads back");
+    }
+    check(ttp_room_transition_to(h, "nowhere") == 0, "an unknown phase is refused");
+    check(ttp_room_transition_to(h, "") == 0, "an empty phase is refused");
+    check(ttp_room_transition_to(h, "playing") == 0,
+          "a legal phase reached ILLEGALLY is refused too (lobby never jumps to playing)");
+    check(std::strcmp(ttp_room_state(h), "lobby") == 0, "…and the phase did not move");
+    ttp_room_events_json(h);
+  }
+
+  // ---- events drain in EMISSION order and empty the queue. Two mutations in
+  // one drain is the case that can only fail here: a queue that answered per
+  // call, or in reverse, would still pass a one-event test.
+  {
+    ttp_room_add_player(h, "3", "{\"name\":\"Cy\"}");
+    ttp_room_transition_to(h, "countdown");
+    Value evs = parseOrNull(ttp_room_events_json(h), "events_json");
+    std::string types;
+    for (const Value& e : evs.arr) types += (types.empty() ? "" : ",") + json::str_field(e, "type");
+    check(types == "playerjoin,rosterchange,statechange",
+          "the queue drains in emission order — got " + types);
+    check(std::strcmp(ttp_room_events_json(h), "[]") == 0, "…and the drain emptied it");
+
+    // The detail rides across whole — the listener reads from/to off it.
+    ttp_room_transition_to(h, "playing");
+    evs = parseOrNull(ttp_room_events_json(h), "events_json");
+    check(evs.arr.size() == 1, "one statechange for one transition");
+    if (evs.arr.size() == 1) {
+      const Value detail = at(evs.arr[0], "detail");
+      check(json::str_field(detail, "from") == "countdown" &&
+                json::str_field(detail, "to") == "playing",
+            "…carrying the phases it moved between");
+    }
+  }
+
+  // ---- the liveness-enabled setter, observable through the walk that reads it:
+  // with liveness off nothing expires however long a seat is silent.
+  {
+    // useEnabledProvider is what makes the setter consulted at all — without
+    // it the flag is inert, which is the config parse being asserted here too.
+    const int q = ttp_room_create(
+        "{\"liveness\":{\"timeoutMs\":10,\"graceMs\":10,\"useEnabledProvider\":true}}");
+    ttp_net_restore_room(q, "ROOM", "");
+    ttp_net_on_protocol_json(q, "created", "{\"room\":\"ROOM\",\"instance\":\"m-1\"}", 0);
+    ttp_net_on_protocol_json(q, "peer_joined", "{\"index\":1}", 0);
+    ttp_room_transition_to(q, "countdown");
+    ttp_room_transition_to(q, "playing");
+    ttp_room_events_json(q);
+    ttp_room_set_liveness_enabled(q, 0);
+    Value off = parseOrNull(ttp_net_liveness_json(q, 0, 100000), "liveness off");
+    bool dropped = false;
+    for (const Value& e : at(off, "effects").arr)
+      dropped = dropped || json::str_field(e, "op") == "show-reconnect";
+    check(!dropped, "liveness disabled: a silent seat is never expired");
+    // The canary comes home, so the next tick sends again instead of declaring
+    // the socket dead and skipping its sweep.
+    ttp_net_on_peer_message_json(q, 0, "0", "{\"type\":\"_heartbeat\"}", 0, 100000);
+    ttp_room_set_liveness_enabled(q, 1);
+    Value on = parseOrNull(ttp_net_liveness_json(q, 0, 200000), "liveness on");
+    for (const Value& e : at(on, "effects").arr)
+      dropped = dropped || json::str_field(e, "op") == "show-reconnect";
+    check(dropped, "…and re-enabling it drops them on the next sweep");
+    ttp_room_dispose(q);
+  }
+
+  ttp_room_dispose(h);
+  // A disposed handle is an unknown one again.
+  check(std::strcmp(ttp_room_list_json(h), "[]") == 0, "a disposed room has no roster");
+  ttp_room_dispose(h);  // twice is safe
+  std::printf("  the room ABI's surviving shell surface\n");
 }
 
 // ---------------------------------------------------------------------------
 // Part 4b: the ABANDONED-RACE policy — hand-authored, because the frozen oracle
 // cannot reach it.
 //
-// graceTick is called 146 times across the corpus's 36 scripts and returns true
-// in NONE of them: the recorded oracle never once let a deadline expire, so the
-// arm → fire → disarm path crossed into C++ carrying no cross-implementation
-// evidence whatsoever. The display now RUNS this policy (display/Net.js polls it
-// on the liveness tick and returns to the lobby when it fires), so it needs a
-// gate. This is C++-AUTHORED, i.e. REGRESSION evidence only — it proves the
-// policy still does what it does, never that the port was right
-// (tests/fixtures/traces/README.md). ttp_room_late_joiners_json is likewise
-// newer than the corpus.
+// graceTick is called 146 times across roomflow-corpus's 36 scripts and returns
+// true in NONE of them: the recorded oracle never once let a deadline expire, so
+// the arm → fire → disarm path crossed into C++ carrying no cross-implementation
+// evidence whatsoever. The display RUNS this policy (the liveness walk polls it
+// and answers `race-abandoned`), so it needs a gate. This is C++-AUTHORED, i.e.
+// REGRESSION evidence only — it proves the policy still does what it does, never
+// that the port was right (tests/fixtures/traces/README.md).
 //
-// It also pins the wiring display/Net.js depends on. That module feeds the active
-// order "every seat holding a car, plus every dropped seat", so the leftover set
-// — what hasLateJoiners/lateJoiners answer for — is exactly a CONNECTED seat with
-// no car. A dropped, car-less ghost must therefore never be the thing that keeps
+// It is driven THROUGH THE WALK that owns each step — the liveness tick for the
+// deadline, peer_joined/peer_left for presence, _seen for the lift — because
+// none of them has a one-rule export any more. The waiting set is read off the
+// machine through ttp_room.h's seam, which is the only reader left.
+//
+// It also pins the wiring the walks depend on. The active order is "every seat
+// holding a car, plus every dropped seat", so the leftover set — what
+// hasLateJoiners/lateJoiners answer for — is exactly a CONNECTED seat with no
+// car. A dropped, car-less ghost must therefore never be the thing that keeps
 // the room waiting, and must never appear as a "joining" row.
 // ---------------------------------------------------------------------------
 void abandonedRacePolicy() {
-  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  // graceMs is the subject; the expiry timeout is pushed far out so this
+  // section isolates the ABANDONED-RACE deadline from the per-seat expiry
+  // sweep that shares its tick (which has its own case in
+  // netWalksMatchMultiCallPath).
+  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":600000,\"graceMs\":1500}}");
   if (h <= 0) { fail("abandoned-race: ttp_room_create returned no handle"); return; }
+  RoomFlow* flow = ttp_room_flow(h);
+  if (!flow) { fail("abandoned-race: no machine behind the room handle"); return; }
+  // The deadline only runs inside a room, because the walk's heartbeat half
+  // gates the sweep on being in one.
+  ttp_net_on_protocol_json(h, "created", "{\"room\":\"ABCD\",\"instance\":\"m-1\"}", 0);
+  ttp_room_events_json(h);
+  // A REAL race behind the room. The tick re-syncs the active order off it, so
+  // a room with no session would have its participant set wiped on the first
+  // tick and could never read "every participant is gone" — the sync is the
+  // definition of the set, not a refinement of it.
+  const int race = ttp_session_begin("tidepool", 42u, 3, nullptr);
+  if (race <= 0) { fail("abandoned-race: ttp_session_begin returned no handle"); return; }
+  ttp_add_human(race, "1", nullptr);
+  ttp_add_human(race, "2", nullptr);
+  ttp_session_start(race, 3);
 
-  check(std::strcmp(ttp_room_late_joiners_json(0), "[]") == 0,
-        "ttp_room_late_joiners_json on handle 0 is []");
-
-  auto add = [&](const char* id, const char* name) {
-    ttp_room_add_player(h, id, (std::string("{\"name\":\"") + name + "\",\"colorIndex\":0}").c_str());
+  // ONE 1 Hz tick, exactly as the display performs it: the walk, then the
+  // relay's echo of the canary it just sent — without the echo the next tick
+  // would read the socket as dead and skip its sweep, which is the heartbeat's
+  // own rule and not this policy's. Answers whether the race was abandoned.
+  const auto tick = [&](double nowMs) {
+    const Value w = parseOrNull(ttp_net_liveness_json(h, race, nowMs), "liveness");
+    bool abandoned = false;
+    for (const Value& e : at(w, "effects").arr)
+      abandoned = abandoned || json::str_field(e, "op") == "race-abandoned";
+    ttp_net_on_peer_message_json(h, 0, "0", "{\"type\":\"_heartbeat\"}", 0, nowMs);
+    ttp_room_events_json(h);
+    return abandoned;
   };
-  auto lateIds = [&]() {
-    Value v = parseOrNull(ttp_room_late_joiners_json(h), "late_joiners_json");
+  const auto join = [&](int id, double nowMs) {
+    char msg[48];
+    std::snprintf(msg, sizeof msg, "{\"index\":%d}", id);
+    ttp_net_on_protocol_json(h, "peer_joined", msg, nowMs);
+    ttp_room_events_json(h);
+  };
+  const auto leave = [&](int id, double nowMs) {
+    char msg[48];
+    std::snprintf(msg, sizeof msg, "{\"index\":%d}", id);
+    ttp_net_on_protocol_json(h, "peer_left", msg, nowMs);
+    ttp_room_events_json(h);
+  };
+  // The waiting set, off the machine. No export answers it: the only ABI
+  // reader left is the standings board, which takes it already synced.
+  const auto lateIds = [&]() {
     std::string out;
-    for (const Value& e : v.arr) out += canonical_stringify(*e.find("peerIndex")) + ";";
+    for (const Value& e : flow->lateJoinersValue().arr)
+      out += canonical_stringify(*e.find("peerIndex")) + ";";
     return out;
   };
   // The predicate and the list are the same set, always.
-  auto agree = [&](const char* where) {
-    const bool anyBool = ttp_room_has_late_joiners(h) != 0;
-    const bool anyList = !lateIds().empty();
-    check(anyBool == anyList,
+  const auto agree = [&](const char* where) {
+    check(flow->hasLateJoiners() == !lateIds().empty(),
           std::string("hasLateJoiners agrees with lateJoiners (") + where + ")");
   };
 
-  add("0", "Ada");
-  add("1", "Bo");
+  join(1, 0);
+  join(2, 0);
   agree("lobby");
   // In the LOBBY the order is empty, so everyone is outside it — the corpus
   // records exactly this (a room with no active order has only late joiners).
-  check(lateIds() == "0;1;", "lobby: the whole roster sits outside an empty order");
+  check(lateIds() == "1;2;", "lobby: the whole roster sits outside an empty order");
 
-  ttp_room_transition_to(h, "countdown");   // snapshots the order: [0, 1]
+  ttp_room_transition_to(h, "countdown");   // snapshots the order: [1, 2]
   ttp_room_transition_to(h, "playing");
+  ttp_room_events_json(h);
   check(lateIds().empty(), "the countdown snapshot leaves no late joiners");
-  check(ttp_room_all_participants_disconnected(h) == 0, "two live racers are not all gone");
-  check(ttp_room_grace_tick(h, 1000) == 0, "no grace while the racers are here");
+  check(!flow->allParticipantsDisconnected(), "two live racers are not all gone");
+  check(!tick(1000), "no grace while the racers are here");
 
   // Both racers drop. Their seats are held (a car and a reconnect QR each), so
   // there is still nobody WAITING — the room must sit tight indefinitely.
-  ttp_room_mark_disconnected(h, "0");
-  ttp_room_mark_disconnected(h, "1");
-  check(ttp_room_all_participants_disconnected(h) == 1, "every participant is gone");
-  check(ttp_room_grace_tick(h, 1100) == 0, "no grace with nobody waiting");
-  check(ttp_room_grace_tick(h, 99999) == 0, "…and no deadline was armed to expire");
+  leave(1, 1000);
+  leave(2, 1000);
+  check(flow->allParticipantsDisconnected(), "every participant is gone");
+  check(!tick(1100), "no grace with nobody waiting");
+  check(!tick(1200), "…and no deadline was armed to expire");
 
   // A phone scans in mid-race: now someone IS waiting, and the clock starts.
-  add("2", "Cy");
+  join(3, 2000);
   agree("late joiner present");
-  check(lateIds() == "2;", "the mid-race joiner is the only late joiner");
-  check(ttp_room_grace_tick(h, 2000) == 0, "the first qualifying tick only ARMS");
-  check(ttp_room_grace_tick(h, 3499) == 0, "…and holds until graceMs has elapsed");
-  check(ttp_room_grace_tick(h, 3500) == 1, "fires at exactly nowMs + graceMs");
-  check(ttp_room_grace_tick(h, 3500) == 0, "fires exactly ONCE (it re-arms, not re-fires)");
-  check(ttp_room_grace_tick(h, 9999) == 1, "the re-armed deadline expires in its turn");
+  check(lateIds() == "3;", "the mid-race joiner is the only late joiner");
+  check(!tick(2000), "the first qualifying tick only ARMS");
+  check(!tick(3499), "…and holds until graceMs has elapsed");
+  check(tick(3500), "fires at exactly nowMs + graceMs");
+  check(!tick(3500), "fires exactly ONCE (it re-arms, not re-fires)");
+  check(tick(9999), "the re-armed deadline expires in its turn");
 
-  // A racer coming back disarms it: the room is being played again.
-  ttp_room_mark_reconnected(h, "0");
-  check(ttp_room_grace_tick(h, 20000) == 0, "a reconnected racer disarms the deadline");
-  check(ttp_room_grace_tick(h, 99999) == 0, "…and it stays disarmed while they are here");
+  // A racer coming back disarms it: the room is being played again. `_seen` is
+  // the single writer that lifts a drop, so the walk that owns it is the way in.
+  ttp_net_on_seen_json(h, "1", 10000);
+  ttp_room_events_json(h);
+  check(!tick(20000), "a reconnected racer disarms the deadline");
+  check(!tick(99999), "…and it stays disarmed while they are here");
 
   // Leaving PLAYING disarms it too — the results board is not an abandoned race.
-  ttp_room_mark_disconnected(h, "0");
-  check(ttp_room_grace_tick(h, 100000) == 0, "re-arms on the first qualifying tick");
+  leave(1, 100000);
+  check(!tick(100001), "re-arms on the first qualifying tick");
   ttp_room_transition_to(h, "results");
-  check(ttp_room_grace_tick(h, 200000) == 0, "RESULTS is not a race to abandon");
+  ttp_room_events_json(h);
+  check(!tick(200000), "RESULTS is not a race to abandon");
   ttp_room_transition_to(h, "countdown");
   ttp_room_transition_to(h, "playing");
-  check(ttp_room_grace_tick(h, 300000) == 0, "the state change dropped the armed deadline");
+  ttp_room_events_json(h);
+  check(!tick(300000), "the state change dropped the armed deadline");
 
+  ttp_dispose(race);
   ttp_room_dispose(h);
 
   // ---- the participant set, computed against a LIVE RACE ---------------------
   // ttp_room_sync_active_order is the whole definition of "who this race is for",
-  // taken here rather than in each shell: every seat holding a car, plus every
+  // taken in C++ rather than in each shell: every seat holding a car, plus every
   // dropped seat. It reads the sim through ttp_session.h, so this section drives
   // it with a REAL session — a room fed from a hand-written array proves the
   // room's half and nothing about the join.
@@ -1038,62 +1123,74 @@ void abandonedRacePolicy() {
   // The case that matters is a late joiner who has ALSO dropped: a ghost seat, no
   // car, no phone. Against the raw COUNTDOWN snapshot it counts as someone
   // waiting and would yank a blipped party's whole race back to the lobby.
-  const int g = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  const int g = ttp_room_create("{\"liveness\":{\"timeoutMs\":600000,\"graceMs\":1500}}");
   if (g <= 0) { fail("abandoned-race/ghost: ttp_room_create returned no handle"); return; }
-  // The race: Ada (seat 0) plus a bot. The bot is deliberate — a car id that is
+  RoomFlow* gflow = ttp_room_flow(g);
+  // The race: Ada (seat 1) plus a bot. The bot is deliberate — a car id that is
   // no seat at all must never become a participant.
   const int s = ttp_session_begin("tidepool", 42u, 3, nullptr);
-  if (s <= 0) { fail("abandoned-race/ghost: ttp_session_begin returned no handle"); return; }
-  ttp_add_human(s, "0", nullptr);
+  if (s <= 0 || !gflow) { fail("abandoned-race/ghost: no session or machine"); return; }
+  ttp_add_human(s, "1", nullptr);
   ttp_add_bot(s, "\"ai-1\"", 1.0, 0.0, 7u, nullptr);
   ttp_session_start(s, 3);
 
-  ttp_room_add_player(g, "0", "{\"name\":\"Ada\"}");
+  ttp_net_on_protocol_json(g, "created", "{\"room\":\"WXYZ\",\"instance\":\"m-2\"}", 0);
+  ttp_net_on_protocol_json(g, "peer_joined", "{\"index\":1}", 0);
   ttp_room_transition_to(g, "countdown");
   ttp_room_transition_to(g, "playing");
-  ttp_room_add_player(g, "2", "{\"name\":\"Cy\"}");
-  ttp_room_mark_disconnected(g, "0");
-  ttp_room_mark_disconnected(g, "2");
-  check(ttp_room_has_late_joiners(g) == 1, "raw: a dropped ghost still reads as a late joiner");
-  check(ttp_room_grace_tick(g, 1000) == 0 && ttp_room_grace_tick(g, 3000) == 1,
+  ttp_net_on_protocol_json(g, "peer_joined", "{\"index\":2}", 0);
+  ttp_net_on_protocol_json(g, "peer_left", "{\"index\":1}", 0);
+  ttp_net_on_protocol_json(g, "peer_left", "{\"index\":2}", 0);
+  ttp_room_events_json(g);
+
+  // RAW — the countdown snapshot, before anything syncs. Read and driven off
+  // the machine because every ABI path to the deadline now syncs on its way in,
+  // which is precisely the fix being demonstrated.
+  check(gflow->hasLateJoiners(), "raw: a dropped ghost still reads as a late joiner");
+  check(!gflow->graceTick(1000) && gflow->graceTick(3000),
         "raw: …and would abandon the race for nobody");
-  // Synced: seat 0 holds a car and seat 2 is dropped, so both are participants.
-  ttp_room_sync_active_order(g, s);
-  check(ttp_room_has_late_joiners(g) == 0, "synced: a dropped ghost is absent, not waiting");
-  check(std::strcmp(ttp_room_late_joiners_json(g), "[]") == 0,
-        "synced: …so it is no 'joining' row either");
+
+  // The walk's own tick, which syncs first: seat 1 holds a car and seat 2 is
+  // dropped, so both are participants and nobody is waiting.
+  const auto gtick = [&](double nowMs, int sessionHandle) {
+    const Value w = parseOrNull(ttp_net_liveness_json(g, sessionHandle, nowMs), "liveness/ghost");
+    bool abandoned = false;
+    for (const Value& e : at(w, "effects").arr)
+      abandoned = abandoned || json::str_field(e, "op") == "race-abandoned";
+    ttp_net_on_peer_message_json(g, 0, "0", "{\"type\":\"_heartbeat\"}", 0, nowMs);
+    ttp_room_events_json(g);
+    return abandoned;
+  };
+  check(!gtick(4000, s) && !gtick(9999, s), "synced: the blipped party keeps its race");
+  check(!gflow->hasLateJoiners(), "synced: a dropped ghost is absent, not waiting");
+  check(gflow->lateJoinersValue().arr.empty(), "synced: …so it is no 'joining' row either");
   // The bot is racing and will never disconnect, so an order that swallowed cars
   // with no seat behind them could not read "every participant is gone" here.
-  check(ttp_room_all_participants_disconnected(g) == 1,
+  check(ttp_room_all_participants_disconnected_synced(g, s) == 1,
         "synced: a bot's car is nobody's seat, so the race still counts as abandoned");
-  check(ttp_room_grace_tick(g, 4000) == 0 && ttp_room_grace_tick(g, 9999) == 0,
-        "synced: the blipped party keeps its race");
+
   // The ghost's phone comes back — car-less and connected, which is a late joiner.
-  ttp_room_mark_reconnected(g, "2");
-  ttp_room_sync_active_order(g, s);
-  check(ttp_room_has_late_joiners(g) == 1, "synced: a returning ghost is waiting again");
+  ttp_net_on_seen_json(g, "2", 10000);
+  ttp_room_events_json(g);
+  check(!gtick(10000, s), "synced: a returning ghost re-arms rather than firing");
+  check(gflow->hasLateJoiners(), "synced: a returning ghost is waiting again");
   {
-    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/synced");
+    const Value v = ttp_room_late_joiners_synced(g, s);
     check(v.arr.size() == 1 && canonical_stringify(*v.arr[0].find("peerIndex")) == "2",
           "synced: the car-less seat is the one waiting");
   }
-  check(ttp_room_grace_tick(g, 10000) == 0 && ttp_room_grace_tick(g, 11500) == 1,
-        "synced: and the deadline runs for them");
+  check(gtick(11500, s), "synced: and the deadline runs for them");
+
   // The cars really come from the SIM, not from presence. With both seats back,
-  // the ONLY thing separating them is that 0 holds a car and 2 does not — and
+  // the ONLY thing separating them is that 1 holds a car and 2 does not — and
   // against session handle 0 (no session: the lobby, or a shell between races)
   // there are no cars and no dropped seats, so the order empties and both wait.
-  ttp_room_mark_reconnected(g, "0");
-  ttp_room_sync_active_order(g, s);
-  {
-    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/live");
-    check(v.arr.size() == 1, "synced: the car-holder is a participant, the car-less seat is not");
-  }
-  ttp_room_sync_active_order(g, 0);
-  {
-    Value v = parseOrNull(ttp_room_late_joiners_json(g), "late_joiners_json/no-session");
-    check(v.arr.size() == 2, "no session: no cars and no dropped seats leaves an empty order");
-  }
+  ttp_net_on_seen_json(g, "1", 12000);
+  ttp_room_events_json(g);
+  check(ttp_room_late_joiners_synced(g, s).arr.size() == 1,
+        "synced: the car-holder is a participant, the car-less seat is not");
+  check(ttp_room_late_joiners_synced(g, 0).arr.size() == 2,
+        "no session: no cars and no dropped seats leaves an empty order");
   ttp_dispose(s);
   ttp_room_dispose(g);
 }
@@ -1487,6 +1584,15 @@ void audioThroughAbi() {
 // what this catches: a key spelled differently on the way out (the corpus
 // records every one), and an id crossing as the wrong JSON type (`3` vs `"3"` —
 // the corpus's bots are strings and its seats are numbers).
+//
+// Not every op still has a way in. The roster projection, race flow, the pause
+// arbitration and the standings board are handle walks now, so their JSON
+// spellings are gone; those steps are SKIPPED and counted, and the count is
+// printed so a skip set quietly swallowing the corpus cannot read as a pass.
+// Two arms survive by being driven FROM the recording rather than compared
+// against it — the seat grid off the recorded seats, the results overlay off
+// the recorded board — which is legitimate: both are pure functions of a frozen
+// JS answer, and holding them to one is the strongest input available.
 // ---------------------------------------------------------------------------
 
 // gen-ui-corpus.mjs's synthetic world is READ OUT OF THE CORPUS HEADER, not
@@ -1579,8 +1685,11 @@ struct UiShell {
   }
 };
 
-// One step through the C exports, answering in the corpus's `out` shape.
-Value uiStep(UiShell& st, const std::string& op, const Value& in) {
+// One step through the C exports, answering in the corpus's `out` shape — or
+// UNDEF for an op whose JSON-taking export is gone, which the caller counts and
+// reports. `want` is the recorded answer, read by the one arm that is driven
+// FROM the recording rather than compared against it (see "board").
+Value uiStep(UiShell& st, const std::string& op, const Value& in, const Value& want) {
   Value out = Value::Obj();
 
   if (op == "show") {
@@ -1597,25 +1706,13 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in) {
     return out;
   }
   if (op == "roster") {
-    const std::string roster = uiArgField(in, "roster");
-    const std::string host = uiArgField(in, "host");
-    const Value seats = uiJson(ttp_ui_roster_seats_json(roster.c_str(), host.c_str()));
-    const std::string seatsArg = canonical_stringify(seats);
-    out.set("seats", seats);
-    out.set("grid", uiJson(ttp_ui_seat_grid_json(seatsArg.c_str())));
-    out.set("ready", Value::Bool(ttp_ui_all_racers_ready(roster.c_str(), host.c_str()) != 0));
-    // The ABI answers with INDICES so a shell keeps its own objects; the corpus
-    // recorded the ids, so resolving them back is also what pins the indices.
-    const Value idx = uiJson(ttp_ui_connected_players_json(roster.c_str()));
-    const Value* rosterV = in.find("roster");
-    Value conn = Value::Arr();
-    if (idx.type == Value::ARR && rosterV && rosterV->type == Value::ARR) {
-      for (const Value& i : idx.arr) {
-        const size_t n = (size_t) i.num;
-        conn.push(n < rosterV->arr.size() ? uiField(rosterV->arr[n], "peerIndex") : Value::Str("<out of range>"));
-      }
-    }
-    out.set("connected", conn);
+    // roster_seats / all_racers_ready / connected_players took a roster ARRAY;
+    // all three read the live room now, so there is no JSON path to drive them
+    // down. The seat GRID survives and still takes the seats array, so the
+    // recorded seats feed it — a frozen JS seat list is a legitimate input.
+    const Value* seats = want.find("seats");
+    if (!seats) return Value();
+    out.set("grid", uiJson(ttp_ui_seat_grid_json(canonical_stringify(*seats).c_str())));
     return out;
   }
   if (op == "pick") {
@@ -1695,70 +1792,25 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in) {
     out.set("item", uiJson(ttp_ui_welcome_item_json(car.c_str())));
     return out;
   }
-  if (op == "flow") {
-    const std::string arg = uiArg(in);
-    const Value r = uiJson(ttp_ui_race_flow_json(arg.c_str()));
-    out.set("allDone", r.find("allDone") ? *r.find("allDone") : Value::Null());
-    out.set("forfeit", r.find("forfeit") ? *r.find("forfeit") : Value::Null());
-    return out;
-  }
-  if (op == "autopause") {
-    const std::string arg = uiArg(in);
-    const int asks = ttp_ui_auto_pause_asks(arg.c_str());
-    const bool allDown = asks && in.find("allDisconnected") &&
-                         in.find("allDisconnected")->type == Value::BOOL &&
-                         in.find("allDisconnected")->b;
-    out.set("asks", Value::Bool(asks != 0));
-    out.set("decision", uiJson(ttp_ui_auto_pause_json(arg.c_str(), allDown ? 1 : 0)));
-    return out;
-  }
-  if (op == "freeze") {
-    const auto flag = [&in](const char* k) {
-      const Value* v = in.find(k);
-      return (v && v->type == Value::BOOL && v->b) ? 1 : 0;
-    };
-    const Value* rsV = in.find("roomState");
-    const std::string rs = (rsV && rsV->type == Value::STR) ? rsV->str : std::string();
-    out.set("move", Value::Str(ttp_ui_freeze_transition(flag("paused"), flag("autoPaused"),
-                                                        flag("sessionPaused"))));
-    out.set("canPause", Value::Bool(ttp_ui_can_pause(flag("hasSession"), flag("paused"),
-                                                     rs.c_str()) != 0));
-    out.set("canResume", Value::Bool(ttp_ui_can_resume(flag("hasSession"), flag("paused")) != 0));
-    return out;
+  if (op == "flow" || op == "autopause" || op == "freeze") {
+    // race_flow / auto_pause / the three freeze predicates were all replaced by
+    // handle walks (ttp_ui_race_flow_live_json, ttp_race_auto_pause_live_json,
+    // ttp_ui_freeze_plan_json), so their rules no longer take plain data at the
+    // boundary. ui_check keeps replaying this corpus against the rules
+    // themselves; the walks are gated by composition, not by replay.
+    return Value();
   }
   if (op == "board") {
-    // The cup chip is its own export, and the board takes its answer back —
-    // exactly how a shell composes them, so a mismatch between the two spellings
-    // of SeriesInfo shows up here rather than on a phone.
-    Value cup = Value::Null();
-    const Value* sV = in.find("series");
-    if (sV && sV->type == Value::OBJ) {
-      Value si = *sV;
-      si.set("autoAdvanceMs", Value::Num(UI_INTERMISSION_MS));
-      const std::string siArg = uiArg(si);
-      cup = Value::Obj();
-      cup.set("standings", uiField(*sV, "standings"));
-      cup.set("info", uiJson(ttp_ui_series_info_json(siArg.c_str())));
-    }
-    Value board = Value::Obj();
-    board.set("results", uiField(in, "results"));
-    board.set("field", uiField(in, "field"));
-    board.set("cup", cup);
-    board.set("lateJoiners", uiField(in, "lateJoiners"));
-    board.set("hostPeerIndex", uiField(in, "hostPeerIndex"));
-    board.set("over", uiField(in, "over"));
-    const std::string arg = uiArg(board);
-    const char* bytes = ttp_ui_standings_json(arg.c_str());
-    const std::string wire = bytes ? bytes : "";
-    out.set("board", uiJson(bytes));
-    // The WIRE bytes, and this is the assertion that only the ABI can make:
-    // ui_check proves the C++ builds the right board, this proves the exported
-    // string IS those bytes in the phones' key order rather than a sorted
-    // re-spelling of them.
-    out.set("wire", Value::Str(wire));
+    // The board is gathered off live handles now — no JSON twin, so its gather
+    // is gated in uiLiveTwinsMatchJsonPaths instead. What still replays is the
+    // OVERLAY, driven from the board bytes the corpus RECORDED: resultsView is
+    // a pure function of a board, and a frozen JS board is exactly the input it
+    // should be held to.
+    const Value* wire = want.find("wire");
+    if (!wire || wire->type != Value::STR) return Value();
     const Value* over = in.find("over");
     out.set("view", (over && over->type == Value::BOOL && over->b)
-                        ? uiJson(ttp_ui_results_view_json(wire.c_str(), UI_INTERMISSION_MS))
+                        ? uiJson(ttp_ui_results_view_json(wire->str.c_str(), UI_INTERMISSION_MS))
                         : Value::Null());
     return out;
   }
@@ -1854,21 +1906,21 @@ void uiCupTendency() {
   const char* two[] = { "powder", "wash" };            // 2, 3 -> mean 2.5
   const char* twoLow[] = { "tidepool", "powder" };     // 1, 2 -> mean 1.5
   const char* four[] = { "wash", "gauntlet", "gauntlet", "gauntlet" };  // 3.75
-  const ttp::CupDef tie{ "t", "Tie", two, 2, 0 };
-  const ttp::CupDef tieLow{ "tl", "Tie Low", twoLow, 2, 0 };
-  const ttp::CupDef high{ "h", "High", four, 4, 0 };
+  const ttp::CupDef tie{ "t", "Tie", two, 2, 0, 0 };
+  const ttp::CupDef tieLow{ "tl", "Tie Low", twoLow, 2, 0, 0 };
+  const ttp::CupDef high{ "h", "High", four, 4, 0, 0 };
   check(ui::cupTendency(tie) == 3, "a mean of exactly 2.5 rounds UP, as Math.round does");
   check(ui::cupTendency(tieLow) == 2, "…and 1.5 does too, so it is half-up and not half-even");
   check(ui::cupTendency(high) == 4, "3.75 rounds to 4 — the case std::trunc would silently drop");
 
   // The override wins outright, and is not averaged with anything.
-  const ttp::CupDef pinned{ "p", "Pinned", four, 4, 1 };
+  const ttp::CupDef pinned{ "p", "Pinned", four, 4, 1, 0 };
   check(ui::cupTendency(pinned) == 1, "an authored tendency is used verbatim");
 
   // A cup with no tracks has no mean; JS `sum/0` was NaN and Math.round(NaN) is
   // NaN, which the picker read as no meter. The C++ answers the middling 2
   // rather than propagating a NaN through an int.
-  const ttp::CupDef empty{ "e", "Empty", nullptr, 0, 0 };
+  const ttp::CupDef empty{ "e", "Empty", nullptr, 0, 0, 0 };
   check(ui::cupTendency(empty) == 2, "an empty cup falls back rather than dividing by zero");
 }
 
@@ -1878,7 +1930,7 @@ void uiCorpusThroughAbi(const char* path) {
 
   UiShell st;
   std::string line, scenario;
-  int steps = 0;
+  int steps = 0, skipped = 0;
   bool header = false;
   while (std::getline(in, line)) {
     if (line.empty()) continue;
@@ -1910,7 +1962,8 @@ void uiCorpusThroughAbi(const char* path) {
     if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed ui step"); return; }
     const Value empty = Value::Obj();
     const Value* inV = root.find("in");
-    const Value got = uiStep(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
+    const Value got = uiStep(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty, *wantOut);
+    if (got.type == Value::UNDEF) { skipped++; continue; }
     steps++;
     // Only the keys this driver answers: `rows` is a live-session readback and
     // is checked by hud_check / ui_check, not here.
@@ -1923,340 +1976,41 @@ void uiCorpusThroughAbi(const char* path) {
     }
   }
   check(header && steps > 0, "ui corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
-}
-
-
-// ---------------------------------------------------------------------------
-// The RACE-ORCHESTRATION ABI (ttp_race.h), replayed against the same corpus
-// runtimetest/raceflow_check.cc drives the C++ objects with.
-//
-// The two checks are not redundant, and the difference is the same one the ui
-// and session pairs have: raceflow_check proves the RULES, this proves the
-// MARSHALLING. What can only go wrong here is invisible there — an effect's
-// payload key dropped on the way out, a bot id emitted as a number instead of
-// the string "ai-0", the opaque car-stats row not surviving the round trip, or
-// the key-PRESENCE contract (a rejected start must carry `reason` and no
-// `series`) collapsing into a null.
-//
-// Four of the corpus's ops have no export of their own — carStatsAt,
-// lowestFreeSlot and cpuSeats are internals reached through buildField, and the
-// shell never calls them across the boundary — so they are skipped here and
-// covered by raceflow_check alone.
-// gen-raceflow-corpus.mjs's synthetic world is READ OUT OF THE CORPUS HEADER,
-// not transcribed here: it arrives in exactly ttp_race_configure's shape, so
-// the ABI is configured by handing the header's `world` straight back across
-// the boundary — which makes the configure export's own contract part of what
-// this replay proves. raceflow_check.cc reads the same object. See
-// tests/fixtures/traces/README.md, "A corpus carries its own world".
-
-// The corpus's `in` is already the ABI's input shape for most ops, so the step
-// mostly re-stringifies it. Returns UNDEF for an op with no export.
-Value raceStep(const std::string& op, const Value& in) {
-  const auto J = [](const Value& v) { return ordered_stringify(v); };
-  const auto jsonOf = [](const char* s) {
-    bool ok = false;
-    Value v = json::parse(s ? s : "", &ok);
-    return ok ? v : Value::Null();
-  };
-  const auto sub = [&in](const char* k) {
-    const Value* v = in.find(k);
-    return v ? ordered_stringify(*v) : std::string("null");
-  };
-  const auto numIn = [&in](const char* k) {
-    const Value* v = in.find(k);
-    return (v && v->type == Value::NUM) ? v->num : 0.0;
-  };
-  const auto strIn = [&in](const char* k) {
-    const Value* v = in.find(k);
-    return (v && v->type == Value::STR) ? v->str : std::string();
-  };
-  const auto truthyIn = [&in](const char* k) {
-    const Value* v = in.find(k);
-    if (!v) return false;
-    if (v->type == Value::BOOL) return v->b;
-    if (v->type == Value::NUM) return v->num != 0;
-    if (v->type == Value::STR) return !v->str.empty();
-    return v->type == Value::ARR || v->type == Value::OBJ;
-  };
-
-  if (op == "buildField") {
-    return jsonOf(ttp_race_build_field_json(sub("humans").c_str(), numIn("seed"),
-                                            sub("botCap").c_str()));
-  }
-  if (op == "buildDemoField") {
-    return jsonOf(ttp_race_build_demo_field_json(sub("humans").c_str(), sub("botCap").c_str()));
-  }
-  if (op == "demoSig") {
-    return Value::Str(ttp_race_demo_sig(sub("field").c_str(), strIn("trackId").c_str()));
-  }
-  if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
-  if (op == "returnDrawsNeeded") return Value::Num(ttp_race_return_draws_needed(J(in).c_str()));
-  if (op == "endParty") return jsonOf(ttp_race_end_party_json());
-  if (op == "pauseRace") return jsonOf(ttp_race_pause_json(J(in).c_str()));
-  if (op == "resumeRace") return jsonOf(ttp_race_resume_json(J(in).c_str()));
-  if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
-  if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
-  if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));
-  if (op == "raceStart") {
-    return jsonOf(ttp_race_start_beat_json(strIn("biome").c_str(), truthyIn("audioReady") ? 1 : 0));
-  }
-  if (op == "raceEvent") return jsonOf(ttp_race_event_json(J(in).c_str()));
-  if (op == "endRace") return jsonOf(ttp_race_end_json(J(in).c_str()));
-  if (op == "advanceSeriesRace") return jsonOf(ttp_race_advance_json(J(in).c_str()));
-  if (op == "returnToLobby") return jsonOf(ttp_race_return_json(J(in).c_str()));
-  if (op == "forfeitCar") {
-    return jsonOf(ttp_race_forfeit_json(truthyIn("removed") ? 1 : 0, sub("peerIndex").c_str()));
-  }
-  if (op == "rekeyCarPlayer") {
-    return jsonOf(ttp_race_rekey_json(truthyIn("hasSeries") ? 1 : 0, truthyIn("rekeyed") ? 1 : 0,
-                                      sub("oldId").c_str(), sub("newId").c_str()));
-  }
-  if (op == "autoPauseEffects") return jsonOf(ttp_race_auto_pause_json(sub("decision").c_str()));
-  if (op == "seriesForStart") {
-    // No export of its own: startRace is how a shell reaches it, and the plan it
-    // returns is the same object. Replay it through the accepting path.
-    Value si = Value::Obj();
-    si.set("roomState", Value::Str("lobby"));
-    si.set("sceneReady", Value::Bool(true));
-    si.set("selectedTrackId", Value::Str("a1"));
-    Value players = Value::Arr();
-    Value p = Value::Obj();
-    p.set("peerIndex", Value::Num(1));
-    p.set("name", Value::Str("P"));
-    p.set("colorIndex", Value::Num(0));
-    p.set("carIndex", Value::Num(0));
-    players.push(p);
-    si.set("players", players);
-    for (const char* k : {"mode", "cupId", "trackId", "randomRaces", "draws"}) {
-      const Value* v = in.find(k);
-      if (v) si.set(k, *v);
-    }
-    const Value got = jsonOf(ttp_race_start_json(ordered_stringify(si).c_str()));
-    // startRace's answer wraps the same plan under `series` + `drawsUsed`.
-    Value out = Value::Obj();
-    const Value* s = got.find("series");
-    out.set("series", s ? *s : Value::Null());
-    const Value* d = got.find("drawsUsed");
-    out.set("drawsUsed", d ? *d : Value::Num(0));
-    return out;
-  }
-  return Value();   // UNDEF: no export, covered by raceflow_check
-}
-
-void raceCorpusThroughAbi(const char* path) {
-  std::ifstream in(path);
-  if (!in) { fail(std::string("cannot open ") + path); return; }
-
-  std::string line, scenario;
-  int steps = 0, skipped = 0;
-  bool header = false;
-  while (std::getline(in, line)) {
-    if (line.empty()) continue;
-    Value root;
-    std::string err;
-    if (!read_line(line, root, &err)) { fail("raceflow corpus parse: " + err); return; }
-    const Value* kind = root.find("case");
-    if (!kind) {
-      if (header) continue;
-      header = true;
-      const Value* world = corpusWorld(root, "raceflow",
-                                       {"personas", "carStats", "cups"});
-      if (!world) return;
-      check(ttp_race_configure(canonical_stringify(*world).c_str()) == 1,
-            "the corpus's own world configured through ttp_race_configure");
-      continue;
-    }
-    if (kind->str == "scenario") {
-      const Value* nm = root.find("name");
-      scenario = nm && nm->type == Value::STR ? nm->str : "?";
-      continue;
-    }
-    if (kind->str != "step") continue;
-    const Value* opV = root.find("op");
-    const Value* wantOut = root.find("out");
-    if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed raceflow step"); return; }
-    const Value empty = Value::Obj();
-    const Value* inV = root.find("in");
-    const Value got = raceStep(opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
-    if (got.type == Value::UNDEF) { skipped++; continue; }
-    steps++;
-    // WHOLE-VALUE diff, not key-by-key: key PRESENCE is this ABI's contract, so
-    // an extra key the corpus does not have has to fail too.
-    const Diff d = diff_val(*wantOut, got, "out");
-    check(!d.differ, "race " + opV->str + " " + scenario + " step " + std::to_string(steps) +
-                     ": " + d.path + " expected " + d.expected + " got " + d.actual);
-  }
-  check(header && steps > 0,
-        "raceflow corpus replayed through the ABI (" + std::to_string(steps) + " steps, " +
-            std::to_string(skipped) + " internals skipped)");
-  // Printed rather than silent: the four skipped ops make "it ran" and "it ran
-  // over nothing" look alike from the assertion count alone.
-  std::printf("  raceflow corpus through the race ABI: %d steps (%d internals skipped)\n",
+  // Printed rather than silent: a skip count that quietly grows to swallow the
+  // whole corpus reads exactly like a passing run from the assertion total.
+  std::printf("  ui corpus through the ui ABI: %d steps (%d ops with no JSON spelling left)\n",
               steps, skipped);
 }
 
-// ---------------------------------------------------------------------------
-// The SESSION-POLICY ABI (ttp_net.h), replayed against the same corpus
-// partytest/session_check.cc drives the C++ objects with.
-//
-// The two checks are not redundant and the difference is the whole point: the
-// session check proves the RULES, this one proves the MARSHALLING. Everything
-// that can go wrong only here is invisible there — an absent rejoinToken
-// arriving as an explicit null (they answer differently, and that is frozen), a
-// snapshot key dropped on the way out, a carIndex string coerced to a number
-// somewhere in the parse, the chooser payload leaking into a non-lobby snapshot.
-// ---------------------------------------------------------------------------
-Value netStep(const std::string& op, const Value& in) {
-  const auto txt = [](const Value* v) -> std::string {
-    return v ? canonical_stringify(*v) : std::string();
-  };
-  // The shared readers (ttp/json_read.h), bound to this step's `in`.
-  const auto num = [&in](const char* k) { return json::num_field(in, k); };
-  const auto str = [&in](const char* k) { return json::str_field(in, k); };
-  const auto flag = [&in](const char* k) { return json::truthy(in, k); };
-  const auto parse = [](const char* json) {
-    bool ok = false;
-    Value v = json::parse(json ? json : "null", &ok);
-    return ok ? v : Value::Null();
-  };
-
-  Value out = Value::Obj();
-  if (op == "roster") {
-    out.set("rows", parse(ttp_net_roster_rows_json(txt(in.find("roster")).c_str(),
-                                                   txt(in.find("inRace")).c_str())));
-  } else if (op == "snapshot") {
-    const Value* chooser = in.find("chooser");
-    // Set once per step here rather than once per run: the corpus deliberately
-    // walks a configured and an UNCONFIGURED chooser, and "the three keys are
-    // simply absent" is part of the contract.
-    check(ttp_net_configure(chooser && chooser->type == Value::OBJ
-                                ? canonical_stringify(*chooser).c_str() : "") == 1,
-          "net chooser configured");
-    out.set("snapshot", parse(ttp_net_lobby_snapshot_json(canonical_stringify(in).c_str())));
-  } else if (op == "joinUrl") {
-    out.set("url", Value::Str(ttp_net_join_url(str("base").c_str(), str("room").c_str(),
-                                               str("instance").c_str())));
-  } else if (op == "claimUrl") {
-    out.set("url", Value::Str(ttp_net_claim_url(str("url").c_str(), num("peerIndex"))));
-  } else if (op == "template") {
-    const std::string t = ttp_net_controller_url_template(str("base").c_str());
-    out.set("template", t.empty() ? Value::Null() : Value::Str(t));
-  } else if (op == "normIndex") {
-    // NULL is JS undefined; "null" is an explicit null. Passing the wrong one
-    // here is exactly the marshalling bug this driver exists to catch.
-    const std::string arg = flag("absent") ? std::string() : txt(in.find("value"));
-    out.set("index", parse(ttp_net_norm_index_json(arg.empty() ? nullptr : arg.c_str())));
-  } else if (op == "seat") {
-    out.set("defaults", parse(ttp_net_seat_defaults_json(num("colorIndex"))));
-  } else if (op == "addPeer") {
-    out.set("plan", parse(ttp_net_add_peer_plan_json(flag("has") ? 1 : 0, num("size"),
-                                                     num("maxPlayers"), num("colorIndex"))));
-  } else if (op == "presence") {
-    out.set("action", Value::Str(ttp_net_presence_action(str("roomState").c_str())));
-  } else if (op == "leave") {
-    out.set("action", Value::Str(ttp_net_leave_action(str("roomState").c_str())));
-  } else if (op == "card") {
-    out.set("card", parse(ttp_net_reconnect_card_json(txt(in.find("seat")).c_str(),
-                                                      str("url").c_str())));
-  } else if (op == "route") {
-    out.set("route", Value::Str(ttp_net_inbound_route(num("from"), str("type").c_str())));
-  } else if (op == "action") {
-    out.set("action", Value::Str(ttp_net_message_action(str("type").c_str())));
-  } else if (op == "setCar") {
-    const std::string idx = txt(in.find("carIndex"));
-    out.set("accept", Value::Bool(ttp_net_set_car(flag("ready") ? 1 : 0, str("roomState").c_str(),
-                                                  flag("inRace") ? 1 : 0,
-                                                  idx.empty() ? nullptr : idx.c_str(),
-                                                  num("carCount")) != 0));
-  } else if (op == "setReady") {
-    out.set("accept", Value::Bool(ttp_net_set_ready(flag("isHost") ? 1 : 0,
-                                                    str("roomState").c_str(),
-                                                    flag("ready") ? 1 : 0,
-                                                    flag("current") ? 1 : 0) != 0));
-  } else if (op == "stateChange") {
-    out.set("plan", parse(ttp_net_state_change_json(str("to").c_str())));
-  } else if (op == "hostChange") {
-    out.set("plan", parse(ttp_net_host_change_json()));
-  } else if (op == "hb") {
-    out.set("tick", parse(ttp_net_heartbeat_tick_json(flag("inRoom") ? 1 : 0,
-                                                      flag("hbPending") ? 1 : 0,
-                                                      num("hbSentAt"), num("now"))));
-  } else if (op == "claim") {
-    Value hello = Value::Obj();
-    if (!flag("absent")) {
-      const Value* tok = in.find("rejoinToken");
-      hello.set("rejoinToken", tok ? *tok : Value::Null());
-    }
-    out.set("plan", parse(ttp_net_claim_plan_json(canonical_stringify(hello).c_str(),
-                                                  num("fromId"), flag("hasOld") ? 1 : 0,
-                                                  flag("oldDisconnected") ? 1 : 0)));
-  } else if (op == "resync") {
-    out.set("plan", parse(ttp_net_resync_plan_json(txt(in.find("rosterIds")).c_str(),
-                                                   txt(in.find("relayPeers")).c_str())));
-  }
-  return out;
-}
-
-void sessionCorpusThroughAbi(const char* path) {
-  std::ifstream in(path);
-  if (!in) { fail(std::string("cannot open ") + path); return; }
-  std::string line, scenario;
-  int steps = 0;
-  while (std::getline(in, line)) {
-    if (line.empty()) continue;
-    Value root;
-    std::string err;
-    if (!read_line(line, root, &err)) { fail("session corpus parse: " + err); return; }
-    const Value* kind = root.find("case");
-    if (!kind || kind->type != Value::STR) continue;
-    if (kind->str == "scenario") {
-      const Value* nm = root.find("name");
-      scenario = nm && nm->type == Value::STR ? nm->str : "?";
-      continue;
-    }
-    if (kind->str != "step") continue;
-    const Value* opV = root.find("op");
-    const Value* wantOut = root.find("out");
-    if (!opV || opV->type != Value::STR || !wantOut) { fail("malformed session step"); return; }
-    const Value empty = Value::Obj();
-    const Value* inV = root.find("in");
-    const Value got = netStep(opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
-    if (got.obj.empty()) { fail("session: unhandled op " + opV->str); return; }
-    steps++;
-    for (const auto& kv : got.obj) {
-      const Value* want = wantOut->find(kv.first);
-      if (!want) { fail("session " + scenario + ": corpus has no " + kv.first); continue; }
-      const Diff d = diff_val(*want, kv.second, kv.first);
-      check(!d.differ, "session " + opV->str + " " + scenario + " step " + std::to_string(steps) +
-                       ": " + d.path + " expected " + d.expected + " got " + d.actual);
-    }
-  }
-  check(steps > 0, "session corpus replayed through the ABI (" + std::to_string(steps) + " steps)");
-  ttp_net_configure("");  // leave no configured chooser behind
-}
 
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// The handle-taking spellings against the JSON ones they replace.
+// The handle-taking gathers against the rules they gather for.
 //
 // NO CORPUS COVERS THIS, and that is exactly why it is here. Every frozen
 // fixture in the tree feeds a layer plain data and reads its answer back, so it
 // gates the RULES; ttp_net_lobby_frame and ttp_ui_roster_seats_room_json add no
 // rule at all — they GATHER, in C++, what a shell used to gather in JS and hand
-// back. The only thing that can be wrong with them is the gathering, and the
-// only statement of what "right" means is that they agree, byte for byte, with
-// the two-call path they were introduced to remove.
+// back. The only thing that can be wrong with them is the gathering, so the
+// statement of what "right" means is that each equals its rule composed over
+// the state the room ABI still hands out.
 //
-// Assert the equivalence, not the bytes: the expected value is computed the old
-// way in the same run, so this stays true when the snapshot's shape changes and
-// can never become a second, stale copy of the wire format.
+// Assert the equivalence, not the bytes: the expected value is computed in the
+// same run by composing the C++ RULES the walk calls, so this stays true when
+// the snapshot's shape changes and can never become a second, stale copy of the
+// wire format.
 void handlePathsMatchJsonPaths() {
   const int room = ttp_room_create("{}");
-  if (room <= 0) { fail("lobby-frame: ttp_room_create returned no handle"); return; }
+  RoomFlow* flow = ttp_room_flow(room);
+  if (room <= 0 || !flow) { fail("lobby-frame: ttp_room_create returned no handle"); return; }
 
-  ttp_net_configure("{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
-                    "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\"}]}");
+  const char* kChooser = "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
+                         "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\"}]}";
+  ttp_net_configure(kChooser);
+  // The same object the ABI now holds internally. lobby_snapshot keeps it
+  // OPAQUE, so re-parsing the configured text is the whole of the copy.
+  const Value chooser = parseOrNull(kChooser, "chooser");
 
   // Three seats: one that will hold a car, one that will not (a late joiner),
   // and one dropped — so `inRace`, `connected` and the host election all carry
@@ -2264,7 +2018,7 @@ void handlePathsMatchJsonPaths() {
   ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
   ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":false}");
   ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":1,\"ready\":false}");
-  ttp_room_mark_disconnected(room, "3");
+  flow->markDisconnected(PeerId::Num(3));
 
   const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
   if (sess <= 0) { fail("lobby-frame: ttp_session_begin returned no handle"); return; }
@@ -2280,7 +2034,10 @@ void handlePathsMatchJsonPaths() {
   ttp_room_store_pick(room, parseOrNull(kPick, "staged pick"));
 
   // The old path, spelled out: the pick plus the four room keys the shell used
-  // to gather, each through the ABI call it used to make.
+  // to gather, each through the ABI call it used to make — and then the two
+  // RULES the walk folds together, called directly. session::lobby_snapshot is
+  // the frozen, corpus-pinned composer; encode_set_state is the framer. The
+  // walk may not be anything other than their composition.
   const auto twoCallFrame = [&](int r, int s) {
     Value input = parseOrNull(kFields, "lobby-frame fields");
     const Value pick = parseOrNull(kPick, "lobby-frame pick");
@@ -2296,9 +2053,8 @@ void handlePathsMatchJsonPaths() {
     input.set("inRace", inRace);
     input.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "room host"));
     input.set("roomState", Value::Str(ttp_room_state(r)));
-    const std::string snapshot = canonical_stringify(input);
-    return std::string(ttp_framing_encode_set_state(
-        ttp_net_lobby_snapshot_json(snapshot.c_str())));
+    const std::string snapshot = ordered_stringify(ns::lobby_snapshot(input, chooser));
+    return std::string(ttp_framing_encode_set_state(snapshot.c_str()));
   };
 
   const auto sameFrame = [&](int r, int s, const char* where) {
@@ -2307,11 +2063,32 @@ void handlePathsMatchJsonPaths() {
     check(got == want, std::string("ttp_net_lobby_frame == snapshot+encode (") + where + ")");
   };
 
+  // The seat projection, off the roster the room ABI hands out, against the
+  // rule the walk calls. Field for field rather than byte for byte: the encoder
+  // has no JSON twin left, and a writer spelled here would be the stale second
+  // copy the charter above forbids.
   const auto sameSeats = [&](int r, const char* host, const char* where) {
-    const std::string want = ttp_ui_roster_seats_json(ttp_room_list_json(r), host);
-    const std::string got = ttp_ui_roster_seats_room_json(r, host);
-    check(got == want,
-          std::string("ttp_ui_roster_seats_room_json == roster_seats_json (") + where + ")");
+    const std::vector<ui::Seat> want =
+        ui::rosterSeats(rosterEntriesOf(parseOrNull(ttp_room_list_json(r), "room list")),
+                        parse_scalar_id(host));
+    const Value got = parseOrNull(ttp_ui_roster_seats_room_json(r, host), "roster seats");
+    const std::string at_ = std::string("ttp_ui_roster_seats_room_json == ui::rosterSeats (") +
+                            where + ")";
+    if (got.arr.size() != want.size()) { fail(at_ + ": " + std::to_string(got.arr.size()) +
+                                              " seats, rule says " + std::to_string(want.size()));
+                                         checks++; return; }
+    bool ok = true;
+    for (size_t i = 0; i < want.size(); i++) {
+      const Value& g = got.arr[i];
+      ok = ok && json::str_field(g, "name") == want[i].name &&
+           json::num_field(g, "colorIndex") == want[i].colorIndex &&
+           canonical_stringify(at(g, "carIndex")) ==
+               canonical_stringify(optVal(want[i].carIndex)) &&
+           json::truthy(g.find("connected")) == want[i].connected &&
+           json::truthy(g.find("host")) == want[i].host &&
+           json::truthy(g.find("ready")) == want[i].ready;
+    }
+    check(ok, at_);
   };
 
   sameFrame(room, sess, "lobby, a live race");
@@ -2342,7 +2119,7 @@ void handlePathsMatchJsonPaths() {
 
   // A roster that MOVES under both spellings — the gathering reads it live, so a
   // stale read would show up here and nowhere else.
-  ttp_room_remove_player(room, "2");
+  flow->removePlayer(PeerId::Num(2));
   sameFrame(room, sess, "after a seat leaves");
   sameSeats(room, "1", "after a seat leaves");
 
@@ -2374,21 +2151,74 @@ void handlePathsMatchJsonPaths() {
 }
 
 // ---------------------------------------------------------------------------
-// The ui LIVE twins (ttp_ui.h's *_live_json / *_gp_json) against the JSON
-// forms they gather for. Same charter as handlePathsMatchJsonPaths: a twin
-// adds no rule — it GATHERS the input the shell used to assemble (main.js's
-// raceRoleSets / refreshAutoPause / seriesInfo / standingsPayload, transcribed
-// below call for call) — so the only statement of correctness is byte
-// agreement with the JSON form over that assembly, in the same run.
+// The ui LIVE twins (ttp_ui.h's *_live_json) against the rules they gather for.
+// Same charter as handlePathsMatchJsonPaths: a twin adds no rule — it GATHERS
+// the input the shell used to assemble (main.js's raceRoleSets / seriesInfo /
+// standingsPayload, transcribed below call for call) — so the statement of
+// correctness is that each answer is its rule's output over that assembly, in
+// the same run.
+//
+// Race flow is compared byte for byte: two values, no encoder restated. The
+// chip and the board are compared FIELD for field, because their encoders lost
+// their JSON twins and a writer spelled here would be the stale second copy of
+// the wire format. The one byte comparison left inside the board is the one
+// that matters most — its nested chip must BE the chip export's answer, which
+// is the nesting a shell composing the two by hand got wrong.
 // ---------------------------------------------------------------------------
+// The chip's input off the ONE state read, spelled as ttp_ui.cc spells it off
+// the series object. This is the gather the twin performs; running the rule
+// over it is what says the twin gathered the right things.
+ui::SeriesInput seriesInputOfState(const Value& state, double autoAdvanceMs) {
+  const Value cup = at(state, "cup");
+  ui::SeriesInput si;
+  si.cupId = ui::OptStr::Of(json::str_field(cup, "id"));
+  si.cupName = ui::OptStr::Of(json::str_field(cup, "name"));
+  si.endless = json::truthy(state.find("endless"));
+  si.raceIndex = json::num_field(state, "raceIndex");
+  si.raceCount = ui::OptNum::Of(json::num_field(state, "raceCount"));
+  si.finished = json::truthy(state.find("finished"));
+  si.nextTrackId = json::opt_str<ui::OptStr>(state.find("nextTrack"));
+  si.autoAdvanceMs = autoAdvanceMs;
+  return si;
+}
+
+// The chip, field for field. Not byte for byte: seriesInfo's encoder has no
+// JSON twin left, so a writer spelled here would be the stale second copy of
+// the wire format the charter forbids. Every field the rule answers is checked.
+void sameSeriesInfo(const Value& got, const ui::SeriesInfo& want, const std::string& where) {
+  const auto same = [&](const char* key, const Value& expected) {
+    check(canonical_stringify(at(got, key)) == canonical_stringify(expected),
+          where + ": " + key + " expected " + canonical_stringify(expected) + ", got " +
+              canonical_stringify(at(got, key)));
+  };
+  same("cupId", optVal(want.cupId));
+  same("cupName", optVal(want.cupName));
+  same("endless", Value::Bool(want.endless));
+  same("raceIndex", Value::Num(want.raceIndex));
+  same("raceCount", optVal(want.raceCount));
+  same("nextTrackId", optVal(want.nextTrackId));
+  same("nextTrackName", optVal(want.nextTrackName));
+  same("final", Value::Bool(want.isFinal));   // `isFinal` in C++, `final` on the wire
+  same("autoAdvanceMs", Value::Num(want.autoAdvanceMs));
+}
+
 void uiLiveTwinsMatchJsonPaths() {
+  // The chip and the board resolve track NAMES against the configured
+  // catalogue, so the composed expectations have to run over the same one.
+  // Omitting both lists installs the shipped world, which ui::shippedCatalog()
+  // is then the reader for — no second copy either side of the boundary.
+  check(ttp_ui_configure("{\"maxPlayers\":4,\"carCount\":12}") == 1,
+        "ui twins: the shipped catalogue configured");
+  const std::vector<ui::CatalogEntry> catalog = ui::shippedCatalog();
+
   const int room = ttp_room_create("{}");
-  if (room <= 0) { fail("ui-twins: ttp_room_create returned no handle"); return; }
+  RoomFlow* flow = ttp_room_flow(room);
+  if (room <= 0 || !flow) { fail("ui-twins: ttp_room_create returned no handle"); return; }
   // Ada races and stays; Bo waits (late joiner); Cy races but dropped.
   ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
   ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":false}");
   ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":3,\"ready\":true}");
-  ttp_room_mark_disconnected(room, "3");
+  flow->markDisconnected(PeerId::Num(3));
 
   const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
   if (sess <= 0) { fail("ui-twins: ttp_session_begin returned no handle"); return; }
@@ -2397,32 +2227,36 @@ void uiLiveTwinsMatchJsonPaths() {
   ttp_add_bot(sess, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
   ttp_add_bot(sess, "\"ai-1\"", 0.9, 0.2, 2u, nullptr);
 
-  // main.js kept its own aiCarIds Set; the twin reads the bot registry. The
-  // comparison spells the shell's copy literally, which is exactly what the
-  // old assembly did.
-  const char* kAiIds = "[\"ai-0\",\"ai-1\"]";
-
-  // ---- raceRoleSets + ttp_ui_race_flow_json, transcribed --------------------
-  const auto oldRaceFlow = [&](int s, int r) {
-    Value in = Value::Obj();
-    Value carIds = parseOrNull(ttp_car_ids_json(s), "car ids");
-    Value disc = Value::Arr();
-    Value fin = Value::Arr();
-    for (const Value& idV : carIds.arr) {
-      const std::string idJson = canonical_stringify(idV);
-      if (ttp_room_is_disconnected(r, idJson.c_str())) disc.push(idV);
-      if (ttp_car_finished(s, idJson.c_str()) == 1) fin.push(idV);
+  // ---- race flow: the role sets main.js gathered, then the two rules --------
+  // Byte for byte here, because the answer is two values and no encoder is
+  // being restated: {"allDone":bool,"forfeit":[id,...]}, in that order.
+  const auto wantRaceFlow = [&](int s, int r) {
+    std::vector<ui::Id> carIds;
+    ui::IdSet ai, disc, fin;
+    const Value ids = parseOrNull(ttp_car_ids_json(s), "car ids");
+    RoomFlow* rf = ttp_room_flow(r);
+    for (const Value& idV : ids.arr) {
+      const ui::Id id = json::id_of<ui::Id>(&idV);
+      carIds.push_back(id);
+      if (rf && rf->isDisconnected(id)) disc.add(id);
+      if (ttp_car_finished(s, canonical_stringify(idV).c_str()) == 1) fin.add(id);
     }
-    in.set("carIds", carIds);
-    in.set("aiIds", parseOrNull(kAiIds, "ai ids"));
-    in.set("disconnectedIds", disc);
-    in.set("finishedIds", fin);
-    return std::string(ttp_ui_race_flow_json(canonical_stringify(in).c_str()));
+    // main.js kept its own aiCarIds Set; the twin reads the bot registry. The
+    // comparison spells the shell's copy literally, exactly as it did.
+    ai.add(ui::Id::Str("ai-0"));
+    ai.add(ui::Id::Str("ai-1"));
+    Value o = Value::Obj();
+    o.set("allDone", Value::Bool(ui::humansAllDone(carIds, ai, disc, fin)));
+    Value f = Value::Arr();
+    for (const ui::Id& id : ui::forfeitCandidates(carIds, ai, disc)) f.push(id.toValue());
+    o.set("forfeit", std::move(f));
+    return ordered_stringify(o);
   };
   const auto sameRaceFlow = [&](const char* where) {
-    const std::string want = oldRaceFlow(sess, room);
+    const std::string want = wantRaceFlow(sess, room);
     const std::string got = ttp_ui_race_flow_live_json(sess, room);
-    check(got == want, std::string("ttp_ui_race_flow_live_json == assembled form (") + where + ")");
+    check(got == want, std::string("ttp_ui_race_flow_live_json == the two rules (") + where +
+                           ")\n  want " + want + "\n  got  " + got);
   };
   sameRaceFlow("mid-race, one dropped");
   ttp_force_finish(sess, "1", 42.5);
@@ -2431,69 +2265,22 @@ void uiLiveTwinsMatchJsonPaths() {
   check(std::string(ttp_ui_race_flow_live_json(0, room)) == "{\"allDone\":false,\"forfeit\":[]}",
         "ttp_ui_race_flow_live_json without a session is the no-race constant");
 
-  // ---- refreshAutoPause's assembly, transcribed -----------------------------
-  const auto oldAutoPause = [&](int s, int r, bool raceEnded) {
-    Value in = Value::Obj();
-    in.set("hasSession", Value::Bool(s != 0));
-    in.set("raceEnded", Value::Bool(raceEnded));
-    in.set("roomState", Value::Str(ttp_room_state(r)));
-    Value carIds = s ? parseOrNull(ttp_car_ids_json(s), "car ids") : Value::Arr();
-    Value seated = Value::Arr();
-    for (const Value& idV : carIds.arr) {
-      const std::string idJson = canonical_stringify(idV);
-      if (ttp_room_has(r, idJson.c_str())) seated.push(idV);
-    }
-    in.set("carIds", carIds);
-    in.set("aiIds", s ? parseOrNull(kAiIds, "ai ids") : Value::Arr());
-    in.set("seatedIds", seated);
-    const std::string inJson = canonical_stringify(in);
-    int allDisc = 0;
-    if (ttp_ui_auto_pause_asks(inJson.c_str())) {
-      ttp_room_sync_active_order(r, s);
-      allDisc = ttp_room_all_participants_disconnected(r);
-    }
-    return std::string(ttp_ui_auto_pause_json(inJson.c_str(), allDisc));
-  };
-  const auto sameAutoPause = [&](int s, int r, bool ended, const char* where) {
-    const std::string want = oldAutoPause(s, r, ended);
-    const std::string got = ttp_ui_auto_pause_live_json(s, r, ended ? 1 : 0);
-    check(got == want, std::string("ttp_ui_auto_pause_live_json == assembled form (") + where + ")");
-  };
-  sameAutoPause(sess, room, false, "lobby phase");
+  ttp_room_transition_to(room, "countdown");
   ttp_room_transition_to(room, "playing");
-  sameAutoPause(sess, room, false, "playing, one racer dropped");
-  ttp_room_mark_disconnected(room, "1");
-  sameAutoPause(sess, room, false, "playing, every racer dropped");
-  sameAutoPause(sess, room, true, "results overlay up");
-  sameAutoPause(0, room, false, "no session");
-  ttp_room_mark_reconnected(room, "1");
+  ttp_room_events_json(room);
 
-  // ---- seriesInfo's getter walk + standingsPayload, transcribed -------------
+  // ---- the Grand Prix chip --------------------------------------------------
   const int gp = ttp_gp_create(
       "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"tidepool\",\"helix\"]}", 0);
   if (gp <= 0) { fail("ui-twins: ttp_gp_create returned no handle"); return; }
   const double kMs = 10000;
 
-  const auto oldSeriesInfo = [&](int g) {
-    Value cup = parseOrNull(ttp_gp_cup_json(g), "gp cup");
-    Value in = Value::Obj();
-    in.set("cupId", *cup.find("id"));
-    in.set("cupName", *cup.find("name"));
-    in.set("endless", Value::Bool(ttp_gp_endless(g) != 0));
-    in.set("raceIndex", Value::Num(ttp_gp_race_index(g)));
-    in.set("raceCount", Value::Num(ttp_gp_race_count(g)));
-    in.set("finished", Value::Bool(ttp_gp_finished(g) != 0));
-    const char* next = ttp_gp_next_track(g);
-    in.set("nextTrackId", next[0] ? Value::Str(next) : Value::Null());
-    in.set("autoAdvanceMs", Value::Num(kMs));
-    return std::string(ttp_ui_series_info_json(canonical_stringify(in).c_str()));
+  const auto chipRule = [&](int g) {
+    return ui::seriesInfo(seriesInputOfState(parseOrNull(ttp_gp_state_json(g), "gp state"), kMs),
+                          catalog);
   };
-  const auto sameSeriesInfo = [&](const char* where) {
-    const std::string want = oldSeriesInfo(gp);
-    const std::string got = ttp_ui_series_info_live_json(gp, kMs);
-    check(got == want, std::string("ttp_ui_series_info_live_json == getter walk (") + where + ")");
-  };
-  sameSeriesInfo("race 1 of the cup");
+  sameSeriesInfo(parseOrNull(ttp_ui_series_info_live_json(gp, kMs), "series info live"),
+                 chipRule(gp), "series_info_live, race 1 of the cup");
   check(std::string(ttp_ui_series_info_live_json(0, kMs)) == "null",
         "ttp_ui_series_info_live_json without a series is null");
 
@@ -2503,34 +2290,103 @@ void uiLiveTwinsMatchJsonPaths() {
       "{\"peerIndex\":\"ai-0\",\"name\":\"Alpha\",\"colorIndex\":4,\"ai\":true},"
       "{\"peerIndex\":\"ai-1\",\"name\":\"Beta\",\"colorIndex\":5,\"ai\":true}]";
 
-  const auto oldStandings = [&](int s, int r, int g, bool over, const char* resultsJson) {
-    Value in = Value::Obj();
-    Value resultsObj = resultsJson ? parseOrNull(resultsJson, "explicit results")
-                                   : parseOrNull(ttp_results_json(s), "live results");
-    in.set("results", *resultsObj.find("results"));
-    in.set("field", parseOrNull(kField, "field"));
+  // ---- the standings board --------------------------------------------------
+  // broadcastStandings' four sources, gathered as the shell gathered them, then
+  // ui::standingsPayload over them. The board's own encoder has no JSON twin
+  // left, so the comparison walks the answer against the rule's Board.
+  const auto wantBoard = [&](int g, bool over, const char* resultsJson) {
+    const Value resultsObj = resultsJson ? parseOrNull(resultsJson, "explicit results")
+                                         : parseOrNull(ttp_results_json(sess), "live results");
+    std::vector<ui::ResultRow> results;
+    for (const Value& r : at(resultsObj, "results").arr) {
+      ui::ResultRow rr;
+      rr.playerId = json::id_of<ui::Id>(r.find("playerId"));
+      rr.finished = json::truthy(r.find("finished"));
+      rr.time = json::opt_num<ui::OptNum>(r.find("time"));
+      results.push_back(std::move(rr));
+    }
+    std::vector<ui::FieldRow> field;
+    for (const Value& f : parseOrNull(kField, "field").arr) {
+      ui::FieldRow fr;
+      fr.peerIndex = json::id_of<ui::Id>(f.find("peerIndex"));
+      fr.name = json::str_field(f, "name");
+      fr.colorIndex = json::opt_num<ui::OptNum>(f.find("colorIndex"));
+      fr.ai = json::truthy(f.find("ai"));
+      field.push_back(std::move(fr));
+    }
+    std::vector<ui::StandingRow> standings;
+    ui::CupBoard cup;
     if (g) {
-      Value cup = Value::Obj();
-      cup.set("standings", parseOrNull(ttp_gp_standings_json(g), "gp standings"));
-      cup.set("info", parseOrNull(oldSeriesInfo(g).c_str(), "series info"));
-      in.set("cup", cup);
-    } else {
-      in.set("cup", Value::Null());
+      for (const Value& s : at(parseOrNull(ttp_gp_state_json(g), "gp state"), "standings").arr) {
+        ui::StandingRow sr;
+        sr.playerId = json::id_of<ui::Id>(s.find("playerId"));
+        sr.points = json::num_field(s, "points");
+        sr.gained = json::num_field(s, "gained");
+        standings.push_back(std::move(sr));
+      }
+      cup.standings = &standings;
+      cup.info = chipRule(g);
     }
     // DisplayNet.lateJoiners() pushes the live car set in BEFORE reading — the
     // late set is defined by subtraction from the active order, so the sync is
-    // part of the old path, not an optimization.
-    ttp_room_sync_active_order(r, s);
-    in.set("lateJoiners", parseOrNull(ttp_room_late_joiners_json(r), "late joiners"));
-    in.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "host"));
-    in.set("over", Value::Bool(over));
-    return std::string(ttp_ui_standings_json(canonical_stringify(in).c_str()));
+    // part of the gather, not an optimization. The seam holds the two together.
+    std::vector<ui::LateJoiner> late;
+    for (const Value& l : ttp_room_late_joiners_synced(room, sess).arr) {
+      ui::LateJoiner lj;
+      lj.peerIndex = json::id_of<ui::Id>(l.find("peerIndex"));
+      lj.name = json::str_field(l, "name");
+      lj.colorIndex = json::num_field(l, "colorIndex");
+      late.push_back(std::move(lj));
+    }
+    const Value hostV = parseOrNull(ttp_room_host_json(room), "host");
+    return ui::standingsPayload(results, field, cup.standings ? &cup : nullptr, late,
+                                json::id_of<ui::Id>(&hostV), over);
   };
+
   const auto sameStandings = [&](int g, bool over, const char* resultsJson, const char* where) {
-    const std::string want = oldStandings(sess, room, g, over, resultsJson);
-    const std::string got = ttp_ui_standings_live_json(sess, room, g, over ? 1 : 0,
-                                                       kField, resultsJson, kMs);
-    check(got == want, std::string("ttp_ui_standings_live_json == assembled form (") + where + ")");
+    const ui::Board want = wantBoard(g, over, resultsJson);
+    const Value got = parseOrNull(
+        ttp_ui_standings_live_json(sess, room, g, over ? 1 : 0, kField, resultsJson, kMs),
+        "standings live");
+    const std::string at_ = std::string("ttp_ui_standings_live_json == ui::standingsPayload (") +
+                            where + ")";
+    check(json::truthy(got.find("over")) == want.over, at_ + ": over");
+    check(canonical_stringify(at(got, "hostPeerIndex")) ==
+              canonical_stringify(want.hostPeerIndex.toValue()),
+          at_ + ": hostPeerIndex");
+    check(json::num_field(got, "total") == (double)want.total(), at_ + ": total");
+    const Value order = at(got, "order");
+    check(order.arr.size() == want.order.size(), at_ + ": row count");
+    if (order.arr.size() != want.order.size()) return;
+    bool rows = true;
+    for (size_t i = 0; i < want.order.size(); i++) {
+      const Value& r = order.arr[i];
+      const ui::BoardRow& w = want.order[i];
+      rows = rows && canonical_stringify(at(r, "playerId")) ==
+                         canonical_stringify(w.playerId.toValue()) &&
+             json::str_field(r, "name") == w.name &&
+             json::num_field(r, "colorIndex") == w.colorIndex &&
+             json::truthy(r.find("joining")) == w.joining &&
+             (r.find("points") != nullptr) == w.hasPoints &&
+             (!w.hasPoints || json::num_field(r, "points") == w.points) &&
+             (!w.hasGained || json::num_field(r, "gained") == w.gained) &&
+             (w.joining || (json::truthy(r.find("ai")) == w.ai &&
+                            json::truthy(r.find("finished")) == w.finished &&
+                            canonical_stringify(at(r, "time")) ==
+                                canonical_stringify(optVal(w.time))));
+    }
+    check(rows, at_ + ": every row");
+    // The cup half is NESTED — one `cup` object, never two sibling keys — and
+    // the chip inside it must be the same bytes the chip export answers, which
+    // is the one place a byte comparison is available and is exactly the
+    // mismatch a shell composing the two by hand used to ship.
+    if (g) {
+      check(canonical_stringify(at(got, "series")) ==
+                canonical_stringify(parseOrNull(ttp_ui_series_info_live_json(g, kMs), "chip")),
+            at_ + ": the board's chip IS ttp_ui_series_info_live_json");
+    } else {
+      check(!got.has("series"), at_ + ": a plain race carries no chip at all");
+    }
   };
   sameStandings(0, false, nullptr, "plain race, live board");
   sameStandings(gp, false, nullptr, "cup, live board");
@@ -2542,23 +2398,28 @@ void uiLiveTwinsMatchJsonPaths() {
                 "cup, final board off the callback argument");
 
   // ---- the endless-draw gate ------------------------------------------------
-  // NativeCupSeries spelled `drawNext && raceIndex >= raceCount - 1`; the
-  // export owns the index half. A fixed cup never draws; the endless series
+  // NativeCupSeries spelled `drawNext && raceIndex >= raceCount - 1`; the state
+  // object owns the index half now. A fixed cup never draws; an endless series
   // draws exactly while sitting on its last queued race.
-  check(ttp_gp_needs_draw(gp) == 0, "a fixed cup never needs a draw");
+  const auto needsDraw = [&](int g) {
+    const Value st = parseOrNull(ttp_gp_state_json(g), "gp state");
+    return json::truthy(st.find("needsDraw"));
+  };
+  const auto oldSpelling = [&](int g) {
+    const Value st = parseOrNull(ttp_gp_state_json(g), "gp state");
+    return json::truthy(st.find("endless")) &&
+           json::num_field(st, "raceIndex") >= json::num_field(st, "raceCount") - 1;
+  };
+  check(!needsDraw(gp), "a fixed cup never needs a draw");
   const int egp = ttp_gp_create("{\"id\":\"random\",\"name\":\"Random\",\"tracks\":[\"tidepool\"]}", 1);
-  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
-                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
-        "needs_draw == the adapter's old spelling (fresh endless)");
-  check(ttp_gp_needs_draw(egp) == 1, "a one-track endless series draws immediately");
+  check(needsDraw(egp) == oldSpelling(egp), "needsDraw == the adapter's old spelling (fresh)");
+  check(needsDraw(egp), "a one-track endless series draws immediately");
   ttp_gp_apply_race(egp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
                     "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
                     "\"helix\"");
   ttp_gp_advance(egp);
-  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
-                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
-        "needs_draw == the adapter's old spelling (after an advance)");
-  check(ttp_gp_needs_draw(0) == 0, "needs_draw on handle 0 is 0");
+  check(needsDraw(egp) == oldSpelling(egp), "needsDraw == the adapter's old spelling (advanced)");
+  check(std::strcmp(ttp_gp_state_json(0), "null") == 0, "gp state on handle 0 is null");
 
   // ---- the freeze plan ------------------------------------------------------
   // The plan's transition must agree with the frozen-corpus-pinned rule over
@@ -2567,9 +2428,9 @@ void uiLiveTwinsMatchJsonPaths() {
     for (int ap = 0; ap <= 1; ap++)
       for (int sp = 0; sp <= 1; sp++) {
         const Value plan = parseOrNull(ttp_ui_freeze_plan_json(p, ap, sp), "freeze plan");
-        check(plan.find("transition") &&
-                  plan.find("transition")->str == ttp_ui_freeze_transition(p, ap, sp),
-              "freeze plan transition == ttp_ui_freeze_transition");
+        check(json::str_field(plan, "transition") ==
+                  ui::key(ui::freezeTransition(p != 0, ap != 0, sp != 0)),
+              "freeze plan transition == ui::freezeTransition");
       }
   check(std::string(ttp_ui_freeze_plan_json(1, 0, 0)) ==
             "{\"transition\":\"freeze\",\"ops\":[\"pause-session\",\"stop-voices\","
@@ -2596,7 +2457,8 @@ void uiLiveTwinsMatchJsonPaths() {
                       "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
                       nullptr);
     ttp_gp_advance(fgp);
-    check(ttp_gp_finished(fgp) == 1, "one-track cup is finished after its race");
+    check(json::truthy(parseOrNull(ttp_gp_state_json(fgp), "gp state").find("finished")),
+          "one-track cup is finished after its race");
     check(std::string(ttp_ui_results_action_json(fgp)) == "\"return-to-lobby\"",
           "finished cup: the button returns to the lobby");
     ttp_gp_dispose(fgp);
@@ -2604,7 +2466,11 @@ void uiLiveTwinsMatchJsonPaths() {
 
   // ---- the controller-message verdict ---------------------------------------
   // Host is Ada (peer 1, earliest join). Bo (2) is not ready, so a start is
-  // refused even FROM the host; flipping Bo ready opens the gate.
+  // refused even FROM the host; flipping Bo ready opens the gate. The room is
+  // back in the lobby for it — readiness is a lobby concept.
+  ttp_room_transition_to(room, "results");
+  ttp_room_transition_to(room, "lobby");
+  ttp_room_events_json(room);
   const auto act = [&](const char* from, const char* type, int s) {
     return std::string(ttp_net_controller_action(room, s, from, type));
   };
@@ -2695,12 +2561,25 @@ void beginFieldMatchesManualPath() {
 // ---------------------------------------------------------------------------
 namespace {
 
+// Every op these scenarios actually raised, so the vocabulary export can be
+// held to them at the end. A walk that grew an op nobody added to the table
+// would ship a shell whose performer switch has no arm for it.
+std::vector<std::string> g_netOpsSeen;
+
 // The walk answer, parsed. canonical re-stringify normalizes the model key
 // order away, so expected lists can be built with Value::set in any order.
 Value walkOf(const char* answerJson, const char* where) {
   Value v = parseOrNull(answerJson, where);
   const Value* eff = v.find("effects");
   check(eff && eff->type == Value::ARR, std::string(where) + ": answer carries effects[]");
+  if (eff && eff->type == Value::ARR) {
+    for (const Value& e : eff->arr) {
+      const std::string op = json::str_field(e, "op");
+      bool seen = false;
+      for (const std::string& s : g_netOpsSeen) seen = seen || s == op;
+      if (!seen) g_netOpsSeen.push_back(op);
+    }
+  }
   return v;
 }
 
@@ -2718,62 +2597,65 @@ Value bareEffect(const char* op) {
 }
 
 // The pre-walk shell, transcribed: every helper is one of Net.js's private
-// methods, written with the same ABI calls in the same order, and RECORDING the
-// platform ops it would have performed (the expected effect list).
+// methods, in the same order, RECORDING the platform ops it would have
+// performed (the expected effect list).
+//
+// It used to spell each step as the ABI call the shell made. Those one-rule
+// exports are gone, so each is now the RULE the walk itself calls —
+// ttp::session::add_peer_plan / claim_plan / norm_index / state_change_plan and
+// RoomFlow's own mutators — driven against a SECOND room machine. That is a
+// stronger statement than before, not a weaker one: the twin can no longer
+// agree with the walk by accident of sharing a marshaller.
 struct ShellTwin {
   int room = 0;
+  RoomFlow* flow = nullptr;
   Value expected = Value::Arr();
 
   void reset() { expected = Value::Arr(); }
 
   // Net.js _seen
   void seen(double id, double now) {
-    const std::string pj = canonical_stringify(Value::Num(id));
-    ttp_room_on_seen(room, pj.c_str(), now);
-    if (ttp_room_is_disconnected(room, pj.c_str())) {
-      ttp_room_mark_reconnected(room, pj.c_str());
+    const PeerId p = PeerId::Num(id);
+    flow->onSeen(p, now);
+    if (flow->isDisconnected(p)) {
+      flow->markReconnected(p);
       expected.push(peerEffect("clear-reconnect", id));
     }
   }
 
   // Net.js _addPeer (colour scan + lowestFreeSlot + add_peer_plan + addPlayer)
   void addPeer(double id, double now) {
-    Value roster = parseOrNull(ttp_room_list_json(room), "twin roster");
-    Value used = Value::Arr();
-    for (const Value& p : roster.arr)
-      if (const Value* c = p.find("colorIndex")) used.push(*c);
-    const int slot = ttp_room_lowest_free_slot(canonical_stringify(used).c_str(),
-                                               protocol::MAX_PLAYERS);
-    const std::string pj = canonical_stringify(Value::Num(id));
-    Value plan = parseOrNull(
-        ttp_net_add_peer_plan_json(ttp_room_has(room, pj.c_str()), ttp_room_size(room),
-                                   protocol::MAX_PLAYERS, slot),
-        "twin add plan");
-    if (const Value* seat = plan.find("seat")) {
-      // NativeSessionModel's SEAT_NAME table: 'Player ' + nameArg.
-      Value fields = Value::Obj();
-      char name[32];
-      std::snprintf(name, sizeof name, "Player %d", (int)json::num_field(*seat, "nameArg"));
-      fields.set("name", Value::Str(name));
-      fields.set("colorIndex", *seat->find("colorIndex"));
-      fields.set("carIndex", *seat->find("carIndex"));
-      fields.set("ready", *seat->find("ready"));
-      ttp_room_add_player(room, pj.c_str(), canonical_stringify(fields).c_str());
+    std::vector<double> used;
+    for (const Value& p : flow->listValue().arr)
+      if (const Value* c = p.find("colorIndex"))
+        if (c->type == Value::NUM) used.push_back(c->num);
+    const int slot = lowest_free_slot(used, protocol::MAX_PLAYERS);
+    const PeerId p = PeerId::Num(id);
+    const ns::AddPeerPlan plan = ns::add_peer_plan(
+        flow->has(p), static_cast<double>(flow->size()), protocol::MAX_PLAYERS, slot);
+    if (plan.hasSeat) {
+      std::vector<std::pair<std::string, Value>> fields;
+      fields.emplace_back("name", Value::Str(ns::seat_name(plan.seat)));
+      fields.emplace_back("colorIndex", Value::Num(plan.seat.colorIndex));
+      fields.emplace_back("carIndex", Value::Num(plan.seat.carIndex));
+      fields.emplace_back("ready", Value::Bool(plan.seat.ready));
+      flow->addPlayer(p, fields);
     }
-    if (json::truthy(plan.find("stamp"))) seen(id, now);
+    if (plan.stamp) seen(id, now);
   }
 
   // Net.js _dropSeat
   void dropSeat(double id) {
-    const std::string pj = canonical_stringify(Value::Num(id));
+    const PeerId p = PeerId::Num(id);
     expected.push(peerEffect("close-fastlane", id));
-    ttp_room_mark_disconnected(room, pj.c_str());
-    Value rec = parseOrNull(ttp_room_get_json(room, pj.c_str()), "twin drop rec");
-    if (rec.type != Value::OBJ) return;
+    flow->markDisconnected(p);
+    const ttp::Player* rec = flow->get(p);
+    if (!rec) return;
     Value seat = Value::Obj();
     seat.set("peerIndex", Value::Num(id));
-    if (const Value* v = rec.find("name")) seat.set("name", *v);
-    if (const Value* v = rec.find("colorIndex")) seat.set("colorIndex", *v);
+    for (const auto& kv : rec->fields) {
+      if (kv.first == "name" || kv.first == "colorIndex") seat.set(kv.first, kv.second);
+    }
     Value e = bareEffect("show-reconnect");
     e.set("seat", std::move(seat));
     expected.push(std::move(e));
@@ -2781,33 +2663,27 @@ struct ShellTwin {
 
   // Net.js _expireSeat
   void expireSeat(double id) {
-    const std::string pj = canonical_stringify(Value::Num(id));
+    const PeerId p = PeerId::Num(id);
     expected.push(peerEffect("clear-reconnect", id));
-    if (!ttp_room_has(room, pj.c_str())) return;
+    if (!flow->has(p)) return;
     expected.push(peerEffect("close-fastlane", id));
-    ttp_room_remove_player(room, pj.c_str());
+    flow->removePlayer(p);
   }
 
   // Net.js _claimReconnect
   void claim(double from, const Value& hello, double now) {
     const Value* token = hello.find("rejoinToken");
-    const std::string tokenJson = token ? canonical_stringify(*token) : std::string();
-    Value guess = parseOrNull(
-        ttp_net_norm_index_json(tokenJson.empty() ? nullptr : tokenJson.c_str()), "twin guess");
-    const bool hasGuess = guess.type == Value::NUM;
-    const std::string oldPj = canonical_stringify(guess);
-    const int hasOld = hasGuess && ttp_room_has(room, oldPj.c_str());
-    const int oldDisc = hasGuess && ttp_room_is_disconnected(room, oldPj.c_str());
-    Value plan = parseOrNull(
-        ttp_net_claim_plan_json(canonical_stringify(hello).c_str(), from, hasOld, oldDisc),
-        "twin claim plan");
-    if (!json::truthy(plan.find("claim"))) return;
-    const double oldId = json::num_field(plan, "oldId");
-    const std::string fromPj = canonical_stringify(Value::Num(from));
+    double guess = 0;
+    const bool hasGuess = ns::norm_index(token, &guess);
+    const PeerId oldPeer = PeerId::Num(guess);
+    const ns::ClaimPlan plan = ns::claim_plan(from, token, hasGuess && flow->has(oldPeer),
+                                              hasGuess && flow->isDisconnected(oldPeer));
+    if (!plan.claim) return;
+    const double oldId = plan.oldId;
     expected.push(peerEffect("close-fastlane", oldId));
     expected.push(peerEffect("close-fastlane", from));
-    ttp_room_rekey(room, canonical_stringify(Value::Num(oldId)).c_str(), fromPj.c_str());
-    if (json::truthy(plan.find("restamp"))) ttp_room_on_seen(room, fromPj.c_str(), now);
+    flow->rekey(PeerId::Num(oldId), PeerId::Num(from));
+    if (plan.restamp) flow->onSeen(PeerId::Num(from), now);
     Value e = bareEffect("rekey-player");
     e.set("oldId", Value::Num(oldId));
     e.set("newId", Value::Num(from));
@@ -2821,17 +2697,18 @@ struct ShellTwin {
   void hello(double from, const Value& msg, int sessionHandle, double now) {
     seen(from, now);
     claim(from, msg, now);
+    const PeerId p = PeerId::Num(from);
     const std::string pj = canonical_stringify(Value::Num(from));
-    const bool seated = ttp_room_has(room, pj.c_str());
+    const bool seated = flow->has(p);
     if (!seated) addPeer(from, now);
-    Value rec = parseOrNull(ttp_room_get_json(room, pj.c_str()), "twin hello rec");
+    const ttp::Player* rec = flow->get(p);
     const Value* nameV = msg.find("name");
-    if (rec.type == Value::OBJ && json::truthy(nameV)) {
+    if (rec && json::truthy(nameV)) {
       const std::string name = ttp_net_clean_name(canonical_stringify(*nameV).c_str());
-      const Value* cur = rec.find("name");
+      const Value* cur = nullptr;
+      for (const auto& kv : rec->fields) if (kv.first == "name") cur = &kv.second;
       const bool renamed = seated && !(cur && cur->type == Value::STR && cur->str == name);
-      ttp_room_set_field(room, pj.c_str(), "name",
-                         canonical_stringify(Value::Str(name)).c_str());
+      flow->setField(p, "name", Value::Str(name));
       if (renamed) {
         Value e = bareEffect("player-renamed");
         e.set("peerIndex", Value::Num(from));
@@ -2883,7 +2760,8 @@ void netWalksMatchMultiCallPath() {
   const int walkRoom = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
   ShellTwin twin;
   twin.room = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
-  if (walkRoom <= 0 || twin.room <= 0) { fail("netwalk: no room handles"); return; }
+  twin.flow = ttp_room_flow(twin.room);
+  if (walkRoom <= 0 || twin.room <= 0 || !twin.flow) { fail("netwalk: no room handles"); return; }
 
   const auto walkPeerMsg = [&](double from, const char* msgJson, int sess, double now) {
     const std::string fromJson = canonical_stringify(Value::Num(from));
@@ -2995,10 +2873,13 @@ void netWalksMatchMultiCallPath() {
     twin.reset();
     twin.seen(2, 2400);
     {
-      Value rec = parseOrNull(ttp_room_get_json(twin.room, "2"), "twin car rec");
-      if (ttp_net_set_car(json::truthy(rec.find("ready")), "lobby", 0, "1",
-                          static_cast<double>(protocol::CAR_MODELS.size()))) {
-        ttp_room_set_field(twin.room, "2", "carIndex", "1");
+      const ttp::Player* rec = twin.flow->get(PeerId::Num(2));
+      bool ready = false;
+      if (rec) for (const auto& kv : rec->fields) if (kv.first == "ready") ready = json::truthy(&kv.second);
+      const Value idx = Value::Num(1);
+      if (ns::set_car_decision(ready, ns::RoomState::LOBBY, false, &idx,
+                               static_cast<double>(protocol::CAR_MODELS.size()))) {
+        twin.flow->setField(PeerId::Num(2), "carIndex", Value::Num(1));
         twin.expected.push(bareEffect("announce"));
       }
     }
@@ -3217,15 +3098,14 @@ void netWalksMatchMultiCallPath() {
     twin.reset();
     {
       // Net.js's statechange handler: restampConnected + clearStandings + publish.
-      Value plan = parseOrNull(ttp_net_state_change_json("countdown"), "twin sc plan");
-      if (json::truthy(plan.find("restampConnected"))) {
-        Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin sc roster");
-        for (const Value& p : roster.arr)
+      const ns::StateChangePlan plan = ns::state_change_plan(ns::RoomState::COUNTDOWN);
+      if (plan.restampConnected) {
+        for (const Value& p : twin.flow->listValue().arr)
           if (json::truthy(p.find("connected")))
-            ttp_room_on_seen(twin.room, canonical_stringify(*p.find("peerIndex")).c_str(), 4000);
+            twin.flow->onSeen(json::id_of<PeerId>(p.find("peerIndex")), 4000);
       }
-      if (json::truthy(plan.find("clearStandings"))) twin.expected.push(bareEffect("clear-standings"));
-      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+      if (plan.clearStandings) twin.expected.push(bareEffect("clear-standings"));
+      if (plan.publish) twin.expected.push(bareEffect("publish"));
     }
     sameEffects(sc, twin, "statechange/countdown");
     sameRooms(walkRoom, twin, "statechange/countdown");
@@ -3262,10 +3142,9 @@ void netWalksMatchMultiCallPath() {
     // shell state; the sweep is what touches the room).
     twin.reset();
     {
-      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 5100), "twin expired");
-      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      for (const PeerId& id : twin.flow->expiredPeers(5100)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
-      if (ttp_room_grace_tick(twin.room, 5100)) twin.expected.push(bareEffect("race-abandoned"));
+      if (twin.flow->graceTick(5100)) twin.expected.push(bareEffect("race-abandoned"));
     }
     sameRooms(walkRoom, twin, "liveness/no-expiry");
 
@@ -3285,10 +3164,9 @@ void netWalksMatchMultiCallPath() {
     twin.reset();
     // (the echo routes 'self-heartbeat' in the twin too — no stamp, no effect)
     {
-      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 5300), "twin expired2");
-      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      for (const PeerId& id : twin.flow->expiredPeers(5300)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
-      if (ttp_room_grace_tick(twin.room, 5300)) twin.expected.push(bareEffect("race-abandoned"));
+      if (twin.flow->graceTick(5300)) twin.expected.push(bareEffect("race-abandoned"));
     }
     sameRooms(walkRoom, twin, "liveness/echoed");
 
@@ -3296,10 +3174,9 @@ void netWalksMatchMultiCallPath() {
     Value lt3 = walkOf(ttp_net_liveness_json(walkRoom, sess, 9000), "liveness expiry");
     twin.reset();
     {
-      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 9000), "twin expired3");
-      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      for (const PeerId& id : twin.flow->expiredPeers(9000)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
-      if (ttp_room_grace_tick(twin.room, 9000)) twin.expected.push(bareEffect("race-abandoned"));
+      if (twin.flow->graceTick(9000)) twin.expected.push(bareEffect("race-abandoned"));
     }
     // The heartbeat half differs (the twin holds no canary state), so compare
     // only the sweep's effects: strip send-to/reconnect from the walk's answer.
@@ -3348,18 +3225,17 @@ void netWalksMatchMultiCallPath() {
     Value lob = walkOf(ttp_net_state_change_apply_json(walkRoom, "lobby", 9400), "sc lobby");
     twin.reset();
     {
-      Value plan = parseOrNull(ttp_net_state_change_json("lobby"), "twin lobby plan");
-      if (json::truthy(plan.find("freeDisconnected"))) {
-        Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin lobby roster");
+      const ns::StateChangePlan plan = ns::state_change_plan(ns::RoomState::LOBBY);
+      if (plan.freeDisconnected) {
         std::vector<double> disc;
-        for (const Value& p : roster.arr) {
-          const std::string pj = canonical_stringify(*p.find("peerIndex"));
-          if (ttp_room_is_disconnected(twin.room, pj.c_str())) disc.push_back(p.find("peerIndex")->num);
+        for (const Value& p : twin.flow->listValue().arr) {
+          const PeerId id = json::id_of<PeerId>(p.find("peerIndex"));
+          if (twin.flow->isDisconnected(id)) disc.push_back(id.num);
         }
         for (double id : disc) twin.expireSeat(id);
       }
-      if (json::truthy(plan.find("clearStandings"))) twin.expected.push(bareEffect("clear-standings"));
-      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+      if (plan.clearStandings) twin.expected.push(bareEffect("clear-standings"));
+      if (plan.publish) twin.expected.push(bareEffect("publish"));
     }
     sameEffects(lob, twin, "statechange/lobby");
     sameRooms(walkRoom, twin, "statechange/lobby");
@@ -3375,9 +3251,9 @@ void netWalksMatchMultiCallPath() {
     Value hc = walkOf(ttp_net_host_change_apply_json(walkRoom, "2"), "host_change");
     twin.reset();
     {
-      Value plan = parseOrNull(ttp_net_host_change_json(), "twin host plan");
-      if (json::truthy(plan.find("clearReady"))) ttp_room_set_field(twin.room, "2", "ready", "false");
-      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("announce"));
+      const ns::HostChangePlan plan = ns::host_change_plan();
+      if (plan.clearReady) twin.flow->setField(PeerId::Num(2), "ready", Value::Bool(false));
+      if (plan.publish) twin.expected.push(bareEffect("announce"));
     }
     sameEffects(hc, twin, "hostchange");
     sameRooms(walkRoom, twin, "hostchange");
@@ -3393,14 +3269,13 @@ void netWalksMatchMultiCallPath() {
     twin.reset();
     twin.expected.push(bareEffect("clear-create-timer"));
     {
-      Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin resync roster");
-      Value ids = Value::Arr();
-      for (const Value& p : roster.arr) ids.push(*p.find("peerIndex"));
-      Value plan = parseOrNull(
-          ttp_net_resync_plan_json(canonical_stringify(ids).c_str(), "[0,2,5]"), "twin resync");
-      for (const Value& id : plan.find("expire")->arr) twin.expireSeat(id.num);
-      for (const Value& id : plan.find("add")->arr) twin.addPeer(id.num, 10000);
-      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+      std::vector<double> ids;
+      for (const Value& p : twin.flow->listValue().arr)
+        ids.push_back(json::num_field(p, "peerIndex"));
+      const ns::ResyncPlan plan = ns::resync_plan(ids, {0, 2, 5});
+      for (double id : plan.expire) twin.expireSeat(id);
+      for (double id : plan.add) twin.addPeer(id, 10000);
+      if (plan.publish) twin.expected.push(bareEffect("publish"));
     }
     twin.expected.push(bareEffect("reset-reconnect-count"));
     {
@@ -3433,7 +3308,8 @@ void netWalksMatchMultiCallPath() {
     twin.expected.push(bareEffect("connect-fresh"));
     sameEffects(w, twin, "close/room-closed");
     sameRooms(walkRoom, twin, "close/room-closed");
-    check(ttp_room_size(walkRoom) == 0, "netwalk close: no seat survives into the fresh room");
+    check(std::strcmp(ttp_room_list_json(walkRoom), "[]") == 0,
+          "netwalk close: no seat survives into the fresh room");
 
     // ...and the next error with no room code counts a failed attempt.
     Value err = walkOf(ttp_net_on_protocol_json(walkRoom, "error",
@@ -3447,15 +3323,704 @@ void netWalksMatchMultiCallPath() {
   ttp_room_dispose(twin.room);
   ttp_room_dispose(walkRoom);
   ttp_net_configure("");  // leave no configured chooser behind
-  std::printf("  net choreography walks against the multi-call path\n");
+
+  // ---- the vocabulary, against what the scenarios above actually emitted ----
+  // A shell asserts its performer switch covers ttp_net_effect_ops_json at
+  // boot, so an op a walk can raise but the table omits is a step silently
+  // dropped mid-party. The table is the shipped claim; this is the evidence
+  // for it that no reading of the code gives you.
+  {
+    const Value ops = parseOrNull(ttp_net_effect_ops_json(), "net effect ops");
+    check(ops.type == Value::ARR && !ops.arr.empty(),
+          "ttp_net_effect_ops_json is a non-empty array");
+    for (const std::string& op : g_netOpsSeen) {
+      bool listed = false;
+      for (const Value& v : ops.arr) listed = listed || (v.type == Value::STR && v.str == op);
+      check(listed, "netwalk op '" + op + "' is in ttp_net_effect_ops_json");
+    }
+    std::printf("  net choreography walks against the composed rules: %d ops raised, %d declared\n",
+                (int)g_netOpsSeen.size(), (int)ops.arr.size());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The RACE-ORCHESTRATION walks (ttp_race.h) against the decision functions they
+// sequence.
+//
+// Every entry point here takes LIVE HANDLES and answers an ordered effect list,
+// so there is no JSON-taking spelling left for raceflow-corpus to be replayed
+// down and none should be invented — raceflow_check replays it against
+// race_flow.{h,cc} on every leg, which is where the rules are. What only this
+// boundary can say is that a walk GATHERED the right inputs off the handles and
+// SEQUENCED the rules in the right order.
+//
+// THE ORDER IS THE ASSERTION. race_flow.h's header names four constraints that
+// live in the effect ORDER alone and are silent when wrong, so the primary
+// comparison below is the op sequence of a walk's answer against
+// race::key(...) over the Effects the same rule produces for the same state.
+// That needs no second copy of the payload writer, which is the thing this file
+// may not grow (it would freeze bytes here and go stale on the first shape
+// change).
+//
+// Payloads are covered two other ways: by BYTE equality between two answers
+// that must agree by construction (a start's launch effects are the launch
+// walk's effects), and by naming the specific fields a marshaller can drop — a
+// bot id emitted as a number, a null forceItem coerced to "", the opaque
+// car-stats row lost, `deferred` flattened.
+// ---------------------------------------------------------------------------
+
+// The op sequence of a walk's answer, and of a rule's Effects. Comparing these
+// two strings is the ordering contract, stated once.
+std::string opsOf(const Value& answer) {
+  std::string s;
+  for (const Value& e : at(answer, "effects").arr)
+    s += (s.empty() ? "" : ",") + json::str_field(e, "op");
+  return s;
+}
+std::string opsOf(const race::Effects& es) {
+  std::string s;
+  for (const race::Effect& e : es) s += (s.empty() ? "" : ",") + std::string(race::key(e.op));
+  return s;
+}
+void sameOps(const Value& answer, const race::Effects& want, const std::string& where) {
+  const std::string got = opsOf(answer), exp = opsOf(want);
+  check(got == exp, where + "\n  want " + exp + "\n  got  " + got);
+}
+
+// One drained session event, as the finish rule reads it — the same parse the
+// shim does, needed here because the expected side routes the SAME events.
+race::RaceEvent raceEventOf(const Value& e) {
+  race::RaceEvent ev;
+  ev.present = true;
+  ev.type = json::str_field(e, "type");
+  ev.id = json::id_of<race::Id>(e.find("id"));
+  ev.item = json::str_field(e, "item");
+  ev.cause = json::str_field(e, "cause");
+  ev.finished = json::truthy(e.find("finished"));
+  ev.s = json::num_field(e, "s");
+  ev.lat = json::num_field(e, "lat");
+  return ev;
+}
+
+void raceLiveWalks() {
+  // ---- the world, configured FROM the structs the rules will be run over, so
+  // the two cannot drift into different worlds and quietly agree about nothing.
+  const Value personas = parseOrNull(ttp_race_personas_json(), "personas");
+  Value carStats = Value::Arr();
+  for (int i = 0; i < 12; i++) {
+    Value row = Value::Obj();                 // opaque: the layer copies, never reads
+    row.set("accel", Value::Num(1.0 + i * 0.01));
+    carStats.push(std::move(row));
+  }
+  Value cupsJson = Value::Arr();
+  {
+    Value cup = Value::Obj();
+    cup.set("id", Value::Str("beach"));
+    cup.set("name", Value::Str("Beach"));
+    Value tracks = Value::Arr();
+    tracks.push(Value::Str("tidepool"));
+    tracks.push(Value::Str("helix"));
+    cup.set("tracks", std::move(tracks));
+    cupsJson.push(std::move(cup));
+  }
+  Value world = Value::Obj();
+  world.set("fieldSize", Value::Num(4));
+  world.set("carCount", Value::Num(12));
+  world.set("colorCount", Value::Num(12));
+  world.set("aiPrefix", Value::Str("ai-"));
+  world.set("personas", personas);
+  world.set("carStats", carStats);
+  world.set("cups", cupsJson);
+  check(ttp_race_configure(canonical_stringify(world).c_str()) == 1,
+        "race walks: the world configured");
+  check(ttp_race_configure("not json") == 0, "a malformed world is refused");
+
+  race::FieldWorld W;
+  W.fieldSize = 4;
+  W.carCount = 12;
+  W.colorCount = 12;
+  W.aiPrefix = "ai-";
+  for (const Value& p : personas.arr)
+    W.personas.push_back({json::str_field(p, "name"), json::num_field(p, "caution"),
+                          json::num_field(p, "laneBias")});
+  for (const Value& r : carStats.arr) W.carStats.push_back(r);
+  const std::vector<race::Cup> CUPS = {{"beach", "Beach", {"tidepool", "helix"}}};
+
+  // ---- the vocabulary, first: a shell proves its performer switch against it
+  // AT BOOT, so it has to be the enum itself and not a hand-kept mirror.
+  {
+    const Value ops = parseOrNull(ttp_race_effect_ops_json(), "race effect ops");
+    check((int)ops.arr.size() == race::OP_COUNT,
+          "ttp_race_effect_ops_json declares every op (" + std::to_string(ops.arr.size()) +
+              " vs " + std::to_string(race::OP_COUNT) + ")");
+    bool inOrder = ops.arr.size() == (size_t)race::OP_COUNT;
+    for (int i = 0; inOrder && i < race::OP_COUNT; i++)
+      inOrder = ops.arr[i].type == Value::STR &&
+                ops.arr[i].str == race::key(static_cast<race::Op>(i));
+    check(inOrder, "…in the enum's own order, key for key");
+  }
+
+  // ---- the room the walks read: two connected seats and one dropped, so
+  // connectedPlayers has something to leave out.
+  ttp_net_configure(
+      "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
+      "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
+      "{\"id\":\"helix\",\"name\":\"Helix\",\"cup\":\"beach\"}]}");
+  const int room = ttp_room_create("{}");
+  RoomFlow* flow = ttp_room_flow(room);
+  if (room <= 0 || !flow) { fail("race walks: ttp_room_create returned no handle"); return; }
+  ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+  ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":true}");
+  ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":3,\"ready\":true}");
+  flow->markDisconnected(PeerId::Num(3));
+  ttp_net_init_pick(room, "tidepool", 1);
+  ttp_room_events_json(room);
+
+  // The gathers, spelled as the walk spells them: the roster through the room
+  // ABI, the pick through its own reader, the rule for who a race seats.
+  const auto humansOf = [&](bool connectedOnly) {
+    std::vector<race::Human> out;
+    const std::vector<ui::RosterEntry> roster =
+        rosterEntriesOf(parseOrNull(ttp_room_list_json(room), "roster"));
+    const auto push = [&out](const ui::RosterEntry& e) {
+      race::Human h;
+      h.peerIndex = e.peerIndex;
+      h.name = e.name;
+      h.colorIndex = static_cast<int>(e.colorIndex);
+      h.carIndex = e.carIndex;
+      out.push_back(std::move(h));
+    };
+    if (connectedOnly) {
+      for (const ui::RosterEntry* e : ui::connectedPlayers(roster)) push(*e);
+    } else {
+      for (const ui::RosterEntry& e : roster) push(e);
+    }
+    return out;
+  };
+  const auto startInputOf = [&](int sceneReady, std::vector<std::string> draws) {
+    race::StartInput si;
+    si.roomState = ui::roomStateOf(ttp_room_state(room));
+    si.sceneReady = sceneReady != 0;
+    const Value pick = parseOrNull(ttp_net_pick_json(room), "pick");
+    si.selectedTrackId = json::opt_str<race::OptStr>(pick.find("trackId"));
+    si.mode = json::str_field(pick, "mode");
+    si.cupId = json::opt_str<race::OptStr>(pick.find("cupId"));
+    si.trackId = json::str_field(pick, "trackId");
+    si.randomRaces = json::num_field(pick, "randomRaces");
+    si.cups = CUPS;
+    si.players = humansOf(true);
+    si.draws = std::move(draws);
+    return si;
+  };
+  const auto launchRule = [&](double seed, double countdownSeconds, const char* forceItem) {
+    race::LaunchInput li;
+    li.players = humansOf(true);
+    li.seed = seed;
+    li.trackId = json::str_field(parseOrNull(ttp_net_pick_json(room), "pick"), "trackId");
+    li.countdownSeconds = countdownSeconds;
+    if (forceItem && *forceItem) li.forceItem = race::OptStr::Of(forceItem);
+    li.world = W;
+    return race::launchRace(li);
+  };
+
+  // ---- start_live: the four refusals -----------------------------------------
+  const auto refusal = [&](int sceneReady, const char* where) {
+    const Value got = parseOrNull(
+        ttp_race_start_live_json(room, sceneReady, nullptr, 1, 3, nullptr, nullptr), where);
+    const race::StartResult want = race::startRace(startInputOf(sceneReady, {}));
+    check(json::str_field(got, "action") == "none" &&
+              want.action == race::StartAction::NONE,
+          std::string("start_live refuses (") + where + ")");
+    check(json::str_field(got, "reason") == race::key(want.reason),
+          std::string("start_live's reason is the rule's (") + where + "): " +
+              json::str_field(got, "reason"));
+    // KEY PRESENCE is the contract: a refusal carries `reason` and nothing else.
+    check(!got.has("series") && !got.has("effects") && !got.has("drawsNeeded"),
+          std::string("…and carries no plan, effects or draws ask (") + where + ")");
+  };
+  refusal(0, "scene");
+  ttp_room_transition_to(room, "countdown");
+  ttp_room_events_json(room);
+  refusal(1, "room-state");
+  ttp_room_transition_to(room, "lobby");
+  ttp_room_events_json(room);
+  ttp_net_clear_pick(room);
+  refusal(1, "no-track");
+  ttp_net_init_pick(room, "tidepool", 1);
+  flow->markDisconnected(PeerId::Num(1));
+  flow->markDisconnected(PeerId::Num(2));
+  refusal(1, "no-players");
+  flow->markReconnected(PeerId::Num(1));
+  flow->markReconnected(PeerId::Num(2));
+  ttp_room_events_json(room);
+
+  // ---- start_live: a TRACK pick completes on the FIRST call -------------------
+  {
+    const race::StartResult want = race::startRace(startInputOf(1, {}));
+    const Value got = parseOrNull(
+        ttp_race_start_live_json(room, 1, nullptr, 42, 3, nullptr, nullptr), "start track");
+    check(json::str_field(got, "action") == "launch", "start_live launches a track pick at once");
+    check(!got.has("drawsNeeded"), "…asking for no draws");
+    check(json::num_field(got, "drawsUsed") == want.drawsUsed, "…and spending none");
+    check(at(got, "series").type == Value::NUL && !want.series.has,
+          "a single race commits to no series");
+    sameOps(got, launchRule(42, 3, nullptr).effects, "start_live effects == race::launchRace");
+
+    // The launch walk is the SAME composition over the same handles, so the two
+    // answers must agree BYTE for byte — the one payload comparison available
+    // without spelling a second writer, and it covers every field of every op.
+    const std::string launched = ttp_race_launch_live_json(room, 42, 3, nullptr, nullptr);
+    check(canonical_stringify(at(got, "effects")) ==
+              canonical_stringify(at(parseOrNull(launched.c_str(), "launch"), "effects")),
+          "start_live's effects ARE ttp_race_launch_live_json's, byte for byte");
+
+    // The payload fields a marshaller can quietly drop.
+    const Value effects = at(got, "effects");
+    const Value* setField = nullptr;
+    const Value* createSession = nullptr;
+    for (const Value& e : effects.arr) {
+      const std::string op = json::str_field(e, "op");
+      if (op == "set-field") setField = &e;
+      if (op == "create-session") createSession = &e;
+    }
+    check(setField && createSession, "the launch carries set-field and create-session");
+    if (setField && createSession) {
+      const Value bots = at(*setField, "bots");
+      bool botIdsAreStrings = !bots.arr.empty();
+      for (const Value& b : bots.arr)
+        botIdsAreStrings = botIdsAreStrings && at(b, "peerIndex").type == Value::STR;
+      check(botIdsAreStrings, "a bot's id crosses as the STRING \"ai-0\", never a number");
+      check(canonical_stringify(at(*setField, "aiIds")).find("\"ai-") != std::string::npos,
+            "…and aiIds names them the same way");
+      bool statsSurvive = true;
+      for (const Value& f : at(*setField, "field").arr)
+        statsSurvive = statsSurvive && at(f, "stats").type == Value::OBJ;
+      check(statsSurvive, "the opaque car-stats row survives the round trip");
+      check(at(*createSession, "forceItem").type == Value::NUL,
+            "no ?item override crosses as null, not \"\"");
+      check(json::str_field(*createSession, "trackId") == "tidepool",
+            "create-session names the picked track");
+    }
+    // ?item and ?bots are per-launch hooks, so they must reach the rule.
+    const Value forced = parseOrNull(
+        ttp_race_launch_live_json(room, 42, 3, "rocket", "1"), "launch forced");
+    race::LaunchInput li;
+    li.players = humansOf(true);
+    li.seed = 42;
+    li.trackId = "tidepool";
+    li.countdownSeconds = 3;
+    li.forceItem = race::OptStr::Of("rocket");
+    li.world = W;
+    li.world.botCap = race::OptNum::Of(1);
+    sameOps(forced, race::launchRace(li).effects, "launch_live with ?item and ?bots");
+    for (const Value& e : at(forced, "effects").arr)
+      if (json::str_field(e, "op") == "create-session")
+        check(json::str_field(e, "forceItem") == "rocket", "the ?item override rides through");
+  }
+
+  // ---- start_live: the draws protocol on a random pick ------------------------
+  {
+    // The host's random pick, through the walk that owns it.
+    walkOf(ttp_net_select_mode_draw_json(
+               room, "1", "{\"type\":\"select_mode\",\"mode\":\"random\",\"randomRaces\":2}",
+               "helix"),
+           "select random");
+    ttp_room_events_json(room);
+    const race::StartInput ask = startInputOf(1, {});
+    const int need = race::drawsNeeded(ask.mode, ask.randomRaces);
+    check(need > 0, "premise: a random pick needs draws");
+
+    const Value phase1 = parseOrNull(
+        ttp_race_start_live_json(room, 1, nullptr, 7, 3, nullptr, nullptr), "start draws ask");
+    check(json::str_field(phase1, "action") == "draws", "phase 1 asks for draws");
+    check(json::num_field(phase1, "drawsNeeded") == need,
+          "…exactly race::drawsNeeded many");
+    check(!phase1.has("effects"), "…and decides nothing yet — a draw cannot be put back");
+
+    // The shell draws n and calls again. The walk re-checks its own gate.
+    std::vector<std::string> draws;
+    for (int i = 0; i < need; i++) draws.push_back(i % 2 ? "helix" : "tidepool");
+    Value drawsJson = Value::Arr();
+    for (const std::string& d : draws) drawsJson.push(Value::Str(d));
+    const race::StartResult want = race::startRace(startInputOf(1, draws));
+    const Value phase2 = parseOrNull(
+        ttp_race_start_live_json(room, 1, canonical_stringify(drawsJson).c_str(), 7, 3, nullptr,
+                                 nullptr),
+        "start draws launch");
+    check(json::str_field(phase2, "action") == "launch", "phase 2 launches");
+    check(json::num_field(phase2, "drawsUsed") == want.drawsUsed,
+          "…and reports the draws the rule actually spent");
+    const Value plan = at(phase2, "series");
+    check(want.series.has && plan.type == Value::OBJ, "a random run commits to a series");
+    if (want.series.has && plan.type == Value::OBJ) {
+      check(json::str_field(plan, "kind") == race::key(want.series.series.kind),
+            "the plan's kind is the rule's: " + json::str_field(plan, "kind"));
+      check(json::str_field(plan, "cupId") == want.series.series.cupId, "…and its cupId");
+      check(at(plan, "tracks").arr.size() == want.series.series.tracks.size(),
+            "…and it carries the drawn card");
+    }
+    sameOps(phase2, launchRule(7, 3, nullptr).effects, "start_live/random effects");
+
+    // A CUP plan carries kind+cupId and nothing else — the shell already holds
+    // the cup, so re-sending its tracks would be a second copy on the wire.
+    walkOf(ttp_net_on_peer_message_json(
+               room, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\",\"cupId\":\"beach\"}", 0,
+               1000),
+           "select cup");
+    ttp_room_events_json(room);
+    const Value cupStart = parseOrNull(
+        ttp_race_start_live_json(room, 1, nullptr, 9, 3, nullptr, nullptr), "start cup");
+    const Value cupPlan = at(cupStart, "series");
+    check(json::str_field(cupStart, "action") == "launch", "a cup pick launches at once");
+    check(json::str_field(cupPlan, "kind") == "cup" &&
+              json::str_field(cupPlan, "cupId") == "beach",
+          "the cup plan names the cup");
+    check(!cupPlan.has("tracks") && !cupPlan.has("cupName"),
+          "…and nothing else — the shell already holds it");
+  }
+
+  // ---- advance_live: the cup chain -------------------------------------------
+  {
+    const int gp = ttp_gp_create(
+        "{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\",\"helix\"]}", 0);
+    ttp_room_transition_to(room, "countdown");
+    ttp_room_transition_to(room, "playing");
+    ttp_room_transition_to(room, "results");
+    ttp_room_events_json(room);
+
+    const auto advanceRule = [&](int g, int sceneReady) {
+      const Value st = parseOrNull(ttp_gp_state_json(g), "gp state");
+      race::AdvanceInput ai;
+      ai.roomState = ui::roomStateOf(ttp_room_state(room));
+      ai.hasSeries = st.type == Value::OBJ;
+      ai.seriesFinished = json::truthy(st.find("finished"));
+      ai.sceneReady = sceneReady != 0;
+      ai.players = humansOf(true);
+      return race::advanceSeriesRace(ai);
+    };
+    const auto sameAdvance = [&](int g, int sceneReady, const char* where) {
+      const race::AdvanceResult want = advanceRule(g, sceneReady);
+      const Value got = parseOrNull(ttp_race_advance_live_json(room, g, sceneReady), where);
+      check(json::str_field(got, "action") == race::key(want.action),
+            std::string("advance_live's action is the rule's (") + where + "): " +
+                json::str_field(got, "action"));
+      sameOps(got, want.effects, std::string("advance_live effects (") + where + ")");
+    };
+    sameAdvance(gp, 1, "mid-cup");
+    sameAdvance(0, 1, "no series at all");
+    sameAdvance(gp, 0, "the scene is not built");
+
+    // A finished cup goes back to the lobby rather than chaining.
+    ttp_gp_apply_race(gp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]", nullptr);
+    ttp_gp_advance(gp);
+    ttp_gp_apply_race(gp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]", nullptr);
+    ttp_gp_advance(gp);
+    sameAdvance(gp, 1, "the cup is over");
+    ttp_gp_dispose(gp);
+  }
+
+  // ---- return_live: the way out, with its own draws protocol -----------------
+  {
+    const auto returnRule = [&](std::vector<std::string> draws) {
+      race::ReturnInput ri;
+      ri.roomState = ui::roomStateOf(ttp_room_state(room));
+      const Value pick = parseOrNull(ttp_net_pick_json(room), "pick");
+      ri.mode = json::str_field(pick, "mode");
+      ri.cupId = json::opt_str<race::OptStr>(pick.find("cupId"));
+      ri.trackId = json::opt_str<race::OptStr>(pick.find("trackId"));
+      ri.cups = CUPS;
+      ri.draws = std::move(draws);
+      return race::returnToLobby(ri);
+    };
+    // From the lobby it is a no-op, and a no-op MUST NOT advance the bag.
+    ttp_room_transition_to(room, "lobby");
+    ttp_room_events_json(room);
+    {
+      const Value got = parseOrNull(ttp_race_return_live_json(room, nullptr), "return noop");
+      check(json::str_field(got, "action") == "none", "return_live from the lobby is a no-op");
+      check(json::num_field(got, "drawsUsed") == 0, "…and spends no draw");
+      check(at(got, "effects").arr.empty(), "…and performs nothing");
+    }
+    // Mid-race, on a RANDOM pick: the pick re-rolls, so the walk asks first.
+    walkOf(ttp_net_select_mode_draw_json(
+               room, "1", "{\"type\":\"select_mode\",\"mode\":\"random\",\"randomRaces\":2}",
+               "helix"),
+           "select random for return");
+    ttp_room_transition_to(room, "countdown");
+    ttp_room_transition_to(room, "playing");
+    ttp_room_events_json(room);
+
+    const int need = race::returnDrawsNeeded(
+        json::str_field(parseOrNull(ttp_net_pick_json(room), "pick"), "mode"));
+    check(need > 0, "premise: a random room re-rolls on the way back");
+    const Value ask = parseOrNull(ttp_race_return_live_json(room, nullptr), "return ask");
+    check(json::str_field(ask, "action") == "draws" &&
+              json::num_field(ask, "drawsNeeded") == need,
+          "return_live asks for its draws first");
+    const race::ReturnResult want = returnRule({"tidepool"});
+    const Value got = parseOrNull(ttp_race_return_live_json(room, "[\"tidepool\"]"), "return");
+    check(json::str_field(got, "action") == "return", "…then returns");
+    check(canonical_stringify(at(got, "trackSwap")) ==
+              canonical_stringify(want.trackSwap.has ? Value::Str(want.trackSwap.v)
+                                                     : Value::Null()),
+          "trackSwap re-aims the next lobby's pick exactly as the rule says");
+    check(json::num_field(got, "drawsUsed") == want.drawsUsed, "…spending the rule's draws");
+    sameOps(got, want.effects, "return_live effects");
+
+    // Ending the PARTY takes nothing and is a frozen order.
+    sameOps(parseOrNull(ttp_race_end_party_json(), "end party"), race::endParty(),
+            "end_party effects");
+  }
+
+  // ---- pause / resume ---------------------------------------------------------
+  {
+    const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+    ttp_add_human(sess, "1", nullptr);
+    ttp_session_start(sess, 3);
+    const auto pauseInput = [&](int s, int paused, int autoPaused, int raceEnded) {
+      race::PauseInput pi;
+      pi.hasSession = s != 0;
+      pi.paused = paused != 0;
+      pi.autoPaused = autoPaused != 0;
+      pi.raceEnded = raceEnded != 0;
+      pi.roomState = ui::roomStateOf(ttp_room_state(room));
+      return pi;
+    };
+    for (int s : {sess, 0})
+      for (int p = 0; p <= 1; p++)
+        for (int ap = 0; ap <= 1; ap++)
+          for (int re = 0; re <= 1; re++) {
+            const race::PauseInput in = pauseInput(s, p, ap, re);
+            const Value gotP = parseOrNull(ttp_race_pause_live_json(s, room, p, ap, re), "pause");
+            const race::PauseResult wantP = race::pauseRace(in);
+            check(json::str_field(gotP, "action") == race::key(wantP.action),
+                  "pause_live's verdict is race::pauseRace's");
+            sameOps(gotP, wantP.effects, "pause_live effects");
+            const Value gotR = parseOrNull(ttp_race_resume_live_json(s, room, p, ap, re), "resume");
+            const race::PauseResult wantR = race::resumeRace(in);
+            check(json::str_field(gotR, "action") == race::key(wantR.action),
+                  "resume_live's verdict is race::resumeRace's");
+            sameOps(gotR, wantR.effects, "resume_live effects");
+          }
+    ttp_dispose(sess);
+  }
+
+  // ---- the lobby attract demo -------------------------------------------------
+  {
+    const std::vector<race::DemoEntry> want = race::buildDemoField(humansOf(false), W);
+    const Value got = parseOrNull(ttp_race_demo_live_json(room, "tidepool", nullptr), "demo");
+    check(at(got, "field").arr.size() == want.size(),
+          "demo_live seats the whole attract grid, dropped seats included");
+    check(json::str_field(got, "sig") == race::demoSig(want, "tidepool"),
+          "…and its signature is race::demoSig over that field");
+    bool ids = at(got, "field").arr.size() == want.size();
+    for (size_t i = 0; ids && i < want.size(); i++)
+      ids = json::str_field(at(got, "field").arr[i], "id") == want[i].id &&
+            json::str_field(at(at(got, "field").arr[i], "persona"), "name") ==
+                want[i].persona.name;
+    check(ids, "…with the demo ids and the by-grid-index personas the rule assigns");
+    // The signature must move with the TRACK, or a cup change would keep the
+    // stale grid on screen.
+    check(json::str_field(parseOrNull(ttp_race_demo_live_json(room, "helix", nullptr), "demo2"),
+                          "sig") != json::str_field(got, "sig"),
+          "a different track is a different signature");
+  }
+
+  // ---- auto_pause_live: the ui rule plus the race layer's effects -------------
+  {
+    const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+    ttp_add_human(sess, "1", nullptr);
+    ttp_add_human(sess, "3", nullptr);
+    ttp_add_bot(sess, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
+    ttp_session_start(sess, 3);
+
+    const auto autoPauseRule = [&](int s, int raceEnded) {
+      ui::AutoPauseInput in;
+      in.hasSession = s != 0;
+      in.raceEnded = raceEnded != 0;
+      in.roomState = ui::roomStateOf(ttp_room_state(room));
+      const Value ids = s ? parseOrNull(ttp_car_ids_json(s), "car ids") : Value::Arr();
+      for (const Value& idV : ids.arr) {
+        const ui::Id id = json::id_of<ui::Id>(&idV);
+        in.carIds.push_back(id);
+        if (flow->has(id)) in.seatedIds.add(id);
+      }
+      if (s) in.aiIds.add(ui::Id::Str("ai-0"));
+      const bool allDisc = ui::autoPauseAsksParticipants(in) &&
+                           ttp_room_all_participants_disconnected_synced(room, s) != 0;
+      const ui::AutoPauseDecision d = ui::autoPause(in, allDisc);
+      race::AutoPauseDecision rd;
+      rd.present = true;
+      rd.action = ui::key(d.action);
+      rd.autoPaused = d.hasAutoPaused && d.autoPaused;
+      return race::autoPauseEffects(rd);
+    };
+    const auto sameAutoPause = [&](int s, int ended, const char* where) {
+      sameOps(parseOrNull(ttp_race_auto_pause_live_json(s, room, ended), where),
+              autoPauseRule(s, ended), std::string("auto_pause_live effects (") + where + ")");
+    };
+    sameAutoPause(sess, 0, "playing, one racer dropped");
+    flow->markDisconnected(PeerId::Num(1));
+    sameAutoPause(sess, 0, "playing, every racer dropped");
+    sameAutoPause(sess, 1, "results overlay up");
+    sameAutoPause(0, 0, "no session");
+    flow->markReconnected(PeerId::Num(1));
+    ttp_room_events_json(room);
+    ttp_dispose(sess);
+  }
+
+  // ---- forfeit_live / rekey_live: the removal happens INSIDE the walk ---------
+  {
+    const int sess = ttp_session_begin_field(
+        "tidepool", 7u, 3, nullptr,
+        "[{\"peerIndex\":1},{\"peerIndex\":2},{\"peerIndex\":\"ai-0\"}]",
+        "[{\"peerIndex\":\"ai-0\",\"caution\":1,\"laneBias\":0,\"seed\":1}]");
+    ttp_session_start(sess, 3);
+    check(ttp_has_car(sess, "2") == 1, "premise: seat 2 holds a car");
+
+    const Value f1 = parseOrNull(ttp_race_forfeit_live_json(sess, "2"), "forfeit");
+    check(ttp_has_car(sess, "2") == 0, "forfeit_live removed the car itself");
+    sameOps(f1, race::forfeitCar(true, race::Id::Num(2)), "forfeit_live effects (removed)");
+    const Value f2 = parseOrNull(ttp_race_forfeit_live_json(sess, "2"), "forfeit again");
+    sameOps(f2, race::forfeitCar(false, race::Id::Num(2)),
+            "forfeit_live effects (there was no car)");
+    sameOps(parseOrNull(ttp_race_forfeit_live_json(0, "2"), "forfeit no session"),
+            race::forfeitCar(false, race::Id::Num(2)), "forfeit_live with no race");
+
+    const int gp = ttp_gp_create("{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\"]}", 0);
+    const Value r1 = parseOrNull(ttp_race_rekey_live_json(sess, gp, "1", "9"), "rekey");
+    check(ttp_has_car(sess, "9") == 1 && ttp_has_car(sess, "1") == 0,
+          "rekey_live moved the car itself");
+    sameOps(r1, race::rekeyCarPlayer(true, true, race::Id::Num(1), race::Id::Num(9)),
+            "rekey_live effects (a car moved, a series is live)");
+    // Banked points follow the PLAYER, so the series rekey fires with no car.
+    const Value r2 = parseOrNull(ttp_race_rekey_live_json(sess, gp, "1", "8"), "rekey no car");
+    sameOps(r2, race::rekeyCarPlayer(true, false, race::Id::Num(1), race::Id::Num(8)),
+            "rekey_live effects (no car, but the cup still follows the player)");
+    check(opsOf(r2).find("series-rekey") != std::string::npos,
+          "…and series-rekey is in it");
+    const Value r3 = parseOrNull(ttp_race_rekey_live_json(sess, 0, "9", "7"), "rekey no series");
+    sameOps(r3, race::rekeyCarPlayer(false, true, race::Id::Num(9), race::Id::Num(7)),
+            "rekey_live effects (no series)");
+    ttp_gp_dispose(gp);
+    ttp_dispose(sess);
+  }
+
+  // ---- events_live: the drain, its routing and its results -------------------
+  //
+  // The walk drains the queue, so the expected side cannot read the same events
+  // after it. A SECOND session built identically stays bit-identical under
+  // identical driving (beginFieldMatchesManualPath is the same trick), so its
+  // ttp_events_json is the oracle for what the walk just consumed.
+  {
+    const char* kField = "[{\"peerIndex\":1},{\"peerIndex\":\"ai-0\"}]";
+    const char* kBots = "[{\"peerIndex\":\"ai-0\",\"caution\":1,\"laneBias\":0,\"seed\":1}]";
+    const int live = ttp_session_begin_field("tidepool", 7u, 3, nullptr, kField, kBots);
+    const int twin = ttp_session_begin_field("tidepool", 7u, 3, nullptr, kField, kBots);
+    ttp_session_start(live, 1);
+    ttp_session_start(twin, 1);
+    const double kInterMs = ttp_race_intermission_ms();
+    const double kFailMs = ttp_race_results_failsafe_ms();
+    check(kInterMs == race::INTERMISSION_MS && kFailMs == race::RESULTS_FAILSAFE_MS,
+          "the two timing budgets read back as race_flow's own");
+
+    // The expected effects for whatever the twin drained, routed the way the
+    // walk routes them — the three lifecycle beats to their own rules, the rest
+    // through the ordinary-event filter.
+    const auto expectedFor = [&](const Value& events, const char* biome, int audioReady,
+                                 int fastForwarding, double nowMs) {
+      race::Effects all;
+      for (const Value& e : events.arr) {
+        const std::string type = json::str_field(e, "type");
+        race::Effects es;
+        if (type == "_countdown") {
+          es = race::countdownTick(json::num_field(e, "n"));
+        } else if (type == "_raceStart") {
+          es = race::raceStart(biome, audioReady != 0);
+        } else if (type == "_raceEnd") {
+          race::EndRaceInput ei;
+          ei.hasSeries = false;
+          ei.seriesFinished = false;
+          ei.intermissionMs = kInterMs;
+          ei.nowMs = nowMs;
+          ei.resultsFailsafeMs = kFailMs;
+          es = race::endRace(ei);
+        } else {
+          const bool allDone = type == "finish" && !fastForwarding &&
+                               ttp_live_humans_all_done(twin, room);
+          es = race::raceEvent(raceEventOf(e), fastForwarding != 0, allDone);
+        }
+        for (race::Effect& x : es) all.push_back(std::move(x));
+      }
+      return all;
+    };
+
+    int beats = 0, gos = 0;
+    for (int f = 0; f < 120; f++) {
+      ttp_update(live, 1000.0 / 60.0);
+      ttp_update(twin, 1000.0 / 60.0);
+      const Value drained = parseOrNull(ttp_events_json(twin), "twin events");
+      const Value got = parseOrNull(
+          ttp_race_events_live_json(live, room, 0, "beach", 1, 0, kInterMs, f * 16.0, kFailMs),
+          "events_live");
+      sameOps(got, expectedFor(drained, "beach", 1, 0, f * 16.0), "events_live effects");
+      for (const Value& e : drained.arr) {
+        if (json::str_field(e, "type") != "_countdown") continue;
+        beats++;
+        if (json::num_field(e, "n") == 0) gos++;
+      }
+      check(at(got, "results").type == Value::NUL || json::str_field(got, "op") == "",
+            "results stays null until the race ends");
+    }
+    check(beats >= 2 && gos == 1,
+          "the countdown beats were routed, GO among them (" + std::to_string(beats) +
+              " beats, " + std::to_string(gos) + " GO)");
+    // The queue really empties: a second drain with nothing behind it.
+    const Value empty = parseOrNull(
+        ttp_race_events_live_json(live, room, 0, "beach", 1, 0, kInterMs, 9000, kFailMs),
+        "events_live empty");
+    check(at(empty, "effects").arr.empty() && at(empty, "results").type == Value::NUL,
+          "a drained queue answers no effects and a null results");
+
+    // The end of the race: `results` rides the ANSWER, because no effect can
+    // carry it and three of them read it as their context.
+    for (const char* id : {"1", "\"ai-0\""}) {
+      ttp_force_finish(live, id, 12.5);
+      ttp_force_finish(twin, id, 12.5);
+    }
+    ttp_update(live, 1000.0 / 60.0);
+    ttp_update(twin, 1000.0 / 60.0);
+    const Value drained = parseOrNull(ttp_events_json(twin), "twin end events");
+    const Value ended = parseOrNull(
+        ttp_race_events_live_json(live, room, 0, "beach", 1, 0, kInterMs, 10000, kFailMs),
+        "events_live end");
+    sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
+    check(at(ended, "results").type == Value::OBJ,
+          "the end of the race carries its ranked board on the answer");
+    check(opsOf(ended).find("show-results") != std::string::npos,
+          "…and the endRace composition is in the effects");
+    ttp_dispose(live);
+    ttp_dispose(twin);
+  }
+
+  ttp_room_dispose(room);
+  ttp_net_configure("");
+  std::printf("  race walks against the composed decision functions\n");
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 8) {
-    std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
-                         "<framing-corpus> <ui-corpus> <session-corpus> <raceflow-corpus> "
+  // Three corpora and the traces. The roomflow, session and raceflow fixtures
+  // are NOT taken any more: the JSON-taking spellings they were replayed
+  // through are gone, and roomflow_check / session_check / raceflow_check
+  // replay them against the decision layers themselves on every leg. The walks
+  // that replaced those spellings are gated by composition instead — see the
+  // file header.
+  if (argc < 4) {
+    std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <framing-corpus> <ui-corpus> "
                          "<trace.jsonl>...\n");
     return 2;
   }
@@ -3464,24 +4029,23 @@ int main(int argc, char** argv) {
   // marshalling its recorded inputs contain: tidepool's four bots never brake, so
   // on that fixture alone ttp_process_input's brake bit could be deleted outright
   // and every frame would still hash correctly. helix carries 402 braking inputs.
-  for (int i = 7; i < argc; i++) traceThroughAbi(argv[i]);
+  for (int i = 4; i < argc; i++) traceThroughAbi(argv[i]);
   gpThroughAbi(argv[1]);
   boundaryExports();
-  roomCorpusThroughAbi(argv[2]);
+  roomShellSurface();
   abandonedRacePolicy();
-  framingCorpusThroughAbi(argv[3]);
+  framingCorpusThroughAbi(argv[2]);
   fastlaneThroughAbi();
   themeThroughAbi();
   audioThroughAbi();
   uiShippedCatalogue();
   uiCupTendency();
-  uiCorpusThroughAbi(argv[4]);
+  uiCorpusThroughAbi(argv[3]);
   handlePathsMatchJsonPaths();
   uiLiveTwinsMatchJsonPaths();
   beginFieldMatchesManualPath();
   netWalksMatchMultiCallPath();
-  sessionCorpusThroughAbi(argv[5]);
-  raceCorpusThroughAbi(argv[6]);
+  raceLiveWalks();
 
   std::printf("  %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

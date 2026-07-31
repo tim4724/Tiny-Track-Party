@@ -10,11 +10,10 @@
 // takes, and hands the answers back RAW — Net.js owns the one parse, because
 // its hot path (_seen) wants to compare bytes before paying for it.
 //
-// No rule may live here. The fine-grained JSON exports this file used to wrap
-// one-for-one still exist in the ABI — the frozen session corpus replays them,
-// abi_check's netWalksMatchMultiCallPath drives the walks against them, and
-// the unmerged tvOS branch still calls them — but a wrapper nothing on this
-// page calls is surface, so only what Net.js reaches remains wrapped.
+// No rule may live here. The fine-grained one-rule exports this file once
+// wrapped are gone from the ABI: the walks are the only spelling, the frozen
+// session corpus replays the rules at the C++ level (session_check), and
+// abi_check holds each walk to the same rules composed in-test.
 //
 // public/display/sessionModel.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/session-corpus.jsonl was recorded off it, native/partytest/
@@ -32,6 +31,7 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
+    effectOps: c('ttp_net_effect_ops_json', 'string', []),
     lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
@@ -71,6 +71,10 @@ const idJson = (v) => J(v === undefined ? null : v);
 // the bulky reduced track schematics lobby-only. Opaque to the snapshot
 // composition, set ONCE because it is authored data that changes when the game
 // ships, not while it runs. The MODE PICK walk reads `tracks` as its catalogue.
+// The walks' whole effect vocabulary — Net.js proves its performer switch
+// total at boot, so a missing arm fails the load instead of dropping a step.
+export function effectOps() { return JSON.parse(fn.effectOps()); }
+
 export function configure({ cars, colors, tracks }) {
   const ok = fn.configure(J({ cars: cars || [], colors: colors || [], tracks: tracks || [] }));
   if (!ok) throw nativeError('configuring the chooser payload');
@@ -79,11 +83,9 @@ export function configure({ cars, colors, tracks }) {
 // ---- the retained room snapshot --------------------------------------------
 // THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
 // handles and the six fields only the game knows; the answer is the exact frame
-// TEXT for the socket. There is deliberately no parse here — a caller that
+ // TEXT for the socket. There is deliberately no parse here — a caller that
 // wants to look inside is asking for the snapshot, not the frame, and should
-// say so. ttp_net_lobby_snapshot_json / ttp_net_roster_rows_json still exist
-// unwrapped (the frozen corpus replays them; a shell whose roster does NOT
-// live in this wasm needs the plain-data spellings).
+// say so.
 //
 // KEY ORDER IS NOT THE WIRE'S, whatever the shape of the ABI suggests: the
 // frame encoder canonicalizes every outbound frame, so what the relay retains

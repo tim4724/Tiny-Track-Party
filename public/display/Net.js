@@ -75,6 +75,78 @@ function genDisplayClientId() {
   return 'display-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// The net walks' performers, one per op of ttp_net_effect_ops_json. A TABLE
+// rather than a switch so the coverage is checkable data: assertNetOps holds it
+// to the wasm's vocabulary at construction, turning a missing arm into a boot
+// failure instead of a silently half-set-up room mid-party.
+const NET_PERFORMERS = {
+  'clear-create-timer': (n) => clearTimeout(n._createTimer),
+  // A socket that opens but never gets a created/joined answer would hang
+  // forever — no close event ever fires — so the walk arms a watchdog and
+  // the expiry asks C++ whether the attempt is still unanswered.
+  'arm-create-watchdog': (n, e) => {
+    clearTimeout(n._createTimer);
+    n._createTimer = setTimeout(() => {
+      n._walk(n.flow.runWalk(() => session.createTimeout(n.flow.handle)));
+    }, e.delayMs);
+  },
+  'join-room': (n, e) => n.party.join(e.room),
+  'create-room': (n, e) => n.party.create(e.maxClients, n._controllerUrlTemplate()),
+  'pin-instance': (n, e) => n.party.pinInstance(RELAY_URL, e.room, e.instance),
+  'save-room': (n, e) => {
+    n.roomCode = e.room;
+    n.instance = e.instance;
+    n._saveRoom();
+  },
+  'forget-room': (n) => {
+    n._forgetRoom();
+    n.roomCode = null;
+    n.instance = null;
+  },
+  'room-ready': (n, e) => n.onRoomReady({ roomCode: e.room, joinUrl: n._joinUrl() }),
+  // The timer guard is all that is left of _startLiveness: the in-flight
+  // heartbeat reset that had to precede it happens inside the wasm, on the
+  // created/joined walk itself.
+  'start-liveness': (n) => {
+    if (!n._livenessTimer) n._livenessTimer = setInterval(() => n._livenessTick(), LIVENESS_TICK_MS);
+  },
+  'reset-reconnect-count': (n) => n.party.resetReconnectCount(),
+  'connect-fresh': (n) => n._connect(),
+  'fail-attempt': (n) => n.party.failAttempt(),
+  'reconnect': (n) => n.party.reconnectNow(),
+  // The frame data arrives composed (PONG, the self-heartbeat) — this side
+  // puts it on the socket and adds nothing.
+  'send-to': (n, e) => n.party.sendTo(e.to, e.data),
+  'publish': (n) => n._publishLobby(),
+  'announce': (n) => n._announce(),
+  'close-fastlane': (n, e) => n.fastlane.close(e.peerIndex),
+  // The claim URL needs this shell's base origin (D3), so it is spliced
+  // here; the card payload and the DIFF over the set stay C++'s.
+  'show-reconnect': (n, e) => {
+    n._reconnectSeats.set(e.seat.peerIndex,
+      session.reconnectCard(e.seat, session.claimUrl(n._joinUrl(), e.seat.peerIndex)));
+    n.onReconnectChange([...n._reconnectSeats.values()]);
+  },
+  'clear-reconnect': (n, e) => {
+    if (n._reconnectSeats.delete(e.peerIndex)) n.onReconnectChange([...n._reconnectSeats.values()]);
+  },
+  'rekey-player': (n, e) => n.onPlayerRekey(e.oldId, e.newId),
+  'player-renamed': (n, e) => n.onPlayerRenamed(e.peerIndex, e.name),
+  'welcome-item': (n, e) => n.onPlayerWelcomed(e.peerIndex),
+  'game-message': (n, e, ctx) => n.onControllerMessage(ctx.from, ctx.data),
+  'race-abandoned': (n) => n.onRaceAbandoned(),
+  'track-change': (n, e) => n.onTrackChange(e.trackId),
+  'clear-standings': (n) => { n._standings = null; }
+};
+
+// The boot proof: every op this build's walks can emit has a performer. Run at
+// DisplayNet construction — before any walk — so the next platform's port
+// fails its first launch instead of dropping a step at a party.
+function assertNetOps() {
+  const missing = session.effectOps().filter((op) => !NET_PERFORMERS[op]);
+  if (missing.length) throw new Error(`net effect ops with no performer: ${missing.join(', ')}`);
+}
+
 export class DisplayNet extends GameNet {
   constructor(opts = {}) {
     super();
@@ -140,6 +212,7 @@ export class DisplayNet extends GameNet {
     // MODE PICK walk reads its `tracks` as the catalogue, which is what let
     // the pick rules cross at all.
     session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
+    assertNetOps();
     // Latest standings board, mirrored into the snapshot so a phone that reconnects
     // on the results screen (or after its car finished) recovers it by replay.
     // null outside a race; set via setStandings on each finish + at race end,
@@ -340,70 +413,12 @@ export class DisplayNet extends GameNet {
   }
 
   _performNetEffect(e, ctx) {
-    switch (e.op) {
-      case 'clear-create-timer': clearTimeout(this._createTimer); break;
-      // A socket that opens but never gets a created/joined answer would hang
-      // forever — no close event ever fires — so the walk arms a watchdog and
-      // the expiry asks C++ whether the attempt is still unanswered.
-      case 'arm-create-watchdog':
-        clearTimeout(this._createTimer);
-        this._createTimer = setTimeout(() => {
-          this._walk(this.flow.runWalk(() => session.createTimeout(this.flow.handle)));
-        }, e.delayMs);
-        break;
-      case 'join-room': this.party.join(e.room); break;
-      case 'create-room': this.party.create(e.maxClients, this._controllerUrlTemplate()); break;
-      case 'pin-instance': this.party.pinInstance(RELAY_URL, e.room, e.instance); break;
-      case 'save-room':
-        this.roomCode = e.room;
-        this.instance = e.instance;
-        this._saveRoom();
-        break;
-      case 'forget-room':
-        this._forgetRoom();
-        this.roomCode = null;
-        this.instance = null;
-        break;
-      case 'room-ready': this.onRoomReady({ roomCode: e.room, joinUrl: this._joinUrl() }); break;
-      case 'start-liveness':
-        // The timer guard is all that is left of _startLiveness: the in-flight
-        // heartbeat reset that had to precede it happens inside the wasm, on
-        // the created/joined walk itself.
-        if (!this._livenessTimer) this._livenessTimer = setInterval(() => this._livenessTick(), LIVENESS_TICK_MS);
-        break;
-      case 'reset-reconnect-count': this.party.resetReconnectCount(); break;
-      case 'connect-fresh': this._connect(); break;
-      case 'fail-attempt': this.party.failAttempt(); break;
-      case 'reconnect': this.party.reconnectNow(); break;
-      // The frame data arrives composed (PONG, the self-heartbeat) — this side
-      // puts it on the socket and adds nothing.
-      case 'send-to': this.party.sendTo(e.to, e.data); break;
-      case 'publish': this._publishLobby(); break;
-      case 'announce': this._announce(); break;
-      case 'close-fastlane': this.fastlane.close(e.peerIndex); break;
-      case 'show-reconnect':
-        // The claim URL needs this shell's base origin (D3), so it is spliced
-        // here; the card payload and the DIFF over the set stay C++'s.
-        this._reconnectSeats.set(e.seat.peerIndex,
-          session.reconnectCard(e.seat, session.claimUrl(this._joinUrl(), e.seat.peerIndex)));
-        this.onReconnectChange([...this._reconnectSeats.values()]);
-        break;
-      case 'clear-reconnect':
-        if (this._reconnectSeats.delete(e.peerIndex)) this.onReconnectChange([...this._reconnectSeats.values()]);
-        break;
-      case 'rekey-player': this.onPlayerRekey(e.oldId, e.newId); break;
-      case 'player-renamed': this.onPlayerRenamed(e.peerIndex, e.name); break;
-      case 'welcome-item': this.onPlayerWelcomed(e.peerIndex); break;
-      case 'game-message': this.onControllerMessage(ctx.from, ctx.data); break;
-      case 'race-abandoned': this.onRaceAbandoned(); break;
-      // (No set-pick arm: the walks STORE the pick behind the room handle;
-      // nothing is handed back for a shell to keep.)
-      case 'track-change': this.onTrackChange(e.trackId); break;
-      case 'clear-standings': this._standings = null; break;
-      // An op this build cannot perform is a MISSING CAPABILITY, not an optional
-      // step — say so loudly rather than dropping it and leaving a half-set-up room.
-      default: throw new Error(`net: unperformable effect ${e.op}`);
-    }
+    const perform = NET_PERFORMERS[e.op];
+    // An op this build cannot perform is a MISSING CAPABILITY, not an optional
+    // step — and assertNetOps below turns this throw into a BOOT failure by
+    // holding this table to the wasm's own vocabulary before any walk runs.
+    if (!perform) throw new Error(`net: unperformable effect ${e.op}`);
+    perform(this, e, ctx);
   }
 
   // Game-layer track swap that keeps mode/cupId as they are: the series engine
@@ -498,6 +513,7 @@ export class DisplayNet extends GameNet {
     if (colors) this.colorPalette = colors;
     if (tracks) this.trackChooser = tracks;
     session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
+    assertNetOps();
     this._publishLobby();
   }
 

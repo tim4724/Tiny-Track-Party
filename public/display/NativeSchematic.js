@@ -29,8 +29,7 @@ export async function init() {
   const M = await loadNativeRuntime();
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
-    pack: c('ttp_schematic_pack', 'string', ['string', 'number']),
-    schematic: c('ttp_track_schematic_json', 'string', ['string', 'number', 'number'])
+    pack: c('ttp_schematic_pack', 'string', ['string', 'number'])
   };
 }
 
@@ -39,12 +38,4 @@ export async function init() {
 // chosen so straights reproduce and corners do not clip, not just for size).
 export function pack(d, eps = 0) {
   return fn.pack(d || '', eps);
-}
-
-// The full map for a track, built natively. Not on the browser's boot path (see
-// the header) — this is here so the ABI has a JS caller at all, and for any tool
-// that wants the map without the bake.
-export function schematic(trackId, laps = 3, seed = 1) {
-  const json = fn.schematic(trackId, laps, seed);
-  return json ? JSON.parse(json) : null;
 }
