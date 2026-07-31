@@ -50,7 +50,8 @@ TTP_ABI void ttp_display_destroy(void);
 /* ---- scene -------------------------------------------------------------- */
 
 /* Hand the display a named asset's bytes (materials, GLBs, textures). The shell
- * owns fetching; the bytes are copied before this returns. 0 on success. */
+ * owns fetching; the bytes are copied before this returns. 1 on success —
+ * predicate polarity, like every int on the ABI. */
 TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len);
 
 /* Force a biome on every scene built from here on, regardless of the track's
@@ -121,7 +122,6 @@ TTP_ABI void ttp_display_bench(const char* model);
  * road driven are one object, not two builds of one descriptor that could drift.
  * The biome comes from that track's own cup (or ttp_display_biome), resolved out
  * of the C++ palette tables, so the look is not authored per shell either.
- * Returns 1 on an unknown trackId.
  *
  * rosterJson is the field in SLOT order — the ONE thing about a race that only
  * the shell knows, since the sim's cars carry no livery and no display name:
@@ -143,7 +143,9 @@ TTP_ABI void ttp_display_bench(const char* model);
  *
  * Every race start comes through here, since a Grand Prix chains four tracks
  * and even a restart wants the skid ribbons, kicked cones and collected boxes
- * back at their opening state. Returns 0 on success. */
+ * back at their opening state. Returns 1 on success, 0 on refusal (no
+ * display, an unknown trackId, a failed scene build — ttp_last_error says
+ * which). */
 TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
 
 /* Re-dress the BUILT scene's car slots in place: same rosterJson shape as
@@ -158,7 +160,7 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * changed, whether a change is a model reload or just a re-dress of the plate
  * and markers — is decided here (ttp/roster.h planReroster).
  *
- * Returns 0 on success. Nonzero means this was NOT a re-dress — no scene, a
+ * Returns 1 when it re-dressed. 0 means this was NOT a re-dress — no scene, a
  * join/leave/reorder, a slot that failed to rebuild — and the shell performs
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);

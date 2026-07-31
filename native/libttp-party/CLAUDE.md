@@ -21,9 +21,10 @@ the model, bar the rule that tracks ride the LOBBY snapshot only.
 
 **Deliberately did not cross:** the transport and its timers, the QR bitmap (the
 URL composition is shared, the bitmap is three platform one-liners), the reconnect
-card's DOM, identity generation (no rules, just entropy), and the random pick's
-shuffle bag (page RNG — the select-mode walk answers `needDraw` and the shell
-draws). The mode pick's RULES did cross, but into the walk layer above this one
+card's DOM, and identity generation (no rules, just entropy). The random
+pick's shuffle bag lives behind the room handle in the walk layer now — the
+shell seeds it once with page entropy and the select-mode walk draws
+internally. The mode pick's RULES crossed into that same walk layer
 (`runtime/ttp_net.cc`): they read the configured chooser as their catalogue,
 which this layer keeps opaque.
 

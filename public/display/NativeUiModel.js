@@ -13,10 +13,10 @@
 // JSON the ABI takes, and turn the answer back into the shapes the renderers
 // already expect. No rule may live here. Two places where that shows:
 //
-//   * connectedPlayers and reconnectDiff come back as INDICES, and this file
-//     resolves them against the arrays it passed in — so the shell keeps its
-//     OWN objects (and whatever it hangs off them) instead of racing a copy
-//     that has been through a serializer.
+//   * reconnectDiff comes back as INDICES, and this file resolves them against
+//     the array it passed in — so the shell keeps its OWN objects (and
+//     whatever it hangs off them) instead of racing a copy that has been
+//     through a serializer.
 //   * raceFlow answers allDone and the forfeit list TOGETHER, because the
 //     boundary is what costs, not the rule. main.js reads one and then the
 //     other off a single crossing per frame.
@@ -46,21 +46,17 @@ export async function init() {
     catalogue: c('ttp_ui_catalogue_json', 'string', []),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string']),
-    rosterSeats: c('ttp_ui_roster_seats_json', 'string', ['string', 'string']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
-    connectedPlayers: c('ttp_ui_connected_players_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
-    itemPushes: c('ttp_ui_item_pushes_json', 'string', ['string', 'string', 'string']),
-    welcomeItem: c('ttp_ui_welcome_item_json', 'string', ['string']),
+    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number', 'string']),
+    welcomeItem: c('ttp_ui_welcome_item_live_json', 'string', ['number', 'string']),
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
-    autoPauseLive: c('ttp_ui_auto_pause_live_json', 'string', ['number', 'number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
-    seriesInfoGp: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
     standingsLive: c('ttp_ui_standings_live_json', 'string',
-      ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
+      ['number', 'number', 'number', 'string', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
     intermissionSecs: c('ttp_ui_intermission_secs', 'number', ['number', 'number'])
   };
@@ -68,7 +64,6 @@ export async function init() {
 
 const J = JSON.stringify;
 const id = (x) => J(x === undefined ? null : x);   // a JSON-scalar identity
-const ids = (set) => J([...set]);
 const b = (x) => (x ? 1 : 0);
 
 // The two field sizes the seat grid needs, and NOTHING ELSE. The world every id
@@ -120,35 +115,18 @@ export function backEffect(screen) { return fn.backEffect(screen || ''); }
 // of the party ABI, ferry it through the retained snapshot's `players`
 // projection, then hand those rows back here. That made the lobby's own grid
 // depend on the wire message sitting next to it, and serialized the roster three
-// times to render it once. rosterSeats (the plain-data spelling) stays for
-// callers that hold rows rather than a room — the test surfaces, and any shell
-// whose roster does not live in this wasm.
+// times to render it once.
 export function rosterSeatsFromRoom(roomHandle, hostPeerIndex) {
   return JSON.parse(fn.rosterSeatsFromRoom(roomHandle | 0, id(hostPeerIndex)));
-}
-
-export function rosterSeats(roster, hostPeerIndex) {
-  return JSON.parse(fn.rosterSeats(J(roster.map((p) => ({
-    peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex,
-    carIndex: p.carIndex == null ? null : p.carIndex,
-    connected: !!p.connected, ready: !!p.ready
-  }))), id(hostPeerIndex)));
 }
 
 // The taken seats padded with OPEN placeholders (maxPlayers and the car roster
 // size come from configure, not from a second copy on this side).
 export function seatGrid(seats) { return JSON.parse(fn.seatGrid(J(seats))); }
 
-// (allRacersReady has no JS wrapper anymore: the one shell reader was the
-// START_GAME gate, which ttp_net_controller_action now asks in C++.)
-
-// Connected seats only. The ABI answers with indices; the ENTRIES that come
-// back are the caller's own objects, because startRace hangs a whole race field
-// off them.
-export function connectedPlayers(roster) {
-  const arr = J(roster.map((p) => ({ connected: !!p.connected })));
-  return JSON.parse(fn.connectedPlayers(arr)).map((i) => roster[i]);
-}
+// (allRacersReady and connectedPlayers have no ABI spelling anymore: the
+// START_GAME gate lives inside ttp_net_controller_action, and the race walks
+// gather the connected players off the room handle themselves.)
 
 // The lobby's right-rail race card, or null before a pick. randomRaces is the
 // RANDOM mode's run length (0 = endless); absent reads as endless, so a shell
@@ -172,24 +150,22 @@ export function reconnectDiff(shownIds, seats) {
 }
 
 // ---- the ITEM push ---------------------------------------------------------
-// Only the three fields the rule reads cross, not the whole snapshot car. Note
-// what is NOT done here: an `item` that is undefined stays undefined through
-// JSON.stringify (the key vanishes), which is the third state the rule turns on
-// — a slot that went from null to absent pushes again.
-export function itemPushes(cars, aiIds, lastItem) {
+// The cars and the CPU set come off the live session in C++; what crosses is
+// the shell's own outbox map — what each phone was last told, in insertion
+// order. An `item` that is undefined stays undefined through JSON.stringify
+// (the key vanishes), which is the third state the rule turns on.
+export function itemPushes(sessionHandle, lastItem) {
   const last = [];
   for (const [k, v] of lastItem) last.push(v === undefined ? { id: k } : { id: k, item: v });
-  const out = JSON.parse(fn.itemPushes(
-    J(cars.map((c) => ({ id: c.id, item: c.item, finished: !!c.finished }))),
-    ids(aiIds), J(last)));
+  const out = JSON.parse(fn.itemPushes(sessionHandle | 0, J(last)));
   // `item` is absent on the wire when it is undefined — reading the key back
   // gives undefined again, so the ITEM message keeps the shape it always had.
   return out.map((p) => ({ id: p.id, item: p.item }));
 }
 
-// The one-shot relight a (re)joining phone gets. null for no live car.
-export function welcomeItem(car) {
-  return JSON.parse(fn.welcomeItem(car ? J({ id: car.id, item: car.item, finished: !!car.finished }) : 'null'));
+// The one-shot relight a (re)joining phone gets, off the live race.
+export function welcomeItem(sessionHandle, peerIndex) {
+  return JSON.parse(fn.welcomeItem(sessionHandle | 0, id(peerIndex)));
 }
 
 // ---- race flow -------------------------------------------------------------
@@ -203,16 +179,10 @@ export function raceFlow(sessionHandle, roomHandle) {
 }
 
 // ---- pause arbitration -----------------------------------------------------
-// (canPause/canResume have no JS wrappers anymore: the pause/resume walks ask
-// them inside ttp_race_pause_json / resume_json.)
-
-// The whole silent-freeze arbitration off the two live handles: C++ gathers
-// the input, asks its own consult rule, and reads the party layer through the
-// synced seam exactly when the decision wants it (ttp_ui_auto_pause_live_json).
-// raceEnded stays an argument — it is the shell's results-overlay latch.
-export function autoPause(sessionHandle, roomHandle, raceEnded) {
-  return JSON.parse(fn.autoPauseLive(sessionHandle | 0, roomHandle | 0, b(raceEnded)));
-}
+// (canPause/canResume/autoPause have no spelling here anymore: the pause and
+// resume walks ask the verdicts inside ttp_race_pause_live_json, and the whole
+// silent-freeze arbitration is ttp_race_auto_pause_live_json's — decision and
+// effects in one walk.)
 
 // The transition AND its ordered member ops in one answer; the shell walks
 // `ops` and re-derives nothing (thaw is deliberately not freeze reversed).
@@ -222,17 +192,14 @@ export function freezePlan(paused, autoPaused, sessionPaused) {
 
 // What the results board's one button does — the branch behind the click,
 // answered by the same layer that labels it (resultsView's newGameKey).
-export function resultsAction(gpHandle) {
-  return JSON.parse(fn.resultsAction(gpHandle | 0));
+export function resultsAction(roomHandle) {
+  return JSON.parse(fn.resultsAction(roomHandle | 0));
 }
 
-// ---- the Grand Prix chip + the standings board ------------------------------
-// All eight input fields are read off the ttp_gp_create handle in C++
-// (ttp_ui_series_info_live_json) — the getter walk main.js used to spell (and
-// the tvOS twin misspelled) is gone. null without a series.
-export function seriesInfo(gpHandle, autoAdvanceMs) {
-  return JSON.parse(fn.seriesInfoGp(gpHandle | 0, autoAdvanceMs));
-}
+// ---- the standings board ----------------------------------------------------
+// (The Grand Prix chip rides the board's `cup.info` — ttp_ui_series_info_live_json
+// stays exported for a shell that draws the chip alone; this page reads it off
+// the board and wraps nothing.)
 
 // The board the TV and every phone render.
 //
@@ -246,10 +213,9 @@ export function seriesInfo(gpHandle, autoAdvanceMs) {
 // (ttp_ui_standings_live_json). The FIELD is the one shell-owned input left:
 // the launch's frozen copy plus the shell's rename/rekey repairs (the AI
 // racers are not in any roster the room knows).
-export function standingsPayload({ sessionHandle, roomHandle, gpHandle, over, field, results, autoAdvanceMs }) {
+export function standingsPayload({ sessionHandle, roomHandle, over, results, autoAdvanceMs }) {
   return JSON.parse(fn.standingsLive(
-    sessionHandle | 0, roomHandle | 0, gpHandle | 0, b(over),
-    J(field.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, ai: !!p.ai }))),
+    sessionHandle | 0, roomHandle | 0, b(over),
     results ? J(results) : null,
     autoAdvanceMs));
 }

@@ -104,8 +104,9 @@ export class LobbyDemo {
     // so reading the whole field 60 times a second to ask "done yet?" is the
     // only thing that would still be marshalling state for the attract loop.
     if ((this._tick = (this._tick || 0) + 1) % 30) return;
-    const snap = this.engine.getSnapshot();
-    if (snap.cars.length > 0 && snap.cars.every((c) => c.finished)) {
+    // Per-car scalar reads, not a ~4 KB snapshot parse for one boolean.
+    const ids = this.engine.carIds();
+    if (ids.length > 0 && ids.every((id) => this.engine.carFinished(id))) {
       this.engine.dispose();
       this.engine = this._buildEngine();
       this.scene.bindSession(this.engine.h);

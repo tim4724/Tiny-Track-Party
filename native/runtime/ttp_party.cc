@@ -6,6 +6,7 @@
 // handle owns a queue the callback appends to and ttp_room_events_json drains —
 // preserving exact intra-op emission order, which is contract (fp-profile §party).
 #include "ttp_party.h"
+#include "ttp_runtime.h"
 
 #include <map>
 #include <memory>
@@ -45,6 +46,20 @@ struct RoomHandle {
   // RoomFlow's: the frozen party corpora know no pick, and the walks are its
   // only writers (ttp_room_store_pick). Shells read ttp_net_pick_json.
   Value pick = Value::Obj();
+  // The random-track SHUFFLE BAG ({seed, deck:[ids], cursor}), seeded once by
+  // the shell (ttp_net_init_pick) and drawn ONLY by the walks — "random walks
+  // the whole catalogue before any repeat" lives here now, so no shell owns a
+  // draw protocol. Empty object until seeded.
+  Value bag = Value::Obj();
+  // The live cup series: a ttp_gp_create handle the RACE walks own (create on
+  // launch, advance/apply/rekey mid-cup, dispose on the way out). 0 = single
+  // race. Shells read ttp_race_series_state_json; no shell holds the handle.
+  int series = 0;
+  // The launched race FIELD (the rows every standings board is composed from),
+  // retained here because the AI racers exist in no roster the room knows.
+  // Written by the launch walks; repaired in place by the rename and rekey
+  // walks; cleared with the race. Null outside a race.
+  Value field = Value::Null();
 };
 
 std::map<int, std::unique_ptr<RoomHandle>> g_rooms;
@@ -100,12 +115,11 @@ int ttp_room_create(const char* configJson) {
   return h;
 }
 
-void ttp_room_dispose(int h) { g_rooms.erase(h); }
-
-void ttp_room_reset(int h) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->reset();
-}
+void ttp_room_dispose(int h) {
+  // The room owns its series: a party ending must not leak a GrandPrix.
+  if (RoomHandle* rh = room(h)) {
+    if (rh->series) ttp_gp_dispose(rh->series);
+  } g_rooms.erase(h); }
 
 // ---- roster -----------------------------------------------------------------
 
@@ -122,16 +136,6 @@ const char* ttp_room_add_player(int h, const char* peerIdJson, const char* field
   return p ? ret(rh, p->toValue()) : "null";
 }
 
-void ttp_room_remove_player(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->removePlayer(parse_scalar_id(peerIdJson));
-}
-
-int ttp_room_rekey(int h, const char* oldIdJson, const char* newIdJson) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->rekey(parse_scalar_id(oldIdJson), parse_scalar_id(newIdJson))) ? 1 : 0;
-}
-
 int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const char* valueJson) {
   RoomHandle* rh = room(h);
   if (!rh || !key) return 0;
@@ -139,21 +143,6 @@ int ttp_room_set_field(int h, const char* peerIdJson, const char* key, const cha
   Value v = json::parse(valueJson, &ok);
   if (!ok) return 0;
   return rh->flow->setField(parse_scalar_id(peerIdJson), key, std::move(v)) ? 1 : 0;
-}
-
-void ttp_room_mark_disconnected(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->markDisconnected(parse_scalar_id(peerIdJson));
-}
-
-void ttp_room_mark_reconnected(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->markReconnected(parse_scalar_id(peerIdJson));
-}
-
-void ttp_room_clear_disconnected(int h, int hasNow, double nowMs) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->clearDisconnected(hasNow != 0, nowMs);
 }
 
 // ---- lifecycle / state ------------------------------------------------------
@@ -166,33 +155,23 @@ int ttp_room_transition_to(int h, const char* stateName) {
 
 const char* ttp_room_state(int h) {
   RoomHandle* rh = room(h);
-  if (!rh) return "null";
+  // "" for an unknown handle — the same spelling the internal seam
+  // (ttp_room_state_name) has always used, so every reader treats the two
+  // paths identically. It used to answer the literal "null", which forced a
+  // carve-out in abi_check's frame comparison.
+  if (!rh) return "";
   rh->scratch = rh->flow->stateName();
   return rh->scratch.c_str();
 }
 
-void ttp_room_set_active_order(int h, const char* peerIdsJson) {
-  RoomHandle* rh = room(h);
-  if (!rh) return;
-  std::vector<PeerId> order;
-  if (peerIdsJson && *peerIdsJson) {
-    bool ok = false;
-    Value a = json::parse(peerIdsJson, &ok);
-    if (ok && a.type == Value::ARR) {
-      for (const Value& e : a.arr) {
-        if (e.type == Value::NUM) order.push_back(PeerId::Num(e.num));
-        else if (e.type == Value::STR) order.push_back(PeerId::Str(e.str));
-        else order.push_back(PeerId::None());
-      }
-    }
-  }
-  rh->flow->setActiveOrder(order);
-}
+// ---- the internal seam (ttp_room.h) -----------------------------------------
+// The same read, generalized: a room handle plus a session handle is everything
+// needed to describe the room to a phone or a screen, and both answers are taken
+// HERE rather than reassembled by whichever shell asked. See ttp_room.h.
 
-// The party layer's one read of the SIM, through the same internal seam the
-// display runtime uses (ttp_session.h): the participant set is a decision about
-// a live race, so it is taken here rather than in three shells. Nothing is
-// mutated on either side and no car id crosses the ABI.
+// syncActiveOrder against the LIVE RACE: every seat holding a car, plus every
+// dropped seat. Was an ABI export; the walks and the synced reads below are
+// its only callers now, so it lives on the seam.
 void ttp_room_sync_active_order(int h, int sessionHandle) {
   RoomHandle* rh = room(h);
   if (!rh) return;
@@ -202,11 +181,6 @@ void ttp_room_sync_active_order(int h, int sessionHandle) {
   }
   rh->flow->syncActiveOrder(active);
 }
-
-// ---- the internal seam (ttp_room.h) -----------------------------------------
-// The same read, generalized: a room handle plus a session handle is everything
-// needed to describe the room to a phone or a screen, and both answers are taken
-// HERE rather than reassembled by whichever shell asked. See ttp_room.h.
 
 Value ttp_room_roster_value(int roomHandle) {
   RoomHandle* rh = room(roomHandle);
@@ -285,46 +259,39 @@ void ttp_room_store_pick(int roomHandle, Value pick) {
   if (rh) rh->pick = std::move(pick);
 }
 
+Value ttp_room_bag_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->bag : Value::Obj();
+}
+
+void ttp_room_store_bag(int roomHandle, Value bag) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->bag = std::move(bag);
+}
+
+int ttp_room_series(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->series : 0;
+}
+
+void ttp_room_store_series(int roomHandle, int gpHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return;
+  if (rh->series && rh->series != gpHandle) ttp_gp_dispose(rh->series);
+  rh->series = gpHandle;
+}
+
+Value ttp_room_field_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->field : Value::Null();
+}
+
+void ttp_room_store_field(int roomHandle, Value field) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->field = std::move(field);
+}
+
 // ---- liveness ---------------------------------------------------------------
-
-void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->onSeen(parse_scalar_id(peerIdJson), nowMs);
-}
-
-int ttp_room_is_expired(int h, const char* peerIdJson, double nowMs) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->isExpired(parse_scalar_id(peerIdJson), nowMs)) ? 1 : 0;
-}
-
-const char* ttp_room_expired_peers_json(int h, double nowMs) {
-  RoomHandle* rh = room(h);
-  if (!rh) return "[]";
-  Value arr = Value::Arr();
-  for (const PeerId& p : rh->flow->expiredPeers(nowMs)) arr.push(p.toValue());
-  return ret(rh, std::move(arr));
-}
-
-int ttp_room_all_participants_disconnected(int h) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->allParticipantsDisconnected()) ? 1 : 0;
-}
-
-int ttp_room_has_late_joiners(int h) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->hasLateJoiners()) ? 1 : 0;
-}
-
-const char* ttp_room_late_joiners_json(int h) {
-  RoomHandle* rh = room(h);
-  if (!rh) return "[]";
-  return ret(rh, rh->flow->lateJoinersValue());
-}
-
-int ttp_room_grace_tick(int h, double nowMs) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->graceTick(nowMs)) ? 1 : 0;
-}
 
 // ---- provider setters -------------------------------------------------------
 
@@ -346,42 +313,10 @@ const char* ttp_room_host_json(int h) {
   return ret(rh, rh->flow->host().toValue());
 }
 
-int ttp_room_is_host(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->isHost(parse_scalar_id(peerIdJson))) ? 1 : 0;
-}
-
-int ttp_room_size(int h) {
-  RoomHandle* rh = room(h);
-  return rh ? static_cast<int>(rh->flow->size()) : 0;
-}
-
-int ttp_room_connected_count(int h) {
-  RoomHandle* rh = room(h);
-  return rh ? rh->flow->connectedCount() : 0;
-}
-
 const char* ttp_room_list_json(int h) {
   RoomHandle* rh = room(h);
   if (!rh) return "[]";
   return ret(rh, rh->flow->listValue());
-}
-
-int ttp_room_has(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->has(parse_scalar_id(peerIdJson))) ? 1 : 0;
-}
-
-int ttp_room_is_disconnected(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  return (rh && rh->flow->isDisconnected(parse_scalar_id(peerIdJson))) ? 1 : 0;
-}
-
-const char* ttp_room_get_json(int h, const char* peerIdJson) {
-  RoomHandle* rh = room(h);
-  if (!rh) return "null";
-  const Player* p = rh->flow->get(parse_scalar_id(peerIdJson));
-  return p ? ret(rh, p->toValue()) : "null";
 }
 
 const char* ttp_room_events_json(int h) {
@@ -578,18 +513,6 @@ const char* ttp_link_stats_json(int h) {
 }
 
 // ---- statics ----------------------------------------------------------------
-
-int ttp_room_lowest_free_slot(const char* usedJson, int max) {
-  std::vector<double> used;
-  if (usedJson && *usedJson) {
-    bool ok = false;
-    Value a = json::parse(usedJson, &ok);
-    if (ok && a.type == Value::ARR) {
-      for (const Value& e : a.arr) if (e.type == Value::NUM) used.push_back(e.num);
-    }
-  }
-  return lowest_free_slot(used, max);
-}
 
 const char* ttp_party_version(void) {
   static std::string buf;

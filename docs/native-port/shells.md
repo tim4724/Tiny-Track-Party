@@ -1,12 +1,52 @@
 # Writing a shell
 
 What a second or third platform actually owes, audited against the tree on
-2026-07-29 rather than planned in advance. [architecture.md](architecture.md)
+2026-07-31 rather than planned in advance. [architecture.md](architecture.md)
 says what a shell IS ("a shell may only contain code that names a platform
 API"); this says what that leaves you holding, and which parts are a decision
 rather than a task.
 
 Nothing here is Android- or tvOS-specific work. It is the state of the base.
+
+## The shell set
+
+The ABI a shell binds is deliberately small and has ONE generation: the
+handle-taking walks. Since the 2026-07-31 surface cut there is no superseded
+spelling to pick by mistake — the fine-grained one-rule exports, the
+JSON-input race entry points and the GP scalar getters are gone outright
+(their corpora replay at the C++ level in ctest). The surface splits by
+audience:
+
+- **Shell surface** — what a platform binds: the sim session
+  (`ttp_session_begin_field` → `ttp_update` → `ttp_process_input`, packed HUD),
+  the room machine's slim core (create/dispose/add_player/set_field/
+  transition_to/state/list/host/events + the two provider setters), the
+  relay framing + fastlane kits, the net walks (`ttp_net_on_*`, liveness,
+  stored pick), the race EXECUTOR walks (`ttp_race_*_live_json` +
+  `configure` + `series_state`), the ui reads (`ttp_ui_*` — all of them),
+  audio, display, theme, glb. The cup series, the launched field and the
+  random-track shuffle bag all live BEHIND THE ROOM HANDLE: the walks create,
+  advance, bank, repair and draw internally, so a shell holds no series
+  handle, curates no field rows and owns no draw protocol — a start, a cup
+  advance and a lobby return are each ONE call. (`ttp_gp_*` remains exported
+  as the series engine's own test/tool surface; a shell binds none of it.)
+- **Port mirrors** — exports the WEB deliberately does not call because the
+  authored JS source is already on its page, pinned by a Node test that sees
+  both: `ttp_protocol_manifest_json` (protocol.js), `ttp_net_clean_name`
+  (names.js), `ttp_ui_cup_tint_rgb` + `ttp_ui_cup_field_tint_pct`
+  (trackPicker.js), `ttp_schematic_points_json` (the SVG-path reader).
+- **Authoring tools** — the `ttp_track_*` reads and the schematic decode half,
+  banner-marked in `ttp_runtime.h`. Node scripts only; a shell binds none.
+- **Dev/gallery** — the display's showcase/bench/debug latches, documented in
+  place as off the shipping path.
+
+Two boot-time proofs replace a whole bug class: `ttp_race_effect_ops_json`
+and `ttp_net_effect_ops_json` hand over each walk's op vocabulary, and a
+shell asserts its performer tables against them at startup (see
+`public/display/main.js` and `Net.js`) — an unhandled effect fails the first
+launch instead of silently dropping a step at a party. A race answer may
+carry net-vocabulary ops in place (the executor merges the set-track tail),
+so the race performer falls through to the net performer for those.
 
 ## What you get for free
 
@@ -19,7 +59,7 @@ Every one of these is C++ behind a C ABI, conformance-gated on four legs
 | Track geometry, sampling, schematic projection | `libttp-track` | `ttp_runtime.h` (`ttp_track_*`) |
 | Room state, relay framing, fastlane codec, session policy AND its choreography (the net effect lists) | `libttp-party` + the ABI shim | `ttp_party.h`, `ttp_net.h` |
 | Cameras, cell layout, fog, the per-frame builder | `libttp-runtime` | `ttp_display.h` |
-| Race orchestration (the effect lists) | `libttp-runtime` | `ttp_race.h` |
+| Race orchestration, WHOLE: the start gate + launch, the frame's event drain (lifecycle routing included), the cup chain, pause/auto-pause, the roster repairs — each one walk off the live handles | `libttp-runtime` | `ttp_race.h` |
 | Every 2D screen's DECISIONS, as keys + data | `libttp-runtime` | `ttp_ui.h` |
 | Which cue, what gain, which song | `libttp-runtime` | `ttp_audio.h` |
 | The scene itself (Filament) | `libttp-renderer` | `ttp_display.h` |
@@ -57,6 +97,8 @@ Three properties of that surface matter more than the list:
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
    and what Android TV wants; tvOS needs `-a metal`.
 4. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
+   Bind the effect-op vocabularies at boot and assert your performer tables
+   against them (see The shell set above) before anything else.
    Sizing: `public/display/main.js` (1755 lines) + `lobbySeats.js` + roughly
    1165 lines of CSS, of which the decisions are already gone. Consume
    `public/shared/design-tokens.json` rather than re-authoring the sticker
@@ -103,12 +145,13 @@ Three properties of that surface matter more than the list:
 ## The asymmetries worth knowing before you start
 
 - **C interop is not equal across platforms.** Swift consumes a C header
-  directly; JS gets `cwrap`. Kotlin gets neither, and the web shell touches
-  **182 distinct `ttp_*` symbols**, so a JVM shell needs either a generated JNI
-  bridge or a C++ "performer" that keeps the JNI surface small. That is a
-  design decision, not an implementation detail, and it should be made before
-  any Kotlin is written. `architecture.md`'s "three thin wrappers" is true of
-  Swift and JS and understates the JVM case.
+  directly; JS gets `cwrap`. Kotlin gets neither, and even after the surface
+  cut the web shell binds well over a hundred distinct `ttp_*` symbols, so a
+  JVM shell needs either a generated JNI bridge or a C++ "performer" that
+  keeps the JNI surface small. That is a design decision, not an
+  implementation detail, and it should be made before any Kotlin is written.
+  `architecture.md`'s "three thin wrappers" is true of Swift and JS and
+  understates the JVM case.
 - **Constants: read them, do not copy them.** `ttp_protocol_manifest_json()`
   hands over the car tables, the wire vocabulary, the STEER contract and the
   LIVENESS windows as one JSON object. A C++ layer can include
@@ -153,42 +196,32 @@ correct.
 "nothing to apply". A misspelled key reads as absent, and absent is legal
 almost everywhere. An unhandled event is dropped. None of it throws, none of it
 logs, and no type system helps: the returns are JSON on one side and prose on
-the other. The six, as a checklist for the next shell:
+the other. The first shell shipped six bugs of this class; four of the six are
+now UNREPRESENTABLE, because the entry point that permitted each is gone:
 
-1. **Read the documented key, not the one that reads well.**
-   `ttp_race_start_json` answers `{"action":"launch"}` — a `launch` key does not
-   exist, and `verdict["launch"] as? Bool` is nil on every answer there has
-   ever been, so the guard rejected every start.
-2. **Some answers are a VERDICT, not a plan.** A start carries no `effects`;
-   the shell must then stand up the series and call `ttp_race_launch_json`
-   itself. `ttp_race_advance_json`'s header says "the shell runs
-   ttp_race_launch_json next" and means it literally.
-3. **Index-returning exports must be resolved against your own array.**
-   `ttp_ui_connected_players_json` and `ttp_ui_reconnect_diff_json` answer with
-   INDICES. Passing them on as `players` launches a race for a field of bare
-   numbers.
-4. **Three sim events are LIFECYCLE and have their own entry points.**
-   `_countdown` → `ttp_race_countdown_tick_json`, `_raceStart` →
-   `ttp_race_start_beat_json`, `_raceEnd` → your end-of-race path. Feed them to
-   `ttp_race_event_json` (which filters ORDINARY events) and they vanish: the
-   countdown never beats and the room sits in COUNTDOWN forever.
+1. ~~Verdict keys misread~~ / 2. ~~a verdict mistaken for a plan~~ — the start
+   walk (`ttp_race_start_live_json`) answers the verdict AND the launch
+   effects in one call; there is no second call to forget and no bare verdict
+   to misread. The one protocol left is the DRAWS phase, and it is one
+   export's documented contract.
+3. **Index-returning exports must be resolved against your own array.** The
+   one left is `ttp_ui_reconnect_diff_json` (`add` is indices into the seat
+   list you passed). `ttp_ui_connected_players_json` is gone — the walks
+   gather the players off the room handle themselves.
+4. ~~Lifecycle events misrouted~~ — `ttp_race_events_live_json` drains the
+   session queue and routes `_countdown`/`_raceStart`/`_raceEnd` internally.
+   A shell never sees a lifecycle event again.
 5. **Bitmask parameters are PRESENCE, not value.** `ttp_process_input`'s mask is
    derived by you from which fields arrived; the wire carries none.
-6. **Go through the seam, not around it.** "All participants disconnected" and
-   "who is a late joiner" are only meaningful AFTER the active order is synced
-   off the live race; calling `ttp_room_all_participants_disconnected` or
-   `ttp_room_late_joiners_json` bare answers off a stale set. The ui twins
-   below do the synced read internally, which is the strongest form of this
-   rule: a shell that uses them cannot get the order wrong.
+6. **Go through the seam, not around it** — now the strongest form: the bare
+   unsynced room reads are no longer exported at all. Every answer that
+   depends on the active order (`auto-pause`, the standings board's late
+   joiners) does the synced read inside the walk.
 
-Items 1, 3 and 6's whole class shrank after the first shell shipped: the inputs
-a shell used to hand-assemble for the race-flow pair, the auto-pause
-arbitration, the cup chip and the standings board are now gathered in C++ off
-the live handles (`ttp_ui_race_flow_live_json`, `ttp_ui_auto_pause_live_json`,
-`ttp_ui_series_info_gp_json`, `ttp_ui_standings_live_json` — the misspellable
-JSON forms remain only as the conformance surface). Prefer the live twins in
-every new shell; the field row array on the standings twin is the one
-hand-assembled input left.
+There is no hand-assembled input left at all: the launch's field copy is
+retained behind the room and repaired by the rename/rekey walks, so the
+standings board is a pure read (`ttp_ui_standings_live_json(session, room,
+over, resultsOrNull, autoAdvanceMs)`).
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on

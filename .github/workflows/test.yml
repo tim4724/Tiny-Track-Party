@@ -30,7 +30,10 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The sweep below alone is minutes of CPU (it grew with the terrain-relief
+    # ground), and a cold checkout has been observed to take 2m+ on GitHub's
+    # side — a 5-minute budget had zero headroom and flaked on exactly that.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -50,7 +53,8 @@ jobs:
       # sheet, so the true worst position is not always one of them (measured: the
       # screen reported 43% margin where the full sweep found 35%). This relocates
       # one decal of every kind along every metre of all 20 tracks and is the
-      # authority. ~15 s, which is nothing next to the E2E shards below.
+      # authority. Minutes of CPU since the heightfield ground landed — still
+      # cheaper than an E2E shard, and the authoritative answer.
       - name: Decal conformance, every metre of every track
         run: npm run audit:decals:sweep
 

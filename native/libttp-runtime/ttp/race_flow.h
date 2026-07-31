@@ -95,6 +95,10 @@ enum class Op {
   RETURN_TO_LOBBY, CLOSE_ROOM, CLEAR_PICK, RENDER_LOBBY_PICK,
   REFRESH_LOBBY_DEMO, UPDATE_BACKDROP
 };
+// One past the last op — the vocabulary export walks [0, OP_COUNT) and a new
+// op joins it by construction. Keep UPDATE_BACKDROP the last enumerator or
+// move this with it.
+inline constexpr int OP_COUNT = static_cast<int>(Op::UPDATE_BACKDROP) + 1;
 const char* key(Op op);
 
 // ---- the pieces an effect carries -------------------------------------------
@@ -195,7 +199,11 @@ int lowestFreeSlot(const std::vector<int>& used, int count);
 
 // The world the field rules are resolved against. Passed per call, never held.
 struct FieldWorld {
-  int fieldSize = 4;
+  // 0, not a plausible 4: an UNCONFIGURED world must produce an empty field
+  // (the ttp_race.h contract "the CPU fill seats nobody"), never a
+  // real-looking all-CPU grid a shell could race without noticing its boot
+  // never ran.
+  int fieldSize = 0;
   int carCount = 0;
   int colorCount = 0;
   std::vector<Persona> personas;

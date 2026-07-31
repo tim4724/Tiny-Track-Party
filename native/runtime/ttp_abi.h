@@ -7,23 +7,18 @@
 //  - Handles are ints > 0 (0 = failure). An unknown or disposed handle is a safe
 //    no-op: queries return 0 / "null" / an empty array.
 //  - INT RETURNS ARE NOT ONE POLARITY, so read the declaration rather than
-//    assuming. There are three, and the split is by what the call IS, not by
-//    which header it lives in:
-//      * a HANDLE or a PREDICATE returns truth as non-zero — the factories
-//        (ttp_session_begin, ttp_gp_create, ttp_room_create, ttp_link_create)
-//        return the handle or 0; ttp_display_create returns 1/0 because a
-//        singleton's handle would always be 1; the queries and the mutators that
-//        report "did it apply" (ttp_has_car, ttp_racing, ttp_room_is_host,
-//        ttp_room_rekey, ttp_room_transition_to, ttp_car_world_pos …) return 1
-//        for yes, 0 for no, and ttp_car_finished adds -1 for "unknown car".
-//      * an OUTCOME returns the C exit-status polarity: 0 on success, non-zero on
-//        failure. Only the display's setup calls are in this class —
-//        ttp_display_asset and ttp_display_build.
-//      * ttp_display_frame is neither: 1 = it drew, 0 = the renderer skipped the
-//        frame and the surface still holds the previous one.
-//    This is DOCUMENTED, not designed, and deliberately not changed: every one of
-//    these is a shipped signature with live JS callers, and quietly flipping a
-//    polarity would fail as a wrong picture rather than as a build error.
+//    assuming. ONE polarity: truth is non-zero. The factories
+//    (ttp_session_begin, ttp_gp_create, ttp_room_create, ttp_link_create)
+//    return the handle or 0 (ttp_display_create returns 1/0 because a
+//    singleton's handle would always be 1); the queries and the mutators that
+//    report "did it apply" (ttp_has_car, ttp_racing, ttp_room_set_field,
+//    ttp_room_transition_to, ttp_car_world_pos, ttp_display_asset,
+//    ttp_display_build, ttp_display_reroster …) return 1 for yes/success, 0
+//    for no/refused; ttp_car_finished adds -1 for "unknown car";
+//    ttp_display_frame's 0 is a legitimate pace-skip (the surface still holds
+//    the previous frame); ttp_display_cell_rects returns a COUNT. The display
+//    trio used to carry C exit-status polarity (0 = success) — flipped
+//    2026-07-31 when compatibility stopped being owed, so the zoo is gone.
 //  - Identities cross as JSON SCALARS in a C string: the token `3` is the number
 //    3, `"abc"` the string abc. Numbers and strings are DISTINCT identities,
 //    exactly like JS. "null" / nullptr is absent; so is any malformed text.

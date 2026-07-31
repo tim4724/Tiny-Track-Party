@@ -11,6 +11,7 @@
 #define TTP_SESSION_H
 
 namespace ttp {
+class CupSeries;
 class Game;
 struct Value;
 }
@@ -39,5 +40,26 @@ ttp::Value ttp_session_finished_flags(int handle, const ttp::Value& carIds);
 // `.results` the standings board reads. Empty array when there is no engine,
 // which composes to an empty board, never a crash.
 ttp::Value ttp_session_results_rows(int handle);
+
+// The live cars as the ITEM-push rule reads them
+// ([{"id","item":str|null,"finished"}], grid order) — the per-owner USE-button
+// gather, off the engine rather than a snapshot. Empty for an unknown handle.
+ttp::Value ttp_session_item_cars(int handle);
+
+// Drain the session's outbound event queue — race events verbatim plus the
+// reconstructed lifecycle beats — in fire order, and EMPTY it. The same queue
+// ttp_events_json spells as text; the race walk's event drain routes it in
+// C++ instead. Empty array for an unknown handle.
+ttp::Value ttp_session_drain_events(int handle);
+
+// The live cup series behind a ttp_gp_create handle, or nullptr — the seam the
+// ui and race shims read series metadata through, so no scalar getter has to
+// be exported per field (ttp_gp_state_json is the shell's one read).
+ttp::CupSeries* ttp_gp_series(int handle);
+
+// The series' standings rows in the JS twin's spelling (absent keys for an
+// unseated row) — shared by ttp_gp_state_json and the standings board's live
+// gather. Empty array for an unknown handle.
+ttp::Value ttp_gp_standings_value(int handle);
 
 #endif  // TTP_SESSION_H

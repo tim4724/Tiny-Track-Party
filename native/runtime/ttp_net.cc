@@ -44,6 +44,7 @@
 #include "ttp/protocol.h"
 #include "ttp/room_flow.h"
 #include "ttp_party.h"  // ttp_room_sync_active_order — the one participant-set rule
+#include "ttp_live.h"
 #include "ttp_room.h"
 #include "ttp_session.h"
 #include "ttp_ui.h"     // ttp_ui_all_racers_ready — the start gate, asked not re-spelled
@@ -62,9 +63,18 @@ Value g_chooser = Value::Obj();
 // tick, and a single buffer would hand the second call's bytes to a caller still
 // holding the first's pointer. ttp_abi.h's "valid until the next call" rule is
 // per handle, and this ABI has none.
-std::string g_bufRows, g_bufSnapshot, g_bufJoin, g_bufClaimUrl, g_bufTemplate,
-    g_bufNorm, g_bufSeat, g_bufAddPeer, g_bufCard, g_bufState, g_bufHost,
-    g_bufTick, g_bufClaim, g_bufResync, g_bufFrame;
+std::string g_bufJoin, g_bufClaimUrl, g_bufTemplate, g_bufCard, g_bufFrame, g_bufOps;
+
+// The walks' effect vocabulary — every op an answer below can carry, in the
+// order ttp_net.h documents them. A new pushOp spelling joins this table in
+// the same commit; abi_check pins every emitted op to the export.
+const char* const NET_EFFECT_OPS[] = {
+    "clear-create-timer", "arm-create-watchdog", "join-room", "create-room",
+    "pin-instance", "save-room", "forget-room", "room-ready", "start-liveness",
+    "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
+    "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
+    "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
+    "game-message", "race-abandoned", "track-change", "clear-standings"};
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -114,43 +124,23 @@ void setPickFields(int roomHandle, Value& out) {
 }
 
 
-// A JSON text that may legitimately be "absent". NULL and "" mean JS
-// `undefined`; anything else parses, and a parse FAILURE is undefined too (a
-// malformed token is not a null). Returns nullptr for absent.
-const Value* parseOptional(const char* json, Value& storage) {
-  if (!json || !*json) return nullptr;
-  bool ok = false;
-  storage = json::parse(json, &ok);
-  return ok ? &storage : nullptr;
-}
 
-std::vector<double> numbersOf(const char* json) {
-  std::vector<double> out;
-  Value v = json::parse_or(json, Value::Arr());
-  if (v.type != Value::ARR) return out;
-  for (const Value& e : v.arr) {
-    if (e.type == Value::NUM) out.push_back(e.num);
-  }
-  return out;
-}
 
 std::string strOr(const char* s) { return s ? std::string(s) : std::string(); }
 
 ns::RoomState stateOf(const char* s) { return ns::room_state_of(strOr(s)); }
 
-Value seatValue(const ns::SeatDefaults& d) {
-  Value v = Value::Obj();
-  v.set("nameKey", Value::Str(d.nameKey));
-  v.set("nameArg", Value::Num(d.nameArg));
-  v.set("colorIndex", Value::Num(d.colorIndex));
-  v.set("carIndex", Value::Num(d.carIndex));
-  v.set("ready", Value::Bool(d.ready));
-  return v;
-}
 
 }  // namespace
 
 // ---- the chooser -------------------------------------------------------------
+
+const char* ttp_net_effect_ops_json(void) {
+  Value a = Value::Arr();
+  for (const char* op : NET_EFFECT_OPS) a.push(Value::Str(op));
+  ordered_stringify_into(a, g_bufOps);
+  return g_bufOps.c_str();
+}
 
 int ttp_net_configure(const char* chooserJson) {
   ttp::clear_error();
@@ -170,15 +160,6 @@ int ttp_net_configure(const char* chooserJson) {
 }
 
 // ---- the retained room snapshot ----------------------------------------------
-
-const char* ttp_net_roster_rows_json(const char* rosterJson, const char* inRaceJson) {
-  return put(g_bufRows, ns::roster_rows(json::parse_or(rosterJson, Value::Arr()),
-                                        json::parse_or(inRaceJson, Value::Arr())));
-}
-
-const char* ttp_net_lobby_snapshot_json(const char* inputJson) {
-  return put(g_bufSnapshot, ns::lobby_snapshot(json::parse_or(inputJson, Value::Obj()), g_chooser));
-}
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
@@ -218,13 +199,6 @@ const char* ttp_net_controller_url_template(const char* base) {
   return putStr(g_bufTemplate, std::move(out));
 }
 
-const char* ttp_net_norm_index_json(const char* valueJson) {
-  Value storage;
-  const Value* v = parseOptional(valueJson, storage);
-  double n = 0;
-  return put(g_bufNorm, ns::norm_index(v, &n) ? Value::Num(n) : Value::Null());
-}
-
 // ---- seats --------------------------------------------------------------------
 
 const char* ttp_net_clean_name(const char* valueJson) {
@@ -233,40 +207,11 @@ const char* ttp_net_clean_name(const char* valueJson) {
   return out.c_str();
 }
 
-const char* ttp_net_seat_defaults_json(double colorIndex) {
-  return put(g_bufSeat, seatValue(ns::seat_defaults(colorIndex)));
-}
-
-const char* ttp_net_add_peer_plan_json(int has, double size, double maxPlayers,
-                                       double colorIndex) {
-  const ns::AddPeerPlan plan = ns::add_peer_plan(has != 0, size, maxPlayers, colorIndex);
-  Value out = Value::Obj();
-  out.set("seat", plan.hasSeat ? seatValue(plan.seat) : Value::Null());
-  out.set("stamp", Value::Bool(plan.stamp));
-  return put(g_bufAddPeer, out);
-}
-
-const char* ttp_net_presence_action(const char* roomState) {
-  return ns::key(ns::presence_action(stateOf(roomState)));
-}
-
-const char* ttp_net_leave_action(const char* roomState) {
-  return ns::key(ns::leave_action(stateOf(roomState)));
-}
-
 const char* ttp_net_reconnect_card_json(const char* seatJson, const char* url) {
   return put(g_bufCard, ns::reconnect_card(json::parse_or(seatJson, Value::Obj()), strOr(url)));
 }
 
 // ---- controller messages ------------------------------------------------------
-
-const char* ttp_net_inbound_route(double from, const char* type) {
-  return ns::key(ns::inbound_route(from, strOr(type)));
-}
-
-const char* ttp_net_message_action(const char* type) {
-  return ns::key(ns::message_action(strOr(type)));
-}
 
 // protocol.h's MSG table, by NAME — the wire spellings live there alone.
 static const std::string& msgType(const char* name) {
@@ -299,89 +244,23 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
       if (t == msgType("SERIES_NEXT")) {
         verdict = "series-next";
       } else {
-        const std::string roster(ttp_room_list_json(roomHandle));
-        const std::string host = canonical_stringify(ttp_room_host_value(roomHandle));
-        if (ttp_ui_all_racers_ready(roster.c_str(), host.c_str())) verdict = "start-race";
+        // The same readiness rule the lobby's Start button shows, asked of the
+        // ui model directly over the live roster (ttp_live.h).
+        const Value hostV = ttp_room_host_value(roomHandle);
+        if (ttp::rt::ui::allRacersReady(ttp_live_roster_players(roomHandle, false),
+                                        json::id_of<ttp::rt::ui::Id>(&hostV)))
+          verdict = "start-race";
       }
     }
   }
   return verdict;
 }
 
-int ttp_net_set_car(int ready, const char* roomState, int inRace,
-                    const char* carIndexJson, double carCount) {
-  Value storage;
-  const Value* idx = parseOptional(carIndexJson, storage);
-  return ns::set_car_decision(ready != 0, stateOf(roomState), inRace != 0, idx, carCount) ? 1 : 0;
-}
-
-int ttp_net_set_ready(int isHost, const char* roomState, int ready, int current) {
-  return ns::set_ready_decision(isHost != 0, stateOf(roomState), ready != 0, current != 0) ? 1 : 0;
-}
-
 // ---- room-state transitions ----------------------------------------------------
-
-const char* ttp_net_state_change_json(const char* to) {
-  const ns::StateChangePlan plan = ns::state_change_plan(stateOf(to));
-  Value out = Value::Obj();
-  out.set("restampConnected", Value::Bool(plan.restampConnected));
-  out.set("freeDisconnected", Value::Bool(plan.freeDisconnected));
-  out.set("clearStandings", Value::Bool(plan.clearStandings));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufState, out);
-}
-
-const char* ttp_net_host_change_json(void) {
-  const ns::HostChangePlan plan = ns::host_change_plan();
-  Value out = Value::Obj();
-  out.set("clearReady", Value::Bool(plan.clearReady));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufHost, out);
-}
 
 // ---- liveness -------------------------------------------------------------------
 
-const char* ttp_net_heartbeat_tick_json(int inRoom, int hbPending, double hbSentAt, double now) {
-  const ns::HeartbeatTick t = ns::heartbeat_tick(inRoom != 0, hbPending != 0, hbSentAt, now);
-  Value out = Value::Obj();
-  out.set("act", Value::Str(ns::key(t.act)));
-  out.set("hbPending", Value::Bool(t.hbPending));
-  out.set("hbSentAt", Value::Num(t.hbSentAt));
-  out.set("sweep", Value::Bool(t.sweep));
-  return put(g_bufTick, out);
-}
-
 // ---- claims + reconciliation ------------------------------------------------------
-
-const char* ttp_net_claim_plan_json(const char* helloJson, double fromId, int hasOld,
-                                    int oldDisconnected) {
-  Value hello = json::parse_or(helloJson, Value::Obj());
-  // An ABSENT rejoinToken is JS undefined and an explicit null is not; find()
-  // answers nullptr for both absent and undefined, which is exactly the
-  // distinction claim_plan turns on.
-  const Value* token = hello.type == Value::OBJ ? hello.find("rejoinToken") : nullptr;
-  const ns::ClaimPlan plan = ns::claim_plan(fromId, token, hasOld != 0, oldDisconnected != 0);
-  Value out = Value::Obj();
-  out.set("claim", Value::Bool(plan.claim));
-  if (plan.claim) {
-    out.set("oldId", Value::Num(plan.oldId));
-    out.set("restamp", Value::Bool(plan.restamp));
-  }
-  return put(g_bufClaim, out);
-}
-
-const char* ttp_net_resync_plan_json(const char* rosterIdsJson, const char* relayPeersJson) {
-  const ns::ResyncPlan plan = ns::resync_plan(numbersOf(rosterIdsJson), numbersOf(relayPeersJson));
-  Value expire = Value::Arr();
-  for (double id : plan.expire) expire.push(Value::Num(id));
-  Value add = Value::Arr();
-  for (double id : plan.add) add.push(Value::Num(id));
-  Value out = Value::Obj();
-  out.set("expire", std::move(expire));
-  out.set("add", std::move(add));
-  out.set("publish", Value::Bool(plan.publish));
-  return put(g_bufResync, out);
-}
 
 // ===========================================================================
 // THE CHOREOGRAPHY WALKS (ttp_net.h's second section).
@@ -473,10 +352,9 @@ void pushPeerOp(Value& effects, const char* op, const PeerId& id) {
   effects.push(std::move(e));
 }
 
-const char* answer(std::string& buf, Value effects, bool needDraw = false) {
+const char* answer(std::string& buf, Value effects) {
   Value out = Value::Obj();
   out.set("effects", std::move(effects));
-  if (needDraw) out.set("needDraw", Value::Bool(true));
   ordered_stringify_into(out, buf);
   return buf.c_str();
 }
@@ -606,6 +484,57 @@ bool catalogueHasTrack(const Value* wanted) {
   for (const Value& t : tracks->arr)
     if (t.type == Value::OBJ && strictEquals(orUndef(t.find("id")), *wanted)) return true;
   return false;
+}
+
+// ---- the shuffle bag ---------------------------------------------------------
+// {seed, deck:[ids], cursor} behind the room handle. xorshift64* over the
+// chooser's track ids, re-shuffled when the deck empties — the JS bag's rule
+// ("random walks the whole catalogue before any repeat"), owned here so no
+// shell carries a draw protocol. The seed is the shell's page entropy, handed
+// over once at ttp_net_init_pick; an unseeded bag draws nothing, which is the
+// bagless test surface's refusal.
+uint64_t bagNext(uint64_t x) {
+  if (!x) x = 0x9E3779B97F4A7C15ull;
+  x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+  return x;
+}
+
+std::string bagDraw(int roomHandle) {
+  Value bag = ttp_room_bag_value(roomHandle);
+  const Value* seedV = bag.find("seed");
+  if (!seedV || seedV->type != Value::NUM) return "";
+  uint64_t rng = (uint64_t)seedV->num;
+  std::vector<std::string> deck;
+  if (const Value* d = bag.find("deck"))
+    if (d->type == Value::ARR)
+      for (const Value& e : d->arr) if (e.type == Value::STR) deck.push_back(e.str);
+  const Value* curV = bag.find("cursor");
+  size_t cursor = (curV && curV->type == Value::NUM && curV->num >= 0) ? (size_t)curV->num : 0;
+  if (cursor >= deck.size()) {
+    deck.clear();
+    if (const Value* tracks = g_chooser.find("tracks"))
+      if (tracks->type == Value::ARR)
+        for (const Value& t : tracks->arr)
+          if (t.type == Value::OBJ)
+            if (const Value* id = t.find("id"))
+              if (id->type == Value::STR) deck.push_back(id->str);
+    for (size_t i = deck.size(); i > 1; --i) {
+      rng = bagNext(rng);
+      std::swap(deck[i - 1], deck[rng % i]);
+    }
+    cursor = 0;
+  }
+  if (deck.empty()) return "";
+  const std::string out = deck[cursor++];
+  Value nb = Value::Obj();
+  // The advanced rng becomes the next seed; 32 bits keeps the double exact.
+  nb.set("seed", Value::Num((double)(bagNext(rng) & 0xFFFFFFFFull)));
+  Value dv = Value::Arr();
+  for (const std::string& s : deck) dv.push(Value::Str(s));
+  nb.set("deck", std::move(dv));
+  nb.set("cursor", Value::Num((double)cursor));
+  ttp_room_store_bag(roomHandle, std::move(nb));
+  return out;
 }
 
 // The catalogue is in CUPS order, so a cup's first entry is its race 1.
@@ -905,6 +834,17 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
             seated && !(cur && cur->type == Value::STR && cur->str == name);
         flow->setField(from, "name", Value::Str(name));
         if (renamed) {
+          // A race freezes field-row copies of the name at launch; repair the
+          // room-retained field here so every later standings board tells the
+          // new name without a shell curating rows.
+          Value f = ttp_room_field_value(roomHandle);
+          if (f.type == Value::ARR) {
+            for (Value& row : f.arr) {
+              const Value* pid = row.find("peerIndex");
+              if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
+            }
+            ttp_room_store_field(roomHandle, std::move(f));
+          }
           Value e = effectOp("player-renamed");
           e.set("peerIndex", from.toValue());
           e.set("name", Value::Str(name));
@@ -966,8 +906,17 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       break;
     }
     case ns::MessageAction::SELECT_MODE: {
-      const bool needDraw = selectModeWalk(roomHandle, from, msg, nullptr, effects);
-      return answer(g_bufPeerMsg, std::move(effects), needDraw);
+      // A random pick that needs a draw takes it from the room's own bag and
+      // completes in the same walk — the needDraw round trip died with the
+      // shell-side bag.
+      if (selectModeWalk(roomHandle, from, msg, nullptr, effects)) {
+        const std::string drawn = bagDraw(roomHandle);
+        if (!drawn.empty()) {
+          const Value d = Value::Str(drawn);
+          selectModeWalk(roomHandle, from, msg, &d, effects);
+        }
+      }
+      return answer(g_bufPeerMsg, std::move(effects));
     }
     case ns::MessageAction::PING: {
       // The PONG is COMPOSED here — type off the manifest, `t` echoed verbatim
@@ -990,18 +939,6 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
   return answer(g_bufPeerMsg, std::move(effects));
 }
 
-const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
-                                          const char* msgJson,
-                                          const char* drawnTrackId) {
-  RoomFlow* flow = ttp_room_flow(roomHandle);
-  Value effects = Value::Arr();
-  if (!flow) return answer(g_bufSelectDraw, std::move(effects));
-  const Value fromV = json::parse_or(fromJson, Value::Null());
-  const Value msg = json::parse_or(msgJson, Value::Obj());
-  const Value drawn = Value::Str(strOr(drawnTrackId));
-  selectModeWalk(roomHandle, peerIdOf(&fromV), msg, &drawn, effects);
-  return answer(g_bufSelectDraw, std::move(effects));
-}
 
 const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
@@ -1026,13 +963,21 @@ const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
   return answer(g_bufSetTrack, std::move(effects));
 }
 
-void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag) {
+void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag,
+                       double bagSeed) {
   // DisplayNet's constructor rule: a default track preselects mode "track".
   const bool hasDefault = defaultTrackIdOrNull && *defaultTrackIdOrNull;
   ttp_room_store_pick(roomHandle,
       makePick(hasDefault ? Value::Str("track") : Value::Null(), Value::Null(), 0,
                hasDefault ? Value::Str(defaultTrackIdOrNull) : Value::Null(),
                Value::Bool(hasBag != 0)));
+  // Seed the room's shuffle bag with the shell's page entropy. hasBag 0 leaves
+  // it unseeded — the bagless test surface's refusal, same gate as ever.
+  if (hasBag) {
+    Value bag = Value::Obj();
+    bag.set("seed", Value::Num(bagSeed));
+    ttp_room_store_bag(roomHandle, std::move(bag));
+  }
 }
 
 void ttp_net_clear_pick(int roomHandle) {
@@ -1146,3 +1091,6 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
   if (plan.publish) pushOp(effects, "publish");
   return answer(g_bufStateApply, std::move(effects));
 }
+
+// The race walks' draws come from the same room-owned bag (ttp_live.h).
+extern "C++" std::string ttp_live_bag_draw(int roomHandle) { return bagDraw(roomHandle); }

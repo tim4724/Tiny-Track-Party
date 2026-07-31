@@ -1,18 +1,24 @@
 'use strict';
-// Party C ABI conformance gate. Loads the browser wasm module
-// (public/display/engine/native/ttp_runtime.mjs, built by native/scripts/
-// build-runtime-web.sh) in Node and replays the FULL RoomFlow behavioural corpus
-// THROUGH THE ABI — the same oracle native/partytest/roomflow_check.cc replays
-// against the C++ objects directly, but crossing the extern "C" boundary the
-// browser adapter actually uses.
+// Party C ABI conformance gate against the SHIPPED wasm. Loads the browser
+// module (public/display/engine/native/ttp_runtime.mjs, built by
+// native/scripts/build-runtime-web.sh) in Node and drives the party surface the
+// display actually calls, crossing the extern "C" boundary the browser adapter
+// uses. This is the only place that artifact is exercised.
 //
-// This is the layer the corpus check cannot reach: JSON-scalar peer identity
-// (numeric 3 vs "3"), the event QUEUE standing in for RoomFlow's emit callback
-// (exact intra-op order preserved across the boundary), scratch-buffer lifetime,
-// and config marshalling. If the ABI mangles any of it, a step diverges here even
-// though roomflow_check is green.
+// WHAT IS HERE AND WHAT IS IN ctest. The behavioural corpora are replayed
+// against the C++ objects on every ctest leg (partytest/roomflow_check.cc,
+// session_check.cc, framing_check.cc, fastlane_check.cc) and the walks are held
+// to the same rules over the same live state by runtimetest/abi_check.cc. What
+// crossing the boundary HERE adds is the artifact: exports that survived the
+// linker, cwrap signatures, scratch-buffer lifetime, JSON-scalar peer identity
+// (numeric 3 vs "3"), and the event QUEUE standing in for RoomFlow's emit
+// callback with its intra-op order intact.
 //
-// Also covers ttp_room_lowest_free_slot (the display's colour-slot allocator).
+// The room MACHINE is no longer reachable one mutator at a time — the
+// fine-grained ttp_room_* spellings the corpus replay rode are gone from the
+// ABI, and a room is driven through ttp_net.h's choreography walks. So the
+// corpus replay left with them (roomflow_check.cc owns that ground); the
+// sections below drive the walks instead, which is what a shell does.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,7 +28,6 @@ const { pathToFileURL } = require('node:url');
 const ROOT = path.join(__dirname, '..');
 const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
 const WASM = path.join(ROOT, 'public/display/engine/native/ttp_runtime.wasm');
-const CORPUS = path.join(ROOT, 'tests/fixtures/roomflow-corpus.jsonl');
 
 // The artifacts are CHECKED IN and the game is native-only, so a missing module
 // is a broken checkout, not an unbuilt optional extra. This used to skip; skipping
@@ -32,9 +37,6 @@ for (const f of [MJS, WASM]) {
     throw new Error(`${path.relative(ROOT, f)} missing — run native/scripts/build-runtime-web.sh`);
   }
 }
-
-// A peer id crosses the ABI as a JSON scalar ("3" numeric, "\"a\"" string).
-const idJson = (v) => JSON.stringify(v === undefined ? null : v);
 
 // Recursive key sort, so ABI JSON and recorded JSON compare structurally
 // regardless of key order (the ABI already emits canonical, but the recorded
@@ -49,146 +51,6 @@ function sortKeys(v) {
   return v;
 }
 const same = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-
-test('party ABI replays the RoomFlow corpus through the C boundary', async () => {
-  const factory = (await import(pathToFileURL(MJS).href)).default;
-  const M = await factory();
-  const cw = (n, ret, args) => M.cwrap(n, ret, args);
-  const abi = {
-    create: cw('ttp_room_create', 'number', ['string']),
-    dispose: cw('ttp_room_dispose', null, ['number']),
-    reset: cw('ttp_room_reset', null, ['number']),
-    addPlayer: cw('ttp_room_add_player', 'string', ['number', 'string', 'string']),
-    removePlayer: cw('ttp_room_remove_player', null, ['number', 'string']),
-    rekey: cw('ttp_room_rekey', 'number', ['number', 'string', 'string']),
-    setField: cw('ttp_room_set_field', 'number', ['number', 'string', 'string', 'string']),
-    markDisc: cw('ttp_room_mark_disconnected', null, ['number', 'string']),
-    markReconn: cw('ttp_room_mark_reconnected', null, ['number', 'string']),
-    clearDisc: cw('ttp_room_clear_disconnected', null, ['number', 'number', 'number']),
-    transitionTo: cw('ttp_room_transition_to', 'number', ['number', 'string']),
-    state: cw('ttp_room_state', 'string', ['number']),
-    setActiveOrder: cw('ttp_room_set_active_order', null, ['number', 'string']),
-    onSeen: cw('ttp_room_on_seen', null, ['number', 'string', 'number']),
-    isExpired: cw('ttp_room_is_expired', 'number', ['number', 'string', 'number']),
-    expiredPeers: cw('ttp_room_expired_peers_json', 'string', ['number', 'number']),
-    allDisconnected: cw('ttp_room_all_participants_disconnected', 'number', ['number']),
-    hasLateJoiners: cw('ttp_room_has_late_joiners', 'number', ['number']),
-    graceTick: cw('ttp_room_grace_tick', 'number', ['number', 'number']),
-    setMaster: cw('ttp_room_set_master', null, ['number', 'string']),
-    setLivenessEnabled: cw('ttp_room_set_liveness_enabled', null, ['number', 'number']),
-    host: cw('ttp_room_host_json', 'string', ['number']),
-    isHost: cw('ttp_room_is_host', 'number', ['number', 'string']),
-    size: cw('ttp_room_size', 'number', ['number']),
-    connectedCount: cw('ttp_room_connected_count', 'number', ['number']),
-    list: cw('ttp_room_list_json', 'string', ['number']),
-    has: cw('ttp_room_has', 'number', ['number', 'string']),
-    isDisconnected: cw('ttp_room_is_disconnected', 'number', ['number', 'string']),
-    get: cw('ttp_room_get_json', 'string', ['number', 'string']),
-    events: cw('ttp_room_events_json', 'string', ['number']),
-    lowestFreeSlot: cw('ttp_room_lowest_free_slot', 'number', ['string', 'number']),
-    version: cw('ttp_party_version', 'string', [])
-  };
-
-  assert.deepEqual(JSON.parse(abi.version()), { contractVersion: 2, layer: 'party' });
-
-  const lines = fs.readFileSync(CORPUS, 'utf8').trim().split('\n');
-  const header = JSON.parse(lines[0]);
-  let scripts = 0, steps = 0, slotCases = 0;
-
-  for (const line of lines.slice(1)) {
-    const rec = JSON.parse(line);
-
-    // lowestFreeSlot lines (static helper, no handle)
-    if (rec.slotCase) {
-      const { used, max, expect } = rec.slotCase;
-      assert.equal(abi.lowestFreeSlot(JSON.stringify(used), max), expect,
-        `lowestFreeSlot(${JSON.stringify(used)}, ${max})`);
-      slotCases++;
-      continue;
-    }
-
-    // ---- build the room from the recorded config ----
-    const cfg = {};
-    if (rec.config.useMasterProvider) cfg.master = rec.config.master ?? null;
-    if (rec.config.liveness) cfg.liveness = rec.config.liveness;
-    const h = abi.create(JSON.stringify(cfg));
-    assert.ok(h > 0, 'ttp_room_create returned a handle');
-    scripts++;
-
-    for (const [si, step] of rec.steps.entries()) {
-      const op = step.op;
-      let ret = null;
-
-      switch (op.op) {
-        case 'add':
-          ret = JSON.parse(abi.addPlayer(h, idJson(op.p), JSON.stringify(op.fields ?? {})));
-          break;
-        case 'remove': abi.removePlayer(h, idJson(op.p)); break;
-        case 'rekey': ret = abi.rekey(h, idJson(op.oldId), idJson(op.newId)) === 1; break;
-        case 'markDisc': abi.markDisc(h, idJson(op.p)); break;
-        case 'markReconn': abi.markReconn(h, idJson(op.p)); break;
-        case 'clearDisc':
-          abi.clearDisc(h, op.t === undefined ? 0 : 1, op.t ?? 0);
-          break;
-        case 'transition': ret = abi.transitionTo(h, op.to) === 1; break;
-        case 'endGame': ret = abi.transitionTo(h, 'results') === 1; break;
-        case 'returnToLobby': ret = abi.transitionTo(h, 'lobby') === 1; break;
-        case 'setOrder': abi.setActiveOrder(h, JSON.stringify(op.order ?? [])); break;
-        case 'seen': abi.onSeen(h, idJson(op.p), op.t); break;
-        case 'isExpired': ret = abi.isExpired(h, idJson(op.p), op.t) === 1; break;
-        case 'expiredPeers': ret = JSON.parse(abi.expiredPeers(h, op.t)); break;
-        case 'graceTick': ret = abi.graceTick(h, op.t) === 1; break;
-        case 'setMaster': abi.setMaster(h, idJson(op.v)); break;
-        case 'setLivenessEnabled': abi.setLivenessEnabled(h, op.v ? 1 : 0); break;
-        case 'reset': abi.reset(h); break;
-        case 'setField': {
-          // The display's direct live-record write, as an ABI call.
-          const applied = abi.setField(h, idJson(op.p), op.key, JSON.stringify(op.value ?? null)) === 1;
-          const rec = applied ? JSON.parse(abi.get(h, idJson(op.p))) : null;
-          ret = rec ? (rec[op.key] ?? null) : null;
-          break;
-        }
-        default: throw new Error(`unknown op ${op.op}`);
-      }
-
-      // Events emitted during THIS op, in order (the queue drains per op, so
-      // ordering across the boundary is asserted, not just membership).
-      const events = JSON.parse(abi.events(h));
-      if (step.events !== undefined) {
-        assert.ok(same(events, step.events),
-          `${rec.name} step ${si} (${op.op}) events\n  want ${JSON.stringify(step.events)}\n  got  ${JSON.stringify(events)}`);
-      }
-      if (step.ret !== undefined && step.ret !== null) {
-        assert.ok(same(ret, step.ret),
-          `${rec.name} step ${si} (${op.op}) ret\n  want ${JSON.stringify(step.ret)}\n  got  ${JSON.stringify(ret)}`);
-      }
-
-      // Public-surface digest, exactly as the corpus records it.
-      if (step.digest !== undefined) {
-        const d = step.digest;
-        assert.equal(abi.state(h), d.state, `${rec.name} step ${si} state`);
-        assert.ok(same(JSON.parse(abi.host(h)), d.host), `${rec.name} step ${si} host`);
-        assert.equal(abi.size(h), d.size, `${rec.name} step ${si} size`);
-        assert.equal(abi.connectedCount(h), d.connectedCount, `${rec.name} step ${si} connectedCount`);
-        assert.ok(same(JSON.parse(abi.list(h)), d.list), `${rec.name} step ${si} list`);
-        assert.equal(abi.allDisconnected(h) === 1, d.allDisconnected, `${rec.name} step ${si} allDisconnected`);
-        assert.equal(abi.hasLateJoiners(h) === 1, d.hasLateJoiners, `${rec.name} step ${si} hasLateJoiners`);
-        for (const pp of d.perPeer) {
-          const pj = idJson(pp.p);
-          assert.equal(abi.has(h, pj) === 1, pp.has, `${rec.name} step ${si} has(${pj})`);
-          assert.equal(abi.isHost(h, pj) === 1, pp.isHost, `${rec.name} step ${si} isHost(${pj})`);
-          assert.equal(abi.isDisconnected(h, pj) === 1, pp.disc, `${rec.name} step ${si} disc(${pj})`);
-        }
-      }
-      steps++;
-    }
-    abi.dispose(h);
-  }
-
-  assert.equal(scripts, header.scripts, 'every corpus script replayed');
-  assert.equal(slotCases, header.slotCases, 'every lowestFreeSlot case replayed');
-  console.info(`[party-abi] ${scripts} scripts / ${steps} steps / ${slotCases} slot cases through the ABI`);
-});
 
 // ---------------------------------------------------------------------------
 // Relay framing through the ABI. Replays tests/fixtures/framing-corpus.jsonl —
@@ -322,84 +184,95 @@ test('party ABI reproduces the fastlane netcode corpus', async () => {
 // The abandoned-race policy, against the SHIPPED wasm. Two reasons this is not
 // just a copy of native/'s abi_check section:
 //
-//  - EXPORT LIST. ttp_room_late_joiners_json has to survive into the artifact the
+//  - EXPORT LIST. ttp_net_liveness_json has to survive into the artifact the
 //    browser loads. The exports come from TTP_ABI/EMSCRIPTEN_KEEPALIVE, so a
 //    missing one is a linker outcome ctest cannot see (it links a different
 //    target). cwrap does NOT throw on a missing name — it defers until the call
 //    — so absence surfaces here as the call failing, not the wrap. See
 //    tests/display-abi.test.js, which checks the export table directly.
-//  - The policy is now LOAD-BEARING in the display: DisplayNet polls graceTick on
-//    its liveness tick and returns to the lobby when it fires. The frozen corpus
-//    replayed above calls graceTick 146 times and gets `true` from none of them,
-//    so nothing else in this file exercises the path that actually runs.
-test('party ABI: the abandoned-race deadline and the late-joiner list', async () => {
+//  - The policy is LOAD-BEARING and nothing else in this file reaches it:
+//    DisplayNet performs `race-abandoned` by returning to the lobby, and the
+//    deadline is the ONLY way a party whose phones all walked away ever leaves a
+//    race. The frozen RoomFlow corpus calls graceTick 146 times and gets `true`
+//    from none of them.
+//
+// It is driven through the liveness WALK because that is now the only way in:
+// the expiry sweep, the active-order re-sync against the live race and the
+// deadline are one tick and one clock reading inside ttp_net_liveness_json, and
+// the room mutators that used to spell them by hand are gone from the ABI.
+test('party ABI: the liveness walk abandons a race nobody is left driving', async () => {
   const factory = (await import(pathToFileURL(MJS).href)).default;
   const M = await factory();
   const cw = (n, ret, args) => M.cwrap(n, ret, args);
-  const create = cw('ttp_room_create', 'number', ['string']);
-  const dispose = cw('ttp_room_dispose', null, ['number']);
-  const addPlayer = cw('ttp_room_add_player', 'string', ['number', 'string', 'string']);
-  const transitionTo = cw('ttp_room_transition_to', 'number', ['number', 'string']);
-  const markDisc = cw('ttp_room_mark_disconnected', null, ['number', 'string']);
-  const markReconn = cw('ttp_room_mark_reconnected', null, ['number', 'string']);
-  const setActiveOrder = cw('ttp_room_set_active_order', null, ['number', 'string']);
-  const hasLate = cw('ttp_room_has_late_joiners', 'number', ['number']);
-  const lateJoiners = cw('ttp_room_late_joiners_json', 'string', ['number']);
-  const graceTick = cw('ttp_room_grace_tick', 'number', ['number', 'number']);
-  const allDisc = cw('ttp_room_all_participants_disconnected', 'number', ['number']);
+  const net = {
+    onOpen: cw('ttp_net_on_open_json', 'string', ['number']),
+    onProtocol: cw('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
+    onSeen: cw('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
+    liveness: cw('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
+    stateChangeApply: cw('ttp_net_state_change_apply_json', 'string', ['number', 'string', 'number'])
+  };
+  const room = {
+    create: cw('ttp_room_create', 'number', ['string']),
+    dispose: cw('ttp_room_dispose', null, ['number']),
+    transitionTo: cw('ttp_room_transition_to', 'number', ['number', 'string']),
+    list: cw('ttp_room_list_json', 'string', ['number']),
+    events: cw('ttp_room_events_json', 'string', ['number'])
+  };
+  const sim = {
+    begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+    addHuman: cw('ttp_add_human', null, ['number', 'string', 'string']),
+    dispose: cw('ttp_dispose', null, ['number'])
+  };
 
-  assert.equal(lateJoiners(0), '[]', 'an invalid handle answers []');
+  assert.deepEqual(JSON.parse(cw('ttp_party_version', 'string', [])()),
+    { contractVersion: 2, layer: 'party' }, 'the party layer in the artifact is the one the adapter expects');
 
-  const h = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  const h = room.create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
   assert.ok(h > 0);
-  const ids = () => JSON.parse(lateJoiners(h)).map((p) => p.peerIndex);
+  const ops = (raw) => JSON.parse(raw).effects.map((e) => e.op);
+  const tick = (s, t) => ops(net.liveness(h, s, t)).filter((o) => o !== 'send-to');
+  const seat = (i) => JSON.parse(room.list(h)).find((p) => p.peerIndex === i);
 
-  addPlayer(h, '0', JSON.stringify({ name: 'Ada', colorIndex: 0 }));
-  addPlayer(h, '1', JSON.stringify({ name: 'Bo', colorIndex: 1 }));
-  transitionTo(h, 'countdown');   // snapshots the participant order
-  transitionTo(h, 'playing');
-  assert.deepEqual(ids(), [], 'the countdown snapshot leaves nobody waiting');
+  // A room the walks believe they are IN — the heartbeat's in-room latch is what
+  // lets a tick sweep at all, and it is set by the relay's `created`.
+  net.onOpen(h);
+  net.onProtocol(h, 'created', '{"room":"ABCD"}', 1000);
+  net.onProtocol(h, 'peer_joined', '{"index":1}', 1000);
+  net.onProtocol(h, 'peer_joined', '{"index":2}', 1000);
 
-  // Both racers drop; their seats (and cars) are held, so nobody is WAITING.
-  markDisc(h, '0'); markDisc(h, '1');
-  assert.equal(allDisc(h), 1);
-  assert.equal(graceTick(h, 1000), 0, 'no deadline with nobody waiting');
-  assert.equal(graceTick(h, 99999), 0, 'and none was armed to expire');
+  // Seat 1 races; seat 2 is seated but holds no car.
+  const s = sim.begin('tidepool', 42, 3, null);
+  sim.addHuman(s, '1', null);
+  room.transitionTo(h, 'countdown');
+  net.stateChangeApply(h, 'countdown', 2000);   // restamps every connected seat
+  room.transitionTo(h, 'playing');
+  net.stateChangeApply(h, 'playing', 2000);
+  // ...and a third phone scans in mid-race, car-less: the one WAITING.
+  net.onProtocol(h, 'peer_joined', '{"index":3}', 2000);
+  room.events(h);
 
-  // A phone scans in mid-race. Now the clock runs.
-  addPlayer(h, '2', JSON.stringify({ name: 'Cy', colorIndex: 2 }));
-  assert.equal(hasLate(h), 1);
-  assert.deepEqual(ids(), [2], 'the mid-race joiner is the one waiting');
-  const rec = JSON.parse(lateJoiners(h))[0];
-  assert.equal(rec.name, 'Cy', 'records carry the game fields, like list()');
-  assert.equal(rec.connected, true);
-  assert.equal(graceTick(h, 2000), 0, 'the first qualifying tick only arms');
-  assert.equal(graceTick(h, 3499), 0, 'holds until graceMs has elapsed');
-  assert.equal(graceTick(h, 3500), 1, 'fires at nowMs + graceMs');
-  assert.equal(graceTick(h, 3500), 0, 'fires exactly once');
+  assert.deepEqual(tick(s, 2100), [], 'a healthy race arms no deadline');
 
-  markReconn(h, '0');
-  assert.equal(graceTick(h, 50000), 0, 'a returning racer disarms it');
-  dispose(h);
+  // The racers go silent. Seat 3 keeps proving life, so it is still waiting when
+  // the sweep drops the other two.
+  net.onSeen(h, '3', 5100);
+  assert.deepEqual(tick(s, 5200), ['close-fastlane', 'show-reconnect', 'close-fastlane', 'show-reconnect'],
+    'the silent seats are dropped, cards up, before the deadline is consulted');
+  assert.equal(seat(1).connected, false);
+  assert.equal(seat(3).connected, true, 'the waiting phone is not swept with them');
+  // A DROPPED seat is still a participant — its car is held for the reconnect —
+  // so the deadline is armed by seat 3 waiting, not by the drops themselves.
+  assert.deepEqual(tick(s, 6699), [], 'the first qualifying tick only armed it');
+  assert.deepEqual(tick(s, 6700), ['race-abandoned'], 'it fires at the tick + graceMs');
+  assert.deepEqual(tick(s, 6800), [], 'and fires exactly once');
 
-  // The set display/Net.js feeds: cars + dropped seats, so the leftovers are the
-  // CONNECTED car-less seats. A dropped ghost must not abandon a blipped party's
-  // race, nor show up as a "joining" row.
-  const g = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
-  addPlayer(g, '0', JSON.stringify({ name: 'Ada' }));
-  transitionTo(g, 'countdown'); transitionTo(g, 'playing');
-  addPlayer(g, '2', JSON.stringify({ name: 'Cy' }));
-  markDisc(g, '0'); markDisc(g, '2');
-  setActiveOrder(g, '[0,2]');     // 0 holds a car; 2 is a dropped seat
-  assert.equal(hasLate(g), 0, 'a dropped ghost is absent, not waiting');
-  assert.equal(lateJoiners(g), '[]');
-  assert.equal(graceTick(g, 1000) + graceTick(g, 9999), 0, 'the blipped party keeps its race');
-  markReconn(g, '2');
-  setActiveOrder(g, '[0]');       // recomputed: the ghost is back and car-less
-  assert.deepEqual(JSON.parse(lateJoiners(g)).map((p) => p.peerIndex), [2]);
-  assert.equal(graceTick(g, 10000), 0);
-  assert.equal(graceTick(g, 11500), 1, 'and the deadline runs for them');
-  dispose(g);
+  // One racer scans back in: a fastlane packet is proof of life, and a live
+  // participant disarms the deadline.
+  assert.deepEqual(ops(net.onSeen(h, '1', 6900)), ['clear-reconnect']);
+  assert.deepEqual(tick(s, 8000), [], 'a returning racer disarms it');
+
+  sim.dispose(s);
+  room.dispose(h);
 });
 
 // The choreography walks (ttp_net_on_*), against the SHIPPED wasm — the entry
@@ -421,10 +294,8 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     onClose: cw('ttp_net_on_close_json', 'string', ['number', 'number']),
     onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
-    selectModeDraw: cw('ttp_net_select_mode_draw_json', 'string',
-      ['number', 'string', 'string', 'string']),
     setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
-    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number', 'number']),
     pickJson: cw('ttp_net_pick_json', 'string', ['number']),
     liveness: cw('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
     onSeen: cw('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
@@ -437,10 +308,13 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     state: cw('ttp_room_state', 'string', ['number']),
     transitionTo: cw('ttp_room_transition_to', 'number', ['number', 'string']),
     list: cw('ttp_room_list_json', 'string', ['number']),
-    size: cw('ttp_room_size', 'number', ['number']),
-    events: cw('ttp_room_events_json', 'string', ['number']),
-    isDisconnected: cw('ttp_room_is_disconnected', 'number', ['number', 'string'])
+    events: cw('ttp_room_events_json', 'string', ['number'])
   };
+  // Presence and seat count come off the roster the room publishes — the
+  // per-seat predicates are internal to the walks now, and the roster row is
+  // what a shell (and every phone) reads them from anyway.
+  const roster = () => JSON.parse(room.list(h));
+  const connected = (i) => roster().find((p) => p.peerIndex === i)?.connected;
   const sim = {
     begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
     addHuman: cw('ttp_add_human', null, ['number', 'string', 'string']),
@@ -476,8 +350,10 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   net.onProtocol(h, 'peer_joined', '{"index":1}', 2000);
   assert.equal(drain().some((e) => e.type === 'rosterchange'), true, 'the seat landed');
   // The pick is stored behind the handle now — seeded once, exactly as
-  // DisplayNet's constructor does (no default track, a bag wired).
-  net.initPick(h, null, 1);
+  // DisplayNet's constructor does (no default track, a bag wired, one page
+  // entropy seed). The bag itself lives behind the room; the seed is the only
+  // random thing this shell still supplies.
+  net.initPick(h, null, 1, 20260731);
   const storedPick = () => JSON.parse(net.pickJson(h));
   const hello = walk(net.onPeerMessage(h, 0, '1',
     JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: null }), 0, 2100));
@@ -500,19 +376,26 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   walk(net.onPeerMessage(h, 0, '1',
     '{"type":"select_mode","mode":"cup","cupId":"beach"}', 0, 2600));
   assert.equal(storedPick().trackId, 'tidepool');
-  // Random is the two-step draw:
+  // Random completes in ONE walk: the shuffle bag is the room's, so the draw
+  // happens inside and the pick lands with the same publish/track-change tail
+  // as the other two modes. There is no draws protocol for a shell to hold.
   const rnd = walk(net.onPeerMessage(h, 0, '1',
     '{"type":"select_mode","mode":"random","randomRaces":4}', 0, 2700));
-  assert.equal(rnd.needDraw, true);
-  assert.deepEqual(rnd.effects, []);
-  walk(net.selectModeDraw(h, '1',
-    '{"type":"select_mode","mode":"random","randomRaces":4}', 'lagoon'));
-  assert.equal(storedPick().trackId, 'lagoon');
-  // ...and the game-layer swap shares the tail and keeps mode/length:
-  const swapped = walk(net.setTrack(h, 'tidepool'));
+  assert.deepEqual(ops(JSON.stringify(rnd)), ['publish', 'track-change']);
+  assert.equal(rnd.needDraw, undefined, 'the two-step draw protocol is gone');
+  // WHICH track the bag drew is the bag's business (seeded above); that it drew
+  // from the configured catalogue is the contract.
+  assert.ok(['tidepool', 'lagoon'].includes(storedPick().trackId),
+    `the bag drew outside the catalogue: ${storedPick().trackId}`);
+  assert.equal(rnd.effects.at(-1).trackId, storedPick().trackId,
+    'the track-change effect names the track the walk stored');
+  // ...and the game-layer swap shares the tail and keeps mode/length. Aim it at
+  // the track the bag did NOT draw: a same-pick swap is a deliberate no-op.
+  const other = storedPick().trackId === 'tidepool' ? 'lagoon' : 'tidepool';
+  const swapped = walk(net.setTrack(h, other));
   assert.deepEqual(ops(JSON.stringify(swapped)), ['publish', 'track-change']);
   assert.deepEqual(storedPick(),
-    { mode: 'random', cupId: null, randomRaces: 4, trackId: 'tidepool' });
+    { mode: 'random', cupId: null, randomRaces: 4, trackId: other });
   drain();
 
   // Into the race; the statechange walk restamps so lobby silence isn't charged.
@@ -533,13 +416,13 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   assert.deepEqual(ops(JSON.stringify(expiry)).filter((o) => o !== 'send-to'),
     ['close-fastlane', 'show-reconnect'], 'seat 2 (silent since the 3000 restamp) expired; seat 1 did not');
   assert.deepEqual(expiry.effects.find((e) => e.op === 'show-reconnect').seat.peerIndex, 2);
-  assert.equal(room.isDisconnected(h, '2'), 1);
+  assert.equal(connected(2), false);
   drain();
 
   // A fastlane packet is proof of life: the single writer lifts the drop.
   const lifted = walk(net.onSeen(h, '2', 6600));
   assert.deepEqual(lifted.effects, [{ op: 'clear-reconnect', peerIndex: 2 }]);
-  assert.equal(room.isDisconnected(h, '2'), 0);
+  assert.equal(connected(2), true);
   drain();
 
   // The cross-device claim: drop seat 1, then a fresh connection carries its
@@ -567,83 +450,18 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   assert.equal(closedOps.at(-1), 'connect-fresh');
   assert.ok(closedOps.indexOf('close-fastlane') < closedOps.indexOf('connect-fresh'),
     'seats are expired BEFORE the fresh dial');
-  assert.equal(room.size(h), 0, 'no seat haunts the fresh lobby');
+  assert.equal(roster().length, 0, 'no seat haunts the fresh lobby');
 
   sim.dispose(s);
   room.dispose(h);
   net.configure('');
 });
 
-// ttp_room_sync_active_order — the participant set, against the SHIPPED wasm.
-//
-// It is the one party export that reaches ACROSS the two halves of the runtime:
-// it reads the live Game behind a session handle through ttp_session.h, so a
-// build that links the party ABI without the sim half (or drops the export)
-// fails here and nowhere else. display/Net.js calls nothing else to decide who
-// this race is for — the whole definition lives behind this call, which is what
-// keeps a tvOS/Android shell from restating it.
-test('party ABI: the participant set comes from the live race', async () => {
-  const factory = (await import(pathToFileURL(MJS).href)).default;
-  const M = await factory();
-  const cw = (n, ret, args) => M.cwrap(n, ret, args);
-  const create = cw('ttp_room_create', 'number', ['string']);
-  const dispose = cw('ttp_room_dispose', null, ['number']);
-  const addPlayer = cw('ttp_room_add_player', 'string', ['number', 'string', 'string']);
-  const removePlayer = cw('ttp_room_remove_player', null, ['number', 'string']);
-  const transitionTo = cw('ttp_room_transition_to', 'number', ['number', 'string']);
-  const markDisc = cw('ttp_room_mark_disconnected', null, ['number', 'string']);
-  const markReconn = cw('ttp_room_mark_reconnected', null, ['number', 'string']);
-  const syncActiveOrder = cw('ttp_room_sync_active_order', null, ['number', 'number']);
-  const lateJoiners = cw('ttp_room_late_joiners_json', 'string', ['number']);
-  const allDisc = cw('ttp_room_all_participants_disconnected', 'number', ['number']);
-  // The sim half, for the session the room is synced against.
-  const begin = cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']);
-  const addHuman = cw('ttp_add_human', null, ['number', 'string', 'string']);
-  const addBot = cw('ttp_add_bot', null, ['number', 'string', 'number', 'number', 'number', 'string']);
-  const start = cw('ttp_session_start', null, ['number', 'number']);
-  const removeCar = cw('ttp_force_remove_car', 'number', ['number', 'string']);
-  const disposeSession = cw('ttp_dispose', null, ['number']);
-
-  // Ada (seat 0) races; Bo (seat 1) is a CPU-driven id that is nobody's seat.
-  const s = begin('tidepool', 42, 3, null);
-  assert.ok(s > 0);
-  addHuman(s, '0', null);
-  addBot(s, '"ai-1"', 1, 0, 7, null);
-  start(s, 3);
-
-  const h = create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
-  const waiting = () => JSON.parse(lateJoiners(h)).map((p) => p.peerIndex);
-  addPlayer(h, '0', JSON.stringify({ name: 'Ada' }));
-  transitionTo(h, 'countdown');
-  transitionTo(h, 'playing');
-  addPlayer(h, '2', JSON.stringify({ name: 'Cy' }));   // scans in mid-race, car-less
-
-  syncActiveOrder(h, s);
-  assert.deepEqual(waiting(), [2], 'the car-less seat is the only one waiting');
-  assert.equal(allDisc(h), 0, 'the car-holder is here');
-
-  // Both phones drop. The held seat is still a participant; so is the ghost.
-  markDisc(h, '0'); markDisc(h, '2');
-  syncActiveOrder(h, s);
-  assert.deepEqual(waiting(), [], 'a dropped ghost is absent, not waiting');
-  assert.equal(allDisc(h), 1, 'every participant is gone — and no bot is one');
-
-  // The cars come from the SIM, not from presence: take Ada's car away with both
-  // seats connected and she becomes a late joiner like Cy.
-  markReconn(h, '0'); markReconn(h, '2');
-  syncActiveOrder(h, s);
-  assert.deepEqual(waiting(), [2]);
-  assert.equal(removeCar(s, '0'), 1);
-  syncActiveOrder(h, s);
-  assert.deepEqual(waiting(), [0, 2], 'a seat whose car is gone waits like any other');
-
-  // No session at all (the lobby, or a shell between races): no cars, and here no
-  // dropped seats either, so the order empties.
-  removePlayer(h, '2');
-  syncActiveOrder(h, 0);
-  assert.deepEqual(waiting(), [0]);
-  assert.equal(allDisc(h), 0, 'an empty order is not "everyone gone"');
-
-  disposeSession(s);
-  dispose(h);
-});
+// The participant set — who this race is FOR — left with ttp_room_sync_active_order,
+// which is an internal seam (native/runtime/ttp_room.h) rather than an export now:
+// it is folded into the reads that need it so no caller can ask off a stale set.
+// Its ground is covered twice over. runtimetest/abi_check.cc holds the seam to the
+// sync-then-read sequence the shell used to spell, and the liveness walk above is
+// the artifact proof that the party ABI still reaches ACROSS the two halves of the
+// runtime — the deadline it fires is armed by "a seat with no car in the live
+// Game", which is that definition and nothing else.

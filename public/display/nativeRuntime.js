@@ -2,7 +2,7 @@
 // (engine/native/ttp_runtime.mjs: the sim ABI ttp_runtime.h + the party ABI
 // ttp_party.h in a single module).
 //
-// Every adapter (NativeRaceSession, NativeCupSeries, NativeRoomFlow,
+// Every adapter (NativeRaceSession, NativeRoomFlow,
 // NativePartyConnection, NativePartyFastlane) goes through here, so the display
 // instantiates ONE module — one wasm heap, one copy of double-conversion — rather
 // than one per layer. main.js awaits this at boot and a failure is FATAL: the

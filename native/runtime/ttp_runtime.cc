@@ -358,6 +358,22 @@ Value ttp_session_results_rows(int h) {
   return rows && rows->type == Value::ARR ? *rows : Value::Arr();
 }
 
+Value ttp_session_item_cars(int h) {
+  // The three fields the ITEM-push rule reads, straight off the live cars —
+  // never a snapshot. An empty slot is JSON null, as the JS cars spelled it.
+  Value a = Value::Arr();
+  if (Game* g = ttp_session_engine(h)) {
+    for (const auto& c : g->cars()) {
+      Value o = Value::Obj();
+      o.set("id", c->id.toValue());
+      o.set("item", c->item.empty() ? Value::Null() : Value::Str(c->item));
+      o.set("finished", Value::Bool(c->finished));
+      a.push(std::move(o));
+    }
+  }
+  return a;
+}
+
 // ===========================================================================
 // Audio decisions (ttp_audio.h).
 //
@@ -999,6 +1015,18 @@ const char* ttp_results_json(int h) {
   return rs->scratch.c_str();
 }
 
+// A C++ seam defined inside the extern "C" block (it needs the registry
+// statics above): the linkage is stated explicitly, as its declaration in
+// ttp_session.h carries.
+extern "C++" Value ttp_session_drain_events(int h) {
+  Value arr = Value::Arr();
+  RuntimeSession* rs = get(h);
+  if (!rs) return arr;
+  for (auto& e : rs->outQueue) arr.push(std::move(e));
+  rs->outQueue.clear();
+  return arr;
+}
+
 const char* ttp_events_json(int h) {
   RuntimeSession* rs = get(h);
   if (!rs) return EMPTY_ARR;
@@ -1006,10 +1034,7 @@ const char* ttp_events_json(int h) {
   // beats, pickups, laps, finishes) — skip the build/stringify/JS-string
   // round trip for the common case. The shell short-circuits on "[]" too.
   if (rs->outQueue.empty()) return EMPTY_ARR;
-  Value arr = Value::Arr();
-  for (auto& e : rs->outQueue) arr.push(std::move(e));
-  rs->outQueue.clear();
-  canonical_stringify_into(arr, rs->scratch);
+  canonical_stringify_into(ttp_session_drain_events(h), rs->scratch);
   return rs->scratch.c_str();
 }
 
@@ -1209,43 +1234,12 @@ int ttp_gp_create(const char* cupJson, int endless) {
 
 void ttp_gp_dispose(int h) { g_gps.erase(h); }
 
-int ttp_gp_endless(int h) { GpHandle* g = gp(h); return (g && g->series->endless()) ? 1 : 0; }
-int ttp_gp_race_count(int h) { GpHandle* g = gp(h); return g ? g->series->raceCount() : 0; }
-int ttp_gp_race_index(int h) { GpHandle* g = gp(h); return g ? g->series->raceIndex() : 0; }
-int ttp_gp_finished(int h) { GpHandle* g = gp(h); return (g && g->series->finished()) ? 1 : 0; }
-
-int ttp_gp_needs_draw(int h) {
+// The live series behind a handle — the seam the other shims read metadata
+// through (ttp_session.h), so no scalar-getter export outlives ttp_gp_state_json.
+// extern "C++": defined inside the extern "C" block, C++ linkage as declared.
+extern "C++" ttp::CupSeries* ttp_gp_series(int h) {
   GpHandle* g = gp(h);
-  return (g && g->series->endless() &&
-          g->series->raceIndex() >= g->series->raceCount() - 1) ? 1 : 0;
-}
-
-const char* ttp_gp_current_track(int h) {
-  GpHandle* g = gp(h);
-  if (!g) return "";
-  g->scratch = g->series->currentTrackId();
-  return g->scratch.c_str();
-}
-
-const char* ttp_gp_next_track(int h) {
-  GpHandle* g = gp(h);
-  if (!g) return "";
-  g->scratch = g->series->nextTrackId();   // "" == JS null
-  return g->scratch.c_str();
-}
-
-const char* ttp_gp_cup_json(int h) {
-  GpHandle* g = gp(h);
-  if (!g) return "null";
-  const GpCup& c = g->series->cup();
-  Value o = Value::Obj();
-  o.set("id", Value::Str(c.id));
-  o.set("name", Value::Str(c.name));
-  Value tr = Value::Arr();
-  for (const std::string& t : c.tracks) tr.push(Value::Str(t));
-  o.set("tracks", std::move(tr));
-  canonical_stringify_into(o, g->scratch);
-  return g->scratch.c_str();
+  return g ? g->series.get() : nullptr;
 }
 
 void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
@@ -1285,10 +1279,10 @@ void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
 
 void ttp_gp_advance(int h) { GpHandle* g = gp(h); if (g) g->series->advance(); }
 
-const char* ttp_gp_standings_json(int h) {
-  GpHandle* g = gp(h);
-  if (!g) return "[]";
+extern "C++" Value ttp_gp_standings_value(int h) {
   Value arr = Value::Arr();
+  GpHandle* g = gp(h);
+  if (!g) return arr;
   for (const GpStanding& st : g->series->standings()) {
     Value o = Value::Obj();
     o.set("playerId", st.playerId.toValue());
@@ -1305,7 +1299,35 @@ const char* ttp_gp_standings_json(int h) {
     o.set("lastRank", st.lastRankNull ? Value::Null() : Value::Num(st.lastRank));
     arr.push(std::move(o));
   }
-  canonical_stringify_into(arr, g->scratch);
+  return arr;
+}
+
+const char* ttp_gp_state_json(int h) {
+  GpHandle* g = gp(h);
+  if (!g) return NULL_JSON;
+  const CupSeries& s = *g->series;
+  const GpCup& c = s.cup();
+  Value cup = Value::Obj();
+  cup.set("id", Value::Str(c.id));
+  cup.set("name", Value::Str(c.name));
+  Value tr = Value::Arr();
+  for (const std::string& t : c.tracks) tr.push(Value::Str(t));
+  cup.set("tracks", std::move(tr));
+
+  Value o = Value::Obj();
+  o.set("cup", std::move(cup));
+  o.set("currentTrack", Value::Str(s.currentTrackId()));
+  o.set("endless", Value::Bool(s.endless()));
+  o.set("finished", Value::Bool(s.finished()));
+  o.set("needsDraw", Value::Bool(s.endless() && s.raceIndex() >= s.raceCount() - 1));
+  // A real null after a cup's last race — the "" the old getter spelled was a
+  // JS-null wart every consumer had to know about.
+  const std::string next = s.nextTrackId();
+  o.set("nextTrack", next.empty() ? Value::Null() : Value::Str(next));
+  o.set("raceCount", Value::Num(s.raceCount()));
+  o.set("raceIndex", Value::Num(s.raceIndex()));
+  o.set("standings", ttp_gp_standings_value(h));
+  canonical_stringify_into(o, g->scratch);
   return g->scratch.c_str();
 }
 
@@ -1596,13 +1618,6 @@ const char* ttp_schematic_points_json(const char* pathD) {
   return out.c_str();
 }
 
-const char* ttp_schematic_unpack_json(const char* b64) {
-  static std::string out;
-  Value v;
-  schematicInto(ttp::schematic::unpack(b64 ? b64 : ""), v);
-  out = canonical_stringify(v);
-  return out.c_str();
-}
 
 const char* ttp_item_id(int code) {
   // 1-based so TTP_ITEM_NONE can be 0 without a sentinel that looks like an

@@ -123,20 +123,21 @@ TTP_ABI double ttp_get_steer_expo(void);
 TTP_ABI int ttp_gp_create(const char* cupJson, int endless);
 TTP_ABI void ttp_gp_dispose(int h);
 
-TTP_ABI int ttp_gp_endless(int h);
-TTP_ABI int ttp_gp_race_count(int h);
-TTP_ABI int ttp_gp_race_index(int h);
-TTP_ABI int ttp_gp_finished(int h);
-TTP_ABI const char* ttp_gp_current_track(int h);
-TTP_ABI const char* ttp_gp_next_track(int h);   // "" == JS null
-TTP_ABI const char* ttp_gp_cup_json(int h);
-
-// 1 when the NEXT ttp_gp_apply_race must be handed a drawn track: an endless
-// series sitting on its last queued race. GrandPrix.js's own check point —
-// drawing on any other call would pull the shuffle bag faster than the kit
-// does and desynchronise the whole track sequence, and the bag is stateful,
-// so an unused draw is not free. The shell owns the BAG; this owns the WHEN.
-TTP_ABI int ttp_gp_needs_draw(int h);
+// The whole series state as ONE canonical JSON read:
+//   {"cup":{"id","name","tracks":[...]}, "currentTrack":str,
+//    "endless":bool, "finished":bool, "needsDraw":bool,
+//    "nextTrack":str|null, "raceCount":n, "raceIndex":n, "standings":[...]}
+// It replaced seven scalar getters a shell had to compose (and the tvOS shell
+// recomposed wrongly — its needs-draw was three crossings re-spelling the rule
+// this object's `needsDraw` owns). nextTrack is a real JSON null after a cup's
+// last race, not the "" the old getter spelled. "null" for an unknown handle.
+//
+// needsDraw: 1 means the NEXT ttp_gp_apply_race must be handed a drawn track —
+// an endless series sitting on its last queued race. Drawing on any other call
+// would pull the shuffle bag faster than the kit does and desynchronise the
+// whole track sequence; the bag is stateful, so an unused draw is not free.
+// The shell owns the BAG; this owns the WHEN.
+TTP_ABI const char* ttp_gp_state_json(int h);
 
 // resultsJson: [{"playerId":<scalar>,"rank":N,"finished":bool},...] (Game results)
 // fieldJson:   [{"peerIndex":<scalar>,"name":..,"colorIndex":N,"ai":bool},...]
@@ -144,8 +145,17 @@ TTP_ABI int ttp_gp_needs_draw(int h);
 TTP_ABI void ttp_gp_apply_race(int h, const char* resultsJson, const char* fieldJson,
                        const char* drawnTrackIdOrNull);
 TTP_ABI void ttp_gp_advance(int h);
-TTP_ABI const char* ttp_gp_standings_json(int h);
 TTP_ABI void ttp_gp_rekey(int h, const char* oldIdJson, const char* newIdJson);
+
+// ============================================================================
+// AUTHORING-TOOLS SURFACE. Nothing below this banner is shell surface: the
+// five track reads serve the Node authoring/audit scripts (which reach the
+// shipped wasm through scripts/native-track.mjs), and the schematic codec's
+// decode half serves the PHONE-side round-trip gate. A platform shell binds
+// nothing here except ttp_track_schematic_json (a TV shell with no baked
+// maps) and ttp_schematic_pack/points (the chooser payload). See
+// docs/native-port/shells.md for the authoritative shell set.
+// ============================================================================
 
 // ---- track geometry, without a session --------------------------------------
 
@@ -278,12 +288,6 @@ TTP_ABI int ttp_schematic_view_size(void);
 // nothing else — so this is not a general SVG reader and must not become one.
 TTP_ABI const char* ttp_schematic_points_json(const char* pathD);
 
-// The phone's half, for completeness and for the round-trip gate: back to
-// {viewBox, d, start}. Straight segments between the kept points, no spline (a
-// spline IMPOSES a rounded look the original does not have). Phones stay on the
-// JS controller on all three TV platforms, so this is not on a shipping path —
-// public/shared/schematicCodec.js's unpackSchematic is what a player runs.
-TTP_ABI const char* ttp_schematic_unpack_json(const char* b64);
 
 // The item vocabulary, by CODE: the id a box roll can yield for TTP_ITEM_BOOST
 // (1) … TTP_ITEM_MONSTER (4), and NULL for anything else (TTP_ITEM_NONE

@@ -322,11 +322,17 @@ export const JS_MUTATIONS = [
     // reorder, batch or SKIP an effect, and dropping one is precisely the bug a
     // hand-written performer produces. Skipping `announce` keeps the room right
     // and every phone stale, from every trigger at once.
+    //
+    // The performer switch became the NET_PERFORMERS table, so the anchor moved
+    // with it and the mutation is now an arm that does NOTHING rather than an
+    // arm that is missing. That is deliberate: a missing arm is caught at boot
+    // by assertNetOps against ttp_net_effect_ops_json, so a present-but-empty
+    // one is the only spelling of this bug that still reaches a party.
     name: 'display/announce-skipped',
     kind: 'perform an effect list with one op dropped',
     file: 'public/display/Net.js',
-    find: "      case 'announce': this._announce(); break;",
-    replace: "      case 'announce': break;",
+    find: "  'announce': (n) => n._announce(),",
+    replace: "  'announce': () => {},",
     expect: 'the LOBBY_UPDATE the display AUTHORS survives the round trip',
   },
   {

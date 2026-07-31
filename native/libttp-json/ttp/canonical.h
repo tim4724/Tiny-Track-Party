@@ -44,7 +44,16 @@ struct Value {
   void push(Value x) { arr.push_back(std::move(x)); }
   // Object set (insertion order irrelevant — canonical_stringify sorts keys). A
   // value of type UNDEF is dropped at stringify time, mirroring JS `v[k] !== undefined`.
-  void set(std::string key, Value x) { obj.emplace_back(std::move(key), std::move(x)); }
+  // JS assignment semantics: an existing key is REPLACED in place (its
+  // position kept), a new one appended. The old blind emplace_back silently
+  // duplicated the key when a parsed object was repaired — and find() then
+  // answered the stale first copy, which bit both walk-side field repairs.
+  void set(std::string key, Value x) {
+    for (auto& kv : obj) {
+      if (kv.first == key) { kv.second = std::move(x); return; }
+    }
+    obj.emplace_back(std::move(key), std::move(x));
+  }
 };
 
 // JSON.stringify with a recursive key sort and shortest-form numbers.

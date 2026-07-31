@@ -12,8 +12,8 @@
 // shapes (plain data out, fresh objects the caller owns).
 //
 // Differences from the JS RaceSession, by design:
-// - Bots live INSIDE the wasm (added via opts.bots personas); driveBot() is
-//   a no-op — ttp_update steps the AI internally in the live loop's order.
+// - Bots live INSIDE the wasm (added via opts.bots personas); ttp_update steps
+//   the AI internally in the live loop's order.
 // - Construction is deferred: the engine session is built at startCountdown
 //   (the ABI's begin/add/start split); every pre-start passthrough answers
 //   from the roster.
@@ -22,7 +22,6 @@ import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
 let M = null;            // the instantiated emscripten module (shared)
 let fn = null;           // cwrap'd ABI
-let vecPtr = 0;          // persistent 3-double out-buffer for pos queries
 
 export async function init() {
   if (M) return;
@@ -38,11 +37,10 @@ export async function init() {
     update: c('ttp_update', null, ['number', 'number']),
     input: c('ttp_process_input', null, ['number', 'string', 'number', 'number', 'number', 'number']),
     snapshot: c('ttp_snapshot_json', 'string', ['number']),
-    results: c('ttp_results_json', 'string', ['number']),
     events: c('ttp_events_json', 'string', ['number']),
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
+    carFinished: c('ttp_car_finished', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
-    carWorldPos: c('ttp_car_world_pos', 'number', ['number', 'string', 'number']),
     removeCar: c('ttp_force_remove_car', 'number', ['number', 'string']),
     rekeyCar: c('ttp_rekey_car', 'number', ['number', 'string', 'string']),
     forceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
@@ -55,7 +53,6 @@ export async function init() {
     setSteerExpo: c('ttp_set_steer_expo', null, ['number']),
     getSteerExpo: c('ttp_get_steer_expo', 'number', [])
   };
-  vecPtr = M._malloc(3 * 8);
   const v = JSON.parse(fn.version());
   console.info(`[native:sim] ${JSON.stringify(v)}`);
 }
@@ -72,7 +69,6 @@ const idJson = (id) => JSON.stringify(id);
 // ttp_session_start's "no countdown" sentinel (any negative — see its header):
 // racing from frame 0, bare-Game stepping.
 const BARE_COUNTDOWN = -1;
-const vec = () => ({ x: M.HEAPF64[vecPtr >> 3], y: M.HEAPF64[(vecPtr >> 3) + 1], z: M.HEAPF64[(vecPtr >> 3) + 2] });
 
 export class NativeRaceSession {
   // players: the same `field` RaceSession gets ([{peerIndex, stats, ai?...}]).
@@ -80,6 +76,13 @@ export class NativeRaceSession {
   // for the seats the host would otherwise drive with JS AiControllers.
   constructor(players, track, opts = {}) {
     if (!M) throw new Error('NativeRaceSession used before init() resolved');
+    // events: 'external' — the RACE path. The queue is drained and routed in
+    // C++ (ttp_race_events_live_json), so this adapter must not touch it: a
+    // drain here would eat the beats the walk routes. Default: drained and
+    // DISCARDED on update (the attract demo and preview surfaces, which want a
+    // moving world and no lifecycle), or fed to the legacy callbacks when any
+    // are passed (test surfaces).
+    this._external = opts.events === 'external';
     this._onRaceEvent = opts.onRaceEvent || (() => {});
     this._onCountdownTick = opts.onCountdownTick || (() => {});
     this._onRaceStart = opts.onRaceStart || (() => {});
@@ -100,8 +103,9 @@ export class NativeRaceSession {
     if (!this.h) throw nativeError(`starting a race on '${track.trackId}'`);
   }
 
-  get racing() { return this._racingCache; }
-  set racing(v) { this._racingCache = v; } // RaceSession exposes a plain field; keep assignability
+  // External mode reads the engine (the adapter never sees the lifecycle
+  // beats); the drain modes latch off the beats as the JS session did.
+  get racing() { return this._external ? !!(this.h && fn.racing(this.h)) : this._racingCache; }
   get paused() { return this.h ? !!fn.paused(this.h) : false; }
 
   startCountdown(seconds) {
@@ -134,10 +138,6 @@ export class NativeRaceSession {
     fn.input(this.h, idJson(id), mask, s, b, u);
   }
 
-  // Bots are stepped inside ttp_update in the live loop's exact order; the
-  // host's driveBots() loop has nothing to do here.
-  driveBot() { return false; }
-
   fastForwardToEnd() {
     if (!this.h || this._ended) return;
     fn.fastForward(this.h);
@@ -162,10 +162,9 @@ export class NativeRaceSession {
   }
 
   getSnapshot() { return JSON.parse(fn.snapshot(this.h)); }
-  getResults() { return JSON.parse(fn.results(this.h)); }
   carIds() { return JSON.parse(fn.carIds(this.h)); }
   hasCar(id) { return !!fn.hasCar(this.h, idJson(id)); }
-  carWorldPos(id) { return fn.carWorldPos(this.h, idJson(id), vecPtr) ? vec() : null; }
+  carFinished(id) { return this.h ? fn.carFinished(this.h, idJson(id)) === 1 : false; }
 
   dispose() {
     this._ended = true;
@@ -174,6 +173,7 @@ export class NativeRaceSession {
   }
 
   _drain() {
+    if (this._external) return;  // the race walk owns the queue
     // Called every frame; the queue is empty on almost all of them, and the
     // wasm returns the shared "[]" constant for that case — skip the parse.
     const raw = fn.events(this.h);

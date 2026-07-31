@@ -30,6 +30,12 @@ struct Value;
 class RoomFlow;
 }
 
+// syncActiveOrder against the LIVE RACE: every seat holding a car, plus every
+// dropped seat (RoomFlow::syncActiveOrder). Called by the net walks' liveness
+// sweep and folded into the *_synced reads below, so no caller can drop the
+// sync-then-read order. No-op for an unknown handle.
+void ttp_room_sync_active_order(int roomHandle, int sessionHandle);
+
 // The roster as RoomFlow hands it over — ttp_room_list_json's answer as a Value
 // instead of as text. Empty array for an unknown handle.
 //
@@ -87,6 +93,18 @@ int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHan
 // set-track/clear); read by the walks, the lobby frame and ttp_net_pick_json.
 ttp::Value ttp_room_pick_value(int roomHandle);
 void ttp_room_store_pick(int roomHandle, ttp::Value pick);
+
+// The random-track shuffle bag ({seed, deck, cursor}), the live cup series (a
+// gp handle the race walks own — storing a different handle disposes the old
+// one, and room dispose frees it) and the launched race field. Same charter as
+// the pick: shim state behind the room, walk-written, so no shell mirrors any
+// of it. See RoomHandle in ttp_party.cc.
+ttp::Value ttp_room_bag_value(int roomHandle);
+void ttp_room_store_bag(int roomHandle, ttp::Value bag);
+int ttp_room_series(int roomHandle);
+void ttp_room_store_series(int roomHandle, int gpHandle);
+ttp::Value ttp_room_field_value(int roomHandle);
+void ttp_room_store_field(int roomHandle, ttp::Value field);
 
 // The live machine behind a handle, or nullptr — for the choreography walks
 // (see the header note). Mutations through it still queue their events on the

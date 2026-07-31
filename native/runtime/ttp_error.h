@@ -35,6 +35,7 @@
 //
 //     ttp_session_begin      ttp_gp_create        ttp_display_build
 //     ttp_ui_configure       ttp_net_configure    ttp_race_configure
+//     ttp_race_launch_live_json  (an unknown room handle refuses the launch)
 //
 // Each CLEARS it on entry, so a success leaves it empty and a failure leaves its
 // own reason — never an older one. That clearing is the difference between a
