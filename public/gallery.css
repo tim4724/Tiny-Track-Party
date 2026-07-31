@@ -226,6 +226,17 @@ section.stage iframe {
 .legend__group ul { list-style: none; }
 .legend__group li { color: #d5d5ee; }
 .legend__note { color: #6f7699; margin-top: 6px; }
+/* The item-chip group: real rendered chips, not captions. Each chip mimics the
+   HUD's sticker slot (paper ground, ink border) so the icons are judged on the
+   surface they actually ship on, not on this panel's dark glass. */
+.legend__icons { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.legend__icon {
+  flex: none; width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff6eb; border: 2px solid #2a2735; border-radius: 12px;
+}
+.legend__icon svg { width: 72%; height: 72%; display: block; }
+.legend__icon--small { width: 34px; height: 34px; border-radius: 9px; }
 
 /* Mobile: one card per row + compact, touch-friendly header.
    - Header becomes a 3-col grid: title spans the top row, and Display /

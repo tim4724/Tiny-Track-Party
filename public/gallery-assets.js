@@ -17,6 +17,8 @@
 // this page would be a fourth copy, and the first one to go stale.
 import { PROP_MODELS } from '/display/render/Display.js';
 import { ITEM_IDS } from '/display/engine/contract.js';
+import { loadItemIcons, CAR_BODY_COLORS } from '/shared/itemIcons.js';
+import { cssHex } from '/shared/biomes.js';
 
 const Gallery = window.Gallery;
 const state = Gallery.loadState();
@@ -205,6 +207,53 @@ function list(title, items, note) {
   return box;
 }
 
+// The 2D half of the kit: the HUD's item roulette chips, rendered from the
+// same SVG files the display inlines (/assets/items/<id>.svg, via
+// shared/itemIcons.js). Boost wears the picked biome's accent — re-pick the
+// biome above to see it change — and the monster cab wears the body tone of
+// the car model that grabs it, so it is shown once per roster car.
+async function iconGroup() {
+  let icons;
+  try { icons = await loadItemIcons(); } catch (_) { return null; }
+  const api = biomeApi();
+  const biome = api.has(state.assetBiome) ? state.assetBiome : api.names[0];
+  const box = document.createElement('div');
+  box.className = 'legend__group';
+  const h = document.createElement('h2');
+  h.textContent = `Item chips · ${ITEM_IDS.length}`;
+  box.appendChild(h);
+  const row = document.createElement('div');
+  row.className = 'legend__icons';
+  for (const id of ITEM_IDS) {
+    const chip = document.createElement('div');
+    chip.className = 'legend__icon';
+    chip.title = id;
+    if (id === 'boost') chip.style.setProperty('--icon-accent', cssHex(api.boostIcon(biome)));
+    chip.innerHTML = icons[id];
+    row.appendChild(chip);
+  }
+  box.appendChild(row);
+  const bodies = document.createElement('div');
+  bodies.className = 'legend__icons';
+  const names = window.CAR_NAMES || [];
+  CAR_BODY_COLORS.forEach((hex, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'legend__icon legend__icon--small';
+    chip.title = `monster · ${names[i] || hex}`;
+    chip.style.setProperty('--icon-car', hex);
+    chip.innerHTML = icons.monster;
+    bodies.appendChild(chip);
+  });
+  box.appendChild(bodies);
+  const p = document.createElement('p');
+  p.className = 'legend__note';
+  p.textContent = 'The HUD roulette chips (/assets/items/*.svg). Boost is stroked in this '
+    + 'biome\'s accent; the monster cab wears the grabbing car\'s own body tone — one '
+    + 'chip per model below (Dash, Bolt, Carve, Rumble).';
+  box.appendChild(p);
+  return box;
+}
+
 async function buildLegend() {
   const api = biomeApi();
   if (!api) return;
@@ -226,6 +275,7 @@ async function buildLegend() {
     list('Cars', models.map((m, i) => `${names[i] || m} · ${m}`),
          'Parked on the grid, one seat per livery.'),
     list('Props', PROP_MODELS),
+    await iconGroup(),
     list('Scenery', inv.scenery),
     list('Landmarks', inv.landmarks),
     list('Clutter', inv.clutter),
@@ -281,6 +331,7 @@ whenReady((s) => {
   Gallery.bindSelect(state, 'asset-biome', 'assetBiome', () => {
     const live = showroom();
     if (live) live.biome(state.assetBiome);
+    buildLegend(); // the boost chip in the legend wears this biome's accent
   });
 
   syncVariantOptions();

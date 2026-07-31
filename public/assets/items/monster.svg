@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2a2735" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><!--
+  Monster truck in the WHEELIE pose (picked over the flat side view,
+  2026-07-31): the side profile rearing up - the crush stance. The 2D echo of the in-race transform, which grafts the player's own
+  car body onto the kit chassis over oversized tyres: the cab fills
+  var(--icon-car) - the body colour of the CAR MODEL the player drives (see
+  CAR_BODY_COLORS in shared/itemIcons.js; Rumble-purple fallback) - while the
+  frame, exhaust and tyres stay gunmetal.
+--><g transform="rotate(-16 10 16)"><path d="M15.2 5.4V8" stroke-width="2" stroke="#565b63"/><path d="M5.4 11.6L6.5 7.4A1.4 1.4 0 0 1 7.9 6.4H13.5A1.6 1.6 0 0 1 14.9 7.2L18.6 11.6Z" fill="var(--icon-car, #aa77dd)"/><path d="M13.4 7.8H14.5L16.4 10.4H13.4Z" fill="#dff1fb" stroke-width="1"/><path d="M3.4 11.6H20.6V13A1.2 1.2 0 0 1 19.4 14.2H4.6A1.2 1.2 0 0 1 3.4 13Z" fill="#565b63"/><circle cx="7" cy="16.6" r="4.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="17" cy="16.6" r="4.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7" cy="16.6" r="1.4" fill="#aeb4bd" stroke="none"/><circle cx="17" cy="16.6" r="1.4" fill="#aeb4bd" stroke="none"/></g></svg>

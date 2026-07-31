@@ -11,7 +11,6 @@
     "dev": "node --watch server/index.js",
     "fetch:music": "node scripts/fetch-music.mjs",
     "gen:schematics": "node scripts/gen-track-schematics.js",
-    "icon:item": "node scripts/capture-item-icon.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",

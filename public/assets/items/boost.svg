@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--icon-accent, #12a99a)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><!--
+  The boost chip's twin chevrons, stroked in the biome's boost accent
+  (--icon-accent; the teal fallback is the pre-theme look). Two forward
+  chevrons, apex-up (= travel), stacked and CENTRED on the 24x24 box: each
+  chevron is 6 tall, apexes 7 apart, so the pair spans y5.5..18.5 (centre 12)
+  with a 1u gap between the upper arms and the lower apex - even, not
+  overlapping.
+--><polyline points="5,11.5 12,5.5 19,11.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>

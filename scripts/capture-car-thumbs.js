@@ -7,9 +7,9 @@
 //   <model>.png        — front-3/4 hero still (== strip frame 0)
 //   <model>.strip.png  — horizontal sprite strip, SPIN_FRAMES cells wide
 //
-// Same "render the real GLB offline" pipeline as capture-item-icon.js: reuse the
-// live origin so the page's CSP resolves, render into an
-// own transparent renderer with the game's toy lighting, then read PNGs back.
+// "Render the real GLB offline": reuse the live origin so the page's CSP
+// resolves, render into an own transparent renderer with the game's toy
+// lighting, then read PNGs back.
 //
 // Framing splits the two axes, because a yaw turntable treats them differently:
 //   - HORIZONTAL from the model's bounding SPHERE (rotation-invariant), so the car
@@ -126,7 +126,7 @@ async function main() {
         renderer.setClearColor(0x000000, 0);
 
         const scene = new THREE.Scene();
-        // Toy lighting matched to the game renderer / capture-item-icon.js. The key only LIGHTS
+        // Toy lighting matched to the game renderer. The key only LIGHTS
         // the body now — it casts no shadow (cars don't cast the sun shadow in-race either);
         // the ground shadow below is the car's baked top-down silhouette, like the engine.
         scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));

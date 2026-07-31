@@ -140,7 +140,15 @@ Three properties of that surface matter more than the list:
     `ttp_theme_scenery_models` answers, and the trackside props as
     `prop<i>.glb` per `ttp_theme_prop_models` — the index IS the contract, and
     a missing GLB is skipped, not fatal. Textures ride the URIs inside the
-    GLBs plus the kit's shared `Textures/colormap.png`.
+    GLBs plus the kit's shared `Textures/colormap.png`. The HUD's 2D item
+    icons are shared assets too: one SVG per item id under
+    `public/assets/items/`, recolourable through two CSS custom properties —
+    `--icon-accent` (the boost chevrons, `ttp_theme_boost_icon`) and
+    `--icon-car` (the monster cab: the body tone of the car MODEL the player
+    drives, per `CAR_BODY_COLORS` in `public/shared/itemIcons.js` — not the
+    livery, which only ever paints the name plate). A shell that cannot
+    evaluate CSS vars substitutes those two tokens and rasterizes; the baked
+    fallback colours are the pre-theme look.
 
 ## The asymmetries worth knowing before you start
 

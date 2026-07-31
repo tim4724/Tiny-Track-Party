@@ -437,9 +437,8 @@ html.cam-free #race { pointer-events: none; }
   border: 4px dashed color-mix(in srgb, var(--ink) 45%, transparent);
   box-shadow: none;
 }
+/* every icon is an inlined /assets/items/*.svg (see shared/itemIcons.js) */
 .cell-label__item svg { width: 70%; height: 70%; display: block; }
-/* baked asset icons (e.g. the banana GLB render) — already square + padded */
-.cell-label__item img { width: 78%; height: 78%; object-fit: contain; display: block; }
 /* roulette spin: a fast scale/tilt flicker while the slot rolls */
 .cell-label__item.rolling { animation: cellItemRoll 0.1s linear infinite; }
 @keyframes cellItemRoll {

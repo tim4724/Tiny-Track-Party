@@ -27,28 +27,19 @@ import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
 import { ITEM_IDS } from './engine/contract.js';
+import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
 
 // Labels are the vocabulary, shouted — derived, not re-typed.
 const ITEM_LABELS = Object.fromEntries(ITEM_IDS.map((id) => [id, id.toUpperCase()]));
-// The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
-// by _applyBoostShades, default teal for the pre-theme look). Takes a '#rrggbb'
-// stroke string. Two forward chevrons, apex-up (= travel), stacked and CENTRED on
-// the 24×24 box: each chevron is 6 tall, apexes 7 apart, so the pair spans
-// y5.5..18.5 (centre 12) with a 1u gap between the upper arms and the lower apex —
-// even, not overlapping.
-const boostIconSvg = (stroke) => `<svg viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,11.5 12,5.5 19,11.5"/><polyline points="5,18.5 12,12.5 19,18.5"/></svg>`;
-const ITEM_ICONS = {
-  boost: boostIconSvg('#12a99a'),
-  banana: '<img src="/assets/toycar/thumbs/item-banana.png" alt="" draggable="false" decoding="async">',
-  // Toy rocket: cream body (red outline), blue porthole, red fins, orange flame — the
-  // 2D echo of the in-race procedural model (matched to the same toy palette). Inline
-  // SVG like boost, so no baked asset / CSP change is needed.
-  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="#e6492d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c2.7 2.3 4 5.4 4 9.3 0 2-.5 3.8-1.3 5.2H9.3C8.5 15.3 8 13.5 8 11.5c0-3.9 1.3-7 4-9.3z" fill="#fff3e0"/><circle cx="12" cy="9.2" r="1.5" fill="#2d9cdb" stroke="none"/><path d="M8.2 14.2 5.5 16.6l.3 3 2.9-1.4M15.8 14.2l2.7 2.4-.3 3-2.9-1.4z" fill="#e6492d"/><path d="M10.3 19.6c.5 1.3 1.7 2.2 1.7 2.2s1.2-.9 1.7-2.2" stroke="#f2784b"/></svg>',
-  // Monster truck: a chunky cab on a high frame over two fat tyres — the 2D echo of
-  // the in-race transform (gunmetal frame, purple cab nod to the kit body, dark
-  // tyres). Inline SVG like boost/rocket, so no baked asset / CSP change is needed.
-  monster: '<svg viewBox="0 0 24 24" fill="none" stroke="#3a3f47" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11.5h14l-1.3-3.2a1.6 1.6 0 0 0-1.5-1H7.8a1.6 1.6 0 0 0-1.5 1L5 11.5z" fill="#7b4fc0"/><path d="M3.5 11.5h17v2.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z" fill="#565b63"/><circle cx="7.2" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="16.8" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7.2" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/><circle cx="16.8" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/></svg>'
-};
+// The item chips' artwork — one shared SVG file per item id
+// (/assets/items/<id>.svg, see shared/itemIcons.js), fetched once and INLINED
+// so two CSS custom properties reach inside: the boost chevrons stroke
+// --icon-accent (the biome's boost accent, set on the overlay in setTrack) and
+// the monster cab fills --icon-car (the body tone of the car model this cell
+// drives, set in addCar — the 2D echo of the in-race graft, which stands the
+// player's own body on the kit chassis). Filled by setTrack, which every
+// scene awaits before a race can hand an item out.
+const ITEM_ICONS = {};
 // The roulette reel cycles the ROLL-TABLE order — deliberately (ITEM_IDS is
 // the one vocabulary, and the reel landing on the real item depends on every
 // id having an icon; a missing entry would flash an empty chip).
@@ -215,7 +206,8 @@ export class Stage {
     // Snow) so the HUD reads as the same item the deck does. This is the ONE
     // colour of the palette that crosses back, because the chip is DOM: every
     // other boost surface is drawn by the renderer from the same one recipe.
-    ITEM_ICONS.boost = boostIconSvg(cssHex(b.boostIcon(this._biome)));
+    Object.assign(ITEM_ICONS, await loadItemIcons());
+    this.overlay.style.setProperty('--icon-accent', cssHex(b.boostIcon(this._biome)));
     return this._rebuild();
   }
 
@@ -372,6 +364,10 @@ export class Stage {
       label.innerHTML = `<div class="cell-label__row"><span class="cell-label__name"></span><div class="cell-label__item is-empty"></div></div>`;
       label.querySelector('.cell-label__name').textContent = name || ('P' + id);
       label.style.setProperty('--c', colHex);
+      // The monster chip's cab wears the CAR's own body tone, not the player's
+      // livery — the in-race transform grafts the player's body onto the
+      // chassis, and the body keeps its model paint (the livery is the plate's).
+      label.style.setProperty('--icon-car', CAR_BODY_COLORS[carIndex % CAR_BODY_COLORS.length]);
       this.overlay.appendChild(label);
       c.label = label;
       c.itemEl = label.querySelector('.cell-label__item');
@@ -457,7 +453,11 @@ export class Stage {
     const c = this.cars.get(id);
     if (!c) return false;
     if (colorIndex != null) c.colorIndex = colorIndex;
-    if (carIndex != null) c.carIndex = carIndex;
+    if (carIndex != null) {
+      c.carIndex = carIndex;
+      // the monster chip's cab follows the MODEL, so a re-pick retints it
+      if (c.label) c.label.style.setProperty('--icon-car', CAR_BODY_COLORS[carIndex % CAR_BODY_COLORS.length]);
+    }
     if (name != null) {
       c.name = name;
       if (c.label) c.label.querySelector('.cell-label__name').textContent = name || ('P' + id);
