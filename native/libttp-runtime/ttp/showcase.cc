@@ -178,7 +178,38 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
                   == t.scenery.models.end()) {
     t.scenery.models.push_back(t.scenery.bush.model);
   }
+
+  // Trackside props, by the same rules: the prop<i>.glb slot order falls out of
+  // the fixed biome walk (never the picked biome first), and the scatter set is
+  // deduped by model then rebalanced to EQUAL weights so one lap meets every prop.
+  t.props = PropsSpec{};
+  const auto propSlot = [&](const std::string& model) -> uint32_t {
+    const auto it = std::find(t.props.models.begin(), t.props.models.end(), model);
+    if (it != t.props.models.end()) return (uint32_t) (it - t.props.models.begin());
+    t.props.models.push_back(model);
+    return (uint32_t) (t.props.models.size() - 1);
+  };
+  for (int i = 0; i < biome_count(); i++) {
+    const Theme o = resolve_theme(biome_name(i), trackId);
+    for (const PropStamp& p : o.props.scatter) {
+      const std::string& model = o.props.models[p.slot];
+      const bool seen = std::find(t.props.models.begin(), t.props.models.end(), model)
+              != t.props.models.end();
+      const uint32_t slot = propSlot(model);
+      if (!seen) t.props.scatter.push_back({ slot, p.w, p.s0, p.s1 });
+    }
+    t.props.scatterDensity = std::max(t.props.scatterDensity, o.props.scatterDensity);
+  }
+  const float pw = t.props.scatter.empty() ? 0.0f : 1.0f / (float) t.props.scatter.size();
+  for (PropStamp& p : t.props.scatter) p.w = pw;
   return t;
+}
+
+const std::vector<std::string>& showcase_prop_models() {
+  // The showcase_models() rule: any biome answers the same list.
+  static const std::vector<std::string> models =
+      showcase_theme(biome_name(0), "").props.models;
+  return models;
 }
 
 std::string showcase_inventory_json() {
@@ -188,6 +219,10 @@ std::string showcase_inventory_json() {
   Value scenery = Value::Arr();
   for (const std::string& m : showcase_models()) scenery.push(Value::Str(m));
   o.set("scenery", scenery);
+
+  Value props = Value::Arr();
+  for (const std::string& m : showcase_prop_models()) props.push(Value::Str(m));
+  o.set("props", props);
 
   Value landmarks = Value::Arr();
   for (uint32_t k : t.landmarks) landmarks.push(Value::Str(landmarkName(k)));

@@ -91,6 +91,14 @@ Three properties of that surface matter more than the list:
 9. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
    different animals and the shell owns the traversal.
+10. **Asset bytes for the renderer.** The renderer asks for names; the shell
+    fetches bytes and hands them over before the build (the web reference is
+    `render/Display.js`). Cars and item props go over by their own file names;
+    the biome's scenery goes over as `scenery<i>.glb` in the slot order
+    `ttp_theme_scenery_models` answers, and the trackside props as
+    `prop<i>.glb` per `ttp_theme_prop_models` — the index IS the contract, and
+    a missing GLB is skipped, not fatal. Textures ride the URIs inside the
+    GLBs plus the kit's shared `Textures/colormap.png`.
 
 ## The asymmetries worth knowing before you start
 

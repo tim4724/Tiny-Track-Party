@@ -253,10 +253,16 @@ export class Display {
     const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
     scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
 
+    // Trackside prop GLBs (scattered set dressing): the same slot contract
+    // one channel over, bound back as prop<i>.glb.
+    const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
+    const prBytes = await Promise.all(prModels.map((m) => assets.glb(m)));
+    prBytes.forEach((b, i) => { if (b) this.provide(`prop${i}.glb`, b); });
+
     // An unparseable model answers with an empty list and just renders
     // untextured, which is what the try/catch here used to buy.
     const texUris = new Set();
-    for (const bytes of scBytes) {
+    for (const bytes of [...scBytes, ...prBytes]) {
       if (bytes) for (const uri of this._imageUris(bytes)) texUris.add(uri);
     }
     texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette

@@ -196,22 +196,29 @@ test('the shipped module exports the biome ABI, and resolves through it', async 
 // neither announces itself.
 test('the asset showroom stages every scenery GLB in the kit', async () => {
   const M = await load();
-  for (const name of ['ttp_theme_showcase_models', 'ttp_showcase_inventory_json']) {
+  for (const name of ['ttp_theme_showcase_models', 'ttp_theme_showcase_prop_models',
+                      'ttp_showcase_inventory_json']) {
     assert.equal(typeof M[`_${name}`], 'function',
       `_${name} is not exported — gallery-assets.js would fail at the cwrap call`);
   }
   const staged = JSON.parse(M.cwrap('ttp_theme_showcase_models', 'string', [])());
+  const stagedProps = JSON.parse(M.cwrap('ttp_theme_showcase_prop_models', 'string', [])());
 
   // Every biome's own list, unioned by hand here rather than trusted from the
   // same function under test.
   const nameAt = M.cwrap('ttp_theme_biome_name', 'string', ['number']);
   const models = M.cwrap('ttp_theme_scenery_models', 'string', ['string']);
+  const propModels = M.cwrap('ttp_theme_prop_models', 'string', ['string']);
   const want = new Set();
+  const wantProps = new Set();
   for (let i = 0, n = M.cwrap('ttp_theme_biome_count', 'number', [])(); i < n; i++) {
     for (const m of JSON.parse(models(nameAt(i)))) want.add(m);
+    for (const m of JSON.parse(propModels(nameAt(i)))) wantProps.add(m);
   }
   assert.deepEqual([...want].filter((m) => !staged.includes(m)), [],
     'a biome plants a model the asset gallery never shows');
+  assert.deepEqual([...wantProps].filter((m) => !stagedProps.includes(m)), [],
+    'a biome plants a prop the asset gallery never shows');
 
   // And the directory: everything under the kit is either a car, a prop the
   // renderer always loads, or one of the staged scenery models.
@@ -219,12 +226,13 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   const PROPS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
-  const drawnBy = new Set([...CARS, ...PROPS, ...staged]);
+  const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps]);
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
 
   const inv = JSON.parse(M.cwrap('ttp_showcase_inventory_json', 'string', [])());
   assert.deepEqual(inv.scenery, staged, 'the legend lists what the build stages');
+  assert.deepEqual(inv.props, stagedProps, 'the legend lists the staged props too');
   assert.equal(inv.landmarks.length, 17, 'every hero landmark kind is staged');
   assert.ok(inv.clutter.includes('dominoes') && inv.fliers.includes('hot-air balloon'),
     'the legend spans kinds no single biome carries');

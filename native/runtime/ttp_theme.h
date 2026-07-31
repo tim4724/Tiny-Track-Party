@@ -73,6 +73,11 @@ TTP_ABI uint32_t ttp_theme_hill_color(const char* biomeName, int index);
  * Points at a static scratch buffer valid until the next call. */
 TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
 
+/* The trackside prop GLBs this biome stamps (scattered set dressing), same
+ * JSON array and same slot contract — handed back as "prop<i>.glb". Empty
+ * array for a biome that runs no props. */
+TTP_ABI const char* ttp_theme_prop_models(const char* biomeName);
+
 /* ---- the asset gallery ---------------------------------------------------
  *
  * The SHOWCASE world (ttp/showcase.h): one biome's palette carrying every
@@ -92,9 +97,13 @@ TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
  * shell's hand and a cactus in the renderer's. */
 TTP_ABI const char* ttp_theme_showcase_models(void);
 
+/* The prop GLBs a showcase build stages — ttp_theme_prop_models's contract with
+ * ttp_theme_showcase_models's biome-independence rule. */
+TTP_ABI const char* ttp_theme_showcase_prop_models(void);
+
 /* What that world holds, as JSON, for the gallery's legend:
  *
- *   {"clutter":[…],"fliers":[…],"landmarks":[…],"scenery":[…]}
+ *   {"clutter":[…],"fliers":[…],"landmarks":[…],"props":[…],"scenery":[…]}
  *
  * HUMAN-READABLE captions, not ids: nothing resolves by them. They come from
  * here because the layer that decides what is staged should be the one that says

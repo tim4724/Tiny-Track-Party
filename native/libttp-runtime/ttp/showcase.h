@@ -39,6 +39,10 @@ namespace rt {
 // keep a list of its own.
 const std::vector<std::string>& showcase_models();
 
+// The prop GLBs the showcase stages, in prop<i>.glb slot order — the
+// showcase_models() contract, for the trackside prop channel (Theme::props).
+const std::vector<std::string>& showcase_prop_models();
+
 // The showcase world for `biomeName`, on `trackId`. Everything a track's own
 // theme decides is unchanged (resolve_theme's per-track ambient patch and
 // shoreline seed included); what is added is the rest of the kit.

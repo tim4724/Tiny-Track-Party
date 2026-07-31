@@ -224,6 +224,12 @@ struct TtpRenderer::TrackBin {
     std::vector<uint32_t> scRocks{ 0xaaaaaa, 0xb4a898, 0x9aa2a4 };
     float scRockS[2] = { 0.3f, 0.45f };
     uint32_t scModelCount = 0;
+    // Trackside props (theme.props): scattered set dressing, bound as
+    // prop<i>.glb by slot.
+    uint32_t prModelCount = 0;
+    float prDensity = 0;
+    struct PropStamp { uint32_t slot; float w, s0, s1; };
+    std::vector<PropStamp> prScatter;
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
     std::vector<uint32_t> lmKinds;       // 0 gnome, 1 doghouse, 2 picnic
     float clDensity = 0;                 // clutter (only 'flower' ported)
@@ -686,6 +692,14 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.clKinds.clear();
     for (const ttp::rt::ClutterSpec& c : sc.clutter) out.clKinds.push_back({ c.kind, c.w, c.tints });
 
+    // Props ride the same slot contract (ttp_theme_prop_models / prop<i>.glb).
+    out.prModelCount = (uint32_t) th.props.models.size();
+    out.prDensity = th.props.scatterDensity;
+    out.prScatter.clear();
+    for (const ttp::rt::PropStamp& p : th.props.scatter) {
+        out.prScatter.push_back({ p.slot, p.w, p.s0, p.s1 });
+    }
+
     out.lmKinds = th.landmarks;
     out.structureCol = th.structure;
 
@@ -876,6 +890,150 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
         out.scSeed2 = s2;
         out.lmSeed = s3;
     }
+}
+
+namespace {
+// Terrain value noise: integer lattice hash, cosine-eased bilinear blend.
+// Renderer-local and cosmetic — no JS twin, no conformance corpus behind it —
+// but integer-hashed rather than sin-based so every platform draws the same
+// hills for the same track.
+uint32_t terrainHash(uint32_t seed, int32_t xi, int32_t zi) {
+    uint32_t h = seed;
+    h ^= (uint32_t) xi * 0x27d4eb2du; h = (h ^ (h >> 15)) * 0x85ebca6bu;
+    h ^= (uint32_t) zi * 0x165667b1u; h = (h ^ (h >> 13)) * 0xc2b2ae35u;
+    return h ^ (h >> 16);
+}
+float terrainNoise(uint32_t seed, float x, float z) { // [0, 1)
+    const float fx = std::floor(x), fz = std::floor(z);
+    const int32_t xi = (int32_t) fx, zi = (int32_t) fz;
+    float tx = x - fx, tz = z - fz;
+    tx = tx * tx * (3.0f - 2.0f * tx);
+    tz = tz * tz * (3.0f - 2.0f * tz);
+    const auto at = [&](int32_t dx, int32_t dz) {
+        return (float) (terrainHash(seed, xi + dx, zi + dz) >> 8) / 16777216.0f;
+    };
+    const float a = at(0, 0) + (at(1, 0) - at(0, 0)) * tx;
+    const float b = at(0, 1) + (at(1, 1) - at(0, 1)) * tx;
+    return a + (b - a) * tz;
+}
+float smooth01(float t) {
+    t = std::min(1.0f, std::max(0.0f, t));
+    return t * t * (3.0f - 2.0f * t);
+}
+} // namespace
+
+// Rolling hills for the biomes whose ground is open country (lawn, redrock,
+// snow). Sand stays flat — the beach's shoreline and water sheet assume the
+// plane — and so does the playroom's wood floor: an indoor floor with hills
+// under the boards reads as a defect, not a landscape.
+void TtpRenderer::setupTerrain(const TrackBin& tb) {
+    switch (tb.groundKind) {
+        case 0: mTerrainAmp = 4.6f; break;  // lawn
+        case 2: mTerrainAmp = 6.5f; break;  // redrock — badlands earn the drama
+        case 3: mTerrainAmp = 5.2f; break;  // snow
+        default: mTerrainAmp = 0; break;    // sand, wood
+    }
+    mTerrainHs.clear();
+    mTerrainCols = mTerrainRows = 0;
+    // Own stream, derived from the scatter seed: reusing scSeed1's VALUE (not
+    // its stream) keeps every existing tree/clutter/landmark roll untouched.
+    mTerrainSeed = tb.scSeed1 ^ 0x7465726eu;
+    mTerrainFlats.clear();
+    float x0 = 1e30f, z0 = 1e30f, x1 = -1e30f, z1 = -1e30f;
+    for (const auto& s : tb.samples) {
+        x0 = std::min(x0, s.pos.x); x1 = std::max(x1, s.pos.x);
+        z0 = std::min(z0, s.pos.z); z1 = std::max(z1, s.pos.z);
+    }
+    // Hills live in the track's own neighbourhood; past the region the flat
+    // sheet resumes, well before the horizon ring's feature bases.
+    const float EXT = 90.0f, LIM = 390.0f;
+    mTerrainX0 = std::max(x0 - EXT, -LIM); mTerrainX1 = std::min(x1 + EXT, LIM);
+    mTerrainZ0 = std::max(z0 - EXT, -LIM); mTerrainZ1 = std::min(z1 + EXT, LIM);
+    if (tb.samples.empty()) mTerrainAmp = 0;
+}
+
+float TtpRenderer::terrainY(const TrackBin& tb, float x, float z) const {
+    if (mTerrainAmp <= 0) return tb.groundY;
+    // Fade to the flat plane at the region border, so the outer sheet joins
+    // without a step.
+    const float border = std::min(
+            std::min(x - mTerrainX0, mTerrainX1 - x),
+            std::min(z - mTerrainZ0, mTerrainZ1 - z));
+    if (border <= 0) return tb.groundY;
+    // Flat corridor: distance past the road EDGE (each sample's own width, like
+    // the scatter's isClear), ramping to full height 28u out. Raised deck keeps
+    // its flat ground too — the pillars, posts and berms under it stand on it.
+    float edge = 1e30f;
+    for (const auto& s : tb.samples) {
+        const float dx = x - s.pos.x, dz = z - s.pos.z;
+        const float d = std::sqrt(dx * dx + dz * dz) - s.width * 0.5f;
+        if (d < edge) edge = d;
+        if (edge <= 4.0f) return tb.groundY;
+    }
+    float mask = smooth01((edge - 4.0f) / 24.0f) * smooth01(border / 24.0f);
+    for (const TerrainFlat& f : mTerrainFlats) {
+        if (mask <= 0) break;
+        const float dx = x - f.x, dz = z - f.z;
+        mask *= smooth01((std::sqrt(dx * dx + dz * dz) - f.r) / 8.0f);
+    }
+    if (mask <= 0) return tb.groundY;
+    // Broad swells with a whisper of detail: short wavelengths at these
+    // amplitudes read as lumps tracking the road outline, not landscape.
+    const float n = 0.78f * terrainNoise(mTerrainSeed, x / 92.0f, z / 92.0f)
+                  + 0.22f * terrainNoise(mTerrainSeed ^ 0x9e3779b9u, x / 34.0f, z / 34.0f);
+    // Shaped so valleys sit flat and hills round off — pure noise reads as
+    // static, not landscape.
+    return tb.groundY + mTerrainAmp * mask * std::pow(n, 1.15f);
+}
+
+// Sample the analytic field once at the mesh's own resolution. Runs after
+// buildLandmarks (whose spots carve the clearings) and before every builder
+// that stands anything on the ground.
+void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
+    if (mTerrainAmp <= 0) return;
+    mTerrainCols = std::min(96, std::max(12,
+            (int) std::ceil((mTerrainX1 - mTerrainX0) / 4.5f)));
+    mTerrainRows = std::min(96, std::max(12,
+            (int) std::ceil((mTerrainZ1 - mTerrainZ0) / 4.5f)));
+    mTerrainSx = (mTerrainX1 - mTerrainX0) / mTerrainCols;
+    mTerrainSz = (mTerrainZ1 - mTerrainZ0) / mTerrainRows;
+    mTerrainHs.resize((size_t) (mTerrainCols + 1) * (mTerrainRows + 1));
+    for (int r = 0; r <= mTerrainRows; r++) {
+        for (int c = 0; c <= mTerrainCols; c++) {
+            mTerrainHs[(size_t) r * (mTerrainCols + 1) + c] = terrainY(tb,
+                    mTerrainX0 + c * mTerrainSx, mTerrainZ0 + r * mTerrainSz);
+        }
+    }
+}
+
+// The grounding rule for chunky pieces: the LOWEST surface point under the
+// footprint, so a slope-centre height can't leave the downhill edge hanging
+// in silhouette on a dune face.
+float TtpRenderer::footprintY(const TrackBin& tb, float x, float z, float r) const {
+    float y = groundSurfaceY(tb, x, z);
+    for (const auto& o : { float2{ r, 0 }, float2{ -r, 0 },
+                           float2{ 0, r }, float2{ 0, -r } }) {
+        y = std::min(y, groundSurfaceY(tb, x + o.x, z + o.y));
+    }
+    return y;
+}
+
+float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
+    if (mTerrainHs.empty()) return tb.groundY;
+    const float u = (x - mTerrainX0) / mTerrainSx, v = (z - mTerrainZ0) / mTerrainSz;
+    if (u <= 0 || v <= 0 || u >= mTerrainCols || v >= mTerrainRows) return tb.groundY;
+    const int c = std::min(mTerrainCols - 1, (int) u);
+    const int r = std::min(mTerrainRows - 1, (int) v);
+    const float fu = u - c, fv = v - r;
+    const auto h = [&](int cc, int rr) {
+        return mTerrainHs[(size_t) rr * (mTerrainCols + 1) + cc];
+    };
+    // TRIANGLE-exact, not bilinear: the mesh splits each cell along the b–d
+    // anti-diagonal (see the index loop), and a blob draped onto the other
+    // interpolant would still dip under the drawn surface.
+    const float a = h(c, r), b = h(c + 1, r), d = h(c, r + 1), e = h(c + 1, r + 1);
+    if (fu + fv <= 1.0f) return a + (b - a) * fu + (d - a) * fv;
+    return e + (d - e) * (1.0f - fu) + (b - e) * (1.0f - fv);
 }
 
 // The painted road — a direct port of render/track.js buildRoad's sweep: a
@@ -1164,11 +1322,13 @@ float3 TtpRenderer::groundColorAt(float x) const {
     return mGroundBands.back().col;
 }
 
-// The biome's floor canvas, ported from textures.js pixel for pixel: N vertical
-// bands of a per-kind luminance/hue wobble over a base colour, then the kind's
-// speckle pass (2×2 stamps alpha-blended over the bands). The wood adds the
-// pieces the band approximation could never carry — a dark seam stroked between
-// planks, staggered END joints across each board, and knots.
+// The biome's floor canvas, from textures.js: N vertical bands of a per-kind
+// luminance/hue wobble over a base colour. The JS also stamped a per-kind
+// speckle pass; it is deliberately GONE — sub-pixel from the race rig, and
+// from any lower camera the tiling repeated its grain clusters across the
+// whole ground. The wood keeps the pieces the band approximation could never
+// carry — a dark seam stroked between planks, staggered END joints across
+// each board, and knots.
 //
 // 256², sRGB, repeat-wrapped, mipmapped: three tiles the same 256² canvas at
 // 33.3 world-u, so the texel density and tiling cadence match.
@@ -1207,20 +1367,13 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
             band((int) std::floor((float) i * S / n), (int) std::ceil((float) S / n), rgb);
         }
     };
-    // Speckle: `n` 2×2 stamps on the shared (i*53, i*97) lattice.
-    const auto speckle = [&](int n, int r, int g, int b, float a0, float step) {
-        for (int i = 0; i < n; i++) {
-            blend((i * 53) % S, (i * 97) % S, 2, 2, r, g, b, a0 + (i % 3) * step);
-        }
-    };
     switch (kind) {
-        case 1: { // sand — gentle wind ripples, then darker grit
+        case 1: { // sand — gentle wind ripples
             const int base[3] = { 222, 200, 150 };
             sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.03f : 0.975f; });
-            speckle(140, 150, 120, 80, 0.05f, 0.03f);
             break;
         }
-        case 2: { // redrock — sediment strata (a hue wobble), then iron flecks
+        case 2: { // redrock — sediment strata (a hue wobble)
             const int base[3] = { 211, 150, 113 };
             sweep(8, base, [](int i, float* f) {
                 const bool rust = i % 2;
@@ -1228,13 +1381,11 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
                 f[1] = rust ? 0.972f : 1.024f;
                 f[2] = rust ? 0.958f : 1.036f;
             });
-            speckle(120, 120, 62, 38, 0.06f, 0.03f);
             break;
         }
-        case 3: { // snow — whisper-contrast drift banding, then ice flecks
+        case 3: { // snow — whisper-contrast drift banding
             const int base[3] = { 237, 242, 247 };
             sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.012f : 0.988f; });
-            speckle(90, 168, 184, 204, 0.05f, 0.025f);
             break;
         }
         case 4: { // wood — planks: per-board tone, seams, end joints, knots
@@ -1253,7 +1404,6 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
                 blend((int) std::floor(i * bw), (i * 149 + 40) % S,
                         (int) std::ceil(bw), 2, 96, 66, 40, 0.55f);
             }
-            speckle(60, 110, 74, 44, 0.08f, 0.04f);
             break;
         }
         default: { // lawn — mowing stripes
@@ -2109,7 +2259,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (const auto& p : placements) {
             if (p.model != m) continue;
             const mat4f xf = mat4f::translation(
-                    float3{ p.x, tb.groundY - p.sink * p.s, p.z })
+                    float3{ p.x, groundSurfaceY(tb, p.x, p.z) - p.sink * p.s, p.z })
                     * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
                     * mat4f::scaling(float3{ p.s, p.s * p.syJit, p.s });
             tcm.setTransform(tcm.getInstance(mSceneryInstances[m][k]->getRoot()), xf);
@@ -2136,12 +2286,13 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (const Boulder& b : boulders) {
             const uint32_t col = packLinear(srgbToLinear(b.grey), b.shade);
             const float cy = std::cos(b.yaw), sy = std::sin(b.yaw);
+            const float by = footprintY(tb, b.x, b.z, b.rr);
             for (const auto& face : F) {
                 for (int vi = 0; vi < 3; vi++) {
                     float3 p = V[face[vi]] * INV;
                     p = { p.x * b.rr, p.y * b.rr * b.sy, p.z * b.rr };
                     const float rx = p.x * cy + p.z * sy, rz = -p.x * sy + p.z * cy;
-                    mBoulders.verts.push_back({ b.x + rx, tb.groundY + b.rr * 0.25f + p.y,
+                    mBoulders.verts.push_back({ b.x + rx, by + b.rr * 0.25f + p.y,
                                                 b.z + rz, col });
                 }
             }
@@ -2150,6 +2301,87 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
         buildMesh(mBoulders);
+    }
+}
+
+// Trackside props (theme.props): a scattered set-dressing pass, instanced from
+// the generated prop-*.glb kit pieces (scripts/gen-props.mjs). Own seeded
+// stream — the scenery, clutter and landmark scatters are untouched by
+// anything rolled here.
+void TtpRenderer::buildProps(const TrackBin& tb) {
+    if (tb.prModelCount == 0) return;
+    uint32_t seed = tb.scSeed2 ^ 0x70726f70u; // "prop"
+    const auto rnd = [&]() {
+        seed = seed * 1664525u + 1013904223u;
+        return (double) seed / 4294967296.0;
+    };
+    const auto isClearP = [&](float x, float z, float m) {
+        for (const auto& s : tb.samples) {
+            const float half = s.width / 2 + m;
+            const float dx = x - s.pos.x, dz = z - s.pos.z;
+            if (dx * dx + dz * dz < half * half) return false;
+        }
+        return true;
+    };
+
+    struct Placement { uint32_t slot; float x, y, z, s, yaw, r, h; };
+    std::vector<Placement> placements;
+
+    // Scattered pieces, the buildScenery idiom: a candidate every 9u per side,
+    // rolled against density, kind picked by cumulative weight.
+    if (tb.prDensity > 0 && !tb.prScatter.empty()) {
+        for (float d = 0; d < tb.length; d += 9) {
+            const TrackBin::Sample f = tb.frameAt(d);
+            for (const int side : { -1, 1 }) {
+                if (rnd() > tb.prDensity) continue;
+                const float lat = side * (f.width / 2 + 2.8f + (float) rnd() * 8.0f);
+                const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 2.0f;
+                const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 2.0f;
+                if (!isClearP(x, z, 1.0f)) continue;
+                const double roll = rnd();
+                double acc = 0;
+                const TrackBin::PropStamp* e = &tb.prScatter.back();
+                for (const auto& p : tb.prScatter) {
+                    acc += p.w;
+                    if (roll < acc) { e = &p; break; }
+                }
+                const float s = e->s0 + (float) rnd() * e->s1;
+                const float yaw = (float) rnd() * 2.0f * (float) M_PI;
+                const float py = footprintY(tb, x, z, 0.45f * s);
+                placements.push_back({ e->slot, x, py, z, s, yaw,
+                                       0.75f * s, 0.6f * s });
+            }
+        }
+    }
+
+    mPropAssets.resize(tb.prModelCount, nullptr);
+    mPropInstances.resize(tb.prModelCount);
+    auto& tcm = mEngine->getTransformManager();
+    for (uint32_t m = 0; m < tb.prModelCount; m++) {
+        size_t count = 0;
+        for (const auto& p : placements) if (p.slot == m) count++;
+        if (!count) continue;
+        const std::string name = "prop" + std::to_string(m) + ".glb";
+        mPropAssets[m] = loadInstancedProp(name.c_str(), count, mPropInstances[m]);
+        if (!mPropAssets[m]) continue;
+        // The buildScenery metal fix: the shared matte read on every piece.
+        for (auto* inst : mPropInstances[m]) {
+            MaterialInstance* const* mis = inst->getMaterialInstances();
+            for (size_t i = 0; i < inst->getMaterialInstanceCount(); i++) {
+                mis[i]->setParameter("metallicFactor", 0.0f);
+                mis[i]->setParameter("roughnessFactor", 1.0f);
+            }
+        }
+        size_t k = 0;
+        for (const auto& p : placements) {
+            if (p.slot != m) continue;
+            const mat4f xf = mat4f::translation(float3{ p.x, p.y, p.z })
+                    * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
+                    * mat4f::scaling(float3{ p.s, p.s, p.s });
+            tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()), xf);
+            mShadowSpots.push_back({ p.x, p.z, p.r, p.h });
+            k++;
+        }
     }
 }
 
@@ -2800,11 +3032,11 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
         seed = seed * 1664525u + 1013904223u;
         return (double) seed / 4294967296.0;
     };
-    const float gy = tb.groundY;
+    const float gy0 = tb.groundY;
     const float CL_MARGIN = 0.7f;
     const auto isClearC = [&](float x, float z) {
         for (const auto& s : tb.samples) {
-            const float h = s.pos.y - gy;
+            const float h = s.pos.y - gy0;
             const float half = s.width / 2 + CL_MARGIN + (h > 0.5f ? 0.6f + 0.8f * h : 0.0f);
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
@@ -2836,6 +3068,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat + ((float) rnd() - 0.5f) * 1.6f;
             const float z = f.pos.z + f.lat.z * lat + ((float) rnd() - 0.5f) * 1.6f;
             if (!isClearC(x, z)) continue;
+            const float gy = groundSurfaceY(tb, x, z); // every piece stands on the relief
             const double r = rnd(); // weighted kind pick (one draw)
             double acc = 0;
             const TrackBin::ClutterKind* entry = &tb.clKinds.back();
@@ -3062,6 +3295,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
             if (!clearSpot(x, z, m)) continue;
             placed.push_back({ x, z, m });
+            mTerrainFlats.push_back({ x, z, m + 1.0f }); // clearing in the relief
             const float fx = -f.lat.x * side, fz = -f.lat.z * side;
             return { x, z, std::atan2(fx, fz), true };
         }
@@ -3080,6 +3314,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 const float px = mx + std::cos(a) * rr, pz = mz + std::sin(a) * rr;
                 if (!clearSpot(px, pz, m)) continue;
                 placed.push_back({ px, pz, m });
+                mTerrainFlats.push_back({ px, pz, m + 1.0f }); // clearing in the relief
                 return { px, pz, (float) rnd() * 2.0f * (float) M_PI, true };
             }
         }
@@ -4600,6 +4835,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     applyTheme(tb, theme);
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
+    setupTerrain(tb); // before the ground sheet and every builder that stands on it
     const uint32_t carCount = (uint32_t) tb.carColors.size();
     const float groundY = tb.groundY;
 
@@ -4615,9 +4851,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     {
         // Every ground kind is the same tiled-canvas idiom (textures.js): N
         // vertical bands of a per-kind luminance/hue wobble over a base colour,
-        // 33.3u per tile. The speckle passes are sub-pixel at any race camera
-        // distance, so only the banding (and the wood's board seams, which do
-        // read) crosses over.
+        // 33.3u per tile. Only the banding (and the wood's board seams, which
+        // do read) crosses over — the JS speckle passes are deliberately gone
+        // (see buildGroundTexture).
         std::vector<GroundBand>& bands = mGroundBands;
         bands.clear();
         const auto shade = [](uint32_t base, float fr, float fg, float fb) {
@@ -4671,35 +4907,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
         // The bands stay — the berms sample them by world x (groundColorAt),
         // which is how the JS shares one texture between floor and kerb. The
-        // FLOOR itself is now the real texture: one quad, UVs in tiles, so the
-        // wood's plank seams and end joints survive (bands can only vary in x).
-        const float G = 400.0f, TILE = kGroundTile;
-        const uint32_t white = packLinear(float3{ 1, 1, 1 }, 1.0f);
-        mGround.verts.push_back({ -G, groundY, -G, white });
-        mGround.verts.push_back({ G, groundY, -G, white });
-        mGround.verts.push_back({ -G, groundY, G, white });
-        mGround.verts.push_back({ G, groundY, G, white });
-        mGround.uvs = { { -G / TILE, -G / TILE }, { G / TILE, -G / TILE },
-                        { -G / TILE, G / TILE }, { G / TILE, G / TILE } };
-        mGround.idx = { 0, 2, 1, 1, 2, 3 };
-        mGround.normals.assign(mGround.verts.size(), float3{ 0, 1, 0 });
-        if (mGroundMaterial) {
-            mGroundTex = buildGroundTexture(tb.groundKind);
-            MaterialInstance* gmi = sceneInstance(mGroundMaterial);
-            mGroundInst = gmi; // bound to the sun map once it is baked, below
-            if (mGroundTex) {
-                TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
-                        TextureSampler::MagFilter::LINEAR);
-                smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
-                smp.setWrapModeT(TextureSampler::WrapMode::REPEAT);
-                smp.setAnisotropy(4.0f); // three sets the same on every ground texture
-                gmi->setParameter("albedo", mGroundTex, smp);
-            }
-            if (!buildMesh(mGround, true, gmi)) return false;
-        } else if (!buildMesh(mGround)) {
-            return false;
-        }
+        // FLOOR mesh itself builds AFTER the builders below, because the
+        // landmark spots carve clearings into the terrain field it samples.
     }
+
 
     // Sky dome (environment.js paintSky): vertex gradient zenith→horizon→below,
     // the same hand-tuned easing. Sits at SKY_R, past the fog cutoff — the sky
@@ -5125,9 +5336,116 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     buildFliers(tb);
     buildOils(tb);   // the cones are always meshes; the slick itself is stamped
     buildStructures(tb);
-    buildScenery(tb);
+    // Landmarks FIRST: their spots carve flat clearings into the terrain field
+    // (mTerrainFlats), which the scatter and the ground mesh then sample. The
+    // three streams are independently seeded, so this order moves nothing.
     buildLandmarks(tb);
+    buildTerrainGrid(tb); // the clearings are carved; freeze the surface
+    buildScenery(tb);
+    buildProps(tb);
     buildClutter(tb);
+
+    // The ground sheet, last of the static builders: the terrain field is
+    // only complete once the landmark spots have carved their clearings.
+    {
+        const float G = 400.0f, TILE = kGroundTile;
+        const uint32_t white = packLinear(float3{ 1, 1, 1 }, 1.0f);
+        if (mTerrainAmp <= 0) {
+            mGround.verts.push_back({ -G, groundY, -G, white });
+            mGround.verts.push_back({ G, groundY, -G, white });
+            mGround.verts.push_back({ -G, groundY, G, white });
+            mGround.verts.push_back({ G, groundY, G, white });
+            mGround.uvs = { { -G / TILE, -G / TILE }, { G / TILE, -G / TILE },
+                            { -G / TILE, G / TILE }, { G / TILE, G / TILE } };
+            mGround.idx = { 0, 2, 1, 1, 2, 3 };
+            mGround.normals.assign(mGround.verts.size(), float3{ 0, 1, 0 });
+        } else {
+            // Heightfield grid over the terrain region, flat sheet as a 4-strip
+            // ring out to ±G. One mesh, one material instance — the relief costs
+            // vertices, never draw calls. The heights are the STORED grid
+            // (buildTerrainGrid), the same surface every placement stood on;
+            // the border rows sit exactly at groundY (terrainY fades to 0
+            // there), so the ring joins without a seam.
+            const int cols = mTerrainCols, rows = mTerrainRows;
+            const float sx = mTerrainSx, sz = mTerrainSz;
+            const auto hAt = [&](int c, int r) {
+                c = std::min(cols, std::max(0, c));
+                r = std::min(rows, std::max(0, r));
+                return mTerrainHs[(size_t) r * (cols + 1) + c];
+            };
+            for (int r = 0; r <= rows; r++) {
+                for (int c = 0; c <= cols; c++) {
+                    const float x = mTerrainX0 + c * sx, z = mTerrainZ0 + r * sz;
+                    mGround.verts.push_back({ x, hAt(c, r), z, white });
+                    mGround.uvs.push_back({ x / TILE, z / TILE });
+                    // Central-difference heightfield normal — analytic, so the
+                    // hills shade smooth at any grid step.
+                    mGround.normals.push_back(normalize(float3{
+                            (hAt(c - 1, r) - hAt(c + 1, r)) / (2 * sx), 1.0f,
+                            (hAt(c, r - 1) - hAt(c, r + 1)) / (2 * sz) }));
+                }
+            }
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    const uint32_t a = (uint32_t) (r * (cols + 1) + c);
+                    const uint32_t b = a + 1;
+                    const uint32_t d = a + (uint32_t) cols + 1, e = d + 1;
+                    mGround.idx.insert(mGround.idx.end(), { a, d, b, b, d, e });
+                }
+            }
+            const auto flatQuad = [&](float qx0, float qz0, float qx1, float qz1) {
+                if (qx1 <= qx0 || qz1 <= qz0) return;
+                const uint32_t base = (uint32_t) mGround.verts.size();
+                mGround.verts.push_back({ qx0, groundY, qz0, white });
+                mGround.verts.push_back({ qx1, groundY, qz0, white });
+                mGround.verts.push_back({ qx0, groundY, qz1, white });
+                mGround.verts.push_back({ qx1, groundY, qz1, white });
+                mGround.uvs.insert(mGround.uvs.end(),
+                        { { qx0 / TILE, qz0 / TILE }, { qx1 / TILE, qz0 / TILE },
+                          { qx0 / TILE, qz1 / TILE }, { qx1 / TILE, qz1 / TILE } });
+                mGround.normals.insert(mGround.normals.end(), 4, float3{ 0, 1, 0 });
+                mGround.idx.insert(mGround.idx.end(),
+                        { base, base + 2, base + 1, base + 1, base + 2, base + 3 });
+            };
+            flatQuad(-G, -G, mTerrainX0, G);            // west strip
+            flatQuad(mTerrainX1, -G, G, G);             // east strip
+            flatQuad(mTerrainX0, -G, mTerrainX1, mTerrainZ0); // north strip
+            flatQuad(mTerrainX0, mTerrainZ1, mTerrainX1, G);  // south strip
+
+            // Depth-pass stand-in (see the caster note before bakeShadowMap):
+            // the relief must NOT cast — a heightfield rendered into its own
+            // shadow map self-shadows the swells into dotted acne trails —
+            // but ground receivers still need a floor in the map or the
+            // road's penumbra collapses against the far plane. This flat quad
+            // at groundY is that floor: layer bit 0 cleared so no main view
+            // ever draws it, bit 1 set (below) so the bake does.
+            mGroundProxy.verts = {
+                { -G, groundY, -G, white }, { G, groundY, -G, white },
+                { -G, groundY, G, white }, { G, groundY, G, white } };
+            mGroundProxy.idx = { 0, 2, 1, 1, 2, 3 };
+            if (buildMesh(mGroundProxy)) {
+                auto& rcm = mEngine->getRenderableManager();
+                const auto ri = rcm.getInstance(mGroundProxy.entity);
+                if (ri) rcm.setLayerMask(ri, 0x01, 0x00);
+            }
+        }
+        if (mGroundMaterial) {
+            mGroundTex = buildGroundTexture(tb.groundKind);
+            MaterialInstance* gmi = sceneInstance(mGroundMaterial);
+            mGroundInst = gmi; // bound to the sun map once it is baked, below
+            if (mGroundTex) {
+                TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
+                        TextureSampler::MagFilter::LINEAR);
+                smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+                smp.setWrapModeT(TextureSampler::WrapMode::REPEAT);
+                smp.setAnisotropy(4.0f); // three sets the same on every ground texture
+                gmi->setParameter("albedo", mGroundTex, smp);
+            }
+            if (!buildMesh(mGround, true, gmi)) return false;
+        } else if (!buildMesh(mGround)) {
+            return false;
+        }
+    }
 
     // Skid pool — SkidMarks.js port. SKID_POOL 4-column stamps (rear L/l/r/R,
     // front L/l/r/R): the two INNER columns carry the full alpha and the outer
@@ -5266,19 +5584,35 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // spot = { worldX, worldZ, radius, casterHeight }.
             // key from (2,12,1.5): shadow shifts opposite, scaled by height.
             const float ox = -2.0f / 12.0f * s.w, oz = -1.5f / 12.0f * s.w;
-            const float3 ctr = { s.x + ox, groundY + 0.02f, s.y + oz };
+            const float cx = s.x + ox, cz = s.y + oz;
             const float r = s.z;
-            const uint32_t base = (uint32_t) mGroundShadows.verts.size();
-            mGroundShadows.verts.push_back({ ctr.x, ctr.y, ctr.z, core });
+            // Conformed per vertex onto the ground MESH's own surface
+            // (groundSurfaceY), with a mid ring: a plain fan interpolates
+            // straight across grid creases, and over a valley crease the chord
+            // dips under the drawn ground. Half the span, a quarter the sag.
+            constexpr float LIFT = 0.03f;
             const int SEG = 14;
-            for (int j = 0; j <= SEG; j++) {
-                const float a = (float) j / SEG * 2.0f * (float) M_PI;
-                mGroundShadows.verts.push_back({ ctr.x + std::cos(a) * r, ctr.y,
-                        ctr.z + std::sin(a) * r, rim });
+            const uint32_t mid = packLinear(srgbToLinear(0x2a2735), 1.0f, 0.15f);
+            const uint32_t base = (uint32_t) mGroundShadows.verts.size();
+            mGroundShadows.verts.push_back(
+                    { cx, groundSurfaceY(tb, cx, cz) + LIFT, cz, core });
+            for (const float ring : { 0.5f, 1.0f }) {
+                for (int j = 0; j <= SEG; j++) {
+                    const float a = (float) j / SEG * 2.0f * (float) M_PI;
+                    const float vx = cx + std::cos(a) * r * ring;
+                    const float vz = cz + std::sin(a) * r * ring;
+                    mGroundShadows.verts.push_back({ vx,
+                            groundSurfaceY(tb, vx, vz) + LIFT, vz,
+                            ring < 1.0f ? mid : rim });
+                }
             }
+            const uint32_t r0 = base + 1, r1 = base + 1 + (SEG + 1);
             for (int j = 0; j < SEG; j++) {
                 mGroundShadows.idx.insert(mGroundShadows.idx.end(),
-                        { base, base + 1 + (uint32_t) j, base + 2 + (uint32_t) j });
+                        { base, r0 + (uint32_t) j, r0 + (uint32_t) j + 1 });
+                mGroundShadows.idx.insert(mGroundShadows.idx.end(),
+                        { r0 + (uint32_t) j, r1 + (uint32_t) j, r1 + (uint32_t) j + 1,
+                          r0 + (uint32_t) j, r1 + (uint32_t) j + 1, r0 + (uint32_t) j + 1 });
             }
         }
         buildMesh(mGroundShadows, true, mBlendMaterial->getDefaultInstance());
@@ -5654,7 +5988,11 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // ...and the floor, for exactly the same reason. Two triangles in a
     // depth-only pass, and without them every ground receiver compares itself
     // against the far plane and gets the collapsed penumbra described above.
-    setMeshShadows(mGround, true, true);
+    // The heightfield receives but must not cast (its flat PROXY casts in its
+    // place — see the ground build); the flat-quad biomes keep the original
+    // two-triangle self.
+    setMeshShadows(mGround, mTerrainAmp <= 0, true);
+    setMeshShadows(mGroundProxy, true, false);
     setMeshShadows(mGantry, true, true);
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
@@ -9668,6 +10006,7 @@ void TtpRenderer::releaseScene() {
     mEngine->flushAndWait();
     destroyMesh(mRoad);
     destroyMesh(mGround);
+    destroyMesh(mGroundProxy);
     destroyMesh(mSky);
     destroyMesh(mHills);
     destroyMesh(mBalloon);
@@ -9714,6 +10053,7 @@ void TtpRenderer::releaseScene() {
     mMaskLayerBakedBits &= (uint16_t) (1u << kMaskLayerGeneric);
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
+    for (auto*& a : mPropAssets) dropAsset(a);
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
@@ -9756,6 +10096,8 @@ void TtpRenderer::releaseScene() {
     mConeInstances.clear();
     mSceneryAssets.clear();
     mSceneryInstances.clear();
+    mPropAssets.clear();
+    mPropInstances.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();

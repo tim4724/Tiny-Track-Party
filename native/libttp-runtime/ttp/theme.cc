@@ -84,6 +84,16 @@ ScenerySpec grassScenery() {
 // ── grass — the canonical Sunny Circuit biome. Every value here is the VERBATIM
 // constant the renderer used before theming existed; do not drift it, or the
 // Backyard cup (which resolves to grass) changes look.
+// Shared by grass and sunset, the grassScenery() rule: one authored list, two
+// light rigs.
+PropsSpec gardenProps() {
+  PropsSpec p;
+  p.models = { "prop-hay", "prop-crate" };
+  p.scatterDensity = 0.1f;
+  p.scatter = { { 0, 0.7f, 0.85f, 0.4f }, { 1, 0.3f, 0.9f, 0.25f } };
+  return p;
+}
+
 Theme grassTheme() {
   Theme t;
   t.sky[0] = 0x59a7e8; t.sky[1] = 0x8ecae6; t.sky[2] = 0xc8e9f2;
@@ -99,6 +109,7 @@ Theme grassTheme() {
   t.balloon = { { 0xd94f3d, 0xf5f0e2 }, 44, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };
   t.scenery = grassScenery();
+  t.props = gardenProps();  // hay bales and toy crates on the verge
   deriveRoad(t.road, false, false, false);
   return t;
 }
@@ -119,6 +130,7 @@ Theme sunsetTheme() {
   t.balloon = { { 0xf2c14e, 0x8a76d8 }, 46, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };  // the same backyard, later in the day
   t.scenery = grassScenery();
+  t.props = gardenProps();  // the same garden, later in the day
   deriveRoad(t.road, false, false, false);
   return t;
 }
@@ -171,6 +183,11 @@ Theme beachTheme() {
                 { CL_DRIFTWOOD, 0.25f, { 0xcbb794, 0xb8a686 } } };
   s.clutterDensity = 0.28f;
   deriveModels(s);
+  // Washed-up freight: a few crates above the tide line. No fence — the coast
+  // stays open to the water.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.07f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
   return t;
 }
 
@@ -221,6 +238,10 @@ Theme canyonTheme() {
                 { CL_PEBBLES, 0.28f, { 0xc07a55, 0xa8623f, 0xd39a70 } } };
   s.clutterDensity = 0.25f;
   deriveModels(s);
+  // Supply crates by the road.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.06f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
   return t;
 }
 
@@ -270,6 +291,10 @@ Theme snowTheme() {
   s.clutter = { { CL_DRIFT, 1, { 0xf3f7fb, 0xe9eff6 } } };  // wind-blown snow heaps
   s.clutterDensity = 0.3f;
   deriveModels(s);
+  // Sled crates.
+  t.props.models = { "prop-crate" };
+  t.props.scatterDensity = 0.05f;
+  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
   return t;
 }
 

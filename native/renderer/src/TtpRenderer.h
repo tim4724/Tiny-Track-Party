@@ -385,6 +385,10 @@ private:
     static constexpr float kRoadCell = 2.0f;
     std::unordered_map<uint64_t, std::vector<uint32_t>> mRoadGrid; // cell → first vertex of each tri
     Mesh mGround;
+    // The heightfield's stand-in in the shadow bake's depth pass: a flat quad
+    // at groundY, drawn by no main view (layer bit 0 cleared). The relief
+    // itself must not cast — see the caster note before bakeShadowMap.
+    Mesh mGroundProxy;
     // The ground's tiled colour bands (the biome's lawn/sand/redrock/snow/wood
     // canvas, baked to vertex colour). The berms tile the SAME texture in the
     // JS, so they sample this by world x.
@@ -392,6 +396,29 @@ private:
     std::vector<GroundBand> mGroundBands;
     static constexpr float kGroundTile = 600.0f / 18.0f;
     filament::math::float3 groundColorAt(float x) const;
+    // Terrain relief: rolling hills on the ground sheet, flat under and beside
+    // the road (see setupTerrain). Amp 0 = the flat-quad biomes (sand, wood).
+    float mTerrainAmp = 0;
+    uint32_t mTerrainSeed = 0;
+    float mTerrainX0 = 0, mTerrainZ0 = 0, mTerrainX1 = 0, mTerrainZ1 = 0;
+    // Flat clearings the landmark spots carve into the relief (so a windmill
+    // never stands on a slope). Registered by buildLandmarks BEFORE the ground
+    // mesh and the scatter sample the field — see the builder order.
+    struct TerrainFlat { float x, z, r; };
+    std::vector<TerrainFlat> mTerrainFlats;
+    void setupTerrain(const TrackBin& tb);
+    float terrainY(const TrackBin& tb, float x, float z) const;
+    // The sampled heightfield the ground MESH is built from, kept so every
+    // placement stands on the mesh's own piecewise-linear surface rather than
+    // the analytic field — between grid vertices they differ by enough to bury
+    // a shadow disc or a starfish. Filled by buildTerrainGrid, read by
+    // groundSurfaceY (which answers groundY wherever the grid is absent).
+    std::vector<float> mTerrainHs;
+    int mTerrainCols = 0, mTerrainRows = 0;
+    float mTerrainSx = 0, mTerrainSz = 0;
+    void buildTerrainGrid(const TrackBin& tb);
+    float groundSurfaceY(const TrackBin& tb, float x, float z) const;
+    float footprintY(const TrackBin& tb, float x, float z, float r) const;
     // Build the biome's 256² floor texture (textures.js makeLawn/Sand/RedRock/
     // Snow/WoodFloorTexture, ported pixel-for-pixel) and hand it to Filament.
     filament::Texture* buildGroundTexture(uint32_t kind);
@@ -647,6 +674,9 @@ private:
     // Trackside scenery: instanced tree/bush GLBs + a merged boulder mesh.
     std::vector<filament::gltfio::FilamentAsset*> mSceneryAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSceneryInstances;
+    // Trackside props (prop<i>.glb): scattered set dressing.
+    std::vector<filament::gltfio::FilamentAsset*> mPropAssets;
+    std::vector<std::vector<filament::gltfio::FilamentInstance*>> mPropInstances;
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
     Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
@@ -848,6 +878,7 @@ private:
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
+    void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
