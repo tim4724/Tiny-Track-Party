@@ -27,6 +27,9 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH_RAW="${{ github.event.ref }}"
-          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g')
+          # Must stay identical to the slug pipeline in preview.yml — a shorter
+          # pipeline here computes a different namespace for long branch names,
+          # deletes nothing (--ignore-not-found stays green) and leaks the ns.
+          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
           NS="tinytrack-${SAFE_BRANCH}"
           kubectl delete namespace "$NS" --ignore-not-found
