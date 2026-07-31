@@ -147,6 +147,15 @@ function enableFreeCamIfStandalone(scene) {
   return true;
 }
 
+// One key for all tracks, deliberately: reload-same-URL is the use case, and a
+// pose carried onto a different track is one drag away from useful anyway.
+const FREECAM_KEY = 'ttp-freecam';
+
+function restoreFreeCamPose() {
+  try { return JSON.parse(sessionStorage.getItem(FREECAM_KEY)) || undefined; }
+  catch (_) { return undefined; } // corrupt entry: fall back to the iso framing
+}
+
 // The same camera, unconditionally, from `start` (see Stage.enableUserCamera).
 // The asset gallery takes this branch: there the preview IS the page — one
 // full-bleed frame you are meant to fly, not a thumbnail in a grid — so the
@@ -158,7 +167,16 @@ function enableFreeCam(scene, start) {
   // #race is a transparent z-2 overlay over the canvas; let pointer events fall
   // through to it so the drag handler can listen (see .cam-free in display.css).
   document.documentElement.classList.add('cam-free');
-  const cam = scene.enableUserCamera(start);
+  // Reload keeps the pose: the pose you flew to is saved per-tab on pagehide and
+  // handed back as the start override, so an F5 reopens the exact same view. An
+  // explicit `start` wins — a caller that says where to look means it.
+  const cam = scene.enableUserCamera(start || restoreFreeCamPose());
+  window.addEventListener('pagehide', () => {
+    try {
+      sessionStorage.setItem(FREECAM_KEY,
+        JSON.stringify({ eye: cam.eye, yaw: cam.yaw, pitch: cam.pitch }));
+    } catch (_) { /* storage denied: the next load just opens on the default framing */ }
+  });
   showCamHint(); // surface the (otherwise invisible) drag + WASD/QE controls
   return cam;
 }
