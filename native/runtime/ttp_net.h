@@ -30,8 +30,8 @@
  * sessionStorage, setInterval/setTimeout, the QR module bitmap (decision D3 —
  * the URL composition is shared, the bitmap is three platform one-liners), the
  * reconnect card's DOM, the slot-0 bearer secret (no rules, just entropy), and
- * the host's MODE PICK (_applyMode/setTrack — a cup-series concern that needs a
- * catalogue and a shuffle bag).
+ * the random pick's SHUFFLE BAG (page RNG, not room state — the walks below ask
+ * for a draw rather than owning one).
  *
  * NULL IS NOT ZERO, and ABSENT IS NOT NULL. The rejoinToken normalizer turns on
  * that difference: JS Number(null) is 0 while Number(undefined) is NaN, so a
@@ -102,8 +102,10 @@ TTP_ABI const char* ttp_net_lobby_snapshot_json(const char* inputJson);
  *                  host and the room phase
  *   sessionHandle  a ttp_session_begin handle, or 0 for no live race — supplies
  *                  every seat's inRace, read off the Game itself
- *   fieldsJson     {"paused":bool,"mode":str|null,"cupId":str|null,
- *                   "randomRaces":num,"trackId":str|null,"standings":obj|null}
+ *   fieldsJson     {"paused":bool,"standings":obj|null} — the two things only
+ *                  the game layer knows. The PICK is not among them: the frame
+ *                  reads the stored one off the room handle (see the stored
+ *                  pick section below), so a pick key passed here is dead.
  *   ->             {"data":{...the LOBBY_UPDATE...},"type":"set_state"}
  *
  * ttp_net_lobby_snapshot_json + ttp_framing_encode_set_state are the two halves
@@ -209,6 +211,23 @@ TTP_ABI const char* ttp_net_inbound_route(double from, const char* type);
  * name is the game layer's. */
 TTP_ABI const char* ttp_net_message_action(const char* type);
 
+/* The verdict on a GAME message (what a `game-message` effect hands the
+ * coordinator): "start-race" | "series-next" | "pause" | "resume" |
+ * "return-to-lobby" | "control" | "none" — with the authorization inside.
+ * START_GAME must come from the host AND every other racer must be ready (the
+ * same ttp_ui_all_racers_ready gate the lobby button shows); SERIES_NEXT is
+ * host-only; pause/resume/new-game are any player's; CONTROL needs a live
+ * race. A shell dispatches on the verdict and re-derives none of the gates —
+ * the if-chain this replaces existed in two shells with the gates spelled
+ * twice.
+ *
+ * A shell MAY keep CONTROL on its own short-circuit ahead of this call (the
+ * web does): CONTROL is the relay-fallback INPUT path, sensor-rate when the
+ * fastlane is down, and adding a crossing there was measured and refuted —
+ * the verdict exists for the button-press messages. */
+TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
+                                              const char* fromJson, const char* type);
+
 /* SET_CAR: 1 to accept the pick. Four conjoined rules — a READY seat is locked
  * (ready survives race -> lobby, so the pick behind it must not shift), a RACER
  * is locked until the room is back in the lobby while a car-less late joiner may
@@ -275,6 +294,174 @@ TTP_ABI const char* ttp_net_claim_plan_json(const char* helloJson, double fromId
  * duplicates in the relay's list collapse. */
 TTP_ABI const char* ttp_net_resync_plan_json(const char* rosterIdsJson,
                                              const char* relayPeersJson);
+
+/* ===========================================================================
+ * THE CHOREOGRAPHY WALKS — one entry point per inbound trigger.
+ * ===========================================================================
+ *
+ * Everything above answers ONE rule and leaves the sequencing to the shell,
+ * which is exactly where the first TV shell's launch bugs lived: the same walk
+ * hand-written twice, once per platform. These entry points are that walk,
+ * once. Each takes the ttp_room_create handle (and the session handle where a
+ * step reads race state), performs every ROOM MUTATION internally through the
+ * live machine, and answers an ORDERED effect list of platform ops:
+ *
+ *   {"effects":[{"op":"...", ...}, ...]}
+ *
+ * A shell walks the array in index order and performs each op against its
+ * socket, timers, storage and callbacks. It may not reorder, batch or skip,
+ * and an op it cannot perform is a missing capability that must THROW — the
+ * same contract as ttp_race.h's lists, stated there at length.
+ *
+ * EVENTS STILL DRAIN FIRST. Room mutations queue rosterchange/hostchange/
+ * playerleave on the handle as ever; a shell drains ttp_room_events_json (and
+ * re-fires its listeners) BEFORE performing the effects, which reproduces the
+ * old inline order (the announce a mutation used to fire mid-walk lands before
+ * the walk's own trailing sends).
+ *
+ * PER-ROOM NET STATE lives behind the room handle: the room code, the shard
+ * instance, the in-room flag and the self-heartbeat's in-flight pair. The
+ * shell mirrors code/instance only to compose URLs and dial sockets, and only
+ * ever writes its mirror while performing `save-room` / `forget-room`.
+ *
+ * The effect vocabulary (op -> payload -> what the shell does):
+ *   clear-create-timer                       cancel the created/joined watchdog
+ *   arm-create-watchdog {delayMs}            (re)arm it; on expiry call
+ *                                            ttp_net_create_timeout_json
+ *   join-room {room}                         relay join
+ *   create-room {maxClients}                 relay create (+ the shell's own
+ *                                            controller-URL template)
+ *   pin-instance {room,instance}             pin the relay shard
+ *   save-room {room,instance|null}           adopt + persist the room identity
+ *   forget-room                              drop + unpersist it
+ *   room-ready {room,instance|null}          the onRoomReady callback
+ *   start-liveness                           arm the 1 Hz liveness interval
+ *   reset-reconnect-count                    the connection's attempt counter
+ *   connect-fresh                            tear down and dial a fresh room
+ *   fail-attempt                             count a failed connect attempt
+ *   reconnect                                force an immediate reconnect
+ *   send-to {to,data}                        relay unicast, data verbatim
+ *   publish                                  republish the retained snapshot
+ *   announce                                 publish + the roster-changed
+ *                                            callback (count + host)
+ *   close-fastlane {peerIndex}               close that peer's RTC link
+ *   show-reconnect {seat}                    raise the seat's reconnect card
+ *                                            ({peerIndex,name,colorIndex}; the
+ *                                            shell adds the claim URL — D3)
+ *   clear-reconnect {peerIndex}              drop that seat's card
+ *   rekey-player {oldId,newId}               the onPlayerRekey callback
+ *   player-renamed {peerIndex,name}          the onPlayerRenamed callback
+ *   welcome-item {peerIndex}                 relight the rejoiner's held ITEM
+ *                                            (emitted only when the live race
+ *                                            holds their car — the predicate
+ *                                            the shell used to own)
+ *   game-message                             hand the triggering message to the
+ *                                            game layer (the shell still holds
+ *                                            from/data — nothing re-crosses)
+ *   race-abandoned                           the onRaceAbandoned callback
+ *   set-pick {mode,cupId,randomRaces,trackId} adopt the resolved lobby pick
+ *   track-change {trackId}                   the onTrackChange callback
+ *   clear-standings                          drop the mirrored results board
+ *
+ * `pickJson` is the shell's CURRENT pick, {"mode","cupId","randomRaces",
+ * "trackId","hasBag"} — shell-held state because the game layer reads it
+ * synchronously all day; the walks validate and answer `set-pick`, so the
+ * shell mirror has a single writer. `hasBag` says whether a shuffle bag exists
+ * at all (test surfaces run without one, and a bagless shell must refuse
+ * random picks exactly as the old shell did). */
+
+/* Adopt a room identity restored from the shell's storage, before the first
+ * dial — what makes the reopened socket JOIN instead of CREATE. */
+TTP_ABI void ttp_net_restore_room(int roomHandle, const char* code, const char* instance);
+
+/* Socket open: join-vs-create plus the created/joined watchdog. */
+TTP_ABI const char* ttp_net_on_open_json(int roomHandle);
+
+/* The watchdog expired. fail-attempt unless an answer landed meanwhile. */
+TTP_ABI const char* ttp_net_create_timeout_json(int roomHandle);
+
+/* A relay protocol frame: created / joined (post-reload reconciliation
+ * included) / peer_joined / peer_left / error. */
+TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
+                                             const char* msgJson, double nowMs);
+
+/* The socket closed. roomClosed is the close-outcome meta's flag (our own
+ * close_room echoing back, or the relay tearing the room down): terminal for
+ * the ROOM but not the display — forget it, expire every seat (close_room
+ * sends no peer_lefts, so the old roster would haunt the fresh lobby), and
+ * only then dial fresh. That order is load-bearing. The reconnect BACKOFF is
+ * not here: it lives in the connection kit (PartyConnection), which stays
+ * platform code by design. */
+TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
+
+/* A relay message. Routes slot-0 echoes (the heartbeat closes its loop here),
+ * stamps liveness, and walks the peer switch: hello (cross-device claim,
+ * seating, rename-vs-first-hello, welcome), leave, set_car, set_ready,
+ * select_mode, ping (the PONG is composed here), default -> game-message.
+ * `isSignal` is the shell's "the fastlane consumed this as an RTC signal" —
+ * the walk then stops after the liveness stamp, exactly where the old shell
+ * returned. `sessionHandle` supplies the seat's in-race answer (SET_CAR's
+ * lock, the welcome-item predicate) off the live Game; 0 between races.
+ * select_mode may answer {"effects":[],"needDraw":true}: the pick needs a
+ * fresh draw, the bag is the shell's, so draw one and finish with
+ * ttp_net_select_mode_draw_json. The pick itself is STORED STATE behind the
+ * room handle (ttp_net_init_pick / ttp_net_pick_json below) — no walk takes
+ * it as an argument and no shell mirrors it. */
+TTP_ABI const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
+                                                 const char* fromJson, const char* msgJson,
+                                                 int isSignal, double nowMs);
+
+/* The second half of a needDraw round trip: the same select-mode rules, with
+ * the drawn track id in hand. */
+TTP_ABI const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
+                                                  const char* msgJson,
+                                                  const char* drawnTrackId);
+
+/* The game-layer track swap that keeps mode/cup as they are (a cup advancing,
+ * a lobby re-draw). Same catalogue-membership and same-pick gates as the mode
+ * pick, same store/publish/track-change tail. */
+TTP_ABI const char* ttp_net_set_track_json(int roomHandle, const char* trackId);
+
+/* ---- the stored pick -------------------------------------------------------
+ * The lobby pick ({mode,cupId,randomRaces,trackId}) lives behind the room
+ * handle: the walks above are its only writers, the lobby frame reads it on
+ * every publish, and a shell that wants it (the start gate, the cup slot)
+ * asks — it keeps no mirror, which is a copy two shells already carried.
+ *
+ * init_pick is the constructor rule that used to live in DisplayNet: a
+ * default track preselects mode "track"; hasBag stamps whether this shell
+ * wired a shuffle bag (a bagless test surface refuses random outright).
+ * clear_pick is End party's fresh-room reset (hasBag survives — the shell's
+ * capability did not change). Fields answer with EXPLICIT nulls, exactly as
+ * the mirror spelled them. */
+TTP_ABI void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag);
+TTP_ABI void ttp_net_clear_pick(int roomHandle);
+TTP_ABI const char* ttp_net_pick_json(int roomHandle);
+
+/* The 1 Hz liveness tick: the self-heartbeat state machine (in-flight pair
+ * internal — it also resets under created/joined, BEFORE the shell's timer
+ * guard can matter, so a heartbeat left in flight by a dropped socket cannot
+ * survive into the fresh connection), then on a sweep the expiry drops, the
+ * active-order re-sync and the abandoned-race deadline, in that order on the
+ * one clock reading. */
+TTP_ABI const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowMs);
+
+/* Proof of life outside the message path (fastlane input): stamp, and lift a
+ * dropped seat back to connected — the SINGLE writer that lifts disconnection;
+ * ttp_net_on_peer_message_json runs this same walk internally. */
+TTP_ABI const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson, double nowMs);
+
+/* The drained hostchange event's body, taking the event's own hostPeerIndex:
+ * clear the promoted host's ready flag (their footer button is "Start race",
+ * so it could never be cleared — and it would keep their car pick locked
+ * forever), then announce. */
+TTP_ABI const char* ttp_net_host_change_apply_json(int roomHandle, const char* hostPeerIdJson);
+
+/* The drained statechange event's body: restamp connected seats on a race
+ * start (never a blanket clear-disconnected — it would orphan a grace-pending
+ * seat's QR), free disconnected seats on LOBBY, clear-standings, publish. */
+TTP_ABI const char* ttp_net_state_change_apply_json(int roomHandle, const char* to,
+                                                    double nowMs);
 
 #ifdef __cplusplus
 }

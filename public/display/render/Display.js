@@ -79,12 +79,9 @@ export class Display {
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
     this._showcase = false;  // the asset gallery's showroom; see showcase()
-    // The roster ids handed to ttp_display_build, in SLOT order. The HUD block
-    // comes back indexed by slot and carries no car id (ttp_hud.h's slot
-    // identity note), so this list — the one this class authored — is what maps
-    // an entry back to a car. Empty whenever no scene is built, which is exactly
-    // when C++ has no roster either.
-    this._rosterIds = [];
+    // No slot→car-id list here anymore: the HUD block is indexed by slot and
+    // hud() maps entries back to cars via ttp_display_slot_ids_json — the
+    // built scene's OWN roster, not a copy this class authors.
     this._fn = {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
@@ -101,6 +98,7 @@ export class Display {
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
       cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
+      slotIds: mod.cwrap('ttp_display_slot_ids_json', 'string', []),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
@@ -239,10 +237,6 @@ export class Display {
   async setTrack(trackId, biome, roster, assets) {
     if (this.built) this._fn.release();
     this.built = false;
-    // Released, so C++ holds no roster either: the two lists go empty together
-    // and the HUD reads as "nothing to say yet" for the length of the rebuild,
-    // rather than mapping this race's slots onto last race's ids.
-    this._rosterIds = [];
     // The look, before anything is fetched: the scenery model list is a
     // function of it, and so is the scene the build call will produce.
     this._fn.biome(biome);
@@ -297,10 +291,8 @@ export class Display {
     // about it (the livery's ABGR word, the name plate's 8 chars, how high that
     // plate sits on this model's back panel) is decided by ttp/roster.h — it
     // used to be a byte buffer this file packed by hand.
-    const ids = (roster || []).map((r) => r.id);
     // The reason is the engine's: no surface, or a track this build does not have.
     if (this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
-    this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
   }
 
@@ -316,7 +308,6 @@ export class Display {
     // one job in the exchange, exactly as at build.
     await this._provideCars(roster, assets);
     return !this._fn.reroster(JSON.stringify(this._slots(roster)));
-    // _rosterIds is already right: C++ refuses any change to the id list.
   }
 
   // The per-slot car GLBs (and their 50%-alpha ghost twins), provided as
@@ -344,7 +335,6 @@ export class Display {
   release() {
     if (!this.built) return;
     this._fn.release();
-    this._rosterIds = [];
     this.built = false;
   }
 
@@ -417,10 +407,13 @@ export class Display {
     }
     const count = u32[head + 1];
     const stride = u32[head + 2];
+    // Slot i's car id, off the built scene's own roster (the one owner —
+    // this side used to keep a copy and a drifted index was silently skipped).
+    const slotIds = JSON.parse(this._fn.slotIds());
     const rows = [];
     for (let i = 0; i < count; i++) {
-      const id = this._rosterIds[i];
-      if (id === undefined) continue; // a slot this side never named: nothing to paint
+      const id = slotIds[i];
+      if (id === undefined) continue; // more block rows than roster: nothing to paint
       const off = ptr + HUD_HEADER_BYTES + i * stride;
       const at = off >> 2;
       const flags = u32[at + 4];

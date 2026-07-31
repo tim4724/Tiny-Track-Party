@@ -12,10 +12,14 @@
 // a cross-layer read belongs and where ttp_room_sync_active_order has always
 // done it.
 //
-// NO RoomFlow TYPE CROSSES, deliberately. These are narrow accessors returning
-// plain ttp::Value, so ttp_net.cc and ttp_ui.cc include this header and nothing
-// from libttp-party's public headers — the seam stays one file wide instead of
-// becoming an include that later grows a habit.
+// NO RoomFlow TYPE CROSSES on the READ accessors, deliberately: they return
+// plain ttp::Value, so ttp_ui.cc includes this header and nothing from
+// libttp-party's public headers — the seam stays one file wide instead of
+// becoming an include that later grows a habit. ttp_room_flow below is the ONE
+// exception, and it exists for the choreography walks alone (ttp_net.cc's
+// ttp_net_on_* entry points), which MUTATE the room in C++ and therefore need
+// the machine itself, not a projection of it. Nothing that only DESCRIBES a
+// room may take it.
 #ifndef TTP_ROOM_H
 #define TTP_ROOM_H
 
@@ -23,6 +27,7 @@
 
 namespace ttp {
 struct Value;
+class RoomFlow;
 }
 
 // The roster as RoomFlow hands it over — ttp_room_list_json's answer as a Value
@@ -55,5 +60,39 @@ ttp::Value ttp_room_host_value(int roomHandle);
 // "lobby" | "countdown" | "playing" | "results". Empty for an unknown handle,
 // which every roomStateOf/room_state_of reader already treats as "not a phase".
 std::string ttp_room_state_name(int roomHandle);
+
+// Per-id presence answers over a caller-ordered car-id list, in its order —
+// the role sets the race-flow and auto-pause rules read (RoomFlow.has /
+// RoomFlow.isDisconnected), taken here so no shell loops the roster through
+// the C boundary to build them. An unknown handle answers all-false, which
+// composes to "nobody seated, nobody dropped" — the no-room case.
+ttp::Value ttp_room_has_flags(int roomHandle, const ttp::Value& carIds);
+ttp::Value ttp_room_disconnected_flags(int roomHandle, const ttp::Value& carIds);
+
+// lateJoinersValue() AFTER syncing the active order off the live race — "who
+// is a late joiner" is defined by subtraction from the active set, so an
+// unsynced read answers off a stale race (DisplayNet.lateJoiners has always
+// pushed first; the ordering crosses with the read so no caller can drop it).
+// Empty array for an unknown handle.
+ttp::Value ttp_room_late_joiners_synced(int roomHandle, int sessionHandle);
+
+// allParticipantsDisconnected AFTER syncing the active order off the live
+// race. The sync-first ordering is the reason the shell-facing seam exists at
+// all (Net.js used to hold it); here it is one call so no reader can ask off
+// a stale set.
+int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHandle);
+
+// The lobby pick the net walks decide, stored beside the room it describes so
+// no shell keeps a mirror. Written ONLY by ttp_net's walks (init/select/
+// set-track/clear); read by the walks, the lobby frame and ttp_net_pick_json.
+ttp::Value ttp_room_pick_value(int roomHandle);
+void ttp_room_store_pick(int roomHandle, ttp::Value pick);
+
+// The live machine behind a handle, or nullptr — for the choreography walks
+// (see the header note). Mutations through it still queue their events on the
+// handle exactly as the ttp_room_* mutators do, so a shell that drains
+// ttp_room_events_json after a walk observes the same rosterchange/hostchange/
+// playerleave cadence it always has. Never owns: the room outlives the call.
+ttp::RoomFlow* ttp_room_flow(int roomHandle);
 
 #endif  // TTP_ROOM_H

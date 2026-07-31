@@ -40,6 +40,11 @@ struct RoomHandle {
   std::unique_ptr<RoomFlow> flow;
   std::vector<std::pair<std::string, Value>> events;  // emission-ordered queue
   std::string scratch;                                // backs const char* returns
+  // The lobby pick the net walks decide ({mode,cupId,randomRaces,trackId,
+  // hasBag}, explicit nulls — strictEquals reads them). SHIM state, not
+  // RoomFlow's: the frozen party corpora know no pick, and the walks are its
+  // only writers (ttp_room_store_pick). Shells read ttp_net_pick_json.
+  Value pick = Value::Obj();
 };
 
 std::map<int, std::unique_ptr<RoomHandle>> g_rooms;
@@ -227,6 +232,57 @@ Value ttp_room_host_value(int roomHandle) {
 std::string ttp_room_state_name(int roomHandle) {
   RoomHandle* rh = room(roomHandle);
   return rh ? rh->flow->stateName() : std::string();
+}
+
+Value ttp_room_has_flags(int roomHandle, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  RoomHandle* rh = room(roomHandle);
+  for (const Value& idV : carIds.arr) {
+    const PeerId id = json::id_of<PeerId>(&idV);
+    flags.push(Value::Bool(rh && !id.isNull() && rh->flow->has(id)));
+  }
+  return flags;
+}
+
+Value ttp_room_disconnected_flags(int roomHandle, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  RoomHandle* rh = room(roomHandle);
+  for (const Value& idV : carIds.arr) {
+    const PeerId id = json::id_of<PeerId>(&idV);
+    flags.push(Value::Bool(rh && !id.isNull() && rh->flow->isDisconnected(id)));
+  }
+  return flags;
+}
+
+Value ttp_room_late_joiners_synced(int roomHandle, int sessionHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return Value::Arr();
+  ttp_room_sync_active_order(roomHandle, sessionHandle);
+  return rh->flow->lateJoinersValue();
+}
+
+int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return 0;
+  ttp_room_sync_active_order(roomHandle, sessionHandle);
+  return rh->flow->allParticipantsDisconnected() ? 1 : 0;
+}
+
+RoomFlow* ttp_room_flow(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->flow.get() : nullptr;
+}
+
+Value ttp_room_pick_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->pick : Value::Obj();
+}
+
+void ttp_room_store_pick(int roomHandle, Value pick) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->pick = std::move(pick);
 }
 
 // ---- liveness ---------------------------------------------------------------
@@ -430,6 +486,7 @@ const char* ttp_framing_close_outcome(int hasCode, double code, double attemptBe
 }
 
 double ttp_framing_backoff_ms(double attempt) { return framing::backoff_delay_ms(attempt); }
+double ttp_framing_max_reconnect_attempts(void) { return framing::MAX_RECONNECT_ATTEMPTS; }
 
 const char* ttp_framing_pin_url(const char* base, const char* room, const char* instance) {
   g_bufPinUrl = framing::pin_instance_url(base ? base : "", room ? room : "",

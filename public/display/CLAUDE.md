@@ -2,10 +2,10 @@
 
 Its job is to **perform and render**; the *game* decisions are C++ (see
 `native/libttp-runtime/CLAUDE.md`). What deliberately stays here is the shuffle
-bag, the host's mode pick and the lobby demo. tvOS and Android TV get siblings of this
-directory reading the same ABIs, so a rule that lives only here is a rule every
-other shell must re-derive from prose. If you find yourself writing one, it
-belongs in the wasm.
+bag and the lobby demo. tvOS and Android TV get siblings of this directory
+reading the same ABIs, so a rule that lives only here is a rule every other
+shell must re-derive from prose. If you find yourself writing one, it belongs
+in the wasm.
 
 `nativeRuntime.js` loads the wasm and the `Native*.js` files are thin adapters
 over one ABI each. `main.js` awaits the wasm at boot and a load failure is
@@ -22,6 +22,17 @@ they fill.
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several
 correctness constraints live in that order alone.
+
+`Net.js` is the same shape one layer down: every inbound trigger (relay frame,
+peer message, socket close, liveness tick, drained room event) is ONE walk into
+`ttp_net.h`, which mutates the room inside the wasm and answers an ordered
+effect list; `_performNetEffect` holds the same no-reorder/no-skip contract.
+What stays in the file is the socket, the three timers, sessionStorage and the
+shuffle bag (a random pick answers `needDraw` and the shell draws). The pick
+itself is STORED behind the room handle (`ttp_net_pick_json`) — no mirror; the
+game layer asks `net.pick` when it needs one. Walks go through `flow.runWalk`,
+which keeps NativeRoomFlow's provider/drain/record-cache discipline around a
+mutation the class's own methods didn't make.
 
 ## Boot and the back stack
 

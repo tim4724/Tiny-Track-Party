@@ -67,8 +67,9 @@ The persona table is single-sourced from libttp-sim and configured straight back
 It used to be a hand-synced JS copy held together by a "keep in sync" comment —
 the exact drift root rule 1 exists to stop.
 
-Deliberately did NOT cross: the shuffle bag (page RNG, not sim state), the host's
-mode pick, the lobby demo, and the performing itself.
+Deliberately did NOT cross: the shuffle bag (page RNG, not sim state), the lobby
+demo, and the performing itself. The host's mode pick crossed too, but into the
+net walks (`runtime/ttp_net.cc`), not here — see `native/libttp-party/CLAUDE.md`.
 
 ## Audio decisions
 

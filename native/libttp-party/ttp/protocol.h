@@ -55,10 +55,14 @@ inline const std::vector<std::pair<std::string, std::string>> ROOM_STATE = {
 
 inline const std::string RELAY_URL = "wss://ws.couchpad.games";
 inline const std::string STUN_URL = "stun:stun.couchpad.games:3478";
+inline const std::string STUN_FALLBACK_URL = "stun:stun.l.google.com:19302";
 
 inline constexpr int MAX_PLAYERS = 4;
 inline constexpr int TOTAL_LAPS = 3;
 inline constexpr int COUNTDOWN_SECONDS = 3;
+// The schematic codec's max deviation — schematic.h EPS must equal this
+// (abi_check pins it), exactly as getSteerExpo() must equal STEER_EXPO.
+inline constexpr double SCHEMATIC_EPS = 0.35;
 
 // ---- the presence contract (protocol.js LIVENESS) ---------------------------
 // The phone's ping cadence and the display's drop / grace / canary windows.

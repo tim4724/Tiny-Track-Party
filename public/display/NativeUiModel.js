@@ -49,20 +49,18 @@ export async function init() {
     rosterSeats: c('ttp_ui_roster_seats_json', 'string', ['string', 'string']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
-    allRacersReady: c('ttp_ui_all_racers_ready', 'number', ['string', 'string']),
     connectedPlayers: c('ttp_ui_connected_players_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
     itemPushes: c('ttp_ui_item_pushes_json', 'string', ['string', 'string', 'string']),
     welcomeItem: c('ttp_ui_welcome_item_json', 'string', ['string']),
-    raceFlow: c('ttp_ui_race_flow_json', 'string', ['string']),
-    canPause: c('ttp_ui_can_pause', 'number', ['number', 'number', 'string']),
-    canResume: c('ttp_ui_can_resume', 'number', ['number', 'number']),
-    autoPauseAsks: c('ttp_ui_auto_pause_asks', 'number', ['string']),
-    autoPause: c('ttp_ui_auto_pause_json', 'string', ['string', 'number']),
-    freezeTransition: c('ttp_ui_freeze_transition', 'string', ['number', 'number', 'number']),
-    seriesInfo: c('ttp_ui_series_info_json', 'string', ['string']),
-    standings: c('ttp_ui_standings_json', 'string', ['string']),
+    raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
+    autoPauseLive: c('ttp_ui_auto_pause_live_json', 'string', ['number', 'number', 'number']),
+    freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
+    resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
+    seriesInfoGp: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
+    standingsLive: c('ttp_ui_standings_live_json', 'string',
+      ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
     intermissionSecs: c('ttp_ui_intermission_secs', 'number', ['number', 'number'])
   };
@@ -141,11 +139,8 @@ export function rosterSeats(roster, hostPeerIndex) {
 // size come from configure, not from a second copy on this side).
 export function seatGrid(seats) { return JSON.parse(fn.seatGrid(J(seats))); }
 
-export function allRacersReady(roster, hostPeerIndex) {
-  return !!fn.allRacersReady(J(roster.map((p) => ({
-    peerIndex: p.peerIndex, connected: !!p.connected, ready: !!p.ready
-  }))), id(hostPeerIndex));
-}
+// (allRacersReady has no JS wrapper anymore: the one shell reader was the
+// START_GAME gate, which ttp_net_controller_action now asks in C++.)
 
 // Connected seats only. The ABI answers with indices; the ENTRIES that come
 // back are the caller's own objects, because startRace hangs a whole race field
@@ -200,52 +195,43 @@ export function welcomeItem(car) {
 // ---- race flow -------------------------------------------------------------
 // Both finish-moment answers off ONE crossing: allDone is read every frame and
 // forfeit only on the frame it flips, so splitting them would double the
-// boundary traffic to save nothing.
-export function raceFlow({ carIds, aiIds, disconnectedIds, finishedIds }) {
-  return JSON.parse(fn.raceFlow(J({
-    carIds: [...carIds], aiIds: [...aiIds],
-    disconnectedIds: [...disconnectedIds], finishedIds: [...finishedIds]
-  })));
+// boundary traffic to save nothing. The role sets are GATHERED in C++ off the
+// two handles (ttp_ui_race_flow_live_json) — the shell no longer assembles
+// carIds/aiIds/disconnectedIds/finishedIds at all.
+export function raceFlow(sessionHandle, roomHandle) {
+  return JSON.parse(fn.raceFlowLive(sessionHandle | 0, roomHandle | 0));
 }
 
 // ---- pause arbitration -----------------------------------------------------
-export function canPause({ hasSession, paused, roomState }) {
-  return !!fn.canPause(b(hasSession), b(paused), roomState || '');
-}
-export function canResume({ hasSession, paused }) {
-  return !!fn.canResume(b(hasSession), b(paused));
+// (canPause/canResume have no JS wrappers anymore: the pause/resume walks ask
+// them inside ttp_race_pause_json / resume_json.)
+
+// The whole silent-freeze arbitration off the two live handles: C++ gathers
+// the input, asks its own consult rule, and reads the party layer through the
+// synced seam exactly when the decision wants it (ttp_ui_auto_pause_live_json).
+// raceEnded stays an argument — it is the shell's results-overlay latch.
+export function autoPause(sessionHandle, roomHandle, raceEnded) {
+  return JSON.parse(fn.autoPauseLive(sessionHandle | 0, roomHandle | 0, b(raceEnded)));
 }
 
-function autoPauseArg({ hasSession, raceEnded, roomState, carIds, aiIds, seatedIds }) {
-  return J({
-    hasSession: !!hasSession, raceEnded: !!raceEnded, roomState: roomState || '',
-    carIds: [...carIds], aiIds: [...aiIds], seatedIds: [...seatedIds]
-  });
-}
-// Would the decision consult the party layer for this input? Reading that
-// answer is not free (it pushes the live car set into the room machine), so the
-// shell asks first and reads it only on the ticks that need it.
-export function autoPauseAsksParticipants(input) { return !!fn.autoPauseAsks(autoPauseArg(input)); }
-export function autoPause(input) {
-  return JSON.parse(fn.autoPause(autoPauseArg(input), b(input.allParticipantsDisconnected)));
+// The transition AND its ordered member ops in one answer; the shell walks
+// `ops` and re-derives nothing (thaw is deliberately not freeze reversed).
+export function freezePlan(paused, autoPaused, sessionPaused) {
+  return JSON.parse(fn.freezePlan(b(paused), b(autoPaused), b(sessionPaused)));
 }
 
-export function freezeTransition({ paused, autoPaused, sessionPaused }) {
-  return fn.freezeTransition(b(paused), b(autoPaused), b(sessionPaused));
+// What the results board's one button does — the branch behind the click,
+// answered by the same layer that labels it (resultsView's newGameKey).
+export function resultsAction(gpHandle) {
+  return JSON.parse(fn.resultsAction(gpHandle | 0));
 }
 
 // ---- the Grand Prix chip + the standings board ------------------------------
-export function seriesInfo(input) {
-  return JSON.parse(fn.seriesInfo(J({
-    cupId: input.cupId == null ? null : input.cupId,
-    cupName: input.cupName == null ? null : input.cupName,
-    endless: !!input.endless,
-    raceIndex: input.raceIndex,
-    raceCount: input.raceCount == null ? null : input.raceCount,
-    finished: !!input.finished,
-    nextTrackId: input.nextTrackId == null ? null : input.nextTrackId,
-    autoAdvanceMs: input.autoAdvanceMs
-  })));
+// All eight input fields are read off the ttp_gp_create handle in C++
+// (ttp_ui_series_info_live_json) — the getter walk main.js used to spell (and
+// the tvOS twin misspelled) is gone. null without a series.
+export function seriesInfo(gpHandle, autoAdvanceMs) {
+  return JSON.parse(fn.seriesInfoGp(gpHandle | 0, autoAdvanceMs));
 }
 
 // The board the TV and every phone render.
@@ -256,15 +242,16 @@ export function seriesInfo(input) {
 // ttp_ui_standings_json writes is sorted away before it leaves. The ordered
 // emitter is pinned by abi_check at the ABI boundary and by the frozen ui
 // corpus; it is not a wire guarantee.
-export function standingsPayload({ results, field, cup, lateJoiners, hostPeerIndex, over }) {
-  return JSON.parse(fn.standings(J({
-    results: results.map((r) => ({ playerId: r.playerId, finished: !!r.finished, time: r.time == null ? null : r.time })),
-    field: field.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, ai: !!p.ai })),
-    cup: cup ? { standings: cup.standings, info: cup.info } : null,
-    lateJoiners: lateJoiners.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex })),
-    hostPeerIndex: hostPeerIndex === undefined ? null : hostPeerIndex,
-    over: !!over
-  })));
+// results/cup/lateJoiners/host are gathered in C++ off the three handles
+// (ttp_ui_standings_live_json). The FIELD is the one shell-owned input left:
+// the launch's frozen copy plus the shell's rename/rekey repairs (the AI
+// racers are not in any roster the room knows).
+export function standingsPayload({ sessionHandle, roomHandle, gpHandle, over, field, results, autoAdvanceMs }) {
+  return JSON.parse(fn.standingsLive(
+    sessionHandle | 0, roomHandle | 0, gpHandle | 0, b(over),
+    J(field.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, ai: !!p.ai }))),
+    results ? J(results) : null,
+    autoAdvanceMs));
 }
 
 // The results overlay, off that same board — pass it straight back.

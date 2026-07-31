@@ -279,6 +279,16 @@ TTP_ABI const char* ttp_ui_welcome_item_json(const char* carJson);
  * car that cannot finish. */
 TTP_ABI const char* ttp_ui_race_flow_json(const char* json);
 
+/* THE SAME PAIR, READ STRAIGHT OFF THE LIVE RACE. Hand over the session and
+ * room handles instead of the four role sets — carIds and finishedIds come off
+ * the engine, aiIds off the bot registry (the same set by construction: the
+ * layer's buildField registers exactly those as bot personas), disconnectedIds
+ * off the room. The shell used to assemble them by crossing the C boundary
+ * twice per car per slow tick; the tvOS twin then misspelled the keys and the
+ * absent sets read as legal. sessionHandle 0 answers the no-race constants
+ * ({"allDone":false,"forfeit":[]}). */
+TTP_ABI const char* ttp_ui_race_flow_live_json(int sessionHandle, int roomHandle);
+
 /* ---- pause arbitration --------------------------------------------------- */
 
 /* The manual overlay pause (any player's controller, or the on-screen button).
@@ -317,12 +327,34 @@ TTP_ABI int ttp_ui_auto_pause_asks(const char* json);
  * 0 when ttp_ui_auto_pause_asks said no. */
 TTP_ABI const char* ttp_ui_auto_pause_json(const char* json, int allParticipantsDisconnected);
 
+/* THE WHOLE ARBITRATION, READ STRAIGHT OFF THE LIVE RACE AND ROOM. Gathers the
+ * input above (roomState, carIds, aiIds, seatedIds) from the two handles, asks
+ * the consult rule itself, and reads the party layer's answer THROUGH THE
+ * SYNCED SEAM (ttp_room.h) exactly when the decision wants it — the ordering
+ * Net.js used to hold. raceEnded stays a parameter: it is the shell's own
+ * "results overlay is up" latch, not a fact either handle knows. Answer is
+ * byte-identical to ttp_ui_auto_pause_json over the same state. */
+TTP_ABI const char* ttp_ui_auto_pause_live_json(int sessionHandle, int roomHandle,
+                                                int raceEnded);
+
 /* What the combined freeze state means for the SIM's clock, given where the sim
  * currently is: "freeze" | "thaw" | "none". One writer, so neither pause path
  * drives pause()/resume() itself — a manual resume while every racer is still
  * gone keeps the field frozen, and a reconnect during a manual pause keeps the
  * overlay's authority. */
 TTP_ABI const char* ttp_ui_freeze_transition(int paused, int autoPaused, int sessionPaused);
+
+/* The transition AND what performing it means, in one answer:
+ *   -> {"transition":"freeze"|"thaw"|"none",
+ *       "ops":["pause-session","stop-voices","pause-music","hold-cars"]}   (freeze)
+ *       ops ["resume-session","release-cars","resume-music"]               (thaw)
+ *       ops []                                                             (none)
+ * THE ORDER OF ops IS THE CONTRACT, and thaw is not freeze reversed —
+ * deliberately (voices never restart on thaw; cars release before the music
+ * returns). A shell walks the list and performs each op; re-spelling the
+ * composition at the call site is how one shell already shipped frozen cars
+ * that kept squealing. */
+TTP_ABI const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sessionPaused);
 
 /* ---- the Grand Prix chip ------------------------------------------------- */
 
@@ -336,6 +368,22 @@ TTP_ABI const char* ttp_ui_freeze_transition(int paused, int autoPaused, int ses
  * null after a cup's last race, and `final` marks the podium (never for
  * endless). autoAdvanceMs lets the phones caption the auto-start. */
 TTP_ABI const char* ttp_ui_series_info_json(const char* json);
+
+/* THE SAME CHIP, READ STRAIGHT OFF A ttp_gp_create HANDLE — all eight input
+ * fields come from the series state (cup id/name off the cup, "" from
+ * ttp_gp_next_track spelling null), so a shell cannot omit one and ship a
+ * board whose podium never says `final` (the tvOS twin did exactly that).
+ * autoAdvanceMs stays a parameter: the intermission budget is the shell's
+ * (its E2E override lives there). gpHandle must be live — 0 is not a series
+ * and answers "null". */
+TTP_ABI const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanceMs);
+
+/* What the results board's one button DOES: "advance" mid-cup, else
+ * "return-to-lobby". The LABEL for the same button is resultsView's
+ * newGameKey; this is the branch behind the click, which the shells used to
+ * re-derive from their series wrappers while the label came from here — the
+ * two could disagree. gpHandle 0 (no cup) returns to the lobby. */
+TTP_ABI const char* ttp_ui_results_action_json(int gpHandle);
 
 /* ---- the standings board ------------------------------------------------- */
 
@@ -364,6 +412,28 @@ TTP_ABI const char* ttp_ui_series_info_json(const char* json);
  * THE KEY ORDER OF THIS ANSWER IS THE WIRE'S. See the deviation note at the top
  * of this header. */
 TTP_ABI const char* ttp_ui_standings_json(const char* json);
+
+/* THE SAME BOARD, GATHERED OFF THE LIVE HANDLES. What the shell used to
+ * assemble from four sources crosses as three handles and two documented
+ * parameters:
+ *   results      the race's own results OBJECT (endRace's callback argument,
+ *                which no effect can carry), or "null"/NULL to read the live
+ *                session — the same either-or broadcastStandings always had
+ *   fieldJson    the race field rows [{"peerIndex","name","colorIndex","ai"},
+ *                ...]. THE ONE SHELL-OWNED INPUT: the field is the launch's
+ *                frozen copy plus the shell's rename/rekey repairs, and it
+ *                stays with the shell until the session executor owns it
+ *   gpHandle     0 for a plain race; else the cup half (standings + info) is
+ *                composed HERE — one `cup` object, never two sibling keys,
+ *                which is the nesting the tvOS twin got wrong
+ * lateJoiners and the host come off the room seam. autoAdvanceMs as in
+ * ttp_ui_series_info_live_json. Answer bytes identical to ttp_ui_standings_json
+ * over the same state — abi_check holds the two to each other. */
+TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle,
+                                               int gpHandle, int over,
+                                               const char* fieldJson,
+                                               const char* resultsJsonOrNull,
+                                               double autoAdvanceMs);
 
 /* The results overlay in its three dressings, as semantic values, off the board
  * above (pass its JSON straight back).

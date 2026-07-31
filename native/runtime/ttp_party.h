@@ -130,6 +130,10 @@ TTP_ABI const char* ttp_framing_close_outcome(int hasCode, double code, double a
 
 // Reconnect backoff for attempt N, in ms.
 TTP_ABI double ttp_framing_backoff_ms(double attempt);
+// The default retry budget (relay_framing.h MAX_RECONNECT_ATTEMPTS) — read it,
+// don't re-type the 5. close_outcome still takes the budget as an argument so
+// a caller-supplied override keeps working.
+TTP_ABI double ttp_framing_max_reconnect_attempts(void);
 
 // base + '/' + enc(room) + '?instance=' + enc(instance); base unchanged when
 // instance is empty (the JS early return).

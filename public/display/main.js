@@ -656,13 +656,10 @@ const net = new DisplayNet({
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
   onPlayerRenamed: renamePlayer,        // live rename: move the copies a race froze
-  // Mid-race WELCOME routing: a seat with a car still on track is a rejoin (the
-  // phone drops back into the race); one without is a late joiner (the phone
-  // waits in its lobby — they get a car when the next race builds its field).
-  inRace: (peerIndex) => !!(session && session.hasCar(peerIndex)),
   // The live race itself, as a native handle: the party layer works out its own
-  // participant order (cars + dropped seats) from it in C++ rather than being
-  // fed a set from here. 0 between races.
+  // participant order (cars + dropped seats), each seat's inRace flag AND the
+  // welcome-item routing from it in C++ rather than being fed answers from
+  // here. 0 between races.
   sessionHandle: () => (session ? session.h : 0),
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
@@ -673,23 +670,34 @@ const net = new DisplayNet({
   // A (re)joining phone recovers all room/results state from the snapshot replay,
   // but its held item is per-owner and rides ITEM (sent only on change) — so
   // relight it here, once, or a reconnecting driver's USE button stays dark until
-  // their next pickup. No-op for a seat with no live car (lobby / late joiner).
+  // their next pickup. Fired by the welcome-item effect, which C++ emits only
+  // when the live race holds this seat's car — the lobby / late-joiner filter
+  // this callback used to apply itself lives behind the session handle now.
   onPlayerWelcomed: (peerIndex) => {
-    if (!session || !session.hasCar(peerIndex)) return;
+    if (!session) return; // the handle the effect was decided on is being torn down
     const c = session.getSnapshot().cars.find((x) => x.id === peerIndex);
+    // Belt only, not the gate: the walk emits welcome-item exclusively for a
+    // seat whose car is in the live race (C++'s predicate, off the handle).
+    if (!c) return;
     const item = ui.welcomeItem(c);
     _lastItem.set(peerIndex, item);
     net.sendTo(peerIndex, { type: MSG.ITEM, item });
   },
   onControllerMessage: (from, data) => {
-    if (data.type === MSG.CONTROL && session) session.processInput(from, data);
-    else if (data.type === MSG.START_GAME && from === net.flow.host && allRacersReady()) startRace();
-    // Host's "Next race" during a cup intermission (advanceSeriesRace re-checks room state).
-    else if (data.type === MSG.SERIES_NEXT && from === net.flow.host) advanceSeriesRace();
-    // Pause / resume / new game can come from any player's controller.
-    else if (data.type === MSG.PAUSE_GAME) pauseRace();
-    else if (data.type === MSG.RESUME_GAME) resumeRace();
-    else if (data.type === MSG.RETURN_TO_LOBBY) returnToLobby();
+    // CONTROL stays on its own short-circuit: it is the relay-fallback INPUT
+    // path (sensor-rate when the fastlane is down), and adding a crossing
+    // there was measured and refuted. Every button-press message routes
+    // through the verdict, gates (host, all-ready, live race) included.
+    if (data.type === MSG.CONTROL) { if (session) session.processInput(from, data); return; }
+    switch (net.controllerAction(from, data.type)) {
+      case 'start-race': startRace(); break;
+      // Host's "Next race" during a cup intermission (advanceSeriesRace
+      // re-checks room state).
+      case 'series-next': advanceSeriesRace(); break;
+      case 'pause': pauseRace(); break;
+      case 'resume': resumeRace(); break;
+      case 'return-to-lobby': returnToLobby(); break;
+    }
   }
 });
 
@@ -733,28 +741,17 @@ window.addEventListener('pagehide', () => net.shutdown());
 // surfaced as onRaceAbandoned below. It used to be a second copy of this
 // bookkeeping in JS.
 // The RULE is uiModel.autoPause's (which seats count, when the freeze may apply,
-// what an empty field means); what stays here is reading the live session and
-// the room. "Is anyone AT those wheels?" comes from RoomFlow, over the very
-// participant set the abandoned-race grace waits on (Net.js _syncActiveOrder) —
-// read, never re-derived, which is what keeps the silent freeze and that policy
-// from ever disagreeing.
+// what an empty field means), and the whole gather is C++'s too: "is anyone AT
+// those wheels?" comes from RoomFlow over the very participant set the
+// abandoned-race grace waits on, synced and read behind the twin
+// (ttp_room.h's synced seam) — never re-derived, which is what keeps the
+// silent freeze and that policy from ever disagreeing.
 function refreshAutoPause() {
-  const carIds = session ? session.carIds() : [];
-  const input = {
-    hasSession: !!session,
-    raceEnded,
-    roomState: net.roomState,
-    carIds,
-    aiIds: aiCarIds,
-    // a human at the wheel, or a held seat with its QR up
-    seatedIds: new Set(carIds.filter((id) => net.flow.has(id)))
-  };
-  // allParticipantsDisconnected() pushes the live car set into RoomFlow before
-  // answering, so it is read exactly on the ticks the decision consults it.
-  const d = ui.autoPause({
-    ...input,
-    allParticipantsDisconnected: ui.autoPauseAsksParticipants(input) && net.allParticipantsDisconnected()
-  });
+  // The input (roomState, carIds, aiIds, seatedIds), the consult rule and the
+  // synced participants read all happen behind the twin — one crossing where
+  // the shell used to make four over two ABIs. raceEnded is the one input
+  // that stays: it is this shell's results-overlay latch.
+  const d = ui.autoPause(session ? session.h : 0, net.flow.handle, raceEnded);
   perform(flow.autoPauseEffects(d).effects);
 }
 net.flow.on('rosterchange', refreshAutoPause);
@@ -802,7 +799,6 @@ function renamePlayer(peerIndex, name) {
 // `series` (GrandPrix.js), holds the room in RESULTS for an intermission, then
 // chains straight into the next race (advanceSeriesRace) — the lobby only
 // returns after the podium (or on any quit path, which cancels the series).
-const INTERMISSION_MS = 10000;  // auto-advance budget; the host can advance early
 let series = null;              // live CupSeries, or null (single race / no cup)
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
@@ -838,8 +834,7 @@ function renderLobbyPick() {
   const slot = el('cup-slot');
   if (!slot) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
-  const m = ui.cupSlot({ mode: net.mode, cupId: net.cupId, trackId: net.trackId,
-                         randomRaces: net.randomRaces });
+  const m = ui.cupSlot(net.pick);
   renderCupSlot(slot, m && {
     name: m.nameKey === 'random' ? 'Random' : (m.name || '?'),
     races: RACES_COPY[m.racesKey](m.raceCount),
@@ -957,13 +952,26 @@ function applyEffect(e, ctx) {
       break;
     case 'clear-intermission': clearSeriesTimers(); break;
     case 'series-advance': series.advance(); break;
-    case 'clear-series': series = null; break;
+    // Dispose the wasm handle, not just the wrapper — leaving it was a leak
+    // (one orphaned GrandPrix per finished cup; the tvOS shell had this right).
+    case 'clear-series': if (series) series.dispose(); series = null; break;
     case 'set-track-from-series': net.setTrack(series.currentTrackId); break;
     // A chained start has no lobby step, so the new circuit is placed explicitly
     // (selectTrack outside the lobby skips the scene swap) — the results overlay
     // covers the pop.
     case 'place-track': scene.setTrack(track); break;
     case 'set-track': net.setTrack(e.trackId); break;
+    // endParty's teardown — closeRoom bails every phone terminally while the
+    // display's own 4001 self-heals into a FRESH room (Net.js onClose
+    // {roomClosed}, which also clears the roster), so the next NEW GAME
+    // reveals a lobby already sitting on the new room's QR.
+    case 'close-room': net.closeRoom(); break;
+    // A fresh party starts clean: drop the ended party's pick so the welcome
+    // board and the next lobby sit on the paper diorama, cup slot empty.
+    case 'clear-pick': net.clearPick(); selectedTrackId = null; break;
+    case 'render-lobby-pick': renderLobbyPick(); break;
+    case 'refresh-lobby-demo': refreshLobbyDemo(); break;
+    case 'update-backdrop': updateBackdrop(); break;
     case 'dispose-session':
       if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
       break;
@@ -995,9 +1003,12 @@ function applyEffect(e, ctx) {
 // The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
 // beat, the banner fades over the next via .is-go). n < 0: banner gone. The
 // beat's SOUND is the wasm's — it taps the same tick — so there is no cue call.
+const CD_COPY = { go: 'GO!' };  // the GO beat's copy; numerals ride the effect
 function showCountdownBanner(e) {
   const cd = el('countdown');
-  cd.textContent = e.n > 0 ? e.n : e.n === 0 ? 'GO!' : '';
+  // `go` IS the beat semantics (the effect carries it); no third spelling of
+  // "n === 0 means GO" here.
+  cd.textContent = e.go ? CD_COPY.go : e.n > 0 ? String(e.n) : '';
   cd.classList.toggle('is-go', e.go);
   // slap each numeral in (re-add .slap around a reflow so the animation restarts
   // on the same element); GO! keeps its own is-go fade-out.
@@ -1013,9 +1024,6 @@ function showCountdownBanner(e) {
 // other player is ready (controller-side renderReadyFoot); re-checked here so
 // a stale or forged START_GAME can't jump the lobby. The host themselves never
 // readies — their start IS the commitment.
-function allRacersReady() {
-  return ui.allRacersReady(net.flow.list(), net.flow.host);
-}
 
 // The series behind a Random start, per the host's length pick (net.randomRaces).
 // Endless (0) is the original behaviour: one track on the card and a draw offered
@@ -1055,7 +1063,7 @@ function startRace() {
   const players = ui.connectedPlayers(net.flow.list());
   // The go/no-go and what the Start commits to are both the orchestration
   // layer's; a rejection comes back with its reason and nothing happens.
-  const pick = { mode: net.mode, cupId: net.cupId, trackId: net.trackId, randomRaces: net.randomRaces };
+  const pick = net.pick;   // the stored one, read where the walks keep it
   const gate = { roomState: net.roomState, sceneReady, selectedTrackId, players, ...pick };
   // ASKED TWICE, ON PURPOSE, and the draws are why. The first call is handed no
   // draws and is read for its VERDICT only — so a start that is going to be
@@ -1162,80 +1170,53 @@ function onRaceEvent(e) {
   }).effects);
 }
 
-// The live race's car list split into the roles the UI model reasons over —
-// which car is a CPU racer, whose phone has dropped, who is already home. Read
-// off the session + the room here (the part that names this shell's objects) so
-// the RULES over them stay plain-data pure (uiModel.humansAllDone /
-// forfeitCandidates).
-function raceRoleSets() {
-  const carIds = session ? session.carIds() : [];
-  const disconnectedIds = new Set();
-  const finishedIds = new Set();
-  for (const id of carIds) {
-    if (net.flow.isDisconnected(id)) disconnectedIds.add(id);
-    if (session.carFinished(id)) finishedIds.add(id);
-  }
-  return { carIds, aiIds: aiCarIds, disconnectedIds, finishedIds };
-}
-
 // The finish-moment pair, off one call: `allDone` is true once every CONNECTED
 // human car has crossed the line (CPU cars may still be out — the cue to skip
 // to results), and `forfeit` names the dropped-racer ghosts to pull out at that
-// moment. Both rules are the native UI model's.
+// moment. Both rules are the native UI model's, and the role sets they read
+// (car/AI/dropped/finished ids) are gathered off the two handles in C++ —
+// the shell no longer crosses the boundary per car to build them.
 function raceFlow() {
-  if (!session) return { allDone: false, forfeit: [] };
-  return ui.raceFlow(raceRoleSets());
+  return ui.raceFlow(session ? session.h : 0, net.flow.handle);
 }
 function humansAllDone() { return raceFlow().allDone; }
 
 // Live standings for the controllers' results overlay. Pushed as each car
 // finishes (over=false) and once more at race end (over=true, so DNF/AFK cars
 // resolve and everyone — not just finishers — sees the final board). The BOARD
-// is uiModel.standingsPayload's; what stays here is naming the objects it reads
-// — currentField (the AI racers aren't in the lobby roster the phones know, so
-// the display is the only side that can name/colour them), the live cup, and
-// RoomFlow's late-joiner set.
+// is the ui model's, and the results, cup half (standings + chip), late
+// joiners and host are all gathered off the live handles in C++. What stays
+// here is naming currentField — the AI racers aren't in the lobby roster the
+// phones know, so the display is the only side that can name/colour them —
+// and the results object endRace's callback carries (no effect can).
 function standingsPayload(results, over) {
   return ui.standingsPayload({
-    results: results.results,
+    sessionHandle: session ? session.h : 0,
+    roomHandle: net.flow.handle,
+    gpHandle: series ? series.handle : 0,
+    over,
     field: currentField,
-    cup: series ? { standings: series.standings(), info: seriesInfo() } : null,
-    lateJoiners: net.lateJoiners(),
-    hostPeerIndex: net.flow.host,
-    over
-  });
-}
-
-// The cup's progress chip on every STANDINGS board (uiModel.seriesInfo).
-function seriesInfo() {
-  const cup = series.cup;
-  return ui.seriesInfo({
-    cupId: cup.id, cupName: cup.name,
-    endless: series.endless,
-    raceIndex: series.raceIndex, raceCount: series.raceCount,
-    finished: series.finished, nextTrackId: series.nextTrackId,
-    // No catalogue: the model resolves nextTrackName against the one handed over
-    // ONCE at boot (ui.configure). Passing it here was a leftover from when this
-    // layer was JS and took its world per call — the adapter never forwarded it.
+    results: results || null,
     autoAdvanceMs: intermissionMs()
   });
 }
 
-// The intermission budget, with the E2E override (__intermissionMs) applied.
-function intermissionMs() { return window.__intermissionMs || INTERMISSION_MS; }
+// The intermission budget — the layer's number (race_flow.h), with the E2E
+// override (__intermissionMs) applied shell-side.
+function intermissionMs() { return window.__intermissionMs || flow.intermissionMs(); }
 
 function broadcastStandings(over, results) {
   if (!session) return;
   // The final board rides endRace's OWN results object (via the perform
-  // context); the running ones re-read the live session, which is the same
-  // thing mid-race and the only source when no callback is in flight.
-  const board = standingsPayload(results || session.getResults(), over);
+  // context); with none in flight the twin re-reads the live session in C++,
+  // which is the same thing mid-race.
+  const board = standingsPayload(results || null, over);
   net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
 }
 
-// The host ends the results screen with "New game" (RETURN_TO_LOBBY); this is
-// only a safety net so a room whose players all left mid-podium still recovers.
-const RESULTS_FAILSAFE_MS = 60000;
+// The host ends the results screen with "New game" (RETURN_TO_LOBBY); the
+// failsafe (the layer's number) is only a net so a room whose players all
+// left mid-podium still recovers.
 let endTimer = null;
 function endRace(results) {
   // `results` rides in the perform context: it is the callback's argument, so no
@@ -1248,7 +1229,7 @@ function endRace(results) {
     seriesFinished: !!(series && series.finished),
     intermissionMs: intermissionMs(),
     nowMs: Date.now(),
-    resultsFailsafeMs: RESULTS_FAILSAFE_MS
+    resultsFailsafeMs: flow.resultsFailsafeMs()
   }).effects, { results });
 }
 
@@ -1382,12 +1363,14 @@ function renderPodium(wrap, top) {
 }
 
 function returnToLobby() {
-  // Asked twice for the same reason startRace is: a lobby return only draws in
-  // RANDOM mode, and a call that is already a no-op (we are in the lobby) must
-  // not advance the bag. The first call is read for its verdict only.
-  const at = { roomState: net.roomState, mode: net.mode, cupId: net.cupId, trackId: net.trackId };
+  // Asked twice for the same reason startRace is: a return spends a draw and a
+  // call that is already a no-op (we are in the lobby) must not advance the
+  // bag. The first call is read for its verdict only; how many draws the
+  // return will consume is the layer's answer (returnDrawsNeeded), never
+  // re-spelled here — this call site's own copy had drifted from startRace's.
+  const at = { roomState: net.roomState, ...net.pick };
   if (flow.returnToLobby({ ...at, draws: [] }).action !== 'return') return;
-  perform(flow.returnToLobby({ ...at, draws: net.mode === 'random' ? [randomBag.draw()] : [] }).effects);
+  perform(flow.returnToLobby({ ...at, draws: offerDraws(flow.returnDrawsNeeded(at)) }).effects);
 }
 
 // End the party and return to the title board (back from the lobby, or a
@@ -1397,38 +1380,25 @@ function returnToLobby() {
 // the next NEW GAME reveals a lobby already sitting on the new room's QR.
 function endParty() {
   returnToLobby(); // no-op from the lobby; full race teardown from anywhere else
-  net.closeRoom();
-  // A fresh party starts clean: drop the ended party's pick so the welcome
-  // board and the next lobby sit on the paper diorama again, with an empty
-  // cup slot and no attract demo, exactly like a cold boot.
-  net.clearPick();
-  selectedTrackId = null;
-  renderLobbyPick();
-  refreshLobbyDemo();  // no pick → stops the attract demo
-  show('welcome');
-  updateBackdrop();    // fade the 3D preview back out to the diorama
+  // The teardown ORDER is the layer's (flow.endParty), corpus-pinned like
+  // every other lifecycle path — this was the one that ran outside perform().
+  perform(flow.endParty().effects);
 }
 
 // ---- pause ----
 // Any player's controller (or the on-screen pause button) can freeze the race;
 // the display is authoritative, so it owns `paused` and tells the controllers.
-// "New game" routes through returnToLobby (a full reset), so it isn't handled here.
+// "New game" routes through returnToLobby (a full reset), so it isn't handled
+// here. The verdict AND the five-step order are the walk's
+// (ttp_race_pause_json / resume_json); these two only hand in the shell's
+// latches and perform.
 function pauseRace() {
-  if (!ui.canPause({ hasSession: !!session, paused, roomState: net.roomState })) return;
-  paused = true;
-  syncSessionFrozen();
-  net.syncState();  // paused is snapshot state — the republish is what tells the phones
-  setPauseOverlay(true);
-  holdRaceChrome(); // the overlay is a mouse target — cursor + buttons stay put while it's up
+  perform(flow.pauseRace({ hasSession: !!session, paused, autoPaused, raceEnded,
+                           roomState: net.roomState }).effects);
 }
 
 function resumeRace() {
-  if (!ui.canResume({ hasSession: !!session, paused })) return;
-  paused = false;
-  syncSessionFrozen();
-  net.syncState();  // paused cleared — the republish is what tells the phones
-  setPauseOverlay(false);
-  revealRaceChrome(); // racing again — re-arm the fade (this click already hid the overlay)
+  perform(flow.resumeRace({ hasSession: !!session, paused, autoPaused, raceEnded }).effects);
 }
 
 // The sim is frozen while EITHER pause is set (manual overlay pause OR the
@@ -1438,16 +1408,21 @@ function resumeRace() {
 // combined state instead of letting each path drive pause()/resume() directly.
 function syncSessionFrozen() {
   if (!session) return;
-  const move = ui.freezeTransition({ paused, autoPaused, sessionPaused: session.paused });
-  if (move === 'freeze') {
-    session.pause();
-    sfx(audioDecide.stopVoices());       // frozen cars must not keep their wind/squeal going
-    sfx(audioDecide.pauseMusic());       // ... and the music holds where it was
-    freezeCars();                        // hold the field at rest behind the overlay
-  } else if (move === 'thaw') {
-    session.resume();
-    freezeCars(false);                   // back to reading the live engine
-    sfx(audioDecide.resumeMusic());
+  // What freeze/thaw MEAN — which member ops, in which order, thaw not being
+  // freeze reversed — is the plan's (ttp_ui_freeze_plan_json). This walk only
+  // performs; an op it cannot perform is a missing capability, same contract
+  // as the race-flow walk.
+  for (const op of ui.freezePlan(paused, autoPaused, session.paused).ops) {
+    switch (op) {
+      case 'pause-session': session.pause(); break;
+      case 'resume-session': session.resume(); break;
+      case 'stop-voices': sfx(audioDecide.stopVoices()); break;
+      case 'pause-music': sfx(audioDecide.pauseMusic()); break;
+      case 'resume-music': sfx(audioDecide.resumeMusic()); break;
+      case 'hold-cars': freezeCars(); break;
+      case 'release-cars': freezeCars(false); break;
+      default: throw new Error(`freeze op this build cannot perform: ${op}`);
+    }
   }
 }
 
@@ -1550,9 +1525,11 @@ el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseR
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit — cancels a cup too
 // On the results board the same button is "Next race ▸" during a cup
-// intermission and "New Game" otherwise (label swapped by showResults).
+// intermission and "New Game" otherwise (label swapped by showResults). The
+// ACTION behind the click is the model's too — label and branch can no longer
+// disagree.
 el('results-newgame').addEventListener('click', () => {
-  if (series && !series.finished) advanceSeriesRace();
+  if (ui.resultsAction(series ? series.handle : 0) === 'advance') advanceSeriesRace();
   else returnToLobby();
 });
 

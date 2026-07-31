@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "TtpRenderer.h"
+#include "ttp/canonical.h"
 #include "ttp/frame_builder.h"
 #include "ttp/framing.h"
 #include "ttp/game.h"
@@ -262,6 +263,15 @@ int ttp_display_cell_rects(float* out, int maxCells) {
 
 void ttp_display_cell_cards(uint32_t mask) {
     if (g_disp) g_disp->cardMask = mask;
+}
+
+const char* ttp_display_slot_ids_json(void) {
+    static std::string buf;
+    if (!g_disp || !g_disp->built) return "[]";
+    ttp::Value a = ttp::Value::Arr();
+    for (const auto& id : g_disp->roster) a.push(id.toValue());
+    ttp::canonical_stringify_into(a, buf);   // an array of scalars: order kept
+    return buf.c_str();
 }
 
 const TtpHudBlock* ttp_display_hud(void) {

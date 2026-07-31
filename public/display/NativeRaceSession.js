@@ -32,9 +32,8 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     version: c('ttp_version', 'string', []),
-    begin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
-    addHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
-    addBot: c('ttp_add_bot', null, ['number', 'string', 'number', 'number', 'number', 'string']),
+    beginField: c('ttp_session_begin_field', 'number',
+      ['string', 'number', 'number', 'string', 'string', 'string']),
     start: c('ttp_session_start', null, ['number', 'number']),
     update: c('ttp_update', null, ['number', 'number']),
     input: c('ttp_process_input', null, ['number', 'string', 'number', 'number', 'number', 'number']),
@@ -42,7 +41,6 @@ export async function init() {
     results: c('ttp_results_json', 'string', ['number']),
     events: c('ttp_events_json', 'string', ['number']),
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
-    carFinished: c('ttp_car_finished', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
     carWorldPos: c('ttp_car_world_pos', 'number', ['number', 'string', 'number']),
     removeCar: c('ttp_force_remove_car', 'number', ['number', 'string']),
@@ -71,6 +69,9 @@ export function setNativeSteerExpo(x) { if (fn) fn.setSteerExpo(x); }
 export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
 
 const idJson = (id) => JSON.stringify(id);
+// ttp_session_start's "no countdown" sentinel (any negative — see its header):
+// racing from frame 0, bare-Game stepping.
+const BARE_COUNTDOWN = -1;
 const vec = () => ({ x: M.HEAPF64[vecPtr >> 3], y: M.HEAPF64[(vecPtr >> 3) + 1], z: M.HEAPF64[(vecPtr >> 3) + 2] });
 
 export class NativeRaceSession {
@@ -86,18 +87,17 @@ export class NativeRaceSession {
     this._ended = false;
     this._racingCache = false;
 
-    this.h = fn.begin(track.trackId, (track.seed ?? 1) >>> 0, track.totalLaps || 3, opts.forceItem || null);
+    // The whole construction — begin plus the one-pass over the field with bot
+    // specs keyed by scalar id — is ttp_session_begin_field's. The persona and
+    // seed defaults live there too, not at this call site.
+    this.h = fn.beginField(track.trackId, (track.seed ?? 1) >>> 0,
+      track.totalLaps || window.TOTAL_LAPS,  // the manifest's lap count, not a re-typed 3
+      opts.forceItem || null,
+      JSON.stringify(players.map((p) => ({ peerIndex: p.peerIndex, stats: p.stats || null }))),
+      JSON.stringify(opts.bots || []));
     // The REASON is the engine's — unknown track, refused lap count — rather
     // than this file guessing from the one bit it was handed.
     if (!this.h) throw nativeError(`starting a race on '${track.trackId}'`);
-
-    const bots = new Map((opts.bots || []).map((b) => [b.peerIndex, b]));
-    for (const p of players) {
-      const stats = p.stats ? JSON.stringify(p.stats) : null;
-      const b = bots.get(p.peerIndex);
-      if (b) fn.addBot(this.h, idJson(p.peerIndex), b.caution ?? 1, b.laneBias ?? 0, (b.seed ?? 1) >>> 0, stats);
-      else fn.addHuman(this.h, idJson(p.peerIndex), stats);
-    }
   }
 
   get racing() { return this._racingCache; }
@@ -114,7 +114,7 @@ export class NativeRaceSession {
   // scenarios, the lobby demo) want exactly that: a world that is already moving,
   // with no lobby lifecycle around it.
   startBare() {
-    fn.start(this.h, -1);
+    fn.start(this.h, BARE_COUNTDOWN);
     this._racingCache = true;
     this._drain();
   }
@@ -165,7 +165,6 @@ export class NativeRaceSession {
   getResults() { return JSON.parse(fn.results(this.h)); }
   carIds() { return JSON.parse(fn.carIds(this.h)); }
   hasCar(id) { return !!fn.hasCar(this.h, idJson(id)); }
-  carFinished(id) { return fn.carFinished(this.h, idJson(id)) === 1; } // -1 = unknown car, must read false
   carWorldPos(id) { return fn.carWorldPos(this.h, idJson(id), vecPtr) ? vec() : null; }
 
   dispose() {

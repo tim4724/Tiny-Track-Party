@@ -403,6 +403,22 @@ FreezeMove freezeTransition(bool paused, bool autoPaused, bool sessionPaused) {
   return FreezeMove::NONE;
 }
 
+std::vector<const char*> freezePlan(FreezeMove m) {
+  switch (m) {
+    // Voices stop BEFORE the music holds (a wind cut after the music pause
+    // would gap), cars hold last so the field freezes on the settled mix.
+    case FreezeMove::FREEZE:
+      return {"pause-session", "stop-voices", "pause-music", "hold-cars"};
+    // Thaw is NOT the reverse: voices never restart (the boost/skid that owned
+    // them is over), and the cars release before the music returns so motion
+    // and sound come back together, not sound-first over a frozen field.
+    case FreezeMove::THAW:
+      return {"resume-session", "release-cars", "resume-music"};
+    case FreezeMove::NONE: break;
+  }
+  return {};
+}
+
 // ---- the Grand Prix chip ----------------------------------------------------
 
 SeriesInfo seriesInfo(const SeriesInput& in, const std::vector<CatalogEntry>& catalog) {

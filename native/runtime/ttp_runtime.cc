@@ -11,6 +11,7 @@
 #include "ttp_audio.h"
 #include "ttp_session.h"
 
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -29,6 +30,7 @@
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
@@ -45,12 +47,9 @@ static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 // Flat numeric stats object; absent or non-numeric members keep the benchmark
 // default. Each key is read as a real object member, not matched as a substring
 // of the raw text.
-static Stats parseStats(const char* json) {
+static Stats statsOf(const Value& v) {
   Stats st;
-  if (!json) return st;
-  bool ok = false;
-  Value v = json::parse(json, &ok);
-  if (!ok || v.type != Value::OBJ) return st;
+  if (v.type != Value::OBJ) return st;
   auto num = [&v](const char* key, double& dst) {
     const Value* f = v.find(key);
     if (f && f->type == Value::NUM) dst = f->num;
@@ -62,6 +61,13 @@ static Stats parseStats(const char* json) {
   num("halfLen", st.halfLen);
   num("halfWid", st.halfWid);
   return st;
+}
+
+static Stats parseStats(const char* json) {
+  if (!json) return Stats{};
+  bool ok = false;
+  Value v = json::parse(json, &ok);
+  return ok ? statsOf(v) : Stats{};
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +321,41 @@ ttp::Game* ttp_session_engine(int h) {
   if (!rs) return nullptr;
   if (!rs->eng) buildSession(rs);
   return rs->eng;
+}
+
+Value ttp_session_car_ids(int h) {
+  Value a = Value::Arr();
+  if (Game* g = ttp_session_engine(h))
+    for (const auto& c : g->cars()) a.push(c->id.toValue());
+  return a;
+}
+
+Value ttp_session_ai_ids(int h) {
+  Value a = Value::Arr();
+  RuntimeSession* rs = get(h);
+  if (rs)
+    for (const auto& b : rs->bots) a.push(b.id.toValue());
+  return a;
+}
+
+Value ttp_session_finished_flags(int h, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  Game* g = ttp_session_engine(h);
+  for (const Value& idV : carIds.arr) {
+    bool fin = false;
+    if (g) g->carFinished(json::id_of<Id>(&idV), fin);  // unknown car stays false
+    flags.push(Value::Bool(fin));
+  }
+  return flags;
+}
+
+Value ttp_session_results_rows(int h) {
+  Game* g = ttp_session_engine(h);
+  if (!g) return Value::Arr();
+  Value res = g->getResults();
+  const Value* rows = res.find("results");
+  return rows && rows->type == Value::ARR ? *rows : Value::Arr();
 }
 
 // ===========================================================================
@@ -766,6 +807,64 @@ void ttp_add_bot(int h, const char* idJson, double caution, double laneBias,
   rs->bots.push_back(std::move(b));
 }
 
+// JS ToUint32 (`>>> 0`) for a seed that rode JSON: truncate, wrap into 2^32,
+// negatives from the top. Every shell used to do this before the crossing;
+// here it happens after, so a spec can carry whatever its page RNG produced.
+static uint32_t jsToUint32(double d) {
+  if (!std::isfinite(d)) return 0;
+  double m = std::fmod(std::trunc(d), 4294967296.0);
+  if (m < 0) m += 4294967296.0;
+  return (uint32_t) m;
+}
+
+int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
+                            const char* forceItemOrNull,
+                            const char* fieldJson, const char* botsJson) {
+  const int h = ttp_session_begin(trackId, seed, laps, forceItemOrNull);
+  if (!h) return 0;   // ttp_last_error already says why
+  RuntimeSession* rs = get(h);
+
+  // Bot specs keyed by scalar id — number 3 and string "3" stay different
+  // keys, exactly as the shells' Maps kept them.
+  const Value bots = json::parse_or(botsJson, Value::Arr());
+  std::map<std::string, const Value*> spec;
+  if (bots.type == Value::ARR)
+    for (const Value& b : bots.arr)
+      if (const Value* pid = b.find("peerIndex")) spec[canonical_stringify(*pid)] = &b;
+
+  // ONE PASS OVER THE FIELD, in its order. The buckets keep that order, and
+  // the grid is humans first then bots (buildSession's contract), which is
+  // what every shell's hand-written loop produced.
+  const Value field = json::parse_or(fieldJson, Value::Arr());
+  const auto optNum = [](const Value* e, const char* key, double dflt) {
+    const Value* f = e->find(key);   // absent OR null -> the default (JS ??)
+    return f && f->type == Value::NUM ? f->num : dflt;
+  };
+  if (field.type == Value::ARR) {
+    for (const Value& p : field.arr) {
+      const Value* pid = p.find("peerIndex");
+      if (!pid) continue;
+      const Value* st = p.find("stats");
+      const auto it = spec.find(canonical_stringify(*pid));
+      if (it != spec.end()) {
+        BotEntry b;
+        b.id = json::id_of<Id>(pid);
+        b.caution = optNum(it->second, "caution", 1);
+        b.laneBias = optNum(it->second, "laneBias", 0);
+        b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
+        if (st && st->type == Value::OBJ) { b.hasStats = true; b.stats = statsOf(*st); }
+        rs->bots.push_back(std::move(b));
+      } else {
+        PlayerDesc pd;
+        pd.id = json::id_of<Id>(pid);
+        if (st && st->type == Value::OBJ) { pd.hasStats = true; pd.stats = statsOf(*st); }
+        rs->humans.push_back(pd);
+      }
+    }
+  }
+  return h;
+}
+
 // Build every bot's controller and, with them, the racing line they share. Both
 // session modes need exactly this; written out twice, a persona knob could be
 // dropped from one path with the other still covering it.
@@ -1114,6 +1213,12 @@ int ttp_gp_endless(int h) { GpHandle* g = gp(h); return (g && g->series->endless
 int ttp_gp_race_count(int h) { GpHandle* g = gp(h); return g ? g->series->raceCount() : 0; }
 int ttp_gp_race_index(int h) { GpHandle* g = gp(h); return g ? g->series->raceIndex() : 0; }
 int ttp_gp_finished(int h) { GpHandle* g = gp(h); return (g && g->series->finished()) ? 1 : 0; }
+
+int ttp_gp_needs_draw(int h) {
+  GpHandle* g = gp(h);
+  return (g && g->series->endless() &&
+          g->series->raceIndex() >= g->series->raceCount() - 1) ? 1 : 0;
+}
 
 const char* ttp_gp_current_track(int h) {
   GpHandle* g = gp(h);

@@ -66,6 +66,11 @@ const char* key(Op op) {
     case Op::SET_AUTO_PAUSED: return "set-auto-paused";
     case Op::SYNC_FROZEN: return "sync-frozen";
     case Op::RETURN_TO_LOBBY: return "return-to-lobby";
+    case Op::CLOSE_ROOM: return "close-room";
+    case Op::CLEAR_PICK: return "clear-pick";
+    case Op::RENDER_LOBBY_PICK: return "render-lobby-pick";
+    case Op::REFRESH_LOBBY_DEMO: return "refresh-lobby-demo";
+    case Op::UPDATE_BACKDROP: return "update-backdrop";
   }
   return "";
 }
@@ -293,6 +298,10 @@ int drawsNeeded(const std::string& mode, double randomRaces) {
   if (mode != "random") return 0;
   if (randomRaces == 0 || std::isnan(randomRaces) || randomRaces == 1) return 0;
   return static_cast<int>(js_max(0.0, randomRaces - 1));
+}
+
+int returnDrawsNeeded(const std::string& mode) {
+  return mode == "random" ? 1 : 0;
 }
 
 SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
@@ -592,6 +601,61 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   // race cars + restart the demo under cover so the reset doesn't pop.
   e = mk(Op::FADE_TO_LOBBY); e.placeTrack = r.trackSwap.has; r.effects.push_back(e);
   return r;
+}
+
+const char* key(PauseAction a) {
+  switch (a) {
+    case PauseAction::PAUSE: return "pause";
+    case PauseAction::RESUME: return "resume";
+    case PauseAction::NONE: break;
+  }
+  return "none";
+}
+
+PauseResult pauseRace(const PauseInput& in) {
+  PauseResult r;
+  if (!ui::canPause(in.hasSession, in.paused, in.roomState)) return r;
+  r.action = PauseAction::PAUSE;
+  Effect e = mk(Op::SET_RACE_FLAGS);
+  e.paused = true; e.autoPaused = in.autoPaused; e.raceEnded = in.raceEnded;
+  r.effects.push_back(e);
+  r.effects.push_back(mk(Op::SYNC_FROZEN));
+  r.effects.push_back(mk(Op::SYNC_STATE));
+  e = mk(Op::SET_PAUSE_OVERLAY); e.on = true; r.effects.push_back(e);
+  // the overlay is a mouse target — cursor + buttons stay put while it's up
+  r.effects.push_back(mk(Op::HOLD_CHROME));
+  return r;
+}
+
+PauseResult resumeRace(const PauseInput& in) {
+  PauseResult r;
+  if (!ui::canResume(in.hasSession, in.paused)) return r;
+  r.action = PauseAction::RESUME;
+  Effect e = mk(Op::SET_RACE_FLAGS);
+  e.paused = false; e.autoPaused = in.autoPaused; e.raceEnded = in.raceEnded;
+  r.effects.push_back(e);
+  r.effects.push_back(mk(Op::SYNC_FROZEN));
+  r.effects.push_back(mk(Op::SYNC_STATE));
+  e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; r.effects.push_back(e);
+  // racing again — re-arm the chrome fade
+  r.effects.push_back(mk(Op::REVEAL_CHROME));
+  return r;
+}
+
+Effects endParty() {
+  Effects out;
+  // The room closes FIRST — phones bail to their party-over overlay before the
+  // pick vanishes under them — and the screen flips only once the lobby is
+  // re-dressed; the backdrop fades last, over the final state. The shell's own
+  // returnToLobby() runs BEFORE this list (it owns the race teardown and the
+  // draw protocol); from the lobby that call is a no-op.
+  out.push_back(mk(Op::CLOSE_ROOM));
+  out.push_back(mk(Op::CLEAR_PICK));
+  out.push_back(mk(Op::RENDER_LOBBY_PICK));
+  out.push_back(mk(Op::REFRESH_LOBBY_DEMO));
+  Effect e = mk(Op::SHOW_SCREEN); e.str = "welcome"; out.push_back(e);
+  out.push_back(mk(Op::UPDATE_BACKDROP));
+  return out;
 }
 
 // ---- the roster-driven repairs ----------------------------------------------

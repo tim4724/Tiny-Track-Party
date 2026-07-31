@@ -184,6 +184,10 @@ function applyEffect(s, e) {
     case 'set-auto-paused': s.autoPaused = e.on; break;
     case 'sync-frozen': break;
     case 'return-to-lobby': break;
+    // endParty's ops: pure shell performances, nothing the digest tracks —
+    // the recorded `ops` log alone pins their presence and order.
+    case 'close-room': case 'clear-pick': case 'render-lobby-pick':
+    case 'refresh-lobby-demo': case 'update-backdrop': break;
     default: throw new Error(`unknown effect op: ${e.op}`);
   }
 }
@@ -225,6 +229,26 @@ const OPS = {
   },
   demoSig: (s, a) => ({ in: a, out: rf.demoSig(a.field, a.trackId) }),
   drawsNeeded: (s, a) => ({ in: a, out: rf.drawsNeeded(a) }),
+  returnDrawsNeeded: (s, a) => ({ in: a, out: rf.returnDrawsNeeded(a) }),
+  endParty: (s, a) => {
+    const out = rf.endParty();
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: a, out };
+  },
+  pauseRace: (s, a) => {
+    const input = { hasSession: s.hasSession, paused: s.paused, autoPaused: s.autoPaused,
+      raceEnded: s.raceEnded, roomState: s.roomState, ...a };
+    const out = rf.pauseRace(input);
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: input, out };
+  },
+  resumeRace: (s, a) => {
+    const input = { hasSession: s.hasSession, paused: s.paused, autoPaused: s.autoPaused,
+      raceEnded: s.raceEnded, ...a };
+    const out = rf.resumeRace(input);
+    for (const e of out.effects) applyEffect(s, e);
+    return { in: input, out };
+  },
   seriesForStart: (s, a) => {
     const input = { ...a, cups: CUPS };
     return { in: a, out: rf.seriesForStart(input) };
@@ -470,6 +494,50 @@ SCRIPTS.push({
     ['raceEvent', { event: { type: 'lap', id: 1, lap: 2 } }],
     ['raceEvent', { event: { type: 'finish', id: 1 }, humansAllDone: true }],
     ['raceEvent', { event: { type: 'finish', id: 1 }, humansAllDone: false }]
+  ]
+});
+
+// The lobby-return draw rule, one step per mode. Appended as its own scenario
+// (2026-07-31) rather than inside random-modes so every previously recorded
+// step keeps its index — the file stays append-only across re-records.
+SCRIPTS.push({
+  name: 'return-draws',
+  steps: [
+    ['returnDrawsNeeded', { mode: 'random' }],
+    ['returnDrawsNeeded', { mode: 'cup' }],
+    ['returnDrawsNeeded', { mode: 'exact' }]
+  ]
+});
+
+// Ending the whole party (back from the lobby): the ordered teardown that used
+// to be the one lifecycle path written outside the effect walk. From the
+// lobby, and mid-race after the return the shell performs first.
+SCRIPTS.push({
+  name: 'end-party',
+  steps: [
+    ['endParty', {}],
+    ['launchRace', { players: [P(1, 'Ann', 0, 0)], seed: 11, trackId: 'a1' }],
+    ['returnToLobby', { mode: 'exact', trackId: 'a1' }],
+    ['endParty', {}]
+  ]
+});
+
+// The manual pause/resume walk: refused from the lobby, taken mid-race,
+// idempotent-refused when already in the target state, and composing with the
+// silent auto-pause (the flags pass through untouched).
+SCRIPTS.push({
+  name: 'pause-resume',
+  steps: [
+    ['pauseRace', {}],                                     // lobby: refused
+    ['resumeRace', {}],                                    // not paused: refused
+    ['launchRace', { players: [P(1, 'Ann', 0, 0)], seed: 21, trackId: 'a1' }],
+    ['pauseRace', {}],                                     // countdown: allowed
+    ['pauseRace', {}],                                     // already paused: refused
+    ['resumeRace', {}],
+    ['raceStart', { biome: 'meadow', audioReady: false }],
+    ['pauseRace', { autoPaused: true }],                   // over a silent freeze
+    ['resumeRace', { autoPaused: true }],                  // manual lifts, silent stays
+    ['returnToLobby', { mode: 'exact', trackId: 'a1' }]
   ]
 });
 

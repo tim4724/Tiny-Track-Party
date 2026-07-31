@@ -402,6 +402,178 @@ test('party ABI: the abandoned-race deadline and the late-joiner list', async ()
   dispose(g);
 });
 
+// The choreography walks (ttp_net_on_*), against the SHIPPED wasm — the entry
+// points DisplayNet actually calls. The equivalence gate (walk == the old
+// multi-call sequence) is abi_check's netWalksMatchMultiCallPath on every ctest
+// leg; what THIS test adds is the artifact: the exports survived the linker,
+// cwrap's signatures match, and one whole party's choreography runs through the
+// same wasm the browser loads.
+test('party ABI: the session choreography walks run against the shipped wasm', async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const cw = (n, ret, args) => M.cwrap(n, ret, args);
+  const net = {
+    configure: cw('ttp_net_configure', 'number', ['string']),
+    restoreRoom: cw('ttp_net_restore_room', null, ['number', 'string', 'string']),
+    onOpen: cw('ttp_net_on_open_json', 'string', ['number']),
+    createTimeout: cw('ttp_net_create_timeout_json', 'string', ['number']),
+    onProtocol: cw('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
+    onClose: cw('ttp_net_on_close_json', 'string', ['number', 'number']),
+    onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
+      ['number', 'number', 'string', 'string', 'number', 'number']),
+    selectModeDraw: cw('ttp_net_select_mode_draw_json', 'string',
+      ['number', 'string', 'string', 'string']),
+    setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
+    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    pickJson: cw('ttp_net_pick_json', 'string', ['number']),
+    liveness: cw('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
+    onSeen: cw('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
+    hostChangeApply: cw('ttp_net_host_change_apply_json', 'string', ['number', 'string']),
+    stateChangeApply: cw('ttp_net_state_change_apply_json', 'string', ['number', 'string', 'number'])
+  };
+  const room = {
+    create: cw('ttp_room_create', 'number', ['string']),
+    dispose: cw('ttp_room_dispose', null, ['number']),
+    state: cw('ttp_room_state', 'string', ['number']),
+    transitionTo: cw('ttp_room_transition_to', 'number', ['number', 'string']),
+    list: cw('ttp_room_list_json', 'string', ['number']),
+    size: cw('ttp_room_size', 'number', ['number']),
+    events: cw('ttp_room_events_json', 'string', ['number']),
+    isDisconnected: cw('ttp_room_is_disconnected', 'number', ['number', 'string'])
+  };
+  const sim = {
+    begin: cw('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
+    addHuman: cw('ttp_add_human', null, ['number', 'string', 'string']),
+    hasCar: cw('ttp_has_car', 'number', ['number', 'string']),
+    rekeyCar: cw('ttp_rekey_car', 'number', ['number', 'string', 'string']),
+    dispose: cw('ttp_dispose', null, ['number'])
+  };
+
+  assert.equal(net.configure(JSON.stringify({
+    cars: [{ id: 'dash' }], colors: ['#f00'],
+    tracks: [{ id: 'tidepool', cup: 'beach' }, { id: 'lagoon', cup: 'beach' }]
+  })), 1);
+  const h = room.create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  assert.ok(h > 0);
+  const walk = (raw) => JSON.parse(raw);
+  const ops = (raw) => walk(raw).effects.map((e) => e.op);
+  const drain = () => JSON.parse(room.events(h));
+
+  // Open on a cold boot: create + watchdog; the unanswered watchdog fails the attempt.
+  assert.deepEqual(ops(net.onOpen(h)), ['create-room', 'arm-create-watchdog']);
+  assert.deepEqual(ops(net.createTimeout(h)), ['fail-attempt']);
+  // A restored identity joins instead.
+  net.restoreRoom(h, 'OLDR', '');
+  assert.deepEqual(ops(net.onOpen(h)), ['join-room', 'arm-create-watchdog']);
+  net.restoreRoom(h, '', '');
+
+  // created → adopt/persist/liveness/ready, and the watchdog goes quiet.
+  assert.deepEqual(ops(net.onProtocol(h, 'created', '{"room":"ABCD"}', 1000)),
+    ['clear-create-timer', 'save-room', 'start-liveness', 'room-ready']);
+  assert.deepEqual(ops(net.createTimeout(h)), []);
+
+  // peer_joined → hello → set_car → set_ready, events draining like the shell does.
+  net.onProtocol(h, 'peer_joined', '{"index":1}', 2000);
+  assert.equal(drain().some((e) => e.type === 'rosterchange'), true, 'the seat landed');
+  // The pick is stored behind the handle now — seeded once, exactly as
+  // DisplayNet's constructor does (no default track, a bag wired).
+  net.initPick(h, null, 1);
+  const storedPick = () => JSON.parse(net.pickJson(h));
+  const hello = walk(net.onPeerMessage(h, 0, '1',
+    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: null }), 0, 2100));
+  assert.deepEqual(hello.effects.at(-1), { op: 'announce' });
+  assert.equal(JSON.parse(room.list(h))[0].name, 'Ada');
+  assert.deepEqual(ops(net.onPeerMessage(h, 0, '1',
+    '{"type":"set_car","carIndex":0}', 0, 2200)), ['announce']);
+  net.onProtocol(h, 'peer_joined', '{"index":2}', 2300);
+  drain();
+  assert.deepEqual(ops(net.onPeerMessage(h, 0, '2',
+    '{"type":"set_ready","ready":true}', 0, 2400)), ['announce']);
+
+  // The mode pick, all three modes — verified off the STORED pick. Exact track:
+  const trackPick = walk(net.onPeerMessage(h, 0, '1',
+    '{"type":"select_mode","mode":"track","trackId":"lagoon"}', 0, 2500));
+  assert.deepEqual(ops(JSON.stringify(trackPick)), ['publish', 'track-change']);
+  assert.deepEqual(storedPick(),
+    { mode: 'track', cupId: null, randomRaces: 0, trackId: 'lagoon' });
+  // A cup resolves to its first race:
+  walk(net.onPeerMessage(h, 0, '1',
+    '{"type":"select_mode","mode":"cup","cupId":"beach"}', 0, 2600));
+  assert.equal(storedPick().trackId, 'tidepool');
+  // Random is the two-step draw:
+  const rnd = walk(net.onPeerMessage(h, 0, '1',
+    '{"type":"select_mode","mode":"random","randomRaces":4}', 0, 2700));
+  assert.equal(rnd.needDraw, true);
+  assert.deepEqual(rnd.effects, []);
+  walk(net.selectModeDraw(h, '1',
+    '{"type":"select_mode","mode":"random","randomRaces":4}', 'lagoon'));
+  assert.equal(storedPick().trackId, 'lagoon');
+  // ...and the game-layer swap shares the tail and keeps mode/length:
+  const swapped = walk(net.setTrack(h, 'tidepool'));
+  assert.deepEqual(ops(JSON.stringify(swapped)), ['publish', 'track-change']);
+  assert.deepEqual(storedPick(),
+    { mode: 'random', cupId: null, randomRaces: 4, trackId: 'tidepool' });
+  drain();
+
+  // Into the race; the statechange walk restamps so lobby silence isn't charged.
+  room.transitionTo(h, 'countdown');
+  net.stateChangeApply(h, 'countdown', 3000);
+  room.transitionTo(h, 'playing');
+  net.stateChangeApply(h, 'playing', 3000);
+  drain();
+  const s = sim.begin('tidepool', 42, 3, null);
+  sim.addHuman(s, '1', null);
+
+  // The liveness tick: first the canary send, then — once seat 2 has been
+  // silent past the timeout — the sweep drops it with a reconnect card.
+  assert.deepEqual(ops(net.liveness(h, s, 3100)), ['send-to']);
+  net.onPeerMessage(h, s, '0', '{"type":"_heartbeat"}', 0, 3200); // the echo comes home
+  net.onSeen(h, '1', 5000);              // seat 1 keeps driving (fastlane input)
+  const expiry = walk(net.liveness(h, s, 6500));
+  assert.deepEqual(ops(JSON.stringify(expiry)).filter((o) => o !== 'send-to'),
+    ['close-fastlane', 'show-reconnect'], 'seat 2 (silent since the 3000 restamp) expired; seat 1 did not');
+  assert.deepEqual(expiry.effects.find((e) => e.op === 'show-reconnect').seat.peerIndex, 2);
+  assert.equal(room.isDisconnected(h, '2'), 1);
+  drain();
+
+  // A fastlane packet is proof of life: the single writer lifts the drop.
+  const lifted = walk(net.onSeen(h, '2', 6600));
+  assert.deepEqual(lifted.effects, [{ op: 'clear-reconnect', peerIndex: 2 }]);
+  assert.equal(room.isDisconnected(h, '2'), 0);
+  drain();
+
+  // The cross-device claim: drop seat 1, then a fresh connection carries its
+  // index as the rejoin token. The car is still keyed to the OLD seat when the
+  // walk decides — rekey-player must precede welcome-item in the answer.
+  net.onProtocol(h, 'peer_left', '{"index":1}', 6700);
+  drain();
+  const claim = walk(net.onPeerMessage(h, s, '7',
+    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: '1' }), 0, 6800));
+  const claimOps = claim.effects.map((e) => e.op);
+  assert.ok(claimOps.indexOf('rekey-player') >= 0, 'the seat was claimed');
+  assert.ok(claimOps.indexOf('rekey-player') < claimOps.indexOf('welcome-item'),
+    'the car moves before the item relight that needs it');
+  assert.deepEqual(claim.effects.find((e) => e.op === 'rekey-player'),
+    { op: 'rekey-player', oldId: 1, newId: 7 });
+  assert.equal(sim.rekeyCar(s, '1', '7'), 1); // what the shell's effect performs
+  assert.equal(JSON.parse(room.list(h)).some((p) => p.peerIndex === 7), true);
+  drain();
+
+  // close with the room gone: forget → expire EVERY seat → only then re-dial.
+  const closed = walk(net.onClose(h, 1));
+  const closedOps = closed.effects.map((e) => e.op);
+  assert.equal(closedOps[0], 'clear-create-timer');
+  assert.equal(closedOps[1], 'forget-room');
+  assert.equal(closedOps.at(-1), 'connect-fresh');
+  assert.ok(closedOps.indexOf('close-fastlane') < closedOps.indexOf('connect-fresh'),
+    'seats are expired BEFORE the fresh dial');
+  assert.equal(room.size(h), 0, 'no seat haunts the fresh lobby');
+
+  sim.dispose(s);
+  room.dispose(h);
+  net.configure('');
+});
+
 // ttp_room_sync_active_order — the participant set, against the SHIPPED wasm.
 //
 // It is the one party export that reaches ACROSS the two halves of the runtime:

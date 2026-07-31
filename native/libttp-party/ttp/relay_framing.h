@@ -41,6 +41,12 @@ Inbound classify_inbound(const Value& frame);
 
 // ---- close-code semantics (ws.onclose decision) -----------------------------
 // 4000 -> {replaced:true}, terminal; 4001 -> {roomClosed:true}, terminal;
+// The retry budget both JS transports default to (partyplug/PartyConnection.js
+// and the native adapter both spelled a bare 5 before this existed — the
+// config-drift test now pins them here). Callers still pass it through
+// close_outcome so a caller-supplied override keeps working.
+inline constexpr double MAX_RECONNECT_ATTEMPTS = 5;
+
 // otherwise attempt++ and reconnect if still allowed and within budget.
 struct CloseOutcome {
   bool stopReconnect = false;  // sets _shouldReconnect = false

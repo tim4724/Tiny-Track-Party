@@ -92,7 +92,8 @@ enum class Op {
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
-  RETURN_TO_LOBBY
+  RETURN_TO_LOBBY, CLOSE_ROOM, CLEAR_PICK, RENDER_LOBBY_PICK,
+  REFRESH_LOBBY_DEMO, UPDATE_BACKDROP
 };
 const char* key(Op op);
 
@@ -289,6 +290,10 @@ struct StartInput {
 // shuffle for a race that never happened.
 int drawsNeeded(const std::string& mode, double randomRaces);
 
+// The same question for a lobby return: only a RANDOM room re-rolls its pick on
+// the way back (returnToLobby's trackSwap), so only that mode spends a draw.
+int returnDrawsNeeded(const std::string& mode);
+
 SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
                               const std::string& trackId, double randomRaces,
                               const std::vector<Cup>& cups,
@@ -412,6 +417,41 @@ struct ReturnResult {
 // `trackSwap` re-aims the pick for the next lobby: random re-rolls every visit,
 // a cup rewinds to its race 1.
 ReturnResult returnToLobby(const ReturnInput& in);
+
+// Ending the PARTY, not just the race: the ordered teardown AFTER the shell's
+// own returnToLobby() call (which owns the race half and the draw protocol).
+// Was the one lifecycle path written outside the effect walk.
+Effects endParty();
+
+// The manual overlay pause and its resume, as walks. The verdicts are
+// ui_model's (canPause/canResume, called here); the ORDER is the contract —
+// flag first, then the freeze sync, the republish, the overlay, the chrome.
+// autoPaused/raceEnded pass through untouched: this walk owns neither.
+enum class PauseAction { NONE, PAUSE, RESUME };
+const char* key(PauseAction a);
+struct PauseInput {
+  bool hasSession = false;
+  bool paused = false;
+  bool autoPaused = false;
+  bool raceEnded = false;
+  RoomState roomState = RoomState::LOBBY;  // read by the pause verdict only
+};
+struct PauseResult {
+  PauseAction action = PauseAction::NONE;
+  Effects effects;
+};
+PauseResult pauseRace(const PauseInput& in);
+PauseResult resumeRace(const PauseInput& in);
+
+// The two game-timing budgets endRace takes as inputs. They live HERE — the
+// layer that arms the timers' effects — and shells read them through the ABI
+// (main.js used to own both numbers, which made them the only game timings a
+// second shell had to re-author). The E2E overrides (__intermissionMs and
+// friends) stay shell-side overrides of these defaults; the raceflow corpus
+// header records the values it was driven with and raceflow_check pins it to
+// these, so the oracle and the layer cannot drift.
+inline constexpr double INTERMISSION_MS = 10000;       // auto-advance budget; the host can advance early
+inline constexpr double RESULTS_FAILSAFE_MS = 60000;   // players-all-left recovery net
 
 // ---- the roster-driven repairs ----------------------------------------------
 

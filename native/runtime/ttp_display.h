@@ -235,7 +235,9 @@ TTP_ABI void ttp_display_cell_cards(uint32_t mask);
  * field. The web shell uses HUD_TICK_MS (display/Stage.js, 160 ms); a shell that
  * polls twice as often, or that drives the paint off its own UI framework's
  * invalidation instead, is equally correct. It is also the whole of what leaves:
- * no pose, no speed, no camera, no car id.
+ * no pose, no speed, no camera, no car id — the slot's identity is
+ * ttp_display_slot_ids_json below, read from the same roster the scene was
+ * built with rather than from a list the shell keeps.
  *
  * Never null, and answers with or without a built scene — a slot no live car
  * claims comes back zeroed rather than stale, so a Grand Prix swapping tracks
@@ -248,6 +250,14 @@ TTP_ABI void ttp_display_cell_cards(uint32_t mask);
  * traces depend on it byte-for-byte forever. This is about the shipping game no
  * longer calling it. */
 TTP_ABI const TtpHudBlock* ttp_display_hud(void);
+
+/* Slot i's car id, as a JSON array in the block's slot order — the other half
+ * of the HUD readback. The shell used to keep its own copy of this list from
+ * the roster it passed to build, and a drifted index was swallowed silently;
+ * now the ONE owner is the built scene's roster (reroster cannot change it —
+ * C++ refuses id-list changes there). "[]" with no display or unbuilt scene,
+ * which reads as a HUD with no rows. */
+TTP_ABI const char* ttp_display_slot_ids_json(void);
 
 /* The chunky ink rules on the seams between split-screen cells. On by default;
  * the display's ?dividers=0 debug toggle turns them off so the look can be

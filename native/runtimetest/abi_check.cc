@@ -60,7 +60,9 @@
 // export's only claim is that it hands the library's own tables over unchanged,
 // and the sole way to state that is to hold the two side by side.
 #include "ttp/protocol.h"
+#include "ttp/schematic.h"
 #include "ttp_audio.h"
+#include "ttp_room.h"  // ttp_room_store_pick — staging the stored pick for the walk cases
 #include "ttp_net.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
@@ -340,6 +342,13 @@ bool gpThroughAbi(const std::string& path) {
 // Part 3: the boundary + mutation exports.
 // ---------------------------------------------------------------------------
 void boundaryExports() {
+  // The codec tolerance and the retry budget are manifest numbers now; the
+  // C++ owners must BE those numbers (the getSteerExpo pattern).
+  check(ttp::schematic::EPS == ttp::protocol::SCHEMATIC_EPS,
+        "schematic.h EPS == the manifest's SCHEMATIC_EPS");
+  check(ttp_framing_max_reconnect_attempts() == 5,
+        "the retry budget the JS transports default to");
+
   // ---- error paths first: they must not need a valid handle.
   check(ttp_session_begin("no-such-track", 1u, 3, nullptr) == 0,
         "ttp_session_begin on an unknown trackId returns 0");
@@ -1981,6 +1990,10 @@ Value raceStep(const std::string& op, const Value& in) {
     return Value::Str(ttp_race_demo_sig(sub("field").c_str(), strIn("trackId").c_str()));
   }
   if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
+  if (op == "returnDrawsNeeded") return Value::Num(ttp_race_return_draws_needed(J(in).c_str()));
+  if (op == "endParty") return jsonOf(ttp_race_end_party_json());
+  if (op == "pauseRace") return jsonOf(ttp_race_pause_json(J(in).c_str()));
+  if (op == "resumeRace") return jsonOf(ttp_race_resume_json(J(in).c_str()));
   if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
   if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
   if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));
@@ -2258,14 +2271,21 @@ void handlePathsMatchJsonPaths() {
   ttp_add_human(sess, "1", nullptr);
   ttp_add_human(sess, "3", nullptr);   // a dropped seat still holds its car
 
-  const char* kFields =
-      "{\"paused\":false,\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
-      "\"trackId\":\"tidepool\",\"standings\":null}";
+  // The shell hands over only what the walks cannot know; the pick rides the
+  // room handle (staged here exactly as a select_mode walk would store it).
+  const char* kFields = "{\"paused\":false,\"standings\":null}";
+  const char* kPick =
+      "{\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
+      "\"trackId\":\"tidepool\",\"hasBag\":false}";
+  ttp_room_store_pick(room, parseOrNull(kPick, "staged pick"));
 
-  // The old path, spelled out: the four keys the shell used to gather, each
-  // through the ABI call it used to make.
+  // The old path, spelled out: the pick plus the four room keys the shell used
+  // to gather, each through the ABI call it used to make.
   const auto twoCallFrame = [&](int r, int s) {
     Value input = parseOrNull(kFields, "lobby-frame fields");
+    const Value pick = parseOrNull(kPick, "lobby-frame pick");
+    for (const char* k : {"mode", "cupId", "randomRaces", "trackId"})
+      input.set(k, *pick.find(k));
     Value roster = parseOrNull(ttp_room_list_json(r), "room list");
     Value inRace = Value::Arr();
     for (const Value& seat : roster.arr) {
@@ -2353,6 +2373,1085 @@ void handlePathsMatchJsonPaths() {
   ttp_room_dispose(room);
 }
 
+// ---------------------------------------------------------------------------
+// The ui LIVE twins (ttp_ui.h's *_live_json / *_gp_json) against the JSON
+// forms they gather for. Same charter as handlePathsMatchJsonPaths: a twin
+// adds no rule — it GATHERS the input the shell used to assemble (main.js's
+// raceRoleSets / refreshAutoPause / seriesInfo / standingsPayload, transcribed
+// below call for call) — so the only statement of correctness is byte
+// agreement with the JSON form over that assembly, in the same run.
+// ---------------------------------------------------------------------------
+void uiLiveTwinsMatchJsonPaths() {
+  const int room = ttp_room_create("{}");
+  if (room <= 0) { fail("ui-twins: ttp_room_create returned no handle"); return; }
+  // Ada races and stays; Bo waits (late joiner); Cy races but dropped.
+  ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+  ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":false}");
+  ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":3,\"ready\":true}");
+  ttp_room_mark_disconnected(room, "3");
+
+  const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  if (sess <= 0) { fail("ui-twins: ttp_session_begin returned no handle"); return; }
+  ttp_add_human(sess, "1", nullptr);
+  ttp_add_human(sess, "3", nullptr);
+  ttp_add_bot(sess, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
+  ttp_add_bot(sess, "\"ai-1\"", 0.9, 0.2, 2u, nullptr);
+
+  // main.js kept its own aiCarIds Set; the twin reads the bot registry. The
+  // comparison spells the shell's copy literally, which is exactly what the
+  // old assembly did.
+  const char* kAiIds = "[\"ai-0\",\"ai-1\"]";
+
+  // ---- raceRoleSets + ttp_ui_race_flow_json, transcribed --------------------
+  const auto oldRaceFlow = [&](int s, int r) {
+    Value in = Value::Obj();
+    Value carIds = parseOrNull(ttp_car_ids_json(s), "car ids");
+    Value disc = Value::Arr();
+    Value fin = Value::Arr();
+    for (const Value& idV : carIds.arr) {
+      const std::string idJson = canonical_stringify(idV);
+      if (ttp_room_is_disconnected(r, idJson.c_str())) disc.push(idV);
+      if (ttp_car_finished(s, idJson.c_str()) == 1) fin.push(idV);
+    }
+    in.set("carIds", carIds);
+    in.set("aiIds", parseOrNull(kAiIds, "ai ids"));
+    in.set("disconnectedIds", disc);
+    in.set("finishedIds", fin);
+    return std::string(ttp_ui_race_flow_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameRaceFlow = [&](const char* where) {
+    const std::string want = oldRaceFlow(sess, room);
+    const std::string got = ttp_ui_race_flow_live_json(sess, room);
+    check(got == want, std::string("ttp_ui_race_flow_live_json == assembled form (") + where + ")");
+  };
+  sameRaceFlow("mid-race, one dropped");
+  ttp_force_finish(sess, "1", 42.5);
+  sameRaceFlow("after a finish");
+  // No session: the shell answered its constant without crossing at all.
+  check(std::string(ttp_ui_race_flow_live_json(0, room)) == "{\"allDone\":false,\"forfeit\":[]}",
+        "ttp_ui_race_flow_live_json without a session is the no-race constant");
+
+  // ---- refreshAutoPause's assembly, transcribed -----------------------------
+  const auto oldAutoPause = [&](int s, int r, bool raceEnded) {
+    Value in = Value::Obj();
+    in.set("hasSession", Value::Bool(s != 0));
+    in.set("raceEnded", Value::Bool(raceEnded));
+    in.set("roomState", Value::Str(ttp_room_state(r)));
+    Value carIds = s ? parseOrNull(ttp_car_ids_json(s), "car ids") : Value::Arr();
+    Value seated = Value::Arr();
+    for (const Value& idV : carIds.arr) {
+      const std::string idJson = canonical_stringify(idV);
+      if (ttp_room_has(r, idJson.c_str())) seated.push(idV);
+    }
+    in.set("carIds", carIds);
+    in.set("aiIds", s ? parseOrNull(kAiIds, "ai ids") : Value::Arr());
+    in.set("seatedIds", seated);
+    const std::string inJson = canonical_stringify(in);
+    int allDisc = 0;
+    if (ttp_ui_auto_pause_asks(inJson.c_str())) {
+      ttp_room_sync_active_order(r, s);
+      allDisc = ttp_room_all_participants_disconnected(r);
+    }
+    return std::string(ttp_ui_auto_pause_json(inJson.c_str(), allDisc));
+  };
+  const auto sameAutoPause = [&](int s, int r, bool ended, const char* where) {
+    const std::string want = oldAutoPause(s, r, ended);
+    const std::string got = ttp_ui_auto_pause_live_json(s, r, ended ? 1 : 0);
+    check(got == want, std::string("ttp_ui_auto_pause_live_json == assembled form (") + where + ")");
+  };
+  sameAutoPause(sess, room, false, "lobby phase");
+  ttp_room_transition_to(room, "playing");
+  sameAutoPause(sess, room, false, "playing, one racer dropped");
+  ttp_room_mark_disconnected(room, "1");
+  sameAutoPause(sess, room, false, "playing, every racer dropped");
+  sameAutoPause(sess, room, true, "results overlay up");
+  sameAutoPause(0, room, false, "no session");
+  ttp_room_mark_reconnected(room, "1");
+
+  // ---- seriesInfo's getter walk + standingsPayload, transcribed -------------
+  const int gp = ttp_gp_create(
+      "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"tidepool\",\"helix\"]}", 0);
+  if (gp <= 0) { fail("ui-twins: ttp_gp_create returned no handle"); return; }
+  const double kMs = 10000;
+
+  const auto oldSeriesInfo = [&](int g) {
+    Value cup = parseOrNull(ttp_gp_cup_json(g), "gp cup");
+    Value in = Value::Obj();
+    in.set("cupId", *cup.find("id"));
+    in.set("cupName", *cup.find("name"));
+    in.set("endless", Value::Bool(ttp_gp_endless(g) != 0));
+    in.set("raceIndex", Value::Num(ttp_gp_race_index(g)));
+    in.set("raceCount", Value::Num(ttp_gp_race_count(g)));
+    in.set("finished", Value::Bool(ttp_gp_finished(g) != 0));
+    const char* next = ttp_gp_next_track(g);
+    in.set("nextTrackId", next[0] ? Value::Str(next) : Value::Null());
+    in.set("autoAdvanceMs", Value::Num(kMs));
+    return std::string(ttp_ui_series_info_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameSeriesInfo = [&](const char* where) {
+    const std::string want = oldSeriesInfo(gp);
+    const std::string got = ttp_ui_series_info_live_json(gp, kMs);
+    check(got == want, std::string("ttp_ui_series_info_live_json == getter walk (") + where + ")");
+  };
+  sameSeriesInfo("race 1 of the cup");
+  check(std::string(ttp_ui_series_info_live_json(0, kMs)) == "null",
+        "ttp_ui_series_info_live_json without a series is null");
+
+  const char* kField =
+      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false},"
+      "{\"peerIndex\":3,\"name\":\"Cy\",\"colorIndex\":3,\"ai\":false},"
+      "{\"peerIndex\":\"ai-0\",\"name\":\"Alpha\",\"colorIndex\":4,\"ai\":true},"
+      "{\"peerIndex\":\"ai-1\",\"name\":\"Beta\",\"colorIndex\":5,\"ai\":true}]";
+
+  const auto oldStandings = [&](int s, int r, int g, bool over, const char* resultsJson) {
+    Value in = Value::Obj();
+    Value resultsObj = resultsJson ? parseOrNull(resultsJson, "explicit results")
+                                   : parseOrNull(ttp_results_json(s), "live results");
+    in.set("results", *resultsObj.find("results"));
+    in.set("field", parseOrNull(kField, "field"));
+    if (g) {
+      Value cup = Value::Obj();
+      cup.set("standings", parseOrNull(ttp_gp_standings_json(g), "gp standings"));
+      cup.set("info", parseOrNull(oldSeriesInfo(g).c_str(), "series info"));
+      in.set("cup", cup);
+    } else {
+      in.set("cup", Value::Null());
+    }
+    // DisplayNet.lateJoiners() pushes the live car set in BEFORE reading — the
+    // late set is defined by subtraction from the active order, so the sync is
+    // part of the old path, not an optimization.
+    ttp_room_sync_active_order(r, s);
+    in.set("lateJoiners", parseOrNull(ttp_room_late_joiners_json(r), "late joiners"));
+    in.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "host"));
+    in.set("over", Value::Bool(over));
+    return std::string(ttp_ui_standings_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameStandings = [&](int g, bool over, const char* resultsJson, const char* where) {
+    const std::string want = oldStandings(sess, room, g, over, resultsJson);
+    const std::string got = ttp_ui_standings_live_json(sess, room, g, over ? 1 : 0,
+                                                       kField, resultsJson, kMs);
+    check(got == want, std::string("ttp_ui_standings_live_json == assembled form (") + where + ")");
+  };
+  sameStandings(0, false, nullptr, "plain race, live board");
+  sameStandings(gp, false, nullptr, "cup, live board");
+  sameStandings(gp, true, nullptr, "cup, final board off the session");
+  // endRace's own results object, as the perform context carries it.
+  sameStandings(gp, true,
+                "{\"results\":[{\"playerId\":1,\"finished\":true,\"time\":42.5},"
+                "{\"playerId\":3,\"finished\":false,\"time\":null}]}",
+                "cup, final board off the callback argument");
+
+  // ---- the endless-draw gate ------------------------------------------------
+  // NativeCupSeries spelled `drawNext && raceIndex >= raceCount - 1`; the
+  // export owns the index half. A fixed cup never draws; the endless series
+  // draws exactly while sitting on its last queued race.
+  check(ttp_gp_needs_draw(gp) == 0, "a fixed cup never needs a draw");
+  const int egp = ttp_gp_create("{\"id\":\"random\",\"name\":\"Random\",\"tracks\":[\"tidepool\"]}", 1);
+  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
+                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
+        "needs_draw == the adapter's old spelling (fresh endless)");
+  check(ttp_gp_needs_draw(egp) == 1, "a one-track endless series draws immediately");
+  ttp_gp_apply_race(egp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                    "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
+                    "\"helix\"");
+  ttp_gp_advance(egp);
+  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
+                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
+        "needs_draw == the adapter's old spelling (after an advance)");
+  check(ttp_gp_needs_draw(0) == 0, "needs_draw on handle 0 is 0");
+
+  // ---- the freeze plan ------------------------------------------------------
+  // The plan's transition must agree with the frozen-corpus-pinned rule over
+  // all eight inputs, and the two op lists are literal contracts.
+  for (int p = 0; p <= 1; p++)
+    for (int ap = 0; ap <= 1; ap++)
+      for (int sp = 0; sp <= 1; sp++) {
+        const Value plan = parseOrNull(ttp_ui_freeze_plan_json(p, ap, sp), "freeze plan");
+        check(plan.find("transition") &&
+                  plan.find("transition")->str == ttp_ui_freeze_transition(p, ap, sp),
+              "freeze plan transition == ttp_ui_freeze_transition");
+      }
+  check(std::string(ttp_ui_freeze_plan_json(1, 0, 0)) ==
+            "{\"transition\":\"freeze\",\"ops\":[\"pause-session\",\"stop-voices\","
+            "\"pause-music\",\"hold-cars\"]}",
+        "freeze ops, in order");
+  check(std::string(ttp_ui_freeze_plan_json(0, 0, 1)) ==
+            "{\"transition\":\"thaw\",\"ops\":[\"resume-session\",\"release-cars\","
+            "\"resume-music\"]}",
+        "thaw ops, in order — voices never restart");
+  check(std::string(ttp_ui_freeze_plan_json(0, 0, 0)) ==
+            "{\"transition\":\"none\",\"ops\":[]}",
+        "no transition, no ops");
+
+  // ---- the results button's action ------------------------------------------
+  check(std::string(ttp_ui_results_action_json(gp)) == "\"advance\"",
+        "mid-cup: the button advances");
+  check(std::string(ttp_ui_results_action_json(egp)) == "\"advance\"",
+        "endless: the button always advances");
+  check(std::string(ttp_ui_results_action_json(0)) == "\"return-to-lobby\"",
+        "no series: the button returns to the lobby");
+  {
+    const int fgp = ttp_gp_create("{\"id\":\"c\",\"name\":\"C\",\"tracks\":[\"tidepool\"]}", 0);
+    ttp_gp_apply_race(fgp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
+                      nullptr);
+    ttp_gp_advance(fgp);
+    check(ttp_gp_finished(fgp) == 1, "one-track cup is finished after its race");
+    check(std::string(ttp_ui_results_action_json(fgp)) == "\"return-to-lobby\"",
+          "finished cup: the button returns to the lobby");
+    ttp_gp_dispose(fgp);
+  }
+
+  // ---- the controller-message verdict ---------------------------------------
+  // Host is Ada (peer 1, earliest join). Bo (2) is not ready, so a start is
+  // refused even FROM the host; flipping Bo ready opens the gate.
+  const auto act = [&](const char* from, const char* type, int s) {
+    return std::string(ttp_net_controller_action(room, s, from, type));
+  };
+  check(act("1", "start_game", sess) == "none", "start: host but not all ready");
+  check(act("2", "start_game", sess) == "none", "start: not the host");
+  check(act("2", "series_next", sess) == "none", "series-next: not the host");
+  check(act("1", "series_next", sess) == "series-next", "series-next: the host");
+  check(act("1", "pause_game", sess) == "pause", "pause: any player");
+  check(act("3", "resume_game", sess) == "resume", "resume: any player");
+  check(act("3", "return_to_lobby", sess) == "return-to-lobby", "new game: any player");
+  check(act("1", "control", sess) == "control", "control: live race");
+  check(act("1", "control", 0) == "none", "control: no race, no input");
+  check(act("1", "no_such_type", sess) == "none", "unknown type is none");
+  ttp_room_set_field(room, "2", "ready", "true");
+  check(act("1", "start_game", sess) == "start-race", "start: host, everyone ready");
+
+  ttp_gp_dispose(egp);
+  ttp_gp_dispose(gp);
+  ttp_dispose(sess);
+  ttp_room_dispose(room);
+}
+
+// ---------------------------------------------------------------------------
+// ttp_session_begin_field against the begin + add loop it replaces. The
+// composite adds no rule — same buckets, same order, same defaults — so the
+// two constructions must produce bit-identical worlds under identical driving.
+// ---------------------------------------------------------------------------
+void beginFieldMatchesManualPath() {
+  const int a = ttp_session_begin_field(
+      "tidepool", 7u, 3, nullptr,
+      "[{\"peerIndex\":1,\"stats\":{\"accel\":1.05},\"name\":\"Ada\",\"colorIndex\":0},"
+      "{\"peerIndex\":\"ai-7\",\"stats\":null},"
+      "{\"peerIndex\":3}]",
+      "[{\"peerIndex\":\"ai-7\",\"caution\":0.9,\"laneBias\":0.2,\"seed\":42},"
+      "{\"peerIndex\":\"ai-9\"}]");   // a spec no field entry names is inert
+  if (a <= 0) { fail("begin_field: no handle"); return; }
+
+  // The manual path, spelled as the shells' one-pass loop spelled it —
+  // including the defaults the loop applied for an all-absent bot spec.
+  const int b = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  if (b <= 0) { fail("begin_field: manual twin got no handle"); return; }
+  ttp_add_human(b, "1", "{\"accel\":1.05}");
+  ttp_add_bot(b, "\"ai-7\"", 0.9, 0.2, 42u, nullptr);
+  ttp_add_human(b, "3", nullptr);
+
+  ttp_session_start(a, -1);
+  ttp_session_start(b, -1);
+  for (int i = 0; i < 30; i++) { ttp_update(a, 16.6667); ttp_update(b, 16.6667); }
+
+  check(std::string(ttp_car_ids_json(a)) == ttp_car_ids_json(b),
+        "begin_field: same grid as the manual loop");
+  check(std::string(ttp_snapshot_json(a)) == ttp_snapshot_json(b),
+        "begin_field: bit-identical world after 30 driven frames");
+  check(std::string(ttp_events_json(a)) == ttp_events_json(b),
+        "begin_field: same event stream");
+
+  // An absent-knob spec means the defaults, not zeros: a bot spelled {} must
+  // drive exactly like caution 1 / laneBias 0 / seed 1.
+  const int c = ttp_session_begin_field("tidepool", 7u, 3, nullptr,
+      "[{\"peerIndex\":\"ai-0\"}]", "[{\"peerIndex\":\"ai-0\"}]");
+  const int d = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  ttp_add_bot(d, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
+  ttp_session_start(c, -1);
+  ttp_session_start(d, -1);
+  for (int i = 0; i < 30; i++) { ttp_update(c, 16.6667); ttp_update(d, 16.6667); }
+  check(std::string(ttp_snapshot_json(c)) == ttp_snapshot_json(d),
+        "begin_field: {} spec == the engine defaults");
+
+  ttp_dispose(a); ttp_dispose(b); ttp_dispose(c); ttp_dispose(d);
+}
+
+// ---------------------------------------------------------------------------
+// The choreography walks (ttp_net.h's second section) against the multi-call
+// path they replace.
+//
+// Same charter as handlePathsMatchJsonPaths, one level up: a walk adds no rule
+// — it SEQUENCES the fine-grained exports against the live room the way
+// public/display/Net.js used to inline — so the only statement of correctness
+// is agreement with that sequence, executed here through the same exports the
+// shell called, in the same order, in the same run. Each trigger is applied to
+// TWO rooms: one through the walk, one through a shell twin transcribed from
+// the pre-walk Net.js. After every trigger the roster (ttp_room_list_json),
+// the room state and the drained event stream must be byte-identical, and the
+// walk's effects must equal what the twin's sequence implies.
+//
+// The mode pick has no old multi-call path (it was shell JS), so its cases
+// assert literal effect lists instead of derived ones.
+// ---------------------------------------------------------------------------
+namespace {
+
+// The walk answer, parsed. canonical re-stringify normalizes the model key
+// order away, so expected lists can be built with Value::set in any order.
+Value walkOf(const char* answerJson, const char* where) {
+  Value v = parseOrNull(answerJson, where);
+  const Value* eff = v.find("effects");
+  check(eff && eff->type == Value::ARR, std::string(where) + ": answer carries effects[]");
+  return v;
+}
+
+Value peerEffect(const char* op, double peerIndex) {
+  Value e = Value::Obj();
+  e.set("op", Value::Str(op));
+  e.set("peerIndex", Value::Num(peerIndex));
+  return e;
+}
+
+Value bareEffect(const char* op) {
+  Value e = Value::Obj();
+  e.set("op", Value::Str(op));
+  return e;
+}
+
+// The pre-walk shell, transcribed: every helper is one of Net.js's private
+// methods, written with the same ABI calls in the same order, and RECORDING the
+// platform ops it would have performed (the expected effect list).
+struct ShellTwin {
+  int room = 0;
+  Value expected = Value::Arr();
+
+  void reset() { expected = Value::Arr(); }
+
+  // Net.js _seen
+  void seen(double id, double now) {
+    const std::string pj = canonical_stringify(Value::Num(id));
+    ttp_room_on_seen(room, pj.c_str(), now);
+    if (ttp_room_is_disconnected(room, pj.c_str())) {
+      ttp_room_mark_reconnected(room, pj.c_str());
+      expected.push(peerEffect("clear-reconnect", id));
+    }
+  }
+
+  // Net.js _addPeer (colour scan + lowestFreeSlot + add_peer_plan + addPlayer)
+  void addPeer(double id, double now) {
+    Value roster = parseOrNull(ttp_room_list_json(room), "twin roster");
+    Value used = Value::Arr();
+    for (const Value& p : roster.arr)
+      if (const Value* c = p.find("colorIndex")) used.push(*c);
+    const int slot = ttp_room_lowest_free_slot(canonical_stringify(used).c_str(),
+                                               protocol::MAX_PLAYERS);
+    const std::string pj = canonical_stringify(Value::Num(id));
+    Value plan = parseOrNull(
+        ttp_net_add_peer_plan_json(ttp_room_has(room, pj.c_str()), ttp_room_size(room),
+                                   protocol::MAX_PLAYERS, slot),
+        "twin add plan");
+    if (const Value* seat = plan.find("seat")) {
+      // NativeSessionModel's SEAT_NAME table: 'Player ' + nameArg.
+      Value fields = Value::Obj();
+      char name[32];
+      std::snprintf(name, sizeof name, "Player %d", (int)json::num_field(*seat, "nameArg"));
+      fields.set("name", Value::Str(name));
+      fields.set("colorIndex", *seat->find("colorIndex"));
+      fields.set("carIndex", *seat->find("carIndex"));
+      fields.set("ready", *seat->find("ready"));
+      ttp_room_add_player(room, pj.c_str(), canonical_stringify(fields).c_str());
+    }
+    if (json::truthy(plan.find("stamp"))) seen(id, now);
+  }
+
+  // Net.js _dropSeat
+  void dropSeat(double id) {
+    const std::string pj = canonical_stringify(Value::Num(id));
+    expected.push(peerEffect("close-fastlane", id));
+    ttp_room_mark_disconnected(room, pj.c_str());
+    Value rec = parseOrNull(ttp_room_get_json(room, pj.c_str()), "twin drop rec");
+    if (rec.type != Value::OBJ) return;
+    Value seat = Value::Obj();
+    seat.set("peerIndex", Value::Num(id));
+    if (const Value* v = rec.find("name")) seat.set("name", *v);
+    if (const Value* v = rec.find("colorIndex")) seat.set("colorIndex", *v);
+    Value e = bareEffect("show-reconnect");
+    e.set("seat", std::move(seat));
+    expected.push(std::move(e));
+  }
+
+  // Net.js _expireSeat
+  void expireSeat(double id) {
+    const std::string pj = canonical_stringify(Value::Num(id));
+    expected.push(peerEffect("clear-reconnect", id));
+    if (!ttp_room_has(room, pj.c_str())) return;
+    expected.push(peerEffect("close-fastlane", id));
+    ttp_room_remove_player(room, pj.c_str());
+  }
+
+  // Net.js _claimReconnect
+  void claim(double from, const Value& hello, double now) {
+    const Value* token = hello.find("rejoinToken");
+    const std::string tokenJson = token ? canonical_stringify(*token) : std::string();
+    Value guess = parseOrNull(
+        ttp_net_norm_index_json(tokenJson.empty() ? nullptr : tokenJson.c_str()), "twin guess");
+    const bool hasGuess = guess.type == Value::NUM;
+    const std::string oldPj = canonical_stringify(guess);
+    const int hasOld = hasGuess && ttp_room_has(room, oldPj.c_str());
+    const int oldDisc = hasGuess && ttp_room_is_disconnected(room, oldPj.c_str());
+    Value plan = parseOrNull(
+        ttp_net_claim_plan_json(canonical_stringify(hello).c_str(), from, hasOld, oldDisc),
+        "twin claim plan");
+    if (!json::truthy(plan.find("claim"))) return;
+    const double oldId = json::num_field(plan, "oldId");
+    const std::string fromPj = canonical_stringify(Value::Num(from));
+    expected.push(peerEffect("close-fastlane", oldId));
+    expected.push(peerEffect("close-fastlane", from));
+    ttp_room_rekey(room, canonical_stringify(Value::Num(oldId)).c_str(), fromPj.c_str());
+    if (json::truthy(plan.find("restamp"))) ttp_room_on_seen(room, fromPj.c_str(), now);
+    Value e = bareEffect("rekey-player");
+    e.set("oldId", Value::Num(oldId));
+    e.set("newId", Value::Num(from));
+    expected.push(std::move(e));
+    expected.push(peerEffect("clear-reconnect", oldId));
+    expected.push(peerEffect("clear-reconnect", from));
+  }
+
+  // Net.js _onMessage's HELLO arm, sessionHandle standing in for the inRace
+  // callback exactly as the walk reads it.
+  void hello(double from, const Value& msg, int sessionHandle, double now) {
+    seen(from, now);
+    claim(from, msg, now);
+    const std::string pj = canonical_stringify(Value::Num(from));
+    const bool seated = ttp_room_has(room, pj.c_str());
+    if (!seated) addPeer(from, now);
+    Value rec = parseOrNull(ttp_room_get_json(room, pj.c_str()), "twin hello rec");
+    const Value* nameV = msg.find("name");
+    if (rec.type == Value::OBJ && json::truthy(nameV)) {
+      const std::string name = ttp_net_clean_name(canonical_stringify(*nameV).c_str());
+      const Value* cur = rec.find("name");
+      const bool renamed = seated && !(cur && cur->type == Value::STR && cur->str == name);
+      ttp_room_set_field(room, pj.c_str(), "name",
+                         canonical_stringify(Value::Str(name)).c_str());
+      if (renamed) {
+        Value e = bareEffect("player-renamed");
+        e.set("peerIndex", Value::Num(from));
+        e.set("name", Value::Str(name));
+        expected.push(std::move(e));
+      }
+    }
+    if (ttp_has_car(sessionHandle, pj.c_str()))
+      expected.push(peerEffect("welcome-item", from));
+    expected.push(bareEffect("announce"));
+  }
+};
+
+// Drain both rooms and demand the same event stream; then the same roster and
+// state. Byte equality on all three, which is the whole gate.
+void sameRooms(int walkRoom, ShellTwin& twin, const char* where) {
+  const std::string walkEvents = ttp_room_events_json(walkRoom);
+  const std::string twinEvents = ttp_room_events_json(twin.room);
+  check(walkEvents == twinEvents, std::string("netwalk ") + where + ": event streams equal");
+  const std::string walkRoster = ttp_room_list_json(walkRoom);
+  const std::string twinRoster = ttp_room_list_json(twin.room);
+  check(walkRoster == twinRoster, std::string("netwalk ") + where + ": rosters byte-identical");
+  check(std::string(ttp_room_state(walkRoom)) == ttp_room_state(twin.room),
+        std::string("netwalk ") + where + ": room state equal");
+}
+
+void sameEffects(const Value& walk, const ShellTwin& twin, const char* where) {
+  const std::string got = canonical_stringify(*walk.find("effects"));
+  const std::string want = canonical_stringify(twin.expected);
+  check(got == want, std::string("netwalk ") + where + ": effects\n  want " + want +
+                         "\n  got  " + got);
+}
+
+void literalEffects(const Value& walk, const Value& want, const char* where) {
+  const std::string got = canonical_stringify(*walk.find("effects"));
+  const std::string wantS = canonical_stringify(want);
+  check(got == wantS, std::string("netwalk ") + where + ": effects\n  want " + wantS +
+                          "\n  got  " + got);
+}
+
+void netWalksMatchMultiCallPath() {
+  // The same chooser both the pick walk and the twin's expectations read.
+  ttp_net_configure(
+      "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\",\"#0f0\"],"
+      "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
+      "{\"id\":\"lagoon\",\"name\":\"Lagoon\",\"cup\":\"beach\"},"
+      "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\"}]}");
+
+  const int walkRoom = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  ShellTwin twin;
+  twin.room = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  if (walkRoom <= 0 || twin.room <= 0) { fail("netwalk: no room handles"); return; }
+
+  const auto walkPeerMsg = [&](double from, const char* msgJson, int sess, double now) {
+    const std::string fromJson = canonical_stringify(Value::Num(from));
+    return walkOf(ttp_net_on_peer_message_json(walkRoom, sess, fromJson.c_str(), msgJson,
+                                               0, now),
+                  "on_peer_message");
+  };
+
+  // --- open: a cold boot CREATES; a restored identity JOINS -----------------
+  {
+    Value w = walkOf(ttp_net_on_open_json(walkRoom), "on_open cold");
+    Value want = Value::Arr();
+    Value cr = bareEffect("create-room");
+    cr.set("maxClients", Value::Num(5));
+    want.push(std::move(cr));
+    Value wd = bareEffect("arm-create-watchdog");
+    wd.set("delayMs", Value::Num(8000));
+    want.push(std::move(wd));
+    literalEffects(w, want, "open/cold-create");
+
+    ttp_net_restore_room(walkRoom, "OLDR", "m-9");
+    Value w2 = walkOf(ttp_net_on_open_json(walkRoom), "on_open restored");
+    Value want2 = Value::Arr();
+    Value jr = bareEffect("join-room");
+    jr.set("room", Value::Str("OLDR"));
+    want2.push(std::move(jr));
+    Value wd2 = bareEffect("arm-create-watchdog");
+    wd2.set("delayMs", Value::Num(8000));
+    want2.push(std::move(wd2));
+    literalEffects(w2, want2, "open/restored-join");
+
+    // Nothing answered yet, so the watchdog writes the attempt off...
+    Value t1 = walkOf(ttp_net_create_timeout_json(walkRoom), "create_timeout");
+    Value wantT = Value::Arr();
+    wantT.push(bareEffect("fail-attempt"));
+    literalEffects(t1, wantT, "watchdog/before-answer");
+    ttp_net_restore_room(walkRoom, "", "");  // back to the cold-boot state
+  }
+
+  // --- created: adopt + persist + liveness + room-ready ---------------------
+  {
+    Value w = walkOf(ttp_net_on_protocol_json(walkRoom, "created",
+                                              "{\"room\":\"ABCD\",\"instance\":\"m-1\"}", 1000),
+                     "created");
+    Value want = Value::Arr();
+    want.push(bareEffect("clear-create-timer"));
+    Value pin = bareEffect("pin-instance");
+    pin.set("room", Value::Str("ABCD"));
+    pin.set("instance", Value::Str("m-1"));
+    want.push(std::move(pin));
+    Value sv = bareEffect("save-room");
+    sv.set("room", Value::Str("ABCD"));
+    sv.set("instance", Value::Str("m-1"));
+    want.push(std::move(sv));
+    want.push(bareEffect("start-liveness"));
+    Value rr = bareEffect("room-ready");
+    rr.set("room", Value::Str("ABCD"));
+    rr.set("instance", Value::Str("m-1"));
+    want.push(std::move(rr));
+    literalEffects(w, want, "created");
+
+    // ...and once in the room, the watchdog is a no-op.
+    Value t2 = walkOf(ttp_net_create_timeout_json(walkRoom), "create_timeout in-room");
+    literalEffects(t2, Value::Arr(), "watchdog/after-answer");
+    ttp_room_events_json(walkRoom);  // nothing queued, but keep the streams aligned
+  }
+
+  // --- two seats join, say hello, pick and ready ----------------------------
+  ttp_net_on_protocol_json(walkRoom, "peer_joined", "{\"index\":1}", 2000);
+  twin.reset();
+  twin.addPeer(1, 2000);
+  sameRooms(walkRoom, twin, "peer_joined 1");
+
+  ttp_net_on_protocol_json(walkRoom, "peer_joined", "{\"index\":2}", 2100);
+  twin.reset();
+  twin.addPeer(2, 2100);
+  sameRooms(walkRoom, twin, "peer_joined 2");
+
+  {
+    // First hello onto a placeholder seat. On a live wire the HELLO usually
+    // lands BEFORE peer_joined (the relay answers `joined` first and the phone
+    // HELLOs inside that handler), which is what keeps joins quiet; this
+    // artificial order exercises the other branch — a named hello over a
+    // "Player N" placeholder — and only demands the two paths AGREE on it.
+    const char* helloMsg = "{\"type\":\"hello\",\"name\":\"Ada\",\"rejoinToken\":null}";
+    Value w = walkPeerMsg(1, helloMsg, 0, 2200);
+    twin.reset();
+    twin.hello(1, parseOrNull(helloMsg, "hello msg"), 0, 2200);
+    sameEffects(w, twin, "hello/first");
+    sameRooms(walkRoom, twin, "hello/first");
+
+    // Re-hello with a NEW name: exactly one player-renamed, before the announce.
+    const char* rename = "{\"type\":\"hello\",\"name\":\"Zephyr\",\"rejoinToken\":null}";
+    Value w2 = walkPeerMsg(1, rename, 0, 2300);
+    twin.reset();
+    twin.hello(1, parseOrNull(rename, "rename msg"), 0, 2300);
+    sameEffects(w2, twin, "hello/rename");
+    sameRooms(walkRoom, twin, "hello/rename");
+    bool sawRename = false;
+    for (const Value& e : w2.find("effects")->arr)
+      sawRename = sawRename || json::str_field(e, "op") == "player-renamed";
+    check(sawRename, "netwalk hello/rename: the rename signal was raised");
+  }
+
+  {
+    // SET_CAR: an accepted pick stores + announces; a ready seat's is refused.
+    const char* pick = "{\"type\":\"set_car\",\"carIndex\":1}";
+    Value w = walkPeerMsg(2, pick, 0, 2400);
+    twin.reset();
+    twin.seen(2, 2400);
+    {
+      Value rec = parseOrNull(ttp_room_get_json(twin.room, "2"), "twin car rec");
+      if (ttp_net_set_car(json::truthy(rec.find("ready")), "lobby", 0, "1",
+                          static_cast<double>(protocol::CAR_MODELS.size()))) {
+        ttp_room_set_field(twin.room, "2", "carIndex", "1");
+        twin.expected.push(bareEffect("announce"));
+      }
+    }
+    sameEffects(w, twin, "set_car/accept");
+    sameRooms(walkRoom, twin, "set_car/accept");
+
+    Value r = walkPeerMsg(2, "{\"type\":\"set_ready\",\"ready\":true}", 0, 2500);
+    twin.reset();
+    twin.seen(2, 2500);
+    ttp_room_set_field(twin.room, "2", "ready", "true");
+    twin.expected.push(bareEffect("announce"));
+    sameEffects(r, twin, "set_ready/accept");
+    sameRooms(walkRoom, twin, "set_ready/accept");
+
+    // Now the ready seat's car pick is locked...
+    Value locked = walkPeerMsg(2, pick, 0, 2600);
+    twin.reset();
+    twin.seen(2, 2600);
+    sameEffects(locked, twin, "set_car/ready-locked");
+    sameRooms(walkRoom, twin, "set_car/ready-locked");
+    // ...and a redundant ready toggle is suppressed (no republish).
+    Value again = walkPeerMsg(2, "{\"type\":\"set_ready\",\"ready\":true}", 0, 2700);
+    twin.reset();
+    twin.seen(2, 2700);
+    sameEffects(again, twin, "set_ready/redundant");
+  }
+
+  {
+    // PING: the PONG is composed in C++, `t` echoed verbatim, absent stays absent.
+    Value w = walkPeerMsg(2, "{\"type\":\"ping\",\"t\":1234567890123}", 0, 2800);
+    twin.reset();
+    twin.seen(2, 2800);
+    Value data = Value::Obj();
+    data.set("type", Value::Str("pong"));
+    data.set("t", Value::Num(1234567890123.0));
+    Value e = bareEffect("send-to");
+    e.set("to", Value::Num(2));
+    e.set("data", std::move(data));
+    twin.expected.push(std::move(e));
+    sameEffects(w, twin, "ping/echo-t");
+
+    Value noT = walkPeerMsg(2, "{\"type\":\"ping\"}", 0, 2850);
+    bool tAbsent = true;
+    for (const Value& eff : noT.find("effects")->arr)
+      if (json::str_field(eff, "op") == "send-to")
+        tAbsent = !eff.find("data")->find("t");
+    check(tAbsent, "netwalk ping/no-t: an absent t stays absent in the PONG");
+    ttp_room_events_json(twin.room);  // drain the twin's stamp-only noise
+    ttp_room_events_json(walkRoom);
+  }
+
+  // --- the mode pick (no old multi-call path; literal expectations). The pick
+  // is STORED behind the handle now, so the cases stage it with the seam,
+  // read it back with ttp_net_pick_json, and — where a walk stored it — lean
+  // on the storage itself carrying state from one case to the next. ---------
+  {
+    const auto setPick = [&](const char* json) {
+      ttp_room_store_pick(walkRoom, parseOrNull(json, "staged pick"));
+    };
+    const auto pickIs = [&](const char* want, const char* where) {
+      check(std::string(ttp_net_pick_json(walkRoom)) == want,
+            std::string("netwalk stored pick (") + where + ")");
+    };
+    // publish + track-change, the whole tail now that no set-pick effect
+    // hands the pick back to a shell.
+    const auto wantTail = [&](const char* trackId) {
+      Value want = Value::Arr();
+      want.push(bareEffect("publish"));
+      Value tc = bareEffect("track-change");
+      tc.set("trackId", Value::Str(trackId));
+      want.push(std::move(tc));
+      return want;
+    };
+
+    setPick("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null,\"hasBag\":true}");
+    // A non-host pick is refused outright, and stores nothing.
+    Value nh = walkOf(ttp_net_on_peer_message_json(
+                          walkRoom, 0, "2", "{\"type\":\"select_mode\",\"mode\":\"track\","
+                                            "\"trackId\":\"tidepool\"}",
+                          0, 2900),
+                      "select_mode non-host");
+    literalEffects(nh, Value::Arr(), "pick/non-host");
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "non-host untouched");
+
+    // The host's exact-track pick stores and answers the tail.
+    Value w = walkOf(ttp_net_on_peer_message_json(
+                         walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
+                                           "\"trackId\":\"tidepool\"}",
+                         0, 3000),
+                     "select_mode track");
+    literalEffects(w, wantTail("tidepool"), "pick/track");
+    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+           "track stored");
+
+    // Same pick again: a no-op — against the pick the WALK stored, no staging.
+    Value same = walkOf(ttp_net_on_peer_message_json(
+                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
+                                              "\"trackId\":\"tidepool\"}",
+                            0, 3100),
+                        "select_mode same");
+    literalEffects(same, Value::Arr(), "pick/same-noop");
+
+    // A cup resolves to its first race; an unknown track is refused.
+    Value cup = walkOf(ttp_net_on_peer_message_json(
+                           walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\","
+                                             "\"cupId\":\"alpine\"}",
+                           0, 3200),
+                       "select_mode cup");
+    literalEffects(cup, wantTail("summit"), "pick/cup-first-race");
+    pickIs("{\"mode\":\"cup\",\"cupId\":\"alpine\",\"randomRaces\":0,\"trackId\":\"summit\"}",
+           "cup stored");
+
+    Value bad = walkOf(ttp_net_on_peer_message_json(
+                           walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
+                                             "\"trackId\":\"nowhere\"}",
+                           0, 3300),
+                       "select_mode unknown");
+    literalEffects(bad, Value::Arr(), "pick/unknown-track");
+
+    // Random: the two-step draw. First half answers needDraw, no effects, and
+    // must leave the stored pick alone...
+    Value rnd = walkOf(ttp_net_on_peer_message_json(
+                           walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                                             "\"randomRaces\":4}",
+                           0, 3400),
+                       "select_mode random");
+    check(json::truthy(rnd.find("needDraw")), "netwalk pick/random: first half asks for a draw");
+    literalEffects(rnd, Value::Arr(), "pick/random-needdraw");
+    pickIs("{\"mode\":\"cup\",\"cupId\":\"alpine\",\"randomRaces\":0,\"trackId\":\"summit\"}",
+           "needDraw stores nothing");
+    // ...the second half lands the drawn track.
+    Value drawn = walkOf(ttp_net_select_mode_draw_json(
+                             walkRoom, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                                            "\"randomRaces\":4}",
+                             "lagoon"),
+                         "select_mode_draw");
+    literalEffects(drawn, wantTail("lagoon"), "pick/random-drawn");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\"}",
+           "drawn stored");
+
+    // Changing only the LENGTH keeps the drawn track — no fresh draw.
+    Value keep = walkOf(ttp_net_on_peer_message_json(
+                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                                              "\"randomRaces\":0}",
+                            0, 3500),
+                        "select_mode keepdraw");
+    check(!json::truthy(keep.find("needDraw")), "netwalk pick/keepdraw: no draw asked");
+    literalEffects(keep, wantTail("lagoon"), "pick/keepdraw");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"lagoon\"}",
+           "the length changed, the track did not");
+
+    // An out-of-range length clamps to the manifest default (ceiling, not range:
+    // the 0 above already proved endless survives). Staged back to a TRACK pick
+    // so the draw branch runs rather than keepDraw.
+    setPick("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\","
+            "\"hasBag\":true}");
+    walkOf(ttp_net_select_mode_draw_json(
+               walkRoom, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                              "\"randomRaces\":999}",
+               "lagoon"),
+           "select_mode clamp");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\"}",
+           "999 races clamps to the default");
+
+    // A bagless shell refuses random outright.
+    setPick("{\"mode\":null,\"trackId\":null,\"hasBag\":false}");
+    Value bagless = walkOf(ttp_net_on_peer_message_json(
+                               walkRoom, 0, "1", "{\"type\":\"select_mode\","
+                                                 "\"mode\":\"random\",\"randomRaces\":4}",
+                               0, 3600),
+                           "select_mode bagless");
+    check(!json::truthy(bagless.find("needDraw")), "netwalk pick/bagless: refused, not deferred");
+    literalEffects(bagless, Value::Arr(), "pick/bagless");
+
+    // init_pick spells the constructor rule; clear_pick keeps only hasBag.
+    ttp_net_init_pick(walkRoom, "tidepool", 1);
+    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+           "init with a default track");
+    ttp_net_init_pick(walkRoom, nullptr, 1);
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}",
+           "init without one");
+
+    // setTrack: the game-layer swap keeps mode/cup, same tail, same gates.
+    setPick("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\","
+            "\"hasBag\":true}");
+    Value st = walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track");
+    literalEffects(st, wantTail("tidepool"), "set_track/accept");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"tidepool\"}",
+           "set_track keeps mode and length");
+    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track same"),
+                   Value::Arr(), "set_track/same-id-noop");
+    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "nowhere"), "set_track unknown"),
+                   Value::Arr(), "set_track/unknown");
+
+    // clear_pick: End party's reset. Random still works after — hasBag survived.
+    ttp_net_clear_pick(walkRoom);
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "cleared");
+    Value stillBagged = walkOf(ttp_net_on_peer_message_json(
+                                   walkRoom, 0, "1", "{\"type\":\"select_mode\","
+                                                     "\"mode\":\"random\",\"randomRaces\":2}",
+                                   0, 3700),
+                               "select_mode after clear");
+    check(json::truthy(stillBagged.find("needDraw")),
+          "netwalk pick/clear: hasBag survives a clear");
+
+    ttp_room_events_json(walkRoom);
+    ttp_room_events_json(twin.room);
+  }
+
+  // --- the race: statechange restamp, a drop, liveness, the claim ----------
+  {
+    // Both rooms flip to countdown/playing; the statechange walk restamps.
+    ttp_room_transition_to(walkRoom, "countdown");
+    ttp_room_transition_to(twin.room, "countdown");
+    Value sc = walkOf(ttp_net_state_change_apply_json(walkRoom, "countdown", 4000), "sc countdown");
+    twin.reset();
+    {
+      // Net.js's statechange handler: restampConnected + clearStandings + publish.
+      Value plan = parseOrNull(ttp_net_state_change_json("countdown"), "twin sc plan");
+      if (json::truthy(plan.find("restampConnected"))) {
+        Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin sc roster");
+        for (const Value& p : roster.arr)
+          if (json::truthy(p.find("connected")))
+            ttp_room_on_seen(twin.room, canonical_stringify(*p.find("peerIndex")).c_str(), 4000);
+      }
+      if (json::truthy(plan.find("clearStandings"))) twin.expected.push(bareEffect("clear-standings"));
+      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+    }
+    sameEffects(sc, twin, "statechange/countdown");
+    sameRooms(walkRoom, twin, "statechange/countdown");
+    ttp_room_transition_to(walkRoom, "playing");
+    ttp_room_transition_to(twin.room, "playing");
+    ttp_room_events_json(walkRoom);
+    ttp_room_events_json(twin.room);
+
+    // A live race: seat 1 holds a car, seat 2 does not (a late joiner).
+    const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+    ttp_add_human(sess, "1", nullptr);
+
+    // peer_left mid-race: a soft drop, seat and car kept, QR offered.
+    Value pl = walkOf(ttp_net_on_protocol_json(walkRoom, "peer_left", "{\"index\":1}", 5000),
+                      "peer_left");
+    twin.reset();
+    twin.expected.push(peerEffect("close-fastlane", 1));
+    twin.dropSeat(1);
+    sameEffects(pl, twin, "peer_left/mid-race");
+    sameRooms(walkRoom, twin, "peer_left/mid-race");
+
+    // The liveness tick: heartbeat SEND first (in-room, nothing in flight),
+    // then the sweep — nothing expired yet at 5100.
+    Value lt = walkOf(ttp_net_liveness_json(walkRoom, sess, 5100), "liveness");
+    {
+      bool sentHb = false;
+      for (const Value& e : lt.find("effects")->arr)
+        if (json::str_field(e, "op") == "send-to")
+          sentHb = json::num_field(e, "to") == 0 &&
+                   json::str_field(*e.find("data"), "type") == "_heartbeat";
+      check(sentHb, "netwalk liveness: the canary heartbeat is composed off the manifest");
+    }
+    // The twin's sweep half, over the same clock (its heartbeat state was JS
+    // shell state; the sweep is what touches the room).
+    twin.reset();
+    {
+      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 5100), "twin expired");
+      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      ttp_room_sync_active_order(twin.room, sess);
+      if (ttp_room_grace_tick(twin.room, 5100)) twin.expected.push(bareEffect("race-abandoned"));
+    }
+    sameRooms(walkRoom, twin, "liveness/no-expiry");
+
+    // The echo comes home and clears the in-flight flag: the NEXT tick sends
+    // again instead of reconnecting.
+    walkPeerMsg(0, "{\"type\":\"_heartbeat\"}", sess, 5200);
+    Value lt2 = walkOf(ttp_net_liveness_json(walkRoom, sess, 5300), "liveness 2");
+    {
+      bool sentAgain = false, reconnected = false;
+      for (const Value& e : lt2.find("effects")->arr) {
+        const std::string op = json::str_field(e, "op");
+        sentAgain = sentAgain || op == "send-to";
+        reconnected = reconnected || op == "reconnect";
+      }
+      check(sentAgain && !reconnected, "netwalk liveness: the echo closed the loop");
+    }
+    twin.reset();
+    // (the echo routes 'self-heartbeat' in the twin too — no stamp, no effect)
+    {
+      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 5300), "twin expired2");
+      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      ttp_room_sync_active_order(twin.room, sess);
+      if (ttp_room_grace_tick(twin.room, 5300)) twin.expected.push(bareEffect("race-abandoned"));
+    }
+    sameRooms(walkRoom, twin, "liveness/echoed");
+
+    // Seat 2 goes silent past the timeout: the sweep drops it in both worlds.
+    Value lt3 = walkOf(ttp_net_liveness_json(walkRoom, sess, 9000), "liveness expiry");
+    twin.reset();
+    {
+      Value expired = parseOrNull(ttp_room_expired_peers_json(twin.room, 9000), "twin expired3");
+      for (const Value& id : expired.arr) twin.dropSeat(id.num);
+      ttp_room_sync_active_order(twin.room, sess);
+      if (ttp_room_grace_tick(twin.room, 9000)) twin.expected.push(bareEffect("race-abandoned"));
+    }
+    // The heartbeat half differs (the twin holds no canary state), so compare
+    // only the sweep's effects: strip send-to/reconnect from the walk's answer.
+    {
+      Value sweep = Value::Arr();
+      for (const Value& e : lt3.find("effects")->arr) {
+        const std::string op = json::str_field(e, "op");
+        if (op != "send-to" && op != "reconnect") sweep.push(e);
+      }
+      const std::string got = canonical_stringify(sweep);
+      const std::string want = canonical_stringify(twin.expected);
+      check(got == want, "netwalk liveness/expiry: sweep effects\n  want " + want +
+                             "\n  got  " + got);
+    }
+    sameRooms(walkRoom, twin, "liveness/expiry");
+
+    // _seen lifts the dropped seat back: the single writer, in both worlds.
+    Value seen = walkOf(ttp_net_on_seen_json(walkRoom, "2", 9100), "on_seen");
+    twin.reset();
+    twin.seen(2, 9100);
+    sameEffects(seen, twin, "seen/lift");
+    sameRooms(walkRoom, twin, "seen/lift");
+
+    // The cross-device claim: seat 1 (dropped, car-holding) reclaimed from a
+    // fresh connection as peer 7. welcome-item fires — the live race holds the
+    // rekeyed car — and the twin's inRace callback agrees through ttp_has_car.
+    const char* claimHello = "{\"type\":\"hello\",\"name\":\"Zephyr\",\"rejoinToken\":\"1\"}";
+    Value cw = walkPeerMsg(7, claimHello, sess, 9200);
+    // The walk rekeys the ROOM seat; the car moves under the shell's
+    // rekey-player effect, so move it here before comparing welcome-item.
+    ttp_rekey_car(sess, "1", "7");
+    twin.reset();
+    twin.hello(7, parseOrNull(claimHello, "claim hello"), sess, 9200);
+    sameEffects(cw, twin, "claim/rekey");
+    sameRooms(walkRoom, twin, "claim/rekey");
+
+    // Back to the lobby: disconnected seats are freed, standings cleared.
+    ttp_room_transition_to(walkRoom, "lobby");
+    ttp_room_transition_to(twin.room, "lobby");
+    ttp_room_events_json(walkRoom);
+    ttp_room_events_json(twin.room);
+    walkOf(ttp_net_on_seen_json(walkRoom, "2", 9300), "reseen");  // seat 2 is back
+    twin.seen(2, 9300);
+    ttp_room_events_json(walkRoom);
+    ttp_room_events_json(twin.room);
+    Value lob = walkOf(ttp_net_state_change_apply_json(walkRoom, "lobby", 9400), "sc lobby");
+    twin.reset();
+    {
+      Value plan = parseOrNull(ttp_net_state_change_json("lobby"), "twin lobby plan");
+      if (json::truthy(plan.find("freeDisconnected"))) {
+        Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin lobby roster");
+        std::vector<double> disc;
+        for (const Value& p : roster.arr) {
+          const std::string pj = canonical_stringify(*p.find("peerIndex"));
+          if (ttp_room_is_disconnected(twin.room, pj.c_str())) disc.push_back(p.find("peerIndex")->num);
+        }
+        for (double id : disc) twin.expireSeat(id);
+      }
+      if (json::truthy(plan.find("clearStandings"))) twin.expected.push(bareEffect("clear-standings"));
+      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+    }
+    sameEffects(lob, twin, "statechange/lobby");
+    sameRooms(walkRoom, twin, "statechange/lobby");
+    ttp_dispose(sess);
+  }
+
+  // --- host promotion clears the inherited ready flag -----------------------
+  {
+    ttp_room_set_field(walkRoom, "2", "ready", "true");
+    ttp_room_set_field(twin.room, "2", "ready", "true");
+    ttp_room_events_json(walkRoom);
+    ttp_room_events_json(twin.room);
+    Value hc = walkOf(ttp_net_host_change_apply_json(walkRoom, "2"), "host_change");
+    twin.reset();
+    {
+      Value plan = parseOrNull(ttp_net_host_change_json(), "twin host plan");
+      if (json::truthy(plan.find("clearReady"))) ttp_room_set_field(twin.room, "2", "ready", "false");
+      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("announce"));
+    }
+    sameEffects(hc, twin, "hostchange");
+    sameRooms(walkRoom, twin, "hostchange");
+  }
+
+  // --- joined: the post-reload reconciliation -------------------------------
+  {
+    // The relay knows peers 2 and 5; seat 7 is stale. resync_plan decides, the
+    // walk performs; the twin performs the same plan through the exports.
+    Value w = walkOf(ttp_net_on_protocol_json(walkRoom, "joined",
+                                              "{\"room\":\"ABCD\",\"peers\":[0,2,5]}", 10000),
+                     "joined");
+    twin.reset();
+    twin.expected.push(bareEffect("clear-create-timer"));
+    {
+      Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin resync roster");
+      Value ids = Value::Arr();
+      for (const Value& p : roster.arr) ids.push(*p.find("peerIndex"));
+      Value plan = parseOrNull(
+          ttp_net_resync_plan_json(canonical_stringify(ids).c_str(), "[0,2,5]"), "twin resync");
+      for (const Value& id : plan.find("expire")->arr) twin.expireSeat(id.num);
+      for (const Value& id : plan.find("add")->arr) twin.addPeer(id.num, 10000);
+      if (json::truthy(plan.find("publish"))) twin.expected.push(bareEffect("publish"));
+    }
+    twin.expected.push(bareEffect("reset-reconnect-count"));
+    {
+      Value sv = bareEffect("save-room");
+      sv.set("room", Value::Str("ABCD"));
+      sv.set("instance", Value::Str("m-1"));  // kept from `created` — joined never clears it
+      twin.expected.push(std::move(sv));
+      twin.expected.push(bareEffect("start-liveness"));
+      Value rr = bareEffect("room-ready");
+      rr.set("room", Value::Str("ABCD"));
+      rr.set("instance", Value::Str("m-1"));
+      twin.expected.push(std::move(rr));
+    }
+    sameEffects(w, twin, "joined/resync");
+    sameRooms(walkRoom, twin, "joined/resync");
+  }
+
+  // --- close with the room gone: forget, expire EVERY seat, then re-dial ----
+  {
+    Value w = walkOf(ttp_net_on_close_json(walkRoom, 1), "close roomClosed");
+    twin.reset();
+    twin.expected.push(bareEffect("clear-create-timer"));
+    twin.expected.push(bareEffect("forget-room"));
+    {
+      Value roster = parseOrNull(ttp_room_list_json(twin.room), "twin close roster");
+      std::vector<double> ids;
+      for (const Value& p : roster.arr) ids.push_back(p.find("peerIndex")->num);
+      for (double id : ids) twin.expireSeat(id);
+    }
+    twin.expected.push(bareEffect("connect-fresh"));
+    sameEffects(w, twin, "close/room-closed");
+    sameRooms(walkRoom, twin, "close/room-closed");
+    check(ttp_room_size(walkRoom) == 0, "netwalk close: no seat survives into the fresh room");
+
+    // ...and the next error with no room code counts a failed attempt.
+    Value err = walkOf(ttp_net_on_protocol_json(walkRoom, "error",
+                                                "{\"message\":\"Server draining\"}", 11000),
+                       "error no-room");
+    Value wantErr = Value::Arr();
+    wantErr.push(bareEffect("fail-attempt"));
+    literalEffects(err, wantErr, "error/create-rejected");
+  }
+
+  ttp_room_dispose(twin.room);
+  ttp_room_dispose(walkRoom);
+  ttp_net_configure("");  // leave no configured chooser behind
+  std::printf("  net choreography walks against the multi-call path\n");
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
   if (argc < 8) {
     std::fprintf(stderr, "usage: abi_check <grandprix-corpus> <roomflow-corpus> "
@@ -2378,6 +3477,9 @@ int main(int argc, char** argv) {
   uiCupTendency();
   uiCorpusThroughAbi(argv[4]);
   handlePathsMatchJsonPaths();
+  uiLiveTwinsMatchJsonPaths();
+  beginFieldMatchesManualPath();
+  netWalksMatchMultiCallPath();
   sessionCorpusThroughAbi(argv[5]);
   raceCorpusThroughAbi(argv[6]);
 

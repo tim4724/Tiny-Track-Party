@@ -1,35 +1,26 @@
-// NativeSessionModel — the display's edge of the SESSION POLICY, which is C++.
+// NativeSessionModel — the display's edge of the SESSION POLICY and its
+// CHOREOGRAPHY, which are C++.
 //
-// public/display/sessionModel.js's surface, backed by native/runtime/ttp_net.h
-// over native/libttp-party/ttp/session.cc. Every room decision DisplayNet used
-// to take inline — what the retained snapshot contains, what a new seat starts
-// as, what a drop or a LEAVE means in each phase, which car picks and ready
-// toggles are refused, when the self-heartbeat says the socket is dead, who may
-// claim a dropped seat, what the claim QR's URL looks like — is taken in the
-// wasm now. Net.js PERFORMS those answers against the socket, the timers, the
-// storage and the RoomFlow, and decides nothing.
+// Backed by native/runtime/ttp_net.h over native/libttp-party/ttp/session.cc.
+// Since the walk entry points landed (ttp_net_on_*), DisplayNet no longer
+// sequences the fine-grained rules itself: every inbound trigger crosses ONCE,
+// the room mutations happen inside the wasm, and an ordered effect list comes
+// back for Net.js to perform. This file names the shell's own objects (a peer
+// message, the current pick, a seat), turns them into the plain JSON the ABI
+// takes, and hands the answers back RAW — Net.js owns the one parse, because
+// its hot path (_seen) wants to compare bytes before paying for it.
 //
-// WHAT THIS FILE IS ALLOWED TO DO, and it is a short list: name the shell's own
-// objects (a roster record, a seat, a chooser payload), turn them into the plain
-// JSON the ABI takes, and turn the answer back into what Net.js already expects.
-// No rule may live here.
-//
-// TWO PLACES WHERE THAT SHOWS, and both are about JS values the wire cannot
-// spell:
-//   * normIndex/claimPlan distinguish an ABSENT rejoinToken from an explicit
-//     null — `Number(undefined)` is NaN while `Number(null)` is 0, so an
-//     ordinary HELLO claims nothing while one carrying an explicit null claims
-//     seat 0. The ABI takes the whole HELLO for exactly that reason, and this
-//     file must not "helpfully" default the key.
-//   * seatDefaults answers {nameKey:'player_n', nameArg:N}, never the sentence.
-//     The copy table is below, next to nothing else that composes English.
+// No rule may live here. The fine-grained JSON exports this file used to wrap
+// one-for-one still exist in the ABI — the frozen session corpus replays them,
+// abi_check's netWalksMatchMultiCallPath drives the walks against them, and
+// the unmerged tvOS branch still calls them — but a wrapper nothing on this
+// page calls is surface, so only what Net.js reaches remains wrapped.
 //
 // public/display/sessionModel.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/session-corpus.jsonl was recorded off it, native/partytest/
 // session_check.cc replays every step through the C++ on all four legs, and
-// runtimetest/abi_check.cc replays the same corpus through the C boundary this
-// file calls. A disagreement between them is a bug in the port, never in the
-// corpus. Nothing that ships imports it.
+// runtimetest/abi_check.cc replays the same corpus through the C boundary.
+// A disagreement between them is a bug in the port, never in the corpus.
 
 import { loadNativeRuntime, nativeError } from './nativeRuntime.js';
 
@@ -41,96 +32,64 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_net_configure', 'number', ['string']),
-    cleanName: c('ttp_net_clean_name', 'string', ['string']),
     lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
     joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
     controllerUrlTemplate: c('ttp_net_controller_url_template', 'string', ['string']),
-    normIndex: c('ttp_net_norm_index_json', 'string', ['string']),
-    seatDefaults: c('ttp_net_seat_defaults_json', 'string', ['number']),
-    addPeerPlan: c('ttp_net_add_peer_plan_json', 'string', ['number', 'number', 'number', 'number']),
-    presenceAction: c('ttp_net_presence_action', 'string', ['string']),
-    leaveAction: c('ttp_net_leave_action', 'string', ['string']),
     reconnectCard: c('ttp_net_reconnect_card_json', 'string', ['string', 'string']),
-    inboundRoute: c('ttp_net_inbound_route', 'string', ['number', 'string']),
-    messageAction: c('ttp_net_message_action', 'string', ['string']),
-    setCar: c('ttp_net_set_car', 'number', ['number', 'string', 'number', 'string', 'number']),
-    setReady: c('ttp_net_set_ready', 'number', ['number', 'string', 'number', 'number']),
-    stateChange: c('ttp_net_state_change_json', 'string', ['string']),
-    hostChange: c('ttp_net_host_change_json', 'string', []),
-    heartbeatTick: c('ttp_net_heartbeat_tick_json', 'string', ['number', 'number', 'number', 'number']),
-    claimPlan: c('ttp_net_claim_plan_json', 'string', ['string', 'number', 'number', 'number']),
-    resyncPlan: c('ttp_net_resync_plan_json', 'string', ['string', 'string'])
+    // The choreography walks: room-handle-taking, mutate inside the wasm,
+    // answer {"effects":[...]} (+ needDraw on a mode pick).
+    restoreRoom: c('ttp_net_restore_room', null, ['number', 'string', 'string']),
+    onOpen: c('ttp_net_on_open_json', 'string', ['number']),
+    createTimeout: c('ttp_net_create_timeout_json', 'string', ['number']),
+    onProtocol: c('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
+    onClose: c('ttp_net_on_close_json', 'string', ['number', 'number']),
+    onPeerMessage: c('ttp_net_on_peer_message_json', 'string',
+      ['number', 'number', 'string', 'string', 'number', 'number']),
+    controllerAction: c('ttp_net_controller_action', 'string',
+      ['number', 'number', 'string', 'string']),
+    selectModeDraw: c('ttp_net_select_mode_draw_json', 'string',
+      ['number', 'string', 'string', 'string']),
+    setTrack: c('ttp_net_set_track_json', 'string', ['number', 'string']),
+    initPick: c('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    clearPick: c('ttp_net_clear_pick', null, ['number']),
+    pickJson: c('ttp_net_pick_json', 'string', ['number']),
+    liveness: c('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
+    onSeen: c('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
+    hostChangeApply: c('ttp_net_host_change_apply_json', 'string', ['number', 'string']),
+    stateChangeApply: c('ttp_net_state_change_apply_json', 'string', ['number', 'string', 'number'])
   };
 }
 
 const J = JSON.stringify;
-const b = (x) => (x ? 1 : 0);
 
-// The seat-name copy table. It is one line and it is HERE rather than in C++
-// because a default name is user-facing copy: the model answers with a key and
-// its number (decision D4), and every shell fills it from its own table.
-const SEAT_NAME = { player_n: (n) => 'Player ' + n };
-function seatName(d) { return (SEAT_NAME[d.nameKey] || ((n) => String(n)))(d.nameArg); }
+// A peer id crosses the ABI as a JSON scalar (numeric 3 vs the string "3" are
+// distinct room keys, exactly as in JS).
+const idJson = (v) => J(v === undefined ? null : v);
 
 // The chooser content every room snapshot carries — cars and colours always,
-// the bulky reduced track schematics lobby-only. Opaque to the model, set ONCE
-// because it is authored data that changes when the game ships, not while it
-// runs.
-// The display-name cap, THROUGH THE ABI rather than through names.js.
-//
-// public/shared/names.js is still the authored source and still ships — the
-// PHONE imports it, and a phone has no wasm to ask. But the DISPLAY half is a
-// shell like any other, and a shell reads the rule rather than re-running it.
-// Routing the browser through the same export tvOS uses is what keeps that
-// export honest: if it drifts, the web breaks first and loudest.
-//
-// The RAW JSON crosses, not a string, because a HELLO's `name` is untrusted and
-// the rule is JS's — a number, a bool and an array each have a defined spelling.
-export function cleanName(value) {
-  return fn.cleanName(JSON.stringify(value === undefined ? null : value));
-}
-
+// the bulky reduced track schematics lobby-only. Opaque to the snapshot
+// composition, set ONCE because it is authored data that changes when the game
+// ships, not while it runs. The MODE PICK walk reads `tracks` as its catalogue.
 export function configure({ cars, colors, tracks }) {
   const ok = fn.configure(J({ cars: cars || [], colors: colors || [], tracks: tracks || [] }));
   if (!ok) throw nativeError('configuring the chooser payload');
 }
 
 // ---- the retained room snapshot --------------------------------------------
-// ONE WRAPPER, not three. ttp_net_roster_rows_json and
-// ttp_net_lobby_snapshot_json both still exist — the frozen session corpus
-// replays them, and a shell whose roster does NOT live in this wasm needs the
-// plain-data spellings — but this display reaches the snapshot only one way, so
-// wrapping the other two here would be surface nothing calls.
-//
 // THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
-// handles and the six fields only the game knows.
+// handles and the six fields only the game knows; the answer is the exact frame
+// TEXT for the socket. There is deliberately no parse here — a caller that
+// wants to look inside is asking for the snapshot, not the frame, and should
+// say so. ttp_net_lobby_snapshot_json / ttp_net_roster_rows_json still exist
+// unwrapped (the frozen corpus replays them; a shell whose roster does NOT
+// live in this wasm needs the plain-data spellings).
 //
-// What it replaces is a round trip: the snapshot came back as text, this side
-// parsed it, PartyConnection.setState re-serialized it and
-// ttp_framing_encode_set_state parsed it BACK. The roster made the same trip one
-// layer earlier — pulled out of the room as JSON only to be handed straight
-// back. Now nothing about a seat is serialized out at all: ttp_net_lobby_frame
-// reads the roster off the room handle and every seat's inRace off the live
-// Game. Measured in the browser at the 4-player cap: 169.6 us -> 44.4 us.
-//
-// KEY ORDER IS NOT THE WIRE'S, whatever the shape of the ABI suggests.
-// ttp_net_lobby_snapshot_json and ttp_ui_standings_json write the model's own
-// order, but the frame encoder downstream does not preserve it: ttp_party.cc's
-// `put` runs canonical_stringify over EVERY outbound frame — set_state,
-// broadcast and sendTo alike — so what the relay retains and replays is the
-// SORTED object, and always has been. The ordered emitter earns its keep at the
-// ABI boundary, where abi_check pins those bytes and the frozen corpora
-// recorded them off a JS oracle that emitted insertion order. Below this line
-// nothing preserves it, so do not spend anything protecting it.
-//
-// The size is the chooser, not the party: ~5.9 KB of the ~7 KB snapshot is the
-// `tracks` payload, set once at boot and never read by anything above the wire.
-// That is the blob the round trip kept re-parsing on every rename.
-//
-// Returns the exact frame TEXT for the socket. There is deliberately no parse
-// here — a caller that wants to look inside is asking for the snapshot, not the
-// frame, and should say so.
+// KEY ORDER IS NOT THE WIRE'S, whatever the shape of the ABI suggests: the
+// frame encoder canonicalizes every outbound frame, so what the relay retains
+// is the SORTED object and always has been. The ordered emitter earns its keep
+// at the ABI boundary, where abi_check pins bytes against corpora recorded off
+// a JS oracle that emitted insertion order.
 export function lobbyFrame(roomHandle, sessionHandle, fields) {
   return fn.lobbyFrame(roomHandle | 0, sessionHandle | 0, J(fields));
 }
@@ -149,69 +108,65 @@ export function controllerUrlTemplate(base) {
   return t === '' ? null : t;
 }
 
-// ---- seats -------------------------------------------------------------------
-// The plan for a peer_joined (or a HELLO from someone we never seated): the seat
-// record to add, or null, plus whether to stamp its liveness. The name is
-// composed HERE, from the key the model answered with.
-export function addPeerPlan({ has, size, maxPlayers, colorIndex }) {
-  const plan = JSON.parse(fn.addPeerPlan(b(has), size, maxPlayers, colorIndex));
-  if (!plan.seat) return { seat: null, stamp: plan.stamp };
-  const d = plan.seat;
-  return {
-    seat: { name: seatName(d), colorIndex: d.colorIndex, carIndex: d.carIndex, ready: d.ready },
-    stamp: plan.stamp
-  };
-}
-export function presenceAction(roomState) { return fn.presenceAction(roomState || ''); }
-export function leaveAction(roomState) { return fn.leaveAction(roomState || ''); }
+// The dropped-seat card payload {peerIndex,name,colorIndex,url} — the seat as
+// the show-reconnect effect carried it, plus the claim URL only this shell can
+// compose (D3: it needs the platform's base origin).
 export function reconnectCard(seat, url) {
   return JSON.parse(fn.reconnectCard(
     J({ peerIndex: seat.peerIndex, name: seat.name, colorIndex: seat.colorIndex }), url));
 }
 
-// ---- controller messages ------------------------------------------------------
-export function inboundRoute(from, type) { return fn.inboundRoute(from, type == null ? '' : String(type)); }
-export function messageAction(type) { return fn.messageAction(type == null ? '' : String(type)); }
+// ---- the choreography walks -------------------------------------------------
+// Raw-string answers, deliberately: Net.js._walk owns the single JSON.parse,
+// and the _seen hot path skips it on the shared empty answer. The peer message
+// and the current pick cross as the shell's own objects; JSON.stringify keeps
+// the absent-vs-null distinction the claim logic turns on (an absent
+// rejoinToken drops out of the message text, exactly as the wasm expects).
 
-// carIndex crosses as its RAW JSON so the integer check can refuse a string or a
-// boolean rather than coerce it — this is untrusted input from a phone.
-export function setCarDecision({ ready, roomState, inRace, carIndex, carCount }) {
-  return !!fn.setCar(b(ready), roomState || '', b(inRace),
-    J(carIndex === undefined ? null : carIndex), carCount);
+export function restoreRoom(roomHandle, code, instance) {
+  fn.restoreRoom(roomHandle | 0, code || '', instance || '');
 }
-export function setReadyDecision({ isHost, roomState, ready, current }) {
-  return !!fn.setReady(b(isHost), roomState || '', b(ready), b(current));
+export function onOpen(roomHandle) { return fn.onOpen(roomHandle | 0); }
+export function createTimeout(roomHandle) { return fn.createTimeout(roomHandle | 0); }
+export function onProtocol(roomHandle, type, msg, nowMs) {
+  return fn.onProtocol(roomHandle | 0, type || '', J(msg || {}), nowMs);
 }
-
-// ---- room-state transitions ----------------------------------------------------
-export function stateChangePlan(to) { return JSON.parse(fn.stateChange(to || '')); }
-export function hostChangePlan() { return JSON.parse(fn.hostChange()); }
-
-// ---- liveness --------------------------------------------------------------------
-export function heartbeatTick({ inRoom, hbPending, hbSentAt, now }) {
-  return JSON.parse(fn.heartbeatTick(b(inRoom), b(hbPending), hbSentAt || 0, now));
+export function onClose(roomHandle, roomClosed) {
+  return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0);
 }
-
-// ---- claims + reconciliation --------------------------------------------------------
-// The WHOLE HELLO crosses, not just the token: an absent rejoinToken and an
-// explicit null answer differently, and only the message itself can tell them
-// apart. JSON.stringify drops an undefined value, which is precisely the
-// distinction being preserved.
-export function claimPlan({ hello, fromId, hasOld, oldDisconnected }) {
-  return JSON.parse(fn.claimPlan(J(hello || {}), fromId, b(hasOld), b(oldDisconnected)));
+export function onPeerMessage(roomHandle, sessionHandle, from, msg, isSignal, nowMs) {
+  return fn.onPeerMessage(roomHandle | 0, sessionHandle | 0, idJson(from), J(msg || {}),
+    isSignal ? 1 : 0, nowMs);
 }
-
-// The rejoinToken of a HELLO as a seat index, or null. Reads the KEY, not the
-// value, for the reason above: an empty argument is JS `undefined` and the
-// string "null" is an explicit null, and the two do not answer the same.
-//
-// It exists because claimPlan needs the caller to have already asked the roster
-// about the seat the token names, which the caller cannot do without normalizing
-// it first. Same rule, same C++, one extra crossing on a HELLO.
-export function normIndexOf(hello) {
-  const present = hello && typeof hello === 'object' && hello.rejoinToken !== undefined;
-  return JSON.parse(fn.normIndex(present ? J(hello.rejoinToken) : ''));
+// The verdict on a game message, gates included (host, all-ready, live race).
+// CONTROL never comes through here on this shell — see main.js's short-circuit.
+export function controllerAction(roomHandle, sessionHandle, from, type) {
+  return fn.controllerAction(roomHandle | 0, sessionHandle | 0, idJson(from), type || '');
 }
-export function resyncPlan(rosterIds, relayPeers) {
-  return JSON.parse(fn.resyncPlan(J(rosterIds), J(relayPeers)));
+export function selectModeDraw(roomHandle, from, msg, drawnTrackId) {
+  return fn.selectModeDraw(roomHandle | 0, idJson(from), J(msg || {}),
+    drawnTrackId == null ? '' : String(drawnTrackId));
+}
+export function setTrack(roomHandle, trackId) {
+  return fn.setTrack(roomHandle | 0, trackId == null ? '' : String(trackId));
+}
+// The stored pick's lifecycle — the walks write it, these three touch it from
+// the shell's edge: the constructor rule, End party's reset, and the read.
+export function initPick(roomHandle, defaultTrackId, hasBag) {
+  fn.initPick(roomHandle | 0, defaultTrackId == null ? null : String(defaultTrackId),
+    hasBag ? 1 : 0);
+}
+export function clearPick(roomHandle) { fn.clearPick(roomHandle | 0); }
+export function pick(roomHandle) { return JSON.parse(fn.pickJson(roomHandle | 0)); }
+export function liveness(roomHandle, sessionHandle, nowMs) {
+  return fn.liveness(roomHandle | 0, sessionHandle | 0, nowMs);
+}
+export function onSeen(roomHandle, peerIndex, nowMs) {
+  return fn.onSeen(roomHandle | 0, idJson(peerIndex), nowMs);
+}
+export function hostChangeApply(roomHandle, hostPeerIndex) {
+  return fn.hostChangeApply(roomHandle | 0, idJson(hostPeerIndex));
+}
+export function stateChangeApply(roomHandle, to, nowMs) {
+  return fn.stateChangeApply(roomHandle | 0, to || '', nowMs);
 }

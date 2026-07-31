@@ -219,6 +219,72 @@ export function drawsNeeded({ mode, randomRaces }) {
   return randomRaces - 1;
 }
 
+// The same question for a lobby return: only a RANDOM room re-rolls its pick on
+// the way back (returnToLobby's trackSwap), so only that mode spends a draw.
+// The shell asks this instead of re-spelling the mode test at the call site —
+// the one place that did grew a second, subtly different copy of the rule.
+export function returnDrawsNeeded({ mode }) {
+  return mode === 'random' ? 1 : 0;
+}
+
+// The manual overlay pause and its resume, as walks. The VERDICTS are
+// uiModel's (canPause/canResume — inlined on this file's no-import terms; the
+// port calls the ui rules themselves, so a drift between the two spellings
+// turns the corpus replay red). The ORDER is the contract: the flag flips
+// first, the sim's clock syncs to the combined freeze state, the republish
+// tells the phones, and only then the overlay and chrome dress the change.
+// autoPaused/raceEnded pass through untouched — this walk owns neither.
+export function pauseRace({ hasSession, paused, autoPaused, raceEnded, roomState }) {
+  const can = !paused && !!hasSession && (roomState === 'countdown' || roomState === 'playing');
+  if (!can) return { action: 'none', effects: [] };
+  return {
+    action: 'pause',
+    effects: [
+      { op: 'set-race-flags', paused: true, autoPaused: !!autoPaused, raceEnded: !!raceEnded },
+      { op: 'sync-frozen' },
+      { op: 'sync-state' },
+      { op: 'set-pause-overlay', on: true },
+      // the overlay is a mouse target — cursor + buttons stay put while it's up
+      { op: 'hold-chrome' }
+    ]
+  };
+}
+export function resumeRace({ hasSession, paused, autoPaused, raceEnded }) {
+  if (!(paused && hasSession)) return { action: 'none', effects: [] };
+  return {
+    action: 'resume',
+    effects: [
+      { op: 'set-race-flags', paused: false, autoPaused: !!autoPaused, raceEnded: !!raceEnded },
+      { op: 'sync-frozen' },
+      { op: 'sync-state' },
+      { op: 'set-pause-overlay', on: false },
+      // racing again — re-arm the fade (this click already hid the overlay)
+      { op: 'reveal-chrome' }
+    ]
+  };
+}
+
+// Ending the PARTY, not just the race: everything after the shell's own
+// returnToLobby() call (which owns the race teardown and the draw protocol).
+// A fresh party starts clean — the ended party's pick is dropped so the
+// welcome board and the next lobby sit on the paper diorama again, with an
+// empty cup slot and no attract demo, exactly like a cold boot. The ORDER is
+// the contract: the room closes first (phones bail to their party-over
+// overlay before the pick vanishes under them), the screen flips only once
+// the lobby is re-dressed, and the backdrop fades last, over the final state.
+export function endParty() {
+  return {
+    effects: [
+      { op: 'close-room' },
+      { op: 'clear-pick' },
+      { op: 'render-lobby-pick' },
+      { op: 'refresh-lobby-demo' },
+      { op: 'show-screen', screen: 'welcome' },
+      { op: 'update-backdrop' }
+    ]
+  };
+}
+
 // ---- start / launch --------------------------------------------------------
 
 // The START_GAME go/no-go. The host's "Start race" button is only enabled once

@@ -26,8 +26,10 @@ import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
 import { CAM, Display, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
+import { ITEM_IDS } from './engine/contract.js';
 
-const ITEM_LABELS = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
+// Labels are the vocabulary, shouted — derived, not re-typed.
+const ITEM_LABELS = Object.fromEntries(ITEM_IDS.map((id) => [id, id.toUpperCase()]));
 // The boost chip's twin chevrons, stroked in the biome's boost accent (regenerated
 // by _applyBoostShades, default teal for the pre-theme look). Takes a '#rrggbb'
 // stroke string. Two forward chevrons, apex-up (= travel), stacked and CENTRED on
@@ -47,7 +49,16 @@ const ITEM_ICONS = {
   // tyres). Inline SVG like boost/rocket, so no baked asset / CSP change is needed.
   monster: '<svg viewBox="0 0 24 24" fill="none" stroke="#3a3f47" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11.5h14l-1.3-3.2a1.6 1.6 0 0 0-1.5-1H7.8a1.6 1.6 0 0 0-1.5 1L5 11.5z" fill="#7b4fc0"/><path d="M3.5 11.5h17v2.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z" fill="#565b63"/><circle cx="7.2" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="16.8" cy="17.4" r="3.1" fill="#2b2f36" stroke="#1c1f24"/><circle cx="7.2" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/><circle cx="16.8" cy="17.4" r="1.1" fill="#aeb4bd" stroke="none"/></svg>'
 };
-const ITEM_KEYS = Object.keys(ITEM_ICONS);
+// The roulette reel cycles the ROLL-TABLE order — deliberately (ITEM_IDS is
+// the one vocabulary, and the reel landing on the real item depends on every
+// id having an icon; a missing entry would flash an empty chip).
+const ITEM_KEYS = [...ITEM_IDS];
+
+// A centred card (FINISHED banner or reconnect QR) owns this car's cell. ONE
+// spelling: it feeds both the renderer's per-cell mask (steer bar hides, one
+// layer down) and the DOM chrome around it — two consumers that must agree or
+// the bar shows under a card.
+const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 
 // The race loop's SLOW TICK: everything on that loop which is not the frame
 // itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
@@ -619,7 +630,7 @@ export class Stage {
     let mask = 0;
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
-      if (c && (c.finished || c.reconnecting)) mask |= 1 << i;
+      if (c && cardOwnsCell(c)) mask |= 1 << i;
     });
     if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
     if (this._dividers !== this._divPushed) {
@@ -891,11 +902,10 @@ export class Stage {
         c.label.style.left = r.x + 'px';
         c.label.style.top = r.y + 'px';
       }
-      // place/lap is hidden while a centred card owns the cell — when the player
-      // has FINISHED or has dropped and is shown the reconnect QR. The steer bar
-      // goes with it, one layer down: same predicate, pushed as _syncOverlay's
-      // bitmask above.
-      const cardInCell = c.finished || c.reconnecting;
+      // place/lap is hidden while a centred card owns the cell; the steer bar
+      // goes with it, one layer down — cardOwnsCell is the one predicate both
+      // consumers read (pushed as _syncOverlay's bitmask above).
+      const cardInCell = cardOwnsCell(c);
       if (c.placeEl) {
         c.placeEl.style.display = cardInCell ? 'none' : 'block';
         c.placeEl.style.left = (r.x + r.w - 12) + 'px';

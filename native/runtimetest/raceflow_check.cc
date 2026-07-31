@@ -133,6 +133,16 @@ bool loadWorld(const Value& header, World& w) {
     std::fprintf(stderr, "the corpus header's `world` is not a world\n");
     return false;
   }
+  // The layer OWNS the game-timing budgets now (race_flow.h); the recorder
+  // still writes the values it drove with, so a drift between the oracle
+  // script and the constants fails here instead of shipping.
+  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS ||
+      json::num_field(header, "resultsFailsafeMs") != race::RESULTS_FAILSAFE_MS) {
+    std::fprintf(stderr,
+                 "the corpus was recorded with different game-timing budgets "
+                 "than race_flow.h declares\n");
+    return false;
+  }
   return true;
 }
 
@@ -449,6 +459,12 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::SERIES_REKEY:
     case race::Op::SYNC_FROZEN:
     case race::Op::RETURN_TO_LOBBY:
+    // endParty's ops: pure shell performances, pinned by the ops log alone.
+    case race::Op::CLOSE_ROOM:
+    case race::Op::CLEAR_PICK:
+    case race::Op::RENDER_LOBBY_PICK:
+    case race::Op::REFRESH_LOBBY_DEMO:
+    case race::Op::UPDATE_BACKDROP:
       break;
   }
 }
@@ -525,6 +541,31 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
       }
     }
     return Value::Str(race::demoSig(f, json::str_field(in, "trackId")));
+  }
+  if (op == "returnDrawsNeeded") {
+    return Value::Num(race::returnDrawsNeeded(json::str_field(in, "mode")));
+  }
+  if (op == "endParty") {
+    race::Effects es = race::endParty();
+    applyAll(s, es);
+    Value v = Value::Obj();
+    v.set("effects", effectsVal(es));
+    return v;
+  }
+  if (op == "pauseRace" || op == "resumeRace") {
+    race::PauseInput pi;
+    pi.hasSession = json::truthy(in.find("hasSession"));
+    pi.paused = json::truthy(in.find("paused"));
+    pi.autoPaused = json::truthy(in.find("autoPaused"));
+    pi.raceEnded = json::truthy(in.find("raceEnded"));
+    pi.roomState = ttp::rt::ui::roomStateOf(json::str_field(in, "roomState"));
+    const race::PauseResult r =
+        op == "pauseRace" ? race::pauseRace(pi) : race::resumeRace(pi);
+    applyAll(s, r.effects);
+    Value v = Value::Obj();
+    v.set("action", Value::Str(race::key(r.action)));
+    v.set("effects", effectsVal(r.effects));
+    return v;
   }
   if (op == "drawsNeeded") {
     return Value::Num(race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces")));

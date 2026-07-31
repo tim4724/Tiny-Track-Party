@@ -51,9 +51,11 @@ Value manifest() {
 
   m.set("RELAY_URL", Value::Str(RELAY_URL));
   m.set("STUN_URL", Value::Str(STUN_URL));
+  m.set("STUN_FALLBACK_URL", Value::Str(STUN_FALLBACK_URL));
   m.set("MAX_PLAYERS", Value::Num(MAX_PLAYERS));
   m.set("TOTAL_LAPS", Value::Num(TOTAL_LAPS));
   m.set("COUNTDOWN_SECONDS", Value::Num(COUNTDOWN_SECONDS));
+  m.set("SCHEMATIC_EPS", Value::Num(SCHEMATIC_EPS));
 
   Value steer = Value::Obj();
   steer.set("EXPO", Value::Num(STEER_EXPO));

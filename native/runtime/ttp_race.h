@@ -163,6 +163,12 @@ TTP_ABI const char* ttp_race_start_json(const char* inputJson);
  * Takes the same input object; reads only `mode` and `randomRaces`. */
 TTP_ABI int ttp_race_draws_needed(const char* inputJson);
 
+/* The lobby-return twin of the above: how many draws returnToLobby will consume
+ * ({"mode":...} -> 1 only for "random"). Exists so no shell re-spells the mode
+ * test at the call site — the display's own copy had already drifted from
+ * startRace's once. */
+TTP_ABI int ttp_race_return_draws_needed(const char* inputJson);
+
 /* The launch itself, shared by the lobby start and the cup chain. Assumes the
  * guards above already passed.
  *
@@ -221,6 +227,28 @@ TTP_ABI const char* ttp_race_advance_json(const char* inputJson);
  * `trackSwap` re-aims the next lobby's pick: random re-rolls every visit, a cup
  * rewinds to its race 1. */
 TTP_ABI const char* ttp_race_return_json(const char* inputJson);
+
+/* Ending the PARTY (back from the lobby): the ordered teardown effects AFTER
+ * the shell's own returnToLobby call — close-room, clear-pick,
+ * render-lobby-pick, refresh-lobby-demo, show-screen welcome,
+ * update-backdrop, in that order (the order is the contract; the corpus pins
+ * it). Takes nothing: a party end has no mode. */
+TTP_ABI const char* ttp_race_end_party_json(void);
+
+/* The manual overlay pause / resume, as walks.
+ *   {"hasSession":bool,"paused":bool,"autoPaused":bool,"raceEnded":bool,
+ *    "roomState":str}   (roomState read by the pause verdict only)
+ *   -> {"action":"none"|"pause"|"resume","effects":[...]}
+ * The verdicts (ttp_ui_can_pause / can_resume) are asked INSIDE, and the
+ * five-op order is the contract — a shell performs, it does not sequence.
+ * autoPaused/raceEnded ride through into the set-race-flags effect untouched. */
+TTP_ABI const char* ttp_race_pause_json(const char* inputJson);
+TTP_ABI const char* ttp_race_resume_json(const char* inputJson);
+
+/* The two game-timing budgets (race_flow.h INTERMISSION_MS /
+ * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
+TTP_ABI double ttp_race_intermission_ms(void);
+TTP_ABI double ttp_race_results_failsafe_ms(void);
 
 /* ---- the roster-driven repairs ------------------------------------------- */
 
