@@ -199,6 +199,9 @@ struct TtpRenderer::TrackBin {
         }
     };
     std::vector<Sample> samples;
+    // The ring frames buildRoadMesh swept (uniform arclength step, closed),
+    // retained because project() must scan THESE chords — see its comment.
+    std::vector<Sample> rings;
     std::vector<uint32_t> carColors;
     std::vector<std::string> carNames; // rear name plates
     std::vector<float> carPlateY;      // per-model plate height (PLATE_Y); <0 = auto
@@ -377,38 +380,81 @@ struct TtpRenderer::TrackBin {
         return r;
     }
 
-    // Foot of `p` on the centreline (Centerline.nearest): used to re-express a
-    // car-local point as (arclength, lateral) so flat decals can be CONFORMED
-    // to the deck — the JS raycasts the rendered road for the same result.
+    // Foot of `p` on the RENDERED road: used to re-express a car-local point
+    // as (arclength, lateral) so flat decals can be CONFORMED to the deck —
+    // the JS raycasts the rendered road for the same result.
     //
-    // Projects onto the closest SEGMENT, not the closest sample: the closest
-    // point on a polyline moves continuously with p, while a per-sample frame
-    // snaps as the nearest knot changes — which shifted the whole decal by a
-    // few mm several times a second (the shadow's jitter).
-    void project(const float3& p, const float3& up, float& outS, float& outLat) const {
-        const size_t n = samples.size();
+    // Projects onto the ring polyline buildRoadMesh swept, NOT the raw contract
+    // samples. The deck's uv0 track space is exact at the rings and linear
+    // along the chords between them, so a decal centre projected onto those
+    // same chords agrees with the fragments' own (s, lat) everywhere. The
+    // contract samples are chords of a DIFFERENT curve (the raw knot polyline,
+    // where the mesh sweeps the cubic through the knots), and the two disagree
+    // on bends by ~curvature·spacing²/8 — a few cm on the trick tracks, zero at
+    // each knot and maximal mid-segment, so the shadow's error sawtoothed at
+    // knot-crossing rate under a driving car: the shadow's jiggle. (Projecting
+    // onto segments rather than snapping to the nearest sample's frame was the
+    // first, coarser round of the same artefact.)
+    //
+    // Projects onto the closest SEGMENT, not the closest sample, because the
+    // closest point on a polyline moves continuously with p.
+    //
+    // `hint` is the caller's ring index from its previous projection (-1 to
+    // start). A car crosses a fraction of a ring per frame, so the scan is a
+    // small window around the hint; the full sweep below runs only on the
+    // first frame, after a respawn, or when the windowed winner looks wrong.
+    void project(const float3& p, const float3& up, float& outS, float& outLat,
+            int* hint = nullptr) const {
+        const std::vector<Sample>& knots = rings.empty() ? samples : rings;
+        const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
         float bestD = 1e30f, bestT = 0;
         size_t bestI = 0;
-        // Where the track crosses over itself — a loop, a bridge — the closest
-        // segment in space can be the OTHER deck, and the decal snaps between
-        // the two branches as the car drives. Only segments whose road normal
-        // agrees with the caller's rules them out.
-        for (int pass = 0; pass < 2 && bestD > 1e29f; pass++) {
-            for (size_t i = 0; i < n; i++) {
-                const Sample& a = samples[i];
-                if (pass == 0 && dot(a.up, up) < 0.3f) continue; // wrong branch
-                const float3 ab = samples[(i + 1) % n].pos - a.pos;
-                const float len2 = dot(ab, ab);
-                float t = len2 > 1e-12f ? dot(p - a.pos, ab) / len2 : 0.0f;
-                t = std::min(1.0f, std::max(0.0f, t));
-                const float3 d = p - (a.pos + ab * t);
-                const float dd = dot(d, d);
-                if (dd < bestD) { bestD = dd; bestI = i; bestT = t; }
+        const auto trySeg = [&](size_t i) {
+            const Sample& a = knots[i];
+            const float3 ab = knots[(i + 1) % n].pos - a.pos;
+            const float len2 = dot(ab, ab);
+            float t = len2 > 1e-12f ? dot(p - a.pos, ab) / len2 : 0.0f;
+            t = std::min(1.0f, std::max(0.0f, t));
+            const float3 d = p - (a.pos + ab * t);
+            const float dd = dot(d, d);
+            if (dd < bestD) { bestD = dd; bestI = i; bestT = t; }
+        };
+        // ±12 rings ≈ ±6u of track: an order of magnitude past what a car
+        // covers in a frame, cheap enough that widening it costs nothing.
+        constexpr long W = 12;
+        bool solved = false;
+        if (hint && *hint >= 0 && (size_t) *hint < n) {
+            for (long k = -W; k <= W; k++)
+                trySeg((size_t) ((((long) *hint + k) % (long) n + (long) n) % (long) n));
+            // Trust the window only if the winner sits strictly INSIDE it and
+            // within a deck's reach of the car (8u — clear of any jump apex):
+            // a respawn moves the car half a circuit in one frame, and a
+            // winner pressed against the window's edge means the true foot is
+            // likely beyond it.
+            long rel = (long) bestI - *hint;
+            if (rel > (long) n / 2) rel -= (long) n;
+            if (rel < -(long) n / 2) rel += (long) n;
+            solved = (rel < 0 ? -rel : rel) < W && bestD < 64.0f;
+        }
+        if (!solved) {
+            bestD = 1e30f;
+            // Where the track crosses over itself — a loop, a bridge — the
+            // closest segment in space can be the OTHER deck, and the decal
+            // snaps between the two branches as the car drives. Only segments
+            // whose road normal agrees with the caller's rules them out. (The
+            // windowed path needs no such filter: continuity with the last
+            // frame IS the branch choice, banked deck included.)
+            for (int pass = 0; pass < 2 && bestD > 1e29f; pass++) {
+                for (size_t i = 0; i < n; i++) {
+                    if (pass == 0 && dot(knots[i].up, up) < 0.3f) continue; // wrong branch
+                    trySeg(i);
+                }
             }
         }
-        const Sample& a = samples[bestI];
-        const Sample& b = samples[(bestI + 1) % n];
+        if (hint) *hint = (int) bestI;
+        const Sample& a = knots[bestI];
+        const Sample& b = knots[(bestI + 1) % n];
         float sB = b.s;
         if (sB < a.s) sB += length; // start/finish seam
         outS = a.s + (sB - a.s) * bestT;
@@ -1043,7 +1089,7 @@ float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
 // runs, bare asphalt under launch strips, and the same baked-AO gradients.
 // Unlit for now (the JS ribbon is Lambert; the matte-material family is later
 // work) — the AO carries most of the plastic-toy form.
-bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
+bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const size_t nSrc = tb.samples.size();
     const float L = tb.length;
     if (nSrc < 2 || L <= 0 || !tb.closed) return false;
@@ -1087,6 +1133,9 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
 
     std::vector<TrackBin::Sample> frames(N);
     for (uint32_t i = 0; i < N; i++) frames[i] = frameAt(((float) i / N) * L);
+    // Retained on the bin: uv0's track space is linear along exactly these
+    // chords, so project() must scan these and no others — see its comment.
+    tb.rings = frames;
     const auto halfAt = [&](uint32_t i) { return frames[i].width / 2; };
 
     // Palette (linear).
@@ -6159,6 +6208,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // assets' textures never bind and those cars render black).
     pumpTextures();
     mTrack = std::make_unique<TrackBin>(std::move(tb));
+    mDecalProjHint.clear(); // ring indices belong to the track just replaced
     return true;
 }
 
@@ -6865,21 +6915,6 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         }
     }
     return asset;
-}
-
-// Project the decal's origin onto the centreline, then conform. Callers that
-// already know where they are on the ribbon should use conformDecalAt directly:
-// project() is a linear scan over every centreline sample (twice, if the first
-// pass's normal test rejects everything), and the bananas, rockets and boost
-// discs all have the arclength in hand — the bananas and rockets straight from
-// FrameInput, the disc from the ground blob that was conformed six lines earlier
-// for the same car at the same pose.
-void TtpRenderer::conformDecal(Mesh& mesh, const mat4f& basis, float sx, float sz,
-        float lift, float alphaScale) {
-    if (!mTrack || mesh.entity.isNull() || !mesh.vb || mesh.local.empty()) return;
-    float s0 = 0, lat0 = 0;
-    mTrack->project(basis[3].xyz, basis[1].xyz, s0, lat0);
-    conformDecalAt(mesh, basis, s0, lat0, sx, sz, lift, alphaScale);
 }
 
 void TtpRenderer::conformDecalAt(Mesh& mesh, const mat4f& basis, float s0, float lat0,
@@ -8800,7 +8835,8 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     ? std::min(1.0f, std::fabs(mCarWheels[i].pitch) / 0.08f) : 0.0f;
             // One projection per car, shared with the boost disc below: both
             // decals hang off the same origin and the same road frame.
-            mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
+            if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
+            mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat, &mDecalProjHint[i]);
             haveCarS = true;
             if (mRoadInst && mDecalMaskArray
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
@@ -8947,7 +8983,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
                 const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
                 if (!haveCarS) {
-                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat);
+                    if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
+                    mTrack->project(m[3].xyz, m[1].xyz, carS, carLat,
+                            &mDecalProjHint[i]);
                     haveCarS = true;
                 }
                 // LIFT 0.013, down from 0.02, and it is the FOURTH RING above
