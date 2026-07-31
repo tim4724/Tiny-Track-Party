@@ -102,11 +102,14 @@ inferring shader state from pixels.
    car's aura to the outside of a loop.
 3. A `MaterialInstance` from `sceneInstance()` is scene-scoped, so a member holding
    one must be nulled in `releaseScene()`.
-4. A per-frame decal centre is projected onto the road's **own ring polyline**
-   (`TrackBin::rings`, warm-started per car), never onto the raw contract
-   samples: uv0's track space is linear along the ring chords, and a centre
-   computed against any other curve disagrees with the fragments on bends by
-   an amount that oscillates as the car crosses knots — the shadow jiggle.
+4. A per-frame decal centre must agree with uv0's own field: project onto the
+   road's **own ring polyline** (`TrackBin::rings`, warm-started per car),
+   never the raw contract samples, and take the foot from the **ring-plane
+   blend**, never a perpendicular onto the chord — the deck's iso-arclength
+   lines fan with the ring cross-sections on a bend, so a perpendicular foot
+   is only right on the centreline. Either shortcut makes the shadow saw-tooth
+   a few cm at knot-crossing rate under a cornering car (the shadow jiggle);
+   `project()`'s comment has the measured numbers.
 
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —

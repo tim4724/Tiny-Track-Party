@@ -385,19 +385,30 @@ struct TtpRenderer::TrackBin {
     // the JS raycasts the rendered road for the same result.
     //
     // Projects onto the ring polyline buildRoadMesh swept, NOT the raw contract
-    // samples. The deck's uv0 track space is exact at the rings and linear
-    // along the chords between them, so a decal centre projected onto those
-    // same chords agrees with the fragments' own (s, lat) everywhere. The
-    // contract samples are chords of a DIFFERENT curve (the raw knot polyline,
-    // where the mesh sweeps the cubic through the knots), and the two disagree
-    // on bends by ~curvature·spacing²/8 — a few cm on the trick tracks, zero at
-    // each knot and maximal mid-segment, so the shadow's error sawtoothed at
-    // knot-crossing rate under a driving car: the shadow's jiggle. (Projecting
-    // onto segments rather than snapping to the nearest sample's frame was the
-    // first, coarser round of the same artefact.)
+    // samples, and blends between the two ring PLANES rather than dropping a
+    // perpendicular onto the chord. Both halves exist because the answer must
+    // agree with the deck's own uv0 field, which is exact at the rings and
+    // linear across the strips between them:
     //
-    // Projects onto the closest SEGMENT, not the closest sample, because the
-    // closest point on a polyline moves continuously with p.
+    //  - WHICH CURVE: the contract samples are chords of a different curve
+    //    (the raw knot polyline, where the mesh sweeps the cubic through the
+    //    knots); on a bend the two disagree by ~curvature·spacing²/8, zero at
+    //    each knot and maximal mid-segment.
+    //  - WHICH FOOT: the deck's iso-arclength lines run parallel to the ring
+    //    cross-sections, which FAN on a bend — they are not perpendicular to
+    //    the chord. A perpendicular foot is exact on the centreline but off by
+    //    ~lat·ringStep·curvature at lateral offset, which is where a cornering
+    //    car always is. So t comes from the two ring planes (normals = the
+    //    ring tangents): d0/(d0−d1) is 0 and 1 exactly AT the rings, hence
+    //    continuous across them, and follows the fan in between.
+    //
+    // Each error alone made the shadow saw-tooth a few cm at knot-crossing
+    // rate under a driving car — the shadow's jiggle. Measured on the playroom
+    // catalogue (scratchpad jiggle-analysis, points ON the sheet, truth by
+    // construction): contract-polyline perpendicular 0.043u worst at 1.6u off
+    // centre; ring-polyline perpendicular still 0.029u there; the plane blend
+    // 0.0014u. (Projecting onto segments rather than snapping to the nearest
+    // sample's frame was the first, coarser round of the same artefact.)
     //
     // `hint` is the caller's ring index from its previous projection (-1 to
     // start). A car crosses a fraction of a ring per frame, so the scan is a
@@ -453,13 +464,21 @@ struct TtpRenderer::TrackBin {
             }
         }
         if (hint) *hint = (int) bestI;
+        // The segment is picked by perpendicular distance (a discrete choice —
+        // any continuous tie-break agrees at the boundary), but the foot along
+        // it is the ring-plane blend, matching the fan of the deck's iso-s
+        // lines. bestT is only the picker's scratch value.
         const Sample& a = knots[bestI];
         const Sample& b = knots[(bestI + 1) % n];
+        const float d0 = dot(p - a.pos, a.tangent());
+        const float d1 = dot(p - b.pos, b.tangent());
+        float t = (d0 - d1) != 0 ? d0 / (d0 - d1) : bestT;
+        t = std::min(1.0f, std::max(0.0f, t));
         float sB = b.s;
         if (sB < a.s) sB += length; // start/finish seam
-        outS = a.s + (sB - a.s) * bestT;
-        const float3 q = a.pos + (b.pos - a.pos) * bestT;
-        const float3 lat = normalize(mix(a.lat, b.lat, bestT));
+        outS = a.s + (sB - a.s) * t;
+        const float3 q = a.pos + (b.pos - a.pos) * t;
+        const float3 lat = normalize(mix(a.lat, b.lat, t));
         outLat = dot(p - q, lat);
     }
 };
