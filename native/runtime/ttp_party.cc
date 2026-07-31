@@ -229,11 +229,6 @@ std::string ttp_room_state_name(int roomHandle) {
   return rh ? rh->flow->stateName() : std::string();
 }
 
-RoomFlow* ttp_room_flow(int roomHandle) {
-  RoomHandle* rh = room(roomHandle);
-  return rh ? rh->flow.get() : nullptr;
-}
-
 // ---- liveness ---------------------------------------------------------------
 
 void ttp_room_on_seen(int h, const char* peerIdJson, double nowMs) {

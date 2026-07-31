@@ -311,12 +311,6 @@ SeatDefaults seat_defaults(double colorIndex) {
   return d;
 }
 
-std::string seat_name(const SeatDefaults& d) {
-  // The JS shell's SEAT_NAME table spelled this 'Player ' + n, with n a plain
-  // integer — js_number_to_string keeps that spelling exact for the wire.
-  return std::string("Player ") + js_number_to_string(d.nameArg);
-}
-
 AddPeerPlan add_peer_plan(bool has, double size, double maxPlayers, double colorIndex) {
   AddPeerPlan plan;
   if (has) {

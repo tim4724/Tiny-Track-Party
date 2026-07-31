@@ -19,13 +19,10 @@
 // direction.
 //
 // WHAT IS DELIBERATELY NOT HERE. The transport (sockets, RTCPeerConnection,
-// storage, timers, the QR bitmap, the reconnect card's DOM) and identity
-// generation (no rules, just entropy). The host's MODE PICK lived in the shell
-// for a while ("needs a catalogue and a shuffle bag") — the catalogue turned out
-// to be the chooser payload already configured into ttp_net, so only the BAG
-// stays page-side and the pick's rules live in the walk layer (ttp_net.cc's
-// select-mode walk), still above this file: they read the chooser, which this
-// layer keeps opaque.
+// storage, timers, the QR bitmap, the reconnect card's DOM), identity generation
+// (no rules, just entropy), and the host's MODE PICK — _applyMode/setTrack need a
+// track catalogue AND a game-owned shuffle bag, which makes them a cup-series
+// concern wearing a session hat; they stay in the shell.
 //
 // STRINGS ARE KEYS, NOT COPY (decision D4). The default seat name comes out as
 // {nameKey:"player_n", nameArg:N}; no shell is ever handed the sentence.
@@ -168,15 +165,6 @@ struct SeatDefaults {
   bool ready = false;
 };
 SeatDefaults seat_defaults(double colorIndex);
-
-// The composed default name, "Player N" — what actually gets STORED on the seat
-// record and therefore rides the retained snapshot to every phone. This is not a
-// breach of decision D4, and the distinction is worth keeping straight: D4
-// governs what an ABI ANSWERS a shell (keys, so each platform fills from its own
-// copy table), while this string is ROSTER DATA the wire carries to phones that
-// have no table of their own — one spelling, or two shells' rooms would name the
-// same seat differently. seat_defaults keeps answering the key.
-std::string seat_name(const SeatDefaults& d);
 
 // peer_joined, or a HELLO from someone we never seated. `colorIndex` is
 // RoomFlow::lowestFreeSlot's answer, passed in resolved so this stays a

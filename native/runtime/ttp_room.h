@@ -12,14 +12,10 @@
 // a cross-layer read belongs and where ttp_room_sync_active_order has always
 // done it.
 //
-// NO RoomFlow TYPE CROSSES on the READ accessors, deliberately: they return
-// plain ttp::Value, so ttp_ui.cc includes this header and nothing from
-// libttp-party's public headers — the seam stays one file wide instead of
-// becoming an include that later grows a habit. ttp_room_flow below is the ONE
-// exception, and it exists for the choreography walks alone (ttp_net.cc's
-// ttp_net_on_* entry points), which MUTATE the room in C++ and therefore need
-// the machine itself, not a projection of it. Nothing that only DESCRIBES a
-// room may take it.
+// NO RoomFlow TYPE CROSSES, deliberately. These are narrow accessors returning
+// plain ttp::Value, so ttp_net.cc and ttp_ui.cc include this header and nothing
+// from libttp-party's public headers — the seam stays one file wide instead of
+// becoming an include that later grows a habit.
 #ifndef TTP_ROOM_H
 #define TTP_ROOM_H
 
@@ -27,7 +23,6 @@
 
 namespace ttp {
 struct Value;
-class RoomFlow;
 }
 
 // The roster as RoomFlow hands it over — ttp_room_list_json's answer as a Value
@@ -60,12 +55,5 @@ ttp::Value ttp_room_host_value(int roomHandle);
 // "lobby" | "countdown" | "playing" | "results". Empty for an unknown handle,
 // which every roomStateOf/room_state_of reader already treats as "not a phase".
 std::string ttp_room_state_name(int roomHandle);
-
-// The live machine behind a handle, or nullptr — for the choreography walks
-// (see the header note). Mutations through it still queue their events on the
-// handle exactly as the ttp_room_* mutators do, so a shell that drains
-// ttp_room_events_json after a walk observes the same rosterchange/hostchange/
-// playerleave cadence it always has. Never owns: the room outlives the call.
-ttp::RoomFlow* ttp_room_flow(int roomHandle);
 
 #endif  // TTP_ROOM_H
