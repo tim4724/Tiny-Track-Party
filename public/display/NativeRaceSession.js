@@ -42,7 +42,6 @@ export async function init() {
     results: c('ttp_results_json', 'string', ['number']),
     events: c('ttp_events_json', 'string', ['number']),
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
-    carFinished: c('ttp_car_finished', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
     carWorldPos: c('ttp_car_world_pos', 'number', ['number', 'string', 'number']),
     removeCar: c('ttp_force_remove_car', 'number', ['number', 'string']),
@@ -165,7 +164,6 @@ export class NativeRaceSession {
   getResults() { return JSON.parse(fn.results(this.h)); }
   carIds() { return JSON.parse(fn.carIds(this.h)); }
   hasCar(id) { return !!fn.hasCar(this.h, idJson(id)); }
-  carFinished(id) { return fn.carFinished(this.h, idJson(id)) === 1; } // -1 = unknown car, must read false
   carWorldPos(id) { return fn.carWorldPos(this.h, idJson(id), vecPtr) ? vec() : null; }
 
   dispose() {

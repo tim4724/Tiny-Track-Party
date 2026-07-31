@@ -295,6 +295,10 @@ int drawsNeeded(const std::string& mode, double randomRaces) {
   return static_cast<int>(js_max(0.0, randomRaces - 1));
 }
 
+int returnDrawsNeeded(const std::string& mode) {
+  return mode == "random" ? 1 : 0;
+}
+
 SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
                               const std::string& trackId, double randomRaces,
                               const std::vector<Cup>& cups,

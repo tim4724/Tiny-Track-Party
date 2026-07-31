@@ -71,8 +71,13 @@ correctness is byte-for-byte agreement with the two-call path. The `abi` ctest
 computes the expected value the old way in the same run, never a second copy of
 the wire format. **Add a case there for every new handle-taking export** — see
 `handlePathsMatchJsonPaths` for the read-only gathers (`ttp_room_sync_active_order`,
-`ttp_net_lobby_frame`, `ttp_ui_roster_seats_room_json`) and
-`netWalksMatchMultiCallPath` for the choreography walks.
+`ttp_net_lobby_frame`, `ttp_ui_roster_seats_room_json`),
+`uiLiveTwinsMatchJsonPaths` for the ui model's live twins (race flow,
+auto-pause, series chip, standings board — each gathered off the session/room/
+gp handles against the assembly main.js used to spell), and
+`netWalksMatchMultiCallPath` for the choreography walks. A gather that the old
+shell path ORDERED (sync-then-read) keeps that order inside the seam accessor
+(`ttp_room.h`'s `*_synced` pair), so no caller can drop it.
 
 **The choreography walks (`ttp_net.h`'s second section) go one step further:**
 they SEQUENCE the fine-grained session rules against the live room and answer

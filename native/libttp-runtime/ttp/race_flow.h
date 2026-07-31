@@ -289,6 +289,10 @@ struct StartInput {
 // shuffle for a race that never happened.
 int drawsNeeded(const std::string& mode, double randomRaces);
 
+// The same question for a lobby return: only a RANDOM room re-rolls its pick on
+// the way back (returnToLobby's trackSwap), so only that mode spends a draw.
+int returnDrawsNeeded(const std::string& mode);
+
 SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
                               const std::string& trackId, double randomRaces,
                               const std::vector<Cup>& cups,

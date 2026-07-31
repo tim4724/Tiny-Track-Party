@@ -225,6 +225,7 @@ const OPS = {
   },
   demoSig: (s, a) => ({ in: a, out: rf.demoSig(a.field, a.trackId) }),
   drawsNeeded: (s, a) => ({ in: a, out: rf.drawsNeeded(a) }),
+  returnDrawsNeeded: (s, a) => ({ in: a, out: rf.returnDrawsNeeded(a) }),
   seriesForStart: (s, a) => {
     const input = { ...a, cups: CUPS };
     return { in: a, out: rf.seriesForStart(input) };
@@ -470,6 +471,18 @@ SCRIPTS.push({
     ['raceEvent', { event: { type: 'lap', id: 1, lap: 2 } }],
     ['raceEvent', { event: { type: 'finish', id: 1 }, humansAllDone: true }],
     ['raceEvent', { event: { type: 'finish', id: 1 }, humansAllDone: false }]
+  ]
+});
+
+// The lobby-return draw rule, one step per mode. Appended as its own scenario
+// (2026-07-31) rather than inside random-modes so every previously recorded
+// step keeps its index — the file stays append-only across re-records.
+SCRIPTS.push({
+  name: 'return-draws',
+  steps: [
+    ['returnDrawsNeeded', { mode: 'random' }],
+    ['returnDrawsNeeded', { mode: 'cup' }],
+    ['returnDrawsNeeded', { mode: 'exact' }]
   ]
 });
 

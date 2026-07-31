@@ -166,9 +166,21 @@ the other. The six, as a checklist for the next shell:
    countdown never beats and the room sits in COUNTDOWN forever.
 5. **Bitmask parameters are PRESENCE, not value.** `ttp_process_input`'s mask is
    derived by you from which fields arrived; the wire carries none.
-6. **Go through the seam, not around it.** `PartyNet.allParticipantsDisconnected`
-   exists because it syncs the active order BEFORE asking. Calling
-   `ttp_room_all_participants_disconnected` directly answers off a stale set.
+6. **Go through the seam, not around it.** "All participants disconnected" and
+   "who is a late joiner" are only meaningful AFTER the active order is synced
+   off the live race; calling `ttp_room_all_participants_disconnected` or
+   `ttp_room_late_joiners_json` bare answers off a stale set. The ui twins
+   below do the synced read internally, which is the strongest form of this
+   rule: a shell that uses them cannot get the order wrong.
+
+Items 1, 3 and 6's whole class shrank after the first shell shipped: the inputs
+a shell used to hand-assemble for the race-flow pair, the auto-pause
+arbitration, the cup chip and the standings board are now gathered in C++ off
+the live handles (`ttp_ui_race_flow_live_json`, `ttp_ui_auto_pause_live_json`,
+`ttp_ui_series_info_gp_json`, `ttp_ui_standings_live_json` — the misspellable
+JSON forms remain only as the conformance surface). Prefer the live twins in
+every new shell; the field row array on the standings twin is the one
+hand-assembled input left.
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on

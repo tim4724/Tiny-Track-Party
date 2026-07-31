@@ -36,7 +36,8 @@ export async function init() {
     applyRace: c('ttp_gp_apply_race', null, ['number', 'string', 'string', 'string']),
     advance: c('ttp_gp_advance', null, ['number']),
     standings: c('ttp_gp_standings_json', 'string', ['number']),
-    rekey: c('ttp_gp_rekey', null, ['number', 'string', 'string'])
+    rekey: c('ttp_gp_rekey', null, ['number', 'string', 'string']),
+    needsDraw: c('ttp_gp_needs_draw', 'number', ['number'])
   };
 }
 
@@ -54,6 +55,9 @@ export class NativeCupSeries {
     if (!this._h) throw nativeError('creating a cup series');
   }
 
+  // The wasm handle, for the ui twins that read this series' state in C++
+  // (ttp_ui_series_info_gp_json / ttp_ui_standings_live_json).
+  get handle() { return this._h; }
   get endless() { return fn.endless(this._h) === 1; }
   get raceCount() { return fn.raceCount(this._h); }
   get raceIndex() { return fn.raceIndex(this._h); }
@@ -65,14 +69,12 @@ export class NativeCupSeries {
   get cup() { return JSON.parse(fn.cupJson(this._h)); }
 
   applyRace(results, field) {
-    // Draw ONLY when the kit would: GrandPrix.js calls drawNext() inside
-    // applyRace and only while sitting on the last race. Drawing on every call
-    // would pull the shuffle bag faster than the kit does and desynchronise the
-    // whole track sequence — the bag is stateful, so an unused draw is not free.
-    // raceIndex/raceCount are unchanged by applyRace itself, so evaluating the
-    // condition up front gives the same answer the kit gets at its check point.
-    const needsDraw = !!this.drawNext && this.raceIndex >= this.raceCount - 1;
-    const drawn = needsDraw ? this.drawNext() : null;
+    // Draw ONLY when the kit would (ttp_gp_needs_draw owns the WHEN — drawing
+    // on every call would pull the shuffle bag faster than the kit does and
+    // desynchronise the whole track sequence; the bag is stateful, so an
+    // unused draw is not free). What stays here is the BAG: drawNext is the
+    // page's shuffle, and its absence means a fixed cup that never draws.
+    const drawn = this.drawNext && fn.needsDraw(this._h) ? this.drawNext() : null;
     fn.applyRace(this._h,
       JSON.stringify((results || []).map((r) => ({
         playerId: r.playerId, rank: r.rank, finished: !!r.finished

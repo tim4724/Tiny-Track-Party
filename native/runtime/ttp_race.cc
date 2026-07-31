@@ -401,6 +401,11 @@ int ttp_race_draws_needed(const char* inputJson) {
   return race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces"));
 }
 
+int ttp_race_return_draws_needed(const char* inputJson) {
+  Value in = json::parse_or(inputJson, Value::Obj());
+  return race::returnDrawsNeeded(json::str_field(in, "mode"));
+}
+
 const char* ttp_race_launch_json(const char* inputJson) {
   Value in = json::parse_or(inputJson, Value::Obj());
   race::LaunchInput li;

@@ -25,10 +25,14 @@
 #include "ttp/json_read.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
-// The live room, for ttp_ui_roster_seats_room_json alone, and through a seam
-// that hands over a plain Value — this file gains no edge on libttp-party, only
-// on the shim that already links it. See ttp_room.h.
+// The live room and the live race, through the two seams that hand over plain
+// Values — this file gains no edge on libttp-party or the session registry,
+// only on the shim that already links them. See ttp_room.h / ttp_session.h.
+// ttp_runtime.h is here for the gp accessors the series twins gather from —
+// C ABI functions of this same module, called directly.
 #include "ttp_room.h"
+#include "ttp_runtime.h"
+#include "ttp_session.h"
 
 using namespace ttp;
 namespace ui = ttp::rt::ui;
@@ -51,7 +55,8 @@ std::vector<ui::CatalogEntry> g_catalog;
 // the next call") is per handle, and this ABI has none.
 std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
-    g_bufBoard, g_bufView, g_bufCatalogue;
+    g_bufBoard, g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
+    g_bufSeriesGp, g_bufBoardLive;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -498,16 +503,44 @@ const char* ttp_ui_welcome_item_json(const char* carJson) {
 
 // ---- race flow ---------------------------------------------------------------
 
-const char* ttp_ui_race_flow_json(const char* json) {
-  const Value in = json::parse_or(json, Value::Obj());
-  const std::vector<ui::Id> carIds = idListOf(in.find("carIds"));
-  const ui::IdSet ai = idSetOf(in.find("aiIds"));
-  const ui::IdSet disc = idSetOf(in.find("disconnectedIds"));
-  const ui::IdSet fin = idSetOf(in.find("finishedIds"));
+// Shared by the JSON form (the conformance surface) and the live twin below, so
+// the two can only ever differ in how the role sets were GATHERED — which is
+// exactly the part abi_check holds them to.
+static Value raceFlowValue(const std::vector<ui::Id>& carIds, const ui::IdSet& ai,
+                           const ui::IdSet& disc, const ui::IdSet& fin) {
   Value o = Value::Obj();
   o.set("allDone", Value::Bool(ui::humansAllDone(carIds, ai, disc, fin)));
   o.set("forfeit", idArray(ui::forfeitCandidates(carIds, ai, disc)));
-  return put(g_bufFlow, o);
+  return o;
+}
+
+const char* ttp_ui_race_flow_json(const char* json) {
+  const Value in = json::parse_or(json, Value::Obj());
+  return put(g_bufFlow, raceFlowValue(idListOf(in.find("carIds")),
+                                      idSetOf(in.find("aiIds")),
+                                      idSetOf(in.find("disconnectedIds")),
+                                      idSetOf(in.find("finishedIds"))));
+}
+
+// The set of `ids[i]` whose parallel `flags[i]` is true — how a seam's
+// per-id answer becomes a role set.
+static ui::IdSet idSetWhere(const Value& ids, const Value& flags) {
+  ui::IdSet s;
+  if (ids.type == Value::ARR && flags.type == Value::ARR)
+    for (size_t i = 0; i < ids.arr.size() && i < flags.arr.size(); ++i)
+      if (flags.arr[i].type == Value::BOOL && flags.arr[i].b)
+        s.add(idOf(&ids.arr[i]));
+  return s;
+}
+
+const char* ttp_ui_race_flow_live_json(int sessionHandle, int roomHandle) {
+  const Value carIdsV = ttp_session_car_ids(sessionHandle);
+  const Value aiV = ttp_session_ai_ids(sessionHandle);
+  const Value finV = ttp_session_finished_flags(sessionHandle, carIdsV);
+  const Value discV = ttp_room_disconnected_flags(roomHandle, carIdsV);
+  return put(g_bufFlowLive, raceFlowValue(idListOf(&carIdsV), idSetOf(&aiV),
+                                          idSetWhere(carIdsV, discV),
+                                          idSetWhere(carIdsV, finV)));
 }
 
 // ---- pause arbitration -------------------------------------------------------
@@ -526,15 +559,38 @@ int ttp_ui_auto_pause_asks(const char* json) {
   return ui::autoPauseAsksParticipants(autoPauseInputOf(in)) ? 1 : 0;
 }
 
-const char* ttp_ui_auto_pause_json(const char* json, int allParticipantsDisconnected) {
-  const Value in = json::parse_or(json, Value::Obj());
-  const ui::AutoPauseDecision d =
-      ui::autoPause(autoPauseInputOf(in), allParticipantsDisconnected != 0);
+static Value autoPauseValue(const ui::AutoPauseInput& in, bool allParticipantsDisconnected) {
+  const ui::AutoPauseDecision d = ui::autoPause(in, allParticipantsDisconnected);
   Value o = Value::Obj();
   o.set("action", Value::Str(ui::key(d.action)));
   o.set("asked", Value::Bool(d.asked));
   if (d.hasAutoPaused) o.set("autoPaused", Value::Bool(d.autoPaused));
-  return put(g_bufAutoPause, o);
+  return o;
+}
+
+const char* ttp_ui_auto_pause_json(const char* json, int allParticipantsDisconnected) {
+  const Value in = json::parse_or(json, Value::Obj());
+  return put(g_bufAutoPause, autoPauseValue(autoPauseInputOf(in),
+                                            allParticipantsDisconnected != 0));
+}
+
+const char* ttp_ui_auto_pause_live_json(int sessionHandle, int roomHandle, int raceEnded) {
+  ui::AutoPauseInput in;
+  in.hasSession = ttp_session_engine(sessionHandle) != nullptr;
+  in.raceEnded = raceEnded != 0;
+  in.roomState = ui::roomStateOf(ttp_room_state_name(roomHandle));
+  const Value carIdsV = ttp_session_car_ids(sessionHandle);
+  in.carIds = idListOf(&carIdsV);
+  const Value aiV = ttp_session_ai_ids(sessionHandle);
+  in.aiIds = idSetOf(&aiV);
+  // A human at the wheel, or a held seat with its QR up.
+  in.seatedIds = idSetWhere(carIdsV, ttp_room_has_flags(roomHandle, carIdsV));
+  // The party layer's answer is read THROUGH THE SYNCED SEAM and only when the
+  // decision consults it — the two rules the shell used to hold (Net.js pushed
+  // the live car set in first; refreshAutoPause asked `asks` before reading).
+  const bool allDisc = ui::autoPauseAsksParticipants(in) &&
+      ttp_room_all_participants_disconnected_synced(roomHandle, sessionHandle) != 0;
+  return put(g_bufAutoLive, autoPauseValue(in, allDisc));
 }
 
 const char* ttp_ui_freeze_transition(int paused, int autoPaused, int sessionPaused) {
@@ -557,13 +613,37 @@ const char* ttp_ui_series_info_json(const char* json) {
   return put(g_bufSeries, seriesValue(ui::seriesInfo(si, g_catalog)));
 }
 
+// The chip's input off a live series handle — the gather the shell (and the
+// tvOS twin, wrongly) used to spell. Field-for-field what main.js's
+// seriesInfo() read off NativeCupSeries' getters, including "" spelling null
+// for the next track.
+static ui::SeriesInput seriesInputOfGp(int gpHandle, double autoAdvanceMs) {
+  ui::SeriesInput si;
+  const Value cup = json::parse_or(ttp_gp_cup_json(gpHandle), Value::Obj());
+  si.cupId = strOf(cup.find("id"));
+  si.cupName = strOf(cup.find("name"));
+  si.endless = ttp_gp_endless(gpHandle) != 0;
+  si.raceIndex = ttp_gp_race_index(gpHandle);
+  si.raceCount = ui::OptNum::Of(ttp_gp_race_count(gpHandle));
+  si.finished = ttp_gp_finished(gpHandle) != 0;
+  const char* next = ttp_gp_next_track(gpHandle);
+  if (next && next[0] != '\0') si.nextTrackId = ui::OptStr::Of(next);
+  si.autoAdvanceMs = autoAdvanceMs;
+  return si;
+}
+
+const char* ttp_ui_series_info_gp_json(int gpHandle, double autoAdvanceMs) {
+  if (!gpHandle) return put(g_bufSeriesGp, Value::Null());
+  return put(g_bufSeriesGp,
+             seriesValue(ui::seriesInfo(seriesInputOfGp(gpHandle, autoAdvanceMs), g_catalog)));
+}
+
 // ---- the standings board -----------------------------------------------------
 
-const char* ttp_ui_standings_json(const char* json) {
-  const Value in = json::parse_or(json, Value::Obj());
-
+// The four row parses, shared by the JSON form and the live twin (whose seam
+// Values carry the same shapes the JS assembly did).
+static std::vector<ui::ResultRow> resultRowsOf(const Value* rV) {
   std::vector<ui::ResultRow> results;
-  const Value* rV = in.find("results");
   if (rV && rV->type == Value::ARR) {
     for (const Value& r : rV->arr) {
       ui::ResultRow rr;
@@ -573,8 +653,10 @@ const char* ttp_ui_standings_json(const char* json) {
       results.push_back(std::move(rr));
     }
   }
+  return results;
+}
+static std::vector<ui::FieldRow> fieldRowsOf(const Value* fV) {
   std::vector<ui::FieldRow> field;
-  const Value* fV = in.find("field");
   if (fV && fV->type == Value::ARR) {
     for (const Value& f : fV->arr) {
       ui::FieldRow fr;
@@ -585,8 +667,10 @@ const char* ttp_ui_standings_json(const char* json) {
       field.push_back(std::move(fr));
     }
   }
+  return field;
+}
+static std::vector<ui::LateJoiner> lateRowsOf(const Value* lV) {
   std::vector<ui::LateJoiner> late;
-  const Value* lV = in.find("lateJoiners");
   if (lV && lV->type == Value::ARR) {
     for (const Value& l : lV->arr) {
       ui::LateJoiner lj;
@@ -596,30 +680,23 @@ const char* ttp_ui_standings_json(const char* json) {
       late.push_back(std::move(lj));
     }
   }
-  // The cup half. `standings` is held by value here and pointed at by CupBoard,
-  // so it must outlive the call to standingsPayload below.
+  return late;
+}
+static std::vector<ui::StandingRow> standingRowsOf(const Value* sV) {
   std::vector<ui::StandingRow> standings;
-  ui::CupBoard cup;
-  const Value* cV = in.find("cup");
-  if (cV && cV->type == Value::OBJ) {
-    const Value* sV = cV->find("standings");
-    if (sV && sV->type == Value::ARR) {
-      for (const Value& r : sV->arr) {
-        ui::StandingRow sr;
-        sr.playerId = idOf(r.find("playerId"));
-        sr.points = json::num_field(r, "points");
-        sr.gained = json::num_field(r, "gained");
-        standings.push_back(std::move(sr));
-      }
+  if (sV && sV->type == Value::ARR) {
+    for (const Value& r : sV->arr) {
+      ui::StandingRow sr;
+      sr.playerId = idOf(r.find("playerId"));
+      sr.points = json::num_field(r, "points");
+      sr.gained = json::num_field(r, "gained");
+      standings.push_back(std::move(sr));
     }
-    cup.standings = &standings;
-    const Value* iV = cV->find("info");
-    if (iV && iV->type == Value::OBJ) cup.info = seriesOf(*iV);
   }
+  return standings;
+}
 
-  const ui::Board b = ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
-                                           late, idOf(in.find("hostPeerIndex")),
-                                           json::truthy(in.find("over")));
+static Value boardValue(const ui::Board& b) {
   Value o = Value::Obj();      // over, hostPeerIndex, [series], total, order
   o.set("over", Value::Bool(b.over));
   o.set("hostPeerIndex", b.hostPeerIndex.toValue());
@@ -628,7 +705,67 @@ const char* ttp_ui_standings_json(const char* json) {
   Value order = Value::Arr();
   for (const ui::BoardRow& r : b.order) order.push(rowValue(r));
   o.set("order", order);
-  return put(g_bufBoard, o);
+  return o;
+}
+
+const char* ttp_ui_standings_json(const char* json) {
+  const Value in = json::parse_or(json, Value::Obj());
+
+  const std::vector<ui::ResultRow> results = resultRowsOf(in.find("results"));
+  const std::vector<ui::FieldRow> field = fieldRowsOf(in.find("field"));
+  const std::vector<ui::LateJoiner> late = lateRowsOf(in.find("lateJoiners"));
+
+  // The cup half. `standings` is held by value here and pointed at by CupBoard,
+  // so it must outlive the call to standingsPayload below.
+  std::vector<ui::StandingRow> standings;
+  ui::CupBoard cup;
+  const Value* cV = in.find("cup");
+  if (cV && cV->type == Value::OBJ) {
+    standings = standingRowsOf(cV->find("standings"));
+    cup.standings = &standings;
+    const Value* iV = cV->find("info");
+    if (iV && iV->type == Value::OBJ) cup.info = seriesOf(*iV);
+  }
+
+  const ui::Board b = ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
+                                           late, idOf(in.find("hostPeerIndex")),
+                                           json::truthy(in.find("over")));
+  return put(g_bufBoard, boardValue(b));
+}
+
+const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int gpHandle,
+                                       int over, const char* fieldJson,
+                                       const char* resultsJsonOrNull, double autoAdvanceMs) {
+  // endRace's own results object when the caller holds one (no effect can
+  // carry it), else the live session's — broadcastStandings' either-or.
+  Value resultsObj = json::parse_or(resultsJsonOrNull ? resultsJsonOrNull : "null",
+                                    Value::Null());
+  const Value rowsV = resultsObj.type == Value::OBJ && resultsObj.find("results")
+      ? *resultsObj.find("results")
+      : ttp_session_results_rows(sessionHandle);
+  const std::vector<ui::ResultRow> results = resultRowsOf(&rowsV);
+
+  const Value fieldV = json::parse_or(fieldJson, Value::Arr());
+  const std::vector<ui::FieldRow> field = fieldRowsOf(&fieldV);
+
+  const Value lateV = ttp_room_late_joiners_synced(roomHandle, sessionHandle);
+  const std::vector<ui::LateJoiner> late = lateRowsOf(&lateV);
+
+  // The cup half is composed HERE — one `cup` object holding standings + info,
+  // the nesting a shell used to get wrong.
+  std::vector<ui::StandingRow> standings;
+  ui::CupBoard cup;
+  if (gpHandle) {
+    const Value standingsV = json::parse_or(ttp_gp_standings_json(gpHandle), Value::Arr());
+    standings = standingRowsOf(&standingsV);
+    cup.standings = &standings;
+    cup.info = ui::seriesInfo(seriesInputOfGp(gpHandle, autoAdvanceMs), g_catalog);
+  }
+
+  const Value hostV = ttp_room_host_value(roomHandle);
+  const ui::Board b = ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
+                                           late, idOf(&hostV), over != 0);
+  return put(g_bufBoardLive, boardValue(b));
 }
 
 const char* ttp_ui_results_view_json(const char* boardJson, double intermissionMs) {

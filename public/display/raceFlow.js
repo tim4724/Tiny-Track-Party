@@ -219,6 +219,14 @@ export function drawsNeeded({ mode, randomRaces }) {
   return randomRaces - 1;
 }
 
+// The same question for a lobby return: only a RANDOM room re-rolls its pick on
+// the way back (returnToLobby's trackSwap), so only that mode spends a draw.
+// The shell asks this instead of re-spelling the mode test at the call site —
+// the one place that did grew a second, subtly different copy of the rule.
+export function returnDrawsNeeded({ mode }) {
+  return mode === 'random' ? 1 : 0;
+}
+
 // ---- start / launch --------------------------------------------------------
 
 // The START_GAME go/no-go. The host's "Start race" button is only enabled once

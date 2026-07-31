@@ -526,6 +526,9 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     }
     return Value::Str(race::demoSig(f, json::str_field(in, "trackId")));
   }
+  if (op == "returnDrawsNeeded") {
+    return Value::Num(race::returnDrawsNeeded(json::str_field(in, "mode")));
+  }
   if (op == "drawsNeeded") {
     return Value::Num(race::drawsNeeded(json::str_field(in, "mode"), json::num_field(in, "randomRaces")));
   }

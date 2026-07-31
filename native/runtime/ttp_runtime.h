@@ -118,6 +118,13 @@ TTP_ABI const char* ttp_gp_current_track(int h);
 TTP_ABI const char* ttp_gp_next_track(int h);   // "" == JS null
 TTP_ABI const char* ttp_gp_cup_json(int h);
 
+// 1 when the NEXT ttp_gp_apply_race must be handed a drawn track: an endless
+// series sitting on its last queued race. GrandPrix.js's own check point —
+// drawing on any other call would pull the shuffle bag faster than the kit
+// does and desynchronise the whole track sequence, and the bag is stateful,
+// so an unused draw is not free. The shell owns the BAG; this owns the WHEN.
+TTP_ABI int ttp_gp_needs_draw(int h);
+
 // resultsJson: [{"playerId":<scalar>,"rank":N,"finished":bool},...] (Game results)
 // fieldJson:   [{"peerIndex":<scalar>,"name":..,"colorIndex":N,"ai":bool},...]
 // drawnTrackIdOrNull: the host's next shuffle-bag draw (endless only; may be null).

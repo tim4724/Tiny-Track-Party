@@ -733,28 +733,17 @@ window.addEventListener('pagehide', () => net.shutdown());
 // surfaced as onRaceAbandoned below. It used to be a second copy of this
 // bookkeeping in JS.
 // The RULE is uiModel.autoPause's (which seats count, when the freeze may apply,
-// what an empty field means); what stays here is reading the live session and
-// the room. "Is anyone AT those wheels?" comes from RoomFlow, over the very
-// participant set the abandoned-race grace waits on (Net.js _syncActiveOrder) —
-// read, never re-derived, which is what keeps the silent freeze and that policy
-// from ever disagreeing.
+// what an empty field means), and the whole gather is C++'s too: "is anyone AT
+// those wheels?" comes from RoomFlow over the very participant set the
+// abandoned-race grace waits on, synced and read behind the twin
+// (ttp_room.h's synced seam) — never re-derived, which is what keeps the
+// silent freeze and that policy from ever disagreeing.
 function refreshAutoPause() {
-  const carIds = session ? session.carIds() : [];
-  const input = {
-    hasSession: !!session,
-    raceEnded,
-    roomState: net.roomState,
-    carIds,
-    aiIds: aiCarIds,
-    // a human at the wheel, or a held seat with its QR up
-    seatedIds: new Set(carIds.filter((id) => net.flow.has(id)))
-  };
-  // allParticipantsDisconnected() pushes the live car set into RoomFlow before
-  // answering, so it is read exactly on the ticks the decision consults it.
-  const d = ui.autoPause({
-    ...input,
-    allParticipantsDisconnected: ui.autoPauseAsksParticipants(input) && net.allParticipantsDisconnected()
-  });
+  // The input (roomState, carIds, aiIds, seatedIds), the consult rule and the
+  // synced participants read all happen behind the twin — one crossing where
+  // the shell used to make four over two ABIs. raceEnded is the one input
+  // that stays: it is this shell's results-overlay latch.
+  const d = ui.autoPause(session ? session.h : 0, net.flow.handle, raceEnded);
   perform(flow.autoPauseEffects(d).effects);
 }
 net.flow.on('rosterchange', refreshAutoPause);
@@ -1162,61 +1151,33 @@ function onRaceEvent(e) {
   }).effects);
 }
 
-// The live race's car list split into the roles the UI model reasons over —
-// which car is a CPU racer, whose phone has dropped, who is already home. Read
-// off the session + the room here (the part that names this shell's objects) so
-// the RULES over them stay plain-data pure (uiModel.humansAllDone /
-// forfeitCandidates).
-function raceRoleSets() {
-  const carIds = session ? session.carIds() : [];
-  const disconnectedIds = new Set();
-  const finishedIds = new Set();
-  for (const id of carIds) {
-    if (net.flow.isDisconnected(id)) disconnectedIds.add(id);
-    if (session.carFinished(id)) finishedIds.add(id);
-  }
-  return { carIds, aiIds: aiCarIds, disconnectedIds, finishedIds };
-}
-
 // The finish-moment pair, off one call: `allDone` is true once every CONNECTED
 // human car has crossed the line (CPU cars may still be out — the cue to skip
 // to results), and `forfeit` names the dropped-racer ghosts to pull out at that
-// moment. Both rules are the native UI model's.
+// moment. Both rules are the native UI model's, and the role sets they read
+// (car/AI/dropped/finished ids) are gathered off the two handles in C++ —
+// the shell no longer crosses the boundary per car to build them.
 function raceFlow() {
-  if (!session) return { allDone: false, forfeit: [] };
-  return ui.raceFlow(raceRoleSets());
+  return ui.raceFlow(session ? session.h : 0, net.flow.handle);
 }
 function humansAllDone() { return raceFlow().allDone; }
 
 // Live standings for the controllers' results overlay. Pushed as each car
 // finishes (over=false) and once more at race end (over=true, so DNF/AFK cars
 // resolve and everyone — not just finishers — sees the final board). The BOARD
-// is uiModel.standingsPayload's; what stays here is naming the objects it reads
-// — currentField (the AI racers aren't in the lobby roster the phones know, so
-// the display is the only side that can name/colour them), the live cup, and
-// RoomFlow's late-joiner set.
+// is the ui model's, and the results, cup half (standings + chip), late
+// joiners and host are all gathered off the live handles in C++. What stays
+// here is naming currentField — the AI racers aren't in the lobby roster the
+// phones know, so the display is the only side that can name/colour them —
+// and the results object endRace's callback carries (no effect can).
 function standingsPayload(results, over) {
   return ui.standingsPayload({
-    results: results.results,
+    sessionHandle: session ? session.h : 0,
+    roomHandle: net.flow.handle,
+    gpHandle: series ? series.handle : 0,
+    over,
     field: currentField,
-    cup: series ? { standings: series.standings(), info: seriesInfo() } : null,
-    lateJoiners: net.lateJoiners(),
-    hostPeerIndex: net.flow.host,
-    over
-  });
-}
-
-// The cup's progress chip on every STANDINGS board (uiModel.seriesInfo).
-function seriesInfo() {
-  const cup = series.cup;
-  return ui.seriesInfo({
-    cupId: cup.id, cupName: cup.name,
-    endless: series.endless,
-    raceIndex: series.raceIndex, raceCount: series.raceCount,
-    finished: series.finished, nextTrackId: series.nextTrackId,
-    // No catalogue: the model resolves nextTrackName against the one handed over
-    // ONCE at boot (ui.configure). Passing it here was a leftover from when this
-    // layer was JS and took its world per call — the adapter never forwarded it.
+    results: results || null,
     autoAdvanceMs: intermissionMs()
   });
 }
@@ -1227,9 +1188,9 @@ function intermissionMs() { return window.__intermissionMs || INTERMISSION_MS; }
 function broadcastStandings(over, results) {
   if (!session) return;
   // The final board rides endRace's OWN results object (via the perform
-  // context); the running ones re-read the live session, which is the same
-  // thing mid-race and the only source when no callback is in flight.
-  const board = standingsPayload(results || session.getResults(), over);
+  // context); with none in flight the twin re-reads the live session in C++,
+  // which is the same thing mid-race.
+  const board = standingsPayload(results || null, over);
   net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
 }
 
@@ -1382,12 +1343,14 @@ function renderPodium(wrap, top) {
 }
 
 function returnToLobby() {
-  // Asked twice for the same reason startRace is: a lobby return only draws in
-  // RANDOM mode, and a call that is already a no-op (we are in the lobby) must
-  // not advance the bag. The first call is read for its verdict only.
+  // Asked twice for the same reason startRace is: a return spends a draw and a
+  // call that is already a no-op (we are in the lobby) must not advance the
+  // bag. The first call is read for its verdict only; how many draws the
+  // return will consume is the layer's answer (returnDrawsNeeded), never
+  // re-spelled here — this call site's own copy had drifted from startRace's.
   const at = { roomState: net.roomState, mode: net.mode, cupId: net.cupId, trackId: net.trackId };
   if (flow.returnToLobby({ ...at, draws: [] }).action !== 'return') return;
-  perform(flow.returnToLobby({ ...at, draws: net.mode === 'random' ? [randomBag.draw()] : [] }).effects);
+  perform(flow.returnToLobby({ ...at, draws: offerDraws(flow.returnDrawsNeeded(at)) }).effects);
 }
 
 // End the party and return to the title board (back from the lobby, or a

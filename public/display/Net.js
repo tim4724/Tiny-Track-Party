@@ -258,33 +258,11 @@ export class DisplayNet extends GameNet {
     this.onRosterChange(this.flow.size, this.flow.host);
   }
 
-  // ---- the active participant order ----
-  // RoomFlow's participant order, from THIS game's point of view: the seats this
-  // race is for, decided in C++ by RoomFlow::syncActiveOrder over the live Game.
-  // This module supplies the session handle and nothing else, so a tvOS/Android
-  // shell inherits the definition instead of restating it. What is LEFT OVER is
-  // exactly a CONNECTED seat with no car — a late joiner — and that leftover set
-  // answers both "is anyone waiting?" and "who?", so the policy and the boards
-  // read one definition. Push before every read.
-  _syncActiveOrder() {
-    this.flow.syncActiveOrder(this.sessionHandle());
-  }
-
-  // Connected seats with no car in the live race — who the room is holding the
-  // next race for. Records in join order, like list().
-  lateJoiners() {
-    this._syncActiveOrder();
-    return this.flow.lateJoiners();
-  }
-
-  // Every seat this race is for has dropped: the room has a race running and
-  // nobody at any wheel. RoomFlow's predicate over the SAME participant set the
-  // abandoned-race grace waits on, so the display's freeze and that policy can
-  // never disagree about whether the race still has drivers.
-  allParticipantsDisconnected() {
-    this._syncActiveOrder();
-    return this.flow.allParticipantsDisconnected();
-  }
+  // The active participant order — the seats this race is for, and by
+  // subtraction who is a late joiner — is synced and read entirely inside the
+  // wasm now: the net walks push it on their own ticks, and the ui twins
+  // (auto-pause, standings) read it through the synced seam accessors in
+  // ttp_room.h. This module holds no reader of its own anymore.
 
   // ---- connection ----
   _connect() {

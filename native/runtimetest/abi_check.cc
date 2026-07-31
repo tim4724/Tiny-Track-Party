@@ -1981,6 +1981,7 @@ Value raceStep(const std::string& op, const Value& in) {
     return Value::Str(ttp_race_demo_sig(sub("field").c_str(), strIn("trackId").c_str()));
   }
   if (op == "drawsNeeded") return Value::Num(ttp_race_draws_needed(J(in).c_str()));
+  if (op == "returnDrawsNeeded") return Value::Num(ttp_race_return_draws_needed(J(in).c_str()));
   if (op == "startRace") return jsonOf(ttp_race_start_json(J(in).c_str()));
   if (op == "launchRace") return jsonOf(ttp_race_launch_json(J(in).c_str()));
   if (op == "countdownTick") return jsonOf(ttp_race_countdown_tick_json(numIn("n")));
@@ -2350,6 +2351,199 @@ void handlePathsMatchJsonPaths() {
   ttp_dispose(sess);
   // A DISPOSED session must read as no race, not as the race it used to be.
   sameFrame(room, sess, "disposed session");
+  ttp_room_dispose(room);
+}
+
+// ---------------------------------------------------------------------------
+// The ui LIVE twins (ttp_ui.h's *_live_json / *_gp_json) against the JSON
+// forms they gather for. Same charter as handlePathsMatchJsonPaths: a twin
+// adds no rule — it GATHERS the input the shell used to assemble (main.js's
+// raceRoleSets / refreshAutoPause / seriesInfo / standingsPayload, transcribed
+// below call for call) — so the only statement of correctness is byte
+// agreement with the JSON form over that assembly, in the same run.
+// ---------------------------------------------------------------------------
+void uiLiveTwinsMatchJsonPaths() {
+  const int room = ttp_room_create("{}");
+  if (room <= 0) { fail("ui-twins: ttp_room_create returned no handle"); return; }
+  // Ada races and stays; Bo waits (late joiner); Cy races but dropped.
+  ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+  ttp_room_add_player(room, "2", "{\"name\":\"Bo\",\"colorIndex\":1,\"carIndex\":null,\"ready\":false}");
+  ttp_room_add_player(room, "3", "{\"name\":\"Cy\",\"colorIndex\":3,\"ready\":true}");
+  ttp_room_mark_disconnected(room, "3");
+
+  const int sess = ttp_session_begin("tidepool", 7u, 3, nullptr);
+  if (sess <= 0) { fail("ui-twins: ttp_session_begin returned no handle"); return; }
+  ttp_add_human(sess, "1", nullptr);
+  ttp_add_human(sess, "3", nullptr);
+  ttp_add_bot(sess, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
+  ttp_add_bot(sess, "\"ai-1\"", 0.9, 0.2, 2u, nullptr);
+
+  // main.js kept its own aiCarIds Set; the twin reads the bot registry. The
+  // comparison spells the shell's copy literally, which is exactly what the
+  // old assembly did.
+  const char* kAiIds = "[\"ai-0\",\"ai-1\"]";
+
+  // ---- raceRoleSets + ttp_ui_race_flow_json, transcribed --------------------
+  const auto oldRaceFlow = [&](int s, int r) {
+    Value in = Value::Obj();
+    Value carIds = parseOrNull(ttp_car_ids_json(s), "car ids");
+    Value disc = Value::Arr();
+    Value fin = Value::Arr();
+    for (const Value& idV : carIds.arr) {
+      const std::string idJson = canonical_stringify(idV);
+      if (ttp_room_is_disconnected(r, idJson.c_str())) disc.push(idV);
+      if (ttp_car_finished(s, idJson.c_str()) == 1) fin.push(idV);
+    }
+    in.set("carIds", carIds);
+    in.set("aiIds", parseOrNull(kAiIds, "ai ids"));
+    in.set("disconnectedIds", disc);
+    in.set("finishedIds", fin);
+    return std::string(ttp_ui_race_flow_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameRaceFlow = [&](const char* where) {
+    const std::string want = oldRaceFlow(sess, room);
+    const std::string got = ttp_ui_race_flow_live_json(sess, room);
+    check(got == want, std::string("ttp_ui_race_flow_live_json == assembled form (") + where + ")");
+  };
+  sameRaceFlow("mid-race, one dropped");
+  ttp_force_finish(sess, "1", 42.5);
+  sameRaceFlow("after a finish");
+  // No session: the shell answered its constant without crossing at all.
+  check(std::string(ttp_ui_race_flow_live_json(0, room)) == "{\"allDone\":false,\"forfeit\":[]}",
+        "ttp_ui_race_flow_live_json without a session is the no-race constant");
+
+  // ---- refreshAutoPause's assembly, transcribed -----------------------------
+  const auto oldAutoPause = [&](int s, int r, bool raceEnded) {
+    Value in = Value::Obj();
+    in.set("hasSession", Value::Bool(s != 0));
+    in.set("raceEnded", Value::Bool(raceEnded));
+    in.set("roomState", Value::Str(ttp_room_state(r)));
+    Value carIds = s ? parseOrNull(ttp_car_ids_json(s), "car ids") : Value::Arr();
+    Value seated = Value::Arr();
+    for (const Value& idV : carIds.arr) {
+      const std::string idJson = canonical_stringify(idV);
+      if (ttp_room_has(r, idJson.c_str())) seated.push(idV);
+    }
+    in.set("carIds", carIds);
+    in.set("aiIds", s ? parseOrNull(kAiIds, "ai ids") : Value::Arr());
+    in.set("seatedIds", seated);
+    const std::string inJson = canonical_stringify(in);
+    int allDisc = 0;
+    if (ttp_ui_auto_pause_asks(inJson.c_str())) {
+      ttp_room_sync_active_order(r, s);
+      allDisc = ttp_room_all_participants_disconnected(r);
+    }
+    return std::string(ttp_ui_auto_pause_json(inJson.c_str(), allDisc));
+  };
+  const auto sameAutoPause = [&](int s, int r, bool ended, const char* where) {
+    const std::string want = oldAutoPause(s, r, ended);
+    const std::string got = ttp_ui_auto_pause_live_json(s, r, ended ? 1 : 0);
+    check(got == want, std::string("ttp_ui_auto_pause_live_json == assembled form (") + where + ")");
+  };
+  sameAutoPause(sess, room, false, "lobby phase");
+  ttp_room_transition_to(room, "playing");
+  sameAutoPause(sess, room, false, "playing, one racer dropped");
+  ttp_room_mark_disconnected(room, "1");
+  sameAutoPause(sess, room, false, "playing, every racer dropped");
+  sameAutoPause(sess, room, true, "results overlay up");
+  sameAutoPause(0, room, false, "no session");
+  ttp_room_mark_reconnected(room, "1");
+
+  // ---- seriesInfo's getter walk + standingsPayload, transcribed -------------
+  const int gp = ttp_gp_create(
+      "{\"id\":\"cup-a\",\"name\":\"Sunrise\",\"tracks\":[\"tidepool\",\"helix\"]}", 0);
+  if (gp <= 0) { fail("ui-twins: ttp_gp_create returned no handle"); return; }
+  const double kMs = 10000;
+
+  const auto oldSeriesInfo = [&](int g) {
+    Value cup = parseOrNull(ttp_gp_cup_json(g), "gp cup");
+    Value in = Value::Obj();
+    in.set("cupId", *cup.find("id"));
+    in.set("cupName", *cup.find("name"));
+    in.set("endless", Value::Bool(ttp_gp_endless(g) != 0));
+    in.set("raceIndex", Value::Num(ttp_gp_race_index(g)));
+    in.set("raceCount", Value::Num(ttp_gp_race_count(g)));
+    in.set("finished", Value::Bool(ttp_gp_finished(g) != 0));
+    const char* next = ttp_gp_next_track(g);
+    in.set("nextTrackId", next[0] ? Value::Str(next) : Value::Null());
+    in.set("autoAdvanceMs", Value::Num(kMs));
+    return std::string(ttp_ui_series_info_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameSeriesInfo = [&](const char* where) {
+    const std::string want = oldSeriesInfo(gp);
+    const std::string got = ttp_ui_series_info_gp_json(gp, kMs);
+    check(got == want, std::string("ttp_ui_series_info_gp_json == getter walk (") + where + ")");
+  };
+  sameSeriesInfo("race 1 of the cup");
+  check(std::string(ttp_ui_series_info_gp_json(0, kMs)) == "null",
+        "ttp_ui_series_info_gp_json without a series is null");
+
+  const char* kField =
+      "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false},"
+      "{\"peerIndex\":3,\"name\":\"Cy\",\"colorIndex\":3,\"ai\":false},"
+      "{\"peerIndex\":\"ai-0\",\"name\":\"Alpha\",\"colorIndex\":4,\"ai\":true},"
+      "{\"peerIndex\":\"ai-1\",\"name\":\"Beta\",\"colorIndex\":5,\"ai\":true}]";
+
+  const auto oldStandings = [&](int s, int r, int g, bool over, const char* resultsJson) {
+    Value in = Value::Obj();
+    Value resultsObj = resultsJson ? parseOrNull(resultsJson, "explicit results")
+                                   : parseOrNull(ttp_results_json(s), "live results");
+    in.set("results", *resultsObj.find("results"));
+    in.set("field", parseOrNull(kField, "field"));
+    if (g) {
+      Value cup = Value::Obj();
+      cup.set("standings", parseOrNull(ttp_gp_standings_json(g), "gp standings"));
+      cup.set("info", parseOrNull(oldSeriesInfo(g).c_str(), "series info"));
+      in.set("cup", cup);
+    } else {
+      in.set("cup", Value::Null());
+    }
+    // DisplayNet.lateJoiners() pushes the live car set in BEFORE reading — the
+    // late set is defined by subtraction from the active order, so the sync is
+    // part of the old path, not an optimization.
+    ttp_room_sync_active_order(r, s);
+    in.set("lateJoiners", parseOrNull(ttp_room_late_joiners_json(r), "late joiners"));
+    in.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "host"));
+    in.set("over", Value::Bool(over));
+    return std::string(ttp_ui_standings_json(canonical_stringify(in).c_str()));
+  };
+  const auto sameStandings = [&](int g, bool over, const char* resultsJson, const char* where) {
+    const std::string want = oldStandings(sess, room, g, over, resultsJson);
+    const std::string got = ttp_ui_standings_live_json(sess, room, g, over ? 1 : 0,
+                                                       kField, resultsJson, kMs);
+    check(got == want, std::string("ttp_ui_standings_live_json == assembled form (") + where + ")");
+  };
+  sameStandings(0, false, nullptr, "plain race, live board");
+  sameStandings(gp, false, nullptr, "cup, live board");
+  sameStandings(gp, true, nullptr, "cup, final board off the session");
+  // endRace's own results object, as the perform context carries it.
+  sameStandings(gp, true,
+                "{\"results\":[{\"playerId\":1,\"finished\":true,\"time\":42.5},"
+                "{\"playerId\":3,\"finished\":false,\"time\":null}]}",
+                "cup, final board off the callback argument");
+
+  // ---- the endless-draw gate ------------------------------------------------
+  // NativeCupSeries spelled `drawNext && raceIndex >= raceCount - 1`; the
+  // export owns the index half. A fixed cup never draws; the endless series
+  // draws exactly while sitting on its last queued race.
+  check(ttp_gp_needs_draw(gp) == 0, "a fixed cup never needs a draw");
+  const int egp = ttp_gp_create("{\"id\":\"random\",\"name\":\"Random\",\"tracks\":[\"tidepool\"]}", 1);
+  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
+                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
+        "needs_draw == the adapter's old spelling (fresh endless)");
+  check(ttp_gp_needs_draw(egp) == 1, "a one-track endless series draws immediately");
+  ttp_gp_apply_race(egp, "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",
+                    "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false}]",
+                    "\"helix\"");
+  ttp_gp_advance(egp);
+  check(ttp_gp_needs_draw(egp) == (ttp_gp_endless(egp) &&
+                                   ttp_gp_race_index(egp) >= ttp_gp_race_count(egp) - 1 ? 1 : 0),
+        "needs_draw == the adapter's old spelling (after an advance)");
+  check(ttp_gp_needs_draw(0) == 0, "needs_draw on handle 0 is 0");
+
+  ttp_gp_dispose(egp);
+  ttp_gp_dispose(gp);
+  ttp_dispose(sess);
   ttp_room_dispose(room);
 }
 
@@ -3155,6 +3349,7 @@ int main(int argc, char** argv) {
   uiCupTendency();
   uiCorpusThroughAbi(argv[4]);
   handlePathsMatchJsonPaths();
+  uiLiveTwinsMatchJsonPaths();
   netWalksMatchMultiCallPath();
   sessionCorpusThroughAbi(argv[5]);
   raceCorpusThroughAbi(argv[6]);

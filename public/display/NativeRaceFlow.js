@@ -47,6 +47,7 @@ export async function init() {
     demoSig: c('ttp_race_demo_sig', 'string', ['string', 'string']),
     start: c('ttp_race_start_json', 'string', ['string']),
     drawsNeeded: c('ttp_race_draws_needed', 'number', ['string']),
+    returnDrawsNeeded: c('ttp_race_return_draws_needed', 'number', ['string']),
     launch: c('ttp_race_launch_json', 'string', ['string']),
     countdownTick: c('ttp_race_countdown_tick_json', 'string', ['number']),
     startBeat: c('ttp_race_start_beat_json', 'string', ['string', 'number']),
@@ -86,6 +87,7 @@ export function buildDemoField(humans, botCap) {
 export function demoSig(field, trackId) { return fn.demoSig(J(field), trackId || ''); }
 
 export function drawsNeeded(input) { return fn.drawsNeeded(J(input)); }
+export function returnDrawsNeeded(input) { return fn.returnDrawsNeeded(J(input)); }
 export function startRace(input) { return P(fn.start(J(input))); }
 export function launchRace(input) { return P(fn.launch(J(input))); }
 export function countdownTick(n) { return P(fn.countdownTick(n)); }

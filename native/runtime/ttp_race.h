@@ -163,6 +163,12 @@ TTP_ABI const char* ttp_race_start_json(const char* inputJson);
  * Takes the same input object; reads only `mode` and `randomRaces`. */
 TTP_ABI int ttp_race_draws_needed(const char* inputJson);
 
+/* The lobby-return twin of the above: how many draws returnToLobby will consume
+ * ({"mode":...} -> 1 only for "random"). Exists so no shell re-spells the mode
+ * test at the call site — the display's own copy had already drifted from
+ * startRace's once. */
+TTP_ABI int ttp_race_return_draws_needed(const char* inputJson);
+
 /* The launch itself, shared by the lobby start and the cup chain. Assumes the
  * guards above already passed.
  *

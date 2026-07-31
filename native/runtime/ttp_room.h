@@ -61,6 +61,27 @@ ttp::Value ttp_room_host_value(int roomHandle);
 // which every roomStateOf/room_state_of reader already treats as "not a phase".
 std::string ttp_room_state_name(int roomHandle);
 
+// Per-id presence answers over a caller-ordered car-id list, in its order —
+// the role sets the race-flow and auto-pause rules read (RoomFlow.has /
+// RoomFlow.isDisconnected), taken here so no shell loops the roster through
+// the C boundary to build them. An unknown handle answers all-false, which
+// composes to "nobody seated, nobody dropped" — the no-room case.
+ttp::Value ttp_room_has_flags(int roomHandle, const ttp::Value& carIds);
+ttp::Value ttp_room_disconnected_flags(int roomHandle, const ttp::Value& carIds);
+
+// lateJoinersValue() AFTER syncing the active order off the live race — "who
+// is a late joiner" is defined by subtraction from the active set, so an
+// unsynced read answers off a stale race (DisplayNet.lateJoiners has always
+// pushed first; the ordering crosses with the read so no caller can drop it).
+// Empty array for an unknown handle.
+ttp::Value ttp_room_late_joiners_synced(int roomHandle, int sessionHandle);
+
+// allParticipantsDisconnected AFTER syncing the active order off the live
+// race. The sync-first ordering is the reason the shell-facing seam exists at
+// all (Net.js used to hold it); here it is one call so no reader can ask off
+// a stale set.
+int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHandle);
+
 // The live machine behind a handle, or nullptr — for the choreography walks
 // (see the header note). Mutations through it still queue their events on the
 // handle exactly as the ttp_room_* mutators do, so a shell that drains

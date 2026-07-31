@@ -229,6 +229,42 @@ std::string ttp_room_state_name(int roomHandle) {
   return rh ? rh->flow->stateName() : std::string();
 }
 
+Value ttp_room_has_flags(int roomHandle, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  RoomHandle* rh = room(roomHandle);
+  for (const Value& idV : carIds.arr) {
+    const PeerId id = json::id_of<PeerId>(&idV);
+    flags.push(Value::Bool(rh && !id.isNull() && rh->flow->has(id)));
+  }
+  return flags;
+}
+
+Value ttp_room_disconnected_flags(int roomHandle, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  RoomHandle* rh = room(roomHandle);
+  for (const Value& idV : carIds.arr) {
+    const PeerId id = json::id_of<PeerId>(&idV);
+    flags.push(Value::Bool(rh && !id.isNull() && rh->flow->isDisconnected(id)));
+  }
+  return flags;
+}
+
+Value ttp_room_late_joiners_synced(int roomHandle, int sessionHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return Value::Arr();
+  ttp_room_sync_active_order(roomHandle, sessionHandle);
+  return rh->flow->lateJoinersValue();
+}
+
+int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return 0;
+  ttp_room_sync_active_order(roomHandle, sessionHandle);
+  return rh->flow->allParticipantsDisconnected() ? 1 : 0;
+}
+
 RoomFlow* ttp_room_flow(int roomHandle) {
   RoomHandle* rh = room(roomHandle);
   return rh ? rh->flow.get() : nullptr;

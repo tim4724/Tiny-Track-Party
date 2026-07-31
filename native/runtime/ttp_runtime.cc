@@ -29,6 +29,7 @@
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
+#include "ttp/json_read.h"
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
@@ -315,6 +316,41 @@ ttp::Game* ttp_session_engine(int h) {
   if (!rs) return nullptr;
   if (!rs->eng) buildSession(rs);
   return rs->eng;
+}
+
+Value ttp_session_car_ids(int h) {
+  Value a = Value::Arr();
+  if (Game* g = ttp_session_engine(h))
+    for (const auto& c : g->cars()) a.push(c->id.toValue());
+  return a;
+}
+
+Value ttp_session_ai_ids(int h) {
+  Value a = Value::Arr();
+  RuntimeSession* rs = get(h);
+  if (rs)
+    for (const auto& b : rs->bots) a.push(b.id.toValue());
+  return a;
+}
+
+Value ttp_session_finished_flags(int h, const Value& carIds) {
+  Value flags = Value::Arr();
+  if (carIds.type != Value::ARR) return flags;
+  Game* g = ttp_session_engine(h);
+  for (const Value& idV : carIds.arr) {
+    bool fin = false;
+    if (g) g->carFinished(json::id_of<Id>(&idV), fin);  // unknown car stays false
+    flags.push(Value::Bool(fin));
+  }
+  return flags;
+}
+
+Value ttp_session_results_rows(int h) {
+  Game* g = ttp_session_engine(h);
+  if (!g) return Value::Arr();
+  Value res = g->getResults();
+  const Value* rows = res.find("results");
+  return rows && rows->type == Value::ARR ? *rows : Value::Arr();
 }
 
 // ===========================================================================
@@ -1114,6 +1150,12 @@ int ttp_gp_endless(int h) { GpHandle* g = gp(h); return (g && g->series->endless
 int ttp_gp_race_count(int h) { GpHandle* g = gp(h); return g ? g->series->raceCount() : 0; }
 int ttp_gp_race_index(int h) { GpHandle* g = gp(h); return g ? g->series->raceIndex() : 0; }
 int ttp_gp_finished(int h) { GpHandle* g = gp(h); return (g && g->series->finished()) ? 1 : 0; }
+
+int ttp_gp_needs_draw(int h) {
+  GpHandle* g = gp(h);
+  return (g && g->series->endless() &&
+          g->series->raceIndex() >= g->series->raceCount() - 1) ? 1 : 0;
+}
 
 const char* ttp_gp_current_track(int h) {
   GpHandle* g = gp(h);
