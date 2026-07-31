@@ -2490,12 +2490,12 @@ void uiLiveTwinsMatchJsonPaths() {
   };
   const auto sameSeriesInfo = [&](const char* where) {
     const std::string want = oldSeriesInfo(gp);
-    const std::string got = ttp_ui_series_info_gp_json(gp, kMs);
-    check(got == want, std::string("ttp_ui_series_info_gp_json == getter walk (") + where + ")");
+    const std::string got = ttp_ui_series_info_live_json(gp, kMs);
+    check(got == want, std::string("ttp_ui_series_info_live_json == getter walk (") + where + ")");
   };
   sameSeriesInfo("race 1 of the cup");
-  check(std::string(ttp_ui_series_info_gp_json(0, kMs)) == "null",
-        "ttp_ui_series_info_gp_json without a series is null");
+  check(std::string(ttp_ui_series_info_live_json(0, kMs)) == "null",
+        "ttp_ui_series_info_live_json without a series is null");
 
   const char* kField =
       "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false},"

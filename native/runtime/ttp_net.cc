@@ -75,6 +75,45 @@ const char* putStr(std::string& buf, std::string s) {
   return buf.c_str();
 }
 
+// The ONE spelling of a stored pick — explicit nulls (strictEquals reads the
+// fields; null is not absent), hasBag last. Every writer goes through this so
+// a fifth pick field is one edit, not five.
+Value makePick(Value mode, Value cupId, double randomRaces, Value trackId, Value hasBag) {
+  if (mode.type == Value::UNDEF) mode = Value::Null();
+  if (cupId.type == Value::UNDEF) cupId = Value::Null();
+  if (trackId.type == Value::UNDEF) trackId = Value::Null();
+  Value pick = Value::Obj();
+  pick.set("mode", std::move(mode));
+  pick.set("cupId", std::move(cupId));
+  pick.set("randomRaces", Value::Num(randomRaces));
+  pick.set("trackId", std::move(trackId));
+  pick.set("hasBag", hasBag.type == Value::BOOL ? hasBag : Value::Bool(false));
+  return pick;
+}
+
+// The stored hasBag — the shell's capability stamp, carried through every
+// rewrite of the pick around it.
+Value storedHasBag(int roomHandle) {
+  const Value cur = ttp_room_pick_value(roomHandle);
+  const Value* hb = cur.find("hasBag");
+  return hb ? *hb : Value::Bool(false);
+}
+
+// The four reader-facing fields, defaults filled — what ttp_net_pick_json
+// answers and what the lobby frame merges into its snapshot input.
+void setPickFields(int roomHandle, Value& out) {
+  const Value pick = ttp_room_pick_value(roomHandle);
+  const auto field = [&](const char* k, Value dflt) {
+    const Value* v = pick.find(k);
+    out.set(k, v ? *v : std::move(dflt));
+  };
+  field("mode", Value::Null());
+  field("cupId", Value::Null());
+  field("randomRaces", Value::Num(0));
+  field("trackId", Value::Null());
+}
+
+
 // A JSON text that may legitimately be "absent". NULL and "" mean JS
 // `undefined`; anything else parses, and a parse FAILURE is undefined too (a
 // malformed token is not a null). Returns nullptr for absent.
@@ -147,15 +186,7 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   // walks are its writers, so the frame reads it where it lives.
   Value input = json::parse_or(fieldsJson, Value::Obj());
   if (input.type != Value::OBJ) input = Value::Obj();
-  const Value pick = ttp_room_pick_value(roomHandle);
-  const auto pickField = [&](const char* k, Value dflt) {
-    const Value* v = pick.find(k);
-    input.set(k, v ? *v : std::move(dflt));
-  };
-  pickField("mode", Value::Null());
-  pickField("cupId", Value::Null());
-  pickField("randomRaces", Value::Num(0));
-  pickField("trackId", Value::Null());
+  setPickFields(roomHandle, input);
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
   // corpus-pinned rule and not a variant of it. The roster is built ONCE and
@@ -589,22 +620,12 @@ const Value* firstCupTrackId(const Value* cupId) {
 
 // Adopt a new pick: STORE it (ttp_room.h's slot is the one copy — no set-pick
 // effect hands it back to a shell anymore), then publish — the frame reads the
-// pick just stored — then swap the preview. hasBag rides through untouched: it
-// is the shell's capability stamp, not part of any pick.
+// pick just stored — then swap the preview.
 void storePickAndPush(int roomHandle, Value& effects, Value mode, Value cupId,
                       double randomRaces, Value trackId) {
   if (trackId.type == Value::UNDEF) trackId = Value::Null();
-  if (cupId.type == Value::UNDEF) cupId = Value::Null();
-  if (mode.type == Value::UNDEF) mode = Value::Null();
-  const Value cur = ttp_room_pick_value(roomHandle);
-  const Value* hb = cur.find("hasBag");
-  Value pick = Value::Obj();
-  pick.set("mode", std::move(mode));
-  pick.set("cupId", std::move(cupId));
-  pick.set("randomRaces", Value::Num(randomRaces));
-  pick.set("trackId", trackId);
-  pick.set("hasBag", hb ? *hb : Value::Bool(false));
-  ttp_room_store_pick(roomHandle, std::move(pick));
+  ttp_room_store_pick(roomHandle, makePick(std::move(mode), std::move(cupId), randomRaces,
+                                           trackId, storedHasBag(roomHandle)));
   pushOp(effects, "publish");
   Value tc = effectOp("track-change");
   tc.set("trackId", std::move(trackId));
@@ -1007,43 +1028,23 @@ const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
 
 void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag) {
   // DisplayNet's constructor rule: a default track preselects mode "track".
-  // Explicit nulls, exactly as the shell mirror spelled them — strictEquals
-  // reads these fields, and null is not absent.
   const bool hasDefault = defaultTrackIdOrNull && *defaultTrackIdOrNull;
-  Value pick = Value::Obj();
-  pick.set("mode", hasDefault ? Value::Str("track") : Value::Null());
-  pick.set("cupId", Value::Null());
-  pick.set("randomRaces", Value::Num(0));
-  pick.set("trackId", hasDefault ? Value::Str(defaultTrackIdOrNull) : Value::Null());
-  pick.set("hasBag", Value::Bool(hasBag != 0));
-  ttp_room_store_pick(roomHandle, std::move(pick));
+  ttp_room_store_pick(roomHandle,
+      makePick(hasDefault ? Value::Str("track") : Value::Null(), Value::Null(), 0,
+               hasDefault ? Value::Str(defaultTrackIdOrNull) : Value::Null(),
+               Value::Bool(hasBag != 0)));
 }
 
 void ttp_net_clear_pick(int roomHandle) {
   // End party -> fresh room: the next party must not inherit the old party's
   // cup. hasBag survives — the shell's capability did not change.
-  const Value cur = ttp_room_pick_value(roomHandle);
-  const Value* hb = cur.find("hasBag");
-  Value pick = Value::Obj();
-  pick.set("mode", Value::Null());
-  pick.set("cupId", Value::Null());
-  pick.set("randomRaces", Value::Num(0));
-  pick.set("trackId", Value::Null());
-  pick.set("hasBag", hb ? *hb : Value::Bool(false));
-  ttp_room_store_pick(roomHandle, std::move(pick));
+  ttp_room_store_pick(roomHandle,
+      makePick(Value::Null(), Value::Null(), 0, Value::Null(), storedHasBag(roomHandle)));
 }
 
 const char* ttp_net_pick_json(int roomHandle) {
-  const Value pick = ttp_room_pick_value(roomHandle);
   Value out = Value::Obj();
-  const auto field = [&](const char* k, Value dflt) {
-    const Value* v = pick.find(k);
-    out.set(k, v ? *v : std::move(dflt));
-  };
-  field("mode", Value::Null());
-  field("cupId", Value::Null());
-  field("randomRaces", Value::Num(0));
-  field("trackId", Value::Null());
+  setPickFields(roomHandle, out);
   ordered_stringify_into(out, g_bufPick);
   return g_bufPick.c_str();
 }

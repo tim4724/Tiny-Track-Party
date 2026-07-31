@@ -56,7 +56,7 @@ export class NativeCupSeries {
   }
 
   // The wasm handle, for the ui twins that read this series' state in C++
-  // (ttp_ui_series_info_gp_json / ttp_ui_standings_live_json).
+  // (ttp_ui_series_info_live_json / ttp_ui_standings_live_json).
   get handle() { return this._h; }
   get endless() { return fn.endless(this._h) === 1; }
   get raceCount() { return fn.raceCount(this._h); }

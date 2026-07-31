@@ -102,8 +102,10 @@ TTP_ABI const char* ttp_net_lobby_snapshot_json(const char* inputJson);
  *                  host and the room phase
  *   sessionHandle  a ttp_session_begin handle, or 0 for no live race — supplies
  *                  every seat's inRace, read off the Game itself
- *   fieldsJson     {"paused":bool,"mode":str|null,"cupId":str|null,
- *                   "randomRaces":num,"trackId":str|null,"standings":obj|null}
+ *   fieldsJson     {"paused":bool,"standings":obj|null} — the two things only
+ *                  the game layer knows. The PICK is not among them: the frame
+ *                  reads the stored one off the room handle (see the stored
+ *                  pick section below), so a pick key passed here is dead.
  *   ->             {"data":{...the LOBBY_UPDATE...},"type":"set_state"}
  *
  * ttp_net_lobby_snapshot_json + ttp_framing_encode_set_state are the two halves

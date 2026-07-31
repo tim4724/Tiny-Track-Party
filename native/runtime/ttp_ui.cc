@@ -643,7 +643,7 @@ static ui::SeriesInput seriesInputOfGp(int gpHandle, double autoAdvanceMs) {
   return si;
 }
 
-const char* ttp_ui_series_info_gp_json(int gpHandle, double autoAdvanceMs) {
+const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanceMs) {
   if (!gpHandle) return put(g_bufSeriesGp, Value::Null());
   return put(g_bufSeriesGp,
              seriesValue(ui::seriesInfo(seriesInputOfGp(gpHandle, autoAdvanceMs), g_catalog)));

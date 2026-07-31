@@ -376,7 +376,7 @@ TTP_ABI const char* ttp_ui_series_info_json(const char* json);
  * autoAdvanceMs stays a parameter: the intermission budget is the shell's
  * (its E2E override lives there). gpHandle must be live — 0 is not a series
  * and answers "null". */
-TTP_ABI const char* ttp_ui_series_info_gp_json(int gpHandle, double autoAdvanceMs);
+TTP_ABI const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanceMs);
 
 /* What the results board's one button DOES: "advance" mid-cup, else
  * "return-to-lobby". The LABEL for the same button is resultsView's
@@ -427,7 +427,7 @@ TTP_ABI const char* ttp_ui_standings_json(const char* json);
  *                composed HERE — one `cup` object, never two sibling keys,
  *                which is the nesting the tvOS twin got wrong
  * lateJoiners and the host come off the room seam. autoAdvanceMs as in
- * ttp_ui_series_info_gp_json. Answer bytes identical to ttp_ui_standings_json
+ * ttp_ui_series_info_live_json. Answer bytes identical to ttp_ui_standings_json
  * over the same state — abi_check holds the two to each other. */
 TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle,
                                                int gpHandle, int over,

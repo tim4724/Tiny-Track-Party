@@ -58,7 +58,7 @@ export async function init() {
     autoPauseLive: c('ttp_ui_auto_pause_live_json', 'string', ['number', 'number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
-    seriesInfoGp: c('ttp_ui_series_info_gp_json', 'string', ['number', 'number']),
+    seriesInfoGp: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
     standingsLive: c('ttp_ui_standings_live_json', 'string',
       ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
@@ -228,7 +228,7 @@ export function resultsAction(gpHandle) {
 
 // ---- the Grand Prix chip + the standings board ------------------------------
 // All eight input fields are read off the ttp_gp_create handle in C++
-// (ttp_ui_series_info_gp_json) — the getter walk main.js used to spell (and
+// (ttp_ui_series_info_live_json) — the getter walk main.js used to spell (and
 // the tvOS twin misspelled) is gone. null without a series.
 export function seriesInfo(gpHandle, autoAdvanceMs) {
   return JSON.parse(fn.seriesInfoGp(gpHandle | 0, autoAdvanceMs));

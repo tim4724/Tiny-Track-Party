@@ -676,6 +676,8 @@ const net = new DisplayNet({
   onPlayerWelcomed: (peerIndex) => {
     if (!session) return; // the handle the effect was decided on is being torn down
     const c = session.getSnapshot().cars.find((x) => x.id === peerIndex);
+    // Belt only, not the gate: the walk emits welcome-item exclusively for a
+    // seat whose car is in the live race (C++'s predicate, off the handle).
     if (!c) return;
     const item = ui.welcomeItem(c);
     _lastItem.set(peerIndex, item);
