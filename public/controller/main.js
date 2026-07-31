@@ -161,7 +161,8 @@ initDriveSurface({ tilt, buzz, haptics });
 initControlScheme({
   tilt, buzz,
   gameVisible: () => !screens.game.classList.contains('hidden'),
-  releaseControls
+  releaseControls,
+  setNoiseless: (on) => net.gate.setNoiseless(on)
 });
 
 function setStatus(t) { el('name-status').textContent = t; }

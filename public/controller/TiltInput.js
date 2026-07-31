@@ -73,24 +73,28 @@ export const SMOOTH = 0.5;
 // sit where it does) and a button has none; a one-pole's infinite tail (133 ms to
 // 90% of a step, as long again to let go) reads as lag, not smoothing. Linear
 // instead makes hold time itself the analog axis: constant progress from the first
-// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a half-lock
+// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a ~0.7
 // correction instead of slamming full. Release is faster because letting go must
 // never feel sticky — the attack/release asymmetry every d-pad racing scheme
 // uses. The ramp is WALL-CLOCK based (see _tick): _flush inserts extra ticks
 // between the 25 Hz beats, and a per-tick step would fast-forward through them.
 //
-// The duration is bounded on BOTH sides by the wire, not by taste alone. The send
-// gate passes at most one CONTROL per SEND_MIN_INTERVAL_MS (40 ms), so whatever
-// this file computes, the display receives a ≤25 Hz staircase — a ramp is at most
-// RAMP_MS/40 wire values. And only deltas ≥ STRONG_THRESHOLD (0.15) may ride that
-// 40 ms floor; smaller ones wait the 100 ms cadence. So a GENTLER ramp than this
-// arrives CHUNKIER, not smoother: under ~3.75 lock/s the steps stop clearing the
-// strong tier and collapse into ~0.33-sized lumps 100 ms apart. 200 ms to lock is
-// the slowest build whose every 40 ms step still clears 0.15 with margin for
-// timer jitter. Smoother than 5×40 ms needs display-side interpolation, which is
-// a sim (C++) decision, not a phone one.
+// The wire turns any ramp into a staircase: the send gate passes at most one
+// CONTROL per SEND_MIN_INTERVAL_MS (40 ms), so the display receives at most
+// RAMP_MS/40 values however smooth the curve is here. In the button schemes the
+// gate runs NOISELESS (InputGate.setNoiseless, flipped by applyScheme) — no
+// sensor, no noise dead-bands — so every one of those steps rides the 40 ms
+// floor no matter how small, and the duration below is a pure feel choice, not
+// a wire constraint. Smoother than one value per 40 ms cannot come from the
+// phone at all; that would be display-side interpolation, a sim (C++) decision.
 const BTN_RAMP_MS = 200;    // press → full lock
 const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
+// The press edge's head start: seed the ramp as if it had already run one send
+// floor (40 ms), so the flush the edge fires announces a real turn-in (a full
+// wire step, 0.2) instead of the near-zero few-ms partial it would otherwise
+// carry. That first packet spends a 40 ms floor slot either way — it had better
+// say something the car can act on.
+const BTN_HEAD_MS = 40;
 // While the ramp is in motion, self-tick faster than the 25 Hz heartbeat so every
 // 40 ms send window opens onto a FRESH value. The heartbeat alone under-samples
 // the ramp: its beats race the send floor, and a beat that loses by 1 ms is a
@@ -358,6 +362,17 @@ export class TiltInput {
   // On-screen LEFT/RIGHT steer buttons (button schemes). `dir` < 0 is left.
   pressSteer(dir, on) {
     if (dir < 0) this._btnL = !!on; else this._btnR = !!on;
+    // Presses get the BTN_HEAD_MS head start (both-held cancels to target 0 and
+    // gets none — that pose is the brake, not a turn). Releases just ramp down
+    // from wherever they are. Resetting the tick clock makes the edge's flush
+    // sample exactly the seed, not seed + whatever ran since the last beat.
+    const target = (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0);
+    if (on && target !== 0) {
+      const d = target - this._steer;
+      const head = BTN_HEAD_MS / BTN_RAMP_MS;
+      this._steer += Math.abs(d) <= head ? d : Math.sign(d) * head;
+      this._btnTickMs = this._now();
+    }
     this._flush();
   }
   // Both steer buttons down = the brake. Exposed so the UI can light both buttons

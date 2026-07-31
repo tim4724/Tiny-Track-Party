@@ -136,10 +136,10 @@ test('button steering ramps linearly to lock and releases at double speed', () =
   let ms = 0; t._now = () => ms; // the ramp is wall-clock based; drive time by hand
   t._tick(); // seed the ramp clock
   t.pressSteer(1, true);
-  ms += 40; t._tick(); // one 25 Hz beat
-  assert.ok(Math.abs(out.at(-1).s - 40 / 200) < 0.001, `one beat of hold is a partial 40/200 lock (got ${out.at(-1).s})`);
+  t._tick(); // the edge's own sample (headlessly the flush is a no-op, so tick by hand)
+  assert.ok(Math.abs(out.at(-1).s - 40 / 200) < 0.001, `the press edge itself carries the head start, one wire step (got ${out.at(-1).s})`);
   for (let i = 0; i < 4; i++) { ms += 40; t._tick(); }
-  assert.equal(out.at(-1).s, 1, '200 ms of hold LANDS exactly on 1 — the ramp has no asymptote');
+  assert.equal(out.at(-1).s, 1, 'head start + 160 ms of hold LANDS exactly on 1 — the ramp has no asymptote');
   t.pressSteer(1, false);
   ms += 40; t._tick(); ms += 40; t._tick();
   assert.equal(out.at(-1).s, 0, 'released, the steer is back to exactly 0 within two beats (75 ms release)');

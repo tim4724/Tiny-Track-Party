@@ -178,6 +178,18 @@ export class InputGate {
     this._shadows = null;
   }
 
+  // The steer dead-bands above are NOISE figures: they exist because the sensor
+  // twitches and a deliberate turn must be told apart from drift. A button
+  // scheme has no sensor in the loop — every sample is a deliberate ramp step —
+  // so both bands drop to zero: lossless (only exact repeats are filtered, and a
+  // moving ramp never repeats) and always-urgent (every change rides the
+  // sendMinIntervalMs floor instead of the 100 ms sub-strong cadence). The floor
+  // itself is untouched: it is the platform message budget, not a noise figure.
+  setNoiseless(on) {
+    this.steerThreshold = on ? 0 : DEFAULT_STEER_THRESHOLD;
+    this.strongThreshold = on ? 0 : DEFAULT_STRONG_THRESHOLD;
+  }
+
   // Install one shadow counter per candidate threshold. Shadows track their own
   // would-be acked state, because a different threshold would have sent at
   // different moments and therefore have a different confirmed value.

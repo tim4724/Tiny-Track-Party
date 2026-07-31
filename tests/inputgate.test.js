@@ -167,6 +167,24 @@ test('reset() drops confirmed state so the next sample re-establishes ground tru
     'after a transport reset the display state is unknowable — assume it knows nothing');
 });
 
+test('setNoiseless drops both dead-bands (button schemes) and restores the defaults', () => {
+  const gate = new InputGate();
+  gate.markSent(sample(0), 0);
+  gate.markAcked(sample(0));
+  // defaults: a 0.05 delta is sub-strong — the 40 ms floor alone is not enough
+  assert.equal(gate.decide(sample(0.05), 40, 20), null);
+  gate.setNoiseless(true);
+  // noiseless: the same tiny delta is deliberate news and rides the floor
+  assert.equal(gate.decide(sample(0.05), 40, 20), 'change');
+  gate.markSent(sample(0.05), 40);
+  gate.markAcked(sample(0.05));
+  // still lossless, not unconditional: an exact repeat stays filtered
+  assert.equal(gate.decide(sample(0.05), 80, 20), null);
+  gate.setNoiseless(false);
+  assert.equal(gate.steerThreshold, DEFAULT_STEER_THRESHOLD);
+  assert.equal(gate.strongThreshold, DEFAULT_STRONG_THRESHOLD);
+});
+
 test('shadow counters cover every candidate threshold and are monotonic', () => {
   const gate = new InputGate({ steerThreshold: 0.03 });
   gate.enableShadows(); // off by default — only the ?netstats=1 overlay turns them on

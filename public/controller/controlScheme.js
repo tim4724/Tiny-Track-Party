@@ -13,6 +13,7 @@ let _tilt = null;
 let _buzz = () => {};
 let _gameVisible = () => false;
 let _releaseControls = () => {};
+let _setNoiseless = () => {};
 
 const CTRL_KEY = 'tinytrack_ctrl_scheme';
 const CTRL_SCHEMES = [
@@ -40,13 +41,17 @@ export function applyScheme() {
   // it's out of sight off the game screen without a second condition here.)
   el('motion-tip').classList.toggle('hidden', !(s.tilt && _tilt.motionState !== 'granted'));
   _tilt.setScheme({ tilt: s.tilt, extraAngle: s.land ? 90 : 0 });   // no-op when unchanged
+  // Buttons carry no sensor noise, so the send gate's noise dead-bands come off
+  // with them — every ramp step is deliberate news (see InputGate.setNoiseless).
+  _setNoiseless(!s.tilt);
 }
 
 // `gameVisible` and `releaseControls` are injected rather than imported: the drive
 // surface owns the buttons and imports applyScheme, so reaching back for them
 // directly would close the loop between the two modules.
-export function initControlScheme({ tilt, buzz, gameVisible, releaseControls }) {
+export function initControlScheme({ tilt, buzz, gameVisible, releaseControls, setNoiseless }) {
   _tilt = tilt; _buzz = buzz; _gameVisible = gameVisible; _releaseControls = releaseControls;
+  _setNoiseless = setNoiseless;
 
   el('ctrl-btn').addEventListener('click', () => {
     _buzz(15);
