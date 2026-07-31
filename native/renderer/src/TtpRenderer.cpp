@@ -201,7 +201,12 @@ struct TtpRenderer::TrackBin {
     std::vector<Sample> samples;
     // The ring frames buildRoadMesh swept (uniform arclength step, closed),
     // retained because project() must scan THESE chords — see its comment.
+    // deckGap/deckLine are the deck profile's gap and edge-line widths, set by
+    // buildRoadMesh from the SAME locals it sweeps with, so project() can
+    // reconstruct the deck strip boundaries without a second derivation.
     std::vector<Sample> rings;
+    float deckGap = 0, deckLine = 0;
+    static constexpr float kDashW = 0.18f;
     std::vector<uint32_t> carColors;
     std::vector<std::string> carNames; // rear name plates
     std::vector<float> carPlateY;      // per-model plate height (PLATE_Y); <0 = auto
@@ -384,31 +389,27 @@ struct TtpRenderer::TrackBin {
     // as (arclength, lateral) so flat decals can be CONFORMED to the deck —
     // the JS raycasts the rendered road for the same result.
     //
-    // Projects onto the ring polyline buildRoadMesh swept, NOT the raw contract
-    // samples, and blends between the two ring PLANES rather than dropping a
-    // perpendicular onto the chord. Both halves exist because the answer must
-    // agree with the deck's own uv0 field, which is exact at the rings and
-    // linear across the strips between them:
+    // The answer must agree with what the RASTERIZER computes from uv0, or
+    // the difference oscillates under a driving car at knot-crossing rate —
+    // the shadow's jiggle, a few cm on the trick tracks. Three approximations
+    // were peeled off it in turn, each one visibly smaller and each still
+    // visible (measured on the playroom catalogue with points generated ON
+    // the mesh, truth by construction):
     //
-    //  - WHICH CURVE: the contract samples are chords of a different curve
-    //    (the raw knot polyline, where the mesh sweeps the cubic through the
-    //    knots); on a bend the two disagree by ~curvature·spacing²/8, zero at
-    //    each knot and maximal mid-segment.
+    //  - WHICH CURVE: the raw contract samples are chords of a curve the
+    //    mesh never draws (it sweeps the cubic THROUGH those knots) — worst
+    //    0.043u at 1.6u off centre. Hence the ring polyline.
     //  - WHICH FOOT: the deck's iso-arclength lines run parallel to the ring
-    //    cross-sections, which FAN on a bend — they are not perpendicular to
-    //    the chord. A perpendicular foot is exact on the centreline but off by
-    //    ~lat·ringStep·curvature at lateral offset, which is where a cornering
-    //    car always is. So t comes from the two ring planes (normals = the
-    //    ring tangents): d0/(d0−d1) is 0 and 1 exactly AT the rings, hence
-    //    continuous across them, and follows the fan in between.
-    //
-    // Each error alone made the shadow saw-tooth a few cm at knot-crossing
-    // rate under a driving car — the shadow's jiggle. Measured on the playroom
-    // catalogue (scratchpad jiggle-analysis, points ON the sheet, truth by
-    // construction): contract-polyline perpendicular 0.043u worst at 1.6u off
-    // centre; ring-polyline perpendicular still 0.029u there; the plane blend
-    // 0.0014u. (Projecting onto segments rather than snapping to the nearest
-    // sample's frame was the first, coarser round of the same artefact.)
+    //    cross-sections, which FAN on a bend; a perpendicular foot onto the
+    //    chord is exact on the centreline only — still 0.029u off centre.
+    //    Hence the ring-plane blend, d0/(d0−d1) with the ring tangents as
+    //    normals: exactly 0 and 1 AT the rings, continuous across them.
+    //  - WHICH FIELD: uv0 is interpolated linearly PER TRIANGLE, and the wide
+    //    road strips make skewed triangles whose field kinks at each diagonal
+    //    — even the plane blend is still ~0.02u off mid-strip. Hence the
+    //    exact evaluation at the end: same quad, same diagonal, same
+    //    barycentric interpolation as the GPU, zero at deck level by
+    //    construction.
     //
     // `hint` is the caller's ring index from its previous projection (-1 to
     // start). A car crosses a fraction of a ring per frame, so the scan is a
@@ -463,11 +464,22 @@ struct TtpRenderer::TrackBin {
                 }
             }
         }
+        // The perpendicular pick is only the coarse locator. Resolve the quad
+        // by ring-plane SIDEDNESS: the ring planes (normal = ring tangent)
+        // contain the ring lines, so d0 >= 0 && d1 < 0 is exactly "between
+        // this quad's two edge lines". The nearest chord can disagree right
+        // at a ring, and evaluating the neighbour quad's (differently tilted)
+        // strip planes there is what threw the canyon hairpins off.
+        if (&knots == &rings) {
+            for (int walk = 0; walk < 4; walk++) {
+                const Sample& wa = knots[bestI];
+                const Sample& wb = knots[(bestI + 1) % n];
+                if (dot(p - wa.pos, wa.tangent()) < 0) bestI = (bestI + n - 1) % n;
+                else if (dot(p - wb.pos, wb.tangent()) >= 0) bestI = (bestI + 1) % n;
+                else break;
+            }
+        }
         if (hint) *hint = (int) bestI;
-        // The segment is picked by perpendicular distance (a discrete choice —
-        // any continuous tie-break agrees at the boundary), but the foot along
-        // it is the ring-plane blend, matching the fan of the deck's iso-s
-        // lines. bestT is only the picker's scratch value.
         const Sample& a = knots[bestI];
         const Sample& b = knots[(bestI + 1) % n];
         const float d0 = dot(p - a.pos, a.tangent());
@@ -476,10 +488,70 @@ struct TtpRenderer::TrackBin {
         t = std::min(1.0f, std::max(0.0f, t));
         float sB = b.s;
         if (sB < a.s) sB += length; // start/finish seam
+        // Ring-plane blend: continuous everywhere, and the fallback answer
+        // when the exact evaluation below has nothing to stand on.
         outS = a.s + (sB - a.s) * t;
         const float3 q = a.pos + (b.pos - a.pos) * t;
-        const float3 lat = normalize(mix(a.lat, b.lat, t));
-        outLat = dot(p - q, lat);
+        const float3 latS = normalize(mix(a.lat, b.lat, t));
+        outLat = dot(p - q, latS);
+        if (&knots != &rings || deckGap <= 0) return;
+
+        // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
+        // PER TRIANGLE, and on a bend the wide road strips make skewed
+        // triangles whose field kinks at every diagonal — against that field
+        // even the plane blend is off by up to ~0.02u mid-strip (measured,
+        // playroom catalogue), a sawtooth at ring-crossing rate under a
+        // cornering car. So finish the way the GPU does: drop p onto the deck
+        // ALONG THE SMOOTH ROAD UP (per-triangle normals would turn ride
+        // height into a fresh per-triangle sawtooth), find the strip quad,
+        // split it by the same diagonal buildRoadMesh winds — (i,a)-(i+1,b) —
+        // and interpolate the corners' own uv0. Exact at deck level by
+        // construction; a ride height above it costs height x up-drift,
+        // smooth by construction.
+        const float3 upS = normalize(mix(a.up, b.up, t));
+        const float hA = a.width * 0.5f, hB = b.width * 0.5f;
+        const auto stripBounds = [&](float h, float* o) {
+            o[0] = -h; o[1] = -h + deckGap; o[2] = -h + deckGap + deckLine;
+            o[3] = -kDashW / 2; o[4] = kDashW / 2;
+            o[5] = h - deckGap - deckLine; o[6] = h - deckGap; o[7] = h;
+        };
+        float bA[8], bB[8];
+        stripBounds(hA, bA);
+        stripBounds(hB, bB);
+        const float l = std::min(bA[7] - 1e-4f, std::max(bA[0] + 1e-4f, outLat));
+        int j = 0;
+        while (j < 6 && l > bA[j + 1]) j++;
+        const float3 A = a.pos + a.lat * bA[j];
+        const float3 B = a.pos + a.lat * bA[j + 1];
+        const float3 C = b.pos + b.lat * bB[j + 1];
+        const float3 D = b.pos + b.lat * bB[j];
+        // Drop p along -upS onto the triangle's plane, then barycentric
+        // weights of the hit. w[1] is the middle vertex's weight — its sign
+        // against the A-C diagonal picks the triangle, as rasterization does.
+        float w0, w1, w2;
+        const auto dropBary = [&](const float3& T0, const float3& T1, const float3& T2) {
+            const float3 nrm = cross(T1 - T0, T2 - T0);
+            const float den = dot(upS, nrm);
+            if (std::fabs(den) < 1e-7f) return false; // deck edge-on to up: keep the blend
+            const float3 hit = p - upS * (dot(p - T0, nrm) / den);
+            const float3 v0 = T1 - T0, v1 = T2 - T0, v2 = hit - T0;
+            const float d00 = dot(v0, v0), d01 = dot(v0, v1), d11 = dot(v1, v1);
+            const float d20 = dot(v2, v0), d21 = dot(v2, v1);
+            const float dn = d00 * d11 - d01 * d01;
+            if (std::fabs(dn) < 1e-9f) return false;
+            w1 = (d11 * d20 - d01 * d21) / dn;
+            w2 = (d00 * d21 - d01 * d20) / dn;
+            w0 = 1.0f - w1 - w2;
+            return true;
+        };
+        if (!dropBary(A, B, C)) return;
+        if (w1 >= 0) {
+            outS = (w0 + w1) * a.s + w2 * sB;
+            outLat = w0 * bA[j] + w1 * bA[j + 1] + w2 * bB[j + 1];
+        } else if (dropBary(A, C, D)) {
+            outS = w0 * a.s + (w1 + w2) * sB;
+            outLat = w0 * bA[j] + w1 * bB[j + 1] + w2 * bB[j];
+        }
     }
 };
 
@@ -1123,7 +1195,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     const float cw = tb.kerbW, ch = tb.kerbH, deck = 0.34f;
     const float gap = std::min(0.07f, defHalf * 0.3f);
     const float lw = std::min(0.20f, defHalf * 0.5f - gap);
-    const float stripeLen = 2.0f, dashW = 0.18f;
+    const float stripeLen = 2.0f, dashW = TrackBin::kDashW;
+    tb.deckGap = gap;
+    tb.deckLine = lw; // with the rings: project()'s deck strip model
     const float DASH_PERIOD = 5.76f, DASH_FRAC = 0.25f;
 
     // RING STEP. This was hard-capped at 0.24u, which is HALF what the paint
