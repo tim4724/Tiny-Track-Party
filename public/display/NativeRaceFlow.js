@@ -22,10 +22,10 @@
 // series is displayed via seriesState(). The persona table defaults inside
 // configure (libttp-sim's own), so boot hands over nothing it read back.
 //
-// public/display/raceFlow.js stays in the tree and stays the ORACLE:
-// tests/fixtures/raceflow-corpus.jsonl was recorded off it, and
+// tests/fixtures/raceflow-corpus.jsonl was recorded off the JS oracle
+// (public/display/raceFlow.js, retired — git history has it) and is FROZEN;
 // native/runtimetest/raceflow_check.cc replays every step through the C++ on
-// every leg. Nothing that ships imports it.
+// every leg.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 

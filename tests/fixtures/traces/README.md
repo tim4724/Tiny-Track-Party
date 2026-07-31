@@ -72,13 +72,12 @@ display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
 AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
 expectations being the committed `public/shared/trackSchematics.js` bake.
 
-**Four of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
-`audio/decide.js` and `trackSchematic.js` were deleted once their ports were
-conformance-proven, and their generators went with them: those four corpora can
-never be re-derived, exactly like the traces above, and the `record_*`
-roundtrips are what replaced the freshness checks. Only
-`raceflow-corpus.jsonl` is still RENEWABLE (`public/display/raceFlow.js`
-survives).
+**All of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
+`audio/decide.js`, `trackSchematic.js` and finally `raceFlow.js` were deleted
+once their ports were conformance-proven, and their generators went with them:
+those corpora can never be re-derived, exactly like the traces above. The
+`record_*` roundtrips replaced the freshness checks where a re-emit mode
+exists; the raceflow check replays structurally and has none on purpose.
 
 The schematic one is worth a note, because retiring its twin also moved a
 SHIPPING codegen path onto C++: `scripts/gen-track-schematics.js` bakes
@@ -136,7 +135,8 @@ So before planning one: grep the whole tree for the module, separate the real
 `import`s from the mentions in comments, and check `scripts/` and `package.json`
 for a codegen path as well as `public/` for a page. "It is only an oracle" is a
 claim about the whole repo, and the generator is the one file that cannot
-support it. `public/display/raceFlow.js` is the only oracle left.
+support it. (`raceFlow.js`, the last oracle, retired cleanly by exactly this
+audit: its generator was its one importer.)
 
 ## A corpus carries its own world
 
@@ -179,13 +179,9 @@ Two shapes satisfy the rule, and either is fine:
 What is *not* fine is a `const` in the check that the generator also spells. If
 you are typing a number that also exists in a `.mjs`, put it in the fixture.
 
-`raceflow-corpus.jsonl` carries its world the same way, and it is the one where
-this still MOVES: `gen-raceflow-corpus.mjs` is the only renewable generator left,
-so its personas, stat rows, cups and sizes can still change under a replayer.
-(The frozen four cannot move — but a stale copy of one of their worlds can no
-longer be caught by regenerating either, which is the same argument pointing the
-same way.) `tests/codegen-freshness.test.js` is what keeps it re-derivable; an
-entry missing from that list is not a weaker gate, it is no gate.
+`raceflow-corpus.jsonl` carries its world the same way. No corpus world moves
+anymore — every oracle is retired — but a transcribed copy of one still rots
+silently, which is the same argument pointing the same way.
 
 ## Blind spots these traces structurally cannot cover
 

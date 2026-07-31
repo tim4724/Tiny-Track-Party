@@ -41,9 +41,10 @@ See `tests/fixtures/traces/README.md`.
 Some `scripts/gen-*-corpus.mjs` are **frozen** — their JS twin is retired, so they
 can no longer run against a live implementation. Frozen headers name the `git show`
 that restores a twin, and `npm run revive:js-oracle` does the set. The audio, ui,
-session and schematic oracles were **deleted outright** with their twins; those
-corpora can never be re-derived at all, and the `record_*` roundtrip replaced their
-freshness obligation.
+session, schematic and raceflow oracles were **deleted outright** with their twins;
+those corpora can never be re-derived at all. The `record_*` roundtrip replaced the
+first four's freshness obligation; the raceflow check replays structurally and
+deliberately has no record mode, so its obligation simply ended with the oracle.
 
 `tests/codegen-freshness.test.js` is the only thing in the tree that runs any
 generator, so **an entry missing from it is not a weaker gate, it is no gate** —

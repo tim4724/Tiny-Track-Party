@@ -286,11 +286,15 @@ TTP_ABI const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sess
 
 /* THE SAME CHIP, READ STRAIGHT OFF A ttp_gp_create HANDLE — all eight input
  * fields come from the series state (cup id/name off the cup, "" from
- * ttp_gp_next_track spelling null), so a shell cannot omit one and ship a
- * board whose podium never says `final` (the tvOS twin did exactly that).
- * autoAdvanceMs stays a parameter: the intermission budget is the shell's
- * (its E2E override lives there). gpHandle must be live — 0 is not a series
- * and answers "null". */
+ * ttp_gp_next_track spelling null), so no caller can omit one and ship a
+ * board whose podium never says `final` (the first TV shell did, over the
+ * old per-field route). NOT SHELL SURFACE: no shell holds a series handle —
+ * a shell's chip rides the standings board's `cup.info`, and its series read
+ * is ttp_race_series_state_json. This export is the CONFORMANCE surface:
+ * tests/ui-model.test.js pins the chip rule against the shipped catalogue
+ * through it, and the abi ctest pins the board's chip to it. autoAdvanceMs
+ * stays a parameter: the intermission budget is the caller's. gpHandle must
+ * be live — 0 is not a series and answers "null". */
 TTP_ABI const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanceMs);
 
 /* What the results board's one button DOES: "advance" mid-cup, else

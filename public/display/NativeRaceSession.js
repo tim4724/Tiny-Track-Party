@@ -72,8 +72,10 @@ const BARE_COUNTDOWN = -1;
 
 export class NativeRaceSession {
   // players: the same `field` RaceSession gets ([{peerIndex, stats, ai?...}]).
-  // opts: RaceSession's callbacks + `bots`: [{peerIndex, caution, laneBias, seed}]
-  // for the seats the host would otherwise drive with JS AiControllers.
+  // opts: RaceSession's callbacks + `seed` (the race's item/wander seed, off
+  // the create-session effect; preview surfaces omit it) + `bots`:
+  // [{peerIndex, caution, laneBias, seed}] for the seats the host would
+  // otherwise drive with JS AiControllers.
   constructor(players, track, opts = {}) {
     if (!M) throw new Error('NativeRaceSession used before init() resolved');
     // events: 'external' — the RACE path. The queue is drained and routed in
@@ -93,7 +95,7 @@ export class NativeRaceSession {
     // The whole construction — begin plus the one-pass over the field with bot
     // specs keyed by scalar id — is ttp_session_begin_field's. The persona and
     // seed defaults live there too, not at this call site.
-    this.h = fn.beginField(track.trackId, (track.seed ?? 1) >>> 0,
+    this.h = fn.beginField(track.trackId, (opts.seed ?? 1) >>> 0,
       track.totalLaps || window.TOTAL_LAPS,  // the manifest's lap count, not a re-typed 3
       opts.forceItem || null,
       JSON.stringify(players.map((p) => ({ peerIndex: p.peerIndex, stats: p.stats || null }))),

@@ -81,7 +81,7 @@ using ui::RoomState;
 // the corpus recorded and a shell dispatches on; the two must stay in step and
 // raceflow_check pins every one of them.
 enum class Op {
-  SET_TRACK_SEED, STOP_LOBBY_DEMO, SET_FIELD, CLEAR_ITEM_CACHE, SHOW_SCREEN,
+  STOP_LOBBY_DEMO, SET_FIELD, CLEAR_ITEM_CACHE, SHOW_SCREEN,
   HIDE_RESULTS, SET_RACE_FLAGS, SET_PAUSE_OVERLAY, SET_PAUSE_BUTTON,
   REVEAL_CHROME, HOLD_CHROME, RESET_SCENE_CARS, CREATE_SESSION, TRANSITION,
   BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
@@ -157,7 +157,7 @@ struct SceneCar {
 struct Effect {
   Op op = Op::SYNC_STATE;
 
-  double num = 0;         // seed | n | ms | seconds
+  double num = 0;         // create-session's seed | n | ms | seconds
   double deadline = 0;    // arm-intermission — when the auto-advance fires
   bool on = false;        // set-pause-overlay/show-music-credit/set-auto-paused
   bool shown = false;     // set-pause-button

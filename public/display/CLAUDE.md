@@ -88,6 +88,6 @@ themselves, `public/assets/audio/CLAUDE.md`.
 
 ## Surviving JS that ships to nobody
 
-`raceFlow.js` is the oracle its corpus was recorded from, and `aiPersonas.js`
-survives only for test surfaces needing the persona table synchronously. **Do not
-import either from the display page.**
+`aiPersonas.js` survives only for test surfaces needing the persona table
+synchronously. **Do not import it from the display page.** (`raceFlow.js`, the
+last JS oracle, is retired — its corpus is frozen; git history has it.)

@@ -2,9 +2,10 @@
 // against native/libttp-runtime/ttp/race_flow.h.
 //
 // JS-RECORDED evidence, like the ui/audio/session corpora and unlike the
-// C++-authored ones: every line was taken off the live public/display/raceFlow.js
-// before this port existed, so it settles whether the port matches the JS it
-// replaced. A disagreement is a bug in the C++, never in the fixture.
+// C++-authored ones: every line was taken off public/display/raceFlow.js (the
+// oracle, retired 2026-07-31 — git history has it) while it was live, so it
+// settles whether the port matches the JS it replaced. The fixture is FROZEN.
+// A disagreement is a bug in the C++, never in the fixture.
 //
 // WHAT IT REPLAYS, AND WHY BOTH HALVES MATTER. Each step carries `out` (the
 // layer's answer) and `state` (the shell state the generator's driver threads).
@@ -62,7 +63,7 @@ void report(const std::string& what, const Diff& d) {
 }
 
 // ---- the generator's synthetic world ----------------------------------------
-// Read from the corpus header, never transcribed. gen-raceflow-corpus.mjs writes
+// Read from the corpus header, never transcribed. gen-raceflow-corpus.mjs wrote
 // its PERSONAS / CAR_STATS / CUPS and the three sizes into line 1 verbatim, and
 // this check configures itself from them — because ONE corpus has several
 // replayers (this one, runtimetest/abi_check.cc, a tvOS or Android shell later)
@@ -103,9 +104,10 @@ bool loadWorld(const Value& header, World& w) {
   const Value* wv = header.find("world");
   if (!wv || wv->type != Value::OBJ) {
     std::fprintf(stderr,
-                 "the corpus header carries no `world`. Regenerate it: "
-                 "node scripts/gen-raceflow-corpus.mjs — this check configures "
-                 "itself from the fixture and has no world of its own.\n");
+                 "the corpus header carries no `world`. The fixture is frozen "
+                 "(its JS oracle is retired) — restore the committed file from "
+                 "git; this check configures itself from the fixture and has "
+                 "no world of its own.\n");
     return false;
   }
   w.fieldSize = static_cast<int>(json::num_field(*wv, "fieldSize"));
@@ -255,7 +257,6 @@ Value effectVal(const race::Effect& e) {
   Value v = Value::Obj();
   v.set("op", Value::Str(race::key(e.op)));
   switch (e.op) {
-    case race::Op::SET_TRACK_SEED: v.set("seed", Value::Num(e.num)); break;
     case race::Op::SET_FIELD:
       v.set("field", arrOf(e.field, fieldVal));
       v.set("aiIds", idArr(e.aiIds));
@@ -274,6 +275,7 @@ Value effectVal(const race::Effect& e) {
     case race::Op::RESET_SCENE_CARS: v.set("cars", arrOf(e.cars, carVal)); break;
     case race::Op::CREATE_SESSION:
       v.set("trackId", Value::Str(e.str));
+      v.set("seed", Value::Num(e.num));
       v.set("forceItem", valOf(e.forceItem));
       v.set("bots", arrOf(e.bots, botVal));
       break;
@@ -388,7 +390,6 @@ struct Shell {
 void applyEffect(Shell& s, const race::Effect& e) {
   s.ops.push_back(race::key(e.op));
   switch (e.op) {
-    case race::Op::SET_TRACK_SEED: s.trackSeed = race::OptNum::Of(e.num); break;
     case race::Op::STOP_LOBBY_DEMO: s.demoRunning = false; break;
     case race::Op::SET_FIELD: s.field = e.field; s.aiIds = e.aiIds; break;
     case race::Op::SHOW_SCREEN: s.screen = e.str; break;
@@ -403,7 +404,8 @@ void applyEffect(Shell& s, const race::Effect& e) {
       for (const race::SceneCar& c : e.cars) s.sceneCars.push_back(c.id);
       break;
     case race::Op::CREATE_SESSION:
-      s.hasSession = true; s.trackId = race::OptStr::Of(e.str); break;
+      s.hasSession = true; s.trackId = race::OptStr::Of(e.str);
+      s.trackSeed = race::OptNum::Of(e.num); break;
     case race::Op::TRANSITION: s.roomState = e.str; break;
     case race::Op::BIND_SESSION: s.sessionBound = true; break;
     case race::Op::START_COUNTDOWN:

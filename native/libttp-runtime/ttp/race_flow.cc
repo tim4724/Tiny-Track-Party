@@ -15,7 +15,6 @@ namespace race {
 // every one of these against the corpus.
 const char* key(Op op) {
   switch (op) {
-    case Op::SET_TRACK_SEED: return "set-track-seed";
     case Op::STOP_LOBBY_DEMO: return "stop-lobby-demo";
     case Op::SET_FIELD: return "set-field";
     case Op::CLEAR_ITEM_CACHE: return "clear-item-cache";
@@ -374,9 +373,6 @@ LaunchResult launchRace(const LaunchInput& in) {
   // single line of it.
   Effect e;
 
-  // Fresh seed per race so item rolls (and AI lane wander) vary game-to-game.
-  // BEFORE the field is built, so the bots seed their wander from it.
-  e = mk(Op::SET_TRACK_SEED); e.num = in.seed; out.effects.push_back(e);
   out.effects.push_back(mk(Op::STOP_LOBBY_DEMO));   // the race owns the scene now
 
   e = mk(Op::SET_FIELD);                            // kept for the results screen
@@ -411,8 +407,10 @@ LaunchResult launchRace(const LaunchInput& in) {
   }
   out.effects.push_back(e);
 
+  // The seed rides the effect that consumes it (the session constructor), so
+  // a shell threads nothing across ops to perform a launch.
   e = mk(Op::CREATE_SESSION);
-  e.str = in.trackId; e.forceItem = in.forceItem; e.bots = built.bots;
+  e.str = in.trackId; e.num = in.seed; e.forceItem = in.forceItem; e.bots = built.bots;
   out.effects.push_back(e);
 
   // Flip to COUNTDOWN only now that the session exists — see the header. No

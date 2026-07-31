@@ -221,7 +221,6 @@ Value effectVal(const race::Effect& e) {
   Value v = Value::Obj();
   v.set("op", Value::Str(race::key(e.op)));
   switch (e.op) {
-    case race::Op::SET_TRACK_SEED: v.set("seed", Value::Num(e.num)); break;
     case race::Op::SET_FIELD:
       v.set("field", arrOf(e.field, fieldVal));
       v.set("aiIds", idArr(e.aiIds));
@@ -240,6 +239,7 @@ Value effectVal(const race::Effect& e) {
     case race::Op::RESET_SCENE_CARS: v.set("cars", arrOf(e.cars, carVal)); break;
     case race::Op::CREATE_SESSION:
       v.set("trackId", Value::Str(e.str));
+      v.set("seed", Value::Num(e.num));
       v.set("forceItem", valOf(e.forceItem));
       v.set("bots", arrOf(e.bots, botVal));
       break;

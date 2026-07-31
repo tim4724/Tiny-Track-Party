@@ -23,12 +23,6 @@
 //     MAX_PLAYERS from 4 to 6 passed everything, with the phone allowing six
 //     players and the display's party layer capping at four.
 //
-//   raceflow-corpus     <- public/display/raceFlow.js
-//     The last RENEWABLE oracle. The other four (ui, session, audio, schematic)
-//     were retired with their ports, so their corpora are frozen and the
-//     `record_*` roundtrips took over; this one's JS survives, so it keeps the
-//     original obligation and belongs here.
-//
 //   genTracks.js        <- scripts/track-gen.mjs (the seed grammar)
 //     The odd member: not a C++ input, and its generator reads no JS twin — it
 //     reads the NATIVE builder through scripts/native-track.mjs. Which is exactly
@@ -84,18 +78,6 @@ const DERIVED = [
     from: 'partyplug/PartyFastlane.js',
     gen: 'scripts/gen-fastlane-corpus.mjs',
     then: 'ctest --test-dir native/build -R fastlane   # then match native/libttp-party/ttp/fastlane.cc',
-  },
-  {
-    // The race orchestration, and the LAST renewable oracle in the tree. The
-    // other four were retired with their ports and their corpora frozen; this
-    // one still has its JS (public/display/raceFlow.js), so it still carries the
-    // obligation the frozen ones were released from — keep it green, because the
-    // day it goes red for a rotted input is the day the corpus can no longer be
-    // re-derived and the ratchet closes on the last one.
-    what: 'tests/fixtures/raceflow-corpus.jsonl',
-    from: 'public/display/raceFlow.js',
-    gen: 'scripts/gen-raceflow-corpus.mjs',
-    then: 'ctest --test-dir native/build -R raceflow   # then match native/libttp-runtime/ttp/race_flow.cc',
   },
   // Not a C++ input (yet): the design tokens as data, for the tvOS/Android TV
   // shells architecture.md accepts three implementations of the sticker look

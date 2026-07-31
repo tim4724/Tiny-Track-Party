@@ -58,10 +58,9 @@ function show(name) {
 // by `npm run gen:schematics`) and nothing on this page integrates a track.
 //
 // `entry` is what the rest of the file passes around as "the track": the
-// catalogue row plus the two mutable per-race fields (the item-roll seed and the
-// lap count) the session reads off it.
+// catalogue row plus the lap count the session reads off it.
 function trackEntry(t) {
-  return { ...t, trackId: t.id, totalLaps: TOTAL_LAPS, seed: 1 };
+  return { ...t, trackId: t.id, totalLaps: TOTAL_LAPS };
 }
 // Filled from the wasm's own catalogue once it is up (see the boot block below).
 // `let` rather than `const` for that reason alone — neither is written twice.
@@ -873,7 +872,6 @@ function perform(effects, ctx = {}) {
 // holds it to the wasm's own vocabulary, turning a missing arm into a load
 // failure instead of a half-built race.
 const RACE_PERFORMERS = {
-  'set-track-seed': (e) => { track.seed = e.seed; },
   'stop-lobby-demo': () => lobbyDemo.stop(),
   'clear-item-cache': () => _lastItem.clear(),
   'show-screen': (e) => show(e.screen),
@@ -1044,6 +1042,7 @@ function createSession(e) {
   // room forever. A clean 3-lap is ~50-80 s.
   session = new _nativeSim.NativeRaceSession(e.field, track, {
     events: 'external',
+    seed: e.seed,
     forceItem: e.forceItem,
     bots: e.bots
   });
