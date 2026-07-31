@@ -37,8 +37,10 @@ libttp-json/    Canonical JSON (sorted keys, ECMA-262 shortest-form numbers)
                 + the parser. Byte-identical to JSON.stringify by contract.
 runtime/        The public C ABIs — sim, party, display, ui, net, race, audio,
                 theme — plus the internal seam headers. No C++ types cross them.
-                ttp_display_web.cc is the WEB shell behind the display ABI;
-                tvOS and Android get siblings of that file, not of the library.
+                ttp_display_core.cc is the display ABI's shared bodies;
+                ttp_display_web.cc is only the WEB surface (the WebGL2
+                context), and tvOS/Android get siblings of that surface file
+                alone — never of the core or the library.
 mathlib/        Vendored fdlibm — transcendentals off V8's implementation, so
                 traces are platform-independent.
 replay/         replay_cli — the golden-trace conformance gate.

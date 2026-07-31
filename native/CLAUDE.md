@@ -75,9 +75,15 @@ handle-taking exports and their JSON twins are `ttp_room_sync_active_order`,
 
 ## Platform shells
 
-`runtime/ttp_display_web.cc` is the WEB shell and needs the Filament SDK, so it
-compiles on one machine configuration and **no ctest sees it**. tvOS and Android
-TV get siblings of that file, not of the library.
+The display ABI is two files. `runtime/ttp_display_core.cc` holds every extern
+"C" body that names no platform API — which is all of them except surface
+create/destroy — and is compiled by EVERY platform module.
+`runtime/ttp_display_web.cc` is the WEB surface (the WebGL2 context and the
+`TtpRenderer` construction); tvOS and Android TV get siblings of that file
+only, never of the core or the library. Both need the Filament SDK, so they
+compile on one machine configuration and **no ctest sees them** — keep any
+decision a ctest should pin (the camera maths, the roster parse, the re-roster
+plan) down in libttp-runtime.
 
 **If a line names no platform API it belongs in libttp-runtime**, where ctests
 compile and execute it on every leg. Anything that must not drift silently goes in

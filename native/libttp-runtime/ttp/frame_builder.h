@@ -64,6 +64,9 @@ struct DisplayState {
 
     int session = 0;                    // bound session handle (0 = draw an empty track)
     std::vector<ScalarId> roster;       // slot order, fixed at build
+    // The same slots as the renderer dressed them — ttp_display_reroster's diff
+    // base (ttp/roster.h planReroster). Set with `roster`, updated on re-roster.
+    std::vector<TtpRosterCar> rosterCars;
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
 

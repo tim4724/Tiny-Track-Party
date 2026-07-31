@@ -926,13 +926,16 @@ set(TTP_APP_SOURCES
 # artifact — it is CI's browser-ABI link check (the wasm leg has no SDK), which
 # is the one build that would otherwise never compile these link options.
 if(EMSCRIPTEN)
-  # The shared list plus this platform's shell. The shell is the ONLY difference
-  # between this target and the tvOS/Android ones — if a second file ever has to
-  # be appended here, check first whether it names a platform API; if it does not,
-  # it belongs in TTP_APP_SOURCES above.
+  # The shared list plus the display pair. The SURFACE file is the only
+  # per-platform difference between this target and the tvOS/Android ones:
+  # ttp_display_core.cc holds every display ABI body that names no platform API
+  # and is compiled by all of them, while ttp_display_web.cc is only the WebGL2
+  # context. Both sit behind the SDK gate (they name TtpRenderer), which is why
+  # they are appended here and not in TTP_APP_SOURCES — if a new file names
+  # neither a platform API nor the renderer, it belongs in TTP_APP_SOURCES.
   set(TTP_WEB_SOURCES ${TTP_APP_SOURCES})
   if(TARGET ttp_renderer)
-    list(APPEND TTP_WEB_SOURCES runtime/ttp_display_web.cc)
+    list(APPEND TTP_WEB_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_web.cc)
   endif()
   add_executable(ttp_runtime_web ${TTP_WEB_SOURCES})
   # renderer/include is ttp_render.h ONLY — the plain-data frame contract. It is

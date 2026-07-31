@@ -114,7 +114,7 @@ export const MIRRORED = [
   // the aura hovering, because it sits visibly above where the wheels touch. The
   // blob shadow sits one below the aura so the aura still paints over it. Nothing
   // geometric in this audit can see a priority, so they are pinned here.
-  { name: 'car blob priority',   value: 2, find: 'if (!buildMesh(m, true, mi, 2)) return false;' },
+  { name: 'car blob priority',   value: 2, find: 'return buildMesh(m, true, mi, 2);' },
   { name: 'boost disk priority', value: 3, find: 'if (!buildMesh(m, true, mi, 3)) return false;' },
 ];
 

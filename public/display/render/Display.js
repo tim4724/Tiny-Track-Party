@@ -90,6 +90,7 @@ export class Display {
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
+      reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
@@ -271,14 +272,7 @@ export class Display {
     }));
 
     await Promise.all([
-      ...(roster || []).map(async (r, i) => {
-        if (!r.model) return;
-        const bytes = await assets.glb(r.model);
-        if (!bytes) return;
-        this.provide(`car${i}.glb`, bytes);
-        const ghost = this._ghost(bytes);
-        if (ghost) this.provide(`car${i}-ghost.glb`, ghost);
-      }),
+      this._provideCars(roster, assets),
       ...PROP_MODELS.map(async (name) => {
         const bytes = await assets.glb(name);
         if (!bytes) return;
@@ -304,13 +298,47 @@ export class Display {
     // plate sits on this model's back panel) is decided by ttp/roster.h — it
     // used to be a byte buffer this file packed by hand.
     const ids = (roster || []).map((r) => r.id);
-    const slots = (roster || []).map((r) => ({
-      id: r.id, name: r.name || '', carIndex: r.carIndex ?? 0, color: r.color || ''
-    }));
     // The reason is the engine's: no surface, or a track this build does not have.
-    if (this._fn.build(trackId, JSON.stringify(slots))) throw nativeError(`building the scene for '${trackId}'`);
+    if (this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
     this._rosterIds = ids; // slot i is this car, for the HUD readback
     this.built = true;
+  }
+
+  // Re-dress the BUILT scene's car slots in place (ttp_display_reroster): same
+  // slots, new models/liveries/names. What earns it a second entry point is
+  // everything setTrack would reset and this keeps — the scene meshes, the
+  // baked shadows, the skid patina and the preview camera's orbit phase.
+  // Whether the change IS a re-dress is C++'s decision; false means it was a
+  // field change after all, and the caller performs the full setTrack.
+  async reroster(roster, assets) {
+    if (!this.built) return false;
+    // Model swaps need their GLBs re-provided first — fetching is this side's
+    // one job in the exchange, exactly as at build.
+    await this._provideCars(roster, assets);
+    return !this._fn.reroster(JSON.stringify(this._slots(roster)));
+    // _rosterIds is already right: C++ refuses any change to the id list.
+  }
+
+  // The per-slot car GLBs (and their 50%-alpha ghost twins), provided as
+  // car<slot>.glb in roster order — the fetch half of both setTrack and
+  // reroster. `model` names the file; it never crosses the ABI.
+  _provideCars(roster, assets) {
+    return Promise.all((roster || []).map(async (r, i) => {
+      if (!r.model) return;
+      const bytes = await assets.glb(r.model);
+      if (!bytes) return;
+      this.provide(`car${i}.glb`, bytes);
+      const ghost = this._ghost(bytes);
+      if (ghost) this.provide(`car${i}-ghost.glb`, ghost);
+    }));
+  }
+
+  // A roster as the ABI takes it, in slot order (see setTrack on the split
+  // between what crosses and what stays).
+  _slots(roster) {
+    return (roster || []).map((r) => ({
+      id: r.id, name: r.name || '', carIndex: r.carIndex ?? 0, color: r.color || ''
+    }));
   }
 
   release() {

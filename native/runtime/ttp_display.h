@@ -146,6 +146,23 @@ TTP_ABI void ttp_display_bench(const char* model);
  * back at their opening state. Returns 0 on success. */
 TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
 
+/* Re-dress the BUILT scene's car slots in place: same rosterJson shape as
+ * ttp_display_build, same slot ids in the same order, with only models,
+ * liveries and names changed. The scene, the camera state and the cosmetic
+ * clocks are untouched — which is the whole point: a lobby car pick must not
+ * snap the preview's orbit back to its start bearing, and it must not pay a
+ * track re-mesh and shadow re-bake for a livery.
+ *
+ * The shell re-provides car<slot>.glb for a slot whose model changed BEFORE
+ * calling (fetching is its job, as at build); everything else — which slots
+ * changed, whether a change is a model reload or just a re-dress of the plate
+ * and markers — is decided here (ttp/roster.h planReroster).
+ *
+ * Returns 0 on success. Nonzero means this was NOT a re-dress — no scene, a
+ * join/leave/reorder, a slot that failed to rebuild — and the shell performs
+ * the fallback: a full ttp_display_build. */
+TTP_ABI int ttp_display_reroster(const char* rosterJson);
+
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */
 TTP_ABI void ttp_display_release(void);

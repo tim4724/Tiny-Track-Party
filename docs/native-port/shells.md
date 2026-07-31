@@ -39,17 +39,20 @@ Three properties of that surface matter more than the list:
 
 ## What every shell owes
 
-1. **The surface + shell file.** A sibling of
-   `native/runtime/ttp_display_web.cc` (374 lines): the platform's
-   GL/Metal/Vulkan surface, the `TtpRenderer` singleton, and the same
-   `extern "C"` bodies. The
-   platform-free half is already in `libttp-runtime` and must stay there. If a
-   line names no platform API, it is in the wrong file.
+1. **The surface file.** A sibling of `native/runtime/ttp_display_web.cc`:
+   ONLY creating and destroying the platform's GL/Metal/Vulkan surface, the
+   `TtpRenderer` construction over it, and parking the object in
+   `ttp::rt::displayCore()` (`ttp_display_core.h`). Every other display ABI
+   body is shared in `runtime/ttp_display_core.cc`, which your module compiles
+   as-is — a shell porting from a revision where those bodies lived in the web
+   file deletes its copies. The platform-free half below both is in
+   `libttp-runtime` and must stay there. If a line names no platform API, it
+   is in the wrong file.
 2. **A module target.** Add it beside `ttp_runtime_web` in
-   `native/CMakeLists.txt` and compile `${TTP_APP_SOURCES}` plus your shell
-   file. Do not retype that list; it is a variable precisely because a second
-   copy drifts on the first ABI added and fails as a link error on one platform
-   only.
+   `native/CMakeLists.txt` and compile `${TTP_APP_SOURCES}` plus
+   `runtime/ttp_display_core.cc` plus your surface file. Do not retype the
+   list; it is a variable precisely because a second copy drifts on the first
+   ABI added and fails as a link error on one platform only.
 3. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
    and what Android TV wants; tvOS needs `-a metal`.

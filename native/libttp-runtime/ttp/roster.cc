@@ -114,10 +114,33 @@ Roster parseRoster(const char* json) {
     TtpRosterCar car{};
     car.colorABGR = liveryABGR(color && color->type == Value::STR ? color->str : std::string());
     writePlate(name && name->type == Value::STR ? name->str : std::string(), car.name);
-    car.plateY = plateY(carIndex && carIndex->type == Value::NUM ? (int) carIndex->num : 0);
+    car.carIndex = carIndex && carIndex->type == Value::NUM ? (int32_t) carIndex->num : 0;
+    car.plateY = plateY(car.carIndex);
     out.cars.push_back(car);
   }
   return out;
+}
+
+RerosterPlan planReroster(const Roster& prev, const Roster& next) {
+  RerosterPlan plan;
+  // Same slots, same order — slot identity is baked into the scene.
+  if (prev.ids.size() != next.ids.size()) return plan;
+  for (size_t i = 0; i < prev.ids.size(); i++) {
+    if (!(prev.ids[i] == next.ids[i])) return plan;
+  }
+  plan.ok = true;
+  for (size_t i = 0; i < next.cars.size(); i++) {
+    const TtpRosterCar& a = prev.cars[i];
+    const TtpRosterCar& b = next.cars[i];
+    // plateY is not compared: parseRoster derives it from carIndex alone, so
+    // with carIndex equal it cannot differ.
+    if (a.carIndex != b.carIndex) {
+      plan.remodel.push_back((uint32_t) i);
+    } else if (a.colorABGR != b.colorABGR || std::string(a.name) != b.name) {
+      plan.redress.push_back((uint32_t) i);
+    }
+  }
+  return plan;
 }
 
 }  // namespace rt

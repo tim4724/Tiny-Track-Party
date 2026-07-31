@@ -4478,7 +4478,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     const uint32_t carCount = (uint32_t) tb.carColors.size();
-    const std::vector<uint32_t>& carColors = tb.carColors;
     const float groundY = tb.groundY;
 
     if (!buildRoadMesh(tb)) return false;
@@ -4739,21 +4738,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
     mMonsterViews.assign(carCount, {});
     for (uint32_t c = 0; c < carCount; c++) {
-        const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
-        if (glb != mAssets.end() && loadCarAsset(c, glb->second)) continue;
-        Mesh& m = mCars[c];
-        const uint32_t col = carColors[c];
-        const float HL = 0.62f, HW = 0.36f, Y0 = 0.06f, Y1 = 0.62f;
-        for (const float y : { Y0, Y1 }) {
-            m.verts.push_back({ -HW, y, -HL, col });
-            m.verts.push_back({  HW, y, -HL, col });
-            m.verts.push_back({ -HW, y,  HL, col });
-            m.verts.push_back({  HW, y,  HL, col });
-        }
-        m.idx = { 0,1,2, 1,3,2,  4,6,5, 5,6,7,   // bottom, top
-                  0,2,4, 2,6,4,  1,5,3, 3,5,7,   // sides
-                  2,3,6, 3,7,6,  0,4,1, 1,4,5 }; // front, back
-        if (!buildMesh(m)) return false;
+        if (!buildCarSlot(tb, c)) return false;
     }
     // Furniture: item boxes at their authored anchors (availability reconciled
     // per frame from the snapshot), a banana pool for dropped hazards, and the
@@ -5319,63 +5304,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mCarBlobs.resize(carCount);
         mCarBlobMats.assign(carCount, nullptr);
         mCarBlobMasks.assign(carCount, nullptr);
-        const float3 INKC = srgbToLinear(0x171513);
-        constexpr float AO = 0.35f;                   // see the note above
         for (uint32_t c = 0; c < carCount; c++) {
-            Mesh& m = mCarBlobs[c];
-            const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
-            const float fl = (mCarWheels.size() > c) ? mCarWheels[c].footL : 2.0f;
-            const float W = fw * 1.45f, L = fl * 1.45f;   // SHADOW_OVERSCAN quad
-            // The SHAPE now lives in a texture (buildShadowMask), because the JS
-            // silhouette's penumbra is three pixels of a 128-wide bake — about
-            // 5% of the half-width — and a falloff evaluated on a 10×14 grid
-            // can't hold an edge that tight. It just made the blob vague. The
-            // grid stays: it exists so the sheet can CONFORM to a curving deck.
-            constexpr int GW = 10, GL = 14;               // grid segments
-            for (int j = 0; j <= GL; j++) {
-                for (int i = 0; i <= GW; i++) {
-                    const float x = ((float) i / GW - 0.5f) * W;
-                    const float z = ((float) j / GL - 0.5f) * L;
-                    m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, AO) });
-                    m.uvs.push_back({ (float) i / GW, (float) j / GL });
-                    m.local.push_back({ x, z, (uint8_t) std::lround(AO * 255.0f) });
-                }
-            }
-            for (int j = 0; j < GL; j++) {
-                for (int i = 0; i < GW; i++) {
-                    const uint32_t b = (uint32_t) (j * (GW + 1) + i);
-                    const uint32_t n = b + (uint32_t) (GW + 1);
-                    m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                }
-            }
-            MaterialInstance* mi = mDecalMaterial ? sceneInstance(mDecalMaterial)
-                                                  : sceneInstance(mBlendMaterial);
-            mi->setPolygonOffset(-2.0f, -2.0f); // never z-fight the deck it hugs
-            if (mDecalMaterial) {
-                // The car's own outline when we could bake it; the generic
-                // rounded-rect only when a car has no GLB (box marker).
-                Texture* mask = (mCarSilhouettes.size() > c) ? mCarSilhouettes[c] : nullptr;
-                bool baked = mask != nullptr;
-                if (!mask) {
-                    if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
-                    mask = mShadowMaskTex;
-                }
-                if (mask) {
-                    setBlobMask(mi, mask, baked);
-                    mCarBlobMasks[c] = mask;
-                }
-                mCarBlobMats[c] = mi; // the monster swaps this mask per frame
-            } else {
-                m.uvs.clear(); // vblend has no uv0 attribute
-            }
-            // PRIORITY 2, one below the boost aura's 3, so the aura still paints
-            // over the contact shadow exactly as it did when the two were 3 and 5
-            // — the aura only moved down to get BELOW the cars, and this keeps
-            // their relative order deterministic rather than distance-sorted.
-            // Sharing 2 with the sea ring is harmless: that starts at radius 135
-            // and a blob is on the road, so they never overlap, and neither
-            // writes depth.
-            if (!buildMesh(m, true, mi, 2)) return false;
+            if (!buildCarBlob(c)) return false;
         }
         // Rear name plates (makePlate): a livery rounded-rect sticker with a
         // white feathered rim and the player's name, fixed to the car's rear
@@ -5383,154 +5313,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // a pixel font (the JS sets Fredoka); it's MIXED CASE like the roster,
         // since a shouty all-caps "MIA" was the loudest difference on the plate.
         mPlates.resize(carCount);
-        // 5 wide × 9 rows (bit 4 = leftmost column): rows 0–6 are the cap band
-        // (uppercase fills it), lowercase sits on rows 2–6 with ascenders up to
-        // row 0 and descenders on rows 7–8.
-        static const uint8_t PL[26][9] = {
-            { 0,0, 0x0E,0x01,0x0F,0x11,0x0F, 0,0 },              // a
-            { 0x10,0x10, 0x1E,0x11,0x11,0x11,0x1E, 0,0 },        // b
-            { 0,0, 0x0E,0x11,0x10,0x11,0x0E, 0,0 },              // c
-            { 0x01,0x01, 0x0F,0x11,0x11,0x11,0x0F, 0,0 },        // d
-            { 0,0, 0x0E,0x11,0x1F,0x10,0x0E, 0,0 },              // e
-            { 0x06,0x09, 0x08,0x1C,0x08,0x08,0x08, 0,0 },        // f
-            { 0,0, 0x0F,0x11,0x11,0x0F,0x01, 0x01,0x0E },        // g
-            { 0x10,0x10, 0x1E,0x11,0x11,0x11,0x11, 0,0 },        // h
-            { 0x04,0x00, 0x0C,0x04,0x04,0x04,0x0E, 0,0 },        // i
-            { 0x02,0x00, 0x06,0x02,0x02,0x02,0x02, 0x12,0x0C },  // j
-            { 0x10,0x10, 0x12,0x14,0x18,0x14,0x12, 0,0 },        // k
-            { 0x0C,0x04, 0x04,0x04,0x04,0x04,0x0E, 0,0 },        // l
-            { 0,0, 0x1A,0x15,0x15,0x15,0x15, 0,0 },              // m
-            { 0,0, 0x1E,0x11,0x11,0x11,0x11, 0,0 },              // n
-            { 0,0, 0x0E,0x11,0x11,0x11,0x0E, 0,0 },              // o
-            { 0,0, 0x1E,0x11,0x11,0x1E,0x10, 0x10,0x10 },        // p
-            { 0,0, 0x0F,0x11,0x11,0x0F,0x01, 0x01,0x01 },        // q
-            { 0,0, 0x16,0x19,0x10,0x10,0x10, 0,0 },              // r
-            { 0,0, 0x0F,0x10,0x0E,0x01,0x1E, 0,0 },              // s
-            { 0x08,0x08, 0x1C,0x08,0x08,0x09,0x06, 0,0 },        // t
-            { 0,0, 0x11,0x11,0x11,0x13,0x0D, 0,0 },              // u
-            { 0,0, 0x11,0x11,0x11,0x0A,0x04, 0,0 },              // v
-            { 0,0, 0x11,0x11,0x15,0x15,0x0A, 0,0 },              // w
-            { 0,0, 0x11,0x0A,0x04,0x0A,0x11, 0,0 },              // x
-            { 0,0, 0x11,0x11,0x11,0x0F,0x01, 0x01,0x0E },        // y
-            { 0,0, 0x1F,0x02,0x04,0x08,0x1F, 0,0 },              // z
-        };
-        static const uint8_t PF[26][7] = {
-            { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 },  // A
-            { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E },  // B
-            { 0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E },  // C
-            { 0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E },  // D
-            { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F },  // E
-            { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 },  // F
-            { 0x0E, 0x11, 0x10, 0x13, 0x11, 0x11, 0x0F },  // G
-            { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 },  // H
-            { 0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E },  // I
-            { 0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C },  // J
-            { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 },  // K
-            { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F },  // L
-            { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 },  // M
-            { 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11 },  // N
-            { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E },  // O
-            { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 },  // P
-            { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D },  // Q
-            { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 },  // R
-            { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E },  // S
-            { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 },  // T
-            { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E },  // U
-            { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04 },  // V
-            { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A },  // W
-            { 0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11 },  // X
-            { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 },  // Y
-            { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F },  // Z
-        };
         for (uint32_t c = 0; c < carCount; c++) {
-            if (mCarAssets.size() <= c || !mCarAssets[c] || mCarWheels.size() <= c) continue;
-            Mesh& m = mPlates[c];
-            const CarWheels& cw = mCarWheels[c];
-            const std::string name = (tb.carNames.size() > c) ? tb.carNames[c] : "";
-            // ABGR roster colour → sRGB rgb
-            const uint32_t abgr = (tb.carColors.size() > c) ? tb.carColors[c] : 0xff888888u;
-            const uint32_t rgb = ((abgr & 0xff) << 16) | (abgr & 0xff00) | ((abgr >> 16) & 0xff);
-            const float3 livery = srgbToLinear(rgb);
-            const float3 white = { 1, 1, 1 };
-            // visible plate: capped to the car's rear, JS 232:92 aspect
-            const float W = std::min(0.2f, cw.footW * 0.92f);
-            const float H = W * (92.0f / 232.0f);
-            // Hand-tuned rear-panel height for this model when the payload
-            // carries one (SceneRenderer's PLATE_Y), else the old fraction.
-            const float authored = (tb.carPlateY.size() > c) ? tb.carPlateY[c] : -1.0f;
-            const float cy = authored >= 0 ? authored
-                    : cw.bbMin.y + 0.46f * (cw.bbMax.y - cw.bbMin.y);
-            const float cz = cw.bbMax.z + 0.008f;
-            // rounded-rect layer (plate local: x MIRRORED so the face reads
-            // correctly from BEHIND the car — the chase cam looks along −z)
-            const auto roundRect = [&](float hw, float hh, float r, float z,
-                    const float3& col) {
-                const uint32_t cc = packLinear(col, 1.0f);
-                std::vector<float2> ring;
-                const float qx[4] = { hw - r, -(hw - r), -(hw - r), hw - r };
-                const float qy[4] = { hh - r, hh - r, -(hh - r), -(hh - r) };
-                const float a0[4] = { 0, (float) M_PI / 2, (float) M_PI, 3 * (float) M_PI / 2 };
-                for (int k = 0; k < 4; k++) {
-                    for (int j = 0; j <= 3; j++) {
-                        const float a = a0[k] + (float) j / 3 * (float) M_PI / 2;
-                        ring.push_back({ qx[k] + std::cos(a) * r, qy[k] + std::sin(a) * r });
-                    }
-                }
-                const uint32_t base = (uint32_t) m.verts.size();
-                m.verts.push_back({ 0, cy, cz + z, cc });
-                for (const float2& q : ring) {
-                    m.verts.push_back({ -q.x, cy + q.y, cz + z, cc });
-                }
-                const uint32_t NR = (uint32_t) ring.size();
-                for (uint32_t j = 0; j < NR; j++) {
-                    m.idx.insert(m.idx.end(),
-                            { base, base + 1 + j, base + 1 + (j + 1) % NR });
-                }
-            };
-            const float pad = W * (6.0f / 232.0f), rr = W * (16.0f / 232.0f);
-            roundRect(W / 2, H / 2, rr, 0, white);
-            roundRect(W / 2 - pad, H / 2 - pad, rr * 0.75f, 0.0015f, livery);
-            // name — white pixel glyphs, auto-fit to the field width. The cap
-            // band is 42% of the plate height, matching the JS's 54px Fredoka
-            // on its 92px plate (the old 50% ran visibly large).
-            if (!name.empty()) {
-                const uint32_t nc = packLinear(white, 1.0f);
-                const float maxW = W - 2 * pad - W * (24.0f / 232.0f);
-                float px = (0.42f * H) / 7.0f;
-                const float tw = (float) (name.size() * 6 - 1);
-                if (tw * px > maxW) px = maxW / tw;
-                // The pose's half-turn maps asset-local +x to the viewer's
-                // RIGHT, so the first glyph starts at −x — laying it out from
-                // +x downward printed the name mirrored.
-                const float x0 = -tw * px / 2;
-                const float y0 = cy - 3.5f * px;
-                for (size_t ci2 = 0; ci2 < name.size(); ci2++) {
-                    const char ch = name[ci2];
-                    const uint8_t* g = nullptr;
-                    uint8_t rows = 7;
-                    if (ch >= 'A' && ch <= 'Z') g = PF[ch - 'A'];
-                    else if (ch >= 'a' && ch <= 'z') { g = PL[ch - 'a']; rows = 9; }
-                    if (!g) continue;
-                    for (int row = 0; row < rows; row++) {
-                        for (int cx = 0; cx < 5; cx++) {
-                            if (!((g[row] >> (4 - cx)) & 1)) continue;
-                            const float gx = x0 + ((float) (ci2 * 6 + cx)) * px;
-                            const float gy = y0 + (float) (6 - row) * px;
-                            const uint32_t b = (uint32_t) m.verts.size();
-                            m.verts.push_back({ gx, gy, cz + 0.003f, nc });
-                            m.verts.push_back({ gx + px, gy, cz + 0.003f, nc });
-                            m.verts.push_back({ gx, gy + px, cz + 0.003f, nc });
-                            m.verts.push_back({ gx + px, gy + px, cz + 0.003f, nc });
-                            m.idx.insert(m.idx.end(),
-                                    { b, b + 1, b + 2, b + 1, b + 3, b + 2 });
-                        }
-                    }
-                }
-            }
-            if (!buildMesh(m)) return false;
-            auto& tcmP = mEngine->getTransformManager();
-            tcmP.setTransform(tcmP.getInstance(m.entity),
-                    mat4f::translation(float3{ 0, -1000, 0 }));
+            if (!buildCarPlate(tb, c)) return false;
         }
         // Boost aura: the teal pool under a boosting car (SceneRenderer's
         // boostDisk). Colour = boostShades.disk (accent +15%), profile =
@@ -5875,50 +5659,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // fade — loaded LAST, with a full decode pump after each: interleaving
     // them with the solid cars doubled the in-flight decode queue and dropped
     // a car's colormap (it rendered gray). Parked until a swap needs them.
-    for (uint32_t c = 0; c < carCount; c++) {
-        if (!mCarAssets[c]) continue;
-        const auto ghost = mAssets.find("car" + std::to_string(c) + "-ghost.glb");
-        if (ghost == mAssets.end()) continue;
-        gltfio::FilamentAsset* ga = mAssetLoader->createAsset(
-                ghost->second.data(), (uint32_t) ghost->second.size());
-        if (!ga) continue;
-        registerAssetUris(ga);
-        if (!mResourceLoader->loadResources(ga)) {
-            mAssetLoader->destroyAsset(ga);
-            continue;
-        }
-        ga->releaseSourceData();
-        mScene->addEntities(ga->getEntities(), ga->getEntityCount());
-        setShadows(ga->getEntities(), ga->getEntityCount(), false, false);
-        auto& tcmG = mEngine->getTransformManager();
-        tcmG.setTransform(tcmG.getInstance(ga->getRoot()),
-                mat4f::translation(float3{ 0, -1000, 0 }));
-        // The ghost body is only ever shown as the GRAFTED monster body, and
-        // MonsterRig strips the car's wheels before seating it — collapse them
-        // once here (this instance's wheels are never animated).
-        for (const char* wn : { "wheel-fl", "wheel-fr", "wheel-bl", "wheel-br", "axle" }) {
-            const utils::Entity we = ga->getFirstEntityByName(wn);
-            if (we.isNull()) continue;
-            const auto wi = tcmG.getInstance(we);
-            mat4f local = mat4f::scaling(float3{ 1e-4f });
-            local[3] = tcmG.getTransform(wi)[3];
-            tcmG.setTransform(wi, local);
-        }
-        mCarGhostAssets[c] = ga;
-        if (mStbProvider) {
-            mStbProvider->waitForCompletion();
-            mResourceLoader->asyncUpdateLoad();
-        }
-    }
+    for (uint32_t c = 0; c < carCount; c++) buildCarGhost(c);
 
     // Texture decodes ride the provider's async queue even on the synchronous
     // loadResources path — finished textures only ATTACH on a queue pump (the
     // sync path pumps at the START of the next load, so without this the last
     // assets' textures never bind and those cars render black).
-    if (mStbProvider) {
-        mStbProvider->waitForCompletion();
-        mResourceLoader->asyncUpdateLoad();
-    }
+    pumpTextures();
     mTrack = std::make_unique<TrackBin>(std::move(tb));
     return true;
 }
@@ -6081,6 +5828,362 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         }
     }
     return true;
+}
+
+// glTF assets own their instances — drop the entities from the scene first
+// so nothing dangles between destroyAsset() and the next build. Was a lambda
+// local to releaseScene() until destroyCarSlot() needed it too.
+void TtpRenderer::dropAsset(gltfio::FilamentAsset*& a) {
+    if (!a) return;
+    mScene->removeEntities(a->getEntities(), a->getEntityCount());
+    mAssetLoader->destroyAsset(a);
+    a = nullptr;
+}
+
+// Texture decodes ride the provider's async queue even on the synchronous
+// loadResources path — finished textures only ATTACH on a queue pump (the
+// sync path pumps at the START of the next load, so without this the last
+// assets' textures never bind and those cars render black).
+void TtpRenderer::pumpTextures() {
+    if (mStbProvider) {
+        mStbProvider->waitForCompletion();
+        mResourceLoader->asyncUpdateLoad();
+    }
+}
+
+// One car slot's body: the real GLB when the shell provided "car<c>.glb"
+// (gltfio + ubershaders, textures via stb), else a roster-coloured box
+// marker. Split out of buildTrackScene so reroster() can rebuild one slot.
+bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
+    const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
+    if (glb != mAssets.end() && loadCarAsset(c, glb->second)) return true;
+    Mesh& m = mCars[c];
+    destroyMesh(m); // a re-dress replaces the live marker; empty on a fresh build
+    const uint32_t col = (tb.carColors.size() > c) ? tb.carColors[c] : 0xff888888u;
+    const float HL = 0.62f, HW = 0.36f, Y0 = 0.06f, Y1 = 0.62f;
+    for (const float y : { Y0, Y1 }) {
+        m.verts.push_back({ -HW, y, -HL, col });
+        m.verts.push_back({  HW, y, -HL, col });
+        m.verts.push_back({ -HW, y,  HL, col });
+        m.verts.push_back({  HW, y,  HL, col });
+    }
+    m.idx = { 0,1,2, 1,3,2,  4,6,5, 5,6,7,   // bottom, top
+              0,2,4, 2,6,4,  1,5,3, 3,5,7,   // sides
+              2,3,6, 3,7,6,  0,4,1, 1,4,5 }; // front, back
+    return buildMesh(m);
+}
+
+// One car's contact-shadow sheet. See the long note where buildTrackScene
+// calls it for why it is a GRID and why the shape lives in a mask texture.
+bool TtpRenderer::buildCarBlob(uint32_t c) {
+    if (!mBlendMaterial || mCarBlobs.size() <= c) return true;
+    Mesh& m = mCarBlobs[c];
+    destroyMesh(m); // a re-dress refits the grid to the new model's footprint
+    const float3 INKC = srgbToLinear(0x171513);
+    constexpr float AO = 0.35f; // the measured 35% ambient dip — see the call site
+    const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
+    const float fl = (mCarWheels.size() > c) ? mCarWheels[c].footL : 2.0f;
+    const float W = fw * 1.45f, L = fl * 1.45f;   // SHADOW_OVERSCAN quad
+    // The SHAPE lives in a texture (buildShadowMask): the silhouette's
+    // penumbra is too tight for a falloff evaluated on a 10×14 grid. The
+    // grid stays so the sheet can CONFORM to a curving deck.
+    constexpr int GW = 10, GL = 14;               // grid segments
+    for (int j = 0; j <= GL; j++) {
+        for (int i = 0; i <= GW; i++) {
+            const float x = ((float) i / GW - 0.5f) * W;
+            const float z = ((float) j / GL - 0.5f) * L;
+            m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, AO) });
+            m.uvs.push_back({ (float) i / GW, (float) j / GL });
+            m.local.push_back({ x, z, (uint8_t) std::lround(AO * 255.0f) });
+        }
+    }
+    for (int j = 0; j < GL; j++) {
+        for (int i = 0; i < GW; i++) {
+            const uint32_t b = (uint32_t) (j * (GW + 1) + i);
+            const uint32_t n = b + (uint32_t) (GW + 1);
+            m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
+        }
+    }
+    // On a re-dress the slot's scene-scoped instance is reused rather than
+    // minting another: sceneInstance() records every instance until the
+    // scene is released, so a lobby of car-cycling players would pile them up.
+    MaterialInstance* mi = (mCarBlobMats.size() > c && mCarBlobMats[c])
+            ? mCarBlobMats[c]
+            : (mDecalMaterial ? sceneInstance(mDecalMaterial)
+                              : sceneInstance(mBlendMaterial));
+    mi->setPolygonOffset(-2.0f, -2.0f); // never z-fight the deck it hugs
+    if (mDecalMaterial) {
+        // The car's own outline when we could bake it; the generic
+        // rounded-rect only when a car has no GLB (box marker).
+        Texture* mask = (mCarSilhouettes.size() > c) ? mCarSilhouettes[c] : nullptr;
+        bool baked = mask != nullptr;
+        if (!mask) {
+            if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
+            mask = mShadowMaskTex;
+        }
+        if (mask) {
+            setBlobMask(mi, mask, baked);
+            mCarBlobMasks[c] = mask;
+        }
+        mCarBlobMats[c] = mi; // the monster swaps this mask per frame
+    } else {
+        m.uvs.clear(); // vblend has no uv0 attribute
+    }
+    // PRIORITY 2, one below the boost aura's 3, so the aura still paints
+    // over the contact shadow — see the ordering note on the aura's build.
+    return buildMesh(m, true, mi, 2);
+}
+
+// The inverse of buildCarSlot + buildCarGhost + buildCarPlate + buildCarBlob,
+// for one slot of a LIVE scene (reroster). Sizes are left alone — the field's
+// shape is the scene's, and a re-roster never changes it.
+void TtpRenderer::destroyCarSlot(uint32_t c) {
+    if (mCarAssets.size() > c) dropAsset(mCarAssets[c]);
+    if (mCarGhostAssets.size() > c) dropAsset(mCarGhostAssets[c]);
+    if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
+    if (mCarSilhouettes.size() > c && mCarSilhouettes[c]) {
+        // The blob's material may still sample it — point that back at the
+        // generic mask until buildCarBlob rebinds the new bake.
+        if (mCarBlobMats.size() > c && mCarBlobMats[c]
+                && mCarBlobMasks.size() > c && mCarBlobMasks[c] == mCarSilhouettes[c]) {
+            if (!mShadowMaskTex) mShadowMaskTex = buildShadowMask();
+            if (mShadowMaskTex) {
+                setBlobMask(mCarBlobMats[c], mShadowMaskTex, false);
+                mCarBlobMasks[c] = mShadowMaskTex;
+            }
+        }
+        mEngine->destroy(mCarSilhouettes[c]);
+        mCarSilhouettes[c] = nullptr;
+    }
+    if (mCars.size() > c) destroyMesh(mCars[c]);
+    if (mPlates.size() > c) destroyMesh(mPlates[c]);
+    if (mCarBlobs.size() > c) destroyMesh(mCarBlobs[c]);
+    if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};
+    if (mMonsterViews.size() > c) mMonsterViews[c] = MonsterView{};
+}
+
+bool TtpRenderer::reroster(const std::vector<TtpRosterCar>& roster,
+        const std::vector<uint32_t>& remodel,
+        const std::vector<uint32_t>& redress) {
+    if (!mTrack || roster.size() != mTrack->carColors.size()) return false;
+    applyRoster(*mTrack, roster); // colours/names/plate heights, in place
+    for (uint32_t c : remodel) {
+        if (c >= roster.size()) return false;
+        destroyCarSlot(c);
+        if (!buildCarSlot(*mTrack, c)) return false;
+        pumpTextures(); // bind the body's decodes before the ghost queues its own
+        buildCarGhost(c);
+        if (!buildCarPlate(*mTrack, c)) return false;
+        if (!buildCarBlob(c)) return false;
+    }
+    for (uint32_t c : redress) {
+        if (c >= roster.size()) return false;
+        // Same model, new livery/name: only what WEARS them. The GLB body
+        // keeps its own paint — a livery is the plate's (and, for a slot
+        // with no GLB, the box marker's) to show.
+        if (!buildCarPlate(*mTrack, c)) return false;
+        if ((mCarAssets.size() <= c || !mCarAssets[c]) && !buildCarSlot(*mTrack, c)) return false;
+    }
+    pumpTextures();
+    return true;
+}
+
+// One car's rear name plate, rebuilt whole — buildTrackScene dresses every
+// slot with it, reroster() re-dresses one. Reads the roster fields off `tb`
+// (the build's local bin, or the retained mTrack on a re-roster) and the
+// wheel measurements loadCarAsset grabbed; GLB-less slots carry no plate.
+bool TtpRenderer::buildCarPlate(const TrackBin& tb, uint32_t c) {
+    if (!mBlendMaterial || mPlates.size() <= c) return true;
+    destroyMesh(mPlates[c]); // a re-dress replaces the live plate; empty on a fresh build
+    if (mCarAssets.size() <= c || !mCarAssets[c] || mCarWheels.size() <= c) return true;
+    // 5 wide × 9 rows (bit 4 = leftmost column): rows 0–6 are the cap band
+    // (uppercase fills it), lowercase sits on rows 2–6 with ascenders up to
+    // row 0 and descenders on rows 7–8.
+    static const uint8_t PL[26][9] = {
+        { 0,0, 0x0E,0x01,0x0F,0x11,0x0F, 0,0 },              // a
+        { 0x10,0x10, 0x1E,0x11,0x11,0x11,0x1E, 0,0 },        // b
+        { 0,0, 0x0E,0x11,0x10,0x11,0x0E, 0,0 },              // c
+        { 0x01,0x01, 0x0F,0x11,0x11,0x11,0x0F, 0,0 },        // d
+        { 0,0, 0x0E,0x11,0x1F,0x10,0x0E, 0,0 },              // e
+        { 0x06,0x09, 0x08,0x1C,0x08,0x08,0x08, 0,0 },        // f
+        { 0,0, 0x0F,0x11,0x11,0x0F,0x01, 0x01,0x0E },        // g
+        { 0x10,0x10, 0x1E,0x11,0x11,0x11,0x11, 0,0 },        // h
+        { 0x04,0x00, 0x0C,0x04,0x04,0x04,0x0E, 0,0 },        // i
+        { 0x02,0x00, 0x06,0x02,0x02,0x02,0x02, 0x12,0x0C },  // j
+        { 0x10,0x10, 0x12,0x14,0x18,0x14,0x12, 0,0 },        // k
+        { 0x0C,0x04, 0x04,0x04,0x04,0x04,0x0E, 0,0 },        // l
+        { 0,0, 0x1A,0x15,0x15,0x15,0x15, 0,0 },              // m
+        { 0,0, 0x1E,0x11,0x11,0x11,0x11, 0,0 },              // n
+        { 0,0, 0x0E,0x11,0x11,0x11,0x0E, 0,0 },              // o
+        { 0,0, 0x1E,0x11,0x11,0x1E,0x10, 0x10,0x10 },        // p
+        { 0,0, 0x0F,0x11,0x11,0x0F,0x01, 0x01,0x01 },        // q
+        { 0,0, 0x16,0x19,0x10,0x10,0x10, 0,0 },              // r
+        { 0,0, 0x0F,0x10,0x0E,0x01,0x1E, 0,0 },              // s
+        { 0x08,0x08, 0x1C,0x08,0x08,0x09,0x06, 0,0 },        // t
+        { 0,0, 0x11,0x11,0x11,0x13,0x0D, 0,0 },              // u
+        { 0,0, 0x11,0x11,0x11,0x0A,0x04, 0,0 },              // v
+        { 0,0, 0x11,0x11,0x15,0x15,0x0A, 0,0 },              // w
+        { 0,0, 0x11,0x0A,0x04,0x0A,0x11, 0,0 },              // x
+        { 0,0, 0x11,0x11,0x11,0x0F,0x01, 0x01,0x0E },        // y
+        { 0,0, 0x1F,0x02,0x04,0x08,0x1F, 0,0 },              // z
+    };
+    static const uint8_t PF[26][7] = {
+        { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 },  // A
+        { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E },  // B
+        { 0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E },  // C
+        { 0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E },  // D
+        { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F },  // E
+        { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 },  // F
+        { 0x0E, 0x11, 0x10, 0x13, 0x11, 0x11, 0x0F },  // G
+        { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 },  // H
+        { 0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E },  // I
+        { 0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C },  // J
+        { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 },  // K
+        { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F },  // L
+        { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 },  // M
+        { 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11 },  // N
+        { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E },  // O
+        { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 },  // P
+        { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D },  // Q
+        { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 },  // R
+        { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E },  // S
+        { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 },  // T
+        { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E },  // U
+        { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04 },  // V
+        { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A },  // W
+        { 0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11 },  // X
+        { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 },  // Y
+        { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F },  // Z
+    };
+    Mesh& m = mPlates[c];
+    const CarWheels& cw = mCarWheels[c];
+    const std::string name = (tb.carNames.size() > c) ? tb.carNames[c] : "";
+    // ABGR roster colour → sRGB rgb
+    const uint32_t abgr = (tb.carColors.size() > c) ? tb.carColors[c] : 0xff888888u;
+    const uint32_t rgb = ((abgr & 0xff) << 16) | (abgr & 0xff00) | ((abgr >> 16) & 0xff);
+    const float3 livery = srgbToLinear(rgb);
+    const float3 white = { 1, 1, 1 };
+    // visible plate: capped to the car's rear, JS 232:92 aspect
+    const float W = std::min(0.2f, cw.footW * 0.92f);
+    const float H = W * (92.0f / 232.0f);
+    // Hand-tuned rear-panel height for this model when the payload
+    // carries one (SceneRenderer's PLATE_Y), else the old fraction.
+    const float authored = (tb.carPlateY.size() > c) ? tb.carPlateY[c] : -1.0f;
+    const float cy = authored >= 0 ? authored
+            : cw.bbMin.y + 0.46f * (cw.bbMax.y - cw.bbMin.y);
+    const float cz = cw.bbMax.z + 0.008f;
+    // rounded-rect layer (plate local: x MIRRORED so the face reads
+    // correctly from BEHIND the car — the chase cam looks along −z)
+    const auto roundRect = [&](float hw, float hh, float r, float z,
+            const float3& col) {
+        const uint32_t cc = packLinear(col, 1.0f);
+        std::vector<float2> ring;
+        const float qx[4] = { hw - r, -(hw - r), -(hw - r), hw - r };
+        const float qy[4] = { hh - r, hh - r, -(hh - r), -(hh - r) };
+        const float a0[4] = { 0, (float) M_PI / 2, (float) M_PI, 3 * (float) M_PI / 2 };
+        for (int k = 0; k < 4; k++) {
+            for (int j = 0; j <= 3; j++) {
+                const float a = a0[k] + (float) j / 3 * (float) M_PI / 2;
+                ring.push_back({ qx[k] + std::cos(a) * r, qy[k] + std::sin(a) * r });
+            }
+        }
+        const uint32_t base = (uint32_t) m.verts.size();
+        m.verts.push_back({ 0, cy, cz + z, cc });
+        for (const float2& q : ring) {
+            m.verts.push_back({ -q.x, cy + q.y, cz + z, cc });
+        }
+        const uint32_t NR = (uint32_t) ring.size();
+        for (uint32_t j = 0; j < NR; j++) {
+            m.idx.insert(m.idx.end(),
+                    { base, base + 1 + j, base + 1 + (j + 1) % NR });
+        }
+    };
+    const float pad = W * (6.0f / 232.0f), rr = W * (16.0f / 232.0f);
+    roundRect(W / 2, H / 2, rr, 0, white);
+    roundRect(W / 2 - pad, H / 2 - pad, rr * 0.75f, 0.0015f, livery);
+    // name — white pixel glyphs, auto-fit to the field width. The cap
+    // band is 42% of the plate height, matching the JS's 54px Fredoka
+    // on its 92px plate (the old 50% ran visibly large).
+    if (!name.empty()) {
+        const uint32_t nc = packLinear(white, 1.0f);
+        const float maxW = W - 2 * pad - W * (24.0f / 232.0f);
+        float px = (0.42f * H) / 7.0f;
+        const float tw = (float) (name.size() * 6 - 1);
+        if (tw * px > maxW) px = maxW / tw;
+        // The pose's half-turn maps asset-local +x to the viewer's
+        // RIGHT, so the first glyph starts at −x — laying it out from
+        // +x downward printed the name mirrored.
+        const float x0 = -tw * px / 2;
+        const float y0 = cy - 3.5f * px;
+        for (size_t ci2 = 0; ci2 < name.size(); ci2++) {
+            const char ch = name[ci2];
+            const uint8_t* g = nullptr;
+            uint8_t rows = 7;
+            if (ch >= 'A' && ch <= 'Z') g = PF[ch - 'A'];
+            else if (ch >= 'a' && ch <= 'z') { g = PL[ch - 'a']; rows = 9; }
+            if (!g) continue;
+            for (int row = 0; row < rows; row++) {
+                for (int cx = 0; cx < 5; cx++) {
+                    if (!((g[row] >> (4 - cx)) & 1)) continue;
+                    const float gx = x0 + ((float) (ci2 * 6 + cx)) * px;
+                    const float gy = y0 + (float) (6 - row) * px;
+                    const uint32_t b = (uint32_t) m.verts.size();
+                    m.verts.push_back({ gx, gy, cz + 0.003f, nc });
+                    m.verts.push_back({ gx + px, gy, cz + 0.003f, nc });
+                    m.verts.push_back({ gx, gy + px, cz + 0.003f, nc });
+                    m.verts.push_back({ gx + px, gy + px, cz + 0.003f, nc });
+                    m.idx.insert(m.idx.end(),
+                            { b, b + 1, b + 2, b + 1, b + 3, b + 2 });
+                }
+            }
+        }
+    }
+    if (!buildMesh(m)) return false;
+    auto& tcmP = mEngine->getTransformManager();
+    tcmP.setTransform(tcmP.getInstance(m.entity),
+            mat4f::translation(float3{ 0, -1000, 0 }));
+    return true;
+}
+
+// One car's ghost body (the 50%-alpha occlusion twin), loaded with its own
+// decode pump — see the ordering note where buildTrackScene calls it. Also
+// reroster()'s, after the slot's solid body reloads. Best-effort: a missing
+// or unparseable ghost just means no monster occlusion fade for that car.
+void TtpRenderer::buildCarGhost(uint32_t c) {
+    if (mCarAssets.size() <= c || !mCarAssets[c]) return;
+    if (mCarGhostIn.size() > c) mCarGhostIn[c] = 1; // in scene below; frame 1 re-parks it
+    const auto ghost = mAssets.find("car" + std::to_string(c) + "-ghost.glb");
+    if (ghost == mAssets.end()) return;
+    gltfio::FilamentAsset* ga = mAssetLoader->createAsset(
+            ghost->second.data(), (uint32_t) ghost->second.size());
+    if (!ga) return;
+    registerAssetUris(ga);
+    if (!mResourceLoader->loadResources(ga)) {
+        mAssetLoader->destroyAsset(ga);
+        return;
+    }
+    ga->releaseSourceData();
+    mScene->addEntities(ga->getEntities(), ga->getEntityCount());
+    setShadows(ga->getEntities(), ga->getEntityCount(), false, false);
+    auto& tcmG = mEngine->getTransformManager();
+    tcmG.setTransform(tcmG.getInstance(ga->getRoot()),
+            mat4f::translation(float3{ 0, -1000, 0 }));
+    // The ghost body is only ever shown as the GRAFTED monster body, and
+    // MonsterRig strips the car's wheels before seating it — collapse them
+    // once here (this instance's wheels are never animated).
+    for (const char* wn : { "wheel-fl", "wheel-fr", "wheel-bl", "wheel-br", "axle" }) {
+        const utils::Entity we = ga->getFirstEntityByName(wn);
+        if (we.isNull()) continue;
+        const auto wi = tcmG.getInstance(we);
+        mat4f local = mat4f::scaling(float3{ 1e-4f });
+        local[3] = tcmG.getTransform(wi)[3];
+        tcmG.setTransform(wi, local);
+    }
+    mCarGhostAssets[c] = ga;
+    if (mStbProvider) {
+        mStbProvider->waitForCompletion();
+        mResourceLoader->asyncUpdateLoad();
+    }
 }
 
 // Instanced prop pool (item boxes, bananas): one shared GLB, `count` instances,
@@ -9191,14 +9294,6 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mPollen);
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
-    // glTF assets own their instances — drop the entities from the scene first
-    // so nothing dangles between destroyAsset() and the next build.
-    const auto dropAsset = [&](gltfio::FilamentAsset*& a) {
-        if (!a) return;
-        mScene->removeEntities(a->getEntities(), a->getEntityCount());
-        mAssetLoader->destroyAsset(a);
-        a = nullptr;
-    };
     for (auto*& a : mCarAssets) dropAsset(a);
     // Baked per-car silhouettes die with the roster that produced them.
     for (Texture*& t : mCarSilhouettes) { if (t) mEngine->destroy(t); t = nullptr; }

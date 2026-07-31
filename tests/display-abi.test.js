@@ -42,7 +42,8 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   const M = await load();
   // Every name Display.js cwraps. cwrap('missing') does not throw until the
   // call, so check the exports themselves.
-  for (const name of ['create', 'asset', 'resize', 'build', 'release', 'bind',
+  for (const name of ['create', 'asset', 'resize', 'build', 'reroster',
+                      'release', 'bind',
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'profile', 'profile_names',

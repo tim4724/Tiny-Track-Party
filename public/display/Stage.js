@@ -274,18 +274,35 @@ export class Stage {
           // leaves the seats identical, and on a roster-only signature that
           // rebuild was silently skipped — the scene kept the old palette and
           // the caller's await resolved as if it had not.
+          //
+          // Two signatures, because the two halves have different cheap paths:
+          // a SCENE input change (track, biome, showcase, bench, variants) is
+          // always a full build, while a roster-only change on a live scene is
+          // offered to ttp_display_reroster first — an in-place re-dress that
+          // keeps the meshes, the baked shadows and the preview camera's orbit
+          // phase. Whether it qualifies is C++'s call; a refusal (join/leave,
+          // reorder) just falls through to the build below.
           const variants = this._variants || {};
-          const sig = JSON.stringify([this._biome, !!this._showcase, roster,
-                                      this._bench || '', variants]);
-          if (sig === this._rosterSig) continue; // nothing the renderer can see
-          this._rosterSig = sig;
+          const sceneSig = JSON.stringify([this._track.id, this._biome,
+                                           !!this._showcase, this._bench || '', variants]);
+          const rosterSig = JSON.stringify(roster);
+          if (sceneSig === this._sceneSig && rosterSig === this._rosterSig) {
+            continue; // nothing the renderer can see
+          }
           try {
+            if (sceneSig === this._sceneSig && this.display.built
+                && await this.display.reroster(roster, this._assets)) {
+              this._rosterSig = rosterSig;
+              continue;
+            }
             this.display.showcase(!!this._showcase); // latched; see showcase()
             this.display.bench(this._bench || '');   // …and see bench()
             for (const [m, v] of Object.entries(variants)) this.display.modelVariant(m, v);
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
+            this._sceneSig = sceneSig;
+            this._rosterSig = rosterSig;
           } catch (e) {
-            this._rosterSig = null; // let the next change retry
+            this._sceneSig = this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);
           }
         }
@@ -300,10 +317,12 @@ export class Stage {
     return this._rebuilding;
   }
 
-  // Force a rebuild even when the roster comes out identical — a new race on the
-  // same track with the same field still wants the scene back at its opening
-  // state (cones upright, boxes uncollected, no skid patina).
-  rebuild() { this._rosterSig = null; return this._rebuild(); }
+  // Force a FULL rebuild even when the roster comes out identical — a new race
+  // on the same track with the same field still wants the scene back at its
+  // opening state (cones upright, boxes uncollected, no skid patina). Nulling
+  // the SCENE signature is what routes around the re-dress path: reroster
+  // would happily say "nothing changed" and keep the raced-on scene.
+  rebuild() { this._sceneSig = this._rosterSig = null; return this._rebuild(); }
 
   // The session whose cars get drawn. 0 / null clears it (an empty track).
   bindSession(handle) {
@@ -378,10 +397,12 @@ export class Stage {
 
     this.cars.set(id, c);
     if (cell && !this._order.includes(id)) this._order.push(id);
-    // The renderer bakes a car's model and livery into its slot at scene build,
-    // so any change to the field needs one: the lobby's attract race starts its
-    // cars a tick AFTER the track lands, phones join and leave mid-lobby, and
-    // the race grid then replaces the whole demo field.
+    // The renderer bakes a car's model and livery into its slot, so any change
+    // to the field goes through _rebuild — which routes it to an in-place
+    // re-dress when only the dressing changed (a car pick on the same seats)
+    // and to a full scene build when the field changed shape (the lobby's
+    // attract race starting a tick after the track lands, phones joining and
+    // leaving mid-lobby, the race grid replacing the whole demo field).
     this._rebuild();
   }
 
@@ -415,22 +436,30 @@ export class Stage {
     return true;
   }
 
-  // A seated player changed their name (DisplayNet's onPlayerRenamed). Moves the
-  // cell chip, which is DOM. It does NOT move the rear name plate: that is
-  // geometry the renderer baked from the build roster (ttp_display_build), so the
-  // car keeps the name it launched under until the next scene build — which
-  // writing `c.name` is exactly what makes it pick up, since _roster() reads this
-  // field and the change therefore lands in _rebuild's signature instead of being
-  // skipped as a no-op.
-  setCarName(id, name) {
+  // Change a registered car's model/livery/name IN PLACE — same slot, same
+  // insertion order. The order is the point: removing and re-adding the car
+  // would push its slot to the end of the roster, and a REORDERED roster is a
+  // full scene build by design (planReroster refuses it), where this lands as
+  // a re-dress that leaves the scene and the preview camera alone.
+  updateCar(id, { colorIndex, carIndex, name } = {}) {
     const c = this.cars.get(id);
     if (!c) return false;
-    c.name = name;
-    // Re-queried rather than cached as a leaf the way setCarHud's are: those are
-    // re-read at ~6 Hz forever, this a handful of times a party.
-    if (c.label) c.label.querySelector('.cell-label__name').textContent = name || ('P' + id);
+    if (colorIndex != null) c.colorIndex = colorIndex;
+    if (carIndex != null) c.carIndex = carIndex;
+    if (name != null) {
+      c.name = name;
+      if (c.label) c.label.querySelector('.cell-label__name').textContent = name || ('P' + id);
+    }
+    this._rebuild();
     return true;
   }
+
+  // A seated player changed their name (DisplayNet's onPlayerRenamed). Moves
+  // the cell chip, which is DOM, and re-dresses the rear name plate: a rename
+  // is a roster-only change on a live scene, which _rebuild routes through
+  // ttp_display_reroster — the plate re-bakes in place, mid-race or mid-lobby,
+  // and nothing else (meshes, skids, cameras) moves.
+  setCarName(id, name) { return this.updateCar(id, { name }); }
 
   // Show (el) or clear (null) a dropped player's reconnect card, centred in
   // their split-screen cell by _loop — same placement as the FINISHED card.

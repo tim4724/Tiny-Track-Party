@@ -74,10 +74,12 @@ export class LobbyDemo {
     return engine;
   }
 
-  // Swap one car's model/livery WITHOUT restarting the demo race: rebuild just its scene
-  // mesh (addCar bakes the model at creation) and re-pose it at its current spot so it
-  // keeps driving from where it was — no re-grid. Used when a player changes their lobby
-  // car pick. The new handling stats only land on the next full rebuild (join/leave/track
+  // Swap one car's model/livery WITHOUT restarting the demo race: the sim keeps
+  // driving, and the re-registration below lands in Stage._rebuild as a
+  // roster-only change — an in-place re-dress (ttp_display_reroster) that swaps
+  // the model in its slot while the scene, the skids and the preview camera's
+  // orbit phase all stay put. Used when a player changes their lobby car pick.
+  // The new handling stats only land on the next full rebuild (join/leave/track
   // switch): the native ABI has no re-stat hook, and re-seating the car in a fresh
   // session would pop the whole field back to the grid, which is the visible cost the
   // attract loop is avoiding. Handling differences are invisible in eye-candy anyway.
@@ -85,11 +87,9 @@ export class LobbyDemo {
     if (!this.engine || !this.engine.hasCar(id)) return;
     const rec = this.field.find((p) => p.id === id); // keep our field record current for that later rebuild
     if (rec) { rec.colorIndex = colorIndex; rec.carIndex = carIndex; rec.name = name; rec.stats = stats; }
-    // Re-registering the car rebuilds the renderer's roster, which is what bakes
-    // the new model and livery into its slot. The car itself never moves — it
-    // keeps driving from wherever the sim has it.
-    this.scene.removeCar(id);
-    this.scene.addCar(id, colorIndex, name, { cell: false, carIndex });
+    // In place, NOT removeCar + addCar: re-adding would move the car to the end
+    // of the roster, and a reordered roster is a full build (slot identity).
+    this.scene.updateCar(id, { colorIndex, carIndex, name });
   }
 
   // One frame-loop tick (driven by Stage.onFrame; dt in seconds). A no-op until

@@ -51,6 +51,25 @@ struct Roster {
 // never be matched to a car); every other field falls back.
 Roster parseRoster(const char* json);
 
+// What ttp_display_reroster may change IN PLACE on a built scene, per slot —
+// or that it may not run at all (`ok` false: the field changed shape, which is
+// a build). The decision, separated from the renderer work it names so a ctest
+// on every leg can pin it:
+//
+//   - ok requires the SAME slots in the SAME order: slot identity is baked into
+//     the scene (cameras, HUD readback, held poses all go by slot), so a
+//     join/leave/reorder is never a re-dress.
+//   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB, ghost,
+//     silhouette and plate are all rebuilt.
+//   - `redress` — slots whose livery/name changed under the same model: only
+//     what wears them (the plate, or a GLB-less slot's box marker) is rebuilt.
+struct RerosterPlan {
+  bool ok = false;
+  std::vector<uint32_t> remodel;
+  std::vector<uint32_t> redress;
+};
+RerosterPlan planReroster(const Roster& prev, const Roster& next);
+
 // The rear name plate's height on a model's back panel, in world Y, indexed by
 // the car's position in CAR_MODELS. Hand-tuned per model because the plate sits
 // on a flat rear surface the renderer cannot raycast for the way a scene graph

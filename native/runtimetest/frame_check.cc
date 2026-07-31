@@ -323,7 +323,10 @@ void testParseRoster() {
     check(std::string(r.cars[0].name) == "Ada", "a short name fills the plate and stops");
     check(std::string(r.cars[1].name) == "Bartholo", "a long name is cut to the plate's 8 chars");
     check(r.cars[0].plateY == rt::plateY(1), "the plate height follows the car's MODEL");
-    check(r.cars[2].colorABGR == 0xFF888888u && std::string(r.cars[2].name).empty(),
+    check(r.cars[0].carIndex == 1 && r.cars[1].carIndex == 0,
+          "carIndex crosses raw — it is the re-roster plan's model-change signal");
+    check(r.cars[2].colorABGR == 0xFF888888u && std::string(r.cars[2].name).empty()
+              && r.cars[2].carIndex == 0,
           "a slot with only an id still builds — grey, no plate text, first model");
   }
 
@@ -333,6 +336,53 @@ void testParseRoster() {
   const rt::Roster emoji = rt::parseRoster("[{\"id\":1,\"name\":\"\\ud83d\\ude00ab\"}]");
   check(emoji.cars.size() == 1 && std::string(emoji.cars[0].name) == "=",
         "an emoji eats two plate slots and terminates it, as it always has");
+}
+
+// ---------------------------------------------------------------------------
+// 1c. planReroster — what ttp_display_reroster may change on a LIVE scene.
+//
+//     The stakes are the lobby preview's camera: a car pick used to tear the
+//     whole scene down (build resets the orbit to its start bearing), so the
+//     decision "this is a re-dress, not a build" is what keeps the turntable
+//     turning. The renderer work is SDK-gated and untestable here; the
+//     decision is not, which is why it lives in ttp/roster.h.
+// ---------------------------------------------------------------------------
+void testPlanReroster() {
+  const auto roster = [](const char* json) { return rt::parseRoster(json); };
+  const rt::Roster base = roster(
+      "[{\"id\":1,\"name\":\"Ada\",\"carIndex\":0,\"color\":\"#112233\"},"
+      " {\"id\":\"ai-0\",\"name\":\"Rex\",\"carIndex\":1,\"color\":\"#445566\"}]");
+
+  const rt::RerosterPlan same = rt::planReroster(base, base);
+  check(same.ok && same.remodel.empty() && same.redress.empty(),
+        "an identical roster is a legal re-dress that touches nothing");
+
+  check(!rt::planReroster(base, roster("[{\"id\":1,\"carIndex\":0}]")).ok,
+        "a slot count change is a build, never a re-dress");
+  check(!rt::planReroster(base, roster(
+            "[{\"id\":\"ai-0\",\"name\":\"Rex\",\"carIndex\":1,\"color\":\"#445566\"},"
+            " {\"id\":1,\"name\":\"Ada\",\"carIndex\":0,\"color\":\"#112233\"}]")).ok,
+        "reordered ids are a build — slot identity is baked into the scene");
+
+  const rt::RerosterPlan model = rt::planReroster(base, roster(
+      "[{\"id\":1,\"name\":\"Ada\",\"carIndex\":3,\"color\":\"#112233\"},"
+      " {\"id\":\"ai-0\",\"name\":\"Rex\",\"carIndex\":1,\"color\":\"#445566\"}]"));
+  check(model.ok && model.remodel == std::vector<uint32_t>{ 0 } && model.redress.empty(),
+        "a car pick is a REMODEL of that slot alone");
+
+  const rt::RerosterPlan dress = rt::planReroster(base, roster(
+      "[{\"id\":1,\"name\":\"Ada\",\"carIndex\":0,\"color\":\"#112233\"},"
+      " {\"id\":\"ai-0\",\"name\":\"Max\",\"carIndex\":1,\"color\":\"#0000ff\"}]"));
+  check(dress.ok && dress.remodel.empty() && dress.redress == std::vector<uint32_t>{ 1 },
+        "a rename or livery change under the same model is a RE-DRESS");
+
+  // A model change wins over a simultaneous livery change: the remodel path
+  // rebuilds everything the redress path would have.
+  const rt::RerosterPlan both = rt::planReroster(base, roster(
+      "[{\"id\":1,\"name\":\"Eve\",\"carIndex\":2,\"color\":\"#ff0000\"},"
+      " {\"id\":\"ai-0\",\"name\":\"Rex\",\"carIndex\":1,\"color\":\"#445566\"}]"));
+  check(both.ok && both.remodel == std::vector<uint32_t>{ 0 } && both.redress.empty(),
+        "a slot changing model AND livery is listed once, as a remodel");
 }
 
 // ---------------------------------------------------------------------------
@@ -1382,6 +1432,7 @@ int main() {
   testCameraDefault();
   testParseIds();
   testParseRoster();
+  testPlanReroster();
   testCameraMath();
   testAtRest();
   testCarsAndRoster(bt.game);

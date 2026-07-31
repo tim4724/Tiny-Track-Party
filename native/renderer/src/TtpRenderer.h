@@ -120,6 +120,16 @@ public:
     // NOTHING about a scene is serialized any more.
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster);
+    // Re-dress the BUILT scene's car slots in place — same track, same slot
+    // count, camera state and cosmetic clocks untouched. `remodel` slots reload
+    // their GLB (the shell re-provided car<slot>.glb first) plus ghost,
+    // silhouette and plate; `redress` slots rebuild only what wears the livery.
+    // Which slots go in which list is planReroster's call (ttp/roster.h) — this
+    // performs it. False = no scene to re-dress or a slot failed; the caller
+    // falls back to a full build.
+    bool reroster(const std::vector<TtpRosterCar>& roster,
+            const std::vector<uint32_t>& remodel,
+            const std::vector<uint32_t>& redress);
     // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
     // material instances — and reset the per-scene state, so buildScene() can
     // run again on a new track (a Grand Prix chains four of them) or a new
@@ -774,6 +784,19 @@ private:
             const std::function<uint32_t(const filament::math::float3&)>& colorAt,
             bool lit = false);
     bool loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb);
+    // One car slot's scene pieces, shared verbatim between buildTrackScene and
+    // reroster(). Each reads the roster fields off `tb` (the build's local bin,
+    // or the retained mTrack on a re-roster) and assumes the per-car containers
+    // are already sized to the field.
+    bool buildCarSlot(const TrackBin& tb, uint32_t c);   // GLB via loadCarAsset, else box marker
+    void buildCarGhost(uint32_t c);                      // 50%-alpha occlusion twin (+ decode pump)
+    bool buildCarPlate(const TrackBin& tb, uint32_t c);  // rear name plate (GLB cars only)
+    bool buildCarBlob(uint32_t c);                       // contact-shadow grid, mask from the silhouette
+    void destroyCarSlot(uint32_t c);                     // the inverse of the four above
+    void dropAsset(filament::gltfio::FilamentAsset*& a);
+    // Attach finished texture decodes: the async queue only binds on a pump, so
+    // every batch of loads ends with one (see the note in buildTrackScene).
+    void pumpTextures();
     void ensureAssetLoader();
     void registerAssetUris(filament::gltfio::FilamentAsset* asset);
     // shareMaterials false keeps each instance's own MaterialInstance, so they
