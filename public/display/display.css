@@ -73,6 +73,27 @@ html, body {
    so the ticket holds its final footprint before the async QR fetch resolves
    (a blank <canvas> is 300×150 — without this the card would pop taller). */
 #qr { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; image-rendering: pixelated; }
+/* Until the room opens that reserved box is a blank white square (the card
+   surface); the QR and URL fade in when they render (Net.js stamps .is-in),
+   rather than popping in over a lobby that's already up. */
+#qr, #joinurl { opacity: 0; transition: opacity 0.4s ease; }
+#qr.is-in, #joinurl.is-in { opacity: 1; }
+/* The URL line reads "Loading…" until then — overlapped with the real URL in
+   one grid cell so the swap is a crossfade, not a reflow. */
+.ticket__urlbox {
+  display: grid; max-width: 100%;
+  /* the URL scale lives HERE (both lines inherit it) so the em reserve below
+     tracks it. Smaller than the code under it: the host is the boring half of
+     the URL, and a preview host (up to ~76 chars) needs to wrap in few lines. */
+  font-size: clamp(13px, 1.15vw, 17px);
+  /* reserve the final host-line + code-line footprint up front: the card must
+     not grow (and recentre) when the room opens — only its content fades */
+  min-height: 3.4em;
+  align-items: center;
+}
+.ticket__urlbox > * { grid-area: 1 / 1; }
+.ticket__wait { color: var(--ink-2); transition: opacity 0.4s ease; }
+.ticket__urlbox:has(#joinurl.is-in) .ticket__wait { opacity: 0; }
 /* The URL must stay readable in full — it's the type-it-in fallback for anyone
    who can't scan. So it WRAPS rather than truncating: an ellipsis eats the tail,
    and the tail is the room code (preview hosts like
@@ -81,9 +102,7 @@ html, body {
 .ticket__url {
   max-width: 100%;
   font-family: var(--font-display); font-weight: 600;
-  /* smaller than the code below it: the host is the boring half of the URL, and
-     a preview host (up to ~76 chars) needs the room to wrap in few lines */
-  font-size: clamp(13px, 1.15vw, 17px);
+  /* font-size inherits from .ticket__urlbox, where the em height reserve needs it */
   line-height: 1.25;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -184,7 +203,9 @@ html, body {
 .cup-meter i.is-on { background: var(--red); }
 
 /* Scan hint — a quiet white sticker hanging centred under the ticket for the
-   whole lobby; absolute, so it never affects the card's position. */
+   whole lobby; absolute, so it never affects the card's position. Hidden until
+   there's a code to scan (the QR's .is-in), then it fades — or, with motion
+   on, slaps — in with it. */
 .tagline {
   position: absolute; top: calc(100% + 14px); left: 50%;
   transform: translateX(-50%) rotate(-2deg);
@@ -194,7 +215,9 @@ html, body {
   border: 3px solid var(--ink); border-radius: var(--r);
   padding: 0.55em 1.1em;
   box-shadow: var(--shadow-pop);
+  opacity: 0; transition: opacity 0.4s ease;
 }
+.ticket-rail:has(#qr.is-in) .tagline { opacity: 1; }
 .tagline__main {
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
@@ -691,7 +714,8 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   html:not(.device-choice-dismissed) #device-choice { display: flex; }
 }
 
-/* ---- Motion: sticker slap-ins (keyframes in theme.css) ----
+/* ---- Motion: sticker slap-ins (sticker-slap keyframes in theme.css;
+   the scan hint's scale-only tagline-slap twin lives below) ----
    Lobby chrome slaps on in a quick stagger every time #lobby is (re)shown
    (display:none → shown restarts CSS animations), the cup sticker pops as the
    pick lands (.cup-slot__pick loses .hidden), and the results board's pieces
@@ -700,13 +724,26 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
    only exists under prefers-reduced-motion: no-preference. */
 @media (prefers-reduced-motion: no-preference) {
   .welcome__wordmark, .welcome__tag, .welcome__btn,
-  .ticket, .cup-slot__pick, .tagline, .lobby-foot {
+  .ticket, .cup-slot__pick, .lobby-foot {
     animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
   }
   .welcome__tag { animation-delay: 60ms; }
   .welcome__btn { animation-delay: 120ms; }
   .ticket { animation-delay: 40ms; }
-  .tagline { animation-delay: 80ms; }
+  /* The scan hint's slap is SCALE-ONLY: opacity belongs to the QR-gated fade
+     (see .tagline above), so when the QR lands mid-lobby the hint fades in
+     quietly — no pop next to a card that's been sitting still. On a lobby
+     re-show the restarted animation and the already-in QR line up, and the
+     hint slaps with the rest of the chrome. */
+  @keyframes tagline-slap {
+    0%   { scale: 1.15; rotate: 2deg; }
+    60%  { scale: 0.96; rotate: -0.6deg; }
+    100% { scale: 1; rotate: 0deg; }
+  }
+  .tagline {
+    animation: tagline-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
+    animation-delay: 80ms;
+  }
   .cup-slot__pick { animation-delay: 120ms; }
   .lobby-foot { animation-delay: 160ms; }
 

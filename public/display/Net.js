@@ -591,6 +591,7 @@ export function renderJoinUrl(el, fullText, code) {
   } else {
     el.textContent = fullText;
   }
+  el.classList.add('is-in'); // the lobby ticket fades its content in on first render
 }
 
 // QR matrix fetch + canvas render (server returns a module bitmap).
@@ -611,6 +612,7 @@ export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
     if (qr.modules[r * n + c]) ctx.fillRect(c * cell, r * cell, cell, cell);
   }
+  canvas.classList.add('is-in'); // see renderJoinUrl — inert everywhere but the ticket
 }
 
 // Build a dropped-player reconnect card — name + "scan to rejoin" + the rejoin QR

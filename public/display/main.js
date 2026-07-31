@@ -48,6 +48,28 @@ function show(name) {
   else if (step < 0 && prev && !popstateNavigating) { suppressPopstate = true; history.back(); }
 }
 
+// NEW GAME answers from the first paint. The engine boot below top-level-awaits
+// the wasm, so a click landing mid-boot would find a button with no listener —
+// this listener attaches ahead of every await. Pre-boot the click claims the
+// gesture-bound unlock (fullscreen) and reveals the lobby IMMEDIATELY: its
+// markup is complete without the engine (index.html seeds the open seats; the
+// ticket shows a blank square until the room opens and the QR fades in). The
+// bootstrap tail re-runs the reveal through show() — the history entry, the
+// sound hint, the backdrop — once the engine is up. (No audio carry needed: if
+// this gesture predates the AudioContext, the sound-hint pill catches the next
+// one.)
+// Declared up here (not with the fullscreen section below) so the hoisted
+// enterFullscreen() is callable from this pre-boot handler.
+const _fullscreenSupported = !!document.fullscreenEnabled;
+let newGameClicked = false;
+let newGameClick = () => {
+  newGameClicked = true;
+  screens.welcome.classList.add('hidden');
+  screens.lobby.classList.remove('hidden');
+  enterFullscreen();
+};
+el('newgame-btn').addEventListener('click', () => newGameClick());
+
 // ---- tracks ----
 // A track is an ID here, and nothing more. The geometry is built inside the
 // engine — by the sim when a race begins (ttp_session_begin) and by the renderer
@@ -283,6 +305,10 @@ const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   sceneReady = true;
   scene.start();
   refreshLobbyDemo(); // start the attract demo if a track is already picked (?track= / picked during load)
+  // The backdrop may already WANT the 3D (a mid-boot NEW GAME landed in the
+  // lobby before the scene was up): reveal it only now, two frames into the
+  // loop, so the fade starts from a drawn track rather than a black canvas.
+  requestAnimationFrame(() => requestAnimationFrame(updateBackdrop));
 });
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
@@ -319,6 +345,10 @@ function selectTrack(id) {
 // track), even though a preview or pick exists behind it — NEW GAME re-runs
 // updateBackdrop to reveal the 3D attract race already running underneath.
 function backdropShow3D() {
+  // Never reveal a canvas that hasn't drawn a frame yet — the fade would come
+  // up from black instead of from the diorama. scenePromise re-runs
+  // updateBackdrop once the first track frames exist.
+  if (!sceneReady) return false;
   if (currentScreen === 'welcome') return false;
   return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
 }
@@ -665,7 +695,7 @@ const net = new DisplayNet({
     // URL line with the trailing code highlighted in the accent colour.
     currentJoinUrl = joinUrl;                   // the full link the join ticket copies
     try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
-    catch (_) { el('joinurl').textContent = joinUrl; }
+    catch (_) { renderJoinUrl(el('joinurl'), joinUrl, roomCode); }
     try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
   },
   onRosterChange: renderRoster,
@@ -1442,7 +1472,8 @@ if (!_isTestMode && _audioSupported) {
 // Hidden where it can't work: fullscreenEnabled is false both with no API at all
 // and inside an iframe that wasn't granted the permission (the gallery's preview
 // cards), so it covers both without a test-surface special case.
-const _fullscreenSupported = !!document.fullscreenEnabled;
+// _fullscreenSupported is declared at the top of the file — the pre-boot NEW
+// GAME handler needs enterFullscreen() before this section has run.
 el('fullscreen-btn').classList.toggle('hidden', !_fullscreenSupported);
 function enterFullscreen() {
   if (!_fullscreenSupported || document.fullscreenElement) return;
@@ -1589,21 +1620,29 @@ if (_scenario) {
     debugSolo.start();
   });
 } else {
-  show('welcome');
-  renderRoster([], null); // paint the open-seat placeholders now, so the lobby reveal is complete
-  updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  startWhenDeviceChosen(); // net.start() warms the room BEHIND the welcome board, gated on the device chooser where it shows
-
-  // NEW GAME — reveal the (already-connecting) lobby. The session's first real
-  // click, so it carries the browser unlocks that need a user gesture: fullscreen
-  // here, and the AudioContext via the window pointerdown listener above (this
-  // same click trips it; the explicit resume() just makes the intent readable).
-  el('newgame-btn').addEventListener('click', () => {
+  // NEW GAME — reveal the (already-connecting) lobby. The listener and the
+  // pre-boot half of the handshake live at the top of the file; here the click
+  // becomes the real reveal, adding what only the booted engine can do: the
+  // history entry, the sound hint, the backdrop. The audio unlock rides the
+  // window pointerdown listener above (this same click trips it; the explicit
+  // resume() just makes the intent readable).
+  newGameClick = () => {
     enterFullscreen();
     audio.resume();
     show('lobby');
     updateBackdrop(); // a pick made while on the title board reveals its preview now
-  });
+  };
+  show('welcome');
+  // The caught-click replay runs IMMEDIATELY after show('welcome'), before
+  // anything that forces a style recalc (startWhenDeviceChosen reads computed
+  // style): if the lobby's display:none from show('welcome') were committed
+  // between the two, re-showing it would restart every entrance animation in
+  // it — the already-visible chrome re-slapping is what a mid-boot click must
+  // NOT cause.
+  if (newGameClicked) newGameClick();
+  renderRoster([], null); // paint the open-seat placeholders now, so the lobby reveal is complete
+  updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
+  startWhenDeviceChosen(); // net.start() warms the room BEHIND the welcome board, gated on the device chooser where it shows
 
   // Browser back: one level up the SCREEN_ORDER stack. WHAT that means per
   // screen is uiModel.BACK_EFFECT (race → the same reset as the pause overlay's
@@ -1663,7 +1702,7 @@ import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
   return initDebugPanel([
   { section: 'Test harness' },
   { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
+    options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
       .map((s) => ({ value: s, label: s })) },
   { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
   { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },

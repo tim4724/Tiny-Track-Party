@@ -9,6 +9,7 @@
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
 var DISPLAY_CARDS = [
   { key: 'welcome',     title: 'Welcome' },
+  { key: 'lobby-loading', title: 'Lobby (loading)' },
   { key: 'lobby-empty', title: 'Lobby (waiting)', animated: true },
   { key: 'lobby',       title: 'Lobby (track picked)',  hostVariant: true, animated: true, params: { picked: 'track',  track: 'driftwood' } },
   { key: 'lobby',       title: 'Lobby (tour picked)',   hostVariant: true, animated: true, params: { picked: 'tour' } },

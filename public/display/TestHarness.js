@@ -223,9 +223,11 @@ export function runDisplayScenario(opts, ctx) {
   // (and the device chooser sitting on it) keeps the 2D paper diorama — every
   // other screen floats over the live 3D scene, the lobby included, which has
   // attracted in 3D from its first frame since the boot-time preview shipped.
-  // Default-3D on purpose: a scenario added later previews the production look
-  // unless it explicitly opts back onto the diorama here.
-  const DIORAMA_ONLY = ['welcome', 'device-choice'];
+  // The exception is lobby-loading: it previews the mid-boot lobby, before the
+  // scene has drawn a frame (backdropShow3D's sceneReady gate), so it sits on
+  // the diorama on purpose. Default-3D otherwise: a scenario added later
+  // previews the production look unless it explicitly opts back on here.
+  const DIORAMA_ONLY = ['welcome', 'device-choice', 'lobby-loading'];
   if (!DIORAMA_ONLY.includes(scenario)) {
     // #scene ships .is-dim (opacity 0) — drop BOTH .hidden and .is-dim, else the
     // canvas renders into a fully transparent container (looks like a blank page).
@@ -256,10 +258,10 @@ export function runDisplayScenario(opts, ctx) {
       running: () => ctx.scene.isRunning()
     };
   }
-  // Diorama previews (welcome / device-choice) drive no 3D — the WebGL backdrop
-  // sits dimmed behind them — so let the scene paint once, then idle for good.
-  // The lobby previews are NOT in this set any more: they run the attract demo
-  // and hold their frame once it's up (startAttractDemo below).
+  // Diorama previews (welcome / device-choice / lobby-loading) drive no 3D — the
+  // WebGL backdrop sits dimmed behind them — so let the scene paint once, then
+  // idle for good. The other lobby previews are NOT in this set: they run the
+  // attract demo and hold their frame once it's up (startAttractDemo below).
   if (DIORAMA_ONLY.includes(scenario) && ctx.scenePromise) {
     ctx.scenePromise.then(() => holdFrame(false)).catch(() => {});
   }
@@ -335,13 +337,23 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
+  if (scenario === 'lobby-loading') {
+    // The mid-boot lobby (a NEW GAME click the engine boot caught): the ticket
+    // shows its blank white square + "Loading…", the scan hint is held back —
+    // nothing room-dependent has rendered, so nothing here fakes a join.
+    show('lobby');
+    renderRoster([], null);
+    renderCupSlot(el('cup-slot'), null);
+    return;
+  }
+
   if (scenario === 'lobby-empty') {
     // The lobby the instant NEW GAME reveals it, before anyone joins: open
     // seats, empty cup slot, the room's join URL + QR — over the boot-time
     // attract race (all-CPU field: no one has joined).
     show('lobby');
     renderRoster([], null);
-    el('joinurl').textContent = (location.host || 'tinytrack.party');
+    renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     startAttractDemo([]);

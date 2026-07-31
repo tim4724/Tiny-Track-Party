@@ -103,7 +103,12 @@
       <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
         <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
         <canvas id="qr"></canvas>
-        <div class="ticket__url" id="joinurl">…</div>
+        <!-- "Loading…" holds the URL line until the room opens; the real URL
+             crossfades in over it (renderJoinUrl stamps .is-in). -->
+        <div class="ticket__urlbox">
+          <div class="ticket__url ticket__wait">Loading…</div>
+          <div class="ticket__url" id="joinurl"></div>
+        </div>
       </button>
       <!-- Scan hint — hangs just under the ticket for the whole lobby
            (joining stays possible until the race starts). -->
