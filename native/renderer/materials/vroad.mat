@@ -57,19 +57,27 @@ material {
         { type : int, name : decalCount },
         // Lap length, for the wrap: s is periodic, so a decal near the lap line
         // must still reach fragments on the other side of it.
-        { type : float, name : trackLength },
+        // PRECISION IS LOAD-BEARING on every decal parameter that carries
+        // world units. A default-precision uniform is mediump, and matc's
+        // Metal backend takes mediump at its word: the fp32 in the buffer is
+        // ROUNDED THROUGH half ON LOAD. At an arclength of 500 an fp16 step
+        // is 0.5 of a unit — the car shadow's world anchor quantized by half
+        // a car length, which read as no shadow at all with flickering
+        // garbage at the quantization crossings. Desktop GL promotes mediump
+        // to fp32, which is why the web never showed it.
+        { type : float, name : trackLength, precision : high },
         // 1/trackLength, and the arclength this chunk is centred on. Together
         // they take the lap wrap OUT of the per-decal loop: the fragment folds
         // its own arclength into the chunk's local frame ONCE, and each decal is
         // then a plain subtract. The wrap was a divide and a floor per decal per
         // fragment, which is the single most expensive thing that loop did.
-        { type : float, name : invTrackLength },
-        { type : float, name : chunkMid },
+        { type : float, name : invTrackLength, precision : high },
+        { type : float, name : chunkMid, precision : high },
         // Per decal, in track space:
         //   xy = centre (s, lat), zw = half-extents — ALL world units, matching
         // uv0 exactly, EXCEPT that x arrives relative to this chunk's centre
         // (see chunkMid) so the loop needs no per-decal lap wrap.
-        { type : float4[32], name : decalRect },
+        { type : float4[32], name : decalRect, precision : high },
         //   rgb = colour, a = peak alpha
         { type : float4[32], name : decalColor },
         //   x = inner radius fraction held at full alpha, beyond which it
@@ -98,9 +106,9 @@ material {
         // corner and the per-triangle kinks of the interpolated field ripple
         // through its sharp edge as the car crosses rings — edge shimmer on
         // bends, gone flat. Zero on profile decals.
-        { type : float4[32], name : decalWPos },
-        { type : float4[32], name : decalWFwd },
-        { type : float4[32], name : decalWRight },
+        { type : float4[32], name : decalWPos, precision : high },
+        { type : float4[32], name : decalWFwd, precision : high },
+        { type : float4[32], name : decalWRight, precision : high },
         // One 2D-array texture, one silhouette per layer: 0..7 the cars in
         // slot order, 8 the monster rig, 9 the generic superellipse. Baked
         // and pre-blurred by bakeSilhouette, so this samples ONCE.
@@ -139,7 +147,7 @@ fragment {
     // and the first thing each iteration does is reject on |ds| — most decals on
     // a track are nowhere near any given fragment, so the common path is one
     // subtract and one compare.
-    vec3 deckDecals(vec3 base, vec2 tc) {
+    vec3 deckDecals(vec3 base, highp vec2 tc) {
         int n = min(materialParams.decalCount, 32);
         // ONE wrap for the whole loop: fold this fragment's arclength into the
         // chunk's local frame, the short way round the lap. Every decal's x is
@@ -292,7 +300,7 @@ fragment {
         // surface, and the per-decal |dl| reject above drops it for free — which
         // is also what makes a FULL-WIDTH decal (the launch strips, if they ever
         // move here) safe.
-        vec2 tc = getUV0();
+        highp vec2 tc = getUV0();
         if (materialParams.decalCount > 0) base = deckDecals(base, tc);
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
