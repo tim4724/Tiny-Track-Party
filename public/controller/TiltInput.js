@@ -43,6 +43,8 @@
 // edge — the InputGate downstream decides what actually reaches the wire — with
 // a SEND_HZ interval kept as the idle heartbeat and the no-sensor fallback.
 
+import { BUTTON_SEND_MIN_INTERVAL_MS } from './InputGate.js';
+
 const SEND_HZ = 25;
 
 // The three steering numbers below are MANIFEST values: they belong to the
@@ -80,26 +82,24 @@ export const SMOOTH = 0.5;
 // between the 25 Hz beats, and a per-tick step would fast-forward through them.
 //
 // The wire turns any ramp into a staircase: the send gate passes at most one
-// CONTROL per SEND_MIN_INTERVAL_MS (40 ms), so the display receives at most
-// RAMP_MS/40 values however smooth the curve is here. In the button schemes the
-// gate runs NOISELESS (InputGate.setNoiseless, flipped by applyScheme) — no
-// sensor, no noise dead-bands — so every one of those steps rides the 40 ms
-// floor no matter how small, and the duration below is a pure feel choice, not
-// a wire constraint. Smoother than one value per 40 ms cannot come from the
-// phone at all; that would be display-side interpolation, a sim (C++) decision.
+// CONTROL per send floor, so the display receives at most RAMP_MS/floor values
+// however smooth the curve is here. In the button schemes the gate runs
+// NOISELESS (InputGate.setNoiseless, flipped by applyScheme) — no sensor, no
+// noise dead-bands, and the floor tightened to one display frame
+// (BUTTON_SEND_MIN_INTERVAL_MS) — so the ramp arrives at frame granularity and
+// the duration below is a pure feel choice, not a wire constraint.
 const BTN_RAMP_MS = 100;    // press → full lock
 const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
 // The press edge's head start: seed the ramp as if it had already run one send
-// floor (40 ms), so the flush the edge fires announces a real turn-in (a full
-// wire step, 0.2) instead of the near-zero few-ms partial it would otherwise
-// carry. That first packet spends a 40 ms floor slot either way — it had better
-// say something the car can act on.
-const BTN_HEAD_MS = 40;
-// While the ramp is in motion, self-tick faster than the 25 Hz heartbeat so every
-// 40 ms send window opens onto a FRESH value. The heartbeat alone under-samples
-// the ramp: its beats race the send floor, and a beat that loses by 1 ms is a
-// step the wire never carries — the staircase degrades into two fat jumps.
-const BTN_RAMP_TICK_MS = 16;
+// floor, so the flush the edge fires announces a real turn-in — a full wire
+// step — instead of the few-ms partial it would otherwise carry. That first
+// packet occupies a floor slot either way.
+const BTN_HEAD_MS = BUTTON_SEND_MIN_INTERVAL_MS;
+// While the ramp is in motion, self-tick at the send floor's own period so every
+// send window opens onto a FRESH value. The 25 Hz heartbeat alone under-samples
+// the ramp: its beats race the floor, and a beat that loses the race is a step
+// the wire never carries — the staircase degrades into fat jumps.
+const BTN_RAMP_TICK_MS = BUTTON_SEND_MIN_INTERVAL_MS;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 

@@ -216,10 +216,12 @@ var STEER = {
   // WIRE. Baseline cadence for sub-strong news: an unconfirmed steering change
   // never waits longer than this to reach the wire.
   SEND_INTERVAL_MS: 100,
-  // WIRE. Hard floor between ANY two CONTROL sends. Every InputGate tier waits
-  // at least this long, so the wire rate is provably bounded at 1000/this
-  // msgs/s — sized to the strictest platform message budget in sight
-  // (AirConsole allows 25 messages/s).
+  // WIRE. Hard floor between any two CONTROL sends in the tilt schemes. Every
+  // InputGate tier waits at least this long, so the wire rate is provably
+  // bounded at 1000/this msgs/s — sized to the strictest platform message
+  // budget in sight (AirConsole allows 25 messages/s). The button schemes run
+  // the gate's noiseless profile with a tighter floor of their own — see
+  // InputGate.setNoiseless / BUTTON_SEND_MIN_INTERVAL_MS.
   SEND_MIN_INTERVAL_MS: 40
 };
 

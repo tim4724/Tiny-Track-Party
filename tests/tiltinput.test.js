@@ -137,9 +137,9 @@ test('button steering ramps linearly to lock and releases at double speed', () =
   t._tick(); // seed the ramp clock
   t.pressSteer(1, true);
   t._tick(); // the edge's own sample (headlessly the flush is a no-op, so tick by hand)
-  assert.ok(Math.abs(out.at(-1).s - 40 / 100) < 0.001, `the press edge itself carries the head start, one wire step (got ${out.at(-1).s})`);
-  for (let i = 0; i < 2; i++) { ms += 40; t._tick(); }
-  assert.equal(out.at(-1).s, 1, 'head start + 80 ms of hold LANDS exactly on 1 — the ramp has no asymptote');
+  assert.ok(Math.abs(out.at(-1).s - 16 / 100) < 0.001, `the press edge itself carries the head start, one wire step (got ${out.at(-1).s})`);
+  for (let i = 0; i < 3; i++) { ms += 40; t._tick(); }
+  assert.equal(out.at(-1).s, 1, 'head start + ~120 ms of beats LANDS exactly on 1 — the ramp has no asymptote');
   t.pressSteer(1, false);
   ms += 40; t._tick(); ms += 40; t._tick();
   assert.equal(out.at(-1).s, 0, 'released, the steer is back to exactly 0 within two beats (75 ms release)');

@@ -102,6 +102,15 @@ export const DEFAULT_SEND_INTERVAL_MS = 100;
 // provable rather than statistical (AirConsole's platform budget).
 export const DEFAULT_SEND_MIN_INTERVAL_MS = 40;
 
+// The floor the noiseless (button) profile runs instead: one display frame, so
+// a 100 ms ramp arrives as ~7 values rather than 3 — at 40 ms spacing it reads
+// as two fat steps, the very thing the ramp exists to avoid. Affordable
+// because the 40 ms figure was sized to AirConsole's 25 msgs/s budget and this
+// kit no longer carries AirConsole; the fastlane/relay take a sub-second
+// 62 msgs/s burst without noticing, and a HELD button emits nothing (exact
+// repeats filter out), so the higher rate only exists while a ramp is moving.
+export const BUTTON_SEND_MIN_INTERVAL_MS = 16;
+
 // The FLOOR of the measured idle twitch (the "1-2 degrees" above). The floor, not
 // the ceiling: a threshold under the QUIETEST phone's surviving wobble never
 // engages at all, so that is the bound worth pinning.
@@ -182,12 +191,15 @@ export class InputGate {
   // twitches and a deliberate turn must be told apart from drift. A button
   // scheme has no sensor in the loop — every sample is a deliberate ramp step —
   // so both bands drop to zero: lossless (only exact repeats are filtered, and a
-  // moving ramp never repeats) and always-urgent (every change rides the
-  // sendMinIntervalMs floor instead of the 100 ms sub-strong cadence). The floor
-  // itself is untouched: it is the platform message budget, not a noise figure.
+  // moving ramp never repeats) and always-urgent (every change rides the send
+  // floor instead of the 100 ms sub-strong cadence). The floor tightens to
+  // BUTTON_SEND_MIN_INTERVAL_MS (see its note) so the ramp arrives at display
+  // frame granularity; every pacing guarantee above still holds, just at the
+  // profile's own floor.
   setNoiseless(on) {
     this.steerThreshold = on ? 0 : DEFAULT_STEER_THRESHOLD;
     this.strongThreshold = on ? 0 : DEFAULT_STRONG_THRESHOLD;
+    this.sendMinIntervalMs = on ? BUTTON_SEND_MIN_INTERVAL_MS : DEFAULT_SEND_MIN_INTERVAL_MS;
   }
 
   // Install one shadow counter per candidate threshold. Shadows track their own

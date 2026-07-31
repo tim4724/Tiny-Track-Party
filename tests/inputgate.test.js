@@ -180,9 +180,12 @@ test('setNoiseless drops both dead-bands (button schemes) and restores the defau
   gate.markAcked(sample(0.05));
   // still lossless, not unconditional: an exact repeat stays filtered
   assert.equal(gate.decide(sample(0.05), 80, 20), null);
+  // the tighter button floor: a fresh change may follow the last send by 16 ms
+  assert.equal(gate.decide(sample(0.1), 56, 20), 'change');
   gate.setNoiseless(false);
   assert.equal(gate.steerThreshold, DEFAULT_STEER_THRESHOLD);
   assert.equal(gate.strongThreshold, DEFAULT_STRONG_THRESHOLD);
+  assert.equal(gate.sendMinIntervalMs, DEFAULT_SEND_MIN_INTERVAL_MS);
 });
 
 test('shadow counters cover every candidate threshold and are monotonic', () => {
