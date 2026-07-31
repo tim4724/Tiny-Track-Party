@@ -88,7 +88,12 @@ export const SMOOTH = 0.5;
 // noise dead-bands, and the floor tightened to one display frame
 // (BUTTON_SEND_MIN_INTERVAL_MS) — so the ramp arrives at frame granularity and
 // the duration below is a pure feel choice, not a wire constraint.
-const BTN_RAMP_MS = 100;    // press → full lock
+// 200, not less: the wire can carry a finer ramp (16 ms steps), but the EYE
+// cannot — under ~150 ms a sweep spans so few display frames it reads as
+// "a blip, then full lock" however smooth the data is. Verified against the
+// real pipeline: at 100 ms the wire was a perfect 6-value 16 ms ladder and
+// still FELT like two steps. Duration is the perceptual knob, not fidelity.
+const BTN_RAMP_MS = 200;    // press → full lock
 const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
 // The press edge's head start: seed the ramp as if it had already run one send
 // floor, so the flush the edge fires announces a real turn-in — a full wire
