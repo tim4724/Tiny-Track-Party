@@ -32,7 +32,7 @@ const PAIRS = [
     // OWN shaders (Skybox's constant colour, and the fog composite inside
     // surface_main.fs). Neither can be handed one of our uniforms.
     shader: { file: 'materials/ttp_grade.inc', re: /const float TTP_GRADE_EXPOSURE = ([\d.]+);/ },
-    cpp: { file: 'src/TtpRenderer.cpp', re: /constexpr float kGradeExposure = ([\d.]+)f;/ }
+    cpp: { file: 'src/TtpRendererImpl.h', re: /constexpr float kGradeExposure = ([\d.]+)f;/ }
   }
 ];
 

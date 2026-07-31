@@ -304,6 +304,18 @@ private:
     };
     std::vector<DeckDecal> mDeckDecals;      // gathered per frame
     std::vector<DeckDecal> mDeckDecalsLast;  // last frame's, for debugDeckDecals()
+
+    // render(), split along the profiler's zones (TtpRendererFrame.cpp). What
+    // crosses a phase boundary crosses as a parameter: the car contract slots,
+    // the ground-conformed car positions, and the boost auras held back so
+    // every aura composites over every shadow.
+    void renderCars(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
+            std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
+    void renderWorld(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
+            const std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
+    void renderSkids(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
+    void renderAmbient(const TtpFrameInput& input);
+    void renderCells(const TtpFrameInput& input, double& tMark);
     // Decals that never move — boost pads, launch strips, oil slicks, item-box
     // contact shadows. Resolved once at track build and re-queued each frame,
     // which is cheaper than it sounds (a memcpy of a handful of float4s) and

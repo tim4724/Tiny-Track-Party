@@ -847,7 +847,14 @@ add_test(NAME showcase COMMAND showcase_check)
 # renderer wants the compiler's normal float latitude.
 if(DEFINED FILAMENT_SDK)
   include(cmake/FilamentSdk.cmake)
-  add_library(ttp_renderer STATIC renderer/src/TtpRenderer.cpp)
+  add_library(ttp_renderer STATIC
+    renderer/src/TtpRenderer.cpp
+    renderer/src/TtpRendererBakes.cpp
+    renderer/src/TtpRendererCars.cpp
+    renderer/src/TtpRendererDecals.cpp
+    renderer/src/TtpRendererDressing.cpp
+    renderer/src/TtpRendererFrame.cpp
+    renderer/src/TtpRendererTrack.cpp)
   target_include_directories(ttp_renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/src

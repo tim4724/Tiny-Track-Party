@@ -26,8 +26,8 @@ if [ ! -x "$MATC" ]; then
 fi
 
 # Only the ones that actually moved. matc is deterministic — the .filamat it
-# writes for an unchanged .mat is byte-identical — so recompiling all eleven on
-# every engine build was ~1 s spent reproducing bytes we already had, on the
+# writes for an unchanged .mat is byte-identical — so recompiling every material
+# on every engine build was time spent reproducing bytes we already had, on the
 # command you run most while working on native/.
 #
 # matc ITSELF is a dependency, not just the .mat: a rebuilt Filament fork can
