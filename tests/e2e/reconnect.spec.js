@@ -23,6 +23,42 @@ test('a reloaded phone rejoins straight into its still-running race', async ({ p
   await bob.waitForSelector(visible('#game'), { timeout: 15000 });
 });
 
+test('a mid-race peer_left holds the seat, the car and its cell (QR up)', async ({ page, browser }) => {
+  // The liveness test below covers SILENCE (socket open, no peer_left). This is
+  // the other arm of session.cc's presence_action fork — a REAL socket close —
+  // and no other spec drives it: mid-game the seat and the still-racing car must
+  // survive the drop, so the camera stays on the cell and its reconnect QR.
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
+  const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
+  await startRace(alice, [bob]);
+  await waitForRacing(page);
+
+  // Bob's phone goes away for real: context close → socket close → peer_left.
+  await bob.context().close();
+  await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
+
+  const after = await page.evaluate(() => ({
+    has: window.__net.flow.has(2),
+    cars: window.__session().carIds(),
+  }));
+  expect(after.has).toBe(true);        // seat kept for the whole race
+  expect(after.cars).toContain(2);     // car still racing — the split cell stays
+  await expect(page.locator('.cell-reconnect')).toBeVisible();
+});
+
+test('a lobby peer_left frees the seat outright', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+  await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
+  const bob = await joinController(browser, roomCode, 'Bob'); // peerIndex 2
+  await expect(page.locator('#players')).toContainText('Bob');
+
+  await bob.context().close();
+  // A drop would KEEP the seat (flow.has stays true), so this wait is the fork.
+  await page.waitForFunction(() => !window.__net.flow.has(2), null, { timeout: 10000 });
+  await expect(page.locator('#players')).not.toContainText('Bob');
+});
+
 test('a silent phone is dropped by liveness and restored when its pings resume', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
