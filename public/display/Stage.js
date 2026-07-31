@@ -148,6 +148,7 @@ export class Stage {
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
+    this._hudSig = null;     // last-placed HUD layout (rects + cards) — see _loop
     this._camMode = null;
     this._cardMask = null;   // last pushed "a card owns this cell" bitmask
     this._divPushed = null;  // last pushed divider toggle
@@ -645,6 +646,7 @@ export class Stage {
   _hideCellHud() {
     if (this._hudHidden) return;
     this._hudHidden = true;
+    this._hudSig = null; // the labels are display:none now — re-place on return
     for (const c of this.cars.values()) {
       for (const el of [c.label, c.finishEl, c.placeEl, c.reconnectEl]) {
         if (el) el.style.display = 'none';
@@ -889,7 +891,18 @@ export class Stage {
 
     // Place this frame's HUD over the cells the renderer just drew — ASKING it
     // where they are (_cellRects) instead of scoring the same grid again here.
+    // The placement only moves on a seat edit, a resize or a card flip, so the
+    // ~40 style writes below latch on a signature of exactly those inputs and
+    // the steady-state frame writes no DOM (this file's own rule).
     const cells = this._cellRects(ids.length);
+    const hudSig = cellSig + '|'
+        + cells.map((r) => r.x + ',' + r.y + ',' + r.w + ',' + r.h).join(';') + '|'
+        + ids.map((id) => {
+          const c = this.cars.get(id);
+          return (c.finished ? 'f' : '') + (c.reconnecting ? 'r' : '');
+        }).join(',');
+    if (hudSig === this._hudSig) { this._scheduleNext(); return; }
+    this._hudSig = hudSig;
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
       const r = cells[i];

@@ -265,6 +265,8 @@ private:
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
     static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
+    // Kept POD with no padding: uploadDeckDecals memcmps these to skip a
+    // chunk whose list hasn't changed.
     struct DeckDecal {
         filament::math::float4 rect;   // s, lat, halfS, halfLat — ALL world units
         filament::math::float4 color;  // linear rgb, peak alpha
@@ -286,8 +288,12 @@ private:
     struct RoadChunk {
         filament::MaterialInstance* mi;
         float sMin, sMax;   // arclength covered, before the decal margin
+        // What this chunk's instance was last handed (folded), so a chunk whose
+        // stretch nothing dynamic crossed skips its uniform writes entirely.
+        std::vector<DeckDecal> last;
     };
     std::vector<RoadChunk> mRoadChunks;
+    std::vector<DeckDecal> mRoadInstLast;  // ditto for the whole-lap fallback chunk
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -486,6 +492,13 @@ private:
     float mBoxScale = 1.0f;                    // kit box → BOX_H 0.3 world units
     std::vector<float> mBoxCollectT;           // grow+fade burst clocks (TrackProps)
     std::vector<uint8_t> mBoxPrevAvail;        // availability edge detect
+    // Scene membership for the box pools (setInstanceInScene state): a collected
+    // box leaves the scene, and its fade twin is only IN it for the 0.2 s poof.
+    std::vector<uint8_t> mBoxIn, mBoxFadeIn;
+    // Every box-pool MaterialInstance carrying emissiveFactor, resolved once at
+    // load — the throb retints these instead of string-probing every material of
+    // every instance per frame.
+    std::vector<filament::MaterialInstance*> mBoxGlowMats;
     // Every box's contact blob is baked into the ONE mPropShadows mesh, so a
     // collected box's blob can only be hidden by rewriting its slice of the
     // vertex alphas: `mBoxShadowRest` is the baked colour to scale, and
@@ -673,6 +686,7 @@ private:
         float restRoadY = 0;
         bool hasRest = false;
         float radius = 0.1f, loY = 0, hiY = 0.3f; // silhouette proxy (base rim + apex)
+        bool posed = false;             // rest transform pushed; settled cones skip the write
     };
     std::vector<ConeState> mConeStates;
     // Water biomes swap the warning cone for an A-frame "wet floor" sign —

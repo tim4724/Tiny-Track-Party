@@ -1114,17 +1114,26 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
             if (e.isNull()) break;
             auto ri = rcm.getInstance(e);
             if (!ri) continue;
+            const float sMin = (float) (t0 / trisPerRing) / N * L;
+            const float sMax = (float) ((t0 + n) / trisPerRing + 1) / N * L;
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
             mi->setParameter("shadowTexel", 0.0f);
             mi->setParameter("decalCount", 0);
-            mi->setParameter("trackLength", 0.0f);
-            mi->setParameter("invTrackLength", 0.0f);
-            mi->setParameter("chunkMid", 0.0f);
+            // Build-time constants: the wrap and this chunk's own midpoint never
+            // change again, so uploadDeckDecals only ever writes the decal set.
+            mi->setParameter("trackLength", L);
+            mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
+            mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
             rcm.setMaterialInstanceAt(ri, 0, mi);
-            mRoadChunks.push_back({ mi,
-                    (float) (t0 / trisPerRing) / N * L,
-                    (float) ((t0 + n) / trisPerRing + 1) / N * L });
+            mRoadChunks.push_back({ mi, sMin, sMax, {} });
         }
+    }
+    // The whole-lap fallback instance carries the same build-time wrap
+    // constants as the chunks, so uploadDeckDecals only ever writes decal sets.
+    if (mRoadInst) {
+        mRoadInst->setParameter("trackLength", L);
+        mRoadInst->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
+        mRoadInst->setParameter("chunkMid", 0.0f);
     }
     return true;
 }
@@ -4278,18 +4287,25 @@ void TtpRenderer::uploadDeckDecals() {
         mDeckDecals.insert(mDeckDecals.begin(),
                 mStaticDeckDecals.begin(), mStaticDeckDecals.end());
     }
-    mDeckDecalsLast = mDeckDecals;
+    // The composited list moves into mDeckDecalsLast (debugDeckDecals' view of
+    // this frame) by swap, and the emptied buffer becomes next frame's scratch —
+    // the old deep copy existed only to feed that debug accessor.
+    mDeckDecalsLast.swap(mDeckDecals);
+    mDeckDecals.clear();
     const float L = mTrack ? mTrack->length : 0.0f;
 
     // PER CHUNK, not per road. A fragment only ever needs the decals near its own
     // arclength, and the road is already split into ~35u chunks for culling, so
     // handing each chunk its own short list is what keeps the loop off the 99% of
-    // the deck that has nothing on it. Most chunks end up with decalCount 0 and
-    // skip the whole thing.
-    const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan) {
-        float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+    // the deck that has nothing on it. The statics never move, and the dynamics
+    // (auras, item blobs) cross 1–2 chunks — so each chunk's folded list is
+    // compared to what it was last handed, and an unchanged chunk (which in a
+    // steady frame is every chunk) writes no uniforms at all.
+    const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan,
+            std::vector<DeckDecal>& last) {
+        DeckDecal sel[kMaxDeckDecals];
         int n = 0;
-        for (const DeckDecal& d : mDeckDecals) {
+        for (const DeckDecal& d : mDeckDecalsLast) {
             if (n >= kMaxDeckDecals) break;
             // Overlap on a PERIODIC arclength, measured the short way round: a
             // decal is in range if its own footprint reaches this span. Folding
@@ -4298,29 +4314,35 @@ void TtpRenderer::uploadDeckDecals() {
             float ds = d.rect.x - mid;
             if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
             if (std::fabs(ds) > halfSpan + d.rect.z) continue;
-            rect[n] = d.rect; rect[n].x = ds;
-            col[n] = d.color; shape[n] = d.shape; n++;
+            sel[n] = d; sel[n].rect.x = ds; n++;
         }
+        if ((size_t) n == last.size()
+                && (n == 0 || std::memcmp(sel, last.data(), n * sizeof(DeckDecal)) == 0)) {
+            return;
+        }
+        last.assign(sel, sel + n);
         if (n > 0) {
+            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+            for (int i = 0; i < n; i++) {
+                rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
+            }
             mi->setParameter("decalRect", rect, (size_t) n);
             mi->setParameter("decalColor", col, (size_t) n);
             mi->setParameter("decalShape", shape, (size_t) n);
-            mi->setParameter("trackLength", L);
-            mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
-            mi->setParameter("chunkMid", mid);
         }
         mi->setParameter("decalCount", n);
     };
     if (!mRoadChunks.empty()) {
-        for (const RoadChunk& ch : mRoadChunks) {
-            uploadTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
+        for (RoadChunk& ch : mRoadChunks) {
+            uploadTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f,
+                    ch.last);
         }
     } else if (mRoadInst) {
         // Degenerate: the deck material exists but the chunk pass produced
-        // nothing. One "chunk" spanning the whole lap keeps the decals drawing.
-        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
+        // nothing. One "chunk" spanning the whole lap keeps the decals drawing
+        // (its wrap constants are set at build, like the chunks').
+        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f, mRoadInstLast);
     }
-    mDeckDecals.clear();
 }
 
 MaterialInstance* TtpRenderer::litShadowInstance() {
@@ -4434,11 +4456,12 @@ void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
 // Parking is invisible but not free: an entity in the Scene pays a full
 // FScene::prepare slot — a double-precision world transform, a frustum test, a
 // UBO slot, a draw command and its place in the sort — and it pays it ONCE PER
-// CELL. A 4-way split has ~126 permanently-parked renderables (the four car
-// ghosts, the monster rigs and their ghosts, the banana/rocket/blob pools, the
-// impact bursts, the boost streaks and discs), so that is ~500 prepare slots a
-// frame spent on things nobody can see. FScene::prepare only walks SET bits, so
-// removing an entity costs it exactly nothing.
+// CELL. A 4-way split HAD ~126 permanently-parked renderables (the four car
+// ghosts, the monster rigs and their ghosts, the item boxes and their fade
+// twins, the banana/rocket/blob pools, the impact bursts, the boost streaks and
+// discs), so that was ~500 prepare slots a frame spent on things nobody can
+// see. FScene::prepare only walks SET bits, so removing an entity costs it
+// exactly nothing — every one of those pools now rides these helpers.
 //
 // Both helpers are edge-triggered — the flag is the last state pushed, so a
 // pool that stays parked for a whole race issues one remove and nothing else.
@@ -4780,7 +4803,28 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     for (const TrackBin::Box& b : tb.boxes) {
         mBoxXf.push_back(tb.frameAt(b.s).basis(b.lat));
     }
+    // loadInstancedProp added every pool member; the first reconcile removes
+    // whatever isn't live (frame 1, like the ghosts). Seeded 1 for that.
+    mBoxIn.assign(mBoxInstances.size(), 1);
+    mBoxFadeIn.assign(mBoxFadeInstances.size(), 1);
+    // Resolve the emissive-bearing material instances once — the gold throb
+    // retints these per frame instead of string-probing every material.
+    mBoxGlowMats.clear();
+    const auto collectGlow = [&](gltfio::FilamentInstance* inst) {
+        if (!inst) return;
+        MaterialInstance* const* mats = inst->getMaterialInstances();
+        for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
+            if (!mats[mi]->getMaterial()->hasParameter("emissiveFactor")) continue;
+            if (std::find(mBoxGlowMats.begin(), mBoxGlowMats.end(), mats[mi])
+                    == mBoxGlowMats.end()) {
+                mBoxGlowMats.push_back(mats[mi]);
+            }
+        }
+    };
+    for (auto* inst : mBoxInstances) collectGlow(inst);
+    for (auto* inst : mBoxFadeInstances) collectGlow(inst);
     mBananaAsset = loadInstancedProp("item-banana.glb", 8, mBananaInstances);
+    mBananaIn.assign(mBananaInstances.size(), 1);
     // Contact blobs for the FLOATING props (TrackProps' _boxShadow): a box's
     // real sun shadow lands raked off to one side, so a soft smudge is painted
     // on the deck directly beneath it as the position cue. makeBlobShadowTexture
@@ -8393,13 +8437,16 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     sm.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
                             sm.verts.data(), sm.verts.size() * sizeof(Vertex), nullptr));
                 }
+                // A dead streak leaves the scene (edge-triggered) rather than
+                // parking underground — see setMeshInScene for what a parked
+                // slot costs per cell.
+                setMeshInScene(sm, !st.dead && st.alpha > 0.0f);
             }
         }
         // Boost pool: the JS breathes both the opacity (min(0.85, 0.7 + k·0.3)
         // × pulse) and the radius ((footW+footL)/2 × (1.25 + k·1.4) × 0.5),
         // then CONFORMS every ring vertex onto the deck.
         if (mBoostDisks.size() > i && !mBoostDisks[i].entity.isNull()) {
-            static const mat4f PARKED = mat4f::translation(float3{ 0, -1000, 0 });
             if (c.boostMul > 1.001f) {
                 const float k = c.boostMul - 1.0f;
                 const float pulse = 0.9f + 0.1f * std::sin(mTime * 11.0f);
@@ -8427,15 +8474,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // was served no vroad.filamat.
                 addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
                         0.72f, 0.94f, true);
-                if (mRoadInst) {
-                    tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity),
-                            mat4f::translation(float3{ 0, -1000, 0 }));
-                } else {
+                // The disc mesh only draws on a shell served no vroad.filamat;
+                // with the deck material it never enters the scene at all.
+                setMeshInScene(mBoostDisks[i], !mRoadInst);
+                if (!mRoadInst) {
                     conformDecalAt(mBoostDisks[i], m, carS, carLat, outerR, outerR,
                             0.017f, alpha);
                 }
             } else {
-                tcm.setTransform(tcm.getInstance(mBoostDisks[i].entity), PARKED);
+                setMeshInScene(mBoostDisks[i], false);
             }
         }
     }
@@ -8588,6 +8635,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             auto inst = isSign ? tcm.getInstance(mSignMeshes[ci].entity)
                                : tcm.getInstance(mConeInstances[ci]->getRoot());
             if (!cs.airborne) {
+                const bool toppling = cs.hasFlat;
                 if (cs.hasFlat) {
                     cs.quat = rotateTowards(cs.quat, cs.flatTarget, TOPPLE * input.dt);
                     if (cs.hasRest) cs.pos.y = cs.restRoadY - groundOffset(cs, cs.quat);
@@ -8621,7 +8669,13 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     cs.hasFlat = false; // re-kicked mid-topple → tumble afresh
                     break;
                 }
-                tcm.setTransform(inst, mat4f::translation(cs.pos) * mat4f(cs.quat));
+                // A settled cone hasn't moved since its topple eased out — only
+                // write the transform while something is actually changing (a
+                // kick doesn't move it THIS frame; the airborne pass writes).
+                if (toppling || !cs.posed) {
+                    cs.posed = true;
+                    tcm.setTransform(inst, mat4f::translation(cs.pos) * mat4f(cs.quat));
+                }
                 continue;
             }
             cs.vel.y -= GRAVITY * input.dt;
@@ -8697,27 +8751,18 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     if (mTrack) {
         // Gold emissive throb (TrackProps _stepBoxes): synchronized across
         // boxes — 0xffd23f at 0.16 + 0.18·(0.5 + 0.5·sin(4.5t)).
-        if (mBoxAsset) {
+        if (!mBoxGlowMats.empty()) {
             const float pulse = 0.16f + 0.18f * (0.5f + 0.5f * std::sin(mTime * 4.5f));
             const float3 gold = srgbToLinear(0xffd23f) * pulse;
-            // The fade twins carry it too, or a box would drop its glow on the
-            // frame it is grabbed — the one frame anyone is looking at it.
-            const auto glow = [&](gltfio::FilamentInstance* inst) {
-                if (!inst) return;
-                MaterialInstance* const* mats = inst->getMaterialInstances();
-                for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
-                    if (mats[mi]->getMaterial()->hasParameter("emissiveFactor")) {
-                        mats[mi]->setParameter("emissiveFactor", gold);
-                    }
-                }
-            };
-            for (auto* inst : mBoxInstances) glow(inst);
-            for (auto* inst : mBoxFadeInstances) glow(inst);
+            // mBoxGlowMats holds every emissive-bearing instance across both
+            // pools (the fade twins carry it too, or a box would drop its glow
+            // on the frame it is grabbed — the one frame anyone is looking at
+            // it), resolved once at load rather than string-probed here.
+            for (MaterialInstance* gm : mBoxGlowMats) gm->setParameter("emissiveFactor", gold);
         }
         const uint32_t* boxStates = ttp_frame_box_states(&input);
         const uint32_t nBoxes = std::min<uint32_t>(input.boxCount,
                 (uint32_t) std::min(mBoxInstances.size(), mBoxXf.size()));
-        static const mat4f PARK = mat4f::translation(float3{ 0, -1000, 0 });
         if (mBoxCollectT.size() < nBoxes) mBoxCollectT.assign(nBoxes, 0.0f);
         if (mBoxPrevAvail.size() < nBoxes) mBoxPrevAvail.assign(nBoxes, 1);
         // Collect burst (TrackProps): a grabbed box GROWS (→2.1×) while it fades,
@@ -8742,11 +8787,19 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const float bob = 0.18f + 0.07f * std::sin(mTime * 3.0f + 0.9f * i);
             const mat4f hover = mBoxXf[i] * mat4f::translation(float3{ 0, bob, 0 });
             float alpha = 1.0f; // the box's own opacity, and its blob's
-            if (!avail && mBoxCollectT[i] > 0 && fadeInst) {
+            // A collected box LEAVES the scene (and its fade twin only enters
+            // it for the poof) — membership, not an underground park.
+            const bool poofing = !avail && mBoxCollectT[i] > 0 && fadeInst;
+            if (mBoxIn.size() > i) {
+                setInstanceInScene(mBoxInstances[i], mBoxIn[i], avail);
+            }
+            if (fadeInst && mBoxFadeIn.size() > i) {
+                setInstanceInScene(fadeInst, mBoxFadeIn[i], poofing);
+            }
+            if (poofing) {
                 mBoxCollectT[i] = std::max(0.0f, mBoxCollectT[i] - input.dt);
                 alpha = mBoxCollectT[i] / POOF;                  // 1 → 0
                 const float grow = 1.0f + (1.0f - alpha) * 1.1f; // 1 → 2.1
-                tcm.setTransform(inst, PARK);
                 tcm.setTransform(tcm.getInstance(fadeInst->getRoot()),
                         hover * mat4f::rotation(mTime * 1.6f * 2.2f, float3{ 0, 1, 0 })
                         * mat4f::scaling(float3{ mBoxScale * grow }));
@@ -8758,8 +8811,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                     }
                 }
             } else if (!avail) {
-                tcm.setTransform(inst, PARK);
-                if (fadeInst) tcm.setTransform(tcm.getInstance(fadeInst->getRoot()), PARK);
                 alpha = 0.0f;
             } else {
                 mBoxCollectT[i] = 0;
@@ -8767,7 +8818,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 tcm.setTransform(inst, hover
                         * mat4f::rotation(mTime * 1.6f, float3{ 0, 1, 0 })
                         * mat4f::scaling(float3{ mBoxScale }));
-                if (fadeInst) tcm.setTransform(tcm.getInstance(fadeInst->getRoot()), PARK);
             }
             const uint8_t fade = (uint8_t) std::lround(alpha * 255.0f);
             if (i < mBoxShadowFade.size() && mBoxShadowFade[i] != fade) {
@@ -8796,10 +8846,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         const auto placeBlob = [&](size_t slot, const TrackBin::Sample& f, float lat,
                 float scale, bool live) {
             if (mPropBlobs.size() <= slot || mPropBlobs[slot].entity.isNull()) return;
-            if (!live) {
-                tcm.setTransform(tcm.getInstance(mPropBlobs[slot].entity), PARK);
-                return;
-            }
+            // The blob mesh draws only for a live item on a shell served no
+            // vroad.filamat — scene membership, not an underground park (see
+            // setMeshInScene).
+            setMeshInScene(mPropBlobs[slot], live && !mRoadInst);
+            if (!live) return;
             const float r = 0.3f * scale;
             // f came from frameAt(item.s), so the arclength is already exact —
             // no need to project the resulting world point back onto the curve.
@@ -8813,7 +8864,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             if (mRoadInst) {
                 addDeckDecal(f.s, lat, r, r, srgbToLinear(0x1c1a18), 0.4f,
                         /*inner=*/0.55f, /*kneeAlpha=*/0.82f, /*ellipse=*/true);
-                tcm.setTransform(tcm.getInstance(mPropBlobs[slot].entity), PARK);
             } else {
                 conformDecalAt(mPropBlobs[slot], f.basis(lat), f.s, lat, r, r,
                         0.013f, 1.0f);
@@ -8821,15 +8871,18 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         };
         const TtpBananaInput* bananas = ttp_frame_bananas(&input);
         for (uint32_t j = 0; j < (uint32_t) mBananaInstances.size(); j++) {
-            auto inst = tcm.getInstance(mBananaInstances[j]->getRoot());
-            if (j >= input.bananaCount) {
-                tcm.setTransform(inst, PARK);
+            const bool live = j < input.bananaCount;
+            if (mBananaIn.size() > j) {
+                setInstanceInScene(mBananaInstances[j], mBananaIn[j], live);
+            }
+            if (!live) {
                 placeBlob(j, {}, 0, 0.7f, false);
                 continue;
             }
             const TrackBin::Sample bf = mTrack->frameAt(bananas[j].s);
             placeBlob(j, bf, bananas[j].lat, 0.7f, true);
-            tcm.setTransform(inst, bf.basis(bananas[j].lat));
+            tcm.setTransform(tcm.getInstance(mBananaInstances[j]->getRoot()),
+                    bf.basis(bananas[j].lat));
         }
         const TtpRocketInput* rockets = ttp_frame_rockets(&input);
         std::vector<float3> nowRockets;
@@ -8839,13 +8892,12 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             const bool haveFlame = mRocketFlames.size() > j
                     && !mRocketFlames[j].entity.isNull();
             if (j >= input.rocketCount) {
-                tcm.setTransform(inst, PARK);
-                if (haveFlame) {
-                    tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity), PARK);
-                }
+                setMeshInScene(mRockets[j], false);
+                if (haveFlame) setMeshInScene(mRocketFlames[j], false);
                 placeBlob(mBananaInstances.size() + j, {}, 0, 0.95f, false);
                 continue;
             }
+            setMeshInScene(mRockets[j], true);
             // Nose (local +Y) along the travel tangent, ROCKET_HOVER 0.32
             // above the deck, whizz-rolling about its axis at 9 rad/s.
             const TrackBin::Sample f = mTrack->frameAt(rockets[j].s);
@@ -8862,6 +8914,7 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // opacity, this scaled it) — at the size a rocket reads on a TV
                 // that is not a flicker, it is noise: too small to see as fire
                 // and too busy to ignore. A constant flame is the clearer cue.
+                setMeshInScene(mRocketFlames[j], true);
                 tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity), rocketXf);
             }
         }
@@ -9399,10 +9452,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 auto sInst = tcmV.getInstance(sm.entity);
                 const Streak& st = mStreaks[si];
                 const size_t car = si / 4;
-                if (st.dead || st.alpha <= 0 || mCarBasis.size() <= car
+                // A dead streak was already removed from the scene by the
+                // update pass — nothing to park, nothing to write.
+                if (!sm.inScene || mCarBasis.size() <= car
                         || mCarBasisInv.size() <= car) {
-                    tcmV.setTransform(sInst,
-                            mat4f::translation(float3{ 0, -1000, 0 }));
                     continue;
                 }
                 const mat4f& P = mCarBasis[car];
@@ -9510,6 +9563,7 @@ void TtpRenderer::releaseScene() {
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
+    mRoadInstLast.clear();
     mDeckDecals.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     mPadMat = nullptr;
@@ -9550,6 +9604,9 @@ void TtpRenderer::releaseScene() {
     mMonsterIn.clear();
     mMonsterGhostIn.clear();
     mBananaIn.clear();
+    mBoxIn.clear();
+    mBoxFadeIn.clear();
+    mBoxGlowMats.clear(); // the box assets own them (dropAsset above) — handles only
     mConeStates.clear();
     mSignMeshes.clear();
     mCarBlobs.clear();
