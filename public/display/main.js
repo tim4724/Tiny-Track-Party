@@ -1556,17 +1556,9 @@ const _params = new URLSearchParams(location.search);
 const _scenario = _params.get('scenario');
 if (_scenario) {
   dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
-  // Gallery/test. DOM-only previews (welcome / lobbies / device-choice) keep the
-  // default diorama backdrop (no track picked, matching the real boards); race
-  // previews reveal the 3D scene the harness renders the track + cars into.
+  // Which backdrop each scenario gets (diorama vs the 3D scene) is the
+  // harness's call, in ONE place next to the scenarios — see runDisplayScenario.
   const _scn = _scenario;
-  if (!['welcome', 'lobby', 'lobby-empty', 'device-choice'].includes(_scn)) {
-    // Reveal the 3D scene: #scene ships .is-dim (opacity 0) so the lobby starts on the
-    // diorama, but a track/race preview owns the screen — drop BOTH .hidden and .is-dim,
-    // else the canvas renders into a fully transparent container (looks like a blank page).
-    el('scene').classList.remove('hidden', 'is-dim');
-    const _dio = el('lobby-diorama'); if (_dio) _dio.classList.add('hidden');
-  }
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
   import('./TestHarness.js').then(({ runDisplayScenario }) => runDisplayScenario(
     {

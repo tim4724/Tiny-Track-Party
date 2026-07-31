@@ -16,6 +16,7 @@ import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { renderSeats, renderCupSlot } from './lobbySeats.js';
+import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 // The monster demo's engine timbre. It used to be imported from decide.js, the
@@ -72,6 +73,11 @@ function bareSession(field, track, opts) {
 }
 
 const el = (id) => document.getElementById(id);
+
+// Handling stats for a preview car (undefined when the stats table isn't on the
+// page — the sim falls back to defaults). Resolved per call: this module loads
+// dynamically, but a lazy read costs nothing and can't race the classic scripts.
+const statsFor = (i) => (window.carStats ? window.carStats(i) : undefined);
 
 // ---- track-preview minimap ----
 // A small schematic overlay (bottom-left) with LIVE car dots, so the orbiting
@@ -212,6 +218,21 @@ export function runDisplayScenario(opts, ctx) {
   const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
+  // ---- backdrop ----
+  // Mirrors live play's rule (main.js backdropShow3D): only the welcome board
+  // (and the device chooser sitting on it) keeps the 2D paper diorama — every
+  // other screen floats over the live 3D scene, the lobby included, which has
+  // attracted in 3D from its first frame since the boot-time preview shipped.
+  // Default-3D on purpose: a scenario added later previews the production look
+  // unless it explicitly opts back onto the diorama here.
+  const DIORAMA_ONLY = ['welcome', 'device-choice'];
+  if (!DIORAMA_ONLY.includes(scenario)) {
+    // #scene ships .is-dim (opacity 0) — drop BOTH .hidden and .is-dim, else the
+    // canvas renders into a fully transparent container (looks like a blank page).
+    el('scene').classList.remove('hidden', 'is-dim');
+    const dio = el('lobby-diorama'); if (dio) dio.classList.add('hidden');
+  }
+
   window.__TEST__ = window.__TEST__ || {};
 
   // ---- gallery power saver ----
@@ -235,10 +256,11 @@ export function runDisplayScenario(opts, ctx) {
       running: () => ctx.scene.isRunning()
     };
   }
-  // DOM-only previews (welcome / lobbies / device-choice) drive no 3D — the WebGL
-  // backdrop sits dimmed behind them — so let it paint once, then idle for good.
-  const DOM_ONLY = ['welcome', 'lobby', 'lobby-empty', 'device-choice'];
-  if (DOM_ONLY.includes(scenario) && ctx.scenePromise) {
+  // Diorama previews (welcome / device-choice) drive no 3D — the WebGL backdrop
+  // sits dimmed behind them — so let the scene paint once, then idle for good.
+  // The lobby previews are NOT in this set any more: they run the attract demo
+  // and hold their frame once it's up (startAttractDemo below).
+  if (DIORAMA_ONLY.includes(scenario) && ctx.scenePromise) {
     ctx.scenePromise.then(() => holdFrame(false)).catch(() => {});
   }
 
@@ -278,6 +300,34 @@ export function runDisplayScenario(opts, ctx) {
       .catch(() => { /* gallery still works without the QR */ });
   }
 
+  // ---- lobby attract demo ----
+  // The live lobby attracts from its first frame, so the lobby previews run the
+  // SAME LobbyDemo main.js does — real sim, AI-driven field, orbiting overview
+  // camera — on ctx.track (?track= or the catalogue's first, which is also the
+  // fresh-display boot fallback). The field mirrors the previewed roster (each
+  // seat's car in its seat colour), topped up with CPU racers to a full grid —
+  // the shape flow.demoLive answers off a live room.
+  function startAttractDemo(slots) {
+    const ids = slots.slice();
+    const fieldSize = Math.min(window.MAX_PLAYERS || 4, COLORS.length);
+    for (let i = 0; ids.length < fieldSize; i++) {
+      if (!ids.includes(i)) ids.push(i);
+    }
+    const field = ids.map((s, n) => ({
+      id: s, colorIndex: s, carIndex: s, name: FAKE_NAMES[s], stats: statsFor(s),
+      persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length]
+    }));
+    const demo = new LobbyDemo(ctx.scene);
+    // The SAME automation hook live play publishes (main.js), so one E2E
+    // predicate covers both: gallery-lobby.spec asserts the attract race runs.
+    window.__lobbyDemo = demo;
+    ready().then(() => {
+      demo.start(ctx.track, field, 'gallery');
+      ctx.scene.onFrame = (dt) => demo.step(dt);
+      holdFrame(true); // gallery card: hold the attract race on a still; ▶ resumes it
+    }).catch((e) => console.warn('[TestHarness] lobby attract demo failed to start', e));
+  }
+
   if (scenario === 'welcome') {
     // The title board at boot: just the section over the diorama (the room
     // warms invisibly behind it in live play — nothing to fake here).
@@ -287,12 +337,14 @@ export function runDisplayScenario(opts, ctx) {
 
   if (scenario === 'lobby-empty') {
     // The lobby the instant NEW GAME reveals it, before anyone joins: open
-    // seats, empty cup slot, the room's join URL + QR.
+    // seats, empty cup slot, the room's join URL + QR — over the boot-time
+    // attract race (all-CPU field: no one has joined).
     show('lobby');
     renderRoster([], null);
     el('joinurl').textContent = (location.host || 'tinytrack.party');
     renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
+    startAttractDemo([]);
     return;
   }
 
@@ -313,13 +365,14 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster(slots, hostIdx);
     fakeJoin('TEST');
+    startAttractDemo(slots);
     if (opts.picked) {
-      // Post-pick lobby: race card in the slot, hint gone, chrome floating
-      // over the live 3D preview (mirrors renderLobbyPick + the .is-dim
-      // reveal). `picked` picks the MODE: 'cup' (legacy '1'), 'track' or
-      // 'random'. Pair the card with a matching ?track=<id> so the orbiting
-      // preview shows the circuit the card names. Same prebaked schematics the
-      // live lobby uses — nothing in the browser integrates a track any more.
+      // Post-pick lobby: race card in the slot, hint gone (mirrors
+      // renderLobbyPick). `picked` picks the MODE: 'cup' (legacy '1'), 'track',
+      // 'random' or 'tour'. Pair the card with a matching ?track=<id> so the
+      // orbiting preview shows the circuit the card names. Same prebaked
+      // schematics the live lobby uses — nothing in the browser integrates a
+      // track any more.
       const mode = opts.picked === '1' ? 'cup' : String(opts.picked);
       const qTrack = new URLSearchParams(location.search).get('track');
       const mapOf = (id) => ({ svg: TRACK_SCHEMATICS[id] });
@@ -358,7 +411,6 @@ export function runDisplayScenario(opts, ctx) {
         };
       }
       renderCupSlot(el('cup-slot'), state);
-      el('scene').classList.remove('hidden', 'is-dim');
     } else {
       renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
     }
@@ -466,7 +518,6 @@ export function runDisplayScenario(opts, ctx) {
       const ids = [];
       for (let i = 0; i < COLORS.length; i++) ids.push(i);
       const modelOf = (i) => (MODELS.length ? i % MODELS.length : 0);
-      const statsFor = window.carStats || (() => undefined);
       const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(modelOf(i)) }));
 
       let forceItem = null;   // the roulette override the gallery's picker sets
@@ -606,7 +657,6 @@ export function runDisplayScenario(opts, ctx) {
     for (let i = 0; i < players; i++) ids.push(i);
     // Give each preview car the model + stats for its slot so the gallery shows
     // the real spread of handling and the new car-car bumping, not a uniform field.
-    const statsFor = window.carStats || (() => undefined);
     const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(i) }));
 
     // The 'rocket' scenario routes the engine's hit event to the impact burst (live
