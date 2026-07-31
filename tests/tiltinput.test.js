@@ -129,20 +129,18 @@ test('_tick re-expands a mid lean past the dead-zone (lock maps linearly, no los
   });
 });
 
-test('button steering ramps linearly to lock and releases at double speed', () => {
+test('button steering is binary: full lock on the press edge, centre on release', () => {
   const out = [];
   const t = new TiltInput({ onControl: (c) => out.push(c) });
   t.setScheme({ tilt: false });
-  let ms = 0; t._now = () => ms; // the ramp is wall-clock based; drive time by hand
-  t._tick(); // seed the ramp clock
-  t.pressSteer(1, true);
-  t._tick(); // the edge's own sample (headlessly the flush is a no-op, so tick by hand)
-  assert.ok(Math.abs(out.at(-1).s - 16 / 200) < 0.001, `the press edge itself carries the head start, one wire step (got ${out.at(-1).s})`);
-  for (let i = 0; i < 5; i++) { ms += 40; t._tick(); }
-  assert.equal(out.at(-1).s, 1, 'head start + ~200 ms of beats LANDS exactly on 1 — the ramp has no asymptote');
-  t.pressSteer(1, false);
-  ms += 40; t._tick(); ms += 40; t._tick();
-  assert.equal(out.at(-1).s, 0, 'released, the steer is back to exactly 0 within two beats (75 ms release)');
+  t.pressSteer(1, true); t._tick(); // headlessly the flush is a no-op, so tick by hand
+  assert.equal(out.at(-1).s, 1, 'a press is full lock on its very own sample — no ramp');
+  t.pressSteer(-1, true); t._tick();
+  assert.equal(out.at(-1).s, 0, 'both held cancel to centre (the brake pose)');
+  t.pressSteer(1, false); t._tick();
+  assert.equal(out.at(-1).s, -1, 'the surviving button steers its own way at full lock');
+  t.pressSteer(-1, false); t._tick();
+  assert.equal(out.at(-1).s, 0, 'release lands on exact centre');
 });
 
 test('the on-screen BRAKE button feeds b through _tick and clears on release', () => {

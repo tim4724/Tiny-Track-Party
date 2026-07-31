@@ -102,13 +102,15 @@ export const DEFAULT_SEND_INTERVAL_MS = 100;
 // provable rather than statistical (AirConsole's platform budget).
 export const DEFAULT_SEND_MIN_INTERVAL_MS = 40;
 
-// The floor the noiseless (button) profile runs instead: one display frame, so
-// a 100 ms ramp arrives as ~7 values rather than 3 — at 40 ms spacing it reads
-// as two fat steps, the very thing the ramp exists to avoid. Affordable
-// because the 40 ms figure was sized to AirConsole's 25 msgs/s budget and this
-// kit no longer carries AirConsole; the fastlane/relay take a sub-second
-// 62 msgs/s burst without noticing, and a HELD button emits nothing (exact
-// repeats filter out), so the higher rate only exists while a ramp is moving.
+// The floor the noiseless (button) profile runs instead: one display frame.
+// Button steering is BINARY (full lock or centre), so partial steering is
+// FEATHERED — rapid taps — and each tap is two edges that both must reach the
+// wire promptly: at the default 40 ms floor a release can trail its press by up
+// to a whole floor interval, putting a floor under the shortest possible tap.
+// Affordable because the 40 ms figure was sized to AirConsole's 25 msgs/s
+// budget and this kit no longer carries AirConsole; edges are finite and a HELD
+// button emits nothing (exact repeats filter out), so the higher rate only
+// exists across an edge burst.
 export const BUTTON_SEND_MIN_INTERVAL_MS = 16;
 
 // The FLOOR of the measured idle twitch (the "1-2 degrees" above). The floor, not
@@ -189,13 +191,12 @@ export class InputGate {
 
   // The steer dead-bands above are NOISE figures: they exist because the sensor
   // twitches and a deliberate turn must be told apart from drift. A button
-  // scheme has no sensor in the loop — every sample is a deliberate ramp step —
-  // so both bands drop to zero: lossless (only exact repeats are filtered, and a
-  // moving ramp never repeats) and always-urgent (every change rides the send
-  // floor instead of the 100 ms sub-strong cadence). The floor tightens to
-  // BUTTON_SEND_MIN_INTERVAL_MS (see its note) so the ramp arrives at display
-  // frame granularity; every pacing guarantee above still holds, just at the
-  // profile's own floor.
+  // scheme has no sensor in the loop — every sample is a deliberate edge — so
+  // both bands drop to zero: lossless (only exact repeats are filtered) and
+  // always-urgent (every change rides the send floor instead of the 100 ms
+  // sub-strong cadence). The floor tightens to BUTTON_SEND_MIN_INTERVAL_MS (see
+  // its note) so feathered taps reach the wire at display-frame granularity;
+  // every pacing guarantee above still holds, just at the profile's own floor.
   setNoiseless(on) {
     this.steerThreshold = on ? 0 : DEFAULT_STEER_THRESHOLD;
     this.strongThreshold = on ? 0 : DEFAULT_STRONG_THRESHOLD;
