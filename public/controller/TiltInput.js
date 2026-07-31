@@ -73,13 +73,29 @@ export const SMOOTH = 0.5;
 // sit where it does) and a button has none; a one-pole's infinite tail (133 ms to
 // 90% of a step, as long again to let go) reads as lag, not smoothing. Linear
 // instead makes hold time itself the analog axis: constant progress from the first
-// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a ~2/3-lock
-// correction instead of slamming full. Release is twice as fast because letting go
-// must never feel sticky — the attack/release asymmetry every d-pad racing scheme
+// tick, a crisp landing exactly on ±1, and a quick tap (~100 ms) lands a half-lock
+// correction instead of slamming full. Release is faster because letting go must
+// never feel sticky — the attack/release asymmetry every d-pad racing scheme
 // uses. The ramp is WALL-CLOCK based (see _tick): _flush inserts extra ticks
 // between the 25 Hz beats, and a per-tick step would fast-forward through them.
-const BTN_RAMP_MS = 150;    // press → full lock
+//
+// The duration is bounded on BOTH sides by the wire, not by taste alone. The send
+// gate passes at most one CONTROL per SEND_MIN_INTERVAL_MS (40 ms), so whatever
+// this file computes, the display receives a ≤25 Hz staircase — a ramp is at most
+// RAMP_MS/40 wire values. And only deltas ≥ STRONG_THRESHOLD (0.15) may ride that
+// 40 ms floor; smaller ones wait the 100 ms cadence. So a GENTLER ramp than this
+// arrives CHUNKIER, not smoother: under ~3.75 lock/s the steps stop clearing the
+// strong tier and collapse into ~0.33-sized lumps 100 ms apart. 200 ms to lock is
+// the slowest build whose every 40 ms step still clears 0.15 with margin for
+// timer jitter. Smoother than 5×40 ms needs display-side interpolation, which is
+// a sim (C++) decision, not a phone one.
+const BTN_RAMP_MS = 200;    // press → full lock
 const BTN_RELEASE_MS = 75;  // release (or reversal, until it re-crosses centre) → 0
+// While the ramp is in motion, self-tick faster than the 25 Hz heartbeat so every
+// 40 ms send window opens onto a FRESH value. The heartbeat alone under-samples
+// the ramp: its beats race the send floor, and a beat that loses by 1 ms is a
+// step the wire never carries — the staircase degrades into two fat jumps.
+const BTN_RAMP_TICK_MS = 16;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
@@ -116,6 +132,7 @@ export class TiltInput {
     this._tiltOn = true;   // sensor steering (off in the button schemes — see setScheme)
     this._btnL = false; this._btnR = false;  // on-screen LEFT/RIGHT steer buttons
     this._btnTickMs = 0;   // last button-path tick, for the wall-clock ramp dt
+    this._rampTimer = null; // fast self-tick while the button ramp is in motion
     this.extraAngle = 0;   // degrees the LAYOUT is rotated on top of the OS (see setScheme)
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
@@ -181,6 +198,7 @@ export class TiltInput {
   }
   stop() {
     clearInterval(this._timer); this._timer = null;
+    clearTimeout(this._rampTimer); this._rampTimer = null;
     this._brakeBtn = 0;
     this._btnL = false; this._btnR = false; // a race can end with a steer button still down
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
@@ -275,6 +293,14 @@ export class TiltInput {
       const releasing = this._steer !== 0 && Math.sign(d) !== Math.sign(this._steer);
       const step = dt / (releasing ? BTN_RELEASE_MS : BTN_RAMP_MS);
       this._steer += Math.abs(d) <= step ? d : Math.sign(d) * step;
+      // keep offering fresh values while the ramp moves (see BTN_RAMP_TICK_MS);
+      // one outstanding timer, self-chaining, and only while actually driving
+      if (this._steer !== target && this._timer && !this._rampTimer) {
+        this._rampTimer = setTimeout(() => {
+          this._rampTimer = null;
+          if (this._timer) this._tick();
+        }, BTN_RAMP_TICK_MS);
+      }
     }
 
     const s = clamp1(this._steer + this._key);
