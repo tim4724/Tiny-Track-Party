@@ -10,6 +10,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const zlib = require('zlib');
 const QRCode = require('qrcode');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
@@ -81,6 +82,27 @@ const MIME_TYPES = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
+}
+
+// Brotli for the text-ish types plus the engine wasm, which is the whole cold
+// load (3.5 MB raw, ~3x smaller compressed). Compressed once per file content
+// and kept; the Buffer.equals check makes the cache safe against on-disk edits
+// without a stat, and quality 5 keeps the one-time cost tens of ms rather than
+// the seconds quality 11 would take on the wasm. Media types stay raw — they
+// are already compressed formats, and they're the ones that get range requests.
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm']);
+const brotliCache = new Map(); // filePath -> { src, encoded }
+function brotliFor(filePath, data) {
+  const hit = brotliCache.get(filePath);
+  if (hit && hit.src.equals(data)) return hit.encoded;
+  const encoded = zlib.brotliCompressSync(data, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_QUALITY]: 5,
+      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length
+    }
+  });
+  brotliCache.set(filePath, { src: data, encoded });
+  return encoded;
 }
 
 function generateQRMatrix(text) {
@@ -223,10 +245,14 @@ const server = http.createServer((req, res) => {
       headers['Content-Security-Policy'] = cspHeader(iframeable ? "'self'" : "'none'");
     }
 
-    // HTML + JS always no-store (avoid stale-version mismatch). Other static
-    // assets (CSS, images, fonts, GLBs) get a 24h cache in prod; bust with
-    // ?v=__APP_V__ when they change.
-    const noCache = !IS_PROD || ext === '.html' || ext === '.js';
+    // HTML + scripts + the engine always no-store (avoid stale-version
+    // mismatch). The engine pair (.mjs/.wasm) is reached by a bare dynamic
+    // import with no ?v= bust path, so caching it would leave browsers on a
+    // stale engine beside a fresh shell for a day. Other static assets (CSS,
+    // images, fonts, GLBs) get a 24h cache in prod; bust with ?v=__APP_V__
+    // when they change.
+    const noCache = !IS_PROD || ext === '.html' || ext === '.js' ||
+                    ext === '.mjs' || ext === '.wasm';
     headers['Cache-Control'] = noCache ? 'no-store' : 'public, max-age=86400';
 
     // Byte-range support — media elements need 206 responses to compute a
@@ -254,7 +280,14 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    headers['Content-Length'] = total;
+    if (COMPRESSIBLE.has(ext)) {
+      headers['Vary'] = 'Accept-Encoding';
+      if (data.length > 1024 && /\bbr\b/.test(req.headers['accept-encoding'] || '')) {
+        data = brotliFor(filePath, data);
+        headers['Content-Encoding'] = 'br';
+      }
+    }
+    headers['Content-Length'] = data.length;
     res.writeHead(200, headers);
     res.end(data);
   });
