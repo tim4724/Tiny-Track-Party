@@ -1687,7 +1687,7 @@ float TtpRenderer::roadHitY(float x, float z, float refY, bool* hit) const {
 }
 
 // Unit UV-sphere (widthSegments × heightSegments, THREE.SphereGeometry layout):
-// used by the sky dome (32×16) and hill domes (8×5). Appends transformed verts
+// used by the sky dome and hill domes. Appends transformed verts
 // with a per-vertex colour callback into a Mesh.
 void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
         const std::function<float3(const float3&)>& transform,
@@ -2430,8 +2430,8 @@ void buildRocketModel(const PartFn& part, int variant) {
         // deck; the nose is yellow because that is the end you want to read
         // when it is coming at you.
         constexpr uint32_t HULL = 0xe6492d, TRIM = 0xf2c14e, DEEP = 0xa8382a;
-        part(primCylinder(0.078f, 0.078f, 0.240f, 18), 0, 0, 0, HULL, 1.0f);
-        part(applyPre(primSphere(0.078f, 18, 12),
+        part(primCylinder(0.078f, 0.078f, 0.240f, 12), 0, 0, 0, HULL, 1.0f);
+        part(applyPre(primSphere(0.078f, 12, 8),
                     mat4f::scaling(float3{ 1.0f, 1.9f, 1.0f })), 0, 0.120f, 0, TRIM, 1.0f);
         part(primCylinder(0.078f, 0.056f, 0.055f, 18), 0, -0.1475f, 0, DEEP, 1.0f);
         // Kept SMALL: they sit on the back third of the body and reach about
@@ -2644,13 +2644,13 @@ void buildTrainModel(const PartFn& part, int variant) {
     part(primBox(1.16f, 0.28f, 2.10f), 0, 0.44f, 0, IRON, 1.0f);
     part(applyPre(primCylinder(0.56f, 0.58f, 1.30f, 20), rotXm(PI2)), 0, 1.10f, 0.30f, TRIM, 1.0f);
     part(applyPre(primCylinder(0.60f, 0.60f, 0.13f, 20), rotXm(PI2)), 0, 1.10f, 0.92f, GOLD, 1.0f);
-    part(applyPre(primSphere(0.575f, 18, 12), mat4f::scaling(float3{ 1, 1, 0.55f })),
+    part(applyPre(primSphere(0.575f, 14, 10), mat4f::scaling(float3{ 1, 1, 0.55f })),
             0, 1.10f, 1.00f, TRIM, 1.0f);
     part(applyPre(primCylinder(0.30f, 0.30f, 0.08f, 16), rotXm(PI2)), 0, 1.10f, 1.30f, GOLD, 1.0f);
     part(primCylinder(0.20f, 0.17f, 0.52f, 16), 0, 1.72f, 0.72f, IRON, 1.0f);
     part(primCylinder(0.34f, 0.21f, 0.22f, 16), 0, 2.06f, 0.72f, IRON, 1.0f);
     part(primSphere(0.26f, 14, 10), 0, 1.62f, 0.10f, GOLD, 1.0f);
-    part(applyPre(primSphere(0.62f, 18, 12), mat4f::scaling(float3{ 1, 1, 0.86f })),
+    part(applyPre(primSphere(0.62f, 14, 10), mat4f::scaling(float3{ 1, 1, 0.86f })),
             0, 1.26f, -0.76f, BODY, 1.0f);
     part(primBox(1.24f, 1.02f, 0.92f), 0, 1.16f, -0.76f, BODY, 1.0f);
     for (const int sd : { -1, 1 }) {
@@ -3257,12 +3257,12 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             dot(0, 2.30f, 0.72f, 0.08f); dot(0, 2.00f, 0.76f, 0.08f); dot(0, 1.70f, 0.72f, 0.08f);
             // Soft knit beanie: rolled brim, stretched crown dome, pom-pom.
             constexpr uint32_t HAT = 0x3b6fb0;
-            part(primTorusArc(0.42f, 0.15f, 12, 24, 2.0f * (float) M_PI), 0, 3.5f, 0, sp, HAT, 1.08f);
+            part(primTorusArc(0.42f, 0.15f, 8, 18, 2.0f * (float) M_PI), 0, 3.5f, 0, sp, HAT, 1.08f);
             part(applyPre(primSphereBand(0.42f, 20, 12, 0, (float) M_PI / 2),
                         mat4f::scaling(float3{ 1, 1.28f, 1 })), 0, 3.5f, 0, sp, HAT);
             part(primIcoDetail(0.17f, 2), 0, 4.12f, 0, sp, 0xf6f9fc);
             // Knit scarf: a ring at the neck with a tail draped down the belly.
-            part(primTorusArc(0.47f, 0.14f, 12, 24, 2.0f * (float) M_PI), 0, 2.66f, 0, sp, 0xd8463f);
+            part(primTorusArc(0.47f, 0.14f, 8, 18, 2.0f * (float) M_PI), 0, 2.66f, 0, sp, 0xd8463f);
             part(applyPre(primBox(0.26f, 0.62f, 0.14f),
                         rotX(0.45f) * mat4f::translation(float3{ 0, -0.31f, 0 })),
                     0, 2.62f, 0.5f, sp, 0xd8463f, 1.04f);
@@ -3371,7 +3371,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             // lerping smears the seams) with white polar caps cut at a whole
             // latitude ring, then the ball is tilted — a settled ball never
             // sits pole-up, and the tilt is what makes the panels read.
-            const Prim sph = primSphere(BR, 18, 12);
+            const Prim sph = primSphere(BR, 14, 10);
             const float rz = 0.35f + (float) rnd() * 0.4f;
             const float ry = (float) rnd() * 2.0f * (float) M_PI;
             const mat4f m = mat4f::translation(float3{ x, gy + BR * 0.92f, z })
@@ -3618,7 +3618,9 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 if (mBlendMaterial) {
                     mSmoke.resize(3);
                     const BlurKernel blur(6.0f);
-                    constexpr int NX = 16, NY = 16;
+                    // 8px cells: the 6px blur spreads the disc edge over ~12px
+                    // of the 64×64 field, so every gradient still gets a sample.
+                    constexpr int NX = 8, NY = 8;
                     for (Mesh& m : mSmoke) {
                         for (int j = 0; j <= NY; j++) {
                             for (int k = 0; k <= NX; k++) {
@@ -3800,7 +3802,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                             0, TRAIN_RAIL_Y, zs, rail, 0x8d949e, 1.0f);
                 }
                 for (const int es : { 1, -1 }) {     // two half-torus ends
-                    part(applyPre(primTorusArc(rr, TRAIN_RAIL_R, 8, 30, (float) M_PI),
+                    part(applyPre(primTorusArc(rr, TRAIN_RAIL_R, 6, 20, (float) M_PI),
                                 rotY(es * ((float) M_PI / 2))),
                             es * (LT / 2), TRAIN_RAIL_Y, 0, rail, 0x8d949e, 1.0f);
                 }
@@ -4605,7 +4607,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const float3 top = skyLin(tb.sky[0]);
         const float3 hor = skyLin(tb.sky[1]);
         const float3 low = skyLin(tb.sky[2]);
-        appendSphere(mSky, 32, 16,
+        // The gradient only varies vertically, so the height segments carry the
+        // picture; the 20 wall segments are silhouette only, and the dome is a
+        // backdrop seen from inside — nothing reads its horizontal facets.
+        appendSphere(mSky, 20, 16,
                 [&](const float3& p) { return p * SKY_R; },
                 [&](const float3& p) {
                     const float t = p.y; // -1 nadir .. 1 zenith
@@ -5577,7 +5582,12 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             { 36, 36, 14 }, { 58, 30, 17 }, { 84, 36, 14 },
             { 68, 42, 11 }, { 46, 42, 10 },
         };
-        constexpr int NX = 32, NY = 16;
+        // Grid step is bounded by the 5px blur: the softened edge spans ~10px
+        // of the 128×64 field, so 8px cells (16×8) still put a sample inside
+        // every gradient. 32×16 was 1024 tris per sprite — with 8 clouds plus
+        // the haze banks reusing the grid, a quarter of the lobby's triangles
+        // were cloud quads.
+        constexpr int NX = 16, NY = 8;
         std::vector<uint8_t> alpha((NX + 1) * (NY + 1));
         {
             const BlurKernel blur(5.0f);
@@ -6440,7 +6450,9 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
     if (!tb.hasWater || !mBlendMaterial) return;
     constexpr float WATER_INNER = 135.0f, WATER_LIFT = 0.12f;
     constexpr float WATER_SHADE = 1.0f; // the flat sheet's constant Lambert term
-    constexpr int SEG = 288;
+    // 144 spokes = 2.5° steps: chord sag at the shore radius is ~0.03u and the
+    // sharpest crinkle harmonic (29·a) still gets ~5 samples per cycle.
+    constexpr int SEG = 144;
     constexpr float SHORE_MARGIN = 26, SHORE_WOBBLE = 22, SHORE_CRINKLE = 2.6f;
     constexpr float SHORE_FADE = 220, SWASH_RANGE = 0.62f, SWASH_ZONE = 20;
     // [radius, colour param (0..2 = foam→shallow→deep), alpha]
@@ -6956,11 +6968,15 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         }
         mBerms.idx.insert(mBerms.idx.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
     };
+    // Rings arrive at the sim's 0.25u sample step; every second one is enough.
+    // 0.5u is the road ribbon's own chord scale (0.48), and the berm top hides
+    // under a 0.34u-thick deck, so the extra chord sag can't poke through.
     for (const auto& run : tb.berms) {
         if (run.size() < 2) continue;
         float3 A[4], B[4];
         corners(run[0], A);
         for (size_t i = 1; i < run.size(); i++) {
+            if (i % 2 && i + 1 < run.size()) continue;
             corners(run[i], B);
             quad(A[0], A[1], B[1], B[0]); // left slope
             quad(A[1], A[2], B[2], B[1]); // top, under the road
