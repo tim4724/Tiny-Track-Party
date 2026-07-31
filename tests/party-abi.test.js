@@ -420,10 +420,12 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     onProtocol: cw('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
     onClose: cw('ttp_net_on_close_json', 'string', ['number', 'number']),
     onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
-      ['number', 'number', 'string', 'string', 'string', 'number', 'number']),
+      ['number', 'number', 'string', 'string', 'number', 'number']),
     selectModeDraw: cw('ttp_net_select_mode_draw_json', 'string',
-      ['number', 'string', 'string', 'string', 'string']),
-    setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string', 'string']),
+      ['number', 'string', 'string', 'string']),
+    setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
+    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    pickJson: cw('ttp_net_pick_json', 'string', ['number']),
     liveness: cw('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
     onSeen: cw('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
     hostChangeApply: cw('ttp_net_host_change_apply_json', 'string', ['number', 'string']),
@@ -473,40 +475,44 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   // peer_joined → hello → set_car → set_ready, events draining like the shell does.
   net.onProtocol(h, 'peer_joined', '{"index":1}', 2000);
   assert.equal(drain().some((e) => e.type === 'rosterchange'), true, 'the seat landed');
-  const pick0 = JSON.stringify({ mode: null, cupId: null, randomRaces: 0, trackId: null, hasBag: true });
+  // The pick is stored behind the handle now — seeded once, exactly as
+  // DisplayNet's constructor does (no default track, a bag wired).
+  net.initPick(h, null, 1);
+  const storedPick = () => JSON.parse(net.pickJson(h));
   const hello = walk(net.onPeerMessage(h, 0, '1',
-    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: null }), pick0, 0, 2100));
+    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: null }), 0, 2100));
   assert.deepEqual(hello.effects.at(-1), { op: 'announce' });
   assert.equal(JSON.parse(room.list(h))[0].name, 'Ada');
   assert.deepEqual(ops(net.onPeerMessage(h, 0, '1',
-    '{"type":"set_car","carIndex":0}', pick0, 0, 2200)), ['announce']);
+    '{"type":"set_car","carIndex":0}', 0, 2200)), ['announce']);
   net.onProtocol(h, 'peer_joined', '{"index":2}', 2300);
   drain();
   assert.deepEqual(ops(net.onPeerMessage(h, 0, '2',
-    '{"type":"set_ready","ready":true}', pick0, 0, 2400)), ['announce']);
+    '{"type":"set_ready","ready":true}', 0, 2400)), ['announce']);
 
-  // The mode pick, all three modes. Exact track:
-  const pickOf = (raw) => walk(raw).effects.find((e) => e.op === 'set-pick');
+  // The mode pick, all three modes — verified off the STORED pick. Exact track:
   const trackPick = walk(net.onPeerMessage(h, 0, '1',
-    '{"type":"select_mode","mode":"track","trackId":"lagoon"}', pick0, 0, 2500));
-  assert.deepEqual(pickOf(JSON.stringify(trackPick)),
-    { op: 'set-pick', mode: 'track', cupId: null, randomRaces: 0, trackId: 'lagoon' });
+    '{"type":"select_mode","mode":"track","trackId":"lagoon"}', 0, 2500));
+  assert.deepEqual(ops(JSON.stringify(trackPick)), ['publish', 'track-change']);
+  assert.deepEqual(storedPick(),
+    { mode: 'track', cupId: null, randomRaces: 0, trackId: 'lagoon' });
   // A cup resolves to its first race:
-  const cupPick = walk(net.onPeerMessage(h, 0, '1',
-    '{"type":"select_mode","mode":"cup","cupId":"beach"}', pick0, 0, 2600));
-  assert.equal(pickOf(JSON.stringify(cupPick)).trackId, 'tidepool');
+  walk(net.onPeerMessage(h, 0, '1',
+    '{"type":"select_mode","mode":"cup","cupId":"beach"}', 0, 2600));
+  assert.equal(storedPick().trackId, 'tidepool');
   // Random is the two-step draw:
   const rnd = walk(net.onPeerMessage(h, 0, '1',
-    '{"type":"select_mode","mode":"random","randomRaces":4}', pick0, 0, 2700));
+    '{"type":"select_mode","mode":"random","randomRaces":4}', 0, 2700));
   assert.equal(rnd.needDraw, true);
   assert.deepEqual(rnd.effects, []);
-  const drawn = walk(net.selectModeDraw(h, '1',
-    '{"type":"select_mode","mode":"random","randomRaces":4}', pick0, 'lagoon'));
-  assert.equal(pickOf(JSON.stringify(drawn)).trackId, 'lagoon');
-  // ...and the game-layer swap shares the tail:
-  const swapped = walk(net.setTrack(h, 'tidepool',
-    JSON.stringify({ mode: 'random', cupId: null, randomRaces: 4, trackId: 'lagoon', hasBag: true })));
-  assert.deepEqual(ops(JSON.stringify(swapped)), ['set-pick', 'publish', 'track-change']);
+  walk(net.selectModeDraw(h, '1',
+    '{"type":"select_mode","mode":"random","randomRaces":4}', 'lagoon'));
+  assert.equal(storedPick().trackId, 'lagoon');
+  // ...and the game-layer swap shares the tail and keeps mode/length:
+  const swapped = walk(net.setTrack(h, 'tidepool'));
+  assert.deepEqual(ops(JSON.stringify(swapped)), ['publish', 'track-change']);
+  assert.deepEqual(storedPick(),
+    { mode: 'random', cupId: null, randomRaces: 4, trackId: 'tidepool' });
   drain();
 
   // Into the race; the statechange walk restamps so lobby silence isn't charged.
@@ -521,7 +527,7 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   // The liveness tick: first the canary send, then — once seat 2 has been
   // silent past the timeout — the sweep drops it with a reconnect card.
   assert.deepEqual(ops(net.liveness(h, s, 3100)), ['send-to']);
-  net.onPeerMessage(h, s, '0', '{"type":"_heartbeat"}', 3200); // the echo comes home
+  net.onPeerMessage(h, s, '0', '{"type":"_heartbeat"}', 0, 3200); // the echo comes home
   net.onSeen(h, '1', 5000);              // seat 1 keeps driving (fastlane input)
   const expiry = walk(net.liveness(h, s, 6500));
   assert.deepEqual(ops(JSON.stringify(expiry)).filter((o) => o !== 'send-to'),
@@ -542,7 +548,7 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   net.onProtocol(h, 'peer_left', '{"index":1}', 6700);
   drain();
   const claim = walk(net.onPeerMessage(h, s, '7',
-    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: '1' }), pick0, 0, 6800));
+    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: '1' }), 0, 6800));
   const claimOps = claim.effects.map((e) => e.op);
   assert.ok(claimOps.indexOf('rekey-player') >= 0, 'the seat was claimed');
   assert.ok(claimOps.indexOf('rekey-player') < claimOps.indexOf('welcome-item'),

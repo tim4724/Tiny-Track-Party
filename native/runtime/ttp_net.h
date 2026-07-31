@@ -402,23 +402,39 @@ TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
  * lock, the welcome-item predicate) off the live Game; 0 between races.
  * select_mode may answer {"effects":[],"needDraw":true}: the pick needs a
  * fresh draw, the bag is the shell's, so draw one and finish with
- * ttp_net_select_mode_draw_json. */
+ * ttp_net_select_mode_draw_json. The pick itself is STORED STATE behind the
+ * room handle (ttp_net_init_pick / ttp_net_pick_json below) — no walk takes
+ * it as an argument and no shell mirrors it. */
 TTP_ABI const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
                                                  const char* fromJson, const char* msgJson,
-                                                 const char* pickJson, int isSignal,
-                                                 double nowMs);
+                                                 int isSignal, double nowMs);
 
 /* The second half of a needDraw round trip: the same select-mode rules, with
  * the drawn track id in hand. */
 TTP_ABI const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
-                                                  const char* msgJson, const char* pickJson,
+                                                  const char* msgJson,
                                                   const char* drawnTrackId);
 
 /* The game-layer track swap that keeps mode/cup as they are (a cup advancing,
  * a lobby re-draw). Same catalogue-membership and same-pick gates as the mode
- * pick, same set-pick/publish/track-change tail. */
-TTP_ABI const char* ttp_net_set_track_json(int roomHandle, const char* trackId,
-                                           const char* pickJson);
+ * pick, same store/publish/track-change tail. */
+TTP_ABI const char* ttp_net_set_track_json(int roomHandle, const char* trackId);
+
+/* ---- the stored pick -------------------------------------------------------
+ * The lobby pick ({mode,cupId,randomRaces,trackId}) lives behind the room
+ * handle: the walks above are its only writers, the lobby frame reads it on
+ * every publish, and a shell that wants it (the start gate, the cup slot)
+ * asks — it keeps no mirror, which is a copy two shells already carried.
+ *
+ * init_pick is the constructor rule that used to live in DisplayNet: a
+ * default track preselects mode "track"; hasBag stamps whether this shell
+ * wired a shuffle bag (a bagless test surface refuses random outright).
+ * clear_pick is End party's fresh-room reset (hasBag survives — the shell's
+ * capability did not change). Fields answer with EXPLICIT nulls, exactly as
+ * the mirror spelled them. */
+TTP_ABI void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag);
+TTP_ABI void ttp_net_clear_pick(int roomHandle);
+TTP_ABI const char* ttp_net_pick_json(int roomHandle);
 
 /* The 1 Hz liveness tick: the self-heartbeat state machine (in-flight pair
  * internal — it also resets under created/joined, BEFORE the shell's timer

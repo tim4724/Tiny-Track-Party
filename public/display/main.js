@@ -832,8 +832,7 @@ function renderLobbyPick() {
   const slot = el('cup-slot');
   if (!slot) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
-  const m = ui.cupSlot({ mode: net.mode, cupId: net.cupId, trackId: net.trackId,
-                         randomRaces: net.randomRaces });
+  const m = ui.cupSlot(net.pick);
   renderCupSlot(slot, m && {
     name: m.nameKey === 'random' ? 'Random' : (m.name || '?'),
     races: RACES_COPY[m.racesKey](m.raceCount),
@@ -1062,7 +1061,7 @@ function startRace() {
   const players = ui.connectedPlayers(net.flow.list());
   // The go/no-go and what the Start commits to are both the orchestration
   // layer's; a rejection comes back with its reason and nothing happens.
-  const pick = { mode: net.mode, cupId: net.cupId, trackId: net.trackId, randomRaces: net.randomRaces };
+  const pick = net.pick;   // the stored one, read where the walks keep it
   const gate = { roomState: net.roomState, sceneReady, selectedTrackId, players, ...pick };
   // ASKED TWICE, ON PURPOSE, and the draws are why. The first call is handed no
   // draws and is read for its VERDICT only — so a start that is going to be
@@ -1367,7 +1366,7 @@ function returnToLobby() {
   // bag. The first call is read for its verdict only; how many draws the
   // return will consume is the layer's answer (returnDrawsNeeded), never
   // re-spelled here — this call site's own copy had drifted from startRace's.
-  const at = { roomState: net.roomState, mode: net.mode, cupId: net.cupId, trackId: net.trackId };
+  const at = { roomState: net.roomState, ...net.pick };
   if (flow.returnToLobby({ ...at, draws: [] }).action !== 'return') return;
   perform(flow.returnToLobby({ ...at, draws: offerDraws(flow.returnDrawsNeeded(at)) }).effects);
 }

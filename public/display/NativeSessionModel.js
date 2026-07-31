@@ -45,12 +45,15 @@ export async function init() {
     onProtocol: c('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
     onClose: c('ttp_net_on_close_json', 'string', ['number', 'number']),
     onPeerMessage: c('ttp_net_on_peer_message_json', 'string',
-      ['number', 'number', 'string', 'string', 'string', 'number', 'number']),
+      ['number', 'number', 'string', 'string', 'number', 'number']),
     controllerAction: c('ttp_net_controller_action', 'string',
       ['number', 'number', 'string', 'string']),
     selectModeDraw: c('ttp_net_select_mode_draw_json', 'string',
-      ['number', 'string', 'string', 'string', 'string']),
-    setTrack: c('ttp_net_set_track_json', 'string', ['number', 'string', 'string']),
+      ['number', 'string', 'string', 'string']),
+    setTrack: c('ttp_net_set_track_json', 'string', ['number', 'string']),
+    initPick: c('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    clearPick: c('ttp_net_clear_pick', null, ['number']),
+    pickJson: c('ttp_net_pick_json', 'string', ['number']),
     liveness: c('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
     onSeen: c('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
     hostChangeApply: c('ttp_net_host_change_apply_json', 'string', ['number', 'string']),
@@ -131,22 +134,30 @@ export function onProtocol(roomHandle, type, msg, nowMs) {
 export function onClose(roomHandle, roomClosed) {
   return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0);
 }
-export function onPeerMessage(roomHandle, sessionHandle, from, msg, pick, isSignal, nowMs) {
+export function onPeerMessage(roomHandle, sessionHandle, from, msg, isSignal, nowMs) {
   return fn.onPeerMessage(roomHandle | 0, sessionHandle | 0, idJson(from), J(msg || {}),
-    J(pick), isSignal ? 1 : 0, nowMs);
+    isSignal ? 1 : 0, nowMs);
 }
 // The verdict on a game message, gates included (host, all-ready, live race).
 // CONTROL never comes through here on this shell — see main.js's short-circuit.
 export function controllerAction(roomHandle, sessionHandle, from, type) {
   return fn.controllerAction(roomHandle | 0, sessionHandle | 0, idJson(from), type || '');
 }
-export function selectModeDraw(roomHandle, from, msg, pick, drawnTrackId) {
-  return fn.selectModeDraw(roomHandle | 0, idJson(from), J(msg || {}), J(pick),
+export function selectModeDraw(roomHandle, from, msg, drawnTrackId) {
+  return fn.selectModeDraw(roomHandle | 0, idJson(from), J(msg || {}),
     drawnTrackId == null ? '' : String(drawnTrackId));
 }
-export function setTrack(roomHandle, trackId, pick) {
-  return fn.setTrack(roomHandle | 0, trackId == null ? '' : String(trackId), J(pick));
+export function setTrack(roomHandle, trackId) {
+  return fn.setTrack(roomHandle | 0, trackId == null ? '' : String(trackId));
 }
+// The stored pick's lifecycle — the walks write it, these three touch it from
+// the shell's edge: the constructor rule, End party's reset, and the read.
+export function initPick(roomHandle, defaultTrackId, hasBag) {
+  fn.initPick(roomHandle | 0, defaultTrackId == null ? null : String(defaultTrackId),
+    hasBag ? 1 : 0);
+}
+export function clearPick(roomHandle) { fn.clearPick(roomHandle | 0); }
+export function pick(roomHandle) { return JSON.parse(fn.pickJson(roomHandle | 0)); }
 export function liveness(roomHandle, sessionHandle, nowMs) {
   return fn.liveness(roomHandle | 0, sessionHandle | 0, nowMs);
 }

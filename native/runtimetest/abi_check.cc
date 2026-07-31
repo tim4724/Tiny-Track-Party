@@ -62,6 +62,7 @@
 #include "ttp/protocol.h"
 #include "ttp/schematic.h"
 #include "ttp_audio.h"
+#include "ttp_room.h"  // ttp_room_store_pick — staging the stored pick for the walk cases
 #include "ttp_net.h"
 #include "ttp_party.h"
 #include "ttp_runtime.h"
@@ -2270,14 +2271,21 @@ void handlePathsMatchJsonPaths() {
   ttp_add_human(sess, "1", nullptr);
   ttp_add_human(sess, "3", nullptr);   // a dropped seat still holds its car
 
-  const char* kFields =
-      "{\"paused\":false,\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
-      "\"trackId\":\"tidepool\",\"standings\":null}";
+  // The shell hands over only what the walks cannot know; the pick rides the
+  // room handle (staged here exactly as a select_mode walk would store it).
+  const char* kFields = "{\"paused\":false,\"standings\":null}";
+  const char* kPick =
+      "{\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
+      "\"trackId\":\"tidepool\",\"hasBag\":false}";
+  ttp_room_store_pick(room, parseOrNull(kPick, "staged pick"));
 
-  // The old path, spelled out: the four keys the shell used to gather, each
-  // through the ABI call it used to make.
+  // The old path, spelled out: the pick plus the four room keys the shell used
+  // to gather, each through the ABI call it used to make.
   const auto twoCallFrame = [&](int r, int s) {
     Value input = parseOrNull(kFields, "lobby-frame fields");
+    const Value pick = parseOrNull(kPick, "lobby-frame pick");
+    for (const char* k : {"mode", "cupId", "randomRaces", "trackId"})
+      input.set(k, *pick.find(k));
     Value roster = parseOrNull(ttp_room_list_json(r), "room list");
     Value inRace = Value::Arr();
     for (const Value& seat : roster.arr) {
@@ -2880,7 +2888,7 @@ void netWalksMatchMultiCallPath() {
   const auto walkPeerMsg = [&](double from, const char* msgJson, int sess, double now) {
     const std::string fromJson = canonical_stringify(Value::Num(from));
     return walkOf(ttp_net_on_peer_message_json(walkRoom, sess, fromJson.c_str(), msgJson,
-                                               "{}", 0, now),
+                                               0, now),
                   "on_peer_message");
   };
 
@@ -3042,46 +3050,54 @@ void netWalksMatchMultiCallPath() {
     ttp_room_events_json(walkRoom);
   }
 
-  // --- the mode pick (no old multi-call path; literal expectations) ---------
+  // --- the mode pick (no old multi-call path; literal expectations). The pick
+  // is STORED behind the handle now, so the cases stage it with the seam,
+  // read it back with ttp_net_pick_json, and — where a walk stored it — lean
+  // on the storage itself carrying state from one case to the next. ---------
   {
-    const char* pickState =
-        "{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null,\"hasBag\":true}";
-    // A non-host pick is refused outright.
+    const auto setPick = [&](const char* json) {
+      ttp_room_store_pick(walkRoom, parseOrNull(json, "staged pick"));
+    };
+    const auto pickIs = [&](const char* want, const char* where) {
+      check(std::string(ttp_net_pick_json(walkRoom)) == want,
+            std::string("netwalk stored pick (") + where + ")");
+    };
+    // publish + track-change, the whole tail now that no set-pick effect
+    // hands the pick back to a shell.
+    const auto wantTail = [&](const char* trackId) {
+      Value want = Value::Arr();
+      want.push(bareEffect("publish"));
+      Value tc = bareEffect("track-change");
+      tc.set("trackId", Value::Str(trackId));
+      want.push(std::move(tc));
+      return want;
+    };
+
+    setPick("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null,\"hasBag\":true}");
+    // A non-host pick is refused outright, and stores nothing.
     Value nh = walkOf(ttp_net_on_peer_message_json(
                           walkRoom, 0, "2", "{\"type\":\"select_mode\",\"mode\":\"track\","
                                             "\"trackId\":\"tidepool\"}",
-                          pickState, 0, 2900),
+                          0, 2900),
                       "select_mode non-host");
-    Value wantNh = Value::Arr();  // just the liveness stamp, no pick effects
-    literalEffects(nh, wantNh, "pick/non-host");
+    literalEffects(nh, Value::Arr(), "pick/non-host");
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "non-host untouched");
 
-    // The host's exact-track pick.
+    // The host's exact-track pick stores and answers the tail.
     Value w = walkOf(ttp_net_on_peer_message_json(
                          walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
                                            "\"trackId\":\"tidepool\"}",
-                         pickState, 0, 3000),
+                         0, 3000),
                      "select_mode track");
-    Value want = Value::Arr();
-    Value sp = bareEffect("set-pick");
-    sp.set("mode", Value::Str("track"));
-    sp.set("cupId", Value::Null());
-    sp.set("randomRaces", Value::Num(0));
-    sp.set("trackId", Value::Str("tidepool"));
-    want.push(std::move(sp));
-    want.push(bareEffect("publish"));
-    Value tc = bareEffect("track-change");
-    tc.set("trackId", Value::Str("tidepool"));
-    want.push(std::move(tc));
-    literalEffects(w, want, "pick/track");
+    literalEffects(w, wantTail("tidepool"), "pick/track");
+    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+           "track stored");
 
-    // Same pick again: a no-op (the shell's pick mirror now says tidepool).
-    const char* picked =
-        "{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\","
-        "\"hasBag\":true}";
+    // Same pick again: a no-op — against the pick the WALK stored, no staging.
     Value same = walkOf(ttp_net_on_peer_message_json(
                             walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
                                               "\"trackId\":\"tidepool\"}",
-                            picked, 0, 3100),
+                            0, 3100),
                         "select_mode same");
     literalEffects(same, Value::Arr(), "pick/same-noop");
 
@@ -3089,114 +3105,105 @@ void netWalksMatchMultiCallPath() {
     Value cup = walkOf(ttp_net_on_peer_message_json(
                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\","
                                              "\"cupId\":\"alpine\"}",
-                           picked, 0, 3200),
+                           0, 3200),
                        "select_mode cup");
-    Value wantCup = Value::Arr();
-    Value spc = bareEffect("set-pick");
-    spc.set("mode", Value::Str("cup"));
-    spc.set("cupId", Value::Str("alpine"));
-    spc.set("randomRaces", Value::Num(0));
-    spc.set("trackId", Value::Str("summit"));
-    wantCup.push(std::move(spc));
-    wantCup.push(bareEffect("publish"));
-    Value tcc = bareEffect("track-change");
-    tcc.set("trackId", Value::Str("summit"));
-    wantCup.push(std::move(tcc));
-    literalEffects(cup, wantCup, "pick/cup-first-race");
+    literalEffects(cup, wantTail("summit"), "pick/cup-first-race");
+    pickIs("{\"mode\":\"cup\",\"cupId\":\"alpine\",\"randomRaces\":0,\"trackId\":\"summit\"}",
+           "cup stored");
 
     Value bad = walkOf(ttp_net_on_peer_message_json(
                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"track\","
                                              "\"trackId\":\"nowhere\"}",
-                           picked, 0, 3300),
+                           0, 3300),
                        "select_mode unknown");
     literalEffects(bad, Value::Arr(), "pick/unknown-track");
 
-    // Random: the two-step draw. First half answers needDraw and no effects...
+    // Random: the two-step draw. First half answers needDraw, no effects, and
+    // must leave the stored pick alone...
     Value rnd = walkOf(ttp_net_on_peer_message_json(
                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
                                              "\"randomRaces\":4}",
-                           picked, 0, 3400),
+                           0, 3400),
                        "select_mode random");
     check(json::truthy(rnd.find("needDraw")), "netwalk pick/random: first half asks for a draw");
     literalEffects(rnd, Value::Arr(), "pick/random-needdraw");
+    pickIs("{\"mode\":\"cup\",\"cupId\":\"alpine\",\"randomRaces\":0,\"trackId\":\"summit\"}",
+           "needDraw stores nothing");
     // ...the second half lands the drawn track.
     Value drawn = walkOf(ttp_net_select_mode_draw_json(
                              walkRoom, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
                                             "\"randomRaces\":4}",
-                             picked, "lagoon"),
+                             "lagoon"),
                          "select_mode_draw");
-    Value wantR = Value::Arr();
-    Value spr = bareEffect("set-pick");
-    spr.set("mode", Value::Str("random"));
-    spr.set("cupId", Value::Null());
-    spr.set("randomRaces", Value::Num(4));
-    spr.set("trackId", Value::Str("lagoon"));
-    wantR.push(std::move(spr));
-    wantR.push(bareEffect("publish"));
-    Value tcr = bareEffect("track-change");
-    tcr.set("trackId", Value::Str("lagoon"));
-    wantR.push(std::move(tcr));
-    literalEffects(drawn, wantR, "pick/random-drawn");
+    literalEffects(drawn, wantTail("lagoon"), "pick/random-drawn");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\"}",
+           "drawn stored");
 
     // Changing only the LENGTH keeps the drawn track — no fresh draw.
-    const char* randomPicked =
-        "{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\","
-        "\"hasBag\":true}";
     Value keep = walkOf(ttp_net_on_peer_message_json(
                             walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
                                               "\"randomRaces\":0}",
-                            randomPicked, 0, 3500),
+                            0, 3500),
                         "select_mode keepdraw");
     check(!json::truthy(keep.find("needDraw")), "netwalk pick/keepdraw: no draw asked");
-    bool keptLagoon = false;
-    for (const Value& e : keep.find("effects")->arr)
-      if (json::str_field(e, "op") == "set-pick")
-        keptLagoon = json::str_field(e, "trackId") == "lagoon" &&
-                     json::num_field(e, "randomRaces") == 0;
-    check(keptLagoon, "netwalk pick/keepdraw: the length changed, the track did not");
+    literalEffects(keep, wantTail("lagoon"), "pick/keepdraw");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"lagoon\"}",
+           "the length changed, the track did not");
 
     // An out-of-range length clamps to the manifest default (ceiling, not range:
-    // the 0 above already proved endless survives).
-    Value clamp = walkOf(ttp_net_select_mode_draw_json(
-                             walkRoom, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
-                                            "\"randomRaces\":999}",
-                             picked, "lagoon"),
-                         "select_mode clamp");
-    bool clamped = false;
-    for (const Value& e : clamp.find("effects")->arr)
-      if (json::str_field(e, "op") == "set-pick")
-        clamped = json::num_field(e, "randomRaces") == 4;
-    check(clamped, "netwalk pick/clamp: 999 races clamps to the default");
+    // the 0 above already proved endless survives). Staged back to a TRACK pick
+    // so the draw branch runs rather than keepDraw.
+    setPick("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\","
+            "\"hasBag\":true}");
+    walkOf(ttp_net_select_mode_draw_json(
+               walkRoom, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                              "\"randomRaces\":999}",
+               "lagoon"),
+           "select_mode clamp");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\"}",
+           "999 races clamps to the default");
 
     // A bagless shell refuses random outright.
+    setPick("{\"mode\":null,\"trackId\":null,\"hasBag\":false}");
     Value bagless = walkOf(ttp_net_on_peer_message_json(
                                walkRoom, 0, "1", "{\"type\":\"select_mode\","
                                                  "\"mode\":\"random\",\"randomRaces\":4}",
-                               "{\"mode\":null,\"trackId\":null,\"hasBag\":false}", 0, 3600),
+                               0, 3600),
                            "select_mode bagless");
     check(!json::truthy(bagless.find("needDraw")), "netwalk pick/bagless: refused, not deferred");
     literalEffects(bagless, Value::Arr(), "pick/bagless");
 
+    // init_pick spells the constructor rule; clear_pick keeps only hasBag.
+    ttp_net_init_pick(walkRoom, "tidepool", 1);
+    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+           "init with a default track");
+    ttp_net_init_pick(walkRoom, nullptr, 1);
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}",
+           "init without one");
+
     // setTrack: the game-layer swap keeps mode/cup, same tail, same gates.
-    Value st = walkOf(ttp_net_set_track_json(walkRoom, "tidepool", randomPicked), "set_track");
-    Value wantSt = Value::Arr();
-    Value sps = bareEffect("set-pick");
-    sps.set("mode", Value::Str("random"));
-    sps.set("cupId", Value::Null());
-    sps.set("randomRaces", Value::Num(4));
-    sps.set("trackId", Value::Str("tidepool"));
-    wantSt.push(std::move(sps));
-    wantSt.push(bareEffect("publish"));
-    Value tcs = bareEffect("track-change");
-    tcs.set("trackId", Value::Str("tidepool"));
-    wantSt.push(std::move(tcs));
-    literalEffects(st, wantSt, "set_track/accept");
-    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "lagoon", randomPicked),
-                          "set_track same"),
+    setPick("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"lagoon\","
+            "\"hasBag\":true}");
+    Value st = walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track");
+    literalEffects(st, wantTail("tidepool"), "set_track/accept");
+    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"tidepool\"}",
+           "set_track keeps mode and length");
+    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track same"),
                    Value::Arr(), "set_track/same-id-noop");
-    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "nowhere", randomPicked),
-                          "set_track unknown"),
+    literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "nowhere"), "set_track unknown"),
                    Value::Arr(), "set_track/unknown");
+
+    // clear_pick: End party's reset. Random still works after — hasBag survived.
+    ttp_net_clear_pick(walkRoom);
+    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "cleared");
+    Value stillBagged = walkOf(ttp_net_on_peer_message_json(
+                                   walkRoom, 0, "1", "{\"type\":\"select_mode\","
+                                                     "\"mode\":\"random\",\"randomRaces\":2}",
+                                   0, 3700),
+                               "select_mode after clear");
+    check(json::truthy(stillBagged.find("needDraw")),
+          "netwalk pick/clear: hasBag survives a clear");
+
     ttp_room_events_json(walkRoom);
     ttp_room_events_json(twin.room);
   }

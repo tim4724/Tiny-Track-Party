@@ -82,6 +82,12 @@ ttp::Value ttp_room_late_joiners_synced(int roomHandle, int sessionHandle);
 // a stale set.
 int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHandle);
 
+// The lobby pick the net walks decide, stored beside the room it describes so
+// no shell keeps a mirror. Written ONLY by ttp_net's walks (init/select/
+// set-track/clear); read by the walks, the lobby frame and ttp_net_pick_json.
+ttp::Value ttp_room_pick_value(int roomHandle);
+void ttp_room_store_pick(int roomHandle, ttp::Value pick);
+
 // The live machine behind a handle, or nullptr — for the choreography walks
 // (see the header note). Mutations through it still queue their events on the
 // handle exactly as the ttp_room_* mutators do, so a shell that drains

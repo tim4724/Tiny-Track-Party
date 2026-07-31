@@ -142,9 +142,20 @@ const char* ttp_net_lobby_snapshot_json(const char* inputJson) {
 }
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
-  // The game-owned half — everything the room machine cannot know.
+  // The game-owned half — now only what the walks cannot know: the pause latch
+  // and the standings board. The PICK is the stored one (ttp_room.h) — the
+  // walks are its writers, so the frame reads it where it lives.
   Value input = json::parse_or(fieldsJson, Value::Obj());
   if (input.type != Value::OBJ) input = Value::Obj();
+  const Value pick = ttp_room_pick_value(roomHandle);
+  const auto pickField = [&](const char* k, Value dflt) {
+    const Value* v = pick.find(k);
+    input.set(k, v ? *v : std::move(dflt));
+  };
+  pickField("mode", Value::Null());
+  pickField("cupId", Value::Null());
+  pickField("randomRaces", Value::Num(0));
+  pickField("trackId", Value::Null());
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
   // corpus-pinned rule and not a variant of it. The roster is built ONCE and
@@ -372,7 +383,7 @@ NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
 // One scratch buffer per walk, the file's own rule (see the block above).
 std::string g_bufOpen, g_bufCreateTimeout, g_bufProtocol, g_bufClose, g_bufPeerMsg,
     g_bufSelectDraw, g_bufSetTrack, g_bufLiveness, g_bufSeen, g_bufHostApply,
-    g_bufStateApply;
+    g_bufStateApply, g_bufPick;
 
 // The wire spelling of a MSG key, off the shared manifest — never a literal
 // here, so the walk cannot drift from what protocol.js told the phone.
@@ -576,17 +587,24 @@ const Value* firstCupTrackId(const Value* cupId) {
   return nullptr;
 }
 
-void pushPickEffects(Value& effects, const std::string& mode, Value cupId,
-                     double randomRaces, Value trackId) {
+// Adopt a new pick: STORE it (ttp_room.h's slot is the one copy — no set-pick
+// effect hands it back to a shell anymore), then publish — the frame reads the
+// pick just stored — then swap the preview. hasBag rides through untouched: it
+// is the shell's capability stamp, not part of any pick.
+void storePickAndPush(int roomHandle, Value& effects, Value mode, Value cupId,
+                      double randomRaces, Value trackId) {
   if (trackId.type == Value::UNDEF) trackId = Value::Null();
   if (cupId.type == Value::UNDEF) cupId = Value::Null();
-  Value sp = effectOp("set-pick");
-  sp.set("mode", Value::Str(mode));
-  sp.set("cupId", std::move(cupId));
-  sp.set("randomRaces", Value::Num(randomRaces));
-  sp.set("trackId", trackId);
-  effects.push(std::move(sp));
-  // set-pick BEFORE publish: the publish reads the pick the shell just adopted.
+  if (mode.type == Value::UNDEF) mode = Value::Null();
+  const Value cur = ttp_room_pick_value(roomHandle);
+  const Value* hb = cur.find("hasBag");
+  Value pick = Value::Obj();
+  pick.set("mode", std::move(mode));
+  pick.set("cupId", std::move(cupId));
+  pick.set("randomRaces", Value::Num(randomRaces));
+  pick.set("trackId", trackId);
+  pick.set("hasBag", hb ? *hb : Value::Bool(false));
+  ttp_room_store_pick(roomHandle, std::move(pick));
   pushOp(effects, "publish");
   Value tc = effectOp("track-change");
   tc.set("trackId", std::move(trackId));
@@ -597,9 +615,12 @@ void pushPickEffects(Value& effects, const std::string& mode, Value cupId,
 // random draw. Validates, resolves the concrete trackId, and answers the
 // publish + preview swap. Same-pick taps no-op EXCEPT random, where a re-tap
 // re-rolls. Returns true when a draw is needed and none was supplied.
-bool selectModeWalk(RoomFlow* flow, const PeerId& from, const Value& msg, const Value& pick,
+bool selectModeWalk(int roomHandle, const PeerId& from, const Value& msg,
                     const Value* drawnTrack, Value& effects) {
+  RoomFlow* flow = ttp_room_flow(roomHandle);
+  if (!flow) return false;
   if (!(from == flow->host()) || flow->state() != RoomFlow::State::LOBBY) return false;
+  const Value pick = ttp_room_pick_value(roomHandle);
   const Value* modeV = mfind(msg, "mode");
   const std::string mode = (modeV && modeV->type == Value::STR) ? modeV->str : "";
   const Value* curModeV = mfind(pick, "mode");
@@ -609,14 +630,14 @@ bool selectModeWalk(RoomFlow* flow, const PeerId& from, const Value& msg, const 
     if (!catalogueHasTrack(tid)) return false;
     if (curMode == "track" && strictEquals(orUndef(tid), orUndef(mfind(pick, "trackId"))))
       return false;
-    pushPickEffects(effects, mode, Value::Null(), 0, orUndef(tid));
+    storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(), 0, orUndef(tid));
   } else if (mode == "cup") {
     const Value* cupId = mfind(msg, "cupId");
     const Value* first = firstCupTrackId(cupId);
     if (!first) return false;
     if (curMode == "cup" && strictEquals(orUndef(cupId), orUndef(mfind(pick, "cupId"))))
       return false;
-    pushPickEffects(effects, mode, orUndef(cupId), 0, *first);
+    storePickAndPush(roomHandle, effects, Value::Str(mode), orUndef(cupId), 0, *first);
   } else if (mode == "random") {
     // A bagless shell (test surfaces) refuses random outright, keepDraw
     // included — the old shell's `if (!drawRandomTrack) return` gate.
@@ -631,8 +652,10 @@ bool selectModeWalk(RoomFlow* flow, const PeerId& from, const Value& msg, const 
     // itself, or arriving from another mode) draws.
     const bool keepDraw = curMode == "random" && randomRaces != curRRn &&
                           curTrack && curTrack->type != Value::NUL;
-    if (keepDraw) pushPickEffects(effects, mode, Value::Null(), randomRaces, *curTrack);
-    else if (drawnTrack) pushPickEffects(effects, mode, Value::Null(), randomRaces, *drawnTrack);
+    if (keepDraw) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
+                                   randomRaces, *curTrack);
+    else if (drawnTrack) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
+                                          randomRaces, *drawnTrack);
     else return true;  // needDraw: the bag is the shell's
   }
   return false;
@@ -814,7 +837,7 @@ const char* ttp_net_on_close_json(int roomHandle, int roomClosed) {
 
 const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
                                          const char* fromJson, const char* msgJson,
-                                         const char* pickJson, int isSignal, double nowMs) {
+                                         int isSignal, double nowMs) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   NetState& st = netStateOf(roomHandle);
   Value effects = Value::Arr();
@@ -922,8 +945,7 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       break;
     }
     case ns::MessageAction::SELECT_MODE: {
-      const Value pick = json::parse_or(pickJson, Value::Obj());
-      const bool needDraw = selectModeWalk(flow, from, msg, pick, nullptr, effects);
+      const bool needDraw = selectModeWalk(roomHandle, from, msg, nullptr, effects);
       return answer(g_bufPeerMsg, std::move(effects), needDraw);
     }
     case ns::MessageAction::PING: {
@@ -948,28 +970,26 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
 }
 
 const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
-                                          const char* msgJson, const char* pickJson,
+                                          const char* msgJson,
                                           const char* drawnTrackId) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   Value effects = Value::Arr();
   if (!flow) return answer(g_bufSelectDraw, std::move(effects));
   const Value fromV = json::parse_or(fromJson, Value::Null());
   const Value msg = json::parse_or(msgJson, Value::Obj());
-  const Value pick = json::parse_or(pickJson, Value::Obj());
   const Value drawn = Value::Str(strOr(drawnTrackId));
-  selectModeWalk(flow, peerIdOf(&fromV), msg, pick, &drawn, effects);
+  selectModeWalk(roomHandle, peerIdOf(&fromV), msg, &drawn, effects);
   return answer(g_bufSelectDraw, std::move(effects));
 }
 
-const char* ttp_net_set_track_json(int roomHandle, const char* trackId,
-                                   const char* pickJson) {
+const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   Value effects = Value::Arr();
   if (!flow) return answer(g_bufSetTrack, std::move(effects));
-  const Value pick = json::parse_or(pickJson, Value::Obj());
+  const Value pick = ttp_room_pick_value(roomHandle);
   const Value tid = Value::Str(strOr(trackId));
   // Single writer with the mode pick, so trackId always flows out the same way
-  // (set-pick + publish + preview swap). Mode/cup/length ride through as they
+  // (store + publish + preview swap). Mode/cup/length ride through as they
   // are: the series engine advancing a cup, or the lobby re-drawing a random
   // pick, changes the TRACK and nothing else.
   if (!catalogueHasTrack(&tid)) return answer(g_bufSetTrack, std::move(effects));
@@ -978,17 +998,54 @@ const char* ttp_net_set_track_json(int roomHandle, const char* trackId,
   const Value* curModeV = mfind(pick, "mode");
   const Value* curCup = mfind(pick, "cupId");
   const Value* curRR = mfind(pick, "randomRaces");
-  Value sp = effectOp("set-pick");
-  sp.set("mode", curModeV ? *curModeV : Value::Null());
-  sp.set("cupId", curCup ? *curCup : Value::Null());
-  sp.set("randomRaces", Value::Num((curRR && curRR->type == Value::NUM) ? curRR->num : 0));
-  sp.set("trackId", tid);
-  effects.push(std::move(sp));
-  pushOp(effects, "publish");
-  Value tc = effectOp("track-change");
-  tc.set("trackId", tid);
-  effects.push(std::move(tc));
+  storePickAndPush(roomHandle, effects,
+                   curModeV ? *curModeV : Value::Null(),
+                   curCup ? *curCup : Value::Null(),
+                   (curRR && curRR->type == Value::NUM) ? curRR->num : 0, tid);
   return answer(g_bufSetTrack, std::move(effects));
+}
+
+void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag) {
+  // DisplayNet's constructor rule: a default track preselects mode "track".
+  // Explicit nulls, exactly as the shell mirror spelled them — strictEquals
+  // reads these fields, and null is not absent.
+  const bool hasDefault = defaultTrackIdOrNull && *defaultTrackIdOrNull;
+  Value pick = Value::Obj();
+  pick.set("mode", hasDefault ? Value::Str("track") : Value::Null());
+  pick.set("cupId", Value::Null());
+  pick.set("randomRaces", Value::Num(0));
+  pick.set("trackId", hasDefault ? Value::Str(defaultTrackIdOrNull) : Value::Null());
+  pick.set("hasBag", Value::Bool(hasBag != 0));
+  ttp_room_store_pick(roomHandle, std::move(pick));
+}
+
+void ttp_net_clear_pick(int roomHandle) {
+  // End party -> fresh room: the next party must not inherit the old party's
+  // cup. hasBag survives — the shell's capability did not change.
+  const Value cur = ttp_room_pick_value(roomHandle);
+  const Value* hb = cur.find("hasBag");
+  Value pick = Value::Obj();
+  pick.set("mode", Value::Null());
+  pick.set("cupId", Value::Null());
+  pick.set("randomRaces", Value::Num(0));
+  pick.set("trackId", Value::Null());
+  pick.set("hasBag", hb ? *hb : Value::Bool(false));
+  ttp_room_store_pick(roomHandle, std::move(pick));
+}
+
+const char* ttp_net_pick_json(int roomHandle) {
+  const Value pick = ttp_room_pick_value(roomHandle);
+  Value out = Value::Obj();
+  const auto field = [&](const char* k, Value dflt) {
+    const Value* v = pick.find(k);
+    out.set(k, v ? *v : std::move(dflt));
+  };
+  field("mode", Value::Null());
+  field("cupId", Value::Null());
+  field("randomRaces", Value::Num(0));
+  field("trackId", Value::Null());
+  ordered_stringify_into(out, g_bufPick);
+  return g_bufPick.c_str();
 }
 
 const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowMs) {

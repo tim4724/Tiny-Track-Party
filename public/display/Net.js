@@ -145,27 +145,15 @@ export class DisplayNet extends GameNet {
     // null outside a race; set via setStandings on each finish + at race end,
     // cleared by the statechange walk's clear-standings effect.
     this._standings = null;
-    // The lobby pick, MIRRORED from the wasm's answers: null trackId until a
-    // pick lands (the lobby shows the plain diorama and the host's "Start race"
-    // button stays disabled until then). `trackId` is always the RESOLVED
-    // concrete track (exact pick / a cup's current race / the random draw).
-    // Kept as shell state because the game layer reads it synchronously all
-    // day; its single writer is the set-pick effect (plus clearPick below), so
-    // the mirror cannot drift from what the walks decided.
-    this.trackId = opts.defaultTrackId != null ? opts.defaultTrackId : null;
-    // What the trackId MEANS: 'track' = single race on exactly it, 'cup' = it's
-    // the current race of cupId's 4-race Grand Prix, 'random' = it was drawn by
-    // drawRandomTrack (game-supplied shuffle bag; re-picking random re-rolls).
-    this.mode = this.trackId != null ? 'track' : null;
-    this.cupId = null;
-    // How long a 'random' run is: 0 = endless (only a lobby return ends it),
-    // otherwise that many drawn races and then a podium. Meaningless in the
-    // other modes, where it stays 0.
-    this.randomRaces = 0;
     // The game-owned shuffle bag. Page RNG, deliberately never crossed: a
     // random pick answers {needDraw:true}, the shell draws, and the second
     // walk half lands it (see _onMessage).
     this.drawRandomTrack = opts.drawRandomTrack || null;
+    // NO PICK MIRROR. The lobby pick lives behind the room handle
+    // (ttp_net_init_pick / pick_json): the walks write it, the lobby frame
+    // reads it on every publish, and the game layer asks `this.pick` when it
+    // needs one. This constructor only seeds the initial state — a default
+    // track preselects mode 'track' — and stamps whether a bag is wired.
 
     // The room state machine — NativeRoomFlow (C++ decisions, kit surface),
     // injected so this module stays transport-focused.
@@ -183,6 +171,8 @@ export class DisplayNet extends GameNet {
     this.flow = new this._RoomFlowImpl({
       liveness: { timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS }
     });
+    session.initPick(this.flow.handle,
+      opts.defaultTrackId != null ? opts.defaultTrackId : null, !!this.drawRandomTrack);
     this.roomCode = null;   // mirror of the wasm's room identity; written only by
     this.instance = null;   // the save-room/forget-room effects (and _restoreRoom)
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
@@ -310,25 +300,27 @@ export class DisplayNet extends GameNet {
     const ctx = { from, data };
     const ans = this._walk(this.flow.runWalk(() =>
       session.onPeerMessage(this.flow.handle, this.sessionHandle(), from, data,
-        this._pick(), sig, Date.now())), ctx);
+        sig, Date.now())), ctx);
     // A random mode pick needs a draw and the bag is the page's (game-supplied
     // shuffle RNG, never crossed): draw one and finish the pick with the second
-    // walk half. C++ only asks when the pick said hasBag.
+    // walk half. C++ only asks when the stored pick says hasBag.
     if (ans.needDraw) {
       this._walk(this.flow.runWalk(() =>
-        session.selectModeDraw(this.flow.handle, from, data, this._pick(),
+        session.selectModeDraw(this.flow.handle, from, data,
           this.drawRandomTrack())), ctx);
     }
   }
 
-  // The shell's current pick, as the walks read it. `hasBag` is what lets a
-  // bagless test surface refuse random picks exactly as the old shell did.
-  _pick() {
-    return {
-      mode: this.mode, cupId: this.cupId, randomRaces: this.randomRaces,
-      trackId: this.trackId, hasBag: !!this.drawRandomTrack
-    };
-  }
+  // The stored pick ({mode,cupId,randomRaces,trackId}), read where it lives.
+  // One crossing per ask, at button-press frequency.
+  get pick() { return session.pick(this.flow.handle); }
+  // Field projections of the same read — the E2E surface (window.__net.mode
+  // and friends) predates the stored pick and stays stable. Prefer `pick` in
+  // game code: one crossing for all four fields.
+  get mode() { return this.pick.mode; }
+  get cupId() { return this.pick.cupId; }
+  get trackId() { return this.pick.trackId; }
+  get randomRaces() { return this.pick.randomRaces; }
 
   // Parse a walk's answer and perform its effects IN INDEX ORDER. The walk
   // already mutated the room; flow.runWalk drained the queued events first, so
@@ -404,15 +396,8 @@ export class DisplayNet extends GameNet {
       case 'welcome-item': this.onPlayerWelcomed(e.peerIndex); break;
       case 'game-message': this.onControllerMessage(ctx.from, ctx.data); break;
       case 'race-abandoned': this.onRaceAbandoned(); break;
-      // The pick mirror's single writer (clearPick aside): the game layer reads
-      // mode/cupId/randomRaces/trackId synchronously all day, so they live here
-      // — but only the walks decide them.
-      case 'set-pick':
-        this.mode = e.mode;
-        this.cupId = e.cupId;
-        this.randomRaces = e.randomRaces;
-        this.trackId = e.trackId;
-        break;
+      // (No set-pick arm: the walks STORE the pick behind the room handle;
+      // nothing is handed back for a shell to keep.)
       case 'track-change': this.onTrackChange(e.trackId); break;
       case 'clear-standings': this._standings = null; break;
       // An op this build cannot perform is a MISSING CAPABILITY, not an optional
@@ -427,7 +412,7 @@ export class DisplayNet extends GameNet {
   // no-op, set-pick + publish + preview swap), so trackId always flows out the
   // same way.
   setTrack(id) {
-    this._walk(this.flow.runWalk(() => session.setTrack(this.flow.handle, id, this._pick())));
+    this._walk(this.flow.runWalk(() => session.setTrack(this.flow.handle, id)));
   }
 
   // ---- liveness (1 Hz) ----
@@ -477,12 +462,9 @@ export class DisplayNet extends GameNet {
   // on the boundary this call exists to keep it off.
   _publishLobby() {
     if (!this.party) return;
+    // The pick is not here: the frame reads the stored one off the handle.
     this.party.setStateFrame(session.lobbyFrame(this.flow.handle, this.sessionHandle(), {
       paused: !!this.isPaused(),
-      mode: this.mode,
-      cupId: this.cupId,
-      randomRaces: this.randomRaces, // 'random' run length (0 = endless)
-      trackId: this.trackId,         // resolved concrete track
       standings: this._standings      // results board (playing/results), else null
     }));
   }
@@ -522,7 +504,7 @@ export class DisplayNet extends GameNet {
   // Reset the lobby pick to the pre-pick state (End party → fresh room: the
   // next party must not inherit the old party's cup). The retained snapshot
   // republishes with the cleared values when the fresh room comes up.
-  clearPick() { this.mode = null; this.cupId = null; this.randomRaces = 0; this.trackId = null; }
+  clearPick() { session.clearPick(this.flow.handle); }
 
   // End the party for everyone: the relay deletes the room (stale rejoin links
   // 404) and closes every socket with 4001 — phones bail terminally (their

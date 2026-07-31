@@ -40,6 +40,11 @@ struct RoomHandle {
   std::unique_ptr<RoomFlow> flow;
   std::vector<std::pair<std::string, Value>> events;  // emission-ordered queue
   std::string scratch;                                // backs const char* returns
+  // The lobby pick the net walks decide ({mode,cupId,randomRaces,trackId,
+  // hasBag}, explicit nulls — strictEquals reads them). SHIM state, not
+  // RoomFlow's: the frozen party corpora know no pick, and the walks are its
+  // only writers (ttp_room_store_pick). Shells read ttp_net_pick_json.
+  Value pick = Value::Obj();
 };
 
 std::map<int, std::unique_ptr<RoomHandle>> g_rooms;
@@ -268,6 +273,16 @@ int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHan
 RoomFlow* ttp_room_flow(int roomHandle) {
   RoomHandle* rh = room(roomHandle);
   return rh ? rh->flow.get() : nullptr;
+}
+
+Value ttp_room_pick_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->pick : Value::Obj();
+}
+
+void ttp_room_store_pick(int roomHandle, Value pick) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->pick = std::move(pick);
 }
 
 // ---- liveness ---------------------------------------------------------------
