@@ -22,7 +22,6 @@ import { RaceAudio } from './Audio.js';
 // below, because a dev range is a debug surface and never reaches a picker.
 import * as ui from './NativeUiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
-import { makeShuffleBag } from './shuffleBag.js';
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
 const el = (id) => document.getElementById(id);
@@ -121,7 +120,6 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 // Still JS by design: rendering, HUD, and the transport I/O (WebSocket /
 // RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
 const _nativeSim = await import('./NativeRaceSession.js');
-const _nativeSeries = await import('./NativeCupSeries.js');
 // The audio DECISIONS are C++ too (ttp_audio.h). Only the device half — the
 // AudioContext, the cue palette, the song element — is still JS, and it decides
 // nothing.
@@ -131,7 +129,7 @@ const _nativeAudio = await import('./NativeAudio.js');
 // to the lobby. It answers in ORDERED EFFECT LISTS and `perform` below walks
 // them — the order is the contract, so nothing here may reorder or skip.
 const flow = await import('./NativeRaceFlow.js');
-await Promise.all([_nativeSim.init(), _nativeSeries.init(), _nativeAudio.init(), ui.init(), flow.init()]);
+await Promise.all([_nativeSim.init(), _nativeAudio.init(), ui.init(), flow.init()]);
 // The world the UI model resolves ids against, handed over ONCE: the cups, the
 // track catalogue and the two field sizes the seat grid needs. Authored data —
 // it changes when the game ships, not while it runs — so it is set here rather
@@ -497,7 +495,7 @@ let lastHudTick = 0;
 // resend via onPlayerWelcomed.
 const _lastItem = new Map();
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
-// Empty when four humans race. `currentField` is the full roster (humans + AI),
+// Empty when four humans race. The full field (humans + AI) is retained
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
 // Which cars are CPU racers. Sourced from the FIELD, never from "do I hold a
 // controller for it" — bots drive inside the wasm and hold no JS object at all, so
@@ -506,20 +504,19 @@ const _lastItem = new Map();
 // targeting — see git history for aiBots). The AUDIO no longer asks: the
 // decision layer reads the sim's own bot list, which is the same set by
 // construction (the layer's buildField registers exactly these as bot personas).
-let aiCarIds = new Set();
 
 // Reconcile every phone's held-item light against the engine's HUD block.
 // The DECISION (who gets an ITEM message, only on change, AIs filtered) is
 // C++'s ui.itemPushes; this only chooses WHEN to ask. Called from the slow
 // HUD tick as the steady-state net, and from the 'item-pickup' effect so the
 // light + pickup haptic land at the event instead of up to a HUD tick later.
-const pushHeldItems = (rows) => {
-  for (const { id, item } of ui.itemPushes(rows, aiCarIds, _lastItem)) {
+const pushHeldItems = () => {
+  if (!session) return;
+  for (const { id, item } of ui.itemPushes(session.h, _lastItem)) {
     _lastItem.set(id, item);
     net.sendTo(id, { type: MSG.ITEM, item });
   }
 };
-let currentField = [];
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
 let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
@@ -602,8 +599,7 @@ scene.onFrame = (dt) => {
     // ENGINE's, read back packed (ttp_hud.h) rather than picked out of a
     // serialized race state; painting them is still the Stage's. uiModel.hudRows
     // is off this path — it survives as the oracle the C++ port is pinned to.
-    const rows = scene.hudRows();
-    for (const row of rows) scene.setCarHud(row.id, row);
+    for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
     // Held item lights the phone's USE button (all other race state — place/lap,
     // standings — lives on the TV or the room snapshot). It's per-owner, so it
     // rides its own ITEM message sent ONLY ON CHANGE (a reconnect relight comes
@@ -622,14 +618,11 @@ scene.onFrame = (dt) => {
     // resolves to null and the phone's button stays dark — the same degradation
     // the drawn slot takes, and reachable only if ITEM_IDS has drifted from the
     // sim's roll table, which tests/display-abi.test.js exists to prevent.
-    pushHeldItems(rows);
+    pushHeldItems();
   }
 };
 
 // ---- net ----
-// Random-mode track draws: one bag for the room's lifetime, so "random" walks
-// the whole catalogue before any repeat (page RNG, like track.seed).
-const randomBag = makeShuffleBag(TRACK_LIST.map((t) => t.id), Math.random);
 let currentJoinUrl = '';   // full join link (same string the QR encodes); set on room-ready
 const net = new DisplayNet({
   // The room state machine, relay framing and fastlane netcode all run on the
@@ -639,7 +632,9 @@ const net = new DisplayNet({
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
   defaultTrackId: selectedTrackId,
-  drawRandomTrack: () => randomBag.draw(),
+  // The random-track shuffle bag lives BEHIND THE ROOM now; what the shell
+  // supplies is one page-entropy seed (DisplayNet hands it to init_pick).
+  hasBag: true,
   // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
   // even when the resolved trackId didn't change (e.g. a mode switch landing
   // on the same circuit, where selectTrack early-returns).
@@ -675,13 +670,8 @@ const net = new DisplayNet({
   // this callback used to apply itself lives behind the session handle now.
   onPlayerWelcomed: (peerIndex) => {
     if (!session) return; // the handle the effect was decided on is being torn down
-    // Off the packed HUD rows, not a ~4 KB snapshot parse for one car: the row
-    // carries exactly what the rule reads (id, held item, finished).
-    const c = scene.hudRows().find((x) => x.id === peerIndex);
-    // Belt only, not the gate: the walk emits welcome-item exclusively for a
-    // seat whose car is in the live race (C++'s predicate, off the handle).
-    if (!c) return;
-    const item = ui.welcomeItem(c);
+    // The seat's held item, off the live race in C++ — one crossing.
+    const item = ui.welcomeItem(session.h, peerIndex);
     _lastItem.set(peerIndex, item);
     net.sendTo(peerIndex, { type: MSG.ITEM, item });
   },
@@ -764,18 +754,19 @@ function rekeyCarPlayer(oldId, newId) {
   // The session rekey happens inside the walk (before the series-rekey effect
   // it emits — safe: the two are independent wasm handles with no cross-reads,
   // and the corpus pins the order of the EFFECTS, never the query).
-  perform(flow.rekeyCarPlayer(session ? session.h : 0, series ? series.handle : 0,
+  perform(flow.rekeyCarPlayer(session ? session.h : 0, net.flow.handle,
                               oldId, newId).effects);
 }
 
 // A seated player renamed themselves. The lobby needs nothing — its seat grid is
 // re-read off the room handle on the same _announce that delivered this — but a
 // RACE freezes copies of the name at its start, and each has to be moved by hand:
-// the cell chip Stage wrote when the car was added, and `currentField`, which
-// every standings board is composed from. A no-op for a seat with no car, since a
-// late joiner is in neither.
+// the cell chip Stage wrote when the car was added (the room-retained field
+// row every standings board reads was already repaired inside the walk). A
+// no-op for a seat with no car, since a late joiner is in neither.
 function renamePlayer(peerIndex, name) {
-  for (const p of currentField) if (p.peerIndex === peerIndex) p.name = name;
+  // The room-retained field row was repaired inside the rename walk; what is
+  // left here is the scene chip and the board re-push.
   scene.setCarName(peerIndex, name);
   // currentField only reaches the phones on the board's NEXT push — mid-race the
   // next car to cross, on the podium never. So re-push the board already out, at
@@ -791,10 +782,9 @@ function renamePlayer(peerIndex, name) {
 
 // ---- Grand Prix series ----
 // Picking a cup runs its 4 tracks back-to-back: each endRace banks points into
-// `series` (GrandPrix.js), holds the room in RESULTS for an intermission, then
+// the room's stored series, holds the room in RESULTS for an intermission, then
 // chains straight into the next race (advanceSeriesRace) — the lobby only
 // returns after the podium (or on any quit path, which cancels the series).
-let series = null;              // live CupSeries, or null (single race / no cup)
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
 let intermissionTicker = null;  // ½ s "starting in N…" refresh
@@ -885,13 +875,6 @@ function perform(effects, ctx = {}) {
 const RACE_PERFORMERS = {
   'set-track-seed': (e) => { track.seed = e.seed; },
   'stop-lobby-demo': () => lobbyDemo.stop(),
-  // `e.bots` (the persona specs) is deliberately dropped: the wasm gets them on
-  // 'create-session', which carries its own copy. The shell kept a second one
-  // here for a while and never read it.
-  'set-field': (e) => {
-    currentField = e.field;
-    aiCarIds = new Set(e.aiIds);
-  },
   'clear-item-cache': () => _lastItem.clear(),
   'show-screen': (e) => show(e.screen),
   'hide-results': () => el('results').classList.add('hidden'),
@@ -934,11 +917,10 @@ const RACE_PERFORMERS = {
   'stop-music': () => sfx(audioDecide.stopMusic()),
   'show-music-credit': (e) => showMusicCredit(e.on),
   'stop-voices': () => sfx(audioDecide.stopVoices()),
-  'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(scene.hudRows()); },
+  'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(); },
   'rocket-impact': (e) => scene.rocketImpact(e.id),
   'rocket-expire': (e) => scene.rocketExpire(e.s, e.lat),
   'broadcast-standings': (e, ctx) => broadcastStandings(e.over, ctx.results),
-  'apply-race-points': (e, ctx) => series.applyRace(ctx.results.results, currentField),
   'show-results': (e, ctx) => showResults(ctx.results),
   'arm-results-failsafe': (e) => {
     clearTimeout(endTimer);
@@ -951,16 +933,10 @@ const RACE_PERFORMERS = {
     intermissionTicker = setInterval(renderIntermissionCountdown, 500);
   },
   'clear-intermission': () => clearSeriesTimers(),
-  'series-advance': () => series.advance(),
-  // Dispose the wasm handle, not just the wrapper — leaving it was a leak
-  // (one orphaned GrandPrix per finished cup).
-  'clear-series': () => { if (series) series.dispose(); series = null; },
-  'set-track-from-series': () => net.setTrack(series.currentTrackId),
   // A chained start has no lobby step, so the new circuit is placed explicitly
   // (selectTrack outside the lobby skips the scene swap) — the results overlay
   // covers the pop.
   'place-track': () => scene.setTrack(track),
-  'set-track': (e) => net.setTrack(e.trackId),
   // endParty's teardown — closeRoom bails every phone terminally while the
   // display's own 4001 self-heals into a FRESH room (Net.js onClose
   // {roomClosed}, which also clears the roster), so the next NEW GAME
@@ -975,7 +951,6 @@ const RACE_PERFORMERS = {
   'dispose-session': () => {
     if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
   },
-  'clear-field': () => { aiCarIds = new Set(); currentField = []; },
   'fade-to-lobby': (e) => {
     fadeBackdrop(() => {
       for (const c of scene.cars.keys()) scene.removeCar(c);
@@ -986,11 +961,7 @@ const RACE_PERFORMERS = {
   'remove-scene-car': (e) => scene.removeCar(e.id),
   'stop-car-audio': (e) => sfx(audioDecide.stopCar(e.id)),
   'sync-state': () => net.syncState(),
-  'series-rekey': (e) => { if (series) series.rekey(e.oldId, e.newId); },
   'rekey-scene-car': (e) => scene.rekeyCar(e.oldId, e.newId),
-  'rekey-field': (e) => {
-    for (const p of currentField) if (p.peerIndex === e.oldId) p.peerIndex = e.newId;
-  },
   'set-auto-paused': (e) => { autoPaused = e.on; },
   'sync-frozen': () => syncSessionFrozen(),
   'return-to-lobby': () => returnToLobby()
@@ -1006,10 +977,11 @@ const RACE_PERFORMERS = {
 
 function applyEffect(e, ctx) {
   const perform = RACE_PERFORMERS[e.op];
-  // An op this build cannot perform is a MISSING CAPABILITY, not an optional
-  // step — say so loudly rather than dropping it and leaving a half-built race.
-  if (!perform) throw new Error(`raceFlow: unperformable effect ${e.op}`);
-  perform(e, ctx);
+  if (perform) return perform(e, ctx);
+  // A race answer may carry NET-vocabulary ops in place: the executor merges
+  // the set-track walk's tail (track-change, publish, …) into it. Those are
+  // the net performer's; anything neither table knows throws there.
+  net.performEffect(e);
 }
 
 // The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
@@ -1037,37 +1009,7 @@ function showCountdownBanner(e) {
 // a stale or forged START_GAME can't jump the lobby. The host themselves never
 // readies — their start IS the commitment.
 
-// The series behind a Random start, per the host's length pick (net.randomRaces).
-// Endless (0) is the original behaviour: one track on the card and a draw offered
-// at every intermission, so it never finishes. A fixed count instead draws the
-// WHOLE card up front — race 1 is the track the lobby already previewed — and
-// hands it over with no drawNext, which makes it a cup in every way that matters:
-// "Race 2 of 4", a last race, points and a podium. A count of 1 is just a single
-// race (no series), which the phone can't pick but the wire allows.
-// The shuffle bag's offer for one decision. The bag stays JS on purpose (page
-// RNG, not sim state — the plan's non-goal), so the rules are OFFERED draws.
-//
-// A DRAW CANNOT BE PUT BACK, which is why the count is asked for first
-// (ttp_race_draws_needed) instead of guessed generously: pre-drawing for a start
-// that is then rejected — nobody connected, the scene not ready — advances the
-// shuffle for a race that never happened, so "random" repeats sooner and
-// silently skips a track nobody ever saw.
-function offerDraws(n) {
-  return Array.from({ length: Math.max(0, n) }, () => randomBag.draw());
-}
 
-// Build the live series object from the layer's PLAN. The plan says what the
-// Start commits to; constructing the engine is the shell's job, and the endless
-// shape is the one that keeps a live drawNext (each intermission pulls the next
-// from the bag; only a lobby return ends it).
-function seriesFromPlan(plan) {
-  if (!plan) return null;
-  const SeriesImpl = _nativeSeries.NativeCupSeries;
-  if (plan.kind === 'cup') return new SeriesImpl(CUPS.find((c) => c.id === plan.cupId));
-  const cup = { id: plan.cupId, name: plan.cupName, tracks: plan.tracks };
-  if (plan.kind === 'random-endless') return new SeriesImpl(cup, { drawNext: () => randomBag.draw() });
-  return new SeriesImpl(cup);
-}
 
 // The launch knobs the walks cannot know: a fresh seed per race (page RNG —
 // the display is the sole authority, so minting it here keeps the engine
@@ -1084,17 +1026,10 @@ function launchArgs() {
 
 function startRace() {
   // ONE walk: the go/no-go (room phase, scene, pick, connected players — all
-  // read off the room handle in C++), the series plan and the launch effects.
-  // A random pick answers {action:'draws'} first: pull exactly that many and
-  // finish — a start that is going to be rejected never touches the bag, and
-  // a draw can never be put back.
-  let d = flow.startRace(net.flow.handle, sceneReady, null, launchArgs());
-  if (d.action === 'draws') {
-    d = flow.startRace(net.flow.handle, sceneReady, offerDraws(d.drawsNeeded), launchArgs());
-  }
-  if (d.action !== 'launch') return;
-  series = seriesFromPlan(d.series);
-  perform(d.effects);
+  // read off the room handle in C++), the bag draws a random pick needs, the
+  // cup series stood up behind the room, and the launch effects.
+  const d = flow.startRace(net.flow.handle, sceneReady, launchArgs());
+  if (d.action === 'launch') perform(d.effects);
 }
 
 // The 'create-session' effect, performed. The session is the one thing an effect
@@ -1107,7 +1042,7 @@ function createSession(e) {
   // lifecycle routing; the adapter must not touch it. Fail-safe note:
   // RaceSession enforces MAX_RACE_MS internally so AFK/DNF cars can't hang the
   // room forever. A clean 3-lap is ~50-80 s.
-  session = new _nativeSim.NativeRaceSession(currentField, track, {
+  session = new _nativeSim.NativeRaceSession(e.field, track, {
     events: 'external',
     forceItem: e.forceItem,
     bots: e.bots
@@ -1126,16 +1061,12 @@ function createSession(e) {
 // intact, so nothing else — a stale START_GAME, __startRace — can skip an
 // intermission.
 function advanceSeriesRace() {
-  // Phones that sat out the last race on "you're in the next race!" flip to the
-  // wheel off the snapshot: the launch's COUNTDOWN transition republishes it with
-  // their inRace now true (GAME_END never comes mid-cup, so this is their signal).
-  const d = flow.advanceSeriesRace(net.flow.handle, series ? series.handle : 0, sceneReady);
-  if (d.action === 'none') return;
+  // ONE walk: verdict, the series advanced, the pick re-aimed at the cup's
+  // next circuit AND the launch — RESULTS → COUNTDOWN with nothing sequenced
+  // here. Phones that sat out flip to the wheel off the COUNTDOWN republish.
+  const d = flow.advanceSeriesRace(net.flow.handle, sceneReady, launchArgs());
   if (d.action === 'return-to-lobby') { returnToLobby(); return; } // everyone left mid-intermission
-  perform(d.effects);   // series-advance + set-track-from-series re-aim the pick...
-  // ...so the launch walk reads the cup's next circuit and the connected
-  // players back off the handles.
-  perform(flow.launchRace(net.flow.handle, launchArgs()).effects);
+  if (d.action === 'advance') perform(d.effects);
 }
 
 function clearSeriesTimers() {
@@ -1152,7 +1083,7 @@ function clearSeriesTimers() {
 // were decided as the sim fired the events (ttp_audio_bind).
 function drainRaceEvents() {
   if (!session) return;
-  const d = flow.drainEvents(session.h, net.flow.handle, series ? series.handle : 0, {
+  const d = flow.drainEvents(session.h, net.flow.handle, {
     biome: scene.biome(), audioReady: audio.ready, fastForwarding,
     intermissionMs: intermissionMs(), nowMs: Date.now(),
     resultsFailsafeMs: flow.resultsFailsafeMs()
@@ -1175,16 +1106,14 @@ function raceFlow() {
 // resolve and everyone — not just finishers — sees the final board). The BOARD
 // is the ui model's, and the results, cup half (standings + chip), late
 // joiners and host are all gathered off the live handles in C++. What stays
-// here is naming currentField — the AI racers aren't in the lobby roster the
+// here is nothing at all — the AI racers aren't in the lobby roster the
 // phones know, so the display is the only side that can name/colour them —
 // and the results object endRace's callback carries (no effect can).
 function standingsPayload(results, over) {
   return ui.standingsPayload({
     sessionHandle: session ? session.h : 0,
     roomHandle: net.flow.handle,
-    gpHandle: series ? series.handle : 0,
     over,
-    field: currentField,
     results: results || null,
     autoAdvanceMs: intermissionMs()
   });
@@ -1340,13 +1269,8 @@ function renderPodium(wrap, top) {
 }
 
 function returnToLobby() {
-  // The same draws protocol as the start: the ask phase never touches the bag
-  // (a return that is already a no-op must not advance it), and a random pick
-  // re-rolls the next lobby's track with exactly the draws the walk asks for.
-  let d = flow.returnToLobby(net.flow.handle, null);
-  if (d.action === 'draws') d = flow.returnToLobby(net.flow.handle, offerDraws(d.drawsNeeded));
-  if (d.action !== 'return') return;
-  perform(d.effects);
+  const d = flow.returnToLobby(net.flow.handle);
+  if (d.action === 'return') perform(d.effects);
 }
 
 // End the party and return to the title board (back from the lobby, or a
@@ -1506,7 +1430,7 @@ el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit �
 // ACTION behind the click is the model's too — label and branch can no longer
 // disagree.
 el('results-newgame').addEventListener('click', () => {
-  if (ui.resultsAction(series ? series.handle : 0) === 'advance') advanceSeriesRace();
+  if (ui.resultsAction(net.flow.handle) === 'advance') advanceSeriesRace();
   else returnToLobby();
 });
 
@@ -1684,7 +1608,7 @@ if (_scenario) {
 // E2E may also SET timing overrides read elsewhere: __countdownSeconds,
 // __intermissionMs, __abandonGraceMs.
 window.__net = net; window.__scene = scene; window.__startRace = startRace; window.__track = track; window.__audio = audio; window.__audioDecide = audioDecide;
-window.__series = () => series; // live CupSeries (null outside a cup)
+window.__series = () => flow.seriesState(net.flow.handle); // the room's series state (null outside a cup)
 window.__session = () => session; window.__lobbyDemo = lobbyDemo; window.__wakeLock = wakeLock;
 window.__sceneReady = scenePromise; // awaited by E2E before starting a race (startRace gates on sceneReady)
 // Perf HUD (render/PerfHud.js). show()/hide() arm it without a reload, and

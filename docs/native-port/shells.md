@@ -22,10 +22,14 @@ audience:
   the room machine's slim core (create/dispose/add_player/set_field/
   transition_to/state/list/host/events + the two provider setters), the
   relay framing + fastlane kits, the net walks (`ttp_net_on_*`, liveness,
-  stored pick), the race walks (`ttp_race_*_live_json` + `configure` +
-  `personas`), the GP handle (`ttp_gp_create/state_json/apply_race/advance/
-  rekey/dispose`), the ui reads (`ttp_ui_*` — all of them), audio, display,
-  theme, glb.
+  stored pick), the race EXECUTOR walks (`ttp_race_*_live_json` +
+  `configure` + `series_state`), the ui reads (`ttp_ui_*` — all of them),
+  audio, display, theme, glb. The cup series, the launched field and the
+  random-track shuffle bag all live BEHIND THE ROOM HANDLE: the walks create,
+  advance, bank, repair and draw internally, so a shell holds no series
+  handle, curates no field rows and owns no draw protocol — a start, a cup
+  advance and a lobby return are each ONE call. (`ttp_gp_*` remains exported
+  as the series engine's own test/tool surface; a shell binds none of it.)
 - **Port mirrors** — exports the WEB deliberately does not call because the
   authored JS source is already on its page, pinned by a Node test that sees
   both: `ttp_protocol_manifest_json` (protocol.js), `ttp_net_clean_name`
@@ -40,7 +44,9 @@ Two boot-time proofs replace a whole bug class: `ttp_race_effect_ops_json`
 and `ttp_net_effect_ops_json` hand over each walk's op vocabulary, and a
 shell asserts its performer tables against them at startup (see
 `public/display/main.js` and `Net.js`) — an unhandled effect fails the first
-launch instead of silently dropping a step at a party.
+launch instead of silently dropping a step at a party. A race answer may
+carry net-vocabulary ops in place (the executor merges the set-track tail),
+so the race performer falls through to the net performer for those.
 
 ## What you get for free
 
@@ -212,10 +218,10 @@ now UNREPRESENTABLE, because the entry point that permitted each is gone:
    depends on the active order (`auto-pause`, the standings board's late
    joiners) does the synced read inside the walk.
 
-The field row array on the standings twin (`ttp_ui_standings_live_json`) is
-the one hand-assembled input left: the launch's frozen field copy plus the
-shell's rename/rekey repairs, because the AI racers exist in no roster the
-room knows.
+There is no hand-assembled input left at all: the launch's field copy is
+retained behind the room and repaired by the rename/rekey walks, so the
+standings board is a pure read (`ttp_ui_standings_live_json(session, room,
+over, resultsOrNull, autoAdvanceMs)`).
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on

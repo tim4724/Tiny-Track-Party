@@ -41,6 +41,11 @@ ttp::Value ttp_session_finished_flags(int handle, const ttp::Value& carIds);
 // which composes to an empty board, never a crash.
 ttp::Value ttp_session_results_rows(int handle);
 
+// The live cars as the ITEM-push rule reads them
+// ([{"id","item":str|null,"finished"}], grid order) — the per-owner USE-button
+// gather, off the engine rather than a snapshot. Empty for an unknown handle.
+ttp::Value ttp_session_item_cars(int handle);
+
 // Drain the session's outbound event queue — race events verbatim plus the
 // reconstructed lifecycle beats — in fire order, and EMPTY it. The same queue
 // ttp_events_json spells as text; the race walk's event drain routes it in

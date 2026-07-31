@@ -7,6 +7,7 @@
 #ifndef TTP_LIVE_H
 #define TTP_LIVE_H
 
+#include <string>
 #include <vector>
 
 #include "ttp/ui_model.h"
@@ -29,5 +30,11 @@ bool ttp_live_humans_all_done(int sessionHandle, int roomHandle);
 // applies the ui model's connectedPlayers rule (who a race would seat).
 std::vector<ttp::rt::ui::RosterEntry> ttp_live_roster_players(int roomHandle,
                                                               bool connectedOnly);
+
+// One draw from the room's shuffle bag ("" when unseeded or the catalogue is
+// empty — the bagless refusal). Implemented in ttp_net.cc, which owns the
+// chooser catalogue the deck shuffles over; drawn by the net mode-pick walk
+// and the race start/return/apply walks.
+std::string ttp_live_bag_draw(int roomHandle);
 
 #endif  // TTP_LIVE_H

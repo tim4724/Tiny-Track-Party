@@ -1,11 +1,11 @@
 // NativeRaceFlow — the display's edge of the RACE ORCHESTRATION, which is C++.
 //
 // native/runtime/ttp_race.h over native/libttp-runtime/ttp/race_flow.cc. Every
-// entry point is a WALK over the live handles: it gathers the room's phase,
-// the connected players and the stored pick off the room handle in C++, reads
-// the series off the gp handle, and answers an ordered effect list. main.js
-// PERFORMS the answers and decides nothing — it no longer assembles a single
-// input object.
+// entry point is an EXECUTOR WALK over the live handles: it gathers the
+// room's phase, the connected players, the stored pick, the bag and the
+// series off the room handle in C++, performs the series/field/pick ops
+// itself, and answers only the ordered platform ops. main.js PERFORMS the
+// answers and decides nothing.
 //
 // EVERY ANSWER IS AN ORDERED EFFECT LIST, and the shell's contract is to walk it
 // in index order and perform each op. It may not reorder, batch or skip. That is
@@ -16,14 +16,11 @@
 // performer switch against it at boot, so a missing arm fails the load instead
 // of dropping a step mid-party.
 //
-// THE DRAWS PROTOCOL (start / return): call with draws=null first; an answer of
-// {action:'draws', drawsNeeded:n} means pull exactly n from the shuffle bag and
-// call again with them. The bag stays here (page RNG, not sim state); the WHEN
-// and the HOW MANY are the walk's. See ttp_race.h.
-//
-// THE PERSONA TABLE COMES OUT OF THE WASM. personas() reads the real table
-// through ttp_race_personas_json and configure() hands it straight back, so
-// there is one table and C++ owns it.
+// THERE IS NO DRAWS PROTOCOL AND NO SERIES HANDLE. The shuffle bag, the cup
+// series and the launched field live behind the room (seeded/created/retained
+// by the walks); a start, an advance and a return are each ONE call, and the
+// series is displayed via seriesState(). The persona table defaults inside
+// configure (libttp-sim's own), so boot hands over nothing it read back.
 //
 // public/display/raceFlow.js stays in the tree and stays the ORACLE:
 // tests/fixtures/raceflow-corpus.jsonl was recorded off it, and
@@ -44,14 +41,14 @@ export async function init() {
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
     start: c('ttp_race_start_live_json', 'string',
-             ['number', 'number', 'string', 'number', 'number', 'string', 'string']),
-    launch: c('ttp_race_launch_live_json', 'string',
-              ['number', 'number', 'number', 'string', 'string']),
+             ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
-              ['number', 'number', 'number', 'string', 'number', 'number',
+              ['number', 'number', 'string', 'number', 'number',
                'number', 'number', 'number']),
-    advance: c('ttp_race_advance_live_json', 'string', ['number', 'number', 'number']),
-    ret: c('ttp_race_return_live_json', 'string', ['number', 'string']),
+    advance: c('ttp_race_advance_live_json', 'string',
+               ['number', 'number', 'number', 'number', 'string', 'string']),
+    ret: c('ttp_race_return_live_json', 'string', ['number']),
+    seriesState: c('ttp_race_series_state_json', 'string', ['number']),
     endParty: c('ttp_race_end_party_json', 'string', []),
     pauseRace: c('ttp_race_pause_live_json', 'string',
                  ['number', 'number', 'number', 'number', 'number']),
@@ -60,7 +57,7 @@ export async function init() {
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
     resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
-    rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),
+    rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
     autoPause: c('ttp_race_auto_pause_live_json', 'string', ['number', 'number', 'number'])
   };
 }
@@ -70,8 +67,6 @@ const P = (s) => JSON.parse(s);
 // A JSON-scalar identity: an id crosses as the token `3` or `"3"`, and they are
 // different players.
 const id = (x) => J(x === undefined ? null : x);
-// draws=null is the ask phase; an array is the launch/return phase.
-const drawsArg = (draws) => (draws == null ? null : J(draws));
 
 // libttp-sim's persona table — the single source. Read once at boot and handed
 // back through configure().
@@ -92,28 +87,30 @@ export function demoLive(roomHandle, trackId, botCap) {
   return P(fn.demoLive(roomHandle, trackId || '', id(botCap)));
 }
 
-export function startRace(roomHandle, sceneReady, draws, { seed, countdownSeconds, forceItem, botCap }) {
-  return P(fn.start(roomHandle, sceneReady ? 1 : 0, drawsArg(draws),
+export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
+  return P(fn.start(roomHandle, sceneReady ? 1 : 0,
                     seed, countdownSeconds, forceItem || null, id(botCap)));
-}
-export function launchRace(roomHandle, { seed, countdownSeconds, forceItem, botCap }) {
-  return P(fn.launch(roomHandle, seed, countdownSeconds, forceItem || null, id(botCap)));
 }
 
 // The frame's drain: every queued race event routed and answered as one effect
 // list; `results` is non-null exactly when the drain crossed the race's end.
-export function drainEvents(sessionHandle, roomHandle, gpHandle,
+export function drainEvents(sessionHandle, roomHandle,
                             { biome, audioReady, fastForwarding, intermissionMs, nowMs, resultsFailsafeMs }) {
-  return P(fn.events(sessionHandle, roomHandle, gpHandle, biome || '',
+  return P(fn.events(sessionHandle, roomHandle, biome || '',
                      audioReady ? 1 : 0, fastForwarding ? 1 : 0,
                      intermissionMs, nowMs, resultsFailsafeMs));
 }
 
-export function advanceSeriesRace(roomHandle, gpHandle, sceneReady) {
-  return P(fn.advance(roomHandle, gpHandle, sceneReady ? 1 : 0));
+export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
+  return P(fn.advance(roomHandle, sceneReady ? 1 : 0,
+                      seed, countdownSeconds, forceItem || null, id(botCap)));
 }
-export function returnToLobby(roomHandle, draws) {
-  return P(fn.ret(roomHandle, drawsArg(draws)));
+export function returnToLobby(roomHandle) {
+  return P(fn.ret(roomHandle));
+}
+// The room's series state as one read — the E2E surface and any series display.
+export function seriesState(roomHandle) {
+  return P(fn.seriesState(roomHandle));
 }
 export function endParty() { return P(fn.endParty()); }
 
@@ -130,8 +127,8 @@ export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
 export function forfeitCar(sessionHandle, peerIndex) {
   return P(fn.forfeit(sessionHandle, id(peerIndex)));
 }
-export function rekeyCarPlayer(sessionHandle, gpHandle, oldId, newId) {
-  return P(fn.rekey(sessionHandle, gpHandle, id(oldId), id(newId)));
+export function rekeyCarPlayer(sessionHandle, roomHandle, oldId, newId) {
+  return P(fn.rekey(sessionHandle, roomHandle, id(oldId), id(newId)));
 }
 export function autoPause(sessionHandle, roomHandle, raceEnded) {
   return P(fn.autoPause(sessionHandle, roomHandle, raceEnded ? 1 : 0));

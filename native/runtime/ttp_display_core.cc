@@ -99,8 +99,11 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
 // Scene.
 // ---------------------------------------------------------------------------
 int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len) {
-    if (!g_disp) return 1;
-    return g_disp->renderer->provideAsset(name, bytes, len) ? 0 : 1;
+    // PREDICATE polarity (1 = accepted), like every other int on the ABI. This
+    // and build were the two outcome-style (0 = success) returns; both flipped
+    // when the polarity zoo was retired (ttp_abi.h).
+    if (!g_disp) return 0;
+    return g_disp->renderer->provideAsset(name, bytes, len) ? 1 : 0;
 }
 
 void ttp_display_biome(const char* name) {
@@ -127,13 +130,13 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // ships. Both used to be a bare 1.
     if (!g_disp) {
         ttp::set_error("ttp_display_build: no display — ttp_display_create was not called");
-        return 1;
+        return 0;
     }
     const ttp::TrackDef* def = trackId ? ttp::find_track_def(trackId) : nullptr;
     if (!def) {
         ttp::set_error(std::string("ttp_display_build: no track \"")
                        + (trackId ? trackId : "") + "\" in this build (catalogue or dev)");
-        return 1;
+        return 0;
     }
     // Parsed BEFORE anything is torn down: a malformed roster is still a legal
     // scene (an empty one), but the parse must not straddle the release below.
@@ -166,7 +169,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
                                                glb->data(), glb->size())
                 : std::vector<ttp::rt::MatTint>());
     }
-    if (!g_disp->renderer->buildScene(geo, theme, roster.cars)) return 1;
+    if (!g_disp->renderer->buildScene(geo, theme, roster.cars)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;
     g_disp->rosterCars = roster.cars; // ttp_display_reroster's diff base
@@ -180,14 +183,16 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // Start the turntable on the still view's own bearing, so a preview's first
     // frame is the framing the track was fitted for.
     g_disp->orbitAngle = g_disp->framing.ovBearing;
-    return 0;
+    return 1;
 }
 
 int ttp_display_reroster(const char* rosterJson) {
     ttp::clear_error();
+    // PREDICATE polarity (1 = re-dressed), like asset and build now. 0 means
+    // this was NOT a re-dress and the shell performs the fallback build.
     if (!g_disp || !g_disp->built) {
         ttp::set_error("ttp_display_reroster: no built scene to re-dress");
-        return 1;
+        return 0;
     }
     const ttp::rt::Roster next = ttp::rt::parseRoster(rosterJson);
     ttp::rt::Roster prev;
@@ -197,16 +202,16 @@ int ttp_display_reroster(const char* rosterJson) {
     const ttp::rt::RerosterPlan plan = ttp::rt::planReroster(prev, next);
     if (!plan.ok) {
         ttp::set_error("ttp_display_reroster: the field changed shape — that is a build");
-        return 1;
+        return 0;
     }
     if (!g_disp->renderer->reroster(next.cars, plan.remodel, plan.redress)) {
         ttp::set_error("ttp_display_reroster: a slot failed to rebuild — fall back to a build");
-        return 1;
+        return 0;
     }
     // Deliberately NOT touched: sceneT, orbitAngle, chase, steerBar, framing.
     // The scene never went away, so nothing about the cameras did either.
     g_disp->rosterCars = next.cars;
-    return 0;
+    return 1;
 }
 
 void ttp_display_release(void) {

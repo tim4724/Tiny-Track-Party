@@ -20,8 +20,9 @@
  * packed record cannot hold a name without inventing a string table and a
  * second read, so the precedent that fits is ttp_room_events_json's: bursty,
  * string-shaped data, drained as JSON. The one call on anything like a cadence
- * (ttp_ui_item_pushes_json) carries three fields per car, and the shell picks how
- * often to ask — the web one folds it into the same tick as the HUD read.
+ * (ttp_ui_item_pushes_live_json) is a live gather with one shell-owned input,
+ * and the shell picks how often to ask — the web one folds it into the same
+ * tick as the HUD read.
  *
  * There is a second reason, and it is the deciding one for the standings board:
  * that answer IS a JSON message. The shell puts it on the relay verbatim, so a
@@ -225,33 +226,28 @@ TTP_ABI const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const c
 
 /* ---- the ITEM push ------------------------------------------------------- */
 
-/* Which phones need an ITEM push this tick. The held item lights the phone's
- * USE button, it is per-owner, and it rides its own message sent ONLY ON
- * CHANGE. A finished car is on a victory lap with no usable slot, so its item
- * reads empty however full the engine says it is. AI cars have no phone.
- *   cars      [{"id":id,"item":str|null,"finished":bool}, ...]
- *   aiIds     [id, ...]
- *   lastItem  [{"id":id,"item":str|null}, ...] what each phone was last told,
- *             in Map insertion order
+/* Which phones need an ITEM push this tick, off the LIVE race: the cars (id /
+ * held item / finished — a finished car is on a victory lap with no usable
+ * slot, so its item reads empty) and the CPU set come off the session handle;
+ * the shell supplies only lastItem — what each phone was last told, in Map
+ * insertion order — because the push rides its own message sent ONLY ON
+ * CHANGE and the map is the shell's outbox state.
+ *   lastItem  [{"id":id,"item":str|null}, ...]
  *   ->        [{"id":id,"item":str|null}, ...]
  *
- * THREE STATES, not two, and this is why the `item` key may be ABSENT rather
- * than null in any of the three arrays above: JS distinguishes a missing item
- * field from an explicit null and `!==` sees the difference, so a car whose
- * slot went from null to absent pushes again. The empty string is a fourth
- * value and is NOT folded to null here (the HUD block does fold it — a drawn
- * slot and a USE button are different questions).
- *
- * PURE: the caller applies the answers to its own map, and clears that map per
- * race so the first tick resends every phone's empty slot. The map is one of
- * the three pieces of state that stay with the shell. */
-TTP_ABI const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
-                                            const char* lastItemJson);
+ * THREE STATES, not two: JS distinguishes a missing `item` key from an
+ * explicit null and `!==` sees the difference, so a car whose slot went from
+ * null to absent pushes again. The empty string is a fourth value and is NOT
+ * folded to null here. PURE over the map: the caller applies the answers to
+ * its own map, and clears it per race so the first tick resends every phone's
+ * empty slot. */
+TTP_ABI const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItemJson);
 
-/* The same rule for a single car, for the one-shot relight a (re)joining phone
- * gets. `car` is one entry of the array above, or "null" for a seat with no
- * live car. Returns the item as a bare JSON value: a quoted string, or null. */
-TTP_ABI const char* ttp_ui_welcome_item_json(const char* carJson);
+/* The same rule for the one-shot relight a (re)joining phone gets: the
+ * welcome-item effect names a seat, this answers that seat's held item off
+ * the live race as a bare JSON value — a quoted string, or null (no live car,
+ * or an empty slot; the relight message carries `item` directly). */
+TTP_ABI const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJson);
 
 /* ---- race flow ----------------------------------------------------------- */
 
@@ -302,30 +298,22 @@ TTP_ABI const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanc
  * newGameKey; this is the branch behind the click, which the shells used to
  * re-derive from their series wrappers while the label came from here — the
  * two could disagree. gpHandle 0 (no cup) returns to the lobby. */
-TTP_ABI const char* ttp_ui_results_action_json(int gpHandle);
+TTP_ABI const char* ttp_ui_results_action_json(int roomHandle);
 
 /* ---- the standings board ------------------------------------------------- */
 
 
-/* THE SAME BOARD, GATHERED OFF THE LIVE HANDLES. What the shell used to
- * assemble from four sources crosses as three handles and two documented
- * parameters:
- *   results      the race's own results OBJECT (endRace's callback argument,
- *                which no effect can carry), or "null"/NULL to read the live
- *                session — the same either-or broadcastStandings always had
- *   fieldJson    the race field rows [{"peerIndex","name","colorIndex","ai"},
- *                ...]. THE ONE SHELL-OWNED INPUT: the field is the launch's
- *                frozen copy plus the shell's rename/rekey repairs, and it
- *                stays with the shell until the session executor owns it
- *   gpHandle     0 for a plain race; else the cup half (standings + info) is
- *                composed HERE — one `cup` object, never two sibling keys,
- *                which is the nesting the tvOS twin got wrong
- * lateJoiners and the host come off the room seam. autoAdvanceMs as in
- * ttp_ui_series_info_live_json. Answer bytes identical to ttp_ui_standings_json
- * over the same state — abi_check holds the two to each other. */
+/* THE BOARD, GATHERED OFF THE LIVE HANDLES — every input:
+ *   results      the race's own results OBJECT (the event drain's `results`
+ *                answer, which no effect can carry), or "null"/NULL to read
+ *                the live session — the same either-or broadcastStandings
+ *                always had
+ * The race FIELD is the room-retained launch copy (rename/rekey repairs
+ * applied by the walks), the cup half is the room's stored series, and
+ * lateJoiners + the host come off the room seam — no shell assembles a row.
+ * autoAdvanceMs as in ttp_ui_series_info_live_json. */
 TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle,
-                                               int gpHandle, int over,
-                                               const char* fieldJson,
+                                               int over,
                                                const char* resultsJsonOrNull,
                                                double autoAdvanceMs);
 

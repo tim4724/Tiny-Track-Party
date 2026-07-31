@@ -421,10 +421,13 @@ const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const char* sea
 
 // ---- the ITEM push -----------------------------------------------------------
 
-const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
-                                    const char* lastItemJson) {
-  const Value carsV = json::parse_or(carsJson, Value::Arr());
-  const Value aiV = json::parse_or(aiIdsJson, Value::Arr());
+// The ITEM push, live: the cars (id / held item / finished) come off the bound
+// engine through the seam and the CPU set off the bot registry — the shell
+// supplies only its own map of what each phone was last told. See ttp_ui.h for
+// the three-state item contract the map encodes.
+const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItemJson) {
+  const Value carsV = ttp_session_item_cars(sessionHandle);
+  const Value aiV = ttp_session_ai_ids(sessionHandle);
   const Value lastV = json::parse_or(lastItemJson, Value::Arr());
 
   std::vector<ui::PushCar> cars;
@@ -453,18 +456,26 @@ const char* ttp_ui_item_pushes_json(const char* carsJson, const char* aiIdsJson,
   return put(g_bufPushes, a);
 }
 
-const char* ttp_ui_welcome_item_json(const char* carJson) {
-  const Value carV = json::parse_or(carJson, Value::Null());
+// The one-shot relight a (re)joining phone gets, off the live race: the walk's
+// welcome-item effect names a seat, and this answers that seat's held item as
+// a bare JSON value (a quoted string, or null — the relight message carries
+// `item` directly and the phone reads null for an empty slot).
+const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJson) {
+  const ui::Id want = parse_scalar_id(peerIdJson);
+  const Value carsV = ttp_session_item_cars(sessionHandle);
   ui::PushCar car;
-  const bool live = carV.type == Value::OBJ;
-  if (live) {
-    car.id = idOf(carV.find("id"));
-    car.item = itemOf(carV);
-    car.finished = json::truthy(carV.find("finished"));
+  bool live = false;
+  if (carsV.type == Value::ARR) {
+    for (const Value& c : carsV.arr) {
+      if (!(idOf(c.find("id")) == want)) continue;
+      car.id = want;
+      car.item = itemOf(c);
+      car.finished = json::truthy(c.find("finished"));
+      live = true;
+      break;
+    }
   }
   const ui::ItemVal item = ui::welcomeItem(live ? &car : nullptr);
-  // A bare value, not an object: the relight message carries `item` directly,
-  // and an absent slot is null there (never a missing key — the phone reads it).
   return put(g_bufWelcome,
              item.kind == ui::ItemVal::STR ? Value::Str(item.str) : Value::Null());
 }
@@ -542,8 +553,8 @@ const char* ttp_ui_series_info_live_json(int gpHandle, double autoAdvanceMs) {
              seriesValue(ui::seriesInfo(seriesInputOfGp(*s, autoAdvanceMs), g_catalog)));
 }
 
-const char* ttp_ui_results_action_json(int gpHandle) {
-  const ttp::CupSeries* s = ttp_gp_series(gpHandle);
+const char* ttp_ui_results_action_json(int roomHandle) {
+  const ttp::CupSeries* s = ttp_gp_series(ttp_room_series(roomHandle));
   const bool advance = s && !s->finished();
   return put(g_bufResultsAction,
              Value::Str(advance ? "advance" : "return-to-lobby"));
@@ -619,9 +630,9 @@ static Value boardValue(const ui::Board& b) {
   return o;
 }
 
-const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int gpHandle,
-                                       int over, const char* fieldJson,
+const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int over,
                                        const char* resultsJsonOrNull, double autoAdvanceMs) {
+  const int gpHandle = ttp_room_series(roomHandle);
   // endRace's own results object when the caller holds one (no effect can
   // carry it), else the live session's — broadcastStandings' either-or.
   Value resultsObj = json::parse_or(resultsJsonOrNull ? resultsJsonOrNull : "null",
@@ -631,7 +642,9 @@ const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int gp
       : ttp_session_results_rows(sessionHandle);
   const std::vector<ui::ResultRow> results = resultRowsOf(&rowsV);
 
-  const Value fieldV = json::parse_or(fieldJson, Value::Arr());
+  // The field is the room-retained launch copy, rename/rekey repairs applied
+  // by the walks — the last hand-assembled input, gone.
+  const Value fieldV = ttp_room_field_value(roomHandle);
   const std::vector<ui::FieldRow> field = fieldRowsOf(&fieldV);
 
   const Value lateV = ttp_room_late_joiners_synced(roomHandle, sessionHandle);

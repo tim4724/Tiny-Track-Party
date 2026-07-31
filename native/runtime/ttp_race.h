@@ -8,19 +8,18 @@
  * WHAT IS BEHIND IT. libttp-runtime/ttp/race_flow.{h,cc} — public/display/
  * raceFlow.js ported, replayed step for step against
  * tests/fixtures/raceflow-corpus.jsonl by runtimetest/raceflow_check.cc on
- * every leg. This header is only how a SHELL reaches it — and it reaches it
- * THE WAY ttp_net.h's walks do: every entry point takes the LIVE HANDLES
- * (room, session, cup series) and gathers its own inputs off them in C++.
- * Nothing about a roster, a pick or a race is serialized out of one layer by
- * the shell only to be handed straight back into this one. The hand-assembled
- * JSON spellings this surface used to carry are gone; the corpus replays the
- * decision layer directly (raceflow_check), and the `abi` ctest holds each
- * walk here to the same decision functions over the same state.
+ * every leg. This header is how a SHELL reaches it, and the walks here are
+ * EXECUTORS: each gathers its inputs off the live handles, runs the
+ * corpus-pinned rules, PERFORMS the ops whose object lives behind the room —
+ * the cup series, the retained race field, the pick's track, the shuffle
+ * bag's draws — and answers only the ops that name a platform API. The
+ * decision layer still emits the full corpus-pinned list; the `abi` ctest
+ * gates the split by composing the same rules in-run and checking both the
+ * answer AND the stored state the executor moved.
  *
- * EVERY ANSWER IS AN ORDERED EFFECT LIST, and that is the whole design. Nothing
- * here returns a verdict for a shell to sequence, because the sequencing is the
- * part that is load-bearing and silent when wrong. Four constraints live in the
- * order alone:
+ * EVERY ANSWER IS AN ORDERED EFFECT LIST, and that is the whole design. A
+ * shell WALKS the array in index order and performs each op. It may not
+ * reorder, batch or skip. Four constraints live in the order alone:
  *
  *   * COUNTDOWN is published only AFTER the session exists (the statechange
  *     republishes the room snapshot and each player's inRace is read from the
@@ -29,31 +28,25 @@
  *     inside the session update, whose no-seats-left branch tears the session
  *     down under the caller) — it crosses as {"deferred":true} and a shell that
  *     performs it synchronously is broken;
- *   * cup points are banked BEFORE the final board is broadcast;
+ *   * cup points are banked BEFORE the final board is broadcast (the executor
+ *     banks them inside the event drain, in exactly that slot);
  *   * the session is disposed BEFORE the flow flips to LOBBY.
  *
- * So a shell WALKS the array in index order and performs each op. It may not
- * reorder, batch or skip. Anything it cannot perform is a missing capability,
- * not an optional step — and ttp_race_effect_ops_json below hands over the
- * whole op vocabulary so a shell can prove its switch total AT BOOT instead of
- * discovering a hole mid-race.
+ * Anything a shell cannot perform is a missing capability, not an optional
+ * step — and ttp_race_effect_ops_json below hands over the answerable op
+ * vocabulary so a shell can prove its switch total AT BOOT instead of
+ * discovering a hole mid-race. An answer may also carry NET-vocabulary ops
+ * (the executor merges the set-track walk's tail — track-change, publish —
+ * in place), so a shell's performer covers this list PLUS
+ * ttp_net_effect_ops_json's; the web shell's perform() falls through to its
+ * net performer for exactly that reason.
  *
- * WHAT STAYS WITH THE SHELL, deliberately: the page RNG (the per-race seed and
- * the shuffle BAG — the walks ask for draws rather than owning randomness),
- * the timers an effect names, the cup-series HANDLE (an effect says
- * "series-advance"; the shell performs it against the ttp_gp_* handle it
- * owns), and the E2E budget overrides (countdownSeconds / intermissionMs cross
- * as arguments so a test can shrink them).
- *
- * THE DRAWS PROTOCOL. A shuffle-bag draw cannot be put back, so a walk that
- * may spend draws (start, return-to-lobby) runs in two phases THROUGH THE SAME
- * EXPORT: called with drawsJson NULL it answers the verdict — and, when the
- * verdict needs randomness, {"action":"draws","drawsNeeded":n}. The shell
- * draws exactly n and calls again with them; the walk re-checks its own gate.
- * A pick that needs no draws completes on the first call. The old shape — a
- * separate draws-needed export and a gate the shell called twice by
- * convention — drifted at one call site and was transcribed wrongly by the
- * first TV shell; the protocol is one export's contract now.
+ * WHAT STAYS WITH THE SHELL, deliberately: the per-race SEED and the E2E
+ * budget overrides (countdownSeconds / intermissionMs cross as arguments so a
+ * test can shrink them), the timers an effect names, and the ?item / ?bots
+ * URL debug hooks. There is no draws protocol and no series handle anymore:
+ * the shuffle bag and the cup series live behind the room, and a shell that
+ * wants to SHOW the series reads ttp_race_series_state_json.
  *
  * IDS. A player id crosses as a JSON scalar, exactly as in ttp_party.h and
  * ttp_ui.h: the token `3` is the number 3 and `"3"` is the string "3", and they
@@ -61,7 +54,7 @@
  * "ai-0"; both flow through the same field.
  *
  * NULL IS NOT ZERO. A seat with no car pick, a launch with no ?item override
- * and a lobby return with no track swap all come out as JSON null, never 0
+ * and a drain that crossed no race end all come out as JSON null, never 0
  * or "".
  */
 #ifndef TTP_RACE_H
@@ -82,7 +75,9 @@ extern "C" {
  *    "carCount": 12,           models a livery slot wraps into
  *    "colorCount": 12,         liveries the CPU fill draws from
  *    "aiPrefix": "ai-",        id namespace for CPU racers
- *    "personas": [{"name","caution","laneBias"}, ...],
+ *    "personas": [{"name","caution","laneBias"}, ...],   ABSENT = libttp-sim's
+ *                              own table (the single source; a shell passes
+ *                              nothing and no boot round trip exists)
  *    "carStats": [ <opaque>, ... ],    copied into a field entry, never read
  *    "cups":     [{"id","name","tracks":["id",...]}, ...]}
  *
@@ -90,15 +85,16 @@ extern "C" {
  * Unset, a start resolves no cup and the CPU fill seats nobody. */
 TTP_ABI int ttp_race_configure(const char* json);
 
-/* libttp-sim's own persona table, so a shell can configure it back rather than
- * keeping a second copy. -> [{"name","caution","laneBias"}, ...] */
+/* libttp-sim's persona table as data — the drift pin's read
+ * (tests/display-abi.test.js) and the test surfaces'. configure defaults to
+ * this table when `personas` is absent, so a shipping shell never calls it. */
 TTP_ABI const char* ttp_race_personas_json(void);
 
-/* The effect vocabulary this build can emit, as a JSON array of op keys in a
- * stable order. A shell walks it at boot and asserts its performer switch
- * covers every op — the unperformable-op throw, moved from mid-race to
- * startup. The same trick as ttp_audio_cue_id and ttp_item_id: the table
- * lives here, the shell builds FROM it, and no mirror can drift. */
+/* The ops a walk's ANSWER can carry, as a JSON array of keys in a stable
+ * order. A shell walks it at boot and asserts its performer switch covers
+ * every op — the unperformable-op throw, moved from mid-race to startup. The
+ * executor-owned ops (series, field, pick) are NOT in it: they never reach a
+ * shell. Answers may also carry net-vocabulary ops (see the header note). */
 TTP_ABI const char* ttp_race_effect_ops_json(void);
 
 /* ---- the lobby attract demo ---------------------------------------------- */
@@ -116,45 +112,27 @@ TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
 
 /* ---- start / launch ------------------------------------------------------ */
 
-/* The lobby start, off the live room: the START_GAME go/no-go (re-checked here
- * so a stale or forged START_GAME cannot jump the lobby), the series plan, and
- * — once accepted — the full launch, in ONE walk. roomState, the connected
- * players and the stored pick are read off roomHandle; the readiness rule
- * itself is the ui model's.
+/* The lobby start, whole: the START_GAME go/no-go (re-checked here so a stale
+ * or forged START_GAME cannot jump the lobby), the shuffle-bag draws a random
+ * pick needs, the cup series stood up and stored behind the room, and the
+ * launch — ONE call. roomState, the connected players, the stored pick and
+ * the bag are all the room handle's.
  *
  *   sceneReady        the shell's "the 3D scene is built" latch (only it knows)
- *   drawsJson         NULL for the ask phase; a JSON array of drawn track ids
- *                     for the launch phase (see THE DRAWS PROTOCOL above)
  *   seed              the per-race seed (page RNG; the shell mints it)
  *   countdownSeconds  protocol COUNTDOWN_SECONDS, or the E2E override
  *   forceItemOrNull   ?item=<id> debug hook: every box rolls this
  *   botCapJson        ?bots=<n> debug cap as a JSON number, or NULL to fill
  *
  *   -> {"action":"none","reason":"room-state"|"scene"|"no-track"|"no-players"}
- *    | {"action":"draws","drawsNeeded":n}
- *    | {"action":"launch","series":null|{...},"drawsUsed":n,"effects":[...]}
+ *    | {"action":"launch","effects":[...]}
  *
- * A launch's `series` is the plan the shell builds its cup-series handle from
- * BEFORE performing the effects: null (single race), or
- * {"kind":"cup","cupId"} — the shell already holds the cup — or
- * {"kind":"random-endless"|"random-card","cupId","cupName","tracks":[...]},
- * where random-endless is the one shape that keeps a live draw at every
- * intermission. */
+ * The refusal is asked BEFORE any draw — a start that is going to be refused
+ * never advances the bag, and a draw can never be put back. */
 TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
-                                             const char* drawsJson, double seed,
-                                             double countdownSeconds,
+                                             double seed, double countdownSeconds,
                                              const char* forceItemOrNull,
                                              const char* botCapJson);
-
-/* The launch alone, for the cup chain: after ttp_race_advance_live_json's
- * effects are performed (the series advanced, the room's pick re-aimed at the
- * cup's next track), this reads the connected players and the pick back off
- * the handles and answers the launch effects. Same trailing arguments as the
- * start walk. -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_launch_live_json(int roomHandle, double seed,
-                                              double countdownSeconds,
-                                              const char* forceItemOrNull,
-                                              const char* botCapJson);
 
 /* ---- the frame's event drain --------------------------------------------- */
 
@@ -165,7 +143,9 @@ TTP_ABI const char* ttp_race_launch_live_json(int roomHandle, double seed,
  * ordinary-event filter, where they vanish and the room sits in COUNTDOWN
  * forever; that routing table is not a shell concern any more. Ordinary events
  * run the finish/visuals rule, with humans-all-done read off the live handles
- * exactly when a finish asks for it.
+ * exactly when a finish asks for it. At the race's end the executor banks the
+ * cup points against the room's series and retained field — before the board
+ * effects, the order the corpus pins.
  *
  *   biome             the built scene's biome (the GO beat's music pick)
  *   audioReady        the device can play (a locked AudioContext picks no song)
@@ -177,36 +157,33 @@ TTP_ABI const char* ttp_race_launch_live_json(int roomHandle, double seed,
  *   -> {"effects":[...], "results": obj|null}
  *
  * `results` is non-null exactly when the drain crossed the race's end: the
- * ranked board endRace hands its callback, which three effects
- * (apply-race-points, show-results, the final broadcast-standings) read as
- * their context. No effect can carry it, so it rides the answer. */
+ * ranked board endRace hands its callback, which the show-results and final
+ * broadcast-standings effects read as their context. No effect can carry it,
+ * so it rides the answer. */
 TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
-                                              int gpHandle, const char* biome,
+                                              const char* biome,
                                               int audioReady, int fastForwarding,
                                               double intermissionMs, double nowMs,
                                               double resultsFailsafeMs);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 
-/* Chain into the cup's next race straight from the intermission (RESULTS →
- * COUNTDOWN, no lobby between). roomState and the connected players come off
- * roomHandle; whether the series is live and finished off gpHandle (0 = no
- * series). The shell performs the effects — series-advance and
- * set-track-from-series among them — and then calls ttp_race_launch_live_json.
+/* Chain into the cup's next race straight from the intermission — RESULTS →
+ * COUNTDOWN in ONE walk: the verdict, the series advanced, the pick re-aimed
+ * at the cup's next circuit (the net set-track tail merges into the answer),
+ * and the launch, all executed here. Same trailing arguments as the start.
  *   -> {"action":"none"|"return-to-lobby"|"advance","effects":[...]} */
-TTP_ABI const char* ttp_race_advance_live_json(int roomHandle, int gpHandle,
-                                               int sceneReady);
+TTP_ABI const char* ttp_race_advance_live_json(int roomHandle, int sceneReady,
+                                               double seed, double countdownSeconds,
+                                               const char* forceItemOrNull,
+                                               const char* botCapJson);
 
-/* Back to the lobby from anywhere; every exit route cancels a running cup.
- * roomState and the pick are read off roomHandle. Runs the draws protocol
- * (a random pick re-rolls the next lobby's track, and a call that is already
- * a no-op must not advance the bag):
- *   -> {"action":"none","effects":[],"drawsUsed":0}
- *    | {"action":"draws","drawsNeeded":n}
- *    | {"action":"return","effects":[...],"trackSwap":"id"|null,"drawsUsed":n}
- * `trackSwap` re-aims the next lobby's pick: random re-rolls every visit, a cup
- * rewinds to its race 1. */
-TTP_ABI const char* ttp_race_return_live_json(int roomHandle, const char* drawsJson);
+/* Back to the lobby from anywhere; every exit route cancels a running cup
+ * (the executor disposes the room's series) and a random pick re-rolls the
+ * next lobby's track from the room's bag (the re-aim's net tail merges into
+ * the answer). A call that is already a no-op draws nothing.
+ *   -> {"action":"none"|"return","effects":[...]} */
+TTP_ABI const char* ttp_race_return_live_json(int roomHandle);
 
 /* Ending the PARTY (back from the lobby): the ordered teardown effects AFTER
  * the shell's own return-to-lobby walk — close-room, clear-pick,
@@ -214,6 +191,11 @@ TTP_ABI const char* ttp_race_return_live_json(int roomHandle, const char* drawsJ
  * update-backdrop, in that order (the order is the contract; the corpus pins
  * it). Takes nothing: a party end has no mode. */
 TTP_ABI const char* ttp_race_end_party_json(void);
+
+/* The room's live cup series as ONE read — ttp_gp_state_json's answer shape —
+ * or "null" for a single race. The DISPLAY of a series (the E2E surface, a
+ * debug panel) reads here; no shell holds a series handle. */
+TTP_ABI const char* ttp_race_series_state_json(int roomHandle);
 
 /* The manual overlay pause / resume, as walks. hasSession and roomState come
  * off the handles; the three flags are the shell's own latches (the model
@@ -239,11 +221,10 @@ TTP_ABI double ttp_race_results_failsafe_ms(void);
  * back. sessionHandle 0 means no race: the no-car effects. -> {"effects":[...]} */
 TTP_ABI const char* ttp_race_forfeit_live_json(int sessionHandle, const char* peerIdJson);
 
-/* A dropped player reconnected on a different device. The session rekey
- * happens HERE; banked cup points follow the PLAYER, so the series-rekey
- * effect is emitted (for the shell to perform against its gp handle) even with
- * no car to move. gpHandle 0 = no series. -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_rekey_live_json(int sessionHandle, int gpHandle,
+/* A dropped player reconnected on a different device. The session rekey, the
+ * series' banked points (they follow the PLAYER) and the retained field row
+ * all move HERE; what comes back is only the scene op. -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_rekey_live_json(int sessionHandle, int roomHandle,
                                              const char* oldIdJson, const char* newIdJson);
 
 /* The silent auto-pause, whole: the consult rule, the participant read through

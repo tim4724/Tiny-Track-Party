@@ -6,6 +6,7 @@
 // handle owns a queue the callback appends to and ttp_room_events_json drains —
 // preserving exact intra-op emission order, which is contract (fp-profile §party).
 #include "ttp_party.h"
+#include "ttp_runtime.h"
 
 #include <map>
 #include <memory>
@@ -45,6 +46,20 @@ struct RoomHandle {
   // RoomFlow's: the frozen party corpora know no pick, and the walks are its
   // only writers (ttp_room_store_pick). Shells read ttp_net_pick_json.
   Value pick = Value::Obj();
+  // The random-track SHUFFLE BAG ({seed, deck:[ids], cursor}), seeded once by
+  // the shell (ttp_net_init_pick) and drawn ONLY by the walks — "random walks
+  // the whole catalogue before any repeat" lives here now, so no shell owns a
+  // draw protocol. Empty object until seeded.
+  Value bag = Value::Obj();
+  // The live cup series: a ttp_gp_create handle the RACE walks own (create on
+  // launch, advance/apply/rekey mid-cup, dispose on the way out). 0 = single
+  // race. Shells read ttp_race_series_state_json; no shell holds the handle.
+  int series = 0;
+  // The launched race FIELD (the rows every standings board is composed from),
+  // retained here because the AI racers exist in no roster the room knows.
+  // Written by the launch walks; repaired in place by the rename and rekey
+  // walks; cleared with the race. Null outside a race.
+  Value field = Value::Null();
 };
 
 std::map<int, std::unique_ptr<RoomHandle>> g_rooms;
@@ -100,7 +115,11 @@ int ttp_room_create(const char* configJson) {
   return h;
 }
 
-void ttp_room_dispose(int h) { g_rooms.erase(h); }
+void ttp_room_dispose(int h) {
+  // The room owns its series: a party ending must not leak a GrandPrix.
+  if (RoomHandle* rh = room(h)) {
+    if (rh->series) ttp_gp_dispose(rh->series);
+  } g_rooms.erase(h); }
 
 // ---- roster -----------------------------------------------------------------
 
@@ -238,6 +257,38 @@ Value ttp_room_pick_value(int roomHandle) {
 void ttp_room_store_pick(int roomHandle, Value pick) {
   RoomHandle* rh = room(roomHandle);
   if (rh) rh->pick = std::move(pick);
+}
+
+Value ttp_room_bag_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->bag : Value::Obj();
+}
+
+void ttp_room_store_bag(int roomHandle, Value bag) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->bag = std::move(bag);
+}
+
+int ttp_room_series(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->series : 0;
+}
+
+void ttp_room_store_series(int roomHandle, int gpHandle) {
+  RoomHandle* rh = room(roomHandle);
+  if (!rh) return;
+  if (rh->series && rh->series != gpHandle) ttp_gp_dispose(rh->series);
+  rh->series = gpHandle;
+}
+
+Value ttp_room_field_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->field : Value::Null();
+}
+
+void ttp_room_store_field(int roomHandle, Value field) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->field = std::move(field);
 }
 
 // ---- liveness ---------------------------------------------------------------

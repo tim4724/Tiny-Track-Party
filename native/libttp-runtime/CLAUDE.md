@@ -57,19 +57,23 @@ load-bearing AND silent when wrong. Four constraints live in the order alone:
 3. Cup points are banked BEFORE the final board goes out.
 4. The session is disposed BEFORE the flow flips to LOBBY.
 
-**A draw cannot be put back**, which is why starting a race and returning to the
-lobby are each asked TWICE: once with no draws, read for the verdict only, then
-again with the draws needed once the answer is "launch". Pre-drawing for a start
-that is then rejected advances the shuffle bag for a race that never happened, so
-"random" repeats sooner and silently skips a track nobody saw.
+**A draw cannot be put back**, which is why the start/return walks ask the
+rules for the verdict BEFORE drawing: a refused start must not advance the
+shuffle bag, or "random" repeats sooner and silently skips a track nobody saw.
+The bag itself lives behind the room handle now (seeded once with the shell's
+page entropy); the decision layer still takes draws as inputs, and the walk
+supplies them.
 
 The persona table is single-sourced from libttp-sim and configured straight back.
 It used to be a hand-synced JS copy held together by a "keep in sync" comment —
 the exact drift root rule 1 exists to stop.
 
-Deliberately did NOT cross: the shuffle bag (page RNG, not sim state), the lobby
-demo, and the performing itself. The host's mode pick crossed too, but into the
-net walks (`runtime/ttp_net.cc`), not here — see `native/libttp-party/CLAUDE.md`.
+Deliberately did NOT cross: the lobby demo and the performing itself. The
+host's mode pick and the shuffle bag crossed into the net walks
+(`runtime/ttp_net.cc`), not here — see `native/libttp-party/CLAUDE.md`. The
+walks in `runtime/ttp_race.cc` are EXECUTORS over this layer: they perform the
+series/field/pick ops themselves and answer only platform ops, while this
+layer keeps emitting the full corpus-pinned lists.
 
 ## Audio decisions
 

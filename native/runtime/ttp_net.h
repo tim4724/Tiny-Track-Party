@@ -32,9 +32,9 @@
  * WHAT STAYS WITH THE SHELL, deliberately: the WebSocket and RTCPeerConnection,
  * sessionStorage, setInterval/setTimeout, the QR module bitmap (decision D3 —
  * the URL composition is shared, the bitmap is three platform one-liners), the
- * reconnect card's DOM, the slot-0 bearer secret (no rules, just entropy), and
- * the random pick's SHUFFLE BAG (page RNG, not room state — the walks below ask
- * for a draw rather than owning one).
+ * reconnect card's DOM, and the slot-0 bearer secret (no rules, just entropy).
+ * The random pick's shuffle bag moved BEHIND THE ROOM (2026-07-31): the shell
+ * seeds it once with page entropy and the walks own every draw.
  *
  * NULL IS NOT ZERO, and ABSENT IS NOT NULL. The rejoinToken normalizer (inside
  * the hello walk) turns on that difference: JS Number(null) is 0 while
@@ -279,20 +279,15 @@ TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
  * the walk then stops after the liveness stamp, exactly where the old shell
  * returned. `sessionHandle` supplies the seat's in-race answer (SET_CAR's
  * lock, the welcome-item predicate) off the live Game; 0 between races.
- * select_mode may answer {"effects":[],"needDraw":true}: the pick needs a
- * fresh draw, the bag is the shell's, so draw one and finish with
- * ttp_net_select_mode_draw_json. The pick itself is STORED STATE behind the
- * room handle (ttp_net_init_pick / ttp_net_pick_json below) — no walk takes
- * it as an argument and no shell mirrors it. */
+ * A random mode pick draws from the ROOM'S OWN shuffle bag (seeded once by
+ * ttp_net_init_pick) and completes in this walk — no shell owns a draw
+ * protocol. The pick itself is STORED STATE behind the room handle
+ * (ttp_net_init_pick / ttp_net_pick_json below) — no walk takes it as an
+ * argument and no shell mirrors it. */
 TTP_ABI const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
                                                  const char* fromJson, const char* msgJson,
                                                  int isSignal, double nowMs);
 
-/* The second half of a needDraw round trip: the same select-mode rules, with
- * the drawn track id in hand. */
-TTP_ABI const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
-                                                  const char* msgJson,
-                                                  const char* drawnTrackId);
 
 /* The game-layer track swap that keeps mode/cup as they are (a cup advancing,
  * a lobby re-draw). Same catalogue-membership and same-pick gates as the mode
@@ -306,12 +301,16 @@ TTP_ABI const char* ttp_net_set_track_json(int roomHandle, const char* trackId);
  * asks — it keeps no mirror, which is a copy two shells already carried.
  *
  * init_pick is the constructor rule that used to live in DisplayNet: a
- * default track preselects mode "track"; hasBag stamps whether this shell
- * wired a shuffle bag (a bagless test surface refuses random outright).
- * clear_pick is End party's fresh-room reset (hasBag survives — the shell's
- * capability did not change). Fields answer with EXPLICIT nulls, exactly as
- * the mirror spelled them. */
-TTP_ABI void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag);
+ * default track preselects mode "track"; hasBag stamps whether this room has
+ * a shuffle bag at all (a bagless test surface refuses random outright), and
+ * bagSeed is the shell's page entropy — the ONE random thing a shell still
+ * supplies for the pick machinery, handed over once. The bag itself (deck,
+ * cursor, the walk-the-whole-catalogue rule) lives behind the room handle
+ * and only walks draw from it. clear_pick is End party's fresh-room reset
+ * (hasBag and the bag survive — the shell's capability did not change).
+ * Fields answer with EXPLICIT nulls, exactly as the mirror spelled them. */
+TTP_ABI void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag,
+                               double bagSeed);
 TTP_ABI void ttp_net_clear_pick(int roomHandle);
 TTP_ABI const char* ttp_net_pick_json(int roomHandle);
 

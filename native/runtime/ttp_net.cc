@@ -352,10 +352,9 @@ void pushPeerOp(Value& effects, const char* op, const PeerId& id) {
   effects.push(std::move(e));
 }
 
-const char* answer(std::string& buf, Value effects, bool needDraw = false) {
+const char* answer(std::string& buf, Value effects) {
   Value out = Value::Obj();
   out.set("effects", std::move(effects));
-  if (needDraw) out.set("needDraw", Value::Bool(true));
   ordered_stringify_into(out, buf);
   return buf.c_str();
 }
@@ -485,6 +484,57 @@ bool catalogueHasTrack(const Value* wanted) {
   for (const Value& t : tracks->arr)
     if (t.type == Value::OBJ && strictEquals(orUndef(t.find("id")), *wanted)) return true;
   return false;
+}
+
+// ---- the shuffle bag ---------------------------------------------------------
+// {seed, deck:[ids], cursor} behind the room handle. xorshift64* over the
+// chooser's track ids, re-shuffled when the deck empties — the JS bag's rule
+// ("random walks the whole catalogue before any repeat"), owned here so no
+// shell carries a draw protocol. The seed is the shell's page entropy, handed
+// over once at ttp_net_init_pick; an unseeded bag draws nothing, which is the
+// bagless test surface's refusal.
+uint64_t bagNext(uint64_t x) {
+  if (!x) x = 0x9E3779B97F4A7C15ull;
+  x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+  return x;
+}
+
+std::string bagDraw(int roomHandle) {
+  Value bag = ttp_room_bag_value(roomHandle);
+  const Value* seedV = bag.find("seed");
+  if (!seedV || seedV->type != Value::NUM) return "";
+  uint64_t rng = (uint64_t)seedV->num;
+  std::vector<std::string> deck;
+  if (const Value* d = bag.find("deck"))
+    if (d->type == Value::ARR)
+      for (const Value& e : d->arr) if (e.type == Value::STR) deck.push_back(e.str);
+  const Value* curV = bag.find("cursor");
+  size_t cursor = (curV && curV->type == Value::NUM && curV->num >= 0) ? (size_t)curV->num : 0;
+  if (cursor >= deck.size()) {
+    deck.clear();
+    if (const Value* tracks = g_chooser.find("tracks"))
+      if (tracks->type == Value::ARR)
+        for (const Value& t : tracks->arr)
+          if (t.type == Value::OBJ)
+            if (const Value* id = t.find("id"))
+              if (id->type == Value::STR) deck.push_back(id->str);
+    for (size_t i = deck.size(); i > 1; --i) {
+      rng = bagNext(rng);
+      std::swap(deck[i - 1], deck[rng % i]);
+    }
+    cursor = 0;
+  }
+  if (deck.empty()) return "";
+  const std::string out = deck[cursor++];
+  Value nb = Value::Obj();
+  // The advanced rng becomes the next seed; 32 bits keeps the double exact.
+  nb.set("seed", Value::Num((double)(bagNext(rng) & 0xFFFFFFFFull)));
+  Value dv = Value::Arr();
+  for (const std::string& s : deck) dv.push(Value::Str(s));
+  nb.set("deck", std::move(dv));
+  nb.set("cursor", Value::Num((double)cursor));
+  ttp_room_store_bag(roomHandle, std::move(nb));
+  return out;
 }
 
 // The catalogue is in CUPS order, so a cup's first entry is its race 1.
@@ -784,6 +834,17 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
             seated && !(cur && cur->type == Value::STR && cur->str == name);
         flow->setField(from, "name", Value::Str(name));
         if (renamed) {
+          // A race freezes field-row copies of the name at launch; repair the
+          // room-retained field here so every later standings board tells the
+          // new name without a shell curating rows.
+          Value f = ttp_room_field_value(roomHandle);
+          if (f.type == Value::ARR) {
+            for (Value& row : f.arr) {
+              const Value* pid = row.find("peerIndex");
+              if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
+            }
+            ttp_room_store_field(roomHandle, std::move(f));
+          }
           Value e = effectOp("player-renamed");
           e.set("peerIndex", from.toValue());
           e.set("name", Value::Str(name));
@@ -845,8 +906,17 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       break;
     }
     case ns::MessageAction::SELECT_MODE: {
-      const bool needDraw = selectModeWalk(roomHandle, from, msg, nullptr, effects);
-      return answer(g_bufPeerMsg, std::move(effects), needDraw);
+      // A random pick that needs a draw takes it from the room's own bag and
+      // completes in the same walk — the needDraw round trip died with the
+      // shell-side bag.
+      if (selectModeWalk(roomHandle, from, msg, nullptr, effects)) {
+        const std::string drawn = bagDraw(roomHandle);
+        if (!drawn.empty()) {
+          const Value d = Value::Str(drawn);
+          selectModeWalk(roomHandle, from, msg, &d, effects);
+        }
+      }
+      return answer(g_bufPeerMsg, std::move(effects));
     }
     case ns::MessageAction::PING: {
       // The PONG is COMPOSED here — type off the manifest, `t` echoed verbatim
@@ -869,18 +939,6 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
   return answer(g_bufPeerMsg, std::move(effects));
 }
 
-const char* ttp_net_select_mode_draw_json(int roomHandle, const char* fromJson,
-                                          const char* msgJson,
-                                          const char* drawnTrackId) {
-  RoomFlow* flow = ttp_room_flow(roomHandle);
-  Value effects = Value::Arr();
-  if (!flow) return answer(g_bufSelectDraw, std::move(effects));
-  const Value fromV = json::parse_or(fromJson, Value::Null());
-  const Value msg = json::parse_or(msgJson, Value::Obj());
-  const Value drawn = Value::Str(strOr(drawnTrackId));
-  selectModeWalk(roomHandle, peerIdOf(&fromV), msg, &drawn, effects);
-  return answer(g_bufSelectDraw, std::move(effects));
-}
 
 const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
@@ -905,13 +963,21 @@ const char* ttp_net_set_track_json(int roomHandle, const char* trackId) {
   return answer(g_bufSetTrack, std::move(effects));
 }
 
-void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag) {
+void ttp_net_init_pick(int roomHandle, const char* defaultTrackIdOrNull, int hasBag,
+                       double bagSeed) {
   // DisplayNet's constructor rule: a default track preselects mode "track".
   const bool hasDefault = defaultTrackIdOrNull && *defaultTrackIdOrNull;
   ttp_room_store_pick(roomHandle,
       makePick(hasDefault ? Value::Str("track") : Value::Null(), Value::Null(), 0,
                hasDefault ? Value::Str(defaultTrackIdOrNull) : Value::Null(),
                Value::Bool(hasBag != 0)));
+  // Seed the room's shuffle bag with the shell's page entropy. hasBag 0 leaves
+  // it unseeded — the bagless test surface's refusal, same gate as ever.
+  if (hasBag) {
+    Value bag = Value::Obj();
+    bag.set("seed", Value::Num(bagSeed));
+    ttp_room_store_bag(roomHandle, std::move(bag));
+  }
 }
 
 void ttp_net_clear_pick(int roomHandle) {
@@ -1025,3 +1091,6 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
   if (plan.publish) pushOp(effects, "publish");
   return answer(g_bufStateApply, std::move(effects));
 }
+
+// The race walks' draws come from the same room-owned bag (ttp_live.h).
+extern "C++" std::string ttp_live_bag_draw(int roomHandle) { return bagDraw(roomHandle); }

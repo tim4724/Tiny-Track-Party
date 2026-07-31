@@ -218,10 +218,10 @@ export class DisplayNet extends GameNet {
     // null outside a race; set via setStandings on each finish + at race end,
     // cleared by the statechange walk's clear-standings effect.
     this._standings = null;
-    // The game-owned shuffle bag. Page RNG, deliberately never crossed: a
-    // random pick answers {needDraw:true}, the shell draws, and the second
-    // walk half lands it (see _onMessage).
-    this.drawRandomTrack = opts.drawRandomTrack || null;
+    // The shuffle bag lives BEHIND THE ROOM; what this shell supplies is one
+    // page-entropy seed at init_pick. hasBag false is the bagless test
+    // surface, which refuses random picks outright (the walk's gate).
+    this._hasBag = !!opts.hasBag;
     // NO PICK MIRROR. The lobby pick lives behind the room handle
     // (ttp_net_init_pick / pick_json): the walks write it, the lobby frame
     // reads it on every publish, and the game layer asks `this.pick` when it
@@ -245,7 +245,8 @@ export class DisplayNet extends GameNet {
       liveness: { timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS }
     });
     session.initPick(this.flow.handle,
-      opts.defaultTrackId != null ? opts.defaultTrackId : null, !!this.drawRandomTrack);
+      opts.defaultTrackId != null ? opts.defaultTrackId : null, this._hasBag,
+      (Math.random() * 0x100000000) >>> 0);
     this.roomCode = null;   // mirror of the wasm's room identity; written only by
     this.instance = null;   // the save-room/forget-room effects (and _restoreRoom)
     this.clientId = null;   // slot-0 bearer secret; restored-or-minted in _restoreRoom
@@ -371,17 +372,9 @@ export class DisplayNet extends GameNet {
     // them (ANY traffic from a peer is proof of life) and then stops.
     const sig = this._isSignal(from, data);
     const ctx = { from, data };
-    const ans = this._walk(this.flow.runWalk(() =>
+    this._walk(this.flow.runWalk(() =>
       session.onPeerMessage(this.flow.handle, this.sessionHandle(), from, data,
         sig, Date.now())), ctx);
-    // A random mode pick needs a draw and the bag is the page's (game-supplied
-    // shuffle RNG, never crossed): draw one and finish the pick with the second
-    // walk half. C++ only asks when the stored pick says hasBag.
-    if (ans.needDraw) {
-      this._walk(this.flow.runWalk(() =>
-        session.selectModeDraw(this.flow.handle, from, data,
-          this.drawRandomTrack())), ctx);
-    }
   }
 
   // The stored pick ({mode,cupId,randomRaces,trackId}), read where it lives.
@@ -411,6 +404,10 @@ export class DisplayNet extends GameNet {
     for (const e of ans.effects) this._performNetEffect(e, ctx);
     return ans;
   }
+
+  // A race walk's answer may carry net-vocabulary ops in place (the executor
+  // merges the set-track tail); main.js's applyEffect falls through to here.
+  performEffect(e, ctx = {}) { this._performNetEffect(e, ctx); }
 
   _performNetEffect(e, ctx) {
     const perform = NET_PERFORMERS[e.op];

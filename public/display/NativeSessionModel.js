@@ -48,10 +48,8 @@ export async function init() {
       ['number', 'number', 'string', 'string', 'number', 'number']),
     controllerAction: c('ttp_net_controller_action', 'string',
       ['number', 'number', 'string', 'string']),
-    selectModeDraw: c('ttp_net_select_mode_draw_json', 'string',
-      ['number', 'string', 'string', 'string']),
     setTrack: c('ttp_net_set_track_json', 'string', ['number', 'string']),
-    initPick: c('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    initPick: c('ttp_net_init_pick', null, ['number', 'string', 'number', 'number']),
     clearPick: c('ttp_net_clear_pick', null, ['number']),
     pickJson: c('ttp_net_pick_json', 'string', ['number']),
     liveness: c('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
@@ -145,18 +143,14 @@ export function onPeerMessage(roomHandle, sessionHandle, from, msg, isSignal, no
 export function controllerAction(roomHandle, sessionHandle, from, type) {
   return fn.controllerAction(roomHandle | 0, sessionHandle | 0, idJson(from), type || '');
 }
-export function selectModeDraw(roomHandle, from, msg, drawnTrackId) {
-  return fn.selectModeDraw(roomHandle | 0, idJson(from), J(msg || {}),
-    drawnTrackId == null ? '' : String(drawnTrackId));
-}
 export function setTrack(roomHandle, trackId) {
   return fn.setTrack(roomHandle | 0, trackId == null ? '' : String(trackId));
 }
 // The stored pick's lifecycle — the walks write it, these three touch it from
 // the shell's edge: the constructor rule, End party's reset, and the read.
-export function initPick(roomHandle, defaultTrackId, hasBag) {
+export function initPick(roomHandle, defaultTrackId, hasBag, bagSeed) {
   fn.initPick(roomHandle | 0, defaultTrackId == null ? null : String(defaultTrackId),
-    hasBag ? 1 : 0);
+    hasBag ? 1 : 0, bagSeed >>> 0);
 }
 export function clearPick(roomHandle) { fn.clearPick(roomHandle | 0); }
 export function pick(roomHandle) { return JSON.parse(fn.pickJson(roomHandle | 0)); }

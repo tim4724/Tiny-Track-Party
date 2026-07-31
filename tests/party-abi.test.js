@@ -294,10 +294,8 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     onClose: cw('ttp_net_on_close_json', 'string', ['number', 'number']),
     onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
-    selectModeDraw: cw('ttp_net_select_mode_draw_json', 'string',
-      ['number', 'string', 'string', 'string']),
     setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
-    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number']),
+    initPick: cw('ttp_net_init_pick', null, ['number', 'string', 'number', 'number']),
     pickJson: cw('ttp_net_pick_json', 'string', ['number']),
     liveness: cw('ttp_net_liveness_json', 'string', ['number', 'number', 'number']),
     onSeen: cw('ttp_net_on_seen_json', 'string', ['number', 'string', 'number']),
@@ -352,8 +350,10 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   net.onProtocol(h, 'peer_joined', '{"index":1}', 2000);
   assert.equal(drain().some((e) => e.type === 'rosterchange'), true, 'the seat landed');
   // The pick is stored behind the handle now — seeded once, exactly as
-  // DisplayNet's constructor does (no default track, a bag wired).
-  net.initPick(h, null, 1);
+  // DisplayNet's constructor does (no default track, a bag wired, one page
+  // entropy seed). The bag itself lives behind the room; the seed is the only
+  // random thing this shell still supplies.
+  net.initPick(h, null, 1, 20260731);
   const storedPick = () => JSON.parse(net.pickJson(h));
   const hello = walk(net.onPeerMessage(h, 0, '1',
     JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: null }), 0, 2100));
@@ -376,19 +376,26 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   walk(net.onPeerMessage(h, 0, '1',
     '{"type":"select_mode","mode":"cup","cupId":"beach"}', 0, 2600));
   assert.equal(storedPick().trackId, 'tidepool');
-  // Random is the two-step draw:
+  // Random completes in ONE walk: the shuffle bag is the room's, so the draw
+  // happens inside and the pick lands with the same publish/track-change tail
+  // as the other two modes. There is no draws protocol for a shell to hold.
   const rnd = walk(net.onPeerMessage(h, 0, '1',
     '{"type":"select_mode","mode":"random","randomRaces":4}', 0, 2700));
-  assert.equal(rnd.needDraw, true);
-  assert.deepEqual(rnd.effects, []);
-  walk(net.selectModeDraw(h, '1',
-    '{"type":"select_mode","mode":"random","randomRaces":4}', 'lagoon'));
-  assert.equal(storedPick().trackId, 'lagoon');
-  // ...and the game-layer swap shares the tail and keeps mode/length:
-  const swapped = walk(net.setTrack(h, 'tidepool'));
+  assert.deepEqual(ops(JSON.stringify(rnd)), ['publish', 'track-change']);
+  assert.equal(rnd.needDraw, undefined, 'the two-step draw protocol is gone');
+  // WHICH track the bag drew is the bag's business (seeded above); that it drew
+  // from the configured catalogue is the contract.
+  assert.ok(['tidepool', 'lagoon'].includes(storedPick().trackId),
+    `the bag drew outside the catalogue: ${storedPick().trackId}`);
+  assert.equal(rnd.effects.at(-1).trackId, storedPick().trackId,
+    'the track-change effect names the track the walk stored');
+  // ...and the game-layer swap shares the tail and keeps mode/length. Aim it at
+  // the track the bag did NOT draw: a same-pick swap is a deliberate no-op.
+  const other = storedPick().trackId === 'tidepool' ? 'lagoon' : 'tidepool';
+  const swapped = walk(net.setTrack(h, other));
   assert.deepEqual(ops(JSON.stringify(swapped)), ['publish', 'track-change']);
   assert.deepEqual(storedPick(),
-    { mode: 'random', cupId: null, randomRaces: 4, trackId: 'tidepool' });
+    { mode: 'random', cupId: null, randomRaces: 4, trackId: other });
   drain();
 
   // Into the race; the statechange walk restamps so lobby silence isn't charged.

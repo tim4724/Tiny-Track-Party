@@ -358,6 +358,22 @@ Value ttp_session_results_rows(int h) {
   return rows && rows->type == Value::ARR ? *rows : Value::Arr();
 }
 
+Value ttp_session_item_cars(int h) {
+  // The three fields the ITEM-push rule reads, straight off the live cars —
+  // never a snapshot. An empty slot is JSON null, as the JS cars spelled it.
+  Value a = Value::Arr();
+  if (Game* g = ttp_session_engine(h)) {
+    for (const auto& c : g->cars()) {
+      Value o = Value::Obj();
+      o.set("id", c->id.toValue());
+      o.set("item", c->item.empty() ? Value::Null() : Value::Str(c->item));
+      o.set("finished", Value::Bool(c->finished));
+      a.push(std::move(o));
+    }
+  }
+  return a;
+}
+
 // ===========================================================================
 // Audio decisions (ttp_audio.h).
 //

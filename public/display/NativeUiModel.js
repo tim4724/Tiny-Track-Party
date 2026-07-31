@@ -50,13 +50,13 @@ export async function init() {
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
-    itemPushes: c('ttp_ui_item_pushes_json', 'string', ['string', 'string', 'string']),
-    welcomeItem: c('ttp_ui_welcome_item_json', 'string', ['string']),
+    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number', 'string']),
+    welcomeItem: c('ttp_ui_welcome_item_live_json', 'string', ['number', 'string']),
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
     standingsLive: c('ttp_ui_standings_live_json', 'string',
-      ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
+      ['number', 'number', 'number', 'string', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
     intermissionSecs: c('ttp_ui_intermission_secs', 'number', ['number', 'number'])
   };
@@ -64,7 +64,6 @@ export async function init() {
 
 const J = JSON.stringify;
 const id = (x) => J(x === undefined ? null : x);   // a JSON-scalar identity
-const ids = (set) => J([...set]);
 const b = (x) => (x ? 1 : 0);
 
 // The two field sizes the seat grid needs, and NOTHING ELSE. The world every id
@@ -151,24 +150,22 @@ export function reconnectDiff(shownIds, seats) {
 }
 
 // ---- the ITEM push ---------------------------------------------------------
-// Only the three fields the rule reads cross, not the whole snapshot car. Note
-// what is NOT done here: an `item` that is undefined stays undefined through
-// JSON.stringify (the key vanishes), which is the third state the rule turns on
-// — a slot that went from null to absent pushes again.
-export function itemPushes(cars, aiIds, lastItem) {
+// The cars and the CPU set come off the live session in C++; what crosses is
+// the shell's own outbox map — what each phone was last told, in insertion
+// order. An `item` that is undefined stays undefined through JSON.stringify
+// (the key vanishes), which is the third state the rule turns on.
+export function itemPushes(sessionHandle, lastItem) {
   const last = [];
   for (const [k, v] of lastItem) last.push(v === undefined ? { id: k } : { id: k, item: v });
-  const out = JSON.parse(fn.itemPushes(
-    J(cars.map((c) => ({ id: c.id, item: c.item, finished: !!c.finished }))),
-    ids(aiIds), J(last)));
+  const out = JSON.parse(fn.itemPushes(sessionHandle | 0, J(last)));
   // `item` is absent on the wire when it is undefined — reading the key back
   // gives undefined again, so the ITEM message keeps the shape it always had.
   return out.map((p) => ({ id: p.id, item: p.item }));
 }
 
-// The one-shot relight a (re)joining phone gets. null for no live car.
-export function welcomeItem(car) {
-  return JSON.parse(fn.welcomeItem(car ? J({ id: car.id, item: car.item, finished: !!car.finished }) : 'null'));
+// The one-shot relight a (re)joining phone gets, off the live race.
+export function welcomeItem(sessionHandle, peerIndex) {
+  return JSON.parse(fn.welcomeItem(sessionHandle | 0, id(peerIndex)));
 }
 
 // ---- race flow -------------------------------------------------------------
@@ -195,8 +192,8 @@ export function freezePlan(paused, autoPaused, sessionPaused) {
 
 // What the results board's one button does — the branch behind the click,
 // answered by the same layer that labels it (resultsView's newGameKey).
-export function resultsAction(gpHandle) {
-  return JSON.parse(fn.resultsAction(gpHandle | 0));
+export function resultsAction(roomHandle) {
+  return JSON.parse(fn.resultsAction(roomHandle | 0));
 }
 
 // ---- the standings board ----------------------------------------------------
@@ -216,10 +213,9 @@ export function resultsAction(gpHandle) {
 // (ttp_ui_standings_live_json). The FIELD is the one shell-owned input left:
 // the launch's frozen copy plus the shell's rename/rekey repairs (the AI
 // racers are not in any roster the room knows).
-export function standingsPayload({ sessionHandle, roomHandle, gpHandle, over, field, results, autoAdvanceMs }) {
+export function standingsPayload({ sessionHandle, roomHandle, over, results, autoAdvanceMs }) {
   return JSON.parse(fn.standingsLive(
-    sessionHandle | 0, roomHandle | 0, gpHandle | 0, b(over),
-    J(field.map((p) => ({ peerIndex: p.peerIndex, name: p.name, colorIndex: p.colorIndex, ai: !!p.ai }))),
+    sessionHandle | 0, roomHandle | 0, b(over),
     results ? J(results) : null,
     autoAdvanceMs));
 }

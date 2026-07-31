@@ -94,6 +94,18 @@ int ttp_room_all_participants_disconnected_synced(int roomHandle, int sessionHan
 ttp::Value ttp_room_pick_value(int roomHandle);
 void ttp_room_store_pick(int roomHandle, ttp::Value pick);
 
+// The random-track shuffle bag ({seed, deck, cursor}), the live cup series (a
+// gp handle the race walks own — storing a different handle disposes the old
+// one, and room dispose frees it) and the launched race field. Same charter as
+// the pick: shim state behind the room, walk-written, so no shell mirrors any
+// of it. See RoomHandle in ttp_party.cc.
+ttp::Value ttp_room_bag_value(int roomHandle);
+void ttp_room_store_bag(int roomHandle, ttp::Value bag);
+int ttp_room_series(int roomHandle);
+void ttp_room_store_series(int roomHandle, int gpHandle);
+ttp::Value ttp_room_field_value(int roomHandle);
+void ttp_room_store_field(int roomHandle, ttp::Value field);
+
 // The live machine behind a handle, or nullptr — for the choreography walks
 // (see the header note). Mutations through it still queue their events on the
 // handle exactly as the ttp_room_* mutators do, so a shell that drains

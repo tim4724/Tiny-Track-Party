@@ -52,19 +52,38 @@ function ui_() {
       cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
       seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
       standingsLive: c('ttp_ui_standings_live_json', 'string',
-        ['number', 'number', 'number', 'number', 'string', 'string', 'number']),
+        ['number', 'number', 'number', 'string', 'number']),
       resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
       seriesInfoLive: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
       catalogue: c('ttp_ui_catalogue_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
       cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', []),
-      // The handles the two live twins read through. Same module, so the room,
-      // the race and the series the board gathers off are the ones built here.
+      // The walks a party is driven through. Same module, so the room, the race
+      // and the series the board gathers off are the ones played here.
+      netConfigure: c('ttp_net_configure', 'number', ['string']),
+      raceConfigure: c('ttp_race_configure', 'number', ['string']),
       roomCreate: c('ttp_room_create', 'number', ['string']),
-      roomAddPlayer: c('ttp_room_add_player', 'string', ['number', 'string', 'string']),
+      roomList: c('ttp_room_list_json', 'string', ['number']),
+      roomEvents: c('ttp_room_events_json', 'string', ['number']),
+      roomTransition: c('ttp_room_transition_to', 'number', ['number', 'string']),
+      netOnOpen: c('ttp_net_on_open_json', 'string', ['number']),
+      netOnProtocol: c('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
+      netOnPeerMessage: c('ttp_net_on_peer_message_json', 'string',
+        ['number', 'number', 'string', 'string', 'number', 'number']),
+      netInitPick: c('ttp_net_init_pick', null, ['number', 'string', 'number', 'number']),
+      raceStartLive: c('ttp_race_start_live_json', 'string',
+        ['number', 'number', 'number', 'number', 'string', 'string']),
+      raceAdvanceLive: c('ttp_race_advance_live_json', 'string',
+        ['number', 'number', 'number', 'number', 'string', 'string']),
+      raceEventsLive: c('ttp_race_events_live_json', 'string',
+        ['number', 'number', 'string', 'number', 'number', 'number', 'number', 'number']),
+      raceSeriesState: c('ttp_race_series_state_json', 'string', ['number']),
       raceBegin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
       raceAddHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
       raceStart: c('ttp_session_start', null, ['number', 'number']),
+      raceUpdate: c('ttp_update', null, ['number', 'number']),
+      raceForceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
+      raceDispose: c('ttp_dispose', null, ['number']),
       gpCreate: c('ttp_gp_create', 'number', ['string', 'number']),
       gpApplyRace: c('ttp_gp_apply_race', null, ['number', 'string', 'string', 'string']),
       gpAdvance: c('ttp_gp_advance', null, ['number']),
@@ -81,6 +100,20 @@ function ui_() {
       maxPlayers: protocol.MAX_PLAYERS,
       carCount: protocol.CAR_MODELS.length
     }));
+    // The two other worlds a party needs, from the same authored source: the
+    // net walks' chooser (what a mode pick may resolve to) and the race walks'
+    // field rules. fieldSize is the one thing a caller varies, so it is set per
+    // party rather than here — see party() below.
+    raw.netConfigure(J({
+      cars: protocol.CAR_MODELS.map((id) => ({ id })),
+      colors: protocol.CAR_COLORS,
+      tracks: TRACK_LIST.map((t) => ({ id: t.id, cup: t.cup }))
+    }));
+    const raceWorld = (fieldSize) => raw.raceConfigure(J({
+      fieldSize, carCount: protocol.CAR_MODELS.length,
+      colorCount: protocol.CAR_COLORS.length, aiPrefix: 'ai-',
+      cups: CUPS.map((c2) => ({ id: c2.id, name: c2.name, tracks: c2.tracks }))
+    }));
     return {
       CUPS, TRACK_LIST, protocol,
       catalogue: () => JSON.parse(raw.catalogue()),
@@ -92,31 +125,92 @@ function ui_() {
       cupTintRgb: (cupId, pct) => raw.cupTintRgb(cupId == null ? '' : cupId, pct) >>> 0,
       cupFieldTintPct: () => raw.cupFieldTintPct(),
 
-      // ---- the live world the two twins gather off ----
-      // A room whose seats are named, and a race holding a car for each id in
-      // `driving`. A seat with no car is what the board draws as a joining row,
-      // so the two together are the whole of "who is in this race".
-      room: (seats) => {
-        const h = raw.roomCreate('{}');
-        for (const s of seats) raw.roomAddPlayer(h, J(s.peerIndex), J(s));
-        return h;
-      },
-      race: (driving) => {
-        const h = raw.raceBegin('tidepool', 42, 3, null);
-        for (const id of driving) raw.raceAddHuman(h, J(id), null);
-        raw.raceStart(h, 3);
-        return h;
-      },
       cup: (cup) => raw.gpCreate(J(cup), 0),
       applyRace: (gp, results, field) => raw.gpApplyRace(gp, J(results), J(field), null),
       advance: (gp) => raw.gpAdvance(gp),
       gpState: (gp) => JSON.parse(raw.gpState(gp)),
+      seriesInfo: (gp, autoAdvanceMs = 10000) => JSON.parse(raw.seriesInfoLive(gp, autoAdvanceMs)),
 
-      standings: ({ race = 0, room = 0, gp = 0, over, field, results = null,
-                    autoAdvanceMs = 10000 }) =>
-        JSON.parse(raw.standingsLive(race, room, gp, over ? 1 : 0, J(field),
-                                     results == null ? null : J(results), autoAdvanceMs)),
-      seriesInfo: (gp, autoAdvanceMs = 10000) => JSON.parse(raw.seriesInfoLive(gp, autoAdvanceMs))
+      // ---- A PARTY IN A JAR ----------------------------------------------
+      // Every input to the standings board is a HANDLE now. The race field is
+      // the room's launch copy and the cup half is the room's stored series,
+      // both written by the walks and reachable through nothing else — so the
+      // only way to ask the board a question is to have played the game. This
+      // drives the same walks main.js drives, and performs the two ops a test
+      // needs out of the answer (the room transition and the session).
+      //
+      // Seats are peerIndex 1..n in join order, which is what the walks assign.
+      party: ({ names, pick, fieldSize = names.length }) => {
+        const room = raw.roomCreate('{}');
+        raw.netOnOpen(room);
+        raw.netOnProtocol(room, 'created', '{"room":"ABCD"}', 1000);
+        raw.netInitPick(room, null, 1, 20260731);
+        let session = 0;
+        let clock = 2000;
+        // A phone arriving: seated, named, and picking a car. Joining DURING a
+        // race still leaves it out of the launched field, which is what the
+        // board draws as a joining row.
+        const join = (name) => {
+          const peer = JSON.parse(raw.roomList(room)).length + 1;
+          raw.netOnProtocol(room, 'peer_joined', J({ index: peer }), (clock += 10));
+          raw.netOnPeerMessage(room, 0, J(peer),
+            J({ type: 'hello', name, rejoinToken: null }), 0, (clock += 10));
+          raw.netOnPeerMessage(room, 0, J(peer),
+            J({ type: 'set_car', carIndex: peer - 1 }), 0, (clock += 10));
+          raw.roomEvents(room);
+          return peer;
+        };
+        names.forEach((n) => join(n));
+        raw.netOnPeerMessage(room, 0, '1', J({ type: 'select_mode', ...pick }), 0, (clock += 10));
+        raw.roomEvents(room);
+
+        // The two effects this jar performs; everything else names a platform
+        // API no Node test has, and the executor already moved the rest.
+        const perform = (effects) => {
+          for (const e of effects) {
+            if (e.op === 'transition') raw.roomTransition(room, e.to);
+            else if (e.op === 'create-session') {
+              session = raw.raceBegin(e.trackId, 42, 3, null);
+              for (const row of e.field) raw.raceAddHuman(session, J(row.peerIndex), null);
+              raw.raceStart(session, 3);
+              raw.raceUpdate(session, 4000);   // out of the countdown
+            } else if (e.op === 'dispose-session') { raw.raceDispose(session); session = 0; }
+          }
+        };
+        // The field rules are global to the module, so re-assert this party's
+        // before every launch: two parties in one test file must not size each
+        // other's CPU fill.
+        const launch = (walk) => {
+          raceWorld(fieldSize);
+          const d = JSON.parse(walk(room, 1, 42, 3, null, null));
+          assert.ok(d.effects, `the launch walk refused: ${d.reason || d.action}`);
+          perform(d.effects);
+          return d;
+        };
+        launch(raw.raceStartLive);
+        return {
+          room, join,
+          get session() { return session; },
+          roster: () => JSON.parse(raw.roomList(room)),
+          // The room's cup series — no shell holds a handle to it any more.
+          seriesState: () => JSON.parse(raw.raceSeriesState(room)),
+          // Run the current race out in the order given (ids finish 60s, 61s,
+          // ...) and drain it. The drain is where the executor banks the cup
+          // points, so `results` and the series move together, as at a party.
+          finish: (order) => {
+            order.forEach((id, i) => raw.raceForceFinish(session, J(id), 60 + i));
+            raw.raceUpdate(session, 16);
+            const d = JSON.parse(raw.raceEventsLive(session, room, 'beach', 0, 0,
+                                                    8000, 100000, 20000));
+            perform(d.effects);
+            return d.results;
+          },
+          nextRace: () => launch(raw.raceAdvanceLive),
+          board: ({ over = false, results = null, autoAdvanceMs = 10000 } = {}) =>
+            JSON.parse(raw.standingsLive(session, room, over ? 1 : 0,
+                                         results == null ? null : J(results), autoAdvanceMs))
+        };
+      }
     };
   })());
 }
@@ -234,16 +328,13 @@ test('the cup chip names the next race out of the shipped catalogue', async () =
 
 test('the standings board keeps its wire key order', async () => {
   const ui = await ui_();
-  const field = [{ peerIndex: 0, name: 'Ada', colorIndex: 2 }];
-  const results = { results: [{ playerId: 0, rank: 1, finished: true, time: 60 }] };
 
-  // Ada drives; Bo holds a seat with no car, which is the ONLY way to get a
-  // joining row now — the late-joiner list is subtracted from the live race
-  // inside C++ rather than handed in.
-  const race = ui.race([0]);
-  const room = ui.room([{ peerIndex: 0, name: 'Ada', colorIndex: 2 },
-                        { peerIndex: 1, name: 'Bo', colorIndex: 3 }]);
-  const board = ui.standings({ race, room, over: true, field, results });
+  // Ada races alone; Bo's phone arrives AFTER the launch, so he holds a seat
+  // with no car — the only way to get a joining row now, because the late-joiner
+  // list is subtracted from the live race inside C++ rather than handed in.
+  const p = ui.party({ names: ['Ada'], pick: { mode: 'track', trackId: 'tidepool' } });
+  const bo = p.join('Bo');
+  const board = p.board({ over: true, results: p.finish([1]) });
 
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
@@ -251,15 +342,17 @@ test('the standings board keeps its wire key order', async () => {
   assert.deepEqual(Object.keys(board.order[0]), ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time']);
   assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
   assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
-  // The joining row is dressed from the ROOM record, not from the field.
-  assert.deepEqual(board.order[1], { playerId: 1, name: 'Bo', colorIndex: 3, joining: true });
-  assert.equal(board.hostPeerIndex, 0, 'the host comes off the room election');
+  // The joining row is dressed from the ROOM record, not from the race field.
+  assert.deepEqual(board.order[1], {
+    playerId: bo, name: 'Bo', joining: true,
+    colorIndex: p.roster().find((r) => r.peerIndex === bo).colorIndex
+  });
+  assert.equal(board.hostPeerIndex, 1, 'the host comes off the room election');
 
   // The cup half is ONE nested object composed here, never two sibling keys.
-  const gp = ui.cup({ id: 'c', name: 'C', tracks: ['t1', 't2'] });
-  ui.applyRace(gp, [{ playerId: 0, rank: 1, finished: true }], field);
-  const seated = ui.room([{ peerIndex: 0, name: 'Ada', colorIndex: 2 }]);
-  const cupBoard = ui.standings({ race, room: seated, gp, over: true, field, results });
+  // A cup pick is the whole difference: same walks, same board, one more key.
+  const gp = ui.party({ names: ['Ada'], pick: { mode: 'cup', cupId: ui.CUPS[0].id } });
+  const cupBoard = gp.board({ over: true, results: gp.finish([1]) });
   assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
   assert.deepEqual(Object.keys(cupBoard.order[0]),
     ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'points', 'gained']);
@@ -267,32 +360,33 @@ test('the standings board keeps its wire key order', async () => {
 
 test('a live cup board stays in race order; only the final board re-sorts', async () => {
   const ui = await ui_();
-  const field = [{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }];
-  const race = ui.race([0, 1]);
-  const room = ui.room([{ peerIndex: 0, name: 'Ada' }, { peerIndex: 1, name: 'Bo' }]);
+  const [ADA, BO] = [1, 2];
+  const p = ui.party({ names: ['Ada', 'Bo'], pick: { mode: 'cup', cupId: ui.CUPS[0].id } });
 
-  // Ada takes the first two races and Bo the third, so Ada leads the CUP while
-  // Bo won the RACE this board is showing — the one state where the two orders
+  // Ada takes the first two races, so she leads the CUP while Bo goes on to win
+  // the RACE this board is showing — the one state where the two orders
   // disagree, and the reason the board has two of them.
-  const gp = ui.cup({ id: 'c', name: 'C', tracks: ['t1', 't2', 't3', 't4'] });
-  for (const winner of [0, 0, 1]) {
-    ui.applyRace(gp, [{ playerId: winner, rank: 1, finished: true },
-                      { playerId: 1 - winner, rank: 2, finished: true }], field);
-    ui.advance(gp);
-  }
-  assert.deepEqual(ui.gpState(gp).standings.map((r) => r.playerId), [0, 1], 'premise: Ada leads the cup');
+  for (let i = 0; i < 2; i++) { p.finish([ADA, BO]); p.nextRace(); }
+  assert.deepEqual(p.seriesState().standings.map((r) => r.playerId), [ADA, BO],
+    'premise: Ada leads the cup');
 
+  // Mid-race, Bo has crossed first. The board is asked with the results in hand
+  // but nothing banked yet — exactly the live push the shell makes per finish.
   const results = { results: [
-    { playerId: 1, rank: 1, finished: true, time: 60 },
-    { playerId: 0, rank: 2, finished: true, time: 61 }
+    { playerId: BO, rank: 1, finished: true, time: 60 },
+    { playerId: ADA, rank: 2, finished: true, time: 61 }
   ] };
-
-  const live = ui.standings({ race, room, gp, over: false, field, results });
-  assert.deepEqual(live.order.map((r) => r.playerId), [1, 0], 'mid-race the drama is who crossed the line');
+  const live = p.board({ over: false, results });
+  assert.deepEqual(live.order.map((r) => r.playerId), [BO, ADA],
+    'mid-race the drama is who crossed the line');
   assert.ok(live.order.every((r) => r.gained === undefined), 'gains only appear on the final board');
 
-  const final = ui.standings({ race, room, gp, over: true, field, results });
-  assert.deepEqual(final.order.map((r) => r.playerId), [0, 1], 'the final board tells the cup story');
+  // Run it out for real: the drain banks Bo's 9 and Ada's 6 against the room's
+  // series before the final board is composed, which is the order the corpus
+  // pins. Ada still leads, so the final board re-sorts away from the race.
+  const final = p.board({ over: true, results: p.finish([BO, ADA]) });
+  assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
+    'the final board tells the cup story');
   assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
 });
 

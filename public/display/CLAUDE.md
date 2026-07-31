@@ -30,10 +30,11 @@ so a build whose walks grew an op this shell cannot perform fails on load.
 peer message, socket close, liveness tick, drained room event) is ONE walk into
 `ttp_net.h`, which mutates the room inside the wasm and answers an ordered
 effect list; `_performNetEffect` holds the same no-reorder/no-skip contract.
-What stays in the file is the socket, the three timers, sessionStorage and the
-shuffle bag (a random pick answers `needDraw` and the shell draws). The pick
-itself is STORED behind the room handle (`ttp_net_pick_json`) — no mirror; the
-game layer asks `net.pick` when it needs one. Walks go through `flow.runWalk`,
+What stays in the file is the socket, the three timers and sessionStorage.
+The pick, the random-track shuffle bag (seeded once with page entropy), the
+cup series and the launched race field all live BEHIND THE ROOM HANDLE — the
+walks write them, no shell mirrors any of it; the game layer asks `net.pick`
+or `flow.seriesState` when it needs one. Walks go through `flow.runWalk`,
 which keeps NativeRoomFlow's provider-sync and event-drain discipline around a
 mutation the class's own methods didn't make.
 

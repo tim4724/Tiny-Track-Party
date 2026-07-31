@@ -399,11 +399,10 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // roster shuffles the seat order under everyone; a dropped `ready` freezes the
   // host's Start button.
   const { MSG, ROOM_STATE } = H.kit().protocol;
-  // drawRandomTrack is the game layer's shuffle bag (main.js owns it — the pick
-  // RULES crossed into C++ with the walk layer, the bag deliberately did not:
-  // C++ answers needDraw and the shell draws). Random mode is refused outright
-  // without one, so the run-length assertions below need it stubbed.
-  const { relay, net, room } = await bringUpRealDisplay({}, { drawRandomTrack: () => 'tidepool' });
+  // The shuffle bag lives behind the room handle and the walk draws from it
+  // itself; what a shell supplies is `hasBag`, and a bagless display refuses
+  // random outright. The run-length assertions below need one, so wire it.
+  const { relay, net, room } = await bringUpRealDisplay({}, { hasBag: true });
   const ada = await bringUpPhone(relay, room, { name: 'Ada', clientKey: 'lu-a' });
   const bo = await bringUpPhone(relay, room, { name: 'Bo', clientKey: 'lu-b' });
 
@@ -1258,28 +1257,23 @@ test('asym: C++ json::parse accepts frames JSON.parse rejects, with different va
   assert.ok(kitDrops(rawCtl), 'JSON.parse rejects an unescaped control char');
   assert.equal(cls(rawCtl).msg.message, `a${CTL}b`, 'C++ accepts it verbatim');
 
-  // 4. Duplicate keys: JSON.parse takes the LAST, Value::find returns the FIRST.
+  // 4. Duplicate keys: BOTH parsers take the LAST now. Value::set gained JS
+  // assignment semantics (2026-07-31, replace-in-place), so C++'s parser
+  // collapses a hostile duplicate at parse time exactly as JSON.parse does.
+  // This used to be the sharpest edge in the file: ONE frame yielded TWO
+  // different values on the same display, depending on whether C++ EXTRACTED
+  // the field (first won) or PASSED THE OBJECT THROUGH to JSON.parse (last
+  // won). Both routes agree with each other and with the kit now.
   const dup = '{"type":"message","from":1,"from":2,"data":{"type":"ping"}}';
   assert.equal(routeThroughKit(dup).from, 2, 'JSON.parse: last wins');
-  assert.equal(cls(dup).from, 1, 'C++: FIRST wins');
+  assert.equal(cls(dup).from, 2, 'C++: last wins too');
 
-  // ...and on the PROTOCOL route, which hands the whole frame back verbatim, the
-  // duplicate SURVIVES: canonical_stringify re-emits both entries, so the display
-  // is handed an object no JS producer could have made and whose key order is not
-  // guaranteed (the sort is not stable across equal keys).
   const dupProto = '{"type":"peer_left","index":1,"index":2}';
   const raw = abi.framing.classify(dupProto);
-  assert.equal((raw.match(/"index"/g) || []).length, 2,
-    `canonical_stringify re-emits BOTH duplicates: ${raw}`);
-
-  // And here is the sharp edge: ONE frame yields TWO DIFFERENT values on the same
-  // display, depending on whether C++ EXTRACTED the field or PASSED THE OBJECT
-  // THROUGH. `from` on the message route comes from Value::find (FIRST wins);
-  // anything read off the protocol route's `msg` was re-serialized by C++ and then
-  // re-parsed by JSON.parse in NativePartyConnection (LAST wins).
-  assert.equal(cls(dup).from, 1, 'extracted by C++: first');
-  assert.equal(cls(dupProto).msg.index, 2, 'passed through and re-parsed by JS: last');
-  assert.equal(routeThroughKit(dupProto).msg.index, 2, '...which is at least what the kit says too');
+  assert.equal((raw.match(/"index"/g) || []).length, 1,
+    `the duplicate collapses at the C++ parse: ${raw}`);
+  assert.equal(cls(dupProto).msg.index, 2, 'passed through: same last-wins value');
+  assert.equal(routeThroughKit(dupProto).msg.index, 2, '...which is what the kit says too');
 });
 
 test('asym: numbers cross the boundary in shortest form, both directions', async () => {

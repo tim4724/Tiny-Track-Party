@@ -146,9 +146,9 @@ export class Display {
     const m = this.m;
     const ptr = m._malloc(bytes.length);
     m.HEAPU8.set(bytes, ptr);
-    const rc = this._fn.asset(name, ptr, bytes.length);
+    const ok = this._fn.asset(name, ptr, bytes.length);
     m._free(ptr);
-    if (rc) throw new Error(`ttp_display_asset(${name}) failed`);
+    if (!ok) throw new Error(`ttp_display_asset(${name}) failed`);
   }
 
   // Run `bytes` through one of the ttp_glb_* readers. Both take (ptr, len) and
@@ -298,7 +298,7 @@ export class Display {
     // plate sits on this model's back panel) is decided by ttp/roster.h — it
     // used to be a byte buffer this file packed by hand.
     // The reason is the engine's: no surface, or a track this build does not have.
-    if (this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
+    if (!this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
     this._slotIdCache = null; // a build is the one thing that can change slot ids
     this.built = true;
   }
@@ -316,7 +316,7 @@ export class Display {
     await this._provideCars(roster, assets);
     // A re-dress keeps the id list by contract (C++ refuses id changes there),
     // so the slot-id cache stands; a refusal falls back to build, which clears it.
-    return !this._fn.reroster(JSON.stringify(this._slots(roster)));
+    return !!this._fn.reroster(JSON.stringify(this._slots(roster)));
   }
 
   // The per-slot car GLBs (and their 50%-alpha ghost twins), provided as
