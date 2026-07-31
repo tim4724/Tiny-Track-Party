@@ -4,7 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
-import { schematicSvg, cupTint, FIELD_TINT } from '../shared/trackPicker.js';
+import { schematicSvg, cupTint, neutralTint, FIELD_TINT } from '../shared/trackPicker.js';
 import { seatGrid } from './NativeUiModel.js';
 
 const { CAR_COLORS, CAR_MODELS } = window;
@@ -72,27 +72,50 @@ export function renderSeats(listEl, seats) {
 // live lobby (renderLobbyPick in main.js) and the gallery preview for the same
 // no-drift reason. Two states:
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
-//   picked   : { name, races?, difficulty?, maps?, cupId? } → the race card:
-//              red cup sticker over the picked circuits as mini schematics
-//              (maps = [{ svg, n? }] — 4 numbered minis for a cup, 1 for an
-//              exact track / the random draw; cupId biome-tints their fields
-//              exactly like the phone picker), races pill + difficulty pips
-//              (0–4 filled; null hides the meter)
+//   picked   : { name, races?, raceCount?, difficulty?, maps?, cupId? }
+//              → the race card: red cup sticker over the picked circuits as mini
+//              schematics (maps = [{ svg?, n?, q?, glyph?, cup? }] — 4 numbered
+//              minis for a cup, 1 for an exact track, the tour's five per-cup
+//              chips; cupId biome-tints their fields exactly like the phone
+//              picker, a chip's own `cup` outranks it; a q chip shows `glyph`
+//              or "?"), races pill + difficulty pips (0–4 filled; null hides
+//              the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
   if (!picked) return;
   slotEl.querySelector('.cup-sticker').textContent = state.name;
   const mapsEl = slotEl.querySelector('.cup-maps');
-  const maps = (state.maps || []).filter((m) => m && m.svg);
+  // The model names the KNOWN circuits (a chip with q and no svg is an undrawn
+  // race). A counted card shows one box per race, so boxes past the known maps
+  // pad out as "?" placeholders — that's the random card's not-yet-drawn races.
+  // A known chip whose schematic is missing (dev mid-rebuild) still just costs
+  // its picture.
+  const maps = (state.maps || []).filter((m) => m && (m.q || m.svg));
+  if (state.raceCount) while (maps.length < state.raceCount) maps.push({ q: true });
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
   mapsEl.classList.toggle('cup-maps--one', maps.length === 1);
+  mapsEl.classList.toggle('cup-maps--five', maps.length === 5);
+  mapsEl.classList.toggle('cup-maps--many', maps.length >= 6);
   const tint = state.cupId ? cupTint(state.cupId, FIELD_TINT) : undefined;
   for (const m of maps) {
     const tile = document.createElement('div');
     tile.className = 'cup-maps__tile';
-    tile.appendChild(schematicSvg(m.svg, tint));
+    if (m.q) {
+      // An undrawn race: its own cup's wash when the chip names one (the
+      // tour), the picker's neutral grey when the cup is unknown too (a
+      // random run's later races). Never the card-level tint — an unknown
+      // must not borrow the drawn race's colour. The glyph is "?" unless the
+      // chip says otherwise (endless carries ∞).
+      tile.classList.add('cup-maps__tile--q');
+      tile.style.background = m.cup ? cupTint(m.cup, FIELD_TINT) : neutralTint(FIELD_TINT);
+      const q = document.createElement('span');
+      q.textContent = m.glyph || '?';
+      tile.appendChild(q);
+    } else {
+      tile.appendChild(schematicSvg(m.svg, m.cup ? cupTint(m.cup, FIELD_TINT) : tint));
+    }
     if (m.n != null) {
       const n = document.createElement('span');
       n.className = 'cup-maps__n';

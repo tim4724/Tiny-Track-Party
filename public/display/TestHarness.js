@@ -317,11 +317,17 @@ export function runDisplayScenario(opts, ctx) {
           maps: [mapOf(id)], cupId: cup && cup.id
         };
       } else if (mode === 'random') {
-        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[1].tracks[0];
-        const cup = cupOf(id);
-        // the default card, not the endless run — the gallery previews what a
-        // 🎲 tap actually lands on (only race 1 is drawn yet, hence one mini)
-        state = { name: 'Random', races: '4 races', difficulty: null, maps: [mapOf(id)], cupId: cup && cup.id };
+        // the default-length card — the gallery previews raceCount grey "?"
+        // boxes (the card spoils nothing, the drawn race included), same as
+        // the live slot
+        const n = window.RANDOM_RACES.DEFAULT;
+        state = { name: 'Random', races: `${n} races`, raceCount: n, difficulty: null, maps: [] };
+      } else if (mode === 'tour') {
+        // the World Tour card: one "?" per cup, each wearing its cup's wash
+        state = {
+          name: 'World Tour', races: `${CUPS.length} races`, difficulty: null,
+          maps: CUPS.map((c) => ({ q: true, cup: c.id }))
+        };
       } else {
         const cup = (qTrack && cupOf(qTrack)) || CUPS[0];
         const first = TRACK_LIST.find((t) => t.cup === cup.id);

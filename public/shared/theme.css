@@ -262,6 +262,26 @@ body {
 .track-map__casing { fill: none; stroke: #fff; stroke-width: 23; stroke-linejoin: round; stroke-linecap: round; }
 .track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 14; stroke-linejoin: round; stroke-linecap: round; }
 .track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 4; }
+/* A schematic-less variant: the same field carrying a glyph ("?", ∞, or the
+   tour's drawn ring) instead of a ribbon — the picker's random-family tiles
+   wear it so they keep a track tile's exact footprint. The wash is set inline
+   (the neutral grey). */
+.track-map--q {
+  display: grid; place-items: center;
+  container-type: inline-size;
+  font-family: var(--font-display); font-weight: 700;
+  /* fallback for engines without container queries; the child rule below is
+     the real size */
+  font-size: 2.2rem; line-height: 1; color: var(--ink);
+}
+/* the glyph tracks its BOX — roughly a third of the square at any width */
+.track-map--q > span, .track-map--q > i { font-size: 34cqw; }
+/* the tour's ring: drawn, so its stroke matches the ∞'s ink weight on every
+   platform (no circle codepoint does across fallback fonts) */
+.track-map--q > i {
+  width: 1em; aspect-ratio: 1 / 1; border-radius: 50%;
+  border: 0.16em solid currentColor;
+}
 
 /* Dot — a livery colour swatch; set its background inline from CAR_COLORS. */
 .dot {

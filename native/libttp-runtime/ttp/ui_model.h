@@ -240,21 +240,24 @@ int cupTendency(const CupDef& cup);
 std::vector<Cup> shippedCups();
 std::vector<CatalogEntry> shippedCatalog();
 
-enum class PickMode { NONE, CUP, TRACK, RANDOM };
+enum class PickMode { NONE, CUP, TRACK, RANDOM, TOUR };
 PickMode pickModeOf(const OptStr& mode);
 
 // What the card's NAME is, and how many races the pick means. Keys, not copy.
-enum class NameKey { CUP, TRACK, RANDOM };
+enum class NameKey { CUP, TRACK, RANDOM, TOUR };
 enum class RacesKey { COUNT, ONE, ENDLESS };
 const char* key(NameKey k);
 const char* key(RacesKey k);
 
 // A circuit to draw as a mini, BY TRACK ID; the schematic payload is the
 // shell's to look up. A cup numbers them (n = 1..4) — that numbering is the GP
-// menu at a glance and belongs to the model.
+// menu at a glance and belongs to the model. A chip with NO trackId is an
+// undrawn race — the shell shows a "?" placeholder — and `cup` (the tour's
+// per-race cup) is what lets it wear that cup's colour anyway.
 struct MapChip {
   OptStr trackId;
   OptNum n;
+  OptStr cup;
 };
 struct CupSlot {
   NameKey nameKey = NameKey::CUP;
@@ -269,8 +272,9 @@ struct CupSlot {
 //
 // randomRaces is the RANDOM mode's run length: 0 endless, a positive integer
 // that many races. Absent (or any non-positive non-integer) reads as endless,
-// which is what `random` meant before run lengths existed. It is ignored by the
-// other two modes — a cup's count is its track list and a track pick is one race.
+// which is what `random` meant before run lengths existed. It is ignored by
+// every other mode — a cup's count is its track list, a track pick is one race,
+// and the TOUR's count is the cup list itself (one race per cup).
 bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
              const OptNum& randomRaces,
              const std::vector<Cup>& cups, const std::vector<CatalogEntry>& catalog,

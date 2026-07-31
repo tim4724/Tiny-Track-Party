@@ -99,7 +99,7 @@ let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] — snap
 let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
 let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
-let selectedMode = null;   // current pick {mode:'track'|'cup'|'random', trackId?, cupId?} (host-controlled, echoed to all)
+let selectedMode = null;   // current pick {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?} (host-controlled, echoed to all)
 let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
@@ -517,6 +517,7 @@ function renderModePicker() {
 function modeInCatalog(m) {
   if (!m) return false;
   if (m.mode === 'random') return true;
+  if (m.mode === 'tour') return trackCatalog.some((t) => t.cup); // needs cups to tour
   if (m.mode === 'cup') return trackCatalog.some((t) => t.cup === m.cupId);
   if (m.mode === 'track') return trackCatalog.some((t) => t.id === m.trackId);
   return false;
@@ -555,8 +556,9 @@ function chooseMode(pick) {
   const same = cur.mode === pick.mode
     && (pick.mode === 'cup' ? cur.cupId === pick.cupId
       : pick.mode === 'track' ? cur.trackId === pick.trackId
-        // Random is never filtered: a tap that changes the length changes the
-        // pick, and one that doesn't re-rolls the draw. Both need the display.
+        // The random family is never filtered: a tap that changes the run
+        // changes the pick, and EVERY tap — same pick included — deals fresh
+        // track(s). Both need the display.
         : false);
   if (same) return;
   selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth

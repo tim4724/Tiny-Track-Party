@@ -24,6 +24,15 @@ test('boot shows the welcome board with the room pre-warmed; NEW GAME reveals th
   // Same room — the click revealed the pre-warmed lobby, it didn't create anything.
   expect(await page.evaluate(() => window.__net.roomCode)).toBe(roomCode);
   await expect(page.locator('#joinurl')).toContainText(roomCode);
+
+  // The lobby attracts from its first frame: the 3D preview (the remembered
+  // last pick, or the first track on a fresh display) reveals BEFORE any phone
+  // joins. No pick exists yet — it's a preview, and Start stays gated.
+  expect(await page.evaluate(() => window.__net.mode)).toBe(null);
+  await page.waitForFunction(
+    () => !document.getElementById('scene').classList.contains('is-dim'),
+    null, { timeout: 20000 }
+  );
 });
 
 test('back from the lobby ends the party: phones bail, a fresh room with a clean roster warms', async ({ page, browser }) => {
@@ -75,8 +84,9 @@ test('back from a race returns to the lobby (same reset as "New game"), party in
   await page.waitForSelector(visible('#welcome'));
   await alice.waitForSelector(visible('#conn'), { timeout: 15000 });
 
-  // Ending the party also resets the pick: the title board (and the next
-  // lobby) sits on the 2D diorama again, not the dead party's track preview.
+  // Ending the party also resets the PICK (mode/track null again): the title
+  // board sits on the 2D diorama. The 3D preview itself deliberately survives
+  // for the next lobby's attract race — only the welcome screen dims it.
   expect(await page.evaluate(() => ({
     mode: window.__net.mode, track: window.__net.trackId,
     dioramaShowing: document.getElementById('scene').classList.contains('is-dim')

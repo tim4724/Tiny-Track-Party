@@ -1,7 +1,7 @@
 // Mode picker UI — how the host picks what to race: a Cup (its 4 tracks
-// back-to-back as a Grand Prix), 🎲 Random (a run of display-drawn tracks,
-// endless or a fixed card), or — from the panel a picked cup opens — one exact
-// track (single race). Six
+// back-to-back as a Grand Prix), 🎲 Random (a run of display-drawn tracks:
+// endless, a fixed card, or the World Tour — one draw from every cup), or —
+// from the panel a picked cup opens — one exact track (single race). Six
 // compact tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
 // from the schematic catalog the display ships in WELCOME (each entry carries
 // its cup + a top-down SVG path; see native/libttp-track/ttp/schematic.h). Only the HOST
@@ -74,32 +74,43 @@ const NEUTRAL_COLOR = '#8C8398';
 // out of it — and protocol.js is a classic script that publishes onto `window`,
 // which those importers do not have. Read at RENDER time it is browser-only by
 // construction, and a missing manifest says so instead of yielding undefined.
-const randomDefaultRaces = () => {
+const randomManifest = () => {
   const m = globalThis.RANDOM_RACES;
   if (!m) throw new Error('trackPicker: protocol.js must be loaded before the picker renders');
-  return m.DEFAULT;
+  return m;
 };
+const randomDefaultRaces = () => randomManifest().DEFAULT;
 
 //
-// THE FINITE LENGTH IS THE MANIFEST'S, and its LABEL is built from the same
-// number. It was a bare `4` here while `randomDefaultRaces()` below read
-// `RANDOM_RACES.DEFAULT` — the two ends of one value in ONE file, disagreeing
-// the moment the manifest moved: a host tapping Random would get the manifest's
-// length, while the tile beside it still said "4 races" and set 4 on tap.
-// Deriving it is what makes "a manifest number, not private copies" true rather
-// than aspirational.
+// BOTH FINITE LENGTHS ARE THE MANIFEST'S, and each LABEL is built from the
+// same number it sets. The short card was once a bare `4` here while
+// `randomDefaultRaces()` read `RANDOM_RACES.DEFAULT` — the two ends of one
+// value in ONE file, disagreeing the moment the manifest moved: a host tapping
+// Random would get the manifest's length, while the tile beside it still said
+// "4 races" and set 4 on tap. Deriving them is what makes "a manifest number,
+// not private copies" true rather than aspirational.
 //
 // A FUNCTION for the same reason `randomDefaultRaces` is one: this module is
 // imported by Node (the track-defs codegen, ui-model.test.js) for its cup
 // colours, and those importers have no `window` for protocol.js to publish on.
 export const randomLengths = () => {
-  const n = randomDefaultRaces();
+  const m = randomManifest();
   return [
-    { randomRaces: n, label: `${n} races`, sub: 'then a podium' },
-    { randomRaces: 0, label: 'Endless', sub: 'no last race' }
+    { randomRaces: m.DEFAULT, label: `${m.DEFAULT} races`, glyph: '?' },
+    // The long card is the manifest's CEILING worn as an option: the widest
+    // run the display accepts is also the longest one the picker sells, so
+    // the two can never drift apart.
+    { randomRaces: m.MAX, label: `${m.MAX} races`, glyph: '?' },
+    { randomRaces: 0, label: 'Endless', glyph: '∞' }
   ];
 };
 const randomSub = (n) => (n ? `${n} races` : 'endless');
+
+// The World Tour: one drawn track from EVERY cup, raced in the cups' own
+// (difficulty) order — a sampler card, and what the bare 🎲 tile lands on, so
+// it LEADS the panel the tile opens. It carries no knobs at all:
+// `{mode:'tour'}` is the whole pick.
+const TOUR_LABEL = 'World Tour';
 
 // How much colour a surface wears; `pct` is how much survives a mix with white.
 const PANEL_TINT = 45;  // the open cup's track panel: a surface behind cards, so deeper than they are
@@ -112,6 +123,13 @@ const towardWhite = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, #fff)`
 // way, so the two surfaces can't drift.
 export function cupTint(cupId, pct) {
   return towardWhite(CUP_COLOR[cupId] || CUP_COLOR_FALLBACK, pct);
+}
+
+// The neutral "no cup" grey as a wash — exported for the display's cup slot,
+// whose unknown-cup "?" chips wear it (same single source as the 🎲 tile's own
+// fill above, so "belongs to no cup" is one colour everywhere).
+export function neutralTint(pct) {
+  return towardWhite(NEUTRAL_COLOR, pct);
 }
 
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
@@ -221,10 +239,11 @@ function modeTile({ label, glyph, sub, meter, mine, pickTint, canPick, onTap }) 
 
 // Render the picker into `stripEl`.
 //   catalog   : [{ id, name, svg, cup, cupName, cupDifficulty }] (from the display)
-//   selection : {mode:'track'|'cup'|'random', trackId?, cupId?, randomRaces?} | null
+//   selection : {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} | null
 //   canPick   : whether taps are live (host only)
-//   onPickMode: ({mode, trackId?, cupId?, randomRaces?}) => void — also fired by a
-//               re-tap on Random (the display re-rolls the draw), so don't filter it here.
+//   onPickMode: ({mode, trackId?, cupId?, randomRaces?}) => void — every
+//               random-family tap fires, same pick or not: each one deals fresh
+//               track(s) on the display, so don't filter them.
 // A catalog whose entries predate cups collapses to a flat grid of exact picks.
 export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMode }) {
   if (!stripEl) return;
@@ -258,11 +277,15 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   const ownerOf = (id) => { const t = list.find((x) => x.id === id); return t ? t.cup : null; };
   const expanded = sel.mode === 'cup' ? sel.cupId : sel.mode === 'track' ? ownerOf(sel.trackId) : null;
 
-  // The length a Random tap carries: whatever it's already set to, so tapping the
-  // tile re-rolls the draw without also resetting the run's shape. A selection
-  // with no length at all (a phone whose stored pick predates them) takes the
-  // default, so 0 has to be tested for rather than falsy-checked — it's endless,
-  // not "unset".
+  // Random and the World Tour are one FAMILY: both live on the 🎲 tile, whose
+  // panel offers the run lengths and the tour side by side.
+  const randomFamily = sel.mode === 'random' || sel.mode === 'tour';
+  // The length a Random tap carries: whatever it's already set to, so tapping
+  // the main tile re-rolls the draw without also resetting the run's shape. A
+  // selection with no length at all (a phone whose stored pick predates them, or
+  // a tour pick — the display echoes the tour's own race count, which is not a
+  // run length) takes the default, so 0 has to be tested for rather than
+  // falsy-checked — it's endless, not "unset".
   const randomRaces = sel.mode === 'random' && Number.isInteger(sel.randomRaces)
     ? sel.randomRaces : randomDefaultRaces();
 
@@ -289,36 +312,80 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   // reads as what it is — the thing you reach for once the five named cups aren't
   // what you want.
   grid.appendChild(modeTile({
-    label: 'Random', glyph: '🎲', sub: randomSub(randomRaces),
-    mine: sel.mode === 'random',
+    label: 'Random', glyph: '🎲', sub: sel.mode === 'random' ? randomSub(randomRaces) : TOUR_LABEL.toLowerCase(),
+    mine: randomFamily,
     // Belonging to no cup, it has no colour of its own — a neutral grey stands in so it
     // still wears the same fill-and-drop mark the cups do.
     pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
     canPick,
-    onTap: () => pick({ mode: 'random', randomRaces })  // re-tap re-rolls — deliberately not filtered
+    // From outside the family the tile lands on its DEFAULT, the World Tour.
+    // Inside it, it re-sends the current pick — which, like every family tap,
+    // deals fresh track(s) on the display.
+    onTap: () => pick(sel.mode === 'random'
+      ? { mode: 'random', randomRaces }
+      : { mode: 'tour' })
   }));
   stripEl.appendChild(grid);
 
-  // Picked Random opens a panel of its own, in the same slot and the same inset
-  // surface a cup's four tracks open into — one panel position, so the picker
-  // never grows a second place to look. Where a cup panel asks WHICH track, this
-  // one asks HOW LONG.
-  if (sel.mode === 'random') {
+  // A picked Random opens a panel of its own, in the same slot, the same inset
+  // surface AND the same tile grid a cup's four tracks open into — four tiles
+  // in a row, each a "?" square where a schematic would sit, so swapping a cup
+  // for Random moves nothing on the phone. Where a cup panel asks WHICH track,
+  // this one asks WHAT KIND OF RUN: the tour (the tile's default, so it leads),
+  // then the two lengths and endless.
+  if (randomFamily) {
     const panel = document.createElement('div');
     panel.className = 'modepick__tracks';
     panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
-    const opts = document.createElement('div');
-    opts.className = 'modepick__opts';
+    const tgrid = document.createElement('div');
+    tgrid.className = 'trackpick__grid';
+    const qTile = ({ label, glyph, mine, onTap }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
+      if (mine) {
+        btn.setAttribute('aria-current', 'true');
+        btn.style.background = towardWhite(NEUTRAL_COLOR, PICK_TINT);
+      }
+      btn.setAttribute('aria-label', label);
+      btn.disabled = !canPick;
+      const box = document.createElement('span');
+      box.className = 'track-map track-map--q';
+      box.style.background = towardWhite(NEUTRAL_COLOR, FIELD_TINT);
+      if (glyph) {
+        const g = document.createElement('span');
+        g.textContent = glyph;
+        box.appendChild(g);
+      } else {
+        // No glyph = the tour's ring, DRAWN rather than typed: no circle
+        // codepoint matches the ∞'s ink weight across the fonts phones fall
+        // back to, so the theme draws one that does (.track-map--q > i).
+        box.appendChild(document.createElement('i'));
+      }
+      btn.appendChild(box);
+      const lab = document.createElement('span');
+      lab.className = 'track-opt__name';
+      lab.textContent = label;
+      btn.appendChild(lab);
+      if (canPick && onTap) btn.addEventListener('click', onTap);
+      return btn;
+    };
+    tgrid.appendChild(qTile({
+      // No glyph: the tour wears the drawn ring — a plain circle in the same
+      // ink family as ? and ∞, where the globe emoji clashed with the sticker
+      // look and rendered differently on every phone.
+      label: TOUR_LABEL,
+      mine: sel.mode === 'tour',
+      onTap: () => pick({ mode: 'tour' })
+    }));
     for (const o of randomLengths()) {
-      opts.appendChild(modeTile({
-        label: o.label, sub: o.sub,
-        mine: randomRaces === o.randomRaces,
-        pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
-        canPick,
+      tgrid.appendChild(qTile({
+        label: o.label, glyph: o.glyph,
+        mine: sel.mode === 'random' && randomRaces === o.randomRaces,
         onTap: () => pick({ mode: 'random', randomRaces: o.randomRaces })
       }));
     }
-    panel.appendChild(opts);
+    panel.appendChild(tgrid);
     stripEl.appendChild(panel);
   }
 

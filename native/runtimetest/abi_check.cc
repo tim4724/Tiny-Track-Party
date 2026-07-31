@@ -3086,18 +3086,21 @@ void netWalksMatchMultiCallPath() {
     literalEffects(rnd, wantTail(drew), "pick/random-drawn");
     pickIs(pickJson("\"random\"", "null", 4, drew), "the drawn card is stored");
 
-    // Changing only the LENGTH keeps the drawn track — no fresh draw.
-    Value keep = walkOf(ttp_net_on_peer_message_json(
-                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
-                                              "\"randomRaces\":0}",
-                            0, 3500),
-                        "select_mode keepdraw");
-    literalEffects(keep, wantTail(drew), "pick/keepdraw");
-    pickIs(pickJson("\"random\"", "null", 0, drew), "the length changed, the track did not");
+    // Changing only the LENGTH deals a fresh draw too (the keep-the-draw rule
+    // retired with the card that showed its tracks): a full tail over
+    // whatever the bag turned up.
+    Value len = walkOf(ttp_net_on_peer_message_json(
+                           walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"random\","
+                                             "\"randomRaces\":0}",
+                           0, 3500),
+                       "select_mode length change");
+    const std::string drew2 = drawnTrackOf(len, "pick/length-change");
+    literalEffects(len, wantTail(drew2), "pick/length-change");
+    pickIs(pickJson("\"random\"", "null", 0, drew2), "the length changed and the track re-dealt");
 
     // An out-of-range length clamps to the manifest default (ceiling, not range:
     // the 0 above already proved endless survives). Staged back to a TRACK pick
-    // so the draw branch runs rather than keepDraw.
+    // first so the case owns its starting state.
     setPick("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\","
             "\"hasBag\":true}");
     Value clamp = walkOf(ttp_net_on_peer_message_json(
@@ -3152,6 +3155,41 @@ void netWalksMatchMultiCallPath() {
     literalEffects(stillBagged, wantTail(drawnTrackOf(stillBagged, "pick/after-clear")),
                    "pick/after-clear");
 
+    // The World Tour: one call, the draw RESTRICTED to the first cup (beach in
+    // this chooser), and the CUP COUNT stored as the run length — what makes
+    // drawsNeeded's shared everything-past-race-1 formula hold at Start.
+    Value tour = walkOf(ttp_net_on_peer_message_json(
+                            walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"tour\"}",
+                            0, 3750),
+                        "select_mode tour");
+    const std::string tourDrew = drawnTrackOf(tour, "pick/tour");
+    check(tourDrew == "tidepool" || tourDrew == "lagoon",
+          "pick/tour draws from the FIRST cup only, got " + tourDrew);
+    literalEffects(tour, wantTail(tourDrew), "pick/tour-drawn");
+    pickIs(pickJson("\"tour\"", "null", 2, tourDrew),
+           "tour stores the chooser's cup count as its length");
+
+    // A same-pick tour message RE-ROLLS rather than no-ops — the phone filters
+    // its own same-taps, so one arriving is the main 🎲 tile's deliberate
+    // reroll. The shuffle may deal the same card again; the contract is that
+    // the walk answers a full tail (it drew) instead of an empty one.
+    Value retour = walkOf(ttp_net_on_peer_message_json(
+                              walkRoom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"tour\"}",
+                              0, 3760),
+                          "select_mode tour re-tap");
+    const std::string retourDrew = drawnTrackOf(retour, "pick/tour-reroll");
+    check(retourDrew == "tidepool" || retourDrew == "lagoon",
+          "pick/tour reroll stays in the first cup, got " + retourDrew);
+    literalEffects(retour, wantTail(retourDrew), "pick/tour-reroll-tail");
+
+    // A bagless room refuses the tour exactly as it refuses random.
+    setPick("{\"mode\":null,\"trackId\":null,\"hasBag\":false}");
+    Value tourBagless = walkOf(ttp_net_on_peer_message_json(
+                                   walkRoom, 0, "1",
+                                   "{\"type\":\"select_mode\",\"mode\":\"tour\"}", 0, 3770),
+                               "select_mode tour bagless");
+    literalEffects(tourBagless, Value::Arr(), "pick/tour-bagless");
+
     // The bag itself: a pure function of the seed it was handed, walking the
     // whole catalogue before any repeat. WHICH card comes first is the
     // shuffle's business and nothing here may pin it — what is contract is that
@@ -3176,9 +3214,24 @@ void netWalksMatchMultiCallPath() {
       const int c = ttp_room_create("{}");
       ttp_net_init_pick(c, nullptr, 0, 987654);
       check(ttp_live_bag_draw(c).empty(), "netwalk bag: a bagless room draws nothing");
+      // The cup-restricted draw (the tour's) rides the same seed machinery:
+      // deterministic, confined to its cup, empty for a cup that isn't there.
+      const int d = ttp_room_create("{}");
+      const int e = ttp_room_create("{}");
+      ttp_net_init_pick(d, nullptr, 1, 424242);
+      ttp_net_init_pick(e, nullptr, 1, 424242);
+      const std::string cupCard = ttp_live_bag_draw_cup(d, "beach");
+      check(cupCard == ttp_live_bag_draw_cup(e, "beach"),
+            "netwalk bag: the cup draw deals by seed too");
+      check(cupCard == "tidepool" || cupCard == "lagoon",
+            "netwalk bag: the cup draw stays inside its cup");
+      check(ttp_live_bag_draw_cup(d, "nowhere").empty(),
+            "netwalk bag: an unknown cup draws nothing");
       ttp_room_dispose(a);
       ttp_room_dispose(b);
       ttp_room_dispose(c);
+      ttp_room_dispose(d);
+      ttp_room_dispose(e);
     }
 
     ttp_room_events_json(walkRoom);
@@ -4409,6 +4462,102 @@ void raceLiveWalks() {
     ttp_gp_dispose(oracle);
     ttp_dispose(live);
     ttp_dispose(twin);
+  }
+
+  // ---- the WORLD TOUR: one draw per cup, in cup order -------------------------
+  {
+    // A two-cup world of its own — the tour is about cup ORDER, and alpine
+    // holding a single track makes the cup-restricted draw an equality rather
+    // than a plausibility.
+    ttp_net_configure(
+        "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\"],"
+        "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
+        "{\"id\":\"helix\",\"name\":\"Helix\",\"cup\":\"beach\"},"
+        "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\"}]}");
+    Value w2 = Value::Obj();
+    w2.set("fieldSize", Value::Num(4));
+    w2.set("carCount", Value::Num(12));
+    w2.set("colorCount", Value::Num(12));
+    w2.set("aiPrefix", Value::Str("ai-"));
+    w2.set("carStats", carStats);
+    Value cups2 = Value::Arr();
+    {
+      Value beach = Value::Obj();
+      beach.set("id", Value::Str("beach"));
+      beach.set("name", Value::Str("Beach"));
+      Value bt = Value::Arr();
+      bt.push(Value::Str("tidepool"));
+      bt.push(Value::Str("helix"));
+      beach.set("tracks", std::move(bt));
+      cups2.push(std::move(beach));
+      Value alpine = Value::Obj();
+      alpine.set("id", Value::Str("alpine"));
+      alpine.set("name", Value::Str("Alpine"));
+      Value atr = Value::Arr();
+      atr.push(Value::Str("summit"));
+      alpine.set("tracks", std::move(atr));
+      cups2.push(std::move(alpine));
+    }
+    w2.set("cups", std::move(cups2));
+    check(ttp_race_configure(canonical_stringify(w2).c_str()) == 1,
+          "tour: the two-cup world configured");
+
+    const int troom = ttp_room_create("{}");
+    ttp_room_add_player(troom, "1",
+                        "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+    ttp_net_init_pick(troom, nullptr, 1, 314159);
+    ttp_room_events_json(troom);
+
+    walkOf(ttp_net_on_peer_message_json(troom, 0, "1",
+                                        "{\"type\":\"select_mode\",\"mode\":\"tour\"}", 0, 5000),
+           "select tour");
+    ttp_room_events_json(troom);
+    const Value pick = parseOrNull(ttp_net_pick_json(troom), "tour pick");
+    const std::string race1 = json::str_field(pick, "trackId");
+    check(race1 == "tidepool" || race1 == "helix",
+          "tour pick: race 1 is a BEACH draw (" + race1 + ")");
+    check(json::num_field(pick, "randomRaces") == 2, "tour pick: the length is the cup count");
+
+    // The ui race card for that pick: every chip undrawn — the card spoils
+    // nothing, the beach draw included — exact spelling, the `cup` key
+    // present only where a chip carries one.
+    check(ttp_ui_configure(
+              "{\"maxPlayers\":4,\"carCount\":12,"
+              "\"cups\":[{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\",\"helix\"]},"
+              "{\"id\":\"alpine\",\"name\":\"Alpine\",\"tracks\":[\"summit\"]}],"
+              "\"catalog\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\","
+              "\"cupDifficulty\":1},"
+              "{\"id\":\"helix\",\"name\":\"Helix\",\"cup\":\"beach\",\"cupDifficulty\":1},"
+              "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\",\"cupDifficulty\":4}]}") ==
+              1,
+          "tour: the ui world configured");
+    const std::string slot = ttp_ui_cup_slot_json(
+        ("{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"" + race1 + "\",\"randomRaces\":2}")
+            .c_str());
+    const std::string wantSlot =
+        "{\"nameKey\":\"tour\",\"name\":null,\"racesKey\":\"count\",\"raceCount\":2,"
+        "\"difficulty\":null,\"maps\":[{\"trackId\":null,\"cup\":\"beach\"},"
+        "{\"trackId\":null,\"cup\":\"alpine\"}],\"cupId\":null}";
+    check(slot == wantSlot, "tour: the race card spells the per-cup chips\n  want " + wantSlot +
+                                "\n  got  " + slot);
+
+    // Start: the later races' draws are cup-restricted, and alpine has exactly
+    // one track, so race 2 is an equality.
+    const Value got = parseOrNull(ttp_race_start_live_json(troom, 1, 11, 3, nullptr, nullptr),
+                                  "start tour");
+    check(json::str_field(got, "action") == "launch", "a tour pick launches");
+    const Value st = parseOrNull(ttp_race_series_state_json(troom), "tour series");
+    check(st.type == Value::OBJ, "the tour stood a series up behind the room");
+    check(json::str_field(at(st, "cup"), "id") == "tour" &&
+              json::str_field(at(st, "cup"), "name") == "World Tour",
+          "…named as the World Tour");
+    check(!json::truthy(st.find("endless")), "…a fixed card, not an endless run");
+    const Value tracks = at(at(st, "cup"), "tracks");
+    check(tracks.arr.size() == 2 && tracks.arr[0].type == Value::STR &&
+              tracks.arr[0].str == race1 && tracks.arr[1].type == Value::STR &&
+              tracks.arr[1].str == "summit",
+          "…race 1 is the beach draw, race 2 is ALPINE's own track — one per cup, in cup order");
+    ttp_room_dispose(troom);
   }
 
   ttp_room_dispose(room);

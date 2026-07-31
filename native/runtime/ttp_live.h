@@ -37,4 +37,8 @@ std::vector<ttp::rt::ui::RosterEntry> ttp_live_roster_players(int roomHandle,
 // and the race start/return/apply walks.
 std::string ttp_live_bag_draw(int roomHandle);
 
+// The same bag rng RESTRICTED to one cup's tracks (the World Tour's draws) —
+// advances the seed, leaves the global deck alone. Same "" refusals.
+std::string ttp_live_bag_draw_cup(int roomHandle, const std::string& cupId);
+
 #endif  // TTP_LIVE_H

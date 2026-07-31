@@ -398,6 +398,7 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
     Value e = Value::Obj();
     e.set("trackId", valOf(m.trackId));
     if (m.n.has) e.set("n", Value::Num(m.n.v));   // only a cup numbers its minis
+    if (m.cup.has) e.set("cup", Value::Str(m.cup.v));   // only the tour cups its chips
     maps.push(e);
   }
   o.set("maps", maps);

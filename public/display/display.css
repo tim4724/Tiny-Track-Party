@@ -127,12 +127,38 @@ html, body {
   box-shadow: var(--shadow-card);
 }
 /* the picked circuits as mini schematics — a 2×2 grid for a cup's four races
-   (numbered), one full-width map for an exact pick / the random draw */
+   (numbered), one full-width map for an exact pick. The random family spoils
+   nothing: a counted card is raceCount grey "?" boxes, endless a single grey
+   ∞ box, and the World Tour one cup-tinted "?" per cup on a 3-wide grid (the
+   ladder itself). The --five/--many variants are BOX-COUNT layouts, not mode
+   hooks — a bigger cup roster degrades to the denser grid by itself. */
 .cup-maps { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
 .cup-maps--one { grid-template-columns: 1fr; }
 .cup-maps--one .track-map { max-width: 72%; margin: 0 auto; }
+.cup-maps--one .cup-maps__tile--q { width: 72%; margin: 0 auto; }
+.cup-maps--five { grid-template-columns: repeat(3, 1fr); }
+/* the long random card: 8 "?" boxes shrink to a 4-wide strip of pips */
+.cup-maps--many { grid-template-columns: repeat(4, 1fr); }
 .cup-maps__tile { position: relative; }
 .cup-maps__tile .track-map { border: 2.5px solid var(--ink); }
+/* an undrawn race: same footprint as a mini under a big "?". The wash is set
+   inline — its cup's colour, or the picker's neutral grey when even the cup
+   is unknown (lobbySeats.js, single-sourced from trackPicker's palette). */
+.cup-maps__tile--q {
+  aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  border: 2.5px solid var(--ink); border-radius: var(--r-sm);
+  container-type: inline-size;
+  font-family: var(--font-display); font-weight: 700;
+  /* fallback size for engines without container queries; the span rule below
+     is the real one. line-height 1 keeps ∞ (whose glyph box rides high)
+     truly centred */
+  font-size: clamp(1.5rem, 5vh, 3.2rem); line-height: 1; color: var(--ink);
+}
+/* the glyph tracks its own BOX, not the card: a third of the tile whether
+   that tile is the endless card's lone big square or one of the long card's
+   eight small ones */
+.cup-maps__tile--q span { font-size: 34cqw; }
 .cup-maps__n {
   position: absolute; top: -6px; left: -6px;
   min-width: 1.5em; text-align: center;

@@ -232,11 +232,9 @@ input[type=text]:disabled { opacity: 0.6; }
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
-/* Random's panel holds run LENGTHS, not tracks — the same inset surface (neutral
-   grey, since Random belongs to no cup), the same tiles, two across instead of four
-   so the labels are words rather than map thumbnails. */
-.modepick__opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.45rem; }
-.modepick__opts .mode-opt { border-width: 2px; padding: 0.35rem 0.3rem; }
+/* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
+   anatomy — a "?" square (.track-map--q) where a schematic would sit — so
+   swapping a cup for Random moves nothing below the picker. */
 .modepick__tracks .track-opt { padding: 0.3rem 0.25rem 0.35rem; border-width: 2px; }
 .modepick__tracks .track-opt__name { font-size: 0.64rem; }
 /* difficulty TENDENCY meter — 4 pips, the first `data-level` filled RED

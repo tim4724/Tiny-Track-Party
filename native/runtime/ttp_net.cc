@@ -537,6 +537,62 @@ std::string bagDraw(int roomHandle) {
   return out;
 }
 
+// The chooser's cup ids, first-appearance order — which IS difficulty order,
+// the catalogue being cups-order flattened. Cupless tracks contribute nothing.
+std::vector<std::string> chooserCups() {
+  std::vector<std::string> cups;
+  const Value* tracks = g_chooser.find("tracks");
+  if (tracks && tracks->type == Value::ARR) {
+    for (const Value& t : tracks->arr) {
+      if (t.type != Value::OBJ) continue;
+      const Value* c = t.find("cup");
+      if (!c || c->type != Value::STR) continue;
+      bool seen = false;
+      for (const std::string& s : cups) if (s == c->str) { seen = true; break; }
+      if (!seen) cups.push_back(c->str);
+    }
+  }
+  return cups;
+}
+
+// A draw RESTRICTED to one cup, for the World Tour: a uniform pick over the
+// cup's own tracks off the bag's rng. It advances the seed exactly like
+// bagDraw but leaves the deck/cursor alone — the whole-catalogue
+// no-repeat-walk is the global draw's rule, and a four-track cup has no walk
+// worth keeping. Same refusal as bagDraw: an unseeded bag draws nothing.
+std::string bagDrawCup(int roomHandle, const std::string& cupId) {
+  Value bag = ttp_room_bag_value(roomHandle);
+  const Value* seedV = bag.find("seed");
+  if (!seedV || seedV->type != Value::NUM) return "";
+  std::vector<std::string> pool;
+  if (const Value* tracks = g_chooser.find("tracks"))
+    if (tracks->type == Value::ARR)
+      for (const Value& t : tracks->arr) {
+        if (t.type != Value::OBJ) continue;
+        const Value* c = t.find("cup");
+        if (!c || c->type != Value::STR || c->str != cupId) continue;
+        if (const Value* id = t.find("id"))
+          if (id->type == Value::STR) pool.push_back(id->str);
+      }
+  if (pool.empty()) return "";
+  const uint64_t rng = bagNext((uint64_t)seedV->num);
+  const std::string out = pool[rng % pool.size()];
+  // Rebuilt rather than set(): Value::set APPENDS, so re-setting "seed" would
+  // duplicate the key and find() would keep answering the OLD seed.
+  Value nb = Value::Obj();
+  nb.set("seed", Value::Num((double)(bagNext(rng) & 0xFFFFFFFFull)));
+  if (const Value* d = bag.find("deck"))
+    if (d->type == Value::ARR) {
+      Value dv = Value::Arr();
+      for (const Value& e : d->arr) if (e.type == Value::STR) dv.push(Value::Str(e.str));
+      nb.set("deck", std::move(dv));
+    }
+  if (const Value* curV = bag.find("cursor"))
+    if (curV->type == Value::NUM) nb.set("cursor", Value::Num(curV->num));
+  ttp_room_store_bag(roomHandle, std::move(nb));
+  return out;
+}
+
 // The catalogue is in CUPS order, so a cup's first entry is its race 1.
 const Value* firstCupTrackId(const Value* cupId) {
   const Value* tracks = g_chooser.find("tracks");
@@ -561,10 +617,13 @@ void storePickAndPush(int roomHandle, Value& effects, Value mode, Value cupId,
   effects.push(std::move(tc));
 }
 
-// _applyMode: the host's lobby pick — exact track, a cup (Grand Prix), or a
-// random draw. Validates, resolves the concrete trackId, and answers the
-// publish + preview swap. Same-pick taps no-op EXCEPT random, where a re-tap
-// re-rolls. Returns true when a draw is needed and none was supplied.
+// _applyMode: the host's lobby pick — exact track, a cup (Grand Prix), a
+// random draw, or the World Tour. Validates, resolves the concrete trackId,
+// and answers the publish + preview swap. Same-pick taps no-op EXCEPT the
+// random family (random/tour), where EVERY accepted message deals a fresh
+// draw. Returns true when a draw is needed and none was supplied — for
+// "tour" the caller must supply a FIRST-CUP draw (bagDrawCup), not a
+// whole-catalogue one.
 bool selectModeWalk(int roomHandle, const PeerId& from, const Value& msg,
                     const Value* drawnTrack, Value& effects) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
@@ -589,24 +648,29 @@ bool selectModeWalk(int roomHandle, const PeerId& from, const Value& msg,
       return false;
     storePickAndPush(roomHandle, effects, Value::Str(mode), orUndef(cupId), 0, *first);
   } else if (mode == "random") {
-    // A bagless shell (test surfaces) refuses random outright, keepDraw
-    // included — the old shell's `if (!drawRandomTrack) return` gate.
+    // A bagless shell (test surfaces) refuses random outright — the old
+    // shell's `if (!drawRandomTrack) return` gate.
     if (!json::truthy(mfind(pick, "hasBag"))) return false;
     const double randomRaces = normRandomRaces(mfind(msg, "randomRaces"));
-    const Value* curTrack = mfind(pick, "trackId");
-    const Value* curRR = mfind(pick, "randomRaces");
-    const double curRRn = (curRR && curRR->type == Value::NUM) ? curRR->num : 0;
-    // Changing the LENGTH keeps the drawn track — only the shape of the run
-    // changed, and re-rolling the preview under the host would read as the
-    // length button having picked a track. Every other random tap (the tile
-    // itself, or arriving from another mode) draws.
-    const bool keepDraw = curMode == "random" && randomRaces != curRRn &&
-                          curTrack && curTrack->type != Value::NUL;
-    if (keepDraw) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
-                                   randomRaces, *curTrack);
-    else if (drawnTrack) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
-                                          randomRaces, *drawnTrack);
+    // EVERY accepted random tap draws — a length change included. (The
+    // keep-the-draw-on-length-change rule retired 2026-07-31: the card shows
+    // no tracks any more, so a fresh draw no longer reads as the length
+    // button having picked a circuit.)
+    if (drawnTrack) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
+                                     randomRaces, *drawnTrack);
     else return true;  // needDraw: the bag is the shell's
+  } else if (mode == "tour") {
+    // The World Tour: one draw per cup, raced in cup order. The pick carries
+    // race 1's draw (the FIRST cup's — the caller restricts the supplied draw
+    // to it) and stores the cup count as randomRaces, which is what makes
+    // drawsNeeded's shared everything-past-race-1 formula hold at Start.
+    // Every accepted tour message draws afresh, a re-tap included.
+    if (!json::truthy(mfind(pick, "hasBag"))) return false;
+    const std::vector<std::string> cups = chooserCups();
+    if (cups.empty()) return false;   // a cupless catalogue has nothing to tour
+    if (drawnTrack) storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(),
+                                     static_cast<double>(cups.size()), *drawnTrack);
+    else return true;  // needDraw
   }
   return false;
 }
@@ -908,9 +972,17 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
     case ns::MessageAction::SELECT_MODE: {
       // A random pick that needs a draw takes it from the room's own bag and
       // completes in the same walk — the needDraw round trip died with the
-      // shell-side bag.
+      // shell-side bag. The tour's preview is race 1, so its draw comes from
+      // the FIRST cup only.
       if (selectModeWalk(roomHandle, from, msg, nullptr, effects)) {
-        const std::string drawn = bagDraw(roomHandle);
+        const Value* modeV = mfind(msg, "mode");
+        std::string drawn;
+        if (modeV && modeV->type == Value::STR && modeV->str == "tour") {
+          const std::vector<std::string> cups = chooserCups();
+          if (!cups.empty()) drawn = bagDrawCup(roomHandle, cups[0]);
+        } else {
+          drawn = bagDraw(roomHandle);
+        }
         if (!drawn.empty()) {
           const Value d = Value::Str(drawn);
           selectModeWalk(roomHandle, from, msg, &d, effects);
@@ -1094,3 +1166,6 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
 
 // The race walks' draws come from the same room-owned bag (ttp_live.h).
 extern "C++" std::string ttp_live_bag_draw(int roomHandle) { return bagDraw(roomHandle); }
+extern "C++" std::string ttp_live_bag_draw_cup(int roomHandle, const std::string& cupId) {
+  return bagDrawCup(roomHandle, cupId);
+}

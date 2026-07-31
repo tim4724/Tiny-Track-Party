@@ -83,10 +83,12 @@ const carChooser = CAR_MODELS.map((id, i) => {
 });
 const colorPalette = CAR_COLORS.slice();
 
-// No track is selected at first: the lobby shows the plain diorama and the host's
-// "Start race" stays disabled until they pick one. ?track=<id> preselects (dev /
-// gallery). `track` always holds valid geometry (the pick, or the first track as
-// a render default) so the scene + gallery always have something to draw.
+// No track is PICKED at first — the host's "Start race" stays gated until their
+// phone sends one — but the live lobby still previews a circuit from the first
+// frame (the last party's pick, remembered below). ?track=<id> preselects a real
+// pick (dev / gallery). `track` always holds valid geometry (the pick, the
+// preview, or the first track as a render default) so the scene + gallery
+// always have something to draw.
 const _trackParams = new URLSearchParams(location.search);
 // The ASSET SHOWROOM has one stage and only one (shared/devTracks.js's
 // `showroom`), so ?scenario=assets names it for you: the gallery passes it
@@ -221,6 +223,20 @@ if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
   if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
+// Only an EXPLICIT ?track= preselects a room PICK (DisplayNet's defaultTrackId
+// rule) — captured before the attract preview below widens selectedTrackId.
+const _defaultPickId = selectedTrackId;
+// The live lobby attracts from its first frame: preview the last party's
+// circuit (saved on every confirmed pick, below in onTrackChange), falling back
+// to the catalogue's first track — the easy cup's race 1. A PREVIEW, not a
+// pick: the room pick stays null, so Start stays gated until the host's phone
+// picks. Test surfaces and solo own their scenes and pick their own tracks.
+const LAST_TRACK_KEY = 'tinytrack_last_track';
+if (!selectedTrackId && !_isTestMode && !_isDebugSolo) {
+  let last = null;
+  try { last = localStorage.getItem(LAST_TRACK_KEY); } catch (_) {}
+  selectedTrackId = (last && built.has(last)) ? last : TRACK_LIST[0].id;
+}
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 
 // ---- scene ----
@@ -297,10 +313,11 @@ function selectTrack(id) {
 
 // Lobby backdrop: the sunny diorama is the persistent base layer; the 3D #scene sits over
 // it and is shown/hidden by OPACITY (.is-dim), not display, so it can crossfade straight in
-// over the diorama. No track picked (and not racing) → dim, so the diorama shows through.
+// over the diorama. The live lobby always has a preview track (the boot fallback above), so
+// in practice the diorama shows through only on test surfaces that boot without one.
 // The welcome board ALWAYS sits on the diorama (its copy is unreadable over a live
-// track), even if a pick exists — a phone picking while the TV is on the title
-// board, or a dev ?track= preselect. NEW GAME re-runs updateBackdrop to reveal.
+// track), even though a preview or pick exists behind it — NEW GAME re-runs
+// updateBackdrop to reveal the 3D attract race already running underneath.
 function backdropShow3D() {
   if (currentScreen === 'welcome') return false;
   return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
@@ -630,14 +647,19 @@ const net = new DisplayNet({
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
-  defaultTrackId: selectedTrackId,
+  defaultTrackId: _defaultPickId,
   // The random-track shuffle bag lives BEHIND THE ROOM now; what the shell
   // supplies is one page-entropy seed (DisplayNet hands it to init_pick).
   hasBag: true,
   // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
   // even when the resolved trackId didn't change (e.g. a mode switch landing
   // on the same circuit, where selectTrack early-returns).
-  onTrackChange: (id) => { selectTrack(id); renderLobbyPick(); },
+  onTrackChange: (id) => {
+    // Remember every confirmed pick's resolved circuit: it is what the NEXT
+    // party's lobby attracts on before anyone joins.
+    if (id && built.has(id)) { try { localStorage.setItem(LAST_TRACK_KEY, id); } catch (_) {} }
+    selectTrack(id); renderLobbyPick();
+  },
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; the ticket shows one
     // URL line with the trailing code highlighted in the accent colour.
@@ -810,20 +832,33 @@ function renderRoster(rosterSize, hostPeerIndex) {
 // hint under the ticket stays up for the whole lobby — joining is possible
 // until the race starts.
 // The slot's CONTENT is uiModel.cupSlot's — which name, how many races, the
-// difficulty pips, which circuits to draw as minis and how they're numbered. It
-// hands back keys plus data (never composed copy), so the two English strings
-// and the schematic lookup are all that stay here.
+// difficulty pips, which circuits to draw as minis and how they're numbered
+// (an undrawn race is a trackId-less chip). It hands back keys plus data
+// (never composed copy), so the few English strings and the schematic lookup
+// are all that stay here.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
+const NAME_COPY = { random: 'Random', tour: 'World Tour' };
 function renderLobbyPick() {
   const slot = el('cup-slot');
   if (!slot) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
   const m = ui.cupSlot(net.pick);
   renderCupSlot(slot, m && {
-    name: m.nameKey === 'random' ? 'Random' : (m.name || '?'),
+    name: NAME_COPY[m.nameKey] || m.name || '?',
     races: RACES_COPY[m.racesKey](m.raceCount),
+    // raceCount sizes the maps grid (renderCupSlot pads a counted card's
+    // not-yet-drawn races with "?" boxes); endless is a single ∞ box. RANDOM
+    // only — a cup's racesKey is 'count' too, and a cup card must never pad
+    // (a chip with a missing schematic just costs its picture, not a "?").
+    raceCount: m.nameKey === 'random' && m.racesKey === 'count' ? m.raceCount : null,
     difficulty: m.difficulty,
-    maps: m.maps.map((x) => ({ svg: svgOf(x.trackId), n: x.n })),
+    // Random spoils nothing: a counted card is raceCount grey "?" boxes (an
+    // empty list here — renderCupSlot's raceCount padding builds them all)
+    // and endless is one grey box carrying ∞; even the drawn race 1 isn't the
+    // card's to sell. A veil here rather than in the model — the frozen ui
+    // corpus pins cupSlot's random answers to the drawn chip.
+    maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
+      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId, n: x.n, cup: x.cup })),
     cupId: m.cupId   // biome-tints the mini fields, like the phone picker
   });
 }
@@ -940,9 +975,13 @@ const RACE_PERFORMERS = {
   // {roomClosed}, which also clears the roster), so the next NEW GAME
   // reveals a lobby already sitting on the new room's QR.
   'close-room': () => net.closeRoom(),
-  // A fresh party starts clean: drop the ended party's pick so the welcome
-  // board and the next lobby sit on the paper diorama, cup slot empty.
-  'clear-pick': () => { net.clearPick(); selectedTrackId = null; },
+  // A fresh party starts clean: drop the ended party's pick so the cup slot
+  // empties and Start re-gates on a fresh SELECT_MODE. The PREVIEW deliberately
+  // survives — selectedTrackId stays aimed at the dead party's last circuit, so
+  // the next lobby keeps its 3D attract race instead of dipping back to the
+  // paper diorama (the welcome board still sits on the diorama regardless;
+  // backdropShow3D gates on the screen).
+  'clear-pick': () => net.clearPick(),
   'render-lobby-pick': () => renderLobbyPick(),
   'refresh-lobby-demo': () => refreshLobbyDemo(),
   'update-backdrop': () => updateBackdrop(),

@@ -155,6 +155,7 @@ PickMode pickModeOf(const OptStr& mode) {
   if (mode.v == "cup") return PickMode::CUP;
   if (mode.v == "track") return PickMode::TRACK;
   if (mode.v == "random") return PickMode::RANDOM;
+  if (mode.v == "tour") return PickMode::TOUR;
   return PickMode::NONE;
 }
 
@@ -162,6 +163,7 @@ const char* key(NameKey k) {
   switch (k) {
     case NameKey::TRACK: return "track";
     case NameKey::RANDOM: return "random";
+    case NameKey::TOUR: return "tour";
     case NameKey::CUP: break;
   }
   return "cup";
@@ -264,6 +266,26 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.difficulty = OptNum::None();
     out.maps.push_back(MapChip{trackId, OptNum::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
+    return true;
+  }
+  if (mode == PickMode::TOUR) {
+    // The World Tour: one draw from every cup, raced in the cups' own
+    // (difficulty) order — and the card SPOILS NONE of it. Every race, the
+    // already-drawn first included, is an undrawn "?" chip carrying only its
+    // cup id, so the shell tints each placeholder with that cup's colour and
+    // the card reads as the ladder itself. The card-level cupId stays null
+    // (no single cup owns it); difficulty stays null too — the tour spans
+    // the whole ladder, so a single tendency would lie.
+    out = CupSlot{};
+    out.nameKey = NameKey::TOUR;
+    out.name = OptStr::None();
+    out.racesKey = RacesKey::COUNT;
+    out.raceCount = OptNum::Of(static_cast<double>(cups.size()));
+    out.difficulty = OptNum::None();
+    for (const Cup& c : cups) {
+      out.maps.push_back(MapChip{OptStr::None(), OptNum::None(), OptStr::Of(c.id)});
+    }
+    out.cupId = OptStr::None();
     return true;
   }
   return false;

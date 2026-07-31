@@ -294,13 +294,15 @@ std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trac
 // ---- the series behind a start ----------------------------------------------
 
 int drawsNeeded(const std::string& mode, double randomRaces) {
-  if (mode != "random") return 0;
+  // The tour's randomRaces is its cup count (the pick walk stores it), so both
+  // draw-ahead modes share one formula: everything past race 1 is a draw.
+  if (mode != "random" && mode != "tour") return 0;
   if (randomRaces == 0 || std::isnan(randomRaces) || randomRaces == 1) return 0;
   return static_cast<int>(js_max(0.0, randomRaces - 1));
 }
 
 int returnDrawsNeeded(const std::string& mode) {
-  return mode == "random" ? 1 : 0;
+  return (mode == "random" || mode == "tour") ? 1 : 0;
 }
 
 SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
@@ -318,6 +320,22 @@ SeriesForStart seriesForStart(const std::string& mode, const OptStr& cupId,
       }
     }
     return out;   // no such cup -> null, no draws used
+  }
+  if (mode == "tour") {
+    // The World Tour: race 1 is the pick's own (first-cup) draw, the rest are
+    // the walk's per-cup draws in cup order. Mechanically it IS a random card —
+    // fixed track list, points, a podium — so it reuses that kind; its identity
+    // rides the cupId/cupName the shells and boards show.
+    out.has = true;
+    out.series.kind = SeriesKind::RANDOM_CARD;
+    out.series.cupId = "tour";
+    out.series.cupName = "World Tour";
+    out.series.tracks.push_back(trackId);
+    const size_t want = static_cast<size_t>(js_max(0.0, randomRaces - 1));
+    const size_t take = want < draws.size() ? want : draws.size();
+    for (size_t i = 0; i < take; i++) out.series.tracks.push_back(draws[i]);
+    out.drawsUsed = static_cast<int>(take);
+    return out;
   }
   if (mode != "random") return out;
   // Endless: one track on the card, and a draw offered at every intermission.
@@ -556,10 +574,11 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   if (in.roomState == RoomState::LOBBY) return r;   // NONE
   r.action = ReturnAction::RETURN;
 
-  // Re-aim the pick for the next lobby: random re-rolls every visit, a cup
-  // rewinds to its race 1 (a quit or finished cup left trackId mid-cup, and the
-  // next Start races a fresh series from the top).
-  if (in.mode == "random") {
+  // Re-aim the pick for the next lobby: random (and the tour, whose draw the
+  // walk restricts to the first cup) re-rolls every visit, a cup rewinds to its
+  // race 1 (a quit or finished cup left trackId mid-cup, and the next Start
+  // races a fresh series from the top).
+  if (in.mode == "random" || in.mode == "tour") {
     if (!in.draws.empty()) { r.trackSwap = OptStr::Of(in.draws[0]); r.drawsUsed = 1; }
   } else if (in.mode == "cup") {
     for (const Cup& c : in.cups) {

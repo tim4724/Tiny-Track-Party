@@ -595,10 +595,20 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
   if (r.action != race::StartAction::LAUNCH)
     return put(g_bufStart, refuse(race::key(r.reason)));
   const int need = race::drawsNeeded(si.mode, si.randomRaces);
-  for (int i = 0; i < need; ++i) {
-    const std::string d = ttp_live_bag_draw(roomHandle);
-    if (d.empty()) break;
-    si.draws.push_back(d);
+  if (si.mode == "tour") {
+    // The World Tour draws per cup, in cup order — race 1 is the pick's own
+    // first-cup draw, so the card's remaining races come from cups[1..].
+    for (size_t c = 1; c < g_cups.size() && (int)si.draws.size() < need; ++c) {
+      const std::string d = ttp_live_bag_draw_cup(roomHandle, g_cups[c].id);
+      if (d.empty()) break;
+      si.draws.push_back(d);
+    }
+  } else {
+    for (int i = 0; i < need; ++i) {
+      const std::string d = ttp_live_bag_draw(roomHandle);
+      if (d.empty()) break;
+      si.draws.push_back(d);
+    }
   }
   if ((int)si.draws.size() < need)
     // An unseeded bag under a random pick — near-unreachable (the pick walk
@@ -716,7 +726,11 @@ const char* ttp_race_return_live_json(int roomHandle) {
     const int need = race::returnDrawsNeeded(ri.mode);
     bool drew = true;
     for (int i = 0; i < need; ++i) {
-      const std::string d = ttp_live_bag_draw(roomHandle);
+      // The tour's re-aim is race 1's preview, so its re-roll draws from the
+      // FIRST cup only — and a cupless world refuses rather than drawing wide.
+      const std::string d = ri.mode == "tour"
+          ? (g_cups.empty() ? std::string() : ttp_live_bag_draw_cup(roomHandle, g_cups[0].id))
+          : ttp_live_bag_draw(roomHandle);
       if (d.empty()) { drew = false; break; }
       ri.draws.push_back(d);
     }

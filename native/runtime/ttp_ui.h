@@ -195,22 +195,26 @@ TTP_ABI const char* ttp_ui_seat_grid_json(const char* seatsJson);
 
 
 /* The lobby's right-rail race card, from the room's pick.
- *   {"mode":"cup"|"track"|"random"|null, "cupId":"id"|null, "trackId":"id"|null,
- *    "randomRaces": n|null}
+ *   {"mode":"cup"|"track"|"random"|"tour"|null, "cupId":"id"|null,
+ *    "trackId":"id"|null, "randomRaces": n|null}
  * randomRaces is RANDOM mode's run length — 0 endless, a positive integer that
  * many races, absent/null endless (what `random` meant before run lengths). The
- * shell clamps it before it gets here; the other two modes ignore it.
+ * shell clamps it before it gets here; every other mode ignores it (the TOUR's
+ * count is the cup list itself).
  *   -> null                      no pick yet — the slot stays empty
- *   -> {"nameKey":"cup"|"track"|"random",   what the name IS
- *       "name": str|null,                   null for random / an unresolved id
+ *   -> {"nameKey":"cup"|"track"|"random"|"tour",   what the name IS
+ *       "name": str|null,                   null for random/tour / an unresolved id
  *       "racesKey":"count"|"one"|"endless", how many races the pick means
  *       "raceCount": n|null,                meaningful only for "count"
  *       "difficulty": n|null,
- *       "maps":[{"trackId":str|null,"n":n?}, ...],
+ *       "maps":[{"trackId":str|null,"n":n?,"cup":str?}, ...],
  *       "cupId": str|null}
  * `maps` names the circuits to draw as minis BY TRACK ID; the schematic payload
  * is the shell's to look up. A cup numbers them (n = 1..4) — that numbering is
- * the GP menu at a glance and belongs to the model. */
+ * the GP menu at a glance and belongs to the model. A chip with a null trackId
+ * is an UNDRAWN race ("?" placeholder); only the tour emits those — ALL of its
+ * chips, the already-drawn first race included, so the card spoils nothing —
+ * and they carry `cup` so each placeholder wears that cup's colour. */
 TTP_ABI const char* ttp_ui_cup_slot_json(const char* pickJson);
 
 /* ---- dropped-seat reconnect cards ---------------------------------------- */

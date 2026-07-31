@@ -57,7 +57,7 @@ var MSG = {
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
-  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), or random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4; a random tap that doesn't change the length re-rolls the preview)
+  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4), or tour (the World Tour: one drawn track per cup, raced in cup order). EVERY accepted random/tour message deals a fresh draw, identical to the current pick or not — re-tapping a sub-option re-rolls.
   SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
@@ -115,20 +115,23 @@ var SCHEMATIC_EPS = 0.35;
 
 // ---- The RANDOM run length (host picks it, the display clamps it) ----
 // Two numbers the phone's picker and the display's pick resolver must agree on.
-// The picker offers exactly two run lengths — DEFAULT races, or 0 for endless —
-// and the display normalises whatever arrives on the wire against MAX, because
-// SELECT_MODE is a message from a device we do not control.
+// The picker offers exactly three run lengths — DEFAULT races, MAX races (the
+// long card), or 0 for endless — and the display normalises whatever arrives on
+// the wire against MAX, because SELECT_MODE is a message from a device we do
+// not control.
 //
 // They lived as two private copies, one in `shared/trackPicker.js` and one in
 // `display/Net.js`, with nothing between them; the first TV shell then invented
 // a third and defaulted it to 1, so a fresh lobby advertised "Random, 1 race" —
 // a run length the picker cannot produce and the host cannot get back to.
 var RANDOM_RACES = {
-  // What a bare `random` tap means, and the only finite length the picker
-  // offers. A card ends by itself, on a podium.
+  // What a bare `random` tap means, and the shorter of the two finite lengths
+  // the picker offers. A card ends by itself, on a podium.
   DEFAULT: 4,
   // The widest run the display will accept from the wire. 0 is legal and means
   // ENDLESS, so this is a ceiling and not a range check: see normRandomRaces.
+  // The picker also wears it as its LONG-CARD option, so the ceiling and the
+  // longest run on offer are one number by construction.
   MAX: 8
 };
 
