@@ -118,11 +118,19 @@ same expression gave a strip and a disc visibly different weights. The
 rectangle's box height is **derived** from that stroke rather than frozen, or a
 narrower strip clips its outer columns.
 
-**What is still a mesh:** the car's contact shadow (a baked silhouette, not a
-falloff) and the hazard cones, which are not flat. Every stamped decal also keeps
-its mesh as the fallback for a shell served no `vroad.filamat`, and those fallback
-lifts are sized for the road's CONCAVE bulge — a chord over a dip sits above the
-true surface, so a coarser road eats a conformed decal's lift.
+The car's contact shadow is a **masked** decal: its shape is the baked
+silhouette, sampled from a small texture array (one layer per car slot, one for
+the monster, one generic), rotated to the car's heading in track space. A layer
+whose bake hasn't landed falls back to the generic superellipse — never to an
+unbaked layer. **What is still a mesh:** the hazard cones, which are not flat.
+Every stamped decal also keeps its mesh as the fallback for a shell served no
+`vroad.filamat`, and those fallback lifts are sized for the road's CONCAVE
+bulge — a chord over a dip sits above the true surface, so a coarser road eats
+a conformed decal's lift. A lifted sheet also tints whatever crosses its plane:
+ALL blended geometry draws after ALL opaque geometry (Filament's pass bits
+outrank renderable priority), so the shadow sheet painted the bottom slice of
+every tyre from a low camera — that band, not the lift itself, is why the
+shadow moved into the shader.
 
 **The fallback and the shader are two copies of one piece of art**, and the pad
 chevrons drifted to different grids once — invisibly, because nothing in the tree

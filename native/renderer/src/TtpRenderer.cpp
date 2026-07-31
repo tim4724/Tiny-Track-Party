@@ -100,6 +100,17 @@ float3 srgbToLinear(uint32_t rgb) {
              srgbChannel((rgb & 0xff) / 255.0f) };
 }
 
+// Bind the silhouette array to a vroad instance, clamped bilinear. Every
+// instance of the road material needs this: a declared sampler must be bound
+// even while decalCount is 0.
+static void bindDecalMask(MaterialInstance* mi, Texture* arr) {
+    TextureSampler ms(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    ms.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    ms.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("decalMask", arr, ms);
+}
+
 // THE GRADE, on the CPU. MIRRORED FROM ttp_grade.inc — read that file first; it
 // carries what moving the grade into the scene materials bought and what it
 // cost. Only two colours need this side of it, and both for the same reason:
@@ -1124,6 +1135,7 @@ bool TtpRenderer::buildRoadMesh(const TrackBin& tb) {
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
+            if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mi, arr);
             rcm.setMaterialInstanceAt(ri, 0, mi);
             mRoadChunks.push_back({ mi, sMin, sMax, {} });
         }
@@ -1428,8 +1440,11 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
 // The one thing this does NOT reproduce is the outline: three's is the model's
 // real silhouette (cabin narrow, wheels poking out), ours a superellipse fitted
 // to the same footprint. Same size, same softness, rounder corners.
-Texture* TtpRenderer::buildShadowMask() {
-    constexpr int TW = 128, TH = 160; // ~ the footprint's 1:1.25 aspect
+// The generic mask's pixels, at any resolution: a superellipse over 1/1.45 of
+// the frame (SHADOW_OVERSCAN) with the JS bake's blur. Shared by the mesh
+// fallback's texture and the decalMask array's generic layer, so the two are
+// one formula.
+static std::vector<float> superellipseMaskPixels(int TW, int TH) {
     std::vector<float> a((size_t) TW * TH, 0.0f);
     // Footprint occupies 1/1.45 of the quad (SHADOW_OVERSCAN), leaving the rest
     // as room for the blur tail — exactly how the JS frames its bake.
@@ -1459,6 +1474,12 @@ Texture* TtpRenderer::buildShadowMask() {
             }
     };
     for (int i = 0; i < 3; i++) { pass(a, tmp, true); pass(tmp, a, false); }
+    return a;
+}
+
+Texture* TtpRenderer::buildShadowMask() {
+    constexpr int TW = 128, TH = 160; // ~ the footprint's 1:1.25 aspect
+    const std::vector<float> a = superellipseMaskPixels(TW, TH);
     // White RGB so blurring the edge fades ALPHA only — a dark fringe otherwise
     // (the JS forces the same).
     auto* px = new std::vector<uint8_t>((size_t) TW * TH * 4, 255);
@@ -1477,6 +1498,42 @@ Texture* TtpRenderer::buildShadowMask() {
             [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; }, px));
     tex->generateMipmaps(*mEngine);
     return tex;
+}
+
+// The silhouette store for the road-shader shadow decals: one array layer per
+// car slot, one for the monster, one generic. Engine-lifetime (layers are
+// rebaked per scene — mMaskLayerBakedBits says which hold the current scene's
+// bake); created on first use and bound to every vroad instance, because a
+// declared sampler must be bound even while no masked decal references it.
+Texture* TtpRenderer::ensureDecalMaskArray() {
+    if (mDecalMaskArray || !mEngine) return mDecalMaskArray;
+    mDecalMaskArray = Texture::Builder()
+            .width(kMaskCellW).height(kMaskCellH).depth(kMaskLayers).levels(1)
+            .format(Texture::InternalFormat::RGBA8)
+            .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
+            // UPLOADABLE for the generic layer's setImage, COLOR_ATTACHMENT for
+            // the bakes that render into the car layers.
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                    | Texture::Usage::UPLOADABLE)
+            .build(*mEngine);
+    if (!mDecalMaskArray) return nullptr;
+    // The generic layer, same formula as the mesh fallback's texture at the
+    // cell's own resolution. The other layers stay unwritten until a bake
+    // lands; nothing samples a layer whose baked bit is clear.
+    const std::vector<float> a = superellipseMaskPixels(kMaskCellW, kMaskCellH);
+    auto* px = new std::vector<uint8_t>((size_t) kMaskCellW * kMaskCellH * 4, 255);
+    for (size_t i = 0; i < a.size(); i++) {
+        (*px)[i * 4 + 3] = (uint8_t) std::lround(
+                std::min(1.0f, std::max(0.0f, a[i])) * 255.0f);
+    }
+    mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) kMaskLayerGeneric,
+            kMaskCellW, kMaskCellH, 1,
+            Texture::PixelBufferDescriptor(px->data(), px->size(),
+                    Texture::Format::RGBA, Texture::Type::UBYTE,
+                    [](void*, size_t, void* user) { delete (std::vector<uint8_t>*) user; },
+                    px));
+    mMaskLayerBakedBits |= (uint16_t) (1u << kMaskLayerGeneric);
+    return mDecalMaskArray;
 }
 
 // Both blob masks arrive PRE-BLURRED — the baked silhouette through vblur, the
@@ -1508,13 +1565,14 @@ void TtpRenderer::setBlobMask(MaterialInstance* mi, Texture* mask, bool baked) {
 // clear leaves 0 — which is why the bake needs no lights and doesn't care that
 // an unlit car in an empty scene renders black.
 Texture* TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
-        const float3& bbMin, const float3& bbMax) {
+        const float3& bbMin, const float3& bbMax, int maskLayer) {
     if (!asset) return nullptr;
-    return bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax);
+    return bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax,
+            maskLayer);
 }
 
 Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
-        const float3& bbMin, const float3& bbMax) {
+        const float3& bbMin, const float3& bbMax, int maskLayer) {
     if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return nullptr;
     // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
     // gaussian resolves its edge in about five quantised steps, and those steps
@@ -1614,9 +1672,30 @@ Texture* TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count
             const Renderer::ClearOptions bprev = mRenderer->getClearOptions();
             mRenderer->setClearOptions(bco);
             mRenderer->renderStandaloneView(bv);
+            // The SAME blur, once more, into the decalMask array layer the
+            // road-shader shadow decal will sample. The cell is a fixed
+            // kMaskCellW x kMaskCellH, so the bake stretches into it and the
+            // decal stretches it back onto the footprint rect — net identity,
+            // exactly how the mesh maps the standalone texture onto its quad.
+            RenderTarget* art = nullptr;
+            if (maskLayer >= 0 && maskLayer < kMaskLayers && mRoadMaterial
+                    && ensureDecalMaskArray()) {
+                art = RenderTarget::Builder()
+                        .texture(RenderTarget::AttachmentPoint::COLOR, mDecalMaskArray)
+                        .layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) maskLayer)
+                        .build(*mEngine);
+                if (art) {
+                    bv->setViewport({ 0, 0, (uint32_t) kMaskCellW, (uint32_t) kMaskCellH });
+                    bv->setRenderTarget(art);
+                    mRenderer->setClearOptions(bco);
+                    mRenderer->renderStandaloneView(bv);
+                    mMaskLayerBakedBits |= (uint16_t) (1u << maskLayer);
+                }
+            }
             mRenderer->setClearOptions(bprev);
             mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
             mEngine->destroy(bv);
+            if (art) mEngine->destroy(art);
             mEngine->destroy(brt);
             mEngine->destroy(bs);
             mEngine->destroy(bq);
@@ -4206,17 +4285,21 @@ MaterialInstance* TtpRenderer::roadInstance() {
         mRoadInst->setParameter("trackLength", 0.0f);
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
+        if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
     }
     return mRoadInst;
 }
 
 void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
-        const float3& linCol, float alpha, float inner, float kneeAlpha, bool ellipse) {
-    if ((int) mDeckDecals.size() >= kMaxDeckDecals) return;
-    mDeckDecals.push_back({
+        const float3& linCol, float alpha, float inner, float kneeAlpha, bool ellipse,
+        std::vector<DeckDecal>* out) {
+    std::vector<DeckDecal>& dst = out ? *out : mDeckDecals;
+    if ((int) dst.size() >= kMaxDeckDecals) return;
+    dst.push_back({
             float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
             float4{ linCol.x, linCol.y, linCol.z, alpha },
-            float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f } });
+            float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f },
+            float4{ 0, 0, 0, 0 } });
 }
 
 // The deck's fixed furniture, as stamps. These used to be three separate meshes
@@ -4232,7 +4315,8 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
         mStaticDeckDecals.push_back({
                 float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
                 float4{ col.x, col.y, col.z, alpha },
-                float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons } });
+                float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons },
+                float4{ 0, 0, 0, 0 } });
     };
 
     // Item-box contact shadows (were mPropShadows at 0.004): 1 -> 0.82 at 0.55r.
@@ -4322,13 +4406,16 @@ void TtpRenderer::uploadDeckDecals() {
         }
         last.assign(sel, sel + n);
         if (n > 0) {
-            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals];
+            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
+                    trot[kMaxDeckDecals];
             for (int i = 0; i < n; i++) {
                 rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
+                trot[i] = sel[i].texrot;
             }
             mi->setParameter("decalRect", rect, (size_t) n);
             mi->setParameter("decalColor", col, (size_t) n);
             mi->setParameter("decalShape", shape, (size_t) n);
+            mi->setParameter("decalTexRot", trot, (size_t) n);
         }
         mi->setParameter("decalCount", n);
     };
@@ -4953,7 +5040,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // car — the truck under them all is the same truck.
             if (!mMonsterInstances.empty() && mMonsterInstances[0]) {
                 mMonsterSilhouette = bakeSilhouette(mMonsterInstances[0]->getEntities(),
-                        mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max);
+                        mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max,
+                        kMaskLayerMonster);
             }
         }
         // The rig's wheels, per instance — these are what turn while the
@@ -5458,17 +5546,18 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             }
             MaterialInstance* mi = sceneInstance(mBlendMaterial);
             mi->setPolygonOffset(-2.0f, -2.0f); // conformed, but never z-fight
-            // PRIORITY 3, BEFORE THE CARS (default 4) — this was 5 until
-            // 2026-07-30, i.e. drawn AFTER them, and that is what made the aura
-            // read as hovering. The disc is a plane 0.02 above the deck, so it
-            // slices each tyre 0.02 up from its contact patch; drawing after the
-            // car meant it WON there and painted a bright green band across the
-            // bottom of every wheel. The eye reads that band as the disc sitting
-            // above the road, because it is visibly not at the height where the
-            // wheels touch. The car's own blob shadow never had the bug — it was
-            // already priority 3. Ordering was the whole fix; the lift is only
-            // ever headroom for the chord sag, and it came down to 0.013 once the
-            // fourth ring shrank that sag (see the conform call below).
+            // PRIORITY 3, one above the contact shadow's 2, so on a fallback
+            // shell the aura still paints over the shadow — between two blended
+            // sheets, priority IS the draw order. It does NOT order this sheet
+            // against the opaque cars: Filament's pass bits outrank renderable
+            // priority (RenderPass.h), so every blended sheet draws after every
+            // car, and a plane lifted above the deck wins the depth test across
+            // the bottom slice of any tyre it crosses and paints a band there.
+            // That band — measured on the shadow sheet 2026-07-31, whatever its
+            // priority — is why the LIVE path for both sheets is the road
+            // shader, where the decal has no plane at all. The lift below is
+            // headroom for the fallback mesh's own chord sag (see the conform
+            // call below).
             if (!buildMesh(m, true, mi, 3)) return false;
         }
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
@@ -5995,8 +6084,11 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.bbMin = bb.min;
         w.bbMax = bb.max;
         // Ground-shadow silhouette, off THIS model, while it still sits at rest.
+        // The same bake also lands in decalMask layer `index` for the
+        // road-shader shadow decal.
         if (mCarSilhouettes.size() <= index) mCarSilhouettes.resize(index + 1, nullptr);
-        mCarSilhouettes[index] = bakeSilhouette(asset, bb.min, bb.max);
+        mCarSilhouettes[index] = bakeSilhouette(asset, bb.min, bb.max,
+                index < (uint32_t) kMaskLayerMonster ? (int) index : -1);
     }
     // Tyre-contact width for the skid ribbons: min(0.24, max(0.06,
     // min(wheelBox.x, wheelBox.z))) — SceneRenderer addCar's measurement.
@@ -6059,12 +6151,17 @@ bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
 
 // One car's contact-shadow sheet. See the long note where buildTrackScene
 // calls it for why it is a GRID and why the shape lives in a mask texture.
+// The shadow's ink (the JS UNDER_AO_COLOR) and base opacity, shared by the
+// masked road-shader decal and the mesh fallback so the two render as ONE
+// shadow. 0.35 is the measured 35% ambient dip — see the opacity note where
+// the blobs are built for the scene.
+static const float3 kCarBlobInk = srgbToLinear(0x171513);
+static constexpr float kCarBlobAO = 0.35f;
+
 bool TtpRenderer::buildCarBlob(uint32_t c) {
     if (!mBlendMaterial || mCarBlobs.size() <= c) return true;
     Mesh& m = mCarBlobs[c];
     destroyMesh(m); // a re-dress refits the grid to the new model's footprint
-    const float3 INKC = srgbToLinear(0x171513);
-    constexpr float AO = 0.35f; // the measured 35% ambient dip — see the call site
     const float fw = (mCarWheels.size() > c) ? mCarWheels[c].footW : 0.95f;
     const float fl = (mCarWheels.size() > c) ? mCarWheels[c].footL : 2.0f;
     const float W = fw * 1.45f, L = fl * 1.45f;   // SHADOW_OVERSCAN quad
@@ -6076,9 +6173,9 @@ bool TtpRenderer::buildCarBlob(uint32_t c) {
         for (int i = 0; i <= GW; i++) {
             const float x = ((float) i / GW - 0.5f) * W;
             const float z = ((float) j / GL - 0.5f) * L;
-            m.verts.push_back({ x, 0.02f, z, packLinear(INKC, 1.0f, AO) });
+            m.verts.push_back({ x, 0.02f, z, packLinear(kCarBlobInk, 1.0f, kCarBlobAO) });
             m.uvs.push_back({ (float) i / GW, (float) j / GL });
-            m.local.push_back({ x, z, (uint8_t) std::lround(AO * 255.0f) });
+            m.local.push_back({ x, z, (uint8_t) std::lround(kCarBlobAO * 255.0f) });
         }
     }
     for (int j = 0; j < GL; j++) {
@@ -6115,7 +6212,12 @@ bool TtpRenderer::buildCarBlob(uint32_t c) {
     }
     // PRIORITY 2, one below the boost aura's 3, so the aura still paints
     // over the contact shadow — see the ordering note on the aura's build.
-    return buildMesh(m, true, mi, 2);
+    if (!buildMesh(m, true, mi, 2)) return false;
+    // With the deck material the shadow is a road-shader decal and this mesh is
+    // only the no-vroad fallback: keep it out of the scene from the start, or
+    // its unconformed grid flashes at the origin before the first frame.
+    if (mRoadMaterial) setMeshInScene(m, false);
+    return true;
 }
 
 // The inverse of buildCarSlot + buildCarGhost + buildCarPlate + buildCarBlob,
@@ -6138,6 +6240,11 @@ void TtpRenderer::destroyCarSlot(uint32_t c) {
         }
         mEngine->destroy(mCarSilhouettes[c]);
         mCarSilhouettes[c] = nullptr;
+        // The decalMask layer holds the OLD car until the re-dress rebakes it;
+        // clearing the bit sends the shadow decal to the generic layer meanwhile.
+        if (c < (uint32_t) kMaskLayerMonster) {
+            mMaskLayerBakedBits &= (uint16_t) ~(1u << c);
+        }
     }
     if (mCars.size() > c) destroyMesh(mCars[c]);
     if (mPlates.size() > c) destroyMesh(mPlates[c]);
@@ -8034,6 +8141,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // Conformed car positions, kept for the props that test against the car's
     // RENDERED spot (cone kicks) rather than the raw contract pose.
     std::vector<float3> carPosW(nCars);
+    // Boost auras, held back until after the loop so every aura composites over
+    // every shadow — the layering the meshes had from their render priorities,
+    // which per-car interleaving would break for two overlapping cars.
+    std::vector<DeckDecal> auraDecals;
     for (uint32_t i = 0; i < nCars; i++) {
         const TtpCarInput& c = cars[i];
         const float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
@@ -8342,20 +8453,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 sx = mMonsterFootW / mCarWheels[i].footW;
                 sz = mMonsterFootL / mCarWheels[i].footL;
             }
-            // …and to the RIG's OUTLINE, not just its size. Scaling the little
-            // car's silhouette up to truck dimensions painted a car-shaped
-            // smudge under a chassis whose four fat tyres are the only things
-            // touching the road. Edge-triggered: setParameter rebinds a sampler.
-            if (mCarBlobMats.size() > i && mCarBlobMats[i]) { // sized with mCarBlobMasks
-                Texture* want = monsterBlob && mMonsterSilhouette
-                        ? mMonsterSilhouette
-                        : (mCarSilhouettes.size() > i && mCarSilhouettes[i])
-                                ? mCarSilhouettes[i] : mShadowMaskTex;
-                if (want && want != mCarBlobMasks[i]) {
-                    setBlobMask(mCarBlobMats[i], want, want != mShadowMaskTex);
-                    mCarBlobMasks[i] = want;
-                }
-            }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
             // Carried across as the RELATIVE gain it was, 0.08/0.55, so it still
@@ -8367,16 +8464,73 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
             // decals hang off the same origin and the same road frame.
             mTrack->project(bm[3].xyz, bm[1].xyz, carS, carLat);
             haveCarS = true;
-            // LIFT 0.010, down from 0.02. Every lift on the deck is headroom for
-            // ONE thing — how far this decal's chords sag below the road's own
-            // finer chords on a crest — and this is the finest-tessellated decal
-            // in the scene: a 10x14 grid over 1.38 x 2.90 is 0.207u along travel,
-            // FINER than the road's 0.24u rings, so it barely sags at all
-            // (measured 0.0022, needing 0.0034). It stays clear of the skid marks
-            // at 0.006 so the depth sort keeps putting the shadow over them, and
-            // below the aura's 0.013 so the aura still paints over the shadow.
-            conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.013f,
-                    1.0f + (0.08f / 0.55f) * load);
+            if (mRoadInst && mDecalMaskArray
+                    && (int) mDeckDecals.size() < kMaxDeckDecals) {
+                // SHADED INTO THE ROAD, like the aura below: the shadow's
+                // fragment IS a road fragment, so nothing floats and nothing
+                // can slice the bottom of a tyre — the band a lifted sheet
+                // paints across every wheel from a low camera, because ALL
+                // blended geometry draws after ALL opaque geometry (Filament's
+                // pass bits outrank renderable priority) and the sheet wins
+                // the depth test in front of the tyre's bottom 0.014u.
+                setMeshInScene(mCarBlobs[i], false);
+                const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
+                const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
+                // The blob quad's halves in the CAR's frame: forward in rect.z,
+                // right in rect.w (the shader divides its rotated components by
+                // exactly these).
+                const float halfF = fl * sz * 1.45f * 0.5f;
+                const float halfR = fw * sx * 1.45f * 0.5f;
+                // Heading against the track frame at carS. `bm` already carries
+                // the spin-out whirl, so the silhouette keeps whirling.
+                const TrackBin::Sample f0 = mTrack->frameAt(carS);
+                const float3 fwdW = bm[2].xyz;
+                float cs = dot(f0.tangent(), fwdW), sn = dot(f0.lat, fwdW);
+                const float nl = std::sqrt(cs * cs + sn * sn);
+                if (nl > 1e-5f) { cs /= nl; sn /= nl; } else { cs = 1; sn = 0; }
+                const int layer = monsterBlob
+                        ? (((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)
+                                ? kMaskLayerMonster : kMaskLayerGeneric)
+                        : ((i < (uint32_t) kMaskLayerMonster
+                                && ((mMaskLayerBakedBits >> i) & 1u))
+                                ? (int) i : kMaskLayerGeneric);
+                mDeckDecals.push_back({
+                        float4{ carS, carLat, halfF, halfR },
+                        float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
+                                kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
+                        float4{ 0, 0, 0, 0 },
+                        float4{ sn, cs, (float) layer, 1.0f } });
+            } else {
+                // The conformed-mesh fallback, for a shell served no
+                // vroad.filamat.
+                // …and to the RIG's OUTLINE, not just its size. Scaling the
+                // little car's silhouette up to truck dimensions painted a
+                // car-shaped smudge under a chassis whose four fat tyres are
+                // the only things touching the road. Edge-triggered:
+                // setParameter rebinds a sampler.
+                if (mCarBlobMats.size() > i && mCarBlobMats[i]) { // sized with mCarBlobMasks
+                    Texture* want = monsterBlob && mMonsterSilhouette
+                            ? mMonsterSilhouette
+                            : (mCarSilhouettes.size() > i && mCarSilhouettes[i])
+                                    ? mCarSilhouettes[i] : mShadowMaskTex;
+                    if (want && want != mCarBlobMasks[i]) {
+                        setBlobMask(mCarBlobMats[i], want, want != mShadowMaskTex);
+                        mCarBlobMasks[i] = want;
+                    }
+                }
+                setMeshInScene(mCarBlobs[i], true);
+                // LIFT 0.010, down from 0.02. Every lift on the deck is headroom
+                // for ONE thing — how far this decal's chords sag below the
+                // road's own finer chords on a crest — and this is the finest-
+                // tessellated decal in the scene: a 10x14 grid over 1.38 x 2.90
+                // is 0.207u along travel, FINER than the road's 0.24u rings, so
+                // it barely sags at all (measured 0.0022, needing 0.0034). It
+                // stays clear of the skid marks at 0.006 so the depth sort keeps
+                // putting the shadow over them, and below the aura's 0.013 so
+                // the aura still paints over the shadow.
+                conformDecalAt(mCarBlobs[i], bm, carS, carLat, sx, sz, 0.013f,
+                        1.0f + (0.08f / 0.55f) * load);
+            }
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
         // each streak front (0.7) → back (−2.4) past the body at the car's
@@ -8472,8 +8626,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 // there is no lift, no chord sag to clear and no render order to
                 // get wrong. The disc mesh stays as the fallback for a shell that
                 // was served no vroad.filamat.
+                // Into the held-back aura list (see auraDecals above), so every
+                // aura composites over every car shadow.
                 addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
-                        0.72f, 0.94f, true);
+                        0.72f, 0.94f, true, &auraDecals);
                 // The disc mesh only draws on a shell served no vroad.filamat;
                 // with the deck material it never enters the scene at all.
                 setMeshInScene(mBoostDisks[i], !mRoadInst);
@@ -8485,6 +8641,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
                 setMeshInScene(mBoostDisks[i], false);
             }
         }
+    }
+    for (const DeckDecal& d : auraDecals) {
+        if ((int) mDeckDecals.size() >= kMaxDeckDecals) break;
+        mDeckDecals.push_back(d);
     }
     uploadDeckDecals();
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
@@ -9546,9 +9706,12 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mCarAssets) dropAsset(a);
-    // Baked per-car silhouettes die with the roster that produced them.
+    // Baked per-car silhouettes die with the roster that produced them. The
+    // decalMask layers keep their stale images but lose their baked bits, so
+    // the next scene's shadow decals ride the generic layer until they rebake.
     for (Texture*& t : mCarSilhouettes) { if (t) mEngine->destroy(t); t = nullptr; }
     mCarSilhouettes.clear();
+    mMaskLayerBakedBits &= (uint16_t) (1u << kMaskLayerGeneric);
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     dropAsset(mBoxAsset);
@@ -9675,6 +9838,7 @@ TtpRenderer::~TtpRenderer() {
     if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mShadowMaskTex) mEngine->destroy(mShadowMaskTex);
+    if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mDecalMaterial) mEngine->destroy(mDecalMaterial);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);

@@ -82,7 +82,19 @@ material {
         //       that grid in cream, which is what makes a boost pad or launch
         //       strip expressible without a texture: a chevron is two line
         //       segments and a distance to a segment is four instructions.
-        { type : float4[32], name : decalShape }
+        { type : float4[32], name : decalShape },
+        // MASKED decals — the car ground shadows, whose shape is a baked
+        // silhouette rather than a profile the shader could evaluate:
+        //   x = sin, y = cos of the car's heading against the track tangent
+        //       (the whole rotation, spin-out whirl included)
+        //   z = decalMask layer holding this car's silhouette
+        //   w = 1 marks the decal masked; 0 is every profile decal above
+        { type : float4[32], name : decalTexRot },
+        // One 2D-array texture, one silhouette per layer: 0..7 the cars in
+        // slot order, 8 the monster rig, 9 the generic superellipse. Baked
+        // and pre-blurred by bakeSilhouette, so this samples ONCE, exactly
+        // like the mesh fallback's vdecal does.
+        { type : sampler2dArray, name : decalMask }
     ]
 }
 
@@ -128,10 +140,35 @@ fragment {
         if (L > 0.0) sLocal -= L * floor(sLocal * materialParams.invTrackLength + 0.5);
         for (int i = 0; i < n; i++) {
             highp vec4 r = materialParams.decalRect[i];
+            vec4 trot = materialParams.decalTexRot[i];
+            bool masked = trot.w > 0.5;
+            // A masked decal is ROTATED in track space (rect.zw are the halves
+            // in the CAR's frame), so its axis-aligned reach is the
+            // half-diagonal, not r.z.
+            float bound = masked ? length(r.zw) : r.z;
             highp float ds = sLocal - r.x;
-            if (abs(ds) >= r.z) continue;               // cheap reject
+            if (abs(ds) >= bound) continue;             // cheap reject
             float dl = tc.y - r.y;
-            if (abs(dl) >= r.w) continue;
+            if (abs(dl) >= (masked ? bound : r.w)) continue;
+            if (masked) {
+                // Into the car's frame. With c = dot(tangent, fwd) and
+                // s = dot(latDir, fwd), and car right = up x fwd against
+                // lat = tan x up, the forward/right components come out as
+                //   pf =  c*ds + s*dl,   pr =  s*ds - c*dl
+                // — the handedness flip is folded into pr's signs.
+                float pf = trot.y * ds + trot.x * dl;
+                float pr = trot.x * ds - trot.y * dl;
+                vec2 q = vec2(pf / r.z, pr / r.w);
+                if (max(abs(q.x), abs(q.y)) >= 1.0) continue;
+                // MESH UV PARITY (see the blob mesh in buildCarBlob): u runs
+                // ACROSS the car (+right), v ALONG it (+forward). Pinned by
+                // the decal audit's MIRRORED list against the mesh fallback.
+                vec2 uv = q.yx * 0.5 + 0.5;
+                float m = texture(materialParams_decalMask, vec3(uv, trot.z)).a;
+                vec4 mcol = materialParams.decalColor[i];
+                base = mix(base, mcol.rgb, clamp(mcol.a * m, 0.0, 1.0));
+                continue;
+            }
             vec2 q = vec2(ds / r.z, dl / r.w);
             vec4 shape = materialParams.decalShape[i];
             bool ell = shape.y > 0.5;

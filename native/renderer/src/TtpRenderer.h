@@ -270,7 +270,11 @@ private:
     struct DeckDecal {
         filament::math::float4 rect;   // s, lat, halfS, halfLat — ALL world units
         filament::math::float4 color;  // linear rgb, peak alpha
-        filament::math::float4 shape;  // innerFrac, isEllipse, kneeAlpha, spare
+        filament::math::float4 shape;  // innerFrac, isEllipse, kneeAlpha, chevrons
+        // sin, cos, decalMask layer, masked flag. All zero for a profile decal;
+        // masked decals (the car shadows) carry their heading rotation and the
+        // silhouette layer, and rect.zw become the halves in the CAR's frame.
+        filament::math::float4 texrot;
     };
     std::vector<DeckDecal> mDeckDecals;      // gathered per frame
     std::vector<DeckDecal> mDeckDecalsLast;  // last frame's, for debugDeckDecals()
@@ -294,6 +298,20 @@ private:
     };
     std::vector<RoadChunk> mRoadChunks;
     std::vector<DeckDecal> mRoadInstLast;  // ditto for the whole-lap fallback chunk
+    // The masked decals' silhouette store: one 2D-array texture, one layer per
+    // car slot (0..7), one for the monster rig, one for the generic
+    // superellipse. Engine-lifetime — layers are REBAKED per scene, the flags
+    // below say which ones currently hold this scene's bake.
+    static constexpr int kMaskLayerMonster = 8;
+    static constexpr int kMaskLayerGeneric = 9;
+    static constexpr int kMaskLayers = 10;
+    // Cell size: 256 wide for the same banding reason bakeSilhouette gives, and
+    // 2:1 because a kit car's footprint is ~2:1 — the stretch onto the decal
+    // rect is then near-isotropic, so the baked blur stays round.
+    static constexpr int kMaskCellW = 256, kMaskCellH = 512;
+    filament::Texture* mDecalMaskArray = nullptr;
+    uint16_t mMaskLayerBakedBits = 0;
+    filament::Texture* ensureDecalMaskArray();
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -381,10 +399,14 @@ private:
     // Top-down alpha coverage of a loaded car, at the blob quad's exact framing.
     // The entity overload is what the INSTANCED monster rig needs: gltfio hands
     // an instanced asset's renderables to the FilamentInstance, not the asset.
+    // maskLayer >= 0 additionally blurs the same bake into that decalMask array
+    // layer, for the road-shader shadow decal (see uploadDeckDecals).
     filament::Texture* bakeSilhouette(filament::gltfio::FilamentAsset* asset,
-            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax,
+            int maskLayer = -1);
     filament::Texture* bakeSilhouette(const utils::Entity* entities, size_t count,
-            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax,
+            int maskLayer = -1);
     // Point a ground blob's decal instance at a mask. `baked` = a silhouette
     // that came out of bakeSilhouette (single level, already blurred); false is
     // the mipmapped generic rounded-rect fallback.
@@ -850,9 +872,13 @@ private:
     // road material is absent). Separate from litShadowInstance because that
     // one is shared with the structures and berms, which must not stamp.
     filament::MaterialInstance* roadInstance();
+    // Pushes into mDeckDecals unless `out` redirects it (the held-back aura
+    // list) — either way this is the ONE place the profile-decal layout is
+    // assembled.
     void addDeckDecal(float s, float lat, float halfS, float halfLat,
             const filament::math::float3& linCol, float alpha,
-            float inner, float kneeAlpha, bool ellipse);
+            float inner, float kneeAlpha, bool ellipse,
+            std::vector<DeckDecal>* out = nullptr);
     void uploadDeckDecals();
     // Resolve the decals that never move — pads, launch strips, oil slicks and
     // item-box contact shadows — into mStaticDeckDecals, once per track.

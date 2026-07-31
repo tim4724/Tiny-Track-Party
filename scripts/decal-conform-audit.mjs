@@ -102,20 +102,32 @@ export const MIRRORED = [
   { name: 'pad chevron grid (disc)',  value: '1x3', find: '/*chevrons=*/13' },
   { name: 'pad chevron mesh (strip)', value: '5x2', find: 'constexpr int COLS_C = 5, ROWS_C = 2;' },
   { name: 'pad chevron mesh (disc)',  value: '1x3', find: 'constexpr int N = 3;' },
+  // The car shadow is SHADED INTO the road too now (a MASKED decal sampling the
+  // baked silhouette from the decalMask array); this pins the fallback mesh's
+  // conform lift.
   { name: 'car blob lift',   value: 0.013, find: 'carS, carLat, sx, sz, 0.013f,' },
   // Item shadows are stamped too now; this pins the fallback mesh's lift.
   { name: 'prop blob fallback lift', value: 0.010, find: 'f.s, lat, r, r,\n                        0.013f, 1.0f);' },
   { name: 'skid lift',       value: 0.006, find: 'U * 0.006f;' },
   { name: 'road ring target', value: 0.48, find: 'std::lround(L / std::min(0.48f' },
-  // RENDER ORDER, and it is correctness rather than taste. Both must stay BELOW
-  // the cars' default priority of 4. The boost aura was 5 — drawn after the cars
-  // — so its plane, 0.02 above the deck, won the depth test across the bottom
-  // 0.02 of every tyre and painted a bright band there; that band is what read as
-  // the aura hovering, because it sits visibly above where the wheels touch. The
-  // blob shadow sits one below the aura so the aura still paints over it. Nothing
-  // geometric in this audit can see a priority, so they are pinned here.
-  { name: 'car blob priority',   value: 2, find: 'return buildMesh(m, true, mi, 2);' },
+  // FALLBACK RENDER ORDER. Both sheets only draw on a shell served no
+  // vroad.filamat, and there the aura must still paint over the shadow — which
+  // between two blended sheets is their priority order. (Priority does NOT
+  // order a sheet against the opaque cars: Filament's pass bits outrank it, so
+  // every blended sheet draws after every car and a lifted sheet tints the
+  // bottom slice of the tyres it crosses. That is why the LIVE path is the
+  // road shader, where a decal has no plane to slice with.) Nothing geometric
+  // in this audit can see a priority, so they are pinned here.
+  { name: 'car blob priority',   value: 2, find: 'if (!buildMesh(m, true, mi, 2)) return false;' },
   { name: 'boost disk priority', value: 3, find: 'if (!buildMesh(m, true, mi, 3)) return false;' },
+  // THE MASKED DECAL'S UV MAPPING IS THE MESH'S, written down twice: the blob
+  // mesh maps u ACROSS the car (+right) and v ALONG it (+forward) onto the
+  // baked silhouette, and vroad.mat's masked path recomputes the same mapping
+  // from its rotated track-space components. A sign slip there flips the
+  // silhouette invisibly (car outlines are near-symmetric), so both spellings
+  // are pinned.
+  { name: 'masked decal uv (shader)', value: 'q.yx', in: 'vroad', find: 'vec2 uv = q.yx * 0.5 + 0.5;' },
+  { name: 'masked decal uv (mesh)',   value: 'u across, v along', find: 'm.uvs.push_back({ (float) i / GW, (float) j / GL });' },
 ];
 
 export function verifyMirrors() {

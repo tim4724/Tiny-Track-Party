@@ -376,16 +376,18 @@ const char* ttp_display_debug_decals(void) {
     json = "[";
     if (g_disp && g_disp->renderer) {
         const auto& v = g_disp->renderer->debugDeckDecals();
-        char buf[320];
+        char buf[400];
         for (size_t i = 0; i < v.size(); i++) {
             if (i) json += ',';
             snprintf(buf, sizeof buf,
                     "{\"s\":%.4f,\"lat\":%.4f,\"halfS\":%.4f,\"halfLat\":%.4f,"
                     "\"r\":%.4f,\"g\":%.4f,\"b\":%.4f,\"a\":%.4f,"
-                    "\"inner\":%.3f,\"ellipse\":%.1f,\"knee\":%.3f}",
+                    "\"inner\":%.3f,\"ellipse\":%.1f,\"knee\":%.3f,"
+                    "\"sin\":%.4f,\"cos\":%.4f,\"layer\":%.0f,\"masked\":%.0f}",
                     v[i].rect.x, v[i].rect.y, v[i].rect.z, v[i].rect.w,
                     v[i].color.x, v[i].color.y, v[i].color.z, v[i].color.w,
-                    v[i].shape.x, v[i].shape.y, v[i].shape.z);
+                    v[i].shape.x, v[i].shape.y, v[i].shape.z,
+                    v[i].texrot.x, v[i].texrot.y, v[i].texrot.z, v[i].texrot.w);
             json += buf;
         }
     }
