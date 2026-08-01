@@ -8,16 +8,34 @@ shell must re-derive from prose. If you find yourself writing one, it belongs
 in the wasm.
 
 `nativeRuntime.js` loads the wasm and the `Native*.js` files are thin adapters
-over one ABI each. `main.js` awaits the wasm at boot and a load failure is
-**fatal** — there is no JS fallback.
+over one ABI each. `boot.js` stands the whole native stack up in a fixed order
+(configure before read, world before any render) and a load failure is **fatal**
+— there is no JS fallback.
+
+`main.js` is the RACE CORE and the wiring between layers: the session, the pause
+latches, the effect walk, the net callbacks. Anything with its own state and no
+stake in a race lives beside it instead — the backdrop crossfade, the overlays,
+the TV furniture. When something in `main.js` grows a timer or a generation
+counter of its own, that is the signal it has become one of those.
 
 ## Rendering from the model, not deciding
 
-`main.js` and `lobbySeats.js` render from the ui model and decide nothing. The
-shell keeps only the state the model threads back to it — the current screen, which
-reconnect cards attached, what each phone was last told its item was — and nothing
-else. The model emits KEYS plus data, so copy tables live next to the elements
-they fill.
+`main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)
+render from the ui model and decide nothing. The shell keeps only the state the
+model threads back to it — the current screen, which reconnect cards attached,
+what each phone was last told its item was — and nothing else. The model emits
+KEYS plus data, so copy tables live next to the elements they fill.
+
+**A preview renders through the live renderer, never a copy of it.** Every
+gallery scenario that shows a real screen (the seat grid, the cup slot, the
+results board in all three dressings, the countdown banner) calls the SAME
+function live play calls, with a synthesized model input. A second
+implementation in `TestHarness.js` is how the lobby cards once drifted to a
+screen that no longer existed while every test stayed green, and how the
+intermission preview spent months naming an auto-advance time the engine had
+stopped using. Where the harness has to synthesize a model INPUT (a standings
+board, a pick), an E2E case pins a dressing only the correct shape can produce —
+a renamed field degrades quietly instead of throwing.
 
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several

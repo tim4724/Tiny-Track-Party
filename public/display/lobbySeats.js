@@ -5,7 +5,7 @@
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
 import { schematicSvg, cupTint, neutralTint, FIELD_TINT } from '../shared/trackPicker.js';
-import { seatGrid } from './NativeUiModel.js';
+import { seatGrid, cupSlot } from './NativeUiModel.js';
 
 const { CAR_COLORS, CAR_MODELS } = window;
 
@@ -69,8 +69,8 @@ export function renderSeats(listEl, seats) {
 }
 
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the
-// live lobby (renderLobbyPick in main.js) and the gallery preview for the same
-// no-drift reason. Two states:
+// live lobby and the gallery preview for the same no-drift reason, both through
+// renderLobbyPick below. Two states:
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
 //   picked   : { name, races?, raceCount?, difficulty?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
@@ -130,4 +130,40 @@ export function renderCupSlot(slotEl, state) {
   const meter = slotEl.querySelector('.cup-meter');
   meter.classList.toggle('hidden', state.difficulty == null);
   meter.querySelectorAll('i').forEach((pip, i) => pip.classList.toggle('is-on', i < (state.difficulty || 0)));
+}
+
+// The lobby right-rail cup slot, straight from a PICK ({ mode, cupId, trackId,
+// randomRaces } — the room's stored pick, or the shape a preview wants to show).
+// Pre-pick the slot is empty; post-pick it shows the race card (cup / exact
+// track / random / tour).
+//
+// The card's CONTENT is uiModel.cupSlot's — which name, how many races, the
+// difficulty pips, which circuits to draw as minis and how they're numbered (an
+// undrawn race is a trackId-less chip). It hands back keys plus data (never
+// composed copy), so the few English strings and the schematic lookup are all
+// that live here. `trackCatalog` supplies the baked mini-maps by id.
+const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
+const NAME_COPY = { random: 'Random', tour: 'World Tour' };
+export function renderLobbyPick(slotEl, pick, trackCatalog) {
+  if (!slotEl) return;
+  const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
+  const m = cupSlot(pick);
+  renderCupSlot(slotEl, m && {
+    name: NAME_COPY[m.nameKey] || m.name || '?',
+    races: RACES_COPY[m.racesKey](m.raceCount),
+    // raceCount sizes the maps grid (renderCupSlot pads a counted card's
+    // not-yet-drawn races with "?" boxes); endless is a single ∞ box. RANDOM
+    // only — a cup's racesKey is 'count' too, and a cup card must never pad
+    // (a chip with a missing schematic just costs its picture, not a "?").
+    raceCount: m.nameKey === 'random' && m.racesKey === 'count' ? m.raceCount : null,
+    difficulty: m.difficulty,
+    // Random spoils nothing: a counted card is raceCount grey "?" boxes (an
+    // empty list here — renderCupSlot's raceCount padding builds them all)
+    // and endless is one grey box carrying ∞; even the drawn race 1 isn't the
+    // card's to sell. A veil here rather than in the model — the frozen ui
+    // corpus pins cupSlot's random answers to the drawn chip.
+    maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
+      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId, n: x.n, cup: x.cup })),
+    cupId: m.cupId   // biome-tints the mini fields, like the phone picker
+  });
 }

@@ -1,15 +1,30 @@
 // Display entry — lobby + authoritative race. Owns the Stage (canvas + DOM HUD),
 // the race session, and the countdown→race→results flow. The 3D itself is the
 // engine's: see Stage.js / render/Display.js.
+//
+// What stays HERE is the race core and the wiring that joins the layers: the
+// session, the pause/auto-pause latches, the effect walk that performs the
+// orchestration layer's answers, and the net callbacks. Everything with its own
+// state and no stake in a race was split out beside it — see the imports below.
 import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
-import { loadBiomes } from '../shared/biomes.js';
-import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, renderCupSlot } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
+// The native stack, stood up once in a fixed order (configure before read, world
+// before any render) — see boot.js.
+import { bootEngine, trackEntry } from './boot.js';
+// The two race-screen overlays, painting model answers; the gallery previews
+// drive these same functions so a preview cannot drift from live play.
+import { showCountdownBanner, renderResults } from './raceOverlays.js';
+// The lobby's 3D backdrop: reveal + the track→track crossfade state machine.
+import { setBackdrop3D, crossfadeBackdrop } from './backdrop.js';
+// TV-surface furniture with no stake in the race: the auto-hiding chrome, the
+// fullscreen toggle, the copy toast. Importing this module installs them.
+import { revealRaceChrome, holdRaceChrome, enterFullscreen, showToast, copyText } from './chrome.js';
+import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
 // The UI MODEL is C++ too (ttp_ui.h over libttp-runtime/ttp/ui_model.cc). Every
 // screen decision below — which seats, which race card, which rows, whether the
 // field may freeze — is ITS answer; this file renders and decides nothing.
@@ -58,9 +73,6 @@ function show(name) {
 // sound hint, the backdrop — once the engine is up. (No audio carry needed: if
 // this gesture predates the AudioContext, the sound-hint pill catches the next
 // one.)
-// Declared up here (not with the fullscreen section below) so the hoisted
-// enterFullscreen() is callable from this pre-boot handler.
-const _fullscreenSupported = !!document.fullscreenEnabled;
 let newGameClicked = false;
 let newGameClick = () => {
   newGameClicked = true;
@@ -71,40 +83,6 @@ let newGameClick = () => {
 el('newgame-btn').addEventListener('click', () => newGameClick());
 
 // ---- tracks ----
-// A track is an ID here, and nothing more. The geometry is built inside the
-// engine — by the sim when a race begins (ttp_session_begin) and by the renderer
-// when the scene is built (ttp_display_build) — from the SAME C++ TrackBuilder,
-// on the same descriptor codegen'd into the wasm. The browser used to carry a
-// second builder purely to feed the renderer and to draw these mini-maps; the
-// mini-maps are baked ahead of time now (shared/trackSchematics.js, regenerated
-// by `npm run gen:schematics`) and nothing on this page integrates a track.
-//
-// `entry` is what the rest of the file passes around as "the track": the
-// catalogue row plus the lap count the session reads off it.
-function trackEntry(t) {
-  return { ...t, trackId: t.id, totalLaps: TOTAL_LAPS };
-}
-// Filled from the wasm's own catalogue once it is up (see the boot block below).
-// `let` rather than `const` for that reason alone — neither is written twice.
-let CUPS, TRACK_LIST, built, trackCatalog;
-
-// The controller is a dumb renderer driven entirely off the relay's retained room
-// snapshot (set_state) — so all the chooser CONTENT it needs travels the wire, not
-// a bundled copy that could diverge from a differently-versioned (native) display.
-// These are the slim, display-authoritative payloads that ride the snapshot:
-//   trackChooser — reduced schematics (~24 pts) so the whole catalog fits 16 KiB,
-//   carChooser   — car id/name/handling stats (images load by id from the web host),
-//   colorPalette — the livery hex palette (colorIndex → colour), so the phone's
-//                  livery dots always match the car the display paints.
-// Filled at boot, once the wasm is up: the codec is C++ (NativeSchematic.js over
-// libttp-track/ttp/schematic.cc), so this cannot be a module-scope constant.
-let trackChooser;
-const carChooser = CAR_MODELS.map((id, i) => {
-  const s = (window.CAR_STATS && window.CAR_STATS[i]) || {};
-  return { id, name: (window.CAR_NAMES && window.CAR_NAMES[i]) || id, stats: { accel: s.accel, vmax: s.vmax, turn: s.turn, mass: s.mass } };
-});
-const colorPalette = CAR_COLORS.slice();
-
 // No track is PICKED at first — the host's "Start race" stays gated until their
 // phone sends one — but the live lobby still previews a circuit from the first
 // frame (the last party's pick, remembered below). ?track=<id> preselects a real
@@ -140,104 +118,22 @@ const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get(
 const _qBootDelay = parseInt(_trackParams.get('bootdelay'), 10) || 0;
 if (_qBootDelay) await new Promise((r) => setTimeout(r, _qBootDelay));
 // ---- the native engine ------------------------------------------------------
-// The C++ stack is the ONLY engine: the sim, the cup-series layer above it, and
-// the party layer's decisions (room state, relay framing, fastlane netcode). The
-// JS twins were retired once every layer was conformance-proven and the whole E2E
-// suite ran green on them. Awaited at boot, and a failure is FATAL rather than a
-// silent downgrade — there is nothing left to fall back to.
-// Still JS by design: rendering, HUD, and the transport I/O (WebSocket /
-// RTCPeerConnection), which wasm cannot own without proxying through JS anyway.
-const _nativeSim = await import('./NativeRaceSession.js');
-// The audio DECISIONS are C++ too (ttp_audio.h). Only the device half — the
-// AudioContext, the cue palette, the song element — is still JS, and it decides
-// nothing.
-const _nativeAudio = await import('./NativeAudio.js');
-// The RACE ORCHESTRATION is C++ too (ttp_race.h): the state machine that starts
-// a race, launches one, walks the countdown, ends it, chains a cup and returns
-// to the lobby. It answers in ORDERED EFFECT LISTS and `perform` below walks
+// Stood up in boot.js, which owns the ordering; a failure is FATAL rather than a
+// silent downgrade, so nothing here catches. `flow` is the RACE ORCHESTRATION
+// (ttp_race.h): it answers in ORDERED EFFECT LISTS and `perform` below walks
 // them — the order is the contract, so nothing here may reorder or skip.
-const flow = await import('./NativeRaceFlow.js');
-await Promise.all([_nativeSim.init(), _nativeAudio.init(), ui.init(), flow.init()]);
-// The world the UI model resolves ids against, handed over ONCE: the cups, the
-// track catalogue and the two field sizes the seat grid needs. Authored data —
-// it changes when the game ships, not while it runs — so it is set here rather
-// than re-sent with every pick. Before ANY render below (the gallery harness
-// grids seats off it too).
-// The two field sizes the seat grid needs. The WORLD is not passed: it is
-// codegen'd into the wasm, so this is the point where the page stops having an
-// opinion about which tracks exist. Before ANY render below (the gallery
-// harness grids seats off it too).
-ui.configure({ maxPlayers: MAX_PLAYERS, carCount: CAR_MODELS.length });
-// ...and read straight back, because the SHELL still has to draw the picker and
-// name the tracks in the phones' chooser payload. `catalog` is CUPS order
-// flattened. cupName is derived here rather than carried: the model answers with
-// a cup ID per track, and the cup NAMES are one lookup away in the same answer.
-({ cups: CUPS, catalog: TRACK_LIST } = ui.catalogue());
-{
-  const nameOf = new Map(CUPS.map((c) => [c.id, c.name]));
-  TRACK_LIST = TRACK_LIST.map((t) => ({ ...t, cupName: nameOf.get(t.cup) || null }));
-}
-built = new Map(TRACK_LIST.map((t) => [t.id, trackEntry(t)]));
-trackCatalog = TRACK_LIST.map((t) => ({
-  id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-  svg: TRACK_SCHEMATICS[t.id]
-}));
-// The same once-at-boot handover for the orchestration layer's world. Two things
-// about it are worth knowing:
-//   * the PERSONA table is read back out of the wasm (libttp-sim's own
-//     ttp::AI_PERSONALITIES) and handed straight in, so the CPU roster has ONE
-//     source. public/display/aiPersonas.js survives for the test surfaces that
-//     need it synchronously, and tests/display-abi.test.js pins it to this.
-//   * carStats rows cross OPAQUE — copied into a field entry and never read —
-//     which is what keeps CAR_STATS out of the decision layer.
-flow.configure({
-  fieldSize: MAX_PLAYERS, carCount: CAR_MODELS.length, colorCount: CAR_COLORS.length,
-  aiPrefix: 'ai-', personas: flow.personas(),
-  carStats: CAR_MODELS.map((_, i) => carStats(i)), cups: CUPS
+const {
+  sim: _nativeSim, audio: _nativeAudio, flow, biomes: _biomes,
+  trackList: TRACK_LIST, built, trackCatalog, trackChooser, carChooser, party: _nativeParty
+} = await bootEngine({
+  maxPlayers: MAX_PLAYERS, carModels: CAR_MODELS, carColors: CAR_COLORS,
+  carNames: window.CAR_NAMES || [], carStatsRows: CAR_MODELS.map((_, i) => carStats(i)),
+  totalLaps: TOTAL_LAPS
 });
-// The biome ABI off the same module: the ?biome= list, the music pool key and
-// the HUD boost chip's accent. The palette itself never leaves C++.
-const _biomes = await loadBiomes();
-
-const [_room, _conn, _lane, _sess, _schem] = await Promise.all([
-  import('./NativeRoomFlow.js'),
-  import('./NativePartyConnection.js'),
-  import('./NativePartyFastlane.js'),
-  // The SESSION POLICY: the room snapshot, the seat rules, the message guards,
-  // the self-heartbeat, the seat claim. DisplayNet performs its answers.
-  import('./NativeSessionModel.js'),
-  // ...and the track-map codec the snapshot's chooser payload is packed with.
-  import('./NativeSchematic.js')
-]);
-// One shared wasm module backs all of these (nativeRuntime.js memoizes it).
-await Promise.all([_room.init(), _conn.init(), _lane.init(), _sess.init(), _schem.init()]);
-// The reduced maps the phones' picker renders: the baked full-res schematic,
-// RDP-simplified and uint8-packed by the native codec so the whole catalogue
-// fits the relay's 16 KiB set_state cap.
-// A track with no baked schematic loses its mini-map and nothing else. The two
-// lists cannot disagree in a shipped build — TRACK_LIST comes from the wasm's
-// codegen'd catalogue and the bake comes from the same shared/tracks.js, and
-// tests/ui-model.test.js plus native-artifact gate the pair — but they are two
-// artifacts now rather than one module, so a dev mid-rebuild can hold a wasm
-// the bake has not caught up with. That should cost a picture, not the page.
-trackChooser = TRACK_LIST.flatMap((t) => {
-  const baked = TRACK_SCHEMATICS[t.id];
-  if (!baked) {
-    console.error(`[display] no baked schematic for "${t.id}" — run npm run gen:schematics`);
-    return [];
-  }
-  return [{
-    id: t.id, name: t.name, cup: t.cup, cupName: t.cupName, cupDifficulty: t.cupDifficulty,
-    svg: _schem.pack(baked.d)
-  }];
-});
-const _nativeParty = {
-  RoomFlowImpl: _room.NativeRoomFlow,
-  PartyConnectionImpl: _conn.NativePartyConnection,
-  // The fastlane subclasses the kit's class (which keeps the WebRTC handshake and
-  // is a classic-script global), so the subclass is built here, not at module scope.
-  FastlaneImpl: _lane.makeNativePartyFastlane(window.PartyFastlane)
-};
+// The livery hex palette (colorIndex → colour) rides the retained room snapshot
+// beside the two chooser payloads, so a phone's livery dots always match the car
+// the display paints.
+const colorPalette = CAR_COLORS.slice();
 // DEV_TRACKS (shared/devTracks.js): an unknown ?track= id is looked up in the dev
 // catalogue and built like any track — but only the ONE requested id, and only in a
 // ?scenario= test surface or ?solo (they're keyboard test ranges — e.g. the 'gym'
@@ -247,7 +143,7 @@ if ((_isTestMode || _isDebugSolo) && _qTrack && !built.has(_qTrack)) {
   // Dev ranges are in the wasm's track table too (gen-track-defs-header.mjs
   // carries DEV_TRACKS past the catalogue), so this only has to name one.
   const _devDef = DEV_TRACKS[_qTrack];
-  if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }));
+  if (_devDef) built.set(_qTrack, trackEntry({ id: _qTrack, ..._devDef }, TOTAL_LAPS));
 }
 let selectedTrackId = (_qTrack && built.has(_qTrack)) ? _qTrack : null;
 // Only an EXPLICIT ?track= preselects a room PICK (DisplayNet's defaultTrackId
@@ -342,13 +238,12 @@ function selectTrack(id) {
   }
 }
 
-// Lobby backdrop: the sunny diorama is the persistent base layer; the 3D #scene sits over
-// it and is shown/hidden by OPACITY (.is-dim), not display, so it can crossfade straight in
-// over the diorama. The live lobby always has a preview track (the boot fallback above), so
-// in practice the diorama shows through only on test surfaces that boot without one.
-// The welcome board ALWAYS sits on the diorama (its copy is unreadable over a live
-// track), even though a preview or pick exists behind it — NEW GAME re-runs
-// updateBackdrop to reveal the 3D attract race already running underneath.
+// Whether the 3D backdrop should be showing at all. The live lobby always has a
+// preview track (the boot fallback above), so in practice the diorama shows
+// through only on test surfaces that boot without one. The welcome board ALWAYS
+// sits on the diorama (its copy is unreadable over a live track), even though a
+// preview or pick exists behind it — NEW GAME re-runs updateBackdrop to reveal
+// the 3D attract race already running underneath.
 function backdropShow3D() {
   // Never reveal a canvas that hasn't drawn a frame yet — the fade would come
   // up from black instead of from the diorama. scenePromise re-runs
@@ -357,95 +252,24 @@ function backdropShow3D() {
   if (currentScreen === 'welcome') return false;
   return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
 }
+
+// The reveal itself is backdrop.js's; what stays here is WHEN, and the test-mode
+// veto. Test surfaces own the backdrop (see runDisplayScenario's DIORAMA_ONLY):
+// the harness un-dims #scene for its 3D scenarios before the scene has booted,
+// and scenePromise's deferred call here would re-dim it back to a blank page.
 function updateBackdrop() {
-  // Test surfaces own the backdrop (see runDisplayScenario's DIORAMA_ONLY): the
-  // harness un-dims #scene for its 3D scenarios before the scene has booted, and
-  // scenePromise's deferred call here would re-dim it back to a blank page.
   if (_isTestMode) return;
-  const sc = el('scene');
-  sc.classList.remove('hidden');           // visibility is by opacity now, not display
-  sc.classList.toggle('is-dim', !backdropShow3D());
+  setBackdrop3D(backdropShow3D());
 }
 
-// ---- lobby backdrop crossfade ----
-// Two transitions share this helper, picked by whether a track is already on screen:
-//
-//  • track → track (a track is showing): a TRUE crossfade between circuits. Freeze the
-//    current track as a still over #scene (scene.snapshot), run `mid` to rebuild the live
-//    canvas to the new track UNDERNEATH the still, then fade the still out so the new track
-//    emerges through the old. It never dips through the diorama background.
-//  • diorama → track (the very first pick — #scene still transparent): there's no outgoing
-//    track to dissolve from, so reveal the just-built track over the diorama by fading
-//    #scene's own opacity in.
-//
-// `mid` (swap track, rebuild demo cars, drop the frozen race field…) always runs under cover.
-// FADE_MS mirrors the opacity transitions on #scene / #scene-snap in display.css.
-const FADE_MS = 450;
-let fadeTimer = null, snapTimer = null, fadeGen = 0;
+// The lobby's track→track crossfade, with the two predicates it re-asks after a
+// frame: whether to reveal at all, and whether the lobby is still the thing on
+// screen (a race starting under a crossfade drops the still instead).
 function fadeBackdrop(mid) {
-  const sc = el('scene');
-  if (!sc) { mid(); return; }
-  const dio = el('lobby-diorama'); if (dio) dio.classList.remove('hidden'); // base for the first reveal
-  // Clear any in-flight crossfade so rapid track-cycling can't stack stills / fade timers.
-  // fadeGen invalidates any deferred build still queued from a superseded pick (see below).
-  clearTimeout(fadeTimer); clearTimeout(snapTimer);
-  const gen = ++fadeGen;
-  const oldSnap = el('scene-snap'); if (oldSnap) oldSnap.remove();
-
-  const buildThenFadeIn = () => {
-    // try/finally so a throw in mid() can never leave the backdrop stuck transparent.
-    try { mid(); }
-    finally {
-      sc.classList.remove('hidden');
-      sc.classList.add('is-dim');           // hold the just-built track transparent for one frame…
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        sc.classList.toggle('is-dim', !backdropShow3D()); // …then fade it in over the diorama
-      }));
-    }
-  };
-
-  const visible = !sc.classList.contains('hidden') && !sc.classList.contains('is-dim');
-  if (!visible) { buildThenFadeIn(); return; }   // first reveal → diorama → track
-
-  // A track is on screen: dissolve it straight into the next one. The still is a frozen frame
-  // of the OUTGOING track; the live #scene rebuilds to the new track behind it.
-  const still = scene.snapshot();
-  if (!still) {                                  // capture unavailable → fall back to the dip
-    sc.classList.add('is-dim');
-    fadeTimer = setTimeout(buildThenFadeIn, FADE_MS);
-    return;
-  }
-  still.id = 'scene-snap';
-  sc.appendChild(still);                         // sits over the live canvas, inside #scene's z-0 layer
-  sc.classList.remove('is-dim');                 // the live track stays fully opaque beneath the still
-  // Order matters: start the fade FIRST, rebuild the track a frame LATER. An opacity
-  // transition runs on the compositor, so it keeps animating even while the main thread is
-  // busy — whereas setTrack blocks the thread for tens of ms (and the orbit with it). By the
-  // time the rebuild runs the compositor already owns the fade, so the hitch happens UNDER a
-  // still that's visibly dissolving and the preview never appears to stop. (The very first
-  // reveal masks the same block with the compositor-animated diorama; see buildThenFadeIn.)
-  // Until the rebuild swaps it, the live layer is still the OUTGOING track — same as the
-  // still on top, so the early fade shows no change. mid() reads the latest pick, and a fast
-  // re-pick supersedes this whole chain via fadeGen.
-  const dissolve = () => {
-    if (gen !== fadeGen) return;
-    still.classList.add('is-fading');            // hand the dissolve to the compositor
-    snapTimer = setTimeout(() => { still.remove(); }, FADE_MS);
-  };
-  // The swap finishes LATER than the frame that starts it (asset provisioning +
-  // buildScene), so the still stays opaque until mid()'s promise resolves —
-  // dissolving on schedule would just uncover the OLD circuit and let the new
-  // one pop in.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (gen !== fadeGen) return;                 // superseded by a newer pick
-    requestAnimationFrame(() => {                // rebuild a frame later, hidden behind the still
-      if (gen !== fadeGen) return;               // a newer pick (or leaving the lobby) cancelled us
-      if (!(sceneReady && net.roomState === ROOM_STATE.LOBBY)) { // race started under us → drop the still
-        clearTimeout(snapTimer); still.remove(); return;
-      }
-      Promise.resolve(mid()).then(dissolve, dissolve);
-    });
-  }));
+  crossfadeBackdrop(scene, mid, {
+    show3D: backdropShow3D,
+    stillValid: () => sceneReady && net.roomState === ROOM_STATE.LOBBY
+  });
 }
 
 // ---- lobby attract demo ----
@@ -614,13 +438,15 @@ scene.onFrame = (dt) => {
   // finish event (a drop, a forfeit, a rekey). A net does not need 60 Hz; the
   // worst case is ~160 ms before a fast-forward that then resolves the whole
   // remaining race instantly.
-  const flow = (slowTick && session.racing) ? raceFlow() : null;
-  if (flow && flow.allDone) {
+  // Named for what it is, not `flow` — that is the orchestration MODULE in this
+  // scope, and a local of the same name shadowed it for the whole branch below.
+  const finish = (slowTick && session.racing) ? raceFlow() : null;
+  if (finish && finish.allDone) {
     // A dropped racer's ghost can never cross the line — forfeit any such car now
     // that every connected human is home, so the burst (and the race) ends
     // promptly instead of running to the guard cap on a car that can't finish.
     // fresh array — safe while forfeitCar removes cars
-    for (const id of flow.forfeit) forfeitCar(id);
+    for (const id of finish.forfeit) forfeitCar(id);
     if (!session.racing) return; // forfeiting the last unfinished car already ended the race
     // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
     // advances the deterministic sim with NO rendering, and the just-finished
@@ -690,14 +516,14 @@ const net = new DisplayNet({
   // The random-track shuffle bag lives BEHIND THE ROOM now; what the shell
   // supplies is one page-entropy seed (DisplayNet hands it to init_pick).
   hasBag: true,
-  // selectTrack swaps the 3D preview; renderLobbyPick refreshes the cup slot
-  // even when the resolved trackId didn't change (e.g. a mode switch landing
-  // on the same circuit, where selectTrack early-returns).
+  // selectTrack swaps the 3D preview; renderPick refreshes the cup slot even
+  // when the resolved trackId didn't change (e.g. a mode switch landing on the
+  // same circuit, where selectTrack early-returns).
   onTrackChange: (id) => {
     // Remember every confirmed pick's resolved circuit: it is what the NEXT
     // party's lobby attracts on before anyone joins.
     if (id && built.has(id)) { try { localStorage.setItem(LAST_TRACK_KEY, id); } catch (_) {} }
-    selectTrack(id); renderLobbyPick();
+    selectTrack(id); renderPick();
   },
   onRoomReady: async ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; the ticket shows one
@@ -861,45 +687,17 @@ function renderRoster(rosterSize, hostPeerIndex) {
   // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
   sfx(audioDecide.roster(rosterSize, net.roomState === ROOM_STATE.LOBBY));
   renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex));
-  renderLobbyPick();   // the pre-pick cup slot names the host — track joins/renames
+  renderPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
 }
 
-// Lobby right-rail cup slot, driven by the same state as the phones'
-// track-pick UI (net.mode/cupId/trackId). Pre-pick the slot is empty;
-// post-pick it shows the race card (cup / exact track / random). The scan
-// hint under the ticket stays up for the whole lobby — joining is possible
-// until the race starts.
-// The slot's CONTENT is uiModel.cupSlot's — which name, how many races, the
-// difficulty pips, which circuits to draw as minis and how they're numbered
-// (an undrawn race is a trackId-less chip). It hands back keys plus data
-// (never composed copy), so the few English strings and the schematic lookup
-// are all that stay here.
-const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
-const NAME_COPY = { random: 'Random', tour: 'World Tour' };
-function renderLobbyPick() {
-  const slot = el('cup-slot');
-  if (!slot) return;
-  const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
-  const m = ui.cupSlot(net.pick);
-  renderCupSlot(slot, m && {
-    name: NAME_COPY[m.nameKey] || m.name || '?',
-    races: RACES_COPY[m.racesKey](m.raceCount),
-    // raceCount sizes the maps grid (renderCupSlot pads a counted card's
-    // not-yet-drawn races with "?" boxes); endless is a single ∞ box. RANDOM
-    // only — a cup's racesKey is 'count' too, and a cup card must never pad
-    // (a chip with a missing schematic just costs its picture, not a "?").
-    raceCount: m.nameKey === 'random' && m.racesKey === 'count' ? m.raceCount : null,
-    difficulty: m.difficulty,
-    // Random spoils nothing: a counted card is raceCount grey "?" boxes (an
-    // empty list here — renderCupSlot's raceCount padding builds them all)
-    // and endless is one grey box carrying ∞; even the drawn race 1 isn't the
-    // card's to sell. A veil here rather than in the model — the frozen ui
-    // corpus pins cupSlot's random answers to the drawn chip.
-    maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
-      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId, n: x.n, cup: x.cup })),
-    cupId: m.cupId   // biome-tints the mini fields, like the phone picker
-  });
+// Lobby right-rail cup slot, driven by the same state as the phones' track-pick
+// UI (the room's stored pick). Pre-pick the slot is empty; post-pick it shows
+// the race card. The markup and the copy live in lobbySeats.js, shared with the
+// gallery preview so the two cannot drift. The scan hint under the ticket stays
+// up for the whole lobby — joining is possible until the race starts.
+function renderPick() {
+  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
 }
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
@@ -1021,7 +819,7 @@ const RACE_PERFORMERS = {
   // paper diorama (the welcome board still sits on the diorama regardless;
   // backdropShow3D gates on the screen).
   'clear-pick': () => net.clearPick(),
-  'render-lobby-pick': () => renderLobbyPick(),
+  'render-lobby-pick': () => renderPick(),
   'refresh-lobby-demo': () => refreshLobbyDemo(),
   'update-backdrop': () => updateBackdrop(),
   'dispose-session': () => {
@@ -1059,25 +857,6 @@ function applyEffect(e, ctx) {
   // the net performer's; anything neither table knows throws there.
   net.performEffect(e);
 }
-
-// The countdown banner. n > 0: "3/2/1". n === 0: "GO!" (the race starts this
-// beat, the banner fades over the next via .is-go). n < 0: banner gone. The
-// beat's SOUND is the wasm's — it taps the same tick — so there is no cue call.
-const CD_COPY = { go: 'GO!' };  // the GO beat's copy; numerals ride the effect
-function showCountdownBanner(e) {
-  const cd = el('countdown');
-  // `go` IS the beat semantics (the effect carries it); no third spelling of
-  // "n === 0 means GO" here.
-  cd.textContent = e.go ? CD_COPY.go : e.n > 0 ? String(e.n) : '';
-  cd.classList.toggle('is-go', e.go);
-  // slap each numeral in (re-add .slap around a reflow so the animation restarts
-  // on the same element); GO! keeps its own is-go fade-out.
-  cd.classList.remove('slap');
-  if (e.slap) { void cd.offsetWidth; cd.classList.add('slap'); }
-}
-
-// Feed each AI car its pure-pursuit input for this frame, exactly as a phone's
-// CONTROL would. Runs every frame (a no-op during the countdown, when update() is).
 
 // ---- race lifecycle ----
 // START_GAME gate: the host's "Start race" button is only enabled once every
@@ -1223,126 +1002,13 @@ function renderIntermissionCountdown() {
   if (secs) secs.textContent = String(ui.intermissionSecs(seriesDeadline, Date.now()));
 }
 
-// The results overlay in its three dressings: plain single-race board, cup
-// intermission (points + "next up" footer), cup podium (top-three steps).
-// Rows come from the same standingsPayload the phones get, so both screens
-// always tell the same story (order, points, joining rows).
-//
-// WHICH dressing, which rows go on the steps vs in the list, and what each row's
-// trailing cell says are uiModel.resultsView's — it answers in KEYS, and the
-// table below is where those keys become English. Everything from here down is
-// markup.
-const TITLE_COPY = {
-  // Podium boards celebrate: "<cup> CHAMPS!" on a red header sticker (.is-podium h2).
-  cup_champs: (v) => `${v.cupName} CHAMPS!`,
-  standings: () => 'Standings',
-  results: () => 'Results'
-};
-const SUB_COPY = {
-  cup_race: (v) => `${v.cupName} · Race ${v.race}`,          // endless: no "of N"
-  cup_race_of: (v) => `${v.cupName} · Race ${v.race} of ${v.of}`
-};
-const NEWGAME_COPY = { next_race: 'Next race ▸', new_game: 'New Game' };
+// The results overlay, painted by raceOverlays.js. WHICH dressing (single race,
+// cup intermission, podium) and every row's content are uiModel.resultsView's;
+// what happens here is only the two crossings that need this shell's state — the
+// live board, and the intermission budget.
 function showResults(results) {
   const board = standingsPayload(results, true);
-  const v = ui.resultsView(board, { intermissionMs: intermissionMs() });
-
-  el('results-title').textContent = TITLE_COPY[v.titleKey](v);
-  // Sub only during intermissions ("Cup · Race N of M") — the podium's CHAMPS
-  // header says it all.
-  const sub = el('results-sub');
-  sub.classList.toggle('hidden', !v.intermission);
-  if (v.sub) sub.textContent = SUB_COPY[v.sub.key](v.sub);
-
-  renderPodium(el('results-podium'), v.podiumRows);
-
-  const list = el('results-list');
-  list.innerHTML = '';
-  for (const row of v.listRows) {
-    const li = document.createElement('li');
-    if (row.joining) li.className = 'is-joining';
-    // The name is player-supplied — set as TEXT, never markup (same rule as
-    // the controller's results list and renderJoinUrl). It carries the
-    // player's livery colour itself — no swatch dot.
-    const nm = document.createElement('span');
-    nm.className = 'res-name';
-    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
-    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
-    li.append(nm, ' ');
-    if (row.kind === 'joining') {
-      const t = document.createElement('span');
-      t.className = 'res-time';
-      t.textContent = 'Next race';
-      li.appendChild(t);
-    } else if (row.kind === 'points') {
-      // Cup boards tell the points story ("+9 · 15 pts"); the lap clock already
-      // had its moment on the finish cards.
-      const gain = document.createElement('span');
-      gain.className = 'res-gain' + (row.gained ? '' : ' is-zero');
-      gain.textContent = `+${row.gained || 0}`;
-      const pts = document.createElement('span');
-      pts.className = 'res-pts';
-      pts.textContent = `${row.points || 0} pts`;
-      li.append(gain, pts);
-    } else {
-      const t = document.createElement('span');
-      t.className = 'res-time';
-      t.textContent = row.finished ? `${row.time.toFixed(1)}s` : 'DNF';
-      li.appendChild(t);
-    }
-    list.appendChild(li);
-  }
-
-  // Intermission footer: what's next + the auto-advance countdown (ticked by
-  // renderIntermissionCountdown against seriesDeadline).
-  const next = el('results-next');
-  next.classList.toggle('hidden', !v.intermission);
-  if (v.next) {
-    next.textContent = 'Next up: ';
-    const b = document.createElement('b');
-    b.textContent = v.next.trackName;
-    const secs = document.createElement('span');
-    secs.id = 'results-next-secs';
-    secs.textContent = String(v.next.secs);
-    next.append(b, ' — starting in ', secs, '…');
-  }
-
-  el('results-newgame').textContent = NEWGAME_COPY[v.newGameKey];
-  el('results').classList.toggle('is-podium', v.podium); // list ranks from 4th under the steps
-  el('results').classList.remove('hidden');
-}
-
-// Top-three steps, arranged 2nd | 1st | 3rd; hidden outside podium boards (the
-// model hands back null there). AI keep their (CPU) tag — beating them is the
-// story of a short-handed cup. Each step is a livery-coloured sticker block
-// carrying its rank numeral.
-function renderPodium(wrap, top) {
-  wrap.innerHTML = '';
-  top = top || [];
-  wrap.classList.toggle('hidden', !top.length);
-  for (const place of [2, 1, 3]) {
-    const row = top[place - 1];
-    if (!row) continue;
-    const col = document.createElement('div');
-    col.className = 'podium__col';
-    col.dataset.place = String(place);
-    col.style.setProperty('--c', CAR_COLORS[row.colorIndex] || '#888');
-    const who = document.createElement('div');
-    who.className = 'podium__who';
-    const nm = document.createElement('span');
-    nm.className = 'res-name';
-    nm.style.setProperty('--c', CAR_COLORS[row.colorIndex] || 'inherit');
-    nm.textContent = `${row.name}${row.ai ? ' (CPU)' : ''}`;
-    who.append(nm);
-    const pts = document.createElement('div');
-    pts.className = 'podium__pts';
-    pts.textContent = `${row.points || 0} pts`;
-    const step = document.createElement('div');
-    step.className = 'podium__step';
-    step.textContent = String(place);
-    col.append(who, pts, step);
-    wrap.appendChild(col);
-  }
+  renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS);
 }
 
 function returnToLobby() {
@@ -1417,35 +1083,7 @@ function setPauseOverlay(on) {
   el('pause-overlay').classList.toggle('hidden', !on);
 }
 
-// ---- race chrome auto-hide ----
-// A running race hides its own furniture after a spell of pointer inactivity:
-// the corner buttons (which share the top-right with each cell's place/lap
-// readout) fade, and the mouse pointer goes with them — this is a TV surface,
-// so a parked arrow is litter on the track. One class on <html> drives both
-// (display.css), and any mouse move / tap / key press brings them back.
-//
-// Armed ONLY while a race is actually running, since a vanished cursor is a
-// trap wherever there's something to click: the welcome board, the lobby and
-// the results screen never arm it (the pause button is .hidden there — the
-// same signal), and pauseRace/resumeRace disarm and re-arm it around the pause
-// overlay, whose buttons are the one thing a mouse user MUST be able to hit.
-const CHROME_IDLE_MS = 2500;    // starting value — long enough to aim + click after moving
-let chromeIdleTimer = 0;
-function revealRaceChrome() {
-  // Gated on what's actually ON SCREEN, not on `paused`: the pause button is
-  // .hidden off-race, and a visible overlay means a modal wants the mouse —
-  // true for a real pause AND for the test harness's `paused` preview, which
-  // dresses the overlay without touching the pause state.
-  if (el('pause-btn').classList.contains('hidden')) return;
-  if (!el('pause-overlay').classList.contains('hidden')) return;
-  document.documentElement.classList.remove('chrome-idle');
-  clearTimeout(chromeIdleTimer);
-  chromeIdleTimer = setTimeout(() => document.documentElement.classList.add('chrome-idle'), CHROME_IDLE_MS);
-}
-function holdRaceChrome() { clearTimeout(chromeIdleTimer); document.documentElement.classList.remove('chrome-idle'); }
-for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
-  window.addEventListener(ev, revealRaceChrome, { passive: true });
-}
+// ---- audio unlock + the sound hint ----
 // Unlock audio on the first real gesture (pointermove is not a user activation,
 // so it can't resume a suspended AudioContext — only clicks/keys count).
 for (const ev of ['pointerdown', 'keydown']) {
@@ -1471,35 +1109,7 @@ if (!_isTestMode && _audioSupported) {
   updateSoundHint();
 }
 
-// ---- fullscreen ----
-// The big screen wants the whole screen: NEW GAME claims it on the session's
-// first click (see the bootstrap tail), and this toggle is the way back out —
-// and, more usefully, back IN, since entering needs a user gesture and Esc / a
-// tab switch can drop it mid-party with no other way to recover. The button
-// mirrors the DOCUMENT's state rather than its own clicks: the browser also
-// changes it behind our back (Esc, and a denied request never happens at all).
-// Hidden where it can't work: fullscreenEnabled is false both with no API at all
-// and inside an iframe that wasn't granted the permission (the gallery's preview
-// cards), so it covers both without a test-surface special case.
-// _fullscreenSupported is declared at the top of the file — the pre-boot NEW
-// GAME handler needs enterFullscreen() before this section has run.
-el('fullscreen-btn').classList.toggle('hidden', !_fullscreenSupported);
-function enterFullscreen() {
-  if (!_fullscreenSupported || document.fullscreenElement) return;
-  document.documentElement.requestFullscreen().catch(() => { /* denied/unsupported — play windowed */ });
-}
-function syncFullscreenBtn() {
-  const on = !!document.fullscreenElement;
-  el('fullscreen-btn').setAttribute('aria-pressed', on ? 'true' : 'false');
-  el('fullscreen-btn').setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
-}
-el('fullscreen-btn').addEventListener('click', () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else enterFullscreen();
-});
-document.addEventListener('fullscreenchange', syncFullscreenBtn);
-syncFullscreenBtn(); // a crash-recovery reload can boot already fullscreen
-
+// ---- the buttons the race screen owns ----
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit — cancels a cup too
@@ -1513,36 +1123,6 @@ el('results-newgame').addEventListener('click', () => {
 });
 
 // ---- join link → clipboard ----
-// Brief confirmation toast; auto-hides. Re-trigger restarts the timer.
-let toastTimer = null;
-function showToast(msg) {
-  const t = el('toast');
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.add('is-on');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('is-on'), 1600);
-}
-// Copy with a graceful fallback for non-secure contexts where the async
-// Clipboard API isn't available (older setups / plain http).
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (_) { /* fall through to legacy path */ }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch (_) { return false; }
-}
 el('joinbox').addEventListener('click', async () => {
   if (!currentJoinUrl) return;
   showToast(await copyText(currentJoinUrl) ? 'Copied' : 'Copy failed');
@@ -1554,41 +1134,6 @@ el('joinbox').addEventListener('click', async () => {
 // dev previews and skip it.
 const wakeLock = createWakeLock();
 if (!_isTestMode) wakeLock.enable();
-
-// ---- device chooser ----
-// The display URL opened on a phone-sized screen (see #device-choice in
-// index.html + display.css): most likely someone followed the wrong link while
-// trying to JOIN a game, so don't open a room until they commit to running the
-// big screen here. On big screens (and test/solo surfaces, which dismiss
-// up front) we mark it dismissed immediately, so resizing the window
-// mid-session can never surface the chooser over a live lobby or race.
-function dismissDeviceChoice() { document.documentElement.classList.add('device-choice-dismissed'); }
-function startWhenDeviceChosen() {
-  const choice = el('device-choice');
-  if (!choice || getComputedStyle(choice).display === 'none') {
-    dismissDeviceChoice();
-    net.start();
-    return;
-  }
-  window.__deviceChoicePending = true; // E2E hook: the boot took the deferred path
-  let chosen = false;
-  const proceed = () => {
-    if (chosen) return;
-    chosen = true;
-    window.__deviceChoicePending = false;
-    window.removeEventListener('resize', onResize);
-    dismissDeviceChoice();
-    net.start();
-  };
-  // The chooser's visibility is pure CSS (the display.css media query): if the
-  // window grows past the trigger — a small desktop window getting maximised —
-  // the overlay vanishes on its own, so treat that as choosing the big screen
-  // or the room would never open. Reading the computed style on resize keeps
-  // the breakpoint defined in exactly one place (the CSS).
-  const onResize = () => { if (getComputedStyle(choice).display === 'none') proceed(); };
-  el('device-continue').addEventListener('click', proceed);
-  window.addEventListener('resize', onResize);
-}
 
 // Gallery / test mode: any ?scenario=… skips the relay and lets the
 // TestHarness drive a single screen from fake data. Normal play connects.
@@ -1651,7 +1196,7 @@ if (_scenario) {
   if (newGameClicked) newGameClick();
   renderRoster([], null); // paint the open-seat placeholders now, so the lobby reveal is complete
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
-  startWhenDeviceChosen(); // net.start() warms the room BEHIND the welcome board, gated on the device chooser where it shows
+  startWhenDeviceChosen(() => net.start()); // warms the room BEHIND the welcome board, gated on the device chooser where it shows
 
   // Browser back: one level up the SCREEN_ORDER stack. WHAT that means per
   // screen is uiModel.BACK_EFFECT (race → the same reset as the pause overlay's
@@ -1702,44 +1247,12 @@ window.__biomes = _biomes;
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
 // through its normal boot path above. Lazy import: dev aid, not boot-critical.
-import('../shared/debugPanel.js').then(({ initDebugPanel }) => {
-  // Capture the engine default ONCE, before any URL ?steerExpo= value is applied
-  // (the panel's range field calls live() at init). Used for both the slider's
-  // default and the "· default" readout marker — reading it live inside format()
-  // would wrongly equal the dragged value.
-  const steerDefault = _nativeSim.getNativeSteerExpo();
-  return initDebugPanel([
-  { section: 'Test harness' },
-  { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-    options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
-      .map((s) => ({ value: s, label: s })) },
-  { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: MAX_PLAYERS },
-  { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: MAX_PLAYERS - 1 },
-  { key: 'picked', label: 'Picked mode', hint: 'lobby: post-pick chrome over the preview', type: 'select',
-    options: [{ value: 'cup', label: 'cup' }, { value: 'track', label: 'exact track' }, { value: 'random', label: 'random' }] },
-  { section: 'Solo drive' },
-  { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
-    options: CAR_MODELS.map((_, i) => ({ value: String(i), label: window.CAR_NAMES[i] })) },
-  { section: 'Driving feel' },
-  // Live: re-shapes the tilt→steer curve mid-race (no reload). 1 = linear scaling;
-  // higher = gentler near centre, sharper toward full lock. The engine reads it
-  // fresh each step, so it affects every car in the running race instantly.
-  { key: 'steerExpo', label: 'Steering curve', hint: 'tilt→steer exponent · live', type: 'range',
-    min: 0.6, max: 3, step: 0.05, value: steerDefault,
-    live: (x) => _nativeSim.setNativeSteerExpo(x),
-    format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
-  // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) for slow-mo inspection — no
-  // reload. 1 = normal; drag down to watch fast action (e.g. a rocket strike) play out frame by frame.
-  { key: 'timescale', label: 'Time scale', hint: 'slow-mo · live', type: 'range',
-    min: 0.1, max: 1, step: 0.05, value: 1, live: (n) => scene.setTimeScale(n),
-    format: (n) => n.toFixed(2) + '×' + (Math.abs(n - 1) < 1e-9 ? ' · normal' : '') },
-  { section: 'Track' },
-  { key: 'track', label: 'Preselect', type: 'select',
-    options: TRACK_LIST.map((t) => ({ value: t.id, label: t.name })) },
-  { section: 'Rendering' },
-  { key: 'biome', label: 'Biome', hint: 'override the cup look (blank = cup decides)', type: 'select',
-    options: _biomes.names.map((b) => ({ value: b, label: b })) },
-  { key: 'dividers', label: 'Cell dividers', hint: 'ink lines between cells · default on', type: 'select',
-    options: [{ value: '0', label: 'off' }] },
-  ], { title: 'Display' });
-});
+// The field list is debugFields.js.
+Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js')])
+  .then(([{ initDebugPanel }, { displayDebugFields }]) => initDebugPanel(
+    displayDebugFields({
+      maxPlayers: MAX_PLAYERS, carNames: window.CAR_NAMES || [], trackList: TRACK_LIST,
+      biomeNames: _biomes.names, scene, sim: _nativeSim
+    }),
+    { title: 'Display' }
+  ));

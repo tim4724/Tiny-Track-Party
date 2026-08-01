@@ -15,7 +15,15 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { renderSeats, renderCupSlot } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick } from './lobbySeats.js';
+// The live results overlay and countdown banner. Driving the REAL renderers off
+// the REAL ui model (a synthesized board in, the same markup out) is what keeps
+// these previews from drifting — this file used to carry a second implementation
+// of both in template literals, and the lobby's twin had already drifted to a
+// screen that no longer existed by the time anyone noticed.
+import { renderResults, showCountdownBanner } from './raceOverlays.js';
+import { resultsView } from './NativeUiModel.js';
+import { intermissionMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
@@ -218,6 +226,33 @@ export function runDisplayScenario(opts, ctx) {
   const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
+  // Paint the results overlay from a SYNTHESIZED board — the same shape
+  // standingsPayload hands live play — through the real ui model and the real
+  // renderer. The preview's whole job is choosing what board to show; every
+  // decision after that (dressing, row kinds, podium split, footer) is the
+  // model's, exactly as in a real race.
+  const showBoard = (board) => renderResults(resultsView(board, { intermissionMs: intermissionMs() }), COLORS);
+
+  // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
+  // PICK goes in, the model decides the whole card. null empties the slot.
+  const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
+  const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog);
+
+  // ?picked=<mode> → the pick the preview shows. A matching ?track=<id> aims the
+  // card at that circuit (and its cup) so the card names what the 3D preview is
+  // orbiting; without one each mode falls back to something representative.
+  function previewPick(picked) {
+    const mode = picked === '1' ? 'cup' : String(picked);   // legacy '1' = cup
+    const qTrack = new URLSearchParams(location.search).get('track');
+    const cupOf = (id) => CUPS.find((c) => c.tracks.includes(id));
+    if (mode === 'track') {
+      return { mode, trackId: (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[0].tracks[2] };
+    }
+    if (mode === 'random') return { mode, randomRaces: window.RANDOM_RACES.DEFAULT };
+    if (mode === 'tour') return { mode };
+    return { mode: 'cup', cupId: ((qTrack && cupOf(qTrack)) || CUPS[0]).id };
+  }
+
   // ---- backdrop ----
   // Mirrors live play's rule (main.js backdropShow3D): only the welcome board
   // (and the device chooser sitting on it) keeps the 2D paper diorama — every
@@ -343,7 +378,7 @@ export function runDisplayScenario(opts, ctx) {
     // nothing room-dependent has rendered, so nothing here fakes a join.
     show('lobby');
     renderRoster([], null);
-    renderCupSlot(el('cup-slot'), null);
+    showPick(null);
     return;
   }
 
@@ -354,7 +389,7 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
-    renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
+    showPick(null);   // no pick yet → empty slot
     fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
     startAttractDemo([]);
     return;
@@ -378,54 +413,12 @@ export function runDisplayScenario(opts, ctx) {
     renderRoster(slots, hostIdx);
     fakeJoin('TEST');
     startAttractDemo(slots);
-    if (opts.picked) {
-      // Post-pick lobby: race card in the slot, hint gone (mirrors
-      // renderLobbyPick). `picked` picks the MODE: 'cup' (legacy '1'), 'track',
-      // 'random' or 'tour'. Pair the card with a matching ?track=<id> so the
-      // orbiting preview shows the circuit the card names. Same prebaked
-      // schematics the live lobby uses — nothing in the browser integrates a
-      // track any more.
-      const mode = opts.picked === '1' ? 'cup' : String(opts.picked);
-      const qTrack = new URLSearchParams(location.search).get('track');
-      const mapOf = (id) => ({ svg: TRACK_SCHEMATICS[id] });
-      const entryOf = (id) => TRACK_LIST.find((t) => t.id === id);
-      const cupOf = (id) => CUPS.find((c) => c.tracks.includes(id));
-      let state;
-      if (mode === 'track') {
-        const id = (qTrack && TRACKS[qTrack]) ? qTrack : CUPS[0].tracks[2];
-        const entry = entryOf(id), cup = cupOf(id);
-        state = {
-          name: entry ? entry.name : id, races: '1 race',
-          difficulty: entry ? entry.cupDifficulty : null,
-          maps: [mapOf(id)], cupId: cup && cup.id
-        };
-      } else if (mode === 'random') {
-        // the default-length card — the gallery previews raceCount grey "?"
-        // boxes (the card spoils nothing, the drawn race included), same as
-        // the live slot
-        const n = window.RANDOM_RACES.DEFAULT;
-        state = { name: 'Random', races: `${n} races`, raceCount: n, difficulty: null, maps: [] };
-      } else if (mode === 'tour') {
-        // the World Tour card: one "?" per cup, each wearing its cup's wash
-        state = {
-          name: 'World Tour', races: `${CUPS.length} races`, difficulty: null,
-          maps: CUPS.map((c) => ({ q: true, cup: c.id }))
-        };
-      } else {
-        const cup = (qTrack && cupOf(qTrack)) || CUPS[0];
-        const first = TRACK_LIST.find((t) => t.cup === cup.id);
-        state = {
-          name: cup.name,
-          races: `${cup.tracks.length} races`,
-          difficulty: first ? first.cupDifficulty : null,
-          maps: cup.tracks.map((id, i) => ({ ...mapOf(id), n: i + 1 })),
-          cupId: cup.id
-        };
-      }
-      renderCupSlot(el('cup-slot'), state);
-    } else {
-      renderCupSlot(el('cup-slot'), null);   // no pick yet → empty slot
-    }
+    // Post-pick lobby: race card in the slot, hint gone. `picked` names the MODE
+    // ('cup' — legacy '1' — 'track', 'random' or 'tour'); everything the card
+    // then says is the model's, off the same renderLobbyPick the live lobby
+    // calls. Pair the card with a matching ?track=<id> so the orbiting preview
+    // shows the circuit the card names.
+    showPick(opts.picked ? previewPick(opts.picked) : null);
     return;
   }
 
@@ -825,77 +818,40 @@ export function runDisplayScenario(opts, ctx) {
       for (const c of fnCars) scene.setCarHud(c.id, c);
       scene.hold(true);
     } else if (kind === 'results') {
-      // Freeze the grid behind the blurred results overlay.
+      // Freeze the grid behind the blurred results overlay. Every row is a plain
+      // finish; the late joiner riding along under the field gets the model's
+      // `joining` shape (no rank, no time — they race the next one).
       const slots = buildSlots(players);
-      const listEl = el('results-list'); listEl.innerHTML = '';
-      slots.forEach((s, i) => {
-        const col = COLORS[s % COLORS.length] || '#888';
-        const li = document.createElement('li');
-        li.innerHTML =
-          `<span class="res-name" style="--c:${col}">${FAKE_NAMES[s]}</span>` +
-          `<span class="res-time">${FAKE_TIMES[i].toFixed(1)}s</span>`;
-        listEl.appendChild(li);
-      });
-      // Late joiner riding along under the field — mirrors showResults'
-      // "Next race" row (no rank, no time; they race the next one).
+      const order = slots.map((s, i) => ({
+        playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i]
+      }));
       const j = slots.length % FAKE_NAMES.length;
-      const joinLi = document.createElement('li');
-      joinLi.className = 'is-joining';
-      joinLi.innerHTML =
-        `<span class="res-name" style="--c:${COLORS[j % COLORS.length] || '#888'}">${FAKE_NAMES[j]}</span>` +
-        `<span class="res-time">Next race</span>`;
-      listEl.appendChild(joinLi);
-      el('results').classList.remove('hidden');
+      order.push({ playerId: j, name: FAKE_NAMES[j], colorIndex: j, joining: true });
+      showBoard({ over: true, hostPeerIndex: slots[0], order });
     } else if (kind === 'intermission' || kind === 'podium') {
-      // Cup dressings of the results overlay (mirrors showResults' series
-      // branches): frozen grid behind either the mid-cup intermission (points
-      // board + "next up" footer) or the final podium. Real cup/track names,
-      // fake points — with a leader swap so the board shows cup order beating
-      // this race's finish order.
+      // Cup dressings of the same overlay: frozen grid behind either the mid-cup
+      // intermission (points board + "next up" footer) or the final podium.
+      // WHICH dressing is the model's call off `final` — the two previews differ
+      // only in the board handed to it. Real cup/track names, fake points, with a
+      // leader swap so the board shows cup order beating this race's finish order.
       const cup = CUPS[0];
       const final = kind === 'podium';
       const raceIdx = final ? cup.tracks.length - 1 : 1;
-      const rows = buildSlots(players).map((s, i) => ({
-        slot: s, name: FAKE_NAMES[s],
+      const nextId = cup.tracks[raceIdx + 1] || null;
+      const order = buildSlots(players).map((s, i) => ({
+        playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i],
         gained: POINTS_BY_RANK[i] || 0,
         points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
       })).sort((a, b) => b.points - a.points);
-      el('results-title').textContent = final ? `${cup.name} CHAMPS!` : 'Standings';
-      const sub = el('results-sub');
-      sub.classList.toggle('hidden', final);   // podium: the CHAMPS header says it all
-      if (!final) sub.textContent = `${cup.name} · Race ${raceIdx + 1} of ${cup.tracks.length}`;
-      const cupRow = (r) =>
-        `<span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span>` +
-        `<span class="res-gain${r.gained ? '' : ' is-zero'}">+${r.gained}</span><span class="res-pts">${r.points} pts</span>`;
-      const podiumEl = el('results-podium');
-      podiumEl.innerHTML = '';
-      podiumEl.classList.toggle('hidden', !final);
-      if (final) {
-        for (const place of [2, 1, 3]) {
-          const r = rows[place - 1];
-          if (!r) continue;
-          const col = document.createElement('div');
-          col.className = 'podium__col';
-          col.dataset.place = String(place);
-          col.style.setProperty('--c', COLORS[r.slot % COLORS.length] || '#888');
-          col.innerHTML =
-            `<div class="podium__who"><span class="res-name" style="--c:${COLORS[r.slot % COLORS.length] || '#888'}">${r.name}</span></div>` +
-            `<div class="podium__pts">${r.points} pts</div><div class="podium__step">${place}</div>`;
-          podiumEl.appendChild(col);
+      showBoard({
+        over: true, hostPeerIndex: order[0].playerId, order,
+        series: {
+          cupId: cup.id, cupName: cup.name, endless: false,
+          raceIndex: raceIdx, raceCount: cup.tracks.length,
+          nextTrackId: nextId, nextTrackName: nextId ? TRACKS[nextId].name : null,
+          final, autoAdvanceMs: intermissionMs()
         }
-      }
-      const listEl = el('results-list'); listEl.innerHTML = '';
-      for (const r of final ? rows.slice(3) : rows) {
-        const li = document.createElement('li');
-        li.innerHTML = cupRow(r);
-        listEl.appendChild(li);
-      }
-      const next = el('results-next');
-      next.classList.toggle('hidden', final);
-      if (!final) next.innerHTML = `Next up: <b>${TRACKS[cup.tracks[raceIdx + 1]].name}</b> — starting in 8…`;
-      el('results-newgame').textContent = final ? 'New Game' : 'Next race ▸';
-      el('results').classList.toggle('is-podium', final); // list ranks from 4th under the steps
-      el('results').classList.remove('hidden');
+      });
     }
     // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
     // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint
@@ -904,24 +860,29 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   function runCountdown() {
-    const cd = el('countdown');
     let timers = [];
     const clear = () => { timers.forEach(clearTimeout); timers = []; };
-    const seq = ['3', '2', '1', 'GO!'];
+    // The beats a real countdown walk emits, in order: numerals slap in, GO
+    // doesn't (it fades out on .is-go instead). Painted by the LIVE banner —
+    // what this preview supplies is only the clock the race walk would.
+    const seq = [
+      { n: 3, slap: true, go: false },
+      { n: 2, slap: true, go: false },
+      { n: 1, slap: true, go: false },
+      { n: 0, slap: false, go: true }
+    ];
+    const rest = { n: 3, slap: false, go: false };  // the frozen frame between replays
     function run() {
       clear();
       let i = 0;
       (function tick() {
-        cd.textContent = seq[i];
-        cd.classList.toggle('is-go', seq[i] === 'GO!'); // GO! fades out like the real race
-        cd.classList.remove('slap');                    // slap each numeral in, like the live race
-        if (seq[i] !== 'GO!') { void cd.offsetWidth; cd.classList.add('slap'); }
+        showCountdownBanner(seq[i]);
         i++;
         if (i < seq.length) timers.push(setTimeout(tick, 800));
-        else timers.push(setTimeout(() => { cd.classList.remove('is-go'); cd.textContent = '3'; }, 1200)); // rest at "3"
+        else timers.push(setTimeout(() => showCountdownBanner(rest), 1200));
       })();
     }
-    cd.textContent = '3'; // frozen initial frame; ▶ replays the sequence
+    showCountdownBanner(rest); // frozen initial frame; ▶ replays the sequence
     window.__TEST__.replay = run;
   }
 }
