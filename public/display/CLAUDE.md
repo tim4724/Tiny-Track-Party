@@ -95,9 +95,16 @@ vsync plateau, so it can only ever show DROPS).
 ## The audio device half
 
 `Audio.js` performs the commands the wasm hands back and **decides nothing**:
-AudioContext, limiter, variant picks, the `<audio>` element. The DSP palette stays
+AudioContext, variant picks, the `<audio>` element. The DSP palette stays
 BAKED rather than ported, because emscripten's AudioWorklet path needs the
 COOP/COEP isolation this build refuses.
+
+The master bus — gain → soft limiter → destination — is `audio/bus.js`, with the
+one volume preference behind it. It is its own file because the sound gallery
+builds the same bus: the limiter acts on the SUM of everything, so an audition
+through a different bus is an audition of a different mix. It was three
+hand-copies of the same three numbers; `tests/audio-bus-single-source.test.js`
+keeps it one.
 
 The music catalogue is pure data in `audio/musicCatalogue.js`; `Audio.js` holds no
 table at all, and even the monster engine's timbre arrives as numbers on a voice

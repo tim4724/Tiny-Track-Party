@@ -28,9 +28,9 @@
 // Browsers require a user gesture before audio runs; call resume() from
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
+import { createMasterBus, storedVolume } from './audio/bus.js';
 
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
-const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 
 // THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
 // description: it performs commands and decides nothing. The music catalogue —
@@ -61,15 +61,10 @@ export class RaceAudio {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = this._volume();
-    // Soft limiter: overlapping cues (8 cars' worth) must not clip TV speakers.
-    const comp = this.ctx.createDynamicsCompressor();
-    comp.threshold.value = -12;
-    comp.knee.value = 24;
-    comp.ratio.value = 6;
-    this.master.connect(comp);
-    comp.connect(this.ctx.destination);
+    // Master gain + soft limiter, from audio/bus.js — the SAME bus the audition
+    // galleries build, which is what makes their A/B a comparison of cues rather
+    // than of mixes.
+    this.master = createMasterBus(this.ctx);
     // Decode the one recorded cue (the engine loop) up front, on the same
     // user-gesture that creates the context — so the buffer is ready by the
     // time the first race frame asks for an engine. Fire-and-forget: the voice
@@ -83,12 +78,10 @@ export class RaceAudio {
   }
   get ready() { return !!this.ctx && this.ctx.state === 'running'; }
 
-  _volume() {
-    try {
-      const raw = parseInt(localStorage.getItem(VOLUME_KEY), 10);
-      return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) / 100 : 0.6;
-    } catch (_) { return 0.6; }
-  }
+  // Music is an <audio> element routed straight to the device rather than through
+  // the bus, so it has to scale itself by the same preference the bus was built
+  // with. See the _music branch below.
+  _volume() { return storedVolume(); }
 
   // Gallery picks, read once per session (re-read after resume() if you ever
   // need live re-picking; a race doesn't).

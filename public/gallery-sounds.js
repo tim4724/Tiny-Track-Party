@@ -4,8 +4,8 @@
 // which candidate wins. Picks live in localStorage; the race wiring reads the
 // approved palette from cues.js once the audition round settles it.
 import { CUES, loadSampleBuffers } from '/display/audio/cues.js';
+import { createMasterBus, storedVolume, saveVolumePercent } from '/display/audio/bus.js';
 
-const VOLUME_KEY = 'tinytrack_sound_volume_v1';
 const PICKS_KEY = 'tinytrack_sound_picks_v1';
 
 // ---- audio graph (lazy — browsers need a user gesture before audio runs) ----
@@ -17,22 +17,9 @@ function audio() {
   }
   const AC = window.AudioContext || window.webkitAudioContext;
   ctx = new AC();
-  master = ctx.createGain();
-  master.gain.value = volume();
-  // Soft limiter so spamming overlapping cues can't clip the TV speakers.
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -12;
-  comp.knee.value = 24;
-  comp.ratio.value = 6;
-  master.connect(comp);
-  comp.connect(ctx.destination);
+  master = createMasterBus(ctx);   // the shipping bus (display/audio/bus.js)
   loadSampleBuffers(ctx); // decode the recorded engine loop so its cue auditions here too
   return { ctx, master };
-}
-
-function volume() {
-  const raw = parseInt(localStorage.getItem(VOLUME_KEY), 10);
-  return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) / 100 : 0.6;
 }
 
 function loadPicks() {
@@ -148,9 +135,9 @@ for (const cue of CUES) {
 
 // ---- header controls ----
 const vol = document.getElementById('master-volume');
-vol.value = String(Math.round(volume() * 100));
+vol.value = String(Math.round(storedVolume() * 100));
 vol.addEventListener('input', () => {
-  try { localStorage.setItem(VOLUME_KEY, vol.value); } catch (_) {}
+  saveVolumePercent(vol.value);
   if (master) master.gain.setTargetAtTime(vol.value / 100, ctx.currentTime, 0.02);
 });
 

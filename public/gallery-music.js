@@ -14,21 +14,16 @@ import { loadBiomes, cssHex } from '/shared/biomes.js';
 // Audio.js used to re-export it, which put the oracle on the shipped display
 // page's import graph; this page is a dev surface and is free to read it.
 import { RACE_MUSIC, MUSIC_FALLBACK } from '/display/audio/musicCatalogue.js';
+import { storedVolume, saveVolumePercent } from '/display/audio/bus.js';
 
 const biomes = await loadBiomes();
 
-const VOL_KEY = 'tinytrack_sound_volume_v1'; // shared with the other galleries
-
 const player = new Audio();
 player.preload = 'none';
-function volNorm() {
-  const r = parseInt(localStorage.getItem(VOL_KEY), 10);
-  return Number.isFinite(r) ? Math.max(0, Math.min(100, r)) / 100 : 0.6;
-}
 // The playing song's loudness trim (song.gain — the race applies the same one),
 // so browsing the pools here previews them at matched perceived level.
 let playGain = 1;
-const applyVolume = () => { player.volume = Math.min(1, volNorm() * playGain); };
+const applyVolume = () => { player.volume = Math.min(1, storedVolume() * playGain); };
 applyVolume();
 
 const fmtTime = (t) => Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : '0:00';
@@ -140,11 +135,11 @@ for (const cup of CUPS) {
   cupsEl.appendChild(section);
 }
 
-// ---- volume (shared key, like the other galleries) ----
+// ---- volume (the one preference, from display/audio/bus.js) ----
 const vol = document.getElementById('vol');
-vol.value = String(Math.round(volNorm() * 100));
+vol.value = String(Math.round(storedVolume() * 100));
 vol.addEventListener('input', () => {
-  try { localStorage.setItem(VOL_KEY, vol.value); } catch (_) {}
+  saveVolumePercent(vol.value);
   applyVolume();
 });
 
