@@ -1,4 +1,3 @@
-
 // Every display screen in one flat grid, ordered by the player's journey
 // through a real session. Cards-per-row is set by the header control.
 //

@@ -1,4 +1,3 @@
-
 // Every phone-shaped screen in one flat grid, ordered by the player's journey
 // through a real session: name entry -> lobby -> countdown -> drive -> finish.
 // perColor cards swap the `color` URL param when the view-as selector changes,
