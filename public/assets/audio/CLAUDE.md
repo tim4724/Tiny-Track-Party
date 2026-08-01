@@ -4,8 +4,21 @@ Three kinds, with different sources. None is hand-edited.
 
 ## Cues are GENERATED
 
-`scripts/bake-cues.mjs` is the source; the WAVs under `cues/` are baked from it.
-Change the script, re-bake, commit.
+`display/audio/cues.js` is the source; the WAVs under `cues/` are what
+`scripts/bake-cues.mjs` renders from it. Change the DSP, re-bake, commit.
+
+**Re-baking is MANUAL and nothing in CI does it** — it needs Playwright, a dev
+server and headless Chromium, and the output is a checked-in artifact like the
+wasm. What CI does instead is notice: `tests/bake-cues.test.js` fingerprints the
+shared prelude and every picked variant, so editing `cues.js` without re-baking
+turns the unit job red naming the cue. Trust that gate rather than remembering.
+
+`npm run bake:cues -- --check` re-renders in a real browser and diffs, and is the
+only thing that proves the committed PCM is what `cues.js` renders TODAY. It is
+deliberately not in CI: a re-bake lands within 1 LSB rather than on the byte
+(Chromium sums a node's fan-in in heap-address order), and that tolerance is
+calibrated per machine, so a runner's Chromium could fail it without anything
+having drifted.
 
 ## Recorded sources are INPUTS, not output
 
