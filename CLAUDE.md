@@ -60,7 +60,9 @@ were deleted once each layer was conformance-proven; git history has them.
 - the transport **I/O** (`partyplug/PartyConnection.js`, `PartyFastlane.js`)
 
 `partyplug/` is a reusable party-game transport kit shared across games, served
-under `/partyplug/`. 3D assets are the Kenney Toy Car Kit under
+under `/partyplug/`. It is a **copy-fork**, so every local edit to a kit file
+must be declared in `partyplug/UPSTREAM.md` — `tests/partyplug-fork.test.js`
+fails until it is. 3D assets are the Kenney Toy Car Kit under
 `public/assets/toycar/` — `toycar` names the asset pack, not the game.
 
 Browser code is ES modules. Modules Node imports directly via dynamic `import()`

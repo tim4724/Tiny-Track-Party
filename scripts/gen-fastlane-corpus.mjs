@@ -48,7 +48,10 @@ const PartyFastlane = require('../partyplug/PartyFastlane.js');
 
 // Netcode constants live as module-locals in PartyFastlane; recover them from
 // observed behaviour so the header stamps the real values (and the C++ port
-// asserts against them). TTL: enqueue at t=0 then read ring[0].expires.
+// asserts against them). TTL: enqueue at t=0 then read ring[0].expires. TICK is
+// exported outright. The remaining three are still re-typed here: nothing on the
+// kit's surface reveals them, so a change to one of THOSE is caught by the
+// fastlane wire tests rather than by this corpus.
 function probeConstants() {
   const fl = new PartyFastlane({ selfIndex: 0 });
   const ch = { readyState: 'open', _sent: [], send() {}, close() {} };
@@ -56,7 +59,7 @@ function probeConstants() {
   clock = 0;
   fl.enqueue(1, { probe: true });
   const TTL_MS = fl.peers.get(1).ring[0].expires; // now(0) + TTL_MS
-  return { TTL_MS, TICK_MS: 50, IDLE_MS: 500, WATCHDOG_MS: 3000, RTT_ALPHA: 0.1 };
+  return { TTL_MS, TICK_MS: PartyFastlane.TICK_MS, IDLE_MS: 500, WATCHDOG_MS: 3000, RTT_ALPHA: 0.1 };
 }
 
 // A real RTCDataChannel throws InvalidStateError on send() when not open — the

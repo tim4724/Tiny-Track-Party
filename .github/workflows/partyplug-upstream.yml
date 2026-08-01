@@ -1,0 +1,90 @@
+# Does upstream have partyplug changes we have not taken?
+#
+# partyplug/ is a copy-fork (partyplug/UPSTREAM.md), which drifts in two
+# directions. tests/partyplug-fork.test.js guards the one we control — an
+# undeclared local edit — and runs on every push. It is structurally blind to the
+# other one: upstream fixing a transport bug we never hear about. Nothing in this
+# repo changes when that happens, so no push-triggered gate can ever see it. This
+# is the poll that can.
+#
+# Weekly, plus on demand. Deliberately NOT on push: upstream moving is not a
+# defect here, and a gate that reddens for someone else's commit is one people
+# learn to ignore.
+#
+# It reports by OPENING AN ISSUE rather than by failing. A failed scheduled run
+# notifies only whoever GitHub decides the actor is, only if their personal
+# notification settings say so, and it leaves nothing behind once the run scrolls
+# off. An issue is durable, visible without going looking, and dedupes: the first
+# detection opens it, later runs edit it in place, so a sync deferred for a month
+# does not mean four pings. A run only FAILS if it could not report at all.
+name: partyplug upstream
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays, 06:00 UTC. Scheduled runs fire on the DEFAULT
+                          # BRANCH only — this does nothing until it is on main.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Both the upstream repo and the commit we are synced to are READ OUT of
+      # the ledger rather than repeated here — a stamp this job disagreed with
+      # would poll the wrong baseline and report "up to date" forever.
+      - name: Compare upstream against our stamp
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          L=partyplug/UPSTREAM.md
+          TITLE_PREFIX='partyplug: upstream has moved'
+
+          stamp=$(sed -n 's/.*\*\*Last synced from:\*\* `\([0-9a-f]\{7,\}\)`.*/\1/p' "$L")
+          upstream=$(sed -n 's|.*github\.com/\([A-Za-z0-9_.-]*/[A-Za-z0-9_.-]*\).*|\1|p' "$L" | head -1)
+          if [ -z "$stamp" ] || [ -z "$upstream" ]; then
+            echo "::error::could not read the upstream repo / sync stamp out of $L — did its header format change?"
+            exit 1
+          fi
+          echo "synced to $upstream@$stamp"
+
+          changed=$(gh api "repos/$upstream/compare/$stamp...main" --jq '.files // [] | .[].filename' \
+                    | grep '^partyplug/' || true)
+          if [ -z "$changed" ]; then
+            echo "up to date — no upstream partyplug/ changes since $stamp"
+            exit 0
+          fi
+
+          commits=$(gh api "repos/$upstream/commits?path=partyplug&sha=main&per_page=20" \
+                    --jq '.[] | "- [`\(.sha[0:8])`](https://github.com/'"$upstream"'/commit/\(.sha)) \(.commit.author.date[0:10]) \(.commit.message | split("\n")[0])"')
+          body=$(printf '%s\n' \
+            "\`partyplug/\` upstream has commits we have not taken. We are stamped to \`$stamp\`." \
+            "" \
+            "**Changed upstream since then**" "" "$(printf '%s\n' $changed | sed 's|^|- `|; s|$|`|')" "" \
+            "**Commits touching \`partyplug/\`** (newest first, may predate our stamp)" "" "$commits" "" \
+            "---" "" \
+            "Syncing is a judgement call, not a chore: our fork drops files and carries local deltas on purpose." \
+            "Read [\`partyplug/UPSTREAM.md\`](https://github.com/$REPO/blob/main/partyplug/UPSTREAM.md) before copying anything in, and update its stamp + hashes in the same commit." \
+            "" "_Opened by \`.github/workflows/partyplug-upstream.yml\`; edited in place on later runs. Close it once synced._")
+
+          # Dedupe on the title rather than a label (no label to provision) or the
+          # search index (eventually consistent, so it can double-open).
+          existing=$(gh issue list --repo "$REPO" --state open --limit 100 --json number,title \
+                     --jq "[.[] | select(.title | startswith(\"$TITLE_PREFIX\"))][0].number // empty")
+
+          echo "::warning::upstream partyplug/ has moved since $stamp — see partyplug/UPSTREAM.md to sync"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$REPO" --title "$TITLE_PREFIX since $stamp" --body "$body" \
+              || { echo "::error::could not update issue #$existing"; exit 1; }
+            echo "updated issue #$existing"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE_PREFIX since $stamp" --body "$body" \
+              || { echo "::error::could not open an issue — nothing would have reported this"; exit 1; }
+          fi
