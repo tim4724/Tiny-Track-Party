@@ -1189,7 +1189,9 @@ if (_scenario) {
       host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
       picked: _params.get('picked') || false   // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
     },
-    { scene, track, scenePromise }
+    // `built` is the track catalogue as entries — the chained-start preview is
+    // the one scenario that shows a SECOND circuit, so it needs to name one.
+    { scene, track, scenePromise, built }
   ));
 } else if (_isDebugSolo) {
   // DEBUG ?solo=1: one local keyboard player on the main display, no relay. The

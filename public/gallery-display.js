@@ -24,6 +24,7 @@ var DISPLAY_CARDS = [
   { key: 'finished',  title: 'Player finished' },
   { key: 'results',   title: 'Results' },
   { key: 'intermission', title: 'Cup intermission' },
+  { key: 'chain',     title: 'Cup: race → next race', animated: true },
   { key: 'podium',    title: 'Cup podium' }
 ];
 

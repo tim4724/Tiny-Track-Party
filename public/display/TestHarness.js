@@ -39,6 +39,17 @@ const MONSTER_ENGINE_MOD = { rateMul: 0.6, gainMul: 1.45, lpMul: 0.82 };
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
 const POINTS_BY_RANK = [9, 6, 3, 1];
 
+// One countdown beat as the banner takes it — race_flow.cc's countdownTick,
+// which is the only thing about a beat that is a decision: numerals slap in, GO
+// does not (it fades out on .is-go instead). A preview supplies the BEAT NUMBER
+// and nothing else, and this is the one place either card turns one into a
+// banner. It is not the walk itself: reaching that needs a live room handle,
+// which no scenario has.
+const countdownBeat = (n) => ({ n, slap: n > 0, go: n === 0 });
+const CD_BEAT_MS = 800;   // the COUNTDOWN CARD's replay cadence only — it has no session
+                          // to tick it (a frozen card paints once and idles, so no frames
+                          // run). The chained start below uses the real 1 Hz session clock.
+
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
 // Banked cup points per row for the intermission/podium previews: leader swap
@@ -232,6 +243,30 @@ export function runDisplayScenario(opts, ctx) {
   // decision after that (dressing, row kinds, podium split, footer) is the
   // model's, exactly as in a real race.
   const showBoard = (board) => renderResults(resultsView(board, { intermissionMs: intermissionMs() }), COLORS);
+
+  // A board for the first cup, as it stands after its race `raceIdx`: real cup
+  // and track names, fake points, with a leader swap so the table shows cup
+  // order beating this race's finish order. `final` is the only thing the two
+  // dressings (mid-cup intermission, closing podium) differ by — the model
+  // decides the rest. Shared by the frozen previews and the chained-start loop.
+  function cupBoard(raceIdx, final) {
+    const cup = CUPS[0];
+    const nextId = cup.tracks[raceIdx + 1] || null;
+    const order = buildSlots(players).map((s, i) => ({
+      playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i],
+      gained: POINTS_BY_RANK[i] || 0,
+      points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
+    })).sort((a, b) => b.points - a.points);
+    return {
+      over: true, hostPeerIndex: order[0].playerId, order,
+      series: {
+        cupId: cup.id, cupName: cup.name, endless: false,
+        raceIndex: raceIdx, raceCount: cup.tracks.length,
+        nextTrackId: nextId, nextTrackName: nextId ? TRACKS[nextId].name : null,
+        final, autoAdvanceMs: intermissionMs()
+      }
+    };
+  }
 
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
@@ -656,6 +691,113 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
+  // ---- the cup's chained start (scenario=chain) ----
+  // The one transition in the game with no lobby step to hide behind: a cup race
+  // ends, the intermission board goes up, and the next circuit has to already be
+  // on screen when the board comes down. Live play meshes it UNDER the board
+  // (main.js prepareNextTrack → Stage.prepare) so the chained start has nothing
+  // left to build; done at the start instead, the countdown ticks over the
+  // OUTGOING circuit and then hitches. This preview loops that transition around
+  // a cup's four tracks so the whole thing can be watched, which no still can
+  // show and no assertion reads as well as an eye does.
+  //
+  // NOTHING HERE KEEPS ITS OWN COPY OF THE SEQUENCE. showBoard is the real
+  // results renderer, showCountdownBanner the real banner, the scene work is
+  // Stage.prepare / setTrack / rebuild IN THE ORDER THE WALKS EMIT IT
+  // (place-track, hide-results, reset-scene-cars, create-session, bind-session,
+  // start-countdown), the board sits up for the layer's own intermissionMs, and
+  // the countdown is a REAL countdown-mode session: it ticks at the sim's 1 Hz
+  // and flips `racing` inside the n=0 beat, so the field leaves on GO because
+  // the game says so and not because this file agreed to. A hand-rolled beat
+  // clock here had the cars pulling away a beat LATE, which is the whole reason
+  // the rule is "drive the live code, don't re-time it".
+  //
+  // The one authored number left is how long a leg races: a real race is three
+  // laps and a preview cannot wait for that.
+  //
+  // Clocks run off the frame's dt, so the gallery card's pause freezes the demo
+  // mid-transition instead of letting it march on behind a still.
+  const CHAIN_RACE_MS = 8000;    // long enough to leave the grid and read as a race
+  if (scenario === 'chain') {
+    show('race');
+    el('results').classList.add('hidden');
+    ready().then(() => setupChain()).catch((e) => console.warn('[TestHarness] chain preview failed to start', e));
+
+    function setupChain() {
+      const { scene, built } = ctx;
+      const cup = CUPS[0];
+      const slots = buildSlots(players);
+      const field = slots.map((i) => ({ peerIndex: i, stats: statsFor(i) }));
+      const entry = (id) => built.get(id);
+
+      let leg = 0;          // which of the cup's tracks is racing
+      let engine = null;
+      let onBoard = false;  // the intermission is up; the sim is done
+      let boardMs = 0, raceMs = 0, lastHud = 0;
+
+      // The launch, performed in the walks' own order. The two rebuild triggers
+      // (setTrack, rebuild) come out as no-ops when the board above already
+      // prepared this circuit — which is the whole point of the preview.
+      function launch() {
+        const t = entry(cup.tracks[leg]);
+        scene.setTrack(t);                                    // place-track
+        el('results').classList.add('hidden');                // hide-results
+        for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+        slots.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
+        scene.rebuild();                                      // reset-scene-cars
+        if (engine) engine.dispose();                         // dispose-session
+        // A COUNTDOWN-MODE session, not a bare one: the beats, their cadence and
+        // the moment the field is allowed to move are all its own, drained to
+        // the banner through the callback the live shell uses.
+        engine = new NativeRaceSession(field, t, {            // create-session
+          bots: botSpecs(slots),
+          onCountdownTick: (n) => showCountdownBanner(countdownBeat(n))
+        });
+        window.__engine = engine;
+        scene.bindSession(engine.h);                          // bind-session
+        // The manifest's own count, and the same E2E override the live launch
+        // reads — not a 3 retyped here.
+        engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
+        onBoard = false; raceMs = 0;
+      }
+
+      // End of a leg: the board goes up and the NEXT circuit is meshed behind it.
+      function intermission() {
+        showBoard(cupBoard(leg, false));
+        leg = (leg + 1) % cup.tracks.length;
+        scene.prepare(entry(cup.tracks[leg]));
+        onBoard = true; boardMs = 0;
+      }
+
+      launch();
+      scene.onFrame = (dt) => {
+        const ms = dt * 1000;
+        if (onBoard) {
+          // The board sits for the layer's OWN budget, which is also the number
+          // it is at that moment printing in its "starting in N…" footer.
+          boardMs += ms;
+          if (boardMs >= intermissionMs()) launch();
+          return;
+        }
+        // Countdown and race are ONE path here exactly as they are in main.js:
+        // the session is updated from the first countdown frame on (cars drawn
+        // and steerable, physics held), and IT decides when they are racing.
+        engine.update(ms);
+        const now = performance.now();
+        if (now - lastHud > HUD_TICK_MS) {
+          lastHud = now;
+          for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
+        }
+        if (!engine.racing) return;   // still counting down
+        raceMs += ms;
+        if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) intermission();
+      };
+      holdFrame(true);   // gallery: the card's ▶ runs the loop; a standalone tab just runs
+    }
+    return;
+  }
+
   // ---- race scenarios (countdown / racing / results) ----
   // Switch to the race screen synchronously so the lobby (QR/roster/join URL)
   // doesn't flash while the GLBs load. Build the engine + scene cars once the
@@ -832,26 +974,9 @@ export function runDisplayScenario(opts, ctx) {
       // Cup dressings of the same overlay: frozen grid behind either the mid-cup
       // intermission (points board + "next up" footer) or the final podium.
       // WHICH dressing is the model's call off `final` — the two previews differ
-      // only in the board handed to it. Real cup/track names, fake points, with a
-      // leader swap so the board shows cup order beating this race's finish order.
-      const cup = CUPS[0];
+      // only in the board handed to it.
       const final = kind === 'podium';
-      const raceIdx = final ? cup.tracks.length - 1 : 1;
-      const nextId = cup.tracks[raceIdx + 1] || null;
-      const order = buildSlots(players).map((s, i) => ({
-        playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i],
-        gained: POINTS_BY_RANK[i] || 0,
-        points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
-      })).sort((a, b) => b.points - a.points);
-      showBoard({
-        over: true, hostPeerIndex: order[0].playerId, order,
-        series: {
-          cupId: cup.id, cupName: cup.name, endless: false,
-          raceIndex: raceIdx, raceCount: cup.tracks.length,
-          nextTrackId: nextId, nextTrackName: nextId ? TRACKS[nextId].name : null,
-          final, autoAdvanceMs: intermissionMs()
-        }
-      });
+      showBoard(cupBoard(final ? CUPS[0].tracks.length - 1 : 1, final));
     }
     // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
     // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint
@@ -862,15 +987,7 @@ export function runDisplayScenario(opts, ctx) {
   function runCountdown() {
     let timers = [];
     const clear = () => { timers.forEach(clearTimeout); timers = []; };
-    // The beats a real countdown walk emits, in order: numerals slap in, GO
-    // doesn't (it fades out on .is-go instead). Painted by the LIVE banner —
-    // what this preview supplies is only the clock the race walk would.
-    const seq = [
-      { n: 3, slap: true, go: false },
-      { n: 2, slap: true, go: false },
-      { n: 1, slap: true, go: false },
-      { n: 0, slap: false, go: true }
-    ];
+    const seq = [3, 2, 1, 0].map(countdownBeat);
     const rest = { n: 3, slap: false, go: false };  // the frozen frame between replays
     function run() {
       clear();
@@ -878,7 +995,7 @@ export function runDisplayScenario(opts, ctx) {
       (function tick() {
         showCountdownBanner(seq[i]);
         i++;
-        if (i < seq.length) timers.push(setTimeout(tick, 800));
+        if (i < seq.length) timers.push(setTimeout(tick, CD_BEAT_MS));
         else timers.push(setTimeout(() => showCountdownBanner(rest), 1200));
       })();
     }
