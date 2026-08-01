@@ -611,6 +611,16 @@ void ttp_audio_frame(double nowMs) {
   audioFlush();  // events first, then this frame's mix — the order they happened
   RuntimeSession* rs = get(b.session);
   if (!rs || !rs->eng) return;
+  // PAST THE FLAG THE FIELD IS SILENT. The end-of-race walk stops every voice
+  // (Op::STOP_VOICES) on the very tick the sim reaches the flag, and a shell's
+  // own "race ended" latch can only guard the frame AFTER the one that set it —
+  // so the mix below would run once more against a field frozen at speed and
+  // restart every voice that was just killed. Nothing then updates their levels
+  // (the frame loop is stopped), so they hold: an engine drone — a monster
+  // truck's growl if the car was mid-transform — through the results board and
+  // into the next race's countdown. Flushing above still happens: the finish's
+  // own cues are the race's last word, not the first frame of silence.
+  if (rs->session ? rs->session->ended() : rs->eng->raceOver()) return;
   Game* eng = rs->eng;
   const au::AiIds ai = audioAiIds(*rs);
 

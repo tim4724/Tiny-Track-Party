@@ -45,6 +45,9 @@ class RaceSession {
   void dispose();
 
   bool racing() const { return racing_; }
+  // Past the flag (or the race-timeout failsafe, or disposed) — set once and
+  // never cleared, unlike racing(), which is also false through the countdown.
+  bool ended() const { return ended_; }
   bool paused() const { return paused_; }
   Game& engine() { return *engine_; }
 
