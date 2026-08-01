@@ -5,15 +5,16 @@
 
 #include "ttp/canonical.h"
 #include "ttp/race_track.h"
+#include "ttp/theme.h"
 #include "ttp/util.h"
 
 namespace ttp {
 namespace rt {
 
-WearPlan compute_wear_plan(const RaceTrack& geo) {
+WearPlan compute_wear_plan(const RaceTrack& geo, const RoadPalette& road) {
   WearPlan plan;
   const float L = (float) geo.length;
-  if (L < 20.0f || geo.samples.empty()) return plan;
+  if (!road.patched || L < 20.0f || geo.samples.empty()) return plan;
 
   // The deck's width per arclength, through the sim's own centerline type.
   const std::unique_ptr<Centerline> center = make_centerline(geo);

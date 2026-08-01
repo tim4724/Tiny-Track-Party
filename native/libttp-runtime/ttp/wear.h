@@ -17,6 +17,7 @@
 
 #include <vector>
 
+#include "ttp/theme.h"
 #include "ttp/trackbuilder.h"
 
 namespace ttp {
@@ -34,9 +35,11 @@ struct WearPlan {
   std::vector<WearMark> marks;
 };
 
-// Pure function of the built track. Deterministic: equal geometry gives an
-// identical plan (wear_check replays the catalogue twice and diffs).
-WearPlan compute_wear_plan(const RaceTrack& geo);
+// Pure function of the built track and the deck it is surfaced with.
+// Deterministic: equal geometry gives an identical plan (wear_check replays the
+// catalogue twice and diffs). A deck that declines repairs (RoadPalette::patched
+// — the playroom's moulded plastic) plans nothing at all.
+WearPlan compute_wear_plan(const RaceTrack& geo, const RoadPalette& road);
 
 }  // namespace rt
 }  // namespace ttp

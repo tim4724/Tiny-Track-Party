@@ -110,10 +110,12 @@ the DOM; put it in the renderer instead.**
 
 `ttp/wear.{h,cc}` beside it plans the road's asphalt patches as plain
 track-space data the renderer stamps. Render-only (the sim never reads it),
-deterministic from the track, pinned by the `wear` ctest. Two siblings were
-built and removed by decision (git history has both): a pre-rubbered racing
-groove, and left/right turn chevrons — parked for a later revisit of how
-sharp turns announce themselves.
+deterministic from the track, pinned by the `wear` ctest. **The deck decides
+whether it has ever been repaired** (`RoadPalette::patched`): the playroom's
+moulded plastic plans none, because a patch on it reads as a stain rather than
+as a season of racing. Two siblings were built and removed by decision (git
+history has both): a pre-rubbered racing groove, and left/right turn chevrons —
+parked for a later revisit of how sharp turns announce themselves.
 
 ## The asset gallery and the model bench
 

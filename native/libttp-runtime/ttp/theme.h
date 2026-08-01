@@ -75,6 +75,11 @@ struct RoadPalette {
   uint32_t shoulder = 0x5a6078;  // dusty edge tint where edge lines are dropped
   float kerbW = 0.22f, kerbH = 0.20f;  // kerb cross-section (visual only)
   bool edgeLines = true;         // false drops the painted side lines
+  // Whether this deck has ever been REPAIRED — the asphalt patches of
+  // ttp/wear.h. A moulded-plastic deck has not: a patch on it reads as a
+  // stain, not as a season of racing. Post-corpus (theme_check does not
+  // serialize it), so a biome authors it freely.
+  bool patched = true;
 };
 
 struct TreeSpec {

@@ -172,8 +172,9 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     }
     // The road's wear — the asphalt patches — is planned HERE (the shim links
     // libttp-runtime; the renderer only performs). Pure function of the same
-    // built track the sim races, like the theme.
-    const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo);
+    // built track the sim races plus the deck the biome surfaces it with (a
+    // moulded-plastic deck plans none), like the theme.
+    const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
     if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;

@@ -321,6 +321,7 @@ Theme playroomTheme() {
   t.road.asphalt = 0xe8731f;   // toy-track orange (bright, not neon — soft-toy rule)
   t.road.dash = 0xfdf4de;      // printed cream lane decal — keeps the speedometer read
   t.road.edgeLines = false;    // moulded plastic has no painted lines
+  t.road.patched = false;      // nor repairs — a patch on orange plastic is a stain
   t.road.kerbA = 0x3e6ed8; t.road.kerbB = 0x4677e0;  // solid blue snap-on rails
   t.road.kerbW = 0.26f; t.road.kerbH = 0.26f;        // beefier rail profile
   t.road.skirt = 0xc25e14;     // darker plastic underside/sides

@@ -813,9 +813,10 @@ add_test(NAME theme
 )
 
 # ---- Behavioural: the asphalt-patch planner over the catalogue ---------------
-# Class-2, no corpus (wear never existed in JS). Pins determinism and the
-# planner's own placement rules: every patch on the deck and off the boost
-# pads. `wear_check --dump <trackId>` prints one plan.
+# Class-2, no corpus (wear never existed in JS). Pins determinism, the planner's
+# own placement rules (every patch on the deck and off the boost pads), and that
+# the DECK decides: a moulded-plastic one is never repaired.
+# `wear_check --dump <trackId>` prints one plan.
 add_executable(wear_check runtimetest/wear_check.cc)
 target_link_libraries(wear_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(wear_check)

@@ -10,6 +10,8 @@
 //     the kerb or on air.
 //   * PATCHES KEEP OFF THE FURNITURE — a patch under a boost pad reads as a
 //     broken pad; the planner's rejection rule is asserted, not trusted.
+//   * THE DECK DECIDES — a biome whose deck is moulded plastic rather than
+//     asphalt (RoadPalette::patched) gets no repairs, and an asphalt one does.
 //
 // With --dump <trackId> it prints one track's plan for eyeballing; the ctest
 // runs it bare.
@@ -20,6 +22,7 @@
 #include <memory>
 
 #include "ttp/race_track.h"
+#include "ttp/theme.h"
 #include "ttp/wear.h"
 
 using namespace ttp;
@@ -49,9 +52,18 @@ int main(int argc, char** argv) {
     const TrackDef& def = TTP_TRACKS[i];
     if (dump && std::strcmp(def.id, dump) != 0) continue;
     const RaceTrack geo = build_race_track(def, 1, 0u);
-    const rt::WearPlan plan = rt::compute_wear_plan(geo);
-    const rt::WearPlan again = rt::compute_wear_plan(geo);
+    // The deck this track actually races on — the same resolve the display
+    // shim does, so the gate below is the shipping one.
+    const rt::Theme theme = rt::resolve_theme(rt::biome_for_track(def.id), def.id);
+    const rt::WearPlan plan = rt::compute_wear_plan(geo, theme.road);
+    const rt::WearPlan again = rt::compute_wear_plan(geo, theme.road);
     const float L = (float) geo.length;
+
+    // The deck decides. Moulded plastic is never repaired; asphalt always is
+    // (the planner's 3..6 has no empty outcome for a track this long).
+    expect(theme.road.patched ? !plan.marks.empty() : plan.marks.empty(), def.id,
+           theme.road.patched ? "asphalt deck planned no patches"
+                              : "plastic deck planned patches");
 
     // Determinism, memberwise (the struct is plain floats).
     bool same = plan.marks.size() == again.marks.size();
