@@ -85,11 +85,9 @@ material {
         //   y = SHAPE: 0 rectangle, 1 ellipse
         //   z = alpha at the inner knee (the profile is two straight segments,
         //       1 -> knee across 0..inner, then knee -> 0 out to the rim)
-        //   w = CHEVRON grid, packed as cols*10 + rows (cols ACROSS the lane,
-        //       rows ALONG travel). 0 for a plain decal; anything else overlays
-        //       that grid in cream, which is what makes a boost pad or launch
-        //       strip expressible without a texture: a chevron is two line
-        //       segments and a distance to a segment is four instructions.
+        //   w = CHEVRON grid — see paintShape below. No decal packs one today
+        //       (the pads that did are paint now); the field is here because
+        //       paintStamp reads one layout for both channels.
         { type : float4[32], name : decalShape },
         // MASKED decals — the car ground shadows, whose shape is a baked
         // silhouette rather than a profile the shader could evaluate:
@@ -114,6 +112,23 @@ material {
         // and pre-blurred by bakeSilhouette, so this samples ONCE.
         { type : sampler2dArray, name : decalMask },
 
+        // — the paint channel: the deck's OWN surface (repairs, boost pads) —
+        // Identical entry layout to the decal arrays above and painted by the
+        // same function; the ONLY difference is which side of the rubber tap it
+        // composites on (buildDeckPaint has the why). Static per track, so the
+        // renderer writes these once at build, per chunk, in the same
+        // chunk-local s frame as decalRect.
+        { type : int, name : paintCount },
+        { type : float4[8], name : paintRect, precision : high },
+        { type : float4[8], name : paintColor },
+        //   xyz as decalShape; w = CHEVRON grid, packed as cols*10 + rows (cols
+        //       ACROSS the lane, rows ALONG travel). 0 for a plain stamp;
+        //       anything else overlays that grid in cream, which is what makes a
+        //       boost pad or launch strip expressible without a texture: a
+        //       chevron is two line segments and a distance to a segment is four
+        //       instructions.
+        { type : float4[8], name : paintShape },
+
         // — the rubber layer —
         // Skid marks accumulated in TRACK SPACE: an R8 texture the renderer
         // stamps trail segments into (vskid.mat), mapped u = s / trackLength
@@ -136,14 +151,6 @@ fragment {
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
 
-    // Everything a deck decal contributes at this fragment, composited in the
-    // order the array is given — which is the order the shell packs them, so the
-    // aura still paints over the contact shadow exactly as it did when the two
-    // were separate meshes at different render priorities.
-    //
-    // The loop is bounded by decalCount, a uniform, so it is uniform-coherent:
-    // every fragment in a draw takes the same number of iterations and the
-    // branch costs nothing beyond the work it skips.
     // Distance from p to the segment ab. Four instructions, and it is what lets
     // a boost pad's chevrons be drawn without a texture: the art the mesh used to
     // stroke is two segments per chevron, and the shader can measure them.
@@ -153,25 +160,126 @@ fragment {
         return length(pa - ba * h);
     }
 
+    // ONE stamp — a profile fill plus its optional chevron grid — given the
+    // fragment's offset (ds, dl) from the entry's centre in world units. Shared
+    // by BOTH channels on purpose: paint and decals differ only in which side of
+    // the rubber tap they composite on, so a boost pad must not look different
+    // for having changed sides. Returns `base` unchanged outside the shape.
+    vec3 paintStamp(vec3 base, highp vec4 r, vec4 col, vec4 shape,
+            highp float ds, float dl) {
+        vec2 q = vec2(ds / r.z, dl / r.w);
+        bool ell = shape.y > 0.5;
+        float d = ell ? length(q) : max(abs(q.x), abs(q.y));
+        if (d >= 1.0) return base;
+        // Two straight segments: 1 -> knee across 0..inner, then knee -> 0
+        // out to the rim. That is the profile the meshes baked into their
+        // vertex alpha, reproduced exactly rather than approximated.
+        float inner = shape.x, knee = shape.z;
+        float prof = d <= inner
+                ? mix(1.0, knee, inner > 0.0 ? d / inner : 0.0)
+                : knee * (1.0 - (d - inner) / max(1.0 - inner, 1e-4));
+        base = mix(base, col.rgb, clamp(col.a * prof, 0.0, 1.0));
+
+        // CHEVRONS, laid out in the entry's normalised frame and MEASURED in
+        // world units: cols ACROSS the lane and rows ALONG travel, packed as
+        // cols*10 + rows. That is what makes a boost pad or a launch strip
+        // expressible without a texture — a chevron is two line segments and
+        // a distance to a segment is four instructions. The counts belong to
+        // buildDeckPaint; the caps below are 4 rows and 6 cols, and packing
+        // more silently draws fewer.
+        int packed = int(shape.w + 0.5);
+        int cols = packed / 10, rows = packed - cols * 10;
+        if (rows > 0) {
+            // A MARGIN PLUS A PACKED RUN, not one chevron per grid cell.
+            // Cell centres put more air BETWEEN the marks than AROUND them:
+            // the disc's three sat two of their own depths apart with the
+            // rearmost running its wing tips past the rim, and the strip's
+            // outer columns ran off the paint. Here the gap is a fraction of
+            // a mark's own size and the margin is whatever is left of the
+            // box, which with these numbers leaves the margin comfortably
+            // the larger (0.14 against a 0.083 gap across the strip).
+            //
+            // THE STROKE IS A WORLD WIDTH, which is why the distance below is
+            // taken in world units (ds, dl) rather than in q. The normalised
+            // frame is anisotropic — a launch strip is 2.2 along travel and
+            // 5.0 across — so one width in q is a different width on the road
+            // for every line ANGLE: measured at the wings' own angle, the
+            // strip's chevrons came out 1.8x the disc's weight out of the
+            // same expression (2.8x for a segment straight along travel).
+            float LW = 0.09 * min(r.z, r.w);
+            // The box the run fills. An ELLIPSE gets the smaller one because
+            // its corners clear a RIM rather than a bounding edge: the
+            // rearmost wing tips sit at (BX, BY), and sqrt(BX^2 + BY^2) + LW
+            // has to stay inside the 0.9 the edge fade below starts at. A
+            // RECTANGLE only has to keep its outermost stroke off that same
+            // 0.9 — a rule, not a number, and worth deriving: it comes to
+            // 0.86 for the 1.1 x 2.5 strip that ships, and frozen at that it
+            // would clip the outer columns on any narrower one.
+            float BX = ell ? 0.64 : 0.50;
+            float BY = ell ? 0.46 : (0.90 - LW / r.w);
+            float GAP_S = 0.24, GAP_L = 0.30;   // of a mark's own size
+            float CHEV = 2.0 * BX / (float(rows) + float(rows - 1) * GAP_S);
+            float WIDE = 2.0 * BY / (float(cols) + float(cols - 1) * GAP_L);
+            // Premultiplied into world ONCE: the loop is then plain world
+            // arithmetic, rather than three vec2 multiplies per chevron per
+            // fragment — ten of them on a strip, on the hottest path here.
+            float X0 = -BX * r.z, SX = CHEV * r.z;
+            float PX = CHEV * (1.0 + GAP_S) * r.z;
+            float Y0 = (-BY + WIDE * 0.5) * r.w, HY = WIDE * 0.5 * r.w;
+            float PY = WIDE * (1.0 + GAP_L) * r.w;
+            vec2 wq = vec2(ds, dl);
+            float best = 1e9;
+            for (int rr = 0; rr < 4; rr++) {
+                if (rr >= rows) break;
+                float x = X0 + float(rr) * PX;
+                for (int cc = 0; cc < 6; cc++) {
+                    if (cc >= cols) break;
+                    float y = Y0 + float(cc) * PY;
+                    // The APEX LEADS: q.x grows with arclength, so the wings
+                    // trail. Built the other way round every chevron points
+                    // against travel and reads as a brake marking.
+                    vec2 apex = vec2(x + SX, y);
+                    best = min(best, min(segDist(wq, apex, vec2(x, y - HY)),
+                                         segDist(wq, apex, vec2(x, y + HY))));
+                }
+            }
+            // Fade with the entry's own rim so a chevron never ends in mid-air
+            // past the edge of the disc or strip it belongs to.
+            float edge = 1.0 - smoothstep(0.90, 0.995, d);
+            base = mix(base, vec3(0.9911, 0.9137, 0.6105),
+                    clamp((1.0 - smoothstep(LW * 0.65, LW, best)) * edge, 0.0, 1.0));
+        }
+        return base;
+    }
+
+    // The deck's own paint — repairs and pads — in the same chunk-local s frame
+    // as the decals. Composited BEFORE the rubber tap, which is the whole
+    // reason it is not just more entries in the decal arrays.
+    vec3 deckPaint(vec3 base, highp float sLocal, float lat) {
+        int n = min(materialParams.paintCount, 8);
+        for (int i = 0; i < n; i++) {
+            highp vec4 r = materialParams.paintRect[i];
+            highp float ds = sLocal - r.x;
+            if (abs(ds) >= r.z) continue;           // cheap reject, as in the decals
+            float dl = lat - r.y;
+            if (abs(dl) >= r.w) continue;           // and the deck flag for free
+            base = paintStamp(base, r, materialParams.paintColor[i],
+                    materialParams.paintShape[i], ds, dl);
+        }
+        return base;
+    }
+
     // Everything a deck decal contributes at this fragment, composited in the
-    // order the array is given — which is the order the shell packs them, so a
-    // pad's chevrons sit over its disc and the aura sits over a contact shadow
-    // exactly as they did when these were separate meshes at different render
-    // priorities.
+    // order the array is given — which is the order the shell packs them, so the
+    // aura sits over a contact shadow exactly as it did when the two were
+    // separate meshes at different render priorities.
     //
     // The loop is bounded by decalCount, a uniform, so it is uniform-coherent,
     // and the first thing each iteration does is reject on |ds| — most decals on
     // a track are nowhere near any given fragment, so the common path is one
     // subtract and one compare.
-    vec3 deckDecals(vec3 base, highp vec2 tc) {
+    vec3 deckDecals(vec3 base, highp float sLocal, float lat) {
         int n = min(materialParams.decalCount, 32);
-        // ONE wrap for the whole loop: fold this fragment's arclength into the
-        // chunk's local frame, the short way round the lap. Every decal's x is
-        // already stored relative to the same centre, so the per-decal test is a
-        // subtract and a compare.
-        highp float L = materialParams.trackLength;
-        highp float sLocal = tc.x - materialParams.chunkMid;
-        if (L > 0.0) sLocal -= L * floor(sLocal * materialParams.invTrackLength + 0.5);
         for (int i = 0; i < n; i++) {
             highp vec4 r = materialParams.decalRect[i];
             vec4 trot = materialParams.decalTexRot[i];
@@ -182,7 +290,7 @@ fragment {
             float bound = masked ? length(r.zw) : r.z;
             highp float ds = sLocal - r.x;
             if (abs(ds) >= bound) continue;             // cheap reject
-            float dl = tc.y - r.y;
+            float dl = lat - r.y;
             if (abs(dl) >= (masked ? bound : r.w)) continue;
             if (masked) {
                 // Into the car's frame via the WORLD plane, not track space:
@@ -204,90 +312,8 @@ fragment {
                 base = mix(base, mcol.rgb, clamp(mcol.a * m, 0.0, 1.0));
                 continue;
             }
-            vec2 q = vec2(ds / r.z, dl / r.w);
-            vec4 shape = materialParams.decalShape[i];
-            bool ell = shape.y > 0.5;
-            float d = ell ? length(q) : max(abs(q.x), abs(q.y));
-            if (d >= 1.0) continue;
-            vec4 col = materialParams.decalColor[i];
-            // Two straight segments: 1 -> knee across 0..inner, then knee -> 0
-            // out to the rim. That is the profile the meshes baked into their
-            // vertex alpha, reproduced exactly rather than approximated.
-            float inner = shape.x, knee = shape.z;
-            float prof = d <= inner
-                    ? mix(1.0, knee, inner > 0.0 ? d / inner : 0.0)
-                    : knee * (1.0 - (d - inner) / max(1.0 - inner, 1e-4));
-            base = mix(base, col.rgb, clamp(col.a * prof, 0.0, 1.0));
-
-            // CHEVRONS, laid out in the decal's normalised frame and MEASURED in
-            // world units: cols ACROSS the lane and rows ALONG travel, packed as
-            // cols*10 + rows. That is what makes a boost pad or a launch strip
-            // expressible without a texture — a chevron is two line segments and
-            // a distance to a segment is four instructions. The counts belong to
-            // buildStaticDeckDecals; the caps below are 4 rows and 6 cols, and
-            // packing more silently draws fewer.
-            int packed = int(shape.w + 0.5);
-            int cols = packed / 10, rows = packed - cols * 10;
-            if (rows > 0) {
-                // A MARGIN PLUS A PACKED RUN, not one chevron per grid cell.
-                // Cell centres put more air BETWEEN the marks than AROUND them:
-                // the disc's three sat two of their own depths apart with the
-                // rearmost running its wing tips past the rim, and the strip's
-                // outer columns ran off the paint. Here the gap is a fraction of
-                // a mark's own size and the margin is whatever is left of the
-                // box, which with these numbers leaves the margin comfortably
-                // the larger (0.14 against a 0.083 gap across the strip).
-                //
-                // THE STROKE IS A WORLD WIDTH, which is why the distance below is
-                // taken in world units (ds, dl) rather than in q. The normalised
-                // frame is anisotropic — a launch strip is 2.2 along travel and
-                // 5.0 across — so one width in q is a different width on the road
-                // for every line ANGLE: measured at the wings' own angle, the
-                // strip's chevrons came out 1.8x the disc's weight out of the
-                // same expression (2.8x for a segment straight along travel).
-                float LW = 0.09 * min(r.z, r.w);
-                // The box the run fills. An ELLIPSE gets the smaller one because
-                // its corners clear a RIM rather than a bounding edge: the
-                // rearmost wing tips sit at (BX, BY), and sqrt(BX^2 + BY^2) + LW
-                // has to stay inside the 0.9 the edge fade below starts at. A
-                // RECTANGLE only has to keep its outermost stroke off that same
-                // 0.9 — a rule, not a number, and worth deriving: it comes to
-                // 0.86 for the 1.1 x 2.5 strip that ships, and frozen at that it
-                // would clip the outer columns on any narrower one.
-                float BX = ell ? 0.64 : 0.50;
-                float BY = ell ? 0.46 : (0.90 - LW / r.w);
-                float GAP_S = 0.24, GAP_L = 0.30;   // of a mark's own size
-                float CHEV = 2.0 * BX / (float(rows) + float(rows - 1) * GAP_S);
-                float WIDE = 2.0 * BY / (float(cols) + float(cols - 1) * GAP_L);
-                // Premultiplied into world ONCE: the loop is then plain world
-                // arithmetic, rather than three vec2 multiplies per chevron per
-                // fragment — ten of them on a strip, on the hottest path here.
-                float X0 = -BX * r.z, SX = CHEV * r.z;
-                float PX = CHEV * (1.0 + GAP_S) * r.z;
-                float Y0 = (-BY + WIDE * 0.5) * r.w, HY = WIDE * 0.5 * r.w;
-                float PY = WIDE * (1.0 + GAP_L) * r.w;
-                vec2 wq = vec2(ds, dl);
-                float best = 1e9;
-                for (int rr = 0; rr < 4; rr++) {
-                    if (rr >= rows) break;
-                    float x = X0 + float(rr) * PX;
-                    for (int cc = 0; cc < 6; cc++) {
-                        if (cc >= cols) break;
-                        float y = Y0 + float(cc) * PY;
-                        // The APEX LEADS: q.x grows with arclength, so the wings
-                        // trail. Built the other way round every chevron points
-                        // against travel and reads as a brake marking.
-                        vec2 apex = vec2(x + SX, y);
-                        best = min(best, min(segDist(wq, apex, vec2(x, y - HY)),
-                                             segDist(wq, apex, vec2(x, y + HY))));
-                    }
-                }
-                // Fade with the decal's own rim so a chevron never ends in mid-air
-                // past the edge of the disc or strip it belongs to.
-                float edge = 1.0 - smoothstep(0.90, 0.995, d);
-                base = mix(base, vec3(0.9911, 0.9137, 0.6105),
-                        clamp((1.0 - smoothstep(LW * 0.65, LW, best)) * edge, 0.0, 1.0));
-            }
+            base = paintStamp(base, r, materialParams.decalColor[i],
+                    materialParams.decalShape[i], ds, dl);
         }
         return base;
     }
@@ -317,11 +343,22 @@ fragment {
         // is also what makes a FULL-WIDTH decal (the launch strips, if they ever
         // move here) safe.
         highp vec2 tc = getUV0();
-        // Rubber first, decals over it: a contact shadow or an aura composites
-        // on top of laid rubber the way it would over the asphalt itself. The
-        // out-of-band v of kerbs and underside lands past the texture's lat
-        // span, clamps to an edge row the stamper never writes, and reads zero
-        // ink — the deck flag for free.
+        // ONE wrap for both channels below: fold this fragment's arclength into
+        // the chunk's local frame, the short way round the lap. Every paint and
+        // decal x is stored relative to the same centre, so each per-entry test
+        // is then a subtract and a compare.
+        highp float L = materialParams.trackLength;
+        highp float sLocal = tc.x - materialParams.chunkMid;
+        if (L > 0.0) sLocal -= L * floor(sLocal * materialParams.invTrackLength + 0.5);
+
+        // Paint, THEN rubber, THEN decals. The middle one is the ordering rule:
+        // a repair or a pad is the deck's own surface, so laid rubber runs
+        // across it, while a contact shadow, an aura or an oil film is laid ON
+        // the deck and composites over the rubber the way it would over the
+        // asphalt itself. The out-of-band v of kerbs and underside lands past
+        // the ink texture's lat span, clamps to an edge row the stamper never
+        // writes, and reads zero ink — the deck flag for free.
+        if (materialParams.paintCount > 0) base = deckPaint(base, sLocal, tc.y);
         float lh = materialParams.skidLatHalf;
         if (lh > 0.0) {
             // highp for the same Metal-fp16 reason as the decal uniforms:
@@ -337,7 +374,7 @@ fragment {
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
-        if (materialParams.decalCount > 0) base = deckDecals(base, tc);
+        if (materialParams.decalCount > 0) base = deckDecals(base, sLocal, tc.y);
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(ttpGrade(ttpMatteShade(base, n)), 0.0);

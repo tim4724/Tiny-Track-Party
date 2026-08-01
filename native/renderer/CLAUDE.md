@@ -87,7 +87,9 @@ fragment at the road's own depth: **no lift, no chord sag, no polygon offset, no
 render order.** The road carries arclength in uv0, which is also why loops work —
 a fragment knows its own arclength where one `(x, z)` has two.
 `ttp_display_debug_decals` reads the packed floats back; use it rather than
-inferring shader state from pixels.
+inferring shader state from pixels. It covers the DECAL channel only — the
+paint channel (below) is written straight to the chunk instances and has no
+readback.
 
 **Three things cost a debugging round each:**
 
@@ -114,10 +116,27 @@ inferring shader state from pixels.
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
 reproducing the old mesh's radial gradient came out as an emissive saucer, the
-exact read this tree rejected before. The wear channel's asphalt patches
-(ttp/wear.h) enter `buildStaticDeckDecals` AFTER the item boxes (the collect
-fade rewrites entry i in place, so box i must stay decal i) and are capped by
-`kMaxStaticDeckDecals`, not the shader's per-chunk 32.
+exact read this tree rejected before. The static list is capped by
+`kMaxStaticDeckDecals`, not the shader's per-chunk 32; the item boxes come
+first in it, because the collect fade rewrites entry i's alpha in place.
+
+**The asphalt patches (ttp/wear.h) and the boost pads are NOT decals** — they
+are the deck's own PAINT, on their own channel composited BEFORE the rubber tap
+while every decal composites after; the ordering rule and its reasoning are
+below, under the skid marks. Paint entries carry the SAME layout as decals and
+are painted by the same `paintStamp()`, so a pad cannot look different for
+having changed sides, and they are written once per track straight onto the road
+chunks, so none of it touches a per-frame path. They are also invisible to
+`ttp_display_debug_decals`, which reads the decal list only.
+
+**A chunk list that overflows its cap keeps the HEAD**, in both channels — one
+`foldToChunk` does the periodic-arclength fold and the selection for each. Paint
+uses that as PRIORITY, built pads first and repairs after, so decoration falls
+off a dense chunk rather than a marker the player drives at; nothing is lost by
+that order, because a repair and a pad can never overlap anyway (the planner
+keeps a patch 4u of arclength clear of a pad). The decal list's order is
+COMPOSITING order instead — statics first so an aura lands over the slick it
+crosses — so a full chunk there drops the dynamics.
 
 Their grid is **a margin plus a packed run**, never one chevron per grid cell:
 cells put more air between the marks than around them, so the outermost of them
@@ -167,7 +186,17 @@ alpha-compositing is exactly what a mask bake wants.
 **Skid marks are the same road-shader paint, accumulated.** The transient
 decals above are re-packed every frame; rubber instead lands in a per-track
 R8 texture in track space (u = s / lap, v = lat across the deck) that
-`vroad` samples with one extra tap. ONE offscreen pass owns it
+`vroad` samples with one extra tap. **Paint, then rubber, then decals** is the
+compositing order, and it is a rule about what a thing IS: a repair or a pad is
+the deck's own surface so ink lays over it, while a shadow, an aura or an oil
+film is laid ON the deck so it composites over the ink the way it would over
+bare asphalt. Get it wrong and an opaque stamp blanks the ink under its own
+footprint — the racing line comes out with clean holes punched in it, which is
+what the pads and repairs used to do from the decal side. (The deck's lane
+dashes never had the bug, being vertex colour on the road mesh, already under
+the tap.) The oil slick stays a decal deliberately — a spill, and on the beach
+standing water, sits on top — and its full opacity is what stopped lines and
+wear ghosting through it. ONE offscreen pass owns it
 (`ensureSkidLayer`): additive stamps (`vskid.mat`) for each committed trail
 segment. Ink is permanent until the race-restart wipe — a clear on that same
 pass — because a decay pass was the layer's whole recurring GPU cost

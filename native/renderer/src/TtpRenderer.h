@@ -123,7 +123,8 @@ public:
     // NOTHING about a scene is serialized any more.
     // `wear` is the road-wear plan for the same track (ttp/wear.h) — computed
     // by the CALLER (the display shim links libttp-runtime; this class only
-    // includes its headers): its patches join the static deck decals.
+    // includes its headers): its patches become deck PAINT (buildDeckPaint),
+    // not decals.
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
@@ -277,11 +278,19 @@ private:
     static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
     // The STATIC list's own cap. The shader's 32 is a PER-CHUNK bound —
     // uploadDeckDecals folds each ~35u chunk its own nearby subset — so the
-    // track-wide list can be larger: furniture plus the wear marks landed
-    // around 40 on the busiest catalogue track.
+    // track-wide list may exceed it. This is only a guard: since the pads left
+    // for the paint channel the statics are the boxes plus the slicks, well
+    // under it on any catalogue track.
     static constexpr int kMaxStaticDeckDecals = 96;
-    // Kept POD with no padding: uploadDeckDecals memcmps these to skip a
-    // chunk whose list hasn't changed.
+    // Deck-paint entries per road chunk — matches vroad.mat's float4[8]. A
+    // chunk carries a couple of repairs (3..6 over a whole lap) plus whatever
+    // pads land in its ~35u; the surplus is simply dropped.
+    static constexpr int kMaxChunkPaint = 8;
+    // The entry layout for BOTH deck channels — vroad reads rect/color/shape
+    // the same way whichever array they arrive in (paint fills only those
+    // three; the mask fields below are the decal channel's alone). Kept POD
+    // with no padding: uploadDeckDecals memcmps these to skip a chunk whose
+    // list hasn't changed.
     struct DeckDecal {
         filament::math::float4 rect;   // s, lat, halfS, halfLat — ALL world units
         filament::math::float4 color;  // linear rgb, peak alpha
@@ -961,10 +970,23 @@ private:
             const filament::math::float3& linCol, float alpha,
             float inner, float kneeAlpha, bool ellipse,
             std::vector<DeckDecal>* out = nullptr);
+    // The entry layout, built in ONE place for every producer in both channels.
+    static DeckDecal makeStamp(float s, float lat, float halfS, float halfLat,
+            const filament::math::float3& col, float alpha, float inner, float knee,
+            bool ellipse, int chevrons);
+    // The lap-wrap fold both deck channels share — see the definition. Fills
+    // `out` in list order up to `cap`, so an overflowing chunk keeps the head.
+    static int foldToChunk(const std::vector<DeckDecal>& src, float mid,
+            float halfSpan, float L, DeckDecal* out, int cap);
     void uploadDeckDecals();
-    // Resolve the decals that never move — pads, launch strips, oil slicks and
-    // item-box contact shadows — into mStaticDeckDecals, once per track.
-    void buildStaticDeckDecals(const TrackBin& tb, const ttp::rt::WearPlan& wear);
+    // Resolve the decals that never move — oil slicks and item-box contact
+    // shadows — into mStaticDeckDecals, once per track.
+    void buildStaticDeckDecals(const TrackBin& tb);
+    // The deck's own paint — the asphalt patches (ttp/wear.h) and the boost
+    // pads. NOT decals: paint is the surface, so the rubber layer composites
+    // OVER it. Written straight onto the road chunks once per track, so none
+    // of it touches a per-frame path.
+    void buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& wear);
 public:
     // DEBUG: what was actually packed for the road last frame. Exists so the
     // decal numbers can be read and compared against the car's own position

@@ -406,6 +406,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
             mi->setParameter("shadowTexel", 0.0f);
             mi->setParameter("decalCount", 0);
+            mi->setParameter("paintCount", 0);
             // Build-time constants: the wrap and this chunk's own midpoint never
             // change again, so uploadDeckDecals only ever writes the decal set.
             mi->setParameter("trackLength", L);
@@ -775,9 +776,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     const float groundY = tb.groundY;
 
     if (!buildRoadMesh(tb)) return false;
-    // The deck's fixed furniture becomes stamps on the road we just built.
-    // Without a vroad material there are no stamps: the deck draws bare.
-    if (mRoadMaterial) buildStaticDeckDecals(tb, wear);
+    // The deck's fixed furniture becomes stamps on the road we just built, and
+    // its paint (repairs, pads) goes onto the chunks that carry it. Without a
+    // vroad material there are no stamps: the deck draws bare.
+    if (mRoadMaterial) {
+        buildStaticDeckDecals(tb);
+        buildDeckPaint(tb, wear);
+    }
     buildRoadGrid(); // ground-conform probe accelerator (see roadHitY)
 
     // Ground sheet at groundY with the lawn's mowing stripes as vertex-colour

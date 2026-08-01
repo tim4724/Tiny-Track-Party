@@ -159,6 +159,7 @@ MaterialInstance* TtpRenderer::roadInstance() {
         mRoadInst = sceneInstance(mRoadMaterial);
         mRoadInst->setParameter("shadowTexel", 0.0f);
         mRoadInst->setParameter("decalCount", 0);
+        mRoadInst->setParameter("paintCount", 0);
         mRoadInst->setParameter("trackLength", 0.0f);
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
@@ -168,34 +169,40 @@ MaterialInstance* TtpRenderer::roadInstance() {
     return mRoadInst;
 }
 
+// ONE entry, laid out once. Both deck channels and every producer build the
+// same aggregate — the shader reads rect/color/shape identically whichever
+// array it came from — so the layout is written here and nowhere else.
+TtpRenderer::DeckDecal TtpRenderer::makeStamp(float s, float lat,
+        float halfS, float halfLat, const float3& col, float alpha,
+        float inner, float knee, bool ellipse, int chevrons) {
+    return {
+            float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
+            float4{ col.x, col.y, col.z, alpha },
+            float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons },
+            float4{ 0, 0, 0, 0 }, {}, {}, {} };
+}
+
 void TtpRenderer::addDeckDecal(float s, float lat, float halfS, float halfLat,
         const float3& linCol, float alpha, float inner, float kneeAlpha, bool ellipse,
         std::vector<DeckDecal>* out) {
     std::vector<DeckDecal>& dst = out ? *out : mDeckDecals;
     if ((int) dst.size() >= kMaxDeckDecals) return;
-    dst.push_back({
-            float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
-            float4{ linCol.x, linCol.y, linCol.z, alpha },
-            float4{ inner, ellipse ? 1.0f : 0.0f, kneeAlpha, 0.0f },
-            float4{ 0, 0, 0, 0 }, {}, {}, {} });
+    dst.push_back(makeStamp(s, lat, halfS, halfLat, linCol, alpha, inner, kneeAlpha,
+            ellipse, /*chevrons=*/0));
 }
 
-// The deck's fixed furniture, as stamps. These used to be three separate meshes
-// (pads, oils, box blobs) floating 0.004 to 0.014 above the road; shading them
-// into it removes the lift and the meshes both. Each keeps the profile its
-// mesh baked into vertex alpha, so nothing about the look is re-derived here.
-void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
-        const ttp::rt::WearPlan& wear) {
+// The deck's fixed furniture, as stamps: the item-box contact shadows and the
+// oil slicks, both DISCS. These used to be separate meshes floating 0.004 to
+// 0.014 above the road; shading them into it removes the lift and the meshes
+// both. Each keeps the profile its mesh baked into vertex alpha, so nothing
+// about the look is re-derived here.
+void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
     mStaticDeckDecals.clear();
-    const auto push = [&](float s, float lat, float halfS, float halfLat,
-            const float3& col, float alpha, float inner, float knee,
-            bool ellipse, int chevrons) {
+    const auto pushDisc = [&](float s, float lat, float r,
+            const float3& col, float alpha, float inner, float knee) {
         if ((int) mStaticDeckDecals.size() >= kMaxStaticDeckDecals) return;
-        mStaticDeckDecals.push_back({
-                float4{ s, lat, std::max(halfS, 1e-4f), std::max(halfLat, 1e-4f) },
-                float4{ col.x, col.y, col.z, alpha },
-                float4{ inner, ellipse ? 1.0f : 0.0f, knee, (float) chevrons },
-                float4{ 0, 0, 0, 0 }, {}, {}, {} });
+        mStaticDeckDecals.push_back(makeStamp(s, lat, r, r, col, alpha, inner, knee,
+                /*ellipse=*/true, /*chevrons=*/0));
     };
 
     // Item-box contact shadows: 1 -> 0.82 at 0.55r. FIRST, one per box in box
@@ -203,26 +210,10 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
     // so box i must stay decal i.
     const float3 BOXSH = srgbToLinear(0x1c1a18);
     for (const TrackBin::Box& b : tb.boxes) {
-        push(b.s, b.lat, 0.3f, 0.3f, BOXSH, kBlobShadowAlpha, 0.55f, 0.82f, true, 0);
+        pushDisc(b.s, b.lat, 0.3f, BOXSH, kBlobShadowAlpha, 0.55f, 0.82f);
     }
 
-    // Asphalt patches (ttp/wear.h), directly after the boxes — the box fade's
-    // entry-i contract above is why nothing may come before them. A patch is
-    // the deck's own asphalt shifted a shade, FLAT with a hard edge like the
-    // pads: a repair is paint-adjacent, not a glow. The shade scales in sRGB
-    // space, not linear, on purpose: the authored 0.86/1.10 are PERCEPTUAL
-    // steps (a linear scale of the same factor darkens visibly harder), and
-    // the patch look was approved with exactly these values.
-    const auto shadeHex = [](uint32_t hex, float k) -> uint32_t {
-        const auto m = [&](uint32_t c) {
-            return (uint32_t) std::min(255.0f, std::round((float) c * k));
-        };
-        return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
-    };
-    for (const ttp::rt::WearMark& w : wear.marks) {
-        push(w.s, w.lat, w.halfS, w.halfLat, srgbToLinear(shadeHex(tb.pal[0], w.shade)),
-                1.0f, 0.96f, 1.0f, false, 0);
-    }
+    // The patches and the pads are deck PAINT now — see buildDeckPaint.
 
     // Oil slicks. A dark-blue water puddle on the beach (ONE flat disc — the
     // shallow-cyan fill and a banded mini-sea were both rejected), a pale
@@ -240,12 +231,81 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
     const float oilMix = wet ? 0.9f : ice ? 0.45f : 0.7f;
     const float3 OILC = mix(srgbToLinear(tb.pal[0]), oilTint, oilMix);
     for (const TrackBin::Oil& o : tb.oils) {
-        push(o.s, o.lat, o.radius, o.radius, OILC, 1.0f, 0.96f, 1.0f, true, 0);
+        pushDisc(o.s, o.lat, o.radius, OILC, 1.0f, 0.96f, 1.0f);
     }
+}
 
-    // Boost pads. The disc's radial gradient is its profile;
-    // the three cream chevrons ride the shader's segment distance instead of the
-    // stroked geometry they used to be.
+// Which of `src` reaches the chunk centred on `mid`, folded into that chunk's
+// own frame. ONE copy of the lap wrap for both deck channels: the arclength is
+// PERIODIC, so an entry is in range if its footprint reaches this span measured
+// the short way round, and folding x here is what lets the shader take the wrap
+// out of its per-entry test (a subtract and a compare). Fills up to `cap` in
+// list order and returns how many landed — an overflowing chunk keeps the HEAD
+// of the list, which is why each caller orders its list by priority.
+int TtpRenderer::foldToChunk(const std::vector<DeckDecal>& src, float mid,
+        float halfSpan, float L, DeckDecal* out, int cap) {
+    int n = 0;
+    for (const DeckDecal& d : src) {
+        if (n >= cap) break;
+        float ds = d.rect.x - mid;
+        if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
+        if (std::fabs(ds) > halfSpan + d.rect.z) continue;
+        out[n] = d;
+        out[n].rect.x = ds;
+        n++;
+    }
+    return n;
+}
+
+// THE DECK'S OWN PAINT: the asphalt patches (ttp/wear.h) and the boost pads,
+// onto the chunks that carry them.
+//
+// WHY THESE ARE NOT DECALS. The decal loop runs AFTER the rubber tap, which is
+// right for everything laid ON the deck — a contact shadow, a boost aura or an
+// oil film composites over laid rubber the way it would over asphalt. A repair
+// and a painted pad ARE the deck, so rubber has to run across them: as opaque
+// decals they blanked the ink under their own footprint and left clean holes
+// punched in the racing line wherever the track had been repaired or marked.
+// The deck's lane dashes already behaved correctly for free, being vertex
+// colour on the road mesh — this channel is what puts pads and repairs on that
+// same side of the ink.
+//
+// The entry layout is EXACTLY the decal layout (rect, colour, shape), which is
+// what lets vroad paint both channels through one shared function: a pad must
+// not look different for having changed sides.
+//
+// Written STRAIGHT TO THE CHUNK INSTANCES rather than into a list: none of this
+// moves, and each chunk keeps only its own, so it is off every per-frame path
+// (uploadDeckDecals re-packs its list every frame).
+void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& wear) {
+    // A patch is the deck's own asphalt shifted a shade. The shade scales in
+    // sRGB space, not linear, on purpose: the authored 0.86/1.10 are PERCEPTUAL
+    // steps (a linear scale of the same factor darkens visibly harder), and the
+    // patch look was approved with exactly these values.
+    const auto shadeHex = [](uint32_t hex, float k) -> uint32_t {
+        const auto m = [&](uint32_t c) {
+            return (uint32_t) std::min(255.0f, std::round((float) c * k));
+        };
+        return (m((hex >> 16) & 255) << 16) | (m((hex >> 8) & 255) << 8) | m(hex & 255);
+    };
+
+    // The track-wide list. PADS FIRST, repairs after — order here is SELECTION
+    // PRIORITY, because a chunk that overflows kMaxChunkPaint keeps the head of
+    // the list: decoration falls off the end, never a boost pad, which is a
+    // marker the player drives at. Compositing order does not compete for the
+    // slot, because the two can never overlap in the first place — the planner
+    // keeps a patch 4u of ARCLENGTH clear of a pad (wear.cc, asserted by
+    // wear_check), which is wider than their half-lengths put together, since a
+    // repair under a pad reads as a broken pad.
+    std::vector<DeckDecal> paint;
+    const auto add = [&](float s, float lat, float halfS, float halfLat,
+            const float3& col, float inner, bool ellipse, int chevrons) {
+        paint.push_back(makeStamp(s, lat, halfS, halfLat, col, /*alpha=*/1.0f,
+                inner, /*knee=*/1.0f, ellipse, chevrons));
+    };
+    // Boost pads. The disc's flat fill and hard edge are its profile; the cream
+    // chevrons ride the shader's segment distance instead of the stroked
+    // geometry they used to be.
     const ttp::rt::BoostShades boost = ttp::rt::boost_shades(tb.boostCol);
     for (const TrackBin::Pad& pad : tb.pads) {
         if (pad.kind == 1) {
@@ -253,8 +313,8 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
             // Three columns over a five-metre lane made each mark two and a half
             // times wider than it was deep, so the pair read as two flat waves
             // rather than as chevron paint; five brings it to 1.4.
-            push(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip), 1.0f,
-                    0.99f, 1.0f, /*ellipse=*/false, /*chevrons=*/52);
+            add(pad.s, pad.lat, pad.p0, pad.p1, srgbToLinear(boost.strip),
+                    0.99f, /*ellipse=*/false, /*chevrons=*/52);
         } else {
             // FLAT PAINT, NOT A GLOW. The mesh drew a radial gradient (light core,
             // base at 0.7, dark rim) and reproducing that as a soft profile came
@@ -263,9 +323,39 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb,
             // flat fill and a hard edge, not a gradient. So the disc is solid to
             // 0.9 and then falls off over a tenth of its radius, which is an
             // antialiased edge rather than a feather.
-            push(pad.s, pad.lat, pad.p0, pad.p0, srgbToLinear(boost.base), 1.0f,
-                    0.97f, 1.0f, /*ellipse=*/true, /*chevrons=*/13);
+            add(pad.s, pad.lat, pad.p0, pad.p0, srgbToLinear(boost.base),
+                    0.97f, /*ellipse=*/true, /*chevrons=*/13);
         }
+    }
+    // The repairs (ttp/wear.h): the deck's own asphalt shifted a shade.
+    for (const ttp::rt::WearMark& w : wear.marks) {
+        add(w.s, w.lat, w.halfS, w.halfLat, srgbToLinear(shadeHex(tb.pal[0], w.shade)),
+                0.96f, /*ellipse=*/false, /*chevrons=*/0);
+    }
+
+    // tb, not mTrack: buildTrackScene only adopts the bin at the very end, so
+    // during the build mTrack is still the track this one replaces.
+    const float L = tb.length;
+    const auto writeTo = [&](MaterialInstance* mi, float mid, float halfSpan) {
+        DeckDecal sel[kMaxChunkPaint];
+        const int n = foldToChunk(paint, mid, halfSpan, L, sel, kMaxChunkPaint);
+        if (n > 0) {
+            float4 rect[kMaxChunkPaint], col[kMaxChunkPaint], shape[kMaxChunkPaint];
+            for (int i = 0; i < n; i++) {
+                rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
+            }
+            mi->setParameter("paintRect", rect, (size_t) n);
+            mi->setParameter("paintColor", col, (size_t) n);
+            mi->setParameter("paintShape", shape, (size_t) n);
+        }
+        mi->setParameter("paintCount", n);
+    };
+    for (RoadChunk& ch : mRoadChunks) {
+        writeTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
+    }
+    // The whole-lap fallback instance, when the chunk pass produced nothing.
+    if (mRoadChunks.empty() && mRoadInst) {
+        writeTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
     }
 }
 
@@ -294,18 +384,8 @@ void TtpRenderer::uploadDeckDecals() {
     const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan,
             std::vector<DeckDecal>& last) {
         DeckDecal sel[kMaxDeckDecals];
-        int n = 0;
-        for (const DeckDecal& d : mDeckDecalsLast) {
-            if (n >= kMaxDeckDecals) break;
-            // Overlap on a PERIODIC arclength, measured the short way round: a
-            // decal is in range if its own footprint reaches this span. Folding
-            // it here is also what lets the shader skip the wrap per decal — x
-            // goes over as the offset from `mid`, not as an absolute arclength.
-            float ds = d.rect.x - mid;
-            if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
-            if (std::fabs(ds) > halfSpan + d.rect.z) continue;
-            sel[n] = d; sel[n].rect.x = ds; n++;
-        }
+        const int n = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, sel,
+                kMaxDeckDecals);
         if ((size_t) n == last.size()
                 && (n == 0 || std::memcmp(sel, last.data(), n * sizeof(DeckDecal)) == 0)) {
             return;
