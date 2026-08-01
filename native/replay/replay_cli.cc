@@ -27,6 +27,7 @@
 #include "corpus_diff.h"
 #include "generated/track_defs.h"
 #include "ttp/ai_driver.h"
+#include "ttp/contract.h"
 #include "ttp/canonical.h"
 #include "ttp/dmath.h"
 #include "ttp/centerline.h"
@@ -40,7 +41,6 @@ using namespace ttp;
 using namespace ttp::corpus;
 
 static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
-static const int CONTRACT_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Trace-value builders (Id / Input / Stats from a corpus Value).

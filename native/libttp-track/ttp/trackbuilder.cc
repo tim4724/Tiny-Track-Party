@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "ttp/contract.h"
 #include "ttp/jsmath.h"
 #include "ttp/vec3.h"
 
@@ -19,7 +20,6 @@ namespace ttp {
 namespace {
 
 // TrackBuilder.js constants (unscaled units unless noted).
-constexpr int CONTRACT_VERSION = 2;      // engine/contract.js — buildTrack stamps it
 constexpr double SCALE = 2.0;
 constexpr double ROAD_WIDTH = 2.5;       // default drivable width (fallback)
 constexpr double DS = 0.25;              // centreline sample step

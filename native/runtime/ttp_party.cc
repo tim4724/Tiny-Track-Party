@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "ttp/contract.h"
 #include "ttp/canonical.h"
 #include "ttp/fastlane.h"
 #include "ttp/json_parse.h"
@@ -33,7 +34,6 @@
 
 using namespace ttp;
 
-static const int CONTRACT_VERSION = 2;
 
 namespace {
 

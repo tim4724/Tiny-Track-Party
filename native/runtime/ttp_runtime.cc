@@ -22,6 +22,7 @@
 #include "generated/track_defs.h"
 #include "ttp/ai_driver.h"
 #include "ttp/audio.h"
+#include "ttp/contract.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
 #include "ttp/game.h"
@@ -38,7 +39,6 @@
 
 using namespace ttp;
 
-static const int CONTRACT_VERSION = 2;
 static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,11 @@
 // The engine data contract version: the vocabulary stamp on the plain-data
 // structures that cross the wasm boundary — `version` on a snapshot and on a
 // built track, `contractVersion` on the party manifest — and on every frozen
-// trace header, which replay_cli REFUSES when it disagrees. C++ stamps the live
-// ones (native/runtime/, native/libttp-track/); this is the browser-side mirror,
-// and tests/schemas.test.js pins it against BOTH the live wasm and the JSON
-// schemas so the three cannot quietly disagree.
+// trace header, which replay_cli REFUSES when it disagrees. C++ declares it once
+// in native/libttp-json/ttp/contract.h — the layer every target depends on — and
+// this is the browser-side mirror, pinned to it through the live wasm by
+// tests/schemas.test.js, which also pins the JSON schemas so the three cannot
+// quietly disagree.
 //
 // Bump it when one of those shapes changes (a field added, removed or retyped,
 // or a unit changed) — knowing what that costs: the frozen corpora carry the old
