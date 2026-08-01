@@ -29,8 +29,7 @@
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
 import { createMasterBus, storedVolume } from './audio/bus.js';
-
-const PICKS_KEY = 'tinytrack_sound_picks_v1';
+import { storedPicks } from './audio/picks.js';
 
 // THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
 // description: it performs commands and decides nothing. The music catalogue —
@@ -86,10 +85,7 @@ export class RaceAudio {
   // Gallery picks, read once per session (re-read after resume() if you ever
   // need live re-picking; a race doesn't).
   _loadPicks() {
-    if (!this._picks) {
-      try { this._picks = JSON.parse(localStorage.getItem(PICKS_KEY)) || {}; }
-      catch (_) { this._picks = {}; }
-    }
+    if (!this._picks) this._picks = storedPicks();
     return this._picks;
   }
   _variant(cueId) {

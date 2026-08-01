@@ -5,8 +5,7 @@
 // approved palette from cues.js once the audition round settles it.
 import { CUES, loadSampleBuffers } from '/display/audio/cues.js';
 import { createMasterBus, storedVolume, saveVolumePercent } from '/display/audio/bus.js';
-
-const PICKS_KEY = 'tinytrack_sound_picks_v1';
+import { storedPicks, savePicks } from '/display/audio/picks.js';
 
 // ---- audio graph (lazy — browsers need a user gesture before audio runs) ----
 let ctx = null, master = null;
@@ -22,16 +21,9 @@ function audio() {
   return { ctx, master };
 }
 
-function loadPicks() {
-  try { return JSON.parse(localStorage.getItem(PICKS_KEY)) || {}; }
-  catch (_) { return {}; }
-}
-function savePicks(picks) {
-  try { localStorage.setItem(PICKS_KEY, JSON.stringify(picks)); } catch (_) {}
-}
 
 // ---- UI ----
-const picks = loadPicks();
+const picks = storedPicks();
 const grid = document.getElementById('sound-grid');
 const running = new Map(); // cueId -> { handle, btn, slider } for continuous cues
 

@@ -1,10 +1,11 @@
 'use strict';
-// The master bus and its volume preference are declared ONCE.
+// The master bus and the two audio preferences behind it are declared ONCE.
 //
 // They were not: the limiter's three constants stood in display/Audio.js and two
-// audition galleries, and the volume key in those plus gallery-music.js — under
-// two different constant names, with "shared with the other galleries" comments
-// standing in for an actual shared source.
+// audition galleries, the volume key in those plus gallery-music.js — under two
+// different constant names, with "shared with the other galleries" comments
+// standing in for an actual shared source — and the variant-picks key in
+// Audio.js and gallery-sounds.js with the same parse-or-empty dance around it.
 //
 // This is worth a tripwire rather than trusting review, because the failure is
 // SILENT: an audition gallery whose bus has drifted from the shipped one still
@@ -20,6 +21,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const BUS = 'public/display/audio/bus.js';
+const PICKS = 'public/display/audio/picks.js';
 
 // Every browser file that could plausibly re-declare it. Discovered rather than
 // listed for the galleries, so a NEW audio gallery is covered on the day it lands.
@@ -38,6 +40,14 @@ test('the volume storage key is written in exactly one file', () => {
   for (const f of audioFiles()) {
     assert.doesNotMatch(read(f), /tinytrack_sound_volume_v1/,
       `${f} re-types the volume key — import storedVolume/saveVolumePercent from display/audio/bus.js instead`);
+  }
+});
+
+test('the variant-picks key is written in exactly one file', () => {
+  assert.match(read(PICKS), /'tinytrack_sound_picks_v1'/, `${PICKS} must hold the key`);
+  for (const f of audioFiles()) {
+    assert.doesNotMatch(read(f), /tinytrack_sound_picks_v1/,
+      `${f} re-types the picks key — import storedPicks/savePicks from display/audio/picks.js instead`);
   }
 });
 
