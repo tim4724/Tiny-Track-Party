@@ -1,14 +1,18 @@
 # Sim data contract
 
-> **The JS sources cited below are RETIRED.** Every `public/display/…` path in
-> this document — `Game.js`, `AiDriver.js`, `TrackBuilder.js`, `Centerline.js`,
-> `engine/{Vec3,math,util}.js` — was deleted once its C++ twin was
-> conformance-proven; the `file:line` citations are historical provenance for how
-> each rule was derived, not places you can open today. `git log --diff-filter=D`
-> finds each one, and `node scripts/revive-js-oracle.mjs` restores the whole set
-> into a throwaway worktree. This document stays as written because rewriting the
-> citations would erase the only record of what the port was judged against.
-
+> **Everything cited below is RETIRED — sources AND tooling.** Every
+> `public/display/…` path in this document — `Game.js`, `AiDriver.js`,
+> `TrackBuilder.js`, `Centerline.js`, `engine/{Vec3,math,util}.js` — was deleted
+> once its C++ twin was conformance-proven, and so were the recorders that
+> produced the evidence: `scripts/record-trace.mjs`, `scripts/verify-trace.mjs`,
+> `scripts/record-fixtures.mjs`, `tests/trace.test.js`, `tests/mathlib.test.js`
+> and `tests/portable-purity.test.js`. The `file:line` citations are historical
+> provenance for how each rule was derived, not places you can open today.
+> `git log --diff-filter=D` finds each one, and `npm run revive:js-oracle`
+> restores the sim set into a throwaway worktree. This document stays as written
+> because rewriting the citations would erase the only record of what the port
+> was judged against; what runs NOW is the ctest suite — see
+> [fp-profile.md §7](fp-profile.md#7-enforcing-gates).
 
 The seam between the game engine and everything else (renderers, host UI,
 tests, the future C++ port). The reference implementation is the JS engine at
@@ -71,8 +75,9 @@ frame for frame. Specifically:
 
 - The sim path (engine, Centerline, TrackBuilder data path, AiDriver,
   RaceSession) contains no `Math.random`, no clock reads, no platform timers,
-  and no three.js. `tests/portable-purity.test.js` enforces this by source
-  scan.
+  and no three.js. A JS source scan enforced this while the JS sim existed; the
+  C++ replays subsume it, since any non-deterministic input would break byte
+  agreement on the first frame.
 - All randomness is seeded: the HOST draws a per-race 32-bit seed with
   `Math.random` (`main.js`) and passes it as `track.seed`; the engine's item
   rolls consume a `mulberry32(track.seed)` stream, and each AI bot consumes
@@ -91,9 +96,9 @@ frame for frame. Specifically:
   vendored sources natively (strict FP flags: double-only,
   `-ffp-contract=off`, no fast-math); bit-equality between the two builds is
   pinned by the shared corpus `tests/fixtures/math-corpus.jsonl`
-  (`tests/mathlib.test.js` on the JS side, its twin in `native/` on the C++
-  side). Plain arithmetic and `Math.sqrt` are exact IEEE-754 everywhere and
-  stay on native `Math`. The exhaustive FP + JS-semantics rules the C++ build
+  (the `mathlib_corpus` ctest, `native/mathlib/corpus_check.cc`). Plain
+  arithmetic and `Math.sqrt` are exact IEEE-754 everywhere and stay on native
+  `Math`. The exhaustive FP + JS-semantics rules the C++ build
   must follow (double-only, `-ffp-contract=off`, `Math.round`/`%`/signed-zero/
   `mulberry32` semantics, the `JSON.stringify`-matching serializer) are in
   [fp-profile.md](fp-profile.md).
@@ -101,25 +106,28 @@ frame for frame. Specifically:
   any machine, replay them anywhere. The one provenance that must match is
   the mathlib build stamped in each trace header (`math`); headers carry
   nothing machine-varying, so a re-record is byte-identical everywhere
-  (`record-traces.yml` enforces this on CI). A fixture with a different (or
-  missing) mathlib stamp is stale — the verifier and the fixture gate say so
+  (`.github/workflows/native.yml` enforces this on the four legs that run
+  ctest). A fixture with a
+  different (or missing) mathlib stamp is stale — `replay_cli` says so
   explicitly instead of reporting phantom divergence.
 
-The executable form of this guarantee is the golden-trace tooling:
-`scripts/record-trace.mjs` records a seeded headless race (inputs, events,
+The executable form of this guarantee WAS the golden-trace tooling:
+`scripts/record-trace.mjs` recorded a seeded headless race (inputs, events,
 FNV-1a hash of the canonical-JSON snapshot every frame, full snapshots on a
-cadence), `scripts/verify-trace.mjs` replays the recorded inputs through the
-engine and demands EXACT float equality, and `tests/trace.test.js` replays
-every committed fixture on `npm test`. The committed-fixture gate is ARMED
-(since the mathlib swap, Milestone 0 of Track S): fixtures are committed and
-replay everywhere; re-recording after an intentional behaviour change is one
-local command (`node scripts/record-fixtures.mjs`, see
-`tests/fixtures/traces/README.md`). The C++ port passes conformance when it
-verifies every committed fixture at that point. The fixture set must cover
-the whole event vocabulary and the endgame path, not just early-race
-physics; `scripts/record-fixtures.mjs` defines the set and asserts that
-coverage (two starter slices plus a full skysnake race exercising all seven
-event kinds, all four spin causes, rocket flight, the monster transform, lap
+cadence), `scripts/verify-trace.mjs` replayed the recorded inputs through the
+engine demanding EXACT float equality, and `tests/trace.test.js` replayed every
+committed fixture on `npm test`. All three went with the JS engine. What
+remains is the evidence they produced: the fixtures are committed and the
+`replay_*` ctests replay them through `replay_cli`, which is where the C++ port
+passes or fails conformance.
+
+**Re-recording is no longer available, and that is the point.** The traces are
+frozen cross-implementation evidence; re-recording them from C++ would only
+prove C++ matches itself. So the fixture set can never grow, and the coverage it
+was built to have — the whole event vocabulary and the endgame path, not just
+early-race physics — is the coverage it will always have (two starter slices
+plus a full skysnake race exercising all seven event kinds, all four spin
+causes, rocket flight, the monster transform, lap
 counting across the s = 0 seam, and every car finishing inside the budget).
 
 ## Input: the CONTROL message
@@ -307,8 +315,9 @@ against the built `length`:
 
 The engine reads exactly this augmented object: `centerline`, `length`,
 `roadWidth`, `totalLaps`, `hazards`, `pads`, `boxes`, `poles`, `bananas`,
-`seed`. The golden-trace recorder (`scripts/record-trace.mjs
-buildRaceTrack()`) mirrors this resolve so traces exercise the same layer.
+`seed`. The golden-trace recorder (`scripts/record-trace.mjs buildRaceTrack()`,
+retired) mirrored this resolve, which is why the committed traces exercise the
+same layer.
 
 ### Schema and export
 

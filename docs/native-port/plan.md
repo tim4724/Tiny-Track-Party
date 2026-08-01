@@ -1,9 +1,14 @@
 # Native port: plan
 
 Execution plan for [architecture.md](architecture.md). Gate 0 comes first;
-Tracks R and S then run in parallel and meet at integration. Done so far:
-the sim contract + golden-trace tooling (PR #19) and the Filament tvOS
-port (simulator-proven, packaged).
+Tracks R and S then run in parallel and meet at integration.
+
+> **A PLAN, not a status board.** Each track carries its own state in its
+> heading below — a summary here duplicated it and rotted, still calling the
+> tvOS port "simulator-proven" after it shipped to a device and still listing
+> golden-trace tooling that has since been retired with the JS engine. What was
+> actually built is the tree; what a new platform still owes is
+> [shells.md](shells.md), audited against it.
 
 ## Gate 0 — vertical slice (the first code)
 
@@ -89,11 +94,12 @@ Executed as milestones M0–M4; the original steps below, with outcomes:
    `EcmaScriptConverter` IS `JSON.stringify` (52k-case corpus). Last-bit
    matching held everywhere; the tolerance fallback was never needed —
    mutation probes reproduce the JS engine's exact failure hashes.
-4. **Platform matrix** — ctest 12/12 on: macOS arm64, linux x64 (CI, every
-   PR), emscripten/WASM under Node, and the Apple TV simulator
-   (`simctl spawn`, all corpora + all replays). Android NDK arm64
-   cross-compiles in CI; on-device replay is scripted-manual until an
-   emulator job earns its keep. `native.yml` runs all legs per PR.
+4. **Platform matrix** — the whole ctest suite on: macOS arm64, linux x64,
+   emscripten/WASM under Node, and the Apple TV simulator (`simctl spawn`, all
+   corpora + all replays). Android NDK arm64 cross-compiles only; on-device
+   replay is scripted-manual until an emulator job earns its keep. `native.yml`
+   runs every leg per push and PR. (Test COUNT deliberately not quoted here —
+   it grows; `ctest -N` is the answer.)
 
 ## Integration
 

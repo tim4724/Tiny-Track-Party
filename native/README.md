@@ -9,10 +9,19 @@ no JS engine to fall back on.
 conventions, the seams, the determinism contract, and what a platform shell may
 and may not do. This file is orientation only.
 
-Decision record: [docs/native-port/architecture.md](../docs/native-port/architecture.md).
-Sim contract: [docs/native-port/contract.md](../docs/native-port/contract.md).
-FP rules: [docs/native-port/fp-profile.md](../docs/native-port/fp-profile.md).
-Porting ledger: [docs/native-port/shells.md](../docs/native-port/shells.md).
+`docs/native-port/` holds two kinds of document, and mistaking one for the other
+wastes an afternoon. Only the ledger is audited against the tree:
+
+| | |
+|---|---|
+| [shells.md](../docs/native-port/shells.md) | **Live.** What a new platform still owes, audited against the tree and dated. Start here for shell work. |
+| [architecture.md](../docs/native-port/architecture.md) | **Decision record.** Why the stack is what it is. Stable, not a status board. |
+| [contract.md](../docs/native-port/contract.md) | **Contract + provenance.** The data shapes are current; every JS `file:line` in it cites a retired source. |
+| [fp-profile.md](../docs/native-port/fp-profile.md) | **Provenance.** Why each bit-exactness rule exists, cited to JS that no longer exists. Its §7 gate table is the one part describing today. |
+| [plan.md](../docs/native-port/plan.md), [shared-cpp-plan.md](../docs/native-port/shared-cpp-plan.md) | **Plans.** Per-track state lives in their own headings; the tree is what was actually built. |
+
+The retired JS engine and its recorders are reachable through
+`npm run revive:js-oracle`; what gates the port TODAY is the ctest suite.
 
 ## Layout
 

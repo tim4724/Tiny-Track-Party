@@ -3,21 +3,25 @@
 The porting checklist for bit-exact conformance. `libttp-track` and
 `libttp-sim` must reproduce the JS engine's floating-point results to the last
 bit, verified against the committed golden traces (`tests/fixtures/traces/`,
-tooling in `scripts/record-trace.mjs` / `scripts/verify-trace.mjs`). This doc
-is the exhaustive list of every place JS number semantics differ from a naive
-C++ transliteration, each grounded in the reference source with `file:line`
-citations. The reference is the JS engine at `public/display/engine/Game.js`
-and its sim-path siblings; the determinism guarantee it backs is
+replayed by the `replay_*` ctests). This doc is the exhaustive list of every
+place JS number semantics differ from a naive C++ transliteration, each grounded
+in the reference source with `file:line` citations. The reference is the JS
+engine at `public/display/engine/Game.js` and its sim-path siblings; the
+determinism guarantee it backs is
 [contract.md §Determinism guarantee](contract.md#determinism-guarantee).
 
-> **The JS sources cited below are RETIRED.** Every `public/display/…` path in
-> this document — `Game.js`, `AiDriver.js`, `TrackBuilder.js`, `Centerline.js`,
-> `engine/{Vec3,math,util}.js` — was deleted once its C++ twin was
-> conformance-proven; the `file:line` citations are historical provenance for how
-> each rule was derived, not places you can open today. `git log --diff-filter=D`
-> finds each one, and `node scripts/revive-js-oracle.mjs` restores the whole set
-> into a throwaway worktree. This document stays as written because rewriting the
-> citations would erase the only record of what the port was judged against.
+> **Everything cited below is RETIRED — sources AND tooling.** Every
+> `public/display/…` path — `Game.js`, `AiDriver.js`, `TrackBuilder.js`,
+> `Centerline.js`, `engine/{Vec3,math,util}.js` — was deleted once its C++ twin
+> was conformance-proven, and so were the recorders that produced the evidence:
+> `scripts/record-trace.mjs`, `scripts/verify-trace.mjs`,
+> `scripts/record-fixtures.mjs`, `tests/trace.test.js`, `tests/mathlib.test.js`
+> and `tests/portable-purity.test.js`. Every `file:line` citation here is
+> historical provenance for how a rule was derived, not a place you can open
+> today. `git log --diff-filter=D` finds each one, and `npm run revive:js-oracle`
+> restores the sim set into a throwaway worktree. This document stays as written
+> because rewriting the citations would erase the only record of what the port
+> was judged against — but see the gate table in §7 for what runs NOW.
 
 Sim path (the files this profile inventories, all comment-stripped scans):
 `public/display/engine/{Game,util,contract,Vec3,math}.js`,
@@ -66,10 +70,11 @@ native `Math.sqrt` / `std::sqrt` — it is not routed through the mathlib. Sites
 only for `pow`/`hypot`'s internal use.
 
 **Gate.** `tests/fixtures/math-corpus.jsonl` (header + 4317 cases, hex64
-big-endian, canonical-NaN class) is replayed by `tests/mathlib.test.js`
-demanding identical bit patterns for all six functions. The C++ twin
-(`native/`, Milestone 2) replays the same corpus. Both passing is the
-foundation that makes traces platform-independent. Regenerate with
+big-endian, canonical-NaN class) is replayed by the `mathlib_corpus` ctest
+(`native/mathlib/corpus_check.cc`), demanding identical bit patterns for all six
+functions on every leg that runs ctest. The JS twin that recorded it demanded the same and went
+with the engine; that both once agreed is the foundation that makes traces
+platform-independent. Regenerate with
 `scripts/gen-math-corpus.mjs` only as a deliberate, both-sides act.
 
 ## 3. JS semantics traps
@@ -391,13 +396,24 @@ they apply to the whole determinism-bearing surface, not just the mathlib.
 
 ## 7. Enforcing gates
 
+This table is the one part of this document that describes the tree as it is
+now — the JS gates that once sat here went with the engine they tested.
+
 | Gate | Enforces |
 |---|---|
-| `tests/fixtures/math-corpus.jsonl` + `tests/mathlib.test.js` (+ C++ twin, `native/`) | Both mathlib builds compute identical transcendentals bit-for-bit (§2). |
-| `tests/fixtures/traces/*` + `tests/trace.test.js` (JS) + the headless trace-replay CLI (C++, links `libttp-sim` only) | Exact per-frame snapshot/event/hash agreement — the whole FP + serialization stack (§3–5). Fixtures cover the full event vocabulary and the endgame (`scripts/record-fixtures.mjs`). |
+| `tests/fixtures/math-corpus.jsonl` + the `mathlib_corpus` ctest (`native/mathlib/corpus_check.cc`) | Both mathlib builds compute identical transcendentals bit-for-bit (§2). |
+| `tests/fixtures/traces/*` replayed by the `replay_*` ctests through `replay_cli` (links `libttp-sim` only) | Exact per-frame snapshot/event/hash agreement — the whole FP + serialization stack (§3–5). |
+| the `record_*` ctests | Every recorded answer re-emits byte-identically, its exact JSON spelling included — strictly more than the structural replay asserts. |
+| `replay_sequence` | Every trace in ONE process, so cross-race state leaking between races cannot hide behind one-race-per-process replays. |
 | `tests/schemas.test.js` | Snapshot/event/track/results field sets match the contract and the fixtures. |
-| `tests/portable-purity.test.js` | The sim path stays free of `Math.random`, clocks, and three.js — no non-deterministic input to begin with. |
-| `record-traces.yml` (CI, `workflow_dispatch`) | Cross-platform re-record is byte-identical (the header carries no machine-varying provenance beyond the mathlib stamp). |
+| `.github/workflows/native.yml`, on every push or PR touching `native/` | The whole ctest suite on FOUR legs — ubuntu, macOS, wasm/Node, tvOS-sim — so a platform-specific FP divergence cannot hide on the one machine that built it. The Android NDK leg cross-compiles only (no emulator on CI); its on-device replay is scripted-manual. |
+
+The traces are FROZEN: they were recorded from the JS engine, so the set can
+never grow — a scenario authored from C++ would only prove C++ matches itself.
+That is also why there is no purity gate here any more. The JS one checked the
+sim path for `Math.random` and clocks by source scan; the replays subsume it,
+since any non-deterministic input would break byte agreement on the first frame.
+See `tests/CLAUDE.md`.
 
 ## 8. Highest-risk items
 
