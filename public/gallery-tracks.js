@@ -3,11 +3,9 @@
 // slowly orbiting overview camera with a small AI field driving it (+ the live
 // minimap).
 //
-// This is an ES module (so it can import the track catalogue directly) but it
-// still leans on the classic-script `window.Gallery` loaded just before it.
 import { TRACKS, CUPS } from '/shared/tracks.js';
 
-const Gallery = window.Gallery;
+import * as Gallery from './gallery-common.js';
 const state = Gallery.loadState();
 
 // Tracks use their own columns key so this page doesn't clobber the display /

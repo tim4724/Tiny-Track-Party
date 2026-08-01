@@ -1,4 +1,3 @@
-'use strict';
 
 // Every phone-shaped screen in one flat grid, ordered by the player's journey
 // through a real session: name entry -> lobby -> countdown -> drive -> finish.
@@ -10,6 +9,8 @@
 // `url` points the iframe somewhere other than the controller page — the
 // device chooser lives on the DISPLAY page but only ever renders phone-sized
 // (it's the wrong-link fork), so it previews here among the phone screens.
+
+import * as Gallery from './gallery-common.js';
 var CONTROLLER_CARDS = [
   { key: 'device-choice',   title: 'Device chooser', url: '/display/index.html?scenario=device-choice' },
   { key: 'name',            title: 'Name input' },

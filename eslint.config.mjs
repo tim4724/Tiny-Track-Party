@@ -4,9 +4,6 @@
 //   - Browser ES modules (public/**, partyplug kit): `import`/`export`, plus a
 //     few files using the universal `typeof window` / `module.exports` dual
 //     export shim (public/shared/protocol.js, partyplug/PartyConnection.js, …).
-//   - Browser classic scripts (the gallery preview surface): loaded via plain
-//     <script src> tags that share a global `Gallery`, so they're `script`, not
-//     `module` — under `module` the shared global reads as undefined.
 //   - Node CommonJS (server, unit tests): `require`, `process`, `__dirname`.
 //   - Node CommonJS that drives a browser (asset-capture scripts, Playwright
 //     E2E): the same, plus browser globals for the page.evaluate() closures.
@@ -23,9 +20,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 // Browser globals + the dual browser-script/CommonJS export shim a few shared
-// files use. The gallery preview surface's shared `Gallery` global is added
-// only to its consumers — gallery-common.js *defines* it (a real `var`), so
-// predeclaring it there would trip no-redeclare.
+// files use (public/shared/protocol.js, partyplug/PartyConnection.js).
 const browserGlobals = {
   ...globals.browser,
   module: 'readonly',
@@ -54,37 +49,12 @@ export default [
   js.configs.recommended,
 
   // ── Browser ES modules: shipped display + controller + partyplug kit ──────
-  // Gallery: 'readonly' covers gallery-tracks.js / gallery-sounds.js, which load
-  // as type=module yet read the global from the classic gallery-common.js script.
   {
     files: ['public/**/*.js', 'partyplug/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      globals: { ...browserGlobals, Gallery: 'readonly' },
-    },
-  },
-
-  // ── Gallery preview surface: classic <script src> files (no import/export) ─
-  // gallery-common.js DEFINES the shared `Gallery` global; the others read it.
-  // `script` source type keeps a top-level `var` in the shared global scope.
-  {
-    files: ['public/gallery-common.js'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'script',
-      // 'off' neutralises the Gallery:'readonly' the broad public/** block above
-      // merges in — this file *is* the definition, so its `var Gallery` must not
-      // collide with a predeclared global (flat config merges globals additively).
-      globals: { ...browserGlobals, Gallery: 'off' },
-    },
-  },
-  {
-    files: ['public/gallery-display.js', 'public/gallery-controller.js'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'script',
-      globals: { ...browserGlobals, Gallery: 'readonly' },
+      globals: browserGlobals,
     },
   },
 

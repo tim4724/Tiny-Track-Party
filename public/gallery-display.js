@@ -1,4 +1,3 @@
-'use strict';
 
 // Every display screen in one flat grid, ordered by the player's journey
 // through a real session. Cards-per-row is set by the header control.
@@ -7,6 +6,8 @@
 //   { key, title, hostVariant?, animated?, replayable? }
 // hostVariant cards swap their `host` URL param when the host selector changes
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
+
+import * as Gallery from './gallery-common.js';
 var DISPLAY_CARDS = [
   { key: 'welcome',     title: 'Welcome' },
   { key: 'lobby-loading', title: 'Lobby (loading)' },

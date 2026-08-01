@@ -20,7 +20,7 @@ import { ITEM_IDS } from '/display/engine/contract.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '/shared/itemIcons.js';
 import { cssHex } from '/shared/biomes.js';
 
-const Gallery = window.Gallery;
+import * as Gallery from './gallery-common.js';
 const state = Gallery.loadState();
 
 // The procedural props with more than one take on them, and what each take is.
