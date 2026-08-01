@@ -149,6 +149,15 @@ Three properties of that surface matter more than the list:
     livery, which only ever paints the name plate). A shell that cannot
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
+11. **WHEN the scene is built.** A build blocks the thread long enough to be
+    seen, and a cup's chained start (`advance`) performs `place-track` with the
+    countdown already running — so a shell that meshes there shows the OUTGOING
+    circuit under the count and then hitches. Mesh the next circuit when the
+    intermission arms instead: the results board is opaque enough to hide the
+    swap, and the field the launch will build is a pure function of the
+    connected humans, so the prepared scene is the one it wants. The web
+    reference is `prepareNextTrack()` in `public/display/main.js` plus
+    `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
 
 ## The asymmetries worth knowing before you start
 

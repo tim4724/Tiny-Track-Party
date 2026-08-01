@@ -321,15 +321,40 @@ export class Stage {
     return this._rebuilding;
   }
 
+  // Mesh a track AHEAD of the race that will run on it, and promise the next
+  // rebuild() that what comes out is already at its opening state — so the
+  // launch does not immediately mesh it a second time. See prepareNextTrack()
+  // in main.js for why a cup's chained start wants that.
+  //
+  // A ONE-SHOT TOKEN, not a "is the scene clean" flag, because that question
+  // cannot be answered from this class: the finished race's session is still
+  // bound all through the intermission, and the next one binds before the
+  // prepared build has even landed. The promise is instead consumed by the very
+  // next rebuild() and dropped the moment anything else takes the scene
+  // (bindSession — a lobby demo, a harness scenario) so it can never be spent
+  // on a scene that has since been driven on.
+  prepare(track) {
+    this._prepared = true;
+    return this.setTrack(track);
+  }
+
   // Force a FULL rebuild even when the roster comes out identical — a new race
   // on the same track with the same field still wants the scene back at its
   // opening state (cones upright, boxes uncollected, no skid patina). Nulling
   // the SCENE signature is what routes around the re-dress path: reroster
   // would happily say "nothing changed" and keep the raced-on scene.
-  rebuild() { this._sceneSig = this._rosterSig = null; return this._rebuild(); }
+  rebuild() {
+    const prepared = this._prepared;
+    this._prepared = false;
+    if (!prepared) this._sceneSig = this._rosterSig = null;
+    return this._rebuild();
+  }
 
   // The session whose cars get drawn. 0 / null clears it (an empty track).
+  // Someone else taking the scene (the lobby demo, a harness scenario) drops any
+  // unspent prepare() promise — those cars lay rubber and kick cones on it.
   bindSession(handle) {
+    if (handle) this._prepared = false;
     if (this.display) this.display.bind(handle || 0);
   }
 

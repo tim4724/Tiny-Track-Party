@@ -50,6 +50,12 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await expect(alice.locator('#newgame-btn')).toHaveText('Next race ▸');
     await expect(alice.locator(visible('#quitcup-btn'))).toBeVisible();
     await expect(bob.locator('#result-wait')).toContainText('starting soon');
+    // The next circuit is MESHED UNDER THIS BOARD (main.js prepareNextTrack), not
+    // under the countdown that follows it — a scene build blocks the main thread
+    // for a few hundred ms, and performed at the chained start that is a stutter
+    // with the countdown already ticking over the OUTGOING track. A timeout here
+    // means the prepare stopped happening.
+    await page.waitForFunction((id) => window.__scene._track.id === id, BEACH[race], { timeout: 15000 });
     await alice.click('#newgame-btn');
     await waitForRacing(page);
     expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[race]);
@@ -103,6 +109,11 @@ test('"End cup early" cancels the series and a restart begins at race 1', async 
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => window.__series())).toBe(null);
   await expect(alice.locator(visible('#lobby'))).toBeVisible();
+  // The lobby attracts on the circuit its own card names. Quitting FROM an
+  // intermission is the case that can break this: prepareNextTrack has already
+  // meshed race 2 speculatively, and the rewind to race 1 moves no pick — so
+  // nothing would put the scene back unless fade-to-lobby places it anyway.
+  await page.waitForFunction((id) => window.__scene._track.id === id, BEACH[0], { timeout: 15000 });
 
   // A fresh Start races the cup from the top, not from where it was abandoned.
   await startRace(alice, []);

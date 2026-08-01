@@ -801,11 +801,13 @@ const RACE_PERFORMERS = {
     seriesDeadline = e.deadline;
     seriesTimer = setTimeout(advanceSeriesRace, e.ms);
     intermissionTicker = setInterval(renderIntermissionCountdown, 500);
+    prepareNextTrack();
   },
   'clear-intermission': () => clearSeriesTimers(),
   // A chained start has no lobby step, so the new circuit is placed explicitly
   // (selectTrack outside the lobby skips the scene swap) — the results overlay
-  // covers the pop.
+  // covers the pop. Usually already meshed by prepareNextTrack, in which case
+  // this and the reset below both come out as no-ops.
   'place-track': () => scene.setTrack(track),
   // endParty's teardown — closeRoom bails every phone terminally while the
   // display's own 4001 self-heals into a FRESH room (Net.js onClose
@@ -825,11 +827,23 @@ const RACE_PERFORMERS = {
   'dispose-session': () => {
     if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
   },
-  'fade-to-lobby': (e) => {
+  // ALWAYS place the track, not only on the effect's `placeTrack`. That flag
+  // answers "did the PICK move" (a random re-roll, a cup rewind), which was the
+  // only way the scene could be showing the wrong circuit — until prepareNextTrack
+  // gave the shell its own reason to have moved it. Quitting a cup FROM the
+  // intermission rewinds to race 1, which is usually the circuit already
+  // selected, so the pick has not moved and the layer says there is nothing to
+  // place — while the scene is sitting on the speculatively-meshed race 2. The
+  // lobby then attracts on a circuit its own card does not name. Placing
+  // unconditionally costs nothing when the scene is already right (Stage skips
+  // an unchanged signature), and the promise goes back to the crossfade so the
+  // still holds until the swap lands instead of uncovering the old one.
+  'fade-to-lobby': () => {
     fadeBackdrop(() => {
       for (const c of scene.cars.keys()) scene.removeCar(c);
-      if (e.placeTrack) scene.setTrack(track);   // the re-aimed pick (random re-roll / cup rewind)
+      const placed = scene.setTrack(track);
       refreshLobbyDemo();                        // AI back to driving the picked cars
+      return placed;
     });
   },
   'remove-scene-car': (e) => scene.removeCar(e.id),
@@ -928,6 +942,29 @@ function advanceSeriesRace() {
 function clearSeriesTimers() {
   clearTimeout(seriesTimer); seriesTimer = null;
   clearInterval(intermissionTicker); intermissionTicker = null;
+}
+
+// Mesh the cup's next circuit NOW, under the intermission board, instead of
+// under the countdown that follows it. A scene build blocks the main thread for
+// a few hundred ms and the results overlay is near-opaque paper, so the swap is
+// both invisible and free here; performed at the chained start it is neither —
+// the countdown is already ticking over the OLD circuit while the thread is
+// busy, which is the stutter and the stale track this exists to remove.
+//
+// The field is the same one the launch will build (the AI fill is a function of
+// the connected humans, not of the race seed), so the launch's reset-scene-cars
+// re-adds the same roster onto the prepared scene and both of its rebuild
+// triggers fall out as no-ops. If a player joins or leaves in the meantime the
+// roster moves, the launch rebuilds, and we are back to the old behaviour
+// rather than a wrong scene.
+//
+// WHICH circuit is next is the series', never guessed here. Fire-and-forget:
+// nothing waits on it, and a prepare still in flight when the host taps "Next
+// race" early is picked up by Stage's own rebuild queue.
+function prepareNextTrack() {
+  const series = flow.seriesState(net.flow.handle);
+  const next = series && series.nextTrack;
+  if (next && built.has(next)) scene.prepare(built.get(next));
 }
 
 // ---- race events ----
